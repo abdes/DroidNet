@@ -93,8 +93,8 @@ inline auto ExpectPackagingSummaryMatchesDiagnostics(const ImportReport& report)
 inline auto CanonicalScriptVirtualPath(std::string_view script_name)
   -> std::string
 {
-  return ImportRequest {}.loose_cooked_layout.virtual_mount_root + "/"
-    + std::string(script_name) + std::string(data::kScriptDescriptorExtension);
+  return std::string("/.cooked/") + std::string(script_name)
+    + std::string(data::kScriptDescriptorExtension);
 }
 
 //! A script asset import: the script, where it cooks and how it is stored.
@@ -159,8 +159,8 @@ struct SceneWithScriptSpec final {
 inline auto CanonicalSceneVirtualPath(std::string_view scene_name)
   -> std::string
 {
-  return ImportRequest {}.loose_cooked_layout.virtual_mount_root + "/"
-    + std::string(scene_name) + std::string(data::kSceneDescriptorExtension);
+  return std::string("/.cooked/") + std::string(scene_name)
+    + std::string(data::kSceneDescriptorExtension);
 }
 
 struct CallbackCapture final {

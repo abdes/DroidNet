@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "examples.schema.json",
+  "title": "Oxygen examples catalog",
+  "description": "The one list of the examples project's examples. Tools, CMake and tests read it.",
+  "type": "object",
+  "required": ["version", "examples"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "scenes", "tags"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "PascalCase. The folder is Content/Scenes/<name>/ and the manifest Manifests/<name>.import-manifest.json.",
+            "type": "string",
+            "pattern": "^[A-Z][A-Za-z0-9]*$"
+          },
+          "description": {
+            "description": "One sentence, shown by Tools/cook -List.",
+            "type": "string",
+            "minLength": 1
+          },
+          "scenes": {
+            "description": "Scene names, played as /Content/Scenes/<name>/<scene>.oscene; empty for a model-only example.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+            },
+            "uniqueItems": true
+          },
+          "tags": {
+            "description": "Free words. showcase marks what the SDK ships; validation and benchmark mark test scenes.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*$"
+            },
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  }
+}

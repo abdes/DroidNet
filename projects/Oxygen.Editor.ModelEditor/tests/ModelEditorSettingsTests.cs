@@ -375,7 +375,7 @@ public sealed class ModelEditorSettingsTests : IDisposable
         });
 
     private string RecordPathOf(ModelImportSettings record)
-        => ModelImportSettings.PathFor(this.documents.Project.Root.FullPath, record.SourceIdentity);
+        => ModelImportSettings.PathFor(this.documents.Project.Root.FullPath, record.VirtualPath);
 
     private async Task<(Document Car, ModelEditorViewModel Editor)> OpenAsync()
     {

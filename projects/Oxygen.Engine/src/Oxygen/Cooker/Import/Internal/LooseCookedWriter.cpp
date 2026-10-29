@@ -329,6 +329,14 @@ struct LooseCookedWriter::Impl final {
   auto RequireOwnIdentity_(const std::string& virtual_path,
     const std::string& source, const std::string_view context) const -> void
   {
+    if (!path_by_folded_.empty()) {
+      const auto& held = path_by_folded_.begin()->second;
+      if (content::MountRootOf(held) != content::MountRootOf(virtual_path)) {
+        throw LooseCookedOutputMountMixed(std::string(context) + ": '"
+          + virtual_path + "' is not in the mount of the cooked root, which "
+          + "holds '" + held + "'");
+      }
+    }
     if (const auto spelled = path_by_folded_.find(FoldIdentity(virtual_path));
       spelled != path_by_folded_.end() && spelled->second != virtual_path) {
       throw LooseCookedIdentityCollision(std::string(context) + ": '"

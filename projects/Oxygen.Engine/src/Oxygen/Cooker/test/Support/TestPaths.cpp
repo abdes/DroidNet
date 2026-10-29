@@ -5,10 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <filesystem>
+#include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 
 #if !defined(OXYGEN_COOKER_SOURCE_DIR)                                         \
@@ -59,6 +64,70 @@ auto ModelVirtualPath(const std::filesystem::path& source) -> std::string
 auto SourceMountPath(const std::filesystem::path& source) -> std::string
 {
   return "/Content/" + source.filename().generic_string();
+}
+
+namespace {
+
+  auto MountTableOf(const std::filesystem::path& root,
+    std::vector<content::import::MountDeclaration> declarations)
+    -> std::shared_ptr<const content::import::MountTable>
+  {
+    using content::import::MountDeclarationForm;
+    using content::import::MountTable;
+    using content::import::MountTableOwner;
+    using content::import::MountTableRequest;
+    using content::import::ResolveMountTable;
+    return std::make_shared<const MountTable>(
+      ResolveMountTable(MountTableRequest {
+        .project_root = root,
+        .declarations = std::move(declarations),
+        .form = MountDeclarationForm::kCommittedFile,
+        .declared_in = "test",
+        .working_directory = root,
+        .mounts_option = std::nullopt,
+        .owner = MountTableOwner::kProject,
+      }));
+  }
+
+} // namespace
+
+auto MountPathIn(const std::filesystem::path& root,
+  const std::filesystem::path& file) -> std::string
+{
+  return "/Content/" + file.lexically_relative(root).generic_string();
+}
+
+auto ContentMountTable(const std::filesystem::path& root)
+  -> std::shared_ptr<const content::import::MountTable>
+{
+  return MountTableOf(root,
+    {
+      content::import::MountDeclaration {
+        .name = "Content",
+        .kind = content::import::MountKind::kSource,
+        .path = ".",
+      },
+    });
+}
+
+auto ContentAndOtherMountTable(const std::filesystem::path& root)
+  -> std::shared_ptr<const content::import::MountTable>
+{
+  using content::import::MountDeclaration;
+  using content::import::MountKind;
+  return MountTableOf(root,
+    {
+      MountDeclaration {
+        .name = "Content",
+        .kind = MountKind::kSource,
+        .path = "Content",
+      },
+      MountDeclaration {
+        .name = "Other",
+        .kind = MountKind::kSource,
+        .path = "Other",
+      },
+    });
 }
 
 auto SchemaPath(const std::string_view relative_to_cooker)

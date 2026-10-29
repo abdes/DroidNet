@@ -163,19 +163,51 @@ namespace {
     return std::filesystem::is_regular_file(base::ToNativePath(path), error);
   }
 
-  //! The content root of a record: its folder's parent.
-  auto ContentRootOf(const std::filesystem::path& record_path)
+  //! The path of a record below its content root: `Imports/<virtual path>`
+  //! with the record suffix.
+  auto RecordRelativePath(const std::string_view virtual_path)
     -> std::filesystem::path
   {
-    return Absolute(record_path).parent_path().parent_path();
+    if (content::ValidateVirtualPath(virtual_path).has_value()) {
+      throw std::invalid_argument("A model import record is named by its "
+                                  "model's virtual path, which the engine "
+                                  "refuses: "
+        + std::string(virtual_path));
+    }
+    return std::filesystem::path(ModelImportRecord::kRecordsFolder)
+      / (std::string(virtual_path.substr(1))
+        + std::string(ModelImportRecord::kRecordSuffix));
   }
 
+  //! The content root of a record at the path of `virtual_path`; a record
+  //! elsewhere throws.
+  auto RootOfRecord(const std::filesystem::path& record_path,
+    const std::string_view virtual_path) -> std::filesystem::path
+  {
+    const auto path = Absolute(record_path);
+    const auto relative = RecordRelativePath(virtual_path);
+    auto root = path;
+    for (const auto& part : relative) {
+      static_cast<void>(part);
+      root = root.parent_path();
+    }
+    if (root.empty() || root / relative != path) {
+      throw std::invalid_argument("A model import record lives at its model's "
+                                  "virtual path: "
+        + path.generic_string() + " holds " + std::string(virtual_path)
+        + " and belongs at <content root>/" + relative.generic_string());
+    }
+    return root;
+  }
+
+  //! Locks a record. The lock file beside it exists only while the lock is
+  //! held.
   auto RecordLock(const std::filesystem::path& path) -> serio::FileLock
   {
     auto lock_path = path;
     lock_path += ".lock";
     auto lock = serio::FileLock::TryAcquire(lock_path,
-      serio::FileLockMode::kExclusive, serio::FileLockOpenMode::kOpenOrCreate);
+      serio::FileLockMode::kExclusive, serio::FileLockOpenMode::kTemporary);
     if (!lock) {
       throw std::system_error(lock.error(), "Model import record is busy");
     }
@@ -318,21 +350,6 @@ namespace {
     return nodes;
   }
 
-  auto IdentityOfName(const std::filesystem::path& record_path)
-    -> std::optional<Uuid>
-  {
-    const auto name = record_path.filename().string();
-    if (!name.ends_with(ModelImportRecord::kRecordSuffix)) {
-      return std::nullopt;
-    }
-    const auto identity = Uuid::FromString(
-      name.substr(0, name.size() - ModelImportRecord::kRecordSuffix.size()));
-    if (!identity || !identity.value().IsValidV7()) {
-      return std::nullopt;
-    }
-    return identity.value();
-  }
-
   //! Every record of `content_root`, by path.
   auto RecordPaths(const std::filesystem::path& content_root)
     -> std::vector<std::filesystem::path>
@@ -343,8 +360,8 @@ namespace {
     if (!std::filesystem::exists(base::ToNativePath(folder))) {
       return paths;
     }
-    for (const auto& entry :
-      std::filesystem::directory_iterator(base::ToNativePath(folder))) {
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(
+           base::ToNativePath(folder))) {
       if (entry.is_regular_file()
         && entry.path().filename().string().ends_with(
           ModelImportRecord::kRecordSuffix)) {
@@ -393,10 +410,11 @@ namespace {
   //! Refuses a second record with the source identity or the virtual path of
   //! `content`.
   auto RequireUniqueRecord(const std::filesystem::path& record_path,
-    const ModelImportRecordContent& content) -> void
+    const ModelImportRecordContent& content,
+    const std::filesystem::path& content_root) -> void
   {
     const auto path = Absolute(record_path);
-    for (const auto& other_path : RecordPaths(ContentRootOf(path))) {
+    for (const auto& other_path : RecordPaths(content_root)) {
       if (other_path == path) {
         continue;
       }
@@ -424,7 +442,7 @@ namespace {
   auto GenerationDirectory(const std::filesystem::path& record_path,
     const ModelImportRecordContent& content) -> std::filesystem::path
   {
-    const auto root = ContentRootOf(record_path);
+    const auto root = RootOfRecord(record_path, content.virtual_path);
     const auto path = root / ".cooked" / ModelImportRecord::kRecordsFolder
       / content.source_identity.ToString();
     RequireWithin(path, root);
@@ -573,16 +591,9 @@ namespace {
     content.source_identity
       = Uuid::FromString(document.at("source_identity").get<std::string>())
           .value();
-    if (IdentityOfName(path) != content.source_identity) {
-      throw std::invalid_argument(
-        "A model import record is named by its source "
-        "identity: "
-        + path.generic_string() + " should be "
-        + content.source_identity.ToString()
-        + std::string(ModelImportRecord::kRecordSuffix));
-    }
     auto source_text = document.at("source").get<std::string>();
     content.virtual_path = document.at("virtual_path").get<std::string>();
+    static_cast<void>(RootOfRecord(path, content.virtual_path));
     content.settings_json = document.at("settings").dump();
     content.surface_provenance = document.contains("surface_provenance")
       ? SurfaceProvenance::Parse(
@@ -827,10 +838,17 @@ auto ModelImportRecord::MakeSettings(const SceneImportSettings& settings)
 }
 
 auto ModelImportRecord::PathFor(const std::filesystem::path& content_root,
-  const Uuid& source_identity) -> std::filesystem::path
+  const std::string_view virtual_path) -> std::filesystem::path
 {
-  return Absolute(content_root) / kRecordsFolder
-    / (source_identity.ToString() + std::string(kRecordSuffix));
+  return Absolute(content_root) / RecordRelativePath(virtual_path);
+}
+
+auto ModelImportRecord::ContentRootOf(const std::filesystem::path& record_path)
+  -> std::filesystem::path
+{
+  const auto document = json::parse(ReadText(Absolute(record_path)));
+  return RootOfRecord(
+    record_path, document.at("virtual_path").get<std::string>());
 }
 
 auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
@@ -881,7 +899,7 @@ auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
               "virtual path, import with --record "
             + path.generic_string(),
           file));
-      location.record_path = PathFor(content_root, Uuid::Generate());
+      location.record_path = PathFor(content_root, virtual_path);
       return location;
     }
   }
@@ -954,35 +972,36 @@ auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
         file));
     }
   }
-  location.record_path = PathFor(content_root, Uuid::Generate());
+  location.record_path = PathFor(content_root, virtual_path);
   return location;
 }
 
-auto ModelImportRecord::Save(const ModelImportRecordSave& save) -> void
+auto ModelImportRecord::Save(const ModelImportRecordSave& save)
+  -> std::filesystem::path
 {
   const auto path = Absolute(save.record_path);
   const auto root = Absolute(save.content_root);
-  if (path.parent_path() != root / kRecordsFolder) {
-    throw std::invalid_argument("A model import record lives in "
-      + (root / kRecordsFolder).generic_string() + ": "
+  const auto exists = Exists(path);
+  if (!exists && path != PathFor(root, save.virtual_path)) {
+    throw std::invalid_argument("A new model import record lives at "
+      + PathFor(root, save.virtual_path).generic_string() + ", not "
       + path.generic_string());
   }
   std::filesystem::create_directories(base::ToNativePath(path.parent_path()));
-  const auto lock = RecordLock(path);
-  const auto exists = Exists(path);
+  auto lock = RecordLock(path);
   auto content = ModelImportRecordContent {};
   if (exists) {
     content = Read(path, *save.mounts);
-  } else {
-    const auto identity = IdentityOfName(path);
-    if (!identity) {
-      throw std::invalid_argument("A new model import record is named by a "
-                                  "UUIDv7 source identity: "
-        + path.generic_string());
+    if (RootOfRecord(path, content.virtual_path) != root) {
+      throw std::invalid_argument("The model import record "
+        + path.generic_string() + " belongs to another content root than "
+        + root.generic_string());
     }
-    content.source_identity = *identity;
+  } else {
+    const auto identity = Uuid::Generate();
+    content.source_identity = identity;
     content.surface_provenance
-      = std::make_shared<const SurfaceProvenance>(*identity);
+      = std::make_shared<const SurfaceProvenance>(identity);
   }
   if (!save.source.empty()) {
     const auto located = MountPathOfSource(save.source, *save.mounts);
@@ -1002,11 +1021,29 @@ auto ModelImportRecord::Save(const ModelImportRecordSave& save) -> void
       "A new model import record needs a source and a virtual path");
   }
   ValidateSettings(content, *save.mounts);
-  RequireUniqueRecord(path, content);
-  const auto text = Serialize(content, path);
-  if (!exists || ReadText(path) != text) {
+  // A model given another virtual path takes its record with it.
+  const auto target = PathFor(root, content.virtual_path);
+  RequireUniqueRecord(path, content, root);
+  const auto text = Serialize(content, target);
+  if (target != path) {
+    std::filesystem::create_directories(
+      base::ToNativePath(target.parent_path()));
+    WriteText(target, text);
+    std::filesystem::remove(base::ToNativePath(path));
+    // The folders the record leaves behind go with it, up to the records
+    // folder, once its lock file is gone too.
+    lock = serio::FileLock {};
+    const auto records = root / kRecordsFolder;
+    for (auto folder = path.parent_path();
+      folder != records && IsWithin(folder, records)
+      && std::filesystem::is_empty(base::ToNativePath(folder));
+      folder = folder.parent_path()) {
+      std::filesystem::remove(base::ToNativePath(folder));
+    }
+  } else if (!exists || ReadText(path) != text) {
     WriteText(path, text);
   }
+  return target;
 }
 
 auto ModelImportRecord::SaveRecipeFile(const ModelImportRecordSave& save,
@@ -1063,7 +1100,7 @@ auto ModelImportRecord::SaveRecipeFile(const ModelImportRecordSave& save,
         .exists = Exists(save.record_path),
         .diagnostics = {},
       };
-  Save({
+  location.record_path = Save({
     .record_path = location.record_path,
     .content_root = save.content_root,
     .source = scene.source_path,
@@ -1083,7 +1120,8 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
   state->notes = std::move(notes);
   const auto lock = RecordLock(state->record_path);
   state->content = Read(state->record_path, mounts);
-  RequireUniqueRecord(state->record_path, state->content);
+  RequireUniqueRecord(state->record_path, state->content,
+    RootOfRecord(state->record_path, state->content.virtual_path));
   if (!Exists(state->content.source)) {
     throw std::runtime_error("import.source_missing: the source "
       + state->content.source.generic_string() + " of the model "
@@ -1171,7 +1209,7 @@ auto ModelImportRecord::ReclaimUnusedGenerations(
   const auto path = Absolute(record_path);
   const auto record_lock = RecordLock(path);
   const auto content = ReadDocument(path).content;
-  RequireUniqueRecord(path, content);
+  RequireUniqueRecord(path, content, RootOfRecord(path, content.virtual_path));
   const auto selected = SelectedPath(path, content);
   const auto directory = GenerationDirectory(path, content);
   if (!std::filesystem::exists(base::ToNativePath(directory))) {

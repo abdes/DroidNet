@@ -40,21 +40,36 @@ struct FileBrowserConfig {
 };
 
 //! Centralized content root configuration for demo assets.
+/*!
+ The examples project is read only: a demo's cooked content and ad-hoc imports
+ live in folders the demo owns.
+*/
 struct ContentRootConfig {
+  //! The examples project root; `Examples/Showcase` by default.
   std::filesystem::path content_root;
+  //! The demo's cooked root to browse; none when empty.
   std::filesystem::path cooked_root;
+  //! The folder of the demo's paks; none when empty.
+  std::filesystem::path pak_directory;
+  //! The demo's scratch project for ad-hoc model imports; imports are
+  //! unavailable when empty.
+  std::filesystem::path scratch_root;
 };
 
 //! Resolved content root paths and sub-categories.
 struct ContentRootPaths {
+  //! The examples project root.
   std::filesystem::path content_root;
-  std::filesystem::path fbx_directory;
-  std::filesystem::path glb_directory;
-  std::filesystem::path gltf_directory;
-  std::filesystem::path textures_directory;
+  //! Raw DCC models, `Content/SourceMedia/DCC`.
+  std::filesystem::path dcc_directory;
+  //! Raw images, `Content/SourceMedia/Images`.
   std::filesystem::path images_directory;
+  //! The demo's paks.
   std::filesystem::path pak_directory;
   std::filesystem::path cooked_root;
+  //! The demo's transient project of ad-hoc model imports: its own `Imports/`
+  //! and `.cooked/`, away from the examples project.
+  std::filesystem::path scratch_root;
 };
 
 //! ImGui file browser service with a simple, reusable API.

@@ -1,0 +1,8 @@
+{
+  "name": "floor",
+  "virtual_path": "/Content/Scenes/PhysicsDomains/floor.ocshape",
+  "shape_type": "box",
+  "material_ref": "/Content/Scenes/PhysicsDomains/ground.opmat",
+  "half_extents": [60.0, 60.0, 0.5],
+  "local_position": [0.0, 0.0, -0.5]
+}

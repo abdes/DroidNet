@@ -76,7 +76,7 @@ public sealed class ModelImportDefaultsTests
         var settings = ModelGeometryDefaults.WithLodPolicy(Empty(), "meshes/Body", new LodPolicy.Fixed(1));
         settings = ModelGeometryDefaults.WithSurfaceFlag(settings, "meshes/Body", Surface, ModelSurfaceFlag.CastsShadows, value: false);
         settings = ModelImportSettingScope.Texture("Paint_Normal").Write(ModelImportSettingCatalog.MaxTextureSize, settings, 1024);
-        var path = ModelImportSettings.PathFor(@"C:\Project", Guid.CreateVersion7());
+        var path = ModelImportSettings.PathFor(@"C:\Project", "/Content/Car.glb");
 
         var record = ModelImportSettings.Create(path, @"C:\Project\Content\Car.glb", "/Content/Car.glb", settings);
 

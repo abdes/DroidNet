@@ -115,7 +115,6 @@ namespace {
     = "content.import.tuning.hdr_handling";
 
   // Layout Keys
-  constexpr auto kLayoutVirtualRootKey = "content.layout.virtual_root";
   constexpr auto kLayoutResourcesDirKey = "content.layout.resources_dir";
 } // namespace
 
@@ -341,9 +340,6 @@ auto ContentSettingsService::GetDefaultLayout() const
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
-  if (auto val = settings->GetString(kLayoutVirtualRootKey)) {
-    l.virtual_mount_root = *val;
-  }
   if (auto val = settings->GetString(kLayoutResourcesDirKey)) {
     l.resources_dir = *val;
   }
@@ -357,7 +353,6 @@ auto ContentSettingsService::SetDefaultLayout(
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
-  settings->SetString(kLayoutVirtualRootKey, l.virtual_mount_root);
   settings->SetString(kLayoutResourcesDirKey, l.resources_dir);
   ++epoch_;
 }

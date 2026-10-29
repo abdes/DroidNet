@@ -83,7 +83,7 @@ view model, as `Oxygen.Editor.MaterialEditor` does for materials.
 tab's title keeps the extension (`Car.glb`). The document's content,
 `ModelContent`, holds the model's source and follows it when it moves, and the
 model's import settings, `ModelImportSettings`, read from its model import
-record (`<ProjectRoot>/imports/<source_identity>.import.json`,
+record (`<ProjectRoot>/Imports/<virtual path>.import.json`,
 [scene instances](scene-instances.md) NGN14), which Save writes atomically and
 its history records. The editor never writes the source file.
 

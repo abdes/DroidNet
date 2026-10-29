@@ -69,7 +69,6 @@ namespace {
           "mounts",
           json::array({ { { "name", "Content" }, { "path", "Content" } } }),
         },
-        { "layout", { { "virtual_mount_root", "/Content" } } },
         { "output", ".cooked" },
         { "jobs", std::move(jobs) },
       };
@@ -206,7 +205,6 @@ namespace {
     const auto placeholder = json {
       { "version", 1 },
       { "mounts", json::array({ { { "name", "Studio" } } }) },
-      { "layout", { { "virtual_mount_root", "/Studio" } } },
       {
         "jobs",
         json::array({

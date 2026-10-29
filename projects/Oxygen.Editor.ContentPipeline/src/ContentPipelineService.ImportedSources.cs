@@ -154,7 +154,7 @@ public sealed partial class ContentPipelineService
     private async Task<ContentCookResult> CookWithImportedSourcesAsync(Guid operationId, ContentCookScope scope, CancellationToken cancellationToken)
     {
         // The scope's models cook as one native batch, so the ImportTool runs them as concurrent jobs under the run's
-        // settings; each job keeps its own layout, and each model's identities are checked against its own products.
+        // settings; each model's identities are checked against its own products.
         var results = new List<ContentCookResult>();
         var models = scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.ForeignSource).ToArray();
         if (models.Length != 0)
@@ -164,7 +164,6 @@ public sealed partial class ContentPipelineService
             var manifest = new ContentImportManifest(
                 1,
                 (scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path,
-                jobs[0].Layout ?? new ContentImportLayout(AssetPath.Create(models[0].AssetUri.Mount).VirtualPath),
                 jobs)
             { Mounts = ContentImportManifestBuilder.CreateMounts(scope.Project) };
             var result = await this.ExecuteManifestAsync(operationId, scope.TargetKind, scope with { Inputs = models }, manifest, [], cancellationToken).ConfigureAwait(false);

@@ -96,7 +96,7 @@ internal sealed partial class CookPublicationTransaction
         var recordPath = project.ProjectRoot.Combine(file.RelativePath).FullPath;
         var before = ModelImportSettings.Parse(recordPath, file.Before);
         var after = ModelImportSettings.Parse(recordPath, file.After);
-        var expected = ModelImportSettings.RecordsFolder + "/" + before.SourceIdentity.ToString("D") + ModelImportSettings.RecordSuffix;
+        var expected = ModelImportSettings.RelativePathFor(before.VirtualPath);
         if (!string.Equals(file.RelativePath, expected, StringComparison.Ordinal) || !before.DiffersOnlyByImport(after))
         {
             throw new InvalidDataException("A publication may update only what an import establishes in its model import record.");

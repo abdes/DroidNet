@@ -1,0 +1,36 @@
+{
+  "$schema": "oxygen.geometry-descriptor.schema.json",
+  "name": "SoGhost",
+  "lods": [
+    {
+      "name": "SoGhost_lod0",
+      "mesh_type": "procedural",
+      "procedural": {
+        "generator": "Sphere",
+        "mesh_name": "SoGhost_lod0",
+        "params": {
+          "latitude_segments": 24,
+          "longitude_segments": 32
+        }
+      },
+      "submeshes": [
+        {
+          "name": "SoGhost_lod0_surface",
+          "surface_id": "c55f1e5d-2d5e-4de8-8b90-c397e355db55",
+          "material_ref": "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "surfaces": [
+    {
+      "surface_id": "c55f1e5d-2d5e-4de8-8b90-c397e355db55",
+      "visible": false
+    }
+  ]
+}

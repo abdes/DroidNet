@@ -17,7 +17,15 @@
 namespace oxygen::serio {
 
 enum class FileLockMode : uint8_t { kShared, kExclusive };
-enum class FileLockOpenMode : uint8_t { kExisting, kOpenOrCreate };
+//! How a lock opens its file.
+/*!
+ - `kExisting`: the file must exist, as a lease marker a generation owns does.
+ - `kOpenOrCreate`: the file is created if missing and stays after release.
+ - `kTemporary`: the file exists only while it is locked. It is created if
+   missing and removed when the last holder releases it, so a mutex leaves no
+   file behind. A contender that races the removal reports contention.
+*/
+enum class FileLockOpenMode : uint8_t { kExisting, kOpenOrCreate, kTemporary };
 
 //! A movable, nonblocking operating-system file lock.
 class FileLock final {

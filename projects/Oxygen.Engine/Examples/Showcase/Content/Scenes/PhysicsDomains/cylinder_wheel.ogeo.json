@@ -1,0 +1,30 @@
+{
+  "name": "cylinder_wheel",
+  "lods": [
+    {
+      "name": "cylinder_wheel_lod0",
+      "mesh_type": "procedural",
+      "procedural": {
+        "generator": "Cylinder",
+        "mesh_name": "CylinderWheel",
+        "params": {
+          "segments": 24,
+          "height": 0.3,
+          "radius": 0.3
+        }
+      },
+      "submeshes": [
+        {
+          "name": "wheel_surface",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/Content/Scenes/PhysicsDomains/wheel_dark.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

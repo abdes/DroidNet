@@ -101,7 +101,7 @@ internal sealed partial class RelocationWorkspace : IDisposable
     {
         var source = this.Write(bundle + "/" + primary, "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"uri\":\"mesh.bin\"}]}");
         _ = this.Write(bundle + "/mesh.bin", "bin");
-        var recordPath = ModelImportSettings.PathFor(this.Root, Guid.CreateVersion7());
+        var recordPath = ModelImportSettings.PathFor(this.Root, "/" + bundle + "/" + primary);
         var record = ModelImportSettings.Create(
             recordPath,
             source,
@@ -115,19 +115,16 @@ internal sealed partial class RelocationWorkspace : IDisposable
         return record;
     }
 
-    /// <summary>Gets the path of a model's import record, which never moves.</summary>
-    /// <param name="record">The model's record.</param>
+    /// <summary>Gets the path of a model's import record as it is now: it moves with the model's virtual path.</summary>
+    /// <param name="record">The model's record as written.</param>
     /// <returns>The record's relative path in the project.</returns>
     public string RecordOf(ModelImportSettings record)
-        => this.FileSystem.Path.GetRelativePath(this.Root, ModelImportSettings.PathFor(this.Root, record.SourceIdentity));
+        => this.FileSystem.Path.GetRelativePath(this.Root, this.Find(record).RecordPath);
 
-    /// <summary>Reads a model's import record from its place in the project.</summary>
+    /// <summary>Reads a model's import record from its place in the project, found by its source identity.</summary>
     /// <param name="record">The model's record as written.</param>
     /// <returns>The record as it is now.</returns>
-    public ModelImportSettings ReadRecord(ModelImportSettings record)
-        => ModelImportSettings.Parse(
-            ModelImportSettings.PathFor(this.Root, record.SourceIdentity),
-            this.FileSystem.File.ReadAllBytes(ModelImportSettings.PathFor(this.Root, record.SourceIdentity)));
+    public ModelImportSettings ReadRecord(ModelImportSettings record) => this.Find(record).Settings;
 
     public void Dispose()
     {
@@ -137,4 +134,7 @@ internal sealed partial class RelocationWorkspace : IDisposable
         this.Session.Dispose();
         this.catalogChanges.Dispose();
     }
+
+    private ModelImportRecord Find(ModelImportSettings record)
+        => new ModelImportRecords(this.FileSystem, this.Root).All.Single(found => found.Settings.SourceIdentity == record.SourceIdentity);
 }

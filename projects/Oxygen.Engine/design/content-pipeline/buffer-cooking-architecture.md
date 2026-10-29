@@ -457,7 +457,7 @@ Canonical example:
   "buffers": [
     {
       "source": "woodfloor007_vertices.bin",
-      "virtual_path": "/.cooked/Resources/Buffers/woodfloor007_vertices.obuf",
+      "virtual_path": "/Content/Buffers/woodfloor007_vertices.obuf",
       "usage_flags": 1,
       "element_stride": 32,
       "alignment": 16,
@@ -476,7 +476,7 @@ Canonical example:
     },
     {
       "source": "woodfloor007_indices.bin",
-      "virtual_path": "/.cooked/Resources/Buffers/woodfloor007_indices.obuf",
+      "virtual_path": "/Content/Buffers/woodfloor007_indices.obuf",
       "usage_flags": 2,
       "element_format": 5,
       "alignment": 4
@@ -487,16 +487,16 @@ Canonical example:
 
 #### 7.2.2 `buffer_descriptor` Entry Fields
 
-| Field            | Required | Type                   | Description                                                                 |
-| ---------------- | -------- | ---------------------- | --------------------------------------------------------------------------- |
-| `source`         | **Yes**  | `string`               | Path to binary source file (absolute or relative to descriptor)             |
-| `virtual_path`   | **Yes**  | canonical `.obuf` path | Unique virtual path for this buffer (must end in `.obuf`; canonical format) |
-| `usage_flags`    | No       | `uint` ≥0              | Buffer usage hints bitfield (Section 7.2.3)                                 |
-| `element_stride` | No       | `uint` ≥0              | Stride of each element in bytes; 0 when `element_format` is set             |
-| `element_format` | No       | `uint8` [0,255]        | Format enum value (0 = raw/structured; nonzero = typed)                     |
-| `alignment`      | No       | `uint` ≥1              | Required GPU upload alignment; default 16                                   |
-| `content_hash`   | No       | `uint64`               | Pre-computed content hash; if 0 and hashing enabled, pipeline computes it   |
-| `views`          | No       | array (≥1)             | Named sub-range views (Section 7.2.4)                                       |
+| Field            | Required | Type                   | Description                                                                                    |
+| ---------------- | -------- | ---------------------- | ---------------------------------------------------------------------------------------------- |
+| `source`         | **Yes**  | `string`               | Binary source file: a mount path, or a path relative to the descriptor that stays in its mount |
+| `virtual_path`   | **Yes**  | canonical `.obuf` path | Unique virtual path for this buffer (must end in `.obuf`; canonical format)                    |
+| `usage_flags`    | No       | `uint` ≥0              | Buffer usage hints bitfield (Section 7.2.3)                                                    |
+| `element_stride` | No       | `uint` ≥0              | Stride of each element in bytes; 0 when `element_format` is set                                |
+| `element_format` | No       | `uint8` [0,255]        | Format enum value (0 = raw/structured; nonzero = typed)                                        |
+| `alignment`      | No       | `uint` ≥1              | Required GPU upload alignment; default 16                                                      |
+| `content_hash`   | No       | `uint64`               | Pre-computed content hash; if 0 and hashing enabled, pipeline computes it                      |
+| `views`          | No       | array (≥1)             | Named sub-range views (Section 7.2.4)                                                          |
 
 Schema mutual-exclusion rules:
 
@@ -659,8 +659,10 @@ Key layout constants:
 | `buffers_table_file_name`    | `"buffers.table"` | Resource table filename            |
 | `buffers_data_file_name`     | `"buffers.data"`  | Raw payload filename               |
 
-Virtual path for runtime mounting: `BufferVirtualPath(name)` =
-`<virtual_mount_root>/Buffers/<name>.obuf`
+Virtual path for runtime mounting: the identity the entry names, such as
+`/Content/Buffers/<name>.obuf`. A cooked root holds one mount, the one its
+identities name (`content::MountRootOf`), so the sidecar is
+`Buffers/<name>.obuf` under the root.
 
 Relative path for file emission: `BufferDescriptorRelPath(name)` =
 `Buffers/<name>.obuf`
@@ -684,7 +686,7 @@ messages written to `error_stream`. Error codes follow the pattern
 | Validation   | `buffer.container.no_buffers`                  | All entries failed validation; no valid entries remain                 |
 | Validation   | `buffer.container.no_submissions`              | No work items were submitted to pipeline                               |
 | Validation   | `buffer.container.virtual_path_duplicate`      | Two entries share the same `virtual_path`                              |
-| Validation   | `buffer.container.virtual_path_unmounted`      | `virtual_path` does not start under `virtual_mount_root`               |
+| Validation   | `buffer.container.virtual_path_unmounted`      | `virtual_path` names no mount                                          |
 | Validation   | `buffer.container.source_too_large`            | Source file exceeds 4 GiB (`uint32_t::max` bytes)                      |
 | Views        | `buffer.container.view_*`                      | View addressing errors from `NormalizeBufferViews`                     |
 | Reader       | `buffer.container.reader_unavailable`          | `IAsyncFileReader` not injected                                        |

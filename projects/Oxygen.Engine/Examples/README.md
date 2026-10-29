@@ -5,8 +5,8 @@ runtime host (`Oxygen.Host`); most add the **DemoShell** panels on top.
 
 ## Shared display and timing options
 
-Async, InputSystem, LightBench, MultiView, Physics, RenderScene, TexturedCube and
-VortexBasic share these runtime controls:
+Async, InputSystem, LightBench, MultiView, Physics, RenderScene and VortexBasic
+share these runtime controls:
 
 | Option                   | Meaning                                                                                                    |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------- |

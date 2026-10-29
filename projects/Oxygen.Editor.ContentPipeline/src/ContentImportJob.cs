@@ -46,11 +46,6 @@ public sealed record ContentImportJob(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ManifestSource => this.Record is null ? this.Source : null;
 
-    /// <summary>Gets per-job descriptor folders while retaining the manifest's shared cooked root.</summary>
-    [JsonPropertyName("layout")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public ContentImportLayout? Layout { get; init; }
-
     /// <summary>Gets the ordered resolver-only roots for scene and geometry descriptors.</summary>
     /// <remarks>Not part of the manifest file: the ImportTool receives them as <c>--cooked-context-root</c> arguments.</remarks>
     [JsonIgnore]

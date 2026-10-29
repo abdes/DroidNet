@@ -105,7 +105,7 @@ target_link_libraries(
 target_compile_definitions(
   Oxygen.Scripting.Bindings.Tests
   PRIVATE
-    OXYGEN_EXAMPLE_SCENES_DIR="${OXYGEN_SOURCE_DIR}/../Examples/Content/scenes"
+    OXYGEN_EXAMPLE_SCENES_DIR="${OXYGEN_SOURCE_DIR}/../Examples/Showcase/Content/Scenes"
 )
 
 # Aggregate target that builds all scripting test targets (excludes LinkTest)

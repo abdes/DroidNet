@@ -81,7 +81,7 @@ public sealed class ModelImportDialogViewModelTests
         var source = Path.Combine(root, "Content", "Scenes", "BurgerPiz.glb");
         _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(source)!);
         project.FileSystem.File.WriteAllText(source, "model");
-        var record = ModelImportSettings.PathFor(root, Guid.CreateVersion7());
+        var record = ModelImportSettings.PathFor(root, "/Content/Scenes/BurgerPiz.glb");
         _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(record)!);
         using (var settings = JsonDocument.Parse("""{"name":"BurgerPiz","unit_policy":"preserve"}"""))
         {

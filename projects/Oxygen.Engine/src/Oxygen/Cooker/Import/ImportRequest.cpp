@@ -12,6 +12,8 @@
 #include <string_view>
 #include <system_error>
 
+#include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 
@@ -56,7 +58,7 @@ auto ImportRequest::GetTextureDescriptorRelPath() const -> std::string
 {
   auto relative = std::string {};
   if (!internal::IsCanonicalVirtualPath(asset_virtual_path)
-    || !internal::TryVirtualPathToRelPath(*this, asset_virtual_path, relative)
+    || !internal::TryVirtualPathToRelPath(asset_virtual_path, relative)
     || std::filesystem::path(relative).extension() != ".otex") {
     throw std::invalid_argument(
       "Texture virtual_path must name an .otex descriptor within its mount: "
@@ -65,17 +67,31 @@ auto ImportRequest::GetTextureDescriptorRelPath() const -> std::string
   return relative;
 }
 
+auto ImportRequest::OutputIdentity() const -> std::string_view
+{
+  if (!asset_virtual_path.empty()) {
+    return asset_virtual_path;
+  }
+  if (options.scripting.import_kind == ScriptingImportKind::kScriptingSidecar) {
+    return options.scripting.target_scene_virtual_path;
+  }
+  if (physics.has_value()) {
+    return physics->target_scene_virtual_path;
+  }
+  return {};
+}
+
+auto ImportRequest::OutputMountRoot() const -> std::string_view
+{
+  return content::MountRootOf(OutputIdentity());
+}
+
 auto ImportRequest::ResolveCookedRoot() const -> std::filesystem::path
 {
   if (cooked_root.has_value()) {
     return cooked_root->lexically_normal();
   }
-  auto leaf = std::filesystem::path(loose_cooked_layout.virtual_mount_root)
-                .lexically_normal()
-                .filename();
-  if (leaf.empty()) {
-    leaf = ".cooked";
-  }
+  const auto leaf = std::filesystem::path(OutputMountRoot()).filename();
   std::filesystem::path base;
   if (!source_path.empty()) {
     std::error_code error;
@@ -87,7 +103,7 @@ auto ImportRequest::ResolveCookedRoot() const -> std::filesystem::path
   if (base.empty()) {
     base = std::filesystem::temp_directory_path();
   }
-  return base.filename() == leaf ? base : base / leaf;
+  return leaf.empty() || base.filename() == leaf ? base : base / leaf;
 }
 
 namespace {

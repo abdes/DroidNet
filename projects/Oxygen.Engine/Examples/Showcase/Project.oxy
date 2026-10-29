@@ -1,0 +1,12 @@
+{
+  "Id": "018f8f8f-1234-7abc-8def-0123456789ab",
+  "Name": "Oxygen Examples",
+  "SchemaVersion": 2,
+  "Mounts": [
+    {
+      "Name": "Content",
+      "Kind": "Source",
+      "Path": "Content"
+    }
+  ]
+}

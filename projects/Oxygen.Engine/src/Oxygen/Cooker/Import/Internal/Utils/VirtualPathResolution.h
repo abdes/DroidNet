@@ -53,44 +53,42 @@ inline auto CheckAssetVirtualPath(const ImportRequest& request,
   };
 }
 
-inline auto NormalizeVirtualMountRoot(std::string mount_root) -> std::string
-{
-  if (mount_root.empty()) {
-    return "/";
-  }
-  if (mount_root.front() != '/') {
-    mount_root.insert(mount_root.begin(), '/');
-  }
-  while (mount_root.size() > 1 && mount_root.back() == '/') {
-    mount_root.pop_back();
-  }
-  return mount_root;
-}
+//! The path of an identity in a cooked root, which holds the identity's mount.
+/*!
+ A cooked root holds one mount (`content::MountRootOf`): the descriptor of
+ `/Content/Models/Ship.glb` is `Models/Ship.glb` under it.
 
-inline auto TryVirtualPathToRelPath(const std::string_view mount_root,
+ @return False, with `relpath` empty, for a path that names no mount.
+*/
+inline auto TryVirtualPathToRelPath(
   const std::string_view virtual_path, std::string& relpath) -> bool
 {
-  if (!virtual_path.starts_with(mount_root)) {
-    return false;
-  }
-  if (virtual_path.size() == mount_root.size()) {
+  const auto mount = oxygen::content::MountRootOf(virtual_path);
+  if (mount.empty()) {
     relpath.clear();
     return false;
   }
-  const auto slash_pos = mount_root.size();
-  if (virtual_path[slash_pos] != '/') {
-    return false;
-  }
-  relpath = std::string(virtual_path.substr(slash_pos + 1));
-  return !relpath.empty();
+  relpath = std::string(virtual_path.substr(mount.size() + 1));
+  return true;
 }
 
+//! The path of a reference in the request's own cooked root.
+/*!
+ A reference is in the request's cooked root when it lies in the mount the
+ request cooks into (`ImportRequest::OutputMountRoot`); a reference in another
+ mount, such as `/Engine`, is only in a context root.
+
+ @return False, with `relpath` empty, for a reference in another mount.
+*/
 inline auto TryVirtualPathToRelPath(const ImportRequest& request,
   const std::string_view virtual_path, std::string& relpath) -> bool
 {
-  const auto mount_root
-    = NormalizeVirtualMountRoot(request.loose_cooked_layout.virtual_mount_root);
-  return TryVirtualPathToRelPath(mount_root, virtual_path, relpath);
+  const auto output = request.OutputMountRoot();
+  if (output.empty() || oxygen::content::MountRootOf(virtual_path) != output) {
+    relpath.clear();
+    return false;
+  }
+  return TryVirtualPathToRelPath(virtual_path, relpath);
 }
 
 //! Where a job's identity lives in the cooked root.
@@ -109,13 +107,12 @@ struct AssetPlacement final {
  The cooked layout is the identity: the descriptor of `/Mount/X/Y.ext` lives at
  `X/Y.ext` under the mount's cooked root, and the products of the input source
  `/Mount/X/Player.input` live under `X/Player.input/`. The identity must be a
- virtual path the engine accepts, inside the job's mount and ending in
- `extension`.
+ virtual path the engine accepts, in a mount and ending in `extension`.
 
  @return The placement, or the diagnostic refusing the identity:
    `import.asset_virtual_path_missing`, the rule's `vpath.*` code, or
-   `import.asset_virtual_path_invalid` for a path outside the mount or of
-   another type.
+   `import.asset_virtual_path_invalid` for a path in no mount or of another
+   type.
 */
 inline auto PlaceAsset(
   const ImportRequest& request, const std::string_view extension)
@@ -141,13 +138,11 @@ inline auto PlaceAsset(
       "The engine refuses the asset's virtual path: " + virtual_path));
   }
   auto relpath = std::string {};
-  if (!TryVirtualPathToRelPath(request, virtual_path, relpath)
+  if (!TryVirtualPathToRelPath(virtual_path, relpath)
     || !virtual_path.ends_with(extension)) {
     return std::unexpected(refuse("import.asset_virtual_path_invalid",
       "The asset's virtual path must name a '" + std::string(extension)
-        + "' asset under the mount '"
-        + request.loose_cooked_layout.virtual_mount_root
-        + "': " + virtual_path));
+        + "' asset in a mount: " + virtual_path));
   }
   return AssetPlacement {
     .virtual_path = virtual_path,
@@ -183,7 +178,7 @@ inline auto PlaceModelProduct(const ImportRequest& request,
     .descriptor_relpath = {},
   };
   static_cast<void>(TryVirtualPathToRelPath(
-    request, placement.virtual_path, placement.descriptor_relpath));
+    placement.virtual_path, placement.descriptor_relpath));
   return placement;
 }
 

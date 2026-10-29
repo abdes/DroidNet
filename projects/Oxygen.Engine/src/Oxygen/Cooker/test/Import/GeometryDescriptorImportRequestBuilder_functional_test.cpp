@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -27,6 +28,7 @@ using nlohmann::json;
 using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::GeometryDescriptorImportSettings;
 using oxygen::content::import::internal::BuildGeometryDescriptorRequest;
+using oxygen::cooker::test::ContentMountTable;
 using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
 
@@ -71,7 +73,9 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
   const auto settings = MakeBaseSettings(descriptor_path);
   auto errors = std::ostringstream {};
 
-  const auto request = BuildGeometryDescriptorRequest(settings, errors);
+  const auto mounts = ContentMountTable(temp.Path());
+  const auto request
+    = BuildGeometryDescriptorRequest(settings, *mounts, errors);
 
   ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << errors.str();
@@ -120,7 +124,9 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
   const auto settings = MakeBaseSettings(descriptor_path);
   auto errors = std::ostringstream {};
 
-  const auto request = BuildGeometryDescriptorRequest(settings, errors);
+  const auto mounts = ContentMountTable(temp.Path());
+  const auto request
+    = BuildGeometryDescriptorRequest(settings, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(errors.str(),
@@ -135,7 +141,9 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest, RejectsMissingFile)
   const auto settings = MakeBaseSettings(descriptor_path);
   auto errors = std::ostringstream {};
 
-  const auto request = BuildGeometryDescriptorRequest(settings, errors);
+  const auto mounts = ContentMountTable(temp.Path());
+  const auto request
+    = BuildGeometryDescriptorRequest(settings, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(
@@ -171,7 +179,9 @@ NOLINT_TEST(
   settings.cooked_root = "relative/output";
   auto errors = std::ostringstream {};
 
-  const auto request = BuildGeometryDescriptorRequest(settings, errors);
+  const auto mounts = ContentMountTable(temp.Path());
+  const auto request
+    = BuildGeometryDescriptorRequest(settings, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(

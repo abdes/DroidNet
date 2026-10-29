@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "source": "/Content/SourceMedia/DCC/chest.glb",
+  "virtual_path": "/Content/Models/chest.glb",
+  "settings": {
+    "content_hashing": true,
+    "name": "chest_scene"
+  },
+  "source_identity": "01a0e7c7-f432-7586-8f04-213466d9981f",
+  "surface_provenance": {
+    "geometries": [
+      {
+        "allocations": [
+          {
+            "declaration_key": 0,
+            "surface_id": "a0767b56-4a59-32af-3b90-f25fae7b9bd6"
+          }
+        ],
+        "geometry_asset_key": "fb60176a-81cf-a0fa-589a-35443a2544e4",
+        "layout_revision": "dbf2bc1629ff0768fc5ab81605dfa0b3c5025622abfafdd83b95c2f5685d42f7",
+        "source_geometry_anchor": "geometry_0",
+        "source_layout_witness": "277cfaec3073f66e4594e25f985538046a42fead0efcb41592fd1081f1a483f3",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "3ce87013-f158-71ed-fc6a-20cac3783944",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "Material",
+            "surface_id": "a0767b56-4a59-32af-3b90-f25fae7b9bd6"
+          }
+        ]
+      }
+    ],
+    "schema_version": 2
+  },
+  "node_continuity": [],
+  "published_nodes": [
+    {
+      "anchor": "world",
+      "node_id": "846e4ea4-2a0b-73f8-2e16-ed46489215bc"
+    },
+    {
+      "anchor": "world/geometry_0",
+      "node_id": "043ae840-2700-a92e-f49a-0c95d320ab69"
+    }
+  ],
+  "new_nodes": [],
+  "vanished_nodes": [],
+  "source_fingerprint": {
+    "size": 3656376,
+    "sha256": "92a4963468af5f28f1cf951024fff2344169245813d8d25e6709e4eac9b01553",
+    "files": []
+  }
+}

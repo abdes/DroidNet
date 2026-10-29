@@ -121,16 +121,15 @@ namespace {
           .name = "Content",
           .kind = content::import::MountKind::kSource,
           .path = ".",
-        } },
+        }, },
         .form = content::import::MountDeclarationForm::kCommittedFile,
         .declared_in = "test",
         .working_directory = root_,
         .mounts_option = std::nullopt,
         .owner = content::import::MountTableOwner::kProject,
       });
-      record_ = ModelImportRecord::PathFor(root_, Uuid::Generate());
-      ModelImportRecord::Save({
-        .record_path = record_,
+      record_ = ModelImportRecord::Save({
+        .record_path = ModelImportRecord::PathFor(root_, recipe.virtual_path),
         .content_root = root_,
         .source = source,
         .virtual_path = recipe.virtual_path,
@@ -328,32 +327,25 @@ namespace {
     EXPECT_EQ(requested.front().key, scene.scene_key);
   }
 
-  //! A model is identified by its source's path under the content root, so
-  //! two files of one name in two folders are two models.
-  NOLINT_TEST(ModelVirtualPathTest, NamesTheSourceByItsPathUnderTheContentRoot)
+  //! An ad-hoc model is identified by its source's mount path under
+  //! `/Content/Scratch`, so two files of one name in two folders are two
+  //! models.
+  NOLINT_TEST(ScratchModelVirtualPathTest, NamesTheSourceByItsMountPath)
   {
-    const auto root = std::filesystem::path("H:/Game/Content");
-
     EXPECT_EQ(
-      ui::ModelVirtualPath("/.cooked", root, root / "models/a/Watch.gltf"),
-      "/.cooked/models/a/Watch.gltf");
+      ui::ScratchModelVirtualPath("/Content/SourceMedia/DCC/a/Watch.gltf"),
+      "/Content/Scratch/DCC/a/Watch.gltf");
     EXPECT_EQ(
-      ui::ModelVirtualPath("/.cooked", root, root / "models/b/Watch.gltf"),
-      "/.cooked/models/b/Watch.gltf");
+      ui::ScratchModelVirtualPath("/Content/SourceMedia/DCC/b/Watch.gltf"),
+      "/Content/Scratch/DCC/b/Watch.gltf");
   }
 
-  //! A source outside the content root has no path under it: its file name
-  //! identifies it.
-  NOLINT_TEST(ModelVirtualPathTest, NamesAnOutsideSourceByItsFileName)
+  //! A source in a local mount keeps its mount's name, below the scratch
+  //! folder of the Content mount.
+  NOLINT_TEST(ScratchModelVirtualPathTest, KeepsALocalMountsName)
   {
-    EXPECT_EQ(
-      ui::ModelVirtualPath("/.cooked", std::filesystem::path("H:/Game/Content"),
-        std::filesystem::path("D:/Downloads/Watch.glb")),
-      "/.cooked/Watch.glb");
-    EXPECT_EQ(
-      ui::ModelVirtualPath("/.cooked", std::filesystem::path("H:/Game/Content"),
-        std::filesystem::path("H:/Game/Other/Watch.glb")),
-      "/.cooked/Watch.glb");
+    EXPECT_EQ(ui::ScratchModelVirtualPath("/Downloads/Watch.glb"),
+      "/Content/Scratch/Downloads/Watch.glb");
   }
 } // namespace
 } // namespace oxygen::examples::testing

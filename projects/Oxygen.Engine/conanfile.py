@@ -115,11 +115,11 @@ class OxygenConan(ConanFile):
         "!**/.cooked/**",
         "!**/.cooked.stage-*/**",
         "!**/.cooked.backup-*/**",
-        "!Examples/Content/pak/**",
-        "!Examples/RenderScene/pak/**",
+        "!Examples/Showcase/.build/**",
+        "!**/.mounts.json",
+        "!Examples/RenderScene/.build/**",
+        "!Examples/RenderScene/.scratch/**",
         "!Examples/RenderScene/demo_settings.json",
-        "!Examples/RenderScene/.reimport-runs/**",
-        "!Examples/Content/import-sources.local.json",
     )
 
     @staticmethod

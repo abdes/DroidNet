@@ -27,6 +27,7 @@ namespace oxygen::content::import {
 
 class SurfaceProvenance;
 class CapturedInputSet;
+struct MountTable;
 
 //! Supported authoring source formats.
 enum class ImportFormat : uint8_t {
@@ -146,6 +147,14 @@ struct ImportRequest final {
   */
   std::string source_mount_path;
 
+  //! The mount table the source was located through.
+  /*!
+   A descriptor's references to other files, such as a texture descriptor's
+   image, resolve through it (`MountTable::LocateReference`). Set with
+   `source_mount_path`; a job reading such a reference requires it.
+  */
+  std::shared_ptr<const MountTable> source_mounts {};
+
   //! Optional frozen source inputs; source_path retains its authored identity.
   std::shared_ptr<const CapturedInputSet> captured_inputs {};
 
@@ -156,8 +165,8 @@ struct ImportRequest final {
   //! source an input job cooks.
   /*!
    A material, geometry, scene, script, texture, physics material or collision
-   shape job writes its descriptor at this virtual path, inside
-   `loose_cooked_layout.virtual_mount_root`, and derives the asset key from it.
+   shape job writes its descriptor at this virtual path, in the cooked root of
+   its mount (`content::MountRootOf`), and derives the asset key from it.
    An input job names each action and mapping context under it
    (`/Content/Input/Player.input/Jump.oiact`), and a model job each material,
    geometry, texture and scene (`/Content/Ship/Ship.glb/Paint.omat`).
@@ -172,17 +181,15 @@ struct ImportRequest final {
    If set, this path MUST be absolute.
 
     If unset, the importer derives the cooked root from `source_path` and
-    `loose_cooked_layout.virtual_mount_root`, ensuring the cooked root ends with
-    the virtual mount root leaf directory (by default: `.cooked`).
+    `OutputMountRoot`, ensuring the cooked root ends with the mount's name.
   */
   std::optional<std::filesystem::path> cooked_root {};
 
   //! Loose cooked container layout conventions.
   /*!
-   Destination container layout used by the cook pipeline: the virtual mount
-   root, where a container's products go by type, and where bulk resource
-   blobs (tables/data) are written. A single-asset job's descriptor is placed
-   at `asset_virtual_path` instead.
+   Destination container layout used by the cook pipeline: where bulk resource
+   blobs (tables/data) are written. Descriptors are placed at their identity
+   in the mount's cooked root.
   */
   LooseCookedLayout loose_cooked_layout = {};
 
@@ -331,6 +338,18 @@ struct ImportRequest final {
   //! reading files.
   //! A missing or invalid identity throws std::invalid_argument.
   OXGN_COOK_NDAPI auto GetTextureDescriptorRelPath() const -> std::string;
+
+  //! The identity the job's output belongs to: its own, or, for a sidecar,
+  //! the scene it completes. Empty for a job that names neither.
+  OXGN_COOK_NDAPI auto OutputIdentity() const -> std::string_view;
+
+  //! The mount the job cooks into: that of `OutputIdentity`.
+  /*!
+   A cooked root holds one mount; a reference in another mount (`/Engine`)
+   resolves through the context roots. Empty for a job without an output
+   identity.
+  */
+  OXGN_COOK_NDAPI auto OutputMountRoot() const -> std::string_view;
 
   //! Resolve the explicit or source-derived output root without creating it.
   OXGN_COOK_NDAPI auto ResolveCookedRoot() const -> std::filesystem::path;

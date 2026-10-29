@@ -89,7 +89,6 @@ public sealed class TextureCookTests
         var invalidManifest = new ContentImportManifest(
             1,
             root,
-            new("/Content"),
             [new("invalid", "texture-descriptor", "Invalid.otex.json", [], Output: null, Name: "Invalid") { VirtualPath = "/Other/Meter.otex" }]);
         var invalid = await api.ImportAsync(new(Guid.NewGuid(), workspace.Root, Path.Combine(workspace.Root, ".invalid-native"), invalidManifest), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = invalid.Succeeded.Should().BeFalse();

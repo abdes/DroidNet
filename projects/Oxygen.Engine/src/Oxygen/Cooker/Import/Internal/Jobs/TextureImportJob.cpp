@@ -170,7 +170,8 @@ namespace oxygen::content::import::detail {
 */
 auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
-  descriptor_relative_path_ = Request().GetTextureDescriptorRelPath();
+  // Refuses an identity in no mount before any work.
+  static_cast<void>(Request().GetTextureDescriptorRelPath());
 
   DLOG_F(INFO, "Starting job: job_id={} path={}", JobId(),
     Request().source_path.string());
@@ -866,8 +867,8 @@ auto TextureImportJob::EmitDescriptor(ImportSession& session,
   const data::pak::core::ResourceIndexT index,
   const data::pak::core::TextureResourceDesc& descriptor) -> void
 {
-  static_cast<void>(session.ResourceDescriptorEmitter().EmitTextureAtRelPath(
-    descriptor_relative_path_, index, descriptor));
+  static_cast<void>(session.ResourceDescriptorEmitter().EmitTexture(
+    Request().asset_virtual_path, index, descriptor));
 }
 
 //! Finalize the session and return the import report.

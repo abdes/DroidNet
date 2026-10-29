@@ -31,6 +31,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
@@ -1133,14 +1134,7 @@ namespace {
   auto ApplyLayoutOverrides(
     const json& obj, LooseCookedLayout& layout, std::ostream& errors) -> bool
   {
-    if (!ReadStringField(
-          obj, "virtual_mount_root", layout.virtual_mount_root, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "resources_dir", layout.resources_dir, errors)) {
-      return false;
-    }
-    return true;
+    return ReadStringField(obj, "resources_dir", layout.resources_dir, errors);
   }
 
   auto ApplyCommonOverrides(const json& obj, TextureImportSettings& settings,
@@ -1472,7 +1466,7 @@ auto ImportManifest::LoadBatch(
   auto tables = std::vector<MountTable> {};
   tables.reserve(manifests.size());
   for (const auto& manifest : manifests) {
-    tables.push_back(manifest.mounts);
+    tables.push_back(*manifest.mounts);
   }
   const auto conflicts = CheckMountNameConflicts(tables);
   PrintDiagnostics(conflicts, error_stream);
@@ -1501,7 +1495,7 @@ auto ImportManifest::LoadBatch(
       if (!job.id.empty()
         && std::ranges::contains(batch.jobs, job.id, &ImportManifestJob::id)) {
         error_stream << "ERROR [batch.job_id_duplicate]: job id '" << job.id
-                     << "' of '" << manifest.mounts.declared_in
+                     << "' of '" << manifest.mounts->declared_in
                      << "' names another job of the batch\n";
         return std::nullopt;
       }
@@ -1613,26 +1607,28 @@ namespace {
     const auto manifest_dir = std::filesystem::absolute(manifest_directory);
 
     if (options.mount_table) {
-      manifest.mounts = *options.mount_table;
+      manifest.mounts
+        = std::make_shared<const MountTable>(*options.mount_table);
     } else {
       const auto project_root
         = json_data->value("project_root", std::string {});
-      manifest.mounts = ResolveMountTable(MountTableRequest {
-        .project_root = options.project_root.value_or(
-          (manifest_dir / project_root).lexically_normal()),
-        .declarations = ReadMountDeclarations(*json_data),
-        .form = MountDeclarationForm::kCommittedFile,
-        .declared_in = declared_in,
-        .working_directory = std::filesystem::current_path(),
-        .mounts_option = options.mounts_file,
-        .owner = options.owner,
-      });
-      PrintDiagnostics(manifest.mounts.diagnostics, error_stream);
-      if (!manifest.mounts.IsValid()) {
+      manifest.mounts = std::make_shared<const MountTable>(
+        ResolveMountTable(MountTableRequest {
+          .project_root = options.project_root.value_or(
+            (manifest_dir / project_root).lexically_normal()),
+          .declarations = ReadMountDeclarations(*json_data),
+          .form = MountDeclarationForm::kCommittedFile,
+          .declared_in = declared_in,
+          .working_directory = std::filesystem::current_path(),
+          .mounts_option = options.mounts_file,
+          .owner = options.owner,
+        }));
+      PrintDiagnostics(manifest.mounts->diagnostics, error_stream);
+      if (!manifest.mounts->IsValid()) {
         return std::nullopt;
       }
     }
-    manifest.project_root = manifest.mounts.project_root;
+    manifest.project_root = manifest.mounts->project_root;
 
     auto manifest_output_root = std::string {};
     if (!ReadStringField(
@@ -1918,7 +1914,7 @@ namespace {
       auto model_record = std::shared_ptr<const ModelImportRecordContent> {};
       auto model_job = json {};
       if (entry.value("type", std::string {}) == "model") {
-        model_record = ReadModelRecord(entry, manifest.mounts,
+        model_record = ReadModelRecord(entry, *manifest.mounts,
           fmt::format("jobs[{}].record", manifest.jobs.size()), error_stream);
         if (!model_record) {
           return std::nullopt;
@@ -1934,6 +1930,7 @@ namespace {
         return std::nullopt;
       }
       manifest_job.loose_cooked_layout = manifest.defaults.loose_cooked_layout;
+      manifest_job.mounts = manifest.mounts;
       if (job.contains("layout")) {
         const auto& layout = job.at("layout");
         if (!layout.is_object()) {
@@ -2007,7 +2004,7 @@ namespace {
         }
 
         const auto located
-          = LocateJobSource(manifest.mounts, job, job_field, error_stream);
+          = LocateJobSource(*manifest.mounts, job, job_field, error_stream);
         if (!located.has_value()) {
           return std::nullopt;
         }
@@ -2109,7 +2106,7 @@ namespace {
 
       if (has_source) {
         const auto located
-          = LocateJobSource(manifest.mounts, job, job_field, error_stream);
+          = LocateJobSource(*manifest.mounts, job, job_field, error_stream);
         if (!located.has_value()) {
           return std::nullopt;
         }
@@ -2273,7 +2270,7 @@ namespace {
       }
       for (auto& mapping : manifest_job.texture.sources) {
         const auto located = LocateSource(
-          manifest.mounts, mapping.file, job_field + ".sources", error_stream);
+          *manifest.mounts, mapping.file, job_field + ".sources", error_stream);
         if (!located.has_value()) {
           return std::nullopt;
         }
@@ -2379,6 +2376,7 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
     request->captured_inputs = captured_inputs;
     request->source_key = source_key;
     request->source_mount_path = source_mount_path;
+    request->source_mounts = mounts;
     if (!id.empty()) {
       request->orchestration = ImportRequest::OrchestrationMetadata {
         .job_id = id,
@@ -2397,6 +2395,7 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
       TextureDescriptorImportSettings {
         .descriptor_path = texture.source_path,
         .texture = texture,
+        .mounts = mounts,
       },
       error_stream, captured_inputs));
   }
@@ -2417,8 +2416,9 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
       buffer_container, error_stream, captured_inputs));
   }
   if (job_type == "geometry-descriptor") {
+    CHECK_NOTNULL_F(mounts.get(), "A manifest job carries its mount table");
     return AttachOrchestration(internal::BuildGeometryDescriptorRequest(
-      geometry_descriptor, error_stream, captured_inputs));
+      geometry_descriptor, *mounts, error_stream, captured_inputs));
   }
   if (job_type == "scene-descriptor") {
     return AttachOrchestration(internal::BuildSceneDescriptorRequest(

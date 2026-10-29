@@ -42,15 +42,6 @@ public sealed class ContentImportManifestValidator : IContentImportManifestValid
             diagnostics.Add(CreateDiagnostic(operationId, "Import manifest output root is required."));
         }
 
-        if (manifest.Layout is null || string.IsNullOrWhiteSpace(manifest.Layout.VirtualMountRoot))
-        {
-            diagnostics.Add(CreateDiagnostic(operationId, "Import manifest virtual mount root is required."));
-        }
-        else if (manifest.Layout.VirtualMountRoot[0] != '/')
-        {
-            diagnostics.Add(CreateDiagnostic(operationId, "Import manifest virtual mount root must start with '/'."));
-        }
-
         if (manifest.Jobs.Count == 0)
         {
             diagnostics.Add(CreateDiagnostic(operationId, "Import manifest requires at least one job."));

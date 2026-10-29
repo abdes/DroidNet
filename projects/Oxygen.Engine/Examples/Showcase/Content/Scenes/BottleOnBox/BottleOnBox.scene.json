@@ -1,0 +1,166 @@
+{
+  "version": 15,
+  "name": "bottle-on-box",
+  "starting_camera": {
+    "node": 6
+  },
+  "nodes": [
+    {
+      "id": "3b110db7-18f5-5bab-b7e7-419e29c56ac0",
+      "name": "world",
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "e370e89f-d23f-5e66-a854-3fd4fc5f15a3",
+      "name": "floor_node",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "off",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [10.0, 10.0, 1.0]
+      }
+    },
+    {
+      "id": "83cbb5a8-854e-570e-860a-2a3cbd07b578",
+      "name": "cube_node",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "id": "18ff7750-5cd0-573d-9d94-e9a8ff114d63",
+      "name": "sphere_node",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": false,
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.3, 0.0, 5.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "id": "f454d8c6-5e62-52d5-9345-63b3f1724bc6",
+      "name": "waterbottle_node",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": false,
+        "casts_shadows": "on",
+        "receives_shadows": "on",
+        "ray_cast_selectable": true
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 1.39],
+        "rotation": [0.7071, 0.0, 0.0, 0.7071],
+        "scale": [3.0, 3.0, 3.0]
+      }
+    },
+    {
+      "id": "ccfabcf3-4784-584b-b8a8-2907e7a5287d",
+      "name": "sun_light_node",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 50.0],
+        "rotation": [0.3827, 0.0, 0.0, 0.9239],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "id": "6c0d21b3-3f5c-529f-9530-0f35f2aac406",
+      "name": "camera_node",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [4.0, 12.0, 8.0],
+        "rotation": [0.23208303, -0.03766189, -0.15569179, 0.95941603],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/Content/Geometry/floor.ogeo"
+    },
+    {
+      "node": 2,
+      "geometry_ref": "/Content/Geometry/cube.ogeo"
+    },
+    {
+      "node": 3,
+      "geometry_ref": "/Content/Geometry/sphere.ogeo"
+    },
+    {
+      "node": 4,
+      "geometry_ref": "/Content/Scenes/BottleOnBox/waterbottle_waterbottle_p0_geo.ogeo"
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 6,
+        "fov_y": 0.7854,
+        "aspect_ratio": 1.7778,
+        "aspect_mode": "fixed",
+        "near_plane": 0.1,
+        "far_plane": 100.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 5,
+        "common": {
+          "color_rgb": [1.0, 0.98, 0.95],
+          "casts_shadows": true,
+          "exposure_compensation_ev": 0.0,
+          "shadow": {
+            "bias": 0.0,
+            "normal_bias": 0.02,
+            "resolution_hint": 1
+          }
+        },
+        "intensity_lux": 100000.0,
+        "angular_size_radians": 0.01862,
+        "atmosphere_light_slot": 1,
+        "cascade_count": 4,
+        "cascade_distances": [5.0, 15.0, 40.0, 100.0]
+      }
+    ]
+  }
+}

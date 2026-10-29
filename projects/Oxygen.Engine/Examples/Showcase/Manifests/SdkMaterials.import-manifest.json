@@ -1,0 +1,132 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkMarble_base_color.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkMarble_base_color.otex.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_base_color.otex",
+      "name": "SdkMarble_base_color",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex",
+      "name": "SdkMarble_normal",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex",
+      "name": "SdkMarble_roughness",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkMarble.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkMarble.omat.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble.omat",
+      "name": "SdkMarble",
+      "depends_on": [
+        "/Content/Scenes/SdkMaterials/SdkMarble_base_color.otex",
+        "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex",
+        "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkWood_base_color.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkWood_base_color.otex.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_base_color.otex",
+      "name": "SdkWood_base_color",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkWood_normal.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkWood_normal.otex.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_normal.otex",
+      "name": "SdkWood_normal",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex",
+      "name": "SdkWood_roughness",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkWood.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkWood.omat.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood.omat",
+      "name": "SdkWood",
+      "depends_on": [
+        "/Content/Scenes/SdkMaterials/SdkWood_base_color.otex",
+        "/Content/Scenes/SdkMaterials/SdkWood_normal.otex",
+        "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkCube.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkCube.ogeo.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkCube.ogeo",
+      "name": "SdkCube",
+      "depends_on": ["/Content/Scenes/SdkMaterials/SdkMarble.omat"]
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkCubeB.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkCubeB.ogeo.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkCubeB.ogeo",
+      "name": "SdkCubeB",
+      "depends_on": ["/Content/Scenes/SdkMaterials/SdkWood.omat"]
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkCubeC.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkCubeC.ogeo.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkCubeC.ogeo",
+      "name": "SdkCubeC",
+      "depends_on": ["/Content/Scenes/SdkMaterials/SdkMarble.omat"]
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkCubeD.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkCubeD.ogeo.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkCubeD.ogeo",
+      "name": "SdkCubeD",
+      "depends_on": ["/Content/Scenes/SdkMaterials/SdkWood.omat"]
+    },
+    {
+      "id": "/Content/Scenes/SdkMaterials/SdkMaterials.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/SdkMaterials/SdkMaterials.scene.json",
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMaterials.oscene",
+      "name": "SdkMaterials",
+      "depends_on": [
+        "/Content/Scenes/SdkMaterials/SdkCube.ogeo",
+        "/Content/Scenes/SdkMaterials/SdkCubeB.ogeo",
+        "/Content/Scenes/SdkMaterials/SdkCubeC.ogeo",
+        "/Content/Scenes/SdkMaterials/SdkCubeD.ogeo"
+      ]
+    }
+  ]
+}

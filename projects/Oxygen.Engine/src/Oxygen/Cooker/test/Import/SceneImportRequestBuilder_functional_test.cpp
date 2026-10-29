@@ -84,7 +84,6 @@ protected:
   {
     document["mounts"]
       = json::array({ { { "name", "Content" }, { "path", "." } } });
-    document["layout"] = { { "virtual_mount_root", "/.cooked" } };
     document["output"] = "cooked";
     return document;
   }
@@ -98,13 +97,13 @@ protected:
     return settings;
   }
 
-  //! A record of `source` named by `identity`, in the temp content root.
+  //! A new record of `source` at its place in the temp content root.
   auto SaveRecord(const std::string_view source,
-    const std::string_view virtual_path, const Uuid& identity,
-    const json& settings = json::object()) -> std::filesystem::path
+    const std::string_view virtual_path, const json& settings = json::object())
+    -> std::filesystem::path
   {
-    const auto path = ModelImportRecord::PathFor(Root(), identity);
-    ModelImportRecord::Save({
+    const auto path = ModelImportRecord::PathFor(Root(), virtual_path);
+    return ModelImportRecord::Save({
       .record_path = path,
       .content_root = Root(),
       .source = Path(source),
@@ -112,7 +111,6 @@ protected:
       .settings_json = settings.dump(),
       .mounts = oxygen::make_observer(&Mounts()),
     });
-    return path;
   }
 
 private:
@@ -250,16 +248,16 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, PreparesWithoutDestinationOrFileIo)
 //! extension: the record's settings, source, virtual path and identity.
 NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
 {
-  const auto gltf_identity = Identity();
+  const auto gltf = SaveRecord("model.gltf", "/.cooked/model.gltf",
+    json {
+      { "name", "the_gltf" },
+      { "gltf_scene", "Interior" },
+    });
+  const auto fbx = SaveRecord("model.fbx", "/.cooked/model.fbx");
+  const auto gltf_identity
+    = ModelImportRecord::Read(gltf, Mounts()).source_identity;
   const auto fbx_identity
-    = Uuid::FromString("01990000-0000-7000-8000-000000000002").value();
-  const auto gltf
-    = SaveRecord("model.gltf", "/.cooked/model.gltf", gltf_identity,
-      json {
-        { "name", "the_gltf" },
-        { "gltf_scene", "Interior" },
-      });
-  const auto fbx = SaveRecord("model.fbx", "/.cooked/model.fbx", fbx_identity);
+    = ModelImportRecord::Read(fbx, Mounts()).source_identity;
   const auto manifest_path = Path("import-manifest.json");
   {
     const auto document = ProjectFields({
@@ -328,8 +326,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, TheChosenGltfSceneIsASetting)
 //! a `model` job carries nothing of the record's.
 NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
 {
-  const auto record
-    = SaveRecord("model.gltf", "/.cooked/model.gltf", Identity());
+  const auto record = SaveRecord("model.gltf", "/.cooked/model.gltf");
   const auto refused = [this](const json& job) -> std::string {
     const auto document = ProjectFields({
       { "version", 1 },
@@ -407,7 +404,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
     },
   };
   const auto record
-    = SaveRecord("model.fbx", "/.cooked/model.fbx", Identity(), settings_json);
+    = SaveRecord("model.fbx", "/.cooked/model.fbx", settings_json);
   const auto manifest_path = Path("settings-manifest.json");
   {
     std::ofstream output(manifest_path);

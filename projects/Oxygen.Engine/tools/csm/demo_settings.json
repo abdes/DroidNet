@@ -120,10 +120,10 @@
   },
   "content": {
     "active_scene": {
-      "key": "fb81c5db-a51c-c94f-d9e8-ce98dadac6a7",
-      "name": "/.cooked/Scenes/VsmTwoCubes.oscene",
+      "key": "22014080-e351-658e-86fc-6d51055616c2",
+      "name": "/Content/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
       "source_is_pak": false,
-      "source_path": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content\\.cooked\\container.index.bin"
+      "source_path": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\RenderScene\\.cooked\\Content\\container.index.bin"
     },
     "explorer": {
       "auto_dump_delay": 180.0,
@@ -133,10 +133,10 @@
       "include_fbx": true,
       "include_glb": true,
       "include_gltf": true,
-      "model_root": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content"
+      "model_root": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Showcase\\Content\\SourceMedia\\DCC"
     },
     "library": {
-      "mounted_indices": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Content\\.cooked\\container.index.bin",
+      "mounted_indices": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\RenderScene\\.cooked\\Content\\container.index.bin",
       "mounted_paks": ""
     },
     "paths": {

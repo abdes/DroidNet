@@ -28,7 +28,7 @@ Objective:
 
 Parity target:
 
-1. The manifest-based cooker supports the maintained physics scenarios under `Examples/Content/scenes/` through native JSON descriptors.
+1. The manifest-based cooker supports the maintained physics scenarios under `Examples/Showcase/Content/Scenes/` through native JSON descriptors.
 
 Authoring intent:
 
@@ -235,8 +235,8 @@ Example `physics-resource-descriptor`:
   "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-resource-descriptor.schema.json",
   "name": "park.hinge_joint_a",
   "format": "jolt_constraint_binary",
-  "source": "Examples/Content/physics/bin/park_hinge_joint_a.jphbin",
-  "virtual_path": "/.cooked/Physics/Resources/park_hinge_joint_a.opres"
+  "source": "/Content/Scenes/Park/park_hinge_joint_a.jphbin",
+  "virtual_path": "/Content/Physics/Resources/park_hinge_joint_a.opres"
 }
 ```
 
@@ -262,7 +262,7 @@ Example `collision-shape-descriptor` (primitive):
   "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json",
   "name": "floor_box",
   "shape_type": "box",
-  "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+  "material_ref": "/Content/Physics/Materials/ground.opmat",
   "half_extents": [25.0, 0.5, 25.0]
 }
 ```
@@ -274,8 +274,8 @@ Example `collision-shape-descriptor` (payload-backed):
   "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json",
   "name": "vehicle_chassis_hull",
   "shape_type": "convex_hull",
-  "material_ref": "/.cooked/Physics/Materials/steel.opmat",
-  "payload_ref": "/.cooked/Physics/Resources/vehicle_chassis_hull.opres"
+  "material_ref": "/Content/Physics/Materials/steel.opmat",
+  "payload_ref": "/Content/Physics/Resources/vehicle_chassis_hull.opres"
 }
 ```
 
@@ -284,13 +284,13 @@ Example `physics-sidecar`:
 ```json
 {
   "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json",
-  "target_scene_virtual_path": "/.cooked/Scenes/park.oscene",
+  "target_scene_virtual_path": "/Content/Scenes/Park/Park.oscene",
   "bindings": {
     "rigid_bodies": [
       {
         "node_index": 1,
-        "shape_ref": "/.cooked/Physics/Shapes/floor_box.ocshape",
-        "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+        "shape_ref": "/Content/Physics/Shapes/floor_box.ocshape",
+        "material_ref": "/Content/Physics/Materials/ground.opmat",
         "body_type": "static"
       }
     ],
@@ -298,7 +298,7 @@ Example `physics-sidecar`:
       {
         "node_index_a": 4,
         "node_index_b": 5,
-        "constraint_ref": "/.cooked/Physics/Resources/park_hinge_joint_a.opres"
+        "constraint_ref": "/Content/Physics/Resources/park_hinge_joint_a.opres"
       }
     ]
   }
@@ -310,43 +310,31 @@ Example manifest DAG (all domains):
 ```json
 {
   "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json",
-  "defaults": {
-    "physics_resource_descriptor": {
-      "output": "Examples/Content/.cooked"
-    },
-    "physics_material_descriptor": {
-      "output": "Examples/Content/.cooked"
-    },
-    "collision_shape_descriptor": {
-      "output": "Examples/Content/.cooked"
-    },
-    "physics_sidecar": {
-      "output": "Examples/Content/.cooked"
-    }
-  },
+  "project_root": "..",
+  "mounts": [{ "name": "Content", "kind": "Source", "path": "Content" }],
   "jobs": [
     {
       "id": "joint_blob",
       "type": "physics-resource-descriptor",
-      "source": "Examples/Content/physics/bin/park_hinge_joint_a.jphbin",
+      "source": "/Content/Scenes/Park/park_hinge_joint_a.jphbin",
       "name": "park_hinge_joint_a",
       "format": "jolt_constraint_binary"
     },
     {
       "id": "mat_ground",
       "type": "physics-material-descriptor",
-      "source": "Examples/Content/physics/ground.material.json"
+      "source": "/Content/Scenes/Park/ground.physics-material.json"
     },
     {
       "id": "shape_floor",
       "type": "collision-shape-descriptor",
-      "source": "Examples/Content/physics/floor.shape.json",
+      "source": "/Content/Scenes/Park/floor.shape.json",
       "depends_on": ["mat_ground"]
     },
     {
       "id": "park_sidecar",
       "type": "physics-sidecar",
-      "source": "Examples/Content/physics/park.physics.json",
+      "source": "/Content/Scenes/Park/Park.physics-sidecar.json",
       "depends_on": ["joint_blob", "shape_floor"]
     }
   ]
@@ -356,11 +344,8 @@ Example manifest DAG (all domains):
 Repository-backed examples:
 
 1. Full four-domain descriptor sample:
-   - `Examples/Content/physics/import-manifest.physics.json`
-   - `Examples/Content/physics/README.md`
-2. Mixed real-content supersession sample (scene/geo/material/texture/input/script
-   - physics):
-   * `Examples/Content/full-import/import-manifest.json`
+   - `Examples/Showcase/Manifests/PhysicsDomains.import-manifest.json`
+   - `Examples/Showcase/Content/Scenes/PhysicsDomains/README.md`
 
 ## 6.6 Authoring Contract Tables
 
@@ -717,10 +702,9 @@ Representative parity evidence set:
    - collision shapes (`.ocshape`): `CollisionShapeDescriptor*` tests
    - scene bindings (`.opscene`): `Physics*` sidecar tests
 2. Concrete repository examples:
-   - `Examples/Content/physics/import-manifest.physics.json` (all four physics
-     domains, including all seven sidecar binding families).
-   - `Examples/Content/full-import/import-manifest.json` (mixed-domain
-     supersession scenario used in runtime validation).
+   - `Examples/Showcase/Manifests/PhysicsDomains.import-manifest.json` (all
+     four physics domains, including all seven sidecar binding families, cooked
+     with the scene, its geometry, materials, input and script).
 
 ## 14. Completion Criteria
 

@@ -103,6 +103,9 @@ Examples/<Example>/
 └── test/                    same rules as a module's test/ folder
 ```
 
-`Examples/Content/` holds the example scenes, their sources and the
-`play_scene` and cook scripts; `Examples/Common/` holds code shared by
+`Examples/Showcase/` is the examples project, an editor project no tool writes
+into: one `Content` mount with the example scenes and their raw media, and a
+manifest per example (see its [README](../Examples/Showcase/README.md)).
+`Examples/RenderScene/Tools/` cooks, packages and plays it into RenderScene's
+own `.cooked/` and `.build/`; `Examples/Common/` holds code shared by
 examples.

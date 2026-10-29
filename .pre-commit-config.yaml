@@ -10,14 +10,14 @@ repos:
     rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
-        exclude: '\.verified\.|^projects/Oxygen\.Engine/Examples/Content/fbx/showcase/'
+        exclude: '\.verified\.|^projects/Oxygen\.Engine/Examples/Showcase/Content/SourceMedia/DCC/'
       - id: trailing-whitespace
-        exclude: '\.verified\.|^projects/Oxygen\.Engine/Examples/Content/fbx/showcase/'
+        exclude: '\.verified\.|^projects/Oxygen\.Engine/Examples/Showcase/Content/SourceMedia/DCC/'
       # Keep these exclusions aligned with the -text rules in .gitattributes.
       - id: mixed-line-ending
         name: Normalize text to LF
         args: [--fix=lf]
-        exclude: '(?i)\.(bat|cmd|pak|7z|br|gz|tar|zip|pdf|gif|ico|jpg|png|psd|webp|woff2|exe)$|^projects/Oxygen\.Engine/Examples/Content/fbx/showcase/'
+        exclude: '(?i)\.(bat|cmd|pak|7z|br|gz|tar|zip|pdf|gif|ico|jpg|png|psd|webp|woff2|exe)$|^projects/Oxygen\.Engine/Examples/Showcase/Content/SourceMedia/DCC/'
       - id: mixed-line-ending
         name: Normalize batch scripts to CRLF
         args: [--fix=crlf]

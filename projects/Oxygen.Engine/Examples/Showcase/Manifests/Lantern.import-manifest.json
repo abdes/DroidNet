@@ -1,0 +1,40 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Models/Lantern.glb",
+      "type": "model",
+      "record": "Imports/Content/Models/Lantern.glb.import.json"
+    },
+    {
+      "id": "/Content/Scenes/Lantern/Sky.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/Lantern/Sky.otex.json",
+      "virtual_path": "/Content/Scenes/Lantern/Sky.otex",
+      "name": "Sky",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/Lantern/Lantern.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/Lantern/Lantern.scene.json",
+      "virtual_path": "/Content/Scenes/Lantern/Lantern.oscene",
+      "name": "Lantern",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Models/Lantern.glb",
+        "/Content/Scenes/Lantern/Sky.otex"
+      ]
+    }
+  ]
+}

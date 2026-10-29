@@ -586,7 +586,7 @@ lists cook failures with Go To Property.
   `$schema` kept when present.
 - An unedited file reopens and saves to the same values; an edited item is
   written canonically (section 7.3). The four example input sources under
-  `Examples/Content` round-trip with identical cooked descriptors.
+  `Examples/Showcase` round-trip with identical cooked descriptors.
 - Element IDs, selection, outline state and capture state are not persisted.
 - Unresolved action references stay as authored.
 - Saving never cooks synchronously and never saves other documents.

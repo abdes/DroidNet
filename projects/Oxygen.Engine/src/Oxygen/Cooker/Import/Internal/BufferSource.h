@@ -17,6 +17,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::import::internal {
@@ -34,9 +35,14 @@ struct BufferSource final {
   uint64_t content_hash = 0;
 
   //! Prepare authored buffer declarations without reading or emitting files.
+  /*!
+   Each `source` is a mount path, or a path relative to the descriptor that
+   stays in its mount, located through `mounts`
+   (`MountTable::LocateReference`).
+  */
   OXGN_COOK_NDAPI static auto FromDeclarations(
     const nlohmann::json& buffer_chunks,
-    const std::filesystem::path& descriptor_path,
+    const std::filesystem::path& descriptor_path, const MountTable& mounts,
     std::vector<ImportDiagnostic>& diagnostics,
     std::string_view object_path_prefix = "buffers")
     -> std::optional<std::vector<BufferSource>>;

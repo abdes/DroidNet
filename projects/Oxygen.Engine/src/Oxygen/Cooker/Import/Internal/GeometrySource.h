@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SurfaceId.h>
@@ -102,8 +103,10 @@ struct GeometrySource final {
   //! The surfaces the submeshes declare, in first-declaration order.
   OXGN_COOK_NDAPI auto DeclaredSurfaces() const -> std::vector<data::SurfaceId>;
 
+  //! Reads a geometry descriptor; its buffer sources are located through
+  //! `mounts` (`BufferSource::FromDeclarations`).
   OXGN_COOK_NDAPI static auto FromDescriptor(std::string_view bytes,
-    const std::filesystem::path& source_path,
+    const std::filesystem::path& source_path, const MountTable& mounts,
     std::vector<ImportDiagnostic>& diagnostics)
     -> std::optional<GeometrySource>;
 };

@@ -204,20 +204,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       .configure =
         [&](const oxygen::clap::CommandLineContext& context,
           host::HostConfig& config) -> void {
-        // The installed showcase opens Lantern under its sky unless asked
-        // otherwise.
-        if (runtime_paths.installed && startup.scene_name.empty()
-          && settings->GetString("content.active_scene.key")
-               .value_or("")
-               .empty()) {
-          startup.scene_name = "Lantern";
-        }
-        if (runtime_paths.installed && startup.scene_name == "Lantern"
-          && startup.skybox_path.empty() && environment_profile.empty()) {
-          startup.skybox_path
-            = (runtime_paths.content / "images/showcase/Sky.hdr").string();
-          startup.preview_sun_enabled = true;
-        }
         if (!environment_profile.empty()) {
           const auto index
             = examples::ui::EnvironmentVm::FindPresetIndex(environment_profile);
@@ -243,7 +229,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         auto paths
           = oxygen::PathFinderConfig::Create()
               .WithWorkspaceRoot(runtime_paths.root)
-              .WithSourceMount("Content", runtime_paths.content)
+              .WithSourceMount("Content", runtime_paths.content_mount)
               .WithCVarsArchivePath("bin/Oxygen/render-scene/cvars.json");
         if (runtime_paths.installed) {
           paths = std::move(paths)

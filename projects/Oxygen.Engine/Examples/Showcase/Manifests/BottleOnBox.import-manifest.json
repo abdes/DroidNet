@@ -1,0 +1,223 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Materials/floor_default.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Materials/floor_default.omat.json",
+      "virtual_path": "/Content/Materials/floor_default.omat",
+      "name": "floor_default",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Materials/cube_red.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Materials/cube_red.omat.json",
+      "virtual_path": "/Content/Materials/cube_red.omat",
+      "name": "cube_red",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Materials/sphere_blue.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Materials/sphere_blue.omat.json",
+      "virtual_path": "/Content/Materials/sphere_blue.omat",
+      "name": "sphere_blue",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Geometry/floor.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Geometry/floor.ogeo.json",
+      "virtual_path": "/Content/Geometry/floor.ogeo",
+      "name": "floor",
+      "content_hashing": true,
+      "depends_on": ["/Content/Materials/floor_default.omat"]
+    },
+    {
+      "id": "/Content/Geometry/cube.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Geometry/cube.ogeo.json",
+      "virtual_path": "/Content/Geometry/cube.ogeo",
+      "name": "cube",
+      "content_hashing": true,
+      "depends_on": ["/Content/Materials/cube_red.omat"]
+    },
+    {
+      "id": "/Content/Geometry/sphere.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Geometry/sphere.ogeo.json",
+      "virtual_path": "/Content/Geometry/sphere.ogeo",
+      "name": "sphere",
+      "content_hashing": true,
+      "depends_on": ["/Content/Materials/sphere_blue.omat"]
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/waterbottle_albedo.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/waterbottle_albedo.otex.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_albedo.otex",
+      "name": "waterbottle_albedo",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/waterbottle_orm.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/waterbottle_orm.otex.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_orm.otex",
+      "name": "waterbottle_orm",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/waterbottle_normal.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/waterbottle_normal.otex.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_normal.otex",
+      "name": "waterbottle_normal",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/waterbottle_emissive.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/waterbottle_emissive.otex.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_emissive.otex",
+      "name": "waterbottle_emissive",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/waterbottle_bottlemat.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/waterbottle_bottlemat.omat.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_bottlemat.omat",
+      "name": "waterbottle_bottlemat",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/BottleOnBox/waterbottle_albedo.otex",
+        "/Content/Scenes/BottleOnBox/waterbottle_orm.otex",
+        "/Content/Scenes/BottleOnBox/waterbottle_normal.otex",
+        "/Content/Scenes/BottleOnBox/waterbottle_emissive.otex"
+      ]
+    },
+    {
+      "id": "None#buffer-container",
+      "type": "buffer-container",
+      "source": "/Content/Scenes/BottleOnBox/waterbottle.buffers.json",
+      "name": "waterbottle_buffers",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/waterbottle_waterbottle_p0_geo.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/waterbottle_waterbottle_p0_geo.ogeo.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_waterbottle_p0_geo.ogeo",
+      "name": "waterbottle_waterbottle_p0_geo",
+      "content_hashing": true,
+      "depends_on": [
+        "None#buffer-container",
+        "/Content/Scenes/BottleOnBox/waterbottle_bottlemat.omat"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/BottleOnBox.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/BottleOnBox.scene.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/BottleOnBox.oscene",
+      "name": "bottle-on-box",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Geometry/floor.ogeo",
+        "/Content/Geometry/cube.ogeo",
+        "/Content/Geometry/sphere.ogeo",
+        "/Content/Scenes/BottleOnBox/waterbottle_waterbottle_p0_geo.ogeo"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/BottleOnBox.oscene#physics-sidecar",
+      "type": "physics-sidecar",
+      "source": "/Content/Scenes/BottleOnBox/BottleOnBox.physics-sidecar.json",
+      "target_scene_virtual_path": "/Content/Scenes/BottleOnBox/BottleOnBox.oscene",
+      "name": "bottle-on-box_physics",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/BottleOnBox/BottleOnBox.oscene",
+        "/Content/Scenes/BottleOnBox/floor_box.ocshape",
+        "/Content/Scenes/BottleOnBox/sphere_unit.ocshape",
+        "/Content/Scenes/BottleOnBox/cube_unit.ocshape",
+        "/Content/Scenes/BottleOnBox/waterbottle.ocshape",
+        "/Content/Scenes/BottleOnBox/ground.opmat",
+        "/Content/Scenes/BottleOnBox/bouncy_ball.opmat",
+        "/Content/Scenes/BottleOnBox/plastic.opmat"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/ground.opmat",
+      "type": "physics-material-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/ground.physics-material.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/ground.opmat",
+      "name": "ground_material",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/bouncy_ball.opmat",
+      "type": "physics-material-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/bouncy_ball.physics-material.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/bouncy_ball.opmat",
+      "name": "bouncy_ball_material",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/plastic.opmat",
+      "type": "physics-material-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/plastic.physics-material.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/plastic.opmat",
+      "name": "plastic_material",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/floor_box.ocshape",
+      "type": "collision-shape-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/floor_box.shape.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/floor_box.ocshape",
+      "name": "floor_shape",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/BottleOnBox/ground.opmat"]
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/sphere_unit.ocshape",
+      "type": "collision-shape-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/sphere_unit.shape.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/sphere_unit.ocshape",
+      "name": "sphere_shape",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/BottleOnBox/bouncy_ball.opmat"]
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/cube_unit.ocshape",
+      "type": "collision-shape-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/cube_unit.shape.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/cube_unit.ocshape",
+      "name": "cube_shape",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/BottleOnBox/ground.opmat"]
+    },
+    {
+      "id": "/Content/Scenes/BottleOnBox/waterbottle.ocshape",
+      "type": "collision-shape-descriptor",
+      "source": "/Content/Scenes/BottleOnBox/waterbottle.shape.json",
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle.ocshape",
+      "name": "waterbottle_shape",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/BottleOnBox/plastic.opmat"]
+    }
+  ]
+}

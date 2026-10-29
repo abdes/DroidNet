@@ -49,7 +49,8 @@ namespace {
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = paths.cooked;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+    request.source_mounts = oxygen::cooker::test::ContentMountTable(
+      request.source_path.parent_path());
     request.buffer_container = ImportRequest::BufferContainerPayload {
       .normalized_descriptor_json = descriptor_doc.dump(),
     };
@@ -204,7 +205,11 @@ namespace {
         "buffers",
         json::array({
           json {
-            { "source", vb_source.generic_string() },
+            {
+              "source",
+              oxygen::cooker::test::MountPathIn(
+                vb_source.parent_path(), vb_source),
+            },
             {
               "virtual_path",
               "/.cooked/Resources/Buffers/shared_vertices.obuf",
@@ -223,7 +228,11 @@ namespace {
             },
           },
           json {
-            { "source", ib_source.generic_string() },
+            {
+              "source",
+              oxygen::cooker::test::MountPathIn(
+                ib_source.parent_path(), ib_source),
+            },
             {
               "virtual_path",
               "/.cooked/Resources/Buffers/shared_indices.obuf",
@@ -411,44 +420,50 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
-  const auto descriptor_doc
-    = MakeStandardDescriptorDoc("Cube", "/.cooked/Materials/default.omat",
-      "/.cooked/Resources/Buffers/cube_vertices.obuf",
-      "/.cooked/Resources/Buffers/cube_indices.obuf", "lod0",
-      json::array({
-        json {
-          { "uri", vb_source.generic_string() },
-          { "virtual_path", "/.cooked/Resources/Buffers/cube_vertices.obuf" },
-          { "usage_flags", 1U },
-          { "element_stride", 32U },
-          {
-            "views",
-            json::array({
-              json {
-                { "name", "lod0" },
-                { "element_offset", 0U },
-                { "element_count", 3U },
-              },
-            }),
-          },
+  const auto descriptor_doc = MakeStandardDescriptorDoc("Cube",
+    "/.cooked/Materials/default.omat",
+    "/.cooked/Resources/Buffers/cube_vertices.obuf",
+    "/.cooked/Resources/Buffers/cube_indices.obuf", "lod0",
+    json::array({
+      json {
+        {
+          "uri",
+          oxygen::cooker::test::MountPathIn(vb_source.parent_path(), vb_source),
         },
-        json {
-          { "uri", ib_source.generic_string() },
-          { "virtual_path", "/.cooked/Resources/Buffers/cube_indices.obuf" },
-          { "usage_flags", 2U },
-          { "element_stride", 4U },
-          {
-            "views",
-            json::array({
-              json {
-                { "name", "lod0" },
-                { "element_offset", 0U },
-                { "element_count", 3U },
-              },
-            }),
-          },
+        { "virtual_path", "/.cooked/Resources/Buffers/cube_vertices.obuf" },
+        { "usage_flags", 1U },
+        { "element_stride", 32U },
+        {
+          "views",
+          json::array({
+            json {
+              { "name", "lod0" },
+              { "element_offset", 0U },
+              { "element_count", 3U },
+            },
+          }),
         },
-      }));
+      },
+      json {
+        {
+          "uri",
+          oxygen::cooker::test::MountPathIn(ib_source.parent_path(), ib_source),
+        },
+        { "virtual_path", "/.cooked/Resources/Buffers/cube_indices.obuf" },
+        { "usage_flags", 2U },
+        { "element_stride", 4U },
+        {
+          "views",
+          json::array({
+            json {
+              { "name", "lod0" },
+              { "element_offset", 0U },
+              { "element_count", 3U },
+            },
+          }),
+        },
+      },
+    }));
   WriteText(descriptor_path, descriptor_doc.dump(2));
 
   auto service = AsyncImportService(AsyncImportService::Config {
@@ -624,7 +639,11 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
       "buffers",
       json::array({
         json {
-          { "source", vb_source.generic_string() },
+          {
+            "source",
+            oxygen::cooker::test::MountPathIn(
+              vb_source.parent_path(), vb_source),
+          },
           {
             "virtual_path",
             "/.cooked/Resources/Buffers/context_vertices.obuf",
@@ -643,7 +662,11 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
           },
         },
         json {
-          { "source", ib_source.generic_string() },
+          {
+            "source",
+            oxygen::cooker::test::MountPathIn(
+              ib_source.parent_path(), ib_source),
+          },
           { "virtual_path", "/.cooked/Resources/Buffers/context_indices.obuf" },
           { "usage_flags", 2U },
           { "element_stride", 4U },
@@ -722,7 +745,11 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
       "buffers",
       json::array({
         json {
-          { "source", vb_source.generic_string() },
+          {
+            "source",
+            oxygen::cooker::test::MountPathIn(
+              vb_source.parent_path(), vb_source),
+          },
           {
             "virtual_path",
             "/.cooked/Resources/Buffers/ambiguous_vertices.obuf",
@@ -741,7 +768,11 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
           },
         },
         json {
-          { "source", ib_source.generic_string() },
+          {
+            "source",
+            oxygen::cooker::test::MountPathIn(
+              ib_source.parent_path(), ib_source),
+          },
           {
             "virtual_path",
             "/.cooked/Resources/Buffers/ambiguous_indices.obuf",
@@ -857,7 +888,10 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
     "/.cooked/Resources/Buffers/cube_indices.obuf", "lod_missing",
     json::array({
       json {
-        { "uri", vb_source.generic_string() },
+        {
+          "uri",
+          oxygen::cooker::test::MountPathIn(vb_source.parent_path(), vb_source),
+        },
         { "virtual_path", "/.cooked/Resources/Buffers/cube_vertices.obuf" },
         { "usage_flags", 1U },
         { "element_stride", 32U },
@@ -873,7 +907,10 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
         },
       },
       json {
-        { "uri", ib_source.generic_string() },
+        {
+          "uri",
+          oxygen::cooker::test::MountPathIn(ib_source.parent_path(), ib_source),
+        },
         { "virtual_path", "/.cooked/Resources/Buffers/cube_indices.obuf" },
         { "usage_flags", 2U },
         { "element_stride", 4U },
@@ -939,84 +976,96 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
-  const auto descriptor_a
-    = MakeStandardDescriptorDoc("SharedA", "/.cooked/Materials/default.omat",
-      "/.cooked/Resources/Buffers/shared_vertices.obuf",
-      "/.cooked/Resources/Buffers/shared_indices.obuf", "lod0",
-      json::array({
-        json {
-          { "uri", vb_source.generic_string() },
-          { "virtual_path", "/.cooked/Resources/Buffers/shared_vertices.obuf" },
-          { "usage_flags", 1U },
-          { "element_stride", 32U },
-          {
-            "views",
-            json::array({
-              json {
-                { "name", "lod0" },
-                { "element_offset", 0U },
-                { "element_count", 3U },
-              },
-            }),
-          },
+  const auto descriptor_a = MakeStandardDescriptorDoc("SharedA",
+    "/.cooked/Materials/default.omat",
+    "/.cooked/Resources/Buffers/shared_vertices.obuf",
+    "/.cooked/Resources/Buffers/shared_indices.obuf", "lod0",
+    json::array({
+      json {
+        {
+          "uri",
+          oxygen::cooker::test::MountPathIn(vb_source.parent_path(), vb_source),
         },
-        json {
-          { "uri", ib_source.generic_string() },
-          { "virtual_path", "/.cooked/Resources/Buffers/shared_indices.obuf" },
-          { "usage_flags", 2U },
-          { "element_stride", 4U },
-          {
-            "views",
-            json::array({
-              json {
-                { "name", "lod0" },
-                { "element_offset", 0U },
-                { "element_count", 3U },
-              },
-            }),
-          },
+        { "virtual_path", "/.cooked/Resources/Buffers/shared_vertices.obuf" },
+        { "usage_flags", 1U },
+        { "element_stride", 32U },
+        {
+          "views",
+          json::array({
+            json {
+              { "name", "lod0" },
+              { "element_offset", 0U },
+              { "element_count", 3U },
+            },
+          }),
         },
-      }));
+      },
+      json {
+        {
+          "uri",
+          oxygen::cooker::test::MountPathIn(ib_source.parent_path(), ib_source),
+        },
+        { "virtual_path", "/.cooked/Resources/Buffers/shared_indices.obuf" },
+        { "usage_flags", 2U },
+        { "element_stride", 4U },
+        {
+          "views",
+          json::array({
+            json {
+              { "name", "lod0" },
+              { "element_offset", 0U },
+              { "element_count", 3U },
+            },
+          }),
+        },
+      },
+    }));
   WriteText(descriptor_a_path, descriptor_a.dump(2));
 
-  const auto descriptor_b
-    = MakeStandardDescriptorDoc("SharedB", "/.cooked/Materials/default.omat",
-      "/.cooked/Resources/Buffers/alt_vertices.obuf",
-      "/.cooked/Resources/Buffers/alt_indices.obuf", "lod0",
-      json::array({
-        json {
-          { "uri", vb_source.generic_string() },
-          { "virtual_path", "/.cooked/Resources/Buffers/alt_vertices.obuf" },
-          { "usage_flags", 1U },
-          { "element_stride", 32U },
-          {
-            "views",
-            json::array({
-              json {
-                { "name", "lod0" },
-                { "element_offset", 0U },
-                { "element_count", 3U },
-              },
-            }),
-          },
+  const auto descriptor_b = MakeStandardDescriptorDoc("SharedB",
+    "/.cooked/Materials/default.omat",
+    "/.cooked/Resources/Buffers/alt_vertices.obuf",
+    "/.cooked/Resources/Buffers/alt_indices.obuf", "lod0",
+    json::array({
+      json {
+        {
+          "uri",
+          oxygen::cooker::test::MountPathIn(vb_source.parent_path(), vb_source),
         },
-        json {
-          { "uri", ib_source.generic_string() },
-          { "virtual_path", "/.cooked/Resources/Buffers/alt_indices.obuf" },
-          { "usage_flags", 2U },
-          { "element_stride", 4U },
-          {
-            "views",
-            json::array({
-              json {
-                { "name", "lod0" },
-                { "element_offset", 0U },
-                { "element_count", 3U },
-              },
-            }),
-          },
+        { "virtual_path", "/.cooked/Resources/Buffers/alt_vertices.obuf" },
+        { "usage_flags", 1U },
+        { "element_stride", 32U },
+        {
+          "views",
+          json::array({
+            json {
+              { "name", "lod0" },
+              { "element_offset", 0U },
+              { "element_count", 3U },
+            },
+          }),
         },
-      }));
+      },
+      json {
+        {
+          "uri",
+          oxygen::cooker::test::MountPathIn(ib_source.parent_path(), ib_source),
+        },
+        { "virtual_path", "/.cooked/Resources/Buffers/alt_indices.obuf" },
+        { "usage_flags", 2U },
+        { "element_stride", 4U },
+        {
+          "views",
+          json::array({
+            json {
+              { "name", "lod0" },
+              { "element_offset", 0U },
+              { "element_count", 3U },
+            },
+          }),
+        },
+      },
+    }));
   WriteText(descriptor_b_path, descriptor_b.dump(2));
 
   auto service = AsyncImportService(AsyncImportService::Config {
@@ -1074,7 +1123,11 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
     "/.cooked/Resources/Buffers/conflict_ib.obuf", "lod0",
     json::array({
       json {
-        { "uri", shared_source.generic_string() },
+        {
+          "uri",
+          oxygen::cooker::test::MountPathIn(
+            shared_source.parent_path(), shared_source),
+        },
         { "virtual_path", "/.cooked/Resources/Buffers/conflict_vb.obuf" },
         { "usage_flags", 3U },
         { "element_stride", 4U },
@@ -1090,7 +1143,11 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
         },
       },
       json {
-        { "uri", shared_source.generic_string() },
+        {
+          "uri",
+          oxygen::cooker::test::MountPathIn(
+            shared_source.parent_path(), shared_source),
+        },
         { "virtual_path", "/.cooked/Resources/Buffers/conflict_ib.obuf" },
         { "usage_flags", 3U },
         { "element_stride", 4U },

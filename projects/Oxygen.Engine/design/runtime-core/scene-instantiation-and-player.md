@@ -123,7 +123,7 @@ specified in [runtime host and debug UI](runtime-host.md).
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `version`       | `3`.                                                                                                                                                                    |
 | `mounts`        | Ordered cooked roots or PAK files (a `.pak` file), highest precedence last.                                                                                             |
-| `scene`         | Scene virtual path, e.g. `/.cooked/Scenes/Level.oscene`.                                                                                                                |
+| `scene`         | Scene virtual path, e.g. `/Content/Scenes/Level/Level.oscene`.                                                                                                          |
 | `source_mounts` | Source mount folders by mount name, which external scripts' mount paths name; enables source reload when non-empty.                                                     |
 | `window`        | Title, `mode` (`windowed` or `borderless`), framebuffer size in physical pixels while windowed, VSync and frame cap (`0` is off, else frames per second); all optional. |
 | `control`       | Optional; starts the control server below: `port` (`0`, the default, takes an ephemeral one) and `exit_when_owner_leaves` (default `false`).                            |
@@ -162,7 +162,7 @@ the editor and override the launch file:
 | `--control [port]`        | Start the control server on a loopback port; `0`, the default, takes an ephemeral one.            |
 | graphics tooling, capture | `--debug-layer`, `--aftermath` and the frame capture options of `RuntimeCli`.                     |
 
-`-v <level>` sets the log verbosity. `Examples/Content/play_scene` writes a
+`-v <level>` sets the log verbosity. `Examples/RenderScene/Tools/play` writes a
 launch file for a cooked example scene and runs the player with it.
 
 ### Behavior

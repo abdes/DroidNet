@@ -1,0 +1,41 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Scenes/Instancing/MatInstanced.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/Instancing/MatInstanced.omat.json",
+      "virtual_path": "/Content/Scenes/Instancing/MatInstanced.omat",
+      "name": "MatInstanced",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/Instancing/GeoInstancedCube.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/Instancing/GeoInstancedCube.ogeo.json",
+      "virtual_path": "/Content/Scenes/Instancing/GeoInstancedCube.ogeo",
+      "name": "GeoInstancedCube",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/Instancing/MatInstanced.omat"]
+    },
+    {
+      "id": "/Content/Scenes/Instancing/InstancingTestScene.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/Instancing/InstancingTestScene.scene.json",
+      "virtual_path": "/Content/Scenes/Instancing/InstancingTestScene.oscene",
+      "name": "InstancingTestScene",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/Instancing/GeoInstancedCube.ogeo"]
+    }
+  ]
+}

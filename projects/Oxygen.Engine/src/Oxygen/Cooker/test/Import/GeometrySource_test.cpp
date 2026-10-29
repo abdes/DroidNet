@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -22,6 +23,9 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
+#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/LodPolicyValidation.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
@@ -31,6 +35,23 @@
 namespace oxygen::content::import::test {
 namespace {
   using internal::GeometrySource;
+  using oxygen::cooker::test::ContentMountTable;
+  using oxygen::cooker::test::TempDirTest;
+
+  //! The project's `Content` mount is the temporary root.
+  class GeometrySourceTest : public TempDirTest {
+  protected:
+    auto Mounts() -> const MountTable&
+    {
+      if (!mounts_) {
+        mounts_ = ContentMountTable(TempDir());
+      }
+      return *mounts_;
+    }
+
+  private:
+    std::shared_ptr<const MountTable> mounts_;
+  };
 
   //! A sphere resolution far beyond any generator limit.
   constexpr auto kHugeSegmentCount = 1'000'000;
@@ -56,12 +77,12 @@ namespace {
     })");
   }
 
-  NOLINT_TEST(
+  NOLINT_TEST_F(
     GeometrySourceTest, RetainsSourcesAndSymbolicReferencesWithoutCookedRoots)
   {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      MakeDescriptor().dump(), "authored/geometry.json", diagnostics);
+      MakeDescriptor().dump(), "authored/geometry.json", Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     EXPECT_EQ(source->name, "Geometry.v2");
@@ -70,7 +91,8 @@ namespace {
     EXPECT_FALSE(*source->content_hashing);
     ASSERT_EQ(source->buffers.size(), 1U);
     EXPECT_EQ(source->buffers.front().source_path,
-      std::filesystem::path("authored/raw/vertices.bin"));
+      std::filesystem::weakly_canonical(
+        TempDir() / "authored/raw/vertices.bin"));
     ASSERT_EQ(source->lods.size(), 1U);
     const auto& lod = source->lods.front();
     const auto* buffers = std::get_if<GeometrySource::Buffers>(&lod.mesh);
@@ -95,7 +117,7 @@ namespace {
     EXPECT_EQ(view.bounds->max, submesh.bounds->max);
   }
 
-  NOLINT_TEST(GeometrySourceTest, RetainsAuthoredViewBounds)
+  NOLINT_TEST_F(GeometrySourceTest, RetainsAuthoredViewBounds)
   {
     auto document = MakeDescriptor();
     document.at("lods")
@@ -108,7 +130,7 @@ namespace {
         "bounds", nlohmann::json::parse(R"({"min":[0,0,0],"max":[1,0.5,1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics);
+      document.dump(), "geometry.json", Mounts(), diagnostics);
     if (!source.has_value()) {
       FAIL() << "Expected source to contain a value";
     }
@@ -118,7 +140,7 @@ namespace {
     EXPECT_EQ(view.bounds->max, (std::array { 1.0F, 0.5F, 1.0F }));
   }
 
-  NOLINT_TEST(GeometrySourceTest, RejectsSubmeshBoundsOutsideTheLod)
+  NOLINT_TEST_F(GeometrySourceTest, RejectsSubmeshBoundsOutsideTheLod)
   {
     auto document = MakeDescriptor();
     document.at("lods")
@@ -129,7 +151,7 @@ namespace {
         "bounds", nlohmann::json::parse(R"({"min":[0,0,0],"max":[2,1,1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics));
+      document.dump(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "geometry.descriptor.submesh_bounds_invalid";
@@ -137,18 +159,18 @@ namespace {
   }
 
   //! Absent geometry bounds are left to the cook, which unions the LODs'.
-  NOLINT_TEST(GeometrySourceTest, GeometryBoundsAreOptional)
+  NOLINT_TEST_F(GeometrySourceTest, GeometryBoundsAreOptional)
   {
     auto document = MakeDescriptor();
     document.erase("bounds");
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics);
+      document.dump(), "geometry.json", Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     EXPECT_FALSE(source->bounds.has_value());
   }
 
-  NOLINT_TEST(GeometrySourceTest, RejectsViewBoundsOutsideTheSubmesh)
+  NOLINT_TEST_F(GeometrySourceTest, RejectsViewBoundsOutsideTheSubmesh)
   {
     auto document = MakeDescriptor();
     document.at("lods")
@@ -161,14 +183,14 @@ namespace {
         "bounds", nlohmann::json::parse(R"({"min":[0,0,0],"max":[2,1,1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics));
+      document.dump(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "geometry.descriptor.view_bounds_invalid";
       }));
   }
 
-  NOLINT_TEST(GeometrySourceTest, RetainsAllSkinningReferences)
+  NOLINT_TEST_F(GeometrySourceTest, RetainsAllSkinningReferences)
   {
     auto document = MakeDescriptor();
     auto& lod = document.at("lods").at(0);
@@ -186,7 +208,7 @@ namespace {
       });
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics);
+      document.dump(), "geometry.json", Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     ASSERT_EQ(source->lods.size(), 1U);
     const auto* skin
@@ -203,7 +225,8 @@ namespace {
     EXPECT_EQ(skin->flags, 1U);
   }
 
-  NOLINT_TEST(GeometrySourceTest, PreparesProceduralRecipeWithoutGeneratingMesh)
+  NOLINT_TEST_F(
+    GeometrySourceTest, PreparesProceduralRecipeWithoutGeneratingMesh)
   {
     auto document = MakeDescriptor();
     document.erase("buffers");
@@ -226,7 +249,7 @@ namespace {
     lod.at("submeshes").at(0).at("views").at(0).at("view_ref") = "__all__";
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics);
+      document.dump(), "geometry.json", Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     ASSERT_EQ(source->lods.size(), 1U);
     const auto* procedural
@@ -241,14 +264,14 @@ namespace {
     EXPECT_FALSE(prepared.submeshes.front().views.front().bounds.has_value());
   }
 
-  NOLINT_TEST(GeometrySourceTest, RejectsNilSurfaceBeforeResolvingAssets)
+  NOLINT_TEST_F(GeometrySourceTest, RejectsNilSurfaceBeforeResolvingAssets)
   {
     auto document = MakeDescriptor();
     document.at("lods").at(0).at("submeshes").at(0).at("surface_id")
       = "00000000-0000-0000-0000-000000000000";
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics));
+      document.dump(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "geometry.descriptor.surface_id_invalid";
@@ -269,7 +292,7 @@ namespace {
       });
   }
 
-  NOLINT_TEST(GeometrySourceTest, RetainsAuthoredAssetDefaults)
+  NOLINT_TEST_F(GeometrySourceTest, RetainsAuthoredAssetDefaults)
   {
     auto document = MakeDescriptor();
     document.emplace("surfaces",
@@ -284,7 +307,7 @@ namespace {
         R"({"type":"distance","thresholds":[0.5,0.75],"hysteresis_ratio":0.1})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics);
+      document.dump(), "geometry.json", Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     ASSERT_EQ(source->surfaces.size(), 1U);
     EXPECT_EQ(source->surfaces.front().visible, false);
@@ -296,7 +319,7 @@ namespace {
     EXPECT_EQ(source->lod_policy->thresholds[1], 0.75F);
   }
 
-  NOLINT_TEST(GeometrySourceTest, RejectsDefaultsOfUndeclaredSurface)
+  NOLINT_TEST_F(GeometrySourceTest, RejectsDefaultsOfUndeclaredSurface)
   {
     auto document = MakeDescriptor();
     document.emplace("surfaces",
@@ -308,11 +331,11 @@ namespace {
       }));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics));
+      document.dump(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.surface_unknown"));
   }
 
-  NOLINT_TEST(GeometrySourceTest, RejectsRepeatedSurfaceDefaults)
+  NOLINT_TEST_F(GeometrySourceTest, RejectsRepeatedSurfaceDefaults)
   {
     auto document = MakeDescriptor();
     document.emplace("surfaces",
@@ -322,11 +345,11 @@ namespace {
       }));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics));
+      document.dump(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.surface_duplicate"));
   }
 
-  NOLINT_TEST(GeometrySourceTest, RejectsDecreasingLodThresholds)
+  NOLINT_TEST_F(GeometrySourceTest, RejectsDecreasingLodThresholds)
   {
     auto document = MakeDescriptor();
     document.emplace("lod_policy",
@@ -334,11 +357,11 @@ namespace {
         R"({"type":"distance","thresholds":[0.75,0.5],"hysteresis_ratio":0.1})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics));
+      document.dump(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
   }
 
-  NOLINT_TEST(GeometrySourceTest, RejectsIncreasingScreenSpaceErrors)
+  NOLINT_TEST_F(GeometrySourceTest, RejectsIncreasingScreenSpaceErrors)
   {
     auto document = MakeDescriptor();
     document.emplace(
@@ -346,11 +369,12 @@ namespace {
         "enter_finer_sse":[1,2],"exit_coarser_sse":[0.5,1.5]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics));
+      document.dump(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
   }
 
-  NOLINT_TEST(GeometrySourceTest, RejectsScreenSpaceErrorListsOfDifferentLength)
+  NOLINT_TEST_F(
+    GeometrySourceTest, RejectsScreenSpaceErrorListsOfDifferentLength)
   {
     auto document = MakeDescriptor();
     document.emplace(
@@ -358,7 +382,7 @@ namespace {
         "enter_finer_sse":[2,1],"exit_coarser_sse":[1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", diagnostics));
+      document.dump(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
   }
 

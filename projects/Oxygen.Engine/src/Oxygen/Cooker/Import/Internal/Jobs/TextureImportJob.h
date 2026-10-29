@@ -39,8 +39,6 @@ public:
   using ImportJob::ImportJob;
 
 private:
-  std::string descriptor_relative_path_;
-
   //! Decoded texture source data.
   struct TextureSource {
     bool success = false;

@@ -112,10 +112,10 @@ protected:
     });
     source_ = TempDir() / "Models" / "source.gltf";
     WriteModel(source_);
-    identity_ = Uuid::Generate();
-    record_ = ModelImportRecord::PathFor(TempDir(), identity_);
+    record_ = ModelImportRecord::PathFor(TempDir(), kVirtualPath);
     settings_.normals_policy = "generate";
     SaveRecord(record_, source_, kVirtualPath);
+    identity_ = ModelImportRecord::Read(record_, mounts_).source_identity;
   }
 
   static auto WriteModel(const std::filesystem::path& path,
@@ -128,9 +128,9 @@ protected:
 
   auto SaveRecord(const std::filesystem::path& record,
     const std::filesystem::path& source, const std::string_view virtual_path)
-    -> void
+    -> std::filesystem::path
   {
-    ModelImportRecord::Save({
+    return ModelImportRecord::Save({
       .record_path = record,
       .content_root = TempDir(),
       .source = source,
@@ -143,9 +143,8 @@ protected:
   auto NewRecord(const std::filesystem::path& source,
     const std::string_view virtual_path) -> std::filesystem::path
   {
-    const auto record = ModelImportRecord::PathFor(TempDir(), Uuid::Generate());
-    SaveRecord(record, source, virtual_path);
-    return record;
+    return SaveRecord(ModelImportRecord::PathFor(TempDir(), virtual_path),
+      source, virtual_path);
   }
 
   static auto Candidate(const ModelImportRecord& attempt) -> ImportReport
@@ -187,15 +186,16 @@ protected:
   oxygen::content::import::SceneImportSettings settings_;
 };
 
-//! A record is named by its source identity, keeps its source relative to
+//! A record lives at its model's virtual path, keeps its source relative to
 //! itself inside the content root, and reads back what was saved.
-NOLINT_TEST_F(ModelImportRecordTest, RecordIsNamedByItsIdentityAndRoundTrips)
+NOLINT_TEST_F(ModelImportRecordTest, RecordLivesAtItsVirtualPathAndRoundTrips)
 {
   const auto content = ModelImportRecord::Read(record_, mounts_);
   const auto document = json::parse(std::ifstream(record_));
 
-  EXPECT_EQ(record_.filename().string(),
-    identity_.ToString() + std::string(ModelImportRecord::kRecordSuffix));
+  EXPECT_EQ(record_,
+    TempDir() / "Imports" / ".cooked"
+      / ("source.gltf" + std::string(ModelImportRecord::kRecordSuffix)));
   EXPECT_EQ(content.source_identity, identity_);
   EXPECT_TRUE(std::filesystem::equivalent(content.source, source_));
   EXPECT_EQ(content.virtual_path, kVirtualPath);
@@ -205,7 +205,7 @@ NOLINT_TEST_F(ModelImportRecordTest, RecordIsNamedByItsIdentityAndRoundTrips)
   EXPECT_FALSE(document.at("surface_provenance").contains("source_identity"));
   EXPECT_FALSE(document.contains("source_fingerprint"));
 
-  const auto renamed = TempDir() / "imports" / "renamed.import.json";
+  const auto renamed = TempDir() / "Imports" / "renamed.import.json";
   std::filesystem::copy_file(record_, renamed);
   EXPECT_THROW(static_cast<void>(ModelImportRecord::Read(renamed, mounts_)),
     std::invalid_argument);
@@ -258,12 +258,127 @@ NOLINT_TEST_F(ModelImportRecordTest, SettingsHoldNoJobStructure)
   }
 }
 
-//! One record per virtual path, as there is one per source identity.
+//! One record per virtual path.
 NOLINT_TEST_F(ModelImportRecordTest, TwoRecordsWithOneVirtualPathAreRefused)
 {
-  const auto other = ModelImportRecord::PathFor(TempDir(), Uuid::Generate());
+  const auto other = NewRecord(source_, "/.cooked/other.gltf");
   EXPECT_THROW(SaveRecord(other, source_, kVirtualPath), std::invalid_argument);
-  EXPECT_FALSE(std::filesystem::exists(other));
+  EXPECT_TRUE(std::filesystem::exists(other));
+  EXPECT_TRUE(std::filesystem::exists(record_));
+}
+
+//! A new record is saved at its model's place with a fresh UUIDv7 source
+//! identity of its own.
+NOLINT_TEST_F(
+  ModelImportRecordTest, NewRecordIsSavedAtItsPlaceWithAFreshIdentity)
+{
+  const auto saved = NewRecord(source_, "/.cooked/fresh.gltf");
+
+  EXPECT_EQ(saved,
+    TempDir() / "Imports" / ".cooked"
+      / ("fresh.gltf" + std::string(ModelImportRecord::kRecordSuffix)));
+  EXPECT_TRUE(std::filesystem::exists(saved));
+  const auto content = ModelImportRecord::Read(saved, mounts_);
+  EXPECT_NE(content.source_identity, identity_);
+  EXPECT_EQ(content.source_identity.ToString().at(14), '7');
+  EXPECT_EQ(
+    content.surface_provenance->SourceIdentity(), content.source_identity);
+}
+
+//! Giving a model another virtual path moves its record and keeps its source
+//! identity and surface provenance.
+NOLINT_TEST_F(ModelImportRecordTest, SavingAnotherVirtualPathMovesTheRecord)
+{
+  const auto before = ModelImportRecord::Read(record_, mounts_);
+
+  const auto moved
+    = SaveRecord(record_, source_, "/.cooked/Props/renamed.gltf");
+
+  EXPECT_EQ(moved,
+    TempDir() / "Imports" / ".cooked" / "Props"
+      / ("renamed.gltf" + std::string(ModelImportRecord::kRecordSuffix)));
+  EXPECT_FALSE(std::filesystem::exists(record_));
+  EXPECT_TRUE(std::filesystem::exists(moved));
+  const auto after = ModelImportRecord::Read(moved, mounts_);
+  EXPECT_EQ(after.virtual_path, "/.cooked/Props/renamed.gltf");
+  EXPECT_EQ(after.source_identity, identity_);
+  EXPECT_EQ(after.surface_provenance->Serialize(),
+    before.surface_provenance->Serialize());
+}
+
+//! A record moved out of a nested folder leaves no empty folder behind.
+NOLINT_TEST_F(ModelImportRecordTest, MovingARecordRemovesItsEmptyFolders)
+{
+  const auto nested = NewRecord(source_, "/.cooked/Props/a.gltf");
+  const auto folder = TempDir() / "Imports" / ".cooked" / "Props";
+  ASSERT_TRUE(std::filesystem::exists(folder));
+
+  const auto moved = SaveRecord(nested, source_, "/.cooked/b.gltf");
+
+  EXPECT_TRUE(std::filesystem::exists(moved));
+  EXPECT_FALSE(std::filesystem::exists(folder));
+  EXPECT_TRUE(std::filesystem::exists(TempDir() / "Imports" / ".cooked"));
+}
+
+//! Only records sit in `Imports/`: the lock of a record is derived output
+//! A record's lock exists only while it is held: after a save and an import,
+//! the records folder holds only records and no lock file remains anywhere.
+NOLINT_TEST_F(ModelImportRecordTest, NoLockFileOutlivesItsLock)
+{
+  static_cast<void>(PublishRead(record_));
+
+  for (const auto& entry :
+    std::filesystem::recursive_directory_iterator(TempDir())) {
+    if (entry.is_regular_file() && entry.path().extension() == ".lock") {
+      EXPECT_EQ(entry.path().filename().string(),
+        std::string(oxygen::data::loose_cooked::kGenerationLeaseFileName))
+        << "only a generation's lease marker may remain: " << entry.path();
+    }
+  }
+  for (const auto& entry :
+    std::filesystem::recursive_directory_iterator(TempDir() / "Imports")) {
+    if (entry.is_regular_file()) {
+      EXPECT_TRUE(entry.path().filename().string().ends_with(
+        ModelImportRecord::kRecordSuffix))
+        << entry.path();
+    }
+  }
+}
+
+//! A record that is not at its virtual path's place is refused.
+NOLINT_TEST_F(ModelImportRecordTest, ReadingARecordPlacedElsewhereThrows)
+{
+  const auto elsewhere
+    = TempDir() / "Imports" / ".cooked" / "Misplaced.import.json";
+  std::filesystem::copy_file(record_, elsewhere);
+
+  try {
+    static_cast<void>(ModelImportRecord::Read(elsewhere, mounts_));
+    FAIL() << "Expected a record not at its virtual path to be refused";
+  } catch (const std::invalid_argument& error) {
+    EXPECT_THAT(
+      error.what(), testing::HasSubstr("lives at its model's virtual path"));
+  }
+}
+
+//! A record of `/Content/...` prepared without any manifest layout publishes
+//! its generation with the products under `/Content/...`: the mount comes from
+//! the identity.
+NOLINT_TEST_F(
+  ModelImportRecordTest, ARecordDerivesItsOutputMountFromItsIdentity)
+{
+  const auto record = NewRecord(source_, "/Content/Models/source.gltf");
+
+  const auto attempt = ModelImportRecord::Prepare(record, mounts_);
+
+  EXPECT_EQ(
+    attempt->Request().asset_virtual_path, "/Content/Models/source.gltf");
+  EXPECT_EQ(attempt->Request().OutputMountRoot(), "/Content");
+  auto report = Candidate(*attempt);
+  report.source_fingerprint = Fingerprint(source_);
+  attempt->ValidateCandidate(report);
+  attempt->Publish(report);
+  EXPECT_EQ(ModelImportRecord::SelectedGeneration(record), report.cooked_root);
 }
 
 NOLINT_TEST_F(ModelImportRecordTest, RecordCannotBeWrittenOutsideItsFolder)
@@ -775,12 +890,15 @@ NOLINT_TEST_F(
     .virtual_path = std::string("/.cooked/renamed.gltf"),
     .mounts = oxygen::make_observer(&mounts_),
   });
-  SaveRecord(location.record_path, moved, "/.cooked/renamed.gltf");
+  const auto saved
+    = SaveRecord(location.record_path, moved, "/.cooked/renamed.gltf");
 
   EXPECT_EQ(location.record_path, record_);
   EXPECT_TRUE(location.exists);
+  EXPECT_EQ(
+    saved, ModelImportRecord::PathFor(TempDir(), "/.cooked/renamed.gltf"));
   EXPECT_THAT(Codes(location), testing::ElementsAre("import.source_relocated"));
-  const auto content = ModelImportRecord::Read(record_, mounts_);
+  const auto content = ModelImportRecord::Read(saved, mounts_);
   EXPECT_EQ(content.virtual_path, "/.cooked/renamed.gltf");
   EXPECT_EQ(content.source_identity, identity_);
 }

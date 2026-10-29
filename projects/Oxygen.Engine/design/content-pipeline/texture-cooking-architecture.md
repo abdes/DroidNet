@@ -468,7 +468,7 @@ Fields valid in a `type: "texture"` manifest job:
 {
   "id": "job.unique.id",
   "type": "texture",
-  "source": "Content/Textures/brick_albedo.png",
+  "source": "/Content/SourceMedia/Images/Brick/brick_albedo.png",
   "name": "Brick Albedo",
   "preset": "albedo",
   "intent": "albedo",
@@ -502,13 +502,17 @@ The descriptor file is loaded and merged at request-build time.
 {
   "id": "job.tex.brick",
   "type": "texture-descriptor",
-  "source": "Content/Descriptors/brick_albedo.texture.json",
+  "source": "/Content/Textures/brick_albedo.otex.json",
   "depends_on": []
 }
 ```
 
 The `source` field must point to a file conforming to
-`oxygen.texture-descriptor.schema.json` (Section 7.4).
+`oxygen.texture-descriptor.schema.json` (Section 7.4). The descriptor's `source`
+and `sources[].file` name image files by mount path
+(`/Content/SourceMedia/Images/Sky/sky_px.hdr`) or by a path relative to the
+descriptor that stays in its mount (`import.reference_outside_mount` otherwise);
+an absolute path is refused (`path.absolute_committed`).
 
 Manifest-level defaults may be provided in the `defaults.texture` object.
 
@@ -543,19 +547,19 @@ Manifest-level defaults reduce per-job verbosity:
     {
       "id": "albedo",
       "type": "texture",
-      "source": "Content/Textures/brick_albedo.png",
+      "source": "/Content/SourceMedia/Images/Brick/brick_albedo.png",
       "preset": "albedo"
     },
     {
       "id": "normal",
       "type": "texture",
-      "source": "Content/Textures/brick_normal.png",
+      "source": "/Content/SourceMedia/Images/Brick/brick_normal.png",
       "preset": "normal"
     },
     {
       "id": "roughness",
       "type": "texture",
-      "source": "Content/Textures/brick_roughness.png",
+      "source": "/Content/SourceMedia/Images/Brick/brick_roughness.png",
       "preset": "roughness"
     }
   ]
@@ -592,7 +596,7 @@ Canonical example (`brick_albedo.texture.json`):
 ```json
 {
   "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json",
-  "source": "Content/Textures/brick_albedo.png",
+  "source": "/Content/SourceMedia/Images/Brick/brick_albedo.png",
   "name": "BrickAlbedo",
   "preset": "albedo",
   "mips": {
@@ -914,8 +918,10 @@ Key layout constants:
 | `textures_table_file_name`    | `"textures.table"` | Resource table filename                   |
 | `textures_data_file_name`     | `"textures.data"`  | Pixel payload filename                    |
 
-Virtual path for runtime mounting:
-`TextureVirtualPath(name)` = `<virtual_mount_root>/Textures/<name>.otex`
+Virtual path for runtime mounting: the identity the job names, such as
+`/Content/Textures/<name>.otex`. A cooked root holds one mount, the one its
+identities name (`content::MountRootOf`), so the descriptor is
+`Textures/<name>.otex` under the root.
 
 ---
 

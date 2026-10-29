@@ -24,7 +24,7 @@
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
@@ -32,19 +32,21 @@
 namespace oxygen::content::import {
 
 ResourceDescriptorEmitter::ResourceDescriptorEmitter(
-  IAsyncFileWriter& file_writer, const LooseCookedLayout& layout,
-  std::filesystem::path cooked_root)
+  IAsyncFileWriter& file_writer, std::filesystem::path cooked_root)
   : file_writer_(file_writer)
-  , layout_(layout)
   , cooked_root_(std::move(cooked_root))
 {
 }
 
-auto ResourceDescriptorEmitter::EmitTextureAtRelPath(
-  const std::string_view relpath,
+auto ResourceDescriptorEmitter::EmitTexture(const std::string_view virtual_path,
   const data::pak::core::ResourceIndexT resource_index,
   const data::pak::core::TextureResourceDesc& descriptor) -> std::string
 {
+  auto relpath = std::string {};
+  if (!internal::TryVirtualPathToRelPath(virtual_path, relpath)) {
+    throw std::invalid_argument("texture descriptor identity names no mount: "
+      + std::string(virtual_path));
+  }
   const auto path = std::filesystem::path(relpath);
   if (path.empty() || path.has_root_path()
     || std::ranges::any_of(
@@ -58,14 +60,14 @@ auto ResourceDescriptorEmitter::EmitTextureAtRelPath(
       .index = resource_index,
       .descriptor = descriptor,
     }));
-  records_.insert_or_assign(std::string(relpath),
+  records_.insert_or_assign(relpath,
     Record {
-      .relpath = std::string(relpath),
+      .relpath = relpath,
       .size_bytes = bytes->size(),
-      .virtual_path = layout_.DescriptorVirtualPath(relpath),
+      .virtual_path = std::string(virtual_path),
     });
-  QueueWrite(std::string(relpath), std::move(bytes));
-  return std::string(relpath);
+  QueueWrite(relpath, bytes);
+  return relpath;
 }
 
 auto ResourceDescriptorEmitter::EmitBufferAtRelPath(
@@ -88,12 +90,12 @@ auto ResourceDescriptorEmitter::EmitBufferAtRelPath(
       .size_bytes = bytes->size(),
       .virtual_path = {},
     });
-  QueueWrite(std::move(path), std::move(bytes));
+  QueueWrite(std::move(path), bytes);
   return std::string(relpath);
 }
 
-auto ResourceDescriptorEmitter::QueueWrite(
-  std::string relpath, std::shared_ptr<std::vector<std::byte>> bytes) -> void
+auto ResourceDescriptorEmitter::QueueWrite(std::string relpath,
+  const std::shared_ptr<std::vector<std::byte>>& bytes) -> void
 {
   const auto full_path = cooked_root_ / std::filesystem::path(relpath);
   pending_count_.fetch_add(1, std::memory_order_acq_rel);

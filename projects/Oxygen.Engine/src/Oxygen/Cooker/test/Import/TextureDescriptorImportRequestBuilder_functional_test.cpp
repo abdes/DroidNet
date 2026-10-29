@@ -7,6 +7,7 @@
 // Covers: Import/Internal/TextureDescriptorImportRequestBuilder.cpp
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <vector>
@@ -15,8 +16,10 @@
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -26,6 +29,10 @@ using oxygen::ColorSpace;
 using oxygen::content::import::TextureDescriptorImportSettings;
 using oxygen::content::import::TextureIntent;
 using oxygen::content::import::internal::BuildTextureDescriptorRequest;
+using oxygen::cooker::test::ContentAndOtherMountTable;
+using oxygen::cooker::test::ContentMountTable;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnosticCode;
 using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
 
@@ -34,6 +41,7 @@ auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
 {
   auto settings = TextureDescriptorImportSettings {};
   settings.descriptor_path = descriptor_path.string();
+  settings.mounts = ContentMountTable(descriptor_path.parent_path());
   settings.texture.cooked_root
     = (descriptor_path.parent_path() / ".cooked").string();
   settings.texture.job_name = "base-job";
@@ -46,7 +54,9 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
   PreservesJobIdentityWithoutRewritingSourceDescriptor)
 {
   auto settings = TextureDescriptorImportSettings {};
+  const ScopedTempDir temp;
   settings.descriptor_path = "texture.json";
+  settings.mounts = ContentMountTable(temp.Path());
   settings.texture.virtual_path = "/Content/Textures/Retained.otex";
   auto diagnostics = std::vector<oxygen::content::import::ImportDiagnostic> {};
   const auto prepared
@@ -103,8 +113,8 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
     << "Expected cooked root to be present";
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path,
-    (descriptor_path.parent_path() / "images" / "brick_albedo.png")
-      .lexically_normal());
+    std::filesystem::weakly_canonical(
+      descriptor_path.parent_path() / "images" / "brick_albedo.png"));
   EXPECT_EQ(request->job_name, std::optional<std::string> { "base-job" });
   EXPECT_EQ(request->options.texture_tuning.intent, TextureIntent::kAlbedo);
   EXPECT_EQ(
@@ -156,9 +166,10 @@ NOLINT_TEST(
   TextureDescriptorPreparationTest, ResolvesLayeredInputsWithoutAWriter)
 {
   TextureDescriptorImportSettings settings;
-  settings.descriptor_path = (std::filesystem::temp_directory_path()
-    / "descriptor-preparation" / "texture.json")
-                               .string();
+  const ScopedTempDir temp;
+  settings.descriptor_path
+    = (temp.Path() / "descriptor-preparation" / "texture.json").string();
+  settings.mounts = ContentMountTable(temp.Path());
   settings.texture.job_name = "Default";
   settings.texture.flip_y = true;
   std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
@@ -176,15 +187,55 @@ NOLINT_TEST(
   EXPECT_FALSE(prepared->flip_y);
   EXPECT_EQ(prepared->mip_policy, "none");
   EXPECT_EQ(std::filesystem::path(prepared->source_path),
-    (std::filesystem::path(settings.descriptor_path).parent_path()
-      / "images/base.png")
-      .lexically_normal());
+    std::filesystem::weakly_canonical(
+      std::filesystem::path(settings.descriptor_path).parent_path()
+      / "images/base.png"));
   ASSERT_EQ(prepared->sources.size(), 1U);
   EXPECT_EQ(prepared->sources.at(0).layer, 1U);
   EXPECT_EQ(std::filesystem::path(prepared->sources.at(0).file),
-    (std::filesystem::path(settings.descriptor_path).parent_path()
-      / "images/layer.png")
-      .lexically_normal());
+    std::filesystem::weakly_canonical(
+      std::filesystem::path(settings.descriptor_path).parent_path()
+      / "images/layer.png"));
+}
+
+//! A `source` that is a mount path (`/Content/...`) is located in the mount,
+//! whatever folder the descriptor is in.
+NOLINT_TEST(TextureDescriptorPreparationTest, ResolvesAMountPathSource)
+{
+  const ScopedTempDir temp;
+  auto settings = TextureDescriptorImportSettings {};
+  settings.descriptor_path
+    = (temp.Path() / "Textures" / "brick.texture.json").string();
+  settings.mounts = ContentMountTable(temp.Path());
+  std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
+
+  const auto prepared = settings.Prepare(
+    R"({"source":"/Content/Images/brick.png"})", diagnostics);
+
+  ASSERT_HAS_VALUE(prepared) << DiagnosticSummary(diagnostics);
+  EXPECT_TRUE(diagnostics.empty());
+  EXPECT_EQ(std::filesystem::path(prepared->source_path),
+    std::filesystem::weakly_canonical(temp.Path() / "Images" / "brick.png"));
+}
+
+//! A relative `source` that lands in another mount is refused with
+//! `import.reference_outside_mount`.
+NOLINT_TEST(
+  TextureDescriptorPreparationTest, RefusesARelativeSourceLeavingItsMount)
+{
+  const ScopedTempDir temp;
+  auto settings = TextureDescriptorImportSettings {};
+  settings.descriptor_path
+    = (temp.Path() / "Content" / "Textures" / "brick.texture.json").string();
+  settings.mounts = ContentAndOtherMountTable(temp.Path());
+  std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
+
+  const auto prepared
+    = settings.Prepare(R"({"source":"../../Other/brick.png"})", diagnostics);
+
+  EXPECT_FALSE(prepared.has_value());
+  EXPECT_TRUE(HasDiagnosticCode(diagnostics, "import.reference_outside_mount"))
+    << DiagnosticSummary(diagnostics);
 }
 
 NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,

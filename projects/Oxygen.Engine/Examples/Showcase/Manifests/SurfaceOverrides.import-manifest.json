@@ -1,0 +1,422 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Models/Showcase/lampRoundTable.fbx",
+      "type": "model",
+      "record": "Imports/Content/Models/Showcase/lampRoundTable.fbx.import.json"
+    },
+    {
+      "id": "/Content/Models/Showcase/pottedPlant.fbx",
+      "type": "model",
+      "record": "Imports/Content/Models/Showcase/pottedPlant.fbx.import.json"
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoFloor.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoFloor.omat.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoFloor.omat",
+      "name": "SoFloor",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat",
+      "name": "SoShadeRed",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat",
+      "name": "SoShadeBlue",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat",
+      "name": "SoPotTeal",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoPotGold.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoPotGold.omat.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoPotGold.omat",
+      "name": "SoPotGold",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat",
+      "name": "SoLod0Green",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat",
+      "name": "SoLod1Yellow",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoLod2Red.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoLod2Red.omat.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoLod2Red.omat",
+      "name": "SoLod2Red",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoLodPurple.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoLodPurple.omat.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoLodPurple.omat",
+      "name": "SoLodPurple",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoPillar.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoPillar.omat.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoPillar.omat",
+      "name": "SoPillar",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoPillar.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoPillar.ogeo.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoPillar.ogeo",
+      "name": "SoPillar",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/SurfaceOverrides/SoPillar.omat"]
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoGhost.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoGhost.ogeo.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoGhost.ogeo",
+      "name": "SoGhost",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat"]
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo",
+      "name": "SoLodChain",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat",
+        "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat",
+        "/Content/Scenes/SurfaceOverrides/SoLod2Red.omat"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/surface_overrides.oscript",
+      "type": "script",
+      "source": "/Content/Scenes/SurfaceOverrides/surface_overrides.lua",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/surface_overrides.oscript",
+      "name": "SurfaceOverridesScript",
+      "compile": false,
+      "script_storage": "external",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/surface_overrides.input",
+      "type": "input",
+      "source": "/Content/Scenes/SurfaceOverrides/surface_overrides.input.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/surface_overrides.input"
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SurfaceOverrides.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/SurfaceOverrides/SurfaceOverrides.scene.json",
+      "virtual_path": "/Content/Scenes/SurfaceOverrides/SurfaceOverrides.oscene",
+      "name": "SurfaceOverrides",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Models/Showcase/lampRoundTable.fbx",
+        "/Content/Models/Showcase/pottedPlant.fbx",
+        "/Content/Scenes/SurfaceOverrides/SoFloor.omat",
+        "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat",
+        "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat",
+        "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat",
+        "/Content/Scenes/SurfaceOverrides/SoPotGold.omat",
+        "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat",
+        "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat",
+        "/Content/Scenes/SurfaceOverrides/SoLod2Red.omat",
+        "/Content/Scenes/SurfaceOverrides/SoLodPurple.omat",
+        "/Content/Scenes/SurfaceOverrides/SoPillar.omat",
+        "/Content/Scenes/SurfaceOverrides/SoPillar.ogeo",
+        "/Content/Scenes/SurfaceOverrides/SoGhost.ogeo",
+        "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo",
+        "/Content/Scenes/SurfaceOverrides/surface_overrides.oscript",
+        "/Content/Scenes/SurfaceOverrides/surface_overrides.input"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/SurfaceOverrides/SurfaceOverrides.oscene#script-sidecar",
+      "type": "script-sidecar",
+      "name": "surface_overrides_script_sidecar",
+      "target_scene_virtual_path": "/Content/Scenes/SurfaceOverrides/SurfaceOverrides.oscene",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/SurfaceOverrides/SurfaceOverrides.oscene",
+        "/Content/Scenes/SurfaceOverrides/surface_overrides.oscript",
+        "/Content/Scenes/SurfaceOverrides/surface_overrides.input",
+        "/Content/Scenes/SurfaceOverrides/SoFloor.omat",
+        "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat",
+        "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat",
+        "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat",
+        "/Content/Scenes/SurfaceOverrides/SoPotGold.omat",
+        "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat",
+        "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat",
+        "/Content/Scenes/SurfaceOverrides/SoLod2Red.omat",
+        "/Content/Scenes/SurfaceOverrides/SoLodPurple.omat",
+        "/Content/Scenes/SurfaceOverrides/SoPillar.omat"
+      ],
+      "bindings": [
+        {
+          "node_index": 21,
+          "slot_id": "c3f05628-a906-5823-a5ef-18ca95536163",
+          "script_virtual_path": "/Content/Scenes/SurfaceOverrides/surface_overrides.oscript",
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "lamp_asset",
+              "type": "node",
+              "value": {
+                "node": 2
+              }
+            },
+            {
+              "key": "lamp_scene_material",
+              "type": "node",
+              "value": {
+                "node": 3
+              }
+            },
+            {
+              "key": "lamp_shade_hidden",
+              "type": "node",
+              "value": {
+                "node": 4
+              }
+            },
+            {
+              "key": "lamp_metal_no_shadow",
+              "type": "node",
+              "value": {
+                "node": 5
+              }
+            },
+            {
+              "key": "pot_asset",
+              "type": "node",
+              "value": {
+                "node": 6
+              }
+            },
+            {
+              "key": "pot_scene_materials",
+              "type": "node",
+              "value": {
+                "node": 7
+              }
+            },
+            {
+              "key": "pot_runtime",
+              "type": "node",
+              "value": {
+                "node": 8
+              }
+            },
+            {
+              "key": "pillar_asset",
+              "type": "node",
+              "value": {
+                "node": 9
+              }
+            },
+            {
+              "key": "pillar_cast_override",
+              "type": "node",
+              "value": {
+                "node": 10
+              }
+            },
+            {
+              "key": "ghost_asset",
+              "type": "node",
+              "value": {
+                "node": 11
+              }
+            },
+            {
+              "key": "ghost_visible_override",
+              "type": "node",
+              "value": {
+                "node": 12
+              }
+            },
+            {
+              "key": "lod_asset",
+              "type": "node",
+              "value": {
+                "node": 13
+              }
+            },
+            {
+              "key": "lod_fixed",
+              "type": "node",
+              "value": {
+                "node": 14
+              }
+            },
+            {
+              "key": "lod_sse",
+              "type": "node",
+              "value": {
+                "node": 15
+              }
+            },
+            {
+              "key": "lod_material",
+              "type": "node",
+              "value": {
+                "node": 16
+              }
+            },
+            {
+              "key": "lamp_scene_shade_hidden",
+              "type": "node",
+              "value": {
+                "node": 22
+              }
+            },
+            {
+              "key": "lamp_scene_metal_no_shadow",
+              "type": "node",
+              "value": {
+                "node": 23
+              }
+            },
+            {
+              "key": "pillar_scene_cast",
+              "type": "node",
+              "value": {
+                "node": 24
+              }
+            },
+            {
+              "key": "ghost_scene_visible",
+              "type": "node",
+              "value": {
+                "node": 25
+              }
+            },
+            {
+              "key": "lod_scene_fixed",
+              "type": "node",
+              "value": {
+                "node": 26
+              }
+            },
+            {
+              "key": "lod_scene_sse",
+              "type": "node",
+              "value": {
+                "node": 27
+              }
+            },
+            {
+              "key": "play_lamp",
+              "type": "node",
+              "value": {
+                "node": 17
+              }
+            },
+            {
+              "key": "play_lod",
+              "type": "node",
+              "value": {
+                "node": 18
+              }
+            },
+            {
+              "key": "shade_red",
+              "type": "asset",
+              "value": "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat"
+            },
+            {
+              "key": "shade_blue",
+              "type": "asset",
+              "value": "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat"
+            },
+            {
+              "key": "pot_teal",
+              "type": "asset",
+              "value": "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat"
+            },
+            {
+              "key": "pot_gold",
+              "type": "asset",
+              "value": "/Content/Scenes/SurfaceOverrides/SoPotGold.omat"
+            },
+            {
+              "key": "lod_purple",
+              "type": "asset",
+              "value": "/Content/Scenes/SurfaceOverrides/SoLodPurple.omat"
+            },
+            {
+              "key": "toggle_shade",
+              "type": "asset",
+              "value": "/Content/Scenes/SurfaceOverrides/surface_overrides.input/ToggleShadeAction.oiact"
+            },
+            {
+              "key": "toggle_metal_shadow",
+              "type": "asset",
+              "value": "/Content/Scenes/SurfaceOverrides/surface_overrides.input/ToggleMetalShadowAction.oiact"
+            },
+            {
+              "key": "cycle_shade_material",
+              "type": "asset",
+              "value": "/Content/Scenes/SurfaceOverrides/surface_overrides.input/CycleShadeMaterialAction.oiact"
+            },
+            {
+              "key": "cycle_lod_policy",
+              "type": "asset",
+              "value": "/Content/Scenes/SurfaceOverrides/surface_overrides.input/CycleLodPolicyAction.oiact"
+            },
+            {
+              "key": "reset_overrides",
+              "type": "asset",
+              "value": "/Content/Scenes/SurfaceOverrides/surface_overrides.input/ResetOverridesAction.oiact"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

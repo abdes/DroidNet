@@ -33,7 +33,6 @@ NOLINT_TEST(
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "physics-sidecar",
@@ -79,7 +78,6 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "physics-sidecar",
@@ -112,7 +110,6 @@ NOLINT_TEST(
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "physics-sidecar",
@@ -141,7 +138,6 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "id": "physics.main",
@@ -180,7 +176,6 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "oxygen_manifest_output_top_physics",
       "defaults": {
         "physics_sidecar": {

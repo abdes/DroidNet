@@ -1,0 +1,11 @@
+{
+  "$schema": "oxygen.texture-descriptor.schema.json",
+  "source": "/Content/SourceMedia/Images/Showcase/Wood051_1K-JPG_Color.jpg",
+  "intent": "albedo",
+  "decode": {
+    "color_space": "srgb"
+  },
+  "output": {
+    "format": "bc7_srgb"
+  }
+}

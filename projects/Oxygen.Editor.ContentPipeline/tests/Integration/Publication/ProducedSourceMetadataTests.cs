@@ -241,7 +241,7 @@ public sealed class ProducedSourceMetadataTests
     {
         var primary = projectOwned ? bundle + ".gltf" : "model.gltf";
         var folder = projectOwned ? "Content/Models" : "Content/Models/" + bundle;
-        var recordPath = ModelImportSettings.PathFor(project.Root, Guid.CreateVersion7());
+        var recordPath = ModelImportSettings.PathFor(project.Root, "/" + folder + "/" + primary);
         var record = ModelImportSettings.Create(recordPath, Path.Combine(project.Root, folder, primary), "/" + folder + "/" + primary, ModelImportSettings.DefaultSettings(bundle));
         var established = JsonSerializer.SerializeToElement(new
         {

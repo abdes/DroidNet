@@ -481,7 +481,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     config.engine.path_finder_config
       = PathFinderConfig::Create()
           .WithWorkspaceRoot(workspace_root)
-          .WithSourceMount("Content", workspace_root / "Examples" / "Content")
+          // The examples project's committed mount: Content -> Content.
+          .WithSourceMount(
+            "Content", workspace_root / "Examples" / "Showcase" / "Content")
           .WithCVarsArchivePath("bin/Oxygen/vortex-basic/cvars.json")
           .Build();
     config.engine.timing.pacing_safety_margin = 250us;

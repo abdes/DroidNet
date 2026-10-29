@@ -23,6 +23,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 
 namespace oxygen::content::import::internal {
 namespace {
@@ -31,7 +32,7 @@ namespace {
 
   auto GetBufferEntryValidator() -> json_validator&
   {
-    static auto validator = []() -> json_validator {
+    static auto validator = [] -> json_validator {
       const auto root_schema = json::parse(kBufferContainerSchema);
       return MakeJsonSchemaValidator(json {
         { "$schema", "http://json-schema.org/draft-07/schema#" },
@@ -71,12 +72,13 @@ namespace {
     return internal::ValidateJsonSchemaWithDiagnostics(
       GetBufferEntryValidator(), chunk, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& chunk_object_path) -> void {
+        const std::string_view chunk_object_path) -> void {
         auto full_object_path = std::string(object_path);
         if (!chunk_object_path.empty()) {
-          full_object_path += chunk_object_path.front() == '/'
-            ? chunk_object_path
-            : "." + chunk_object_path;
+          if (chunk_object_path.front() != '/') {
+            full_object_path += '.';
+          }
+          full_object_path += chunk_object_path;
         }
         AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
           std::string(code), message, full_object_path);
@@ -86,13 +88,12 @@ namespace {
 } // namespace
 
 auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
-  const std::filesystem::path& descriptor_path,
+  const std::filesystem::path& descriptor_path, const MountTable& mounts,
   std::vector<ImportDiagnostic>& diagnostics,
   const std::string_view object_path_prefix)
   -> std::optional<std::vector<BufferSource>>
 {
   const auto diagnostics_start = diagnostics.size();
-  const auto descriptor_dir = descriptor_path.parent_path();
   auto entries = std::vector<BufferSource> {};
   auto seen_source_ids = std::unordered_set<std::string> {};
 
@@ -117,12 +118,17 @@ auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
 
     auto entry = BufferSource {};
     entry.object_path = object_path;
-    const auto source_text = buffer_doc.at("source").get<std::string>();
-    auto source_path = std::filesystem::path(source_text);
-    if (source_path.is_relative()) {
-      source_path = descriptor_dir / source_path;
+    const auto source_field = object_path + ".source";
+    const auto located = mounts.LocateReference(descriptor_path,
+      CommittedPath {
+        .text = buffer_doc.at("source").get_ref<const std::string&>(),
+        .field = source_field,
+      },
+      diagnostics);
+    if (!located.has_value()) {
+      continue;
     }
-    entry.source_path = source_path.lexically_normal();
+    entry.source_path = located->file;
 
     entry.source_id = buffer_doc.at("virtual_path").get<std::string>();
     if (!seen_source_ids.insert(entry.source_id).second) {

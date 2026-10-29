@@ -316,9 +316,10 @@ oxygen_cooker_test(
     "Scenarios/PhysicsDomainsParity_functional_test.cpp"
     "Scenarios/PhysicsSidecarRecook_functional_test.cpp"
 )
-# The parity test reads the maintained physics_domains example content.
+# The parity test reads the maintained PhysicsDomains example of the examples
+# project.
 target_compile_definitions(
   "Oxygen.Cooker.Scenarios.Functional.Tests"
   PRIVATE
-    OXYGEN_EXAMPLE_SCENES_DIR="${OXYGEN_SOURCE_DIR}/../Examples/Content/scenes"
+    OXYGEN_EXAMPLES_PROJECT_DIR="${OXYGEN_SOURCE_DIR}/../Examples/Showcase"
 )

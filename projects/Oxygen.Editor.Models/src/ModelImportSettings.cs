@@ -12,11 +12,13 @@ namespace Oxygen.Editor.Models;
 
 /// <summary>A model's import state: the editor's reader and writer of its model import record.</summary>
 /// <remarks>
-/// The record lives at <c>&lt;ProjectRoot&gt;/imports/&lt;source_identity&gt;.import.json</c>, outside every authoring
-/// mount, against the engine's <c>oxygen.model-import.schema.json</c>, which the ImportTool reads and writes too. It
-/// holds what to import (the source, the model's virtual path, the settings) and what earlier imports established (the
-/// source identity, the surface provenance, the node continuity, the published nodes, the source fingerprint). The source
-/// identity never changes, so a record is never renamed: relocating a model rewrites its <see cref="Source"/>.
+/// The record lives under <c>&lt;ProjectRoot&gt;/Imports/</c> at its model's virtual path, outside every authoring mount:
+/// the model <c>/Content/Models/Ship.glb</c> has the record <c>Imports/Content/Models/Ship.glb.import.json</c>. It follows
+/// the engine's <c>oxygen.model-import.schema.json</c>, which the ImportTool reads and writes too. It holds what to import
+/// (the source, the model's virtual path, the settings) and what earlier imports established (the source identity, the
+/// surface provenance, the node continuity, the published nodes, the source fingerprint). The source identity, a UUIDv7
+/// the record holds, never changes. Relocating a model rewrites its <see cref="Source"/>; giving it another virtual path
+/// moves the record to <see cref="PathFor"/> of the new path.
 /// </remarks>
 public sealed record ModelImportSettings
 {
@@ -24,9 +26,9 @@ public sealed record ModelImportSettings
     public const int CurrentSchemaVersion = 1;
 
     /// <summary>The folder of the project root that holds the records.</summary>
-    public const string RecordsFolder = "imports";
+    public const string RecordsFolder = "Imports";
 
-    /// <summary>The suffix of a record's file name, after its source identity.</summary>
+    /// <summary>The suffix of a record's file name, after its model's file name.</summary>
     public const string RecordSuffix = AssetFileTypes.ImportSettings;
 
     private static readonly Lazy<JsonSchema> Schema = new(LoadSchema);
@@ -69,22 +71,52 @@ public sealed record ModelImportSettings
     /// <summary>Gets the files the last import read; absent until the first import.</summary>
     public ModelSourceFingerprint? SourceFingerprint { get; init; }
 
-    /// <summary>Gets the path of the record of <paramref name="sourceIdentity"/>.</summary>
+    /// <summary>Gets the path of the record of the model <paramref name="virtualPath"/>.</summary>
     /// <param name="projectRoot">The project root, the records' content root.</param>
-    /// <param name="sourceIdentity">The model's source identity.</param>
-    /// <returns>The record's full path.</returns>
-    public static string PathFor(string projectRoot, Guid sourceIdentity)
-        => Path.Combine(Path.GetFullPath(projectRoot), RecordsFolder, sourceIdentity.ToString("D") + RecordSuffix);
+    /// <param name="virtualPath">The model's virtual path, such as <c>/Content/Models/Ship.glb</c>.</param>
+    /// <returns>The record's full path, <c>&lt;ProjectRoot&gt;/Imports/Content/Models/Ship.glb.import.json</c>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="virtualPath"/> is not an absolute virtual path.</exception>
+    public static string PathFor(string projectRoot, string virtualPath)
+        => Path.Combine(Path.GetFullPath(projectRoot), RelativePathFor(virtualPath).Replace('/', Path.DirectorySeparatorChar));
 
-    /// <summary>Gets the source identity a record's file name states.</summary>
-    /// <param name="recordPath">A record's path.</param>
-    /// <returns>The identity, or <see langword="null"/> when the name is not a record's.</returns>
-    public static Guid? IdentityOf(string recordPath)
+    /// <summary>Gets the path of the record of the model <paramref name="virtualPath"/> below its project root.</summary>
+    /// <param name="virtualPath">The model's virtual path, such as <c>/Content/Models/Ship.glb</c>.</param>
+    /// <returns>The path with <c>/</c> separators, <c>Imports/Content/Models/Ship.glb.import.json</c>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="virtualPath"/> is not an absolute virtual path.</exception>
+    public static string RelativePathFor(string virtualPath)
     {
-        var name = Path.GetFileName(recordPath);
-        return name.EndsWith(RecordSuffix, StringComparison.OrdinalIgnoreCase)
-            && Guid.TryParseExact(name[..^RecordSuffix.Length], "D", out var identity) && identity.Version == 7
-                ? identity : null;
+        ArgumentNullException.ThrowIfNull(virtualPath);
+        if (virtualPath.Length < 2 || virtualPath[0] != '/' || virtualPath.Contains('\\', StringComparison.Ordinal)
+            || virtualPath[1..].Split('/').Any(static segment => segment is "" or "." or ".."))
+        {
+            throw new ArgumentException($"A model import record is named by its model's virtual path, which '{virtualPath}' is not.", nameof(virtualPath));
+        }
+
+        return RecordsFolder + virtualPath + RecordSuffix;
+    }
+
+    /// <summary>Gets the project root a record belongs to, from its path and the virtual path it holds.</summary>
+    /// <param name="recordPath">A record's path.</param>
+    /// <param name="virtualPath">The virtual path the record holds.</param>
+    /// <returns>The project root, or <see langword="null"/> when the record is not at the place of its virtual path.</returns>
+    public static string? ProjectRootOf(string recordPath, string virtualPath)
+    {
+        var path = Path.GetFullPath(recordPath);
+        string relative;
+        try
+        {
+            relative = RelativePathFor(virtualPath).Replace('/', Path.DirectorySeparatorChar);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+
+        return path.Length > relative.Length
+            && path.EndsWith(relative, StringComparison.OrdinalIgnoreCase)
+            && Path.EndsInDirectorySeparator(path[..^relative.Length])
+                ? Path.TrimEndingDirectorySeparator(path[..^relative.Length])
+                : null;
     }
 
     /// <summary>Gets the settings of a new model: its name, units converted to meters, node transforms kept, and normals and
@@ -102,15 +134,25 @@ public sealed record ModelImportSettings
         });
 
     /// <summary>Creates the record of a model before its first import.</summary>
-    /// <param name="recordPath">Where the record will live; it names its source relative to it.</param>
+    /// <param name="recordPath">Where the record will live, <see cref="PathFor"/> of <paramref name="virtualPath"/>; it
+    /// names its source relative to it.</param>
     /// <param name="sourcePath">The model's primary source file.</param>
     /// <param name="virtualPath">The model's identity.</param>
     /// <param name="settings">The model import settings.</param>
-    /// <returns>The record, its source identity from its path.</returns>
-    public static ModelImportSettings Create(string recordPath, string sourcePath, string virtualPath, JsonElement settings)
+    /// <param name="sourceIdentity">The model's source identity, a UUIDv7; a new one when omitted.</param>
+    /// <returns>The record.</returns>
+    /// <exception cref="ArgumentException">The record path is not the place of <paramref name="virtualPath"/>, or the
+    /// identity is not a UUIDv7.</exception>
+    public static ModelImportSettings Create(string recordPath, string sourcePath, string virtualPath, JsonElement settings, Guid? sourceIdentity = null)
     {
-        var identity = IdentityOf(recordPath)
-            ?? throw new ArgumentException("A model import record is named by a UUIDv7 source identity.", nameof(recordPath));
+        _ = ProjectRootOf(recordPath, virtualPath)
+            ?? throw new ArgumentException($"A model import record lives at the place of its virtual path '{virtualPath}'.", nameof(recordPath));
+        var identity = sourceIdentity ?? Guid.CreateVersion7();
+        if (identity.Version != 7)
+        {
+            throw new ArgumentException("A model's source identity is a UUIDv7.", nameof(sourceIdentity));
+        }
+
         var record = new ModelImportSettings
         {
             Source = string.Empty,
@@ -161,17 +203,17 @@ public sealed record ModelImportSettings
         };
     }
 
-    /// <summary>Reads a record from its file, which must be named by its source identity.</summary>
+    /// <summary>Reads a record from its file, which must be at the place of its virtual path.</summary>
     /// <param name="recordPath">The record's path.</param>
     /// <param name="bytes">The record's bytes.</param>
     /// <returns>The record.</returns>
-    /// <exception cref="InvalidDataException">The record is invalid or not named by its identity.</exception>
+    /// <exception cref="InvalidDataException">The record is invalid or not at its virtual path.</exception>
     public static ModelImportSettings Parse(string recordPath, ReadOnlyMemory<byte> bytes)
     {
         var record = Parse(bytes);
-        return IdentityOf(recordPath) == record.SourceIdentity
+        return ProjectRootOf(recordPath, record.VirtualPath) is not null
             ? record
-            : throw new InvalidDataException($"The model import record '{recordPath}' is not named by its source identity {record.SourceIdentity:D}.");
+            : throw new InvalidDataException($"The model import record '{recordPath}' is not at the place of its virtual path '{record.VirtualPath}'.");
     }
 
     /// <summary>Gets the full path of the record's source.</summary>
@@ -189,7 +231,8 @@ public sealed record ModelImportSettings
     public ModelImportSettings WithSource(string recordPath, string sourcePath)
     {
         var folder = Path.GetDirectoryName(Path.GetFullPath(recordPath))!;
-        var projectRoot = Path.GetDirectoryName(folder)!;
+        var projectRoot = ProjectRootOf(recordPath, this.VirtualPath)
+            ?? throw new ArgumentException($"The record is not at the place of its virtual path '{this.VirtualPath}'.", nameof(recordPath));
         var source = Path.GetFullPath(sourcePath);
         var relative = Path.GetRelativePath(projectRoot, source);
         return this with

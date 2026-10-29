@@ -277,14 +277,8 @@ public sealed record ContentImportManifest(
     int Version,
     [property: JsonPropertyName("output")]
     string Output,
-    [property: JsonPropertyName("layout")]
-    ContentImportLayout Layout,
     [property: JsonPropertyName("jobs")]
     IReadOnlyList<ContentImportJob> Jobs);
-
-public sealed record ContentImportLayout(
-    [property: JsonPropertyName("virtual_mount_root")]
-    string VirtualMountRoot);
 
 public sealed record ContentImportJob(
     [property: JsonPropertyName("id")]
@@ -311,18 +305,17 @@ Mount layout rules:
 - Each authored mount cooks to its own physical loose root:
   `<ProjectRoot>/.cooked/generations/<SourceKey>`, selected by the project head.
 - The manifest `output` is that physical loose root.
-- The manifest `layout.virtual_mount_root` is `/<MountName>`.
+- A cooked root holds one mount, the one its identities name
+  (`/<MountName>/...`); the manifest declares no layout root.
 - Native descriptor references and cooked-index virtual paths use the same
   `/<MountName>/...` prefix.
 - Example for the built-in content mount:
   - `output = <ProjectRoot>/.cooked/generations/<SourceKey>`
-  - `layout.virtual_mount_root = /Content`
   - material descriptor URI `asset:///Content/Materials/Red.omat.json` becomes
     native path `/Content/Materials/Red.omat`
   - cooked index entries must round-trip back to
     `asset:///Content/Materials/Red.omat`
-- Do not depend on a native default `/.cooked` virtual root or on cooked
-  filesystem paths as asset identity.
+- Do not depend on cooked filesystem paths as asset identity.
 
 Required job type mapping:
 
@@ -947,8 +940,9 @@ worker termination until native drain and cleanup complete. Query output remains
 in its operation directory and cannot overwrite an authored source.
 
 A model's import state is its model import record,
-`<ProjectRoot>/imports/<source_identity>.import.json`, the engine's
-`oxygen.model-import.schema.json` shared with the ImportTool
+`<ProjectRoot>/Imports/<virtual path>.import.json` (the model
+`/Content/Models/Ship.glb` has `Imports/Content/Models/Ship.glb.import.json`),
+the engine's `oxygen.model-import.schema.json` shared with the ImportTool
 ([scene instances](scene-instances.md) NGN14): source, virtual path, settings,
 source identity, surface provenance, node continuity, published nodes and
 source fingerprint. The product reads no other format; older sidecars become

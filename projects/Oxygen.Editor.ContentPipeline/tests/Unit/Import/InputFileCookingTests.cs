@@ -67,7 +67,6 @@ internal sealed partial class InputFileCookingTests : IDisposable
         _ = job.Id.Should().Be("input:Content/Gameplay/Player.input.json");
         _ = job.Name.Should().BeNull("input jobs accept no name");
         _ = job.VirtualPath.Should().Be("/Content/Gameplay/Player.input", "the cooker names the source's products under its identity");
-        _ = job.Layout.Should().Be(new ContentImportLayout("/Content"));
     }
 
     [TestMethod]

@@ -76,7 +76,7 @@ public sealed class TexturedModelImportTests
         var record = ModelRecordLookup.Find(workspace.ProjectContext, FileSystemPath.From(retained));
         _ = record.Settings.Settings.GetProperty("tangents_policy").GetString().Should().Be("generate");
         _ = record.Settings.SourceIdentity.Should().Be(request.SourceIdentity);
-        _ = record.RecordPath.Should().Be(ModelImportSettings.PathFor(workspace.Root, request.SourceIdentity));
+        _ = record.RecordPath.Should().Be(ModelImportSettings.PathFor(workspace.Root, record.Settings.VirtualPath));
         _ = record.Settings.SurfaceProvenance.GetProperty("schema_version").GetInt32().Should().Be(2);
         _ = record.Settings.SurfaceProvenance.TryGetProperty("source_identity", out _).Should().BeFalse("the record's identity is the provenance's");
         _ = record.Settings.SourceFingerprint.Should().NotBeNull("the import established what it read");

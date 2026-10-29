@@ -170,11 +170,12 @@ public sealed class RetainedSourceCookTests
         }
 
         // The model's record goes with it: it holds the identity the clean project reproduces.
-        var records = Path.Combine(second.Root, ModelImportSettings.RecordsFolder);
-        _ = Directory.CreateDirectory(records);
-        foreach (var record in Directory.EnumerateFiles(Path.Combine(first.Root, ModelImportSettings.RecordsFolder), "*" + ModelImportSettings.RecordSuffix))
+        var recordsRoot = Path.Combine(first.Root, ModelImportSettings.RecordsFolder);
+        foreach (var record in Directory.EnumerateFiles(recordsRoot, "*" + ModelImportSettings.RecordSuffix, SearchOption.AllDirectories))
         {
-            File.Copy(record, Path.Combine(records, Path.GetFileName(record)));
+            var copy = Path.Combine(second.Root, ModelImportSettings.RecordsFolder, Path.GetRelativePath(recordsRoot, record));
+            _ = Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
+            File.Copy(record, copy);
         }
 
         var two = await CreateService(second, api, compatibility: compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);

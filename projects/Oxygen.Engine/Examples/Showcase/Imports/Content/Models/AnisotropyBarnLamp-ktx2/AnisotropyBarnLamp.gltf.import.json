@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "source": "/Content/SourceMedia/DCC/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf",
+  "virtual_path": "/Content/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf",
+  "settings": {
+    "bake_hdr": false,
+    "bake_transforms": false,
+    "bc7_quality": "fast",
+    "color_space": "srgb",
+    "content_flags": {
+      "geometry": true,
+      "materials": true,
+      "scene": true,
+      "textures": true
+    },
+    "content_hashing": true,
+    "cubemap": false,
+    "data_format": "bc7",
+    "equirect_to_cube": false,
+    "exposure_ev": 0.0,
+    "flip_normal_green": false,
+    "flip_y": false,
+    "force_rgba": true,
+    "generate_lods": false,
+    "gltf_omitted_light_range_m": 4096.0,
+    "hdr_handling": "tonemap",
+    "import_cameras": true,
+    "import_lights": true,
+    "intent": "albedo",
+    "light_intensity_scale": 1.0,
+    "lod_levels": 3,
+    "lod_reduction_percent": 50.0,
+    "max_mips": 1,
+    "mip_filter": "box",
+    "mip_policy": "full",
+    "node_pruning": "keep",
+    "normals_policy": "generate",
+    "normals_smoothing_angle_deg": 60.0,
+    "output_format": "bc7_srgb",
+    "packing_policy": "d3d12",
+    "renormalize": true,
+    "tangents_policy": "generate",
+    "unit_policy": "normalize"
+  },
+  "source_identity": "01a18262-bcc1-7000-9a30-57b30f724a2d",
+  "surface_provenance": {
+    "geometries": [
+      {
+        "allocations": [
+          {
+            "declaration_key": 1,
+            "surface_id": "e780f8a0-9d7e-2925-3193-ed1e0f475ef4"
+          }
+        ],
+        "geometry_asset_key": "5e495212-60e9-9841-63be-4351eae78b1c",
+        "layout_revision": "24a9fba03d422795ba872f70217bd13537ed8c9297c365675e51e8a83ad373aa",
+        "source_geometry_anchor": "Lamp Filament",
+        "source_layout_witness": "024be14068ee156806f0ef25cd4f21541d44df537c9ec1f723a6a2c9d923bbca",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "a7845035-025f-de43-6723-cdcf16b34733",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "Lamp Filament",
+            "surface_id": "e780f8a0-9d7e-2925-3193-ed1e0f475ef4"
+          }
+        ]
+      },
+      {
+        "allocations": [
+          {
+            "declaration_key": 2,
+            "surface_id": "d8439d24-9b57-a1e5-29b6-1b95bd4b800a"
+          }
+        ],
+        "geometry_asset_key": "a8b4f4dc-41ff-9825-6cdb-950f885532d1",
+        "layout_revision": "f2de71baf1459c3a43e37a8ba8f469689f9f8e4195ea40fef905725fb8a56a6b",
+        "source_geometry_anchor": "Lamp Glass",
+        "source_layout_witness": "6fd6e35c11cfa08c0b7f382df390987ef0a8169d44bce5022d913becf286deb4",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "de1a027c-ac03-8eb2-645c-52c1076d8c72",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "Lamp Glass",
+            "surface_id": "d8439d24-9b57-a1e5-29b6-1b95bd4b800a"
+          }
+        ]
+      },
+      {
+        "allocations": [
+          {
+            "declaration_key": 0,
+            "surface_id": "41d8db67-ddc3-e524-5b2e-c5773fbc264c"
+          }
+        ],
+        "geometry_asset_key": "1ddb6ede-6184-4dbb-e0f8-f6fc86bf9b08",
+        "layout_revision": "eee3713b78447be71fa97ab68c2d67d2d140b5ef0e940e4e77447eb020b9687b",
+        "source_geometry_anchor": "Lamp Metal",
+        "source_layout_witness": "9b101829530cc0a1b5268e430ae69a098dc1aee7c3e8b68f851b56e0f2c821f0",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "6f5608a2-8ff2-ad32-d358-2434dabf3b36",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "Lamp Metal",
+            "surface_id": "41d8db67-ddc3-e524-5b2e-c5773fbc264c"
+          }
+        ]
+      }
+    ],
+    "schema_version": 2
+  },
+  "node_continuity": [],
+  "published_nodes": [
+    {
+      "anchor": "Lamp Metal",
+      "node_id": "fec035b1-38ea-d25d-8cc7-1d556c748187"
+    },
+    {
+      "anchor": "Lamp Filament",
+      "node_id": "4a69a9b2-a8f5-c48e-053b-2ed741f31b17"
+    },
+    {
+      "anchor": "Lamp Glass",
+      "node_id": "c0361023-cd29-c4e6-428e-221166f3667c"
+    }
+  ],
+  "new_nodes": [],
+  "vanished_nodes": [],
+  "source_fingerprint": {
+    "size": 6980,
+    "sha256": "b478d057054bd90e9b1922edc8a9404c0694df635c944215a743b724d407f5e5",
+    "files": [
+      {
+        "path": "AnisotropyBarnLamp.bin",
+        "size": 409580,
+        "sha256": "50f196f7613c3cf40886c0058c8f4a51f6118d5654879f41bb2fcdb5ba989871"
+      },
+      {
+        "path": "AnisotropyBarnLamp_basecolor.ktx2",
+        "size": 2127072,
+        "sha256": "9887c98d487f2415f9221f37c14f185edfded7c9438e83ce75a753ae27a4ae53"
+      },
+      {
+        "path": "AnisotropyBarnLamp_normalbump.ktx2",
+        "size": 91214,
+        "sha256": "c04db9be21ca5f2d57c86854b9608c240e13b47e7d7329b696b62a79b262f839"
+      },
+      {
+        "path": "AnisotropyBarnLamp_occlusionroughnessmetal.ktx2",
+        "size": 1572895,
+        "sha256": "73a1ba6dfa0fbf1b1edc158b119623acbff894d62ce5ac3edaa20bedfe812383"
+      }
+    ]
+  }
+}

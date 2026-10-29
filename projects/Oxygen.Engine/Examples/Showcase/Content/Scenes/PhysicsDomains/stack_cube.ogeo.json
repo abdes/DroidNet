@@ -1,0 +1,25 @@
+{
+  "name": "stack_cube",
+  "lods": [
+    {
+      "name": "stack_cube_lod0",
+      "mesh_type": "procedural",
+      "procedural": {
+        "generator": "Cube",
+        "mesh_name": "StackCube"
+      },
+      "submeshes": [
+        {
+          "name": "stack_surface",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/Content/Scenes/PhysicsDomains/stack_yellow.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -32,7 +32,6 @@ $sourceRoots = @(
   "Examples\DemoShell",
   "Examples\InputSystem",
   "Examples\LightBench",
-  "Examples\TexturedCube",
   "Examples\RenderScene",
   "Examples\MultiView",
   "Examples\Physics",

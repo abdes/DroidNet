@@ -165,6 +165,21 @@ NOLINT_TEST(VirtualPathCasesTest, TableCoversEveryRefusalCode)
   EXPECT_EQ(LoadCases().at("unicode_version").get<std::string>(), "15.1.0");
 }
 
+//! A path's mount is its first segment; a path naming no mount, or only a
+//! mount, has none.
+NOLINT_TEST(VirtualPathTest, MountRootIsTheFirstSegment)
+{
+  using oxygen::content::MountRootOf;
+
+  EXPECT_EQ(MountRootOf("/Content/Models/Ship.glb"), "/Content");
+  EXPECT_EQ(MountRootOf("/Engine/Ship.omat"), "/Engine");
+  EXPECT_EQ(MountRootOf("/Content"), "");
+  EXPECT_EQ(MountRootOf("/Content/"), "");
+  EXPECT_EQ(MountRootOf("Content/Ship.omat"), "");
+  EXPECT_EQ(MountRootOf("//Ship.omat"), "");
+  EXPECT_EQ(MountRootOf(""), "");
+}
+
 //! Text that is not UTF-8 has no NFC form and no folding.
 NOLINT_TEST(VirtualPathTest, InvalidUtf8HasNoNormalizationOrFolding)
 {

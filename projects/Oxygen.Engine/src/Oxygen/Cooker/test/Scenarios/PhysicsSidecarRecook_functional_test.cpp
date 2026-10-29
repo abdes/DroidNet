@@ -35,6 +35,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
@@ -250,7 +251,6 @@ namespace {
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
       .normalized_descriptor_json = descriptor.dump(),
     };
@@ -276,7 +276,6 @@ namespace {
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
           .normalized_descriptor_json = descriptor.dump(),
@@ -320,7 +319,6 @@ namespace {
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.collision_shape_descriptor
       = ImportRequest::CollisionShapeDescriptorPayload {
           .normalized_descriptor_json = descriptor.dump(),
@@ -336,7 +334,6 @@ namespace {
     request.source_path = "inline://physics-sidecar";
     request.job_name = "complex-sidecar";
     request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.physics = PhysicsImportSettings {
       .target_scene_virtual_path = std::string(target_scene_virtual_path),
       .inline_bindings_json = bindings_doc.dump(),

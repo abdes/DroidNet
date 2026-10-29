@@ -53,7 +53,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   const auto* const manifest_json = R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": ".cooked",
       "defaults": {
         "material_descriptor": {
@@ -116,7 +115,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
       "layout": {
-        "virtual_mount_root": "/.cooked",
         "resources_dir": "ResourcesTop"
       },
       "defaults": {
@@ -166,7 +164,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "material-cooked",
       "jobs": [
         {
@@ -212,7 +209,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "material-descriptor",
@@ -252,7 +248,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "material-cooked",
       "jobs": [
         {
@@ -295,7 +290,6 @@ NOLINT_TEST(
     {
       "layout",
       {
-        { "virtual_mount_root", "/Content" },
         { "resources_dir", "Common" },
       },
     },
@@ -347,7 +341,7 @@ NOLINT_TEST(
   EXPECT_EQ(requests.at(1).loose_cooked_layout.resources_dir, "Resources/B");
   EXPECT_EQ(requests.at(2).loose_cooked_layout.resources_dir, "Common");
   EXPECT_EQ(requests.at(0).cooked_root, requests.at(1).cooked_root);
-  EXPECT_EQ(requests.at(0).loose_cooked_layout.virtual_mount_root, "/Content");
+  EXPECT_EQ(requests.at(0).OutputMountRoot(), "/Content");
 }
 
 //! Malformed job overrides, and the per-type folders the layout no longer has,
@@ -368,7 +362,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsMalformedJobLayout)
           "mounts",
           nlohmann::json::array({ { { "name", "Content" }, { "path", "." } } }),
         },
-        { "layout", { { "virtual_mount_root", "/.cooked" } } },
         { "output", ".cooked" },
         {
           "jobs",
@@ -403,7 +396,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, CarriesCookedContextRoots)
   WriteText(manifest_path, R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "out",
       "jobs": [
         {
@@ -442,7 +434,6 @@ NOLINT_TEST(
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "material-descriptor",
@@ -477,7 +468,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, ModelJobRequiresItsIdentity)
           "mounts",
           json::array({ { { "name", "Content" }, { "path", "." } } }),
         },
-        { "layout", { { "virtual_mount_root", "/.cooked" } } },
         { "jobs", json::array({ job }) },
       }
         .dump());
@@ -497,7 +487,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, ModelJobRequiresItsIdentity)
           "mounts",
           json::array({ { { "name", "Content" }, { "path", "." } } }),
         },
-        { "layout", { { "virtual_mount_root", "/.cooked" } } },
         { "jobs", json::array({ job }) },
       }
         .dump());

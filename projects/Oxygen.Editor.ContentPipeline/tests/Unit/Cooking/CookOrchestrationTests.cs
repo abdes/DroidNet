@@ -410,7 +410,6 @@ public sealed class CookOrchestrationTests
             => new(
                 Version: 2,
                 Output: string.Empty,
-                Layout: new ContentImportLayout("Content"),
                 Jobs: []);
     }
 }

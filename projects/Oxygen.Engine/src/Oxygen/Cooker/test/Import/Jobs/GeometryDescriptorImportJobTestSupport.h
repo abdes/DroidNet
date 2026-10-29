@@ -99,7 +99,8 @@ inline auto MakeGeometryRequest(const std::filesystem::path& source_path,
     = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = cooked_root;
   request.cooked_context_roots = std::move(cooked_context_roots);
-  request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+  request.source_mounts = oxygen::cooker::test::ContentMountTable(
+    request.source_path.parent_path());
   request.geometry_descriptor = ImportRequest::GeometryDescriptorPayload {
     .normalized_descriptor_json = descriptor_doc.dump(),
   };

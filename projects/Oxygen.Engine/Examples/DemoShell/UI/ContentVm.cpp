@@ -122,7 +122,7 @@ ContentVm::ContentVm(observer_ptr<ContentSettingsService> settings_service,
     auto s = settings_->GetExplorerSettings();
     if (s.model_root.empty()) {
       const auto defaults = file_browser_->GetContentRoots();
-      s.model_root = defaults.content_root;
+      s.model_root = defaults.dcc_directory;
       LOG_F(INFO, "ContentVm: Initializing default model root to: '{}'",
         s.model_root.string());
       settings_->SetExplorerSettings(s);
@@ -299,40 +299,44 @@ auto ContentVm::Update() -> void
   }
 }
 
-//! The app's Content root as the one source mount of its model imports: a
-//! model's recorded source is its mount path, `/Content/...`.
-auto ContentMounts(const std::filesystem::path& content_root)
-  -> content::import::MountTable
+//! The source mounts of the app's scratch project: the examples project's
+//! `Content` folder, and the local mounts a developer's `.mounts.json` files at
+//! or above the scratch project add, such as a downloads folder. A model's
+//! recorded source is its mount path.
+auto ScratchMounts(const std::filesystem::path& scratch_root,
+  const std::filesystem::path& examples_root) -> content::import::MountTable
 {
   using content::import::MountDeclaration;
   auto mounts = content::import::ResolveMountTable({
-    .project_root = content_root,
+    .project_root = scratch_root,
     .declarations = { MountDeclaration {
       .name = "Content",
       .kind = content::import::MountKind::kSource,
-      .path = ".",
-    } },
+      .path = (examples_root / "Content")
+                .lexically_relative(scratch_root)
+                .generic_string(),
+    }, },
     .form = content::import::MountDeclarationForm::kCommittedFile,
-    .declared_in = "DemoShell Content root",
-    .working_directory = content_root,
+    .declared_in = "DemoShell scratch project",
+    .working_directory = scratch_root,
     .mounts_option = std::nullopt,
     .owner = content::import::MountTableOwner::kProject,
   });
   if (!mounts.IsValid()) {
-    throw std::runtime_error("The Content root is not a valid source mount: "
+    throw std::runtime_error("The scratch project's mounts are invalid: "
       + mounts.diagnostics.front().message);
   }
   return mounts;
 }
 
-auto ModelVirtualPath(const std::string_view mount_root,
-  const std::filesystem::path& content_root,
-  const std::filesystem::path& source) -> std::string
+auto ScratchModelVirtualPath(const std::string_view source_mount_path)
+  -> std::string
 {
-  const auto under_root = source.lexically_relative(content_root);
-  const bool inside = !under_root.empty() && *under_root.begin() != "..";
-  return std::string(mount_root) + "/"
-    + (inside ? under_root : source.filename()).generic_string();
+  constexpr auto kSourceMedia = std::string_view { "/Content/SourceMedia/" };
+  const auto relative = source_mount_path.starts_with(kSourceMedia)
+    ? source_mount_path.substr(kSourceMedia.size())
+    : source_mount_path.substr(1);
+  return "/Content/Scratch/" + std::string(relative);
 }
 
 auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
@@ -356,22 +360,34 @@ auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
     }
     auto options = settings_->GetImportOptions();
     options.texture_tuning = settings_->GetTextureTuning();
-    const auto layout = settings_->GetDefaultLayout();
     auto model = content::import::SceneImportSettings::FromOptions(options);
     model.source_path = source_path.string();
-    const auto content_root = file_browser_->GetContentRoots().content_root;
-    model.virtual_path
-      = ModelVirtualPath(layout.virtual_mount_root, content_root, source_path);
-    const auto mounts = ContentMounts(content_root);
+    // Ad-hoc imports keep their records and generations in the app's scratch
+    // project, never in the examples project; their sources resolve through
+    // the scratch project's mounts.
+    const auto roots = file_browser_->GetContentRoots();
+    if (roots.scratch_root.empty()) {
+      throw std::logic_error("This app has no scratch project for imports");
+    }
+    std::filesystem::create_directories(roots.scratch_root);
+    const auto mounts = ScratchMounts(roots.scratch_root, roots.content_root);
+    auto located = std::vector<content::import::ImportDiagnostic> {};
+    const auto source = mounts.MountPathOf(source_path, located);
+    if (!source.has_value()) {
+      throw std::runtime_error(located.front().message
+        + "; add a local mount for its folder to a .mounts.json at or above "
+        + roots.scratch_root.generic_string());
+    }
+    model.virtual_path = ScratchModelVirtualPath(source->mount_path);
     auto location = content::import::ModelImportRecord::LocateRecord({
-      .content_root = content_root,
+      .content_root = roots.scratch_root,
       .source = source_path,
       .virtual_path = model.virtual_path,
       .mounts = make_observer(&mounts),
     });
-    content::import::ModelImportRecord::Save({
+    location.record_path = content::import::ModelImportRecord::Save({
       .record_path = location.record_path,
-      .content_root = content_root,
+      .content_root = roots.scratch_root,
       .source = source_path,
       .virtual_path = model.virtual_path,
       .settings_json = content::import::ModelImportRecord::MakeSettings(model),
@@ -1181,10 +1197,12 @@ auto ContentVm::SetOnSceneLoadCancelRequested(std::function<void()> callback)
 
 auto ContentVm::GetGeneratedStorageRoot() const -> std::string
 {
-  return file_browser_
-    ? (file_browser_->GetContentRoots().content_root / ".cooked" / "imports")
-        .string()
-    : std::string {};
+  if (!file_browser_ || file_browser_->GetContentRoots().scratch_root.empty()) {
+    return {};
+  }
+  return (file_browser_->GetContentRoots().scratch_root / ".cooked"
+    / content::import::ModelImportRecord::kRecordsFolder)
+    .string();
 }
 
 auto ContentVm::GetExplorerSettings() const -> ContentExplorerSettings

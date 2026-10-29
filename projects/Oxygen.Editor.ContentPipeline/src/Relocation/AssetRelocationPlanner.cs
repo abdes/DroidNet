@@ -331,8 +331,8 @@ internal static class AssetRelocationPlanner
 
         foreach (var import in index.Imports)
         {
-            // The record stays where it is, named by the model's source identity; its source and virtual path follow
-            // the model, so its products are named under the model's new path.
+            // The record's source and virtual path follow the model, so its products are named under the model's new
+            // path, and the record moves to the place of the new virtual path.
             var target = map.MapPath(import.PrimaryPath);
             var folder = target.Parent!;
 
@@ -355,10 +355,12 @@ internal static class AssetRelocationPlanner
             var content = snapshot.Content.ToArray();
             var virtualPath = RelocationPaths.ToVirtual(project, target)
                 ?? throw new AssetRelocationException($"'{import.PrimaryVirtualPath.Name}' would leave the project's authoring mounts.");
-            var rewritten = (ModelImportSettings.Parse(import.RecordPath.FullPath, content)
-                .WithSource(import.RecordPath.FullPath, target.FullPath) with
-            { VirtualPath = virtualPath.VirtualPath }).ToBytes();
-            edits.Add(new(import.RecordPath, import.RecordPath, snapshot.Version, content, rewritten));
+            var record = ModelImportSettings.Parse(import.RecordPath.FullPath, content);
+            var finalPath = FileSystemPath.From(ModelImportSettings.PathFor(
+                ModelImportSettings.ProjectRootOf(import.RecordPath.FullPath, record.VirtualPath)!, virtualPath.VirtualPath));
+            var rewritten = (record with { VirtualPath = virtualPath.VirtualPath }).WithSource(finalPath.FullPath, target.FullPath).ToBytes();
+            map.AddMove(new(import.RecordPath, finalPath, IsDirectory: false));
+            edits.Add(new(import.RecordPath, finalPath, snapshot.Version, content, rewritten));
         }
 
         return edits;

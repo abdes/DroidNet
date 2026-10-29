@@ -324,6 +324,7 @@ namespace {
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.job_type = "geometry-descriptor";
+    job.mounts = oxygen::cooker::test::ContentMountTable(Root());
     job.geometry_descriptor.descriptor_path = geometry.string();
     manifest.jobs.push_back(job);
     const auto report = manifest.AnalyzeSources();
@@ -358,7 +359,6 @@ namespace {
     job.job_type = "input";
     job.input.source_path = input.string();
     job.virtual_path = "/Content/Gameplay/Player.input";
-    job.loose_cooked_layout.virtual_mount_root = "/Content";
     manifest.jobs.push_back(job);
 
     const auto report = manifest.AnalyzeSources();
@@ -390,7 +390,6 @@ namespace {
     job.id = "script:Player/move.lua";
     job.job_type = "script";
     job.script.source_path = script.string();
-    job.loose_cooked_layout.virtual_mount_root = "/Content";
     job.virtual_path = "/Content/Player/move.oscript";
     manifest.jobs.push_back(job);
 
@@ -418,6 +417,7 @@ namespace {
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.job_type = "texture-descriptor";
+    job.mounts = oxygen::cooker::test::ContentMountTable(Root());
     job.texture.source_path = path.string();
     job.virtual_path = "/.cooked/Pixels.otex";
     job.texture.virtual_path = job.virtual_path;

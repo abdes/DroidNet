@@ -920,8 +920,11 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   auto diagnostics = std::vector<ImportDiagnostic> {};
+  CHECK_NOTNULL_F(Request().source_mounts.get(),
+    "A geometry descriptor locates its buffers through the job's mounts");
   const auto source = internal::GeometrySource::FromDescriptor(
-    descriptor->normalized_descriptor_json, Request().source_path, diagnostics);
+    descriptor->normalized_descriptor_json, Request().source_path,
+    *Request().source_mounts, diagnostics);
   AddDiagnostics(session, std::move(diagnostics));
   if (!source.has_value()) {
     ReportPhaseProgress(

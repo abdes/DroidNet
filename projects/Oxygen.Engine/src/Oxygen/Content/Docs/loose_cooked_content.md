@@ -490,9 +490,10 @@ The editor retains its write-denying member handles and rechecks membership;
 proof against member edits. Unprotected readers cannot cache verification by
 path, file timestamp or generation name. Input fingerprints remain separate.
 
-The maintained demo content store uses sibling containers: `.cooked/main` for
-shared cooked scenes and `.cooked/imports/<source>/<generation>` for retained
-models. Authored scenes and `imports/*.import.json` remain under Content. The
-physical relocation preserves asset keys and the existing virtual namespace. No
-container includes another container's files or ignores arbitrary nested
-indexes.
+A cooked root holds one mount, the one its asset identities name
+(`/Content/Scenes/A/B.oscene` lives at `Scenes/A/B.oscene` under a root of the
+`Content` mount). A project keeps sibling containers: RenderScene cooks the
+examples project's scenes into its own `.cooked/Content`, and a project retains
+models in `.cooked/Imports/<source_identity>/<generation>`; the model import
+records `Imports/<identity>.import.json` remain under the content root. No container
+includes another container's files or ignores arbitrary nested indexes.

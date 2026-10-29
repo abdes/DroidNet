@@ -217,7 +217,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     "version": 1,
     "output": ".cooked",
     "mounts": [{"name": "Content", "path": "."}],
-    "layout": {"virtual_mount_root": "/.cooked"},
     "jobs": [
       {"type":"material-descriptor","source":"Valid.material.json",
        "virtual_path":"/.cooked/Materials/Valid.omat"},
@@ -240,12 +239,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto manifest_path = root / "manifest.json";
   const auto report_path = root / "report.json";
   WriteText(root / "texture.json",
-    R"({"source":"missing.png","virtual_path":"/Other/Meter.otex"})");
+    R"({"source":"missing.png","virtual_path":"/Meter.otex"})");
   WriteText(manifest_path, R"({"version":1,"output":"cooked",
     "mounts":[{"name":"Content","path":"."}],
-    "layout":{"virtual_mount_root":"/Content"},
     "jobs":[{"type":"texture-descriptor","source":"texture.json",
-      "virtual_path":"/Other/Meter.otex"}]})");
+      "virtual_path":"/Meter.otex"}]})");
   EXPECT_FALSE(RunBatch(manifest_path, std::nullopt, report_path).has_value());
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open());
@@ -273,7 +271,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
       {"action":"Jump","slot":"Space","trigger":"pressed"}]}]})");
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
-    "mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},
+    "mounts":[{"name":"Content","path":"."}],
     "jobs":[{"type":"material-descriptor","source":"Wood.material.json",
       "virtual_path":"/.cooked/Wood.omat"},
       {"id":"input","type":"input","source":"Input/Player.input.json",
@@ -335,7 +333,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, InputSourcesInOneFolderKeepTheirKeys)
   }
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
-    "mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},
+    "mounts":[{"name":"Content","path":"."}],
     "jobs":[
       {"id":"player","type":"input","source":"Input/Player.input.json",
         "virtual_path":"/.cooked/Input/Player.input"},
@@ -377,7 +375,7 @@ NOLINT_TEST_F(
       {"action":"/.cooked/Input/Common.input/Jump.oiact","slot":"Space"}]}]})");
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
-    "mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},
+    "mounts":[{"name":"Content","path":"."}],
     "jobs":[
       {"id":"common","type":"input","source":"Input/Common.input.json",
         "virtual_path":"/.cooked/Input/Common.input"},
@@ -401,7 +399,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, MappingToAMissingActionIsRefused)
       {"action":"Dash","slot":"LeftShift"}]}]})");
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
-    "mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},
+    "mounts":[{"name":"Content","path":"."}],
     "jobs":[
       {"id":"player","type":"input","source":"Input/Player.input.json",
         "virtual_path":"/.cooked/Input/Player.input"}]})");
@@ -422,7 +420,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(root / "Wood.material.json", R"({"name":"Wood"})");
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
-    "mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},
+    "mounts":[{"name":"Content","path":"."}],
     "jobs":[{"type":"material-descriptor","source":"Wood.material.json"}]})");
 
   EXPECT_FALSE(RunBatch(manifest_path).has_value());
@@ -438,12 +436,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto root = MakeScenarioDir("conflicting_output_identities");
   const auto manifest_path = root / "import-manifest.json";
   std::ostringstream manifest;
-  manifest
-    << R"({"version":1,"mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},"jobs":[
+  manifest << R"({"version":1,"mounts":[{"name":"Content","path":"."}],"jobs":[
     {"id":"first","type":"texture","source":"first.png","virtual_path":"/.cooked/first.otex","output":"first","source_key":")"
-    << oxygen::Uuid::Generate().ToString() << R"("},
+           << oxygen::Uuid::Generate().ToString() << R"("},
     {"id":"second","type":"texture","source":"second.png","virtual_path":"/.cooked/second.otex","output":"second","depends_on":["first"],"source_key":")"
-    << oxygen::Uuid::Generate().ToString() << R"("}]})";
+           << oxygen::Uuid::Generate().ToString() << R"("}]})";
   WriteText(manifest_path, manifest.str());
   const auto shared_root = root / "shared";
   EXPECT_FALSE(RunBatch(manifest_path, shared_root).has_value());
@@ -458,12 +455,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto root = MakeScenarioDir("case_alias_output_identities");
   const auto manifest_path = root / "import-manifest.json";
   std::ostringstream manifest;
-  manifest
-    << R"({"version":1,"mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},"jobs":[
+  manifest << R"({"version":1,"mounts":[{"name":"Content","path":"."}],"jobs":[
     {"type":"texture","source":"first.png","virtual_path":"/.cooked/first.otex","output":"Cooked","source_key":")"
-    << oxygen::Uuid::Generate().ToString() << R"("},
+           << oxygen::Uuid::Generate().ToString() << R"("},
     {"type":"texture","source":"second.png","virtual_path":"/.cooked/second.otex","output":"cooked","source_key":")"
-    << oxygen::Uuid::Generate().ToString() << R"("}]})";
+           << oxygen::Uuid::Generate().ToString() << R"("}]})";
   WriteText(manifest_path, manifest.str());
   EXPECT_FALSE(RunBatch(manifest_path).has_value());
   EXPECT_THAT(Messages(), ::testing::HasSubstr("import.source_key_conflict"));
@@ -484,7 +480,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   // saturated service and must be deferred, not dropped.
   manifest
     << R"({"version":1,"output":".cooked",)"
-    << R"("mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},"max_in_flight_jobs":1,"job_admission_capacity":1,"jobs":[)";
+    << R"("mounts":[{"name":"Content","path":"."}],"max_in_flight_jobs":1,"job_admission_capacity":1,"jobs":[)";
   constexpr size_t kMaterialCount = 8;
   for (size_t index = 0; index < kMaterialCount; ++index) {
     const auto name = std::string("M") + std::to_string(index);
@@ -525,7 +521,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "version": 1,
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
-      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.sidecar.main",
@@ -563,7 +558,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "version": 1,
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
-      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.sidecar.main",
@@ -637,7 +631,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "version": 1,
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
-      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.material.shared_a",
@@ -729,7 +722,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "version": 1,
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
-      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.material.shared_a",
@@ -824,7 +816,6 @@ NOLINT_TEST_F(
       "version": 1,
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
-      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "mat.a",
@@ -869,7 +860,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "version": 1,
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
-      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "scene.base",
@@ -916,7 +906,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "version": 1,
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
-      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.sidecar.main",
@@ -946,7 +935,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleStillUsesLegacyCode)
       "version": 1,
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
-      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "input.a",
@@ -983,7 +971,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "version": 1,
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
-      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "script.sidecar.a",
@@ -1030,7 +1017,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "version": 1,
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
-      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.material.main",
@@ -1083,7 +1069,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "version": 1,
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
-      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "dup.id",
@@ -1125,7 +1110,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, TwoManifestsRunAsOneBatch)
         const std::string_view virtual_path) {
         return std::string(R"({"version":1,"output":".cooked",
       "mounts":[{"name":"Content","path":"."}],
-      "layout":{"virtual_mount_root":"/.cooked"},
       "jobs":[{"id":")")
           + std::string(id) + R"(","type":"material-descriptor","source":")"
           + std::string(source) + R"(","virtual_path":")"
@@ -1163,7 +1147,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ManifestsMappingOneMountToTwoFolders)
         return std::string(R"({"version":1,"output":".cooked",
       "mounts":[{"name":"Content","path":")")
           + std::string(folder) + R"("}],
-      "layout":{"virtual_mount_root":"/.cooked"},
       "jobs":[{"type":"material-descriptor","source":"/Content/)"
           + std::string(source) + R"(","virtual_path":")"
           + std::string(virtual_path) + R"("}]})";

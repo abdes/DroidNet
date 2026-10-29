@@ -1,0 +1,149 @@
+{
+  "version": 15,
+  "name": "PointShadowValidation",
+  "starting_camera": {
+    "node": 5
+  },
+  "nodes": [
+    {
+      "id": "5529a0e0-0ed6-565d-a0fb-910e9d8d286a",
+      "name": "Root",
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "019054bc-99be-5cab-84da-f461d1678910",
+      "name": "FloorReceiver",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "off",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "id": "706b168c-f94b-526b-84c3-b93263090fe5",
+      "name": "CenterCaster",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.55],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [0.8, 0.8, 1.1]
+      }
+    },
+    {
+      "id": "4c72552d-6355-5125-aa5a-52e821b08fe4",
+      "name": "SideCaster",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [1.35, 0.55, 0.7],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [0.45, 0.45, 1.4]
+      }
+    },
+    {
+      "id": "bd62bd8c-c7e7-5e1f-9eea-e3b5cb4c27d4",
+      "name": "PointKey",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [-2.4, -2.8, 3.2],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "id": "af9391cb-438c-539f-86b2-936d18e8f4d0",
+      "name": "MainCamera",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [-4.2, 0.7, 1.85],
+        "rotation": [0.06045194, 0.07209562, 0.76395683, 0.63775924],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "geometry_ref": "/Content/Geometry/floor.ogeo",
+      "node": 1
+    },
+    {
+      "geometry_ref": "/Content/Geometry/cube.ogeo",
+      "node": 2
+    },
+    {
+      "geometry_ref": "/Content/Geometry/cube.ogeo",
+      "node": 3
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 5,
+        "fov_y": 1.0,
+        "aspect_ratio": 1.777778,
+        "aspect_mode": "fixed",
+        "near_plane": 0.1,
+        "far_plane": 1200.0
+      }
+    ]
+  },
+  "lights": {
+    "point": [
+      {
+        "node": 4,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.92, 0.82],
+          "casts_shadows": true,
+          "shadow": {
+            "bias": 0.0,
+            "normal_bias": 0.02,
+            "resolution_hint": 2
+          }
+        },
+        "range": 8.0,
+        "source_radius": 0.05,
+        "luminous_flux_lm": 42000.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/Content/Materials/floor_default.omat",
+      "/Content/Materials/cube_red.omat"
+    ]
+  }
+}

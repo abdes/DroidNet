@@ -27,7 +27,6 @@ EMPTY_SCENE = json.dumps({"version": SCENE_VERSION, "name": "Empty", "nodes": []
 # Every manifest declares the mount its sources lie in, and the identity root.
 MOUNTS = {
     "mounts": [{"name": "Content", "path": "."}],
-    "layout": {"virtual_mount_root": "/.cooked"},
 }
 
 

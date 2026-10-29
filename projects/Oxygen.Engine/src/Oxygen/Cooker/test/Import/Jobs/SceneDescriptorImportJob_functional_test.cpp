@@ -159,7 +159,6 @@ namespace {
       request.source_mount_path
         = oxygen::cooker::test::SourceMountPath(request.source_path);
       request.cooked_root = cooked_root;
-      request.loose_cooked_layout.virtual_mount_root = "/.cooked";
       request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
         .normalized_descriptor_json = document.dump(),
       };
@@ -726,6 +725,7 @@ namespace {
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { false, true }) {
       auto request = MakeRequest(output, descriptor);
+      request.asset_virtual_path = "/Art/Scenes/Scene.oscene";
       request.cooked_context_roots = own_wins
         ? std::vector<std::filesystem::path> { library, output }
         : std::vector<std::filesystem::path> { output, library };
@@ -762,7 +762,6 @@ namespace {
     for (const auto own_wins : { true, false }) {
       auto request = MakeRequest(output, descriptor);
       request.asset_virtual_path = "/Art/Scenes/Scene.oscene";
-      request.loose_cooked_layout.virtual_mount_root = "/Art";
       request.cooked_context_roots = own_wins
         ? std::vector<std::filesystem::path> { library, output }
         : std::vector<std::filesystem::path> { output, library };

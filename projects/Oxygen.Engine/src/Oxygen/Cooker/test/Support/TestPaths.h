@@ -7,8 +7,11 @@
 #pragma once
 
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <string_view>
+
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 
 namespace oxygen::cooker::test {
 
@@ -31,6 +34,24 @@ namespace oxygen::cooker::test {
 //! needs one, or the import fails with `import.source_outside_mount`.
 [[nodiscard]] auto SourceMountPath(const std::filesystem::path& source)
   -> std::string;
+
+//! The mount path of `file` in a `Content` mount on `root`
+//! (`/Content/<file relative to root>`): how a descriptor names a file without
+//! an absolute path.
+[[nodiscard]] auto MountPathIn(const std::filesystem::path& root,
+  const std::filesystem::path& file) -> std::string;
+
+//! The mounts of a test project: one source mount, `Content`, on `root`, which
+//! also is the project root. Jobs that resolve the files their descriptors
+//! reference (`ImportRequest::source_mounts`) are given this.
+[[nodiscard]] auto ContentMountTable(const std::filesystem::path& root)
+  -> std::shared_ptr<const content::import::MountTable>;
+
+//! The mounts of a test project with source mounts `Content` and `Other` on
+//! the `Content` and `Other` folders of `root`: two mounts a reference can
+//! leave one for the other.
+[[nodiscard]] auto ContentAndOtherMountTable(const std::filesystem::path& root)
+  -> std::shared_ptr<const content::import::MountTable>;
 
 //! A file under `Cooker/`, for example
 //! `"Import/Schemas/oxygen.input.schema.json"`. Throws if it is missing.

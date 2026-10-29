@@ -115,6 +115,7 @@ target_link_libraries(
     oxygen::vortex
   PRIVATE
     oxygen::input
+    oxygen::serio
 )
 
 # ------------------------------------------------------------------------------

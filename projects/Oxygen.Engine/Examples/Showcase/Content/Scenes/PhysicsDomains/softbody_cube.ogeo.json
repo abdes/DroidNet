@@ -1,0 +1,28 @@
+{
+  "name": "softbody_cube",
+  "lods": [
+    {
+      "name": "softbody_cube_lod0",
+      "mesh_type": "procedural",
+      "procedural": {
+        "generator": "SubdividedCube",
+        "mesh_name": "SoftBodyCube",
+        "params": {
+          "segments": 8
+        }
+      },
+      "submeshes": [
+        {
+          "name": "softbody_cube_surface",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/Content/Scenes/PhysicsDomains/softbody_jelly.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

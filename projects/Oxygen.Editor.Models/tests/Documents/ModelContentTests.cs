@@ -35,7 +35,7 @@ public sealed class ModelContentTests : IDisposable
         this.session = new TestSession(this.project.Context);
         var path = this.project.WriteFile("/Content/Vehicles/Car.glb", SourceBytes);
         this.source = new DocumentFile(path, AssetPath.Parse("/Content/Vehicles/Car.glb"));
-        this.recordPath = ModelImportSettings.PathFor(this.project.Root.FullPath, Guid.CreateVersion7());
+        this.recordPath = ModelImportSettings.PathFor(this.project.Root.FullPath, "/Content/Vehicles/Car.glb");
         this.writer = new RecordWriter(this);
         this.documents = new OpenDocuments([new ModelDocumentKind(this.session, this.writer)], new NativeAtomicFileStore(this.project.Context.FileSystem));
         using var settings = JsonDocument.Parse("""{"name":"Car","unit_policy":"normalize"}""");

@@ -48,9 +48,6 @@ constexpr auto kShapes = std::array {
   EngineShape { .name = "ArrowGizmo", .folder = kInternal },
 };
 
-// Every job cooks into the `/Engine` mount.
-auto Layout() -> json { return { { "virtual_mount_root", kMount } }; }
-
 // A job's asset is `/Engine/<folder>/<name><extension>`, and is placed there.
 //! The mount path of a source in the generated sources folder.
 auto EngineSourcePath(
@@ -158,7 +155,6 @@ auto Manifest(json jobs) -> json
       "mounts",
       json::array({ { { "name", kMount.substr(1) }, { "path", "." } } }),
     },
-    { "layout", Layout() },
     { "jobs", std::move(jobs) },
   };
 }
@@ -190,7 +186,6 @@ auto WriteEngineContentSources(const std::filesystem::path& directory)
           oxygen::data::kMaterialDescriptorExtension),
       },
       { "name", kDefaultMaterialName },
-      { "layout", Layout() },
     },
   });
 
@@ -207,7 +202,6 @@ auto WriteEngineContentSources(const std::filesystem::path& directory)
           shape.folder, shape.name, oxygen::data::kGeometryDescriptorExtension),
       },
       { "name", shape.name },
-      { "layout", Layout() },
     });
   }
 

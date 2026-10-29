@@ -70,13 +70,13 @@ struct ContentSource {
   content::import::ImportFormat format;
 };
 
-//! The virtual path that identifies a model imported from `source`: the
-//! source's path under `content_root`, or its file name for a source outside
-//! it, below `mount_root`. Models of one file name in two folders stay two
-//! models; the model's products are named under this path.
-[[nodiscard]] auto ModelVirtualPath(std::string_view mount_root,
-  const std::filesystem::path& content_root,
-  const std::filesystem::path& source) -> std::string;
+//! The identity of an ad-hoc model import: its source's mount path under
+//! `/Content/Scratch`, without the `Content/SourceMedia` folders a cooked
+//! identity never holds. Models of one file name in two folders stay two
+//! models, and none shadows a committed model; its products are named under
+//! this path.
+[[nodiscard]] auto ScratchModelVirtualPath(std::string_view source_mount_path)
+  -> std::string;
 
 //! View Model orchestrating all content-related operations.
 class ContentVm {

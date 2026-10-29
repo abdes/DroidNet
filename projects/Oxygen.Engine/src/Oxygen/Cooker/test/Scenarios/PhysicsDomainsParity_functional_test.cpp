@@ -24,10 +24,11 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Testing/GTest.h>
 
-//! The physics_domains example keeps every collider where its body is drawn.
+//! The PhysicsDomains example keeps every collider where its body is drawn.
 /*!
  Physics ignores node scale (`BodyDesc::shape_local_scale` stays 1), so a
  collider is authored in its node's unscaled frame while the node's scale
@@ -49,9 +50,21 @@ struct Box final {
   glm::vec3 half { 0.0F };
 };
 
+[[nodiscard]] auto ProjectDir() -> std::filesystem::path
+{
+  return { OXYGEN_EXAMPLES_PROJECT_DIR };
+}
+
 [[nodiscard]] auto SceneDir() -> std::filesystem::path
 {
-  return std::filesystem::path(OXYGEN_EXAMPLE_SCENES_DIR) / "physics_domains";
+  return ProjectDir() / "Content/Scenes/PhysicsDomains";
+}
+
+//! The file of a mount path in the project's `Content` mount.
+[[nodiscard]] auto FileOf(const std::string& mount_path)
+  -> std::filesystem::path
+{
+  return ProjectDir() / mount_path.substr(1);
 }
 
 [[nodiscard]] auto ReadText(const std::filesystem::path& path) -> std::string
@@ -93,11 +106,12 @@ struct Box final {
   -> std::map<std::string, std::filesystem::path>
 {
   auto sources = std::map<std::string, std::filesystem::path> {};
-  const auto manifest = ReadJson(SceneDir() / "import-manifest.json");
+  const auto manifest
+    = ReadJson(ProjectDir() / "Manifests/PhysicsDomains.import-manifest.json");
   for (const auto& job : manifest.at("jobs")) {
     if (job.contains("virtual_path") && job.contains("source")) {
       sources.emplace(job.at("virtual_path").get<std::string>(),
-        SceneDir() / job.at("source").get<std::string>());
+        FileOf(job.at("source").get<std::string>()));
     }
   }
   return sources;
@@ -108,8 +122,10 @@ struct Box final {
   -> std::optional<Box>
 {
   auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto mounts
+    = oxygen::cooker::test::ContentMountTable(ProjectDir() / "Content");
   const auto source = GeometrySource::FromDescriptor(
-    ReadText(descriptor), descriptor, diagnostics);
+    ReadText(descriptor), descriptor, *mounts, diagnostics);
   if (!source.has_value() || source->lods.empty()) {
     return std::nullopt;
   }
@@ -169,7 +185,7 @@ struct Box final {
 {
   auto bindings = std::vector<std::pair<size_t, std::string>> {};
   const auto sidecar
-    = ReadJson(SceneDir() / "physics_domains.physics-sidecar.json");
+    = ReadJson(SceneDir() / "PhysicsDomains.physics-sidecar.json");
   for (const auto* group : { "rigid_bodies", "colliders", "characters" }) {
     for (const auto& binding : sidecar.at("bindings").value(group, json {})) {
       bindings.emplace_back(binding.at("node_index").get<size_t>(),
@@ -183,7 +199,7 @@ struct Box final {
 //! on an axis where the mesh is flat, lying on one of the collider's faces.
 NOLINT_TEST(PhysicsDomainsParityTest, EveryDrawnBodyMatchesItsCollider)
 {
-  const auto scene = ReadJson(SceneDir() / "physics_domains.scene.json");
+  const auto scene = ReadJson(SceneDir() / "PhysicsDomains.scene.json");
   const auto& nodes = scene.at("nodes");
   const auto sources = SourcesByVirtualPath();
 

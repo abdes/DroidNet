@@ -2,18 +2,24 @@
 
 import json
 import os
-from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 ENGINE = Path(__file__).resolve().parents[3]
-PWSH = shutil.which("pwsh")
+PWSH = shutil.which("pwsh") or "pwsh"
+SHOWCASE = "Examples/Showcase"
+RENDERSCENE = "Examples/RenderScene"
+TOOLS = RENDERSCENE + "/Tools"
 
 
-@unittest.skipUnless(PWSH and shutil.which("cmake"), "PowerShell and CMake required")
+@unittest.skipUnless(
+    shutil.which("pwsh") and shutil.which("cmake"), "PowerShell and CMake required"
+)
 class BuildSelectionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="oxygen selection ")
@@ -306,7 +312,7 @@ catch {
         os.utime(build / "build.ninja", (1, 1))
         self.command("""
 . (Join-Path $PSScriptRoot 'tools/cli/oxy-targets.ps1')
-$nativeCmake = (Get-Command cmake -CommandType Application).Source
+$nativeCmake = (Get-Command cmake -CommandType Application | Select-Object -First 1).Source
 function global:cmake {
     if ($args[0] -ne '--build') { throw 'Wrapper must not configure' }
     & $nativeCmake @args
@@ -545,7 +551,7 @@ exit $LASTEXITCODE
             (
                 "@echo off\r\necho RUNTIME=%OXYGEN_SELECTED_RUNTIME%\r\n"
                 "echo ARG1=%~1\r\necho ARG2=%~2\r\necho ARG3=%~3\r\necho ARG4=%~4\r\n"
-                "echo ARG5=%~5\r\necho ARG6=%~6\r\n"
+                "echo ARG5=%~5\r\necho ARG6=%~6\r\necho ARGS=%*\r\n"
                 f"exit /b {exit_code}\r\n"
             ).encode()
         )
@@ -558,8 +564,76 @@ exit $LASTEXITCODE
         shutil.copyfile(source, target)
         return target
 
+    @property
+    def rs(self):
+        return self.root / RENDERSCENE
+
+    PROJECT_ID = "018f8f8f-1234-7abc-8def-0123456789ab"
+
+    def project(self, *scripts):
+        """Lays out a minimal examples project and the RenderScene tools named.
+
+        Returns the project folder (Showcase); RenderScene is `self.rs`.
+        """
+        for script in scripts:
+            self.copy_workflow(f"{TOOLS}/{script}")
+        self.copy_workflow(f"{TOOLS}/internal/ExamplesTools.ps1")
+        self.copy_workflow(f"{SHOWCASE}/Tools/examples.schema.json")
+        folder = self.root / SHOWCASE
+        (folder / "Content").mkdir(parents=True, exist_ok=True)
+        (folder / "Project.oxy").write_text(
+            json.dumps(
+                {
+                    "Id": self.PROJECT_ID,
+                    "Name": "Fixture",
+                    "SchemaVersion": 2,
+                    "Mounts": [
+                        {"Name": "Content", "Kind": "Source", "Path": "Content"}
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (folder / "Examples.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "examples": [
+                        {
+                            "name": "Fixture",
+                            "description": "A fixture example.",
+                            "scenes": ["Main"],
+                            "tags": ["fixture"],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return folder
+
+    def engine_pak(self, tree):
+        """Records the engine content pak the build tree produces."""
+        pak = self.root / "bin/Oxygen/Release/engine.pak"
+        pak.parent.mkdir(parents=True, exist_ok=True)
+        pak.write_bytes(b"")
+        (tree / "engine-content-pak-Release.txt").write_text(str(pak), encoding="utf-8")
+        return pak
+
+    def release_cache(self, tree):
+        (tree / "CMakeCache.txt").write_text(
+            "CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8"
+        )
+
+    def cooked(self, folder):
+        """Marks RenderScene's cooked root as holding a cook."""
+        content = self.rs / ".cooked/Content"
+        content.mkdir(parents=True, exist_ok=True)
+        (content / "container.index.bin").write_bytes(b"")
+        return content
+
     RECORDING_CMAKE = """
-$global:realCmake = (Get-Command cmake -CommandType Application).Source
+$global:realCmake = (Get-Command cmake -CommandType Application | Select-Object -First 1).Source
 function global:cmake {
     if ($args[0] -ne '--build') { return & $global:realCmake @args }
     Write-Host "BUILD $($args -join ' ')"
@@ -569,25 +643,15 @@ function global:cmake {
 
     def test_cook_workflow_builds_importer_then_uses_shared_resolution(self):
         tree = self.tree("ninja")
-        (tree / "CMakeCache.txt").write_text(
-            "CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8"
-        )
+        self.release_cache(tree)
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool")
-        self.copy_workflow("Examples/Content/cook_scenes.ps1")
-        scene = self.root / "Examples/Content/scenes/fixture"
-        scene.mkdir(parents=True)
-        (scene / "import-manifest.json").write_text("{}", encoding="utf-8")
-        # The build tree records the engine content pak it produces.
-        engine_pak = self.root / "bin/Oxygen/Release/engine.pak"
-        engine_pak.parent.mkdir(parents=True)
-        engine_pak.write_bytes(b"")
-        (tree / "engine-content-pak-Release.txt").write_text(
-            str(engine_pak), encoding="utf-8"
-        )
+        folder = self.project("cook.ps1")
+        engine_pak = self.engine_pak(tree)
+        manifest = folder / "Manifests/Fixture.import-manifest.json"
         output = self.command(
             self.RECORDING_CMAKE
             + """
-& (Join-Path $PSScriptRoot 'Examples/Content/cook_scenes.ps1') -Scene fixture -NoTUI
+& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/cook.ps1') Fixture -NoTUI
 exit $LASTEXITCODE
 """
         )
@@ -599,12 +663,83 @@ exit $LASTEXITCODE
         )
         self.assertIn("conan-ninja-release", output)
         self.assertIn("RUNTIME=ninja-Release", output)
+        # The cooked root is a global option, so it precedes the subcommand.
         self.assertIn("ARG1=--no-tui", output)
-        self.assertIn("ARG2=batch", output)
-        self.assertIn("ARG3=--manifest", output)
-        self.assertIn(str(scene / "import-manifest.json"), output)
-        self.assertIn("ARG5=--cooked-context-root", output)
+        self.assertIn("ARG2=--cooked-root", output)
+        self.assertIn(f"ARG3={self.rs / '.cooked/Content'}", output)
+        self.assertIn("ARG4=batch", output)
+        self.assertIn("ARG5=--manifest", output)
+        self.assertIn(f"ARG6={manifest}", output)
+        self.assertIn("--cooked-context-root", output)
         self.assertIn(str(engine_pak), output)
+
+    def test_cook_runs_one_batch_for_all_selected_examples(self):
+        tree = self.tree("ninja")
+        self.release_cache(tree)
+        self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool")
+        folder = self.project("cook.ps1")
+        self.engine_pak(tree)
+        catalog = folder / "Examples.json"
+        data = json.loads(catalog.read_text(encoding="utf-8"))
+        data["examples"].append({**data["examples"][0], "name": "Second"})
+        catalog.write_text(json.dumps(data), encoding="utf-8")
+        output = self.command(
+            self.RECORDING_CMAKE
+            + """
+& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/cook.ps1') -Tag fixture
+exit $LASTEXITCODE
+"""
+        )
+        self.assertEqual(output.count("RUNTIME="), 1)
+        self.assertIn(str(folder / "Manifests/Fixture.import-manifest.json"), output)
+        self.assertIn(str(folder / "Manifests/Second.import-manifest.json"), output)
+
+    def test_cook_propagates_importer_failure(self):
+        tree = self.tree("ninja")
+        self.release_cache(tree)
+        self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool", 31)
+        self.project("cook.ps1")
+        self.engine_pak(tree)
+        output = self.command(
+            self.RECORDING_CMAKE
+            + """
+& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/cook.ps1') Fixture
+exit $LASTEXITCODE
+""",
+            expect=31,
+        )
+        self.assertIn("FAILED", output)
+
+    def test_cook_check_refuses_a_manifest_that_names_an_output(self):
+        folder = self.project("cook.ps1")
+        scene = folder / "Content/Scenes/Fixture/Main.scene.json"
+        scene.parent.mkdir(parents=True)
+        scene.write_text("{}", encoding="utf-8")
+        manifest = folder / "Manifests/Fixture.import-manifest.json"
+        manifest.parent.mkdir()
+        manifest.write_text(json.dumps({"jobs": []}), encoding="utf-8")
+        script = (
+            "& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/cook.ps1') -Check\n"
+        )
+        self.assertIn("consistent", self.command(script))
+        manifest.write_text(
+            json.dumps({"output": "../.cooked", "jobs": []}), encoding="utf-8"
+        )
+        output = self.command(script + "exit $LASTEXITCODE\n", expect=1)
+        self.assertIn("names an output folder", output)
+
+    def test_cook_rejects_unknown_example_before_building(self):
+        self.tree("ninja")
+        self.project("cook.ps1")
+        output = self.command(
+            """
+function global:cmake { throw 'Unknown example must not build' }
+try { & (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/cook.ps1') Absent; throw 'Accepted unknown example' }
+catch { if ($_.Exception.Message -notlike "No example named 'Absent'*") { throw } }
+& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/cook.ps1') -List
+"""
+        )
+        self.assertIn("Fixture", output)
 
     def test_explicit_tool_and_companion_still_use_shared_invocation(self):
         tool = self.fake_tool(self.root / "explicit tools", "CustomImporter", 17)
@@ -635,51 +770,13 @@ $tools.Paths.Values | Sort-Object
         self.assertIn("conan-ninja-debug", output)
         self.assertNotIn("bin\\Release", output)
 
-    def test_reimport_build_failure_preserves_existing_content(self):
-        tree = self.tree("ninja")
-        (tree / "CMakeCache.txt").write_text(
-            "CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8"
-        )
-        self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool")
-        self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.Inspector")
-        self.copy_workflow("Examples/Content/import_models.ps1")
-        self.copy_workflow("Examples/Content/import-sources.schema.json")
-        folder = self.root / "Examples/Content"
-        cooked = self.root / "Examples/Content/.cooked"
-        cooked.mkdir(parents=True)
-        (cooked / "keep.bin").write_bytes(b"previous generation")
-        model = self.root / "original.gltf"
-        model.write_text("{}", encoding="utf-8")
-        (folder / "sources.json").write_text(
-            json.dumps(
-                {"version": 1, "sources": [{"source": str(model), "name": "fixture"}]}
-            ),
-            encoding="utf-8",
-        )
-        output = self.command(
-            """
-$global:realCmake = (Get-Command cmake -CommandType Application).Source
-function global:cmake {
-    if ($args[0] -eq '--build') { Write-Host 'BUILD_FAILED'; $global:LASTEXITCODE = 17; return }
-    & $global:realCmake @args
-}
-& (Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1') (Join-Path $PSScriptRoot 'Examples/Content/sources.json')
-""",
-            expect=1,
-        )
-        self.assertIn("BUILD_FAILED", output)
-        self.assertNotIn("ARG1=", output)
-        self.assertEqual((cooked / "keep.bin").read_bytes(), b"previous generation")
-
     def test_build_tools_creates_missing_release_executables_before_resolution(self):
         tree = self.tree("ninja")
-        (tree / "CMakeCache.txt").write_text(
-            "CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8"
-        )
+        self.release_cache(tree)
         self.fake_tool(tree / "bin/Debug", "Oxygen.Cooker.ImportTool")
         self.fake_tool(tree / "bin/Debug", "Oxygen.Cooker.Inspector")
         output = self.command("""
-$global:realCmake = (Get-Command cmake -CommandType Application).Source
+$global:realCmake = (Get-Command cmake -CommandType Application | Select-Object -First 1).Source
 function global:cmake {
     if ($args[0] -eq '--build') {
         if (($args -join ' ') -ne '--build --preset conan-ninja-release --target oxygen-cooker-importtool oxygen-cooker-inspector') { throw 'Wrong build/configuration' }
@@ -701,77 +798,17 @@ Invoke-OxygenTool -Context $tools -Target oxygen-cooker-importtool
 """)
         self.assertIn("FRESH_RELEASE", output)
 
-    def model_import_record(self):
-        self.copy_workflow("Examples/Content/import_models.ps1")
-        self.copy_workflow(
-            "src/Oxygen/Cooker/Import/Schemas/oxygen.model-import.schema.json"
-        )
-        record = self.root / "Examples/Content/imports/model.import.json"
-        record.parent.mkdir(parents=True)
-        record.write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "source": "original.gltf",
-                    "virtual_path": "/.cooked/gltf/original.gltf",
-                    "settings": {},
-                    "source_identity": "01a0e7c7-f432-7586-8f04-212e9ac8d964",
-                }
-            ),
-            encoding="utf-8",
-        )
-        return record
-
-    def test_model_import_record_preflight_needs_no_tools_and_preserves_record(self):
-        record = self.model_import_record()
-        before = record.read_bytes()
-        output = self.command("""
-$script = Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1'
-& $script -All -WhatIf
-& $script -All -Reclaim -WhatIf
-& $script -Record (Join-Path $PSScriptRoot 'Examples/Content/imports/model.import.json') -WhatIf
-""")
-        self.assertIn("Publish 1 model imports", output)
-        self.assertIn("Reclaim unused generations for 1 model imports", output)
-        self.assertEqual(record.read_bytes(), before)
-
-    def test_record_replay_with_explicit_tool_propagates_failure_without_build(self):
-        record = self.model_import_record()
-        before = record.read_bytes()
-        directory = self.root / "bin/Release"
-        importer = self.fake_tool(directory, "Oxygen.Cooker.ImportTool", 23)
-        importer.write_bytes(b"@echo off\r\necho ARGS=%*\r\nexit /b 23\r\n")
-        self.fake_tool(directory, "Oxygen.Cooker.Inspector")
-        output = self.command(
-            """
-function global:cmake { throw 'Unexpected build invocation' }
-& (Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1') -Record (Join-Path $PSScriptRoot 'Examples/Content/imports/model.import.json') -ToolPath (Join-Path $PSScriptRoot 'bin/Release/Oxygen.Cooker.ImportTool.cmd')
-""",
-            expect=1,
-        )
-        self.assertIn("--record", output)
-        self.assertNotIn("--recipe", output)
-        self.assertNotIn("Unexpected build invocation", output)
-        self.assertEqual(record.read_bytes(), before)
-
     def test_packaging_propagates_shared_tool_failure(self):
         tree = self.tree("ninja")
-        (tree / "CMakeCache.txt").write_text(
-            "CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8"
-        )
+        self.release_cache(tree)
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.PakTool", 29)
-        self.copy_workflow("Examples/Content/pak_content.ps1")
-        (self.root / "Examples/Content/.cooked/main").mkdir(parents=True)
-        engine_pak = self.root / "bin/Oxygen/Release/engine.pak"
-        engine_pak.parent.mkdir(parents=True)
-        engine_pak.write_bytes(b"")
-        (tree / "engine-content-pak-Release.txt").write_text(
-            str(engine_pak), encoding="utf-8"
-        )
+        folder = self.project("pak.ps1")
+        cooked = self.cooked(folder)
+        engine_pak = self.engine_pak(tree)
         output = self.command(
             self.RECORDING_CMAKE
             + """
-& (Join-Path $PSScriptRoot 'Examples/Content/pak_content.ps1')
+& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/pak.ps1')
 exit $LASTEXITCODE
 """,
             expect=29,
@@ -782,24 +819,120 @@ exit $LASTEXITCODE
         )
         self.assertIn("RUNTIME=ninja-Release", output)
         self.assertIn("ARG1=build", output)
+        self.assertIn("ARG2=--loose-source", output)
+        self.assertIn(f"ARG3={cooked}", output)
         self.assertIn("ARG4=--dependency-pak", output)
         self.assertIn(f"ARG5={engine_pak}", output)
-        self.assertNotIn("Published artifacts:", output)
+        self.assertNotIn("Published:", output)
 
-    def test_cooker_callers_have_no_private_launch_paths(self):
-        for relative in (
-            "Examples/Content/cook_scenes.ps1",
-            "Examples/Content/pak_content.ps1",
-            "Examples/Content/import_models.ps1",
-        ):
-            text = (ENGINE / relative).read_text(encoding="utf-8")
-            # Source checkouts build their tools so they are never stale.
-            self.assertIn("Build-OxygenExecutables", text)
-            self.assertIn("Invoke-OxygenTool", text)
-            self.assertNotIn("Resolve-OxygenBuildSelection", text)
-            self.assertNotIn("Invoke-OxygenSelectedExecutable", text)
-            self.assertNotIn("& $ToolPath", text)
-            self.assertNotIn("Invoke-NativeLogged", text)
+    def test_packaging_passes_project_root_mounts_and_source_key(self):
+        tree = self.tree("ninja")
+        self.release_cache(tree)
+        self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.PakTool")
+        folder = self.project("pak.ps1")
+        self.cooked(folder)
+        self.engine_pak(tree)
+        output = self.command(
+            self.RECORDING_CMAKE
+            + """
+& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/pak.ps1')
+exit $LASTEXITCODE
+"""
+        )
+        self.assertIn(f'--root "{folder}"', output)
+        self.assertIn(f'--mount "Content={folder / "Content"}"', output)
+        self.assertIn(f"--source-key {self.PROJECT_ID}", output)
+        self.assertIn(str(self.rs / ".build/pak/examples.pak"), output)
+
+    def test_packaging_requires_a_cook(self):
+        tree = self.tree("ninja")
+        self.release_cache(tree)
+        self.project("pak.ps1")
+        output = self.command(
+            """
+function global:cmake { throw 'Nothing cooked must not build' }
+& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/pak.ps1')
+""",
+            expect=1,
+        )
+        self.assertNotIn("Nothing cooked must not build", output)
+
+    def play_fixture(self, exit_code=0, cooked=True):
+        folder = self.project("play.ps1")
+        self.fake_tool(self.root / "player", "Oxygen.Player", exit_code)
+        if cooked:
+            scene = self.cooked(folder) / "Scenes/Fixture/Main.oscene"
+            scene.parent.mkdir(parents=True)
+            scene.write_bytes(b"")
+        return folder
+
+    def test_play_launches_cooked_scene_with_project_mounts_and_exit_code(self):
+        folder = self.play_fixture(exit_code=7)
+        output = self.command(
+            """
+function global:cmake { throw 'Explicit player must not query presets' }
+& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/play.ps1') Fixture -PlayerPath (Join-Path $PSScriptRoot 'player/Oxygen.Player.cmd') -w 1280x720
+exit $LASTEXITCODE
+""",
+            expect=7,
+        )
+        self.assertIn("Scene: /Content/Scenes/Fixture/Main.oscene", output)
+        self.assertIn("ARG1=--launch", output)
+        self.assertIn("ARG3=-w", output)
+        self.assertIn("ARG4=1280x720", output)
+        found = re.search(r"Launch file: (.+)", output)
+        self.assertIsNotNone(found)
+        launch_file = Path(found.group(1).strip()) if found else Path()
+        self.addCleanup(launch_file.unlink, missing_ok=True)
+        launch = json.loads(launch_file.read_text(encoding="utf-8"))
+        self.assertEqual(Path(launch["mounts"][0]), self.rs / ".cooked/Content")
+        self.assertEqual(Path(launch["source_mounts"]["Content"]), folder / "Content")
+        self.assertEqual(launch["scene"], "/Content/Scenes/Fixture/Main.oscene")
+
+    def test_play_refuses_uncooked_scene_without_launching(self):
+        self.play_fixture(cooked=False)
+        output = self.command(
+            """
+& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/play.ps1') Fixture -PlayerPath (Join-Path $PSScriptRoot 'player/Oxygen.Player.cmd')
+exit $LASTEXITCODE
+""",
+            expect=1,
+        )
+        self.assertNotIn("RUNTIME=", output)
+
+    def test_play_list_names_examples_and_scenes(self):
+        self.play_fixture(cooked=False)
+        output = self.command(
+            """
+function global:cmake { throw 'List must not query presets' }
+& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/play.ps1') -List
+"""
+        )
+        self.assertRegex(output, r"Fixture\s+Main")
+
+    def test_example_tools_have_no_private_launch_paths(self):
+        forbidden = (
+            "Resolve-OxygenBuildSelection",
+            "Invoke-OxygenSelectedExecutable",
+            "& $ToolPath",
+            "Invoke-NativeLogged",
+        )
+        helper = (ENGINE / TOOLS / "internal/ExamplesTools.ps1").read_text(
+            encoding="utf-8"
+        )
+        # Source checkouts build their tools so they are never stale.
+        self.assertIn("Build-OxygenExecutables", helper)
+        self.assertIn("Resolve-OxygenExecutables", helper)
+        for text in [helper] + [
+            (ENGINE / TOOLS / script).read_text(encoding="utf-8")
+            for script in ("cook.ps1", "pak.ps1", "play.ps1")
+        ]:
+            for name in forbidden:
+                self.assertNotIn(name, text)
+        for script in ("cook.ps1", "pak.ps1", "play.ps1"):
+            text = (ENGINE / TOOLS / script).read_text(encoding="utf-8")
+            self.assertIn("Select-ExamplesTools", text, script)
+            self.assertIn("Invoke-OxygenTool", text, script)
 
     def test_all_example_scripts_have_dependency_free_help(self):
         scripts = sorted(
@@ -808,6 +941,11 @@ exit $LASTEXITCODE
             if p.is_file()
             and p.suffix.lower() in (".ps1", ".py")
             and ".cooked" not in p.parts
+            # The shared helper is dot-sourced by the tools, never run.
+            and p.name != "ExamplesTools.ps1"
+            # Generators run once and take no options; only argparse scripts
+            # have a help to check (running a generator with -h would run it).
+            and (p.suffix.lower() == ".ps1" or "argparse" in p.read_text("utf-8"))
         )
         self.assertTrue(scripts)
         for source in scripts:
@@ -858,16 +996,17 @@ exit $LASTEXITCODE
                             result.returncode, 0, result.stdout + result.stderr
                         )
                         self.assertIn("--help", result.stdout)
-        self.assertFalse((self.root / "Examples/Content/pak").exists())
+        for produced in (".cooked", ".build"):
+            self.assertFalse((self.root / RENDERSCENE / produced).exists())
         self.assertFalse((self.root / "out").exists())
 
     def test_relative_tool_paths_logs_and_packaging_whatif(self):
         caller = self.root / "caller"
         caller.mkdir()
-        (caller / "cooked").mkdir()
         (caller / "engine.pak").write_bytes(b"")
         (caller / "Pak.cmd").write_bytes(b"@echo off\r\necho TOOL-RAN\r\nexit /b 0\r\n")
-        self.copy_workflow("Examples/Content/pak_content.ps1")
+        folder = self.project("pak.ps1")
+        self.cooked(folder)
         output = self.command("""
 Push-Location (Join-Path $PSScriptRoot 'caller')
 try {
@@ -875,12 +1014,13 @@ try {
     Invoke-OxygenTool -Context $context -Target Pak -LogPath './tool.log' -CheckExitCode
     if (-not (Test-Path -LiteralPath './tool.log')) { throw 'Log did not use caller directory' }
     if ((Get-Content -LiteralPath './tool.log') -ne 'TOOL-RAN') { throw 'Tool did not run' }
-    & (Join-Path $PSScriptRoot 'Examples/Content/pak_content.ps1') -ToolPath './Pak.cmd' -EnginePak './engine.pak' -CookedRoot './cooked' -OutputDir './uncreated' -WhatIf
-    if (Test-Path -LiteralPath './uncreated') { throw 'WhatIf created output' }
+    & (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/pak.ps1') -ToolPath './Pak.cmd' -EnginePak './engine.pak' -WhatIf
 } finally { Pop-Location }
 """)
         self.assertIn(str(caller / "tool.log"), output)
         self.assertIn("What if:", output)
+        self.assertNotIn("Published:", output)
+        self.assertFalse((self.rs / ".build").exists())
 
     def test_migrated_tool_scripts_have_dependency_free_help(self):
         scripts = [

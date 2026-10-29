@@ -311,12 +311,12 @@ public sealed class DocumentScenesTests
         var document = await documents.OpenModelAsync(Car).ConfigureAwait(false);
         var identity = Guid.CreateVersion7();
         var root = documents.Project.Context.ProjectRoot.FullPath;
-        var record = ModelImportSettings.PathFor(root, identity);
+        var record = ModelImportSettings.PathFor(root, Car.VirtualPath);
         var files = documents.Project.Context.FileSystem;
         _ = files.Directory.CreateDirectory(files.Path.GetDirectoryName(record)!);
         using (var settings = JsonDocument.Parse("{}"))
         {
-            var created = ModelImportSettings.Create(record, document.File.Path.FullPath, Car.VirtualPath, settings.RootElement);
+            var created = ModelImportSettings.Create(record, document.File.Path.FullPath, Car.VirtualPath, settings.RootElement, identity);
             await files.File.WriteAllBytesAsync(record, created.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 

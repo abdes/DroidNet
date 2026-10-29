@@ -34,7 +34,7 @@ internal sealed class ModelOpeningTests : DroidNet.Tests.VisualUserInterfaceTest
         var files = session.Context.FileSystem;
         _ = files.Directory.CreateDirectory(files.Path.GetDirectoryName(source.FullPath)!);
         files.File.WriteAllBytes(source.FullPath, "glTF"u8.ToArray());
-        var record = ModelImportSettings.PathFor(session.Context.ProjectRoot.FullPath, Guid.CreateVersion7());
+        var record = ModelImportSettings.PathFor(session.Context.ProjectRoot.FullPath, Car.VirtualPath);
         _ = files.Directory.CreateDirectory(files.Path.GetDirectoryName(record)!);
         using (var settings = JsonDocument.Parse("{}"))
         {

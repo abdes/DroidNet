@@ -1,0 +1,119 @@
+# Oxygen examples project
+
+The engine's examples as an editor project: one `Content` mount, raw media in
+`Content/SourceMedia`, one folder and one manifest per example, and a catalog
+of examples. No tool writes into it: RenderScene's tools cook, package and play
+it into RenderScene's own folders, and the editor opens it like any project.
+See the [RenderScene user guide](../RenderScene/README.md) for scene selection
+and controls, and for
+[the tools that cook, package and play the examples](../RenderScene/README.md#cook-package-and-play-the-examples).
+Asset attribution is in [ASSET_CREDITS.md](Content/SourceMedia/ASSET_CREDITS.md).
+
+[Layout](#layout) · [Cook, package and play](#cook-package-and-play) ·
+[Models](#models) · [Media](#media) · [Add an example](#add-an-example) ·
+[Rules](#rules)
+
+## Layout
+
+```text
+Examples/Showcase/                # project root
+  Project.oxy                     # Mounts: Content -> Content
+  Examples.json                   # the catalog of examples
+  Content/                        # mount Content
+    Geometry/ Materials/          # parts several examples use
+    Scenes/<Example>/             # one folder per example with a scene
+    SourceMedia/                  # raw media, never cooked as is
+      DCC/ Images/
+      showcase-assets.json        # pinned downloads: URL, size, SHA-256
+      ASSET_CREDITS.md
+  Manifests/<Example>.import-manifest.json
+  Imports/                        # model import records, all committed
+  Tools/                          # fetch; Generators/ and the schemas
+  .cooked/ .build/ .mounts.json   # the editor's outputs, ignored
+```
+
+| Zone                   | Holds                                                                    |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `Content/`             | Files written for Oxygen: descriptors, scenes, scripts, input, physics   |
+| `Content/SourceMedia/` | Files Oxygen reads but does not define: DCC models, mesh buffers, images |
+| `Manifests/`           | One import manifest per example, naming every job the example needs      |
+| `Imports/`             | Model import records, at their model's identity                          |
+| `Tools/`               | `fetch`, the generators that write sources, and the catalog schemas      |
+
+A cooked identity is its source's mount path with the cooked extension:
+`/Content/Scenes/BottleOnBox/BottleOnBox.scene.json` cooks to
+`/Content/Scenes/BottleOnBox/BottleOnBox.oscene`. Descriptors name other files
+by mount path (`/Content/SourceMedia/Images/Showcase/Sky.hdr`) or by a path
+relative to themselves that stays in the mount. A manifest names no `output`:
+the tool that runs it chooses the cooked root.
+
+## Cook, package and play
+
+RenderScene owns these commands; each writes only into RenderScene
+(`.cooked/Content`, `.build/pak/examples.pak`):
+
+```powershell
+Examples/RenderScene/Tools/cook BottleOnBox   # cook the named examples
+Examples/RenderScene/Tools/cook -Check        # the project's own consistency
+Examples/RenderScene/Tools/pak                # package what was cooked
+Examples/RenderScene/Tools/play BottleOnBox   # play an example's first scene
+```
+
+`cook -Check` cooks nothing: every example has its manifest and scenes, every
+identity follows the rule above, and every identity a manifest references is
+one it cooks, so each example cooks alone. The
+[RenderScene guide](../RenderScene/README.md#cook-package-and-play-the-examples)
+lists every option.
+
+## Models
+
+A model import record holds a model's source, identity and settings, and what
+earlier imports established. It lives at the model's identity: the model
+`/Content/Models/Showcase/chair.fbx` has the record
+`Imports/Content/Models/Showcase/chair.fbx.import.json`, and its source is
+`/Content/SourceMedia/DCC/Showcase/chair.fbx`. A manifest's `model` job names
+its record, so cooking an example cooks the models it uses.
+
+A model of one's own stays local: it never goes into `Imports/`. The
+[RenderScene guide](../RenderScene/README.md#cook-package-and-play-the-examples)
+says where RenderScene keeps ad-hoc imports.
+
+## Media
+
+From the project root:
+
+```powershell
+Tools/fetch          # download what is missing or differs
+Tools/fetch -Check   # only check
+```
+
+`Content/SourceMedia/showcase-assets.json` pins each downloaded file: its path,
+URL or archive, size and SHA-256. Credits are in `ASSET_CREDITS.md` beside it.
+
+## Add an example
+
+1. Create `Content/Scenes/<Name>/` with its descriptors and scene.
+2. Add `Manifests/<Name>.import-manifest.json`, naming every job the example
+   needs, shared ones included.
+3. Add one entry to `Examples.json`.
+4. Run `Examples/RenderScene/Tools/cook -Check`, then `cook <Name>`.
+
+No CMake list, tool or test changes. The SDK ships the examples tagged
+`showcase`, as this same project reduced to them (`share/oxygen/Showcase`).
+
+## Rules
+
+- **An ordinary project.** No engine tool, runtime or editor code knows these
+  examples; anything they need, every project gets. Nothing writes into it but
+  the editor and its authors.
+- **Shared parts.** A file two examples use lives in `Content/Geometry` or
+  `Content/Materials`, and each example's manifest names its job. A shared
+  file is never edited for one example; a variation is a copy in the example's
+  folder.
+- **Generators are tools.** `Tools/Generators/generate_city.py` rewrites
+  `CityEnvironmentValidation`; `UvProbe.py`, `SurfaceCar.py` and `Vehicle.py`
+  (Blender) write raw media.
+- **Model naming.** A model's products are named under its identity
+  (`/Content/Models/chest.glb/chest.oscene`) with their authored names; only
+  characters a path segment refuses are replaced, and names that collide after
+  case folding get numeric suffixes.

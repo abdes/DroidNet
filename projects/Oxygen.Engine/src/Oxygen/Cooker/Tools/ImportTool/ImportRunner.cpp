@@ -416,14 +416,11 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
   const GlobalOptions& globals) -> std::expected<void, std::error_code>
 {
   try {
-    // A record belongs to its project: `<project_root>/imports/<record>`.
+    // A record belongs to its project, the content root it lives in.
     auto effective_mounts = mount_options;
     if (effective_mounts.root.empty() && !settings.model_record_path.empty()) {
       effective_mounts.root
-        = std::filesystem::absolute(settings.model_record_path)
-            .parent_path()
-            .parent_path()
-            .string();
+        = ModelImportRecord::ContentRootOf(settings.model_record_path).string();
     }
     const auto mounts = ResolveSourceMounts(effective_mounts, globals.writer);
     if (!mounts.has_value()) {
@@ -527,7 +524,7 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
           throw std::invalid_argument("Creating or updating a model import "
                                       "record requires --root");
         }
-        ModelImportRecord::Save({
+        record_path = ModelImportRecord::Save({
           .record_path = record_path,
           .content_root = settings.content_root,
           .source = settings.source_path,

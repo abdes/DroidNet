@@ -50,7 +50,6 @@ internal sealed partial class ContentImportManifestBuilderTests
         var material = builder.BuildJob(input, []);
         _ = material.Name.Should().Be("Red");
         _ = material.VirtualPath.Should().Be("/Content/Materials/Red.omat");
-        _ = material.Layout.Should().Be(new ContentImportLayout("/Content"), "the cooker places the descriptor at its identity in its mount");
         _ = material.Output.Should().BeNull();
         var texture = builder.BuildJob(
             input with
@@ -78,7 +77,7 @@ internal sealed partial class ContentImportManifestBuilderTests
             "Content/Vehicles/Ship/model.gltf",
             FileSystemPath.From(Path.GetFullPath("model.gltf")),
             ContentCookInputRole.Primary);
-        var recordPath = $"imports/{Guid.CreateVersion7():D}.import.json";
+        var recordPath = "Imports/Content/Vehicles/Ship/model.gltf.import.json";
 
         var job = new ContentImportManifestBuilder().BuildJob(input, ["prior"], recordPath);
 
@@ -86,7 +85,6 @@ internal sealed partial class ContentImportManifestBuilderTests
         _ = job.Record.Should().Be(recordPath);
         _ = job.ManifestSource.Should().BeNull("the record names the model's source");
         _ = job.Source.Should().Be("Content/Vehicles/Ship/model.gltf", "the job stays attributed to the model's file");
-        _ = job.Layout.Should().Be(new ContentImportLayout("/Content"));
         _ = job.DependsOn.Should().Equal("prior");
         _ = job.VirtualPath.Should().BeNull("the record holds the model's identity");
         var json = JsonSerializer.Serialize(job);
@@ -121,7 +119,6 @@ internal sealed partial class ContentImportManifestBuilderTests
         _ = job.Name.Should().Be("Ship");
         _ = job.Source.Should().Be("Content/Vehicles/Ship/model.fbx");
         _ = job.VirtualPath.Should().Be("/Content/Vehicles/Ship/model.fbx");
-        _ = job.Layout.Should().Be(new ContentImportLayout("/Content"));
         _ = job.Record.Should().BeNull();
     }
 
@@ -147,7 +144,6 @@ internal sealed partial class ContentImportManifestBuilderTests
         var manifest = new ContentImportManifestBuilder().BuildSceneManifest(scope, scene);
         _ = manifest.Jobs.Select(static job => job.Type).Should().Equal("texture-descriptor", "scene-descriptor");
         _ = manifest.Jobs[0].VirtualPath.Should().Be("/Content/Textures/Meter.otex");
-        _ = manifest.Jobs[0].Layout.Should().Be(new ContentImportLayout("/Content"));
         _ = manifest.Jobs[1].DependsOn.Should().Equal(manifest.Jobs[0].Id);
     }
 
@@ -174,7 +170,6 @@ internal sealed partial class ContentImportManifestBuilderTests
         var manifest = new ContentImportManifestBuilder().BuildSceneManifest(scope, sceneDescriptor);
 
         _ = manifest.Output.Should().Be(workspace.Output.Path);
-        _ = manifest.Layout.VirtualMountRoot.Should().Be("/Content");
         _ = manifest.Jobs.Select(static job => job.Type).Should().Equal(
             "material-descriptor",
             "geometry-descriptor",
@@ -207,7 +202,7 @@ internal sealed partial class ContentImportManifestBuilderTests
         using var json = JsonDocument.Parse(text);
         _ = json.RootElement.GetProperty("mounts").GetArrayLength().Should().Be(manifest.Mounts.Count);
         _ = json.RootElement.TryGetProperty("output", out _).Should().BeFalse();
-        _ = json.RootElement.GetProperty("layout").GetProperty("virtual_mount_root").GetString().Should().Be("/Content");
+        _ = json.RootElement.TryGetProperty("layout", out _).Should().BeFalse("a cooked root holds one mount, the one its identities name");
         _ = text.Should().NotContain(JsonSerializer.Serialize(workspace.Root)[1..^1], "every manifest path is relative");
     }
 
@@ -244,7 +239,6 @@ internal sealed partial class ContentImportManifestBuilderTests
         var manifest = new ContentImportManifestBuilder().BuildManifest(scope);
 
         _ = manifest.Output.Should().Be(workspace.Output.Path);
-        _ = manifest.Layout.VirtualMountRoot.Should().Be("/Content");
         _ = manifest.Jobs.Should().ContainSingle();
         _ = manifest.Jobs[0].Type.Should().Be("material-descriptor");
         _ = manifest.Jobs[0].Source.Should().Be("Content/Materials/Red.omat.json");

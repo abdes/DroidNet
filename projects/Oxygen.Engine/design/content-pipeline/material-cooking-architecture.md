@@ -100,12 +100,12 @@ The following facts were confirmed during the documentation pass:
 | Manifest job type exists                       | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `if (job_type == "material-descriptor")`                                                                  |
 | Schema is embedded                             | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kMaterialDescriptorSchema`)                                                                |
 | Binary format is locked                        | `src/Oxygen/Data/PakFormat_render.h` (`MaterialAssetDesc`, `static_assert(sizeof(...))==311)`, `ShaderReferenceDesc`, `static_assert(sizeof(...))==21)`) |
-| Loose cooked layout for materials              | The descriptor lives at its identity: `/.cooked/Wood/Floor.omat` is `Wood/Floor.omat` under the cooked root (`internal::PlaceAsset`)                     |
+| Loose cooked layout for materials              | The descriptor lives at its identity: `/Content/Wood/Floor.omat` is `Wood/Floor.omat` under the cooked root (`internal::PlaceAsset`)                     |
 | Texture sidecar reader exists                  | `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp` (`TextureSidecarFile`, `ResolveTextureIndexFromVirtualPath`)                    |
 | Runtime loader for materials exists            | `src/Oxygen/Content/Loaders/MaterialLoader.h` (`LoadMaterialAsset`)                                                                                      |
 | Runtime material asset container               | `src/Oxygen/Data/MaterialAsset.h` (`MaterialAsset`)                                                                                                      |
 | Shader defaults are synthesized                | `MaterialPipeline.cpp` (`BuildDefaultShaderRequests`)                                                                                                    |
-| Example material descriptor                    | `Examples/TexturedCube/WoodFloor007/woodfloor007.material.json`                                                                                          |
+| Example material descriptor                    | `Examples/Showcase/Content/Scenes/SdkMaterials/SdkWood.omat.json`                                                                                        |
 | JSON schema shipped                            | `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`                                                                                |
 
 ## 4. Decision
@@ -465,16 +465,16 @@ Canonical example (`woodfloor007.material.json`):
   },
   "textures": {
     "base_color": {
-      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_color.otex"
+      "virtual_path": "/Content/Textures/woodfloor007_color.otex"
     },
     "ambient_occlusion": {
-      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_ao.otex"
+      "virtual_path": "/Content/Textures/woodfloor007_ao.otex"
     },
     "roughness": {
-      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_roughness.otex"
+      "virtual_path": "/Content/Textures/woodfloor007_roughness.otex"
     },
     "normal": {
-      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_normal.otex"
+      "virtual_path": "/Content/Textures/woodfloor007_normal.otex"
     }
   }
 }
@@ -560,7 +560,7 @@ Each texture slot is specified as:
 
 ```json
 "<slot_name>": {
-  "virtual_path":  "/.cooked/Resources/Textures/<name>.otex",
+  "virtual_path":  "/Content/Textures/<name>.otex",
   "uv_set":        0,
   "uv_transform": {
     "scale":             [1.0, 1.0],
@@ -818,7 +818,8 @@ Key layout constants:
 
 A material descriptor job writes at its `virtual_path`; a model's material is
 named under the model (`ImportRequest::ModelProductVirtualPath`):
-`/.cooked/Ship.glb/Paint.omat`, written at `Ship.glb/Paint.omat`.
+`/Content/Models/Ship.glb/Paint.omat`, written at
+`Models/Ship.glb/Paint.omat`.
 
 ---
 

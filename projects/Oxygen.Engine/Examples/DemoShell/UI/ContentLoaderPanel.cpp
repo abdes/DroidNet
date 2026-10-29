@@ -277,11 +277,6 @@ namespace {
   };
   constexpr auto kLayoutFields = std::array {
     LayoutField {
-      .label = "Virtual Root",
-      .command = "demo.content.layout.virtual_root",
-      .member = &LooseCookedLayout::virtual_mount_root,
-    },
-    LayoutField {
       .label = "Resources Dir",
       .command = "demo.content.layout.resources_dir",
       .member = &LooseCookedLayout::resources_dir,

@@ -59,7 +59,6 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   const auto* const manifest_json = R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": ".cooked",
       "defaults": {
         "geometry_descriptor": {
@@ -139,7 +138,6 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "geometry-cooked",
       "jobs": [
         {
@@ -187,7 +185,6 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "geometry-descriptor",

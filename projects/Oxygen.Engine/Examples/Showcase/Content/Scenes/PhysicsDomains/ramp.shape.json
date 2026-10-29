@@ -1,0 +1,7 @@
+{
+  "name": "ramp_shape",
+  "virtual_path": "/Content/Scenes/PhysicsDomains/ramp.ocshape",
+  "shape_type": "box",
+  "material_ref": "/Content/Scenes/PhysicsDomains/ground.opmat",
+  "half_extents": [2.0, 3.0, 0.15]
+}

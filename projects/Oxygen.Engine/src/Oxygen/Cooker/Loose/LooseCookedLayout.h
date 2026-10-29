@@ -29,11 +29,10 @@ namespace oxygen::content::import {
  geometry, textures, scene and buffer files (`X/Ship.glb/Paint.omat`). The
  layout has no folder for any of them.
 
- It places the shared resource tables, and anchors virtual paths at the
- virtual mount root.
+ A cooked root holds one mount, the one its identities name
+ (`content::MountRootOf`); the layout places the shared resource tables.
 
  - Keep resource blob files (tables/data) under a dedicated resources folder.
- - Keep a virtual mount root that anchors virtual paths recorded in the index.
  - Ensure all configured *physical* paths are container-relative and use
    forward slashes.
 
@@ -44,13 +43,6 @@ namespace oxygen::content::import {
  @see oxygen::data::loose_cooked::FileRecord
 */
 struct LooseCookedLayout final : Layout {
-  //! Place a descriptor-relative path in this container's virtual namespace.
-  [[nodiscard]] auto DescriptorVirtualPath(std::string_view relative_path) const
-    -> std::string
-  {
-    return JoinVirtualPath(virtual_mount_root, relative_path);
-  }
-
   //! Index filename at the cooked-root directory.
   /*!
    This is the file that contains the loose cooked index header, asset entries,
@@ -157,31 +149,6 @@ struct LooseCookedLayout final : Layout {
   }
 
 private:
-  [[nodiscard]] static auto EnsureLeadingSlash(std::string_view s)
-    -> std::string
-  {
-    if (s.starts_with('/')) {
-      return std::string(s);
-    }
-    return std::string("/") + std::string(s);
-  }
-
-  [[nodiscard]] static auto JoinVirtualPath(
-    std::string_view root, std::string_view leaf) -> std::string
-  {
-    const auto u_root = EnsureLeadingSlash(root);
-    if (u_root == "/") {
-      return EnsureLeadingSlash(leaf);
-    }
-    if (leaf.empty()) {
-      return u_root;
-    }
-    if (leaf.front() == '/') {
-      return u_root + std::string(leaf);
-    }
-    return u_root + "/" + std::string(leaf);
-  }
-
   [[nodiscard]] static auto JoinRelPath(
     std::string_view base, std::string_view child) -> std::string
   {

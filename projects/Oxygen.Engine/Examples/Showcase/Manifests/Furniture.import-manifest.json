@@ -1,0 +1,35 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Models/Showcase/tableRound.fbx",
+      "type": "model",
+      "record": "Imports/Content/Models/Showcase/tableRound.fbx.import.json"
+    },
+    {
+      "id": "/Content/Models/Showcase/chair.fbx",
+      "type": "model",
+      "record": "Imports/Content/Models/Showcase/chair.fbx.import.json"
+    },
+    {
+      "id": "/Content/Models/Showcase/lampRoundTable.fbx",
+      "type": "model",
+      "record": "Imports/Content/Models/Showcase/lampRoundTable.fbx.import.json"
+    },
+    {
+      "id": "/Content/Models/Showcase/pottedPlant.fbx",
+      "type": "model",
+      "record": "Imports/Content/Models/Showcase/pottedPlant.fbx.import.json"
+    }
+  ]
+}

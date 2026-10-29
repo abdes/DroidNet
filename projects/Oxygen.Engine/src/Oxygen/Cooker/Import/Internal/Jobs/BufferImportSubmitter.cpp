@@ -10,8 +10,6 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <limits>
 #include <optional>
 #include <span>
@@ -36,6 +34,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Serio/AtomicFile.h>
 
 namespace oxygen::content::import::detail {
 
@@ -79,36 +78,9 @@ namespace {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
   }
 
-  [[nodiscard]] auto NormalizeRelPath(std::string relpath) -> std::string
+  [[nodiscard]] auto NormalizeRelPath(const std::string& relpath) -> std::string
   {
-    return std::filesystem::path(std::move(relpath))
-      .lexically_normal()
-      .generic_string();
-  }
-
-  [[nodiscard]] auto ReadBinaryFile(const std::filesystem::path& path)
-    -> std::optional<std::vector<std::byte>>
-  {
-    auto in = std::ifstream(path, std::ios::binary | std::ios::ate);
-    if (!in.is_open()) {
-      return std::nullopt;
-    }
-    const auto end = in.tellg();
-    if (end < 0) {
-      return std::nullopt;
-    }
-    const auto size = static_cast<size_t>(end);
-    in.seekg(0, std::ios::beg);
-
-    auto bytes = std::vector<std::byte>(size);
-    if (size > 0U) {
-      in.read(reinterpret_cast<char*>(bytes.data()),
-        static_cast<std::streamsize>(size));
-      if (!in) {
-        return std::nullopt;
-      }
-    }
-    return bytes;
+    return std::filesystem::path(relpath).lexically_normal().generic_string();
   }
 
   [[nodiscard]] auto LoadCanonicalBufferSidecarRelpathsByIndex(
@@ -144,7 +116,8 @@ namespace {
 
     auto by_index = std::unordered_map<uint32_t, std::string> {};
     for (const auto& path : sidecar_paths) {
-      const auto bytes = ReadBinaryFile(path);
+      // A sidecar another import is replacing is read as it was opened.
+      const auto bytes = serio::ReadPublishedFile(path);
       if (!bytes.has_value()) {
         continue;
       }
@@ -173,11 +146,11 @@ namespace {
 
 BufferImportSubmitter::BufferImportSubmitter(ImportSession& session,
   const ImportRequest& request, const observer_ptr<IAsyncFileReader> reader,
-  const std::stop_token stop_token)
+  std::stop_token stop_token)
   : session_(session)
   , request_(request)
   , reader_(reader)
-  , stop_token_(stop_token)
+  , stop_token_(std::move(stop_token))
 {
 }
 
@@ -209,11 +182,10 @@ auto BufferImportSubmitter::SubmitBuffers(
   // Resolve all destinations before starting source reads or pipeline work.
   for (const auto& entry : entries) {
     auto relpath = std::string {};
-    if (!internal::TryVirtualPathToRelPath(
-          request_, entry.source_id, relpath)) {
+    if (!internal::TryVirtualPathToRelPath(entry.source_id, relpath)) {
       AddDiagnostic(session_, request_, ImportSeverity::kError,
         "buffer.container.virtual_path_unmounted",
-        "Buffer virtual_path is outside mounted cooked roots",
+        "Buffer virtual_path names no mount",
         entry.object_path + ".virtual_path");
       continue;
     }
@@ -237,7 +209,7 @@ auto BufferImportSubmitter::SubmitBuffers(
     }
 
     const auto source_size = read_result.value().size();
-    if (source_size > (std::numeric_limits<uint32_t>::max)()) {
+    if (source_size > std::numeric_limits<uint32_t>::max()) {
       AddDiagnostic(session_, request_, ImportSeverity::kError,
         "buffer.container.source_too_large",
         "Buffer source exceeds maximum supported size of 4 GiB",

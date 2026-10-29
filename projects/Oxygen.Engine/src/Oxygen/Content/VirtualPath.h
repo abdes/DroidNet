@@ -76,6 +76,18 @@ OXGN_CNTT_NDAPI auto ValidateVirtualPath(std::string_view virtual_path,
 OXGN_CNTT_NDAPI auto IsCanonicalVirtualPath(std::string_view virtual_path,
   VirtualPathRuleSet rules = VirtualPathRuleSet::kCooked) -> bool;
 
+//! The mount a virtual path lives in: its first segment, with the leading `/`.
+/*!
+ `/Content` for `/Content/Models/Ship.glb`. A loose cooked root holds one
+ mount: the descriptor of `/Content/Models/Ship.glb` is `Models/Ship.glb` under
+ it.
+
+ @return The mount, or empty text for a path that does not start with `/`, or
+   names a mount and nothing in it.
+*/
+OXGN_CNTT_NDAPI auto MountRootOf(std::string_view virtual_path) noexcept
+  -> std::string_view;
+
 //! The NFC form of UTF-8 text, or nothing when the text is not valid UTF-8.
 OXGN_CNTT_NDAPI auto ToNfc(std::string_view text) -> std::optional<std::string>;
 

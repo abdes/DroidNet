@@ -40,7 +40,7 @@ public sealed class SourceAnalysisAdapterTests
         var captures = await CaptureAnalyzedSourcesAsync(execution, analysis, this.TestContext.CancellationToken).ConfigureAwait(false);
         var capturedAnalysis = await api.AnalyzeSourcesAsync(execution with { CapturedInputs = captures }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = capturedAnalysis.Should().BeEquivalentTo(analysis);
-        var manifest = new ContentImportManifest(1, Path.Combine(execution.OperationRoot, "output"), new("/Content"), execution.Jobs) { Mounts = mounts };
+        var manifest = new ContentImportManifest(1, Path.Combine(execution.OperationRoot, "output"), execution.Jobs) { Mounts = mounts };
         var import = new ContentImportExecution(execution.OperationId, execution.InputRoot, execution.OperationRoot, manifest)
         {
             Artifacts = artifacts,

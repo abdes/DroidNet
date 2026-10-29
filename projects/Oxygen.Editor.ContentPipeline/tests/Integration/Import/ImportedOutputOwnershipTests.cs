@@ -128,7 +128,7 @@ public sealed class ImportedOutputOwnershipTests
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.CookedAssets.Should().Contain(asset => asset.CookedAssetUri == geometry.CookedAssetUri && asset.SourceAssetUri == source);
         _ = result.InputsAreCurrent.Should().BeTrue();
-        _ = result.InputSnapshot!.Inputs.Should().Contain(input => input.RelativePath.StartsWith("imports/", StringComparison.Ordinal) && input.RelativePath.EndsWith(".import.json", StringComparison.Ordinal));
+        _ = result.InputSnapshot!.Inputs.Should().Contain(input => input.RelativePath.StartsWith("Imports/", StringComparison.Ordinal) && input.RelativePath.EndsWith(".import.json", StringComparison.Ordinal));
     }
 
     /// <summary>A requested name must actually exist in native output; being named under the model is insufficient.</summary>

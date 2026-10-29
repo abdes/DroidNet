@@ -1,0 +1,30 @@
+{
+  "name": "floor",
+  "lods": [
+    {
+      "name": "floor_lod0",
+      "mesh_type": "procedural",
+      "procedural": {
+        "generator": "Plane",
+        "mesh_name": "Floor",
+        "params": {
+          "x_segments": 10,
+          "y_segments": 10,
+          "size": 10.0
+        }
+      },
+      "submeshes": [
+        {
+          "name": "floor_surface",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/Content/Materials/floor_default.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

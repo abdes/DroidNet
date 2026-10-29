@@ -37,7 +37,6 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "script-sidecar",
@@ -79,7 +78,6 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, ForwardsInlineInstanceBindings)
     return R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "script-sidecar",
@@ -130,7 +128,6 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "staging",
       "jobs": [
         {
@@ -175,7 +172,6 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
         { "name": "Authoring", "path": "Authoring" },
         { "name": "Other", "path": "Other" }
       ],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "generated/cooked",
       "defaults": {
         "script": {
@@ -223,7 +219,6 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "script-sidecar",
@@ -258,7 +253,6 @@ NOLINT_TEST(
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "script",
@@ -297,7 +291,6 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "oxygen_manifest_global_output",
       "jobs": [
         {
@@ -354,7 +347,6 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "oxygen_manifest_output_top",
       "defaults": {
         "scripting_sidecar": {
@@ -403,7 +395,6 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "oxygen_manifest_output_top2",
       "defaults": {
         "scripting_sidecar": {

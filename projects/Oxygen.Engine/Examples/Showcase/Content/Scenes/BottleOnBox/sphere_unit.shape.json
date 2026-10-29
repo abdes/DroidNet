@@ -1,0 +1,8 @@
+{
+  "name": "sphere_unit",
+  "content_hashing": true,
+  "virtual_path": "/Content/Scenes/BottleOnBox/sphere_unit.ocshape",
+  "shape_type": "sphere",
+  "material_ref": "/Content/Scenes/BottleOnBox/bouncy_ball.opmat",
+  "radius": 0.5
+}

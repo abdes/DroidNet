@@ -21,7 +21,6 @@ applies at the next frame start. `find <prefix>` lists a group and
 | `demo.grid.*`    | Ground grid.                                                                |
 | `pp.*`           | Post Process: the post-process commands below.                              |
 | `async.*`        | Async: tour playback, lighting preset, animation, spotlight.                |
-| `cube.*`         | TexturedCube: material sandbox, texture import, skybox.                     |
 | `input.swimming` | InputSystem: swimming mode.                                                 |
 | `lightbench.*`   | LightBench: presets, settings file, test object and lights.                 |
 | `multiview.fog`  | MultiView: fog.                                                             |

@@ -386,8 +386,8 @@ auto WorkDispatcher::EmitTextureSidecarDescriptor(
     const auto placement = internal::PlaceModelProduct(
       session_.Request(), name, data::kTextureDescriptorExtension);
     [[maybe_unused]] const auto relpath
-      = session_.ResourceDescriptorEmitter().EmitTextureAtRelPath(
-        placement.descriptor_relpath, resource_index, *descriptor);
+      = session_.ResourceDescriptorEmitter().EmitTexture(
+        placement.virtual_path, resource_index, *descriptor);
     return true;
   } catch (const std::exception& ex) {
     session_.AddDiagnostic(

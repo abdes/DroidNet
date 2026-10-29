@@ -63,6 +63,21 @@ NOLINT_TEST(
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
 
+//! A sidecar cooks into the mount of the scene it targets.
+NOLINT_TEST(
+  PhysicsImportRequestBuilderTest, OutputMountRootIsTheTargetScenesMount)
+{
+  auto settings = MakeValidSourceSettings();
+  settings.target_scene_virtual_path = "/Game/Scenes/TestScene.oscene";
+  auto errors = std::ostringstream {};
+
+  const auto request = BuildPhysicsSidecarRequest(settings, errors);
+
+  ASSERT_HAS_VALUE(request) << errors.str();
+  EXPECT_EQ(request->OutputIdentity(), "/Game/Scenes/TestScene.oscene");
+  EXPECT_EQ(request->OutputMountRoot(), "/Game");
+}
+
 NOLINT_TEST(
   PhysicsImportRequestBuilderTest, BuildPhysicsSidecarRequestValidInlineInput)
 {

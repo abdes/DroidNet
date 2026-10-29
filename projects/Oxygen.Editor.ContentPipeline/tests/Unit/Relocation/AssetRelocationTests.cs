@@ -199,30 +199,36 @@ public sealed class AssetRelocationTests
         _ = moved["virtual_path"]!.GetValue<string>().Should().Be("/Content/Textures/Shared/layers.otex");
     }
 
-    /// <summary>Moving or renaming a model rewrites the source of its import record, which stays where it is.</summary>
+    /// <summary>Moving or renaming a model rewrites the source and virtual path of its import record and moves the record to the place of the new virtual path.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task MovingAndRenamingModelRewritesItsRecordSource()
     {
         using var workspace = CreateContent();
         var written = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
-        var recordPath = workspace.RecordOf(written);
+        _ = workspace.RecordOf(written).Replace(Path.DirectorySeparatorChar, '/').Should().Be("Imports/Content/Models/Robot/robot.gltf.import.json");
 
         _ = await workspace.Service.RelocateAsync(Move("/Content/Models/Robot", "/Content/Models/Bot"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
         var moved = workspace.ReadRecord(written);
-        _ = moved.Source.Should().Be("../Content/Models/Bot/robot.gltf");
+        _ = workspace.RecordOf(written).Replace(Path.DirectorySeparatorChar, '/').Should().Be("Imports/Content/Models/Bot/robot.gltf.import.json", "the record follows its model's virtual path");
+        _ = workspace.Exists("Imports/Content/Models/Robot/robot.gltf.import.json").Should().BeFalse();
+        _ = workspace.FileSystem.Directory.EnumerateDirectories(workspace.PathOf("Imports"), "*", SearchOption.AllDirectories)
+            .Should().OnlyContain(folder => workspace.FileSystem.Directory.EnumerateFileSystemEntries(folder).Any(), "the record's old folders are removed once empty");
+        _ = moved.Source.Should().Be("../../../../Content/Models/Bot/robot.gltf");
         _ = moved.VirtualPath.Should().Be("/Content/Models/Bot/robot.gltf", "its products are named under its new path");
         _ = moved.SourceIdentity.Should().Be(written.SourceIdentity);
 
         _ = await workspace.Service.RelocateAsync(Move("/Content/Models/Bot/robot.gltf", "/Content/Models/Bot/hero.gltf"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
         var renamed = workspace.ReadRecord(written);
-        _ = renamed.Source.Should().Be("../Content/Models/Bot/hero.gltf");
+        var recordPath = workspace.RecordOf(written);
+        _ = recordPath.Replace(Path.DirectorySeparatorChar, '/').Should().Be("Imports/Content/Models/Bot/hero.gltf.import.json");
+        _ = renamed.Source.Should().Be("../../../../Content/Models/Bot/hero.gltf");
         _ = renamed.VirtualPath.Should().Be("/Content/Models/Bot/hero.gltf");
         _ = renamed.ResolveSource(workspace.PathOf(recordPath)).Should().Be(workspace.PathOf("Content/Models/Bot/hero.gltf"));
         _ = renamed.SourceFingerprint!.Files.Should().Equal(written.SourceFingerprint!.Files);
         _ = renamed.Settings.GetProperty("unit_policy").GetString().Should().Be("normalize");
         _ = workspace.Exists("Content/Models/Bot/hero.gltf").Should().BeTrue();
-        _ = workspace.FileSystem.Directory.EnumerateFiles(workspace.PathOf("imports")).Should().ContainSingle().Which.Should().Be(workspace.PathOf(recordPath));
+        _ = workspace.FileSystem.Directory.EnumerateFiles(workspace.PathOf("Imports"), "*", SearchOption.AllDirectories).Should().ContainSingle().Which.Should().Be(workspace.PathOf(recordPath));
     }
 
     /// <summary>A model's preview, named after the model's file, renames and moves with it.</summary>
@@ -277,7 +283,7 @@ public sealed class AssetRelocationTests
         _ = await workspace.Service.RelocateAsync(Move("/Content/Models/robot", "/Content/Models/Robot"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var renamed = workspace.ReadRecord(written);
-        _ = renamed.Source.Should().Be("../Content/Models/Robot/robot.gltf");
+        _ = renamed.Source.Should().Be("../../../../Content/Models/Robot/robot.gltf");
         _ = renamed.VirtualPath.Should().Be("/Content/Models/Robot/robot.gltf");
         _ = renamed.SourceIdentity.Should().Be(written.SourceIdentity);
     }

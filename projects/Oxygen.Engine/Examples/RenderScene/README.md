@@ -19,10 +19,11 @@ From the installed SDK root:
 ```
 
 The SDK launcher finds its executable and working directory without changing
-PATH; it can also be invoked by full path. First launch selects Lantern with an
-HDR sky. Subsequent launches can restore your saved scene and settings. Copy the
-complete SDK, including `bin`, `lib`, `include`, `share` and launchers when moving
-it. SDK-local paths follow the copied tree; external originals remain external.
+PATH; it can also be invoked by full path. The installed showcase has no
+default scene or sky: pick a scene in the Library (the Lantern example's scene
+owns its sky). Subsequent launches can restore your saved scene and settings.
+Copy the complete SDK, including `bin`, `lib`, `include`, `share` and launchers
+when moving it. SDK-local paths follow the copied tree; external originals remain external.
 The showcase needs a writable directory, Windows/D3D12 and a compatible GPU.
 
 From an engine checkout, use a configured build tree and run from
@@ -34,9 +35,46 @@ cmake --build out/build-ninja --config Release --target oxygen-examples-rendersc
 ```
 
 Close the running executable before relinking it. Use `out/build-vs` for the
-existing Visual Studio tree. The [Content workflow](../Content/README.md) owns
-native tool selection, scene cooking, model imports, verification, packaging and
-cleanup. All content scripts live there.
+existing Visual Studio tree.
+
+## Cook, package and play the examples
+
+The examples are the [examples project](../Showcase/README.md), an editor
+project no tool writes into. RenderScene's `Tools/` (PowerShell 7.4, each with a
+`.cmd` wrapper) cook, package and play it, and write only into RenderScene:
+
+| Tool         | Does                                                                 | Writes                    |
+| ------------ | -------------------------------------------------------------------- | ------------------------- |
+| `Tools/cook` | Cooks examples with one ImportTool batch (`--cooked-root`)           | `.cooked/Content`         |
+| `Tools/pak`  | Packages the cooked root, with its catalog and manifest              | `.build/pak/examples.pak` |
+| `Tools/play` | Plays an example's scene in Oxygen.Player, with the project's mounts | a launch file             |
+
+```powershell
+Tools/cook BottleOnBox VsmTwoCubes   # the named examples
+Tools/cook -Tag showcase             # the examples with a tag
+Tools/cook -All                      # every example
+Tools/cook -List                     # names, tags, descriptions
+Tools/cook -Check                    # the project's own consistency
+Tools/pak
+Tools/play CameraSwitch              # the example's first scene
+Tools/play VsmBug1Flat VsmBug1LargeThinCube
+Tools/play PhysicsDomains -- -w 1600x900   # player options after --
+```
+
+Run them from `Examples/RenderScene`. In a source checkout each tool selects a
+configured build tree, preferring Release, and builds the engine tool it runs
+first; `-Preset`, `-BuildTree`, `-Config` and `-ToolPath` choose another. In an
+installed SDK the tools are at `share/oxygen/RenderScene/Tools`, beside the
+cooked content and pak the SDK ships (`.cooked/Content`, `.build/pak`) and
+`share/oxygen/Showcase`, and use the SDK's tools. The launch file `Tools/play`
+writes mounts the cooked root and binds the project's source mounts, so editing
+a scene's script reloads it while playing; `Tools/play <Example> -- --help`
+lists the player's options.
+
+RenderScene's ad-hoc model imports go to `.scratch`, a scratch project that
+mounts `Showcase/Content`, with the local mounts of any `.mounts.json` at or
+above it (a downloads folder, for example). Nothing goes into the examples
+project.
 
 ## Load content
 
@@ -66,8 +104,8 @@ versions of the same asset out of a baseline test.
    whether a scene is requested automatically.
 
 Interactive model imports publish model import records and immutable generations
-under the shared Content directory. The [Content workflow](../Content/README.md)
-owns the paths, replay settings and cleanup rules.
+in RenderScene's `.scratch` project (see
+[Cook, package and play the examples](#cook-package-and-play-the-examples)).
 
 Transform baking can emit geometry variants named `__baked_<node>` while preserving
 scene placement. `mesh.transform_bake_retained` explains why a transform remains
@@ -85,16 +123,17 @@ RenderScene's **Select File** picker is for models. For images use
 3. Check status and **Cubemap ResourceKey**. A placeholder means no usable cubemap
    is bound. Inspect the background and sky lighting as appropriate.
 
-The SDK includes `Content/images/showcase/Sky.hdr`. The additional examples below
-are checkout inputs; their paths are relative to Content.
+The SDK includes `Showcase/Content/SourceMedia/Images/Showcase/Sky.hdr`. The additional
+examples below are checkout inputs; their paths are relative to
+`Content/SourceMedia/Images/` of the [examples project](../Showcase/README.md).
 
-| Example input                                                      | Intended use                                                                                              |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `images/hdr_skybox_f32.hdr`                                        | Equirectangular; RGBA16F or RGBA32F preserves HDR.                                                        |
-| `images/4x3_skybox.png`, `images/skybox.png`                       | Horizontal Cross; ordinary LDR output.                                                                    |
-| `images/Wood.png`, `images/Marble.jpg`, `images/jellybeans1_s.jpg` | Ordinary 2D textures: [TexturedCube](../TexturedCube/README.md), **Texture Browser → Import Texture...**. |
-| `images/debug_sky.png`                                             | Labeled layout diagram with margins, not an exact cubemap atlas.                                          |
-| `images/singlepart.0002.exr`, `images/multipart.0002.exr`          | Linear VFX decoder fixtures with extra channels/parts, not panoramas.                                     |
+| Example input                                 | Intended use                                                          |
+| --------------------------------------------- | --------------------------------------------------------------------- |
+| `hdr_skybox_f32.hdr`                          | Equirectangular; RGBA16F or RGBA32F preserves HDR.                    |
+| `4x3_skybox.png`, `skybox.png`                | Horizontal Cross; ordinary LDR output.                                |
+| `Wood.png`, `Marble.jpg`, `jellybeans1_s.jpg` | Ordinary 2D textures: **Texture Browser → Import Texture...**.        |
+| `debug_sky.png`                               | Labeled layout diagram with margins, not an exact cubemap atlas.      |
+| `singlepart.0002.exr`, `multipart.0002.exr`   | Linear VFX decoder fixtures with extra channels/parts, not panoramas. |
 
 A skybox load changes runtime lighting/background; it does not rebuild the shared
 scene PAK. Record this when comparing captures. HDR-to-LDR tone mapping does not
@@ -341,7 +380,7 @@ and `gfx.capture.open_ui`. Ctrl+Shift+P opens the command palette.
 | `No physics sidecar found ... (scene-only load)` | Expected for scenes without physics; not a load failure.                                                                                                                                                                                                                            |
 | `has no resolved sun directional light`          | Expected for the startup placeholder, preview-disabled scenes without a sun, or directional lights without a sun/environment role. Inspect the loaded scene's preview decision.                                                                                                     |
 | Script scene summary has zero renderables        | Check script attachment, compilation, and runtime creation.                                                                                                                                                                                                                         |
-| Sidecar/dependency/schema/hash failures          | Use matching built/cooked generations and review diagnostics. Recook incompatible content through the Content workflow.                                                                                                                                                             |
+| Sidecar/dependency/schema/hash failures          | Use matching built/cooked generations and review diagnostics. Recook incompatible content with `Tools/cook`.                                                                                                                                                                        |
 | Skybox placeholder                               | Layout/output, valid dimensions, import status, and resource key.                                                                                                                                                                                                                   |
 | Selecting a file unexpectedly starts a cook      | Sources import; Library entries load already-cooked scenes.                                                                                                                                                                                                                         |
 
@@ -360,4 +399,4 @@ These paths are available in the source checkout:
 | Preview eligibility and restoration              | [PreviewSunController.cpp](../DemoShell/Services/PreviewSunController.cpp), [DefaultSceneLighting.cpp](../DemoShell/Services/DefaultSceneLighting.cpp)                                                                             |
 | Profiles and authored-environment restoration    | [EnvironmentVm.cpp](../DemoShell/UI/EnvironmentVm.cpp), [EnvironmentSettingsService.cpp](../DemoShell/Services/EnvironmentSettingsService.cpp), [EnvironmentSceneSnapshot.cpp](../DemoShell/Services/EnvironmentSceneSnapshot.cpp) |
 | Capture CLI                                      | [RuntimeCli.cpp](../../src/Oxygen/Host/RuntimeCli.cpp)                                                                                                                                                                             |
-| Content production and cleanup                   | [Content README](../Content/README.md)                                                                                                                                                                                             |
+| Content production and cleanup                   | [Examples project](../Showcase/README.md)                                                                                                                                                                                          |

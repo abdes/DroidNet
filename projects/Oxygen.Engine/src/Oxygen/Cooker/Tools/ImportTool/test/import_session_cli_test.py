@@ -78,7 +78,6 @@ class ImportSessionCliTests(unittest.TestCase):
                         "scene": {"queue_capacity": 4},
                     },
                     "mounts": [{"name": "Content", "path": "."}],
-                    "layout": {"virtual_mount_root": "/Content"},
                     "jobs": [
                         {
                             "type": "gltf",

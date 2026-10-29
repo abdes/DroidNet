@@ -1,0 +1,11 @@
+{
+  "$schema": "oxygen.texture-descriptor.schema.json",
+  "source": "/Content/SourceMedia/Images/BottleOnBox/waterbottle_orm.png",
+  "intent": "orm",
+  "decode": {
+    "color_space": "linear"
+  },
+  "output": {
+    "format": "bc7"
+  }
+}

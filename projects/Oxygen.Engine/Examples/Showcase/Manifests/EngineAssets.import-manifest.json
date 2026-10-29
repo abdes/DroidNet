@@ -1,0 +1,99 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Scenes/EngineAssets/UvProbe_albedo.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/EngineAssets/UvProbe_albedo.otex.json",
+      "virtual_path": "/Content/Scenes/EngineAssets/UvProbe_albedo.otex",
+      "name": "UvProbe_albedo",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/EngineAssets/UvProbe_normal.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/EngineAssets/UvProbe_normal.otex.json",
+      "virtual_path": "/Content/Scenes/EngineAssets/UvProbe_normal.otex",
+      "name": "UvProbe_normal",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/EngineAssets/UvProbe.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/EngineAssets/UvProbe.omat.json",
+      "virtual_path": "/Content/Scenes/EngineAssets/UvProbe.omat",
+      "name": "UvProbe",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/EngineAssets/UvProbe_albedo.otex",
+        "/Content/Scenes/EngineAssets/UvProbe_normal.otex"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/EngineAssets/MatCube.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/EngineAssets/MatCube.omat.json",
+      "virtual_path": "/Content/Scenes/EngineAssets/MatCube.omat",
+      "name": "MatCube",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/EngineAssets/MatCubeB_mask.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/EngineAssets/MatCubeB_mask.otex.json",
+      "virtual_path": "/Content/Scenes/EngineAssets/MatCubeB_mask.otex",
+      "name": "MatCubeB_mask",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/EngineAssets/MatCubeB.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/EngineAssets/MatCubeB.omat.json",
+      "virtual_path": "/Content/Scenes/EngineAssets/MatCubeB.omat",
+      "name": "MatCubeB",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/EngineAssets/MatCubeB_mask.otex"]
+    },
+    {
+      "id": "/Content/Scenes/EngineAssets/MatCubeC.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/EngineAssets/MatCubeC.omat.json",
+      "virtual_path": "/Content/Scenes/EngineAssets/MatCubeC.omat",
+      "name": "MatCubeC",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/EngineAssets/MatCubeD.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/EngineAssets/MatCubeD.omat.json",
+      "virtual_path": "/Content/Scenes/EngineAssets/MatCubeD.omat",
+      "name": "MatCubeD",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/EngineAssets/EngineAssets.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/EngineAssets/EngineAssets.scene.json",
+      "virtual_path": "/Content/Scenes/EngineAssets/EngineAssets.oscene",
+      "name": "EngineAssets",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/EngineAssets/UvProbe.omat",
+        "/Content/Scenes/EngineAssets/MatCube.omat",
+        "/Content/Scenes/EngineAssets/MatCubeB.omat",
+        "/Content/Scenes/EngineAssets/MatCubeC.omat",
+        "/Content/Scenes/EngineAssets/MatCubeD.omat"
+      ]
+    }
+  ]
+}

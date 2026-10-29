@@ -256,10 +256,10 @@ endif()
 # ==============================================================================
 
 if(OXYGEN_INSTALL)
-  # install-sdk: static
   # The virtual path rules ship with the SDK: consumers built on the installed
   # SDK, such as the editor, generate their Unicode tables from the same pinned
   # database and run the same case table.
+  # install-sdk: static
   install(
     FILES
       "${_unicode_ucd_dir}/CaseFolding.txt"
@@ -268,6 +268,7 @@ if(OXYGEN_INSTALL)
     DESTINATION "${OXYGEN_INSTALL_DATA}/unicode/15.1.0"
     COMPONENT Oxygen_data
   )
+  # install-sdk: static
   install(
     FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/VirtualPathCases.json"

@@ -44,7 +44,6 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   WriteText(path, R"({
     "version":1,"output":"out",
     "mounts":[{"name":"Content","path":"."}],
-    "layout":{"virtual_mount_root":"/.cooked"},
     "defaults":{"scene_descriptor":{"cooked_context_roots":["Libraries/Low"]}},
     "jobs":[
       {"type":"scene-descriptor","source":"scene.json",
@@ -84,7 +83,6 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, BaseContextRootsPrecedeJobRoots)
   WriteText(path, R"({
     "version":1,"output":"out",
     "mounts":[{"name":"Content","path":"."}],
-    "layout":{"virtual_mount_root":"/.cooked"},
     "jobs":[
       {"type":"scene-descriptor","source":"scene.json",
        "virtual_path":"/.cooked/Scenes/Plain.oscene"},
@@ -168,7 +166,6 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto* const manifest_json = R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": ".cooked",
       "defaults": {
         "scene_descriptor": {
@@ -233,7 +230,6 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "scene-cooked",
       "jobs": [
         {
@@ -282,7 +278,6 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "scene-descriptor",

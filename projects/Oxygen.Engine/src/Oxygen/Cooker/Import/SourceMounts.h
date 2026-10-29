@@ -124,6 +124,14 @@ namespace mount_codes {
         .message = "source '{}' needs mount '{}', which no mounts file binds "
                    "on this machine",
       };
+  inline constexpr auto kReferenceOutsideMount
+    = MountCode<std::string_view, std::string_view> {
+        .id = "import.reference_outside_mount",
+        .severity = ImportSeverity::kError,
+        .message = "relative reference '{}' leaves the mount '{}' of the file "
+                   "that holds it: name a file of another mount by its mount "
+                   "path",
+      };
   inline constexpr auto kDerivedFromNotDerived = MountCode<std::string_view> {
     .id = "import.derived_from_not_derived",
     .severity = ImportSeverity::kError,
@@ -355,6 +363,24 @@ struct MountTable final {
   */
   OXGN_COOK_NDAPI auto LocateSource(
     const CommittedPath& source, std::vector<ImportDiagnostic>& findings) const
+    -> std::optional<MountedSource>;
+
+  /*!
+   Locates a file that a source file references, such as the image of a
+   texture descriptor: a mount path (`/Content/...`), or a path relative to the
+   referring file's folder that stays in the referring file's mount.
+
+   @param referrer The file that holds the reference: absolute, or relative to
+     the project root. It lies in a `Source` mount.
+   @param reference The path and the field that holds it.
+   @param findings Receives what `LocateSource` reports, and
+     `import.reference_outside_mount` for a relative reference leaving the
+     referrer's mount.
+   @return The located file, or nothing.
+  */
+  OXGN_COOK_NDAPI auto LocateReference(const std::filesystem::path& referrer,
+    const CommittedPath& reference,
+    std::vector<ImportDiagnostic>& findings) const
     -> std::optional<MountedSource>;
 };
 

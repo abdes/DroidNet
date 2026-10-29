@@ -53,7 +53,6 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
   const auto* const manifest_json = R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": ".cooked",
       "defaults": {
         "buffer_container": {
@@ -119,7 +118,6 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "buffer-container-cooked",
       "jobs": [
         {
@@ -164,7 +162,6 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "buffer-container",

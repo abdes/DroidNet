@@ -18,18 +18,21 @@ public sealed class ModelImportSettingsTests
     private const string ProjectRoot = @"C:\Project";
     private static readonly string Source = Path.Combine(ProjectRoot, "Content", "Car", "Car.glb");
 
+    private const string VirtualPath = "/Content/Car/Car.glb";
+
     private readonly Guid identity = Guid.CreateVersion7();
 
-    private string RecordPath => ModelImportSettings.PathFor(ProjectRoot, this.identity);
+    private string RecordPath => ModelImportSettings.PathFor(ProjectRoot, VirtualPath);
 
     [TestMethod]
-    public void ARecordIsNamedByItsIdentityAndKeepsItsSourceRelativeToItself()
+    public void ARecordLivesAtItsVirtualPathAndKeepsItsSourceRelativeToItself()
     {
         var record = this.Create();
 
-        _ = this.RecordPath.Should().Be(Path.Combine(ProjectRoot, "imports", $"{this.identity:D}.import.json"));
+        _ = this.RecordPath.Should().Be(Path.Combine(ProjectRoot, "Imports", "Content", "Car", "Car.glb.import.json"));
+        _ = ModelImportSettings.RelativePathFor(VirtualPath).Should().Be("Imports/Content/Car/Car.glb.import.json");
         _ = record.SourceIdentity.Should().Be(this.identity);
-        _ = record.Source.Should().Be("../Content/Car/Car.glb");
+        _ = record.Source.Should().Be("../../../Content/Car/Car.glb");
         _ = record.ResolveSource(this.RecordPath).Should().Be(Source);
         _ = record.SourceFingerprint.Should().BeNull("a record has no fingerprint before its first import");
     }
@@ -61,15 +64,52 @@ public sealed class ModelImportSettingsTests
     }
 
     [TestMethod]
-    public void ARecordNotNamedByItsIdentityOrOffSchemaIsRefused()
+    public void ARecordNotAtItsVirtualPathOrOffSchemaIsRefused()
     {
         var bytes = this.Create().ToBytes();
 
-        var renamed = () => ModelImportSettings.Parse(Path.Combine(ProjectRoot, "imports", "Car.import.json"), bytes);
+        var misplaced = () => ModelImportSettings.Parse(Path.Combine(ProjectRoot, "Imports", "Car.import.json"), bytes);
+        var named = () => ModelImportSettings.Parse(Path.Combine(ProjectRoot, "Imports", "Content", "Car", $"{this.identity:D}.import.json"), bytes);
+        var elsewhere = () => ModelImportSettings.Parse(Path.Combine(ProjectRoot, "Content", "Car", "Car.glb.import.json"), bytes);
         var invalid = () => ModelImportSettings.Parse(Encoding.UTF8.GetBytes("""{ "schema_version": 1 }"""));
 
-        _ = renamed.Should().Throw<InvalidDataException>();
+        _ = misplaced.Should().Throw<InvalidDataException>();
+        _ = named.Should().Throw<InvalidDataException>("the file name no longer carries the source identity");
+        _ = elsewhere.Should().Throw<InvalidDataException>("a record lives under Imports");
         _ = invalid.Should().Throw<InvalidDataException>();
+        _ = ModelImportSettings.Parse(this.RecordPath, bytes).VirtualPath.Should().Be(VirtualPath);
+    }
+
+    [TestMethod]
+    public void ANewRecordMustBeCreatedAtItsVirtualPathWithAUuidV7Identity()
+    {
+        using var settings = JsonDocument.Parse("{}");
+
+        var misplaced = () => ModelImportSettings.Create(Path.Combine(ProjectRoot, "Imports", "Car.import.json"), Source, VirtualPath, settings.RootElement);
+        var notV7 = () => ModelImportSettings.Create(this.RecordPath, Source, VirtualPath, settings.RootElement, Guid.NewGuid());
+        var relative = () => ModelImportSettings.PathFor(ProjectRoot, "Content/Car/Car.glb");
+
+        _ = misplaced.Should().Throw<ArgumentException>();
+        _ = notV7.Should().Throw<ArgumentException>();
+        _ = relative.Should().Throw<ArgumentException>();
+        _ = ModelImportSettings.Create(this.RecordPath, Source, VirtualPath, settings.RootElement).SourceIdentity.Version.Should().Be(7);
+    }
+
+    [TestMethod]
+    public void ARecordGivenAnotherVirtualPathBelongsAtTheNewPlace()
+    {
+        var record = this.Create();
+        var path = record.VirtualPath.Replace("Car.glb", "Truck.glb", StringComparison.Ordinal);
+        var moved = record with { VirtualPath = path };
+
+        var newPlace = ModelImportSettings.PathFor(ProjectRoot, path);
+
+        _ = newPlace.Should().Be(Path.Combine(ProjectRoot, "Imports", "Content", "Car", "Truck.glb.import.json"));
+        _ = ModelImportSettings.ProjectRootOf(newPlace, moved.VirtualPath).Should().Be(ProjectRoot);
+        _ = ModelImportSettings.ProjectRootOf(this.RecordPath, moved.VirtualPath).Should().BeNull("the old place is no longer its place");
+        var parse = () => ModelImportSettings.Parse(this.RecordPath, moved.ToBytes());
+        _ = parse.Should().Throw<InvalidDataException>();
+        _ = ModelImportSettings.Parse(newPlace, moved.ToBytes()).SourceIdentity.Should().Be(record.SourceIdentity);
     }
 
     [TestMethod]
@@ -80,7 +120,7 @@ public sealed class ModelImportSettingsTests
 
         var relocated = record.WithSource(this.RecordPath, moved);
 
-        _ = relocated.Source.Should().Be("../Content/Vehicles/Car.glb");
+        _ = relocated.Source.Should().Be("../../../Content/Vehicles/Car.glb");
         _ = relocated.DiffersOnlyByImport(record).Should().BeFalse();
         _ = (relocated with { Source = record.Source }).ToBytes().Should().Equal(record.ToBytes());
     }
@@ -140,6 +180,6 @@ public sealed class ModelImportSettingsTests
     private ModelImportSettings Create()
     {
         using var settings = JsonDocument.Parse("""{ "unit_policy": "normalize", "bake_transforms": false }""");
-        return ModelImportSettings.Create(this.RecordPath, Source, "/Content/Car/Car.glb", settings.RootElement);
+        return ModelImportSettings.Create(this.RecordPath, Source, VirtualPath, settings.RootElement, this.identity);
     }
 }

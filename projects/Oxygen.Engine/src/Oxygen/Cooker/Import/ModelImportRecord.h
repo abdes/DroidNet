@@ -64,8 +64,8 @@ struct ModelImportRecordContent final {
 //! The record LocateRecord found or chose for a source.
 struct ModelImportRecordLocation final {
   std::filesystem::path record_path;
-  //! False when the record is new: `record_path` names it by a fresh source
-  //! identity.
+  //! False when the record is new: `record_path` is the path of the query's
+  //! virtual path (`ModelImportRecord::PathFor`).
   bool exists = false;
   //! What the lookup decided and the hints it found, such as
   //! `import.source_rebound` or `import.source_copy`, and each file it skipped
@@ -99,29 +99,32 @@ struct ModelImportRecordSave final {
 
 //! A model's import state, in one file: its model import record.
 /*!
- The record lives at `<content_root>/imports/<source_identity>.import.json`
+ The record lives at its model's identity under `<content_root>/Imports/`:
+ the model `/Content/Models/Ship.glb` has the record
+ `Imports/Content/Models/Ship.glb.import.json`
  (`oxygen.model-import.schema.json`). It holds what to import (the source, the
  model's virtual path, the settings) and what earlier imports established (the
  source identity, the surface provenance, the node continuity, the published
- nodes, the source fingerprint). The source identity never changes, so a
- record is never renamed: relocating a model rewrites its `source`.
+ nodes, the source fingerprint). Relocating a model rewrites its `source`;
+ giving it another virtual path moves the record. The source identity, a
+ UUIDv7 the record holds, never changes.
 
  This class is the record's one reader and writer, and the ImportTool's
  publisher: one isolated attempt that publishes an immutable generation and
  commits the import's new record content with it. The selected generation is
- kept in `<content_root>/.cooked/imports/<source_identity>/head.json`.
+ kept in `<content_root>/.cooked/Imports/<source_identity>/head.json`.
 */
 class ModelImportRecord final {
 public:
   //! The `schema_version` of a record.
   static constexpr uint32_t kSchemaVersion = 1;
   //! The folder of a content root that holds its records.
-  static constexpr std::string_view kRecordsFolder = "imports";
+  static constexpr std::string_view kRecordsFolder = "Imports";
   //! The suffix of a record's file name.
   static constexpr std::string_view kRecordSuffix = ".import.json";
 
   //! Reads and validates a record: its schema, settings, provenance and
-  //! continuity, and that its file name is its source identity.
+  //! continuity, and that it lives at its virtual path (`PathFor`).
   /*!
    `source` is a mount path, located through `mounts`, or a path relative to
    the record's folder that lies in a `Source` mount. An absolute one fails
@@ -151,9 +154,16 @@ public:
   OXGN_COOK_NDAPI static auto MakeSettings(const SceneImportSettings& settings)
     -> std::string;
 
-  //! The path of the record of `source_identity`.
+  //! The path of the record of the model `virtual_path`:
+  //! `<content_root>/Imports/<virtual path>.import.json`. A virtual path the
+  //! engine refuses throws std::invalid_argument.
   OXGN_COOK_NDAPI static auto PathFor(const std::filesystem::path& content_root,
-    const Uuid& source_identity) -> std::filesystem::path;
+    std::string_view virtual_path) -> std::filesystem::path;
+
+  //! The content root a record belongs to, from its path and the virtual path
+  //! it holds. A record not at its virtual path throws std::invalid_argument.
+  OXGN_COOK_NDAPI static auto ContentRootOf(
+    const std::filesystem::path& record_path) -> std::filesystem::path;
 
   //! Finds the record of a model imported from `source` as `virtual_path`.
   /*!
@@ -170,9 +180,12 @@ public:
     -> ModelImportRecordLocation;
 
   //! Creates or updates a record, keeping its identity and everything earlier
-  //! imports established. A new record takes its identity from its file
-  //! name. Refuses a second record with the same virtual path.
-  OXGN_COOK_API static auto Save(const ModelImportRecordSave& save) -> void;
+  //! imports established. A new record gets a new source identity; a record
+  //! given another virtual path moves to it. Refuses a second record with the
+  //! same virtual path.
+  //! @return The record's path, which changes with its virtual path.
+  OXGN_COOK_API static auto Save(const ModelImportRecordSave& save)
+    -> std::filesystem::path;
 
   //! Saves the settings, source and virtual path of a single-job gltf or fbx
   //! manifest. Its source is a mount path or a path relative to the project

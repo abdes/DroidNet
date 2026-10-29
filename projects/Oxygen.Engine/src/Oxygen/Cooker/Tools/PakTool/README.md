@@ -98,9 +98,9 @@ digest), and the runtime refuses to mount a pak whose requirements do not hold.
   bases, and its deletions hide base assets. A full build has no bases.
 
 ```powershell
-Oxygen.Cooker.PakTool.exe build --loose-source Content/.cooked/main `
-  --dependency-pak share/oxygen/engine.pak --out Content/pak/all.pak `
-  --catalog-out Content/pak/all.catalog.json --content-version 1 `
+Oxygen.Cooker.PakTool.exe build --loose-source .cooked/Content `
+  --dependency-pak share/oxygen/engine.pak --out .build/pak/examples.pak `
+  --catalog-out .build/pak/examples.catalog.json --content-version 1 `
   --source-key 018f8f8f-1234-7abc-8def-0123456789ab
 ```
 
@@ -160,14 +160,17 @@ not `SourceKey` based.
 
 ## Examples
 
+RenderScene packages the cooked examples with its `Tools/pak`; see
+[Cook, package and play the examples](../../../../../Examples/RenderScene/README.md#cook-package-and-play-the-examples).
+
 Full build from a loose-cooked root:
 
 ```powershell
 out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build `
-  --loose-source Examples/Content/.cooked `
-  --out Examples/Content/pak/all-base.pak `
-  --catalog-out Examples/Content/pak/all-base.catalog.json `
-  --manifest-out Examples/Content/pak/all-base.manifest.json `
+  --loose-source Examples/RenderScene/.cooked/Content `
+  --out Examples/RenderScene/.build/pak/examples.pak `
+  --catalog-out Examples/RenderScene/.build/pak/examples.catalog.json `
+  --manifest-out Examples/RenderScene/.build/pak/examples.manifest.json `
   --content-version 1 `
   --source-key 018f8f8f-1234-7abc-8def-0123456789ab
 ```
@@ -176,11 +179,11 @@ Patch build against a published base catalog:
 
 ```powershell
 out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe patch `
-  --loose-source Examples/Content/.cooked `
-  --base-pak Examples/Content/pak/all-base.pak `
-  --out Examples/Content/pak/all-patch-1.pak `
-  --catalog-out Examples/Content/pak/all-patch-1.catalog.json `
-  --manifest-out Examples/Content/pak/all-patch-1.manifest.json `
+  --loose-source Examples/RenderScene/.cooked/Content `
+  --base-pak Examples/RenderScene/.build/pak/examples.pak `
+  --out Examples/RenderScene/.build/pak/examples-patch-1.pak `
+  --catalog-out Examples/RenderScene/.build/pak/examples-patch-1.catalog.json `
+  --manifest-out Examples/RenderScene/.build/pak/examples-patch-1.manifest.json `
   --content-version 1 `
   --source-key 018f8f8f-1234-7abc-8def-0123456789ab
 ```
@@ -189,10 +192,10 @@ Build with an emitted diagnostics report:
 
 ```powershell
 out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build `
-  --loose-source Examples/Content/.cooked `
-  --out Examples/Content/pak/all-base.pak `
-  --catalog-out Examples/Content/pak/all-base.catalog.json `
-  --diagnostics-file Examples/Content/pak/all-base.report.json `
+  --loose-source Examples/RenderScene/.cooked/Content `
+  --out Examples/RenderScene/.build/pak/examples.pak `
+  --catalog-out Examples/RenderScene/.build/pak/examples.catalog.json `
+  --diagnostics-file Examples/RenderScene/.build/pak/examples.report.json `
   --content-version 1 `
   --source-key 018f8f8f-1234-7abc-8def-0123456789ab
 ```

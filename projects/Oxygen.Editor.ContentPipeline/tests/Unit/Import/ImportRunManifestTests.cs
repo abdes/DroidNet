@@ -16,7 +16,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class ImportRunManifestTests
 {
-    private static readonly ContentImportManifest Manifest = new(1, @"C:\Cooked", new ContentImportLayout("/Content"), []);
+    private static readonly ContentImportManifest Manifest = new(1, @"C:\Cooked", []);
 
     [TestMethod]
     public void WithRun_WritesTheSetValuesAtTheTopOfTheManifest()

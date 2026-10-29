@@ -436,13 +436,14 @@ function Assert-OxygenWindowsBuildTools {
         throw 'Oxygen requires 64-bit build hosts. Use 64-bit PowerShell and x64-hosted MSVC tools.'
     }
     if (-not $Compiler) {
-        $Compiler = (Get-Command cl.exe -CommandType Application -ErrorAction Stop).Source
+        # The first match on PATH is the one a build runs.
+        $Compiler = (Get-Command cl.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     } elseif ($Compiler -notmatch '[\\/]') {
         # Conan toolchains cache the compiler as a bare "cl" (no path). The
         # build resolves that name through the caller's PATH, so resolve it the
         # same way and validate the tool. A correctly initialized 64-bit shell
         # then passes without any extra options or a reconfigure.
-        $command = Get-Command $Compiler -CommandType Application -ErrorAction SilentlyContinue
+        $command = Get-Command $Compiler -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $command) {
             throw "Oxygen could not resolve compiler '$Compiler' on PATH. Initialize vcvars64.bat or a developer shell with -arch=x64 -host_arch=x64."
         }

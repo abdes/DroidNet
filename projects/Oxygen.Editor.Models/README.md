@@ -4,18 +4,22 @@ The model family module: what is true of the editor's models whatever shows
 them. It holds no view, view model or dialog.
 
 - `ModelImportSettings` reads and writes a model's import record,
-  `<ProjectRoot>/imports/<source_identity>.import.json`, against the engine's
-  `oxygen.model-import.schema.json` from the installed SDK. The ImportTool
-  reads and writes the same records. A record holds the model's source, its
+  `<ProjectRoot>/Imports/<virtual path>.import.json` (the model
+  `/Content/Models/Ship.glb` has `Imports/Content/Models/Ship.glb.import.json`),
+  against the engine's `oxygen.model-import.schema.json` from the installed
+  SDK. The ImportTool reads and writes the same records. A record holds the model's source, its
   virtual path and its import settings, and what earlier imports established:
   the source identity, the surface provenance, the node continuity, the
   published nodes and the source fingerprint.
-- Relocating a model rewrites the record's source (`WithSource`) and nothing
-  else. An import changes only what it establishes (`WithImportUpdate`,
-  checked by `DiffersOnlyByImport`).
+- Relocating a model rewrites the record's source (`WithSource`) and its
+  virtual path, and moves the record to the place of the new virtual path
+  (`PathFor`). An import changes only what it establishes
+  (`WithImportUpdate`, checked by `DiffersOnlyByImport`).
 - `ModelImportRecords` indexes a project's records by source path and by
-  virtual path. A model is imported when a record names it. The index reads the
-  folder when it is created, so callers create one per operation.
+  virtual path. A model is imported when a record names it. The index reads
+  `Imports/` recursively when it is created, so callers create one per
+  operation; a record not at the place of its virtual path is listed as a
+  problem.
 - `ModelImportSettingCatalog` lists the settings a person chooses, each a
   `ModelImportSetting`: a job key with the importer's default and the manifest
   schema's values and ranges, read and written without touching other keys.

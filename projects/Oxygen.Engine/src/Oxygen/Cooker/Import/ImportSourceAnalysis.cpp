@@ -32,6 +32,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
@@ -528,8 +529,10 @@ namespace {
     if (job.job_type == "geometry-descriptor") {
       report.source_path = job.geometry_descriptor.descriptor_path;
       const auto text = co_await context.ReadText(report.source_path);
+      CHECK_NOTNULL_F(
+        job.mounts.get(), "A manifest job carries its mount table");
       const auto source = internal::GeometrySource::FromDescriptor(
-        text, report.source_path, report.diagnostics);
+        text, report.source_path, *job.mounts, report.diagnostics);
       if (!source) {
         co_return false;
       }
@@ -647,7 +650,9 @@ namespace {
       if (job.job_type == "texture-descriptor") {
         const auto text = co_await context.ReadText(report.source_path);
         const auto effective = TextureDescriptorImportSettings {
-          .descriptor_path = settings.source_path, .texture = settings,
+          .descriptor_path = settings.source_path,
+          .texture = settings,
+          .mounts = job.mounts,
         }.Prepare(text, report.diagnostics);
         if (!effective) {
           co_return false;
@@ -660,9 +665,9 @@ namespace {
         throw std::invalid_argument(errors.str());
       }
       request->loose_cooked_layout = layout;
-      context.Output(
-        layout.DescriptorVirtualPath(request->GetTextureDescriptorRelPath()),
-        Kind::kTexture);
+      // Refuses an identity in no mount, as the cook would.
+      static_cast<void>(request->GetTextureDescriptorRelPath());
+      context.Output(request->asset_virtual_path, Kind::kTexture);
       const auto& tuning = request->options.texture_tuning;
       if (request->additional_sources.empty() && tuning.import_cubemap
         && !tuning.equirect_to_cubemap

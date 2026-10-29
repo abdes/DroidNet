@@ -61,6 +61,10 @@ struct ImportManifestJob {
   //! the manifest's mount table; empty for a sidecar with inline bindings.
   std::string source_mount_path;
 
+  //! The manifest's mount table, which the job's source and the files its
+  //! descriptor references are located through.
+  std::shared_ptr<const MountTable> mounts;
+
   //! Identity of the asset a single-asset job cooks; empty for a container.
   /*!
    Required for material, geometry, scene, script, texture, physics material and
@@ -117,7 +121,7 @@ struct ImportManifest {
   //! `.mounts.json` belong to it, and relative job sources resolve against it.
   std::filesystem::path project_root;
   //! The mount table every source of the manifest is located through.
-  MountTable mounts;
+  std::shared_ptr<const MountTable> mounts;
   std::optional<uint32_t> thread_pool_size;
   std::optional<uint32_t> max_in_flight_jobs;
   std::optional<uint32_t> job_admission_capacity;

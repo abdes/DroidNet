@@ -30,7 +30,7 @@ Summary:
   numbered notifications kept in a ring buffer, so a client can catch up after a
   gap ([§6](#6-events)).
 - The player's named pipe, its request schema and its reader thread are removed;
-  the editor and `play_scene` use the control server ([§7](#7-oxygenplayer),
+  the editor and RenderScene's `Tools/play` use the control server ([§7](#7-oxygenplayer),
   [§8](#8-consumers)).
 - An MCP server for agents (R2) and frame capture, scene queries and input
   injection (R3) build on this and are not part of R1 ([§11](#11-not-in-scope)).
@@ -369,7 +369,7 @@ close, so clients receive the last events, such as the player's `stopping`:
   else, or a wrong token, is answered with an error and closes the connection.
 - A client may claim **ownership** in `rpc.hello`; there is at most one owner.
   When the application was started with `exit_when_owner_leaves` (the player's
-  launch file, for the editor and `play_scene`), losing the owner's connection
+  launch file, for the editor and RenderScene's `Tools/play`), losing the owner's connection
   posts `ngin.quit`, and so does no owner arriving within 10 seconds of start.
   Otherwise the application keeps running and accepts new clients.
 - A client's disconnect does not cancel the jobs it started; their results still
@@ -436,7 +436,10 @@ or the event envelope change.
     "seq": 5121,
     "frame": 1840,
     "topic": "lifecycle",
-    "data": { "state": "scene_loaded", "scene": "/.cooked/Scenes/Level.oscene" }
+    "data": {
+      "state": "scene_loaded",
+      "scene": "/Content/Scenes/Level/Level.oscene"
+    }
   }
 }
 ```
@@ -503,7 +506,7 @@ the `command` and `log` topics in `Oxygen.Control`'s README.
   `diagnostic`. Play runs `ngin.session.begin`, Stop runs `ngin.session.end`,
   Close player runs `ngin.quit`. The editor has no pipe code yet, so this
   changes its design only.
-- **`Examples/Content/play_scene`**: writes a version 2 launch file without
+- **`Examples/RenderScene/Tools/play`**: writes a version 2 launch file without
   `control`, so the player runs standalone; `-- --control` makes it accept
   clients.
 - **Tests and agents** attach to any running host application through its
@@ -520,7 +523,7 @@ the `command` and `log` topics in `Oxygen.Control`'s README.
 | RC-4 | Control server tests with an in-process client: wrong or missing token closes the connection; requests in flight complete out of order; `rpc.events` returns missed events and reports drops; an oversized line closes the connection; the discovery file appears and is removed on exit.              |
 | RC-5 | Player over the protocol: SIP-3 to SIP-6 rerun as commands (play, pause, step replying after its frames, end session, quit, `gpu_work` subscription and lease release on disconnect); owner disconnect quits; a non-owner disconnect does not.                                                         |
 | RC-6 | No bypass: clicking the toolbar's Play, F1 and the console button each produce a `command` event with source `ui` or `key` seen by a remote client; closing the window produces `ngin.quit`.                                                                                                           |
-| RC-7 | `play_scene` writes a version 2 launch file and plays its scene; with `-- --control` the player accepts clients.                                                                                                                                                                                       |
+| RC-7 | RenderScene's `Tools/play` writes a version 2 launch file and plays its scene; with `-- --control` the player accepts clients.                                                                                                                                                                         |
 
 ## 10. Decisions
 

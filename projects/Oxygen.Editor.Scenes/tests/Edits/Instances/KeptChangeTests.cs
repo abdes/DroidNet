@@ -248,7 +248,7 @@ public sealed class KeptChangeTests
                 []));
         }
 
-        var recordPath = ModelImportSettings.PathFor(fixture.Project.Root.FullPath, Guid.CreateVersion7());
+        var recordPath = ModelImportSettings.PathFor(fixture.Project.Root.FullPath, SampleScene.CarModel.VirtualPath);
         var record = ModelImportSettings.Create(recordPath, fixture.Project.PathOf("/Content/Vehicles/Car.glb").FullPath, SampleScene.CarModel.VirtualPath, ModelImportSettings.DefaultSettings("Car")) with
         {
             PublishedNodes = [new("Body", Body.Nodes[0].Value), new(RenamedAnchor, RenamedDoor.Nodes[0].Value), new(MirrorAnchor, Mirror.Nodes[0].Value)],

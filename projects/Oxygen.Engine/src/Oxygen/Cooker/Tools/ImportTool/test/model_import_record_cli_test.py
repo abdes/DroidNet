@@ -80,7 +80,7 @@ class ModelImportRecordCliTests(unittest.TestCase):
         ]
 
     def records(self, content: Path) -> list[Path]:
-        return sorted((content / "imports").glob("*.import.json"))
+        return sorted((content / "Imports").rglob("*.import.json"))
 
     def test_recipe_replay_reclamation_identity_and_conflicts(self):
         root = self.root
@@ -108,8 +108,8 @@ class ModelImportRecordCliTests(unittest.TestCase):
             encoding="utf-8",
         )
         content = root / ("deep-" + "a" * 100) / ("b" * 100) / "Content"
-        identity = str(uuid.uuid7())
-        record = content / "imports" / f"{identity}.import.json"
+        # The record lives at its model's virtual path.
+        record = content / "Imports" / ".cooked" / "source.gltf.import.json"
         # The models lie beside the content root, in the one source mount.
         mount = ["--mount", f"Content={root}"]
 
@@ -126,7 +126,8 @@ class ModelImportRecordCliTests(unittest.TestCase):
         self.run_cli(apply_recipe, succeeds=True)
         first = json.loads(record.read_text(encoding="utf-8"))
         self.assertNotIn("\\\\?\\", record.read_text(encoding="utf-8"))
-        self.assertEqual(first["source_identity"], identity)
+        identity = first["source_identity"]
+        self.assertEqual(str(uuid.UUID(identity).version), "7")
         self.assertEqual(first["settings"]["mip_filter"], "kaiser")
         self.assertEqual(
             [node["anchor"] for node in first["published_nodes"]], ["Root"]
@@ -136,7 +137,7 @@ class ModelImportRecordCliTests(unittest.TestCase):
             [file["path"] for file in first["source_fingerprint"]["files"]],
             ["positions.bin"],
         )
-        generations = content / ".cooked" / "imports" / identity
+        generations = content / ".cooked" / "Imports" / identity
         head = generations / "head.json"
         first_head = json.loads(head.read_text(encoding="utf-8"))
 
@@ -215,7 +216,10 @@ class ModelImportRecordCliTests(unittest.TestCase):
         import_model(source, "/.cooked/Models/source.gltf")
         (record,) = self.records(content)
         identity = json.loads(record.read_text(encoding="utf-8"))["source_identity"]
-        self.assertEqual(record.name, f"{identity}.import.json")
+        self.assertEqual(
+            record,
+            content / "Imports" / ".cooked" / "Models" / "source.gltf.import.json",
+        )
 
         # Moved with its virtual path: the virtual path names the model.
         moved_dir = content / "Moved"
@@ -232,6 +236,13 @@ class ModelImportRecordCliTests(unittest.TestCase):
         shutil.move(moved_dir, renamed_dir)
         import_model(renamed_dir / "source.gltf", "/.cooked/Renamed/source.gltf")
         self.assertIn("import.source_relocated", self.report_codes(report))
+        # The record moves with its model's virtual path.
+        old_record, record = (
+            record,
+            content / "Imports" / ".cooked" / "Renamed" / "source.gltf.import.json",
+        )
+        self.assertFalse(old_record.exists())
+        self.assertEqual(self.records(content), [record])
         relocated = json.loads(record.read_text(encoding="utf-8"))
         self.assertEqual(relocated["source_identity"], identity)
         self.assertEqual(relocated["virtual_path"], "/.cooked/Renamed/source.gltf")

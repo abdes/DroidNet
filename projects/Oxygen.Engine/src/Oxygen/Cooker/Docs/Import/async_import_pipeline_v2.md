@@ -135,18 +135,19 @@ filename-based cached hashes do not establish them.
 ## Model import publication
 
 A glTF or FBX model imported from its model import record
-(`Content/imports/<source_identity>.import.json`) holds its source, virtual
+(`<content_root>/Imports/<virtual path>.import.json`) holds its source, virtual
 path, settings and source identity there, and what its imports established:
 surface provenance, node continuity, published nodes and source fingerprint.
 Original external files are read inputs; importing never writes metadata beside
 them.
 
 Each attempt cooks into a new private directory under
-`Content/.cooked/imports/<source-id>/<generation-id>`. It neither modifies a
-published generation nor copies an earlier aggregate root. After successful
+`<content_root>/.cooked/Imports/<source_identity>/<generation-id>`. It neither
+modifies a published generation nor copies an earlier aggregate root. After successful
 native validation and the check that the source bytes did not change, the
 publisher writes the record's new provenance, published nodes and fingerprint,
-then selects the generation in `Content/.cooked/imports/<source-id>/head.json`.
+then selects the generation in
+`<content_root>/.cooked/Imports/<source_identity>/head.json`.
 Record changes or a competing publication fail the expected-revision check and
 leave the previous generation selected. Failed or interrupted attempts remain
 unselected and leave the record unchanged.
@@ -162,14 +163,15 @@ API and schema. The editor keeps its existing project coordinator and uses the
 shared native provenance value.
 
 `ModelImportRecord` reads and writes a model's import record,
-`<content_root>/imports/<source_identity>.import.json`
-(`oxygen.model-import.schema.json`), the one store of a model's import state
+`<content_root>/Imports/<virtual path>.import.json`
+(`oxygen.model-import.schema.json`; `/Content/Models/Ship.glb` has
+`Imports/Content/Models/Ship.glb.import.json`), the one store of a model's import state
 for the editor and the ImportTool: source, virtual path, settings, source
 identity, surface provenance, node continuity, published nodes and source
 fingerprint. `Prepare` reserves one unique attempt, and
 `AsyncImportService::SubmitModelImport` executes it. The selected
 generation is publication state, kept in
-`<content_root>/.cooked/imports/<source_identity>/head.json`, never in the
+`<content_root>/.cooked/Imports/<source_identity>/head.json`, never in the
 record. See the editor's
 [scene instances](../../../../../../../design/editor/lld/scene-instances.md)
 NGN14. A prepared attempt is
@@ -980,11 +982,13 @@ job. The session carries access to async I/O and the ThreadPool, so the importer
 itself no longer owns file-writer references.
 
 If a job request does not specify `ImportRequest.cooked_root`, the current
-implementation derives it from `ImportRequest.source_path` and
-`ImportRequest.loose_cooked_layout.virtual_mount_root`, ensuring the cooked
-root directory ends with the virtual mount root leaf directory (by default:
-`.cooked`). If the source path cannot be resolved (e.g., synthetic test paths),
-it falls back to the process temp directory and still appends `.cooked`.
+implementation derives it from `ImportRequest.source_path` and the mount of the
+job's identity (`ImportRequest::OutputMountRoot`), ensuring the cooked root
+directory ends with the mount's name (`Content` for `/Content/...`). A cooked
+root holds one mount; the writer refuses another mount in it
+(`import.output_mount_mixed`). If the source path cannot be resolved (e.g.,
+synthetic test paths), it falls back to the process temp directory and still
+appends the mount's name.
 
 ```cpp
 namespace oxygen::content::import::detail {

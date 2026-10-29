@@ -100,6 +100,17 @@ public:
   using std::runtime_error::runtime_error;
 };
 
+//! An index entry refused because its identity is in another mount.
+/*!
+ A cooked root holds one mount, the one its identities name
+ (`content::MountRootOf`), so `/Content/A.omat` and `/Other/A.omat` never meet
+ in one file. The import reports it as `import.output_mount_mixed`.
+*/
+class LooseCookedOutputMountMixed final : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
+
 //! Result of writing a loose cooked container.
 struct LooseCookedWriteResult final {
   std::filesystem::path cooked_root;
@@ -127,8 +138,9 @@ struct LooseCookedWriteResult final {
  Every asset and texture descriptor records the source that produced it. A
  source writing an identity it already produced replaces its entry. An
  identity another source produced, or one differing from an existing identity
- only in case, is refused with LooseCookedIdentityCollision. A source that
- goes away has its outputs removed first (RemoveAssetDescriptor,
+ only in case, is refused with LooseCookedIdentityCollision, and an identity
+ in another mount than the index's with LooseCookedOutputMountMixed. A source
+ that goes away has its outputs removed first (RemoveAssetDescriptor,
  RemoveAuxiliaryFile), so a new source can then produce them. A complete
  re-cook of a source retires the outputs it no longer writes
  (RetireUnwrittenOutputs), so the index lists only current outputs.

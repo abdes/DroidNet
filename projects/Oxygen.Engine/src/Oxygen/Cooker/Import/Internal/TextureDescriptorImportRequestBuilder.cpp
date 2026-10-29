@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -19,6 +20,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -27,6 +29,7 @@
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
@@ -40,14 +43,18 @@ namespace {
   using nlohmann::json;
   using nlohmann::json_schema::json_validator;
 
-  auto ResolveRelativePath(const std::filesystem::path& base_dir,
-    const std::string& path_text) -> std::string
+  //! Locates a file the descriptor references, through the job's mounts.
+  auto LocateReferenced(const MountTable& mounts,
+    const std::filesystem::path& descriptor_path, const std::string& text,
+    const std::string_view field, std::vector<ImportDiagnostic>& diagnostics)
+    -> std::optional<std::string>
   {
-    auto path = std::filesystem::path(path_text);
-    if (path.is_relative() && !base_dir.empty()) {
-      path = (base_dir / path).lexically_normal();
+    const auto located = mounts.LocateReference(descriptor_path,
+      CommittedPath { .text = text, .field = field }, diagnostics);
+    if (!located.has_value()) {
+      return std::nullopt;
     }
-    return path.string();
+    return located->file.string();
   }
 
   auto GetTextureDescriptorValidator() -> json_validator&
@@ -85,21 +92,33 @@ namespace {
       });
   }
 
+  //! Applies the descriptor over `settings`; false when a file it references
+  //! cannot be located.
   auto ApplyDescriptorSettings(const json& descriptor_doc,
-    const std::filesystem::path& descriptor_path,
-    TextureImportSettings& settings) -> void
+    const std::filesystem::path& descriptor_path, const MountTable& mounts,
+    TextureImportSettings& settings, std::vector<ImportDiagnostic>& diagnostics)
+    -> bool
   {
-    const auto descriptor_dir = descriptor_path.parent_path();
-
-    settings.source_path = ResolveRelativePath(
-      descriptor_dir, descriptor_doc.at("source").get<std::string>());
+    auto source = LocateReferenced(mounts, descriptor_path,
+      descriptor_doc.at("source").get<std::string>(), "source", diagnostics);
+    if (!source.has_value()) {
+      return false;
+    }
+    settings.source_path = std::move(*source);
 
     if (descriptor_doc.contains("sources")) {
       settings.sources.clear();
-      for (const auto& mapping_doc : descriptor_doc.at("sources")) {
+      const auto& sources = descriptor_doc.at("sources");
+      for (std::size_t index = 0; index < sources.size(); ++index) {
+        const auto& mapping_doc = sources.at(index);
+        auto file = LocateReferenced(mounts, descriptor_path,
+          mapping_doc.at("file").get<std::string>(),
+          "sources[" + std::to_string(index) + "].file", diagnostics);
+        if (!file.has_value()) {
+          return false;
+        }
         auto mapping = TextureSourceMapping {};
-        mapping.file = ResolveRelativePath(
-          descriptor_dir, mapping_doc.at("file").get<std::string>());
+        mapping.file = std::move(*file);
         if (mapping_doc.contains("layer")) {
           mapping.layer = mapping_doc.at("layer").get<uint16_t>();
         }
@@ -208,6 +227,7 @@ namespace {
         settings.cube_layout = cube.at("cube_layout").get<std::string>();
       }
     }
+    return true;
   }
 
 } // namespace
@@ -245,8 +265,13 @@ auto TextureDescriptorImportSettings::Prepare(const std::string_view bytes,
     });
     return std::nullopt;
   }
+  CHECK_NOTNULL_F(mounts.get(),
+    "A texture descriptor resolves its files through the job's mounts");
   auto effective = texture;
-  ApplyDescriptorSettings(document, path, effective);
+  if (!ApplyDescriptorSettings(
+        document, path, *mounts, effective, diagnostics)) {
+    return std::nullopt;
+  }
   // The same destination-free option interpretation used by request
   // construction.
   auto tuning = ImportOptions::TextureTuning {};

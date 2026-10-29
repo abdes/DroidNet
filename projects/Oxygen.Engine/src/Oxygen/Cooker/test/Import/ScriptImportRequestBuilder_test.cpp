@@ -12,6 +12,7 @@
 #include <type_traits>
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
@@ -74,6 +75,31 @@ NOLINT_TEST(ScriptImportRequestBuilderTest, ScriptStorageModeToStringIsStable)
   using oxygen::content::import::to_string;
   EXPECT_EQ(to_string(ScriptStorageMode::kEmbedded), "Embedded");
   EXPECT_EQ(to_string(ScriptStorageMode::kExternal), "External");
+}
+
+//! An asset cooks into the mount its identity names.
+NOLINT_TEST(ScriptImportRequestBuilderTest, OutputMountRootIsTheAssetsMount)
+{
+  auto request = oxygen::content::import::ImportRequest {};
+  request.asset_virtual_path = "/Content/Models/Ship.glb";
+
+  EXPECT_EQ(request.OutputIdentity(), "/Content/Models/Ship.glb");
+  EXPECT_EQ(request.OutputMountRoot(), "/Content");
+}
+
+//! A scripting sidecar cooks into the mount of the scene it targets.
+NOLINT_TEST(
+  ScriptImportRequestBuilderTest, OutputMountRootIsTheSidecarTargetsMount)
+{
+  auto settings = MakeValidSidecarSettings();
+  settings.target_scene_virtual_path = "/Game/Scenes/TestScene.oscene";
+  auto errors = std::ostringstream {};
+
+  const auto request = BuildScriptingSidecarRequest(settings, errors);
+
+  ASSERT_HAS_VALUE(request) << errors.str();
+  EXPECT_EQ(request->OutputIdentity(), "/Game/Scenes/TestScene.oscene");
+  EXPECT_EQ(request->OutputMountRoot(), "/Game");
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest, BuildScriptAssetRequestValidInput)

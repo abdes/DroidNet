@@ -1,4 +1,6 @@
-pak/
+# What RenderScene's tools and its import panel produce: the cooked examples,
+# their pak, and the scratch project of ad-hoc imports with its local mounts.
 .cooked/
-glb/
-!glb/*.glb
+.build/
+.scratch/
+.mounts.json

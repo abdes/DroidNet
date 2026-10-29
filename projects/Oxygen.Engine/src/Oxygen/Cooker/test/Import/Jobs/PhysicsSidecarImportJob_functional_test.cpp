@@ -37,7 +37,6 @@ namespace {
     request.source_path = "inline://scene.oscene.json";
     request.job_name = "DemoScene";
     request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Scenes/DemoScene.oscene";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
@@ -56,7 +55,6 @@ namespace {
     request.source_path = "inline://physics-sidecar";
     request.job_name = "DemoScene.physics";
     request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.physics = PhysicsImportSettings {
       .target_scene_virtual_path = "/.cooked/Scenes/DemoScene.oscene",
       .inline_bindings_json = R"({"bindings":{}})",

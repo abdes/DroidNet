@@ -29,6 +29,7 @@ namespace fs = std::filesystem;
 namespace codes = oxygen::content::import::mount_codes;
 using nlohmann::json;
 using oxygen::content::import::CheckMountNameConflicts;
+using oxygen::content::import::CommittedPath;
 using oxygen::content::import::IsValidMountName;
 using oxygen::content::import::kMountsFileName;
 using oxygen::content::import::MountDeclaration;
@@ -338,11 +339,11 @@ NOLINT_TEST_F(SourceMountsTest, SiblingFoldersDoNotOverlap)
 //! root.
 NOLINT_TEST_F(SourceMountsTest, FolderInOutputIsRefused)
 {
-  fs::create_directories(Project() / ".cooked" / "imports");
+  fs::create_directories(Project() / ".cooked" / "Imports");
   fs::create_directories(Project() / ".anything");
 
   const auto table = ResolveMountTable(Request({
-    Declared("Cache", ".cooked/imports"),
+    Declared("Cache", ".cooked/Imports"),
     Declared("Any", ".anything"),
   }));
 
@@ -634,6 +635,88 @@ NOLINT_TEST_F(SourceMountsTest, RelativeProjectRootUsesWorkingDirectory)
   EXPECT_TRUE(table.IsValid()) << DiagnosticSummary(table.diagnostics);
   EXPECT_EQ(table.project_root, Canonical(Project()));
   ExpectBound(table, "Content", Project() / "Content", MountOrigin::kCommitted);
+}
+
+// -- References --------------------------------------------------------------
+
+//! A mount path names a file of the mount, whatever the referrer's folder.
+NOLINT_TEST_F(SourceMountsTest, LocateReferenceResolvesAMountPath)
+{
+  fs::create_directories(Project() / "Content" / "Images");
+  const auto table
+    = ResolveMountTable(Request({ Declared("Content", "Content") }));
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+
+  const auto located = table.LocateReference(
+    Project() / "Content" / "Materials" / "wood.material.json",
+    CommittedPath { .text = "/Content/Images/wood.png", .field = "source" },
+    findings);
+
+  ASSERT_HAS_VALUE(located) << DiagnosticSummary(findings);
+  EXPECT_TRUE(findings.empty());
+  EXPECT_EQ(located->file, Canonical(Project() / "Content/Images/wood.png"));
+  EXPECT_EQ(located->mount_path, "/Content/Images/wood.png");
+}
+
+//! A relative path resolves in the referrer's folder when it stays in the
+//! referrer's mount.
+NOLINT_TEST_F(SourceMountsTest, LocateReferenceResolvesARelativePathInTheMount)
+{
+  const auto table
+    = ResolveMountTable(Request({ Declared("Content", "Content") }));
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+
+  const auto located = table.LocateReference(
+    Project() / "Content" / "Materials" / "wood.material.json",
+    CommittedPath { .text = "../Images/wood.png", .field = "source" },
+    findings);
+
+  ASSERT_HAS_VALUE(located) << DiagnosticSummary(findings);
+  EXPECT_TRUE(findings.empty());
+  EXPECT_EQ(located->file, Canonical(Project() / "Content/Images/wood.png"));
+  EXPECT_EQ(located->mount_path, "/Content/Images/wood.png");
+}
+
+//! A relative path that lands in another mount is refused with
+//! `import.reference_outside_mount`; a mount path may name that mount.
+NOLINT_TEST_F(
+  SourceMountsTest, LocateReferenceRefusesARelativePathLeavingTheMount)
+{
+  fs::create_directories(Project() / "Other");
+  const auto table = ResolveMountTable(
+    Request({ Declared("Content", "Content"), Declared("Other", "Other") }));
+  ASSERT_TRUE(table.IsValid()) << DiagnosticSummary(table.diagnostics);
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+  const auto referrer = Project() / "Content" / "wood.material.json";
+
+  const auto refused = table.LocateReference(referrer,
+    CommittedPath { .text = "../Other/wood.png", .field = "source" }, findings);
+
+  EXPECT_FALSE(refused.has_value());
+  EXPECT_TRUE(HasDiagnosticCode(findings, codes::kReferenceOutsideMount.id))
+    << DiagnosticSummary(findings);
+
+  findings.clear();
+  const auto named = table.LocateReference(referrer,
+    CommittedPath { .text = "/Other/wood.png", .field = "source" }, findings);
+  EXPECT_TRUE(named.has_value()) << DiagnosticSummary(findings);
+}
+
+//! A reference holds no absolute path: `path.absolute_committed`.
+NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesAnAbsolutePath)
+{
+  const auto table
+    = ResolveMountTable(Request({ Declared("Content", "Content") }));
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+  const auto absolute = (Project() / "Content" / "wood.png").generic_string();
+
+  const auto located
+    = table.LocateReference(Project() / "Content" / "wood.material.json",
+      CommittedPath { .text = absolute, .field = "source" }, findings);
+
+  EXPECT_FALSE(located.has_value());
+  EXPECT_TRUE(HasDiagnosticCode(findings, codes::kAbsoluteCommitted.id))
+    << DiagnosticSummary(findings);
 }
 
 // -- Batches -----------------------------------------------------------------

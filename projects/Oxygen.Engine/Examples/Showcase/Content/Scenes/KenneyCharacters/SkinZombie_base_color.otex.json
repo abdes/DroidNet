@@ -1,0 +1,11 @@
+{
+  "$schema": "oxygen.texture-descriptor.schema.json",
+  "source": "/Content/SourceMedia/DCC/KenneyAnimatedCharacters/Skins/zombieA.png",
+  "intent": "albedo",
+  "decode": {
+    "color_space": "srgb"
+  },
+  "output": {
+    "format": "bc7_srgb"
+  }
+}

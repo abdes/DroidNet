@@ -1,0 +1,114 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Models/backpack.glb",
+      "type": "model",
+      "record": "Imports/Content/Models/backpack.glb.import.json"
+    },
+    {
+      "id": "/Content/Models/chest.glb",
+      "type": "model",
+      "record": "Imports/Content/Models/chest.glb.import.json"
+    },
+    {
+      "id": "/Content/Scenes/RotatingGltf/rotate.oscript",
+      "type": "script",
+      "source": "/Content/Scenes/RotatingGltf/rotate.lua",
+      "virtual_path": "/Content/Scenes/RotatingGltf/rotate.oscript",
+      "name": "rotate",
+      "compile": false,
+      "script_storage": "embedded",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/RotatingGltf/rotate.input",
+      "type": "input",
+      "source": "/Content/Scenes/RotatingGltf/rotate.input.json",
+      "virtual_path": "/Content/Scenes/RotatingGltf/rotate.input"
+    },
+    {
+      "id": "/Content/Scenes/RotatingGltf/RotatingGltf.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/RotatingGltf/RotatingGltf.scene.json",
+      "virtual_path": "/Content/Scenes/RotatingGltf/RotatingGltf.oscene",
+      "name": "rotating_gltf",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Models/backpack.glb",
+        "/Content/Models/chest.glb",
+        "/Content/Scenes/RotatingGltf/rotate.input"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/RotatingGltf/RotatingGltf.oscene#script-sidecar",
+      "type": "script-sidecar",
+      "name": "rotating_gltf_sidecar",
+      "target_scene_virtual_path": "/Content/Scenes/RotatingGltf/RotatingGltf.oscene",
+      "content_hashing": true,
+      "bindings": [
+        {
+          "node_index": 1,
+          "slot_id": "69eca852-8985-5202-9504-63a41b0ad7d6",
+          "script_virtual_path": "/Content/Scenes/RotatingGltf/rotate.oscript",
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "rotation_angle",
+              "type": "float",
+              "value": 0.7853982
+            },
+            {
+              "key": "speed_up",
+              "type": "asset",
+              "value": "/Content/Scenes/RotatingGltf/rotate.input/RotateSpeedUpAction.oiact"
+            },
+            {
+              "key": "speed_down",
+              "type": "asset",
+              "value": "/Content/Scenes/RotatingGltf/rotate.input/RotateSpeedDownAction.oiact"
+            }
+          ]
+        },
+        {
+          "node_index": 2,
+          "slot_id": "69eca852-8985-5202-9504-63a41b0ad7d6",
+          "script_virtual_path": "/Content/Scenes/RotatingGltf/rotate.oscript",
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "rotation_angle",
+              "type": "float",
+              "value": 10.5707964
+            },
+            {
+              "key": "speed_up",
+              "type": "asset",
+              "value": "/Content/Scenes/RotatingGltf/rotate.input/RotateSpeedUpAction.oiact"
+            },
+            {
+              "key": "speed_down",
+              "type": "asset",
+              "value": "/Content/Scenes/RotatingGltf/rotate.input/RotateSpeedDownAction.oiact"
+            }
+          ]
+        }
+      ],
+      "depends_on": [
+        "/Content/Scenes/RotatingGltf/RotatingGltf.oscene",
+        "/Content/Scenes/RotatingGltf/rotate.oscript",
+        "/Content/Scenes/RotatingGltf/rotate.input"
+      ]
+    }
+  ]
+}

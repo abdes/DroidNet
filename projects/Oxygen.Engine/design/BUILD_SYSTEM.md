@@ -305,7 +305,9 @@ CMake or Conan command-line capabilities.
 
 Ship what install rules declare. The full SDK includes engine libraries, all four
 core cooker tools (ImportTool, Inspector, PakTool and PakDump), ShaderBake, schemas,
-and RenderScene with DemoShell and representative content. Tests, benchmarks and
+and RenderScene with DemoShell and the examples tagged `showcase`: the examples project
+reduced to them (`share/oxygen/Showcase`) and RenderScene's cooked content, pak
+and tools (`share/oxygen/RenderScene`). Tests, benchmarks and
 other examples are development outputs, not SDK payload. Disabling optional tools
 does not remove mandatory SDK tools.
 
@@ -323,7 +325,8 @@ showcase currently keeps settings and content outputs near itself, so it require
 a writable location; read-only SDK execution is not yet promised.
 
 See the [SDK guide](../cmake/SDK_README.md) and
-[content workflow](../Examples/Content/README.md).
+[examples project](../Examples/Showcase/README.md) and
+[RenderScene tools](../Examples/RenderScene/README.md#cook-package-and-play-the-examples).
 
 ## 11. Report provenance without inventing release policy
 

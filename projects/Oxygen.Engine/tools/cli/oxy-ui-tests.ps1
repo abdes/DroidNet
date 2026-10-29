@@ -11,7 +11,7 @@ used in isolation, so the original is never modified.
 Extra command-line arguments for the demo, such as --startup-skybox <path>.
 #>
 param(
-    [ValidateSet('DemoShell', 'LightBench', 'TexturedCube', 'RenderScene')][string]$Demo = 'LightBench',
+    [ValidateSet('DemoShell', 'LightBench', 'RenderScene')][string]$Demo = 'LightBench',
     [string]$BuildTree = 'build-tracy-ninja',
     [ValidateSet('Debug', 'Release')][string]$Config = 'Release',
     [string]$Filter = '',

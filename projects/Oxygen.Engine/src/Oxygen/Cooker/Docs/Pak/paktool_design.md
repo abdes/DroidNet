@@ -397,10 +397,10 @@ Full build from a loose-cooked root:
 
 ```text
 Oxygen.Cooker.PakTool build ^
-  --loose-source Examples/Content/.cooked ^
-  --out Examples/Content/pak/all-base.pak ^
-  --catalog-out Examples/Content/pak/all-base.catalog.json ^
-  --manifest-out Examples/Content/pak/all-base.manifest.json ^
+  --loose-source Examples/RenderScene/.cooked/Content ^
+  --out Examples/RenderScene/.build/pak/examples.pak ^
+  --catalog-out Examples/RenderScene/.build/pak/examples.catalog.json ^
+  --manifest-out Examples/RenderScene/.build/pak/examples.manifest.json ^
   --content-version 1 ^
   --source-key 018f8f8f-1234-7abc-8def-0123456789ab
 ```
@@ -409,11 +409,11 @@ Patch build against a previously published base PAK:
 
 ```text
 Oxygen.Cooker.PakTool patch ^
-  --loose-source Examples/Content/.cooked ^
-  --base-pak Examples/Content/pak/all-base.pak ^
-  --out Examples/Content/pak/all-patch-1.pak ^
-  --catalog-out Examples/Content/pak/all-patch-1.catalog.json ^
-  --manifest-out Examples/Content/pak/all-patch-1.manifest.json ^
+  --loose-source Examples/RenderScene/.cooked/Content ^
+  --base-pak Examples/RenderScene/.build/pak/examples.pak ^
+  --out Examples/RenderScene/.build/pak/examples-patch-1.pak ^
+  --catalog-out Examples/RenderScene/.build/pak/examples-patch-1.catalog.json ^
+  --manifest-out Examples/RenderScene/.build/pak/examples-patch-1.manifest.json ^
   --content-version 1 ^
   --source-key 018f8f8f-1234-7abc-8def-0123456789ac
 ```

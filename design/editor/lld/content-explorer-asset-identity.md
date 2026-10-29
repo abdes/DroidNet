@@ -346,9 +346,10 @@ identity and must update every authored referrer in one transaction.
 - **Imported outputs.** A model is a container: its scene, geometries,
   materials and textures are named under the model's identity
   (`/Content/Ship/Ship.glb/Paint.omat`), so moving or renaming the model or its
-  folder relocates them all. The model's import record stays in
-  `<ProjectRoot>/imports/`, named by its source identity; the plan rewrites its
-  `source` and `virtual_path`, so the identity, and every node and surface it
+  folder relocates them all. The model's import record lives in
+  `<ProjectRoot>/Imports/` at the model's virtual path; the plan rewrites its
+  `source` and `virtual_path` and moves it to the place of the new virtual
+  path, so the identity (`source_identity`), and every node and surface it
   names, survives the move. Deleting a model recycles its record.
 - **Scenes.** A scene is renamed, moved and duplicated like any asset. Deleting
   the project's start scene, or a folder that holds it, is rejected until

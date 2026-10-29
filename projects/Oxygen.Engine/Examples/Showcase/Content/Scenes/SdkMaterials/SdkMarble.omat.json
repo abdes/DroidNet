@@ -1,0 +1,25 @@
+{
+  "$schema": "oxygen.material-descriptor.schema.json",
+  "name": "SdkMarble",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "orm_policy": "auto",
+  "parameters": {
+    "base_color": [1, 1, 1, 1],
+    "metalness": 0,
+    "roughness": 1,
+    "normal_scale": 1,
+    "ambient_occlusion": 1
+  },
+  "textures": {
+    "base_color": {
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_base_color.otex"
+    },
+    "normal": {
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex"
+    },
+    "roughness": {
+      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex"
+    }
+  }
+}

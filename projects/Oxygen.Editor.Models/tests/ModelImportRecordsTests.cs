@@ -49,7 +49,9 @@ public sealed class ModelImportRecordsTests
     {
         var source = Path.Combine(ProjectRoot, "Content", "Car.glb");
         _ = this.Save(source, "/Content/Car.glb");
-        this.fileSystem.File.WriteAllText(ModelImportSettings.PathFor(ProjectRoot, Guid.CreateVersion7()), "{");
+        var damaged = ModelImportSettings.PathFor(ProjectRoot, "/Content/Broken.glb");
+        _ = this.fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(damaged)!);
+        this.fileSystem.File.WriteAllText(damaged, "{");
 
         var records = new ModelImportRecords(this.fileSystem, ProjectRoot);
 
@@ -57,9 +59,43 @@ public sealed class ModelImportRecordsTests
         _ = records.Problems.Should().ContainSingle();
     }
 
+    [TestMethod]
+    public void TheIndexListsTheRecordsOfEveryFolderBelowImports()
+    {
+        var car = this.Save(Path.Combine(ProjectRoot, "Content", "Car.glb"), "/Content/Car.glb");
+        var ship = this.Save(Path.Combine(ProjectRoot, "Content", "Models", "Ships", "Ship.glb"), "/Content/Models/Ships/Ship.glb");
+        var other = this.Save(Path.Combine(ProjectRoot, "Props", "Deep", "Er", "Crate.glb"), "/Props/Deep/Er/Crate.glb");
+
+        var records = new ModelImportRecords(this.fileSystem, ProjectRoot);
+
+        _ = records.Problems.Should().BeEmpty();
+        _ = records.All.Select(static record => record.RecordPath).Should().BeEquivalentTo([car, ship, other]);
+        _ = ship.Should().Be(Path.Combine(ProjectRoot, "Imports", "Content", "Models", "Ships", "Ship.glb.import.json"));
+        _ = records.TryFindBySource(Path.Combine(ProjectRoot, "Props", "Deep", "Er", "Crate.glb"), out var found).Should().BeTrue();
+        _ = found!.RecordPath.Should().Be(other);
+    }
+
+    [TestMethod]
+    public void AMisplacedRecordIsListedAsAProblemWithoutHidingTheOthers()
+    {
+        var source = Path.Combine(ProjectRoot, "Content", "Car.glb");
+        _ = this.Save(source, "/Content/Car.glb");
+        var place = ModelImportSettings.PathFor(ProjectRoot, "/Content/Truck.glb");
+        using var settings = JsonDocument.Parse("{}");
+        var bytes = ModelImportSettings.Create(place, Path.Combine(ProjectRoot, "Content", "Truck.glb"), "/Content/Truck.glb", settings.RootElement).ToBytes();
+        var misplaced = Path.Combine(ProjectRoot, "Imports", "Content", "Models", "Truck.glb.import.json");
+        _ = this.fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(misplaced)!);
+        this.fileSystem.File.WriteAllBytes(misplaced, bytes);
+
+        var records = new ModelImportRecords(this.fileSystem, ProjectRoot);
+
+        _ = records.All.Should().ContainSingle().Which.Settings.VirtualPath.Should().Be("/Content/Car.glb");
+        _ = records.Problems.Should().ContainSingle().Which.RecordPath.Should().Be(misplaced);
+    }
+
     private string Save(string source, string virtualPath)
     {
-        var path = ModelImportSettings.PathFor(ProjectRoot, Guid.CreateVersion7());
+        var path = ModelImportSettings.PathFor(ProjectRoot, virtualPath);
         using var settings = JsonDocument.Parse("{}");
         _ = this.fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         this.fileSystem.File.WriteAllBytes(path, ModelImportSettings.Create(path, source, virtualPath, settings.RootElement).ToBytes());

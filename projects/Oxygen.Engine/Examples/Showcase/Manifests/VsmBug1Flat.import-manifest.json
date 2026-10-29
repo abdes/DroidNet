@@ -1,0 +1,67 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Scenes/VsmBug1Flat/floor_default.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/VsmBug1Flat/floor_default.omat.json",
+      "virtual_path": "/Content/Scenes/VsmBug1Flat/floor_default.omat",
+      "name": "floor_default",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/VsmBug1Flat/cube_red.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/VsmBug1Flat/cube_red.omat.json",
+      "virtual_path": "/Content/Scenes/VsmBug1Flat/cube_red.omat",
+      "name": "cube_red",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/VsmBug1Flat/floor.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/VsmBug1Flat/floor.ogeo.json",
+      "virtual_path": "/Content/Scenes/VsmBug1Flat/floor.ogeo",
+      "name": "floor",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/VsmBug1Flat/floor_default.omat"]
+    },
+    {
+      "id": "/Content/Scenes/VsmBug1Flat/cube.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/VsmBug1Flat/cube.ogeo.json",
+      "virtual_path": "/Content/Scenes/VsmBug1Flat/cube.ogeo",
+      "name": "cube",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/VsmBug1Flat/cube_red.omat"]
+    },
+    {
+      "id": "/Content/Scenes/VsmBug1Flat/VsmBug1LargePlane.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/VsmBug1Flat/VsmBug1LargePlane.scene.json",
+      "virtual_path": "/Content/Scenes/VsmBug1Flat/VsmBug1LargePlane.oscene",
+      "name": "VsmBug1LargePlane",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/VsmBug1Flat/floor.ogeo"]
+    },
+    {
+      "id": "/Content/Scenes/VsmBug1Flat/VsmBug1LargeThinCube.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/VsmBug1Flat/VsmBug1LargeThinCube.scene.json",
+      "virtual_path": "/Content/Scenes/VsmBug1Flat/VsmBug1LargeThinCube.oscene",
+      "name": "VsmBug1LargeThinCube",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/VsmBug1Flat/cube.ogeo"]
+    }
+  ]
+}

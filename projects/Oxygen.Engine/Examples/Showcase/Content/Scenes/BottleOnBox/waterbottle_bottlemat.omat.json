@@ -1,0 +1,36 @@
+{
+  "$schema": "oxygen.material-descriptor.schema.json",
+  "name": "waterbottle_bottlemat",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "orm_policy": "auto",
+  "parameters": {
+    "base_color": [1.0, 1.0, 1.0, 1.0],
+    "metalness": 1.0,
+    "roughness": 1.0,
+    "normal_scale": 1.0,
+    "ambient_occlusion": 1.0,
+    "emissive_color": [1, 1, 1],
+    "emissive_intensity": 1
+  },
+  "textures": {
+    "base_color": {
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_albedo.otex"
+    },
+    "normal": {
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_normal.otex"
+    },
+    "metallic": {
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_orm.otex"
+    },
+    "roughness": {
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_orm.otex"
+    },
+    "ambient_occlusion": {
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_orm.otex"
+    },
+    "emissive": {
+      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_emissive.otex"
+    }
+  }
+}

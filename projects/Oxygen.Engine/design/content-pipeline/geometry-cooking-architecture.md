@@ -543,7 +543,7 @@ Example (`woodfloor_tile.geometry.json`):
   "buffers": [
     {
       "uri": "woodfloor_tile.vb",
-      "virtual_path": "/.cooked/Resources/Buffers/woodfloor_tile.vb.obuf",
+      "virtual_path": "/Content/Buffers/woodfloor_tile.vb.obuf",
       "usage_flags": 1,
       "element_stride": 48,
       "views": [
@@ -552,7 +552,7 @@ Example (`woodfloor_tile.geometry.json`):
     },
     {
       "uri": "woodfloor_tile.ib",
-      "virtual_path": "/.cooked/Resources/Buffers/woodfloor_tile.ib.obuf",
+      "virtual_path": "/Content/Buffers/woodfloor_tile.ib.obuf",
       "usage_flags": 2,
       "element_format": 5,
       "views": [
@@ -566,13 +566,13 @@ Example (`woodfloor_tile.geometry.json`):
       "mesh_type": "standard",
       "bounds": { "min": [-0.5, 0.0, -0.5], "max": [0.5, 0.0, 0.5] },
       "buffers": {
-        "vb_ref": "/.cooked/Resources/Buffers/woodfloor_tile.vb.obuf",
-        "ib_ref": "/.cooked/Resources/Buffers/woodfloor_tile.ib.obuf"
+        "vb_ref": "/Content/Buffers/woodfloor_tile.vb.obuf",
+        "ib_ref": "/Content/Buffers/woodfloor_tile.ib.obuf"
       },
       "submeshes": [
         {
           "name": "floor_surface",
-          "material_ref": "/.cooked/Resources/Materials/woodfloor007.omat",
+          "material_ref": "/Content/Materials/woodfloor007.omat",
           "views": [{ "view_ref": "all_indices" }]
         }
       ]
@@ -1014,8 +1014,11 @@ Key layout constants:
 | `kGeometryDescriptorExtension` | `".ogeo"`    | File extension for geometry descriptors |
 | `kGeometryDirName`             | `"Geometry"` | Subfolder under cooked root             |
 
-Virtual path for runtime mounting: `GeometryVirtualPath(name)` =
-`<virtual_mount_root>/Geometry/<name>.ogeo`
+Virtual path for runtime mounting: the identity the job names, such as
+`/Content/Geometry/<name>.ogeo`. A cooked root holds one mount, the one its
+identities name (`content::MountRootOf`), so the descriptor is
+`Geometry/<name>.ogeo` under the root; a reference into another mount (such as
+`/Engine`) resolves only through context roots.
 
 Relative path for file emission: `GeometryDescriptorRelPath(name)` =
 `Geometry/<name>.ogeo`

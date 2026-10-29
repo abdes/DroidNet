@@ -22,7 +22,6 @@
 #include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
@@ -47,14 +46,16 @@ public:
     std::string virtual_path;
   };
 
-  OXGN_COOK_API ResourceDescriptorEmitter(IAsyncFileWriter& file_writer,
-    const LooseCookedLayout& layout, std::filesystem::path cooked_root);
+  OXGN_COOK_API ResourceDescriptorEmitter(
+    IAsyncFileWriter& file_writer, std::filesystem::path cooked_root);
 
   OXYGEN_MAKE_NON_COPYABLE(ResourceDescriptorEmitter)
   OXYGEN_MAKE_NON_MOVABLE(ResourceDescriptorEmitter)
 
-  //! Emit a texture descriptor at an explicit root-relative path.
-  OXGN_COOK_NDAPI auto EmitTextureAtRelPath(std::string_view relpath,
+  //! Emit a texture descriptor at its identity and return its root-relative
+  //! path. An identity in no mount, or one leaving the root, throws
+  //! std::invalid_argument.
+  OXGN_COOK_NDAPI auto EmitTexture(std::string_view virtual_path,
     data::pak::core::ResourceIndexT resource_index,
     const data::pak::core::TextureResourceDesc& descriptor) -> std::string;
 
@@ -71,13 +72,12 @@ public:
   OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
 
 private:
-  auto QueueWrite(
-    std::string relpath, std::shared_ptr<std::vector<std::byte>> bytes) -> void;
+  auto QueueWrite(std::string relpath,
+    const std::shared_ptr<std::vector<std::byte>>& bytes) -> void;
   auto OnWriteComplete(std::string_view relpath, const FileErrorInfo& error)
     -> void;
 
   IAsyncFileWriter& file_writer_;
-  LooseCookedLayout layout_;
   std::filesystem::path cooked_root_;
   std::unordered_map<std::string, Record> records_;
   std::atomic<size_t> pending_count_ { 0 };

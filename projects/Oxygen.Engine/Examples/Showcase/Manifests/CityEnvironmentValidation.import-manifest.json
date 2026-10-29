@@ -1,0 +1,235 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityAsphalt.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityAsphalt.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityAsphalt.omat",
+      "name": "MatCityAsphalt",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityPavement.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityPavement.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityPavement.omat",
+      "name": "MatCityPavement",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteWarm.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteWarm.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteWarm.omat",
+      "name": "MatCityConcreteWarm",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteCool.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteCool.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteCool.omat",
+      "name": "MatCityConcreteCool",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityLimestone.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityLimestone.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityLimestone.omat",
+      "name": "MatCityLimestone",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityBrickRed.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityBrickRed.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityBrickRed.omat",
+      "name": "MatCityBrickRed",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityBrickBuff.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityBrickBuff.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityBrickBuff.omat",
+      "name": "MatCityBrickBuff",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityGlassBlue.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityGlassBlue.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityGlassBlue.omat",
+      "name": "MatCityGlassBlue",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityGlassTeal.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityGlassTeal.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityGlassTeal.omat",
+      "name": "MatCityGlassTeal",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityGlassBronze.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityGlassBronze.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityGlassBronze.omat",
+      "name": "MatCityGlassBronze",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityMetalPanel.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityMetalPanel.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityMetalPanel.omat",
+      "name": "MatCityMetalPanel",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCitySlateDark.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCitySlateDark.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCitySlateDark.omat",
+      "name": "MatCitySlateDark",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityRoofGravel.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityRoofGravel.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityRoofGravel.omat",
+      "name": "MatCityRoofGravel",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityGrass.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityGrass.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityGrass.omat",
+      "name": "MatCityGrass",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityTreeCanopy.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityTreeCanopy.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityTreeCanopy.omat",
+      "name": "MatCityTreeCanopy",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityBark.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityBark.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityBark.omat",
+      "name": "MatCityBark",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityWater.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityWater.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityWater.omat",
+      "name": "MatCityWater",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/MatCityWoodTank.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/MatCityWoodTank.omat.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/MatCityWoodTank.omat",
+      "name": "MatCityWoodTank",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/GeoCityCube.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/GeoCityCube.ogeo.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/GeoCityCube.ogeo",
+      "name": "GeoCityCube",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteWarm.omat"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/GeoCityCylinder.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/GeoCityCylinder.ogeo.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/GeoCityCylinder.ogeo",
+      "name": "GeoCityCylinder",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteWarm.omat"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/GeoCityCone.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/GeoCityCone.ogeo.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/GeoCityCone.ogeo",
+      "name": "GeoCityCone",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteWarm.omat"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/GeoCitySphere.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/GeoCitySphere.ogeo.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/GeoCitySphere.ogeo",
+      "name": "GeoCitySphere",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteWarm.omat"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/CityEnvironmentValidation/CityEnvironmentValidation.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/CityEnvironmentValidation/CityEnvironmentValidation.scene.json",
+      "virtual_path": "/Content/Scenes/CityEnvironmentValidation/CityEnvironmentValidation.oscene",
+      "name": "CityEnvironmentValidation",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/CityEnvironmentValidation/GeoCityCube.ogeo",
+        "/Content/Scenes/CityEnvironmentValidation/GeoCityCylinder.ogeo",
+        "/Content/Scenes/CityEnvironmentValidation/GeoCityCone.ogeo",
+        "/Content/Scenes/CityEnvironmentValidation/GeoCitySphere.ogeo",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityAsphalt.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityPavement.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteWarm.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityConcreteCool.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityLimestone.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityBrickRed.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityBrickBuff.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityGlassBlue.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityGlassTeal.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityGlassBronze.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityMetalPanel.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCitySlateDark.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityRoofGravel.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityGrass.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityTreeCanopy.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityBark.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityWater.omat",
+        "/Content/Scenes/CityEnvironmentValidation/MatCityWoodTank.omat"
+      ]
+    }
+  ]
+}

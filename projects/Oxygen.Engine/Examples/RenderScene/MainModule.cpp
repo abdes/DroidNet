@@ -184,10 +184,11 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   auto shell = std::make_unique<DemoShell>();
   auto shell_config = MakeShellConfig();
   const auto runtime_paths = ResolveRuntimePaths();
-  const auto& demo_root = runtime_paths.showcase;
   shell_config.content_roots = {
     .content_root = runtime_paths.content,
-    .cooked_root = demo_root / ".cooked" / "main",
+    .cooked_root = runtime_paths.cooked,
+    .pak_directory = runtime_paths.paks,
+    .scratch_root = runtime_paths.scratch,
   };
   shell_config.panel_config.content_loader = true;
   shell_config.panel_config.camera_controls = true;
@@ -258,10 +259,10 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     pending_physics_sidecar_.reset();
     active_scene_load_key_.reset();
 
-    // The scene is looked for in the mounted sources first; the main library
-    // is mounted only when none of them holds it.
-    startup_library_index_ = runtime_paths.content / ".cooked" / "main"
-      / std::filesystem::path(kLooseCookedIndexFileName);
+    // The scene is looked for in the mounted sources first; the cooked
+    // examples are mounted only when none of them holds it.
+    startup_library_index_
+      = runtime_paths.cooked / std::filesystem::path(kLooseCookedIndexFileName);
   }
 
   StageFallbackScene();

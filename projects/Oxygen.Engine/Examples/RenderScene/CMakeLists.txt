@@ -95,6 +95,8 @@ oxygen_module_install(
 asap_pop_module("${META_MODULE_NAME}")
 
 if(OXYGEN_INSTALL)
+  # SDK preparation is unnecessary for source-only development builds.
+  include("${CMAKE_CURRENT_SOURCE_DIR}/Showcase.cmake")
   # install-sdk: static
   install(
     FILES

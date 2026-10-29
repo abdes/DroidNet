@@ -232,7 +232,7 @@ auto MainModule::OnAttachedImpl(
   shell_config.enable_camera_rig = true;
   shell_config.force_environment_override = false;
   shell_config.content_roots = {
-    .content_root = demo_root.parent_path() / "Content",
+    .content_root = demo_root.parent_path() / "Showcase",
     .cooked_root = demo_root / ".cooked",
   };
   shell_config.panel_config = {

@@ -50,7 +50,6 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   const auto* const manifest_json = R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": ".cooked",
       "defaults": {
         "collision_shape_descriptor": {
@@ -116,7 +115,6 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "physics-shape-cooked",
       "jobs": [
         {
@@ -163,7 +161,6 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "collision-shape-descriptor",
@@ -201,7 +198,6 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "physics-shape-cooked",
       "jobs": [
         {

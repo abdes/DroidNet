@@ -1,0 +1,5 @@
+# Derived output and machine-local mounts. The editor writes .cooked/ and
+# .build/ when it opens the project; no tool writes into this project.
+.cooked/
+.build/
+.mounts.json

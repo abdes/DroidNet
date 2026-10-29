@@ -378,7 +378,8 @@ virtual root and the resources directory.
 
 ### 7.4 Model import settings
 
-The model import record (`<ProjectRoot>/imports/<source_identity>.import.json`,
+The model import record (`<ProjectRoot>/Imports/<virtual path>.import.json`: the
+model `/Content/Ship.glb` has `Imports/Content/Ship.glb.import.json`,
 [scene instances](scene-instances.md) NGN14) holds a model's import state:
 source, virtual path, settings, source identity, surface provenance, node
 continuity, published nodes and source fingerprint. It holds no mount and no

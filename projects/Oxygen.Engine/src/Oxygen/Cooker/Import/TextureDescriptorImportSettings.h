@@ -6,12 +6,14 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
 
@@ -29,6 +31,11 @@ struct TextureDescriptorImportSettings final {
    the asset identity; a conflicting descriptor identity is rejected.
   */
   TextureImportSettings texture = {};
+
+  //! The job's mount table: the descriptor's `source` and `sources[].file`
+  //! are mount paths, or paths relative to the descriptor that stay in its
+  //! mount (`MountTable::LocateReference`). Required.
+  std::shared_ptr<const MountTable> mounts;
 
   //! Applies the native descriptor schema and recipe to already-read source
   //! bytes. Does not require or create a cooked destination.

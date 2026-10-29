@@ -1,0 +1,26 @@
+{
+  "$schema": "oxygen.geometry-descriptor.schema.json",
+  "name": "SdkCubeB",
+  "lods": [
+    {
+      "name": "SdkCubeB_lod0",
+      "mesh_type": "procedural",
+      "procedural": {
+        "generator": "Cube",
+        "mesh_name": "SdkCubeB"
+      },
+      "submeshes": [
+        {
+          "name": "GeoCubeB_surface",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/Content/Scenes/SdkMaterials/SdkWood.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

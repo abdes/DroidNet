@@ -22,8 +22,11 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::content::import;
-using namespace oxygen::co;
+using oxygen::co::Co;
+using oxygen::content::import::ImportEventLoop;
+using oxygen::content::import::LooseCookedLayout;
+using oxygen::content::import::ResourceDescriptorEmitter;
+using oxygen::content::import::WindowsFileWriter;
 namespace co = oxygen::co;
 
 namespace {
@@ -54,10 +57,10 @@ NOLINT_TEST_F(WindowsFileWriterTest, EmitterRetainsErrorAfterSharedWriterFlush)
     std::ofstream blocked_directory(TempDir() / layout.resources_dir);
     blocked_directory << "not a directory";
   }
-  ResourceDescriptorEmitter emitter(*writer_, layout, TempDir());
+  ResourceDescriptorEmitter emitter(*writer_, TempDir());
   const oxygen::data::pak::core::TextureResourceDesc descriptor {};
-  static_cast<void>(emitter.EmitTextureAtRelPath(
-    layout.resources_dir + "/Ship.glb/Paint.base_color.otex",
+  static_cast<void>(emitter.EmitTexture(
+    "/.cooked/" + layout.resources_dir + "/Ship.glb/Paint.base_color.otex",
     oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
   co::Run(*loop_, [&] -> Co<> {
     const auto first_flush = co_await writer_->Flush();

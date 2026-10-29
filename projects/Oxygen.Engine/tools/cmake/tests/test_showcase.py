@@ -1,68 +1,90 @@
 # pyright: strict
-"""Validate showcase source inventory and the actual installed-input staging."""
+"""Validate the showcase media pins and the staging of the installed showcase."""
 
 import hashlib
-import shutil
 import unittest
+from typing import Any
 
 from cmake_testing import ENGINE, CommandTestCase, load_module, mtimes, read_json
 
-CONTENT = ENGINE / "Examples/Content"
-SCENES = [
-    "sdk-lantern",
-    "sdk-furniture",
-    "sdk-materials",
-    "city-environment-validation",
-    "emissive",
-    "physics_domains",
-    "multi-script",
-    "point-shadow-validation",
-    "spot-shadow-validation",
-]
+PROJECT = ENGINE / "Examples/Showcase"
+PREPARE = ENGINE / "Examples/RenderScene/Tools/internal/prepare_showcase.py"
 
 
 class ShowcaseTests(CommandTestCase):
     temp_prefix = "oxygen showcase "
 
     def test_pinned_source_asset_bytes(self) -> None:
-        for asset in read_json(CONTENT / "showcase-assets.json")["assets"]:
-            if asset["name"].endswith(".zip"):
-                continue  # Download archives are not shipped; selected inputs are.
+        inventory = read_json(PROJECT / "Content/SourceMedia/showcase-assets.json")
+        for asset in inventory["assets"]:
+            if "path" not in asset:
+                continue  # A download archive is read, never kept.
             with self.subTest(asset=asset["name"]):
-                paths = list(CONTENT.rglob(asset["name"]))
-                self.assertEqual(len(paths), 1)
-                data = paths[0].read_bytes()
+                data = (PROJECT / asset["path"].removeprefix("/")).read_bytes()
                 self.assertEqual(len(data), asset["bytes"])
                 self.assertEqual(hashlib.sha256(data).hexdigest(), asset["sha256"])
 
-    def test_staging_resolves_schemas_and_excludes_benchmark_jobs(self) -> None:
-        showcase = load_module("showcase", CONTENT / "internal/prepare_showcase.py")
-        output = self.root / "Content"
-        showcase.prepare(CONTENT.resolve(), output, SCENES)
-        schemas = self.root / "schemas"
-        schemas.mkdir()
-        for schema in (
-            *(ENGINE / "src/Oxygen/Cooker").rglob("*.schema.json"),
-            CONTENT / "showcase-assets.schema.json",
-            CONTENT / "import-sources.schema.json",
-        ):
-            shutil.copyfile(schema, schemas / schema.name)
-        for path in output.rglob("*.json"):
-            match read_json(path):
-                case {"$schema": str(reference)} if not reference.startswith(("http:", "https:")):
-                    self.assertTrue((path.parent / reference).is_file(), str(path))
-                case _:
-                    pass
-        self.assertTrue((output / "import_models.ps1").is_file())
-        self.assertTrue((output / "import_models.cmd").is_file())
-        self.assertFalse((output / "internal").exists())
-        manifests = list(output.glob("scenes/*/import-manifest.json"))
-        self.assertEqual(len(manifests), len(SCENES))
-        jobs = [job for manifest in manifests for job in read_json(manifest)["jobs"]]
-        self.assertFalse(any("benchmark" in job.get("id", "") for job in jobs))
-        before = mtimes(path for path in output.rglob("*") if path.is_file())
-        showcase.prepare(CONTENT.resolve(), output, SCENES)
+    def test_staging_is_the_project_reduced_to_the_showcase_tag(self) -> None:
+        showcase = load_module("showcase", PREPARE)
+        inputs = showcase.prepare(PROJECT.resolve(), self.root, "showcase")
+        project = self.root / "Showcase"
+        tools = self.root / "RenderScene/Tools"
+        catalog: list[dict[str, Any]] = read_json(PROJECT / "Examples.json")["examples"]
+        tagged = sorted(e["name"] for e in catalog if "showcase" in e["tags"])
+        staged: list[dict[str, Any]] = read_json(project / "Examples.json")["examples"]
+        self.assertEqual(sorted(e["name"] for e in staged), tagged)
+        self.assertEqual(
+            sorted(p.name for p in (project / "Manifests").iterdir()),
+            sorted(f"{name}.import-manifest.json" for name in tagged),
+        )
+        self.assertTrue((project / "Project.oxy").is_file())
+        self.assertTrue((project / "Tools/fetch.ps1").is_file())
+        self.assertFalse((project / "Tools/Generators").exists())
+        for name in ("cook.ps1", "pak.ps1", "play.ps1", "internal/ExamplesTools.ps1"):
+            self.assertTrue((tools / name).is_file(), name)
+        self.assertFalse((tools / "internal/prepare_showcase.py").exists())
+        # Every job's source and record ships, so each staged example cooks.
+        for manifest in (project / "Manifests").iterdir():
+            for job in read_json(manifest)["jobs"]:
+                if "source" in job:
+                    self.assertTrue((project / job["source"].removeprefix("/")).is_file())
+                if "record" in job:
+                    self.assertTrue((project / job["record"]).is_file())
+        self.assertTrue(
+            all(path.is_relative_to(PROJECT.resolve()) or path.is_relative_to(PREPARE.parents[1]) for path in inputs)
+        )
+        before = mtimes(path for path in self.root.rglob("*") if path.is_file())
+        showcase.prepare(PROJECT.resolve(), self.root, "showcase")
         self.assertEqual(mtimes(before), before)
+
+    def test_staging_removes_what_an_earlier_staging_left(self) -> None:
+        showcase = load_module("showcase", PREPARE)
+        project = self.root / "Showcase"
+        stale = project / "scenes/old/import-manifest.json"
+        stale.parent.mkdir(parents=True)
+        stale.write_text("{}", encoding="utf-8")
+        # An older lowercase folder for a staged one keeps its spelling on a
+        # case-insensitive file system unless it is removed.
+        lowercase = project / "imports"
+        lowercase.mkdir()
+        (lowercase / "old.import.json").write_text("{}", encoding="utf-8")
+        old_tool = self.root / "RenderScene/Tools/import.ps1"
+        old_tool.parent.mkdir(parents=True)
+        old_tool.write_text("", encoding="utf-8")
+        cooked = self.root / "RenderScene/.cooked/Content/container.index.bin"
+        cooked.parent.mkdir(parents=True)
+        cooked.write_bytes(b"")
+        showcase.prepare(PROJECT.resolve(), self.root, "showcase")
+        self.assertFalse((project / "scenes").exists())
+        self.assertIn("Imports", [entry.name for entry in project.iterdir()])
+        self.assertNotIn("imports", [entry.name for entry in project.iterdir()])
+        self.assertFalse(old_tool.exists())
+        self.assertTrue(cooked.is_file())
+
+    def test_staging_refuses_an_unknown_tag(self) -> None:
+        showcase = load_module("showcase", PREPARE)
+        with self.assertRaisesRegex(ValueError, "No example has the tag"):
+            showcase.prepare(PROJECT.resolve(), self.root, "no-such-tag")
 
 
 if __name__ == "__main__":

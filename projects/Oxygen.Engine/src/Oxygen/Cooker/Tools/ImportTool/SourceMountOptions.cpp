@@ -122,6 +122,7 @@ auto LocateRequestSource(ImportRequest& request, const MountTable& mounts,
     return false;
   }
   request.source_mount_path = located->mount_path;
+  request.source_mounts = std::make_shared<const MountTable>(mounts);
   return true;
 }
 

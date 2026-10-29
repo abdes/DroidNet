@@ -1,0 +1,44 @@
+{
+  "$schema": "oxygen.geometry-descriptor.schema.json",
+  "name": "waterbottle_waterbottle_p0_geo",
+  "bounds": {
+    "min": [-0.054450009018182755, -0.13022033870220184, -0.05445002391934395],
+    "max": [0.054450009018182755, 0.13022033870220184, 0.05445002391934395]
+  },
+  "lods": [
+    {
+      "name": "LOD0",
+      "mesh_type": "standard",
+      "bounds": {
+        "min": [
+          -0.054450009018182755, -0.13022033870220184, -0.05445002391934395
+        ],
+        "max": [0.054450009018182755, 0.13022033870220184, 0.05445002391934395]
+      },
+      "buffers": {
+        "vb_ref": "/Content/Scenes/BottleOnBox/waterbottle_waterbottle_p0_vb.obuf",
+        "ib_ref": "/Content/Scenes/BottleOnBox/waterbottle_waterbottle_p0_ib.obuf"
+      },
+      "submeshes": [
+        {
+          "name": "waterbottle_waterbottle_p0_geo_submesh",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/Content/Scenes/BottleOnBox/waterbottle_bottlemat.omat",
+          "bounds": {
+            "min": [
+              -0.054450009018182755, -0.13022033870220184, -0.05445002391934395
+            ],
+            "max": [
+              0.054450009018182755, 0.13022033870220184, 0.05445002391934395
+            ]
+          },
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

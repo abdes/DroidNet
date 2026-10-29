@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "source": "/Content/SourceMedia/DCC/Showcase/pottedPlant.fbx",
+  "virtual_path": "/Content/Models/Showcase/pottedPlant.fbx",
+  "settings": {
+    "content_hashing": true,
+    "name": "pottedPlant"
+  },
+  "source_identity": "01a0e7c7-f432-7586-8f04-21318d102e68",
+  "surface_provenance": {
+    "geometries": [
+      {
+        "allocations": [
+          {
+            "declaration_key": 0,
+            "surface_id": "15f61e58-02db-1303-d223-663d1e95110e"
+          },
+          {
+            "declaration_key": 1,
+            "surface_id": "5aac8d25-d9b8-dafb-0dfb-da32cd6051c1"
+          }
+        ],
+        "geometry_asset_key": "cb8091d2-b3e7-f606-baae-a804ef69c5ed",
+        "layout_revision": "327f64cc307659f50254f24b3f8dd2e89b8f87642442d86fcb8db655d2718181",
+        "source_geometry_anchor": "Mesh_0",
+        "source_layout_witness": "210ff5b41e1a6579bad25cca406f4884f88b796ef92b079092969c494126ea58",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "3f8196f9-9957-f6d1-ba98-fc99a287d262",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "wood",
+            "surface_id": "15f61e58-02db-1303-d223-663d1e95110e"
+          },
+          {
+            "bindings": [
+              {
+                "default_material_key": "65e7d563-9424-dcbe-b7bc-852d34f7fc0e",
+                "lod_index": 0,
+                "submesh_index": 1
+              }
+            ],
+            "display_name": "woodDark",
+            "surface_id": "5aac8d25-d9b8-dafb-0dfb-da32cd6051c1"
+          }
+        ]
+      },
+      {
+        "allocations": [
+          {
+            "declaration_key": 0,
+            "surface_id": "ab43fee2-a160-b9a1-0527-7ada751c27ee"
+          }
+        ],
+        "geometry_asset_key": "3744900d-53e5-5f82-ab55-7c4853f2d1e1",
+        "layout_revision": "69dacea00202d05c9edabfa2e5ce0c8d4ad3efd2ea9028c60422c96b7ca2929e",
+        "source_geometry_anchor": "Mesh_1",
+        "source_layout_witness": "c076e8a4dd403e463e0c9b8d79407e3779dba5d4d58b93b246dbc4b1641a81d7",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "84ce48d8-4fcd-78bd-328b-bcc008b7d11c",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "plant",
+            "surface_id": "ab43fee2-a160-b9a1-0527-7ada751c27ee"
+          }
+        ]
+      }
+    ],
+    "schema_version": 2
+  },
+  "node_continuity": [],
+  "published_nodes": [
+    {
+      "anchor": "#root",
+      "node_id": "c226fefb-c93a-0514-c0c0-cfec4dbe031b"
+    },
+    {
+      "anchor": "pottedPlant",
+      "node_id": "eea332bf-904b-c9db-a731-65a8aa50a951"
+    },
+    {
+      "anchor": "pottedPlant/plant",
+      "node_id": "412f41ea-d988-9b1a-80d2-defd48d295fb"
+    }
+  ],
+  "new_nodes": [],
+  "vanished_nodes": [],
+  "source_fingerprint": {
+    "size": 23744,
+    "sha256": "61e963d81fbf4e0772b5b8d542a44dbb0c794affa9994b6d5715f425d71fc97d",
+    "files": []
+  }
+}

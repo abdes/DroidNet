@@ -69,7 +69,6 @@ auto CheckShapeJob(const std::filesystem::path& directory, const json& job)
   EXPECT_EQ(lod.at("procedural").at("generator"), job.at("name"));
   EXPECT_EQ(lod.at("submeshes").at(0).at("material_ref").get<std::string>(),
     oxygen::data::MaterialAsset::kDefaultVirtualPath);
-  EXPECT_EQ(job.at("layout"), (json { { "virtual_mount_root", "/Engine" } }));
   EXPECT_THAT(job.at("virtual_path").get<std::string>(),
     testing::AllOf(testing::StartsWith("/Engine/"),
       testing::EndsWith("/" + job.at("name").get<std::string>() + ".ogeo")));
@@ -92,8 +91,6 @@ NOLINT_TEST_F(EngineContentTest, DefaultMaterialMatchesTheLiveMaterial)
   // Assert
   const auto manifest = LoadJson(manifests.materials);
   EXPECT_FALSE(manifest.contains("output"));
-  EXPECT_EQ(
-    manifest.at("layout"), (json { { "virtual_mount_root", "/Engine" } }));
   EXPECT_EQ(manifest.at("mounts"),
     (json::array({ { { "name", "Engine" }, { "path", "." } } })));
   ASSERT_EQ(manifest.at("jobs").size(), 1U);
@@ -101,7 +98,6 @@ NOLINT_TEST_F(EngineContentTest, DefaultMaterialMatchesTheLiveMaterial)
   EXPECT_EQ(job.at("type"), "material-descriptor");
   EXPECT_EQ(job.at("name"), "Default");
   EXPECT_EQ(job.at("virtual_path"), "/Engine/Generated/Materials/Default.omat");
-  EXPECT_EQ(job.at("layout"), (json { { "virtual_mount_root", "/Engine" } }));
   const auto descriptor = LoadSource(TempDir(), job);
   EXPECT_THAT(
     ValidateJson(

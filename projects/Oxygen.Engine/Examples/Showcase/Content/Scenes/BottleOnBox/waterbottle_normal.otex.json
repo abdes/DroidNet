@@ -1,0 +1,12 @@
+{
+  "$schema": "oxygen.texture-descriptor.schema.json",
+  "source": "/Content/SourceMedia/Images/BottleOnBox/waterbottle_normal.png",
+  "intent": "normal",
+  "decode": {
+    "color_space": "linear",
+    "flip_normal_green": true
+  },
+  "output": {
+    "format": "bc7"
+  }
+}

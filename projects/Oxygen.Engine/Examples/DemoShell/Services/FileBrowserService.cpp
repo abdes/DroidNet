@@ -33,7 +33,7 @@ namespace {
   {
     const auto source_path
       = std::filesystem::path(std::source_location::current().file_name());
-    return source_path.parent_path().parent_path().parent_path() / "Content";
+    return source_path.parent_path().parent_path().parent_path() / "Showcase";
   }
 
   auto ResolveContentRoots(const ContentRootConfig& config) -> ContentRootPaths
@@ -41,19 +41,14 @@ namespace {
     const auto content_root = config.content_root.empty()
       ? ResolveDefaultContentRoot()
       : config.content_root;
-    const auto cooked_root = config.cooked_root.empty()
-      ? content_root / ".cooked" / "main"
-      : config.cooked_root;
-
+    const auto source_media = content_root / "Content" / "SourceMedia";
     return ContentRootPaths {
       .content_root = content_root,
-      .fbx_directory = content_root / "fbx",
-      .glb_directory = content_root / "glb",
-      .gltf_directory = content_root / "gltf",
-      .textures_directory = content_root / "textures",
-      .images_directory = content_root / "images",
-      .pak_directory = content_root / "pak",
-      .cooked_root = cooked_root,
+      .dcc_directory = source_media / "DCC",
+      .images_directory = source_media / "Images",
+      .pak_directory = config.pak_directory,
+      .cooked_root = config.cooked_root,
+      .scratch_root = config.scratch_root,
     };
   }
 
@@ -275,7 +270,7 @@ auto MakeFbxFileBrowserConfig(const ContentRootPaths& roots)
 {
   return FileBrowserConfig {
     .title = "Select FBX File",
-    .initial_directory = roots.fbx_directory,
+    .initial_directory = roots.dcc_directory,
     .filters = { MakeFilter("FBX", { ".fbx" }) },
   };
 }
@@ -285,7 +280,7 @@ auto MakeModelFileBrowserConfig(const ContentRootPaths& roots)
 {
   return FileBrowserConfig {
     .title = "Select Model File",
-    .initial_directory = roots.fbx_directory,
+    .initial_directory = roots.dcc_directory,
     .filters = { MakeFilter("Model", { ".fbx", ".gltf", ".glb" }) },
   };
 }
@@ -295,7 +290,7 @@ auto MakeModelDirectoryBrowserConfig(const ContentRootPaths& roots)
 {
   return FileBrowserConfig {
     .title = "Select Model Directory",
-    .initial_directory = roots.content_root,
+    .initial_directory = roots.dcc_directory,
     .select_directory = true,
     .allow_create_directory = false,
   };

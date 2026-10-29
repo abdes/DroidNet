@@ -290,7 +290,7 @@ and the pipeline implements it (`IScriptLibrary`), as LivePreview implements
 - `Material`, the document kind, edits, validation, property catalog, codes and
   `MaterialTemplates.New`; the Material Editor keeps views and view models.
 
-**What the other modules hold**
+#### What the other modules hold
 
 - Scenes: `Edits/Scripting` (decision 7), validated by `ScriptSlotRules`;
   `SceneTemplates.New`. `SetStartingInputContexts` checks only the list, as
@@ -327,7 +327,7 @@ flowchart LR
         T1 -->|cook| T2[".otex"]
     end
     subgraph geometry["Geometry (no family module)"]
-        G0["Ship.glb"] --- G1["imports/source-identity.import.json<br/>model import record"]
+        G0["Ship.glb"] --- G1["Imports/Content/Ship.glb.import.json<br/>model import record"]
         G0 -->|cook| G2["Ship.glb/Hull.ogeo, Ship.glb/Paint.omat,<br/>Ship.glb/Ship.oscene"]
     end
     subgraph script["Script (Scripting)"]

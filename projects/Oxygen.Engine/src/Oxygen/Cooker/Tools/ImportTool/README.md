@@ -228,19 +228,21 @@ reads a `.glb`'s JSON chunk only, never its binary chunk.
 ### Model import records
 
 A model's import state lives in its model import record,
-`<project_root>/imports/<source_identity>.import.json`
-(`oxygen.model-import.schema.json`), which the editor reads and writes too: the
-source (a mount path), the model's virtual path, its settings, and what earlier imports
+`<content_root>/Imports/<virtual path>.import.json`
+(`oxygen.model-import.schema.json`), which the editor reads and writes too. The
+content root is the project root: the model `/Content/Models/Ship.glb` has the
+record `Imports/Content/Models/Ship.glb.import.json`. It holds the source (a
+mount path), the model's virtual path, its settings, and what earlier imports
 established (source identity, surface provenance, node continuity, published
-nodes, source fingerprint). The source identity names the record and never
+nodes, source fingerprint). The record holds the source identity, which never
 changes; node and surface IDs derive from it, so they survive moving or
 renaming the model.
 
 ```powershell
 Oxygen.Cooker.ImportTool gltf model.glb --root H:/Game --virtual-path /Content/model.glb
-Oxygen.Cooker.ImportTool fbx model.fbx --root H:/Game --record H:/Game/imports/<source_identity>.import.json
-Oxygen.Cooker.ImportTool fbx --record H:/Game/imports/<source_identity>.import.json
-Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --record H:/Game/imports/<source_identity>.import.json --root H:/Game
+Oxygen.Cooker.ImportTool fbx model.fbx --root H:/Game --record H:/Game/Imports/Content/Models/Ship.glb.import.json
+Oxygen.Cooker.ImportTool fbx --record H:/Game/Imports/Content/Models/Ship.glb.import.json
+Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --record H:/Game/Imports/Content/Models/Ship.glb.import.json --root H:/Game
 ```
 
 With `--root` and a source but no `--record`, the tool finds the record,
@@ -262,8 +264,8 @@ them with `--output`.
 The publisher commits the import's surface provenance, published nodes and
 source fingerprint to the record together with the validated immutable
 generation, which it selects in
-`<project_root>/.cooked/imports/<source_identity>/head.json`. Failed or interrupted
-attempts leave the record and the selection unchanged. External raw sources are
+`<content_root>/.cooked/Imports/<source_identity>/head.json`. Failed or
+interrupted attempts leave the record and the selection unchanged. External raw sources are
 read only. The
 [pipeline owner](../../Docs/Import/async_import_pipeline_v2.md#model-import-publication)
 defines publication and lifetime.
@@ -278,19 +280,19 @@ belong to `--thread-pool-size`/`--concurrency`, outside records.
 Reclaim unused generations without another import:
 
 ```powershell
-Oxygen.Cooker.ImportTool reclaim --record H:/Game/imports/<source_identity>.import.json
+Oxygen.Cooker.ImportTool reclaim --record H:/Game/Imports/Content/Models/Ship.glb.import.json
 ```
 
 This uses the publisher's record lock and generation leases. It keeps the
 selected generation and any active reader/writer generations, and leaves the
 record and original sources unchanged. Repeat after readers release their old
 generations. The
-[Content workflow](../../../../../Examples/Content/README.md) owns the example
+[examples project](../../../../../Examples/Showcase/README.md) owns the example
 import, recook, packaging and cleanup commands.
 
 ### Model jobs in manifests
 
-A manifest job `{ "type": "model", "record": "imports/<source_identity>.import.json" }`
+A manifest job `{ "type": "model", "record": "Imports/Content/Models/Ship.glb.import.json" }`
 runs a record as the gltf or fbx job its source names, with the record's
 settings, virtual path and identity. The record resolves as a mount path or
 a path relative to the project root. The job may add `id`, `depends_on`,
@@ -559,8 +561,8 @@ Minimal payload example:
     "rigid_bodies": [
       {
         "node_index": 0,
-        "shape_ref": "/.cooked/Physics/Shapes/box.ocshape",
-        "material_ref": "/.cooked/Physics/Materials/default.opmat",
+        "shape_ref": "/Content/Physics/Shapes/box.ocshape",
+        "material_ref": "/Content/Physics/Materials/default.opmat",
         "body_type": "dynamic"
       }
     ]
@@ -648,7 +650,7 @@ Top-level fields:
   "version": 1,
   "project_root": "..",
   "mounts": [{ "name": "Content", "kind": "Source", "path": "Content" }],
-  "output": "../.cooked/tools/Content",
+  "output": "../.cooked/Content",
   "thread_pool_size": 8,
   "max_in_flight_jobs": 16,
   "job_admission_capacity": 64,
@@ -662,7 +664,7 @@ Top-level fields:
   },
   "defaults": {
     "layout": {
-      "virtual_mount_root": "/Content"
+      "resources_dir": "Resources"
     },
     "texture": { "output": "..." },
     "scene": { "output": "..." },
@@ -694,8 +696,10 @@ one of the two and leave the other at its default.
 `project_root` is relative to the manifest's folder (default: the folder);
 `--root` replaces it. `mounts` lists the mounts: `name`, optional `kind`
 (`Source`, `Cooked` or `Pak`) and optional `path`, relative to the project root.
-A mount without `path` is a placeholder a `.mounts.json` binds. `mounts`
-requires the top-level `layout`. Every path is relative; an absolute path in any
+A mount without `path` is a placeholder a `.mounts.json` binds. A cooked root
+holds one mount, the one its identities name (`content::MountRootOf`); a job
+whose identity names another mount is refused with `import.output_mount_mixed`.
+Every path is relative; an absolute path in any
 field is refused with `path.absolute_committed`.
 
 Job rules:
@@ -714,18 +718,19 @@ Job rules:
   `scene-descriptor`, `script`, `texture`, `texture-descriptor`,
   `physics-material-descriptor`, `collision-shape-descriptor`) requires
   `virtual_path`, the asset's identity. Its descriptor is written at that path
-  below the mount (`/.cooked/Materials/Wood.omat` lives at
+  below the mount (`/Content/Materials/Wood.omat` lives at
   `Materials/Wood.omat`), and its key derives from it. A descriptor that states
   its own `virtual_path` must name the same one.
 - an `input` job requires `virtual_path`, the input source's identity
-  (`/.cooked/Input/Player.input`); each action and mapping context is named
-  under it (`/.cooked/Input/Player.input/Jump.oiact`, written at
+  (`/Content/Input/Player.input`); each action and mapping context is named
+  under it (`/Content/Input/Player.input/Jump.oiact`, written at
   `Input/Player.input/Jump.oiact`).
 - a model job (`gltf`, `fbx`) requires `virtual_path`, the model's identity: the
   virtual path of its source file, ending in its extension
-  (`/.cooked/Ship.glb`). Each material, geometry, texture and scene is named
-  flat under it (`/.cooked/Ship.glb/Paint.omat`, written at
-  `Ship.glb/Paint.omat`); the scene takes the model's stem (`Ship.oscene`).
+  (`/Content/Models/Ship.glb`). Each material, geometry, texture and scene is named
+  flat under it (`/Content/Models/Ship.glb/Paint.omat`, written at
+  `Models/Ship.glb/Paint.omat`); the scene takes the model's stem
+  (`Ship.oscene`).
 - the single-file `texture`, `script` and `input` commands require
   `--virtual-path`, as do `gltf` and `fbx` without `--record`
 - `texture-descriptor` jobs:
@@ -755,8 +760,7 @@ Job rules:
   - allowed keys are exactly: `id`, `type`, `source`, `virtual_path`,
     `depends_on`, `output`, `layout`, `source_key`
 - layout overrides are shared across all importers via manifest `layout` or
-  `defaults.layout`: `virtual_mount_root` and `resources_dir`. They place the
-  resource tables; every descriptor is placed by its identity.
+  `defaults.layout`: `resources_dir`. It places the resource tables; every descriptor is placed by its identity.
 - `script-sidecar` requires exactly one of:
   - `source`
   - `bindings` (inline array)
@@ -779,7 +783,6 @@ Batch example with one output shared at manifest level:
   "project_root": "..",
   "mounts": [{ "name": "Content", "path": "Content" }],
   "output": "../.cooked/Content",
-  "layout": { "virtual_mount_root": "/Content" },
   "jobs": [
     {
       "type": "gltf",
@@ -815,8 +818,8 @@ Batch example with one output shared at manifest level:
         "rigid_bodies": [
           {
             "node_index": 0,
-            "shape_ref": "/Physics/Shapes/backpack_body.ocshape",
-            "material_ref": "/Physics/Materials/default.opmat",
+            "shape_ref": "/Content/Physics/Shapes/backpack_body.ocshape",
+            "material_ref": "/Content/Physics/Materials/default.opmat",
             "body_type": "dynamic"
           }
         ]

@@ -53,13 +53,44 @@ namespace {
     auto writer = FileLock::TryAcquire(marker_, FileLockMode::kExclusive);
     ASSERT_FALSE(writer);
     EXPECT_EQ(writer.error(), std::errc::device_or_resource_busy);
+    // The lock moves with its owner: the reader keeps excluding the writer.
     auto moved = std::move(first).value();
-    EXPECT_FALSE(first->IsLocked());
     EXPECT_TRUE(moved.IsLocked());
     moved = FileLock {};
     EXPECT_FALSE(FileLock::TryAcquire(marker_, FileLockMode::kExclusive));
     second.value() = FileLock {};
     EXPECT_TRUE(FileLock::TryAcquire(marker_, FileLockMode::kExclusive));
+  }
+
+  //! A temporary lock's file exists only while it is held.
+  NOLINT_TEST_F(FileLockTest, TemporaryLockRemovesItsFileOnRelease)
+  {
+    {
+      auto owner = FileLock::TryAcquire(
+        marker_, FileLockMode::kExclusive, FileLockOpenMode::kTemporary);
+      ASSERT_TRUE(owner);
+      EXPECT_TRUE(std::filesystem::exists(marker_));
+      const auto contender = FileLock::TryAcquire(
+        marker_, FileLockMode::kExclusive, FileLockOpenMode::kTemporary);
+      ASSERT_FALSE(contender);
+      EXPECT_EQ(contender.error(),
+        std::make_error_code(std::errc::device_or_resource_busy));
+    }
+    EXPECT_FALSE(std::filesystem::exists(marker_));
+    auto next = FileLock::TryAcquire(
+      marker_, FileLockMode::kExclusive, FileLockOpenMode::kTemporary);
+    EXPECT_TRUE(next);
+  }
+
+  //! A lock opened to create its file keeps the file after release.
+  NOLINT_TEST_F(FileLockTest, OpenOrCreateLockKeepsItsFile)
+  {
+    {
+      auto owner = FileLock::TryAcquire(
+        marker_, FileLockMode::kExclusive, FileLockOpenMode::kOpenOrCreate);
+      ASSERT_TRUE(owner);
+    }
+    EXPECT_TRUE(std::filesystem::exists(marker_));
   }
 
   NOLINT_TEST_F(FileLockTest, ExclusiveOwnerExcludesOtherReadersAndWriters)

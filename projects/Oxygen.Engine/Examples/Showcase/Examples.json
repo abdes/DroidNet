@@ -1,0 +1,132 @@
+{
+  "$schema": "Tools/examples.schema.json",
+  "version": 1,
+  "examples": [
+    {
+      "name": "BottleOnBox",
+      "description": "A water bottle dropped on a box, with rigid-body physics.",
+      "scenes": ["BottleOnBox"],
+      "tags": ["physics"]
+    },
+    {
+      "name": "CameraSwitch",
+      "description": "Two cameras over a cube, switched by an input action from a script.",
+      "scenes": ["CameraSwitch"],
+      "tags": ["scripting", "input"]
+    },
+    {
+      "name": "CityEnvironmentValidation",
+      "description": "A foggy city in metres for validating atmosphere, fog, sky light and shadows at city scale.",
+      "scenes": ["CityEnvironmentValidation"],
+      "tags": ["showcase", "validation", "environment"]
+    },
+    {
+      "name": "CompressedTextures",
+      "description": "Models and a material whose textures arrive already compressed (KTX2, WebP).",
+      "scenes": ["CompressedTextures"],
+      "tags": ["textures"]
+    },
+    {
+      "name": "Emissive",
+      "description": "Emissive materials, solid and masked, beside a non-emissive reference.",
+      "scenes": ["EmissiveScene"],
+      "tags": ["showcase", "materials"]
+    },
+    {
+      "name": "EngineAssets",
+      "description": "Cubes using the engine's generated shapes and default material, and a UV probe texture.",
+      "scenes": ["EngineAssets"],
+      "tags": ["showcase", "materials"]
+    },
+    {
+      "name": "Furniture",
+      "description": "The furniture models the showcase scenes instance.",
+      "scenes": [],
+      "tags": ["showcase", "models"]
+    },
+    {
+      "name": "Instancing",
+      "description": "Many instances of one geometry and material.",
+      "scenes": ["InstancingTestScene"],
+      "tags": ["rendering"]
+    },
+    {
+      "name": "KenneyCharacters",
+      "description": "Animated characters with their skins on a floor.",
+      "scenes": ["KenneyCharacters"],
+      "tags": ["models", "animation"]
+    },
+    {
+      "name": "Lantern",
+      "description": "The lantern model under a sky sphere that also lights it.",
+      "scenes": ["Lantern"],
+      "tags": ["showcase", "models"]
+    },
+    {
+      "name": "MultiScript",
+      "description": "A scene driven by several scripts: day-night cycle and orbiting shapes.",
+      "scenes": ["MultiScript"],
+      "tags": ["showcase", "scripting"]
+    },
+    {
+      "name": "PhysicsDomains",
+      "description": "Every physics sidecar binding family in one scene, with scripted controls.",
+      "scenes": ["PhysicsDomains"],
+      "tags": ["showcase", "physics", "scripting"]
+    },
+    {
+      "name": "PhysicsDomainsVsmBenchmark",
+      "description": "The physics domains scene under a scripted camera path, for virtual shadow map benchmarking.",
+      "scenes": ["PhysicsDomainsVsmBenchmark"],
+      "tags": ["benchmark", "physics"]
+    },
+    {
+      "name": "PointShadowValidation",
+      "description": "A point light over a cube and floor, for validating point-light shadows.",
+      "scenes": ["PointShadowValidation"],
+      "tags": ["showcase", "validation", "shadows"]
+    },
+    {
+      "name": "ProcCubes",
+      "description": "Procedural cubes laid out by a script.",
+      "scenes": ["SceneProcCubes"],
+      "tags": ["scripting"]
+    },
+    {
+      "name": "RotatingGltf",
+      "description": "Imported glTF models rotated by a script.",
+      "scenes": ["RotatingGltf"],
+      "tags": ["models", "scripting"]
+    },
+    {
+      "name": "SdkMaterials",
+      "description": "Marble and wood materials on four cubes.",
+      "scenes": ["SdkMaterials"],
+      "tags": ["showcase", "materials"]
+    },
+    {
+      "name": "SpotShadowValidation",
+      "description": "A spot light over a cube and floor, for validating spot-light shadows.",
+      "scenes": ["SpotShadowValidation"],
+      "tags": ["showcase", "validation", "shadows"]
+    },
+    {
+      "name": "SurfaceOverrides",
+      "description": "Per-instance surface material, visibility, shadow and LOD overrides, checked by a script.",
+      "scenes": ["SurfaceOverrides"],
+      "tags": ["validation", "scripting"]
+    },
+    {
+      "name": "VsmBug1Flat",
+      "description": "A large plane and a large thin cube that reproduce a virtual shadow map defect.",
+      "scenes": ["VsmBug1LargePlane", "VsmBug1LargeThinCube"],
+      "tags": ["validation", "shadows"]
+    },
+    {
+      "name": "VsmTwoCubes",
+      "description": "Two cubes for virtual shadow map checks.",
+      "scenes": ["VsmTwoCubes"],
+      "tags": ["validation", "shadows"]
+    }
+  ]
+}

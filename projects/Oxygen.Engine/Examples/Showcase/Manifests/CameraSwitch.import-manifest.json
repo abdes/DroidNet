@@ -1,0 +1,121 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Scenes/CameraSwitch/CameraSwitchMat.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/CameraSwitch/CameraSwitchMat.omat.json",
+      "virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitchMat.omat",
+      "name": "CameraSwitchMat",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo.json",
+      "virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
+      "name": "CameraSwitchCube",
+      "content_hashing": true,
+      "depends_on": ["/Content/Scenes/CameraSwitch/CameraSwitchMat.omat"]
+    },
+    {
+      "id": "/Content/Scenes/CameraSwitch/camera_switch.oscript",
+      "type": "script",
+      "source": "/Content/Scenes/CameraSwitch/camera_switch.lua",
+      "virtual_path": "/Content/Scenes/CameraSwitch/camera_switch.oscript",
+      "name": "camera_switch",
+      "compile": false,
+      "script_storage": "external",
+      "content_hashing": true
+    },
+    {
+      "id": "/Content/Scenes/CameraSwitch/camera_switch.input",
+      "type": "input",
+      "source": "/Content/Scenes/CameraSwitch/camera_switch.input.json",
+      "virtual_path": "/Content/Scenes/CameraSwitch/camera_switch.input"
+    },
+    {
+      "id": "/Content/Scenes/CameraSwitch/CameraSwitch.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/CameraSwitch/CameraSwitch.scene.json",
+      "virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitch.oscene",
+      "name": "camera_switch",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
+        "/Content/Scenes/CameraSwitch/camera_switch.input"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/CameraSwitch/CameraSwitch.oscene#script-sidecar",
+      "type": "script-sidecar",
+      "name": "camera_switch_sidecar",
+      "target_scene_virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitch.oscene",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Scenes/CameraSwitch/CameraSwitch.oscene",
+        "/Content/Scenes/CameraSwitch/camera_switch.oscript",
+        "/Content/Scenes/CameraSwitch/camera_switch.input"
+      ],
+      "bindings": [
+        {
+          "node_index": 5,
+          "slot_id": "48a16ecd-d2a0-579a-a929-47eee324728d",
+          "script_virtual_path": "/Content/Scenes/CameraSwitch/camera_switch.oscript",
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "first_camera",
+              "type": "node",
+              "value": {
+                "node": 2
+              }
+            },
+            {
+              "key": "second_camera",
+              "type": "node",
+              "value": {
+                "node": 3
+              }
+            },
+            {
+              "key": "play_context",
+              "type": "asset",
+              "value": "/Content/Scenes/CameraSwitch/camera_switch.input/CameraSwitchPlay.oimap"
+            },
+            {
+              "key": "menu_context",
+              "type": "asset",
+              "value": "/Content/Scenes/CameraSwitch/camera_switch.input/CameraSwitchMenu.oimap"
+            },
+            {
+              "key": "next_camera",
+              "type": "asset",
+              "value": "/Content/Scenes/CameraSwitch/camera_switch.input/CameraSwitchNext.oiact"
+            },
+            {
+              "key": "open_menu",
+              "type": "asset",
+              "value": "/Content/Scenes/CameraSwitch/camera_switch.input/CameraSwitchOpenMenu.oiact"
+            },
+            {
+              "key": "close_menu",
+              "type": "asset",
+              "value": "/Content/Scenes/CameraSwitch/camera_switch.input/CameraSwitchCloseMenu.oiact"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -271,9 +271,9 @@ endif()
 # ==============================================================================
 
 if(OXYGEN_INSTALL)
-  # install-sdk: static
   # The scene property schema ships with the SDK: consumers built on the
   # installed SDK, such as the editor, generate their own code from it.
+  # install-sdk: static
   install(
     FILES
       "${_scene_schema_dir}/SceneComponents.yaml"

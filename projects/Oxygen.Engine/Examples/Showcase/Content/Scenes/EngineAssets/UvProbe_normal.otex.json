@@ -1,0 +1,11 @@
+{
+  "$schema": "oxygen.texture-descriptor.schema.json",
+  "source": "/Content/SourceMedia/Images/UvProbe/UvProbe_normal.png",
+  "intent": "normal",
+  "decode": {
+    "color_space": "linear"
+  },
+  "output": {
+    "format": "bc7"
+  }
+}

@@ -12,11 +12,11 @@ namespace Oxygen.Editor.Models;
 
 /// <summary>The model import records of a project, by source path and by virtual path.</summary>
 /// <remarks>
-/// A model is imported when a record names it. The index reads <c>&lt;ProjectRoot&gt;/imports/</c> when it is created,
-/// so a new index sees the folder as it is; callers create one per operation instead of keeping one. A record file
-/// is parsed again only when its size or last write time changed, so creating an index per lookup costs a folder
-/// listing. A record that cannot be read is skipped and listed in <see cref="Problems"/>, so one damaged record does not
-/// hide the others.
+/// A model is imported when a record names it. The index reads <c>&lt;ProjectRoot&gt;/Imports/</c>, recursively, when it
+/// is created, so a new index sees the folder as it is; callers create one per operation instead of keeping one. A record
+/// file is parsed again only when its size or last write time changed, so creating an index per lookup costs a folder
+/// listing. A record that cannot be read, or that is not at the place of its virtual path, is skipped and listed in
+/// <see cref="Problems"/>, so one damaged record does not hide the others.
 /// </remarks>
 public sealed class ModelImportRecords
 {
@@ -37,7 +37,7 @@ public sealed class ModelImportRecords
         var problems = ImmutableArray.CreateBuilder<ModelImportRecordProblem>();
         if (fileSystem.Directory.Exists(this.Folder))
         {
-            foreach (var path in fileSystem.Directory.EnumerateFiles(this.Folder, "*" + ModelImportSettings.RecordSuffix)
+            foreach (var path in fileSystem.Directory.EnumerateFiles(this.Folder, "*" + ModelImportSettings.RecordSuffix, SearchOption.AllDirectories)
                 .Order(StringComparer.OrdinalIgnoreCase))
             {
                 try

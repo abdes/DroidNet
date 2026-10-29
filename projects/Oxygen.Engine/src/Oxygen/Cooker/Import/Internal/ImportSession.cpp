@@ -471,7 +471,7 @@ auto ImportSession::ResourceDescriptorEmitter()
   if (!resource_descriptor_emitter_.has_value()) {
     resource_descriptor_emitter_.emplace(
       std::make_unique<import::ResourceDescriptorEmitter>(
-        *file_writer_, request_.loose_cooked_layout, cooked_root_));
+        *file_writer_, cooked_root_));
   }
   return **resource_descriptor_emitter_;
 }
@@ -898,7 +898,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     if (auto identity_relpath = std::string {}; producer.completes.empty()
       && !producer.source.empty() && !HasErrors()
       && internal::TryVirtualPathToRelPath(
-        request_, request_.asset_virtual_path, identity_relpath)) {
+        request_.asset_virtual_path, identity_relpath)) {
       index_registry_->RetireUnwrittenOutputs(cooked_root_,
         LooseCookedRecook {
           .source = producer.source,
@@ -1037,6 +1037,16 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       .object_path = {},
     });
     LOG_F(ERROR, "Refused index entries: {}", ex.what());
+  } catch (const LooseCookedOutputMountMixed& ex) {
+    report.success = false;
+    report.diagnostics.push_back({
+      .severity = ImportSeverity::kError,
+      .code = "import.output_mount_mixed",
+      .message = ex.what(),
+      .source_path = request_.source_path.string(),
+      .object_path = {},
+    });
+    LOG_F(ERROR, "Refused index entry: {}", ex.what());
   } catch (const LooseCookedIdentityCollision& ex) {
     report.success = false;
     report.diagnostics.push_back({

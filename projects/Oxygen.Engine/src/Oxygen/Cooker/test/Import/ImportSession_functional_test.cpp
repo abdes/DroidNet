@@ -755,8 +755,7 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
         16,
       });
     const auto descriptor_relpath = std::string("Wood.omat");
-    const auto virtual_path
-      = request.loose_cooked_layout.DescriptorVirtualPath(descriptor_relpath);
+    const auto virtual_path = "/.cooked/" + descriptor_relpath;
     const auto descriptor = oxygen::content::test::MaterialDescriptor("Wood");
 
     const auto tex_idx
@@ -829,6 +828,55 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
   });
 }
 
+//! A cooked root holds one mount: a session cooking an identity of another
+//! mount into it fails with `import.output_mount_mixed`.
+NOLINT_TEST_F(ImportSessionTest, FinalizeRefusesAnIdentityOfAnotherMount)
+{
+  co::Run(*loop_, [&] -> co::Co<> {
+    const auto key_of = [](const std::uint8_t seed) -> oxygen::data::AssetKey {
+      auto bytes
+        = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
+      bytes.front() = seed;
+      return oxygen::data::AssetKey::FromBytes(bytes);
+    };
+    const auto descriptor = oxygen::content::test::MaterialDescriptor("Wood");
+
+    auto first_request = MakeRequest("first.fbx");
+    first_request.asset_virtual_path = "/Content/First.omat";
+    std::filesystem::create_directories(first_request.cooked_root.value());
+    {
+      ImportSession session(first_request, observer_ptr(reader_.get()),
+        oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
+        observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
+        observer_ptr(index_registry_.get()));
+      session.AssetEmitter().Emit(key_of(1), oxygen::data::AssetType::kMaterial,
+        "/Content/First.omat", "First.omat", descriptor.bytes,
+        descriptor.references);
+      const auto& report = co_await session.Finalize();
+      EXPECT_TRUE(report.success);
+    }
+
+    auto second_request = MakeRequest("second.fbx");
+    second_request.asset_virtual_path = "/Other/Second.omat";
+    ImportSession session(second_request, observer_ptr(reader_.get()),
+      oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
+      observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
+      observer_ptr(index_registry_.get()));
+    session.AssetEmitter().Emit(key_of(2), oxygen::data::AssetType::kMaterial,
+      "/Other/Second.omat", "Second.omat", descriptor.bytes,
+      descriptor.references);
+
+    const auto& report = co_await session.Finalize();
+
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(std::ranges::any_of(report.diagnostics,
+      [](const import::ImportDiagnostic& diagnostic) -> bool {
+        return diagnostic.code == "import.output_mount_mixed";
+      }));
+    co_return;
+  });
+}
+
 NOLINT_TEST_F(ImportSessionTest, FinalizeIncludesResourceSidecarOutputs)
 {
   co::Run(*loop_, [&] -> co::Co<> {
@@ -861,11 +909,9 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeIncludesResourceSidecarOutputs)
       co_return;
     }
 
-    const auto texture_rel
-      = session.ResourceDescriptorEmitter().EmitTextureAtRelPath(
-        "Wood.glb/wood.base_color.otex",
-        oxygen::data::pak::core::ResourceIndexT { texture_index },
-        *texture_desc);
+    const auto texture_rel = session.ResourceDescriptorEmitter().EmitTexture(
+      "/.cooked/Wood.glb/wood.base_color.otex",
+      oxygen::data::pak::core::ResourceIndexT { texture_index }, *texture_desc);
     const auto buffer_rel
       = session.ResourceDescriptorEmitter().EmitBufferAtRelPath(
         "Wood.glb/Mesh.lod0.vertex.obuf",

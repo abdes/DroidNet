@@ -1,0 +1,105 @@
+{
+  "version": 15,
+  "name": "VsmBug1LargePlane",
+  "starting_camera": {
+    "node": 3
+  },
+  "nodes": [
+    {
+      "id": "b7a658bf-33b4-5908-a26f-b524980a3b6c",
+      "name": "world",
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "f7c8c451-a3a9-5958-986e-18add8fd967d",
+      "name": "plane_node",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [12.0, 12.0, 1.0]
+      }
+    },
+    {
+      "id": "9a5af105-1902-52fd-a2ee-2ffb6cf2125c",
+      "name": "sun_light_node",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 50.0],
+        "rotation": [0.2706, -0.2706, 0.0, 0.9239],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "id": "4d4d5d57-7121-5713-b072-79d9723a5546",
+      "name": "camera_node",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [10.0, -16.0, 9.5],
+        "rotation": [0.0, 0.46174073, 0.88699475, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/Content/Scenes/VsmBug1Flat/floor.ogeo"
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 3,
+        "fov_y": 0.7854,
+        "aspect_ratio": 1.7778,
+        "aspect_mode": "fixed",
+        "near_plane": 0.1,
+        "far_plane": 2000.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 2,
+        "common": {
+          "color_rgb": [1.0, 0.98, 0.95],
+          "casts_shadows": true,
+          "exposure_compensation_ev": 0.0,
+          "shadow": {
+            "bias": 0.0,
+            "normal_bias": 0.02,
+            "resolution_hint": 1
+          }
+        },
+        "intensity_lux": 100000.0,
+        "angular_size_radians": 0.01862,
+        "atmosphere_light_slot": 1,
+        "cascade_count": 4,
+        "cascade_distances": [5.0, 15.0, 40.0, 100.0]
+      }
+    ]
+  }
+}

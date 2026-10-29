@@ -1,0 +1,75 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "version": 1,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Content",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Content/Models/KenneyAnimatedCharacters/Model/characterMedium.fbx",
+      "type": "model",
+      "record": "Imports/Content/Models/KenneyAnimatedCharacters/Model/characterMedium.fbx.import.json"
+    },
+    {
+      "id": "/Content/Scenes/KenneyCharacters/SkinSurvivor_base_color.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/KenneyCharacters/SkinSurvivor_base_color.otex.json",
+      "virtual_path": "/Content/Scenes/KenneyCharacters/SkinSurvivor_base_color.otex",
+      "name": "SkinSurvivor_base_color"
+    },
+    {
+      "id": "/Content/Scenes/KenneyCharacters/SkinZombie_base_color.otex",
+      "type": "texture-descriptor",
+      "source": "/Content/Scenes/KenneyCharacters/SkinZombie_base_color.otex.json",
+      "virtual_path": "/Content/Scenes/KenneyCharacters/SkinZombie_base_color.otex",
+      "name": "SkinZombie_base_color"
+    },
+    {
+      "id": "/Content/Scenes/KenneyCharacters/SkinSurvivor.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/KenneyCharacters/SkinSurvivor.omat.json",
+      "virtual_path": "/Content/Scenes/KenneyCharacters/SkinSurvivor.omat",
+      "name": "SkinSurvivor",
+      "depends_on": [
+        "/Content/Scenes/KenneyCharacters/SkinSurvivor_base_color.otex"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/KenneyCharacters/SkinZombie.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/KenneyCharacters/SkinZombie.omat.json",
+      "virtual_path": "/Content/Scenes/KenneyCharacters/SkinZombie.omat",
+      "name": "SkinZombie",
+      "depends_on": [
+        "/Content/Scenes/KenneyCharacters/SkinZombie_base_color.otex"
+      ]
+    },
+    {
+      "id": "/Content/Scenes/KenneyCharacters/KcFloor.omat",
+      "type": "material-descriptor",
+      "source": "/Content/Scenes/KenneyCharacters/KcFloor.omat.json",
+      "virtual_path": "/Content/Scenes/KenneyCharacters/KcFloor.omat",
+      "name": "KcFloor"
+    },
+    {
+      "id": "/Content/Scenes/KenneyCharacters/KenneyCharacters.oscene",
+      "type": "scene-descriptor",
+      "source": "/Content/Scenes/KenneyCharacters/KenneyCharacters.scene.json",
+      "virtual_path": "/Content/Scenes/KenneyCharacters/KenneyCharacters.oscene",
+      "name": "KenneyCharacters",
+      "content_hashing": true,
+      "depends_on": [
+        "/Content/Models/KenneyAnimatedCharacters/Model/characterMedium.fbx",
+        "/Content/Scenes/KenneyCharacters/SkinSurvivor.omat",
+        "/Content/Scenes/KenneyCharacters/SkinZombie.omat",
+        "/Content/Scenes/KenneyCharacters/KcFloor.omat"
+      ]
+    }
+  ]
+}

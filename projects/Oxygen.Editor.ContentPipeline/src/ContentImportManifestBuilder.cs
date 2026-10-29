@@ -35,7 +35,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         return new ContentImportManifest(
             Version: 1,
             Output: output.Path,
-            Layout: new ContentImportLayout(AssetPath.Create(mountName).VirtualPath),
             Jobs: jobs)
         { SourceKey = output.SourceKey, Mounts = CreateMounts(scope.Project) };
     }
@@ -100,7 +99,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         return new ContentImportManifest(
             Version: 1,
             Output: output.Path,
-            Layout: new ContentImportLayout(AssetPath.Create(mountName).VirtualPath),
             Jobs: jobs)
         { SourceKey = output.SourceKey, Mounts = CreateMounts(scope.Project) };
     }
@@ -124,7 +122,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
                 Name: null)
             {
                 Record = NormalizeSource(modelRecordPath),
-                Layout = new ContentImportLayout(AssetPath.Create(input.MountName).VirtualPath),
             };
         }
 
@@ -136,8 +133,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Output: null,
             Name: input.Kind == ContentCookAssetKind.Input ? null : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(input.SourceRelativePath)))
         {
-            Layout = new ContentImportLayout(AssetPath.Create(input.MountName).VirtualPath),
-
             // A source that cooks one asset names it, and the cooker places its descriptor there; an input source
             // names itself, and the cooker names its actions and contexts under it.
             VirtualPath = input.AssetUri.VirtualPath,
@@ -167,7 +162,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             name)
         {
             // The model names its products under its identity, the virtual path of its source file.
-            Layout = new ContentImportLayout(AssetPath.Create(identity.Mount).VirtualPath),
             VirtualPath = identity.VirtualPath,
         };
 

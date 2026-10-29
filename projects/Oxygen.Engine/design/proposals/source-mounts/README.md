@@ -1,8 +1,8 @@
 # Source mounts
 
-Status: proposal. Nothing here is implemented, scheduled or accepted. It is
-written against the engine and tools as they are today and changes no accepted
-document.
+Status: accepted. The engine, the tools and the examples follow it
+(abdes/DroidNet#81, #120); the editor part is
+[editor source mounts](../../../../../design/editor/proposals/source-mounts/README.md).
 
 Last updated: 2026-10-29
 
@@ -24,7 +24,7 @@ are in
 | Why?              | Source locations are guessed today: from the output's folder, a manifest root, a script source root, a record's folder or an absolute path. Two files can pass for one, and paths break across machines and drives.                |
 | Declared where?   | Committed: one mount list in `Project.oxy` or the import manifest, with relative paths or placeholders, never absolute paths. Local: git-ignored `.mounts.json` files, found up the folder hierarchy, where absolute paths belong. |
 | What it fixes     | abdes/DroidNet#81 (sources taken for one producer); shared and external content on any drive; projects cloned on another machine; `import-sources.local.json` and script source roots.                                             |
-| Examples          | `Examples/Content` becomes an ordinary Oxygen project in the standard layout, with one `Content` mount; see [the examples project](../examples-project/README.md).                                                                 |
+| Examples          | `Examples/Content` becomes `Examples/Showcase`, an ordinary editor project in the standard layout, with one `Content` mount; see [the examples project](../examples-project/README.md).                                            |
 | Not in the design | Cooked-content mounting (`AddLooseCookedRoot`, paks), which already works by cooked index; converting the examples' scene descriptors into editor scene documents.                                                                 |
 
 ## Scenarios
@@ -417,28 +417,27 @@ and recooked, never misread.
   "version": 1,
   "project_root": "..",
   "mounts": [{ "name": "Content", "kind": "Source", "path": "Content" }],
-  "output": "../.cooked/tools/Content",
-  "layout": { "virtual_mount_root": "/Content" },
+  "output": "../.cooked/Content",
   "jobs": [
     {
       "type": "material-descriptor",
-      "source": "/Content/Common/Materials/cube_red.omat.json",
-      "virtual_path": "/Content/Common/Materials/cube_red.omat"
+      "source": "/Content/Materials/cube_red.omat.json",
+      "virtual_path": "/Content/Materials/cube_red.omat"
     }
   ]
 }
 ```
 
-| Field                       | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `project_root`              | Relative to the manifest's folder. Default: the manifest's folder. `--root` replaces it, as the editor's generated manifests need                                                                                                                                                                                                                                                                                                                                                         |
-| `mounts`                    | The committed declaration: `name`, optional `kind` and optional `path` per mount, with the rules above. `.mounts.json` files are applied over it                                                                                                                                                                                                                                                                                                                                          |
-| `layout.virtual_mount_root` | The identity prefix of the output root: a file at `X` in `output` has the identity `<root>/X`. A manifest that declares `mounts` sets it to the mount its identities live in (`/Content`); its default, `/.cooked`, would put them under an output folder. Every job's `virtual_path` lies under it, as the cookers already check                                                                                                                                                         |
-| Job `source`                | A mount path (`/Content/...`), the form manifests use; or a path relative to `project_root` that lies in a mount                                                                                                                                                                                                                                                                                                                                                                          |
-| Job `derived_from`          | For a `source` in an output folder (a derived file the job reads): the mount path, in a `Source` mount, of the authored source it derives from, recorded as the producer instead of the derived file. Refused on a source outside output folders (`import.derived_from_not_derived`), when not a mount path in a `Source` mount (`import.derived_from_invalid`) or absolute (`path.absolute_committed`); a source in an output folder without it fails with `import.source_outside_mount` |
-| Every path                  | Relative. An absolute path in any field is refused with `path.absolute_committed`; generated manifests pass absolute folders as options                                                                                                                                                                                                                                                                                                                                                   |
-| Model `record`              | A mount path or a file path, with the same rule                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Removed                     | `script.source_root` (defaults and per job): a script's source is located by its mount path                                                                                                                                                                                                                                                                                                                                                                                               |
+| Field              | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project_root`     | Relative to the manifest's folder. Default: the manifest's folder. `--root` replaces it, as the editor's generated manifests need                                                                                                                                                                                                                                                                                                                                                         |
+| `mounts`           | The committed declaration: `name`, optional `kind` and optional `path` per mount, with the rules above. `.mounts.json` files are applied over it                                                                                                                                                                                                                                                                                                                                          |
+| Output root        | Holds one mount, the one its identities name (`content::MountRootOf`): the identity `/Content/A/B.omat` is the file `A/B.omat` in `output`. There is no layout root; a job whose identity names another mount than the root already holds fails with `import.output_mount_mixed`, and a reference in another mount (`/Engine`) resolves through the context roots                                                                                                                         |
+| Job `source`       | A mount path (`/Content/...`), the form manifests use; or a path relative to `project_root` that lies in a mount                                                                                                                                                                                                                                                                                                                                                                          |
+| Job `derived_from` | For a `source` in an output folder (a derived file the job reads): the mount path, in a `Source` mount, of the authored source it derives from, recorded as the producer instead of the derived file. Refused on a source outside output folders (`import.derived_from_not_derived`), when not a mount path in a `Source` mount (`import.derived_from_invalid`) or absolute (`path.absolute_committed`); a source in an output folder without it fails with `import.source_outside_mount` |
+| Every path         | Relative. An absolute path in any field is refused with `path.absolute_committed`; generated manifests pass absolute folders as options                                                                                                                                                                                                                                                                                                                                                   |
+| Model `record`     | A mount path or a file path, with the same rule                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Removed            | `script.source_root` (defaults and per job): a script's source is located by its mount path                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ImportTool options:
 
@@ -458,11 +457,23 @@ are unchanged except for the removed `script.source_root`.
 
 A record's `source` is stored as a mount path:
 `"source": "/Content/SourceMedia/DCC/Ship.glb"`. Committed records then never
-hold absolute paths, and a model whose mount moves keeps its record. Records
-stay at `<project_root>/imports/<source_identity>.import.json`, and their
-generations at `<project_root>/.cooked/imports/<source_identity>/` with
-`head.json`, as `ModelImportRecord` places them today. `LocateRecord` matches
-sources by mount path.
+hold absolute paths, and a model whose mount moves keeps its record. A record
+lives at its model's identity: the model `/Content/Models/Ship.glb` has the
+record `<project_root>/Imports/Content/Models/Ship.glb.import.json`, and
+`Imports/` is read recursively. The UUIDv7 source identity is stored inside
+the record; giving the model another virtual path moves the record. Its
+generations are at `<project_root>/.cooked/Imports/<source_identity>/` with
+`head.json`. `LocateRecord` matches sources by mount path.
+
+### Descriptor references
+
+A descriptor names the files it reads, such as a texture descriptor's
+`source` and `sources[].file` or a buffer container's `buffers[].source`, by
+mount path, or by a path relative to the descriptor that stays in the
+descriptor's mount. A relative path that leaves it fails with
+`import.reference_outside_mount`, an absolute path with
+`path.absolute_committed`, and a mount no file binds with `import.mount_unbound`
+(`MountTable::LocateReference`).
 
 ### External scripts
 
@@ -499,9 +510,11 @@ They hold no absolute path: the CMake rule passes the cooked folder as
 
 ## The examples project
 
-`Examples/Content` becomes an ordinary Oxygen project in the standard project
-layout: one committed `Content` mount with raw media in `Content/SourceMedia`,
-one folder and manifest per example, and a catalog of examples. Its design,
+`Examples/Content` becomes `Examples/Showcase`, an ordinary editor project in
+the standard project layout that no tool writes into: one committed `Content`
+mount with raw media in `Content/SourceMedia`, one folder and manifest per
+example, and a catalog of examples. RenderScene's tools cook, package and play
+it into RenderScene's own folders. Its design,
 migration and dependencies are in
 [the examples project](../examples-project/README.md).
 

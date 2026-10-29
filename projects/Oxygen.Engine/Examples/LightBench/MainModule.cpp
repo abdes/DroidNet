@@ -101,7 +101,7 @@ try {
   shell_config.scene_activation_policy
     = SceneActivationPolicy::kExperimentOwned;
   shell_config.content_roots = {
-    .content_root = demo_root.parent_path() / "Content",
+    .content_root = demo_root.parent_path() / "Showcase",
     .cooked_root = demo_root / ".cooked",
   };
   shell_config.panel_config = {

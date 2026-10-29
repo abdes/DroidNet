@@ -9,10 +9,6 @@ set(OXYGEN_EXAMPLES_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 # RenderScene and DemoShell form the installed engine showcase.
 add_subdirectory("DemoShell")
 add_subdirectory("RenderScene")
-# SDK preparation is unnecessary for source-only development builds.
-if(OXYGEN_INSTALL)
-  add_subdirectory("Content")
-endif()
 
 if(OXYGEN_BUILD_EXAMPLES)
   add_subdirectory("Platform")
@@ -20,7 +16,6 @@ if(OXYGEN_BUILD_EXAMPLES)
   add_subdirectory("Async")
   add_subdirectory("InputSystem")
   add_subdirectory("LightBench")
-  add_subdirectory("TexturedCube")
   add_subdirectory("MultiView")
   add_subdirectory("Physics")
   add_subdirectory("VortexBasic")

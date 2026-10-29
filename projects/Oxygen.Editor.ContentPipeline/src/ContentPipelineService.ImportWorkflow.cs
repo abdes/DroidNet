@@ -231,8 +231,8 @@ public sealed partial class ContentPipelineService
             return;
         }
 
-        var path = ModelImportSettings.PathFor(project.ProjectRoot.FullPath, request.SourceIdentity);
-        var record = ModelImportSettings.Create(path, primary.FullPath, identity.VirtualPath, request.Settings ?? ModelImportSettings.DefaultSettings(request.Name));
+        var path = ModelImportSettings.PathFor(project.ProjectRoot.FullPath, identity.VirtualPath);
+        var record = ModelImportSettings.Create(path, primary.FullPath, identity.VirtualPath, request.Settings ?? ModelImportSettings.DefaultSettings(request.Name), request.SourceIdentity);
         _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         this.cookCoordinator.VerifyWriter(operation);
         _ = await this.importRecordFiles.WriteAsync(path, record.ToBytes(), DroidNet.Storage.FileVersion.Missing, cancellationToken).ConfigureAwait(false);

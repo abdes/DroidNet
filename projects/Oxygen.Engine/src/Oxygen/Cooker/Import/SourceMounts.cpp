@@ -837,6 +837,48 @@ namespace {
     }
   }
 
+  //! `MountTable::LocateSource` with a relative path resolved against
+  //! `base`; `subject` is what diagnostics name.
+  auto Locate(const MountTable& table, const fs::path& base,
+    const Subject& subject, const std::string_view committed,
+    std::vector<ImportDiagnostic>& findings) -> std::optional<MountedSource>
+  {
+    const auto reporter = Reporter { findings };
+    // A mount path starts with one slash and no root name; any other rooted
+    // path is a machine's absolute path.
+    const auto text = ToPath(std::string { committed });
+    if (text.has_root_name()
+      || (text.has_root_directory() && !committed.starts_with('/'))) {
+      reporter.Report(mount_codes::kAbsoluteCommitted, subject, committed);
+      return std::nullopt;
+    }
+    if (!text.has_root_directory()) {
+      return table.MountPathOf(base / text, findings);
+    }
+
+    const auto parts = Components(text.relative_path());
+    const auto named = parts.empty() ? std::string {} : parts.front().string();
+    const auto mount
+      = std::ranges::find_if(table.mounts, [&named](const Mount& m) -> bool {
+          return FoldName(m.name) == FoldName(named);
+        });
+    if (mount == table.mounts.end() || mount->kind != MountKind::kSource
+      || parts.size() < 2) {
+      reporter.Report(mount_codes::kSourceOutsideMount, subject, committed);
+      return std::nullopt;
+    }
+    if (mount->state == MountState::kUnbound) {
+      reporter.Report(
+        mount_codes::kSourceMountUnbound, subject, committed, mount->name);
+      return std::nullopt;
+    }
+    auto file = mount->folder;
+    for (const auto& part : parts | std::views::drop(1)) {
+      file /= part;
+    }
+    return table.MountPathOf(file, findings);
+  }
+
 } // namespace
 
 auto MountTable::IsValid() const -> bool
@@ -890,45 +932,52 @@ auto MountTable::MountPathOf(const fs::path& file,
 auto MountTable::LocateSource(const CommittedPath& committed,
   std::vector<ImportDiagnostic>& findings) const -> std::optional<MountedSource>
 {
-  const auto reporter = Reporter { findings };
-  const auto subject = Subject {
-    .file = fs::path { declared_in },
-    .field = std::string { committed.field },
-    .mount = {},
-  };
-  // A mount path starts with one slash and no root name; any other rooted
-  // path is a machine's absolute path.
-  const auto text = ToPath(std::string { committed.text });
-  if (text.has_root_name()
-    || (text.has_root_directory() && !committed.text.starts_with('/'))) {
-    reporter.Report(mount_codes::kAbsoluteCommitted, subject, committed.text);
-    return std::nullopt;
-  }
-  if (!text.has_root_directory()) {
-    return MountPathOf(project_root / text, findings);
-  }
+  return Locate(*this, project_root,
+    Subject {
+      .file = fs::path { declared_in },
+      .field = std::string { committed.field },
+      .mount = {},
+    },
+    committed.text, findings);
+}
 
-  const auto parts = Components(text.relative_path());
-  const auto named = parts.empty() ? std::string {} : parts.front().string();
-  const auto mount
-    = std::ranges::find_if(mounts, [&named](const Mount& m) -> bool {
-        return FoldName(m.name) == FoldName(named);
-      });
-  if (mount == mounts.end() || mount->kind != MountKind::kSource
-    || parts.size() < 2) {
-    reporter.Report(mount_codes::kSourceOutsideMount, subject, committed.text);
-    return std::nullopt;
+auto MountTable::LocateReference(const fs::path& referrer,
+  const CommittedPath& reference, std::vector<ImportDiagnostic>& findings) const
+  -> std::optional<MountedSource>
+{
+  const auto holder
+    = Canonical(referrer.is_absolute() ? referrer : project_root / referrer);
+  auto located = Locate(*this, holder.parent_path(),
+    Subject {
+      .file = holder,
+      .field = std::string { reference.field },
+      .mount = {},
+    },
+    reference.text, findings);
+  if (!located.has_value() || reference.text.starts_with('/')) {
+    return located;
   }
-  if (mount->state == MountState::kUnbound) {
-    reporter.Report(
-      mount_codes::kSourceMountUnbound, subject, committed.text, mount->name);
-    return std::nullopt;
+  auto ignored = std::vector<ImportDiagnostic> {};
+  const auto own = MountPathOf(holder, ignored);
+  const auto mount_of
+    = [](const std::string_view mount_path) -> std::string_view {
+    return mount_path.substr(0, mount_path.find('/', 1));
+  };
+  if (own.has_value()
+    && FoldName(mount_of(own->mount_path))
+      == FoldName(mount_of(located->mount_path))) {
+    return located;
   }
-  auto file = mount->folder;
-  for (const auto& part : parts | std::views::drop(1)) {
-    file /= part;
-  }
-  return MountPathOf(file, findings);
+  Reporter { findings }.Report(mount_codes::kReferenceOutsideMount,
+    Subject {
+      .file = holder,
+      .field = std::string { reference.field },
+      .mount = {},
+    },
+    reference.text,
+    own.has_value() ? mount_of(own->mount_path).substr(1)
+                    : std::string_view {});
+  return std::nullopt;
 }
 
 auto IsValidMountName(const std::string_view name) -> bool

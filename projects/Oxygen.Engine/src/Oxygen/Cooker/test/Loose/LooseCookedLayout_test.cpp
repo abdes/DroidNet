@@ -30,22 +30,6 @@ NOLINT_TEST(LooseCookedLayoutTest, DefaultsToStandardFileAndDirectoryNames)
   EXPECT_EQ(layout.physics_resources_subdir, "Resources");
 }
 
-NOLINT_TEST(LooseCookedLayoutTest, DescriptorVirtualPathJoinsTheMountRoot)
-{
-  LooseCookedLayout layout {};
-
-  layout.virtual_mount_root = "/MountRoot";
-  EXPECT_EQ(layout.DescriptorVirtualPath("Ship.glb/Paint.omat"),
-    "/MountRoot/Ship.glb/Paint.omat");
-
-  layout.virtual_mount_root = "/";
-  EXPECT_EQ(layout.DescriptorVirtualPath("Ship.glb/Ship.oscene"),
-    "/Ship.glb/Ship.oscene");
-
-  layout.virtual_mount_root = "MyMount";
-  EXPECT_EQ(layout.DescriptorVirtualPath("Wood.omat"), "/MyMount/Wood.omat");
-}
-
 NOLINT_TEST(
   LooseCookedLayoutTest, ResolvesResourceTablesAndDataUnderResourcesDir)
 {

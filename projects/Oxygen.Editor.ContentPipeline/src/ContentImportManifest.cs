@@ -12,12 +12,10 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 /// <param name="Version">The native manifest version.</param>
 /// <param name="Output">The physical cooked output root the ImportTool runs against; it is passed as <c>--cooked-root</c> and is not part of the manifest file.</param>
-/// <param name="Layout">The loose cooked layout.</param>
 /// <param name="Jobs">The manifest jobs.</param>
 public sealed record ContentImportManifest(
     [property: JsonPropertyName("version")] int Version,
     [property: JsonIgnore] string Output,
-    [property: JsonPropertyName("layout")] ContentImportLayout Layout,
     [property: JsonPropertyName("jobs")] IReadOnlyList<ContentImportJob> Jobs)
 {
     /// <summary>Gets the project's source mounts: the folders the job sources resolve in; null when the manifest declares none.</summary>

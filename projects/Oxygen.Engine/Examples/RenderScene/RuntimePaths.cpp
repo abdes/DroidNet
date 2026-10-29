@@ -29,24 +29,34 @@ auto ResolveRuntimePaths() -> RuntimePaths
   }
   const auto install_root
     = std::filesystem::path(executable).parent_path().parent_path();
+  // The examples project (share/oxygen/Showcase, or Examples/Showcase) is read
+  // only; what RenderScene cooks, packages and imports stays in its own
+  // folder.
+  const auto at = [](RuntimePaths paths) -> RuntimePaths {
+    paths.content_mount = paths.content / "Content";
+    paths.cooked = paths.showcase / ".cooked" / "Content";
+    paths.paks = paths.showcase / ".build" / "pak";
+    paths.scratch = paths.showcase / ".scratch";
+    return paths;
+  };
   if (std::filesystem::is_regular_file(
         install_root / "share/oxygen/oxygen-source.json")) {
-    return {
+    return at({
       .installed = true,
       .root = install_root,
       .showcase = install_root / "share/oxygen/RenderScene",
-      .content = install_root / "share/oxygen/Content",
-    };
+      .content = install_root / "share/oxygen/Showcase",
+    });
   }
   const auto demo_root
     = std::filesystem::path(std::source_location::current().file_name())
         .parent_path();
-  return {
+  return at({
     .installed = false,
     .root = demo_root.parent_path().parent_path(),
     .showcase = demo_root,
-    .content = demo_root.parent_path() / "Content",
-  };
+    .content = demo_root.parent_path() / "Showcase",
+  });
 }
 
 } // namespace oxygen::examples::render_scene

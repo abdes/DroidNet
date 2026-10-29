@@ -44,7 +44,6 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
       "mounts",
       nlohmann::json::array({ { { "name", "Content" }, { "path", "." } } }),
     },
-    { "layout", { { "virtual_mount_root", "/.cooked" } } },
     { "output", "first" },
     { "source_key", top.ToString() },
     { "defaults", { { "source_key", defaults.ToString() } } },
@@ -103,7 +102,6 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   const auto* const manifest_json = R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": ".cooked",
       "defaults": {
         "texture": {
@@ -158,7 +156,6 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "texture-descriptor",
@@ -195,7 +192,6 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "texture-descriptor",

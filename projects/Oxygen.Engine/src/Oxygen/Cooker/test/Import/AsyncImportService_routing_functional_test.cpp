@@ -166,6 +166,7 @@ NOLINT_TEST_F(
   request.cooked_root
     = TempDir() / "oxygen_buffer_container_routing_submit_test";
   std::filesystem::create_directories(*request.cooked_root);
+  request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
   request.buffer_container = ImportRequest::BufferContainerPayload {
     .normalized_descriptor_json
     = R"({"name":"BadContainer","buffers":[{"source":"missing.buffer.bin","virtual_path":"not/canonical","element_stride":16}]})",

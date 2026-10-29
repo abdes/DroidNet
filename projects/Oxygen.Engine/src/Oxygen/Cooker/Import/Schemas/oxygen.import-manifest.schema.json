@@ -164,9 +164,6 @@
     }
   },
   "required": ["jobs"],
-  "dependencies": {
-    "mounts": ["layout"]
-  },
   "definitions": {
     "mount_declaration": {
       "type": "object",
@@ -618,9 +615,6 @@
     "layout_settings": {
       "type": "object",
       "properties": {
-        "virtual_mount_root": {
-          "type": "string"
-        },
         "resources_dir": {
           "type": "string"
         }

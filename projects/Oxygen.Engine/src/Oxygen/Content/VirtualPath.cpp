@@ -292,6 +292,17 @@ auto ValidateMountName(const std::string_view mount)
   return std::nullopt;
 }
 
+auto MountRootOf(const std::string_view virtual_path) noexcept
+  -> std::string_view
+{
+  const auto end = virtual_path.find('/', 1);
+  if (!virtual_path.starts_with('/') || end == std::string_view::npos
+    || end == 1 || end + 1 == virtual_path.size()) {
+    return {};
+  }
+  return virtual_path.substr(0, end);
+}
+
 auto ValidateVirtualPath(const std::string_view virtual_path,
   const VirtualPathRuleSet rules) -> std::optional<VirtualPathError>
 {

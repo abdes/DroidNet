@@ -65,9 +65,8 @@ optimized Release builds. Configure dependencies and rebuild the applications:
 
 ```powershell
 ./tools/build-tree.ps1 generate profiles/windows-msvc.ini -Generator Ninja -WithTracy
-cmake --build out/build-tracy-ninja --config Release --target oxygen-examples-lightbench oxygen-examples-texturedcube --parallel 8
+cmake --build out/build-tracy-ninja --config Release --target oxygen-examples-lightbench --parallel 8
 ./tools/cli/oxy-ui-tests.ps1 -Demo LightBench -BuildTree build-tracy-ninja -Config Release
-./tools/cli/oxy-ui-tests.ps1 -Demo TexturedCube -BuildTree build-tracy-ninja -Config Release
 ```
 
 The DemoShell's own widget tests have a dedicated runner, `-Demo DemoShell`,

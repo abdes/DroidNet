@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Data/ProceduralMeshDefaults.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -254,7 +255,7 @@ namespace {
   }
 
   auto ReadSource(const json& document,
-    const std::filesystem::path& source_path,
+    const std::filesystem::path& source_path, const MountTable& mounts,
     std::vector<ImportDiagnostic>& diagnostics) -> std::optional<GeometrySource>
   {
     auto source = GeometrySource {};
@@ -267,7 +268,7 @@ namespace {
     }
     if (document.contains("buffers")) {
       auto buffers = BufferSource::FromDeclarations(
-        BuildSubmitterBufferChunks(document), source_path, diagnostics);
+        BuildSubmitterBufferChunks(document), source_path, mounts, diagnostics);
       if (!buffers.has_value()) {
         return std::nullopt;
       }
@@ -432,7 +433,7 @@ auto GeometrySource::DeclaredSurfaces() const -> std::vector<data::SurfaceId>
 }
 
 auto GeometrySource::FromDescriptor(const std::string_view bytes,
-  const std::filesystem::path& source_path,
+  const std::filesystem::path& source_path, const MountTable& mounts,
   std::vector<ImportDiagnostic>& diagnostics) -> std::optional<GeometrySource>
 {
   try {
@@ -440,7 +441,7 @@ auto GeometrySource::FromDescriptor(const std::string_view bytes,
     if (!ValidateDescriptorSchema(diagnostics, source_path, document)) {
       return std::nullopt;
     }
-    return ReadSource(document, source_path, diagnostics);
+    return ReadSource(document, source_path, mounts, diagnostics);
   } catch (const json::exception& error) {
     AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
       "geometry.descriptor.request_invalid_json", error.what());

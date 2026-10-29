@@ -8,8 +8,9 @@ checkout is needed to consume it.
 
 From this directory, run `RenderScene.cmd`. It locates the bundled executable and
 content without changing PATH. See [RenderScene](share/oxygen/RenderScene/README.md)
-for scene selection and [Content](share/oxygen/Content/README.md) for editing,
-cooking, and packing the supplied samples.
+for scene selection, the [examples project](share/oxygen/Showcase/README.md) for
+the supplied samples, and RenderScene's `Tools` for cooking, packing and playing
+them.
 
 ## Build your application
 
@@ -51,8 +52,10 @@ are available as `OXYGEN_SDK_ROOT`, `OXYGEN_RUNTIME_DIR`, and `OXYGEN_DATA_DIR`.
 - `include`, `lib`, `bin`: Oxygen and dependency development/runtime files.
 - `lib/cmake`: native CMake package definitions.
 - `share/oxygen/schemas`: content authoring and tool schemas.
-- `share/oxygen/Content`: curated source inputs, cooked scenes, PAK, and scripts.
-- `share/oxygen/RenderScene`: showcase documentation and local settings.
+- `share/oxygen/Showcase`: the examples project: curated source inputs and
+  scripts.
+- `share/oxygen/RenderScene`: showcase documentation and local settings, its
+  `Tools`, and the cooked scenes (`.cooked/Content`) and PAK (`.build/pak`).
 - `share/oxygen/licenses`: dependency license notices.
 
 Move or archive the complete SDK directory. RenderScene resolves its resources

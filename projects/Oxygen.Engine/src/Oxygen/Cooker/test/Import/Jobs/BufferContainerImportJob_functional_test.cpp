@@ -174,7 +174,10 @@ namespace {
         "buffers",
         json::array({
           json {
-            { "source", buffer_source.generic_string() },
+            {
+              "source",
+              oxygen::cooker::test::MountPathIn(TempDir(), buffer_source),
+            },
             {
               "virtual_path",
               "/.cooked/Resources/Buffers/character_vertices.obuf",
@@ -188,11 +191,11 @@ namespace {
     };
 
     auto request = ImportRequest {};
-    request.source_path = "inline://buffer-container";
+    request.source_path = TempDir() / "inline.buffers.json";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+    request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {
       .normalized_descriptor_json = descriptor_json.dump(),
     };
@@ -298,7 +301,10 @@ namespace {
         "buffers",
         json::array({
           json {
-            { "source", buffer_source.generic_string() },
+            {
+              "source",
+              oxygen::cooker::test::MountPathIn(TempDir(), buffer_source),
+            },
             { "virtual_path", "/.cooked/Resources/Buffers/mesh_indices.obuf" },
             { "usage_flags", 2U },
             { "element_format", 10U },
@@ -318,11 +324,11 @@ namespace {
     };
 
     auto request = ImportRequest {};
-    request.source_path = "inline://buffer-container";
+    request.source_path = TempDir() / "inline.buffers.json";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+    request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {
       .normalized_descriptor_json = descriptor_json.dump(),
     };

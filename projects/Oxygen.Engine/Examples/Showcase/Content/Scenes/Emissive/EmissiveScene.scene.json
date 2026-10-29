@@ -1,0 +1,171 @@
+{
+  "version": 15,
+  "name": "EmissiveScene",
+  "starting_camera": {
+    "node": 7
+  },
+  "nodes": [
+    {
+      "id": "562d9499-9585-5827-ae1a-06be6a7bb531",
+      "name": "Root",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "e88f1bf1-8326-5d63-bbac-fdb3f626e41f",
+      "name": "EmissiveRed",
+      "parent": 0,
+      "transform": {
+        "translation": [-3.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "621a4590-f524-5348-b90d-67a7b4d13432",
+      "name": "EmissiveGreen",
+      "parent": 0,
+      "transform": {
+        "translation": [-1.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "c546ef1c-925a-5ae3-a59a-d88a55e8271c",
+      "name": "EmissiveBlue",
+      "parent": 0,
+      "transform": {
+        "translation": [1.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "355d2b78-ef3d-5921-8186-8e556f81063d",
+      "name": "EmissiveTextured",
+      "parent": 0,
+      "transform": {
+        "translation": [3.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "94f8f069-5bdc-542c-8707-3b59d109f300",
+      "name": "EmissiveMasked",
+      "parent": 0,
+      "transform": {
+        "translation": [-1.0, 0.0, -2.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.2, 1.2, 1.2]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "e13490be-6f8f-504f-bbf0-ed6576c44fd5",
+      "name": "Reference",
+      "parent": 0,
+      "transform": {
+        "translation": [1.0, 0.0, -2.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.2, 1.2, 1.2]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "51bdd8c5-82b4-5780-97b3-a9148e97257d",
+      "name": "MainCamera",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 2.0, 8.0],
+        "rotation": [0.0, 0.77428193, 0.63286057, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/Content/Scenes/Emissive/GeoEmissiveRed.ogeo"
+    },
+    {
+      "node": 2,
+      "geometry_ref": "/Content/Scenes/Emissive/GeoEmissiveGreen.ogeo"
+    },
+    {
+      "node": 3,
+      "geometry_ref": "/Content/Scenes/Emissive/GeoEmissiveBlue.ogeo"
+    },
+    {
+      "node": 4,
+      "geometry_ref": "/Content/Scenes/Emissive/GeoEmissiveTextured.ogeo"
+    },
+    {
+      "node": 5,
+      "geometry_ref": "/Content/Scenes/Emissive/GeoEmissiveMasked.ogeo"
+    },
+    {
+      "node": 6,
+      "geometry_ref": "/Content/Scenes/Emissive/GeoReference.ogeo"
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 7,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "aspect_mode": "fixed",
+        "near_plane": 0.1,
+        "far_plane": 100.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/Content/Scenes/Emissive/MatEmissiveBlue.omat",
+      "/Content/Scenes/Emissive/MatEmissiveGreen.omat",
+      "/Content/Scenes/Emissive/MatEmissiveMasked.omat",
+      "/Content/Scenes/Emissive/MatEmissiveRed.omat",
+      "/Content/Scenes/Emissive/MatEmissiveTextured.omat",
+      "/Content/Scenes/Emissive/MatReference.omat"
+    ]
+  }
+}

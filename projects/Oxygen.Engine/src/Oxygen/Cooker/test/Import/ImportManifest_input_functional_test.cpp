@@ -32,7 +32,6 @@ NOLINT_TEST(ImportManifestInputTest, AcceptsInputJobWithDependencies)
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "id": "core.actions",
@@ -75,7 +74,6 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "id": "core.actions",
@@ -106,7 +104,6 @@ NOLINT_TEST(ImportManifestInputTest, InputOutputPrecedenceIsConsistent)
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "out/top-level",
       "defaults": {
         "input": {
@@ -149,7 +146,6 @@ NOLINT_TEST(ImportManifestInputTest, InputDefaultsOverrideTopLevelOutput)
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "out/top-level",
       "defaults": {
         "input": {
@@ -190,7 +186,6 @@ NOLINT_TEST(ImportManifestInputTest, InputFallsBackToTopLevelOutput)
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "out/top-level",
       "jobs": [
         {
@@ -228,7 +223,6 @@ NOLINT_TEST(
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": ".cooked/top-level",
       "jobs": [
         {
@@ -264,7 +258,6 @@ NOLINT_TEST(ImportManifestInputTest, ResolvesRelativeJobOutputAgainstManifest)
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": ".cooked/top-level",
       "defaults": {
         "input": {
@@ -304,7 +297,6 @@ NOLINT_TEST(ImportManifestInputTest, CarriesInputSourceIdentity)
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/Content" },
       "jobs": [
         {
           "id": "input:Gameplay/Player.input.json",
@@ -339,7 +331,6 @@ NOLINT_TEST(ImportManifestInputTest, CarriesCookedContextRoots)
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "id": "player",
@@ -373,7 +364,6 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutVirtualPath)
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "id": "core.actions",
@@ -400,7 +390,6 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "input",

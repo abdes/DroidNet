@@ -53,7 +53,6 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   const auto* const manifest_json = R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": ".cooked",
       "defaults": {
         "physics_material_descriptor": {
@@ -121,7 +120,6 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "physics-material-cooked",
       "jobs": [
         {
@@ -166,7 +164,6 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "physics-material-descriptor",
@@ -202,7 +199,6 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "physics-material-cooked",
       "jobs": [
         {
@@ -236,7 +232,6 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
     R"({
       "version": 1,
       "mounts": [{ "name": "Content", "path": "." }],
-      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "physics-resource-descriptor",

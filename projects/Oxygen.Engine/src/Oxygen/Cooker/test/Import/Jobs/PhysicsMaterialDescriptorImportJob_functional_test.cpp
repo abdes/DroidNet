@@ -60,7 +60,6 @@ namespace {
     auto request = ImportRequest {};
     request.source_path = source_root / "ground.material.json";
     request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Physics/Materials/ground.opmat";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
@@ -121,7 +120,6 @@ namespace {
     auto request = ImportRequest {};
     request.source_path = source_root / "bad.material.json";
     request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Physics/Materials/bad.opmat";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
@@ -150,7 +148,6 @@ namespace {
     auto request = ImportRequest {};
     request.source_path = cooked_root.parent_path() / "source_data" / "m.json";
     request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = virtual_path;
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);

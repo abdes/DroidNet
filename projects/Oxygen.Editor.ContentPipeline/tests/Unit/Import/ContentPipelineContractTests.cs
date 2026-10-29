@@ -59,7 +59,6 @@ internal sealed class ContentPipelineContractTests
         var manifest = new ContentImportManifest(
             Version: 1,
             Output: @"C:\Project\.cooked\Content",
-            Layout: new ContentImportLayout("/Content"),
             Jobs:
             [
                 new ContentImportJob(
@@ -78,11 +77,10 @@ internal sealed class ContentPipelineContractTests
 
         _ = json.Should().Contain("\"version\":1");
         _ = json.Should().NotContain("\"output\":", "the cooked root is an absolute folder, passed as --cooked-root");
-        _ = json.Should().Contain("\"layout\":");
-        _ = json.Should().Contain("\"virtual_mount_root\":\"/Content\"");
+        _ = json.Should().NotContain("\"layout\":", "a cooked root holds one mount, the one its identities name");
+        _ = json.Should().NotContain("virtual_mount_root");
         _ = json.Should().Contain("\"jobs\":");
         _ = json.Should().Contain("\"depends_on\":[]");
-        _ = json.Should().NotContain("VirtualMountRoot");
         _ = json.Should().NotContain("DependsOn");
     }
 
@@ -142,7 +140,6 @@ internal sealed class ContentPipelineContractTests
         var manifest = new ContentImportManifest(
             Version: 2,
             Output: string.Empty,
-            Layout: new ContentImportLayout("Content"),
             Jobs:
             [
                 new ContentImportJob(
@@ -164,8 +161,6 @@ internal sealed class ContentPipelineContractTests
             && diagnostic.Message.Contains("version", StringComparison.OrdinalIgnoreCase));
         _ = diagnostics.Should().Contain(diagnostic =>
             diagnostic.Message.Contains("output root", StringComparison.OrdinalIgnoreCase));
-        _ = diagnostics.Should().Contain(diagnostic =>
-            diagnostic.Message.Contains("virtual mount root", StringComparison.OrdinalIgnoreCase));
         _ = diagnostics.Should().Contain(diagnostic =>
             diagnostic.Message.Contains("unknown dependency", StringComparison.OrdinalIgnoreCase));
     }

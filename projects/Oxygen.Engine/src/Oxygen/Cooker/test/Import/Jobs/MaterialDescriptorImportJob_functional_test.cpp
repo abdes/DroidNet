@@ -97,7 +97,6 @@ namespace {
       request.job_name = std::string(identity.job_name);
       request.asset_virtual_path = std::string(identity.asset_virtual_path);
       request.cooked_root = cooked_root;
-      request.loose_cooked_layout.virtual_mount_root = "/.cooked";
       request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
         .normalized_descriptor_json = std::move(descriptor_json),
       };
