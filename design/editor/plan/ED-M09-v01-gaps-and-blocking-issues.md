@@ -9,8 +9,8 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: item 17.5**, #121: output folders by rule, with `.imported` and
-`.oxygen` retired; item 17.6 (#75) follows it.
+**Next: item 17.6**, #75: editor source mounts, one `Mounts` list,
+`.mounts.json` and authoring outside the project tree.
 
 | Order | Item                                                                                           | Needs          | State | Commit    |
 | ----- | ---------------------------------------------------------------------------------------------- | -------------- | ----- | --------- |
@@ -38,7 +38,7 @@ holds; its row then names the commit.
 | 17.2  | #81 runtime and tools: source mounts replace script source roots                               | 17             | done  | 4e1f1a103 |
 | 17.3  | #118 full paks pack only referenced resources; re-cooks retire superseded outputs              | 17.1           | done  | c6f6a3eaf |
 | 17.4  | #120 `Examples/Content` as an ordinary Oxygen project                                          | 17.1, 17.2     | done  | b9d53b0fc |
-| 17.5  | #121 output folders by rule; `.imported` and `.oxygen` retired                                 | -              | open  | -         |
+| 17.5  | #121 output folders by rule; `.imported` and `.oxygen` retired                                 | -              | done  | de8885539 |
 | 17.6  | #75 editor source mounts: one `Mounts` list, `.mounts.json`, outside-tree authoring            | 17.1, 17.5     | open  | -         |
 | 18    | #30 RenderDoc past v1.46 for count-buffer `ExecuteIndirect` captures                           | -              | open  | -         |
 | 19    | #109 per-view draw bounds and the viewport Show menu                                           | -              | open  | -         |
