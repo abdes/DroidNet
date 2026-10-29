@@ -9,8 +9,8 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: item 17.1**, the recorded source identity of #81, on the mount table
-of item 17; items 17.3, 17.4 and 17.6 build on it.
+**Next: item 17.2**, the runtime and tools of #81: source mounts replace
+script source roots; items 17.3, 17.4 and 17.6 build on 17.1.
 
 | Order | Item                                                                                           | Needs          | State | Commit    |
 | ----- | ---------------------------------------------------------------------------------------------- | -------------- | ----- | --------- |
@@ -34,7 +34,7 @@ of item 17; items 17.3, 17.4 and 17.6 build on it.
 | 16.2  | Imported tangent frames: reference MikkTSpace, unusable authored frames replaced               | 16             | done  | e43c7a5ea |
 | 16.3  | Texture Coordinates and Tangent Frame Check view modes in the editor viewport                  | 16             | done  | 3cf8098b8 |
 | 17    | #81 engine mount contract: mount table, `.mounts.json` hierarchy, mount rules                  | -              | done  | e45f81c4b |
-| 17.1  | #81 recorded source identity: mount paths, loose cooked index 6 → 7                            | 17             | open  | -         |
+| 17.1  | #81 recorded source identity: mount paths, loose cooked index 6 → 7                            | 17             | done  | 9c1551764 |
 | 17.2  | #81 runtime and tools: source mounts replace script source roots                               | 17             | open  | -         |
 | 17.3  | #118 full paks pack only referenced resources; re-cooks retire superseded outputs              | 17.1           | open  | -         |
 | 17.4  | #120 `Examples/Content` as an ordinary Oxygen project                                          | 17.1, 17.2     | open  | -         |
