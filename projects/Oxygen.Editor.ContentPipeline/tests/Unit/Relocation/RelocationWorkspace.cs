@@ -10,9 +10,12 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Models;
+using Oxygen.Editor.Models.Testing;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
@@ -76,6 +79,38 @@ internal sealed partial class RelocationWorkspace : IDisposable
         return path;
     }
 
+    /// <summary>Writes a scene as the editor saves it, through the production serializer.</summary>
+    /// <param name="relative">The scene file, relative to the project.</param>
+    /// <param name="scene">The scene.</param>
+    /// <param name="token">The cancellation token.</param>
+    /// <returns>The scene file's full path.</returns>
+    public async Task<string> WriteSceneAsync(string relative, Scene scene, CancellationToken token)
+    {
+        var stream = new MemoryStream();
+        await using (stream.ConfigureAwait(false))
+        {
+            await SceneSerializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+            var path = this.PathOf(relative);
+            _ = this.FileSystem.Directory.CreateDirectory(this.FileSystem.Path.GetDirectoryName(path)!);
+            await this.FileSystem.File.WriteAllBytesAsync(path, stream.ToArray(), token).ConfigureAwait(false);
+            return path;
+        }
+    }
+
+    /// <summary>Reads a scene file back through the production serializer.</summary>
+    /// <param name="relative">The scene file, relative to the project.</param>
+    /// <param name="token">The cancellation token.</param>
+    /// <returns>The scene as it is now.</returns>
+    public async Task<Scene> ReadSceneAsync(string relative, CancellationToken token)
+    {
+        var bytes = await this.FileSystem.File.ReadAllBytesAsync(this.PathOf(relative), token).ConfigureAwait(false);
+        var stream = new MemoryStream(bytes);
+        await using (stream.ConfigureAwait(false))
+        {
+            return await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        }
+    }
+
     public string Read(string relative) => this.FileSystem.File.ReadAllText(this.PathOf(relative));
 
     public JsonNode ReadJson(string relative) => JsonNode.Parse(this.Read(relative))!;
@@ -130,19 +165,17 @@ internal sealed partial class RelocationWorkspace : IDisposable
     /// <returns>The model's import record.</returns>
     public ModelImportSettings WriteModel(string bundle, string primary)
     {
-        var source = this.Write(bundle + "/" + primary, "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"uri\":\"mesh.bin\"}]}");
+        _ = this.Write(bundle + "/" + primary, "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"uri\":\"mesh.bin\"}]}");
         _ = this.Write(bundle + "/mesh.bin", "bin");
-        var recordPath = ModelImportSettings.PathFor(this.Root, "/" + bundle + "/" + primary);
-        var record = ModelImportSettings.Create(
-            recordPath,
+        var record = ModelRecords.Create(
+            this.Project,
             "/" + bundle + "/" + primary,
             "/" + bundle + "/" + primary,
             ModelImportSettings.DefaultSettings(Path.GetFileNameWithoutExtension(primary))) with
         {
             SourceFingerprint = new(2, new string('a', 64), [new("mesh.bin", 3, new string('b', 64))]),
         };
-        _ = this.FileSystem.Directory.CreateDirectory(this.FileSystem.Path.GetDirectoryName(recordPath)!);
-        this.FileSystem.File.WriteAllBytes(recordPath, record.ToBytes());
+        _ = ModelRecords.Write(this.Project, record);
         return record;
     }
 

@@ -4,10 +4,12 @@
 
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Authoring;
 using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Tests;
@@ -15,7 +17,14 @@ namespace Oxygen.Managed.Assets.Tests;
 [TestClass]
 public sealed class InputSourceTests
 {
-    private const string Player = """
+    private const string FireIdentity = "/Content/Input/Common.input/Fire.oiact";
+
+    private static readonly AssetPath Source = AssetPath.Parse("/Content/Input/Player.input");
+
+    private static readonly string FireAction = AuthoredFiles.Input(Source.VirtualPath).ActionReference(FireIdentity);
+
+    // The positions asserted below depend on this text, so it stays hand-laid; the Fire reference is still spelled by the kit.
+    private static readonly string Player = $$"""
         {
           // Comments and trailing commas are accepted, as the cooker accepts them.
           "actions": [
@@ -28,7 +37,7 @@ public sealed class InputSourceTests
               "priority": 3,
               "mappings": [
                 { "action": "Jump", "slot": "Space", "trigger": "pressed" },
-                { "action": "/Content/Input/Common.input/Fire.oiact", "slot": "F" },
+                { "action": "{{FireAction}}", "slot": "F" },
                 {
                   "action": "Move",
                   "slot": "W",
@@ -42,8 +51,6 @@ public sealed class InputSourceTests
           ]
         }
         """;
-
-    private static readonly AssetPath Source = AssetPath.Parse("/Content/Input/Player.input");
 
     [TestMethod]
     public void ReadDeclaresActionsAndContextsWithTheirPositions()
@@ -67,10 +74,10 @@ public sealed class InputSourceTests
         var source = InputSourceReader.Read(Encoding.UTF8.GetBytes(Player));
 
         _ = source.ActionReferences.Select(static reference => reference.Text).Should().Equal(
-            "Jump", "/Content/Input/Common.input/Fire.oiact", "Move", "Jump", "Jump");
+            "Jump", FireAction, "Move", "Jump", "Jump");
         _ = source.ActionReferences.First().Position.Should().Be(new SourcePosition(12, 21));
         var actions = source.ActionReferences.Select(reference => reference.TryGetAction(Source, out var action) ? action.VirtualPath : null);
-        _ = actions.Should().StartWith(["/Content/Input/Player.input/Jump.oiact", "/Content/Input/Common.input/Fire.oiact"]);
+        _ = actions.Should().StartWith(["/Content/Input/Player.input/Jump.oiact", FireIdentity]);
     }
 
     [TestMethod]
@@ -141,19 +148,19 @@ public sealed class InputSourceTests
     [TestMethod]
     public void RenamingAnActionRenamesItsLocalReferences()
     {
-        var renamed = InputSourceWriter.RenameProduct(Encoding.UTF8.GetBytes(Player), AssetFileTypes.InputAction, "Jump", "Leap");
+        var renamed = InputSourceWriter.RenameProduct(PlayerDocument().Bytes, AssetFileTypes.InputAction, "Jump", "Leap");
 
         var source = InputSourceReader.Read(JsonSerializer.SerializeToUtf8Bytes(renamed));
         _ = source.Actions.Select(static action => action.Name).Should().Equal("Leap", "Move");
         _ = source.ActionReferences.Select(static reference => reference.Text).Should().Equal(
-            "Leap", "/Content/Input/Common.input/Fire.oiact", "Move", "Leap", "Leap");
+            "Leap", FireAction, "Move", "Leap", "Leap");
         _ = renamed["contexts"]![0]!["priority"]!.GetValue<int>().Should().Be(3);
     }
 
     [TestMethod]
     public void RenamingAContextKeepsTheActions()
     {
-        var renamed = InputSourceWriter.RenameProduct(Encoding.UTF8.GetBytes(Player), AssetFileTypes.InputMappingContext, "OnFoot", "Driving");
+        var renamed = InputSourceWriter.RenameProduct(PlayerDocument().Bytes, AssetFileTypes.InputMappingContext, "OnFoot", "Driving");
 
         var source = InputSourceReader.Read(JsonSerializer.SerializeToUtf8Bytes(renamed));
         _ = source.Contexts.Select(static context => context.Name).Should().Equal("Driving");
@@ -166,8 +173,28 @@ public sealed class InputSourceTests
     [DataRow("Jump", "Le:ap", "vpath.segment.reserved_character")]
     public void ARenameTheSourceCannotTakeIsRefused(string name, string newName, string code)
     {
-        var refuse = () => InputSourceWriter.RenameProduct(Encoding.UTF8.GetBytes(Player), AssetFileTypes.InputAction, name, newName);
+        var refuse = () => InputSourceWriter.RenameProduct(PlayerDocument().Bytes, AssetFileTypes.InputAction, name, newName);
 
         _ = refuse.Should().Throw<AssetFormatException>().Which.Problem.Code.Should().Be(code);
+    }
+
+    private static InputDocument PlayerDocument()
+    {
+        var player = AuthoredFiles.Input(Source.VirtualPath);
+        _ = player.Append("/actions", new JsonObject { ["name"] = "Jump", ["type"] = "bool", ["consumes_input"] = true });
+        _ = player.Append("/actions", new JsonObject { ["name"] = "Move", ["type"] = "axis2d", ["accumulation"] = "cumulative" });
+        _ = player.Context("OnFoot", priority: 3);
+        _ = player.Append("/contexts/0/mappings", new JsonObject { ["action"] = "Jump", ["slot"] = "Space", ["trigger"] = "pressed" });
+        _ = player.Append("/contexts/0/mappings", new JsonObject { ["action"] = FireAction, ["slot"] = "F" });
+        return player.Append(
+            "/contexts/0/mappings",
+            new JsonObject
+            {
+                ["action"] = "Move",
+                ["slot"] = "W",
+                ["triggers"] = new JsonArray(
+                    new JsonObject { ["type"] = "chord", ["chord_action"] = "Jump" },
+                    new JsonObject { ["type"] = "combo", ["combo_actions"] = new JsonArray(new JsonObject { ["action"] = "Jump" }) }),
+            });
     }
 }

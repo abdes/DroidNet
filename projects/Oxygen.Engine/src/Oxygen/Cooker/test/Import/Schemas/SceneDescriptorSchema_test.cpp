@@ -16,15 +16,15 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
-#include <Oxygen/Cooker/test/Support/SceneDescriptorTestData.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 using nlohmann::json;
-using oxygen::content::import::test::MakeCurrentSceneDescriptor;
 using oxygen::cooker::test::LoadSchema;
+using oxygen::cooker::test::SceneDescriptor;
 using oxygen::cooker::test::SchemaCase;
 using oxygen::cooker::test::ValidateJson;
 using ::testing::Contains;
@@ -38,14 +38,105 @@ auto Schema() -> const json&
   return schema;
 }
 
-// The documents in the table below spell out `"version": 15`; this test fails
-// loudly when the schema and the scene asset version drift apart.
+//! A current scene named `name` with one root node.
+auto Scene(const std::string_view name) -> SceneDescriptor
+{
+  return SceneDescriptor { "/Content/Scenes/" + std::string { name }
+    + ".scene" };
+}
+
+// This test fails loudly when the schema and the scene asset version drift
+// apart.
 NOLINT_TEST(SceneDescriptorSchemaTest, SchemaVersionMatchesSceneAssetVersion)
 {
   EXPECT_EQ(Schema().at("properties").at("version").at("const"),
-    MakeCurrentSceneDescriptor("{}").at("version"));
+    Scene("Any").Json().at("version"));
   EXPECT_EQ(Schema().at("properties").at("version").at("const"), 15);
 }
+
+//! The environment of the fog scene, without its texture references.
+constexpr auto kFogEnvironment = R"JSON({
+  "sky_atmosphere": {
+    "enabled": true,
+    "planet_radius_m": 6360000.0,
+    "atmosphere_height_m": 80000.0,
+    "ground_albedo_rgb": [0.1, 0.1, 0.1],
+    "rayleigh_scattering_rgb": [0.0000058, 0.0000135, 0.0000331],
+    "rayleigh_scale_height_m": 8000.0,
+    "mie_scattering_rgb": [0.000021, 0.000021, 0.000021],
+    "mie_absorption_rgb": [0.000004, 0.000004, 0.000004],
+    "mie_scale_height_m": 1200.0,
+    "mie_anisotropy": 0.8,
+    "ozone_absorption_rgb": [0.00065, 0.001881, 0.000085],
+    "ozone_density_profile": [25000.0, 0.0, 0.0],
+    "multi_scattering_factor": 1.0,
+    "sky_luminance_factor_rgb": [1.0, 1.0, 1.0],
+    "sky_and_aerial_perspective_luminance_factor_rgb": [1.0, 1.0, 1.0],
+    "aerial_perspective_distance_scale": 1.0,
+    "aerial_scattering_strength": 1.0,
+    "aerial_perspective_start_depth_m": 100.0,
+    "height_fog_contribution": 1.0,
+    "trace_sample_count_scale": 1.0,
+    "transmittance_min_light_elevation_deg": -90.0,
+    "sun_disk_enabled": true,
+    "holdout": false,
+    "render_in_main_pass": true
+  },
+  "fog": {
+    "enabled": true,
+    "model": 1,
+    "extinction_sigma_t_per_m": 0.01,
+    "height_falloff_per_m": 0.2,
+    "height_offset_m": 0.0,
+    "start_distance_m": 0.0,
+    "max_opacity": 1.0,
+    "single_scattering_albedo_rgb": [1.0, 1.0, 1.0],
+    "anisotropy_g": 0.2,
+    "enable_height_fog": true,
+    "enable_volumetric_fog": true,
+    "second_fog_density": 0.02,
+    "second_fog_height_falloff": 0.1,
+    "second_fog_height_offset": 10.0,
+    "fog_inscattering_luminance": [1.0, 1.0, 1.0],
+    "sky_atmosphere_ambient_contribution_color_scale": [1.0, 1.0, 1.0],
+    "inscattering_color_cubemap_angle": 0.0,
+    "inscattering_texture_tint": [1.0, 1.0, 1.0],
+    "fully_directional_inscattering_color_distance": 1000.0,
+    "non_directional_inscattering_color_distance": 500.0,
+    "directional_inscattering_luminance": [1.0, 1.0, 1.0],
+    "directional_inscattering_exponent": 4.0,
+    "directional_inscattering_start_distance": 50.0,
+    "end_distance_m": 5000.0,
+    "fog_cutoff_distance_m": 6000.0,
+    "volumetric_fog_scattering_distribution": 0.5,
+    "volumetric_fog_albedo": [0.8, 0.8, 0.8],
+    "volumetric_fog_emissive": [0.0, 0.0, 0.0],
+    "volumetric_fog_extinction_scale": 1.0,
+    "volumetric_fog_distance": 1000.0,
+    "volumetric_fog_start_distance": 0.0,
+    "volumetric_fog_near_fade_in_distance": 10.0,
+    "volumetric_fog_static_lighting_scattering_intensity": 1.0,
+    "override_light_colors_with_fog_inscattering_colors": false,
+    "holdout": false,
+    "render_in_main_pass": true,
+    "visible_in_reflection_captures": true,
+    "visible_in_real_time_sky_captures": true
+  },
+  "sky_light": {
+    "enabled": true,
+    "source": 1,
+    "intensity": 1.0,
+    "tint_rgb": [1.0, 1.0, 1.0],
+    "diffuse_intensity": 1.0,
+    "specular_intensity": 1.0,
+    "source_cubemap_angle_radians": 0.25,
+    "lower_hemisphere_color": [0.1, 0.1, 0.2],
+    "lower_hemisphere_is_solid_color": true,
+    "lower_hemisphere_blend_alpha": 1.0,
+    "volumetric_scattering_intensity": 0.5,
+    "affect_reflections": true
+  }
+})JSON";
 
 class SceneDescriptorSchemaCaseTest
   : public ::testing::TestWithParam<SchemaCase> { };
@@ -59,227 +150,127 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
   ::testing::Values(
     SchemaCase {
       "AcceptsNameFollowingTheSegmentRule",
-      R"j({ "version": 15, "name": "Level 1.v2 (copy)", "nodes": [{ "id": "00000000-0000-4000-8000-000000000001" }] })j",
+      Scene("Level").Set("/name", "Level 1.v2 (copy)").Text(),
       true,
       "",
     },
     SchemaCase {
       "RejectsNameWithReservedCharacter",
-      R"j({ "version": 15, "name": "Level:1", "nodes": [{ "id": "00000000-0000-4000-8000-000000000001" }] })j",
+      Scene("Level").Set("/name", "Level:1").Text(),
       false,
       "does not match regex pattern",
     },
     SchemaCase {
       "AcceptsCanonicalDocument",
-      R"({ "version": 15,
-    "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
-    "name": "DemoScene",
-    "nodes": [
-      { "id": "00000000-0000-4000-8000-000000000001", "name": "Root",
-        "transform": { "translation": [0, 0, 0] } },
-      { "id": "00000000-0000-4000-8000-000000000002", "name": "MeshNode", "parent": 0, "transform": { "translation": [1, 0, 0] } }
-    ],
-    "renderables": [
-      { "node": 1, "geometry_ref": "/.cooked/Geometry/cube.ogeo",
-        "overrides": {
-          "values": { "/lod_policy": { "type": "fixed", "lod_index": 1 } },
-          "parts": [{
-            "kind": "surface",
-            "id": "00000000-0000-0000-0000-000000000001",
-            "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001",
-            "values": {
-              "/material": "/.cooked/Materials/cube.omat",
-              "/visible": false,
-              "/casts_shadows": true
-            }
-          }]
-        }
-      }
-    ],
-    "cameras": {
-      "perspective": [
-        { "node": 0, "aspect_mode": "auto", "fov_y": 1.2, "near_plane": 0.1, "far_plane": 500.0 }
-      ]
-    },
-    "lights": {
-      "directional": [
-        { "node": 0, "common": { "casts_shadows": true }, "intensity_lux": 10000.0 }
-      ]
-    },
-    "references": {
-      "scripts": ["/.cooked/Scripts/spin.oscript"],
-      "input_actions": ["/.cooked/Input/jump.oiact"],
-      "input_mapping_contexts": ["/.cooked/Input/gameplay.oimap"],
-      "physics_sidecars": ["/.cooked/Scenes/DemoScene.opscene"]
-    }
-  })",
+      Scene("DemoScene")
+        .Set("/$schema",
+          "./src/Oxygen/Cooker/Import/Schemas/"
+          "oxygen.scene-descriptor.schema.json")
+        .Set("/nodes/0/transform/translation", json::array({ 0, 0, 0 }))
+        .Append("/nodes", json::parse(R"({
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "MeshNode",
+            "parent": 0,
+            "transform": { "translation": [1, 0, 0] }
+          })"))
+        .Renderable(1, "/.cooked/Geometry/cube.ogeo")
+        .Set("/renderables/0/overrides", json::parse(R"({
+            "values": { "/lod_policy": { "type": "fixed", "lod_index": 1 } },
+            "parts": [{
+              "kind": "surface",
+              "id": "00000000-0000-0000-0000-000000000001",
+              "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001",
+              "values": { "/visible": false, "/casts_shadows": true }
+            }]
+          })"))
+        .Reference("/renderables/0/overrides/parts/0/values/~1material",
+          "/.cooked/Materials/cube.omat")
+        .Set("/cameras/perspective", json::parse(R"([
+            { "node": 0, "aspect_mode": "auto", "fov_y": 1.2, "near_plane": 0.1, "far_plane": 500.0 }
+          ])"))
+        .Set("/lights/directional", json::parse(R"([
+            { "node": 0, "common": { "casts_shadows": true }, "intensity_lux": 10000.0 }
+          ])"))
+        .AppendReference("/references/scripts", "/.cooked/Scripts/spin.oscript")
+        .AppendReference(
+          "/references/input_actions", "/.cooked/Input/jump.oiact")
+        .AppendReference(
+          "/references/input_mapping_contexts", "/.cooked/Input/gameplay.oimap")
+        .AppendReference(
+          "/references/physics_sidecars", "/.cooked/Scenes/DemoScene.opscene")
+        .Text(),
       true,
       "",
     },
     SchemaCase {
       "RejectsAnOverrideKeyItsOwnerDoesNotHave",
-      R"({ "version": 15,
-    "name": "BadScene",
-    "nodes": [ { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" } ],
-    "renderables": [
-      { "node": 0, "geometry_ref": "/.cooked/Geometry/cube.ogeo",
-        "overrides": { "values": { "/visible": false } } }
-    ]
-  })",
+      Scene("BadScene")
+        .Renderable(0, "/.cooked/Geometry/cube.ogeo")
+        .Set("/renderables/0/overrides/values/~1visible", false)
+        .Text(),
       false,
       "/renderables/0/overrides/values",
     },
     SchemaCase {
       "RejectsUnknownNestedFields",
-      R"({ "version": 15,
-    "name": "BadScene",
-    "nodes": [ { "id": "00000000-0000-4000-8000-000000000001", "name": "Root", "unknown_field": true } ]
-  })",
+      Scene("BadScene").Set("/nodes/0/unknown_field", true).Text(),
       false,
       "'unknown_field'",
     },
     SchemaCase {
       "AcceptsDirectionalShadowTuningFields",
-      R"({ "version": 15,
-    "name": "TunedScene",
-    "nodes": [
-      { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" }
-    ],
-    "lights": {
-      "directional": [
-        {
-          "node": 0,
-          "common": { "casts_shadows": true },
-          "cascade_count": 4,
-          "split_mode": 0,
-          "max_shadow_distance": 160.0,
-          "distribution_exponent": 3.0,
-          "transition_fraction": 0.1,
-          "distance_fadeout_fraction": 0.1,
-          "intensity_lux": 10000.0
-        }
-      ]
-    }
-  })",
+      Scene("TunedScene")
+        .Set("/lights/directional", json::parse(R"([
+            {
+              "node": 0,
+              "common": { "casts_shadows": true },
+              "cascade_count": 4,
+              "split_mode": 0,
+              "max_shadow_distance": 160.0,
+              "distribution_exponent": 3.0,
+              "transition_fraction": 0.1,
+              "distance_fadeout_fraction": 0.1,
+              "intensity_lux": 10000.0
+            }
+          ])"))
+        .Text(),
       true,
       "",
     },
     SchemaCase {
       "AcceptsCurrentEnvironmentAndLocalFogShape",
-      R"({ "version": 15,
-    "name": "FogScene",
-    "nodes": [
-      { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" },
-      { "id": "00000000-0000-4000-8000-000000000002", "name": "FogVolumeNode", "parent": 0 }
-    ],
-    "environment": {
-      "sky_atmosphere": {
-        "enabled": true,
-        "planet_radius_m": 6360000.0,
-        "atmosphere_height_m": 80000.0,
-        "ground_albedo_rgb": [0.1, 0.1, 0.1],
-        "rayleigh_scattering_rgb": [0.0000058, 0.0000135, 0.0000331],
-        "rayleigh_scale_height_m": 8000.0,
-        "mie_scattering_rgb": [0.000021, 0.000021, 0.000021],
-        "mie_absorption_rgb": [0.000004, 0.000004, 0.000004],
-        "mie_scale_height_m": 1200.0,
-        "mie_anisotropy": 0.8,
-        "ozone_absorption_rgb": [0.00065, 0.001881, 0.000085],
-        "ozone_density_profile": [25000.0, 0.0, 0.0],
-        "multi_scattering_factor": 1.0,
-        "sky_luminance_factor_rgb": [1.0, 1.0, 1.0],
-        "sky_and_aerial_perspective_luminance_factor_rgb": [1.0, 1.0, 1.0],
-        "aerial_perspective_distance_scale": 1.0,
-        "aerial_scattering_strength": 1.0,
-        "aerial_perspective_start_depth_m": 100.0,
-        "height_fog_contribution": 1.0,
-        "trace_sample_count_scale": 1.0,
-        "transmittance_min_light_elevation_deg": -90.0,
-        "sun_disk_enabled": true,
-        "holdout": false,
-        "render_in_main_pass": true
-      },
-      "fog": {
-        "enabled": true,
-        "model": 1,
-        "extinction_sigma_t_per_m": 0.01,
-        "height_falloff_per_m": 0.2,
-        "height_offset_m": 0.0,
-        "start_distance_m": 0.0,
-        "max_opacity": 1.0,
-        "single_scattering_albedo_rgb": [1.0, 1.0, 1.0],
-        "anisotropy_g": 0.2,
-        "enable_height_fog": true,
-        "enable_volumetric_fog": true,
-        "second_fog_density": 0.02,
-        "second_fog_height_falloff": 0.1,
-        "second_fog_height_offset": 10.0,
-        "fog_inscattering_luminance": [1.0, 1.0, 1.0],
-        "sky_atmosphere_ambient_contribution_color_scale": [1.0, 1.0, 1.0],
-        "inscattering_color_cubemap_ref": "/.cooked/Textures/fog_probe.otex",
-        "inscattering_color_cubemap_angle": 0.0,
-        "inscattering_texture_tint": [1.0, 1.0, 1.0],
-        "fully_directional_inscattering_color_distance": 1000.0,
-        "non_directional_inscattering_color_distance": 500.0,
-        "directional_inscattering_luminance": [1.0, 1.0, 1.0],
-        "directional_inscattering_exponent": 4.0,
-        "directional_inscattering_start_distance": 50.0,
-        "end_distance_m": 5000.0,
-        "fog_cutoff_distance_m": 6000.0,
-        "volumetric_fog_scattering_distribution": 0.5,
-        "volumetric_fog_albedo": [0.8, 0.8, 0.8],
-        "volumetric_fog_emissive": [0.0, 0.0, 0.0],
-        "volumetric_fog_extinction_scale": 1.0,
-        "volumetric_fog_distance": 1000.0,
-        "volumetric_fog_start_distance": 0.0,
-        "volumetric_fog_near_fade_in_distance": 10.0,
-        "volumetric_fog_static_lighting_scattering_intensity": 1.0,
-        "override_light_colors_with_fog_inscattering_colors": false,
-        "holdout": false,
-        "render_in_main_pass": true,
-        "visible_in_reflection_captures": true,
-        "visible_in_real_time_sky_captures": true
-      },
-      "sky_light": {
-        "enabled": true,
-        "source": 1,
-        "cubemap_ref": "/.cooked/Textures/sky_probe.otex",
-        "intensity": 1.0,
-        "tint_rgb": [1.0, 1.0, 1.0],
-        "diffuse_intensity": 1.0,
-        "specular_intensity": 1.0,
-        "source_cubemap_angle_radians": 0.25,
-        "lower_hemisphere_color": [0.1, 0.1, 0.2],
-        "lower_hemisphere_is_solid_color": true,
-        "lower_hemisphere_blend_alpha": 1.0,
-        "volumetric_scattering_intensity": 0.5,
-        "affect_reflections": true
-      }
-    },
-    "local_fog_volumes": [
-      {
-        "node": 1,
-        "enabled": true,
-        "radial_fog_extinction": 0.3,
-        "height_fog_extinction": 0.2,
-        "height_fog_falloff": 0.15,
-        "height_fog_offset": 1.25,
-        "fog_phase_g": 0.4,
-        "fog_albedo": [0.7, 0.8, 0.9],
-        "fog_emissive": [0.1, 0.2, 0.3],
-        "sort_priority": 2
-      }
-    ]
-  })",
+      Scene("FogScene")
+        .Append("/nodes", json::parse(R"({
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "FogVolumeNode",
+            "parent": 0
+          })"))
+        .Set("/environment", json::parse(kFogEnvironment))
+        .Reference("/environment/fog/inscattering_color_cubemap_ref",
+          "/.cooked/Textures/fog_probe.otex")
+        .Reference("/environment/sky_light/cubemap_ref",
+          "/.cooked/Textures/sky_probe.otex")
+        .Set("/local_fog_volumes", json::parse(R"([
+            {
+              "node": 1,
+              "enabled": true,
+              "radial_fog_extinction": 0.3,
+              "height_fog_extinction": 0.2,
+              "height_fog_falloff": 0.15,
+              "height_fog_offset": 1.25,
+              "fog_phase_g": 0.4,
+              "fog_albedo": [0.7, 0.8, 0.9],
+              "fog_emissive": [0.1, 0.2, 0.3],
+              "sort_priority": 2
+            }
+          ])"))
+        .Text(),
       true,
       "",
     },
     SchemaCase {
       "RejectsMissingVersion",
-      R"({
-    "name": "LegacyScene",
-    "nodes": [ { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" } ]
-  })",
+      Scene("LegacyScene").Remove("/version").Text(),
       false,
       "'version'",
     }),
@@ -287,8 +278,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
 
 NOLINT_TEST(SceneDescriptorSchemaTest, NodeFlagSourceModesAreCanonical)
 {
-  auto document = MakeCurrentSceneDescriptor(
-    R"({"name":"Flags","nodes":[{"id":"00000000-0000-4000-8000-000000000001","flags":{}}]})");
+  auto document = Scene("Flags").Set("/nodes/0/flags", json::object()).Json();
   for (const auto& visibility : { "inherit", "shown", "hidden" }) {
     for (const auto& shadow : { "inherit", "on", "off" }) {
       document.at("nodes").at(0).update({
@@ -349,10 +339,9 @@ NOLINT_TEST(SceneDescriptorSchemaTest, NodeFlagSourceModesAreCanonical)
 // An omitted aspect policy takes the scene schema's default.
 NOLINT_TEST(SceneDescriptorSchemaTest, CameraAspectPolicyIsADeclaredMember)
 {
-  auto doc = MakeCurrentSceneDescriptor(R"({
-    "name": "CameraPolicy", "nodes": [{ "id": "00000000-0000-4000-8000-000000000001" }],
-    "cameras": { "perspective": [{ "node": 0 }] }
-  })");
+  auto doc = Scene("CameraPolicy")
+               .Append("/cameras/perspective", json::parse(R"({ "node": 0 })"))
+               .Json();
   EXPECT_THAT(ValidateJson(Schema(), doc), IsEmpty());
   auto& camera = doc.at("cameras").at("perspective").at(0);
   constexpr auto kFixedAspectRatio = 1.5;
@@ -367,16 +356,8 @@ NOLINT_TEST(SceneDescriptorSchemaTest, CameraAspectPolicyIsADeclaredMember)
 NOLINT_TEST(
   SceneDescriptorSchemaTest, PostProcessAndBackgroundRejectInvalidEncodings)
 {
-  const auto base = MakeCurrentSceneDescriptor(R"JSON(
-{
-  "name": "Environment",
-  "nodes": [
-    {
-      "id": "00000000-0000-4000-8000-000000000001",
-      "name": "Root"
-    }
-  ],
-  "environment": {
+  const auto base = Scene("Environment")
+                      .Set("/environment", json::parse(R"JSON({
     "post_process_volume": {
       "tone_mapper": 1,
       "exposure_mode": 2,
@@ -405,15 +386,10 @@ NOLINT_TEST(
     },
     "background": {
       "enabled": true,
-      "color_rgb": [
-        0.05,
-        0.25,
-        0.75
-      ]
+      "color_rgb": [0.05, 0.25, 0.75]
     }
-  }
-}
-)JSON");
+  })JSON"))
+                      .Json();
   EXPECT_THAT(ValidateJson(Schema(), base), IsEmpty());
   for (const auto& pointer : {
          "/environment/post_process_volume/tone_mapper",
@@ -448,15 +424,14 @@ NOLINT_TEST(
 
 NOLINT_TEST(SceneDescriptorSchemaTest, RejectsRetiredCaptureModeAndOldVersion)
 {
-  const auto canonical = MakeCurrentSceneDescriptor(R"({
-    "name": "AutomaticSky", "nodes": [{ "id": "00000000-0000-4000-8000-000000000001" }],
-    "environment": { "sky_light": {
+  const auto canonical = Scene("AutomaticSky")
+                           .Set("/environment/sky_light", json::parse(R"({
       "enabled": true, "source": 0, "intensity": 2.5,
       "tint_rgb": [0.2, 0.4, 0.8], "diffuse_intensity": 0.5,
       "specular_intensity": 1.5, "lower_hemisphere_color": [0.1, 0.2, 0.3],
       "volumetric_scattering_intensity": 0.25, "affect_reflections": true
-    } }
-  })");
+    })"))
+                           .Json();
   EXPECT_THAT(ValidateJson(Schema(), canonical), IsEmpty());
   for (const bool value : { false, true }) {
     auto retired = canonical;
@@ -584,16 +559,15 @@ NOLINT_TEST(SceneDescriptorSchemaTest, ComponentPropertiesAreOptional)
 // property; the schema accepts it as a number.
 NOLINT_TEST(SceneDescriptorSchemaTest, ComponentValuesAreNotRangeChecked)
 {
-  const auto document = MakeCurrentSceneDescriptor(R"({
-    "name": "Ranges", "nodes": [{ "id": "00000000-0000-4000-8000-000000000001" }],
-    "cameras": { "perspective": [
+  const auto document = Scene("Ranges")
+                          .Set("/cameras", json::parse(R"({ "perspective": [
       { "node": 0, "aspect_mode": "auto", "fov_y": 10.0, "near_plane": -1.0, "iso": 0 }
-    ] },
-    "lights": { "point": [
+    ] })"))
+                          .Set("/lights", json::parse(R"({ "point": [
       { "node": 0, "range": 0, "luminous_flux_lm": -5,
         "common": { "color_rgb": [2, 2, 2], "shadow": { "resolution_hint": 9 } } }
-    ] }
-  })");
+    ] })"))
+                          .Json();
   EXPECT_THAT(ValidateJson(Schema(), document), IsEmpty());
 }
 

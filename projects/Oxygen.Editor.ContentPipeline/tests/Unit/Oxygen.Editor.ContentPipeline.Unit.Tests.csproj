@@ -11,32 +11,11 @@
         <ProjectReference Include="../../testing/Oxygen.Editor.ContentPipeline.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Input/testing/Oxygen.Editor.Input.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Models/testing/Oxygen.Editor.Models.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Scripting/testing/Oxygen.Editor.Scripting.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testing/Oxygen.Managed.Assets.Testing.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Core/testing/Oxygen.Managed.Core.Testing.csproj" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions.Testing" />
-        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/test/Assets/Models/static_scalar_triangle.*" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CaptureWorkspace.cs" Link="Support/CaptureWorkspace.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CapturingEngineContentPipelineApi.cs" Link="Support/CapturingEngineContentPipelineApi.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CapturingRunner.cs" Link="Support/CapturingRunner.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CapturingSceneDescriptorGenerator.cs" Link="Support/CapturingSceneDescriptorGenerator.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/ControlledSourceAnalysis.cs" Link="Support/ControlledSourceAnalysis.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CookCoordinatorScenario.cs" Link="Support/CookCoordinatorScenario.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CookScenario.cs" Link="Support/CookScenario.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CookWorkspace.cs" Link="Support/CookWorkspace.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/ProjectLibraries.cs" Link="Support/ProjectLibraries.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/WriterHold.cs" Link="Support/WriterHold.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/FailingWorkerRunner.cs" Link="Support/FailingWorkerRunner.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/FixedCookScopeProvider.cs" Link="Support/FixedCookScopeProvider.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/FixedToolLocator.cs" Link="Support/FixedToolLocator.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/ImportAdapterScenario.cs" Link="Support/ImportAdapterScenario.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/ImportAdapterWorkspace.cs" Link="Support/ImportAdapterWorkspace.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/NativeInventoryFixture.Api.cs" Link="Support/NativeInventoryFixture.Api.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/NativeInventoryFixture.cs" Link="Support/NativeInventoryFixture.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/RetainedModelScenario.cs" Link="Support/RetainedModelScenario.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/SavedSourceScenario.cs" Link="Support/SavedSourceScenario.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/SnapshotScenario.cs" Link="Support/SnapshotScenario.cs" />
     </ItemGroup>
 </Project>

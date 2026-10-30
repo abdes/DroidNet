@@ -16,6 +16,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
@@ -26,11 +27,19 @@ namespace {
   using internal::BufferSource;
   using Json = nlohmann::basic_json<>;
 
+  using oxygen::cooker::test::BufferContainer;
   using oxygen::cooker::test::ContentAndOtherMountTable;
   using oxygen::cooker::test::ContentMountTable;
   using oxygen::cooker::test::DiagnosticSummary;
   using oxygen::cooker::test::HasDiagnosticCode;
   using oxygen::cooker::test::TempDirTest;
+
+  //! The buffer declarations of a geometry descriptor, as the source reads
+  //! them.
+  auto DeclarationsOf(const BufferContainer& container) -> Json
+  {
+    return container.Json().at("buffers");
+  }
 
   //! The project's `Content` mount is the temporary root.
   class BufferSourceTest : public TempDirTest {
@@ -49,12 +58,14 @@ namespace {
 
   NOLINT_TEST_F(BufferSourceTest, SeparatesRawInputFromDeclaredOutputWithoutIo)
   {
-    const auto declarations = Json::parse(R"([{
+    auto container = BufferContainer { "/Content/Geometry/geometry.buffers" };
+    container.AppendBuffer(Json::parse(R"({
       "source":"raw/../vertices.bin",
-      "virtual_path":"/OtherMount/Buffers/vertices.obuf",
       "usage_flags":1,"element_stride":16,"alignment":32,
       "views":[{"name":"triangle","element_offset":0,"element_count":3}]
-    }])");
+    })"),
+      "/OtherMount/Buffers/vertices.obuf");
+    const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto sources = BufferSource::FromDeclarations(
       declarations, "authored/geometry.json", Mounts(), diagnostics);
@@ -74,10 +85,11 @@ namespace {
 
   NOLINT_TEST_F(BufferSourceTest, RejectsDuplicateOutputIdentity)
   {
-    const auto declarations = Json::parse(R"([
-      {"source":"a.bin","virtual_path":"/Content/Buffers/shared.obuf"},
-      {"source":"b.bin","virtual_path":"/Content/Buffers/shared.obuf"}
-    ])");
+    auto container = BufferContainer { "/Content/Geometry/geometry.buffers" };
+    container
+      .AppendBuffer({ { "source", "a.bin" } }, "/Content/Buffers/shared.obuf")
+      .AppendBuffer({ { "source", "b.bin" } }, "/Content/Buffers/shared.obuf");
+    const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(
       declarations, "geometry.json", Mounts(), diagnostics));
@@ -89,10 +101,10 @@ namespace {
 
   NOLINT_TEST_F(BufferSourceTest, RejectsInvalidDeclarationWithSourceLocation)
   {
-    const auto declarations = Json::parse(R"([{
-      "source":"a.bin","virtual_path":"/Content/Buffers/a.obuf",
-      "element_format":256
-    }])");
+    auto container = BufferContainer { "/Content/Geometry/geometry.buffers" };
+    container.AppendBuffer({ { "source", "a.bin" }, { "element_format", 256 } },
+      "/Content/Buffers/a.obuf");
+    const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(
       declarations, "geometry.json", Mounts(), diagnostics, "lod.buffers"));
@@ -105,10 +117,10 @@ namespace {
 
   NOLINT_TEST_F(BufferSourceTest, PreservesFormatDrivenStride)
   {
-    const auto declarations = Json::parse(R"([{
-      "source":"a.bin","virtual_path":"/Content/Buffers/a.obuf",
-      "element_format":1
-    }])");
+    auto container = BufferContainer { "/Content/Geometry/geometry.buffers" };
+    container.AppendBuffer({ { "source", "a.bin" }, { "element_format", 1 } },
+      "/Content/Buffers/a.obuf");
+    const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto sources = BufferSource::FromDeclarations(
       declarations, "geometry.json", Mounts(), diagnostics);
@@ -129,13 +141,16 @@ namespace {
 
   NOLINT_TEST_F(BufferSourceTest, RetainsDuplicateViewDiagnostic)
   {
-    const auto declarations = Json::parse(R"([{
-      "source":"a.bin","virtual_path":"/Content/Buffers/a.obuf",
+    auto container = BufferContainer { "/Content/Geometry/geometry.buffers" };
+    container.AppendBuffer(Json::parse(R"({
+      "source":"a.bin",
       "views":[
         {"name":"surface","element_offset":0,"element_count":3},
         {"name":"surface","element_offset":3,"element_count":3}
       ]
-    }])");
+    })"),
+      "/Content/Buffers/a.obuf");
+    const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(
       declarations, "geometry.json", Mounts(), diagnostics));
@@ -146,10 +161,11 @@ namespace {
 
   NOLINT_TEST_F(BufferSourceTest, ResolvesAMountPathSource)
   {
-    const auto declarations = Json::parse(R"([{
-      "source":"/Content/Images/vertices.bin",
-      "virtual_path":"/Content/Buffers/vertices.obuf"
-    }])");
+    auto container = BufferContainer { "/Content/Geometry/geometry.buffers" };
+    container.AppendBuffer(
+      { { "source", container.Spell("/Content/Images/vertices.bin") } },
+      "/Content/Buffers/vertices.obuf");
+    const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto sources = BufferSource::FromDeclarations(
       declarations, "authored/geometry.json", Mounts(), diagnostics);
@@ -162,10 +178,10 @@ namespace {
 
   NOLINT_TEST_F(BufferSourceTest, RefusesARelativeSourceLeavingItsMount)
   {
-    const auto declarations = Json::parse(R"([{
-      "source":"../Other/vertices.bin",
-      "virtual_path":"/Content/Buffers/vertices.obuf"
-    }])");
+    auto container = BufferContainer { "/Content/Geometry/geometry.buffers" };
+    container.AppendBuffer({ { "source", "../Other/vertices.bin" } },
+      "/Content/Buffers/vertices.obuf");
+    const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto mounts = ContentAndOtherMountTable(TempDir());
     EXPECT_FALSE(BufferSource::FromDeclarations(

@@ -3,9 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text;
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Authoring.Textures;
 using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Tests;
@@ -16,13 +18,12 @@ public sealed class TextureSourceTests
     [TestMethod]
     public void ReadNamesEveryImageTheCookerReads()
     {
-        var texture = TextureSourceReader.Read("""
-            {
-              "virtual_path": "/Content/Textures/Terrain.otex",
-              "source": "Grass.png",
-              "sources": [ { "file": "Rock.png", "layer": 1 }, { "file": "../Shared/Snow.png", "layer": 2, "mip": 0 } ]
-            }
-            """u8);
+        var texture = TextureSourceReader.Read(
+            AuthoredFiles.Texture("/Content/Textures/Terrain.otex", "Grass.png")
+                .WithIdentityField()
+                .Append("/sources", new JsonObject { ["file"] = "Rock.png", ["layer"] = 1 })
+                .Append("/sources", new JsonObject { ["file"] = "../Shared/Snow.png", ["layer"] = 2, ["mip"] = 0 })
+                .Bytes);
 
         _ = texture.Images.Should().Equal("Grass.png", "Rock.png", "../Shared/Snow.png");
         _ = texture.Sources[1].Should().Be(new TextureSourceMapping("../Shared/Snow.png") { Layer = 2, Mip = 0 });
@@ -108,21 +109,19 @@ public sealed class TextureSourceTests
 
     [TestMethod]
     public void ReadAcceptsAByteOrderMark()
-        => _ = TextureSourceReader.Read([.. Encoding.UTF8.Preamble, .. """{ "source": "Wood.png" }"""u8]).Source.Should().Be("Wood.png");
+        => _ = TextureSourceReader.Read([.. Encoding.UTF8.Preamble, .. AuthoredFiles.Texture("/Content/Textures/Wood.otex", "Wood.png").Bytes]).Source.Should().Be("Wood.png");
 
     [TestMethod]
     public void WriteKeepsTheFieldsTheModelDoesNotName()
     {
-        var texture = TextureSourceReader.Read("""
-            {
-              "name": "Wood",
-              "source": "Wood.png",
-              "intent": "albedo",
-              "decode": { "color_space": "srgb", "flip_y": true },
-              "mips": { "policy": "full", "filter": "kaiser" },
-              "output": { "format": "bc7_srgb", "bc7_quality": "high" }
-            }
-            """u8);
+        var texture = TextureSourceReader.Read(
+            AuthoredFiles.Texture("/Content/Textures/Wood.otex", "Wood.png")
+                .Set("/name", "Wood")
+                .Set("/intent", "albedo")
+                .Set("/decode", JsonNode.Parse("""{ "color_space": "srgb", "flip_y": true }"""))
+                .Set("/mips", JsonNode.Parse("""{ "policy": "full", "filter": "kaiser" }"""))
+                .Set("/output", JsonNode.Parse("""{ "format": "bc7_srgb", "bc7_quality": "high" }"""))
+                .Bytes);
 
         var written = TextureSourceWriter.ToJson(texture with { Source = "../Wood.png", Format = "rgba8_srgb", ColorSpace = null });
 
@@ -163,7 +162,10 @@ public sealed class TextureSourceTests
     [TestMethod]
     public void WriteDropsTheCubeOfATextureThatIsNoLongerOne()
     {
-        var texture = TextureSourceReader.Read("""{ "source": "Sky.hdr", "cube": { "equirect_to_cube": true, "cube_face_size": 256 } }"""u8);
+        var texture = TextureSourceReader.Read(
+            AuthoredFiles.Texture("/Content/Textures/Sky.otex", "Sky.hdr")
+                .Set("/cube", JsonNode.Parse("""{ "equirect_to_cube": true, "cube_face_size": 256 }"""))
+                .Bytes);
 
         _ = TextureSourceWriter.ToJson(texture with { Cube = null }).ContainsKey("cube").Should().BeFalse();
     }

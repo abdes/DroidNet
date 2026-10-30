@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/LodPolicyValidation.h>
@@ -36,6 +37,7 @@ namespace oxygen::content::import::test {
 namespace {
   using internal::GeometrySource;
   using oxygen::cooker::test::ContentMountTable;
+  using oxygen::cooker::test::GeometryDescriptor;
   using oxygen::cooker::test::TempDirTest;
 
   //! The project's `Content` mount is the temporary root.
@@ -56,25 +58,24 @@ namespace {
   //! A sphere resolution far beyond any generator limit.
   constexpr auto kHugeSegmentCount = 1'000'000;
 
-  auto MakeDescriptor() -> nlohmann::json
+  //! A standard-mesh geometry with one LOD, one submesh and one raw buffer.
+  auto MakeDescriptor() -> GeometryDescriptor
   {
-    return nlohmann::json::parse(R"({
-      "name":"Geometry.v2","content_hashing":false,
-      "bounds":{"min":[-1,-1,-1],"max":[1,1,1]},
-      "buffers":[{"uri":"raw/vertices.bin",
-        "virtual_path":"/Content/Buffers/vertices.obuf"}],
-      "lods":[{
-        "name":"LOD0","mesh_type":"standard",
-        "bounds":{"min":[-1,-1,-1],"max":[1,1,1]},
-        "buffers":{"vb_ref":"/Content/Buffers/vertices.obuf",
-          "ib_ref":"/Shared/Buffers/indices.obuf"},
-        "submeshes":[{
-          "surface_id":"018f8f8f-1111-7111-8111-111111111111",
-          "material_ref":"/Content/Materials/stone.omat",
-          "views":[{"view_ref":"surface"}]
-        }]
-      }]
-    })");
+    auto geometry = GeometryDescriptor { "/Content/Geometry/Geometry.v2.ogeo" };
+    geometry.Set("/content_hashing", false)
+      .Set(
+        "/bounds", nlohmann::json::parse(R"({"min":[-1,-1,-1],"max":[1,1,1]})"))
+      .AppendBuffer(
+        { { "uri", "raw/vertices.bin" } }, "/Content/Buffers/vertices.obuf")
+      .Remove("/lods/0/procedural")
+      .Set("/lods/0/mesh_type", "standard")
+      .Set("/lods/0/bounds",
+        nlohmann::json::parse(R"({"min":[-1,-1,-1],"max":[1,1,1]})"))
+      .Reference("/lods/0/buffers/vb_ref", "/Content/Buffers/vertices.obuf")
+      .Reference("/lods/0/buffers/ib_ref", "/Shared/Buffers/indices.obuf")
+      .SubmeshMaterial(0, 0, "/Content/Materials/stone.omat")
+      .Set("/lods/0/submeshes/0/views/0/view_ref", "surface");
+    return geometry;
   }
 
   NOLINT_TEST_F(
@@ -82,7 +83,7 @@ namespace {
   {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      MakeDescriptor().dump(), "authored/geometry.json", Mounts(), diagnostics);
+      MakeDescriptor().Text(), "authored/geometry.json", Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     EXPECT_EQ(source->name, "Geometry.v2");
@@ -120,17 +121,11 @@ namespace {
   NOLINT_TEST_F(GeometrySourceTest, RetainsAuthoredViewBounds)
   {
     auto document = MakeDescriptor();
-    document.at("lods")
-      .at(0)
-      .at("submeshes")
-      .at(0)
-      .at("views")
-      .at(0)
-      .emplace(
-        "bounds", nlohmann::json::parse(R"({"min":[0,0,0],"max":[1,0.5,1]})"));
+    document.Set("/lods/0/submeshes/0/views/0/bounds",
+      nlohmann::json::parse(R"({"min":[0,0,0],"max":[1,0.5,1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics);
+      document.Text(), "geometry.json", Mounts(), diagnostics);
     if (!source.has_value()) {
       FAIL() << "Expected source to contain a value";
     }
@@ -143,15 +138,11 @@ namespace {
   NOLINT_TEST_F(GeometrySourceTest, RejectsSubmeshBoundsOutsideTheLod)
   {
     auto document = MakeDescriptor();
-    document.at("lods")
-      .at(0)
-      .at("submeshes")
-      .at(0)
-      .emplace(
-        "bounds", nlohmann::json::parse(R"({"min":[0,0,0],"max":[2,1,1]})"));
+    document.Set("/lods/0/submeshes/0/bounds",
+      nlohmann::json::parse(R"({"min":[0,0,0],"max":[2,1,1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics));
+      document.Text(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "geometry.descriptor.submesh_bounds_invalid";
@@ -162,10 +153,10 @@ namespace {
   NOLINT_TEST_F(GeometrySourceTest, GeometryBoundsAreOptional)
   {
     auto document = MakeDescriptor();
-    document.erase("bounds");
+    document.Remove("/bounds");
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics);
+      document.Text(), "geometry.json", Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     EXPECT_FALSE(source->bounds.has_value());
   }
@@ -173,17 +164,11 @@ namespace {
   NOLINT_TEST_F(GeometrySourceTest, RejectsViewBoundsOutsideTheSubmesh)
   {
     auto document = MakeDescriptor();
-    document.at("lods")
-      .at(0)
-      .at("submeshes")
-      .at(0)
-      .at("views")
-      .at(0)
-      .emplace(
-        "bounds", nlohmann::json::parse(R"({"min":[0,0,0],"max":[2,1,1]})"));
+    document.Set("/lods/0/submeshes/0/views/0/bounds",
+      nlohmann::json::parse(R"({"min":[0,0,0],"max":[2,1,1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics));
+      document.Text(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "geometry.descriptor.view_bounds_invalid";
@@ -193,22 +178,23 @@ namespace {
   NOLINT_TEST_F(GeometrySourceTest, RetainsAllSkinningReferences)
   {
     auto document = MakeDescriptor();
-    auto& lod = document.at("lods").at(0);
-    lod.at("mesh_type") = "skinned";
-    lod.emplace("skinning",
-      nlohmann::json {
-        { "joint_index_ref", "/Content/Buffers/joints.obuf" },
-        { "joint_weight_ref", "/Content/Buffers/weights.obuf" },
-        { "inverse_bind_ref", "/Content/Buffers/bind.obuf" },
-        { "joint_remap_ref", "/Content/Buffers/remap.obuf" },
-        { "skeleton_ref", "/Content/Skeletons/body.oskel" },
-        { "joint_count", 4 },
-        { "influences_per_vertex", 4 },
-        { "flags", 1 },
-      });
+    document.Set("/lods/0/mesh_type", "skinned")
+      .Reference(
+        "/lods/0/skinning/joint_index_ref", "/Content/Buffers/joints.obuf")
+      .Reference(
+        "/lods/0/skinning/joint_weight_ref", "/Content/Buffers/weights.obuf")
+      .Reference(
+        "/lods/0/skinning/inverse_bind_ref", "/Content/Buffers/bind.obuf")
+      .Reference(
+        "/lods/0/skinning/joint_remap_ref", "/Content/Buffers/remap.obuf")
+      .Reference(
+        "/lods/0/skinning/skeleton_ref", "/Content/Skeletons/body.oskel")
+      .Set("/lods/0/skinning/joint_count", 4)
+      .Set("/lods/0/skinning/influences_per_vertex", 4)
+      .Set("/lods/0/skinning/flags", 1);
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics);
+      document.Text(), "geometry.json", Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     ASSERT_EQ(source->lods.size(), 1U);
     const auto* skin
@@ -229,27 +215,26 @@ namespace {
     GeometrySourceTest, PreparesProceduralRecipeWithoutGeneratingMesh)
   {
     auto document = MakeDescriptor();
-    document.erase("buffers");
-    auto& lod = document.at("lods").at(0);
-    lod.erase("buffers");
-    lod.erase("bounds");
-    lod.at("mesh_type") = "procedural";
-    lod.emplace("procedural",
-      nlohmann::json {
-        { "generator", "Sphere" },
-        { "mesh_name", "LargeSphere" },
+    document.Remove("/buffers")
+      .Remove("/lods/0/buffers")
+      .Remove("/lods/0/bounds")
+      .Set("/lods/0/mesh_type", "procedural")
+      .Set("/lods/0/procedural",
         {
-          "params",
+          { "generator", "Sphere" },
+          { "mesh_name", "LargeSphere" },
           {
-            { "latitude_segments", kHugeSegmentCount },
-            { "longitude_segments", kHugeSegmentCount },
+            "params",
+            {
+              { "latitude_segments", kHugeSegmentCount },
+              { "longitude_segments", kHugeSegmentCount },
+            },
           },
-        },
-      });
-    lod.at("submeshes").at(0).at("views").at(0).at("view_ref") = "__all__";
+        })
+      .Set("/lods/0/submeshes/0/views/0/view_ref", "__all__");
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics);
+      document.Text(), "geometry.json", Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     ASSERT_EQ(source->lods.size(), 1U);
     const auto* procedural
@@ -267,11 +252,11 @@ namespace {
   NOLINT_TEST_F(GeometrySourceTest, RejectsNilSurfaceBeforeResolvingAssets)
   {
     auto document = MakeDescriptor();
-    document.at("lods").at(0).at("submeshes").at(0).at("surface_id")
-      = "00000000-0000-0000-0000-000000000000";
+    document.Set(
+      "/lods/0/submeshes/0/surface_id", "00000000-0000-0000-0000-000000000000");
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics));
+      document.Text(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "geometry.descriptor.surface_id_invalid";
@@ -295,19 +280,19 @@ namespace {
   NOLINT_TEST_F(GeometrySourceTest, RetainsAuthoredAssetDefaults)
   {
     auto document = MakeDescriptor();
-    document.emplace("surfaces",
+    document.Set("/surfaces",
       nlohmann::json::array({
         {
           { "surface_id", kSurface },
           { "visible", false },
         },
       }));
-    document.emplace("lod_policy",
+    document.Set("/lod_policy",
       nlohmann::json::parse(
         R"({"type":"distance","thresholds":[0.5,0.75],"hysteresis_ratio":0.1})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics);
+      document.Text(), "geometry.json", Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     ASSERT_EQ(source->surfaces.size(), 1U);
     EXPECT_EQ(source->surfaces.front().visible, false);
@@ -322,7 +307,7 @@ namespace {
   NOLINT_TEST_F(GeometrySourceTest, RejectsDefaultsOfUndeclaredSurface)
   {
     auto document = MakeDescriptor();
-    document.emplace("surfaces",
+    document.Set("/surfaces",
       nlohmann::json::array({
         {
           { "surface_id", "018f8f8f-2222-7222-8222-222222222222" },
@@ -331,45 +316,45 @@ namespace {
       }));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics));
+      document.Text(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.surface_unknown"));
   }
 
   NOLINT_TEST_F(GeometrySourceTest, RejectsRepeatedSurfaceDefaults)
   {
     auto document = MakeDescriptor();
-    document.emplace("surfaces",
+    document.Set("/surfaces",
       nlohmann::json::array({
         { { "surface_id", kSurface }, { "visible", false } },
         { { "surface_id", kSurface }, { "casts_shadows", false } },
       }));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics));
+      document.Text(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.surface_duplicate"));
   }
 
   NOLINT_TEST_F(GeometrySourceTest, RejectsDecreasingLodThresholds)
   {
     auto document = MakeDescriptor();
-    document.emplace("lod_policy",
+    document.Set("/lod_policy",
       nlohmann::json::parse(
         R"({"type":"distance","thresholds":[0.75,0.5],"hysteresis_ratio":0.1})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics));
+      document.Text(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
   }
 
   NOLINT_TEST_F(GeometrySourceTest, RejectsIncreasingScreenSpaceErrors)
   {
     auto document = MakeDescriptor();
-    document.emplace(
-      "lod_policy", nlohmann::json::parse(R"({"type":"screen_space_error",
+    document.Set(
+      "/lod_policy", nlohmann::json::parse(R"({"type":"screen_space_error",
         "enter_finer_sse":[1,2],"exit_coarser_sse":[0.5,1.5]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics));
+      document.Text(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
   }
 
@@ -377,12 +362,12 @@ namespace {
     GeometrySourceTest, RejectsScreenSpaceErrorListsOfDifferentLength)
   {
     auto document = MakeDescriptor();
-    document.emplace(
-      "lod_policy", nlohmann::json::parse(R"({"type":"screen_space_error",
+    document.Set(
+      "/lod_policy", nlohmann::json::parse(R"({"type":"screen_space_error",
         "enter_finer_sse":[2,1],"exit_coarser_sse":[1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.dump(), "geometry.json", Mounts(), diagnostics));
+      document.Text(), "geometry.json", Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
   }
 

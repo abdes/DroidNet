@@ -16,12 +16,14 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 using nlohmann::json;
+using oxygen::cooker::test::GeometryDescriptor;
 using oxygen::cooker::test::LoadSchema;
 using oxygen::cooker::test::SchemaCase;
 using oxygen::cooker::test::ValidateJson;
@@ -44,25 +46,27 @@ auto ParamError(const std::string_view key) -> std::string
   return std::string(kParams) + std::string(key) + ": ";
 }
 
+constexpr auto kDefaultMaterial
+  = std::string_view { "/.cooked/Materials/default.omat" };
+
+//! A one-LOD procedural capsule named `name`, with one submesh of the default
+//! material.
+auto Procedural(const std::string_view name) -> GeometryDescriptor
+{
+  auto geometry = GeometryDescriptor {
+    "/Content/Geometry/" + std::string { name } + ".ogeo",
+  };
+  geometry.SubmeshMaterial(0, 0, kDefaultMaterial);
+  return geometry;
+}
+
 auto CapsuleDescriptor(const json& params) -> json
 {
-  auto doc = json::parse(R"({
-    "name": "Capsule",
-    "lods": [{
-      "name": "LOD0",
-      "mesh_type": "procedural",
-      "procedural": { "generator": "Capsule", "mesh_name": "Capsule" },
-      "submeshes": [{
-        "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-        "material_ref": "/.cooked/Materials/default.omat",
-        "views": [{ "view_ref": "__all__" }]
-      }]
-    }]
-  })");
+  auto geometry = Procedural("Capsule");
   if (!params.is_null()) {
-    doc.at("lods").at(0).at("procedural").update({ { "params", params } });
+    geometry.Set("/lods/0/procedural/params", params);
   }
-  return doc;
+  return geometry.Json();
 }
 
 class GeometryDescriptorSchemaCaseTest
@@ -77,82 +81,34 @@ INSTANTIATE_TEST_SUITE_P(Cases, GeometryDescriptorSchemaCaseTest,
   ::testing::Values(
     SchemaCase {
       "AcceptsCanonicalDocument",
-      R"({
-    "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json",
-    "name": "ProcCube",
-    "content_hashing": true,
-    "lods": [
-      {
-        "name": "LOD0",
-        "mesh_type": "procedural",
-        "procedural": {
-          "generator": "Cube",
-          "mesh_name": "CubeMesh"
-        },
-        "submeshes": [
-          {
-            "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-            "material_ref": "/.cooked/Materials/default.omat",
-            "views": [ { "view_ref": "__all__" } ]
-          }
-        ]
-      }
-    ]
-  })",
+      Procedural("ProcCube")
+        .Set("/$schema",
+          "./src/Oxygen/Cooker/Import/Schemas/"
+          "oxygen.geometry-descriptor.schema.json")
+        .Set("/content_hashing", true)
+        .Set("/lods/0/procedural/generator", "Cube")
+        .Set("/lods/0/procedural/mesh_name", "CubeMesh")
+        .Text(),
       true,
       "",
     },
     SchemaCase {
       "AcceptsSubdividedCubeProcedural",
-      R"({
-    "name": "ProcJellyCube",
-    "lods": [
-      {
-        "name": "LOD0",
-        "mesh_type": "procedural",
-        "procedural": {
-          "generator": "SubdividedCube",
-          "mesh_name": "JellyCube",
-          "params": {
-            "segments": 8
-          }
-        },
-        "submeshes": [
-          {
-            "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-            "material_ref": "/.cooked/Materials/default.omat",
-            "views": [ { "view_ref": "__all__" } ]
-          }
-        ]
-      }
-    ]
-  })",
+      Procedural("ProcJellyCube")
+        .Set("/lods/0/procedural/generator", "SubdividedCube")
+        .Set("/lods/0/procedural/mesh_name", "JellyCube")
+        .Set("/lods/0/procedural/params/segments", 8)
+        .Text(),
       true,
       "",
     },
     SchemaCase {
       "RejectsUnknownNestedFields",
-      R"({
-    "name": "ProcCube",
-    "lods": [
-      {
-        "name": "LOD0",
-        "mesh_type": "procedural",
-        "procedural": {
-          "generator": "Cube",
-          "mesh_name": "CubeMesh",
-          "unexpected": true
-        },
-        "submeshes": [
-          {
-            "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-            "material_ref": "/.cooked/Materials/default.omat",
-            "views": [ { "view_ref": "__all__" } ]
-          }
-        ]
-      }
-    ]
-  })",
+      Procedural("ProcCube")
+        .Set("/lods/0/procedural/generator", "Cube")
+        .Set("/lods/0/procedural/mesh_name", "CubeMesh")
+        .Set("/lods/0/procedural/unexpected", true)
+        .Text(),
       false,
       "'unexpected'",
     }),
@@ -160,29 +116,11 @@ INSTANTIATE_TEST_SUITE_P(Cases, GeometryDescriptorSchemaCaseTest,
 
 NOLINT_TEST(GeometryDescriptorSchemaTest, ValidatesIcoSphereParameters)
 {
-  const auto doc = json::parse(R"({
-    "name": "ProcIcoSphere",
-    "lods": [
-      {
-        "name": "LOD0",
-        "mesh_type": "procedural",
-        "procedural": {
-          "generator": "IcoSphere",
-          "mesh_name": "BallGeo",
-          "params": {
-            "subdivision_level": 2
-          }
-        },
-        "submeshes": [
-          {
-            "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-            "material_ref": "/.cooked/Materials/default.omat",
-            "views": [ { "view_ref": "__all__" } ]
-          }
-        ]
-      }
-    ]
-  })");
+  const auto doc = Procedural("ProcIcoSphere")
+                     .Set("/lods/0/procedural/generator", "IcoSphere")
+                     .Set("/lods/0/procedural/mesh_name", "BallGeo")
+                     .Set("/lods/0/procedural/params/subdivision_level", 2)
+                     .Json();
 
   EXPECT_THAT(ValidateJson(Schema(), doc), IsEmpty());
   for (const auto subdivisions : { 0, 8 }) {
@@ -237,15 +175,15 @@ NOLINT_TEST(GeometryDescriptorSchemaTest, RejectsBoundsOnProceduralMeshes)
 //! A buffer mesh has no generator, so its descriptor bounds it.
 NOLINT_TEST(GeometryDescriptorSchemaTest, RequiresBoundsOnBufferMeshes)
 {
-  auto doc = CapsuleDescriptor(nullptr);
+  auto doc
+    = Procedural("Capsule")
+        .Remove("/lods/0/procedural")
+        .Set("/lods/0/mesh_type", "standard")
+        .Reference("/lods/0/buffers/vb_ref", "/.cooked/Buffers/vertices.obuf")
+        .Reference("/lods/0/buffers/ib_ref", "/.cooked/Buffers/indices.obuf")
+        .Set("/lods/0/submeshes/0/views/0/view_ref", "surface")
+        .Json();
   auto& lod = doc.at("lods").at(0);
-  lod.erase("procedural");
-  lod.at("mesh_type") = "standard";
-  lod["buffers"] = json {
-    { "vb_ref", "/.cooked/Buffers/vertices.obuf" },
-    { "ib_ref", "/.cooked/Buffers/indices.obuf" },
-  };
-  lod.at("submeshes").at(0).at("views").at(0).at("view_ref") = "surface";
   EXPECT_THAT(ValidateJson(Schema(), doc), Not(IsEmpty()));
 
   lod["bounds"] = json::parse(R"({ "min": [-1, -1, -1], "max": [1, 1, 1] })");

@@ -16,6 +16,7 @@ include(GTestHelpers)
 add_library(
   Oxygen.Cooker.TestSupport
   STATIC
+  "AuthoredFiles.h"
   "DescriptorFixtures.h"
   "Diagnostics.h"
   "FileIo.cpp"

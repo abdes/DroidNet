@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using AwesomeAssertions;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
@@ -12,6 +11,7 @@ using Moq;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
@@ -29,7 +29,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     [TestMethod]
     public async Task ValidateAsync_ShouldReturnValid_WhenManifestAndContentRootsAreValid()
     {
-        var result = await this.ValidateAsync(CreateManifestJson(), CreateProjectFileSystem()).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(), CreateProjectFileSystem()).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.Valid);
         _ = result.ProjectInfo.Should().NotBeNull();
@@ -42,7 +42,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     [DataRow(3, DisplayName = "A newer version is refused")]
     public async Task ValidateAsync_ShouldReturnUnsupportedVersion_WhenManifestSchemaIsUnsupported(int schemaVersion)
     {
-        var result = await this.ValidateAsync(CreateManifestJson(schemaVersion), CreateProjectFileSystem()).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(schemaVersion: schemaVersion), CreateProjectFileSystem()).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.UnsupportedVersion);
     }
@@ -50,7 +50,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     [TestMethod]
     public async Task ValidateAsync_ShouldRefuseAProjectWithNoSourceMount()
     {
-        var result = await this.ValidateAsync(CreateManifestJson(mounts: []), CreateProjectFileSystem()).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(mounts: []), CreateProjectFileSystem()).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
         _ = result.Message.Should().StartWith(MountCodes.SourceRequired);
@@ -64,7 +64,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     {
         var mounts = new[] { new ProjectMount("Generated", MountKind.Source, path) };
 
-        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), CreateProjectFileSystem(mounts)).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(mounts: mounts), CreateProjectFileSystem(mounts)).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
         _ = result.Message.Should().Contain(MountCodes.FolderInOutput);
@@ -78,7 +78,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     {
         var mounts = new[] { ContentMount, new ProjectMount(name, MountKind.Source, "Other") };
 
-        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), CreateProjectFileSystem(mounts)).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(mounts: mounts), CreateProjectFileSystem(mounts)).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
         _ = result.Message.Should().StartWith(MountCodes.NameInvalid);
@@ -89,7 +89,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     {
         var mounts = new[] { ContentMount, new ProjectMount("Nested", MountKind.Source, "Content/Nested") };
 
-        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), CreateProjectFileSystem(mounts)).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(mounts: mounts), CreateProjectFileSystem(mounts)).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
         _ = result.Message.Should().StartWith(MountCodes.FolderOverlap);
@@ -100,7 +100,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     {
         var mounts = new[] { ContentMount, new ProjectMount("Shared", MountKind.Source, "D:/Studio/Shared") };
 
-        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), CreateProjectFileSystem([ContentMount])).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(mounts: mounts), CreateProjectFileSystem([ContentMount])).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
         _ = result.Message.Should().StartWith(MountCodes.AbsoluteCommitted);
@@ -116,7 +116,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
             new ProjectMount("Gone", MountKind.Source, "Gone"),
         };
 
-        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), CreateProjectFileSystem([ContentMount])).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(mounts: mounts), CreateProjectFileSystem([ContentMount])).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.Valid);
         _ = result.MountFindings.Select(static finding => finding.Code)
@@ -128,9 +128,9 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     {
         var fs = CreateProjectFileSystem();
         _ = fs.Directory.CreateDirectory(@"D:\Elsewhere\Content");
-        WriteMountsFile(fs, """{"version":1,"mounts":{"Content":"D:/Elsewhere/Content"}}""");
+        _ = TestProject.BindMounts(fs, FileSystemPath.From(ProjectRootPath), ("Content", @"D:\Elsewhere\Content"));
 
-        var result = await this.ValidateAsync(CreateManifestJson(), fs).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(), fs).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.Valid);
         var context = ProjectContext.FromProjectInfo(result.ProjectInfo!, fs);
@@ -145,7 +145,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     [DataRow("Content", ProjectValidationState.InvalidContentRoots)]
     public async Task ValidateAsync_ShouldShowOnlyCookedAndBuild(string folder, ProjectValidationState expected)
     {
-        var result = await this.ValidateAsync(CreateManifestJson(outputFolderView: folder), CreateProjectFileSystem()).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(outputFolderView: folder), CreateProjectFileSystem()).ConfigureAwait(false);
 
         _ = result.State.Should().Be(expected);
         if (expected == ProjectValidationState.Valid)
@@ -162,7 +162,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
         _ = fs.Directory.CreateDirectory(@"C:\Paks");
         await fs.File.WriteAllTextAsync(@"C:\Paks\Props.pak", "pak", this.CancellationToken).ConfigureAwait(false);
 
-        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), fs).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(mounts: mounts), fs).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.Valid);
         _ = result.MountFindings.Should().BeEmpty();
@@ -175,7 +175,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
         var fs = CreateProjectFileSystem(mounts);
         _ = fs.Directory.CreateDirectory(@"C:\Paks\Props.pak");
 
-        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), fs).ConfigureAwait(false);
+        var result = await this.ValidateAsync(TestProject.ManifestJson(mounts: mounts), fs).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
         _ = result.Message.Should().StartWith(MountCodes.PathKind);
@@ -450,7 +450,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
         CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
         _ = fs.Directory.CreateDirectory(@"C:\Projects");
         await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson(), this.CancellationToken).ConfigureAwait(false);
-        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Project.oxy", CreateManifestJson(), this.CancellationToken)
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Project.oxy", TestProject.ManifestJson(), this.CancellationToken)
             .ConfigureAwait(false);
 
         var result = await this.CreateFromBlankTemplateAsync(fs).ConfigureAwait(false);
@@ -568,46 +568,6 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
         return fs;
     }
 
-    private static void WriteMountsFile(MockFileSystem fs, string json)
-        => fs.File.WriteAllText(fs.Path.Combine(ProjectRootPath, ProjectMounts.FileName), json);
-
-    private static string CreateManifestJson(
-        int schemaVersion = 2,
-        IReadOnlyList<ProjectMount>? mounts = null,
-        string? outputFolderView = null)
-    {
-        var outputFolderViews = outputFolderView is null
-            ? string.Empty
-            : $$"""
-              ,
-                "OutputFolderViews": [
-                  {
-                    "Folder": "{{outputFolderView}}"
-                  }
-                ]
-              """;
-
-        var mountsJson = string.Join(',', (mounts ?? [ContentMount]).Select(ToMountJson));
-
-        var version = schemaVersion.ToString(CultureInfo.InvariantCulture);
-        var id = Guid.NewGuid().ToString("D", CultureInfo.InvariantCulture);
-        return $$"""
-            {
-              "SchemaVersion": {{version}},
-              "Id": "{{id}}",
-              "Name": "Project",
-              "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
-              "Thumbnail": "Media/Preview.png",
-              "Mounts": [{{mountsJson}}]{{outputFolderViews}}
-            }
-            """;
-    }
-
-    private static string ToMountJson(ProjectMount mount)
-        => mount.Path is null
-            ? $$"""{ "Name": "{{mount.Name}}", "Kind": "{{mount.Kind}}" }"""
-            : $$"""{ "Name": "{{mount.Name}}", "Kind": "{{mount.Kind}}", "Path": "{{mount.Path}}" }""";
-
     private static string CreateTemplateDescriptorJson()
         => """
            {
@@ -715,7 +675,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
         if (bound)
         {
             _ = fs.Directory.CreateDirectory(@"D:\Studio\SharedContent");
-            WriteMountsFile(fs, """{"version":1,"mounts":{"StudioLibrary":"D:/Studio/SharedContent"}}""");
+            _ = TestProject.BindMounts(fs, FileSystemPath.From(ProjectRootPath), ("StudioLibrary", @"D:\Studio\SharedContent"));
         }
 
         return CreateContext("Project", fs, mounts);

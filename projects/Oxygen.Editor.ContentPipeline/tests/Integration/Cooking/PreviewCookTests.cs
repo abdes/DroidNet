@@ -6,8 +6,10 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
+using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
+using static Oxygen.Editor.ContentPipeline.TestSupport.SavedSourceScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 
@@ -63,5 +65,20 @@ public sealed class PreviewCookTests
         _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == geometryUri);
         _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Materials/Red.omat"));
         _ = workspace.CookCoordinator.Runs.Should().ContainSingle().Which.Request.IsDemand.Should().BeTrue();
+    }
+
+    /// <summary>Preview demand cannot silently become a whole-scene cook.</summary>
+    /// <param name="identity">The non-authorable preview scope.</param>
+    /// <returns>The asynchronous scope regression.</returns>
+    [TestMethod]
+    [DataRow("/Content/Scenes/Main.oscene.json")]
+    [DataRow("/Content/Models/Source.fbx")]
+    public async Task PreviewDemandRejectsNonAssetScopes(string identity)
+    {
+        using var workspace = new CookWorkspace();
+        var pipeline = CreateService(workspace, CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync), new CapturingSceneDescriptorGenerator([]));
+        Func<Task> request = () => pipeline.CookPreviewAssetAsync(AssetPath.Parse(identity), workspace.ProjectContext, this.TestContext.CancellationToken);
+        _ = await request.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
+        _ = workspace.CookCoordinator.Runs.Should().BeEmpty();
     }
 }

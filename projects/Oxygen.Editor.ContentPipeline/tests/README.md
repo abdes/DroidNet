@@ -5,11 +5,11 @@ and follow the [fixture rules](#fixtures).
 
 ## Execution tiers
 
-| Project suffix       | Purpose                                                                                                    | Dependencies                                                                  |
-| -------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `.Unit.Tests`        | Orchestration, descriptors, manifests, snapshots, status and controlled worker contracts                   | Managed code and small temporary fixtures; no installed cooker                |
-| `.Integration.Tests` | Native import/cooking, dependency interpretation, publication/recovery, mounting and real worker lifetimes | Matching installed SDK for native cases; Windows filesystem/process semantics |
-| `.Benchmarks.Tests`  | Large shared-source status workload and elapsed-time measurement                                           | Integration prerequisites                                                     |
+| Project suffix       | Purpose                                                                                                                                               | Dependencies                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `.Unit.Tests`        | Orchestration, descriptors, manifests, snapshots, status and controlled worker contracts, in memory                                                   | Managed code, in-memory file systems and fakes only; no real disk, process or installed cooker         |
+| `.Integration.Tests` | Native import/cooking, dependency interpretation, publication/recovery, mounting, real worker lifetimes and every class that writes temporary folders | Real disk and processes; matching installed SDK for native cases; Windows filesystem/process semantics |
+| `.Benchmarks.Tests`  | Large shared-source status workload and elapsed-time measurement                                                                                      | Integration prerequisites                                                                              |
 
 These programs use ordinary .NET hosts. None requires a WinUI window or desktop
 input. `open.cmd` includes all three projects by default:

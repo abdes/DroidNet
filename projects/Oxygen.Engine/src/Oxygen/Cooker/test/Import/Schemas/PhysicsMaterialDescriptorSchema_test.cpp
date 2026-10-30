@@ -10,6 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -17,6 +18,7 @@ namespace {
 
 using nlohmann::json;
 using oxygen::cooker::test::LoadSchema;
+using oxygen::cooker::test::PhysicsMaterialDescriptor;
 using oxygen::cooker::test::SchemaCase;
 
 auto Schema() -> const json&
@@ -24,6 +26,13 @@ auto Schema() -> const json&
   static const auto schema = LoadSchema(
     "Import/Schemas/oxygen.physics-material-descriptor.schema.json");
   return schema;
+}
+
+auto Ground() -> PhysicsMaterialDescriptor
+{
+  return PhysicsMaterialDescriptor {
+    "/.cooked/Physics/Materials/ground.opmat"
+  };
 }
 
 class PhysicsMaterialDescriptorSchemaTest
@@ -38,36 +47,33 @@ INSTANTIATE_TEST_SUITE_P(Cases, PhysicsMaterialDescriptorSchemaTest,
   ::testing::Values(
     SchemaCase {
       "AcceptsCanonicalDocument",
-      R"({
-    "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json",
-    "name": "ground",
-    "static_friction": 0.95,
-    "dynamic_friction": 0.70,
-    "restitution": 0.05,
-    "density": 1800.0,
-    "combine_mode_friction": "max",
-    "combine_mode_restitution": "average",
-    "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
-  })",
+      Ground()
+        .WithIdentityField()
+        .Set("/$schema",
+          "./src/Oxygen/Cooker/Import/Schemas/"
+          "oxygen.physics-material-descriptor.schema.json")
+        .Set("/static_friction", 0.95)
+        .Set("/dynamic_friction", 0.70)
+        .Set("/restitution", 0.05)
+        .Set("/density", 1800.0)
+        .Set("/combine_mode_friction", "max")
+        .Set("/combine_mode_restitution", "average")
+        .Text(),
       true,
       "",
     },
     SchemaCase {
       "RejectsUnknownFields",
-      R"({
-    "name": "ground",
-    "static_friction": 0.95,
-    "unknown_setting": true
-  })",
+      Ground()
+        .Set("/static_friction", 0.95)
+        .Set("/unknown_setting", true)
+        .Text(),
       false,
       "'unknown_setting'",
     },
     SchemaCase {
       "RejectsNonPositiveDensity",
-      R"({
-    "name": "ground",
-    "density": 0.0
-  })",
+      Ground().Set("/density", 0.0).Text(),
       false,
       "/density: ",
     }),

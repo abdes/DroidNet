@@ -6,8 +6,10 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
@@ -107,14 +109,25 @@ public sealed class TextureImportTests
     }
 
     [TestMethod]
-    [DataRow("""{ "source": "Sky.hdr", "output": { "format": "rgba16f" }, "cube": { "equirect_to_cube": true, "cube_face_size": 512 } }""", true, true)]
-    [DataRow("""{ "source": "Sky.hdr", "output": { "format": "rgba32f" }, "cube": { "cubemap": true, "cube_layout": "hcross" } }""", true, true)]
-    [DataRow("""{ "source": "Sky.png", "output": { "format": "rgba8_srgb" }, "cube": { "cubemap": true, "cube_layout": "hstrip" } }""", true, false)]
-    [DataRow("""{ "source": "Sky.hdr", "output": { "format": "rgba16f" } }""", false, false)]
-    [DataRow("""{ "output": { "format": "rgba16f" }, "cube": { "cubemap": true } }""", false, false)]
-    public void ATextureSaysWhetherItIsACubeAndKeepsRadiance(string json, bool cube, bool storesRadiance)
+    [DataRow("Sky.hdr", "rgba16f", """{ "equirect_to_cube": true, "cube_face_size": 512 }""", true, true)]
+    [DataRow("Sky.hdr", "rgba32f", """{ "cubemap": true, "cube_layout": "hcross" }""", true, true)]
+    [DataRow("Sky.png", "rgba8_srgb", """{ "cubemap": true, "cube_layout": "hstrip" }""", true, false)]
+    [DataRow("Sky.hdr", "rgba16f", null, false, false)]
+    [DataRow(null, "rgba16f", """{ "cubemap": true }""", false, false)]
+    public void ATextureSaysWhetherItIsACubeAndKeepsRadiance(string? source, string format, string? cubeJson, bool cube, bool storesRadiance)
     {
-        var descriptor = this.project.WriteFile("/Content/Sky.otex.json", json);
+        var document = AuthoredFiles.Texture("/Content/Sky.otex", source ?? string.Empty).Set("/output/format", format);
+        if (source is null)
+        {
+            _ = document.Remove("/source");
+        }
+
+        if (cubeJson is not null)
+        {
+            _ = document.Set("/cube", JsonNode.Parse(cubeJson));
+        }
+
+        var descriptor = this.project.WriteFile("/Content/Sky.otex.json", document.Bytes);
 
         // A descriptor without a source image is no texture, so it is no cube either.
         var radiance = Texture.TryRead(this.fileSystem, descriptor) is { IsCube: true } texture ? texture.StoresRadiance : (bool?)null;
@@ -128,7 +141,7 @@ public sealed class TextureImportTests
     [DataRow(new[] { "Rock.png" }, false)]
     public void ATextureHasItsSourceImageOnlyWhenEveryImageExists(string[] existing, bool expected)
     {
-        var descriptor = this.project.WriteFile("/Content/Textures/Terrain.otex.json", """{ "source": "Grass.png", "sources": [ { "file": "../Shared/Rock.png", "layer": 1 } ] }""");
+        var descriptor = this.project.WriteFile("/Content/Textures/Terrain.otex.json", AuthoredFiles.Texture("/Content/Textures/Terrain.otex", "Grass.png").Append("/sources", new JsonObject { ["file"] = "../Shared/Rock.png", ["layer"] = 1 }).Bytes);
         if (existing.Contains("Grass.png"))
         {
             _ = this.project.WriteFile("/Content/Textures/Grass.png", [1]);

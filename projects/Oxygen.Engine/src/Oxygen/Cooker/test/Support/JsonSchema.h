@@ -35,8 +35,8 @@ namespace oxygen::cooker::test {
 struct SchemaCase {
   //! CamelCase suffix for the generated test name.
   std::string_view name;
-  //! Document text.
-  std::string_view json;
+  //! Document text, owned so that a builder's `Text()` can be passed.
+  std::string json;
   bool valid = true;
   //! Required when `valid` is false: a substring of the expected error.
   std::string_view error_substr;

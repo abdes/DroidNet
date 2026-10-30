@@ -4,6 +4,7 @@
 
 using System.IO.Abstractions;
 using System.Text;
+using System.Text.Json.Nodes;
 using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
@@ -104,6 +105,51 @@ public sealed class TestProject
         ArgumentNullException.ThrowIfNull(context);
         var file = context.ProjectRoot.Combine(Constants.ProjectFileName);
         context.FileSystem.File.WriteAllText(file.FullPath, ProjectInfo.ToJson(InfoOf(context)));
+        return file;
+    }
+
+    /// <summary>Gets the text of a project file for a project the test describes, as <see cref="ProjectInfo.ToJson"/> writes it.</summary>
+    /// <param name="mounts">The declared mounts: a <see cref="ContentMount"/> source mount when none are given.</param>
+    /// <param name="schemaVersion">The schema version the file declares.</param>
+    /// <param name="outputFolderView">The one output folder the project shows, or none.</param>
+    /// <returns>The text of a <c>Project.oxy</c>.</returns>
+    public static string ManifestJson(
+        IReadOnlyList<ProjectMount>? mounts = null,
+        int schemaVersion = ProjectInfo.CurrentSchemaVersion,
+        string? outputFolderView = null)
+    {
+        var info = new ProjectInfo(Guid.NewGuid(), "Project", Category.Games, thumbnail: "Media/Preview.png", schemaVersion: schemaVersion)
+        {
+            Mounts = [.. mounts ?? new[] { new ProjectMount(ContentMount, MountKind.Source, ContentMount) }],
+        };
+        if (outputFolderView is not null)
+        {
+            info.OutputFolderViews = [new OutputFolderView(outputFolderView)];
+        }
+
+        return ProjectInfo.ToJson(info);
+    }
+
+    /// <summary>
+    /// Binds mounts to folders or pak files on this machine, by writing the project's <c>.mounts.json</c> at its root
+    /// through <paramref name="fileSystem"/>; it is the one test writer of that file.
+    /// </summary>
+    /// <param name="fileSystem">The file system that holds the project.</param>
+    /// <param name="projectRoot">The project folder.</param>
+    /// <param name="bindings">Each mount's name and its absolute folder or pak file.</param>
+    /// <returns>The mounts file.</returns>
+    public static FileSystemPath BindMounts(IFileSystem fileSystem, FileSystemPath projectRoot, params (string Name, string Location)[] bindings)
+    {
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        ArgumentNullException.ThrowIfNull(projectRoot);
+        var mounts = new JsonObject();
+        foreach (var (name, location) in bindings)
+        {
+            mounts[name] = location.Replace('\\', '/');
+        }
+
+        var file = projectRoot.Combine(ProjectMounts.FileName);
+        fileSystem.File.WriteAllText(file.FullPath, new JsonObject { ["version"] = 1, ["mounts"] = mounts }.ToJsonString());
         return file;
     }
 

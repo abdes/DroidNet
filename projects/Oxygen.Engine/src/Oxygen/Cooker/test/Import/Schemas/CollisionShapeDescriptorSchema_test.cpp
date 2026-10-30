@@ -11,12 +11,14 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 using nlohmann::json;
+using oxygen::cooker::test::CollisionShapeDescriptor;
 using oxygen::cooker::test::LoadSchema;
 using oxygen::cooker::test::SchemaCase;
 using oxygen::cooker::test::ValidateJson;
@@ -31,6 +33,32 @@ auto Schema() -> const json&
   return schema;
 }
 
+//! A unit box named `name` of the physics material `material`.
+auto Shape(const std::string& name, const std::string& material)
+  -> CollisionShapeDescriptor
+{
+  return CollisionShapeDescriptor {
+    "/.cooked/Physics/Shapes/" + name + ".ocshape",
+    "/.cooked/Physics/Materials/" + material + ".opmat",
+  }
+    .Set("/name", name);
+}
+
+//! A payload-backed shape: it has no extents of its own.
+auto HullShape() -> CollisionShapeDescriptor
+{
+  return Shape("hull_shape", "steel")
+    .Set("/shape_type", "convex_hull")
+    .Remove("/half_extents");
+}
+
+auto CompoundShape() -> CollisionShapeDescriptor
+{
+  return Shape("compound_shape", "steel")
+    .Set("/shape_type", "compound")
+    .Remove("/half_extents");
+}
+
 class CollisionShapeDescriptorSchemaCaseTest
   : public ::testing::TestWithParam<SchemaCase> { };
 
@@ -43,85 +71,68 @@ INSTANTIATE_TEST_SUITE_P(Cases, CollisionShapeDescriptorSchemaCaseTest,
   ::testing::Values(
     SchemaCase {
       "AcceptsCanonicalPrimitiveDocument",
-      R"({
-    "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json",
-    "name": "floor_box",
-    "shape_type": "box",
-    "material_ref": "/.cooked/Physics/Materials/ground.opmat",
-    "half_extents": [25.0, 0.5, 25.0],
-    "local_position": [0.0, -0.5, 0.0],
-    "collision_own_layer": 1,
-    "collision_target_layers": 18446744073709551615
-  })",
+      Shape("floor_box", "ground")
+        .Set("/$schema",
+          "./src/Oxygen/Cooker/Import/Schemas/"
+          "oxygen.collision-shape-descriptor.schema.json")
+        .Set("/half_extents", json::array({ 25.0, 0.5, 25.0 }))
+        .Set("/local_position", json::array({ 0.0, -0.5, 0.0 }))
+        .Set("/collision_own_layer", 1)
+        .Set("/collision_target_layers", 18446744073709551615ULL)
+        .Text(),
       true,
       "",
     },
     SchemaCase {
       "RejectsTopLevelUnknownFieldDocument",
-      R"({
-    "name": "hull_shape",
-    "shape_type": "convex_hull",
-    "material_ref": "/.cooked/Physics/Materials/steel.opmat",
-    "unexpected_field": "/.cooked/Physics/Resources/hull.opres"
-  })",
+      HullShape()
+        .Set("/unexpected_field", "/.cooked/Physics/Resources/hull.opres")
+        .Text(),
       false,
       "'unexpected_field'",
     },
     SchemaCase {
       "AcceptsPayloadBackedShapeWithoutUnknownField",
-      R"({
-    "name": "hull_shape",
-    "shape_type": "convex_hull",
-    "material_ref": "/.cooked/Physics/Materials/steel.opmat"
-  })",
+      HullShape().Text(),
       true,
       "",
     },
     SchemaCase {
       "RejectsUnknownPayloadFieldForPrimitiveShape",
-      R"({
-    "name": "sphere_shape",
-    "shape_type": "sphere",
-    "material_ref": "/.cooked/Physics/Materials/steel.opmat",
-    "radius": 1.0,
-    "unexpected_field": "/.cooked/Physics/Resources/not_allowed.opres"
-  })",
+      Shape("sphere_shape", "steel")
+        .Set("/shape_type", "sphere")
+        .Remove("/half_extents")
+        .Set("/radius", 1.0)
+        .Set(
+          "/unexpected_field", "/.cooked/Physics/Resources/not_allowed.opres")
+        .Text(),
       false,
       "'unexpected_field'",
     },
     SchemaCase {
       "AcceptsCompoundShapeWithChildren",
-      R"({
-    "name": "compound_shape",
-    "shape_type": "compound",
-    "material_ref": "/.cooked/Physics/Materials/steel.opmat",
-    "children": [
-      {
-        "shape_type": "sphere",
-        "radius": 0.4,
-        "local_position": [0.0, 0.0, 0.0],
-        "local_rotation": [0.0, 0.0, 0.0, 1.0],
-        "local_scale": [1.0, 1.0, 1.0]
-      },
-      {
-        "shape_type": "box",
-        "half_extents": [0.2, 0.3, 0.4],
-        "local_position": [0.7, 0.0, 0.0],
-        "local_rotation": [0.0, 0.0, 0.0, 1.0],
-        "local_scale": [1.0, 1.0, 1.0]
-      }
-    ]
-  })",
+      CompoundShape()
+        .Append("/children", json::parse(R"({
+            "shape_type": "sphere",
+            "radius": 0.4,
+            "local_position": [0.0, 0.0, 0.0],
+            "local_rotation": [0.0, 0.0, 0.0, 1.0],
+            "local_scale": [1.0, 1.0, 1.0]
+          })"))
+        .Append("/children", json::parse(R"({
+            "shape_type": "box",
+            "half_extents": [0.2, 0.3, 0.4],
+            "local_position": [0.7, 0.0, 0.0],
+            "local_rotation": [0.0, 0.0, 0.0, 1.0],
+            "local_scale": [1.0, 1.0, 1.0]
+          })"))
+        .Text(),
       true,
       "",
     },
     SchemaCase {
       "RejectsCompoundShapeWithoutChildren",
-      R"({
-    "name": "compound_shape",
-    "shape_type": "compound",
-    "material_ref": "/.cooked/Physics/Materials/steel.opmat"
-  })",
+      CompoundShape().Text(),
       false,
       "'children'",
     }),
@@ -129,12 +140,12 @@ INSTANTIATE_TEST_SUITE_P(Cases, CollisionShapeDescriptorSchemaCaseTest,
 
 NOLINT_TEST(CollisionShapeDescriptorSchemaTest, CapsuleAllowsSphereLimit)
 {
-  auto doc = json {
-    { "shape_type", "capsule" },
-    { "material_ref", "/.cooked/Physics/Materials/default.opmat" },
-    { "radius", 0.5 },
-    { "half_height", 0.0 },
-  };
+  auto doc = Shape("capsule", "default")
+               .Set("/shape_type", "capsule")
+               .Remove("/half_extents")
+               .Set("/radius", 0.5)
+               .Set("/half_height", 0.0)
+               .Json();
   EXPECT_THAT(ValidateJson(Schema(), doc), IsEmpty());
   doc["half_height"] = -0.1;
   EXPECT_THAT(

@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
@@ -212,9 +213,7 @@ public sealed class ProjectAssetFilesTests
             _ = fileSystem.Directory.CreateDirectory(folder);
         }
 
-        fileSystem.File.WriteAllText(
-            @"C:\Games\Demo\.mounts.json",
-            """{"version":1,"mounts":{"Shared":"D:/Library","Vendor":"E:/Vendor"}}""");
+        _ = TestProject.BindMounts(fileSystem, FileSystemPath.From(@"C:\Games\Demo"), ("Shared", @"D:\Library"), ("Vendor", @"E:\Vendor"));
         var info = new ProjectInfo("Demo", Category.Games, @"C:\Games\Demo")
         {
             Mounts =

@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Text.Json;
 using AwesomeAssertions;
+using Oxygen.Editor.Models.Testing;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
@@ -27,7 +27,7 @@ public sealed class ModelImportRecordsTests
     public void TheIndexFindsARecordBySource()
     {
         var project = this.CreateProject();
-        var path = this.Save("/Content/Car.glb", "/Content/Car.glb");
+        var path = this.Save(project, "/Content/Car.glb", "/Content/Car.glb");
         var source = Path.Combine(ProjectRoot, "Content", "Car.glb");
 
         var records = new ModelImportRecords(project);
@@ -53,8 +53,8 @@ public sealed class ModelImportRecordsTests
     public void ADamagedRecordIsListedWithoutHidingTheOthers()
     {
         var project = this.CreateProject();
-        _ = this.Save("/Content/Car.glb", "/Content/Car.glb");
-        var damaged = ModelImportSettings.PathFor(ProjectRoot, "/Content/Broken.glb");
+        _ = this.Save(project, "/Content/Car.glb", "/Content/Car.glb");
+        var damaged = ModelRecords.PathOf(project, "/Content/Broken.glb");
         _ = this.fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(damaged)!);
         this.fileSystem.File.WriteAllText(damaged, "{");
 
@@ -68,9 +68,9 @@ public sealed class ModelImportRecordsTests
     public void TheIndexListsTheRecordsOfEveryFolderBelowImports()
     {
         var project = this.CreateProject();
-        var car = this.Save("/Content/Car.glb", "/Content/Car.glb");
-        var ship = this.Save("/Content/Models/Ships/Ship.glb", "/Content/Models/Ships/Ship.glb");
-        var other = this.Save("/Props/Deep/Er/Crate.glb", "/Props/Deep/Er/Crate.glb");
+        var car = this.Save(project, "/Content/Car.glb", "/Content/Car.glb");
+        var ship = this.Save(project, "/Content/Models/Ships/Ship.glb", "/Content/Models/Ships/Ship.glb");
+        var other = this.Save(project, "/Props/Deep/Er/Crate.glb", "/Props/Deep/Er/Crate.glb");
 
         var records = new ModelImportRecords(project);
 
@@ -85,10 +85,8 @@ public sealed class ModelImportRecordsTests
     public void AMisplacedRecordIsListedAsAProblemWithoutHidingTheOthers()
     {
         var project = this.CreateProject();
-        _ = this.Save("/Content/Car.glb", "/Content/Car.glb");
-        var place = ModelImportSettings.PathFor(ProjectRoot, "/Content/Truck.glb");
-        using var settings = JsonDocument.Parse("{}");
-        var bytes = ModelImportSettings.Create(place, "/Content/Truck.glb", "/Content/Truck.glb", settings.RootElement).ToBytes();
+        _ = this.Save(project, "/Content/Car.glb", "/Content/Car.glb");
+        var bytes = ModelRecords.Create(project, "/Content/Truck.glb", "/Content/Truck.glb").ToBytes();
         var misplaced = Path.Combine(ProjectRoot, "Imports", "Content", "Models", "Truck.glb.import.json");
         _ = this.fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(misplaced)!);
         this.fileSystem.File.WriteAllBytes(misplaced, bytes);
@@ -106,7 +104,7 @@ public sealed class ModelImportRecordsTests
         _ = this.fileSystem.Directory.CreateDirectory(ProjectRoot);
         this.fileSystem.File.WriteAllText(Path.Combine(ProjectRoot, ProjectMounts.FileName), """{"version":1,"mounts":{"Studio":"D:/Studio/SharedContent"}}""");
         var project = TestProject.Create(this.fileSystem, ProjectRoot, [new ProjectMount("Content", Path: "Content"), new ProjectMount("Studio")]).Context;
-        _ = this.Save("/Studio/Vehicles/Car.glb", "/Studio/Vehicles/Car.glb");
+        _ = this.Save(project, "/Studio/Vehicles/Car.glb", "/Studio/Vehicles/Car.glb");
 
         var records = new ModelImportRecords(project);
 
@@ -119,7 +117,7 @@ public sealed class ModelImportRecordsTests
     {
         var project = TestProject.Create(this.fileSystem, ProjectRoot, [new ProjectMount("Content", Path: "Content"), new ProjectMount("Studio")]).Context;
         _ = project.Mounts.Single(static mount => mount.Name == "Studio").State.Should().Be(MountState.Unbound);
-        var path = this.Save("/Studio/Vehicles/Car.glb", "/Studio/Vehicles/Car.glb");
+        var path = this.Save(project, "/Studio/Vehicles/Car.glb", "/Studio/Vehicles/Car.glb");
 
         var records = new ModelImportRecords(project);
 
@@ -133,7 +131,7 @@ public sealed class ModelImportRecordsTests
     public void ARecordThatNamesItsSourceRelativeToItsFolder_IsAProblem()
     {
         var project = this.CreateProject();
-        var path = this.Save("/Content/Car.glb", "/Content/Car.glb");
+        var path = this.Save(project, "/Content/Car.glb", "/Content/Car.glb");
         var text = this.fileSystem.File.ReadAllText(path).Replace("\"source\": \"/Content/Car.glb\"", "\"source\": \"../../Content/Car.glb\"", StringComparison.Ordinal);
         this.fileSystem.File.WriteAllText(path, text);
 
@@ -146,12 +144,6 @@ public sealed class ModelImportRecordsTests
     private ProjectContext CreateProject()
         => TestProject.Create(this.fileSystem, ProjectRoot, ["Content", "Props"]).Context;
 
-    private string Save(string source, string virtualPath)
-    {
-        var path = ModelImportSettings.PathFor(ProjectRoot, virtualPath);
-        using var settings = JsonDocument.Parse("{}");
-        _ = this.fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        this.fileSystem.File.WriteAllBytes(path, ModelImportSettings.Create(path, source, virtualPath, settings.RootElement).ToBytes());
-        return path;
-    }
+    private string Save(ProjectContext project, string source, string virtualPath)
+        => ModelRecords.Write(project, ModelRecords.Create(project, virtualPath, source));
 }

@@ -1,0 +1,250 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using AwesomeAssertions;
+using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
+using static Oxygen.Editor.ContentPipeline.TestSupport.CookCoordinatorScenario;
+
+namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
+
+[TestClass]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
+public sealed class CookRunHistoryTests
+{
+    public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>Queued writers and cancellation wait until the current consumer refresh settles.</summary>
+    /// <returns>The asynchronous publication ordering regression.</returns>
+    [TestMethod]
+    public async Task ConsumerRefreshRetainsWriterUntilItSettles()
+    {
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.CookCompleted += args =>
+        {
+            _ = entered.TrySetResult();
+            return release.Task;
+        };
+        var first = coordinator.RunCookAsync(
+            new(CookTargetKind.Asset, AssetPath.Parse("/Content/Material.omat.json")),
+            (operation, _) => Task.FromResult(new ContentCookResult(operation.OperationId, CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null)),
+            this.TestContext.CancellationToken);
+        await entered.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var nextStarted = false;
+        var next = coordinator.RunAsync(
+            (_, _) =>
+            {
+                nextStarted = true;
+                return Task.FromResult(2);
+            },
+            this.TestContext.CancellationToken);
+        await coordinator.CancelAsync(coordinator.Runs.Single().OperationId).ConfigureAwait(false);
+        _ = nextStarted.Should().BeFalse();
+        _ = first.IsCompleted.Should().BeFalse();
+        release.SetResult();
+        Func<Task> cancelled = () => first;
+        _ = await cancelled.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
+        _ = (await next.ConfigureAwait(false)).Should().Be(2);
+    }
+
+    /// <summary>Every UI scope and automatic Save delivers its result through the same workspace notification.</summary>
+    /// <param name="kind">The requested cook scope.</param>
+    /// <param name="automatic">Whether Save submitted the request.</param>
+    /// <returns>The asynchronous completion regression.</returns>
+    [TestMethod]
+    [DataRow(CookTargetKind.Asset, true)]
+    [DataRow(CookTargetKind.Asset, false)]
+    [DataRow(CookTargetKind.CurrentScene, false)]
+    [DataRow(CookTargetKind.Folder, false)]
+    [DataRow(CookTargetKind.Project, false)]
+    public async Task CompletedCooksShareOneProjectScopedNotification(CookTargetKind kind, bool automatic)
+    {
+        using var projects = CreateSession();
+        using var coordinator = CreateCoordinator(projects);
+        var notifications = new List<CookCompletedEventArgs>();
+        coordinator.CookCompleted += args =>
+        {
+            notifications.Add(args);
+            return Task.CompletedTask;
+        };
+        var result = await coordinator.RunCookAsync(
+            new(kind, AssetPath.Parse("/Content/Scope"), automatic),
+            (operation, _) => Task.FromResult(new ContentCookResult(operation.OperationId, kind, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null)),
+            CancellationToken.None).ConfigureAwait(false);
+        _ = notifications.Should().ContainSingle();
+        _ = notifications[0].Project.Should().BeSameAs(projects.Context);
+        _ = notifications[0].Result.Should().BeSameAs(result);
+    }
+
+    /// <summary>Catalog compatibility failures retain actionable artifact details in the selected cook.</summary>
+    /// <returns>The asynchronous operation test.</returns>
+    [TestMethod]
+    public async Task CompatibilityFailuresKeepArtifactDiagnosticsInCookHistory()
+    {
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
+        var diagnostic = new DiagnosticRecord
+        {
+            OperationId = Guid.NewGuid(),
+            Domain = FailureDomain.RuntimeDiscovery,
+            Severity = DiagnosticSeverity.Error,
+            Code = Oxygen.Managed.Core.Compatibility.NativeCompatibilityDiagnosticCodes.ArtifactMismatch,
+            Message = "The import tool changed.",
+            AffectedPath = "ImportTool.exe",
+        };
+        Func<Task> cook = () => coordinator.RunCookAsync(
+            new(CookTargetKind.Project, ScopeUri: null),
+            (_, _) => Task.FromException<int>(new Managed.Core.Compatibility.NativeCompatibilityException([diagnostic])),
+            CancellationToken.None);
+        _ = await cook.Should().ThrowAsync<Managed.Core.Compatibility.NativeCompatibilityException>().ConfigureAwait(false);
+        var run = coordinator.Runs.Single();
+        _ = run.Diagnostics.Should().ContainSingle().Which.Should().Be(diagnostic with { OperationId = run.OperationId });
+    }
+
+    /// <summary>Represents an entire project with one run and ordered messages for all its work.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task ProjectRunRetainsItsScopeAndOrderedTranscript()
+    {
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
+        var reveals = new List<Guid>();
+        coordinator.RunChanged += (_, args) =>
+        {
+            if (args.Reveal)
+            {
+                reveals.Add(args.Run.OperationId);
+            }
+        };
+        var result = await coordinator.RunCookAsync(
+            new(CookTargetKind.Project, ScopeUri: null),
+            (operation, _) =>
+            {
+                CookRunContext.Report(new("Cooking Main."));
+                CookRunContext.Report(new("Cooking NewScene2."));
+                return Task.FromResult(new ContentCookResult(operation.OperationId, CookTargetKind.Project, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
+            },
+            CancellationToken.None).ConfigureAwait(false);
+
+        var run = coordinator.Runs.Single();
+        _ = run.Request.TargetKind.Should().Be(CookTargetKind.Project);
+        _ = run.OperationId.Should().Be(result.OperationId);
+        _ = run.State.Should().Be(CookRunState.Succeeded);
+        _ = run.Messages.Select(static message => message.Text).Should().ContainInOrder("Cooking Main.", "Cooking NewScene2.", "Cook complete.");
+        _ = run.Messages.Select(static message => message.Sequence).Should().BeInAscendingOrder();
+        _ = reveals.Should().Equal(run.OperationId, run.OperationId);
+        _ = CookRunContext.Current.Should().BeNull();
+    }
+
+    /// <summary>Cancellation targets one selected request and reports a safe stop before the next writer starts.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task CancelSelectedRunKeepsQueuedCookAndWaitsForDrain()
+    {
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
+        var stopped = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = coordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), (_, _) => stopped.Task, CancellationToken.None);
+        var firstId = coordinator.Runs.Single().OperationId;
+        var second = coordinator.RunCookAsync(new(CookTargetKind.Asset, AssetPath.Parse("/Content/Materials/Blue.omat.json")), (_, _) => Task.FromResult(2), CancellationToken.None);
+
+        await coordinator.CancelAsync(firstId).ConfigureAwait(false);
+        _ = coordinator.Runs.Single(run => run.OperationId == firstId).State.Should().Be(CookRunState.Cancelling);
+        _ = second.IsCompleted.Should().BeFalse();
+        stopped.SetResult(1);
+        Func<Task> cancelled = async () => _ = await first.ConfigureAwait(false);
+        _ = await cancelled.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
+        _ = (await second.ConfigureAwait(false)).Should().Be(2);
+        _ = coordinator.Runs.Single(run => run.OperationId == firstId).State.Should().Be(CookRunState.Cancelled);
+    }
+
+    /// <summary>Automatic work keeps its messages without requesting UI activation or leaking into other scopes.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task AutomaticRunKeepsMessagesScopedWithoutReveal()
+    {
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
+        var reveal = false;
+        coordinator.RunChanged += (_, args) => reveal |= args.Reveal;
+        _ = await coordinator.RunCookAsync(
+            new(CookTargetKind.Asset, AssetPath.Parse("/Content/Materials/Blue.omat.json"), IsAutomatic: true),
+            (_, _) =>
+            {
+                CookRunContext.Report(new("Blue material output."));
+                return Task.FromResult(1);
+            },
+            CancellationToken.None).ConfigureAwait(false);
+        CookRunContext.Report(new("Unrelated editor output."));
+        _ = reveal.Should().BeFalse();
+        _ = coordinator.Runs.Single().Messages.Select(static message => message.Text).Should().Contain("Blue material output.").And.NotContain("Unrelated editor output.");
+    }
+
+    /// <summary>Retained worker termination failures cannot appear complete while work is still draining.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task RunTerminationFailureRemainsActiveUntilDrain()
+    {
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
+        var drained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var failure = new ContentPipelineTerminationException(new IOException("Termination failed."), drained.Task);
+        var operation = coordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), (_, _) => Task.FromException<int>(failure), CancellationToken.None);
+        Func<Task> failed = async () => _ = await operation.ConfigureAwait(false);
+        _ = await failed.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
+        _ = coordinator.Runs.Single().State.Should().Be(CookRunState.Cancelling);
+        _ = coordinator.Runs.Single().IsCompleted.Should().BeFalse();
+        drained.SetResult();
+        _ = await coordinator.RunAsync((_, _) => Task.FromResult(1), CancellationToken.None).ConfigureAwait(false);
+        _ = coordinator.Runs.Single().State.Should().Be(CookRunState.Failed);
+    }
+
+    /// <summary>Broken presentation subscribers cannot break the worker or its writer ownership.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task PresentationFailureCannotFailCook()
+    {
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
+        coordinator.RunChanged += (_, _) => throw new InvalidOperationException("Broken UI observer.");
+        _ = (await coordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), (_, _) => Task.FromResult(42), CancellationToken.None).ConfigureAwait(false)).Should().Be(42);
+        _ = coordinator.Runs.Single().State.Should().Be(CookRunState.Succeeded);
+    }
+
+    /// <summary>Preflight failures retain discovered assets and distinguish the failing asset from skipped work.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task FailedPreflightKeepsAffectedAndSkippedAssets()
+    {
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
+        var main = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
+        var material = AssetPath.Parse("/Content/Materials/Blue.omat.json");
+        _ = await coordinator.RunCookAsync(
+            new(CookTargetKind.Project, ScopeUri: null),
+            (operation, _) =>
+        {
+            CookRunContext.Report(new(Asset: new(main, ContentCookAssetKind.Scene, CookAssetState.Preparing)));
+            CookRunContext.Report(new(Asset: new(material, ContentCookAssetKind.Material, CookAssetState.Preparing)));
+            var issue = new DiagnosticRecord
+            {
+                OperationId = operation.OperationId,
+                Code = "Test.InvalidInput",
+                Message = "Aerial Start is invalid.",
+                Domain = FailureDomain.ContentPipeline,
+                Severity = DiagnosticSeverity.Error,
+                AffectedVirtualPath = main.VirtualPath,
+            };
+            return Task.FromResult(new ContentCookResult(operation.OperationId, CookTargetKind.Project, OperationStatus.Failed, [issue], [], Inspection: null, Validation: null));
+        },
+            CancellationToken.None).ConfigureAwait(false);
+        var assets = coordinator.Runs.Single().Assets;
+        _ = assets[main].State.Should().Be(CookAssetState.Failed);
+        _ = assets[material].State.Should().Be(CookAssetState.Skipped);
+    }
+}

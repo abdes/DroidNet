@@ -7,15 +7,18 @@
 // Covers: Import/Schemas/oxygen.input.schema.json
 
 #include <string>
+#include <string_view>
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 using nlohmann::json;
+using oxygen::cooker::test::InputSource;
 using oxygen::cooker::test::LoadSchema;
 using oxygen::cooker::test::SchemaCase;
 
@@ -24,6 +27,21 @@ auto PrimarySchema() -> const json&
   static const auto schema
     = LoadSchema("Import/Schemas/oxygen.input.schema.json");
   return schema;
+}
+
+auto Source() -> InputSource
+{
+  return InputSource { "/Content/Input/Common.input" };
+}
+
+//! A source with the context `Gameplay` whose one mapping binds `slot`; the
+//! test names its action.
+auto GameplayMapping(const std::string_view slot) -> InputSource
+{
+  return Source()
+    .Context("Gameplay")
+    .Append("/contexts/0/mappings",
+      json::parse(R"({ "slot": ")" + std::string { slot } + R"(" })"));
 }
 
 class InputSchemaCaseTest : public ::testing::TestWithParam<SchemaCase> { };
@@ -37,24 +55,18 @@ INSTANTIATE_TEST_SUITE_P(Cases, InputSchemaCaseTest,
   ::testing::Values(
     SchemaCase {
       "PrimarySchemaAcceptsCanonicalDocument",
-      R"({
-    "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json",
-    "actions": [
-      {
-        "name": "Move",
-        "type": "axis2d",
-        "consumes_input": true,
-        "accumulation": "cumulative"
-      },
-      { "name": "Jump", "type": "bool" }
-    ],
-    "contexts": [
-      {
-        "name": "Gameplay",
-        "priority": 100,
-        "mappings": [
-          { "action": "Jump", "slot": "Space", "trigger": "pressed" },
-          {
+      Source()
+        .Set("/$schema",
+          "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json")
+        .Action("Move", "axis2d")
+        .Set("/actions/0/consumes_input", true)
+        .Set("/actions/0/accumulation", "cumulative")
+        .Action("Jump", "bool")
+        .Context("Gameplay", 100)
+        .Append("/contexts/0/mappings",
+          json::parse(
+            R"({ "action": "Jump", "slot": "Space", "trigger": "pressed" })"))
+        .Append("/contexts/0/mappings", json::parse(R"({
             "action": "Move",
             "slot": "UpArrow",
             "triggers": [
@@ -66,96 +78,70 @@ INSTANTIATE_TEST_SUITE_P(Cases, InputSchemaCaseTest,
                 ]
               }
             ]
-          }
-        ]
-      }
-    ]
-  })",
+          })"))
+        .Text(),
       true,
       "",
     },
     SchemaCase {
       "AcceptsActionsWithoutContexts",
-      R"({ "actions": [ { "name": "Jump", "type": "bool" } ] })",
+      Source().Action("Jump", "bool").Remove("/contexts").Text(),
       true,
       "",
     },
     SchemaCase {
       "AcceptsEmptySource",
-      R"({})",
+      Source().Remove("/actions").Remove("/contexts").Text(),
       true,
       "",
     },
     SchemaCase {
       "AcceptsActionReferenceByVirtualPath",
-      R"({
-    "contexts": [
-      {
-        "name": "Gameplay",
-        "mappings": [
-          {
-            "action": "/Content/Input/Common.input/Jump.oiact",
-            "slot": "Space",
-            "triggers": [
-              {
-                "type": "chord",
-                "chord_action": "/Content/Input/Common.input/Modifier.oiact"
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  })",
+      GameplayMapping("Space")
+        .Reference("/contexts/0/mappings/0/action",
+          "/Content/Input/Common.input/Jump.oiact")
+        .Append("/contexts/0/mappings/0/triggers",
+          json::parse(R"({ "type": "chord" })"))
+        .Reference("/contexts/0/mappings/0/triggers/0/chord_action",
+          "/Content/Input/Common.input/Modifier.oiact")
+        .Text(),
       true,
       "",
     },
     SchemaCase {
       "RejectsActionReferenceToAnotherAssetType",
-      R"({
-    "contexts": [
-      {
-        "name": "Gameplay",
-        "mappings": [
-          { "action": "/Content/Input/Common.input/Gameplay.oimap", "slot": "W" }
-        ]
-      }
-    ]
-  })",
+      GameplayMapping("W")
+        .Reference("/contexts/0/mappings/0/action",
+          "/Content/Input/Common.input/Gameplay.oimap")
+        .Text(),
       false,
       "/contexts/0/mappings/0/action",
     },
     SchemaCase {
       "RejectsUnknownFields",
-      R"({
-    "actions": [
-      { "name": "Move", "type": "axis2d", "unknown": true }
-    ],
-    "contexts": [
-      {
-        "name": "Gameplay",
-        "mappings": [
-          { "action": "Move", "slot": "W" }
-        ]
-      }
-    ]
-  })",
+      Source()
+        .Action("Move", "axis2d")
+        .Set("/actions/0/unknown", true)
+        .Context("Gameplay")
+        .Append("/contexts/0/mappings",
+          json::parse(R"({ "action": "Move", "slot": "W" })"))
+        .Text(),
       false,
       "'unknown'",
     },
     SchemaCase {
       "RejectsInvalidAccumulation",
-      R"({
-    "actions": [
-      { "name": "Move", "type": "axis2d", "accumulation": "average" }
-    ]
-  })",
+      Source()
+        .Action("Move", "axis2d")
+        .Set("/actions/0/accumulation", "average")
+        .Remove("/contexts")
+        .Text(),
       false,
       "/actions/0/accumulation",
     },
     SchemaCase {
       "RejectsInvalidActionType",
-      R"({ "actions": [ { "name": "Move", "type": "axis3d" } ] })",
+      Source().Action("Move", "axis3d").Remove("/contexts").Text(),
       false,
       "/actions/0/type",
     }),

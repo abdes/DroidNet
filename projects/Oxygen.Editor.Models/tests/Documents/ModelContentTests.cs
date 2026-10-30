@@ -8,6 +8,7 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Models.Documents;
+using Oxygen.Editor.Models.Testing;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
@@ -35,11 +36,11 @@ public sealed class ModelContentTests : IDisposable
         this.session = new TestSession(this.project.Context);
         var path = this.project.WriteFile("/Content/Vehicles/Car.glb", SourceBytes);
         this.source = new DocumentFile(path, AssetPath.Parse("/Content/Vehicles/Car.glb"));
-        this.recordPath = ModelImportSettings.PathFor(this.project.Root.FullPath, "/Content/Vehicles/Car.glb");
+        this.recordPath = ModelRecords.PathOf(this.project.Context, "/Content/Vehicles/Car.glb");
         this.writer = new RecordWriter(this);
         this.documents = new OpenDocuments([new ModelDocumentKind(this.session, this.writer)], new NativeAtomicFileStore(this.project.Context.FileSystem));
         using var settings = JsonDocument.Parse("""{"name":"Car","unit_policy":"normalize"}""");
-        this.WriteRecord(ModelImportSettings.Create(this.recordPath, "/Content/Vehicles/Car.glb", "/Content/Vehicles/Car.glb", settings.RootElement));
+        _ = ModelRecords.Write(this.project.Context, "/Content/Vehicles/Car.glb", "/Content/Vehicles/Car.glb", settings.RootElement);
     }
 
     public TestContext TestContext { get; set; }
@@ -196,8 +197,7 @@ public sealed class ModelContentTests : IDisposable
 
     private void WriteRecord(ModelImportSettings record)
     {
-        _ = this.project.Context.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(this.recordPath)!);
-        this.project.Context.FileSystem.File.WriteAllBytes(this.recordPath, record.ToBytes());
+        _ = ModelRecords.Write(this.project.Context, record);
     }
 
     private ModelImportRecordSnapshot ReadSnapshot()

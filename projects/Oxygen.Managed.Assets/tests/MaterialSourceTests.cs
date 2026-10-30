@@ -8,6 +8,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Tests;
@@ -18,7 +19,11 @@ public sealed class MaterialSourceTests
     [TestMethod]
     public void GlossinessSourceExposesEffectiveRoughnessAndPreservesNativeRepresentation()
     {
-        var source = MaterialSourceReader.Read("""{"parameters":{"roughness":0.125,"roughness_as_glossiness":true}}"""u8);
+        var source = MaterialSourceReader.Read(
+            AuthoredFiles.Material("/Content/Materials/Glossy.omat")
+                .Set("/parameters/roughness", 0.125)
+                .Set("/parameters/roughness_as_glossiness", true)
+                .Bytes);
         _ = source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.875f);
         var unchanged = MaterialSourceWriter.ToJson(source with { DoubleSided = true });
         _ = unchanged["parameters"]!["roughness"]!.GetValue<float>().Should().Be(0.125f);
@@ -39,32 +44,33 @@ public sealed class MaterialSourceTests
     [TestMethod]
     public void ScalarEditPreservesIndependentTexturesUvAndNativeShaderFields()
     {
-        const string json = """
-        {
-          "name": "Coated",
-          "domain": "masked",
-          "alpha_mode": "masked",
-          "orm_policy": "force_separate",
-          "parameters": {
-            "base_color": [0.2, 0.3, 0.4, 1],
-            "metalness": 0.75, "roughness": 0.4,
-            "ior": 1.7, "clearcoat_factor": 0.3,
-            "emissive_color": [0.25, 0.5, 1], "emissive_intensity": 9.7
-          },
-          "textures": {
-            "base_color": { "virtual_path": "/Art/Color.otex", "uv_set": 1,
-              "uv_transform": { "scale": [2, 3], "offset": [0.1, 0.2], "rotation_radians": 0.5 } },
-            "metallic": { "virtual_path": "/Art/Metal.otex" },
-            "roughness": { "virtual_path": "/Art/Rough.otex" },
-            "normal": { "virtual_path": "/Art/Normal.otex", "uv_set": 2 },
-            "emissive": { "virtual_path": "/Art/Emit.otex", "uv_set": 3 }
-          },
-          "shaders": [{ "stage": "pixel", "source_path": "Coated.hlsl",
-            "entry_point": "PSMain", "defines": "COATED=1", "shader_hash": 42 }]
-        }
-        """;
-        var original = JsonNode.Parse(json)!;
-        var source = MaterialSourceReader.Read(Encoding.UTF8.GetBytes(json));
+        var material = AuthoredFiles.Material("/Content/Materials/Coated.omat")
+            .Set("/domain", "masked")
+            .Set("/alpha_mode", "masked")
+            .Set("/orm_policy", "force_separate")
+            .Set("/parameters", JsonNode.Parse("""
+                {
+                  "base_color": [0.2, 0.3, 0.4, 1],
+                  "metalness": 0.75, "roughness": 0.4,
+                  "ior": 1.7, "clearcoat_factor": 0.3,
+                  "emissive_color": [0.25, 0.5, 1], "emissive_intensity": 9.7
+                }
+                """))
+            .Texture("base_color", "/Art/Color.otex")
+            .Set("/textures/base_color/uv_set", 1)
+            .Set("/textures/base_color/uv_transform", JsonNode.Parse("""{ "scale": [2, 3], "offset": [0.1, 0.2], "rotation_radians": 0.5 }"""))
+            .Texture("metallic", "/Art/Metal.otex")
+            .Texture("roughness", "/Art/Rough.otex")
+            .Texture("normal", "/Art/Normal.otex")
+            .Set("/textures/normal/uv_set", 2)
+            .Texture("emissive", "/Art/Emit.otex")
+            .Set("/textures/emissive/uv_set", 3)
+            .Set("/shaders", JsonNode.Parse("""
+                [{ "stage": "pixel", "source_path": "Coated.hlsl",
+                  "entry_point": "PSMain", "defines": "COATED=1", "shader_hash": 42 }]
+                """));
+        var original = material.Json;
+        var source = MaterialSourceReader.Read(material.Bytes);
         var edited = source with { AlphaCutoff = 0.25f };
         using var stream = new MemoryStream();
         MaterialSourceWriter.Write(stream, edited);
@@ -86,7 +92,11 @@ public sealed class MaterialSourceTests
     [TestMethod]
     public void ZeroEmissionRetainsAuthoredColor()
     {
-        var source = MaterialSourceReader.Read("""{"parameters":{"emissive_color":[0.25,0.5,0.75],"emissive_intensity":0}}"""u8);
+        var source = MaterialSourceReader.Read(
+            AuthoredFiles.Material("/Content/Materials/Dark.omat")
+                .Set("/parameters/emissive_color", JsonNode.Parse("[0.25, 0.5, 0.75]"))
+                .Set("/parameters/emissive_intensity", 0)
+                .Bytes);
         using var stream = new MemoryStream();
         MaterialSourceWriter.Write(stream, source);
         var output = MaterialSourceReader.Read(stream.ToArray());
@@ -99,7 +109,7 @@ public sealed class MaterialSourceTests
     [DataRow("alpha_blended", MaterialAlphaMode.Blend)]
     public void UnrelatedEditsPreserveDomainOnlySurfaceMode(string domain, MaterialAlphaMode mode)
     {
-        var source = MaterialSourceReader.Read(Encoding.UTF8.GetBytes($$"""{"domain":"{{domain}}"}"""));
+        var source = MaterialSourceReader.Read(AuthoredFiles.Material("/Content/Materials/Surface.omat").Set("/domain", domain).Bytes);
         _ = source.AlphaMode.Should().Be(mode);
         var unchanged = MaterialSourceWriter.ToJson(source with { AlphaCutoff = 0.3f });
         _ = unchanged["domain"]!.GetValue<string>().Should().Be(domain);
@@ -113,7 +123,8 @@ public sealed class MaterialSourceTests
     [TestMethod]
     public void SurfaceEditPreservesSpecializedDomain()
     {
-        var source = MaterialSourceReader.Read("""{"domain":"decal","alpha_mode":"masked"}"""u8);
+        var source = MaterialSourceReader.Read(
+            AuthoredFiles.Material("/Content/Materials/Stamp.omat").Set("/domain", "decal").Set("/alpha_mode", "masked").Bytes);
         var output = MaterialSourceWriter.ToJson(source with { AlphaMode = MaterialAlphaMode.Blend });
         _ = output["domain"]!.GetValue<string>().Should().Be("decal");
         _ = output["alpha_mode"]!.GetValue<string>().Should().Be("blended");
@@ -122,12 +133,13 @@ public sealed class MaterialSourceTests
     [TestMethod]
     public void SameImageWithIndependentUvBindingsKeepsBothBindings()
     {
-        var source = MaterialSourceReader.Read("""
-            { "textures": {
-                "metallic": {"virtual_path":"/Art/Surface.otex","uv_set":0},
-                "roughness": {"virtual_path":"/Art/Surface.otex","uv_set":1}
-            } }
-            """u8);
+        var source = MaterialSourceReader.Read(
+            AuthoredFiles.Material("/Content/Materials/Packed.omat")
+                .Texture("metallic", "/Art/Surface.otex")
+                .Set("/textures/metallic/uv_set", 0)
+                .Texture("roughness", "/Art/Surface.otex")
+                .Set("/textures/roughness/uv_set", 1)
+                .Bytes);
         _ = source.TextureReferences.Should().Contain("metallic", AssetPath.Parse("/Art/Surface.otex")).And.Contain("roughness", AssetPath.Parse("/Art/Surface.otex"));
         var output = MaterialSourceWriter.ToJson(source with { AlphaCutoff = 0.3f });
         _ = output["textures"]!["roughness"]!["uv_set"]!.GetValue<int>().Should().Be(1);
@@ -137,13 +149,14 @@ public sealed class MaterialSourceTests
     [TestMethod]
     public void TextureEditsChangeOnlyTheSelectedChannelAndPreserveItsUvBinding()
     {
-        var source = MaterialSourceReader.Read("""
-            { "textures": {
-                "base_color": { "virtual_path": "/Art/Old.otex", "uv_set": 2,
-                  "uv_transform": { "scale": [2, 3], "offset": [0.1, 0.2] } },
-                "normal": { "virtual_path": "/Art/Normal.otex", "uv_set": 1 }
-            } }
-            """u8);
+        var source = MaterialSourceReader.Read(
+            AuthoredFiles.Material("/Content/Materials/Bark.omat")
+                .Texture("base_color", "/Art/Old.otex")
+                .Set("/textures/base_color/uv_set", 2)
+                .Set("/textures/base_color/uv_transform", JsonNode.Parse("""{ "scale": [2, 3], "offset": [0.1, 0.2] }"""))
+                .Texture("normal", "/Art/Normal.otex")
+                .Set("/textures/normal/uv_set", 1)
+                .Bytes);
 
         var edited = source.WithTextureReference("base_color", AssetPath.Parse("/Content/Textures/New.otex"));
         var output = MaterialSourceWriter.ToJson(edited);
@@ -206,7 +219,8 @@ public sealed class MaterialSourceTests
     [DataRow("base_color", "/Bark.otex")]
     public void WithTextureReference_InvalidChannelOrMount_ThrowsAndKeepsTheSource(string channel, string texture)
     {
-        var source = MaterialSourceReader.Read("""{"textures":{"base_color":{"virtual_path":"/Content/Textures/Oak.otex"}}}"""u8);
+        var source = MaterialSourceReader.Read(
+            AuthoredFiles.Material("/Content/Materials/Oak.omat").Texture("base_color", "/Content/Textures/Oak.otex").Bytes);
 
         var act = () => source.WithTextureReference(channel, AssetPath.Parse(texture));
 
@@ -217,7 +231,7 @@ public sealed class MaterialSourceTests
     [TestMethod]
     public void NormalScale_IsWrittenWhenANormalTextureIsAssigned()
     {
-        var source = MaterialSourceReader.Read("{}"u8).WithTextureReference("normal", AssetPath.Parse("/Content/Textures/Normal.otex"));
+        var source = MaterialSourceReader.Read(AuthoredFiles.Material("/Content/Materials/Plain.omat").Bytes).WithTextureReference("normal", AssetPath.Parse("/Content/Textures/Normal.otex"));
 
         var written = MaterialSourceWriter.ToJson(source);
 

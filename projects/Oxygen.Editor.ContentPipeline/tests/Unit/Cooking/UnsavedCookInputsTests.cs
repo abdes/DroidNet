@@ -2,12 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
@@ -19,18 +23,6 @@ public sealed class UnsavedCookInputsTests
     private const string MaterialA = "Content/Materials/A.omat.json";
     private const string MaterialB = "Content/Other/B.omat.json";
 
-    private const string Geometry = """
-        { "name": "Box", "virtual_path": "/Content/Geometry/Box.ogeo",
-          "buffers": [ { "uri": "mesh.bin", "virtual_path": "/Content/Geometry/Box.obuf" } ],
-          "lods": [ { "submeshes": [ { "surface_id": "a", "material_ref": "/Content/Materials/A.omat", "views": [] } ] } ] }
-        """;
-
-    private const string Scene = """
-        { "Id": "6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10", "Name": "Main",
-          "RootNodes": [ { "Id": "3d9a2b1c-0000-4000-8000-000000000001", "Components": [ { "$type": "Metadata", "Name": "Box" }, { "$type": "Transform", "Name": "Transform" }, { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "GeometryComponent",
-            "GeometryUri": "asset:///Content/Geometry/Box.ogeo" }, { "$type": "Hierarchy", "Name": "Hierarchy" } ] } ] }
-        """;
-
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>A scene cook reads the unsaved material the scene uses, and not an unrelated unsaved one.</summary>
@@ -41,7 +33,7 @@ public sealed class UnsavedCookInputsTests
     [DataRow(CookTargetKind.Asset)]
     public async Task FindAsync_Scene_ReturnsTheUnsavedMaterialItUses(CookTargetKind kind)
     {
-        using var workspace = CreateProject();
+        using var workspace = await CreateProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var (a, _) = MarkUnsaved(workspace, workspace.FileOf(MaterialA), "/Content/Materials/A.omat", workspace.FileOf(MaterialB), "/Content/Other/B.omat");
 
         var found = await CreateInputs(workspace).FindAsync(new(kind, AssetPath.Parse("/Content/Scenes/Main.oscene")), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -54,7 +46,7 @@ public sealed class UnsavedCookInputsTests
     [TestMethod]
     public async Task FindAsync_Asset_ReturnsOnlyTheUnsavedDocumentOfThatAsset()
     {
-        using var workspace = CreateProject();
+        using var workspace = await CreateProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var (_, b) = MarkUnsaved(workspace, workspace.FileOf(MaterialA), "/Content/Materials/A.omat", workspace.FileOf(MaterialB), "/Content/Other/B.omat");
 
         var found = await CreateInputs(workspace).FindAsync(new(CookTargetKind.Asset, AssetPath.Parse("/Content/Other/B.omat")), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -67,7 +59,7 @@ public sealed class UnsavedCookInputsTests
     [TestMethod]
     public async Task FindAsync_Folder_ReturnsTheUnsavedDocumentsInsideIt()
     {
-        using var workspace = CreateProject();
+        using var workspace = await CreateProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var (_, b) = MarkUnsaved(workspace, workspace.FileOf(MaterialA), "/Content/Materials/A.omat", workspace.FileOf(MaterialB), "/Content/Other/B.omat");
 
         var found = await CreateInputs(workspace).FindAsync(new(CookTargetKind.Folder, AssetPath.Parse("/Content/Other")), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -80,7 +72,7 @@ public sealed class UnsavedCookInputsTests
     [TestMethod]
     public async Task FindAsync_Project_ReturnsEveryUnsavedDocument()
     {
-        using var workspace = CreateProject();
+        using var workspace = await CreateProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var (a, b) = MarkUnsaved(workspace, workspace.FileOf(MaterialA), "/Content/Materials/A.omat", workspace.FileOf(MaterialB), "/Content/Other/B.omat");
 
         var found = await CreateInputs(workspace).FindAsync(new(CookTargetKind.Project, ScopeUri: null), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -97,7 +89,7 @@ public sealed class UnsavedCookInputsTests
     [DataRow(CookTargetKind.Project)]
     public async Task FindAsync_WithoutUnsavedDocuments_ReturnsNone(CookTargetKind kind)
     {
-        using var workspace = CreateProject();
+        using var workspace = await CreateProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var scope = kind == CookTargetKind.Project ? null : AssetPath.Parse(kind == CookTargetKind.Folder ? "/Content/Other" : "/Content/Scenes/Main.oscene");
 
         var found = await CreateInputs(workspace).FindAsync(new(kind, scope), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -118,14 +110,19 @@ public sealed class UnsavedCookInputsTests
         return (a, b);
     }
 
-    private static RelocationWorkspace CreateProject()
+    private static async Task<RelocationWorkspace> CreateProjectAsync(CancellationToken token)
     {
         var workspace = new RelocationWorkspace();
-        _ = workspace.Write("Content/Scenes/Main.oscene.json", Scene);
-        _ = workspace.Write("Content/Geometry/Box.ogeo.json", Geometry);
+        var scene = new Scene { Name = "Main", Id = SceneId.FromValue(Guid.Parse("6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10")) };
+        var box = new SceneNode(scene, "Box") { Id = new NodeId(Guid.Parse("3d9a2b1c-0000-4000-8000-000000000001")) };
+        _ = box.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Parse("/Content/Geometry/Box.ogeo") });
+        scene.RootNodes.Add(box);
+        _ = await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json", scene, token).ConfigureAwait(false);
+        var geometry = AuthoredFiles.Geometry("/Content/Geometry/Box.ogeo").SubmeshMaterial(0, 0, "/Content/Materials/A.omat").WithIdentityField();
+        _ = workspace.Write("Content/Geometry/Box.ogeo.json", geometry.Append("/buffers", new JsonObject { ["uri"] = "mesh.bin", ["virtual_path"] = geometry.Spell("/Content/Geometry/Box.obuf") }).Text);
         _ = workspace.Write("Content/Geometry/mesh.bin", "bin");
-        _ = workspace.Write(MaterialA, """{ "name": "A" }""");
-        _ = workspace.Write(MaterialB, """{ "name": "B" }""");
+        _ = workspace.Write(MaterialA, AuthoredFiles.Material("/Content/Materials/A.omat").Text);
+        _ = workspace.Write(MaterialB, AuthoredFiles.Material("/Content/Other/B.omat").Text);
         return workspace;
     }
 }

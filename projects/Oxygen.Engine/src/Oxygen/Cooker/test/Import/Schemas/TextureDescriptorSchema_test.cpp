@@ -7,9 +7,11 @@
 // Covers: Import/Schemas/oxygen.texture-descriptor.schema.json
 
 #include <string>
+#include <string_view>
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -18,12 +20,25 @@ namespace {
 using nlohmann::json;
 using oxygen::cooker::test::LoadSchema;
 using oxygen::cooker::test::SchemaCase;
+using oxygen::cooker::test::TextureDescriptor;
 
 auto Schema() -> const json&
 {
   static const auto schema
     = LoadSchema("Import/Schemas/oxygen.texture-descriptor.schema.json");
   return schema;
+}
+
+auto Texture(const std::string_view identity, const std::string_view source)
+  -> TextureDescriptor
+{
+  return TextureDescriptor { std::string { identity }, source };
+}
+
+auto BrickAlbedo() -> TextureDescriptor
+{
+  return Texture(
+    "/Content/Textures/brick_albedo.otex", "Textures/brick_albedo.png");
 }
 
 class TextureDescriptorSchemaTest
@@ -38,64 +53,48 @@ INSTANTIATE_TEST_SUITE_P(Cases, TextureDescriptorSchemaTest,
   ::testing::Values(
     SchemaCase {
       "AcceptsCanonicalDocument",
-      R"({
-    "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json",
-    "source": "Textures/brick_albedo.png",
-    "intent": "albedo",
-    "decode": {
-      "color_space": "srgb",
-      "flip_y": false,
-      "force_rgba": true
-    },
-    "mips": {
-      "policy": "full",
-      "filter": "kaiser",
-      "renormalize": true
-    },
-    "output": {
-      "format": "bc7_srgb",
-      "bc7_quality": "high",
-      "packing_policy": "d3d12"
-    },
-    "hdr": {
-      "handling": "tonemap",
-      "exposure_ev": 0.0,
-      "bake_hdr": false
-    },
-    "cube": {
-      "cubemap": false
-    }
-  })",
+      BrickAlbedo()
+        .Set("/$schema",
+          "./src/Oxygen/Cooker/Import/Schemas/"
+          "oxygen.texture-descriptor.schema.json")
+        .Set("/intent", "albedo")
+        .Set("/decode/color_space", "srgb")
+        .Set("/decode/flip_y", false)
+        .Set("/decode/force_rgba", true)
+        .Set("/mips/policy", "full")
+        .Set("/mips/filter", "kaiser")
+        .Set("/mips/renormalize", true)
+        .Set("/output/format", "bc7_srgb")
+        .Set("/output/bc7_quality", "high")
+        .Set("/output/packing_policy", "d3d12")
+        .Set("/hdr/handling", "tonemap")
+        .Set("/hdr/exposure_ev", 0.0)
+        .Set("/hdr/bake_hdr", false)
+        .Set("/cube/cubemap", false)
+        .Text(),
       true,
       "",
     },
     SchemaCase {
       "RejectsRemovedMipFilterSpace",
-      R"({
-    "source": "Textures/color.png", "mips": { "filter_space": "srgb" }
-  })",
+      Texture("/Content/Textures/color.otex", "Textures/color.png")
+        .Set("/mips/filter_space", "srgb")
+        .Text(),
       false,
       "'filter_space'",
     },
     SchemaCase {
       "RejectsUnknownNestedFields",
-      R"({
-    "source": "Textures/brick_albedo.png",
-    "decode": {
-      "unknown_setting": true
-    }
-  })",
+      BrickAlbedo().Set("/decode/unknown_setting", true).Text(),
       false,
       "'unknown_setting'",
     },
     SchemaCase {
       "RequiresCubeFaceSizeWhenEquirectToCubeEnabled",
-      R"({
-    "source": "Textures/env_panorama.hdr",
-    "cube": {
-      "equirect_to_cube": true
-    }
-  })",
+      Texture(
+        "/Content/Textures/env_panorama.otex", "Textures/env_panorama.hdr")
+        .Set("/cube/equirect_to_cube", true)
+        .Text(),
       false,
       "'cube_face_size'",
     }),

@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -26,8 +27,6 @@ public sealed class SharedMountTests
 {
     private const string Studio = @"D:\Studio\Shared";
 
-    private const string Wall = """{ "name": "Wall", "textures": { "base_color": { "virtual_path": "/Studio/Textures/Brick.otex" } } }""";
-
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>Renaming a texture in a mount outside the project moves its files there and rewrites its referrers.</summary>
@@ -42,7 +41,8 @@ public sealed class SharedMountTests
         _ = workspace.FileSystem.File.Exists(Path.Combine(Studio, "Textures", "Stone.otex.json")).Should().BeTrue();
         _ = workspace.FileSystem.File.Exists(Path.Combine(Studio, "Textures", "Stone.png")).Should().BeTrue();
         _ = workspace.FileSystem.File.Exists(Path.Combine(Studio, "Textures", "Brick.otex.json")).Should().BeFalse();
-        _ = workspace.ReadJson("Content/Materials/Wall.omat.json")["textures"]!["base_color"]!["virtual_path"]!.GetValue<string>().Should().Be("/Studio/Textures/Stone.otex");
+        _ = workspace.ReadJson("Content/Materials/Wall.omat.json")["textures"]!["base_color"]!["virtual_path"]!.GetValue<string>()
+            .Should().Be(AuthoredFiles.SpellReference(AssetPath.Parse("/Content/Materials/Wall.omat"), AssetPath.Parse("/Studio/Textures/Stone.otex")));
         _ = JsonNode.Parse(workspace.FileSystem.File.ReadAllText(Path.Combine(Studio, "Textures", "Stone.otex.json")))!["virtual_path"]!.GetValue<string>().Should().Be("/Studio/Textures/Stone.otex");
     }
 
@@ -75,7 +75,7 @@ public sealed class SharedMountTests
         _ = entry["missing"]!.GetValue<string>().Should().Be("/Studio/Textures/Brick.otex");
         _ = entry["code"]!.GetValue<string>().Should().Be(AssetIdentityDiagnosticCodes.ResolveMissing);
 
-        _ = workspace.Write("Content/Materials/Wall.omat.json", Wall.Replace("Brick", "Walls", StringComparison.Ordinal));
+        _ = workspace.Write("Content/Materials/Wall.omat.json", WallMaterial("/Studio/Textures/Walls.otex").Text);
         _ = await check.RunAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = check.Unresolved.Should().BeEmpty();
@@ -102,11 +102,13 @@ public sealed class SharedMountTests
     {
         var workspace = new RelocationWorkspace();
         workspace.MountOutside("Studio", Studio);
-        workspace.WriteOutside(Path.Combine(Studio, "Textures", "Brick.otex.json"), """{ "name": "Brick", "virtual_path": "/Studio/Textures/Brick.otex", "source": "Brick.png" }""");
+        workspace.WriteOutside(Path.Combine(Studio, "Textures", "Brick.otex.json"), AuthoredFiles.Texture("/Studio/Textures/Brick.otex", "Brick.png").WithIdentityField().Set("/name", "Brick").Text);
         workspace.WriteOutside(Path.Combine(Studio, "Textures", "Brick.png"), "png");
-        _ = workspace.Write("Content/Materials/Wall.omat.json", Wall);
+        _ = workspace.Write("Content/Materials/Wall.omat.json", WallMaterial("/Studio/Textures/Brick.otex").Text);
         return workspace;
     }
+
+    private static MaterialDocument WallMaterial(string texture) => AuthoredFiles.Material("/Content/Materials/Wall.omat").Texture("base_color", texture);
 
     private static JsonNode ReadReferences(RelocationWorkspace workspace)
         => JsonNode.Parse(workspace.FileSystem.File.ReadAllText(ProjectOutputFolders.BuildPath(workspace.Root, ReferenceCheck.FileName)))!;
