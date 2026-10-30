@@ -9,8 +9,8 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: item 17.6**, #75: editor source mounts, one `Mounts` list,
-`.mounts.json` and authoring outside the project tree.
+**Next: item 18**, #30: RenderDoc past v1.46 for count-buffer
+`ExecuteIndirect` captures.
 
 | Order | Item                                                                                           | Needs          | State | Commit    |
 | ----- | ---------------------------------------------------------------------------------------------- | -------------- | ----- | --------- |
@@ -39,7 +39,7 @@ holds; its row then names the commit.
 | 17.3  | #118 full paks pack only referenced resources; re-cooks retire superseded outputs              | 17.1           | done  | c6f6a3eaf |
 | 17.4  | #120 `Examples/Content` as an ordinary Oxygen project                                          | 17.1, 17.2     | done  | b9d53b0fc |
 | 17.5  | #121 output folders by rule; `.imported` and `.oxygen` retired                                 | -              | done  | de8885539 |
-| 17.6  | #75 editor source mounts: one `Mounts` list, `.mounts.json`, outside-tree authoring            | 17.1, 17.5     | open  | -         |
+| 17.6  | #75 editor source mounts: one `Mounts` list, `.mounts.json`, outside-tree authoring            | 17.1, 17.5     | done  | 974b399fe |
 | 18    | #30 RenderDoc past v1.46 for count-buffer `ExecuteIndirect` captures                           | -              | open  | -         |
 | 19    | #109 per-view draw bounds and the viewport Show menu                                           | -              | open  | -         |
 | 20    | #54 forward-path shader debug modes produce output                                             | -              | open  | -         |
@@ -88,10 +88,11 @@ Ordering decisions:
   #81, #118) and the source locations they depend on. They need no later
   item, so they come first. #110 is worked outside this ledger.
 - #81 left the format window (it was item 39) to become items 17 to 17.2,
-  designed in the source mounts proposals
-  (`projects/Oxygen.Engine/design/proposals/source-mounts/`,
-  `design/editor/proposals/source-mounts/`): the recorded source becomes the
-  source's mount path. Retiring the outputs a re-cook no longer produces
+  designed in the engine's source mounts proposal
+  (`projects/Oxygen.Engine/design/proposals/source-mounts/`) and the editor's
+  [project layout](../lld/project-layout-and-templates.md#mounts) and
+  [content pipeline](../lld/content-pipeline.md) designs: the recorded source
+  becomes the source's mount path. Retiring the outputs a re-cook no longer produces
   (17.3, #118) is keyed by producer, which is only exact after 17.1. The index
   version change of 17.1 needs a recook, besides the one after item 42.
 - The examples project (17.4, #120,
