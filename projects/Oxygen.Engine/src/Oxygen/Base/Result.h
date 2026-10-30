@@ -191,6 +191,11 @@ public:
   }
 
   //! Retrieves the value from the Result as a constant reference.
+  /*!
+   The checked accessor: throws `std::bad_variant_access` when the Result holds
+   an error. After checking the Result, use `*result` or `result->`, which
+   never throw.
+  */
   [[nodiscard]] constexpr auto value() const& -> const T&
   {
     return std::get<T>(value_);
@@ -202,23 +207,30 @@ public:
   //! Retrieves the value from the Result as a rvalue reference.
   constexpr auto value() && -> T&& { return std::get<T>(std::move(value_)); }
 
-  //! Moves the value from the Result.
+  //! Moves the value from the Result. Precondition: it holds a value.
   constexpr auto move_value() noexcept -> T
   {
-    return std::get<T>(std::move(value_));
+    return std::move(*std::get_if<T>(&value_));
   }
 
   //! Retrieves the error code from the Result.
-  [[nodiscard]] constexpr auto error() const& -> const E&
+  /*!
+   Precondition: the Result holds an error (check it first, as with
+   `std::expected::error()`); it never throws.
+  */
+  [[nodiscard]] constexpr auto error() const& noexcept -> const E&
   {
-    return std::get<E>(value_);
+    return *std::get_if<E>(&value_);
   }
 
   //! Retrieves the error code from the Result as a mutable reference.
-  constexpr auto error() & -> E& { return std::get<E>(value_); }
+  constexpr auto error() & noexcept -> E& { return *std::get_if<E>(&value_); }
 
   //! Retrieves the error code from the Result as a rvalue reference.
-  constexpr auto error() && -> E&& { return std::get<E>(std::move(value_)); }
+  constexpr auto error() && noexcept -> E&&
+  {
+    return std::move(*std::get_if<E>(&value_));
+  }
 
   //! Checks if the Result contains a value.
   constexpr explicit operator bool() const noexcept { return has_value(); }
@@ -231,32 +243,46 @@ public:
   template <typename U>
   constexpr auto value_or(U&& default_value) const& noexcept -> T
   {
-    return has_value() ? value()
+    return has_value() ? **this
                        : static_cast<T>(std::forward<U>(default_value));
   }
 
   template <typename U>
   constexpr auto value_or(U&& default_value) && noexcept -> T
   {
-    return has_value() ? std::move(value())
+    return has_value() ? std::move(**this)
                        : static_cast<T>(std::forward<U>(default_value));
   }
   //! @}
 
   //! @{
-  //! Retrieves a reference to the contained value if the Result holds a value.
-  constexpr auto operator*() const& noexcept -> const T& { return value(); }
+  //! Retrieves a reference to the contained value. Precondition: the Result
+  //! holds a value (check it first, as with `std::expected`); never throws.
+  constexpr auto operator*() const& noexcept -> const T&
+  {
+    return *std::get_if<T>(&value_);
+  }
 
-  constexpr auto operator*() & -> T& { return std::get<T>(value_); }
+  constexpr auto operator*() & noexcept -> T&
+  {
+    return *std::get_if<T>(&value_);
+  }
 
-  constexpr auto operator*() && noexcept -> T&& { return std::move(value()); }
+  constexpr auto operator*() && noexcept -> T&&
+  {
+    return std::move(*std::get_if<T>(&value_));
+  }
   //! @}
 
   //! @{
-  //! Pointer-like access to the contained value.
-  constexpr auto operator->() const noexcept -> const T* { return &value(); }
+  //! Pointer-like access to the contained value. Precondition: the Result
+  //! holds a value; never throws.
+  constexpr auto operator->() const noexcept -> const T*
+  {
+    return std::get_if<T>(&value_);
+  }
 
-  constexpr auto operator->() noexcept -> T* { return &value(); }
+  constexpr auto operator->() noexcept -> T* { return std::get_if<T>(&value_); }
   //! @}
 
 private:
@@ -330,13 +356,17 @@ public:
   }
 
   //! Retrieves the error code from the Result.
-  [[nodiscard]] constexpr auto error() const& -> const E&
+  /*!
+   Precondition: the Result holds an error (check it first, as with
+   `std::expected::error()`); it never throws.
+  */
+  [[nodiscard]] constexpr auto error() const& noexcept -> const E&
   {
-    return std::get<E>(value_);
+    return *std::get_if<E>(&value_);
   }
 
   //! Retrieves the error code from the Result as a mutable reference.
-  constexpr auto error() & -> E& { return std::get<E>(value_); }
+  constexpr auto error() & noexcept -> E& { return *std::get_if<E>(&value_); }
 
   //! Checks if the Result indicates success.
   constexpr explicit operator bool() const noexcept { return has_value(); }
@@ -347,10 +377,11 @@ private:
 
 //! Helper macro to evaluate and expression that returns a result, and if the
 //! result has an error, propagates the error.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define CHECK_RESULT(expr)                                                     \
   do {                                                                         \
     if (const auto result = (expr); !result) {                                 \
-      return ::oxygen::Err(result.error());                                    \
+      return ::oxygen::Err(*result.error_if());                                \
     }                                                                          \
   } while (false)
 
