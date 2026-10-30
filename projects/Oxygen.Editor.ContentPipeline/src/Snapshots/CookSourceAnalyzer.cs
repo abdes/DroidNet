@@ -9,12 +9,10 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Authoring.Textures;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -60,6 +58,7 @@ internal sealed partial class CookSourceAnalyzer(
         {
             Artifacts = artifacts,
             Mounts = ContentImportManifestBuilder.CreateMounts(operation.Project),
+            MountsFile = ContentImportMountsFile.Of(operation.Project),
         };
         var report = await native.AnalyzeSourcesAsync(execution, cancellationToken).ConfigureAwait(false);
         this.AddReportDiagnostics(report, prepared, diagnostics);
@@ -166,7 +165,7 @@ internal sealed partial class CookSourceAnalyzer(
                 continue;
             }
 
-            var inputs = await CookSavedSourceReader.ReadNativeInputsAsync(facts, operation.Project.ProjectRoot, generatedPaths, cancellationToken).ConfigureAwait(false);
+            var inputs = await CookSavedSourceReader.ReadNativeInputsAsync(facts, path => CookPaths.TryOf(operation.Project, path), generatedPaths, cancellationToken).ConfigureAwait(false);
             var virtualPath = source.Input.AssetUri.VirtualPath;
             diagnostics.AddRange(inputs.OmittedDiagnostics(operation.OperationId, FailureDomain.ContentPipeline, virtualPath));
             if (!inputs.Outside.IsEmpty)
@@ -220,9 +219,9 @@ internal sealed partial class CookSourceAnalyzer(
         CookInputSnapshot? snapshot,
         CancellationToken cancellationToken)
     {
-        var sourcePath = snapshot is null ? input.SourceAbsolutePath.FullPath : Path.Combine(snapshot.InputRoot, input.SourceRelativePath);
+        var sourcePath = snapshot is null ? input.SourceAbsolutePath.FullPath : Path.Combine(snapshot.InputRoot, CookPaths.StoragePathOf(input.SourceCookPath));
         var bytes = await CookSavedSourceReader.ReadAsync(sourcePath, cancellationToken).ConfigureAwait(false);
-        ImmutableArray<CookSnapshotInput> managed = [new(input.AssetUri, input.SourceAbsolutePath, input.SourceRelativePath, Convert.ToHexString(SHA256.HashData(bytes)))];
+        ImmutableArray<CookSnapshotInput> managed = [new(input.AssetUri, input.SourceAbsolutePath, input.SourceCookPath, Convert.ToHexString(SHA256.HashData(bytes)))];
         var stream = new MemoryStream(bytes, writable: false);
         await using var lifetime = stream.ConfigureAwait(false);
         var scene = await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
@@ -242,7 +241,7 @@ internal sealed partial class CookSourceAnalyzer(
         {
             SourceAbsolutePath = FileSystemPath.From(projection.DescriptorPath),
             Role = ContentCookInputRole.GeneratedDescriptor,
-            DerivedFrom = ContentImportManifestBuilder.ToMountPath(operation.Project, input.SourceRelativePath),
+            DerivedFrom = input.SourceCookPath,
         });
         return new(input, recipes.BuildJob(projected, []), managed, projection);
     }
@@ -312,7 +311,7 @@ internal sealed partial class CookSourceAnalyzer(
 
     // A texture referenced by identity cooks from its authored descriptor in an authoring mount.
     private string? ResolveTextureDescriptorPath(AssetPath texture)
-        => operation.Project.AuthoringMounts.Any(mount => string.Equals(mount.Name, texture.Mount, StringComparison.Ordinal))
+        => operation.Project.SourceMounts.Any(mount => string.Equals(mount.Name, texture.Mount, StringComparison.Ordinal))
             && operation.Project.Find(texture.WithAuthoringSuffix()) is { IsMountRoot: false } descriptor
                 ? descriptor.File.FullPath
                 : null;
@@ -344,7 +343,7 @@ internal sealed partial class CookSourceAnalyzer(
         };
 
     private ContentCookInput Rebase(ContentCookInput input)
-        => input with { SourceRelativePath = Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, input.SourceAbsolutePath.FullPath).Replace('\\', '/') };
+        => input with { SourceCookPath = CookPaths.Of(operation.Project, input.SourceAbsolutePath) };
 
     private sealed record PreparedSource(ContentCookInput Input, ContentImportJob Job, ImmutableArray<CookSnapshotInput> ManagedFiles, SceneDescriptorGenerationResult? Scene)
     {

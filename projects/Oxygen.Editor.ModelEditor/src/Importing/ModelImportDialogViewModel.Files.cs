@@ -26,7 +26,7 @@ public sealed partial class ModelImportDialogViewModel
     {
         ArgumentNullException.ThrowIfNull(paths);
         var listed = this.Files.Select(static file => file.SourcePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var records = new ModelImportRecords(this.project.FileSystem, this.project.ProjectRoot.FullPath);
+        var records = new ModelImportRecords(this.project);
         var added = new List<ModelImportFile>();
         var ignored = 0;
         foreach (var path in paths.Select(Path.GetFullPath))

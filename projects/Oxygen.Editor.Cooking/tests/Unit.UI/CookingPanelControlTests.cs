@@ -545,7 +545,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         => view.FindDescendant<TextBlock>(element => string.Equals(element.Text, text, StringComparison.Ordinal));
 
     private static TestSession CreateSession()
-        => new(TestProject.Create(new MockFileSystem(), Path.GetTempPath()).Context with { ProjectId = Guid.NewGuid(), Name = "Vortex", AuthoringMounts = [] });
+        => new(TestProject.Create(new MockFileSystem(), Path.GetTempPath()).Context with { ProjectId = Guid.NewGuid(), Name = "Vortex", Mounts = [] });
 
     private static CookingPanelViewModel CreateModel(TestSession session, ICookRecovery? actions = null, Mock<ICookRunService>? runService = null, Func<CookRunSnapshot, CookRunSnapshot>? configure = null)
     {

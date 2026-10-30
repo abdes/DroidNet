@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Persistence;
@@ -19,8 +20,16 @@ namespace Oxygen.Editor.Assets.Unit.Tests;
 
 /// <summary>Checks how the composed catalog presents the project output and cooked libraries a publication selects.</summary>
 [TestClass]
-public sealed class CookedLibraryCatalogTests
+public sealed partial class CookedLibraryCatalogTests
 {
+    private Fixture fixture = null!;
+
+    [TestInitialize]
+    public void CreateFixture() => this.fixture = new Fixture();
+
+    [TestCleanup]
+    public async Task DisposeFixtureAsync() => await this.fixture.DisposeAsync().ConfigureAwait(false);
+
     /// <summary>Gets or sets the running test context.</summary>
     public TestContext TestContext { get; set; } = null!;
 
@@ -29,18 +38,17 @@ public sealed class CookedLibraryCatalogTests
     [TestMethod]
     public async Task OverriddenLibraryCopyExplainsTheSourceUsedByAssignments()
     {
-        using var fixture = new Fixture();
-        fixture.Publish(fixture.FirstRoot, fixture.SecondRoot, fixture.ProjectRoot);
-        using var catalog = fixture.CreateCatalog();
+        this.fixture.Publish(this.fixture.FirstRoot, this.fixture.SecondRoot, this.fixture.ProjectRoot);
+        var catalog = this.fixture.CreateCatalog();
         var records = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var rows = fixture.Reduce(records);
+        var rows = this.fixture.Reduce(records);
         _ = rows.Where(static row => row.Kind == AssetKind.Material).Should().ContainSingle();
         var effective = rows.Single(static row => row.Kind == AssetKind.Material);
-        _ = effective.CookedMetadata!.ContainerPath.Should().Be(fixture.ProjectOutput);
+        _ = effective.CookedMetadata!.ContainerPath.Should().Be(this.fixture.ProjectOutput);
         _ = effective.OverriddenCookedSources.Should().HaveCount(2);
-        var library = fixture.LibraryCopy(effective, fixture.First);
+        var library = this.fixture.LibraryCopy(effective, this.fixture.First);
         _ = library.DisplayPath.Should().Be("/First/payloads/shared.bin");
-        _ = library.CookedMetadata!.ContainerPath.Should().Be(fixture.First);
+        _ = library.CookedMetadata!.ContainerPath.Should().Be(this.fixture.First);
         _ = library.PrimaryBadge.Should().Be("Overridden");
         _ = library.PrimaryBadgeTooltip.Should().Contain("project output");
         _ = library.DescriptorPath.Should().BeNull();
@@ -54,28 +62,28 @@ public sealed class CookedLibraryCatalogTests
     [TestMethod]
     public async Task ChangedPriorityAndRestartSelectTheSameSource()
     {
-        using var fixture = new Fixture();
-        fixture.Publish(fixture.FirstRoot, fixture.SecondRoot, fixture.ProjectRoot);
-        using var catalog = fixture.CreateCatalog();
+        this.fixture.Publish(this.fixture.FirstRoot, this.fixture.SecondRoot, this.fixture.ProjectRoot);
+        var catalog = this.fixture.CreateCatalog();
         _ = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        fixture.Publish(fixture.FirstRoot, fixture.ProjectRoot, fixture.SecondRoot);
-        await catalog.UsePublicationAsync(fixture.Publication.Lease(), this.TestContext.CancellationToken).ConfigureAwait(false);
+        this.fixture.Publish(this.fixture.FirstRoot, this.fixture.ProjectRoot, this.fixture.SecondRoot);
+        await catalog.UsePublicationAsync(this.fixture.Publication.Lease(), this.TestContext.CancellationToken).ConfigureAwait(false);
         var current = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = SharedMaterial(current).Cooked!.ContainerPath.Should().Be(fixture.Second);
-        using var restarted = fixture.CreateCatalog();
+        _ = SharedMaterial(current).Cooked!.ContainerPath.Should().Be(this.fixture.Second);
+        var restarted = this.fixture.CreateCatalog();
         var afterRestart = await restarted.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = SharedMaterial(afterRestart).Cooked!.ContainerPath.Should().Be(fixture.Second);
-        var effective = fixture.Reduce(afterRestart).Single(static row => row.Kind == AssetKind.Material);
-        _ = fixture.LibraryCopy(effective, fixture.Second).IsCookedSourceOverridden.Should().BeFalse();
+        _ = SharedMaterial(afterRestart).Cooked!.ContainerPath.Should().Be(this.fixture.Second);
+        var effective = this.fixture.Reduce(afterRestart).Single(static row => row.Kind == AssetKind.Material);
+        _ = this.fixture.LibraryCopy(effective, this.fixture.Second).IsCookedSourceOverridden.Should().BeFalse();
     }
 
     private static AssetRecord SharedMaterial(IReadOnlyList<AssetRecord> records)
         => records.Single(static record => record.Identity == AssetPath.Parse("/Content/Shared.omat"));
 
-    private sealed class Fixture : IDisposable
+    private sealed partial class Fixture : IAsyncDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-LibraryCatalog-");
         private readonly NativeStorageProvider storage = new(new RealFileSystem());
+        private readonly List<AssetCatalog> catalogs = [];
 
         public Fixture()
         {
@@ -86,11 +94,13 @@ public sealed class CookedLibraryCatalogTests
             (this.ProjectOutput, var projectIndex) = this.WriteRoot(".cooked/generations/0123456789abcdef0123456789abcdef", 1);
             (this.First, var firstIndex) = this.WriteRoot("Libraries/First", 2);
             (this.Second, var secondIndex) = this.WriteRoot("Libraries/Second", 3);
-            this.Session = new TestSession(TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
+            var mounts = new ProjectMount[]
             {
-                Name = "Libraries",
-                LocalFolderMounts = [new("First", this.First), new("Second", this.Second)],
-            });
+                new("Content", MountKind.Source, "Content"),
+                new("First", MountKind.Cooked, "Libraries/First"),
+                new("Second", MountKind.Cooked, "Libraries/Second"),
+            };
+            this.Session = new TestSession(TestProject.Create(new RealFileSystem(), this.directory.FullName, mounts).Context with { Name = "Libraries" });
             var project = this.Session.Context;
             this.Publication = new(project.ProjectId, project.ProjectRoot);
             this.ProjectRoot = FakeCookPublicationReader.Root(CookPublicationRootOwner.Project, "Content", projectIndex, this.ProjectOutput);
@@ -115,11 +125,13 @@ public sealed class CookedLibraryCatalogTests
         public FakeCookPublicationReader Publication { get; }
 
         public void Publish(params PublishedRoot[] roots)
-            => this.Publication.Publish(roots, new Dictionary<string, FileSystemPath> { ["Content"] = this.ProjectOutput });
+            => this.Publication.Publish(roots, new Dictionary<string, FileSystemPath>(StringComparer.Ordinal) { ["Content"] = this.ProjectOutput });
 
         public AssetCatalog CreateCatalog()
         {
-            return new(this.Session, this.storage, new EngineContentPakFixture(), this.Publication);
+            var catalog = new AssetCatalog(this.Session, this.storage, new EngineContentPakFixture(), this.Publication);
+            this.catalogs.Add(catalog);
+            return catalog;
         }
 
         public IReadOnlyList<AssetEntry> Reduce(IReadOnlyList<AssetRecord> records)
@@ -135,8 +147,13 @@ public sealed class CookedLibraryCatalogTests
             return AssetIdentity.FromCookedSource(effective, source, this.Session.Context);
         }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
+            foreach (var catalog in this.catalogs)
+            {
+                await catalog.DisposeAsync().ConfigureAwait(false);
+            }
+
             this.Session.Dispose();
             this.directory.Delete(recursive: true);
         }

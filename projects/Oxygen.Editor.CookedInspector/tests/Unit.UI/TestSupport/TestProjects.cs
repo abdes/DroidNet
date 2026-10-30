@@ -15,12 +15,9 @@ internal static class TestProjects
     /// <param name="cookedMount">Whether the project also mounts its cooked output.</param>
     /// <returns>The project session of the project.</returns>
     internal static TestSession CreateQueryProject(bool cookedMount = false)
-    {
-        return new(TestProject.Create(new MockFileSystem(), "C:/Query").Context with
+        => new(TestProject.Create(new MockFileSystem(), "C:/Query").Context with
         {
             Name = "Query",
-            AuthoringMounts = [new("Content", "Content")],
             OutputFolderViews = cookedMount ? [new(ProjectOutputFolders.Cooked)] : [],
         });
-    }
 }

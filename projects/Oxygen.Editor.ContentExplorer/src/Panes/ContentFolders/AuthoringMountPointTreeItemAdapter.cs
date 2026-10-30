@@ -8,6 +8,7 @@ using DroidNet.Controls;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
@@ -16,7 +17,7 @@ namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 ///     Represents an authoring mount point node under the project root.
 /// </summary>
 /// <remarks>
-///     Authoring mount points are persisted in <c>Project.oxy</c> via <see cref="IProjectInfo.AuthoringMounts" />
+///     Authoring mount points are declared in <c>Project.oxy</c> via <see cref="IProjectInfo.Mounts" />
 ///     and define stable virtual roots for asset identity.
 /// </remarks>
 public sealed partial class AuthoringMountPointTreeItemAdapter : TreeItemAdapter, IDisposable
@@ -30,15 +31,21 @@ public sealed partial class AuthoringMountPointTreeItemAdapter : TreeItemAdapter
     ///     Initializes a new instance of the <see cref="AuthoringMountPointTreeItemAdapter"/> class.
     /// </summary>
     /// <param name="logger">Logger used to record load failures.</param>
-    /// <param name="mountPoint">The persisted authoring mount point definition.</param>
+    /// <param name="mountPoint">The resolved source mount.</param>
     /// <param name="rootFolder">The backing folder for the mount point.</param>
-    public AuthoringMountPointTreeItemAdapter(ILogger logger, ProjectMountPoint mountPoint, IFolder rootFolder)
+    public AuthoringMountPointTreeItemAdapter(ILogger logger, ResolvedMount mountPoint, IFolder rootFolder)
         : base(isRoot: false, isHidden: false)
     {
         this.logger = logger;
         this.MountPoint = mountPoint;
         this.RootFolder = rootFolder;
         this.label = mountPoint.Name;
+
+        // A mount a .mounts.json binds on this machine names its folder beside its name, and carries a badge.
+        if (this.IsBoundOnThisMachine)
+        {
+            this.Annotation = mountPoint.Location!.FullPath.Replace('\\', '/');
+        }
 
         this.ChildrenCollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
     }
@@ -60,9 +67,15 @@ public sealed partial class AuthoringMountPointTreeItemAdapter : TreeItemAdapter
     }
 
     /// <summary>
-    ///     Gets the persisted mount point definition.
+    ///     Gets the resolved source mount.
     /// </summary>
-    public ProjectMountPoint MountPoint { get; }
+    public ResolvedMount MountPoint { get; }
+
+    /// <summary>
+    ///     Gets a value indicating whether a <c>.mounts.json</c> binds the mount on this machine, rather than the path
+    ///     <c>Project.oxy</c> commits.
+    /// </summary>
+    public bool IsBoundOnThisMachine => this.MountPoint.Origin == MountOrigin.MountsFile;
 
     /// <summary>
     ///     Gets the mount's virtual root, the identity the browser selects it by.
@@ -93,12 +106,12 @@ public sealed partial class AuthoringMountPointTreeItemAdapter : TreeItemAdapter
     public override bool Equals(ITreeItem? other)
         => other is AuthoringMountPointTreeItemAdapter otherMount
             && string.Equals(this.MountPoint.Name, otherMount.MountPoint.Name, StringComparison.Ordinal)
-            && string.Equals(this.MountPoint.RelativePath, otherMount.MountPoint.RelativePath, StringComparison.Ordinal);
+            && this.MountPoint.Location == otherMount.MountPoint.Location;
 
     /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine(
         StringComparer.Ordinal.GetHashCode(this.MountPoint.Name),
-        StringComparer.Ordinal.GetHashCode(this.MountPoint.RelativePath));
+        this.MountPoint.Location);
 
     /// <inheritdoc />
     protected override int DoGetChildrenCount() => 1;

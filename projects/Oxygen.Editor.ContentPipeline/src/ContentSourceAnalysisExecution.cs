@@ -21,6 +21,9 @@ public sealed record ContentSourceAnalysisExecution(
     /// <summary>Gets the project's source mounts the job sources resolve in; null when the sources are not in a mount.</summary>
     public IReadOnlyList<ContentImportMount>? Mounts { get; init; }
 
+    /// <summary>Gets the mounts file the job sources resolve through.</summary>
+    public required ContentImportMountsFile MountsFile { get; init; }
+
     /// <summary>Gets artifacts borrowed from the cook owner through worker drain.</summary>
     public NativeArtifactLease? Artifacts { get; init; }
 

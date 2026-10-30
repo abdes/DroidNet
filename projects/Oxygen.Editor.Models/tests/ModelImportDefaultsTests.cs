@@ -78,7 +78,7 @@ public sealed class ModelImportDefaultsTests
         settings = ModelImportSettingScope.Texture("Paint_Normal").Write(ModelImportSettingCatalog.MaxTextureSize, settings, 1024);
         var path = ModelImportSettings.PathFor(@"C:\Project", "/Content/Car.glb");
 
-        var record = ModelImportSettings.Create(path, @"C:\Project\Content\Car.glb", "/Content/Car.glb", settings);
+        var record = ModelImportSettings.Create(path, "/Content/Car.glb", "/Content/Car.glb", settings);
 
         _ = JsonElement.DeepEquals(ModelImportSettings.Parse(path, record.ToBytes()).Settings, settings).Should().BeTrue();
     }

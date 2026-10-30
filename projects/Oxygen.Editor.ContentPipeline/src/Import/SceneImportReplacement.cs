@@ -24,7 +24,7 @@ public sealed class SceneImportReplacement
     /// <summary>Gets the stable source identity preserved by replacement.</summary>
     public AssetPath SourceUri { get; }
 
-    /// <summary>Gets the project-relative folder that holds the model and its files.</summary>
+    /// <summary>Gets the cook path of the folder that holds the model and its files, such as <c>/Content/Models/Ship</c>.</summary>
     public string BundleRoot { get; }
 
     /// <summary>Gets the model's primary source file, relative to <see cref="BundleRoot"/>.</summary>
@@ -48,7 +48,7 @@ public sealed class SceneImportReplacement
         var root = ImportSourceRetention.ResolveDestination(project, folder, bundleName);
         var bundle = FileSystemPath.From(root);
         var before = await CookRootImage.CaptureAsync(root, copyTo: null, cancellationToken).ConfigureAwait(false);
-        var records = new ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath).All
+        var records = new ModelImportRecords(project).All
             .Where(record => FileSystemPath.From(record.SourcePath) is var source && source != bundle && source.IsSameOrInside(bundle))
             .ToArray();
         if (!before.Exists || records.Length != 1)
@@ -73,7 +73,7 @@ public sealed class SceneImportReplacement
             throw new IOException("The retained source changed during review. Review it again.");
         }
 
-        return new(folder.Combine(bundleName + "/" + primary), bundle.GetPathBelow(project.ProjectRoot), primary, record, before);
+        return new(folder.Combine(bundleName + "/" + primary), CookPaths.Of(project, bundle), primary, record, before);
     }
 
     private static IEnumerable<string> OwnedFiles(ModelImportRecord record, FileSystemPath bundle)

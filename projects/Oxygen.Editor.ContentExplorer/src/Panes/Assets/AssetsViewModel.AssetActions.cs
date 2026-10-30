@@ -183,7 +183,7 @@ public partial class AssetsViewModel
         }
 
         var isModel = AssetFileTypes.Is(path.Name, AssetFileCategory.Model)
-            && new ModelImportRecords(fileSystem, project.ProjectRoot.FullPath).IsImported(path.FullPath);
+            && new ModelImportRecords(project).IsImported(path.FullPath);
         return new(
             RelocationPaths.ToVirtual(project, path),
             path,

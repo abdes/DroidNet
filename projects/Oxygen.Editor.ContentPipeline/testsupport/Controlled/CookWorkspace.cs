@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
@@ -15,7 +16,7 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal sealed partial class CookWorkspace : IDisposable
 {
-    public CookWorkspace(IReadOnlyList<ProjectMountPoint>? authoringMounts = null, IEngineContentPak? engineContent = null)
+    public CookWorkspace(IReadOnlyList<ProjectMount>? authoringMounts = null, IEngineContentPak? engineContent = null)
     {
         this.EngineContent = engineContent ?? new EngineContentPakFixture();
         this.Root = Path.Combine(Path.GetTempPath(), "oxygen-content-pipeline-service-tests", Guid.NewGuid().ToString("N"));

@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
@@ -23,12 +24,11 @@ internal sealed class TestProjectTests
         try
         {
             var disk = new RealFileSystem();
-            var saved = TestProject.Create(disk, directory.FullName, [new ProjectMountPoint("Content", "Authoring")]).Context with
+            var saved = TestProject.Create(disk, directory.FullName, [new ProjectMount("Content", MountKind.Source, "Authoring"), new ProjectMount("Library", MountKind.Cooked)]).Context with
             {
                 Name = "Saved",
                 DefaultSceneId = SceneId.New(),
-                LocalFolderMounts = [new("Library", FileSystemPath.From(@"C:\Library"))],
-                CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Library"), new(CookedContentSourceKind.ProjectOutput)],
+                CookedContentOrder = [new(CookedContentSourceKind.Cooked, "Library"), new(CookedContentSourceKind.ProjectOutput)],
             };
 
             _ = TestProject.SaveProjectFile(saved);
@@ -39,8 +39,8 @@ internal sealed class TestProjectTests
             _ = opened.ProjectId.Should().Be(saved.ProjectId);
             _ = opened.Name.Should().Be(saved.Name);
             _ = opened.ProjectRoot.Should().Be(saved.ProjectRoot);
-            _ = opened.AuthoringMounts.Should().Equal(saved.AuthoringMounts);
-            _ = opened.LocalFolderMounts.Should().Equal(saved.LocalFolderMounts);
+            _ = opened.DeclaredMounts.Should().Equal(saved.DeclaredMounts);
+            _ = opened.Mounts.Single(static mount => string.Equals(mount.Name, "Library", StringComparison.Ordinal)).State.Should().Be(MountState.Unbound);
             _ = opened.CookedContentOrder.Should().Equal(saved.CookedContentOrder);
             _ = opened.DefaultSceneId.Should().Be(saved.DefaultSceneId);
         }

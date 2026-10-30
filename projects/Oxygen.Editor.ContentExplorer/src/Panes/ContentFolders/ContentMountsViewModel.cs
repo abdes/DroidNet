@@ -8,15 +8,18 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Dialogs;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 
 /// <summary>
-/// The Content mounts dialog: every mount with its virtual name, backing path and kind, with rename and unmount,
-/// and a form that adds a local folder, a pak file, or the Cooked or Build output folder node. An output folder node is
-/// view state, never a mount, and keeps its reserved name. The engine content is listed last, always mounted. Edits
-/// are staged and applied together.
+/// The Content mounts dialog: every mount with its virtual name, kind, what <c>Project.oxy</c> commits for it and where
+/// it is on this machine, with Bind, Override, Remove binding, rename and unmount; and a form that adds a local folder, a
+/// pak file, or the Cooked or Build output folder node, saved in <c>Project.oxy</c> or on this machine only. An output
+/// folder node is view state, never a mount, and keeps its reserved name. The engine content is listed last, always
+/// mounted. Edits are staged and applied together: the declarations in <c>Project.oxy</c>, and the bindings in the
+/// project's own <c>.mounts.json</c>.
 /// </summary>
 public sealed partial class ContentMountsViewModel : ObservableObject
 {
@@ -29,6 +32,8 @@ public sealed partial class ContentMountsViewModel : ObservableObject
     private static readonly string[] OutputFolders = [ProjectOutputFolders.Cooked, ProjectOutputFolders.Build];
 
     private readonly IDialogService dialogService;
+    private readonly ProjectContext project;
+    private readonly List<ContentMountRow> removed = [];
 
     /// <summary>Initializes a new instance of the <see cref="ContentMountsViewModel"/> class.</summary>
     /// <param name="project">The project whose mounts are edited.</param>
@@ -39,15 +44,12 @@ public sealed partial class ContentMountsViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(engineContent);
         this.dialogService = dialogService;
-        var content = project.AuthoringMounts.FirstOrDefault();
-        foreach (var mount in project.AuthoringMounts)
+        this.project = project;
+        this.Placement = new(project.ProjectRoot);
+        var content = project.Mounts.FirstOrDefault(static mount => mount.Kind == MountKind.Source);
+        foreach (var mount in project.Mounts.Where(static mount => mount.Kind == MountKind.Source))
         {
-            this.Mounts.Add(new(this, mount.Name, "./" + mount.RelativePath.Replace('\\', '/').Trim('/'), ContentMountKind.ProjectSource)
-            {
-                RelativePath = mount.RelativePath,
-                IsExpanded = mount.IsExpanded,
-                IsPrimary = ReferenceEquals(mount, content),
-            });
+            this.Mounts.Add(this.RowOf(mount, ContentMountKind.ProjectSource, ReferenceEquals(mount, content)));
         }
 
         foreach (var view in project.OutputFolderViews)
@@ -59,22 +61,9 @@ public sealed partial class ContentMountsViewModel : ObservableObject
             });
         }
 
-        foreach (var mount in project.LocalFolderMounts)
+        foreach (var mount in project.LibraryMounts)
         {
-            this.Mounts.Add(new(this, mount.Name, mount.Root.FullPath, ContentMountKind.LocalLibrary)
-            {
-                AbsolutePath = mount.Root.FullPath,
-                IsExpanded = mount.IsExpanded,
-            });
-        }
-
-        foreach (var mount in project.PakFileMounts)
-        {
-            this.Mounts.Add(new(this, mount.Name, mount.Path.FullPath, ContentMountKind.PakLibrary)
-            {
-                AbsolutePath = mount.Path.FullPath,
-                IsExpanded = mount.IsExpanded,
-            });
+            this.Mounts.Add(this.RowOf(mount, mount.Kind == MountKind.Pak ? ContentMountKind.PakLibrary : ContentMountKind.LocalLibrary, isPrimary: false));
         }
 
         this.Mounts.Add(new(this, AssetPath.Engine.Mount, engineContent.Path.FullPath, ContentMountKind.EngineContent));
@@ -83,6 +72,9 @@ public sealed partial class ContentMountsViewModel : ObservableObject
 
     /// <summary>Gets the mounts as they will be after Apply.</summary>
     public ObservableCollection<ContentMountRow> Mounts { get; } = [];
+
+    /// <summary>Gets where the folder or pak file of the mount to add is saved.</summary>
+    public MountPlacement Placement { get; }
 
     /// <summary>Gets the locations the add form offers.</summary>
     public IReadOnlyList<string> Kinds { get; } = [LocalFolderKind, PakFileKind, .. OutputFolders.Select(ProjectOutputFolders.ViewName)];
@@ -119,36 +111,25 @@ public sealed partial class ContentMountsViewModel : ObservableObject
     /// <summary>Gets a value indicating whether there is an error to show.</summary>
     public bool HasError => this.ErrorMessage.Length != 0;
 
+    /// <summary>Gets the project root, which committed paths are relative to.</summary>
+    internal FileSystemPath ProjectRoot => this.project.ProjectRoot;
+
     private bool IsPakFile => string.Equals(this.SelectedKind, PakFileKind, StringComparison.Ordinal);
 
     /// <summary>
-    /// Checks a proposed mount name, unique among the remaining mounts, also when only the case differs. A project
-    /// or derived mount names the first segment of its virtual paths, so it follows the authored mount rule; a local
-    /// library or a pak file is a label, since its virtual paths come from its own index, and only needs text without
-    /// separators.
+    /// Checks a proposed mount name, unique among the remaining mounts, also when only the case differs. Every mount
+    /// kind follows the one rule of a declared mount name.
     /// </summary>
     /// <param name="name">The proposed name.</param>
-    /// <param name="kind">The kind of mount the name is for.</param>
     /// <param name="except">The mount being renamed, if any.</param>
     /// <returns>The reason the name is refused, or null.</returns>
-    public string? ValidateName(string name, ContentMountKind kind, ContentMountRow? except = null)
+    public string? ValidateName(string name, ContentMountRow? except = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         var trimmed = name.Trim();
-        if (kind is not (ContentMountKind.LocalLibrary or ContentMountKind.PakLibrary))
+        if (ProjectAssetFiles.ValidateDeclaredMountName(trimmed) is { } refusal)
         {
-            if (ProjectAssetFiles.ValidateDeclaredMountName(trimmed) is { } refusal)
-            {
-                return refusal;
-            }
-        }
-        else if (trimmed.Length == 0 || trimmed.IndexOfAny(['/', '\\', ':']) >= 0)
-        {
-            return "Enter a library name without slashes or a colon.";
-        }
-        else if (ProjectAssetFiles.IsReservedMountName(trimmed))
-        {
-            return ProjectAssetFiles.ValidateDeclaredMountName(trimmed);
+            return refusal;
         }
 
         return this.Mounts.Any(row => !ReferenceEquals(row, except) && VirtualPathComparer.CaseFolded.Equals(row.Name, trimmed))
@@ -171,25 +152,98 @@ public sealed partial class ContentMountsViewModel : ObservableObject
         return true;
     }
 
+    /// <summary>
+    /// Gets the changes the staged rows make to the project's own <c>.mounts.json</c>: the bindings added, changed or
+    /// removed, under the mounts' new names, and those of the mounts unmounted.
+    /// </summary>
+    /// <returns>The changes; none when no binding changed.</returns>
+    public MountBindings GetBindingChanges()
+    {
+        var changes = MountBindings.None;
+        foreach (var row in this.removed.Where(static row => row.OriginalLocalLocation is not null))
+        {
+            changes = changes.Unbind(row.OriginalName);
+        }
+
+        foreach (var row in this.Mounts)
+        {
+            var renamed = !string.Equals(row.Name, row.OriginalName, StringComparison.Ordinal);
+            if (renamed && row.OriginalLocalLocation is not null)
+            {
+                changes = changes.Unbind(row.OriginalName);
+            }
+
+            if (renamed ? row.LocalLocation is not null : !string.Equals(row.LocalLocation, row.OriginalLocalLocation, StringComparison.Ordinal))
+            {
+                changes = row.LocalLocation is { } location ? changes.Bind(row.Name, FileSystemPath.From(location)) : changes.Unbind(row.Name);
+            }
+        }
+
+        return changes;
+    }
+
     /// <summary>Removes a mount from the staged list; its files are not touched.</summary>
     /// <param name="row">The mount to remove.</param>
     internal void Remove(ContentMountRow row)
     {
-        _ = this.Mounts.Remove(row);
+        if (this.Mounts.Remove(row) && !row.IsNew)
+        {
+            this.removed.Add(row);
+        }
+
         this.ErrorMessage = string.Empty;
+    }
+
+    /// <summary>Tests whether a folder or a file exists on this machine.</summary>
+    /// <param name="path">The absolute path.</param>
+    /// <returns>Whether a folder or a file is there.</returns>
+    internal bool Exists(string path) => this.project.FileSystem.Directory.Exists(path) || this.project.FileSystem.File.Exists(path);
+
+    /// <summary>Asks for a folder, or a pak file, to bind a mount to.</summary>
+    /// <param name="pakFile">Whether a pak file is picked rather than a folder.</param>
+    /// <param name="start">Where the picker starts, if anywhere.</param>
+    /// <param name="cancellationToken">Cancels the picker.</param>
+    /// <returns>The picked location, or <see langword="null"/> when none was picked.</returns>
+    internal async Task<string?> PickLocationAsync(bool pakFile, string? start, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await MountLocationPicker.PickAsync(this.dialogService, pakFile, start, cancellationToken).ConfigureAwait(true);
+        }
+        catch (IOException error)
+        {
+            this.ErrorMessage = error.Message;
+            return null;
+        }
+    }
+
+    // A mount's row: what Project.oxy commits for it, and where a .mounts.json binds it on this machine. The project's
+    // own file is the one the dialog changes; one above the project is shown and left as it is.
+    private ContentMountRow RowOf(ResolvedMount mount, ContentMountKind kind, bool isPrimary)
+    {
+        var ownFile = this.project.ProjectRoot.Combine(ProjectMounts.FileName);
+        var boundByFile = mount.Origin == MountOrigin.MountsFile ? mount.Location?.FullPath : null;
+        var boundHere = mount.OriginFile == ownFile;
+        return new(this, mount.Name, mount.Location?.FullPath ?? string.Empty, kind)
+        {
+            RelativePath = mount.DeclaredPath?.Replace('\\', '/').Trim('/'),
+            IsExpanded = mount.IsExpanded,
+            IsPrimary = isPrimary,
+            IsLocal = mount.Scope == MountScope.Local,
+            OriginalLocalLocation = boundHere ? boundByFile : null,
+            LocalLocation = boundHere ? boundByFile : null,
+            ParentLocation = boundHere ? null : boundByFile,
+            ParentBindingFile = boundHere || boundByFile is null ? null : mount.OriginFile?.FullPath,
+        };
     }
 
     partial void OnErrorMessageChanged(string value) => this.OnPropertyChanged(nameof(this.HasError));
 
+    partial void OnNewMountPathChanged(string value) => this.Placement.Location = Path.IsPathFullyQualified(value) ? Path.GetFullPath(value) : value;
+
     [RelayCommand]
     private void AddMount()
     {
-        if (this.IsPakFile)
-        {
-            this.AddPakFile();
-            return;
-        }
-
         if (!this.IsExternal)
         {
             var path = OutputFolders.Single(folder => string.Equals(ProjectOutputFolders.ViewName(folder), this.SelectedKind, StringComparison.Ordinal));
@@ -206,43 +260,30 @@ public sealed partial class ContentMountsViewModel : ObservableObject
         }
 
         var name = this.NewMountName.Trim();
-        if (this.ValidateName(name, ContentMountKind.LocalLibrary) is { } invalid)
+        if (this.ValidateName(name) is { } invalid)
         {
             this.ErrorMessage = invalid;
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(this.NewMountPath) || !Directory.Exists(this.NewMountPath))
+        var files = this.project.FileSystem;
+        if (this.IsPakFile
+            ? !files.File.Exists(this.NewMountPath) || !string.Equals(Path.GetExtension(this.NewMountPath), MountLocationPicker.PakExtension, StringComparison.OrdinalIgnoreCase)
+            : !files.Directory.Exists(this.NewMountPath))
         {
-            this.ErrorMessage = "Choose a folder that exists.";
+            this.ErrorMessage = this.IsPakFile ? "Choose a .pak file that exists." : "Choose a folder that exists.";
             return;
         }
 
-        var folder = Path.GetFullPath(this.NewMountPath);
-        this.Mounts.Insert(this.Mounts.Count - 1, new(this, name, folder, ContentMountKind.LocalLibrary) { AbsolutePath = folder, IsNew = true });
-        this.NewMountName = string.Empty;
-        this.NewMountPath = string.Empty;
-        this.ErrorMessage = string.Empty;
-    }
-
-    private void AddPakFile()
-    {
-        var name = this.NewMountName.Trim();
-        if (this.ValidateName(name, ContentMountKind.PakLibrary) is { } invalid)
+        // Project.oxy commits the location, or a placeholder that this machine's .mounts.json binds to it.
+        var location = Path.GetFullPath(this.NewMountPath);
+        this.Mounts.Insert(this.Mounts.Count - 1, new(this, name, location, this.IsPakFile ? ContentMountKind.PakLibrary : ContentMountKind.LocalLibrary)
         {
-            this.ErrorMessage = invalid;
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(this.NewMountPath) || !File.Exists(this.NewMountPath)
-            || !PakFileMount.IsPakFile(this.NewMountPath))
-        {
-            this.ErrorMessage = "Choose a .pak file that exists.";
-            return;
-        }
-
-        var pak = Path.GetFullPath(this.NewMountPath);
-        this.Mounts.Insert(this.Mounts.Count - 1, new(this, name, pak, ContentMountKind.PakLibrary) { AbsolutePath = pak, IsNew = true });
+            AbsolutePath = location,
+            RelativePath = this.Placement.CommittedPath,
+            LocalLocation = this.Placement.LocalLocation?.FullPath,
+            IsNew = true,
+        });
         this.NewMountName = string.Empty;
         this.NewMountPath = string.Empty;
         this.ErrorMessage = string.Empty;
@@ -251,35 +292,13 @@ public sealed partial class ContentMountsViewModel : ObservableObject
     [RelayCommand]
     private async Task BrowseAsync(CancellationToken cancellationToken)
     {
-        try
+        if (await this.PickLocationAsync(this.IsPakFile, this.NewMountPath, cancellationToken).ConfigureAwait(true) is { } path)
         {
-            var path = this.IsPakFile
-                ? await this.dialogService.PickFileAsync(
-                    new FilePickerSpec("Choose a pak file to mount", "Oxygen.PakFileMount", new Dictionary<string, IReadOnlyList<string>> { ["Pak files"] = [PakFileMount.Extension] })
-                    {
-                        SuggestedStartFolder = this.NewMountPath,
-                    },
-                    cancellationToken).ConfigureAwait(true)
-                : await this.dialogService.PickFolderAsync(
-                    new FolderPickerSpec("Choose a folder to mount", "Oxygen.LocalFolderMount") { SuggestedStartFolder = this.NewMountPath },
-                    cancellationToken).ConfigureAwait(true);
-            if (path is { Length: > 0 })
+            this.NewMountPath = path;
+            if (this.NewMountName.Trim().Length == 0)
             {
-                this.NewMountPath = path;
-                if (this.NewMountName.Trim().Length == 0)
-                {
-                    this.NewMountName = this.IsPakFile ? Path.GetFileNameWithoutExtension(path) : Path.GetFileName(path.TrimEnd('\\', '/'));
-                }
+                this.NewMountName = this.IsPakFile ? Path.GetFileNameWithoutExtension(path) : Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
             }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // The dialog closed while the picker was open.
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException
-            or InvalidOperationException or System.Runtime.InteropServices.COMException)
-        {
-            this.ErrorMessage = $"Could not pick a {(this.IsPakFile ? "pak file" : "folder")}: {error.Message}";
         }
     }
 }

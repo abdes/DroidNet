@@ -7,10 +7,11 @@ using System.Text.Json.Serialization;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
-/// One source mount of the native import manifest: a project folder whose files are addressed under the mount's name.
+/// One source mount the native import manifest declares: a folder whose files are addressed under the mount's name.
 /// </summary>
 /// <param name="Name">The mount name, for example <c>Content</c>.</param>
-/// <param name="Path">The mount folder, relative to the project root and with forward slashes.</param>
+/// <param name="Path">The mount folder, relative to the project root and with forward slashes; null for a placeholder,
+/// which the cook's mounts file binds.</param>
 public sealed record ContentImportMount(
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("path")] string Path);
+    [property: JsonPropertyName("path"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Path);

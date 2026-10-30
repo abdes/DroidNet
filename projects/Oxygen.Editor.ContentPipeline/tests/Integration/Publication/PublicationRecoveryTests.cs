@@ -51,7 +51,7 @@ public sealed class PublicationRecoveryTests
             Func<Task> publish = () => transaction.PublishAsync(preview: null, project.Baseline, static () => { }, this.TestContext.CancellationToken);
             _ = await publish.Should().ThrowAsync<IOException>().ConfigureAwait(false);
             _ = captured.Should().BeTrue();
-            var reopened = project.Context with { ProjectRoot = FileSystemPath.From(replica.FullName) };
+            var reopened = project.ReopenAt(replica.FullName);
             using var writer = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(replica.FullName), this.TestContext.CancellationToken).ConfigureAwait(false);
             var recovery = await CookPublicationTransaction.LoadAsync(reopened, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
             await recovery.RecoverAsync(writer).ConfigureAwait(false);

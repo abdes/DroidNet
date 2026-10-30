@@ -8,7 +8,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentExplorer;
@@ -28,7 +28,7 @@ public sealed partial class ContentExplorerViewModel
         }
 
         var project = session.Context;
-        var item = await assetFeed.ResolveAsync(asset).ConfigureAwait(true);
+        var item = await assetFeed.ResolveAsync(asset, session.Lifetime).ConfigureAwait(true);
         return item is not null && item.PrimaryState != AssetState.Missing && ReferenceEquals(project, session.Context)
             && !this.isDisposed && await this.RevealAssetsAsync(project, [item]).ConfigureAwait(true);
     }
@@ -46,8 +46,8 @@ public sealed partial class ContentExplorerViewModel
 
         var project = session.Context;
 
-        await assetFeed.RefreshAsync().ConfigureAwait(true);
-        var items = await assetFeed.Items.FirstAsync().ToTask().ConfigureAwait(true);
+        await assetFeed.RefreshAsync(session.Lifetime).ConfigureAwait(true);
+        var items = await assetFeed.Items.FirstAsync().ToTask(cancellationToken: session.Lifetime).ConfigureAwait(true);
         var requested = assets.ToHashSet();
         var available = items.Where(item => item.PrimaryState != AssetState.Missing && requested.Contains(item.Identity)).ToArray();
         return available.Length > 0 && !this.isDisposed && ReferenceEquals(project, session.Context)
@@ -59,7 +59,7 @@ public sealed partial class ContentExplorerViewModel
 
     private static AssetPath? LibraryFolder(ProjectContext project, AssetEntry item)
         => item.CookedMetadata is { } source
-            && project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == source.ContainerPath) is { } library
+            && project.LibraryMounts.FirstOrDefault(mount => mount.Kind == MountKind.Cooked && mount.Location == source.ContainerPath) is { } library
             && AssetPath.TryCreate(library.Name, source.DescriptorRelativePath, out var location)
                 ? location.Parent
                 : null;
@@ -88,6 +88,7 @@ public sealed partial class ContentExplorerViewModel
         }
 
         var cookedFolder = ProjectCookedFolders.Roots(project).FirstOrDefault();
+
         // Project output shows under the mount of its cooked folder, at its native path.
         var folders = items.Select(item =>
         {
@@ -101,6 +102,13 @@ public sealed partial class ContentExplorerViewModel
 
         await this.localRouter!.NavigateAsync("/(left:folders//right:" + this.currentAssetsViewPath + ")" + RouteStateMapping.BuildSelectedQuery(folders)).ConfigureAwait(true);
         if (this.browserState?.ActiveAssetLayout is not { } layout || this.isDisposed || !ReferenceEquals(project, session.Context))
+        {
+            return false;
+        }
+
+        // Navigation does not wait for a new layout's rows, and a selection needs them.
+        await layout.InitialLoad.ConfigureAwait(true);
+        if (this.isDisposed || !ReferenceEquals(layout, this.browserState?.ActiveAssetLayout) || !ReferenceEquals(project, session.Context))
         {
             return false;
         }

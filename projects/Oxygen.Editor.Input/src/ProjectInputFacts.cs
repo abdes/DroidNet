@@ -110,9 +110,9 @@ internal sealed partial class ProjectInputFacts(ProjectContext project, Action<I
 
     private IEnumerable<(AssetPath Identity, FileSystemPath File)> EnumerateSources()
     {
-        foreach (var mount in project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)))
+        foreach (var mount in project.SourceMounts)
         {
-            var root = project.ProjectRoot.Combine(mount.RelativePath);
+            var root = mount.Location!;
             if (!project.FileSystem.Directory.Exists(root.FullPath))
             {
                 continue;

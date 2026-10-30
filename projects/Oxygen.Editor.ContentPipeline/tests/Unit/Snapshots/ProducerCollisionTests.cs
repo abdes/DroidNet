@@ -153,7 +153,7 @@ internal sealed partial class ProducerCollisionTests : IDisposable
                 outputs.Add(new(buffer, "buffer", "/", Required: true));
             }
 
-            return new(source, [.. outputs], [], [new(source.AssetUri, source.SourceAbsolutePath, source.SourceRelativePath, new string('A', 64))]);
+            return new(source, [.. outputs], [], [new(source.AssetUri, source.SourceAbsolutePath, source.SourceCookPath, new string('A', 64))]);
         }
     }
 }

@@ -19,7 +19,7 @@ internal sealed partial class CookPublicationTransaction
         var inputs = Path.Combine(CookPublicationPaths.Operation(project.ProjectRoot.FullPath, operationId), "inputs");
         CookOutputLease.RejectReparsePoint(inputs);
         var path = inputs;
-        foreach (var segment in Path.GetRelativePath(project.ProjectRoot.FullPath, published).Split(Path.DirectorySeparatorChar))
+        foreach (var segment in CookPaths.StoragePathOf(CookPaths.Of(project, FileSystemPath.From(published))).Split('/'))
         {
             path = Path.Combine(path, segment);
             CookOutputLease.RejectReparsePoint(path);
@@ -77,10 +77,10 @@ internal sealed partial class CookPublicationTransaction
         return path;
     }
 
-    private static bool IsWithinSourceBundle(ProjectContext project, string bundleRoot, string relativePath)
+    private static bool IsWithinSourceBundle(ProjectContext project, string bundleRoot, string cookPath)
     {
         var bundle = FileSystemPath.From(ImportSourceRetention.ResolveBundleRoot(project, bundleRoot));
-        var path = project.ProjectRoot.Combine(relativePath);
+        var path = CookPaths.FileOf(project, cookPath);
         return path != bundle && path.IsSameOrInside(bundle);
     }
 
@@ -102,7 +102,8 @@ internal sealed partial class CookPublicationTransaction
             throw new InvalidDataException("A publication may update only what an import establishes in its model import record.");
         }
 
-        var primary = FileSystemPath.From(before.ResolveSource(recordPath));
+        var primary = before.ResolveSource(project)
+            ?? throw new InvalidDataException("Produced metadata names a model in a mount that is not bound.");
         var sourceUri = CookInputResolver.FindAuthoringSourceUri(project, primary)
             ?? throw new InvalidDataException("Produced metadata does not belong to a project authoring source.");
         var source = CookInputResolver.Resolve(project, sourceUri, ContentCookInputRole.Dependency);

@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.FileSystem;
 using Oxygen.Managed.Assets.Catalog.Pak;
@@ -89,12 +90,12 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     /// <inheritdoc />
     public IObservable<AssetChange> Changes => this.changes.AsObservable();
 
-    // The session's project in its current content mounts, until the session ends.
-    private ProjectContext? SessionProject => this.session.Lifetime.IsCancellationRequested ? null : this.session.Context;
-
     /// <inheritdoc />
     /// <remarks>Folders of the installed project folder catalogs; the folders of a catalog being replaced are not reported.</remarks>
     public IObservable<AssetPath> FolderChanges => this.folderChanges.AsObservable();
+
+    // The session's project in its current content mounts, until the session ends.
+    private ProjectContext? SessionProject => this.session.Lifetime.IsCancellationRequested ? null : this.session.Context;
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<AssetRecord>> QueryAsync(AssetQuery query, CancellationToken cancellationToken = default)
@@ -268,10 +269,9 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         => failure is IOException or InvalidDataException or UnauthorizedAccessException or JsonException;
 
     // Each file belongs to one catalog. The project folder's catalog lists the files outside the mounts, so it leaves
-    // out every mount folder inside the project: the authoring mounts and the local folders mounted from inside it.
+    // out every source mount folder inside the project.
     private static string[] GetFoldersOfOtherCatalogs(ProjectContext project)
-        => [.. project.AuthoringMounts.Select(mount => project.ProjectRoot.Combine(mount.RelativePath))
-            .Concat(project.LocalFolderMounts.Select(static mount => mount.Root))
+        => [.. project.SourceMounts.Select(static mount => mount.Location!)
             .Where(root => root != project.ProjectRoot && root.IsSameOrInside(project.ProjectRoot))
             .Select(root => root.GetPathBelow(project.ProjectRoot))
             .Distinct(FileSystemPath.NameComparer)];
@@ -559,14 +559,14 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
 
         candidates.Add(await this.PrepareFolderAsync(project, ProjectFiles.Mount, project.ProjectRoot, kept, GetFoldersOfOtherCatalogs(project)).ConfigureAwait(false));
 
-        foreach (var mount in project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)))
+        foreach (var mount in project.SourceMounts)
         {
             this.lifetimeToken.ThrowIfCancellationRequested();
-            candidates.Add(await this.PrepareFolderAsync(project, mount.Name, project.ProjectRoot.Combine(mount.RelativePath), kept).ConfigureAwait(false));
+            candidates.Add(await this.PrepareFolderAsync(project, mount.Name, mount.Location!, kept).ConfigureAwait(false));
         }
 
         // Pak files are browsable before the project publishes; a publication catalogs the ones it selects.
-        foreach (var mount in project.PakFileMounts.Where(mount => selected?.Roots.Any(root =>
+        foreach (var mount in project.LibraryMounts.Where(mount => mount is { Kind: MountKind.Pak, IsBound: true } && selected?.Roots.Any(root =>
             root.Owner == CookPublicationRootOwner.Library && string.Equals(root.Name, mount.Name, StringComparison.Ordinal)) != true))
         {
             if (await this.TryPreparePakAsync(mount).ConfigureAwait(false) is { } pak)
@@ -576,10 +576,10 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         }
 
         // Preserve authored-folder browsing for external folders without cooked content.
-        foreach (var mount in project.LocalFolderMounts.Where(mount => selected?.Roots.Any(root =>
+        foreach (var mount in project.LibraryMounts.Where(mount => mount is { Kind: MountKind.Cooked, IsBound: true } && selected?.Roots.Any(root =>
             root.Owner == CookPublicationRootOwner.Library && string.Equals(root.Name, mount.Name, StringComparison.Ordinal)) != true))
         {
-            candidates.Add(await this.PrepareFolderAsync(project, mount.Name, mount.Root, kept).ConfigureAwait(false));
+            candidates.Add(await this.PrepareFolderAsync(project, mount.Name, mount.Location!, kept).ConfigureAwait(false));
         }
     }
 
@@ -627,20 +627,20 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     }
 
     // A pak the project mounts is read-only too; one that cannot be read lists nothing and is reported.
-    private async Task<Registration?> TryPreparePakAsync(PakFileMount mount)
+    private async Task<Registration?> TryPreparePakAsync(ResolvedMount mount)
     {
         PakDocument document;
         try
         {
-            document = await PakIndex.ReadFileAsync(mount.Path, this.lifetimeToken).ConfigureAwait(false);
+            document = await PakIndex.ReadFileAsync(mount.Location!, this.lifetimeToken).ConfigureAwait(false);
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            this.LogPakUnavailable(mount.Name, mount.Path, failure);
+            this.LogPakUnavailable(mount.Name, mount.Location!, failure);
             return null;
         }
 
-        return await this.PrepareCatalogAsync(new PakAssetCatalog(document, mount.Path), isCooked: true).ConfigureAwait(false);
+        return await this.PrepareCatalogAsync(new PakAssetCatalog(document, mount.Location!), isCooked: true).ConfigureAwait(false);
     }
 
     private async Task<Registration> PrepareCatalogAsync(IAssetCatalog catalog, bool isCooked = false)

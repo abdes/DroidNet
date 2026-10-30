@@ -372,7 +372,7 @@ public sealed partial class DocumentScenes : IDisposable
             return null;
         }
 
-        var records = new ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath);
+        var records = new ModelImportRecords(project);
         return records.TryFindBySource(document.File.Path.FullPath, out var record) ? new SceneId(record.Settings.SourceIdentity) : null;
     }
 

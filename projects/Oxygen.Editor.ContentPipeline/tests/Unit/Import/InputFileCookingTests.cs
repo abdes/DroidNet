@@ -52,7 +52,7 @@ internal sealed partial class InputFileCookingTests : IDisposable
         var input = CookInputResolver.Resolve(this.CreateProject(), AssetPath.Parse("/Content/Gameplay/Player.input.json"), ContentCookInputRole.Primary);
 
         _ = input.Kind.Should().Be(ContentCookAssetKind.Input);
-        _ = input.SourceRelativePath.Should().Be("Content/Gameplay/Player.input.json");
+        _ = input.SourceCookPath.Should().Be("/Content/Gameplay/Player.input.json");
         _ = input.AssetUri.Should().Be(AssetPath.Parse("/Content/Gameplay/Player.input"), "an input source stands for its path without the authoring .json");
     }
 
@@ -64,7 +64,7 @@ internal sealed partial class InputFileCookingTests : IDisposable
         var job = new ContentImportManifestBuilder().BuildJob(input, []);
 
         _ = job.Type.Should().Be("input");
-        _ = job.Id.Should().Be("input:Content/Gameplay/Player.input.json");
+        _ = job.Id.Should().Be("input:/Content/Gameplay/Player.input.json");
         _ = job.Name.Should().BeNull("input jobs accept no name");
         _ = job.VirtualPath.Should().Be("/Content/Gameplay/Player.input", "the cooker names the source's products under its identity");
     }

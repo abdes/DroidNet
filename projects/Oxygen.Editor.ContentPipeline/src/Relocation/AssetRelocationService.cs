@@ -145,7 +145,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
 
     /// <inheritdoc/>
     public IReadOnlyList<UnsavedDocument> FindUnsavedDocuments()
-        => documents.Find([session.Context.ProjectRoot]);
+        => documents.Find(session.Context.AuthoredFolders);
 
     /// <inheritdoc/>
     public async Task<IReadOnlyList<AssetPath>> CopyAsync(IReadOnlyList<AssetPath> sources, AssetPath targetFolder, CancellationToken cancellationToken)
@@ -354,7 +354,8 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 _ = owned.Add(FileSystemPath.From(AssetFileTypes.PreviewOf(path.FullPath)));
                 var onlyThisModel = fileSystem.Directory.Exists(modelFolder.FullPath)
                     && fileSystem.Directory.EnumerateFiles(modelFolder.FullPath, "*", SearchOption.AllDirectories).All(file => owned.Contains(FileSystemPath.From(file)));
-                return onlyThisModel && modelFolder != root
+                // A model alone in its folder goes with the folder, unless the folder is the project's or a mount's own.
+                return onlyThisModel && modelFolder != root && !project.SourceMounts.Any(mount => mount.Location == modelFolder)
                     ? [modelFolder, import.RecordPath]
                     : [.. owned.Where(file => fileSystem.File.Exists(file.FullPath)), import.RecordPath];
             }
@@ -439,7 +440,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     // The caller asks to save them first; an undo or redo, or an edit made since, is refused.
     private static void RejectUnsavedDocuments(ProjectContext project, IUnsavedDocuments documents)
     {
-        var unsaved = documents.Find([project.ProjectRoot]).Select(static document => document.Title)
+        var unsaved = documents.Find(project.AuthoredFolders).Select(static document => document.Title)
             .Distinct(StringComparer.CurrentCultureIgnoreCase).ToArray();
         if (unsaved.Length != 0)
         {

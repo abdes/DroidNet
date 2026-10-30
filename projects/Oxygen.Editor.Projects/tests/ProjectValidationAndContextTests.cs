@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using AwesomeAssertions;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
@@ -10,6 +11,7 @@ using DroidNet.TestHelpers;
 using Moq;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
@@ -18,64 +20,54 @@ namespace Oxygen.Editor.Projects.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("ProjectValidation")]
-public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
+public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAssertions
 {
+    private const string ProjectRootPath = @"C:\Project";
+
+    private static readonly ProjectMount ContentMount = new("Content", MountKind.Source, "Content");
+
     [TestMethod]
     public async Task ValidateAsync_ShouldReturnValid_WhenManifestAndContentRootsAreValid()
     {
-        var (storage, document) = CreateStorageWithProjectFile();
-        var service = new ProjectValidationService(storage.Object);
-        document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(CreateManifestJson(schemaVersion: 1));
-
-        var result = await service.ValidateAsync("project").ConfigureAwait(false);
+        var result = await this.ValidateAsync(CreateManifestJson(), CreateProjectFileSystem()).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.Valid);
         _ = result.ProjectInfo.Should().NotBeNull();
         _ = result.ProjectInfo!.Location.Should().Be(@"C:\Project");
+        _ = result.MountFindings.Should().BeEmpty();
     }
 
     [TestMethod]
-    public async Task ValidateAsync_ShouldReturnUnsupportedVersion_WhenManifestSchemaIsUnsupported()
+    [DataRow(1, DisplayName = "Version 1 is refused")]
+    [DataRow(3, DisplayName = "A newer version is refused")]
+    public async Task ValidateAsync_ShouldReturnUnsupportedVersion_WhenManifestSchemaIsUnsupported(int schemaVersion)
     {
-        var (storage, document) = CreateStorageWithProjectFile();
-        var service = new ProjectValidationService(storage.Object);
-        document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(CreateManifestJson(schemaVersion: 2));
-
-        var result = await service.ValidateAsync("project").ConfigureAwait(false);
+        var result = await this.ValidateAsync(CreateManifestJson(schemaVersion), CreateProjectFileSystem()).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.UnsupportedVersion);
     }
 
     [TestMethod]
-    public async Task ValidateAsync_ShouldReturnInvalidContentRoots_WhenAuthoringMountsAreMissing()
+    public async Task ValidateAsync_ShouldRefuseAProjectWithNoSourceMount()
     {
-        var (storage, document) = CreateStorageWithProjectFile();
-        var service = new ProjectValidationService(storage.Object);
-        document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(CreateManifestJson(schemaVersion: 1, includeAuthoringMounts: false));
-
-        var result = await service.ValidateAsync("project").ConfigureAwait(false);
+        var result = await this.ValidateAsync(CreateManifestJson(mounts: []), CreateProjectFileSystem()).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
+        _ = result.Message.Should().StartWith(MountCodes.SourceRequired);
     }
 
     [TestMethod]
     [DataRow(".cooked", DisplayName = "The cooked output folder")]
     [DataRow("Content/.pipeline", DisplayName = "An output folder inside a mount")]
     [DataRow("Content/../.build", DisplayName = "An output folder named through another folder")]
-    public async Task ValidateAsync_ShouldRefuseAnOutputFolderAsAnAuthoringMount(string path)
+    public async Task ValidateAsync_ShouldRefuseAnOutputFolderAsASourceMount(string path)
     {
-        var (storage, document) = CreateStorageWithProjectFile();
-        var service = new ProjectValidationService(storage.Object);
-        document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(CreateManifestJson(schemaVersion: 1, mountName: "Generated", mountPath: path));
+        var mounts = new[] { new ProjectMount("Generated", MountKind.Source, path) };
 
-        var result = await service.ValidateAsync("project").ConfigureAwait(false);
+        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), CreateProjectFileSystem(mounts)).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
-        _ = result.Message.Should().Contain("output folders are never mounts");
+        _ = result.Message.Should().Contain(MountCodes.FolderInOutput);
     }
 
     [TestMethod]
@@ -84,14 +76,66 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     [DataRow("Engine")]
     public async Task ValidateAsync_ShouldRefuseAReservedMountName(string name)
     {
-        var (storage, document) = CreateStorageWithProjectFile();
-        var service = new ProjectValidationService(storage.Object);
-        document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(CreateManifestJson(schemaVersion: 1, mountName: name));
+        var mounts = new[] { ContentMount, new ProjectMount(name, MountKind.Source, "Other") };
 
-        var result = await service.ValidateAsync("project").ConfigureAwait(false);
+        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), CreateProjectFileSystem(mounts)).ConfigureAwait(false);
 
         _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
+        _ = result.Message.Should().StartWith(MountCodes.NameInvalid);
+    }
+
+    [TestMethod]
+    public async Task ValidateAsync_ShouldRefuseOverlappingSourceMounts()
+    {
+        var mounts = new[] { ContentMount, new ProjectMount("Nested", MountKind.Source, "Content/Nested") };
+
+        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), CreateProjectFileSystem(mounts)).ConfigureAwait(false);
+
+        _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
+        _ = result.Message.Should().StartWith(MountCodes.FolderOverlap);
+    }
+
+    [TestMethod]
+    public async Task ValidateAsync_ShouldRefuseAnAbsoluteCommittedPath()
+    {
+        var mounts = new[] { ContentMount, new ProjectMount("Shared", MountKind.Source, "D:/Studio/Shared") };
+
+        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), CreateProjectFileSystem([ContentMount])).ConfigureAwait(false);
+
+        _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
+        _ = result.Message.Should().StartWith(MountCodes.AbsoluteCommitted);
+    }
+
+    [TestMethod]
+    public async Task ValidateAsync_ShouldOpenWithWarnings_WhenAMountIsUnboundOrMissing()
+    {
+        var mounts = new[]
+        {
+            ContentMount,
+            new ProjectMount("Library", MountKind.Cooked),
+            new ProjectMount("Gone", MountKind.Source, "Gone"),
+        };
+
+        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), CreateProjectFileSystem([ContentMount])).ConfigureAwait(false);
+
+        _ = result.State.Should().Be(ProjectValidationState.Valid);
+        _ = result.MountFindings.Select(static finding => finding.Code)
+            .Should().BeEquivalentTo([MountCodes.Unbound, MountCodes.FolderMissing]);
+    }
+
+    [TestMethod]
+    public async Task ValidateAsync_ShouldUseTheMountsFileOverrideOfACommittedPath()
+    {
+        var fs = CreateProjectFileSystem();
+        _ = fs.Directory.CreateDirectory(@"D:\Elsewhere\Content");
+        WriteMountsFile(fs, """{"version":1,"mounts":{"Content":"D:/Elsewhere/Content"}}""");
+
+        var result = await this.ValidateAsync(CreateManifestJson(), fs).ConfigureAwait(false);
+
+        _ = result.State.Should().Be(ProjectValidationState.Valid);
+        var context = ProjectContext.FromProjectInfo(result.ProjectInfo!, fs);
+        _ = context.SourceMounts.Should().ContainSingle()
+            .Which.Location.Should().Be(FileSystemPath.From(@"D:\Elsewhere\Content"));
     }
 
     [TestMethod]
@@ -101,12 +145,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     [DataRow("Content", ProjectValidationState.InvalidContentRoots)]
     public async Task ValidateAsync_ShouldShowOnlyCookedAndBuild(string folder, ProjectValidationState expected)
     {
-        var (storage, document) = CreateStorageWithProjectFile();
-        var service = new ProjectValidationService(storage.Object);
-        document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(CreateManifestJson(schemaVersion: 1, outputFolderView: folder));
-
-        var result = await service.ValidateAsync("project").ConfigureAwait(false);
+        var result = await this.ValidateAsync(CreateManifestJson(outputFolderView: folder), CreateProjectFileSystem()).ConfigureAwait(false);
 
         _ = result.State.Should().Be(expected);
         if (expected == ProjectValidationState.Valid)
@@ -116,19 +155,30 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    [DataRow("C:/Paks/Props.pak", ProjectValidationState.Valid)]
-    [DataRow("C:/Paks/Props.zip", ProjectValidationState.InvalidContentRoots)]
-    public async Task ValidateAsync_ShouldAcceptOnlyPakFilesAsPakFileMounts(string pakPath, ProjectValidationState expected)
+    public async Task ValidateAsync_ShouldAcceptAPakMountBoundToAFile()
     {
-        var (storage, document) = CreateStorageWithProjectFile();
-        storage.Setup(s => s.DocumentExistsAsync(FileSystemPath.From(pakPath).FullPath)).ReturnsAsync(value: true);
-        var service = new ProjectValidationService(storage.Object);
-        document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(CreateManifestJson(schemaVersion: 1, pakFilePath: pakPath));
+        var mounts = new[] { ContentMount, new ProjectMount("Props", MountKind.Pak, "../Paks/Props.pak") };
+        var fs = CreateProjectFileSystem(mounts);
+        _ = fs.Directory.CreateDirectory(@"C:\Paks");
+        await fs.File.WriteAllTextAsync(@"C:\Paks\Props.pak", "pak", this.CancellationToken).ConfigureAwait(false);
 
-        var result = await service.ValidateAsync("project").ConfigureAwait(false);
+        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), fs).ConfigureAwait(false);
 
-        _ = result.State.Should().Be(expected);
+        _ = result.State.Should().Be(ProjectValidationState.Valid);
+        _ = result.MountFindings.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task ValidateAsync_ShouldRefuseAPakMountBoundToAFolder()
+    {
+        var mounts = new[] { ContentMount, new ProjectMount("Props", MountKind.Pak, "../Paks/Props.pak") };
+        var fs = CreateProjectFileSystem(mounts);
+        _ = fs.Directory.CreateDirectory(@"C:\Paks\Props.pak");
+
+        var result = await this.ValidateAsync(CreateManifestJson(mounts: mounts), fs).ConfigureAwait(false);
+
+        _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
+        _ = result.Message.Should().StartWith(MountCodes.PathKind);
     }
 
     [TestMethod]
@@ -141,9 +191,8 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             Name = "Project",
             Category = Category.Games,
             ProjectRoot = FileSystemPath.From(@"C:\Project"),
-            AuthoringMounts = [],
+            Mounts = [],
             FileSystem = new MockFileSystem(),
-            LocalFolderMounts = [],
         };
 
         var scope = provider.CreateScope(context);
@@ -159,7 +208,6 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
 
         var target = resolver.ResolveCreateTarget(context, AuthoringAssetKind.Material, selection: null);
 
-        _ = target.ProjectRelativeFolder.Should().Be("Content/Materials");
         _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials"));
         _ = target.FallbackReason.Should().Be(AuthoringTargetFallbackReason.NoSelection);
     }
@@ -175,7 +223,6 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             AuthoringAssetKind.Material,
             new ContentFolderSelection("Content/Scenes"));
 
-        _ = target.ProjectRelativeFolder.Should().Be("Content/Materials");
         _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials"));
         _ = target.FallbackReason.Should().Be(AuthoringTargetFallbackReason.KindMismatch);
     }
@@ -191,7 +238,6 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             AuthoringAssetKind.Material,
             new ContentFolderSelection("Content/Materials/Subfolder"));
 
-        _ = target.ProjectRelativeFolder.Should().Be("Content/Materials/Subfolder");
         _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials/Subfolder"));
         _ = target.FallbackReason.Should().BeNull();
     }
@@ -200,17 +246,14 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     public void AuthoringTargetResolver_ShouldSupportNonDefaultContentMountPath()
     {
         var resolver = new AuthoringTargetResolver();
-        var context = CreateContext("Project") with
-        {
-            AuthoringMounts = [new ProjectMountPoint("Content", "Authoring")],
-        };
+        var mounts = new[] { new ProjectMount("Content", MountKind.Source, "Authoring") };
+        var context = CreateContext("Project", CreateProjectFileSystem(mounts), mounts);
 
         var target = resolver.ResolveCreateTarget(
             context,
             AuthoringAssetKind.Material,
             new ContentFolderSelection("Authoring/Materials/Subfolder"));
 
-        _ = target.ProjectRelativeFolder.Should().Be("Authoring/Materials/Subfolder");
         _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials/Subfolder"));
         _ = target.FallbackReason.Should().BeNull();
     }
@@ -219,10 +262,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     public void AuthoringTargetResolver_ShouldHonorExplicitLocalMountMaterialSubfolder()
     {
         var resolver = new AuthoringTargetResolver();
-        var context = CreateContext("Project") with
-        {
-            LocalFolderMounts = [new LocalFolderMount("StudioLibrary", FileSystemPath.From(@"D:\Studio\SharedContent"))],
-        };
+        var context = CreateLibraryContext(bound: true);
 
         var target = resolver.ResolveCreateTarget(
             context,
@@ -230,7 +270,6 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             new ContentFolderSelection("StudioLibrary/Materials/Shared", "StudioLibrary"));
 
         _ = target.IsExplicitLocalMount.Should().BeTrue();
-        _ = target.ProjectRelativeFolder.Should().Be("Materials/Shared");
         _ = target.Folder.Should().Be(AssetPath.Parse("/StudioLibrary/Materials/Shared"));
         _ = target.FallbackReason.Should().BeNull();
     }
@@ -239,10 +278,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     public void AuthoringTargetResolver_ShouldFallbackWhenExplicitLocalMountSelectionIsWrongKind()
     {
         var resolver = new AuthoringTargetResolver();
-        var context = CreateContext("Project") with
-        {
-            LocalFolderMounts = [new LocalFolderMount("StudioLibrary", FileSystemPath.From(@"D:\Studio\SharedContent"))],
-        };
+        var context = CreateLibraryContext(bound: true);
 
         var target = resolver.ResolveCreateTarget(
             context,
@@ -250,9 +286,24 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             new ContentFolderSelection("StudioLibrary/Scenes", "StudioLibrary"));
 
         _ = target.IsExplicitLocalMount.Should().BeTrue();
-        _ = target.ProjectRelativeFolder.Should().Be("Materials");
         _ = target.Folder.Should().Be(AssetPath.Parse("/StudioLibrary/Materials"));
         _ = target.FallbackReason.Should().Be(AuthoringTargetFallbackReason.KindMismatch);
+    }
+
+    [TestMethod]
+    public void AuthoringTargetResolver_ShouldNeverTargetAnUnboundMount()
+    {
+        var resolver = new AuthoringTargetResolver();
+        var context = CreateLibraryContext(bound: false);
+
+        var target = resolver.ResolveCreateTarget(
+            context,
+            AuthoringAssetKind.Material,
+            new ContentFolderSelection("StudioLibrary/Materials", "StudioLibrary"));
+
+        _ = target.IsExplicitLocalMount.Should().BeFalse();
+        _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials"));
+        _ = target.FallbackReason.Should().Be(AuthoringTargetFallbackReason.UnknownLocalMount);
     }
 
     [TestMethod]
@@ -260,38 +311,29 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     {
         var fs = new MockFileSystem();
         CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
-        fs.Directory.CreateDirectory(@"C:\Projects");
-        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson()).ConfigureAwait(false);
-        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Content\asset.txt", "payload").ConfigureAwait(false);
+        _ = fs.Directory.CreateDirectory(@"C:\Projects");
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson(), this.CancellationToken).ConfigureAwait(false);
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Content\asset.txt", "payload", this.CancellationToken).ConfigureAwait(false);
 
-        var storage = new NativeStorageProvider(fs);
-        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
-
-        var result = await service.CreateFromTemplateAsync(
-                new ProjectCreationRequest
-                {
-                    TemplateRoot = @"C:\Templates\Blank",
-                    ParentLocation = @"C:\Projects",
-                    ProjectName = "Created",
-                    Category = Category.Games,
-                })
-            .ConfigureAwait(false);
+        var result = await this.CreateFromBlankTemplateAsync(fs).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = fs.File.Exists(@"C:\Projects\Created\Project.oxy").Should().BeTrue();
         _ = fs.File.Exists(@"C:\Projects\Created\Template.json").Should().BeFalse();
         _ = fs.File.Exists(@"C:\Projects\Created\Content\asset.txt").Should().BeTrue();
 
-        var manifest = await fs.File.ReadAllTextAsync(@"C:\Projects\Created\Project.oxy").ConfigureAwait(false);
+        var manifest = await fs.File.ReadAllTextAsync(@"C:\Projects\Created\Project.oxy", this.CancellationToken).ConfigureAwait(false);
         var info = ProjectInfo.FromJson(manifest);
         _ = info.SchemaVersion.Should().Be(ProjectInfo.CurrentSchemaVersion);
         _ = info.Name.Should().Be("Created");
         _ = info.Id.Should().NotBeEmpty();
-        _ = info.AuthoringMounts.Should().ContainSingle();
+        _ = info.Mounts.Should().ContainSingle();
         _ = manifest.Should().NotContain(nameof(ProjectInfo.Location));
         _ = manifest.Should().NotContain(nameof(ProjectInfo.LastUsedOn));
         _ = fs.Directory.Exists(@"C:\Projects\Created\Content\Scenes").Should().BeTrue();
         _ = fs.Directory.Exists(@"C:\Projects\Created\Content\Materials").Should().BeTrue();
+        _ = (await fs.File.ReadAllTextAsync(@"C:\Projects\Created\.gitignore", this.CancellationToken).ConfigureAwait(false))
+            .Should().Contain(ProjectMounts.FileName);
         _ = result.OpenStarterScene.Should().BeTrue();
         _ = result.StarterScene.Should().Be(AssetPath.Parse("/Content/Scenes/Main.oscene"));
     }
@@ -345,30 +387,11 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     {
         var fs = new MockFileSystem();
         CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
-        fs.Directory.CreateDirectory(@"C:\Projects");
-        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson()).ConfigureAwait(false);
+        _ = fs.Directory.CreateDirectory(@"C:\Projects");
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson(), this.CancellationToken).ConfigureAwait(false);
 
-        var storage = new NativeStorageProvider(fs);
-        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
-
-        var first = await service.CreateFromTemplateAsync(
-                new ProjectCreationRequest
-                {
-                    TemplateRoot = @"C:\Templates\Blank",
-                    ParentLocation = @"C:\Projects",
-                    ProjectName = "First",
-                    Category = Category.Games,
-                })
-            .ConfigureAwait(false);
-        var second = await service.CreateFromTemplateAsync(
-                new ProjectCreationRequest
-                {
-                    TemplateRoot = @"C:\Templates\Blank",
-                    ParentLocation = @"C:\Projects",
-                    ProjectName = "Second",
-                    Category = Category.Games,
-                })
-            .ConfigureAwait(false);
+        var first = await this.CreateFromBlankTemplateAsync(fs, "First").ConfigureAwait(false);
+        var second = await this.CreateFromBlankTemplateAsync(fs, "Second").ConfigureAwait(false);
 
         _ = first.Succeeded.Should().BeTrue(first.Message);
         _ = second.Succeeded.Should().BeTrue(second.Message);
@@ -382,24 +405,13 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     {
         var fs = new MockFileSystem();
         CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
-        fs.Directory.CreateDirectory(@"C:\Projects");
-        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson()).ConfigureAwait(false);
+        _ = fs.Directory.CreateDirectory(@"C:\Projects");
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson(), this.CancellationToken).ConfigureAwait(false);
 
-        var storage = new NativeStorageProvider(fs);
-        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
-
-        var result = await service.CreateFromTemplateAsync(
-                new ProjectCreationRequest
-                {
-                    TemplateRoot = @"C:\Templates\Blank",
-                    ParentLocation = @"C:\Projects",
-                    ProjectName = "Created",
-                    Category = Category.Games,
-                })
-            .ConfigureAwait(false);
+        var result = await this.CreateFromBlankTemplateAsync(fs).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue(result.Message);
-        var manifest = await fs.File.ReadAllTextAsync(@"C:\Projects\Created\Project.oxy").ConfigureAwait(false);
+        var manifest = await fs.File.ReadAllTextAsync(@"C:\Projects\Created\Project.oxy", this.CancellationToken).ConfigureAwait(false);
         var info = ProjectInfo.FromJson(manifest);
         _ = info.DefaultSceneId.Should().Be(
             SceneId.FromValue(Guid.Parse("09b406b8-410c-4cc3-8c0a-5f6af9afcc0c")),
@@ -412,33 +424,20 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     {
         var fs = new MockFileSystem();
         CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
-        fs.Directory.CreateDirectory(@"C:\Projects");
-        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson()).ConfigureAwait(false);
-        await fs.File.WriteAllTextAsync(
-                @"C:\Templates\Blank\Content\Scenes\Main.oscene.json",
-                """
-                {
-                  "Name": "Main",
-                  "RootNodes": []
-                }
-                """)
-            .ConfigureAwait(false);
+        _ = fs.Directory.CreateDirectory(@"C:\Projects");
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson(), this.CancellationToken).ConfigureAwait(false);
+        const string scene = """
+            {
+              "Name": "Main",
+              "RootNodes": []
+            }
+            """;
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Content\Scenes\Main.oscene.json", scene, this.CancellationToken).ConfigureAwait(false);
 
-        var storage = new NativeStorageProvider(fs);
-        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
-
-        var result = await service.CreateFromTemplateAsync(
-                new ProjectCreationRequest
-                {
-                    TemplateRoot = @"C:\Templates\Blank",
-                    ParentLocation = @"C:\Projects",
-                    ProjectName = "Created",
-                    Category = Category.Games,
-                })
-            .ConfigureAwait(false);
+        var result = await this.CreateFromBlankTemplateAsync(fs).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue(result.Message);
-        var manifest = await fs.File.ReadAllTextAsync(@"C:\Projects\Created\Project.oxy").ConfigureAwait(false);
+        var manifest = await fs.File.ReadAllTextAsync(@"C:\Projects\Created\Project.oxy", this.CancellationToken).ConfigureAwait(false);
         var info = ProjectInfo.FromJson(manifest);
         _ = info.DefaultSceneId.Should().BeNull("a template scene without a serialized id must not get a guessed default");
         _ = manifest.Should().NotContain(nameof(ProjectInfo.DefaultSceneId));
@@ -449,23 +448,12 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     {
         var fs = new MockFileSystem();
         CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
-        fs.Directory.CreateDirectory(@"C:\Projects");
-        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson()).ConfigureAwait(false);
-        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Project.oxy", CreateManifestJson(schemaVersion: 1))
+        _ = fs.Directory.CreateDirectory(@"C:\Projects");
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateTemplateDescriptorJson(), this.CancellationToken).ConfigureAwait(false);
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Project.oxy", CreateManifestJson(), this.CancellationToken)
             .ConfigureAwait(false);
 
-        var storage = new NativeStorageProvider(fs);
-        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
-
-        var result = await service.CreateFromTemplateAsync(
-                new ProjectCreationRequest
-                {
-                    TemplateRoot = @"C:\Templates\Blank",
-                    ParentLocation = @"C:\Projects",
-                    ProjectName = "Created",
-                    Category = Category.Games,
-                })
-            .ConfigureAwait(false);
+        var result = await this.CreateFromBlankTemplateAsync(fs).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = result.Message.Should().Contain("Project.oxy");
@@ -476,24 +464,11 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     {
         var fs = new MockFileSystem();
         CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
-        fs.Directory.CreateDirectory(@"C:\Projects");
-        await fs.File.WriteAllTextAsync(
-                @"C:\Templates\Blank\Template.json",
-                CreateTemplateDescriptorJson().Replace("\"SchemaVersion\": 1", "\"SchemaVersion\": 2", StringComparison.Ordinal))
-            .ConfigureAwait(false);
+        _ = fs.Directory.CreateDirectory(@"C:\Projects");
+        var descriptor = CreateTemplateDescriptorJson().Replace("\"SchemaVersion\": 1", "\"SchemaVersion\": 2", StringComparison.Ordinal);
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", descriptor, this.CancellationToken).ConfigureAwait(false);
 
-        var storage = new NativeStorageProvider(fs);
-        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
-
-        var result = await service.CreateFromTemplateAsync(
-                new ProjectCreationRequest
-                {
-                    TemplateRoot = @"C:\Templates\Blank",
-                    ParentLocation = @"C:\Projects",
-                    ProjectName = "Created",
-                    Category = Category.Games,
-                })
-            .ConfigureAwait(false);
+        var result = await this.CreateFromBlankTemplateAsync(fs).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = result.Message.Should().Contain("SchemaVersion");
@@ -506,25 +481,12 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     {
         var fs = new MockFileSystem();
         CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
-        fs.Directory.CreateDirectory(@"C:\Projects");
-        var extraMount = $$"""{ "Name": "{{name}}", "RelativePath": "Config" }, {""";
-        await fs.File.WriteAllTextAsync(
-                @"C:\Templates\Blank\Template.json",
-                CreateTemplateDescriptorJson().Replace("\"AuthoringMounts\": [\n    {", $"\"AuthoringMounts\": [{extraMount}", StringComparison.Ordinal))
-            .ConfigureAwait(false);
+        _ = fs.Directory.CreateDirectory(@"C:\Projects");
+        var extraMount = $$"""{ "Name": "{{name}}", "Kind": "Source", "Path": "Config" }, {""";
+        var descriptor = CreateTemplateDescriptorJson().Replace("\"Mounts\": [\n    {", $"\"Mounts\": [{extraMount}", StringComparison.Ordinal);
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", descriptor, this.CancellationToken).ConfigureAwait(false);
 
-        var storage = new NativeStorageProvider(fs);
-        var service = new ProjectCreationService(storage, new ProjectValidationService(storage));
-
-        var result = await service.CreateFromTemplateAsync(
-                new ProjectCreationRequest
-                {
-                    TemplateRoot = @"C:\Templates\Blank",
-                    ParentLocation = @"C:\Projects",
-                    ProjectName = "Created",
-                    Category = Category.Games,
-                })
-            .ConfigureAwait(false);
+        var result = await this.CreateFromBlankTemplateAsync(fs).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
         _ = fs.Directory.Exists(@"C:\Projects\Created").Should().BeFalse();
@@ -535,7 +497,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     {
         var projectUsage = new Mock<IProjectUsageService>();
         var validation = new Mock<IProjectValidationService>();
-        projectUsage.Setup(p => p.GetMostRecentlyUsedProjectsAsync(10))
+        _ = projectUsage.Setup(p => p.GetMostRecentlyUsedProjectsAsync(10))
             .ReturnsAsync(
                 [
                     new ProjectUsage
@@ -545,7 +507,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
                         LastUsedOn = new DateTime(year: 2026, month: 1, day: 2),
                     },
                 ]);
-        validation.Setup(v => v.ValidateAsync(@"C:\Missing", It.IsAny<CancellationToken>()))
+        _ = validation.Setup(v => v.ValidateAsync(@"C:\Missing", It.IsAny<CancellationToken>()))
             .ReturnsAsync(
                 ProjectValidationResult.Failure(
                     ProjectValidationState.Missing,
@@ -554,7 +516,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var adapter = new RecentProjectAdapter(projectUsage.Object, validation.Object);
 
         var entries = new List<RecentProjectEntry>();
-        await foreach (var entry in adapter.GetRecentProjectsAsync().ConfigureAwait(false))
+        await foreach (var entry in adapter.GetRecentProjectsAsync(cancellationToken: this.CancellationToken).ConfigureAwait(false))
         {
             entries.Add(entry);
         }
@@ -573,36 +535,45 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var adapter = new RecentProjectAdapter(projectUsage.Object, validation.Object);
         var context = CreateContext("Project");
 
-        await adapter.RecordActivatedAsync(context).ConfigureAwait(false);
+        await adapter.RecordActivatedAsync(context, this.CancellationToken).ConfigureAwait(false);
 
         projectUsage.Verify(p => p.UpdateProjectUsageAsync("Project", @"C:\Project"), Times.Once);
     }
 
-    private static (Mock<IStorageProvider> storage, Mock<IDocument> document) CreateStorageWithProjectFile()
+    private static (Mock<IStorageProvider> Storage, Mock<IDocument> Document) CreateStorageWithProjectFile()
     {
         var storage = new Mock<IStorageProvider>();
         var document = new Mock<IDocument>();
 
-        storage.Setup(s => s.Normalize("project")).Returns(@"C:\Project");
-        storage.Setup(s => s.FolderExistsAsync(@"C:\Project")).ReturnsAsync(value: true);
-        storage.Setup(s => s.NormalizeRelativeTo(@"C:\Project", Constants.ProjectFileName))
+        _ = storage.Setup(s => s.Normalize("project")).Returns(@"C:\Project");
+        _ = storage.Setup(s => s.FolderExistsAsync(@"C:\Project")).ReturnsAsync(value: true);
+        _ = storage.Setup(s => s.NormalizeRelativeTo(@"C:\Project", Constants.ProjectFileName))
             .Returns(@"C:\Project\Project.oxy");
-        storage.Setup(s => s.DocumentExistsAsync(@"C:\Project\Project.oxy")).ReturnsAsync(value: true);
-        storage.Setup(s => s.GetDocumentFromPathAsync(@"C:\Project\Project.oxy", It.IsAny<CancellationToken>()))
+        _ = storage.Setup(s => s.DocumentExistsAsync(@"C:\Project\Project.oxy")).ReturnsAsync(value: true);
+        _ = storage.Setup(s => s.GetDocumentFromPathAsync(@"C:\Project\Project.oxy", It.IsAny<CancellationToken>()))
             .ReturnsAsync(document.Object);
-        storage.Setup(s => s.NormalizeRelativeTo(@"C:\Project", "Content"))
-            .Returns(@"C:\Project\Content");
-        storage.Setup(s => s.FolderExistsAsync(@"C:\Project\Content")).ReturnsAsync(value: true);
 
         return (storage, document);
     }
 
+    private static MockFileSystem CreateProjectFileSystem(IEnumerable<ProjectMount>? mounts = null)
+    {
+        var fs = new MockFileSystem();
+        _ = fs.Directory.CreateDirectory(ProjectRootPath);
+        foreach (var mount in (mounts ?? [ContentMount]).Where(static mount => mount is { Path: not null, Kind: not MountKind.Pak }))
+        {
+            _ = fs.Directory.CreateDirectory(fs.Path.GetFullPath(fs.Path.Combine(ProjectRootPath, mount.Path!)));
+        }
+
+        return fs;
+    }
+
+    private static void WriteMountsFile(MockFileSystem fs, string json)
+        => fs.File.WriteAllText(fs.Path.Combine(ProjectRootPath, ProjectMounts.FileName), json);
+
     private static string CreateManifestJson(
-        int schemaVersion,
-        bool includeAuthoringMounts = true,
-        string? pakFilePath = null,
-        string mountName = "Content",
-        string mountPath = "Content",
+        int schemaVersion = 2,
+        IReadOnlyList<ProjectMount>? mounts = null,
         string? outputFolderView = null)
     {
         var outputFolderViews = outputFolderView is null
@@ -616,41 +587,26 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
                 ]
               """;
 
-        var pakFileMounts = pakFilePath is null
-            ? string.Empty
-            : $$"""
-              ,
-                "PakFileMounts": [
-                  {
-                    "Name": "Props",
-                    "AbsolutePath": "{{pakFilePath}}"
-                  }
-                ]
-              """;
+        var mountsJson = string.Join(',', (mounts ?? [ContentMount]).Select(ToMountJson));
 
-        var authoringMounts = includeAuthoringMounts
-            ? $$"""
-              ,
-                "AuthoringMounts": [
-                  {
-                    "Name": "{{mountName}}",
-                    "RelativePath": "{{mountPath}}"
-                  }
-                ]
-              """
-            : string.Empty;
-
+        var version = schemaVersion.ToString(CultureInfo.InvariantCulture);
+        var id = Guid.NewGuid().ToString("D", CultureInfo.InvariantCulture);
         return $$"""
-                 {
-                   "SchemaVersion": {{schemaVersion}},
-                   "Id": "{{Guid.NewGuid()}}",
-                   "Name": "Project",
-                   "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
-                   "Thumbnail": "Media/Preview.png"{{authoringMounts}},
-                   "LocalFolderMounts": []{{pakFileMounts}}{{outputFolderViews}}
-                 }
-                 """;
+            {
+              "SchemaVersion": {{version}},
+              "Id": "{{id}}",
+              "Name": "Project",
+              "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
+              "Thumbnail": "Media/Preview.png",
+              "Mounts": [{{mountsJson}}]{{outputFolderViews}}
+            }
+            """;
     }
+
+    private static string ToMountJson(ProjectMount mount)
+        => mount.Path is null
+            ? $$"""{ "Name": "{{mount.Name}}", "Kind": "{{mount.Kind}}" }"""
+            : $$"""{ "Name": "{{mount.Name}}", "Kind": "{{mount.Kind}}", "Path": "{{mount.Path}}" }""";
 
     private static string CreateTemplateDescriptorJson()
         => """
@@ -665,13 +621,13 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
              "Preview": "Media/Preview.png",
              "SourceFolder": ".",
              "Thumbnail": "Media/Preview.png",
-             "AuthoringMounts": [
+             "Mounts": [
                {
                  "Name": "Content",
-                 "RelativePath": "Content"
+                 "Kind": "Source",
+                 "Path": "Content"
                }
              ],
-             "LocalFolderMounts": [],
              "StarterScene": {
                "AssetUri": "asset:///Content/Scenes/Main.oscene",
                "RelativePath": "Content/Scenes/Main.oscene.json",
@@ -710,23 +666,20 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
                      "Media",
                  })
         {
-            fs.Directory.CreateDirectory(Path.Combine(root, folder));
+            _ = fs.Directory.CreateDirectory(Path.Combine(root, folder));
         }
 
         fs.File.WriteAllText(Path.Combine(root, "Media", "Icon.png"), "icon");
         fs.File.WriteAllText(Path.Combine(root, "Media", "Preview.png"), "preview");
-        fs.File.WriteAllText(
-            Path.Combine(root, "Content", "Scenes", "Main.oscene.json"),
-            """
+        const string scene = """
             {
               "Id": "09b406b8-410c-4cc3-8c0a-5f6af9afcc0c",
               "Name": "Main",
               "RootNodes": []
             }
-            """);
-        fs.File.WriteAllText(
-            Path.Combine(root, "Content", "Materials", "Default.omat.json"),
-            """
+            """;
+        fs.File.WriteAllText(Path.Combine(root, "Content", "Scenes", "Main.oscene.json"), scene);
+        const string material = """
             {
               "name": "Default",
               "alpha_mode": "opaque",
@@ -742,18 +695,52 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
                 "double_sided": false
               }
             }
-            """);
+            """;
+        fs.File.WriteAllText(Path.Combine(root, "Content", "Materials", "Default.omat.json"), material);
     }
 
     private static ProjectContext CreateContext(string name)
-        => new()
+        => CreateContext(name, CreateProjectFileSystem(), [ContentMount]);
+
+    private static ProjectContext CreateContext(string name, MockFileSystem fs, IReadOnlyList<ProjectMount> mounts)
+        => ProjectContext.FromProjectInfo(
+            new ProjectInfo(name, Category.Games, ProjectRootPath) { Mounts = [.. mounts] },
+            fs);
+
+    // A project with a Content mount and a StudioLibrary placeholder, bound to a folder outside it or left unbound.
+    private static ProjectContext CreateLibraryContext(bool bound)
+    {
+        var mounts = new[] { ContentMount, new ProjectMount("StudioLibrary") };
+        var fs = CreateProjectFileSystem(mounts);
+        if (bound)
         {
-            ProjectId = Guid.NewGuid(),
-            Name = name,
+            _ = fs.Directory.CreateDirectory(@"D:\Studio\SharedContent");
+            WriteMountsFile(fs, """{"version":1,"mounts":{"StudioLibrary":"D:/Studio/SharedContent"}}""");
+        }
+
+        return CreateContext("Project", fs, mounts);
+    }
+
+    private async Task<ProjectValidationResult> ValidateAsync(string manifestJson, MockFileSystem fs)
+    {
+        var (storage, document) = CreateStorageWithProjectFile();
+        _ = document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(manifestJson);
+
+        return await new ProjectValidationService(storage.Object, fs).ValidateAsync("project", this.CancellationToken).ConfigureAwait(false);
+    }
+
+    // Creates the project Created, or the one named, from the template at C:\Templates\Blank into C:\Projects.
+    private async Task<ProjectCreationResult> CreateFromBlankTemplateAsync(MockFileSystem fs, string projectName = "Created")
+    {
+        var storage = new NativeStorageProvider(fs);
+        var service = new ProjectCreationService(storage, new ProjectValidationService(storage, fs));
+        var request = new ProjectCreationRequest
+        {
+            TemplateRoot = @"C:\Templates\Blank",
+            ParentLocation = @"C:\Projects",
+            ProjectName = projectName,
             Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(@"C:\Project"),
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            FileSystem = new MockFileSystem(),
-            LocalFolderMounts = [],
         };
+        return await service.CreateFromTemplateAsync(request, this.CancellationToken).ConfigureAwait(false);
+    }
 }

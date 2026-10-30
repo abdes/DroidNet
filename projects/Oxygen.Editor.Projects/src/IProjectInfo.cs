@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
@@ -62,25 +63,10 @@ public interface IProjectInfo
     public string? Thumbnail { get; set; }
 
     /// <summary>
-    ///     Gets the project authoring mount points.
+    ///     Gets the mounts the project declares: source folders, cooked folders and pak files, each with a path
+    ///     relative to the project root or none for a placeholder. A <c>.mounts.json</c> binds them on each machine.
     /// </summary>
-    /// <remarks>
-    ///     Mount points are persisted in the project manifest (<c>Project.oxy</c>) and provide the authoritative mapping
-    ///     from a mount point name (virtual root segment) to a project-relative authoring folder.
-    /// </remarks>
-    public IList<ProjectMountPoint> AuthoringMounts { get; }
-
-    /// <summary>
-    ///     Gets the local folder mount points.
-    /// </summary>
-    /// <remarks>
-    ///     Local folder mounts are persisted in the project manifest (<c>Project.oxy</c>) and provide a mapping
-    ///     from a mount point name (virtual root segment) to an absolute path on the local file system.
-    /// </remarks>
-    public IList<LocalFolderMount> LocalFolderMounts { get; }
-
-    /// <summary>Gets the pak files the project mounts as read-only cooked libraries.</summary>
-    public IList<PakFileMount> PakFileMounts { get; }
+    public IList<ProjectMount> Mounts { get; }
 
     /// <summary>Gets the output folders the Content Explorer shows; view state, never mounts.</summary>
     public IList<OutputFolderView> OutputFolderViews { get; }

@@ -52,7 +52,7 @@ public sealed class ImportExecutionPathTests
         var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
 
-        var result = await api.ImportAsync(new(operationId, inputRoot, operationRoot, manifest), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await api.ImportAsync(new(operationId, inputRoot, operationRoot, manifest) { MountsFile = ContentImportMountsFile.Empty }, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.TechnicalMessage ?? diagnostic.Message)));
         var inspection = await api.InspectLooseCookedRootAsync(manifest.Output, this.TestContext.CancellationToken).ConfigureAwait(false);

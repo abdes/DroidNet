@@ -138,7 +138,7 @@ internal static class NativeImportReportReader
                 Severity = issue.GetProperty("severity").GetString() switch { "info" => DiagnosticSeverity.Info, "warning" => DiagnosticSeverity.Warning, _ => DiagnosticSeverity.Error },
                 Code = issue.GetProperty("code").GetString()!,
                 Message = issue.GetProperty("message").GetString()!,
-                AffectedPath = Path.GetFullPath(Path.Combine(execution.InputRoot, requested.AttributedSource)),
+                AffectedPath = execution.MountsFile.Resolve(execution.InputRoot, requested.AttributedSource),
                 TechnicalMessage = issue.TryGetProperty("object_path", out var location) ? location.GetString() : null,
                 AffectedEntity = NativeSourceObject.Read(issue),
             });

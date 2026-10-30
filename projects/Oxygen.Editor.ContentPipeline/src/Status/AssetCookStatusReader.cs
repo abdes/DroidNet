@@ -124,7 +124,7 @@ public sealed partial class AssetCookStatusReader(
         {
             return (CookInputResolver.Resolve(project, requested, ContentCookInputRole.Primary), null);
         }
-        catch (InvalidDataException failure)
+        catch (Exception failure) when (failure is InvalidDataException or CookMountUnavailableException)
         {
             return (null, CreateUnresolvedStatus(requested, failure.Message));
         }
@@ -151,7 +151,7 @@ public sealed partial class AssetCookStatusReader(
 
     private static CookDependencyGraph WithCompleteAssets(CookDependencyGraph graph)
     {
-        var availableFiles = graph.Files.Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal);
+        var availableFiles = graph.Files.Select(static file => file.CookPath).ToHashSet(StringComparer.Ordinal);
         return graph with
         {
             Assets =
@@ -286,7 +286,7 @@ public sealed partial class AssetCookStatusReader(
                 {
                     if (!CookSavedSourceReader.MatchesProbe(input))
                     {
-                        _ = changed.Add(input.RelativePath);
+                        _ = changed.Add(input.CookPath);
                     }
                 }
                 else
@@ -294,13 +294,13 @@ public sealed partial class AssetCookStatusReader(
                     var hash = await CookSavedSourceReader.HashFileAsync(input.SourcePath.FullPath, cancellationToken).ConfigureAwait(false);
                     if (!string.Equals(hash, input.DiscoveryHash, StringComparison.Ordinal))
                     {
-                        _ = changed.Add(input.RelativePath);
+                        _ = changed.Add(input.CookPath);
                     }
                 }
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                _ = changed.Add(input.RelativePath);
+                _ = changed.Add(input.CookPath);
             }
         }
 

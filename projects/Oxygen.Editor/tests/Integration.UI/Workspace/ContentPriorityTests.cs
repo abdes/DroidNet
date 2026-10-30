@@ -5,6 +5,8 @@
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.TestSupport;
 using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.TestSupport.NativeSceneData;
@@ -12,7 +14,7 @@ using static Oxygen.Editor.TestSupport.NativeSceneData;
 namespace Oxygen.Editor.Integration.UI.Tests.Workspace;
 
 [TestClass]
-public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class ContentPriorityTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -31,11 +33,13 @@ public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInte
         var libraryProject = fixture.ProjectRoot.Combine("LibraryProject");
         var (_, libraryKey) = await fixture.CookTestMaterialAsync("Shared", timeout.Token, blue, libraryProject).ConfigureAwait(true);
         _ = libraryKey.Should().Be(key, "stable asset keys preserve the same logical identity while source precedence selects its content");
-        var project = fixture.Session.Context with
+        var libraryRoot = await fixture.GetCookedRootAsync(libraryProject, timeout.Token).ConfigureAwait(true);
+        var mounts = new ProjectMount[]
         {
-            AuthoringMounts = [new("Content", "Content")],
-            LocalFolderMounts = [new("Library", await fixture.GetCookedRootAsync(libraryProject, timeout.Token).ConfigureAwait(true))],
+            new("Content", MountKind.Source, "Content"),
+            new("Library", MountKind.Cooked, libraryRoot.GetPathBelow(fixture.ProjectRoot)),
         };
+        var project = fixture.Session.Context with { Mounts = TestProject.Create(fixture.Session.Context.FileSystem, fixture.ProjectRoot.FullPath, mounts).Context.Mounts };
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         await fixture.ApplyContentPriorityAsync(project, timeout.Token).ConfigureAwait(true);
         var nodeId = fixture.Source.RootNodes.Single().Id;
@@ -46,7 +50,7 @@ public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInte
         var source = fixture.Source;
         var overriding = project with
         {
-            CookedContentOrder = [new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Library")],
+            CookedContentOrder = [new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.Cooked, "Library")],
         };
         await fixture.ApplyContentPriorityAsync(overriding, timeout.Token).ConfigureAwait(true);
         var overridden = await WaitForNodeAsync(fixture, nodeId, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], blue) < 0.001f, timeout.Token).ConfigureAwait(true);

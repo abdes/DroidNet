@@ -38,18 +38,6 @@ public static class ProjectOutputFolders
     };
 
     /// <summary>
-    /// Checks whether a project mount lies in an output folder rather than authored content. <c>SourceMedia</c>,
-    /// which the virtual path rules also keep out of authored paths, holds sources and is not output.
-    /// </summary>
-    /// <param name="mount">The project mount.</param>
-    /// <returns><see langword="true"/> for a mount in an output folder.</returns>
-    public static bool Contains(ProjectMountPoint mount)
-    {
-        ArgumentNullException.ThrowIfNull(mount);
-        return Contains(mount.RelativePath);
-    }
-
-    /// <summary>
     /// Checks whether a path relative to the project root lies in an output folder. The path is made canonical
     /// first: <c>.</c> and <c>..</c> are not folder names, so <c>Content/../.cooked/x</c> is output and
     /// <c>../Media</c>, which leaves the project, is not.

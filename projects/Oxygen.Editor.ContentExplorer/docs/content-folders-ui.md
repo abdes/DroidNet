@@ -14,7 +14,7 @@ refactoring tasks needed to support **mount points** consistent with the
   Folder**. Cooked and Build are output folder nodes, view state that is never a
   mount.
 
-Non-goals (out of scope for this doc): context menus, drag/drop,
+Non-goals (out of scope for this doc): drag/drop,
 filtering/search inside the tree, extra configuration pages.
 
 ## Goals
@@ -115,9 +115,10 @@ The tree is composed of the following adapter types:
       folders that are roots of authoring mount points)
     - Mounted mount point nodes (explicit)
 - **Authoring mount point node** (new adapter)
-  - Backing: `ProjectInfo.AuthoringMounts` (persisted in `Project.oxy`)
+  - Backing: a `Source` mount of `ProjectContext.Mounts`, the resolved table of
+    `ProjectInfo.Mounts` (persisted in `Project.oxy`)
   - Label: mount point name (e.g. `Content`, `Engine`)
-  - Root folder: project-relative `RelativePath` from `ProjectMountPoint`
+  - Root folder: the mount's resolved `Location`, inside or outside the project
   - Children: folders within that mount
 - **Mount point node** (new adapter)
   - Note: this represents a **virtual folder mount** (internal/utility roots
@@ -167,13 +168,49 @@ and therefore hidden by default.
 
 ### Authoring mount points (persisted)
 
-Authoring mount points come from `ProjectInfo.AuthoringMounts` (persisted in
-`Project.oxy`).
+Authoring mount points are the `Source` mounts of `ProjectInfo.Mounts`
+(persisted in `Project.oxy`), bound per machine by `.mounts.json`.
 
 - Default behavior: if the project has no mount points, it has a single default
   mount point `Content` → `Content`.
 - Authoring mount points should be shown as dedicated nodes so virtual path
   mapping is stable and does not depend on filesystem casing.
+- A mount a `.mounts.json` binds on this machine shows its folder beside its
+  name and a `This machine` badge.
+
+### Mounts this machine cannot read
+
+A declared mount that no `.mounts.json` binds, or whose folder or pak file is
+missing, stays in the tree as an `UnavailableMountTreeItemAdapter`: dimmed, with
+`Not bound` or `Folder missing` beside its name, a caution badge whose tooltip
+names the committed path and the folder looked for, and no children. Opening
+the project never fails because of it.
+
+### Mount menu
+
+Every mount row has a context menu after its folder actions:
+
+- **Bind to a folder…** for an unbound mount, **Override folder…** for any
+  other: picks a folder, or a pak file for a `Pak` mount, and writes it to the
+  project's own `.mounts.json`.
+- **Remove binding** when the project's own `.mounts.json` binds a mount that
+  `Project.oxy` declares.
+- **Open Mounts…** opens the Content mounts dialog.
+
+The change applies through the same mount transaction as the dialog; a failed
+change restores the bindings it replaced.
+
+### Content mounts dialog
+
+Each row shows the mount's name and what `Project.oxy` commits for it (its
+relative path, or `Placeholder`), its kind (`Source`, `Cooked`, `Pak`,
+`Output`), and where it is on this machine: `Committed`, `This machine` with
+the bound folder, `Not bound` or `Folder missing` with a caution, or `Always
+mounted` for the engine content. A row this machine cannot read offers
+**Bind…** or **Override…**; a readable one offers to change its binding, and one
+the project's own `.mounts.json` binds offers to remove it. A binding from a
+`.mounts.json` above the project is shown and left as it is. Apply writes
+`Project.oxy` and the project's own `.mounts.json` together.
 
 ### Local Folder mount dialog
 
@@ -193,6 +230,12 @@ Dialog fields:
 - **Mount point name**: text box.
 - **Mount point path**: read-only text label showing the selected folder path,
   plus a button to open a folder picker.
+- **Save the folder** (`MountPlacementView`, shared with the Content mounts
+  dialog's add form): in `Project.oxy` as a path relative to the project,
+  shared through the repository, or on this machine only, as a placeholder the
+  project's own `.mounts.json` binds. A folder on the project's drive defaults
+  to `Project.oxy`; one on another drive has no relative path, so it is saved
+  on this machine only.
 
 Behavior:
 
@@ -200,7 +243,9 @@ Behavior:
 - **OK** is enabled only when:
   - Mount point name is non-empty, and
   - A folder path is selected.
-- On OK, the dialog returns `(Name, Path)` and the mount point is added.
+- On OK, the dialog returns `(Name, Path, CommittedPath)` and the mount point
+  is added: a folder with a cooked index as a `Cooked` mount, any other folder
+  as a `Source` mount.
 - On Cancel, nothing changes.
 
 Collision policy:
@@ -259,9 +304,9 @@ the target behavior.
 
 - [x] Add a new adapter type
       `AuthoringMountPointTreeItemAdapter : TreeItemAdapter`.
-  - Backed by `ProjectInfo.AuthoringMounts` entries (`ProjectMountPoint`), and
+  - Backed by `Source` entries of `ProjectContext.Mounts` (`ResolvedMount`), and
     represents an authoring mount root.
-  - Produces canonical virtual paths rooted at `/{ProjectMountPoint.Name}`.
+  - Produces canonical virtual paths rooted at `/{ResolvedMount.Name}`.
 
   Implementation:
   `projects/Oxygen.Editor.ContentExplorer/src/Panes/ContentFolders/AuthoringMountPointTreeItemAdapter.cs`.
@@ -291,13 +336,13 @@ the target behavior.
       root, excluding:
       - dot-prefixed folders
       - folders that are the root of an authoring mount point
-        (`ProjectMountPoint.RelativePath`)
-    - Authoring mount point adapters (from `ProjectInfo.AuthoringMounts`)
+        (`ResolvedMount.Location`)
+    - Authoring mount point adapters (from the `Source` mounts)
     - Virtual folder mount adapters for explicitly mounted virtual folders
   - Responsible for:
     - enumerating the project root folder and filtering out dot-prefixed folder
       names
-    - projecting `ProjectInfo.AuthoringMounts` into authoring mount point nodes
+    - projecting the `Source` mounts into authoring mount point nodes
     - maintaining the current mounted set
     - inserting/removing mount nodes on mount/unmount
 
@@ -398,12 +443,12 @@ Naming rule:
 ### E) Persistence (MUST)
 
 - [x] Use the existing persisted authoring mount points from
-      `ProjectInfo.AuthoringMounts` (`Project.oxy`) as the source of truth for
+      `ProjectInfo.Mounts` (`Project.oxy`) as the source of truth for
       authoring mounts.
 
 - [x] Persist the mounted set for **virtual folders**
       (Cooked/Build/Local Folder) per project so they can be restored.
-  - Do not store these inside `ProjectInfo.AuthoringMounts` (those are for
+  - Do not store these inside `ProjectInfo.Mounts` (those are for
     authoring mounts / asset identity).
   - Persist stable identifiers (the output folder in `OutputFolderViews`;
     name + absolute path for Local Folder).

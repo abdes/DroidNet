@@ -161,7 +161,7 @@ public sealed partial class ContentPipelineService
             }
 
             var retained = request.RetainedSource ?? await this.RetainRequestedSourceAsync(operation, request, cancellationToken).ConfigureAwait(false);
-            var primary = operation.Project.ProjectRoot.Combine(Path.Combine(retained.DirectoryRelativePath, retained.PrimaryRelativePath));
+            var primary = CookPaths.FileOf(operation.Project, retained.BundleRoot + "/" + retained.PrimaryRelativePath);
             retainedUri = CookInputResolver.FindAuthoringSourceUri(operation.Project, primary)
                 ?? throw new InvalidDataException("The retained source is outside the project's authoring mounts.");
             var recovery = request with { RetainedSource = retained };
@@ -205,11 +205,11 @@ public sealed partial class ContentPipelineService
         {
             var discovered = await discovery.DiscoverAsync(operation, source, recipe, cancellationToken).ConfigureAwait(false);
             var primary = discovered.Files.Single(file => file.SourcePath == FileSystemPath.From(source));
-            var bundleRoot = source[..^primary.RelativePath.Replace('/', Path.DirectorySeparatorChar).Length].TrimEnd(Path.DirectorySeparatorChar);
+            var bundleRoot = source[..^primary.CookPath.Replace('/', Path.DirectorySeparatorChar).Length].TrimEnd(Path.DirectorySeparatorChar);
             return new(
-                Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, bundleRoot).Replace('\\', '/'),
+                CookPaths.Of(operation.Project, FileSystemPath.From(bundleRoot)),
                 discovered.PrimaryRelativePath,
-                [.. discovered.Files.Where(static file => file.Kind == Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.File).Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash))]);
+                [.. discovered.Files.Where(static file => file.Kind == Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.File).Select(static file => new RetainedImportSourceFile(file.CookPath, file.DiscoveryHash))]);
         }
 
         return await new ImportSourceRetention(this.cookCoordinator).RetainAsync(
@@ -232,7 +232,9 @@ public sealed partial class ContentPipelineService
         }
 
         var path = ModelImportSettings.PathFor(project.ProjectRoot.FullPath, identity.VirtualPath);
-        var record = ModelImportSettings.Create(path, primary.FullPath, identity.VirtualPath, request.Settings ?? ModelImportSettings.DefaultSettings(request.Name), request.SourceIdentity);
+        var source = project.SourceMountPathOf(primary)
+            ?? throw new InvalidDataException("The model's source is outside the project's source mounts.");
+        var record = ModelImportSettings.Create(path, source, identity.VirtualPath, request.Settings ?? ModelImportSettings.DefaultSettings(request.Name), request.SourceIdentity);
         _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         this.cookCoordinator.VerifyWriter(operation);
         _ = await this.importRecordFiles.WriteAsync(path, record.ToBytes(), DroidNet.Storage.FileVersion.Missing, cancellationToken).ConfigureAwait(false);
@@ -288,7 +290,7 @@ public sealed partial class ContentPipelineService
             }
 
             var retained = await this.RetainRequestedSourceAsync(operation, request, cancellationToken).ConfigureAwait(false);
-            var primary = operation.Project.ProjectRoot.Combine(Path.Combine(retained.DirectoryRelativePath, retained.PrimaryRelativePath));
+            var primary = CookPaths.FileOf(operation.Project, retained.BundleRoot + "/" + retained.PrimaryRelativePath);
             var uri = CookInputResolver.FindAuthoringSourceUri(operation.Project, primary)
                 ?? throw new InvalidDataException("The retained source is outside the project's authoring mounts.");
             await this.CreateImportRecordAsync(operation, primary, uri, request, cancellationToken).ConfigureAwait(false);

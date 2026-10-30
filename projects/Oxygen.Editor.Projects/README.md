@@ -55,37 +55,67 @@ make projects on any file system.
 - `project` and `Engine` are reserved; `ValidateDeclaredMountName` refuses them
   in any case.
 - The disk is the truth for a file's existence. `ProjectAssetLocation` tells
-  whether a location is a project file, a source in an authoring mount or a
-  library file. Only authoring mounts cook.
+  whether a location is a project file, a source in a source mount or a
+  cooked library file. Only source mounts cook.
 
 ## Manifest
 
-`Project.oxy` at the project's root:
+`Project.oxy` at the project's root, schema version 2:
 
 ```json
 {
+  "SchemaVersion": 2,
   "Id": "8f2b2b16-3a4a-4f39-9f2c-2d9f3a1b2c3d",
   "Name": "MyGame",
   "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
   "Thumbnail": "Media/Preview.png",
-  "AuthoringMounts": [{ "Name": "Content", "RelativePath": "Content" }]
+  "Mounts": [
+    { "Name": "Content", "Kind": "Source", "Path": "Content" },
+    { "Name": "Showcase", "Kind": "Source", "Path": "../../Media/Showcase" },
+    { "Name": "Studio", "Kind": "Source" },
+    { "Name": "Props", "Kind": "Pak", "Path": "../Paks/props.pak" }
+  ]
 }
 ```
 
-| Field                | Meaning                                                   |
-| -------------------- | --------------------------------------------------------- |
-| `Id`                 | Non-empty GUID, the project's identity                    |
-| `Name`, `Category`   | Display name and category                                 |
-| `Thumbnail`          | Optional image, relative to the root                      |
-| `AuthoringMounts`    | Source folders (`Name` + project-relative `RelativePath`) |
-| `LocalFolderMounts`  | Optional cooked library folders (`Name` + `AbsolutePath`) |
-| `PakFileMounts`      | Optional `.pak` files mounted read-only as libraries      |
-| `CookedContentOrder` | Optional library priority, lowest first                   |
-| `DefaultSceneId`     | The scene the workspace opens first                       |
-| `Settings`           | The project's settings (`ProjectSettings`)                |
+| Field                | Meaning                                                  |
+| -------------------- | -------------------------------------------------------- |
+| `Id`                 | Non-empty GUID, the project's identity                   |
+| `Name`, `Category`   | Display name and category                                |
+| `Thumbnail`          | Optional image, relative to the root                     |
+| `Mounts`             | Source folders, cooked folders and pak files (see below) |
+| `CookedContentOrder` | Optional library priority, lowest first                  |
+| `DefaultSceneId`     | The scene the workspace opens first                      |
+| `Settings`           | The project's settings (`ProjectSettings`)               |
 
-Without `AuthoringMounts`, the loader uses one mount, `Content -> Content`.
 `Location` and `LastUsedOn` are runtime and usage state, never saved in it.
+Version 1, with separate mount lists, is refused as unsupported.
+
+## Mounts
+
+Each mount has a name, a kind (`Source`, `Cooked` or `Pak`) and a path
+relative to the project root, which may leave it, or no path: a placeholder.
+`Project.oxy` never holds an absolute path (`path.absolute_committed`). At
+least one `Source` mount is declared.
+
+A git-ignored `.mounts.json` binds mounts on one machine. The project root's
+file binds placeholders, overrides committed paths and adds local source
+mounts; files above it, up to one marked `"root": true`, only bind
+placeholders and add local mounts. The `Oxygen.Editor.Projects.Mounts`
+namespace resolves this as the engine does:
+
+```csharp
+var table = ProjectMounts.Resolve(fileSystem, projectRoot, info.Mounts);
+```
+
+`ProjectContext.Mounts` is the resolved table: each mount's location, where it
+came from and its state (`Bound`, `Unbound`, `Missing`).
+`ProjectContext.SourceMounts` lists the bound source mounts and
+`LibraryMounts` the cooked folders and paks. Opening never fails on an
+unbound or missing mount: they are warnings (`mount.unbound`,
+`mount.folder_missing`). Names, overlapping folders and folders in output
+folders are errors. The engine's `MountTableCases.json`, installed under
+`conformance/`, is run by the tests of both readers.
 
 ## Opening a project
 

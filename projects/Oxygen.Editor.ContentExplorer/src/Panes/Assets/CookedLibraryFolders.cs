@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using LooseCookedIndex = Oxygen.Managed.Assets.Persistence.LooseCooked.LooseCookedIndex;
@@ -45,27 +46,27 @@ public static class CookedLibraryFolders
 
         var priority = CookedContentOrdering.Resolve(project).Select((source, index) => (source, index)).ToArray();
         var all = Library.Of(project);
-        return rows.GroupBy(static row => row.Identity).Select(group => group.OrderByDescending(row =>
+        return [.. rows.GroupBy(static row => row.Identity).Select(group => group.OrderByDescending(row =>
         {
             var owner = all.FirstOrDefault(library => library.Container == row.CookedMetadata?.ContainerPath);
             return priority.First(item => owner is null ? item.source.Kind == CookedContentSourceKind.ProjectOutput : item.source.Kind == owner.Kind && string.Equals(item.source.Name, owner.Name, StringComparison.Ordinal)).index;
-        }).First()).ToArray();
+        }).First())];
     }
 
     // A local folder shows its assets at their descriptor paths, a pak at its assets' virtual paths, under the mount.
     private sealed record Library(CookedContentSourceKind Kind, string Name, FileSystemPath Container)
     {
-        public bool HasContent(ProjectContext project) => this.Kind == CookedContentSourceKind.PakFile
+        public bool HasContent(ProjectContext project) => this.Kind == CookedContentSourceKind.Pak
             ? project.FileSystem.File.Exists(this.Container.FullPath)
             : project.FileSystem.File.Exists(Path.Combine(this.Container.FullPath, LooseCookedIndex.FileName));
 
         public static Library[] Of(ProjectContext project)
-            => [.. project.LocalFolderMounts.Select(static folder => new Library(CookedContentSourceKind.LocalFolder, folder.Name, folder.Root)),
-                .. project.PakFileMounts.Select(static pak => new Library(CookedContentSourceKind.PakFile, pak.Name, pak.Path))];
+            => [.. project.LibraryMounts.Where(static mount => mount.Location is not null).Select(static mount => new Library(
+                mount.Kind == MountKind.Pak ? CookedContentSourceKind.Pak : CookedContentSourceKind.Cooked, mount.Name, mount.Location!))];
 
         public AssetPath? Locate(CookedAssetMetadata source)
         {
-            var relative = this.Kind == CookedContentSourceKind.PakFile ? source.VirtualPath?.VirtualPath.TrimStart('/') : source.DescriptorRelativePath;
+            var relative = this.Kind == CookedContentSourceKind.Pak ? source.VirtualPath?.VirtualPath.TrimStart('/') : source.DescriptorRelativePath;
             return AssetPath.TryCreate(this.Name, relative, out var location) ? location : null;
         }
     }

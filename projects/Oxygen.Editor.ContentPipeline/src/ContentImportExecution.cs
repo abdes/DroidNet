@@ -18,6 +18,9 @@ public sealed record ContentImportExecution(
     string OperationRoot,
     ContentImportManifest Manifest)
 {
+    /// <summary>Gets the mounts file the job sources resolve through.</summary>
+    public required ContentImportMountsFile MountsFile { get; init; }
+
     /// <summary>Gets artifacts borrowed from the cook owner, which retains them through worker drain.</summary>
     public NativeArtifactLease? Artifacts { get; init; }
 

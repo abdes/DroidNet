@@ -4,7 +4,6 @@
 
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
-using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Interop.Scripting;
 using Oxygen.Managed.Core;
@@ -47,10 +46,10 @@ internal sealed class RuntimeProblemReader(ProjectContext project)
 
         if (sourceName.StartsWith('/'))
         {
-            return AssetPath.TryParse(sourceName, out var asset) && RelocationPaths.ToPhysical(project, asset) is { } physical && project.FileSystem.File.Exists(physical.FullPath) ? physical.FullPath : null;
+            return project.SourceFileOf(sourceName) is { } file && project.FileSystem.File.Exists(file.FullPath) ? file.FullPath : null;
         }
 
-        return project.AuthoringMounts.Select(mount => project.FileSystem.Path.Combine(project.ProjectRoot.FullPath, mount.RelativePath, sourceName))
+        return project.SourceMounts.Select(mount => project.FileSystem.Path.Combine(mount.Location!.FullPath, sourceName))
             .Append(project.FileSystem.Path.Combine(project.ProjectRoot.FullPath, sourceName))
             .Select(project.FileSystem.Path.GetFullPath)
             .FirstOrDefault(project.FileSystem.File.Exists);

@@ -6,7 +6,6 @@ using System.Reactive.Subjects;
 using System.Threading.Channels;
 using AwesomeAssertions;
 using Oxygen.Editor.Input.Testing;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Assets.Catalog;
@@ -39,7 +38,7 @@ public sealed partial class InputFactsTests : IDisposable
 
     public InputFactsTests()
     {
-        this.session = new TestSession(this.project.Context with { AuthoringMounts = [] });
+        this.session = new TestSession(this.project.Context with { Mounts = [] });
         this.facts = new InputFacts(this.session, new Catalog(this.changes));
     }
 
@@ -86,7 +85,7 @@ public sealed partial class InputFactsTests : IDisposable
         await this.OpenAsync().ConfigureAwait(false);
 
         _ = this.facts.All.Should().BeEmpty();
-        _ = this.facts.Problems.Select(static problem => problem.Code).Distinct().Should().BeEquivalentTo(InputSourceCodes.NotJson, InputSourceCodes.SchemaMismatch);
+        _ = this.facts.Problems.Select(static problem => problem.Code).Distinct(StringComparer.Ordinal).Should().BeEquivalentTo(InputSourceCodes.NotJson, InputSourceCodes.SchemaMismatch);
     }
 
     [TestMethod]
@@ -172,7 +171,7 @@ public sealed partial class InputFactsTests : IDisposable
         _ = this.project.WriteFile(PlayerFile, InputTemplates.New("Player"));
         await this.OpenAsync().ConfigureAwait(false);
 
-        this.session.ChangeContext(this.project.Context with { AuthoringMounts = [] });
+        this.session.ChangeContext(this.project.Context with { Mounts = [] });
 
         _ = this.facts.All.Should().BeEmpty();
         _ = this.facts.Problems.Should().BeEmpty();

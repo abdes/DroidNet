@@ -100,7 +100,7 @@ public sealed class SourceAnalysisReuseTests
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         const string relative = "Content/Scenes/Main.oscene.json";
-        workspace.WriteText(".build/captured/" + relative, workspace.ReadText(relative));
+        workspace.WriteText(".build/captured/" + CookPaths.StoragePathOf("/" + relative), workspace.ReadText(relative));
         workspace.Scene.RootNodes[0].Metadata.Name = "EditedAfterCapture";
         await workspace.WriteSceneAsync(relative).ConfigureAwait(false);
         var operation = new ContentCookOperation(Guid.NewGuid(), workspace.ProjectContext, 1);

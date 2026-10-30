@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -41,6 +42,7 @@ internal static class CookInputResolver
     /// <param name="uri">The asset's identity, or a path of one of its files.</param>
     /// <param name="role">The input's role in the requested closure.</param>
     /// <returns>The cook input: the source's path, kind and file, and the identity it cooks to.</returns>
+    /// <exception cref="CookMountUnavailableException">The asset's source mount is not bound, or its folder is missing.</exception>
     /// <exception cref="InvalidDataException">The asset has no source the cook can read in this project.</exception>
     public static ContentCookInput Resolve(ProjectContext project, AssetPath uri, ContentCookInputRole role)
     {
@@ -52,6 +54,12 @@ internal static class CookInputResolver
         var identity = AssetFileTypes.ToIdentity(uri);
         if (!HasAuthoringMount(project, identity.Mount))
         {
+            if (project.Mounts.FirstOrDefault(mount => mount.Kind == MountKind.Source
+                    && string.Equals(mount.Name, identity.Mount, StringComparison.Ordinal)) is { } unavailable)
+            {
+                throw new CookMountUnavailableException(unavailable);
+            }
+
             throw new InvalidDataException($"Cook dependency '{uri}' refers to an unknown authoring mount.");
         }
 
@@ -64,14 +72,7 @@ internal static class CookInputResolver
             throw new InvalidDataException($"Unsupported cook dependency '{uri}'.");
         }
 
-        var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, location!.File.FullPath).Replace('\\', '/');
-        if (Path.IsPathRooted(relative) || relative.StartsWith("../", StringComparison.Ordinal)
-            || ProjectOutputFolders.Contains(relative))
-        {
-            throw new InvalidDataException($"Cook dependency '{uri}' does not resolve to a retained authoring file in this project.");
-        }
-
-        return new(identity, kind, identity.Mount, relative, location.File, role);
+        return new(identity, kind, identity.Mount, CookPaths.Of(project, location!.File), location.File, role);
     }
 
     /// <summary>Resolves a container's product to the container that cooks it: a model's mesh or material
@@ -113,8 +114,7 @@ internal static class CookInputResolver
             return null;
         }
 
-        var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, source.File.FullPath).Replace('\\', '/');
-        return new(identity, ContentCookAssetKind.Script, source.Path.Mount, relative, source.File, role);
+        return new(identity, ContentCookAssetKind.Script, source.Path.Mount, CookPaths.Of(project, source.File), source.File, role);
     }
 
     // The cook reads the files of authoring mounts only; a mount's own folder is not a source.
@@ -122,5 +122,5 @@ internal static class CookInputResolver
         => location is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } ? location : null;
 
     private static bool HasAuthoringMount(ProjectContext project, string name)
-        => project.AuthoringMounts.Any(mount => string.Equals(mount.Name, name, StringComparison.Ordinal));
+        => project.SourceMounts.Any(mount => string.Equals(mount.Name, name, StringComparison.Ordinal));
 }

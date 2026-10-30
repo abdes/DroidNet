@@ -30,7 +30,7 @@ internal static class RetainedModelScenario
         var identity = "/" + relative + "/" + filename;
         var recordPath = ModelImportSettings.PathFor(workspace.Root, identity);
         _ = Directory.CreateDirectory(Path.GetDirectoryName(recordPath)!);
-        var record = ModelImportSettings.Create(recordPath, Path.Combine(directory, filename), identity, ModelImportSettings.DefaultSettings(name));
+        var record = ModelImportSettings.Create(recordPath, identity, identity, ModelImportSettings.DefaultSettings(name));
         await File.WriteAllBytesAsync(recordPath, record.ToBytes(), cancellationToken).ConfigureAwait(false);
         return AssetPath.Parse(identity);
     }

@@ -29,6 +29,8 @@ namespace Oxygen.Editor.ContentExplorer.Tests;
 [TestClass]
 public sealed class AssetsViewModelCommandTests
 {
+    public TestContext TestContext { get; set; }
+
     /// <summary>Commands follow the selection: batch cook needs every asset cookable; open and reveal need one asset.</summary>
     /// <returns>The asynchronous availability check.</returns>
     [TestMethod]
@@ -69,7 +71,7 @@ public sealed class AssetsViewModelCommandTests
         var root = Path.Combine(Path.GetTempPath(), "OxygenExplorerCommands", Guid.NewGuid().ToString("N"));
         var clayPath = Path.Combine(root, "Content", "Materials", "Clay.omat.json");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(clayPath)!);
-        await File.WriteAllTextAsync(clayPath, "{}").ConfigureAwait(false);
+        await File.WriteAllTextAsync(clayPath, "{}", this.TestContext.CancellationToken).ConfigureAwait(false);
         var workflow = new Mock<IAssetRelocationWorkflow>();
         _ = workflow.Setup(value => value.PromptNameAsync("Rename", "Clay")).ReturnsAsync("Brick");
         var (browser, state, _, session) = await CreateExplorerAsync(root, workflow.Object).ConfigureAwait(false);
@@ -126,7 +128,7 @@ public sealed class AssetsViewModelCommandTests
         var clayPath = Path.Combine(root, "Content", "Materials", "Clay.omat.json");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(clayPath)!);
         _ = Directory.CreateDirectory(Path.Combine(root, "Content", "Props"));
-        await File.WriteAllTextAsync(clayPath, "{}").ConfigureAwait(false);
+        await File.WriteAllTextAsync(clayPath, "{}", this.TestContext.CancellationToken).ConfigureAwait(false);
         var workflow = new Mock<IAssetRelocationWorkflow>();
         var (browser, state, _, session) = await CreateExplorerAsync(root, workflow.Object).ConfigureAwait(false);
         try
@@ -206,7 +208,7 @@ public sealed class AssetsViewModelCommandTests
         using var scene = TestScenes.Open(new Scene { Name = "Harbor" });
         var area = new TestDocumentArea();
         var views = new Mock<ISceneViews>();
-        _ = views.Setup(port => port.AddInstanceAsync(It.IsAny<DroidNet.Documents.DocumentId>(), It.IsAny<AssetPath>())).ReturnsAsync(true);
+        _ = views.Setup(port => port.AddInstanceAsync(It.IsAny<DroidNet.Documents.DocumentId>(), It.IsAny<AssetPath>())).ReturnsAsync(value: true);
         var (browser, state, _, session) = await CreateExplorerAsync(documents: area, sceneViews: views.Object).ConfigureAwait(false);
         using (session)
         using (browser)
@@ -232,7 +234,7 @@ public sealed class AssetsViewModelCommandTests
         }
     }
 
-    private static async Task<(AssetsViewModel browser, ContentExplorerState state, Mock<IContentFoldersPane> folders, TestSession session)> CreateExplorerAsync(
+    private static async Task<(AssetsViewModel Browser, ContentExplorerState State, Mock<IContentFoldersPane> Folders, TestSession Session)> CreateExplorerAsync(
         string? root = null,
         IAssetRelocationWorkflow? relocation = null,
         TestDocumentArea? documents = null,
@@ -242,7 +244,6 @@ public sealed class AssetsViewModelCommandTests
         var session = new TestSession(TestProject.Create(root is null ? new MockFileSystem() : new RealFileSystem(), root).Context with
         {
             Name = "Commands",
-            AuthoringMounts = [new("Content", "Content")],
             OutputFolderViews = [new(ProjectOutputFolders.Cooked)],
         });
         var state = new ContentExplorerState();

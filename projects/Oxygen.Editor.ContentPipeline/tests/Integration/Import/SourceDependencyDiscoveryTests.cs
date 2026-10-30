@@ -46,7 +46,7 @@ public sealed class SourceDependencyDiscoveryTests
         _ = graph.Diagnostics.Should().BeEmpty();
         _ = graph.Dependencies[sceneUri].Should().Equal(geometrySource);
         _ = graph.Dependencies[geometrySource].Should().Equal(materialSource);
-        _ = graph.Files.Should().ContainSingle(input => input.RelativePath == "Content/Geometry/mesh.bin" && !input.IsAbsent);
+        _ = graph.Files.Should().ContainSingle(input => input.CookPath == "/Content/Geometry/mesh.bin" && !input.IsAbsent);
         _ = graph.PublishedReferences.Should().BeEmpty();
 
         var capture = new CookInputSnapshotCapture(workspace.CookCoordinator);
@@ -54,12 +54,12 @@ public sealed class SourceDependencyDiscoveryTests
             (operation, token) => capture.CaptureAsync(operation, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>(graph.Files), token),
             this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.WriteText("Content/Geometry/mesh.bin", "changed buffer bytes");
-        var capturedBuffer = await File.ReadAllTextAsync(Path.Combine(result.InputRoot, "Content", "Geometry", "mesh.bin"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var capturedBuffer = await File.ReadAllTextAsync(Path.Combine(result.InputRoot, CookPaths.StoragePathOf("/Content/Geometry/mesh.bin")), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = capturedBuffer.Should().Be("saved buffer bytes");
 
         var materialOnly = await discovery.DiscoverAsync(workspace.ProjectContext, [CookInputResolver.Resolve(workspace.ProjectContext, materialSource, ContentCookInputRole.Primary)], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = materialOnly.Assets.Should().ContainSingle().Which.AssetUri.Should().Be(materialSource);
-        _ = materialOnly.Files.Should().NotContain(input => input.RelativePath.EndsWith(".oscene.json", StringComparison.Ordinal));
+        _ = materialOnly.Files.Should().NotContain(input => input.CookPath.EndsWith(".oscene.json", StringComparison.Ordinal));
     }
 
     /// <summary>An action or a mapping context named under a project input source cooks with that source, which the
@@ -285,14 +285,14 @@ public sealed class SourceDependencyDiscoveryTests
             AssetPath.Parse("/Content/Textures/Rough.otex"),
             AssetPath.Parse("/Library/Textures/Emit.otex"),
         ]);
-        _ = graph.Files.Count(static file => file.RelativePath.EndsWith(".png", StringComparison.Ordinal)).Should().Be(3);
+        _ = graph.Files.Count(static file => file.CookPath.EndsWith(".png", StringComparison.Ordinal)).Should().Be(3);
         _ = graph.PublishedReferences.Should().ContainSingle().Which.Should().Be(AssetPath.Parse("/Library/Textures/Emit.otex"));
         var capture = new CookInputSnapshotCapture(workspace.CookCoordinator);
         var captured = await workspace.CookCoordinator.RunAsync(
             (operation, token) => capture.CaptureAsync(operation, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>(graph.Files), token),
             this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.WriteText("Content/Textures/Metal.png", "new image bytes");
-        var saved = await File.ReadAllTextAsync(Path.Combine(captured.InputRoot, "Content/Textures/Metal.png"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var saved = await File.ReadAllTextAsync(Path.Combine(captured.InputRoot, CookPaths.StoragePathOf("/Content/Textures/Metal.png")), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = saved.Should().Be("saved image bytes");
     }
 

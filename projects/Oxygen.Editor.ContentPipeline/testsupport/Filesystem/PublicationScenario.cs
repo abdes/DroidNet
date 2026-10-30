@@ -12,6 +12,8 @@ internal static class PublicationScenario
 {
     internal const string SourceBundle = "Content/Models/Model";
 
+    internal const string SourceBundleRoot = "/" + SourceBundle;
+
     internal static async Task CopyPersistedStateAsync(string source, string target, CancellationToken cancellationToken)
     {
         foreach (var path in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))

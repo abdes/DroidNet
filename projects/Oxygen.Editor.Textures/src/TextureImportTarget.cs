@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -83,10 +84,10 @@ public sealed record TextureImportTarget(string MountName, AssetPath VirtualPath
     }
 
     // The destination: an authoring mount, its folders below it, and the physical folder they name inside the mount.
-    private static (ProjectMountPoint Mount, string PhysicalFolder) ResolveFolder(TextureImportRequest request)
+    private static (ResolvedMount Mount, string PhysicalFolder) ResolveFolder(TextureImportRequest request)
     {
         var folder = request.DestinationFolder;
-        var mount = request.Project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal))
+        var mount = request.Project.SourceMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal))
             ?? throw new TextureImportException(TextureImportCodes.DestinationNotAuthoring, "Choose a folder inside a project authoring mount.");
         var folderParts = folder.IsMount ? [] : folder.RelativePath.Split('/');
         if (folderParts.Any(Oxygen.Managed.Core.VirtualPath.IsDerivedContent))

@@ -47,8 +47,7 @@ public sealed partial class MaterialCookService(
     private static bool IsCurrentMaterialRequest(MaterialCookRequest request, ProjectContext project)
     {
         if (request.Material is null
-            || request.ProjectRoot is null || string.IsNullOrWhiteSpace(request.MountName)
-            || string.IsNullOrWhiteSpace(request.SourceRelativePath) || Path.IsPathRooted(request.SourceRelativePath))
+            || request.ProjectRoot is null || request.SourceFile is null)
         {
             return false;
         }
@@ -62,10 +61,9 @@ public sealed partial class MaterialCookService(
 
             var input = CookInputResolver.Resolve(project, request.Material, ContentCookInputRole.Primary);
             return input.Kind == ContentCookAssetKind.Material
-                && string.Equals(input.MountName, request.MountName, StringComparison.Ordinal)
-                && input.SourceAbsolutePath == project.ProjectRoot.Combine(request.SourceRelativePath);
+                && input.SourceAbsolutePath == request.SourceFile;
         }
-        catch (Exception exception) when (exception is ArgumentException or InvalidDataException)
+        catch (Exception exception) when (exception is ArgumentException or InvalidDataException or CookMountUnavailableException)
         {
             return false;
         }

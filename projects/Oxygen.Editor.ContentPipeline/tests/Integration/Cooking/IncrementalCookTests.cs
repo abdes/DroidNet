@@ -98,10 +98,9 @@ public sealed class IncrementalCookTests
         AssertCookSucceeded(await producer.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false));
 
         var libraryRoot = await library.ExportRootAsync("Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var context = workspace.ProjectContext with
+        var context = workspace.ProjectContext.WithCookedLibraries(("Scripts", libraryRoot)) with
         {
-            LocalFolderMounts = [new("Scripts", FileSystemPath.From(libraryRoot))],
-            CookedContentOrder = [new(Oxygen.Editor.Projects.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.Projects.CookedContentSourceKind.LocalFolder, "Scripts")],
+            CookedContentOrder = [new(Oxygen.Editor.Projects.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.Projects.CookedContentSourceKind.Cooked, "Scripts")],
         };
         workspace.Activate(context);
         workspace.Scene.SetReferences(new SceneReferencesData

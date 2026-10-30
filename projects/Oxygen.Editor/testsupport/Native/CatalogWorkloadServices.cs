@@ -21,7 +21,7 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
     {
         this.Sessions = fixture.Sessions;
         this.Documents = fixture.UnsavedDocuments;
-        this.Sessions.ChangeContext(fixture.Session.Context with { AuthoringMounts = [new("Content", "Content")] });
+        this.Sessions.ChangeContext(fixture.Session.Context with { Mounts = TestProject.Create(fixture.Session.Context.FileSystem, fixture.ProjectRoot.FullPath).Context.Mounts });
         var session = this.Sessions.Session!;
         var files = new NativeAtomicFileStore(new RealFileSystem());
         this.Runs = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);

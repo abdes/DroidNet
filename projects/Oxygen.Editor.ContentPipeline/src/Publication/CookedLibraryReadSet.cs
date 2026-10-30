@@ -9,10 +9,11 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.Pak;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -52,11 +53,11 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             {
                 switch (source.Kind)
                 {
-                    case CookedContentSourceKind.LocalFolder:
-                        await result.AddLooseFolderAsync(project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal)), cancellationToken).ConfigureAwait(false);
+                    case CookedContentSourceKind.Cooked:
+                        await result.AddLooseFolderAsync(project.LibraryMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal) && mount.Kind == MountKind.Cooked), cancellationToken).ConfigureAwait(false);
                         break;
-                    case CookedContentSourceKind.PakFile:
-                        await result.AddPakFileAsync(project.PakFileMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal)), cancellationToken).ConfigureAwait(false);
+                    case CookedContentSourceKind.Pak:
+                        await result.AddPakFileAsync(project.LibraryMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal) && mount.Kind == MountKind.Pak), cancellationToken).ConfigureAwait(false);
                         break;
                     case CookedContentSourceKind.ProjectOutput:
                         break;
@@ -394,7 +395,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
 
     private bool ProjectHasPriority(Root root)
         => this.order.Last(source => source.Kind == CookedContentSourceKind.ProjectOutput
-            || (source.Kind == CookedContentSourceKind.LocalFolder && string.Equals(source.Name, root.Name, StringComparison.Ordinal))).Kind == CookedContentSourceKind.ProjectOutput;
+            || (source.Kind == CookedContentSourceKind.Cooked && string.Equals(source.Name, root.Name, StringComparison.Ordinal))).Kind == CookedContentSourceKind.ProjectOutput;
 
     private bool ProjectSourceWins(AssetPath uri, Root root)
         => this.ProjectHasPriority(root) && (this.resolveImported?.Invoke(uri) is not null
@@ -422,9 +423,14 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     }
 
     // A declared folder without an index holds no cooked library yet and is skipped.
-    private async Task AddLooseFolderAsync(LocalFolderMount mount, CancellationToken cancellationToken)
+    private async Task AddLooseFolderAsync(ResolvedMount mount, CancellationToken cancellationToken)
     {
-        var path = mount.Root.FullPath;
+        if (mount.Location is not { } folder)
+        {
+            return;
+        }
+
+        var path = folder.FullPath;
         if (!File.Exists(Path.Combine(path, LooseCookedIndex.FileName)))
         {
             return;
@@ -463,19 +469,24 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     }
 
     // The engine verifies a pak's integrity when it mounts it; the lease keeps its bytes fixed until then.
-    private async Task AddPakFileAsync(PakFileMount mount, CancellationToken cancellationToken)
+    private async Task AddPakFileAsync(ResolvedMount mount, CancellationToken cancellationToken)
     {
+        if (mount.Location is not { } pakFile)
+        {
+            return;
+        }
+
         PakReadLease? lease = null;
         try
         {
-            lease = await PakReadLease.AcquireAsync(mount.Path, cancellationToken).ConfigureAwait(false);
-            var root = await this.CreatePakRootAsync(mount.Name, mount.Path, lease.Document, cancellationToken).ConfigureAwait(false);
+            lease = await PakReadLease.AcquireAsync(pakFile, cancellationToken).ConfigureAwait(false);
+            var root = await this.CreatePakRootAsync(mount.Name, pakFile, lease.Document, cancellationToken).ConfigureAwait(false);
             this.roots.Add(root with { Container = CookPublicationRootContainer.PakFile, PakLease = lease });
             lease = null;
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            this.unreadable.Add(new(mount.Name, mount.Path.FullPath, failure.Message));
+            this.unreadable.Add(new(mount.Name, pakFile.FullPath, failure.Message));
         }
         finally
         {

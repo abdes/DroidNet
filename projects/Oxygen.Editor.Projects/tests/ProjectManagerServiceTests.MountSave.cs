@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using DroidNet.Storage.Native;
-using Testably.Abstractions;
 using DroidNet.Storage;
-using Oxygen.Managed.Core;
+using DroidNet.Storage.Native;
+using Oxygen.Editor.Projects.Mounts;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.Projects.Tests;
 
@@ -21,14 +21,13 @@ public partial class ProjectManagerServiceTests
         using var workspace = new AtomicWorkspace();
         var store = new ControlledAtomicStore();
         var service = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: store);
-        var original = new ProjectInfo("Mounts", Category.Games, workspace.Root) { AuthoringMounts = [new("Content", "Content")] };
+        var original = new ProjectInfo("Mounts", Category.Games, workspace.Root) { Mounts = [new("Content", MountKind.Source, "Content")] };
         _ = (await service.SaveProjectInfoAsync(original).ConfigureAwait(false)).Should().BeTrue();
         var path = Path.Combine(workspace.Root, Constants.ProjectFileName);
         var before = await File.ReadAllBytesAsync(path, this.CancellationToken).ConfigureAwait(false);
         var candidate = new ProjectInfo(original.Id, original.Name, original.Category, original.Location)
         {
-            AuthoringMounts = [.. original.AuthoringMounts],
-            LocalFolderMounts = [new("Library", FileSystemPath.From(@"C:\Library"))],
+            Mounts = [.. original.Mounts, new("Library", MountKind.Cooked)],
         };
         store.Fail = true;
         Func<Task> save = () => service.SaveProjectInfoAsync(candidate, original, this.CancellationToken);
@@ -37,7 +36,7 @@ public partial class ProjectManagerServiceTests
         store.Fail = false;
         await save().ConfigureAwait(false);
         var saved = ProjectInfo.FromJson(await File.ReadAllTextAsync(path, this.CancellationToken).ConfigureAwait(false));
-        _ = saved.LocalFolderMounts.Should().Equal(candidate.LocalFolderMounts);
+        _ = saved.Mounts.Should().Equal(candidate.Mounts);
     }
 
     /// <summary>An external project edit cannot be overwritten by a mount dialog based on older configuration.</summary>
@@ -47,10 +46,10 @@ public partial class ProjectManagerServiceTests
     {
         using var workspace = new AtomicWorkspace();
         var service = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()));
-        var original = new ProjectInfo("Mounts", Category.Games, workspace.Root) { AuthoringMounts = [new("Content", "Content")] };
+        var original = new ProjectInfo("Mounts", Category.Games, workspace.Root) { Mounts = [new("Content", MountKind.Source, "Content")] };
         _ = (await service.SaveProjectInfoAsync(original).ConfigureAwait(false)).Should().BeTrue();
         var path = Path.Combine(workspace.Root, Constants.ProjectFileName);
-        var external = new ProjectInfo(original.Id, "Externally edited", original.Category, original.Location) { AuthoringMounts = [.. original.AuthoringMounts] };
+        var external = new ProjectInfo(original.Id, "Externally edited", original.Category, original.Location) { Mounts = [.. original.Mounts] };
         var externalJson = ProjectInfo.ToJson(external);
         await File.WriteAllTextAsync(path, externalJson, this.CancellationToken).ConfigureAwait(false);
         Func<Task> save = () => service.SaveProjectInfoAsync(original, original, this.CancellationToken);

@@ -9,7 +9,6 @@ using DroidNet.Aura.Dialogs;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Textures;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentExplorer.Importing;
 
@@ -67,11 +66,17 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         this.Revalidate();
     }
 
+    /// <summary>Gets the native intents available for a standalone image.</summary>
+    public static IReadOnlyList<string> Intents => TextureImport.Intents;
+
+    /// <summary>Gets supported native color spaces.</summary>
+    public static IReadOnlyList<string> ColorSpaces => TextureImport.ColorSpaces;
+
+    /// <summary>Gets supported native texture formats.</summary>
+    public static IReadOnlyList<string> Formats => TextureImport.Formats;
+
     /// <summary>Gets the selected image source.</summary>
     public string SourcePath { get; }
-
-    /// <summary>Gets the native intents available for a standalone image.</summary>
-    public IReadOnlyList<string> Intents => TextureImport.Intents;
 
     /// <summary>Gets the texture shapes the import can produce.</summary>
     public IReadOnlyList<string> Shapes { get; } = [Texture2DShape, CubeShape];
@@ -158,12 +163,6 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
             }
         }
     }
-
-    /// <summary>Gets supported native color spaces.</summary>
-    public IReadOnlyList<string> ColorSpaces => TextureImport.ColorSpaces;
-
-    /// <summary>Gets supported native texture formats.</summary>
-    public IReadOnlyList<string> Formats => TextureImport.Formats;
 
     /// <summary>Gets or sets the named texture asset stem.</summary>
     public string Name
@@ -291,9 +290,9 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
                 return;
             }
 
-            foreach (var mount in this.project.AuthoringMounts)
+            foreach (var mount in this.project.SourceMounts)
             {
-                var root = this.project.ProjectRoot.Combine(mount.RelativePath).FullPath;
+                var root = mount.Location!.FullPath;
                 var relative = Path.GetRelativePath(root, selected).Replace('\\', '/');
                 if (!Path.IsPathRooted(relative) && !string.Equals(relative, "..", StringComparison.Ordinal) && !relative.StartsWith("../", StringComparison.Ordinal))
                 {

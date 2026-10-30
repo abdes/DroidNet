@@ -40,7 +40,7 @@ public sealed partial class ContentPipelineService
     private static CookProvenance BuildProvenance(CookProvenance previous, CookIncrementalPlan plan, CookDependencyGraph graph, IReadOnlyList<ContentCookResult> results, CookInputSnapshot snapshot, ImmutableArray<CookProducedSourceFile> produced)
     {
         var expectedInputs = CookProducedSourceFile.ExpectedInputs(snapshot.Inputs, produced);
-        var expectedFiles = expectedInputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
+        var expectedFiles = expectedInputs.ToDictionary(static file => file.CookPath, StringComparer.Ordinal);
         var sourceInputs = graph.Assets.ToDictionary(static input => input.AssetUri);
         var roots = previous.Roots.Where(root => !plan.DroppedRoots.Contains(root.Mount)).ToDictionary(static root => root.Mount, StringComparer.Ordinal);
         var products = previous.Products.Where(product => !plan.RemovedSources.Contains(product.SourceUri)
@@ -157,10 +157,10 @@ public sealed partial class ContentPipelineService
 
     private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, CancellationToken cancellationToken)
     {
-        var mounts = operation.Project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount))
+        var mounts = operation.Project.SourceMounts
             .Select(static mount => mount.Name).Concat(previous.Roots.Select(static root => root.Mount)).Distinct(StringComparer.Ordinal).ToArray();
         var inventories = await CookIncrementalPlanner.ReadInventoriesAsync(baseline, mounts, this.engineContentPipelineApi, cancellationToken, artifacts).ConfigureAwait(false);
-        var repair = CookRootRepair.Create(baseline, previous, mounts, inventories);
+        var repair = CookRootRepair.Create(operation.Project, baseline, previous, mounts, inventories);
         resolveScopes = this.ExpandRepairScopes(operation, resolveScopes, repair, targetKind);
         var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, this.engineContent, cancellationToken, uri => Import.ImportedOutputs.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency), [.. previous.ProducedAssets]).ConfigureAwait(false);
         try

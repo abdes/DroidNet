@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Testing;
@@ -24,7 +25,7 @@ public sealed class CookedOutputInspectionTests
     [TestMethod]
     public async Task ProjectInspectionIncludesAllOwnedRootsWithoutCookingMissingOutput()
     {
-        using var workspace = new CookWorkspace([new("Content", "Content"), new("Extra", "MoreContent")]);
+        using var workspace = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Extra", MountKind.Source, "MoreContent")]);
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         var pipeline = CreateService(workspace, api.Object, new CapturingSceneDescriptorGenerator([]));
         var report = await pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, validate: true).ConfigureAwait(false);
@@ -110,7 +111,7 @@ public sealed class CookedOutputInspectionTests
         using var workspace = new CookWorkspace();
         var root = Path.Combine(workspace.Root, "ExternalLibrary");
         Directory.CreateDirectory(root);
-        var project = workspace.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(root))] };
+        var project = workspace.ProjectContext.WithCookedLibraries(("Library", root));
         workspace.Activate(project);
         var api = new Mock<IEngineContentPipelineApi>();
         CookedAssetEntry[] entries =

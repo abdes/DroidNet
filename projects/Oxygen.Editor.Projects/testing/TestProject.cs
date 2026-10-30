@@ -4,12 +4,13 @@
 
 using System.IO.Abstractions;
 using System.Text;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects.Testing;
 
 /// <summary>
-/// A project for a test: a <see cref="ProjectContext"/> whose root and authoring mount folders exist on a file system
+/// A project for a test: a <see cref="ProjectContext"/> whose root and source mount folders exist on a file system
 /// the test chooses, usually an in-memory one, and the files the test puts in it by virtual path.
 /// </summary>
 /// <remarks>
@@ -40,40 +41,36 @@ public sealed class TestProject
     /// <param name="fileSystem">The file system that holds the project.</param>
     /// <param name="root">The project folder: <see cref="DefaultRoot"/> when none is given, which suits an in-memory file
     /// system; a temporary folder for the disk.</param>
-    /// <param name="authoringMounts">The authoring mounts, each in the folder of its name; <see cref="ContentMount"/>
+    /// <param name="sourceMounts">The source mounts, each in the folder of its name; <see cref="ContentMount"/>
     /// when none is named.</param>
     /// <returns>The project.</returns>
-    public static TestProject Create(IFileSystem fileSystem, string? root = null, IReadOnlyList<string>? authoringMounts = null)
+    public static TestProject Create(IFileSystem fileSystem, string? root = null, IReadOnlyList<string>? sourceMounts = null)
     {
-        var mounts = authoringMounts is { Count: > 0 } ? authoringMounts : [ContentMount];
-        return Create(fileSystem, root, [.. mounts.Select(static mount => new ProjectMountPoint(mount, mount))]);
+        var mounts = sourceMounts is { Count: > 0 } ? sourceMounts : [ContentMount];
+        return Create(fileSystem, root, [.. mounts.Select(static mount => new ProjectMount(mount, MountKind.Source, mount))]);
     }
 
-    /// <summary>Creates a project whose authoring mounts are in folders the test names, and those folders.</summary>
+    /// <summary>
+    /// Creates a project that declares the mounts the test names, and the folders of its source mounts that have a
+    /// path. The mount table is resolved as the editor resolves it, <c>.mounts.json</c> files included.
+    /// </summary>
     /// <param name="fileSystem">The file system that holds the project.</param>
     /// <param name="root">The project folder: <see cref="DefaultRoot"/> when none is given.</param>
-    /// <param name="authoringMounts">The authoring mounts, each with its folder relative to the project folder.</param>
+    /// <param name="mounts">The declared mounts, each with its folder relative to the project folder or none.</param>
     /// <returns>The project.</returns>
-    public static TestProject Create(IFileSystem fileSystem, string? root, IReadOnlyList<ProjectMountPoint> authoringMounts)
+    public static TestProject Create(IFileSystem fileSystem, string? root, IReadOnlyList<ProjectMount> mounts)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
-        ArgumentNullException.ThrowIfNull(authoringMounts);
-        var context = new ProjectContext
+        ArgumentNullException.ThrowIfNull(mounts);
+        var projectRoot = FileSystemPath.From(root ?? DefaultRoot);
+        _ = fileSystem.Directory.CreateDirectory(projectRoot.FullPath);
+        foreach (var mount in mounts.Where(static mount => mount is { Kind: MountKind.Source, Path: not null }))
         {
-            ProjectId = Guid.NewGuid(),
-            Name = "Test project",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(root ?? DefaultRoot),
-            FileSystem = fileSystem,
-            AuthoringMounts = [.. authoringMounts],
-            LocalFolderMounts = [],
-        };
-        foreach (var mount in authoringMounts)
-        {
-            _ = fileSystem.Directory.CreateDirectory(context.ProjectRoot.Combine(mount.RelativePath).FullPath);
+            _ = fileSystem.Directory.CreateDirectory(projectRoot.Combine(mount.Path!).FullPath);
         }
 
-        return new TestProject(context);
+        var info = new ProjectInfo(Guid.NewGuid(), "Test project", Category.Games, projectRoot.FullPath) { Mounts = [.. mounts] };
+        return Open(info, fileSystem);
     }
 
     /// <summary>Opens a project the test saved or a production service made, as the editor opens it.</summary>
@@ -91,9 +88,7 @@ public sealed class TestProject
         ArgumentNullException.ThrowIfNull(context);
         return new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot.FullPath, context.Thumbnail)
         {
-            AuthoringMounts = [.. context.AuthoringMounts],
-            LocalFolderMounts = [.. context.LocalFolderMounts],
-            PakFileMounts = [.. context.PakFileMounts],
+            Mounts = [.. context.DeclaredMounts],
             OutputFolderViews = [.. context.OutputFolderViews],
             CookedContentOrder = [.. context.CookedContentOrder],
             DefaultSceneId = context.DefaultSceneId,

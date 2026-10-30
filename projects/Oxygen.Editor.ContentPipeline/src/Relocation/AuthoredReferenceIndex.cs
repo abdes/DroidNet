@@ -46,8 +46,7 @@ internal sealed class AuthoredReferenceIndex
         var descriptors = new List<Descriptor>();
         var imports = new List<ImportSource>();
         var unreadable = new List<FileSystemPath>();
-        var root = project.ProjectRoot;
-        foreach (var path in mounts.SelectMany(mount => EnumerateFiles(project.FileSystem, root.Combine(mount.RelativePath))))
+        foreach (var path in mounts.SelectMany(mount => EnumerateFiles(project.FileSystem, mount.Location!)))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var isDescriptor = AuthoredReferenceFormat.IsReferencingSource(path.FullPath);
@@ -78,8 +77,10 @@ internal sealed class AuthoredReferenceIndex
             }
         }
 
-        var records = new ModelImportRecords(project.FileSystem, root.FullPath);
-        unreadable.AddRange(records.Problems.Select(static problem => FileSystemPath.From(problem.RecordPath)));
+        var records = new ModelImportRecords(project);
+        // A record whose model is in a mount this machine has not bound is readable; it names no model here.
+        unreadable.AddRange(records.Problems.Where(static problem => problem.UnboundSource is null)
+            .Select(static problem => FileSystemPath.From(problem.RecordPath)));
         foreach (var record in records.All)
         {
             var primary = FileSystemPath.From(record.SourcePath);
@@ -123,8 +124,12 @@ internal sealed class AuthoredReferenceIndex
     /// <param name="Location">The file on disk.</param>
     /// <param name="VirtualPath">Its virtual path.</param>
     /// <param name="Identity">Its asset identity.</param>
-    /// <param name="References">The identities it references.</param>
-    internal sealed record Descriptor(FileSystemPath Location, AssetPath VirtualPath, AssetPath Identity, IReadOnlyList<AssetPath> References);
+    /// <param name="Fields">Each reference, with the field that holds it.</param>
+    internal sealed record Descriptor(FileSystemPath Location, AssetPath VirtualPath, AssetPath Identity, IReadOnlyList<AuthoredReference> Fields)
+    {
+        /// <summary>Gets the distinct identities the descriptor references.</summary>
+        public IEnumerable<AssetPath> References => this.Fields.Select(static reference => reference.Identity).Distinct();
+    }
 
     /// <summary>An imported model in a writable mount.</summary>
     /// <param name="RecordPath">The model's import record.</param>

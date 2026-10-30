@@ -72,9 +72,9 @@ internal sealed class ProjectAssetKeyIndex(string cachePath, string[] paths)
 
     private static IEnumerable<string> EnumeratePaths(ProjectContext project, CancellationToken cancellationToken)
     {
-        foreach (var mount in project.AuthoringMounts)
+        foreach (var mount in project.SourceMounts)
         {
-            var root = project.ProjectRoot.Combine(mount.RelativePath).FullPath;
+            var root = mount.Location!.FullPath;
             var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, root).Replace('\\', '/');
             if (Path.IsPathRooted(relative) || relative.StartsWith("..", StringComparison.Ordinal)
                 || ProjectOutputFolders.Contains(relative) || !Directory.Exists(root))

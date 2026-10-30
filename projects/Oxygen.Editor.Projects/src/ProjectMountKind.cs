@@ -10,8 +10,8 @@ public enum ProjectMountKind
     /// <summary>An authoring mount: a folder of the project, declared by its manifest.</summary>
     Authoring = 0,
 
-    /// <summary>A local folder mount: a folder outside the project that it lists.</summary>
-    LocalFolder = 1,
+    /// <summary>A cooked folder mount: a read-only cooked library.</summary>
+    Cooked = 1,
 
     /// <summary>
     /// The project's own files: the project's root folder, which holds what no other mount does, such as its

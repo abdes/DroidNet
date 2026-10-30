@@ -1,0 +1,509 @@
+{
+  "$comment": "How a mount table is resolved from a committed declaration and the .mounts.json hierarchy. The engine (SourceMounts_test.cpp) and the editor (ProjectMountTableCasesTests) both run every case, so the two readers cannot drift. Paths are relative to a temp folder whose own .mounts.json has \"root\": true; ${temp} in a path is that folder. Mounts compare by name; codes compare as sets.",
+  "version": 1,
+  "cases": [
+    {
+      "name": "committed relative path",
+      "folders": ["ws/proj/Content"],
+      "declarations": [
+        { "name": "Content", "kind": "Source", "path": "Content" }
+      ],
+      "mounts": [
+        {
+          "name": "Content",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "ws/proj/Content"
+        }
+      ],
+      "codes": []
+    },
+    {
+      "name": "committed path outside the project root",
+      "folders": ["ws/proj/Content", "Media/Showcase"],
+      "declarations": [
+        { "name": "Content", "kind": "Source", "path": "Content" },
+        { "name": "Showcase", "kind": "Source", "path": "../../Media/Showcase" }
+      ],
+      "mounts": [
+        {
+          "name": "Content",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "ws/proj/Content"
+        },
+        {
+          "name": "Showcase",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "Media/Showcase"
+        }
+      ],
+      "codes": []
+    },
+    {
+      "name": "placeholder nothing binds",
+      "folders": [],
+      "declarations": [{ "name": "Studio", "kind": "Source" }],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Unbound",
+          "origin": "none"
+        }
+      ],
+      "codes": ["mount.unbound"]
+    },
+    {
+      "name": "the project's file overrides a committed path",
+      "folders": ["ws/proj/Showcase", "E/Showcase"],
+      "mounts_files": {
+        "ws/proj": {
+          "version": 1,
+          "mounts": { "Showcase": "${temp}/E/Showcase" }
+        }
+      },
+      "declarations": [
+        { "name": "Showcase", "kind": "Source", "path": "Showcase" }
+      ],
+      "mounts": [
+        {
+          "name": "Showcase",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": ".mounts.json",
+          "origin_file": "ws/proj/.mounts.json",
+          "folder": "E/Showcase"
+        }
+      ],
+      "codes": []
+    },
+    {
+      "name": "the project's file binds a placeholder and adds a local mount",
+      "folders": ["D/Studio", "D/Scratch"],
+      "mounts_files": {
+        "ws/proj": {
+          "version": 1,
+          "mounts": {
+            "Studio": "${temp}/D/Studio",
+            "Scratch": "${temp}/D/Scratch"
+          }
+        }
+      },
+      "declarations": [{ "name": "Studio", "kind": "Source" }],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": ".mounts.json",
+          "origin_file": "ws/proj/.mounts.json",
+          "folder": "D/Studio"
+        },
+        {
+          "name": "Scratch",
+          "kind": "Source",
+          "scope": "local",
+          "state": "Bound",
+          "origin": ".mounts.json",
+          "origin_file": "ws/proj/.mounts.json",
+          "folder": "D/Scratch"
+        }
+      ],
+      "codes": []
+    },
+    {
+      "name": "a parent file binds a placeholder",
+      "folders": ["D/Studio"],
+      "mounts_files": {
+        "ws": { "version": 1, "mounts": { "Studio": "${temp}/D/Studio" } }
+      },
+      "declarations": [{ "name": "Studio", "kind": "Source" }],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": ".mounts.json",
+          "origin_file": "ws/.mounts.json",
+          "folder": "D/Studio"
+        }
+      ],
+      "codes": []
+    },
+    {
+      "name": "a parent file never retargets a committed path",
+      "folders": ["ws/proj/Content", "D/Elsewhere"],
+      "mounts_files": {
+        "ws": { "version": 1, "mounts": { "Content": "${temp}/D/Elsewhere" } }
+      },
+      "declarations": [
+        { "name": "Content", "kind": "Source", "path": "Content" }
+      ],
+      "mounts": [
+        {
+          "name": "Content",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "ws/proj/Content"
+        }
+      ],
+      "codes": ["mount.parent_ignored"]
+    },
+    {
+      "name": "the project's file wins over a parent file",
+      "folders": ["D/Near", "D/Far"],
+      "mounts_files": {
+        "ws/proj": { "version": 1, "mounts": { "Studio": "${temp}/D/Near" } },
+        "ws": { "version": 1, "mounts": { "Studio": "${temp}/D/Far" } }
+      },
+      "declarations": [{ "name": "Studio", "kind": "Source" }],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": ".mounts.json",
+          "origin_file": "ws/proj/.mounts.json",
+          "folder": "D/Near"
+        }
+      ],
+      "codes": []
+    },
+    {
+      "name": "the nearest parent file wins",
+      "project": "ws/a/proj",
+      "folders": ["D/Near", "D/Far"],
+      "mounts_files": {
+        "ws/a": { "version": 1, "mounts": { "Studio": "${temp}/D/Near" } },
+        "ws": { "version": 1, "mounts": { "Studio": "${temp}/D/Far" } }
+      },
+      "declarations": [{ "name": "Studio", "kind": "Source" }],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": ".mounts.json",
+          "origin_file": "ws/a/.mounts.json",
+          "folder": "D/Near"
+        }
+      ],
+      "codes": []
+    },
+    {
+      "name": "root true stops the walk",
+      "folders": ["D/Studio"],
+      "mounts_files": {
+        "ws/proj": { "version": 1, "root": true },
+        "ws": { "version": 1, "mounts": { "Studio": "${temp}/D/Studio" } }
+      },
+      "declarations": [{ "name": "Studio", "kind": "Source" }],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Unbound",
+          "origin": "none"
+        }
+      ],
+      "codes": ["mount.unbound"]
+    },
+    {
+      "name": "a relative path resolves against its file's folder",
+      "folders": ["ws/Shared"],
+      "mounts_files": {
+        "ws/proj": { "version": 1, "mounts": { "Studio": "../Shared" } }
+      },
+      "declarations": [{ "name": "Studio", "kind": "Source" }],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": ".mounts.json",
+          "origin_file": "ws/proj/.mounts.json",
+          "folder": "ws/Shared"
+        }
+      ],
+      "codes": []
+    },
+    {
+      "name": "a bound folder that does not exist is missing",
+      "folders": [],
+      "declarations": [
+        { "name": "Content", "kind": "Source", "path": "Content" }
+      ],
+      "mounts": [
+        {
+          "name": "Content",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Missing",
+          "origin": "committed",
+          "folder": "ws/proj/Content"
+        }
+      ],
+      "codes": ["mount.folder_missing"]
+    },
+    {
+      "name": "an absolute committed path is refused",
+      "folders": ["D/Studio"],
+      "declarations": [
+        { "name": "Studio", "kind": "Source", "path": "${temp}/D/Studio" }
+      ],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Unbound",
+          "origin": "none"
+        }
+      ],
+      "codes": ["path.absolute_committed"]
+    },
+    {
+      "name": "overlapping source folders",
+      "folders": ["ws/proj/Content/Sub"],
+      "declarations": [
+        { "name": "Content", "kind": "Source", "path": "Content" },
+        { "name": "Sub", "kind": "Source", "path": "Content/Sub" }
+      ],
+      "mounts": [
+        {
+          "name": "Content",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "ws/proj/Content"
+        },
+        {
+          "name": "Sub",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "ws/proj/Content/Sub"
+        }
+      ],
+      "codes": ["mount.folder_overlap"]
+    },
+    {
+      "name": "a local mount overlapping a committed one",
+      "folders": ["ws/proj/Content/Sub"],
+      "mounts_files": {
+        "ws": { "version": 1, "mounts": { "Sub": "proj/Content/Sub" } }
+      },
+      "declarations": [
+        { "name": "Content", "kind": "Source", "path": "Content" }
+      ],
+      "mounts": [
+        {
+          "name": "Content",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "ws/proj/Content"
+        },
+        {
+          "name": "Sub",
+          "kind": "Source",
+          "scope": "local",
+          "state": "Bound",
+          "origin": ".mounts.json",
+          "origin_file": "ws/.mounts.json",
+          "folder": "ws/proj/Content/Sub"
+        }
+      ],
+      "codes": ["mount.folder_overlap"]
+    },
+    {
+      "name": "a source folder in an output folder",
+      "folders": ["ws/proj/.cooked/imports"],
+      "declarations": [
+        { "name": "Cache", "kind": "Source", "path": ".cooked/imports" }
+      ],
+      "mounts": [
+        {
+          "name": "Cache",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "ws/proj/.cooked/imports"
+        }
+      ],
+      "codes": ["mount.folder_in_output"]
+    },
+    {
+      "name": "a dot-named folder outside the project root is not output",
+      "folders": ["ws/.studio"],
+      "declarations": [
+        { "name": "Studio", "kind": "Source", "path": "../.studio" }
+      ],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "ws/.studio"
+        }
+      ],
+      "codes": []
+    },
+    {
+      "name": "invalid and reserved names",
+      "folders": [],
+      "declarations": [
+        { "name": "1Bad", "kind": "Source" },
+        { "name": "Engine", "kind": "Source" }
+      ],
+      "mounts": [],
+      "codes": ["mount.name_invalid"]
+    },
+    {
+      "name": "names are unique ignoring case",
+      "folders": ["ws/proj/Content", "ws/proj/Other"],
+      "declarations": [
+        { "name": "Content", "kind": "Source", "path": "Content" },
+        { "name": "content", "kind": "Source", "path": "Other" }
+      ],
+      "mounts": [
+        {
+          "name": "Content",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "ws/proj/Content"
+        }
+      ],
+      "codes": ["mount.name_duplicate"]
+    },
+    {
+      "name": "cooked and pak mounts bound to the right and wrong kind of path",
+      "folders": ["Vendor/cooked", "Vendor/folder.pak"],
+      "files": ["Paks/engine2d.pak", "Vendor/file"],
+      "mounts_files": {
+        "ws/proj": {
+          "version": 1,
+          "mounts": {
+            "VendorCooked": "${temp}/Vendor/cooked",
+            "BadCooked": "${temp}/Vendor/file",
+            "BadPak": "${temp}/Vendor/folder.pak"
+          }
+        }
+      },
+      "declarations": [
+        { "name": "VendorCooked", "kind": "Cooked" },
+        { "name": "BadCooked", "kind": "Cooked" },
+        {
+          "name": "Engine2D",
+          "kind": "Pak",
+          "path": "../../Paks/engine2d.pak"
+        },
+        { "name": "BadPak", "kind": "Pak" }
+      ],
+      "mounts": [
+        {
+          "name": "VendorCooked",
+          "kind": "Cooked",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": ".mounts.json",
+          "origin_file": "ws/proj/.mounts.json",
+          "folder": "Vendor/cooked"
+        },
+        {
+          "name": "BadCooked",
+          "kind": "Cooked",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": ".mounts.json",
+          "origin_file": "ws/proj/.mounts.json",
+          "folder": "Vendor/file"
+        },
+        {
+          "name": "Engine2D",
+          "kind": "Pak",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "Paks/engine2d.pak"
+        },
+        {
+          "name": "BadPak",
+          "kind": "Pak",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": ".mounts.json",
+          "origin_file": "ws/proj/.mounts.json",
+          "folder": "Vendor/folder.pak"
+        }
+      ],
+      "codes": ["mount.path_kind"]
+    },
+    {
+      "name": "a file of another version is refused",
+      "folders": ["D/Studio"],
+      "mounts_files": {
+        "ws/proj": { "version": 2, "mounts": { "Studio": "${temp}/D/Studio" } }
+      },
+      "declarations": [{ "name": "Studio", "kind": "Source" }],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Unbound",
+          "origin": "none"
+        }
+      ],
+      "codes": ["mount.file_version", "mount.unbound"]
+    },
+    {
+      "name": "a file with another key is refused",
+      "folders": ["D/Studio"],
+      "mounts_files": {
+        "ws/proj": {
+          "version": 1,
+          "cooked_root": "x",
+          "mounts": { "Studio": "${temp}/D/Studio" }
+        }
+      },
+      "declarations": [{ "name": "Studio", "kind": "Source" }],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Unbound",
+          "origin": "none"
+        }
+      ],
+      "codes": ["mount.file_invalid", "mount.unbound"]
+    }
+  ]
+}

@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
@@ -71,11 +72,12 @@ public sealed partial class PlaySessionTests
     public void LaunchSourceMounts_NameEachExistingMountFolderByItsMountName()
     {
         var fileSystem = new MockFileSystem();
-        var project = TestProject.Create(
+        var created = TestProject.Create(
             fileSystem,
             @"C:\Project",
-            [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Media", "Media"), new ProjectMountPoint("Gone", "Gone")]).Context;
+            [new ProjectMount("Content", MountKind.Source, "Content"), new ProjectMount("Media", MountKind.Source, "Media"), new ProjectMount("Gone", MountKind.Source, "Gone")]);
         fileSystem.Directory.Delete(@"C:\Project\Gone", recursive: true);
+        var project = TestProject.Open(TestProject.InfoOf(created.Context), fileSystem).Context;
 
         var mounts = PlaySession.SourceMounts(project);
 
@@ -87,15 +89,12 @@ public sealed partial class PlaySessionTests
     }
 
     [TestMethod]
-    public void LaunchSourceMounts_NeverNameAnOutputFolder()
+    public void LaunchSourceMounts_LeaveOutAnUnboundOrLibraryMount()
     {
-        var fileSystem = new MockFileSystem();
         var project = TestProject.Create(
-            fileSystem,
+            new MockFileSystem(),
             @"C:\Project",
-            [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Generated", ".cooked"), new ProjectMountPoint("Scenes", "Content/.pipeline")]).Context;
-        _ = fileSystem.Directory.CreateDirectory(@"C:\Project\.cooked");
-        _ = fileSystem.Directory.CreateDirectory(@"C:\Project\Content\.pipeline");
+            [new ProjectMount("Content", MountKind.Source, "Content"), new ProjectMount("Lib", MountKind.Cooked), new ProjectMount("Loose", MountKind.Source)]).Context;
 
         var mounts = PlaySession.SourceMounts(project);
 

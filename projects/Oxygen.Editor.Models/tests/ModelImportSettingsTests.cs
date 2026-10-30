@@ -5,19 +5,22 @@
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
+using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Editor.Projects.Testing;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Models.Tests;
 
 /// <summary>
-/// A model import record holds the engine's schema: the editor writes what the ImportTool reads, relocation rewrites
-/// the source alone, and an import changes only what it establishes.
+/// A model import record holds the engine's schema: the editor writes what the ImportTool reads, the source is a mount
+/// path resolved through the project's mount table, relocation rewrites the source alone, and an import changes only
+/// what it establishes.
 /// </summary>
 [TestClass]
 public sealed class ModelImportSettingsTests
 {
     private const string ProjectRoot = @"C:\Project";
-    private static readonly string Source = Path.Combine(ProjectRoot, "Content", "Car", "Car.glb");
-
+    private const string Source = "/Content/Car/Car.glb";
     private const string VirtualPath = "/Content/Car/Car.glb";
 
     private readonly Guid identity = Guid.CreateVersion7();
@@ -25,15 +28,16 @@ public sealed class ModelImportSettingsTests
     private string RecordPath => ModelImportSettings.PathFor(ProjectRoot, VirtualPath);
 
     [TestMethod]
-    public void ARecordLivesAtItsVirtualPathAndKeepsItsSourceRelativeToItself()
+    public void ARecordLivesAtItsVirtualPathAndNamesItsSourceByMountPath()
     {
         var record = this.Create();
+        var project = TestProject.Create(new MockFileSystem(), ProjectRoot).Context;
 
         _ = this.RecordPath.Should().Be(Path.Combine(ProjectRoot, "Imports", "Content", "Car", "Car.glb.import.json"));
         _ = ModelImportSettings.RelativePathFor(VirtualPath).Should().Be("Imports/Content/Car/Car.glb.import.json");
         _ = record.SourceIdentity.Should().Be(this.identity);
-        _ = record.Source.Should().Be("../../../Content/Car/Car.glb");
-        _ = record.ResolveSource(this.RecordPath).Should().Be(Source);
+        _ = record.Source.Should().Be("/Content/Car/Car.glb");
+        _ = record.ResolveSource(project)!.FullPath.Should().Be(Path.Combine(ProjectRoot, "Content", "Car", "Car.glb"));
         _ = record.SourceFingerprint.Should().BeNull("a record has no fingerprint before its first import");
     }
 
@@ -116,24 +120,46 @@ public sealed class ModelImportSettingsTests
     public void RelocationRewritesTheSourceAlone()
     {
         var record = this.Create();
-        var moved = Path.Combine(ProjectRoot, "Content", "Vehicles", "Car.glb");
 
-        var relocated = record.WithSource(this.RecordPath, moved);
+        var relocated = record.WithSource("/Content/Vehicles/Car.glb");
 
-        _ = relocated.Source.Should().Be("../../../Content/Vehicles/Car.glb");
+        _ = relocated.Source.Should().Be("/Content/Vehicles/Car.glb");
         _ = relocated.DiffersOnlyByImport(record).Should().BeFalse();
         _ = (relocated with { Source = record.Source }).ToBytes().Should().Equal(record.ToBytes());
     }
 
     [TestMethod]
-    public void ASourceOutsideTheProjectIsKeptAbsolute()
+    public void ASourceInAMountOutsideTheProjectResolvesThroughItsBinding()
     {
-        const string outside = @"D:\Assets\Car.glb";
+        var fileSystem = new MockFileSystem();
+        _ = fileSystem.Directory.CreateDirectory(@"D:\Assets");
+        _ = fileSystem.Directory.CreateDirectory(ProjectRoot);
+        fileSystem.File.WriteAllText(Path.Combine(ProjectRoot, ProjectMounts.FileName), """{"version":1,"mounts":{"Studio":"D:/Assets"}}""");
+        var project = TestProject.Create(fileSystem, ProjectRoot, [new ProjectMount("Content", Path: "Content"), new ProjectMount("Studio")]).Context;
 
-        var record = this.Create().WithSource(this.RecordPath, outside);
+        var record = this.Create().WithSource("/Studio/Car.glb");
 
-        _ = record.Source.Should().Be("D:/Assets/Car.glb");
-        _ = record.ResolveSource(this.RecordPath).Should().Be(outside);
+        _ = record.Source.Should().Be("/Studio/Car.glb");
+        _ = record.ResolveSource(project)!.FullPath.Should().Be(@"D:\Assets\Car.glb");
+        _ = record.WithSource("/Vendor/Car.glb").ResolveSource(project).Should().BeNull("the project has no Vendor mount");
+    }
+
+    [TestMethod]
+    [DataRow("../../../Content/Car/Car.glb")]
+    [DataRow("D:/Assets/Car.glb")]
+    [DataRow("/Content/../Car.glb")]
+    public void ASourceThatIsNotAMountPathIsRefused(string source)
+    {
+        var record = this.Create();
+
+        var rebind = () => record.WithSource(source);
+        var create = () => ModelImportSettings.Create(this.RecordPath, source, VirtualPath, record.Settings);
+        var parse = () => ModelImportSettings.Parse(this.RecordPath, Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(record.ToBytes()).Replace(
+            "\"source\": \"/Content/Car/Car.glb\"", "\"source\": \"" + source + "\"", StringComparison.Ordinal)));
+
+        _ = rebind.Should().Throw<ArgumentException>();
+        _ = create.Should().Throw<ArgumentException>();
+        _ = parse.Should().Throw<InvalidDataException>();
     }
 
     [TestMethod]

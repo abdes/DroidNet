@@ -255,7 +255,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         string? publicationError = null)
     {
         // A model is imported when a record names it.
-        var records = new Oxygen.Editor.Models.ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath);
+        var records = new Oxygen.Editor.Models.ModelImportRecords(project);
         source = [.. source.Select(item => item.Kind == AssetKind.Model && item.SourcePath is { } path
             && records.IsImported(path.FullPath)
                 ? item with { ImportSource = item.Identity, ImportSourcePath = path } : item)];

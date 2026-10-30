@@ -32,7 +32,7 @@ internal sealed record CookProducedSourceFile(string RelativePath, byte[] Before
         var updates = produced.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
         var expected = consumed.Select(input =>
         {
-            if (!updates.Remove(input.RelativePath, out var update))
+            if (!updates.Remove(input.CookPath, out var update))
             {
                 return input;
             }

@@ -8,13 +8,17 @@ using Moq;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentExplorer.Tests;
 
-/// <summary>Checks the Content mounts dialog: listing, adding, renaming, unmounting and the resulting project mounts.</summary>
+/// <summary>
+/// Checks the Content mounts dialog: listing with each mount's binding on this machine, adding to Project.oxy or to this
+/// machine only, binding, renaming, unmounting, and the resulting project mounts and .mounts.json changes.
+/// </summary>
 [TestClass]
 public sealed class ContentMountsViewModelTests
 {
@@ -29,14 +33,14 @@ public sealed class ContentMountsViewModelTests
         var model = CreateModel(CreateProject());
 
         _ = model.Mounts.Select(static row => (row.Name, row.KindLabel)).Should().Equal(
-            ("Content", "Project source"),
-            ("Cooked", "Derived output"),
-            ("Studio library", "Local library"),
-            ("Engine", "Engine content"));
+            ("Content", "Source"),
+            ("Cooked", "Output"),
+            ("StudioLibrary", "Cooked"),
+            ("Engine", "Pak"));
         var content = model.Mounts[0];
         _ = content.UnmountCommand.CanExecute(parameter: null).Should().BeFalse();
         _ = content.RenameCommand.CanExecute(parameter: null).Should().BeFalse();
-        _ = content.Path.Should().Be("./Content");
+        _ = content.CommittedText.Should().Be("Content");
         _ = model.Mounts[1].UnmountCommand.CanExecute(parameter: null).Should().BeTrue();
     }
 
@@ -56,27 +60,28 @@ public sealed class ContentMountsViewModelTests
         _ = model.Mounts[^2].Should().BeEquivalentTo(new { Name = "Build", RelativePath = ProjectOutputFolders.Build, IsNew = true, Kind = ContentMountKind.Derived });
 
         model.SelectedKind = ContentMountsViewModel.LocalFolderKind;
-        model.NewMountName = "studio library";
-        model.NewMountPath = this.TestContext.TestRunDirectory!;
+        model.NewMountName = "studiolibrary";
+        model.NewMountPath = "C:/Projects/Mounts/Content";
         model.AddMountCommand.Execute(parameter: null);
         _ = model.ErrorMessage.Should().Be("A mount with this name already exists, or differs from one only in case.");
         model.NewMountName = "Art/Props";
         model.AddMountCommand.Execute(parameter: null);
-        _ = model.ErrorMessage.Should().Contain("slashes");
+        _ = model.ErrorMessage.Should().Contain("starts with a letter");
     }
 
-    /// <summary>A project or derived mount names its virtual paths, so it follows the mount rule; a library is a label.</summary>
+    /// <summary>Every mount kind follows the one rule of a declared mount name.</summary>
     [TestMethod]
-    public void MountNamesFollowTheMountRuleAndLibrariesAreLabels()
+    public void MountNamesFollowTheDeclaredNameRule()
     {
         var model = CreateModel(CreateProject());
 
-        _ = model.ValidateName("Cooked Output", ContentMountKind.Derived).Should().Be(VirtualPathError.InvalidMountName.ToMessage());
-        _ = model.ValidateName(".published", ContentMountKind.Derived).Should().Be(VirtualPathError.InvalidMountName.ToMessage());
-        _ = model.ValidateName("Published", ContentMountKind.Derived).Should().BeNull();
-        _ = model.ValidateName("Prop library", ContentMountKind.LocalLibrary).Should().BeNull();
-        _ = model.ValidateName("project", ContentMountKind.Derived).Should().NotBeNull("the project's own files have that mount");
-        _ = model.ValidateName("Project", ContentMountKind.LocalLibrary).Should().NotBeNull("a library's name is its mount's");
+        _ = model.ValidateName("Cooked Output").Should().Be(ProjectAssetFiles.ValidateDeclaredMountName("Cooked Output")).And.Contain("starts with a letter");
+        _ = model.ValidateName(".published").Should().Contain("starts with a letter");
+        _ = model.ValidateName("Prop library").Should().Contain("starts with a letter");
+        _ = model.ValidateName("Published").Should().BeNull();
+        _ = model.ValidateName("PropLibrary").Should().BeNull();
+        _ = model.ValidateName("project").Should().NotBeNull("the project's own files have that mount");
+        _ = model.ValidateName("Project").Should().NotBeNull("a library's name is its mount's");
     }
 
     /// <summary>A rename is checked when it is accepted, and an unfinished one blocks Apply until it is valid.</summary>
@@ -114,30 +119,29 @@ public sealed class ContentMountsViewModelTests
     public void AppliedRowsRebuildProjectMounts()
     {
         var project = CreateProject();
+        _ = project.FileSystem.Directory.CreateDirectory("C:/Libraries/Library");
         var model = CreateModel(project);
         model.Mounts[2].UnmountCommand.Execute(parameter: null);
         model.SelectedKind = "Build";
         model.AddMountCommand.Execute(parameter: null);
-        var library = Directory.CreateTempSubdirectory("cb-mount-");
-        try
-        {
-            model.SelectedKind = ContentMountsViewModel.LocalFolderKind;
-            model.NewMountName = "Library";
-            model.NewMountPath = library.FullName;
-            model.AddMountCommand.Execute(parameter: null);
-            _ = model.HasError.Should().BeFalse(model.ErrorMessage);
+        model.SelectedKind = ContentMountsViewModel.LocalFolderKind;
+        model.NewMountName = "Library";
+        model.NewMountPath = "C:/Libraries/Library";
+        model.AddMountCommand.Execute(parameter: null);
+        _ = model.HasError.Should().BeFalse(model.ErrorMessage);
 
-            var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
-            ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
+        var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
+        ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
 
-            _ = candidate.AuthoringMounts.Select(static mount => (mount.Name, mount.RelativePath)).Should().Equal(("Content", "Content"));
-            _ = candidate.OutputFolderViews.Select(static view => view.Folder).Should().Equal(ProjectOutputFolders.Cooked, ProjectOutputFolders.Build);
-            _ = candidate.LocalFolderMounts.Select(static mount => mount.Name).Should().Equal("Library");
-        }
-        finally
-        {
-            library.Delete();
-        }
+        _ = candidate.Mounts.Should().Equal(new ProjectMount("Content", MountKind.Source, "Content"), new ProjectMount("Library", MountKind.Cooked, "../../Libraries/Library"));
+        _ = candidate.OutputFolderViews.Select(static view => view.Folder).Should().Equal(ProjectOutputFolders.Cooked, ProjectOutputFolders.Build);
+        _ = model.GetBindingChanges().Changes.Should().BeEquivalentTo(
+            new Dictionary<string, string?>(StringComparer.Ordinal) { ["StudioLibrary"] = null },
+            "the unmounted library's binding leaves the project's .mounts.json");
+
+        var folders = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
+        ContentFoldersViewModel.ApplyMountRows(project, folders, model.Mounts, static _ => false);
+        _ = folders.Mounts[^1].Should().Be(new ProjectMount("Library", MountKind.Source, "../../Libraries/Library"));
     }
 
     /// <summary>The engine content is listed last and stays: it cannot be renamed or unmounted.</summary>
@@ -159,47 +163,36 @@ public sealed class ContentMountsViewModelTests
     public void PakFilesMountAsLibrariesAboveTheEngineContent()
     {
         var project = CreateProject();
+        _ = project.FileSystem.Directory.CreateDirectory("C:/Paks");
+        project.FileSystem.File.WriteAllText("C:/Paks/Props.pak", "pak");
+        project.FileSystem.File.WriteAllText("C:/Paks/Props.bin", "not a pak");
         var model = CreateModel(project);
-        var folder = Directory.CreateTempSubdirectory("cb-pak-");
-        try
-        {
-            var pak = Path.Combine(folder.FullName, "Props.pak");
-            var other = Path.Combine(folder.FullName, "Props.bin");
-            File.WriteAllText(pak, "pak");
-            File.WriteAllText(other, "not a pak");
-            model.SelectedKind = ContentMountsViewModel.PakFileKind;
-            model.NewMountName = "Props";
+        model.SelectedKind = ContentMountsViewModel.PakFileKind;
+        model.NewMountName = "Props";
 
-            model.NewMountPath = other;
-            model.AddMountCommand.Execute(parameter: null);
-            _ = model.HasError.Should().BeTrue();
+        model.NewMountPath = "C:/Paks/Props.bin";
+        model.AddMountCommand.Execute(parameter: null);
+        _ = model.HasError.Should().BeTrue();
 
-            model.NewMountPath = pak;
-            model.AddMountCommand.Execute(parameter: null);
-            _ = model.HasError.Should().BeFalse(model.ErrorMessage);
-            _ = model.Mounts.Select(static row => row.Kind).TakeLast(2).Should().Equal(ContentMountKind.PakLibrary, ContentMountKind.EngineContent);
+        model.NewMountPath = "C:/Paks/Props.pak";
+        model.AddMountCommand.Execute(parameter: null);
+        _ = model.HasError.Should().BeFalse(model.ErrorMessage);
+        _ = model.Mounts.Select(static row => row.Kind).TakeLast(2).Should().Equal(ContentMountKind.PakLibrary, ContentMountKind.EngineContent);
 
-            var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
-            ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
+        var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
+        ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
 
-            _ = candidate.PakFileMounts.Should().Equal(new PakFileMount("Props", FileSystemPath.From(pak)));
-            _ = candidate.AuthoringMounts.Select(static mount => mount.Name).Concat(candidate.LocalFolderMounts.Select(static mount => mount.Name))
-                .Should().NotContain(AssetPath.Engine.Mount);
-        }
-        finally
-        {
-            folder.Delete(recursive: true);
-        }
+        _ = candidate.Mounts.Single(static mount => mount.Kind == MountKind.Pak).Should().Be(new ProjectMount("Props", MountKind.Pak, "../../Paks/Props.pak"));
+        _ = candidate.Mounts.Select(static mount => mount.Name).Should().NotContain(AssetPath.Engine.Mount);
     }
 
     /// <summary>A renamed pak keeps its place in the content priority.</summary>
     [TestMethod]
     public void RenamedPakKeepsItsPriority()
     {
-        var project = CreateProject() with
+        var project = CreateProject(new ProjectMount("Props", MountKind.Pak, "../../Paks/Props.pak")) with
         {
-            PakFileMounts = [new("Props", FileSystemPath.From("D:/Paks/Props.pak"))],
-            CookedContentOrder = [new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.PakFile, "Props")],
+            CookedContentOrder = [new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.Pak, "Props")],
         };
         var model = CreateModel(project);
         var pak = model.Mounts.Single(static row => row.Kind == ContentMountKind.PakLibrary);
@@ -210,17 +203,104 @@ public sealed class ContentMountsViewModelTests
         var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
         ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
 
-        _ = candidate.CookedContentOrder.Should().Equal(new CookedContentSource(CookedContentSourceKind.ProjectOutput), new CookedContentSource(CookedContentSourceKind.PakFile, "Rocks"));
+        _ = candidate.CookedContentOrder.Should().Equal(new CookedContentSource(CookedContentSourceKind.ProjectOutput), new CookedContentSource(CookedContentSourceKind.Pak, "Rocks"));
+    }
+
+    /// <summary>Each row shows where its mount is on this machine, and offers what fits: Bind, Override, Remove binding.</summary>
+    [TestMethod]
+    public void RowsShowEachMountsBindingOnThisMachine()
+    {
+        var project = CreateProject(new ProjectMount("Shared"), new ProjectMount("Media", MountKind.Source, "../Media"));
+        project.FileSystem.Directory.Delete("C:/Projects/Media");
+        var model = CreateModel(TestProject.Open(TestProject.InfoOf(project), project.FileSystem).Context);
+
+        var rows = model.Mounts.ToDictionary(static row => row.Name, StringComparer.Ordinal);
+        _ = rows["Content"].Binding.Should().Be(MountBindingState.Committed);
+        _ = rows["Shared"].Binding.Should().Be(MountBindingState.NotBound);
+        _ = rows["Shared"].BindActionText.Should().Be("Bind…");
+        _ = rows["Shared"].IsPlaceholder.Should().BeTrue();
+        _ = rows["Media"].Binding.Should().Be(MountBindingState.FolderMissing);
+        _ = rows["Media"].BindActionText.Should().Be("Override…");
+        _ = rows["StudioLibrary"].LocalLocation.Should().Be(Path.GetFullPath("D:/Studio/EnvironmentLibrary"));
+        _ = rows["StudioLibrary"].IsRemoveBindingVisible.Should().BeTrue();
+        _ = rows["Engine"].Binding.Should().Be(MountBindingState.Fixed);
+    }
+
+    /// <summary>Binding, rebinding, renaming and unmounting bound mounts change the project's own .mounts.json only.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task BindingChangesWriteTheProjectsOwnMountsFile()
+    {
+        var project = CreateProject(new ProjectMount("Shared"));
+        _ = project.FileSystem.Directory.CreateDirectory("D:/Studio/Shared");
+        _ = project.FileSystem.Directory.CreateDirectory("D:/Studio/Other");
+        var dialogs = new Mock<IDialogService>();
+        _ = dialogs.Setup(value => value.PickFolderAsync(It.IsAny<FolderPickerSpec>(), It.IsAny<CancellationToken>())).ReturnsAsync("D:/Studio/Shared");
+        var model = new ContentMountsViewModel(project, dialogs.Object, EnginePak);
+        var shared = model.Mounts.Single(static row => row.Name == "Shared");
+        var library = model.Mounts.Single(static row => row.Name == "StudioLibrary");
+        _ = model.GetBindingChanges().IsEmpty.Should().BeTrue();
+
+        await shared.BindCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        library.RenameCommand.Execute(parameter: null);
+        library.NameDraft = "Environment";
+        _ = model.Validate().Should().BeTrue();
+
+        _ = shared.Binding.Should().Be(MountBindingState.ThisMachine);
+        _ = model.GetBindingChanges().Changes.Should().BeEquivalentTo(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["Shared"] = "D:/Studio/Shared",
+            ["StudioLibrary"] = null,
+            ["Environment"] = "D:/Studio/EnvironmentLibrary",
+        });
+
+        shared.RemoveBindingCommand.Execute(parameter: null);
+        _ = shared.Binding.Should().Be(MountBindingState.NotBound);
+        _ = model.GetBindingChanges().Changes.Keys.Should().NotContain("Shared");
+    }
+
+    /// <summary>
+    /// A new folder is saved in Project.oxy when it is on the project's drive, and only on this machine otherwise: then
+    /// Project.oxy commits a placeholder and the project's own .mounts.json binds it.
+    /// </summary>
+    [TestMethod]
+    public void ANewFolderIsSavedInTheProjectOrOnThisMachine()
+    {
+        var project = CreateProject();
+        _ = project.FileSystem.Directory.CreateDirectory("C:/Shared/Trees");
+        _ = project.FileSystem.Directory.CreateDirectory("E:/Shared/Rocks");
+        var model = CreateModel(project);
+        model.SelectedKind = ContentMountsViewModel.LocalFolderKind;
+
+        model.NewMountPath = "C:/Shared/Trees";
+        _ = model.Placement.SaveInProject.Should().BeTrue("the folder is on the project's drive");
+        model.NewMountName = "Trees";
+        model.AddMountCommand.Execute(parameter: null);
+        model.NewMountPath = "E:/Shared/Rocks";
+        _ = model.Placement.CanSaveInProject.Should().BeFalse("no relative path reaches another drive");
+        _ = model.Placement.SaveOnThisMachine.Should().BeTrue();
+        model.NewMountName = "Rocks";
+        model.AddMountCommand.Execute(parameter: null);
+
+        var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
+        ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => false);
+        _ = candidate.Mounts.Should().Contain(new ProjectMount("Trees", MountKind.Source, "../../Shared/Trees"));
+        _ = candidate.Mounts.Should().Contain(new ProjectMount("Rocks", MountKind.Source, Path: null));
+        _ = model.GetBindingChanges().Changes.Should().BeEquivalentTo(new Dictionary<string, string?>(StringComparer.Ordinal) { ["Rocks"] = "E:/Shared/Rocks" });
     }
 
     private static ContentMountsViewModel CreateModel(ProjectContext project) => new(project, Mock.Of<IDialogService>(), EnginePak);
 
-    private static ProjectContext CreateProject()
-        => TestProject.Create(new MockFileSystem(), "C:/Projects/Mounts").Context with
+    // The studio library is a placeholder that a mounts file binds outside the project.
+    private static ProjectContext CreateProject(params ProjectMount[] extra)
+    {
+        var fileSystem = new MockFileSystem();
+        _ = fileSystem.Directory.CreateDirectory("C:/Projects/Mounts");
+        fileSystem.File.WriteAllText("C:/Projects/Mounts/.mounts.json", """{"version":1,"mounts":{"StudioLibrary":"D:/Studio/EnvironmentLibrary"}}""");
+        return TestProject.Create(fileSystem, "C:/Projects/Mounts", [new("Content", MountKind.Source, "Content"), new("StudioLibrary", MountKind.Cooked), .. extra]).Context with
         {
             Name = "Mounts",
-            AuthoringMounts = [new("Content", "Content")],
             OutputFolderViews = [new(ProjectOutputFolders.Cooked)],
-            LocalFolderMounts = [new("Studio library", FileSystemPath.From("D:/Studio/EnvironmentLibrary"))],
         };
+    }
 }

@@ -79,11 +79,11 @@ public sealed partial class CookInputSnapshotCapture(IContentCookCoordinator coo
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new
         {
-            Inputs = inputs.OrderBy(static input => input.RelativePath, StringComparer.Ordinal)
+            Inputs = inputs.OrderBy(static input => input.CookPath, StringComparer.Ordinal)
                 .Select(static input => new
                 {
                     AssetPath = input.AssetUri?.ToUriString(),
-                    input.RelativePath,
+                    input.CookPath,
                     Hash = input.DiscoveryHash,
                     input.Kind,
                     Metadata = input.ProbeShape,
@@ -125,7 +125,7 @@ public sealed partial class CookInputSnapshotCapture(IContentCookCoordinator coo
                     captured[input.SourcePath] = probe;
                     if (probe.Exists && probe.Metadata?.IsDirectory == true)
                     {
-                        _ = Directory.CreateDirectory(Path.Combine(attemptRoot, input.RelativePath));
+                        _ = Directory.CreateDirectory(Path.Combine(attemptRoot, CookPaths.StoragePathOf(input.CookPath)));
                     }
 
                     continue;
@@ -136,7 +136,7 @@ public sealed partial class CookInputSnapshotCapture(IContentCookCoordinator coo
                 var hash = Convert.ToHexString(await SHA256.HashDataAsync(source, cancellationToken).ConfigureAwait(false));
                 captured[input.SourcePath] = new(hash, Exists: true, ReadNativeMetadata(input.SourcePath.FullPath, source));
                 source.Position = 0;
-                var destination = Path.Combine(attemptRoot, input.RelativePath);
+                var destination = Path.Combine(attemptRoot, CookPaths.StoragePathOf(input.CookPath));
                 _ = Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                 var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.Asynchronous);
                 await using (output.ConfigureAwait(false))
@@ -167,24 +167,21 @@ public sealed partial class CookInputSnapshotCapture(IContentCookCoordinator coo
         var normalized = ImmutableArray.CreateBuilder<CookSnapshotInput>(inputs.Count);
         foreach (var input in inputs)
         {
-            var relative = input.RelativePath.Replace('\\', '/');
-            if (Path.IsPathRooted(relative)
-                || (!input.IsRootDirectoryProbe && relative.Split('/').Any(static part => part is ".." or "." or ""
-                    || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
-                    || part.EndsWith('.') || part.EndsWith(' ')))
-                || !targets.Add(relative)
+            var cookPath = input.CookPath.Replace('\\', '/');
+            if ((!input.IsRootDirectoryProbe && !CookPaths.IsValid(cookPath))
+                || !targets.Add(cookPath)
                 || !Enum.IsDefined(input.Kind)
                 || input.NativeObservations.IsDefault
                 || (input.Kind != CookSnapshotInputKind.File ? input.DiscoveryHash.Length != 0
                     : input.DiscoveryHash.Length != SHA256.HashSizeInBytes * 2 || !input.DiscoveryHash.All(Uri.IsHexDigit)))
             {
-                throw new ArgumentException("Snapshot inputs require absolute sources, unique contained relative paths, and discovery hashes.", nameof(inputs));
+                throw new ArgumentException("Snapshot inputs require absolute sources, unique cook paths, and discovery hashes.", nameof(inputs));
             }
 
             normalized.Add(input with
             {
                 SourcePath = input.SourcePath,
-                RelativePath = relative,
+                CookPath = cookPath,
                 DiscoveryHash = input.DiscoveryHash.ToUpperInvariant(),
             });
         }

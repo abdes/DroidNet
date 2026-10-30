@@ -6,13 +6,14 @@ using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.Aura;
 using DroidNet.TimeMachine;
+using DryIoc;
 using Microsoft.UI;
 using Moq;
-using DryIoc;
 using Oxygen.Editor.Composition.UI.Tests.TestSupport;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Sessions;
@@ -29,15 +30,22 @@ namespace Oxygen.Editor.Composition.UI.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("Project session")]
-public sealed class ProjectSessionTests
+internal sealed class ProjectSessionTests
 {
+    private EditorScopes scopes = null!;
+
+    [TestInitialize]
+    public async Task InitializeAsync() => this.scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
+
+    [TestCleanup]
+    public async Task CleanupAsync() => await this.scopes.DisposeAsync().ConfigureAwait(false);
+
     [TestMethod]
     public async Task OpenAsync_Project_RegistersTheLoadedProjectAndTheSessionInItsScope()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        _ = this.scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         var changes = 0;
         host.SessionChanged += (_, _) => changes++;
@@ -47,14 +55,14 @@ public sealed class ProjectSessionTests
 
         // Assert
         _ = host.Current.Should().BeSameAs(session);
-        _ = scopes.Host.Resolve<IProjectSessionHost>().Should().BeSameAs(host);
+        _ = this.scopes.Host.Resolve<IProjectSessionHost>().Should().BeSameAs(host);
         _ = session.Context.Should().BeSameAs(context);
         var window = host.OpenWindow(new WindowId(1), []);
         _ = window.Resolver.Resolve<IProject>().Should().BeSameAs(project);
         _ = window.Resolver.Resolve<IProjectSession>().Should().BeSameAs(session);
         _ = window.Resolver.Resolve<WindowId>().Should().Be(new WindowId(1));
-        scopes.Windows.Verify(manager => manager.SetMetadata(new WindowId(1), EditorWindows.SessionMetadataKey, session), Times.Once());
-        _ = scopes.Windows.Object.GetWindow(new WindowId(1))!.DocumentTabSource.Should().BeSameAs(window.Resolver.Resolve<IDocumentTabs>());
+        this.scopes.Windows.Verify(manager => manager.SetMetadata(new WindowId(1), EditorWindows.SessionMetadataKey, session), Times.Once());
+        _ = this.scopes.Windows.Object.GetWindow(new WindowId(1))!.DocumentTabSource.Should().BeSameAs(window.Resolver.Resolve<IDocumentTabs>());
         _ = session.Lifetime.IsCancellationRequested.Should().BeFalse();
         _ = changes.Should().Be(1);
     }
@@ -63,9 +71,8 @@ public sealed class ProjectSessionTests
     public async Task OpenAsync_WhileASessionIsOpen_Throws()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows();
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        _ = this.scopes.ShowWindows();
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         var open = await host.OpenAsync(context, project).ConfigureAwait(false);
         var (next, nextProject) = NewProject();
@@ -82,9 +89,8 @@ public sealed class ProjectSessionTests
     public async Task CloseAsync_OpenSession_CancelsItsLifetimeAndDisposesItsWindowsAndServices()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        _ = this.scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         var session = await host.OpenAsync(context, project).ConfigureAwait(false);
         var window = host.OpenWindow(new WindowId(1), []);
@@ -108,12 +114,11 @@ public sealed class ProjectSessionTests
     public async Task ChangeContext_SameProjectWithNewMounts_ReplacesTheContextAndReportsItOnce()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows();
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        _ = this.scopes.ShowWindows();
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         var session = await host.OpenAsync(context, project).ConfigureAwait(false);
-        var next = context with { LocalFolderMounts = [new LocalFolderMount("Shared", FileSystemPath.From(@"D:\Shared"))] };
+        var next = context with { Mounts = [.. context.Mounts, SharedLibrary()] };
         var seen = new List<ProjectContext>();
         session.ContextChanged += (_, _) => seen.Add(session.Context);
 
@@ -130,9 +135,8 @@ public sealed class ProjectSessionTests
     public async Task ChangeContext_SameProjectWithNewMounts_KeepsTheSessionsDocumentsAndClipboard()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        _ = this.scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         _ = await host.OpenAsync(context, project).ConfigureAwait(false);
         var window = host.OpenWindow(new WindowId(1), []);
@@ -140,7 +144,7 @@ public sealed class ProjectSessionTests
         var clipboard = window.Resolver.Resolve<ISceneNodeClipboard>();
 
         // Act
-        host.ChangeContext(context with { LocalFolderMounts = [new LocalFolderMount("Shared", FileSystemPath.From(@"D:\Shared"))] });
+        host.ChangeContext(context with { Mounts = [.. context.Mounts, SharedLibrary()] });
 
         // Assert: a mount change keeps every open document and what the clipboard holds.
         _ = window.Resolver.Resolve<OpenDocuments>().Should().BeSameAs(documents);
@@ -151,9 +155,8 @@ public sealed class ProjectSessionTests
     public async Task UpdateSettings_ThenAMountChange_KeepsTheNewSettings()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows();
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        _ = this.scopes.ShowWindows();
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         var session = await host.OpenAsync(context, project).ConfigureAwait(false);
         var changes = 0;
@@ -162,7 +165,7 @@ public sealed class ProjectSessionTests
 
         // Act
         session.UpdateSettings(updated);
-        host.ChangeContext(context with { LocalFolderMounts = [new LocalFolderMount("Shared", FileSystemPath.From(@"D:\Shared"))] });
+        host.ChangeContext(context with { Mounts = [.. context.Mounts, SharedLibrary()] });
 
         // Assert: the settings are the session's, which a mount change does not reset to the context's.
         _ = session.Settings.Should().Be(updated);
@@ -173,8 +176,7 @@ public sealed class ProjectSessionTests
     public async Task PersistentState_ResolvedRepeatedlyInTheEditor_ReusesThePooledContext()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        var contexts = scopes.Host.Resolve<Func<PersistentState>>();
+        var contexts = this.scopes.Host.Resolve<Func<PersistentState>>();
         var first = contexts();
         await first.DisposeAsync().ConfigureAwait(false);
 
@@ -190,9 +192,8 @@ public sealed class ProjectSessionTests
     public async Task PersistentState_InTheSession_IsTheSessionsOneContext()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        _ = this.scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         _ = await host.OpenAsync(context, project).ConfigureAwait(false);
         var window = host.OpenWindow(new WindowId(1), []);
@@ -209,9 +210,8 @@ public sealed class ProjectSessionTests
     public async Task ChangeContext_AnotherProject_Throws()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows();
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        _ = this.scopes.ShowWindows();
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         var session = await host.OpenAsync(context, project).ConfigureAwait(false);
         var changes = 0;
@@ -232,17 +232,16 @@ public sealed class ProjectSessionTests
     public async Task CloseAsync_WorkspaceWindowOpen_ClosesTheWindowThenDisposesTheSession()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         var session = await host.OpenAsync(context, project).ConfigureAwait(false);
         var workspace = new WindowId(7);
-        var windows = scopes.ShowWindows(new OpenWindow(workspace, EditorWindows.WorkspaceCategory, session));
+        var windows = this.scopes.ShowWindows(new OpenWindow(workspace, EditorWindows.WorkspaceCategory, session));
         var window = host.OpenWindow(workspace, []);
         var disposedWhenClosed = true;
         _ = windows.Setup(value => value.CloseWindowAsync(workspace))
             .Callback(() => disposedWhenClosed = window.IsDisposed)
-            .ReturnsAsync(true);
+            .ReturnsAsync(value: true);
 
         // Act
         await host.CloseAsync().ConfigureAwait(false);
@@ -258,9 +257,8 @@ public sealed class ProjectSessionTests
     public async Task OpenWindow_ThatAuraDoesNotKnow_Throws()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows();
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        _ = this.scopes.ShowWindows();
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         _ = await host.OpenAsync(context, project).ConfigureAwait(false);
 
@@ -275,14 +273,13 @@ public sealed class ProjectSessionTests
     public async Task CloseAsync_WindowThatStaysOpen_LeavesTheSession()
     {
         // Arrange: the window refuses to close.
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         var session = await host.OpenAsync(context, project).ConfigureAwait(false);
         var kept = new WindowId(5);
-        var windows = scopes.ShowWindows(new OpenWindow(kept, WindowCategory.Document, session));
+        var windows = this.scopes.ShowWindows(new OpenWindow(kept, WindowCategory.Document, session));
         _ = host.OpenWindow(kept, []);
-        _ = windows.Setup(value => value.CloseWindowAsync(kept)).ReturnsAsync(false);
+        _ = windows.Setup(value => value.CloseWindowAsync(kept)).ReturnsAsync(value: false);
 
         // Act
         await host.CloseAsync().ConfigureAwait(false);
@@ -296,9 +293,8 @@ public sealed class ProjectSessionTests
     public async Task CloseAsync_NoSession_DoesNothing()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows();
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        _ = this.scopes.ShowWindows();
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var changes = 0;
         host.SessionChanged += (_, _) => changes++;
 
@@ -314,9 +310,8 @@ public sealed class ProjectSessionTests
     public async Task OpenAsync_AfterClose_CreatesTheNextSessionsOwnServices()
     {
         // Arrange
-        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
-        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        _ = this.scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
+        var host = this.scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         _ = await host.OpenAsync(context, project).ConfigureAwait(false);
         var before = host.OpenWindow(new WindowId(1), []).Resolver.Resolve<IHistoryService>();
@@ -330,6 +325,9 @@ public sealed class ProjectSessionTests
         _ = host.Current!.Context.Should().BeSameAs(next);
         _ = host.OpenWindow(new WindowId(1), []).Resolver.Resolve<IHistoryService>().Should().NotBeSameAs(before);
     }
+
+    private static ResolvedMount SharedLibrary()
+        => new("Shared", MountKind.Cooked, MountScope.Local, DeclaredPath: null, FileSystemPath.From(@"D:\Shared"), MountOrigin.None, OriginFile: null, MountState.Bound);
 
     private static (ProjectContext Context, IProject Project) NewProject()
     {

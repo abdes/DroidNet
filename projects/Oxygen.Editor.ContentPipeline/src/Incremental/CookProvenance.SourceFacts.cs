@@ -16,7 +16,7 @@ internal sealed partial record CookProvenance
     /// <returns>Whether the input representation is valid.</returns>
     internal static bool ValidInputFacts(CookSnapshotInput input)
     {
-        if ((!input.IsRootDirectoryProbe && !ValidRelativePath(input.RelativePath)) || !Enum.IsDefined(input.Kind)
+        if ((!input.IsRootDirectoryProbe && !CookPaths.IsValid(input.CookPath)) || !Enum.IsDefined(input.Kind)
             || input.DiscoveryHash is null || !ValidMetadata(input.Metadata))
         {
             return false;
@@ -34,7 +34,8 @@ internal sealed partial record CookProvenance
 
     /// <summary>
     /// Creates the lookup of the accepted sources that produce each identity, among the sources still in the project; a
-    /// source that was moved or deleted produces nothing any more. Identities differing only in case find each other.
+    /// source that was moved or deleted produces nothing any more, and neither does one whose mount is not bound or whose
+    /// mount's folder is missing. Identities differing only in case find each other.
     /// </summary>
     /// <param name="project">The project containing the sources.</param>
     /// <returns>Finds the source producing an identity, or null when no accepted source does.</returns>
@@ -42,15 +43,13 @@ internal sealed partial record CookProvenance
     internal Func<string, ContentCookInput?> CreateProducerLookup(Oxygen.Editor.Projects.ProjectContext project)
     {
         var producers = this.Products
-            .Where(static product => product.SourceInput is not null)
+            // A source renamed only in case no longer produces under its old name, though the file system still finds it.
+            .Where(product => product.SourceInput is { } source && CookPaths.ExistsExactly(project, source.SourceCookPath))
             .Select(product => (product.DeclaredOutputs, Input: product.SourceInput! with
             {
-                SourceAbsolutePath = project.ProjectRoot.Combine(product.SourceInput.SourceRelativePath),
+                SourceAbsolutePath = CookPaths.FileOf(project, product.SourceInput.SourceCookPath),
                 Role = ContentCookInputRole.Dependency,
             }))
-
-            // A source renamed only in case no longer produces under its old name, though the file system still finds it.
-            .Where(product => ExactSourcePath.Exists(project.FileSystem, project.ProjectRoot.FullPath, product.Input.SourceRelativePath))
             .SelectMany(static product => product.DeclaredOutputs.Select(output => (output.VirtualPath, product.Input)))
             .GroupBy(static item => item.VirtualPath, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.Select(static item => item.Input).DistinctBy(static input => input.AssetUri).ToArray(), StringComparer.OrdinalIgnoreCase);
@@ -78,7 +77,7 @@ internal sealed partial record CookProvenance
         }
 
         if (source.AssetUri != product.SourceUri || !Enum.IsDefined(source.Kind) || !Enum.IsDefined(source.Role)
-            || !ValidRelativePath(source.SourceRelativePath)
+            || !CookPaths.IsValid(source.SourceCookPath)
             || string.IsNullOrWhiteSpace(source.MountName)
             || product.SourceFiles.IsEmpty || product.DeclaredOutputs.IsEmpty)
         {
@@ -86,20 +85,16 @@ internal sealed partial record CookProvenance
         }
 
         var paths = new HashSet<string>(FileSystemPath.NameComparer);
-        return product.SourceFiles.All(file => file is not null && paths.Add(file.RelativePath) && ValidInputFacts(file))
+        return product.SourceFiles.All(file => file is not null && paths.Add(file.CookPath) && ValidInputFacts(file))
             && product.SourceFiles.Any(file => file.AssetUri == product.SourceUri
-                && file.Kind == CookSnapshotInputKind.File && string.Equals(file.RelativePath, source.SourceRelativePath, FileSystemPath.NameComparison));
+                && file.Kind == CookSnapshotInputKind.File && string.Equals(file.CookPath, source.SourceCookPath, FileSystemPath.NameComparison));
     }
 
     private static bool ValidMetadata(NativeSourceFileMetadata? metadata)
         => metadata is null || (metadata.LastModifiedNanoseconds is >= 0 and < 1_000_000_000
             && (!metadata.IsDirectory || metadata.Size == 0));
 
-    private static bool ValidRelativePath(string? path)
-        => !string.IsNullOrWhiteSpace(path) && !Path.IsPathRooted(path) && !path.Contains('\\', StringComparison.Ordinal)
-            && path.Split('/').All(static segment => segment is not ("" or "." or "..")
-                && segment.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && !segment.EndsWith('.') && !segment.EndsWith(' '));
-
+    // A virtual path is spelled as a mount path is.
     private static bool ValidVirtualPath(string? path)
-        => path is { Length: > 1 } && path.StartsWith('/') && ValidRelativePath(path[1..]);
+        => path is { Length: > 1 } && CookPaths.IsMountPath(path) && CookPaths.IsValid(path);
 }

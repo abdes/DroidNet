@@ -26,8 +26,8 @@ internal sealed class CookDependencyDiscovery(
         => this.DiscoverAsync(project, roots, preparedImport: null, cancellationToken);
 
     internal static string FingerprintImportedContent(IEnumerable<CookSnapshotInput> inputs)
-        => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(inputs.OrderBy(static file => file.RelativePath, StringComparer.Ordinal)
-            .Select(static file => new { file.RelativePath, file.DiscoveryHash, file.Kind, Metadata = file.ProbeShape }))));
+        => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(inputs.OrderBy(static file => file.CookPath, StringComparer.Ordinal)
+            .Select(static file => new { file.CookPath, file.DiscoveryHash, file.Kind, Metadata = file.ProbeShape }))));
 
     internal async Task<CookDependencyGraph> DiscoverAsync(ProjectContext project, IReadOnlyList<ContentCookInput> roots, CookDependencyGraph? preparedImport, CancellationToken cancellationToken)
     {
@@ -82,13 +82,13 @@ internal sealed class CookDependencyDiscovery(
             this.importedReferences.UnionWith(prepared.ImportedReferences);
             foreach (var file in prepared.Files)
             {
-                this.files.Add(FileSystemPath.From(Path.Combine(project.ProjectRoot.FullPath, file.RelativePath)), file);
+                this.files.Add(CookPaths.FileOf(project, file.CookPath), file);
             }
         }
 
         public void AddAsset(ContentCookInput input)
         {
-            _ = this.RelativePath(input.SourceAbsolutePath.FullPath);
+            _ = CookPaths.Of(project, input.SourceAbsolutePath);
             if (this.assets.TryAdd(input.SourceAbsolutePath, input))
             {
                 this.pending.Enqueue(input);
@@ -128,8 +128,8 @@ internal sealed class CookDependencyDiscovery(
             }
 
             return new(
-                [.. this.assets.Values.OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)],
-                [.. this.files.Values.OrderBy(static input => input.RelativePath, StringComparer.Ordinal)],
+                [.. this.assets.Values.OrderBy(static input => input.SourceCookPath, StringComparer.Ordinal)],
+                [.. this.files.Values.OrderBy(static input => input.CookPath, StringComparer.Ordinal)],
                 this.dependencies.ToImmutableDictionary(),
                 this.fileDependencies.ToImmutableDictionary(static pair => pair.Key, static pair => pair.Value.Order(StringComparer.Ordinal).ToImmutableArray()),
                 [.. this.published.Order()],
@@ -207,7 +207,7 @@ internal sealed class CookDependencyDiscovery(
             foreach (var file in source.Files)
             {
                 var path = file.SourcePath;
-                _ = this.fileDependencies[input.AssetUri].Add(file.RelativePath);
+                _ = this.fileDependencies[input.AssetUri].Add(file.CookPath);
                 if (this.files.TryGetValue(path, out var existing))
                 {
                     var selected = (int)existing.Kind <= (int)file.Kind ? existing : file;
@@ -231,8 +231,8 @@ internal sealed class CookDependencyDiscovery(
             var primary = source.Files.Single(file => file.AssetUri == input.AssetUri);
             this.imported[input.AssetUri] = new(
                 primary.DiscoveryHash,
-                [.. source.Files.Where(static file => !file.RelativePath.StartsWith(Models.ModelImportSettings.RecordsFolder + "/", StringComparison.OrdinalIgnoreCase))
-                    .Select(static file => file.RelativePath).Order(StringComparer.Ordinal)])
+                [.. source.Files.Where(static file => !file.CookPath.StartsWith(Models.ModelImportSettings.RecordsFolder + "/", StringComparison.OrdinalIgnoreCase))
+                    .Select(static file => file.CookPath).Order(StringComparer.Ordinal)])
             {
                 ContentFingerprint = FingerprintImportedContent(source.Files),
             };
@@ -343,14 +343,6 @@ internal sealed class CookDependencyDiscovery(
             var input = CookInputResolver.Resolve(project, uri, ContentCookInputRole.Dependency);
             this.AddAsset(input);
             return this.assets[input.SourceAbsolutePath].AssetUri;
-        }
-
-        private string RelativePath(string path)
-        {
-            var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, Path.GetFullPath(path)).Replace('\\', '/');
-            return Path.IsPathRooted(relative) || relative is ".." || relative.StartsWith("../", StringComparison.Ordinal)
-                ? throw new InvalidDataException($"Cook dependency '{path}' is outside the project. Retain it in the project before cooking.")
-                : relative;
         }
     }
 }

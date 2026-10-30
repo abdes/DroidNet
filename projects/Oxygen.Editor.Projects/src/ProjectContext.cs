@@ -4,6 +4,7 @@
 
 using System.IO.Abstractions;
 using Oxygen.Editor.Data.Settings;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
@@ -45,17 +46,34 @@ public sealed record ProjectContext
     public string? Thumbnail { get; init; }
 
     /// <summary>
-    ///     Gets the project authoring mount roots.
+    ///     Gets the resolved mount table: every declared or locally added mount, with its location on this machine and
+    ///     where that came from. It is the one table every component maps mount paths through.
     /// </summary>
-    public required IReadOnlyList<ProjectMountPoint> AuthoringMounts { get; init; }
+    public required IReadOnlyList<ResolvedMount> Mounts { get; init; }
+
+    /// <summary>Gets what resolving the mount table found: unbound and missing mounts, and refused declarations.</summary>
+    public IReadOnlyList<MountFinding> MountFindings { get; init; } = [];
+
+    /// <summary>Gets the source mounts that are bound: the folders the project authors, cooks and watches.</summary>
+    public IEnumerable<ResolvedMount> SourceMounts
+        => this.Mounts.Where(static mount => mount is { Kind: MountKind.Source, IsBound: true });
 
     /// <summary>
-    ///     Gets the project local folder mount roots.
+    ///     Gets the folders that hold the files the project edits: the project root, and the folder of each bound source
+    ///     mount outside it.
     /// </summary>
-    public required IReadOnlyList<LocalFolderMount> LocalFolderMounts { get; init; }
+    public IEnumerable<FileSystemPath> AuthoredFolders
+        => this.SourceMounts.Select(static mount => mount.Location!)
+            .Where(folder => !folder.IsSameOrInside(this.ProjectRoot))
+            .Prepend(this.ProjectRoot);
 
-    /// <summary>Gets the pak files the project mounts as read-only cooked libraries.</summary>
-    public IReadOnlyList<PakFileMount> PakFileMounts { get; init; } = [];
+    /// <summary>Gets the cooked folder and pak file mounts, bound or not: the project's read-only libraries.</summary>
+    public IEnumerable<ResolvedMount> LibraryMounts
+        => this.Mounts.Where(static mount => mount.Kind is MountKind.Cooked or MountKind.Pak);
+
+    /// <summary>Gets the mounts the project commits, as <c>Project.oxy</c> declares them.</summary>
+    public IEnumerable<ProjectMount> DeclaredMounts
+        => this.Mounts.Select(static mount => mount.Declaration).OfType<ProjectMount>();
 
     /// <summary>Gets the output folders the Content Explorer shows; view state, never mounts.</summary>
     public IReadOnlyList<OutputFolderView> OutputFolderViews { get; init; } = [];
@@ -122,6 +140,7 @@ public sealed record ProjectContext
             throw new ArgumentException($"Project '{info.Name}' has no location on disk.", nameof(info));
         }
 
+        var table = ProjectMounts.Resolve(fileSystem, FileSystemPath.From(info.Location), info.Mounts);
         return new ProjectContext
         {
             ProjectId = info.Id,
@@ -130,9 +149,8 @@ public sealed record ProjectContext
             ProjectRoot = FileSystemPath.From(info.Location),
             FileSystem = fileSystem,
             Thumbnail = info.Thumbnail,
-            AuthoringMounts = [.. info.AuthoringMounts],
-            LocalFolderMounts = [.. info.LocalFolderMounts],
-            PakFileMounts = [.. info.PakFileMounts],
+            Mounts = table.Mounts,
+            MountFindings = table.Findings,
             OutputFolderViews = [.. info.OutputFolderViews],
             CookedContentOrder = [.. info.CookedContentOrder],
             DefaultSceneId = info.DefaultSceneId,

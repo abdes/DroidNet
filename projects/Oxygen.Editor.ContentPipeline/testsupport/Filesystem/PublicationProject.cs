@@ -84,6 +84,14 @@ internal sealed partial class PublicationProject : IDisposable
 
     public CookPublicationReadLease Baseline => this.baseline ?? throw new InvalidOperationException("Prepare staging first.");
 
+    // The project opened from a copy of its folder, with its mounts resolved in that copy.
+    public ProjectContext ReopenAt(string root)
+    {
+        var info = TestProject.InfoOf(this.Context);
+        info.Location = root;
+        return TestProject.Open(info, new RealFileSystem()).Context;
+    }
+
     public async Task<CookStagingArea> StageAsync(CancellationToken cancellationToken)
     {
         this.ownership = CookOutputLease.AcquireOperation(FileSystemPath.From(this.Root), this.Operation.OperationId);

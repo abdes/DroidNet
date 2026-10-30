@@ -23,7 +23,7 @@ internal sealed record CookPublicationDocument(
     ImmutableArray<CookProvenance.Product> Products,
     CookPublicationInputs? CookInputs)
 {
-    internal const int CurrentVersion = 7;
+    internal const int CurrentVersion = 8;
 
     internal static JsonSerializerOptions JsonOptions { get; } = new()
     {
@@ -47,9 +47,7 @@ internal sealed record CookPublicationDocument(
     {
         var configuration = new
         {
-            project.AuthoringMounts,
-            project.LocalFolderMounts,
-            project.PakFileMounts,
+            Mounts = project.DeclaredMounts.Select(static mount => new { mount.Name, mount.Kind, mount.Path }),
             Order = CookedContentOrdering.Resolve(project),
         };
         return Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(configuration, JsonOptions)));

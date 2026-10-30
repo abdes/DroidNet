@@ -2,7 +2,7 @@
 
 Status: `accepted`
 
-Last Updated: 2026-10-29
+Last Updated: 2026-10-30
 
 ## 1. Purpose
 
@@ -57,7 +57,7 @@ This LLD does not own:
 - [Oxygen rules](../../oxygen/RULES.md): cooked output is derived and not edited
   as authoring data; asset references preserve authoring intent.
 - `project-services.md`: project manifest services, active project context,
-  authoring roots, local folder mounts, and cook-scope facts.
+  its resolved mount table, and cook-scope facts.
 - `content-explorer-asset-identity.md`: browser projection of source, descriptor,
   cooked, missing, and broken states.
 - `content-pipeline.md`: import/cook output paths and cooked index policy.
@@ -68,10 +68,9 @@ The layout below is the V0.1 project contract. New predefined templates, new
 project creation, new authored asset creation, and Content Explorer defaults must
 follow it.
 
-A folder under the project root is not authored content unless it is:
-
-- under a declared `AuthoringMounts` entry.
-- under a declared `LocalFolderMounts` entry.
+A folder is authored content when it is in a bound `Source` mount of the
+project's [mount table](#resolved-mount-table), inside or outside the project
+folder. No other folder is, whatever it holds.
 
 Project configuration and derived output are explicitly not authored asset
 roots.
@@ -199,20 +198,26 @@ Rules:
 
 `Project.oxy` contains:
 
-`SchemaVersion = 1` inherits the ED-M01 V0.1 project manifest baseline. This LLD
-adds the concrete layout and template rules that must be satisfied by that
-manifest version.
+`SchemaVersion = 2` declares one `Mounts` list. The editor refuses a version 1
+manifest with its unsupported-version diagnostic; such projects are migrated by
+editing their data, with no reader of the old form kept:
 
-| Field               | Required | Rule                                                                  |
-| ------------------- | -------- | --------------------------------------------------------------------- |
-| `SchemaVersion`     | Yes      | Must equal the supported V0.1 project manifest version.               |
-| `Id`                | Yes      | New non-empty GUID generated for each created project.                |
-| `Name`              | Yes      | User-facing project name selected at creation.                        |
-| `Category`          | Yes      | Template/project category.                                            |
-| `Thumbnail`         | No       | Project/template preview path when available.                         |
-| `AuthoringMounts`   | Yes      | Project-relative authoring mounts. Must include `Content -> Content`. |
-| `LocalFolderMounts` | No       | Absolute external authored content mounts. Empty when not used.       |
-| `PakFileMounts`     | No       | Absolute `.pak` files mounted read-only as cooked libraries.          |
+| Version 1 `Project.oxy`                             | Version 2 `Project.oxy` and `.mounts.json`                                                                          |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `AuthoringMounts` entry                             | A `Mounts` entry of kind `Source`, with the same name and path                                                      |
+| `LocalFolderMounts` entry without a cooked index    | A `Source` placeholder of the same name, bound in `.mounts.json` to the old absolute path                           |
+| `LocalFolderMounts` entry with a cooked index       | A `Cooked` placeholder, bound in `.mounts.json`                                                                     |
+| `PakFileMounts` entry                               | A `Pak` entry with a relative path when the pak is under the repository, else a placeholder bound in `.mounts.json` |
+| Model import record `source` relative to its folder | The source's mount path (`/Content/Models/Ship.glb`)                                                                |
+
+| Field           | Required | Rule                                                                                   |
+| --------------- | -------- | -------------------------------------------------------------------------------------- |
+| `SchemaVersion` | Yes      | Must equal `2`, the supported project manifest version.                                |
+| `Id`            | Yes      | New non-empty GUID generated for each created project.                                 |
+| `Name`          | Yes      | User-facing project name selected at creation.                                         |
+| `Category`      | Yes      | Template/project category.                                                             |
+| `Thumbnail`     | No       | Project/template preview path when available.                                          |
+| `Mounts`        | Yes      | The project's mounts: `Source`, `Cooked` and `Pak`. Must include `Content -> Content`. |
 
 `Project.oxy` must not persist:
 
@@ -221,99 +226,115 @@ manifest version.
 - operation results or diagnostics.
 - cooked output state.
 - output folder state.
+- an absolute path: a mount this machine binds elsewhere is bound in
+  `.mounts.json`.
 
 Project creation always writes a new non-empty GUID. Predefined templates must
 not ship `Project.oxy` in their `SourceFolder`; a stray `Project.oxy` rejects
 the template with a `ProjectTemplate` diagnostic. A test creates two projects
 from the same template and asserts the two `Id` values differ from each other.
 
-### Authoring Mounts
+### Mounts
 
-`AuthoringMounts` are project-relative authored content roots.
-
-Shape:
+`Project.oxy` declares one `Mounts` list. Each entry is a name, a kind and an
+optional path relative to the project root; an entry without a path is a
+placeholder, which a `.mounts.json` binds on each machine.
 
 ```json
-"AuthoringMounts": [
-  { "Name": "Content", "RelativePath": "Content" },
-  { "Name": "DLC01", "RelativePath": "DLC/DLC01/Content" }
+"Mounts": [
+  { "Name": "Content", "Kind": "Source", "Path": "Content" },
+  { "Name": "Showcase", "Kind": "Source", "Path": "../../Media/Showcase" },
+  { "Name": "Studio", "Kind": "Source" },
+  { "Name": "VendorCooked", "Kind": "Cooked" },
+  { "Name": "Engine2D", "Kind": "Pak", "Path": "../Paks/engine2d.pak" }
 ]
 ```
 
-Rules:
+| Kind     | Holds                                                                         |
+| -------- | ----------------------------------------------------------------------------- |
+| `Source` | A folder of authored sources: edited, cooked, relocated and watched           |
+| `Cooked` | A cooked folder (`container.index.bin`) mounted read-only as a library        |
+| `Pak`    | A `.pak` file mounted read-only as a library, beneath the project's own roots |
 
-- paths are project-relative.
-- rooted paths are rejected.
-- paths containing `..` segments are rejected.
-- paths resolving outside `<ProjectRoot>` are rejected.
-- paths in an output folder (see [Output Folders](#output-folders)) are
-  rejected: an output folder is never a mount.
-- mount names are unique case-insensitively across authoring and local mounts.
-- mount names match `^[A-Za-z][A-Za-z0-9_-]{0,63}$`.
-- reserved mount names are rejected case-insensitively, for authoring, local
-  folder and pak file mounts alike: `project` and `Engine`, the mounts every
-  project has, and `Cooked` and `Build`, the Content Explorer's output folder
-  nodes (`ProjectAssetFiles.IsReservedMountName`).
-- `Content` is required and maps to `Content`.
+Rules, one validator for every place that writes mounts
+(`ProjectMounts.ValidateDeclarations` and the resolved table):
+
+- a path is relative to the project root and may leave it (`../Media`); an
+  absolute path is refused with `path.absolute_committed`.
+- mount names match `^[A-Za-z][A-Za-z0-9_-]{0,63}$` (`mount.name_invalid`) and
+  are unique ignoring case (`mount.name_duplicate`).
+- reserved names are refused ignoring case: `project` and `Engine`, the mounts
+  every project has, and `Cooked` and `Build`, the Content Explorer's output
+  folder nodes (`ProjectAssetFiles.IsReservedMountName`).
+- the project declares a `Source` mount (`mount.source_required`); `Content`
+  maps to `Content` in created projects.
+- source mount folders never overlap (`mount.folder_overlap`), compared on their
+  canonical folders, links resolved.
+- no source mount is in an output folder (`mount.folder_in_output`); see
+  [Output Folders](#output-folders).
+- a shared folder is mounted under the same name by every project that uses it,
+  because the references inside it carry that name.
 - changing a mount name changes asset identity and requires an explicit
-  project-wide reference update.
-- changing a mount backing path without changing the mount name is a storage
-  relocation and preserves asset identity when the content set is equivalent.
-
-### Local Folder Mounts
-
-`LocalFolderMounts` are explicit absolute authored content roots outside the
-project root.
-
-Shape:
-
-```json
-"LocalFolderMounts": [
-  { "Name": "StudioLibrary", "AbsolutePath": "D:\\Studio\\SharedContent" }
-]
-```
-
-Rules:
-
-- paths are absolute.
-- relative paths are rejected.
-- mount names follow the same uniqueness, regex, and reserved-word rules as
-  authoring mounts.
-- local mounts are browsable as authored content roots.
-- local mounts are not default creation targets unless the user explicitly
-  selects that local mount as the target in a creation workflow.
-- local mount availability failures are `ProjectContentRoots` diagnostics.
-
-Local mount identity example:
-
-```text
-asset:///StudioLibrary/Characters/Hero.ogeo.json
-```
-
-### Pak File Mounts
-
-`PakFileMounts` are pak files the project mounts read-only as cooked libraries,
-next to local folders in the cooked content order (kind `PakFile`).
-
-```json
-"PakFileMounts": [
-  { "Name": "Props", "AbsolutePath": "D:\\Studio\\Paks\\Props.pak" }
-]
-```
-
-Rules:
-
-- paths are absolute and name `.pak` files; runtimes and the Player tell a pak
-  from a loose root by that extension.
-- a mount name is a label unique among all the project's mounts; a pak's assets
-  keep the virtual paths the pak records, and the Content Explorer shows them
-  under the mount name.
-- paks are never creation targets; cooks reference their assets without copying
-  them.
-- a missing pak file fails project validation (`InvalidContentRoots`).
+  project-wide reference update; binding a mount to another folder keeps its
+  identities.
 
 The engine content pak is not declared: every project mounts the SDK's
 `engine.pak` beneath all other content.
+
+### Mount Bindings
+
+Git-ignored `.mounts.json` files bind mounts per machine with absolute paths. The
+editor reads the engine's hierarchy, against the installed
+`oxygen.mounts.schema.json`:
+
+```json
+{
+  "version": 1,
+  "mounts": {
+    "Studio": "D:/Studio/SharedContent",
+    "VendorCooked": "E:/Vendor/cooked"
+  }
+}
+```
+
+- the project's own file, at the project root, binds placeholders, overrides
+  committed paths and adds mounts only this machine has.
+- files in the folders above the project only bind placeholders and add mounts;
+  one that names a committed mount is ignored with `mount.parent_ignored`.
+- a file with `"root": true` stops the walk up the folders.
+- the editor writes only the project's own file, through the atomic file store,
+  for Bind, Override and Remove binding (`MountBindings`); a file above the
+  project belongs to the studio or the machine.
+- `.gitignore` of a created project lists `.mounts.json` and the output folders.
+
+### Resolved Mount Table
+
+`ProjectContext.Mounts` is the resolved table: for each declared or locally
+added mount, its name, kind, committed path, folder or file on this machine,
+which file bound it, and its state. The merge is the engine's; a case file,
+`MountTableCases.json`, is run by both the engine's and the editor's tests.
+
+| State     | Meaning                                                            |
+| --------- | ------------------------------------------------------------------ |
+| `Bound`   | The committed path or a `.mounts.json` names a folder              |
+| `Unbound` | A placeholder no `.mounts.json` binds (`mount.unbound`)            |
+| `Missing` | The bound folder or pak file is not there (`mount.folder_missing`) |
+
+- opening never fails for an unbound or missing mount: both are warnings, and
+  the mount stays in the Content Explorer with its state and Bind or Override.
+- structural errors (names, overlap, output folders, absolute committed paths)
+  fail opening and every mount change.
+- `ProjectAssetFiles` is the only mapper between mount paths and files:
+  `Find`, `FindByFilePath`, `SourceMountPathOf` and `SourceFileOf`; no component
+  combines the project root with a mount's path.
+- a change of any `.mounts.json` of the hierarchy during a session resolves the
+  table again; a table that differs is applied as a mount change.
+
+Mount identity example:
+
+```text
+asset:///Studio/Characters/Hero.ogeo.json
+```
 
 ### Default Creation Targets
 
@@ -325,11 +346,10 @@ Default create target rules are asset-kind-specific:
 | `/<Mount>` authoring root                                                       | `/<Mount>/Scenes` | `/<Mount>/Materials` | `/<Mount>/Geometry` | `/<Mount>/Scripts` |
 | folder under an authoring mount and matching the asset kind                     | selected folder   | selected folder      | selected folder     | selected folder    |
 | folder under an authoring mount but not matching the asset kind                 | `/<Mount>/Scenes` | `/<Mount>/Materials` | `/<Mount>/Geometry` | `/<Mount>/Scripts` |
-| local mount root explicitly chosen as target                                    | `/<Local>/Scenes` | `/<Local>/Materials` | `/<Local>/Geometry` | `/<Local>/Scripts` |
-| folder under an explicitly targeted local mount and matching the asset kind     | selected folder   | selected folder      | selected folder     | selected folder    |
-| folder under an explicitly targeted local mount but not matching the asset kind | `/<Local>/Scenes` | `/<Local>/Materials` | `/<Local>/Geometry` | `/<Local>/Scripts` |
-| folder under a local mount not explicitly chosen as target                      | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
-| `Config`, `Packages`, or output folders                                         | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
+| source mount outside the project explicitly chosen as target                    | `/<Mount>/Scenes` | `/<Mount>/Materials` | `/<Mount>/Geometry` | `/<Mount>/Scripts` |
+| folder under a source mount outside the project and matching the asset kind     | selected folder   | selected folder      | selected folder     | selected folder    |
+| folder under a source mount outside the project but not matching the asset kind | `/<Mount>/Scenes` | `/<Mount>/Materials` | `/<Mount>/Geometry` | `/<Mount>/Scripts` |
+| an unbound or missing mount, a library, `Config`, `Packages` or output folders  | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
 
 Before creation, UI presents the effective target as both a virtual folder and
 resulting asset URI. Example:
@@ -384,9 +404,11 @@ Rules:
 
 A model's import record is at `<ProjectRoot>/Imports/<virtual path>.import.json`
 (`/Content/Models/Ship.glb` has `Imports/Content/Models/Ship.glb.import.json`).
-Records are committed state, not output. `Imports/` lies outside every authoring
-mount by convention: a mount whose path is `.` contains it, and cook inputs skip
-it by its prefix.
+Records are committed state, not output. A record names its source by mount
+path (`"source": "/Content/Models/Ship.glb"`), the same in every project that
+mounts the folder; the editor refuses another form. `Imports/` lies outside
+every authoring mount by convention: a mount whose path is `.` contains it, and
+cook inputs skip it by its prefix.
 
 Cooked output mapping:
 
@@ -417,8 +439,9 @@ Top-level browser groups:
 ```text
 Project
   Content                         authored mount
-  <ExtraAuthoringMount>            authored mount
-  <LocalFolderMount>               local authored mount
+  <ExtraSourceMount>               authored mount, inside or outside the project
+  <LibraryMount>                   cooked folder or pak, read-only
+  <UnavailableMount>               unbound or missing: dimmed, with its state
   Config                           project configuration
   Packages                         project packages, when present
   Cooked                           .cooked, when shown (view state)
@@ -427,8 +450,9 @@ Project
 
 Required labels:
 
-- authoring mounts: `AUTH`
-- local authored mounts: `LOCAL`
+- authoring mounts: `AUTH`; one a `.mounts.json` binds also shows its folder
+  and a `This machine` badge
+- unbound and missing mounts: their state, `Not bound` or `Folder missing`
 - configuration: `CONFIG`
 - packages: `PKG`
 - cooked output: `COOKED`
@@ -449,7 +473,7 @@ roots or target folders outside the project layout policy.
 | ------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `Oxygen.Editor.Projects`        | `Project.oxy`, mount validation, project creation layout validation, project cook-scope facts. |
 | `Oxygen.Editor.ProjectExplorer` | predefined template presentation and create-from-template workflow.                            |
-| `Oxygen.Editor.ContentExplorer` | user-facing projection of authoring, local, config, packages, and output folders.              |
+| `Oxygen.Editor.ContentExplorer` | user-facing projection of mounts, their states and bindings, config, packages, output folders. |
 | `Oxygen.Editor.WorldEditor`     | scene document create/open/save under `Content/Scenes`.                                        |
 | `Oxygen.Editor.MaterialEditor`  | material descriptor create/open/save under `Content/Materials` or selected material target.    |
 | `Oxygen.Editor.ContentPipeline` | import/cook outputs under output folders and cooked indexes.                                   |
@@ -471,8 +495,7 @@ Each predefined template has a `Template.json` with this shape:
   "Icon": "Media/Icon.png",
   "Preview": "Media/Preview.png",
   "SourceFolder": ".",
-  "AuthoringMounts": [{ "Name": "Content", "RelativePath": "Content" }],
-  "LocalFolderMounts": [],
+  "Mounts": [{ "Name": "Content", "Kind": "Source", "Path": "Content" }],
   "StarterScene": {
     "AssetUri": "asset:///Content/Scenes/Main.oscene.json",
     "RelativePath": "Content/Scenes/Main.oscene.json",
@@ -500,8 +523,8 @@ Field rules:
   project-template-relative.
 - `SourceFolder` is required and template-root-relative.
 - predefined built-in template `SourceFolder` must not contain `Project.oxy`.
-- `AuthoringMounts` is required and follows the mount rules above.
-- `LocalFolderMounts` is optional; predefined built-in templates use `[]`.
+- `Mounts` is required, follows the mount rules above, and commits no absolute
+  path.
 - `StarterScene` is required for built-in V0.1 templates.
 - every `StarterContent` entry must be under an authoring mount.
 
@@ -521,13 +544,12 @@ After create-from-template, the project `Project.oxy` contains:
 
 ```json
 {
-  "SchemaVersion": 1,
+  "SchemaVersion": 2,
   "Id": "<new-guid>",
   "Name": "<user-project-name>",
   "Category": "<template-category>",
   "Thumbnail": "Media/Preview.png",
-  "AuthoringMounts": [{ "Name": "Content", "RelativePath": "Content" }],
-  "LocalFolderMounts": []
+  "Mounts": [{ "Name": "Content", "Kind": "Source", "Path": "Content" }]
 }
 ```
 
@@ -546,8 +568,8 @@ Create-from-template performs:
 4. Copy template payload except `Template.json` to the target project folder.
 5. Verify the required folder skeleton exists.
 6. Generate a new non-empty project `Id`.
-7. Write `Project.oxy` with the new id, user-selected name, category, thumbnail,
-   `AuthoringMounts`, and `LocalFolderMounts`.
+7. Write `Project.oxy` with the new id, user-selected name, category, thumbnail
+   and `Mounts`, and `.gitignore` with `.mounts.json` and the output folders.
 8. Validate the created project manifest and mounts.
 9. Activate the project through the normal project activation path.
 10. If `StarterScene.OpenOnCreate` is true, request opening that scene document.
@@ -593,16 +615,15 @@ public interface IAuthoringTargetResolver
 
 public sealed record AuthoringTarget(
     string MountName,
-    string ProjectRelativeFolder,
-    Uri FolderAssetUri,
+    AssetPath Folder,
     bool IsExplicitLocalMount,
     AuthoringTargetFallbackReason? FallbackReason);
 ```
 
 Rules:
 
-- `ProjectContext` supplies the active project root, authoring mounts, and local
-  folder mounts.
+- `ProjectContext` supplies the active project root and its bound source mounts;
+  an unbound or missing mount is never a target.
 - `AssetKind` maps to the kind folders in the default creation target table.
 - `ContentFolderSelection` is optional and contains the selected root/folder
   identity from Content Explorer, never a raw cooked path.
@@ -629,8 +650,9 @@ Project Explorer:
 
 Content Explorer:
 
-- authoring, local, config, packages, and output folders use the labels defined
-  in Browser Positioning.
+- mounts, config, packages, and output folders use the labels defined in Browser
+  Positioning; unbound and missing mounts stay with their state, and their menu
+  binds or overrides them.
 - create actions show target folder and resulting asset URI before confirming.
 - raw source media rows are importable/source rows.
 - cooked rows are derived output rows and are not editable as source.
@@ -643,8 +665,7 @@ New project from template must round-trip:
 - user-selected project name.
 - category.
 - optional thumbnail.
-- standard `Content` mount.
-- empty `LocalFolderMounts` for built-in templates.
+- standard `Content` source mount, and no absolute path.
 - required folder skeleton.
 - starter scene identity.
 - starter content identities.
@@ -668,17 +689,16 @@ It provides policy consumed by those systems:
 
 Layout-related failures use existing project/content domains:
 
-| Condition                                 | Domain                | Required diagnostic detail                 |
-| ----------------------------------------- | --------------------- | ------------------------------------------ |
-| missing or invalid `Project.oxy`          | `ProjectValidation`   | manifest path and parse/validation reason  |
-| missing/inaccessible authoring mount      | `ProjectContentRoots` | mount name and resolved path               |
-| invalid authoring mount path              | `ProjectContentRoots` | mount name, raw path, validation rule      |
-| invalid local folder mount path           | `ProjectContentRoots` | mount name, absolute path, validation rule |
-| invalid template metadata                 | `ProjectTemplate`     | template path and field name               |
-| template copy or manifest rewrite failure | `ProjectTemplate`     | source path, target path, exception type   |
-| starter scene missing/outside mount       | `ProjectTemplate`     | starter scene URI and relative path        |
-| derived cooked index invalid              | `ContentPipeline`     | mount name and index path                  |
-| browser cannot map selection to a mount   | `AssetIdentity`       | selection path and active mount list       |
+| Condition                                 | Domain                | Required diagnostic detail                                    |
+| ----------------------------------------- | --------------------- | ------------------------------------------------------------- |
+| missing or invalid `Project.oxy`          | `ProjectValidation`   | manifest path and parse/validation reason                     |
+| unbound or missing mount (warning)        | `ProjectContentRoots` | `mount.unbound` or `mount.folder_missing`, mount name, folder |
+| invalid mount declaration or binding      | `ProjectContentRoots` | the mount table's code, mount name, file                      |
+| invalid template metadata                 | `ProjectTemplate`     | template path and field name                                  |
+| template copy or manifest rewrite failure | `ProjectTemplate`     | source path, target path, exception type                      |
+| starter scene missing/outside mount       | `ProjectTemplate`     | starter scene URI and relative path                           |
+| derived cooked index invalid              | `ContentPipeline`     | mount name and index path                                     |
+| browser cannot map selection to a mount   | `AssetIdentity`       | selection path and active mount list                          |
 
 ## 13. Dependency Rules
 
@@ -697,9 +717,9 @@ Layout-related failures use existing project/content domains:
 
 Project layout/template work is complete when these checks pass:
 
-1. Creating each predefined template writes a `Project.oxy` with a non-empty
-   unique GUID, user-selected name, category, `Content` authoring mount, and
-   empty built-in-template `LocalFolderMounts`.
+1. Creating each predefined template writes a `Project.oxy` of version 2 with a
+   non-empty unique GUID, user-selected name, category and `Content` source
+   mount, and a `.gitignore` that lists `.mounts.json`.
 2. Creating two projects from the same template produces two different project
    ids. Predefined templates do not ship `Project.oxy`.
 3. Built-in template validation fails when `SourceFolder` contains
@@ -708,14 +728,15 @@ Project layout/template work is complete when these checks pass:
    folder requirements table.
 5. Built-in template validation fails when `Template.json` omits `TemplateId`,
    `Category`, `DisplayName`, `Description`, `Icon`, `Preview`, `SourceFolder`,
-   `AuthoringMounts`, or `StarterScene`.
+   `Mounts`, or `StarterScene`.
 6. Built-in template validation fails when required `Icon` or `Preview` media
    paths do not exist in the template payload.
-7. Mount validation rejects rooted authoring paths, `..` authoring paths,
-   duplicate mount names, reserved mount names, output-folder mount paths, and
-   missing `Content`.
-8. Local mount validation rejects relative local paths and duplicate/reserved
-   mount names.
+7. Mount validation rejects absolute committed paths, duplicate and reserved
+   mount names, overlapping source folders, output-folder mount paths and a
+   project without a source mount, each with its code; the engine's and the
+   editor's readers pass the shared `MountTableCases.json`.
+8. A project opens with an unbound and a missing mount, each reported as a
+   warning; a `.mounts.json` change during a session applies the new table.
 9. Scene create resolves to `Content/Scenes/<Name>.oscene.json` and
    `asset:///Content/Scenes/<Name>.oscene.json`.
 10. Material create at project root resolves to
@@ -723,11 +744,12 @@ Project layout/template work is complete when these checks pass:
     `asset:///Content/Materials/<Name>.omat.json`.
 11. Create actions under an extra authoring mount resolve to that mount's
     asset-kind folder and URI.
-12. Create actions under a local mount use that mount only when the local mount
-    is explicitly selected as the creation target; otherwise they resolve to the
-    default `Content` asset-kind folder.
-13. Content Explorer shows authoring, local, config and packages roots, and the
-    optional Cooked and Build nodes, with the required labels.
+12. Create actions under a source mount outside the project use that mount;
+    an unbound or missing mount resolves to the default `Content` asset-kind
+    folder.
+13. Content Explorer shows mounts with their states and bindings, config and
+    packages roots, and the optional Cooked and Build nodes, with the required
+    labels.
 14. `Content/SourceMedia` rows reduce to source/importable state, not cooked
     state.
 15. The selected generation's `container.index.bin` is displayed as derived
@@ -741,8 +763,9 @@ None.
 
 Output folders are never authored mounts or creation targets. Project
 version-control metadata excludes them (`.cooked/`, `.build/`) while retaining
-Project.oxy, `Imports/`, Content/SourceMedia, authored descriptors and Config. Absolute local mounts are nonportable and reported as dependencies;
-the release fixture uses project-relative mounts.
+Project.oxy, `Imports/`, Content/SourceMedia, authored descriptors and Config.
+`.mounts.json` is ignored too: a mount it binds is a dependency each machine
+binds itself, and the release fixture uses committed relative paths.
 
 Input snapshots and source-recovery files live beneath
 `.build/cook/<OperationId>`. Native output is cooked directly into fresh

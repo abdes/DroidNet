@@ -132,7 +132,7 @@ internal static class CookIncrementalPlanner
 
     internal static string Fingerprint(ContentCookInput input, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph, ImporterRevisions importers)
     {
-        var files = inputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
+        var files = inputs.ToDictionary(static file => file.CookPath, StringComparer.Ordinal);
         return Fingerprint(
             input,
             graph.FileDependencies[input.AssetUri].Select(path => files[path]),
@@ -158,7 +158,7 @@ internal static class CookIncrementalPlanner
             Importers = ContentImportManifestBuilder.GetImporters(input).Select(importer => new { Name = importer, Revision = importers.Of(importer) }),
             Files = files.Select(file => new
             {
-                Path = file.RelativePath,
+                Path = file.CookPath,
                 file.DiscoveryHash,
                 file.Kind,
                 Metadata = file.ProbeShape,

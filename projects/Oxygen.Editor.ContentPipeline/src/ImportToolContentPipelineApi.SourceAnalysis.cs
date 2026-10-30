@@ -37,14 +37,12 @@ public sealed partial class ImportToolContentPipelineApi
         }
 
         var artifacts = compatibility.Artifacts!;
-        var manifestPath = Path.Combine(execution.OperationRoot, "manifests", $"analysis-{Guid.NewGuid():N}.json");
-        var reportPath = manifestPath + ".report.json";
-        var capturePath = manifestPath + ".captures.json";
-        string[] ownedPaths = [manifestPath, reportPath, capturePath];
+        var files = RunFiles.For(Path.Combine(execution.OperationRoot, "manifests", $"analysis-{Guid.NewGuid():N}.json"));
+        string[] ownedPaths = [files.Manifest, files.Report, files.Mounts, files.Captures];
         Task? retainedWorkerDrain = null;
         try
         {
-            return await this.RunSourceAnalysisWorkerAsync(execution, artifacts, manifestPath, reportPath, capturePath, cancellationToken).ConfigureAwait(false);
+            return await this.RunSourceAnalysisWorkerAsync(execution, artifacts, files, cancellationToken).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException error)
         {
@@ -83,7 +81,7 @@ public sealed partial class ImportToolContentPipelineApi
             if (!string.Equals(observed.Id, submitted.Id, StringComparison.Ordinal)
                 || !string.Equals(observed.JobType, submitted.ReportedType, StringComparison.Ordinal)
                 || !Path.IsPathFullyQualified(observed.SourcePath)
-                || FileSystemPath.From(observed.SourcePath) != FileSystemPath.From(Path.GetFullPath(submitted.AttributedSource, execution.InputRoot)))
+                || FileSystemPath.From(observed.SourcePath) != FileSystemPath.From(execution.MountsFile.Resolve(execution.InputRoot, submitted.AttributedSource)))
             {
                 throw new InvalidDataException("The native source-analysis report does not match the submitted job identities.");
             }
@@ -91,10 +89,10 @@ public sealed partial class ImportToolContentPipelineApi
     }
 
     private async Task<NativeSourceAnalysisReport> RunSourceAnalysisWorkerAsync(
-        ContentSourceAnalysisExecution execution, NativeArtifactLease artifacts, string manifestPath, string reportPath, string capturePath, CancellationToken cancellationToken)
+        ContentSourceAnalysisExecution execution, NativeArtifactLease artifacts, RunFiles files, CancellationToken cancellationToken)
     {
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
-        var manifest = File.Create(manifestPath);
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(files.Manifest)!);
+        var manifest = File.Create(files.Manifest);
         await using (manifest.ConfigureAwait(false))
         {
             var document = new Dictionary<string, object> { ["version"] = 1, ["jobs"] = execution.Jobs };
@@ -106,28 +104,29 @@ public sealed partial class ImportToolContentPipelineApi
             await JsonSerializer.SerializeAsync(manifest, document, ManifestJsonOptions, cancellationToken).ConfigureAwait(false);
         }
 
+        await execution.MountsFile.WriteAsync(files.Mounts, cancellationToken).ConfigureAwait(false);
         var request = new ContentPipelineProcessRequest(
             this.GetCompatibleToolPath(artifacts),
-            ["--no-tui", "--no-color", "--quiet", "analyze-sources", "--manifest", manifestPath,
-             "--root", execution.InputRoot, "--report", reportPath],
+            ["--no-tui", "--no-color", "--quiet", "analyze-sources", "--manifest", files.Manifest,
+             "--root", execution.InputRoot, "--mounts", files.Mounts, "--report", files.Report],
             execution.OperationRoot)
         {
             Output = CookRunContext.Current is { } progress ? new CookOutput(progress) : null,
         };
         if (execution.CapturedInputs is { } inputs)
         {
-            await WriteCapturedInputsAsync(inputs, capturePath, cancellationToken).ConfigureAwait(false);
-            request = request with { Arguments = [.. request.Arguments, "--captured-inputs", capturePath] };
+            await WriteCapturedInputsAsync(inputs, files.Captures, cancellationToken).ConfigureAwait(false);
+            request = request with { Arguments = [.. request.Arguments, "--captured-inputs", files.Captures] };
         }
 
         var result = await this.processRunner.RunAsync(request, cancellationToken).ConfigureAwait(false);
-        if (!File.Exists(reportPath))
+        if (!File.Exists(files.Report))
         {
             throw new InvalidDataException($"Native source analysis did not produce its required report. {result.StandardError} {result.StandardOutput}");
         }
 
         var report = NativeSourceAnalysisReport.Parse(
-            await File.ReadAllTextAsync(reportPath, cancellationToken).ConfigureAwait(false),
+            await File.ReadAllTextAsync(files.Report, cancellationToken).ConfigureAwait(false),
             execution.OperationId,
             JsonSchema.FromFile(artifacts.GetPath(NativeArtifactInventory.SourceAnalysisSchemaId), new BuildOptions { SchemaRegistry = new SchemaRegistry() }));
         ValidateSourceAnalysisReport(execution, result.ExitCode, report);

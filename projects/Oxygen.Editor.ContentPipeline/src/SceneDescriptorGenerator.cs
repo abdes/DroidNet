@@ -162,7 +162,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
         var descriptor = new NativeSceneDescriptor(
             Schema: string.Create(CultureInfo.InvariantCulture, $"oxygen.scene-descriptor.v{NativeSceneDescriptorVersion.Value}"),
             Version: NativeSceneDescriptorVersion.Value,
-            Name: Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(sceneInput.SourceRelativePath)),
+            Name: Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(sceneInput.SourceCookPath)),
             Nodes: nodes,
             StartingCamera: startingCamera,
             StartingInputContexts: startingInputContexts,
@@ -513,11 +513,10 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
         => scope.Inputs.FirstOrDefault(static input => input.Kind == ContentCookAssetKind.Scene && input.Role == ContentCookInputRole.Primary)
            ?? scope.Inputs.First(static input => input.Kind == ContentCookAssetKind.Scene);
 
+    // A scene's descriptor is generated at its mount path below the pipeline folder: /Content/Scenes/Main.oscene.json
+    // at .pipeline/Scenes/Content/Scenes/Main.oscene.json.
     private static string GetDerivedSceneDescriptorPath(ContentCookScope scope, ContentCookInput sceneInput)
-    {
-        var folder = Path.GetDirectoryName(sceneInput.SourceRelativePath) ?? string.Empty;
-        return ProjectOutputFolders.PipelinePath(scope.PreparationRoot ?? scope.InputRoot, "Scenes", folder, Path.GetFileName(sceneInput.SourceRelativePath));
-    }
+        => ProjectOutputFolders.PipelinePath(scope.PreparationRoot ?? scope.InputRoot, ["Scenes", .. sceneInput.SourceCookPath.TrimStart('/').Split('/')]);
 
     private static NativeReferences? CreateNativeReferences(
         Oxygen.Editor.World.Serialization.SceneReferencesData references,

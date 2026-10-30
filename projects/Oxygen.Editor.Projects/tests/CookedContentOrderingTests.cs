@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Managed.Core;
+using Oxygen.Editor.Projects.Mounts;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Projects.Tests;
@@ -16,11 +16,11 @@ public sealed class CookedContentOrderingTests
     [TestMethod]
     public void DefaultOrderPlacesNewLibrariesImmediatelyBelowProjectOutput()
     {
-        LocalFolderMount[] folders = [new("Older", FileSystemPath.From(@"C:\Older")), new("Newer", FileSystemPath.From(@"C:\Newer"))];
-        _ = CookedContentOrdering.Resolve(folders, [], []).Should().Equal(new CookedContentSource[]
-        {
-            new(CookedContentSourceKind.LocalFolder, "Older"), new(CookedContentSourceKind.LocalFolder, "Newer"), new(CookedContentSourceKind.ProjectOutput),
-        });
+        ProjectMount[] folders = [new("Older", MountKind.Cooked), new("Newer", MountKind.Cooked)];
+        _ = CookedContentOrdering.Resolve(folders, []).Should().Equal(
+        [
+            new(CookedContentSourceKind.Cooked, "Older"), new(CookedContentSourceKind.Cooked, "Newer"), new(CookedContentSourceKind.ProjectOutput),
+        ]);
     }
 
     /// <summary>Adding a library does not demote an explicit override above project output.</summary>
@@ -29,19 +29,19 @@ public sealed class CookedContentOrderingTests
     {
         var info = new ProjectInfo("Priority", Category.Games)
         {
-            LocalFolderMounts = [new("Base", FileSystemPath.From(@"C:\Base")), new("Override", FileSystemPath.From(@"C:\Override")), new("New", FileSystemPath.From(@"C:\New"))],
-            CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Override")],
+            Mounts = [new("Base", MountKind.Cooked), new("Override", MountKind.Cooked), new("New", MountKind.Cooked)],
+            CookedContentOrder = [new(CookedContentSourceKind.Cooked, "Base"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.Cooked, "Override")],
         };
-        info.CookedContentOrder = CookedContentOrdering.Resolve(info).ToList();
+        info.CookedContentOrder = [.. CookedContentOrdering.Resolve(info)];
         var json = ProjectInfo.ToJson(info);
         _ = json.Should().Contain("\"Kind\": \"ProjectOutput\"");
         var restored = ProjectInfo.FromJson(json);
         restored.Location = @"C:\Priority";
         _ = restored.CookedContentOrder.Should().Equal(info.CookedContentOrder);
-        _ = ProjectContext.FromProjectInfo(restored, new MockFileSystem()).CookedContentOrder.Should().Equal(new CookedContentSource[]
-        {
-            new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.LocalFolder, "New"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Override"),
-        });
+        _ = ProjectContext.FromProjectInfo(restored, new MockFileSystem()).CookedContentOrder.Should().Equal(
+        [
+            new(CookedContentSourceKind.Cooked, "Base"), new(CookedContentSourceKind.Cooked, "New"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.Cooked, "Override"),
+        ]);
     }
 
     /// <summary>Pak files are libraries like folders: they join the order below project output and round-trip through the manifest.</summary>
@@ -50,20 +50,19 @@ public sealed class CookedContentOrderingTests
     {
         var info = new ProjectInfo("Paks", Category.Games)
         {
-            LocalFolderMounts = [new("Folder", FileSystemPath.From(@"C:\Folder"))],
-            PakFileMounts = [new("Props", FileSystemPath.From(@"C:\Paks\Props.pak"))],
+            Mounts = [new("Folder", MountKind.Cooked), new("Props", MountKind.Pak, "Props.pak")],
         };
-        info.CookedContentOrder = CookedContentOrdering.Resolve(info).ToList();
+        info.CookedContentOrder = [.. CookedContentOrdering.Resolve(info)];
 
         var restored = ProjectInfo.FromJson(ProjectInfo.ToJson(info));
         restored.Location = @"C:\Paks";
 
-        _ = info.CookedContentOrder.Should().Equal(new CookedContentSource[]
-        {
-            new(CookedContentSourceKind.LocalFolder, "Folder"), new(CookedContentSourceKind.PakFile, "Props"), new(CookedContentSourceKind.ProjectOutput),
-        });
-        _ = restored.PakFileMounts.Should().Equal(info.PakFileMounts);
-        _ = ProjectContext.FromProjectInfo(restored, new MockFileSystem()).PakFileMounts.Should().Equal(info.PakFileMounts);
+        _ = info.CookedContentOrder.Should().Equal(
+        [
+            new(CookedContentSourceKind.Cooked, "Folder"), new(CookedContentSourceKind.Pak, "Props"), new(CookedContentSourceKind.ProjectOutput),
+        ]);
+        _ = restored.Mounts.Should().Equal(info.Mounts);
+        _ = ProjectContext.FromProjectInfo(restored, new MockFileSystem()).DeclaredMounts.Should().Equal(info.Mounts);
         _ = CookedContentOrdering.Resolve(restored).Should().Equal(info.CookedContentOrder);
     }
 
@@ -71,12 +70,11 @@ public sealed class CookedContentOrderingTests
     [TestMethod]
     public void LibrariesAreIdentifiedByNameAndKind()
     {
-        LocalFolderMount[] folders = [new("Props", FileSystemPath.From(@"C:\Props"))];
-        PakFileMount[] paks = [new("Props", FileSystemPath.From(@"C:\Props.pak"))];
-        PakFileMount[] pak = [new("Pak", FileSystemPath.From(@"C:\Pak.pak"))];
+        ProjectMount[] libraries = [new("Props", MountKind.Cooked), new("Props", MountKind.Pak)];
+        ProjectMount[] pak = [new("Pak", MountKind.Pak)];
 
-        Action shared = () => _ = CookedContentOrdering.Resolve(folders, paks, []);
-        Action mislabeled = () => _ = CookedContentOrdering.Resolve([], pak, [new(CookedContentSourceKind.LocalFolder, "Pak")]);
+        Action shared = () => _ = CookedContentOrdering.Resolve(libraries, []);
+        Action mislabeled = () => _ = CookedContentOrdering.Resolve(pak, [new(CookedContentSourceKind.Cooked, "Pak")]);
 
         _ = shared.Should().Throw<InvalidDataException>();
         _ = mislabeled.Should().Throw<InvalidDataException>();
@@ -94,11 +92,11 @@ public sealed class CookedContentOrderingTests
         CookedContentSource[] order = kind switch
         {
             0 => [new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.ProjectOutput)],
-            1 => [new(CookedContentSourceKind.LocalFolder, "Missing")],
+            1 => [new(CookedContentSourceKind.Cooked, "Missing")],
             2 => [new((CookedContentSourceKind)99)],
             _ => [new(CookedContentSourceKind.ProjectOutput, "Invalid")],
         };
-        Action resolve = () => _ = CookedContentOrdering.Resolve([], [], order);
+        Action resolve = () => _ = CookedContentOrdering.Resolve([], order);
         _ = resolve.Should().Throw<InvalidDataException>();
     }
 }

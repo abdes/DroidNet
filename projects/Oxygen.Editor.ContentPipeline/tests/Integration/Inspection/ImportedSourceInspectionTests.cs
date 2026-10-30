@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 
@@ -22,7 +23,7 @@ public sealed class ImportedSourceInspectionTests
     [TestCategory("NativeContent")]
     public async Task ImportedSourceInspectionFollowsItsOutputMount()
     {
-        using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var workspace = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(workspace, this.TestContext.CancellationToken).ConfigureAwait(false);
         var runner = new CountingSourceRunner();
         var cook = NativeCook.Create(workspace, runner: runner);
@@ -46,7 +47,7 @@ public sealed class ImportedSourceInspectionTests
     [TestMethod]
     public async Task UncookedImportedSourceInspectionDoesNotCookOrInspectAnotherMount()
     {
-        using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
+        using var workspace = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")]);
         var source = await WriteCrossMountModelAsync(workspace, this.TestContext.CancellationToken).ConfigureAwait(false);
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         var service = CreateService(workspace, api.Object, Mock.Of<ISceneDescriptorGenerator>());

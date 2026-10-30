@@ -15,10 +15,10 @@ internal static class ControlledSourceAnalysis
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(new NativeSourceAnalysisReport(
             Complete: true,
-            [.. execution.Jobs.Select(job => Describe(execution.InputRoot, job))]));
+            [.. execution.Jobs.Select(job => Describe(execution, job))]));
     }
 
-    private static NativeSourceAnalysisJob Describe(string root, ContentImportJob job)
+    private static NativeSourceAnalysisJob Describe(ContentSourceAnalysisExecution execution, ContentImportJob job)
     {
         var kind = job.Type switch
         {
@@ -27,7 +27,8 @@ internal static class ControlledSourceAnalysis
             "script" => "script",
             _ => throw new InvalidOperationException($"Provide explicit dependency facts for '{job.Type}'."),
         };
-        var source = Path.GetFullPath(job.AttributedSource, root);
+        // The tool reads a mount path through the run's mounts file, as the ImportTool does.
+        var source = execution.MountsFile.Resolve(execution.InputRoot, job.AttributedSource);
         var metadata = CookSavedSourceReader.ReadMetadata(source);
         var digest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source)));
 

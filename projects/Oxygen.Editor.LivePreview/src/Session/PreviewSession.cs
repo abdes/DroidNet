@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Assets;
@@ -10,6 +11,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -38,6 +40,7 @@ namespace Oxygen.Editor.LivePreview.Session;
 /// <param name="coordinator">Serializes project changes with cooking.</param>
 /// <param name="session">The project session: the project the preview shows, as its content mounts are now.</param>
 /// <param name="sessions">The session host, through which the session follows an accepted mount change.</param>
+/// <param name="files">Writes the project's own <c>.mounts.json</c> for a mount change that binds mounts.</param>
 /// <param name="results">Publishes the session's failures.</param>
 /// <param name="status">Reduces the published failures.</param>
 /// <param name="loggerFactory">The optional logger factory.</param>
@@ -48,6 +51,7 @@ public sealed partial class PreviewSession(
     IContentCookCoordinator coordinator,
     IProjectSession session,
     IProjectSessionHost sessions,
+    IAtomicFileStore files,
     IOperationResultPublisher results,
     IStatusReducer status,
     ILoggerFactory? loggerFactory = null) : ObservableObject, IContentMountChanges, IAsyncDisposable
@@ -100,13 +104,14 @@ public sealed partial class PreviewSession(
             };
 
     /// <inheritdoc/>
-    public async Task<bool> ChangeMountsAsync(ProjectContext expected, ProjectInfo candidate, CancellationToken cancellationToken = default)
+    public async Task<bool> ChangeMountsAsync(ProjectContext expected, ProjectInfo candidate, MountBindings bindings, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(expected);
         ArgumentNullException.ThrowIfNull(candidate);
+        ArgumentNullException.ThrowIfNull(bindings);
         var activated = false;
         await coordinator.RunProjectChangeAsync(
-            async (operation, token) => activated = await this.owner.InvokeAsync(() => this.ChangeMountsCoreAsync(expected, candidate, operation, token)).ConfigureAwait(true),
+            async (operation, token) => activated = await this.owner.InvokeAsync(() => this.ChangeMountsCoreAsync(expected, candidate, bindings, operation, token)).ConfigureAwait(true),
             cancellationToken).ConfigureAwait(true);
         return activated;
     }
@@ -161,13 +166,29 @@ public sealed partial class PreviewSession(
             && await this.MountContentAsync().ConfigureAwait(true);
     }
 
-    private async Task<bool> ChangeMountsCoreAsync(ProjectContext expected, ProjectInfo candidate, ContentCookOperation operation, CancellationToken token)
+    private async Task<bool> ChangeMountsCoreAsync(ProjectContext expected, ProjectInfo candidate, MountBindings bindings, ContentCookOperation operation, CancellationToken token)
     {
         if (!ReferenceEquals(expected, operation.Project) || !ReferenceEquals(expected, session.Context) || session.Lifetime.IsCancellationRequested)
         {
             throw new OperationCanceledException("The project configuration changed before this mount operation started.");
         }
 
+        // The project's own .mounts.json changes first, so the candidate resolves with it; a change that fails restores
+        // the bindings it replaced.
+        var undo = await bindings.WriteAsync(files, expected.ProjectRoot, token).ConfigureAwait(true);
+        try
+        {
+            return await this.ActivateMountsAsync(expected, candidate, operation, token).ConfigureAwait(true);
+        }
+        catch (Exception) when (!undo.IsEmpty)
+        {
+            _ = await undo.WriteAsync(files, expected.ProjectRoot, CancellationToken.None).ConfigureAwait(true);
+            throw;
+        }
+    }
+
+    private async Task<bool> ActivateMountsAsync(ProjectContext expected, ProjectInfo candidate, ContentCookOperation operation, CancellationToken token)
+    {
         var next = MountChange.CandidateContext(expected, candidate);
         using var accepted = await publication.ChangeMountsAsync(operation, next, MountChange.ProjectInfoOf(expected, session.Settings), candidate, token).ConfigureAwait(true);
         if (!ReferenceEquals(expected, session.Context) || session.Lifetime.IsCancellationRequested)
@@ -182,7 +203,7 @@ public sealed partial class PreviewSession(
         MountChange.UpdateLoadedMounts(session.Project.ProjectInfo, candidate);
 
         sessions.ChangeContext(next);
-        this.LogMountsChanged(next.ProjectRoot.FullPath, next.LocalFolderMounts.Count, next.CookedContentOrder.Count);
+        this.LogMountsChanged(next.ProjectRoot.FullPath, next.LibraryMounts.Count(), next.CookedContentOrder.Count);
         await catalog.UsePublicationAsync(accepted, CancellationToken.None).ConfigureAwait(true);
         return true;
     }

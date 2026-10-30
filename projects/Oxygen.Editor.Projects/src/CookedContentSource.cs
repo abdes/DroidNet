@@ -13,11 +13,11 @@ public enum CookedContentSourceKind
     /// <summary>All cooked roots owned and published by the project.</summary>
     ProjectOutput,
 
-    /// <summary>A declared local folder containing a cooked library.</summary>
-    LocalFolder,
+    /// <summary>A cooked folder mount: a cooked library.</summary>
+    Cooked,
 
-    /// <summary>A declared pak file.</summary>
-    PakFile,
+    /// <summary>A pak file mount.</summary>
+    Pak,
 }
 
 /// <summary>Identifies one group in the project's cooked-content mount order.</summary>

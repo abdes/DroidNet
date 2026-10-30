@@ -147,13 +147,15 @@ public partial class ContentFoldersViewModel
     /// <returns>Completion after the delete, or at once when no selected folder can be deleted.</returns>
     public Task DeleteSelectedFoldersAsync() => this.DeleteFoldersAsync(this.GetAuthoredFolders(this.ShownItems.Where(static item => item.IsSelected)));
 
-    /// <summary>Builds the context menu of a folder row.</summary>
+    /// <summary>Builds the context menu of a folder or mount row.</summary>
     /// <param name="item">The row the menu was requested on.</param>
-    /// <returns>The menu; it has no items for rows that are not folders under an authoring mount.</returns>
+    /// <returns>The menu: a folder's actions under an authoring mount, then a mount's binding actions; no items for any
+    /// other row.</returns>
     public IMenuSource BuildFolderMenu(ITreeItem item)
     {
         var builder = new MenuBuilder();
-        if (relocation is not null && this.GetAuthoredFolders([item]) is { Length: > 0 } folders)
+        var folders = relocation is null ? [] : this.GetAuthoredFolders([item]);
+        if (folders.Length != 0)
         {
             _ = builder.AddMenuItem(new MenuItemData
             {
@@ -185,6 +187,7 @@ public partial class ContentFoldersViewModel
             });
         }
 
+        this.AddMountItems(builder, item, afterOthers: folders.Length != 0);
         return builder.Build();
     }
 

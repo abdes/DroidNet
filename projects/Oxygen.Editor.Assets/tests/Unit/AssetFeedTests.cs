@@ -15,6 +15,17 @@ namespace Oxygen.Editor.Assets.Unit.Tests;
 [TestClass]
 public sealed partial class AssetFeedTests
 {
+    private readonly List<AssetFeed> feeds = [];
+
+    [TestCleanup]
+    public async Task DisposeFeedsAsync()
+    {
+        foreach (var feed in this.feeds)
+        {
+            await feed.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
     [TestMethod]
     public async Task RefreshAsync_WhenProjectIsActive_ShouldPublishReducedRows()
     {
@@ -23,7 +34,7 @@ public sealed partial class AssetFeedTests
         var catalog = new TestProjectAssetCatalog(
             [new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
         var projectContext = workspace.OpenSession();
-        using var provider = AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider());
+        var provider = this.Own(AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider()));
 
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -43,7 +54,7 @@ public sealed partial class AssetFeedTests
         var catalog = new TestProjectAssetCatalog([]);
         catalog.SetRecordsOnRefresh([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
         var projectContext = workspace.OpenSession();
-        using var provider = AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider());
+        var provider = this.Own(AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider()));
 
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -65,7 +76,7 @@ public sealed partial class AssetFeedTests
         var catalog = new TestProjectAssetCatalog(
             [IndexedOutput(AssetPath.Parse("/Content/Materials/Red.omat"), cookedPath)]);
         var projectContext = workspace.OpenSession();
-        using var provider = AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider());
+        var provider = this.Own(AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider()));
 
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -83,7 +94,7 @@ public sealed partial class AssetFeedTests
         using var workspace = new AssetWorkspace();
         var catalog = new TestProjectAssetCatalog([]);
         var projectContext = workspace.OpenSession();
-        using var provider = AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider());
+        var provider = this.Own(AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider()));
         var identity = AssetPath.Parse("/Content/Materials/Missing.omat");
 
         var row = await provider.ResolveAsync(identity, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -103,7 +114,7 @@ public sealed partial class AssetFeedTests
         await File.WriteAllTextAsync(descriptorPath, "{ invalid json", this.TestContext.CancellationToken).ConfigureAwait(false);
         var catalog = new TestProjectAssetCatalog([]);
         var projectContext = workspace.OpenSession();
-        using var provider = AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider());
+        var provider = this.Own(AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider()));
         var identity = AssetPath.Parse("/Content/Materials/Lagged.omat");
 
         var row = await provider.ResolveAsync(identity, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -124,7 +135,7 @@ public sealed partial class AssetFeedTests
         var catalog = new TestProjectAssetCatalog(
             [new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
         var projectContext = workspace.OpenSession();
-        using var provider = AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider());
+        var provider = this.Own(AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider()));
 
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -157,7 +168,7 @@ public sealed partial class AssetFeedTests
                 new AssetRecord(AssetPath.Parse("/Content/Images/Preview.png")),
             ]);
         var projectContext = workspace.OpenSession();
-        using var provider = AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider());
+        var provider = this.Own(AssetFeeds.Create(catalog, projectContext, new ProjectCookScopeProvider()));
 
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -193,6 +204,12 @@ public sealed partial class AssetFeedTests
                 alphaMode: MaterialAlphaMode.Opaque,
                 alphaCutoff: 0.5f,
                 doubleSided: false));
+    }
+
+    private AssetFeed Own(AssetFeed feed)
+    {
+        this.feeds.Add(feed);
+        return feed;
     }
 
     private sealed class TestProjectAssetCatalog(IReadOnlyList<AssetRecord> records) : IAssetCatalogReader

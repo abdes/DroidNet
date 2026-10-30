@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -15,7 +16,7 @@ namespace Oxygen.Editor.ContentExplorer.Tests;
 
 /// <summary>Checks which rows a browsed cooked-library folder shows.</summary>
 [TestClass]
-public sealed class CookedLibraryFoldersTests
+public sealed partial class CookedLibraryFoldersTests
 {
     /// <summary>A library folder shows the library's own copy of an asset that project output overrides.</summary>
     [TestMethod]
@@ -38,7 +39,7 @@ public sealed class CookedLibraryFoldersTests
         _ = CookedLibraryFolders.ForFolders(items, fixture.Project, [AssetPath.Parse("/Content")]).Should().BeSameAs(items);
     }
 
-    private sealed class Fixture : IDisposable
+    private sealed partial class Fixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-LibraryFolders-");
 
@@ -47,10 +48,12 @@ public sealed class CookedLibraryFoldersTests
             var output = this.WriteLibrary($".cooked/generations/{Guid.NewGuid():N}");
             this.First = this.WriteLibrary("Libraries/First");
             var second = this.WriteLibrary("Libraries/Second");
-            this.Project = TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
+            this.Project = TestProject.Create(
+                new RealFileSystem(),
+                this.directory.FullName,
+                [new ProjectMount("Content", MountKind.Source, "Content"), new("First", MountKind.Cooked, "Libraries/First"), new("Second", MountKind.Cooked, "Libraries/Second")]).Context with
             {
                 Name = "Libraries",
-                LocalFolderMounts = [new("First", this.First), new("Second", second)],
             };
             var identity = AssetPath.Parse("/Content/Shared.omat");
             this.Shared = new(identity, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Unknown, identity.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true)

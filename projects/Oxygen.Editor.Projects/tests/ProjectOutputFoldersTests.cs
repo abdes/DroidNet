@@ -4,6 +4,9 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Projects.Tests;
 
@@ -32,10 +35,19 @@ public sealed class ProjectOutputFoldersTests
         => _ = ProjectOutputFolders.Contains(path).Should().Be(expected);
 
     [TestMethod]
-    public void MountInAnOutputFolderIsOutput()
+    public void SourceMountInAnOutputFolderIsRefusedAndOneOutsideTheRootIsNot()
     {
-        _ = ProjectOutputFolders.Contains(new ProjectMountPoint("Generated", ".cooked")).Should().BeTrue();
-        _ = ProjectOutputFolders.Contains(new ProjectMountPoint("Media", "../Media")).Should().BeFalse();
+        var fileSystem = new MockFileSystem();
+        _ = fileSystem.Directory.CreateDirectory(@"C:\Games\Demo\.cooked");
+        _ = fileSystem.Directory.CreateDirectory(@"C:\Games\Media");
+
+        var table = ProjectMounts.Resolve(
+            fileSystem,
+            FileSystemPath.From(@"C:\Games\Demo"),
+            [new ProjectMount("Generated", MountKind.Source, ".cooked"), new ProjectMount("Media", MountKind.Source, "../Media")]);
+
+        _ = table.Findings.Should().ContainSingle().Which.Should().Match<MountFinding>(
+            static finding => finding.Code == MountCodes.FolderInOutput && finding.Mount == "Generated");
     }
 
     [TestMethod]

@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -31,9 +32,9 @@ public sealed class MaterialKeyPriorityTests
     [TestCategory("NativeContent")]
     public async Task LibraryGeometryUsesProjectPriorityForTheSameNativeMaterialKey()
     {
-        using var materials = new CookWorkspace([new("Art", "Art")], EngineContentPak.Installed());
+        using var materials = new CookWorkspace([new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
         using var meshes = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var consumer = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var consumer = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
         const string material = "Art/Materials/Shared.omat.json";
         materials.WriteMaterial(material, "Library material");
         consumer.WriteMaterial(material, "Project material");
@@ -43,7 +44,7 @@ public sealed class MaterialKeyPriorityTests
         var imported = await materialProducer.CookAssetAsync(AssetPath.Parse("/" + material[..^5]), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = imported.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, imported.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         var materialRoot = await materials.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
-        meshes.Activate(meshes.ProjectContext with { LocalFolderMounts = [new("Materials", FileSystemPath.From(materialRoot))] });
+        meshes.Activate(meshes.ProjectContext.WithCookedLibraries(("Materials", materialRoot)));
         WriteAuthoredGeometry(meshes, withBuffer: false);
         var descriptor = JsonNode.Parse(meshes.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/Art/Materials/Shared.omat";
@@ -51,10 +52,7 @@ public sealed class MaterialKeyPriorityTests
         var producer = CreateService(meshes, api, compatibility: compatibility);
         var geometry = await producer.CookAssetAsync(AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = geometry.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, geometry.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
-        consumer.Activate(consumer.ProjectContext with
-        {
-            LocalFolderMounts = [new("Materials", FileSystemPath.From(materialRoot)), new("Meshes", FileSystemPath.From(meshes.CookedRoot("Content")))],
-        });
+        consumer.Activate(consumer.ProjectContext.WithCookedLibraries(("Materials", materialRoot), ("Meshes", meshes.CookedRoot("Content"))));
         AddGeometryNode(consumer, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(consumer, api, compatibility: compatibility);

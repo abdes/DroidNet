@@ -81,7 +81,6 @@ internal static class AssetRelocationPlanner
         }
 
         var name = move.Source.Name;
-        var root = project.ProjectRoot;
         foreach (var import in index.Imports)
         {
             var folder = import.Folder;
@@ -358,7 +357,9 @@ internal static class AssetRelocationPlanner
             var record = ModelImportSettings.Parse(import.RecordPath.FullPath, content);
             var finalPath = FileSystemPath.From(ModelImportSettings.PathFor(
                 ModelImportSettings.ProjectRootOf(import.RecordPath.FullPath, record.VirtualPath)!, virtualPath.VirtualPath));
-            var rewritten = (record with { VirtualPath = virtualPath.VirtualPath }).WithSource(finalPath.FullPath, target.FullPath).ToBytes();
+            var source = project.SourceMountPathOf(target)
+                ?? throw new AssetRelocationException($"'{import.PrimaryVirtualPath.Name}' would leave the project's source mounts.");
+            var rewritten = (record with { VirtualPath = virtualPath.VirtualPath }).WithSource(source).ToBytes();
             map.AddMove(new(import.RecordPath, finalPath, IsDirectory: false));
             edits.Add(new(import.RecordPath, finalPath, snapshot.Version, content, rewritten));
         }

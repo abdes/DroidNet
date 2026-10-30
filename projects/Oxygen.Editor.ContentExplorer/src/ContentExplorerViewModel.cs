@@ -4,6 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -23,6 +24,7 @@ using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Routing;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -98,6 +100,7 @@ public sealed partial class ContentExplorerViewModel(
     private readonly List<string> navigationHistory = [];
 
     private Authoring.AuthoredAssetCreation? creation;
+    [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "The explorer's scope owns the assets pane and disposes it with the scope.")]
     private AssetsViewModel? assets;
     private ScopeHandle? scope;
     private string currentAssetsViewPath = "assets/tiles"; // tracks whether we show list or tiles
@@ -110,7 +113,7 @@ public sealed partial class ContentExplorerViewModel(
     private bool isApplyingRouteState;
 
     private IRouter? localRouter;
-    private IDisposable? routerEventsSubscription;
+    private CancellationTokenSource? routerEvents;
     private ContentExplorerState? browserState;
 
     /// <summary>
@@ -211,9 +214,10 @@ public sealed partial class ContentExplorerViewModel(
             this.dispatcher = hosting.Dispatcher;
 
             // Subscribe to router events to track navigation history
-            this.routerEventsSubscription = this.localRouter.Events
+            this.routerEvents = CancellationTokenSource.CreateLinkedTokenSource(session.Lifetime);
+            this.localRouter.Events
                 .OfType<NavigationEnd>()
-                .Subscribe(this.OnNavigationEnd);
+                .Subscribe(this.OnNavigationEnd, this.routerEvents.Token);
 
             // Subscribe to ContentExplorerState changes to update the navigation stack
             this.browserState = state;
@@ -259,8 +263,8 @@ public sealed partial class ContentExplorerViewModel(
             return "All project sources";
         }
 
-        var authoring = project?.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal));
-        return authoring is not null ? "Authoring source" : "Read-only source";
+        var authoring = project?.Mounts.Any(mount => mount.Kind == MountKind.Source && string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal));
+        return authoring is true ? "Authoring source" : "Read-only source";
     }
 
     /// <summary>Builds the footer summary from the active layout's counts and selection.</summary>
@@ -294,7 +298,8 @@ public sealed partial class ContentExplorerViewModel(
                 scriptCreation.Detach(current);
             }
 
-            this.routerEventsSubscription?.Dispose();
+            this.routerEvents?.Cancel();
+            this.routerEvents?.Dispose();
 
             this.browserState?.PropertyChanged -= this.OnContentExplorerStateChanged;
             this.Details?.Dispose();
@@ -800,7 +805,7 @@ public sealed partial class ContentExplorerViewModel(
                 await projectLayout.RefreshTreeAsync().ConfigureAwait(true);
             }
 
-            await assetFeed.RefreshAsync().ConfigureAwait(true);
+            await assetFeed.RefreshAsync(session.Lifetime).ConfigureAwait(true);
         }
         finally
         {

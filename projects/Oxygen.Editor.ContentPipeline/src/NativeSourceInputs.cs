@@ -9,10 +9,10 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
 
-/// <summary>The inputs a native source analysis names, classified against the folder they are kept under.</summary>
-/// <param name="Files">The inputs under the root, with the observations capture must verify.</param>
-/// <param name="Omitted">Missing files outside the root; the import proceeds without them.</param>
-/// <param name="Outside">Existing files outside the root, which cannot be kept.</param>
+/// <summary>The inputs a native source analysis names, classified by whether they can be kept.</summary>
+/// <param name="Files">The inputs that can be kept, with the observations capture must verify.</param>
+/// <param name="Omitted">Missing files that cannot be kept; the import proceeds without them.</param>
+/// <param name="Outside">Existing files that cannot be kept.</param>
 internal sealed record NativeSourceInputs(
     ImmutableArray<CookSnapshotInput> Files,
     ImmutableArray<FileSystemPath> Omitted,
@@ -47,7 +47,7 @@ internal sealed record NativeSourceInputs(
             Domain = domain,
             Severity = DiagnosticSeverity.Error,
             Code = AssetImportDiagnosticCodes.DependencyOutsideSource,
-            Message = $"The source uses '{path.FullPath}', which lies outside the folder its inputs are kept under. Move it beside the source.",
+            Message = $"The source uses '{path.FullPath}', which lies outside every folder its inputs are kept from. Move it beside the source, or mount its folder.",
             AffectedPath = path.FullPath,
             AffectedVirtualPath = virtualPath,
         }),];

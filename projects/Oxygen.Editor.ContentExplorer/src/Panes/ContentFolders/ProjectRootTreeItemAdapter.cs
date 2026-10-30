@@ -8,6 +8,7 @@ using DroidNet.Controls;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
@@ -18,7 +19,7 @@ namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 /// <remarks>
 ///     Children include:
 ///     - Non-hidden folders directly under the project root (excluding dot-prefixed folders)
-///     - Authoring mount points (from <see cref="IProjectInfo.AuthoringMounts" />)
+///     - Source mounts (from <see cref="ProjectContext.Mounts" />)
 ///     - Explicitly mounted virtual folders.
 /// </remarks>
 public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDisposable
@@ -37,22 +38,22 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     /// </summary>
     /// <param name="logger">Logger used to record load failures.</param>
     /// <param name="storage">Storage provider used to resolve project-relative paths.</param>
-    /// <param name="projectInfo">The current project info.</param>
+    /// <param name="project">The current project, whose mount table gives the source mounts.</param>
     /// <param name="projectRootFolder">The project root folder handle.</param>
     public ProjectRootTreeItemAdapter(
         ILogger logger,
         IStorageProvider storage,
-        IProjectInfo projectInfo,
+        ProjectContext project,
         IFolder projectRootFolder)
         : base(isRoot: true, isHidden: false)
     {
         this.logger = logger;
         this.storage = storage;
-        this.ProjectInfo = projectInfo;
+        this.Project = project;
         this.ProjectRootFolder = projectRootFolder;
-        this.label = projectInfo.Name;
+        this.label = project.Name;
 
-        this.virtualFolderMounts = new Dictionary<string, VirtualFolderMountTreeItemAdapter>(StringComparer.Ordinal);
+        this.virtualFolderMounts = [with(StringComparer.Ordinal)];
 
         this.ChildrenCollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
     }
@@ -83,9 +84,9 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     public override string DisplayLabel => this.label;
 
     /// <summary>
-    ///     Gets the current project info.
+    ///     Gets the current project.
     /// </summary>
-    public IProjectInfo ProjectInfo { get; }
+    public ProjectContext Project { get; }
 
     /// <summary>
     ///     Gets the project root folder.
@@ -208,6 +209,13 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         {
             await this.LoadProjectFoldersAsync().ConfigureAwait(true);
             await this.LoadAuthoringMountsAsync().ConfigureAwait(true);
+
+            // A mount this machine cannot read stays in the tree, beside those it can, so it is never dropped silently.
+            foreach (var mount in this.Project.Mounts.Where(static mount => !mount.IsBound))
+            {
+                this.AddChildInternal(new UnavailableMountTreeItemAdapter(mount, this.Project.ProjectRoot));
+            }
+
             foreach (var mount in this.virtualFolderMounts.Values)
             {
                 this.AddChildInternal(mount);
@@ -238,18 +246,12 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     private HashSet<string> GetExcludedDirectFolderNames()
     {
         var excluded = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var mount in this.ProjectInfo.AuthoringMounts)
+        // A mount's folder shows as the mount, sources and libraries alike; only direct children of the root are listed.
+        foreach (var mount in this.Project.Mounts.Where(static mount => mount.Location is not null))
         {
-            // Only exclude direct children of the project root.
-            var relative = mount.RelativePath.Trim().Replace('\\', '/');
-            if (relative.Contains('/', StringComparison.Ordinal))
+            if (mount.Location!.Parent == this.Project.ProjectRoot)
             {
-                continue;
-            }
-
-            if (!string.IsNullOrEmpty(relative))
-            {
-                _ = excluded.Add(relative);
+                _ = excluded.Add(mount.Location.Name);
             }
         }
 
@@ -295,13 +297,12 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         Justification = "Tree load should be resilient to partial failures")]
     private async Task LoadAuthoringMountsAsync()
     {
-        foreach (var mountPoint in this.ProjectInfo.AuthoringMounts)
+        foreach (var mountPoint in this.Project.SourceMounts)
         {
             AuthoringMountPointTreeItemAdapter? mountAdapter = null;
             try
             {
-                var mountRootLocation = this.storage.NormalizeRelativeTo(this.ProjectRootFolder.Location, mountPoint.RelativePath);
-                var mountRootFolder = await this.storage.GetFolderFromPathAsync(mountRootLocation).ConfigureAwait(true);
+                var mountRootFolder = await this.storage.GetFolderFromPathAsync(mountPoint.Location!.FullPath).ConfigureAwait(true);
                 mountAdapter = new AuthoringMountPointTreeItemAdapter(this.logger, mountPoint, mountRootFolder)
                 {
                     IsExpanded = mountPoint.IsExpanded,

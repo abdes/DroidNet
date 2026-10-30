@@ -2,7 +2,7 @@
 
 Status: `ED-M07 review-ready`
 
-Last Updated: 2026-10-29
+Last Updated: 2026-10-30
 
 ## 1. Purpose
 
@@ -146,8 +146,9 @@ Service split:
 - `IProjectManagerService` is project persistence only: project info, settings
   and staged project loads. It holds no open project.
 - `EnsureDefaultAuthoringMounts` auto-healing is removed from validation paths.
-  Missing or invalid manifest mounts must surface as `InvalidContentRoots`
-  instead of being silently repaired.
+  Invalid mounts must surface as `InvalidContentRoots` instead of being
+  silently repaired; an unbound or missing mount is a warning, never a failure
+  to open.
 
 ## 7. Data Contracts
 
@@ -157,15 +158,16 @@ Persisted as `Project.oxy` at project root.
 
 V0.1 required fields:
 
-- `SchemaVersion`: `1`.
+- `SchemaVersion`: `2`.
 - `Id`: non-empty GUID.
 - `Name`: non-empty display name.
 - `Category`: project category identity.
 - `Thumbnail`: optional project-relative path.
-- `AuthoringMounts`: persisted project-relative authoring roots.
-- `LocalFolderMounts`: persisted absolute local roots.
-- `PakFileMounts`: persisted absolute `.pak` files mounted read-only as cooked
-  libraries.
+- `Mounts`: the project's mounts (`ProjectMount`): a name, a kind (`Source`,
+  `Cooked`, `Pak`) and a path relative to the project root, or none for a
+  placeholder. Never an absolute path; `.mounts.json` files bind mounts per
+  machine
+  ([project layout](project-layout-and-templates.md#mount-bindings)).
 
 Optional `DefaultSceneId : Guid?` is the stable configured scene identity,
 persisted in the manifest and propagated through `ProjectContext`. Creation
@@ -198,13 +200,15 @@ qualification is closed under C30/T8 in the
 
 Rules:
 
-- `AuthoringMounts` must be explicit in V0.1 project manifests created by the
-  editor.
+- `Mounts` must be explicit in project manifests created by the editor, and
+  declare a `Source` mount.
 - Missing `SchemaVersion` is invalid for V0.1 projects.
-- Any schema version other than `1` returns `UnsupportedVersion`.
+- Any schema version other than `2` returns `UnsupportedVersion`; a version 1
+  manifest is migrated by editing its data.
 - Missing or empty `Id` is invalid.
 - Missing or empty `Name` is invalid.
-- Missing `AuthoringMounts` is invalid for V0.1 projects.
+- A mount the single validator refuses (`ProjectMounts.ValidateDeclarations` and
+  the resolved table) is invalid, with its code.
 - Missing project manifest is invalid.
 - Project `Location` and `LastUsedOn` remain runtime/persistent-state facts and
   are not serialized into `Project.oxy`.
@@ -253,8 +257,13 @@ Required fields:
 - project identity.
 - project manifest snapshot.
 - project root path.
-- authoring roots.
-- local folder roots.
+- the resolved mount table (`Mounts`): every declared or locally added mount
+  with its kind, committed path, location on this machine, the file that bound
+  it and its state (`Bound`, `Unbound`, `Missing`), and what resolving it found
+  (`MountFindings`). `SourceMounts` are its bound source mounts, inside or
+  outside the project folder; `LibraryMounts` its cooked folders and paks;
+  `DeclaredMounts` what `Project.oxy` commits; `AuthoredFolders` the project
+  root and the source mount folders outside it.
 - cooked root path policy.
 - read-only snapshot projection needed by shell consumers, such as scene
   metadata available at activation time. This is not a live `IProject`
@@ -265,28 +274,34 @@ Required fields:
 to persistent usage state. Neither is serialized into `Project.oxy`.
 
 A project session's `ContextChanged` reports only a change of its content
-mounts; opening another project replaces the session. Scene-list, node, and
+mounts, from the Mounts dialog, a Bind or Override, or a `.mounts.json` of the
+hierarchy changed on disk, which the session's `MountsFileWatcher` resolves
+again and applies as a mount change; opening another project replaces the
+session. Scene-list, node, and
 component mutations do not go through the session; they flow through
 document/world authoring channels.
 
 ### Project Content Root
 
-Represents an authoring root.
+Represents a mount of the resolved table (`ResolvedMount`).
 
 Required fields:
 
-- mount name.
-- backing path.
-- backing kind: project-relative or local absolute.
-- exists flag.
-- is writable flag, when cheaply known.
+- mount name and kind.
+- scope: declared in `Project.oxy`, or added by a `.mounts.json` only.
+- committed path, or none for a placeholder.
+- location on this machine, when bound.
+- origin: the committed path, a `.mounts.json` (and which file), or none.
+- state: `Bound`, `Unbound` or `Missing`.
 
 Path rules:
 
-- project-relative authoring mount paths are normalized against project root.
-- local folder mount paths are normalized as absolute paths.
-- pak file mount paths are absolute and name `.pak` files.
-- identity comparisons use `StringComparer.OrdinalIgnoreCase` for V0.1.
+- committed paths are resolved against the project root and may leave it.
+- `.mounts.json` paths are absolute; the project's own file binds and
+  overrides, files above it only bind placeholders and add mounts.
+- folders are compared canonically, links resolved; a pak mount names a `.pak`
+  file.
+- mount names compare ignoring case.
 - display preserves the path casing stored in the manifest or selected by the
   user.
 - authoring mounts are immutable through ED-M01 UI. Editable project content
@@ -476,8 +491,8 @@ Authoring mounts are project facts. Output folders are the layout's rule
 
 Project services provide facts to runtime and pipeline services:
 
-- `ProjectContext` provides project identity, project root, authoring roots,
-  local folder roots, and cooked-root policy to workspace/runtime consumers.
+- `ProjectContext` provides project identity, project root, the resolved mount
+  table, and cooked-root policy to workspace/runtime consumers.
 - `ProjectCookScope` provides the minimal ED-M01 cook-scope record: project
   identity, project root, and cooked output root.
 - Content Explorer consumes the same facts to label authoring roots and derived
@@ -572,8 +587,8 @@ ED-M01 project services are complete when:
 
 ED-M06 project-service gates:
 
-- Content Explorer root adapter derives authoring, local, and derived cooked
-  roots from `ProjectContext` and `ProjectCookScopeProvider`.
+- Content Explorer root adapter derives source, library, unavailable and output
+  folder nodes from `ProjectContext` and `ProjectCookScopeProvider`.
 - browser and template workflows consume layout rules from
   `project-layout-and-templates.md` instead of defining local folder policy.
 - missing/inaccessible content roots surface as `ProjectContentRoots`
@@ -581,9 +596,9 @@ ED-M06 project-service gates:
 
 ED-M07 project-service gates:
 
-- content pipeline resolves cook inputs from `ProjectContext` authoring/local
-  mount facts and builds output paths through `ProjectOutputFolders`; it does
-  not hardcode project folders.
+- content pipeline resolves cook inputs through the resolved mount table and
+  builds output paths through `ProjectOutputFolders`; it does not hardcode
+  project folders.
 - `ProjectCookScopeProvider` remains a policy provider only. It never invokes
   import, cook, inspect, validation, or runtime mount operations.
 - project services do not persist cooked paths, generated descriptor paths, or
@@ -614,8 +629,8 @@ manifest mounts. V0.1 has no generic project settings panel or project renderer
 preset. Scene render intent and transient FPS/logging use their existing owners.
 ContentPipeline executes all cook/import/publication work; Projects cannot own
 that orchestration. Normal default project creation/authoring needs no manual
-manifest repair. Extra/local mounts follow the accepted layout validation rules;
-absolute local mounts are explicit nonportable dependencies.
+manifest repair. Mounts follow the accepted layout validation rules; a mount
+bound by `.mounts.json` is a dependency each machine binds itself.
 
 Saved file plumbing consumes immutable serialized snapshots from the authoring
 owner, coordinates per-destination writes, and preserves last valid source per

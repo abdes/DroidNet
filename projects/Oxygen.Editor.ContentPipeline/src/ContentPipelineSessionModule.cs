@@ -24,16 +24,18 @@ namespace Oxygen.Editor.ContentPipeline;
 ///     The content pipeline in a project session's scope: the project's cook, the pipeline service over it and the ports
 ///     the service implements, the cook's publication, the mounts of cooked content, material cooks, the unsaved
 ///     documents a cook reads, the automatic cook, the cook status of the project's assets, their relocation and
-///     creation, the session's relocation record, and the project's files and relocations as documents see them.
+///     creation, the session's relocation record, the reference check, and the project's files and relocations as
+///     documents see them.
 /// </summary>
 /// <remarks>
 ///     Each service is created for the session's project, and closing the session cancels its work and disposes it.
 /// </remarks>
 public sealed class ContentPipelineSessionModule : IScopeModule<ISessionLayer>
 {
-    // The cook listens to the catalog's changes from the moment the session opens, and the kept-change problems follow
-    // every cook of the session, whether or not the Problems pane is shown yet.
-    private static readonly Type[] Activated = [typeof(IAutomaticCookService), typeof(KeptChangeProblems)];
+    // The cook listens to the catalog's changes from the moment the session opens, the kept-change problems follow
+    // every cook of the session, whether or not the Problems pane is shown yet, and the reference check runs when the
+    // project opens and after each change of its mounts.
+    private static readonly Type[] Activated = [typeof(IAutomaticCookService), typeof(KeptChangeProblems), typeof(ReferenceCheck)];
 
     /// <inheritdoc />
     public IReadOnlyCollection<Type> Shadows => [];
@@ -59,8 +61,8 @@ public sealed class ContentPipelineSessionModule : IScopeModule<ISessionLayer>
         scope.RegisterMapping<ISceneStructures, SceneStructureStore>();
     }
 
-    // The cook status of the project's assets, their relocation and creation, and the session's relocation record,
-    // resolved by undo, redo and paste in every open document.
+    // The cook status of the project's assets, their relocation and creation, the session's relocation record, resolved
+    // by undo, redo and paste in every open document, the authored references, and the reference check.
     private static void RegisterAssets(IRegistrator scope)
     {
         scope.RegisterDelegate<IAssetCookStatusReader>(
@@ -70,6 +72,9 @@ public sealed class ContentPipelineSessionModule : IScopeModule<ISessionLayer>
         scope.Register<AssetRedirects>(Reuse.Singleton);
         scope.RegisterMapping<IAssetRedirects, AssetRedirects>();
         scope.Register<IAuthoredReferences, AuthoredReferences>(Reuse.Singleton);
+        scope.Register<ReferenceCheck>(Reuse.Singleton);
+        scope.RegisterMapping<IReferenceCheck, ReferenceCheck>();
+        scope.RegisterMapping<IAssetProblemSource, ReferenceCheck>();
     }
 
     // The cook, the pipeline service over it and the ports the service implements, the cook's publication and the

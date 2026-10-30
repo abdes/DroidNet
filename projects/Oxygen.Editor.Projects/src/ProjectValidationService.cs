@@ -3,8 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.IO.Abstractions;
 using System.Text.Json;
 using DroidNet.Storage;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
@@ -13,7 +15,8 @@ namespace Oxygen.Editor.Projects;
 ///     Storage-backed implementation of project validation.
 /// </summary>
 /// <param name="storage">The storage provider.</param>
-public sealed class ProjectValidationService(IStorageProvider storage) : IProjectValidationService
+/// <param name="fileSystem">The file system the mount table is resolved on.</param>
+public sealed class ProjectValidationService(IStorageProvider storage, IFileSystem fileSystem) : IProjectValidationService
 {
     /// <inheritdoc/>
     public async Task<ProjectValidationResult> ValidateAsync(
@@ -91,15 +94,10 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
         var projectInfo = ProjectInfo.FromJson(json);
         projectInfo.Location = projectRoot;
 
-        var contentRootFailure = await this.ValidateContentRootsAsync(projectRoot, projectInfo, cancellationToken)
-            .ConfigureAwait(false);
-        return contentRootFailure ?? ProjectValidationResult.Valid(projectRoot, projectInfo);
+        return this.ValidateMounts(projectRoot, projectInfo);
     }
 
-    private async Task<ProjectValidationResult?> ValidateContentRootsAsync(
-        string projectRoot,
-        Oxygen.Editor.Projects.IProjectInfo projectInfo,
-        CancellationToken cancellationToken)
+    private ProjectValidationResult ValidateMounts(string projectRoot, IProjectInfo projectInfo)
     {
         try
         {
@@ -108,14 +106,6 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException)
         {
             return ProjectValidationResult.Failure(ProjectValidationState.InvalidContentRoots, projectRoot, exception.Message);
-        }
-
-        if (projectInfo.AuthoringMounts.Count == 0)
-        {
-            return ProjectValidationResult.Failure(
-                ProjectValidationState.InvalidContentRoots,
-                projectRoot,
-                "Project manifest does not declare any authoring mount roots.");
         }
 
         if (projectInfo.OutputFolderViews.Any(static view => view.Folder is not (ProjectOutputFolders.Cooked or ProjectOutputFolders.Build))
@@ -127,117 +117,20 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
                 $"Project manifest may show only {ProjectOutputFolders.Cooked} and {ProjectOutputFolders.Build}, each once.");
         }
 
-        var authoringRootFailure = await this.ValidateAuthoringMountsAsync(projectRoot, projectInfo, cancellationToken)
-            .ConfigureAwait(false);
-        return authoringRootFailure
-            ?? await this.ValidateLocalFolderMountsAsync(projectRoot, projectInfo, cancellationToken).ConfigureAwait(false)
-            ?? await this.ValidatePakFileMountsAsync(projectRoot, projectInfo, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<ProjectValidationResult?> ValidateAuthoringMountsAsync(
-        string projectRoot,
-        Oxygen.Editor.Projects.IProjectInfo projectInfo,
-        CancellationToken cancellationToken)
-    {
-        foreach (var mount in projectInfo.AuthoringMounts)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            // An output folder is never a mount; the Content Explorer shows one through OutputFolderViews.
-            if (ProjectOutputFolders.Contains(mount))
+        // Unbound and missing mounts are warnings: the project opens and shows them. Structural errors fail.
+        var table = ProjectMounts.Resolve(fileSystem, FileSystemPath.From(projectRoot), projectInfo.Mounts);
+        var findings = projectInfo.Mounts.Any(static mount => mount.Kind == MountKind.Source)
+            ? table.Findings
+            : [.. table.Findings, new MountFinding(MountCodes.SourceRequired, "Project manifest declares no source mount.")];
+        return findings.FirstOrDefault(static finding => finding.IsError) is { } error
+            ? new ProjectValidationResult
             {
-                return ProjectValidationResult.Failure(
-                    ProjectValidationState.InvalidContentRoots,
-                    projectRoot,
-                    $"Authoring mount '{mount.Name}' is in the output folder '{mount.RelativePath}'; output folders are never mounts.");
+                State = ProjectValidationState.InvalidContentRoots,
+                ProjectRoot = projectRoot,
+                Message = $"{error.Code}: {error.Message}",
+                MountFindings = findings,
             }
-
-            if (ProjectAssetFiles.ValidateDeclaredMountName(mount.Name) is not null || string.IsNullOrWhiteSpace(mount.RelativePath))
-            {
-                return ProjectValidationResult.Failure(
-                    ProjectValidationState.InvalidContentRoots,
-                    projectRoot,
-                    "Project manifest declares an invalid authoring mount root.");
-            }
-
-            if (Path.IsPathRooted(mount.RelativePath))
-            {
-                return ProjectValidationResult.Failure(
-                    ProjectValidationState.InvalidContentRoots,
-                    projectRoot,
-                    $"Authoring mount '{mount.Name}' must use a project-relative path.");
-            }
-
-            var mountRoot = storage.NormalizeRelativeTo(projectRoot, mount.RelativePath);
-            if (!await storage.FolderExistsAsync(mountRoot).ConfigureAwait(false))
-            {
-                return ProjectValidationResult.Failure(
-                    ProjectValidationState.InvalidContentRoots,
-                    projectRoot,
-                    $"Authoring mount '{mount.Name}' does not exist: {mountRoot}.");
-            }
-        }
-
-        return null;
-    }
-
-    private async Task<ProjectValidationResult?> ValidateLocalFolderMountsAsync(
-        string projectRoot,
-        Oxygen.Editor.Projects.IProjectInfo projectInfo,
-        CancellationToken cancellationToken)
-    {
-        foreach (var mount in projectInfo.LocalFolderMounts)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (string.IsNullOrWhiteSpace(mount.Name) || ProjectAssetFiles.IsReservedMountName(mount.Name) || mount.Root is null)
-            {
-                return ProjectValidationResult.Failure(
-                    ProjectValidationState.InvalidContentRoots,
-                    projectRoot,
-                    "Project manifest declares an invalid local folder mount root.");
-            }
-
-            var mountRoot = mount.Root.FullPath;
-            if (!await storage.FolderExistsAsync(mountRoot).ConfigureAwait(false))
-            {
-                return ProjectValidationResult.Failure(
-                    ProjectValidationState.InvalidContentRoots,
-                    projectRoot,
-                    $"Local folder mount '{mount.Name}' does not exist: {mountRoot}.");
-            }
-        }
-
-        return null;
-    }
-
-    private async Task<ProjectValidationResult?> ValidatePakFileMountsAsync(
-        string projectRoot,
-        Oxygen.Editor.Projects.IProjectInfo projectInfo,
-        CancellationToken cancellationToken)
-    {
-        foreach (var mount in projectInfo.PakFileMounts)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (string.IsNullOrWhiteSpace(mount.Name) || ProjectAssetFiles.IsReservedMountName(mount.Name) || mount.Path is null || !PakFileMount.IsPakFile(mount.Path.FullPath))
-            {
-                return ProjectValidationResult.Failure(
-                    ProjectValidationState.InvalidContentRoots,
-                    projectRoot,
-                    "Project manifest declares an invalid pak file mount.");
-            }
-
-            if (!await storage.DocumentExistsAsync(mount.Path.FullPath).ConfigureAwait(false))
-            {
-                return ProjectValidationResult.Failure(
-                    ProjectValidationState.InvalidContentRoots,
-                    projectRoot,
-                    $"Pak file mount '{mount.Name}' does not exist: {mount.Path.FullPath}.");
-            }
-        }
-
-        return null;
+            : ProjectValidationResult.Valid(projectRoot, projectInfo, findings);
     }
 
     [SuppressMessage(

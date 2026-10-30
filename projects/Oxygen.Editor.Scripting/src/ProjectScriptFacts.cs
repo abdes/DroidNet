@@ -167,9 +167,9 @@ internal sealed partial class ProjectScriptFacts : IDisposable
 
     private IEnumerable<(AssetPath Identity, FileSystemPath File)> EnumerateSources()
     {
-        foreach (var mount in this.Project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)))
+        foreach (var mount in this.Project.SourceMounts)
         {
-            var root = this.Project.ProjectRoot.Combine(mount.RelativePath);
+            var root = mount.Location!;
             if (!this.Project.FileSystem.Directory.Exists(root.FullPath))
             {
                 continue;
@@ -190,7 +190,7 @@ internal sealed partial class ProjectScriptFacts : IDisposable
     // The script a file of the project is the source of, when it is a script in an authoring mount.
     private (AssetPath Identity, FileSystemPath File)? SourceOf(AssetPath? path)
         => path is not null && AssetFileTypes.Is(path.Name, AssetFileCategory.Script)
-            && this.Project.AuthoringMounts.Any(mount => string.Equals(mount.Name, path.Mount, StringComparison.Ordinal) && !ProjectOutputFolders.Contains(mount))
+            && this.Project.SourceMounts.Any(mount => string.Equals(mount.Name, path.Mount, StringComparison.Ordinal))
             && this.Project.Find(path) is { File: var file }
                 ? (AssetFileTypes.ToIdentity(path), file)
                 : null;

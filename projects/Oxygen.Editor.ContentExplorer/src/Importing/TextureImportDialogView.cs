@@ -69,10 +69,10 @@ public sealed class TextureImportDialogView : UserControl
         destinationRow.Children.Add(browse);
         content.Children.Add(destinationRow);
 
-        this.intent = new ComboBox { Header = "Intent", ItemsSource = viewModel.Intents, SelectedItem = viewModel.Intent };
+        this.intent = new ComboBox { Header = "Intent", ItemsSource = TextureImportDialogViewModel.Intents, SelectedItem = viewModel.Intent };
         var intent = this.intent;
         intent.SelectionChanged += (_, _) => viewModel.Intent = intent.SelectedItem as string ?? string.Empty;
-        this.colorSpace = new ComboBox { Header = "Color space", ItemsSource = viewModel.ColorSpaces, SelectedItem = viewModel.ColorSpace };
+        this.colorSpace = new ComboBox { Header = "Color space", ItemsSource = TextureImportDialogViewModel.ColorSpaces, SelectedItem = viewModel.ColorSpace };
         var colorSpace = this.colorSpace;
         colorSpace.SelectionChanged += (_, _) => viewModel.ColorSpace = colorSpace.SelectedItem as string ?? string.Empty;
         var settings = new Grid { ColumnSpacing = 8 };
@@ -83,7 +83,7 @@ public sealed class TextureImportDialogView : UserControl
         settings.Children.Add(colorSpace);
         content.Children.Add(settings);
 
-        this.format = new ComboBox { Header = "Output format", ItemsSource = viewModel.Formats, SelectedItem = viewModel.Format };
+        this.format = new ComboBox { Header = "Output format", ItemsSource = TextureImportDialogViewModel.Formats, SelectedItem = viewModel.Format };
         var format = this.format;
         format.SelectionChanged += (_, _) => viewModel.Format = format.SelectedItem as string ?? string.Empty;
         content.Children.Add(format);

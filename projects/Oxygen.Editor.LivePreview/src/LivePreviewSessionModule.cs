@@ -30,17 +30,20 @@ namespace Oxygen.Editor.LivePreview;
 ///     preview session, the runtime status of its assets, Play, and the preview settings that apply to them.
 /// </summary>
 /// <remarks>
-///     The project's preview also applies the content-mount changes the Content Explorer confirms. The player runs the
-///     scenes of the session's project and ends with the session; its problems and log reach Problems and Output.
+///     The project's preview also applies the content-mount changes the Content Explorer confirms, and those of the
+///     project's <c>.mounts.json</c> files. The player runs the scenes of the session's project and ends with the
+///     session; its problems and log reach Problems and Output.
 /// </remarks>
 public sealed class LivePreviewSessionModule : IScopeModule<ISessionLayer>
 {
-    // The preview follows the open scene documents; the preview and Play sessions follow the project session.
+    // The preview follows the open scene documents; the preview and Play sessions follow the project session, and the
+    // project's mounts follow its .mounts.json files.
     private static readonly Type[] Activated =
     [
         typeof(IScenePreview),
         typeof(PreviewSession),
         typeof(PlaySession),
+        typeof(MountsFileWatcher),
     ];
 
     /// <inheritdoc />
@@ -76,6 +79,7 @@ public sealed class LivePreviewSessionModule : IScopeModule<ISessionLayer>
             resolver => (IInstancedNodeReader)resolver.Resolve<IScenePreview>(), Reuse.Singleton);
         scope.Register<PreviewSession>(Reuse.Singleton);
         scope.RegisterMapping<IContentMountChanges, PreviewSession>();
+        scope.Register<MountsFileWatcher>(Reuse.Singleton);
     }
 
     private static void RegisterPreviewSettings(IRegistrator scope)

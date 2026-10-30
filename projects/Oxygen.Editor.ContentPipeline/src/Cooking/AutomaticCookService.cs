@@ -57,7 +57,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     private readonly HashSet<AssetPath> waiting = [];
     private readonly Dictionary<AssetPath, AssetPath[]> skipped = [];
     private readonly ITimer window;
-    private readonly IDisposable catalogSubscription;
+    private readonly CancellationTokenSource catalogChanges;
     private ProjectContext? project;
     private CancellationTokenSource projectLifetime = new();
     private long windowOpenedAt;
@@ -102,7 +102,8 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         this.OnContextChanged(this, EventArgs.Empty);
         session.ContextChanged += this.OnContextChanged;
         session.SettingsChanged += this.OnSettingsChanged;
-        this.catalogSubscription = catalog.Changes.Subscribe(this.OnCatalogChange);
+        this.catalogChanges = CancellationTokenSource.CreateLinkedTokenSource(session.Lifetime);
+        catalog.Changes.Subscribe(this.OnCatalogChange, this.catalogChanges.Token);
         scripts.ProblemsChanged += this.OnProblemsChanged;
         inputs.ProblemsChanged += this.OnProblemsChanged;
     }
@@ -146,7 +147,8 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
 
         this.inputs.ProblemsChanged -= this.OnProblemsChanged;
         this.scripts.ProblemsChanged -= this.OnProblemsChanged;
-        this.catalogSubscription.Dispose();
+        this.catalogChanges.Cancel();
+        this.catalogChanges.Dispose();
         this.session.SettingsChanged -= this.OnSettingsChanged;
         this.session.ContextChanged -= this.OnContextChanged;
         this.window.Dispose();
@@ -156,7 +158,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     // A source name the catalog reports for a cooked record resolves to the same source; only a change to the source
     // file itself, an authored descriptor or a script, is cooked.
     private static bool IsCookableSource(ProjectContext project, AssetPath uri)
-        => project.AuthoringMounts.Any(mount => !ProjectOutputFolders.Contains(mount) && string.Equals(mount.Name, uri.Mount, StringComparison.Ordinal))
+        => project.SourceMounts.Any(mount => string.Equals(mount.Name, uri.Mount, StringComparison.Ordinal))
             && project.Find(uri) is { IsMountRoot: false } location
             && (ContentPipelineService.IsCookableDescriptorFile(project, location.File.FullPath) || AssetFileTypes.Is(uri.Name, AssetFileCategory.Script));
 

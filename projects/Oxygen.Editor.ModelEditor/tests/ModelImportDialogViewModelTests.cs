@@ -85,7 +85,7 @@ public sealed class ModelImportDialogViewModelTests
         _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(record)!);
         using (var settings = JsonDocument.Parse("""{"name":"BurgerPiz","unit_policy":"preserve"}"""))
         {
-            project.FileSystem.File.WriteAllBytes(record, ModelImportSettings.Create(record, source, "/Content/Scenes/BurgerPiz.glb", settings.RootElement).ToBytes());
+            project.FileSystem.File.WriteAllBytes(record, ModelImportSettings.Create(record, "/Content/Scenes/BurgerPiz.glb", "/Content/Scenes/BurgerPiz.glb", settings.RootElement).ToBytes());
         }
 
         using var dialog = Create(project);

@@ -2,14 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using AwesomeAssertions;
 using Moq;
-using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Assets.TestSupport;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
-using Oxygen.Editor.Assets.TestSupport;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
 
@@ -26,11 +27,13 @@ public sealed partial class AssetFeedTests
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         var catalog = new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
         var projects = workspace.OpenSession();
-        projects.ChangeContext(projects.Context with { LocalFolderMounts = [new("Library", workspace.Root)] });
+        _ = Directory.CreateDirectory(workspace.SourcePath("Library"));
+        var mounts = new ProjectMount[] { new("Content", MountKind.Source, "Content"), new("Library", MountKind.Cooked, "Library") };
+        projects.ChangeContext(TestProject.Create(new RealFileSystem(), workspace.Root.FullPath, mounts).Context with { Name = "Test" });
         var statuses = new Mock<IAssetCookStatusReader>();
         _ = statuses.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<AssetPath>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => [new AssetCookStatus(identity, AssetCookFreshness.Unknown, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [])]);
-        using var provider = AssetFeeds.Create(catalog, projects, new ProjectCookScopeProvider(), cookStatus: statuses.Object);
+        var provider = this.Own(AssetFeeds.Create(catalog, projects, new ProjectCookScopeProvider(), cookStatus: statuses.Object));
         await provider.RefreshAsync(this.TestContext.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         statuses.Verify(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<AssetPath>>(), It.IsAny<CancellationToken>()), Times.Once);

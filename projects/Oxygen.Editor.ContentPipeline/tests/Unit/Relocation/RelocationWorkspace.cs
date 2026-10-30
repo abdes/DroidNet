@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -29,7 +30,6 @@ internal sealed partial class RelocationWorkspace : IDisposable
         this.Session = new(TestProject.Create(this.FileSystem).Context with
         {
             Name = "Relocation tests",
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             OutputFolderViews = [new(ProjectOutputFolders.Cooked)],
         });
         this.Coordinator = new(this.Session);
@@ -82,6 +82,36 @@ internal sealed partial class RelocationWorkspace : IDisposable
 
     public bool Exists(string relative) => this.FileSystem.File.Exists(this.PathOf(relative)) || this.FileSystem.Directory.Exists(this.PathOf(relative));
 
+    /// <summary>
+    /// Mounts a folder outside the project as a source mount: a placeholder in <c>Project.oxy</c>, bound by the
+    /// project's own <c>.mounts.json</c>.
+    /// </summary>
+    /// <param name="name">The mount name.</param>
+    /// <param name="folder">The absolute folder.</param>
+    public void MountOutside(string name, string folder)
+    {
+        _ = this.FileSystem.Directory.CreateDirectory(folder);
+        this.FileSystem.File.WriteAllText(
+            this.PathOf(ProjectMounts.FileName),
+            new JsonObject { ["version"] = 1, ["mounts"] = new JsonObject { [name] = folder.Replace('\\', '/') } }.ToJsonString());
+        var info = TestProject.InfoOf(this.Project);
+        info.Mounts.Add(new ProjectMount(name));
+        this.Session.ChangeContext(TestProject.Open(info, this.FileSystem).Context with
+        {
+            Name = this.Project.Name,
+            OutputFolderViews = this.Project.OutputFolderViews,
+        });
+    }
+
+    /// <summary>Writes a file in a folder outside the project.</summary>
+    /// <param name="path">The absolute path.</param>
+    /// <param name="content">The file's text.</param>
+    public void WriteOutside(string path, string content)
+    {
+        _ = this.FileSystem.Directory.CreateDirectory(this.FileSystem.Path.GetDirectoryName(path)!);
+        this.FileSystem.File.WriteAllText(path, content);
+    }
+
     /// <summary>Creates a folder in the project.</summary>
     /// <param name="relative">The folder, relative to the project.</param>
     public void CreateFolder(string relative) => _ = this.FileSystem.Directory.CreateDirectory(this.PathOf(relative));
@@ -105,7 +135,7 @@ internal sealed partial class RelocationWorkspace : IDisposable
         var recordPath = ModelImportSettings.PathFor(this.Root, "/" + bundle + "/" + primary);
         var record = ModelImportSettings.Create(
             recordPath,
-            source,
+            "/" + bundle + "/" + primary,
             "/" + bundle + "/" + primary,
             ModelImportSettings.DefaultSettings(Path.GetFileNameWithoutExtension(primary))) with
         {
@@ -137,5 +167,5 @@ internal sealed partial class RelocationWorkspace : IDisposable
     }
 
     private ModelImportRecord Find(ModelImportSettings record)
-        => new ModelImportRecords(this.FileSystem, this.Root).All.Single(found => found.Settings.SourceIdentity == record.SourceIdentity);
+        => new ModelImportRecords(this.Project).All.Single(found => found.Settings.SourceIdentity == record.SourceIdentity);
 }

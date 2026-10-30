@@ -207,7 +207,7 @@ public sealed class RetainedSourceCookTests
         await File.WriteAllTextAsync(primary, content.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
         var changed = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = changed.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, changed.Diagnostics.Select(static issue => issue.Message)));
-        _ = changed.InputSnapshot!.Inputs.Should().Contain(file => file.RelativePath.EndsWith("mesh data.bin", StringComparison.Ordinal));
+        _ = changed.InputSnapshot!.Inputs.Should().Contain(file => file.CookPath.EndsWith("mesh data.bin", StringComparison.Ordinal));
         var count = runner.ImportCount;
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
         _ = runner.ImportCount.Should().Be(count);

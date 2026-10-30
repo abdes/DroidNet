@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
@@ -24,10 +25,10 @@ public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(folder);
         ValidateBundleName(bundleName);
-        var mount = project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal))
+        var mount = project.SourceMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal))
             ?? throw new ArgumentException("Choose an authoring folder, not built-in or cooked content.", nameof(folder));
         var segments = folder.RelativePath.Length == 0 ? [] : folder.RelativePath.Split('/');
-        return Path.Combine(ResolveInsideMount(project, mount, segments), bundleName);
+        return Path.Combine(ResolveInsideMount(mount, segments), bundleName);
     }
 
     /// <summary>Captures all discovered dependencies, then installs the new bundle without overwriting an existing source.</summary>
@@ -69,30 +70,23 @@ public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
         CookOutputLease.RejectReparsePoint(parent);
         Directory.Move(snapshot.InputRoot, destination);
         return new RetainedImportSource(
-            Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, destination).Replace('\\', '/'),
-            snapshot.Inputs.Single(file => string.Equals(file.RelativePath, primary, FileSystemPath.NameComparison)).RelativePath,
-            [.. snapshot.Inputs.Where(static file => file.Kind == CookSnapshotInputKind.File).Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash))]);
+            CookPaths.Of(operation.Project, FileSystemPath.From(destination)),
+            snapshot.Inputs.Single(file => string.Equals(file.CookPath, primary, FileSystemPath.NameComparison)).CookPath,
+            [.. snapshot.Inputs.Where(static file => file.Kind == CookSnapshotInputKind.File).Select(static file => new RetainedImportSourceFile(file.CookPath, file.DiscoveryHash))]);
     }
 
-    /// <summary>Resolves the folder of an existing retained bundle from its project-relative path.</summary>
+    /// <summary>Resolves the folder of an existing retained bundle from its cook path.</summary>
     /// <param name="project">The project owning the source bundle.</param>
-    /// <param name="bundleRoot">The bundle's project-relative folder, as its import record names it.</param>
+    /// <param name="bundleRoot">The bundle folder's cook path, such as <c>/Content/Models/Ship</c>.</param>
     /// <returns>The contained absolute bundle directory.</returns>
     internal static string ResolveBundleRoot(ProjectContext project, string bundleRoot)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentException.ThrowIfNullOrWhiteSpace(bundleRoot);
-        var path = project.ProjectRoot.Combine(bundleRoot);
-        foreach (var mount in project.AuthoringMounts)
-        {
-            var root = project.ProjectRoot.Combine(mount.RelativePath);
-            if (path != root && path.IsSameOrInside(root))
-            {
-                return ResolveInsideMount(project, mount, path.GetPathBelow(root).Split('/'));
-            }
-        }
-
-        throw new InvalidDataException("A retained source bundle must be inside an authoring mount.");
+        var path = CookPaths.IsMountPath(bundleRoot) ? CookPaths.TryFileOf(project, bundleRoot) : null;
+        return path is not null && project.SourceMounts.FirstOrDefault(mount => path != mount.Location && path.IsSameOrInside(mount.Location!)) is { } holder
+            ? ResolveInsideMount(holder, path.GetPathBelow(holder.Location!).Split('/'))
+            : throw new InvalidDataException("A retained source bundle must be inside a bound source mount.");
     }
 
     internal static void ValidateBundleName(string bundleName)
@@ -106,18 +100,11 @@ public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
         }
     }
 
-    // Walks a mount's folders, refusing derived content (SourceMedia, .cooked) and reparse points.
-    private static string ResolveInsideMount(ProjectContext project, ProjectMountPoint mount, IEnumerable<string> segments)
+    // Walks a source mount's folders, inside or outside the project tree, refusing derived content (SourceMedia,
+    // .cooked) and reparse points.
+    private static string ResolveInsideMount(ResolvedMount mount, IEnumerable<string> segments)
     {
-        var root = project.ProjectRoot.Combine(mount.RelativePath).FullPath;
-        var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, root).Replace('\\', '/');
-        if (Path.IsPathRooted(relative) || string.Equals(relative, "..", StringComparison.Ordinal) || relative.StartsWith("../", StringComparison.Ordinal)
-            || ProjectOutputFolders.Contains(relative))
-        {
-            throw new InvalidOperationException("The authoring mount must remain inside the project and outside derived output.");
-        }
-
-        var path = root;
+        var path = mount.Location!.FullPath;
         CookOutputLease.RejectReparsePoint(path);
         foreach (var segment in segments.Where(static segment => segment.Length != 0))
         {
@@ -142,7 +129,7 @@ public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
 
         var primary = bundle.PrimaryRelativePath.Replace('\\', '/');
         return !bundle.Files.Any(file => file.Kind == CookSnapshotInputKind.File
-            && string.Equals(file.RelativePath.Replace('\\', '/'), primary, FileSystemPath.NameComparison))
+            && string.Equals(file.CookPath.Replace('\\', '/'), primary, FileSystemPath.NameComparison))
             ? throw new InvalidDataException("Source retention requires the selected primary file.")
             : primary;
     }

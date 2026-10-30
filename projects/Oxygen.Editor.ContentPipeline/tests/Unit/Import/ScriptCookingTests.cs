@@ -54,13 +54,13 @@ internal sealed partial class ScriptCookingTests : IDisposable
 
         _ = input.Kind.Should().Be(ContentCookAssetKind.Script);
         _ = input.AssetUri.Should().Be(MoveScript);
-        _ = input.SourceRelativePath.Should().Be("Content/Player/move.lua");
+        _ = input.SourceCookPath.Should().Be("/Content/Player/move.lua");
     }
 
     [TestMethod]
-    [DataRow("/Content/Player/move.oscript", "Content/Player/move.lua")]
-    [DataRow("/Content/Player/move.lua", "Content/Player/move.lua")]
-    [DataRow("/Content/Player/move.luau", "Content/Player/move.luau")]
+    [DataRow("/Content/Player/move.oscript", "/Content/Player/move.lua")]
+    [DataRow("/Content/Player/move.lua", "/Content/Player/move.lua")]
+    [DataRow("/Content/Player/move.luau", "/Content/Player/move.luau")]
     public void ResolveDeletedScriptGivesItsMissingSource(string requested, string source)
     {
         File.Delete(Path.Combine(this.root, "Content", "Player", "move.lua"));
@@ -70,7 +70,7 @@ internal sealed partial class ScriptCookingTests : IDisposable
         // The cook reports the source missing and removes what the script published, as for any deleted source.
         _ = input.Kind.Should().Be(ContentCookAssetKind.Script);
         _ = input.AssetUri.Should().Be(MoveScript);
-        _ = input.SourceRelativePath.Should().Be(source);
+        _ = input.SourceCookPath.Should().Be(source);
         _ = File.Exists(input.SourceAbsolutePath.FullPath).Should().BeFalse();
     }
 
@@ -82,7 +82,7 @@ internal sealed partial class ScriptCookingTests : IDisposable
         var job = new ContentImportManifestBuilder().BuildJob(input, []);
 
         _ = job.Type.Should().Be("script");
-        _ = job.Id.Should().Be("script:Content/Player/move.lua");
+        _ = job.Id.Should().Be("script:/Content/Player/move.lua");
         _ = job.Compile.Should().BeTrue();
         _ = job.CompileMode.Should().Be("debug");
         _ = job.ScriptStorage.Should().Be("external");
@@ -233,7 +233,7 @@ internal sealed partial class ScriptCookingTests : IDisposable
         var scene = manifest.Jobs.Single(static job => string.Equals(job.Type, "scene-descriptor", StringComparison.Ordinal));
         _ = sidecar.Source.Should().BeNull();
         _ = sidecar.OwnerSource.Should().Be(scene.Source);
-        _ = sidecar.DependsOn.Should().Equal(scene.Id, "script:Content/Player/move.lua");
+        _ = sidecar.DependsOn.Should().Equal(scene.Id, "script:/Content/Player/move.lua");
         _ = sidecar.TargetSceneVirtualPath.Should().Be("/Content/Scenes/Main.oscene");
         _ = sidecar.Bindings.Should().Equal(binding);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(sidecar));

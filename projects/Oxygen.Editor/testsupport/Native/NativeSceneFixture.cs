@@ -33,6 +33,7 @@ using Oxygen.Editor.LivePreview.Settings;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor;
@@ -283,7 +284,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             _ = (await this.contentSession.StartAsync(cancellationToken).ConfigureAwait(true)).Should().BeTrue("{0}", this.contentSession.Failure);
         }
 
-        _ = (await this.contentSession.ChangeMountsAsync(this.Session.Context, desired, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+        _ = (await this.contentSession.ChangeMountsAsync(this.Session.Context, desired, MountBindings.None, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
     }
 
     public DocumentAreaViewModel CreateDocumentTransitionHost(CatalogWorkloadServices services, WindowId windowId)
@@ -625,7 +626,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     {
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
-        return new PreviewSession(this.previewEngine, publication, catalog, coordinator, session, this.Sessions, publisher.Object, new OperationStatusReducer());
+        return new PreviewSession(this.previewEngine, publication, catalog, coordinator, session, this.Sessions, new NativeAtomicFileStore(session.Context.FileSystem), publisher.Object, new OperationStatusReducer());
     }
 
     /// <summary>Follows relocations on the fixture's UI thread; the relocation calls participants from a worker.</summary>

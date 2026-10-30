@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -28,7 +29,7 @@ public sealed class CrossMountImportTests
     [DataRow(true)]
     public async Task SceneCookOrdersCrossMountMaterialGeometryAndScene(bool interleaved)
     {
-        using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var workspace = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: false);
         var geometryPath = Path.Combine(workspace.Root, "Content/Geometry/AuthoredCube.ogeo.json");
         var descriptor = JsonNode.Parse(await File.ReadAllTextAsync(geometryPath, this.TestContext.CancellationToken).ConfigureAwait(false))!;
@@ -66,8 +67,8 @@ public sealed class CrossMountImportTests
     [DataRow(true)]
     public async Task SceneCookResolvesImportedGeometryAcrossMounts(bool existingOutput)
     {
-        using var original = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
-        using var clean = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var original = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
+        using var clean = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(original, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await WriteCrossMountModelAsync(clean, this.TestContext.CancellationToken).ConfigureAwait(false);
         var compatibility = EditorNativeCompatibilityService.ForCooking();

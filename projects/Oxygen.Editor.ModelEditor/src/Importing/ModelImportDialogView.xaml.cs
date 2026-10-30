@@ -86,7 +86,7 @@ public sealed partial class ModelImportDialogView : UserControl
     /// <returns>Mixed, or nothing.</returns>
     internal static string MixedPlaceholder(bool isMixed) => isMixed ? "Mixed" : string.Empty;
 
-    private void OnSelectionRequested(object? sender, IReadOnlyList<ModelImportFile> files) => this.Select(files);
+    private void OnSelectionRequested(object? sender, ModelImportSelectionEventArgs args) => this.Select(args.Files);
 
     // Shows the dialog's selection in the list. Files just added have no rows yet, and the first ones appear with the
     // list itself, so the selection is shown again once the list has laid out the last of them.

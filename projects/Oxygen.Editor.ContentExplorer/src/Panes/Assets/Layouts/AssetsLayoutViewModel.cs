@@ -11,7 +11,6 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Assets;
@@ -34,8 +33,7 @@ public abstract partial class AssetsLayoutViewModel(
     private readonly ContentExplorerState contentExplorerState = contentExplorerState;
     private readonly HostingContext hostingContext = hostingContext;
 
-    private IDisposable? subscription;
-    private IDisposable? scriptChanges;
+    private CancellationTokenSource? subscriptions;
     private bool disposed;
     private Task? initialization;
     private TaskCompletionSource? initialSnapshotCompletion;
@@ -166,7 +164,7 @@ public abstract partial class AssetsLayoutViewModel(
     /// Forces a refresh of <see cref="Assets"/> by re-querying the provider.
     /// </summary>
     /// <returns>Completion of the shared refresh.</returns>
-    public Task RefreshAsync() => this.assetProvider.RefreshAsync();
+    public Task RefreshAsync() => this.assetProvider.RefreshAsync(this.session.Lifetime);
 
     /// <inheritdoc/>
     /// <remarks>
@@ -182,6 +180,7 @@ public abstract partial class AssetsLayoutViewModel(
         }
 
         this.contentExplorerState.ActiveAssetLayout = this;
+
         // A load that ended without a snapshot failed; navigating again retries it.
         if (this.initialization is not { } load || (load.IsCompleted && !this.hasSnapshot))
         {
@@ -269,9 +268,8 @@ public abstract partial class AssetsLayoutViewModel(
         {
             if (disposing)
             {
-                _ = this.initialSnapshotCompletion?.TrySetCanceled();
-                this.subscription?.Dispose();
-                this.scriptChanges?.Dispose();
+                _ = this.initialSnapshotCompletion?.TrySetCanceled(this.session.Lifetime);
+                this.EndSubscriptions();
                 this.contentExplorerState.PropertyChanged -= this.ContentExplorerState_PropertyChanged;
                 this.Query.Changed -= this.OnQueryChanged;
                 this.Presentation.SortChanged -= this.OnQueryChanged;
@@ -338,21 +336,34 @@ public abstract partial class AssetsLayoutViewModel(
         }
     }
 
+    // Ends the subscriptions of the last initialization: its asset rows and script changes.
+    private void EndSubscriptions()
+    {
+        this.subscriptions?.Cancel();
+        this.subscriptions?.Dispose();
+        this.subscriptions = null;
+    }
+
     private async Task InitializeAsync()
     {
         var firstSnapshot = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         this.initialSnapshotCompletion = firstSnapshot;
-        this.subscription?.Dispose();
-        this.scriptChanges?.Dispose();
+        this.EndSubscriptions();
+        this.subscriptions = CancellationTokenSource.CreateLinkedTokenSource(this.session.Lifetime);
+        var lifetime = this.subscriptions.Token;
         this.contentExplorerState.PropertyChanged -= this.ContentExplorerState_PropertyChanged;
         this.Query.Changed -= this.OnQueryChanged;
         this.Presentation.SortChanged -= this.OnQueryChanged;
-        this.scriptChanges = scripts is null ? null : Observable.FromEventPattern<ScriptChangedEventArgs>(
-                handler => scripts.Changed += handler,
-                handler => scripts.Changed -= handler)
-            .ObserveOn(this.hostingContext.DispatcherScheduler)
-            .Subscribe(change => this.OnScriptChanged(change.EventArgs));
-        this.subscription = this.assetProvider.Items
+        if (scripts is not null)
+        {
+            Observable.FromEventPattern<ScriptChangedEventArgs>(
+                    handler => scripts.Changed += handler,
+                    handler => scripts.Changed -= handler)
+                .ObserveOn(this.hostingContext.DispatcherScheduler)
+                .Subscribe(change => this.OnScriptChanged(change.EventArgs), lifetime);
+        }
+
+        this.assetProvider.Items
             .ObserveOn(this.hostingContext.DispatcherScheduler)
             .Subscribe(
                 items =>
@@ -361,7 +372,8 @@ public abstract partial class AssetsLayoutViewModel(
                     _ = firstSnapshot.TrySetResult();
                 },
                 exception => firstSnapshot.TrySetException(exception),
-                () => firstSnapshot.TrySetResult());
+                () => firstSnapshot.TrySetResult(),
+                lifetime);
         this.contentExplorerState.PropertyChanged += this.ContentExplorerState_PropertyChanged;
         this.Query.Changed += this.OnQueryChanged;
         this.Presentation.SortChanged += this.OnQueryChanged;
@@ -406,13 +418,14 @@ public abstract partial class AssetsLayoutViewModel(
         var selectedIdentities = this.IsActiveLayout
             ? this.contentExplorerState.SelectedIdentities : [.. this.selectedAssets.Select(static asset => asset.Identity)];
         var existing = this.Assets.ToDictionary(static row => row.Item.Identity);
+
         // Rows show the session project's assets and read its files.
         var project = this.session.Context;
         var scopedItems = CookedLibraryFolders.ForFolders(items, project, this.contentExplorerState.SelectedFolders);
+
         // A container is one asset, its source file: its products (a model's materials, an input source's
         // actions) are not listed, and pickers and references reach them by identity.
-        var inScope = scopedItems.Where(static item => AssetFileTypes.ContainerOf(item.Identity) is null)
-            .Where(this.IsInSelectedFolders).ToArray();
+        var inScope = scopedItems.Where(item => AssetFileTypes.ContainerOf(item.Identity) is null && this.IsInSelectedFolders(item)).ToArray();
         this.scopeCount = inScope.Length;
         var visible = this.Presentation.Sort(inScope.Where(this.Query.Matches), project);
         this.isReplacingRows = true;
@@ -486,7 +499,7 @@ public abstract partial class AssetsLayoutViewModel(
         if (sourceFolders.Any(static folder => folder is null))
         {
             // All of the output browses the sources of every authoring folder.
-            this.contentExplorerState.SetSelectedFolders(this.session.Context.AuthoringMounts
+            this.contentExplorerState.SetSelectedFolders(this.session.Context.SourceMounts
                 .Select(static mount => AssetPath.Create(mount.Name)));
         }
         else
@@ -518,5 +531,4 @@ public abstract partial class AssetsLayoutViewModel(
             this.contentExplorerState.SelectedFolders,
             HasCookedProjection(asset),
             this.projectCookedFolders);
-
 }

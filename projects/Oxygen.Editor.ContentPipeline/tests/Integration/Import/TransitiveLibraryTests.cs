@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -31,8 +32,8 @@ public sealed class TransitiveLibraryTests
     [TestCategory("NativeContent")]
     public async Task CookedGeometryDiscoversProjectMaterialOverride(bool projectWins, bool materialLibraryMounted)
     {
-        using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
-        using var consumer = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var library = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
+        using var consumer = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
         const string material = "Art/Materials/Shared.omat.json";
         library.WriteMaterial(material, "Shared");
         consumer.WriteMaterial(material, "Project shared");
@@ -46,12 +47,12 @@ public sealed class TransitiveLibraryTests
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var producer = CreateService(library, api, compatibility: compatibility);
         _ = (await producer.CookAssetAsync(geometry, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
-        var context = consumer.ProjectContext with
+        var libraries = materialLibraryMounted
+            ? new[] { ("Materials", await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false)), ("Meshes", library.CookedRoot("Content")) }
+            : [("Meshes", library.CookedRoot("Content"))];
+        var context = consumer.ProjectContext.WithCookedLibraries(libraries) with
         {
-            LocalFolderMounts = materialLibraryMounted
-                ? [new("Materials", FileSystemPath.From(await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false))), new("Meshes", FileSystemPath.From(library.CookedRoot("Content")))]
-                : [new("Meshes", FileSystemPath.From(library.CookedRoot("Content")))],
-            CookedContentOrder = projectWins ? [] : [new(Oxygen.Editor.Projects.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.Projects.CookedContentSourceKind.LocalFolder, "Materials"), new(Oxygen.Editor.Projects.CookedContentSourceKind.LocalFolder, "Meshes")],
+            CookedContentOrder = projectWins ? [] : [new(Oxygen.Editor.Projects.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.Projects.CookedContentSourceKind.Cooked, "Materials"), new(Oxygen.Editor.Projects.CookedContentSourceKind.Cooked, "Meshes")],
         };
         consumer.Activate(context);
         AddGeometryNode(consumer, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
@@ -90,7 +91,7 @@ public sealed class TransitiveLibraryTests
     [TestCategory("NativeContent")]
     public async Task CookedGeometryTracksItsSeparateMaterialLibrary()
     {
-        using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var library = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
         using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         const string material = "Art/Materials/Shared.omat.json";
         library.WriteMaterial(material, "Shared");
@@ -105,10 +106,9 @@ public sealed class TransitiveLibraryTests
         var producer = CreateService(library, api, compatibility: compatibility);
         var exported = await producer.CookAssetAsync(geometry, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = exported.IsPublished.Should().BeTrue();
-        var context = consumer.ProjectContext with
-        {
-            LocalFolderMounts = [new("Materials", FileSystemPath.From(await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false))), new("Meshes", FileSystemPath.From(library.CookedRoot("Content")))],
-        };
+        var context = consumer.ProjectContext.WithCookedLibraries(
+            ("Materials", await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false)),
+            ("Meshes", library.CookedRoot("Content")));
         consumer.Activate(context);
         AddGeometryNode(consumer, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);

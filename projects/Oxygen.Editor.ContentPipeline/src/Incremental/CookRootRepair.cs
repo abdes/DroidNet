@@ -6,10 +6,10 @@ using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 
@@ -28,12 +28,14 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
     public ImmutableHashSet<string> VacatedRoots { get; init; } = ImmutableHashSet<string>.Empty.WithComparer(StringComparer.Ordinal);
 
     /// <summary>Selects the roots to reconstruct, the outputs to remove and the sources to cook again.</summary>
+    /// <param name="project">The project and its mount table.</param>
     /// <param name="publication">The publication lease that resolves project roots.</param>
     /// <param name="previous">The provenance of the previous cook.</param>
     /// <param name="mounts">The mounts being cooked.</param>
     /// <param name="inventories">The cooked inventory of each mount.</param>
     /// <returns>The repair work.</returns>
     public static CookRootRepair Create(
+        ProjectContext project,
         CookPublicationReadLease publication,
         CookProvenance previous,
         IReadOnlyCollection<string> mounts,
@@ -46,7 +48,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         var diagnostics = new List<DiagnosticRecord>();
 
         // A moved, renamed or deleted source retires its product, and its prior outputs leave their roots.
-        var retired = previous.Products.Where(product => IsRetired(publication.ProjectRoot.FullPath, product)).ToHashSet();
+        var retired = previous.Products.Where(product => IsRetired(project, product)).ToHashSet();
         sources.UnionWith(FindUsers(previous, retired));
         foreach (var mount in mounts)
         {
@@ -93,23 +95,24 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
     /// <summary>Tests whether a prior product's authored source was moved or deleted.</summary>
     /// <remarks>
     /// A model is retired only when no import record names it any more; a model file missing while its
-    /// record remains is damage that cooking reports instead.
+    /// record remains is damage that cooking reports instead. A source whose mount is not bound, or whose mount's
+    /// folder is missing, is not retired: its cooked content stays available until the mount is bound again.
     /// </remarks>
-    /// <param name="projectRoot">The project root.</param>
+    /// <param name="project">The project and its mount table.</param>
     /// <param name="product">The prior product.</param>
     /// <returns>Whether the product must leave the cooked index.</returns>
-    public static bool IsRetired(string projectRoot, CookProvenance.Product product)
+    public static bool IsRetired(ProjectContext project, CookProvenance.Product product)
     {
+        ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(product);
-        if (product.SourceInput is not { } source)
+        if (product.SourceInput is not { } source || CookPaths.TryFileOf(project, source.SourceCookPath) is not { } file)
         {
             return false;
         }
 
-        var fileSystem = new RealFileSystem();
-        return !ExactSourcePath.Exists(fileSystem, projectRoot, source.SourceRelativePath)
+        return !CookPaths.ExistsExactly(project, source.SourceCookPath)
             && (product.ImportedSource is null
-                || !new Models.ModelImportRecords(fileSystem, projectRoot).IsImported(Path.Combine(projectRoot, source.SourceRelativePath)));
+                || !new Models.ModelImportRecords(project).IsImported(file.FullPath));
     }
 
     /// <summary>Finds the remaining products that use a removed product, so that cooking them again reports what they lost.</summary>

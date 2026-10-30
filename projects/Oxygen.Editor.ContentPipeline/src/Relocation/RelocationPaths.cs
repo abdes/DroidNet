@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -40,24 +41,22 @@ public static class RelocationPaths
     /// <param name="project">The project and its mounts.</param>
     /// <param name="path">The virtual path.</param>
     /// <returns>The mount, or null for derived, library or unknown mounts.</returns>
-    public static ProjectMountPoint? FindWritableMount(ProjectContext project, AssetPath path)
+    public static ResolvedMount? FindWritableMount(ProjectContext project, AssetPath path)
     {
         ArgumentNullException.ThrowIfNull(path);
         return GetWritableMounts(project).FirstOrDefault(mount => string.Equals(mount.Name, path.Mount, StringComparison.Ordinal));
     }
 
-    /// <summary>Gets the project's writable authoring mounts: project sources, never derived output.</summary>
+    /// <summary>
+    /// Gets the project's writable authoring mounts: its bound source mounts, inside or outside the project tree, never
+    /// derived output or libraries.
+    /// </summary>
     /// <param name="project">The project.</param>
     /// <returns>The mounts whose files relocation may move and rewrite.</returns>
-    public static IEnumerable<ProjectMountPoint> GetWritableMounts(ProjectContext project)
+    public static IEnumerable<ResolvedMount> GetWritableMounts(ProjectContext project)
     {
         ArgumentNullException.ThrowIfNull(project);
-        var root = project.ProjectRoot;
-        return project.AuthoringMounts.Where(mount =>
-            mount.RelativePath.Replace('\\', '/').Trim('/').Length != 0
-            && !ProjectOutputFolders.Contains(mount)
-            && !Path.IsPathRooted(mount.RelativePath)
-            && root.Combine(mount.RelativePath) is var folder && folder != root && folder.IsSameOrInside(root));
+        return project.SourceMounts;
     }
 
     /// <summary>Resolves a virtual path in a writable authoring mount to its physical location.</summary>

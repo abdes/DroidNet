@@ -17,18 +17,18 @@ namespace Oxygen.Editor.CookedInspector.Unit.Tests;
 
 /// <summary>The Cooked Inspector is told what to inspect by a request, and comes forward.</summary>
 [TestClass]
-public sealed class CookedInspectionsTests
+internal sealed class CookedInspectionsTests
 {
     /// <summary>A request sets the panel's scope to the project, the folder or asset, and the validation it asks for, then shows the panel.</summary>
     /// <returns>A task that completes when the test has run.</returns>
     [TestMethod]
     public async Task RequestInspectsItsScopeAndShowsThePanelAsync()
     {
-        var project = TestProject.Create(new MockFileSystem()).Context with { ProjectId = Guid.NewGuid(), Name = "Test", AuthoringMounts = [] };
+        var project = TestProject.Create(new MockFileSystem()).Context with { ProjectId = Guid.NewGuid(), Name = "Test", Mounts = [] };
         using var session = new TestSession(project);
         var folder = AssetPath.Parse("/Content/Materials");
         var pipeline = new Mock<IContentPipelineService>();
-        _ = pipeline.Setup(value => value.InspectCookedOutputAsync(folder, It.IsAny<CancellationToken>(), true, project))
+        _ = pipeline.Setup(value => value.InspectCookedOutputAsync(folder, It.IsAny<CancellationToken>(), validate: true, project))
             .ReturnsAsync(new CookedOutputReport(project.ProjectId, folder, DateTimeOffset.UtcNow, []));
         var placement = new Mock<IPlacementService>();
         using var model = new CookedInspectionViewModel(pipeline.Object, Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()), session, _ => Task.FromResult(true));
@@ -37,7 +37,7 @@ public sealed class CookedInspectionsTests
         await model.CurrentWork.ConfigureAwait(true);
 
         _ = taken.Should().BeTrue();
-        pipeline.Verify(value => value.InspectCookedOutputAsync(folder, It.IsAny<CancellationToken>(), true, project), Times.Once);
+        pipeline.Verify(value => value.InspectCookedOutputAsync(folder, It.IsAny<CancellationToken>(), validate: true, project), Times.Once);
         placement.Verify(service => service.ShowPanelAsync(CookedInspections.PanelId, It.IsAny<WindowPlacement>()), Times.Once);
     }
 }

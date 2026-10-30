@@ -129,7 +129,7 @@ internal sealed class AssetIdentityReducer
 
     private static string GetDisplayPath(AssetRecord selected, ProjectContext project)
     {
-        var local = selected.Cooked is { DescriptorRelativePath: not null } cooked ? project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == cooked.ContainerPath) : null;
+        var local = selected.Cooked is { DescriptorRelativePath: not null } cooked ? project.LibraryMounts.FirstOrDefault(mount => mount.Location == cooked.ContainerPath) : null;
         return local is not null ? "/" + local.Name + "/" + selected.Cooked!.DescriptorRelativePath : selected.Identity.VirtualPath;
     }
 

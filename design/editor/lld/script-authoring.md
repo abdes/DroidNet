@@ -237,8 +237,9 @@ overrides.
 
 - Every script referenced by a slot or by the scene references gets a `script`
   job with its output at the source folder (section 4): compiled bytecode (debug
-  mode) embedded, with the source path recorded relative to its authoring mount
-  folder so the player can reload it
+  mode) embedded, with the source recorded by its mount path
+  (`/Content/Player/move.lua`), inside or outside the project folder, so the
+  player can reload it through the launch file's `source_mounts`
   ([hosting §6](../../../projects/Oxygen.Engine/design/scripting/scene-script-hosting.md#6-source-reload)).
   The scene depends on the scripts and asset values of its slots, so a scene
   cook includes them.

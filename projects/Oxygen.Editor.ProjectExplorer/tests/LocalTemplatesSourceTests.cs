@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using AwesomeAssertions;
 using Oxygen.Editor.ProjectExplorer.Templates;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets.Authoring.Materials;
@@ -14,6 +15,8 @@ namespace Oxygen.Editor.ProjectExplorer.Tests;
 [TestCategory(nameof(LocalTemplatesSource))]
 public class LocalTemplatesSourceTests
 {
+    public TestContext TestContext { get; set; }
+
     [TestMethod]
     public async Task LoadTemplateAsync_ShouldLoadV01TemplateDescriptor()
     {
@@ -24,13 +27,12 @@ public class LocalTemplatesSourceTests
 
             var template = await source.LoadTemplateAsync(new Uri(Path.Combine(root, "Template.json"))).ConfigureAwait(false);
 
-            Assert.AreEqual(1, template.SchemaVersion);
-            Assert.AreEqual("Games/Blank", template.TemplateId);
-            Assert.AreEqual("Blank", template.Name);
-            Assert.AreEqual(".", template.SourceFolder);
-            Assert.IsTrue(Path.IsPathRooted(template.Icon));
-            Assert.AreEqual(1, template.PreviewImages.Count);
-            Assert.IsTrue(Path.IsPathRooted(template.PreviewImages[0]));
+            _ = template.SchemaVersion.Should().Be(1);
+            _ = template.TemplateId.Should().Be("Games/Blank");
+            _ = template.Name.Should().Be("Blank");
+            _ = template.SourceFolder.Should().Be(".");
+            _ = Path.IsPathRooted(template.Icon).Should().BeTrue();
+            _ = template.PreviewImages.Should().ContainSingle().Which.Should().Match(static path => Path.IsPathRooted(path));
         }
         finally
         {
@@ -44,7 +46,7 @@ public class LocalTemplatesSourceTests
         var root = CreateTempTemplate();
         try
         {
-            await File.WriteAllTextAsync(Path.Combine(root, "Project.oxy"), "{}").ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(root, "Project.oxy"), "{}", this.TestContext.CancellationToken).ConfigureAwait(false);
             var source = new LocalTemplatesSource(new RealFileSystem());
 
             try
@@ -71,9 +73,9 @@ public class LocalTemplatesSourceTests
         try
         {
             var descriptor = Path.Combine(root, "Template.json");
-            var json = await File.ReadAllTextAsync(descriptor).ConfigureAwait(false);
-            var extraMount = $$"""{ "Name": "{{name}}", "RelativePath": "Config" }, { "Name": "Content",""";
-            await File.WriteAllTextAsync(descriptor, json.Replace("{\n      \"Name\": \"Content\",", extraMount, StringComparison.Ordinal)).ConfigureAwait(false);
+            var json = await File.ReadAllTextAsync(descriptor, this.TestContext.CancellationToken).ConfigureAwait(false);
+            var extraMount = $$"""{ "Name": "{{name}}", "Kind": "Source", "Path": "Config" }, { "Name": "Content",""";
+            await File.WriteAllTextAsync(descriptor, json.Replace("{\n      \"Name\": \"Content\",", extraMount, StringComparison.Ordinal), this.TestContext.CancellationToken).ConfigureAwait(false);
             var source = new LocalTemplatesSource(new RealFileSystem());
 
             try
@@ -97,14 +99,13 @@ public class LocalTemplatesSourceTests
         var templatesRoot = FindBuiltInTemplatesRoot();
         var starterScenes = Directory.GetFiles(templatesRoot, "*.oscene.json", SearchOption.AllDirectories);
 
-        Assert.IsTrue(starterScenes.Length > 0);
+        _ = starterScenes.Should().NotBeEmpty();
         foreach (var scenePath in starterScenes)
         {
-            await using var stream = File.OpenRead(scenePath);
-            var scene = await JsonSerializer.DeserializeAsync(stream, SceneJsonContext.Default.SceneData)
-                .ConfigureAwait(false);
+            var json = await File.ReadAllBytesAsync(scenePath, this.TestContext.CancellationToken).ConfigureAwait(false);
+            var scene = JsonSerializer.Deserialize(json, SceneJsonContext.Default.SceneData);
 
-            Assert.IsNotNull(scene, scenePath);
+            _ = scene.Should().NotBeNull(scenePath);
         }
     }
 
@@ -114,12 +115,12 @@ public class LocalTemplatesSourceTests
         var templatesRoot = FindBuiltInTemplatesRoot();
         var starterMaterials = Directory.GetFiles(templatesRoot, "*.omat.json", SearchOption.AllDirectories);
 
-        Assert.IsTrue(starterMaterials.Length > 0);
+        _ = starterMaterials.Should().NotBeEmpty();
         foreach (var materialPath in starterMaterials)
         {
             var material = MaterialSourceReader.Read(File.ReadAllBytes(materialPath));
 
-            Assert.IsTrue(MaterialSourceWriter.ToJson(material).ContainsKey("parameters"), materialPath);
+            _ = MaterialSourceWriter.ToJson(material).ContainsKey("parameters").Should().BeTrue(materialPath);
         }
     }
 
@@ -192,13 +193,13 @@ public class LocalTemplatesSourceTests
               "Preview": "Media/Preview.png",
               "SourceFolder": ".",
               "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
-              "AuthoringMounts": [
+              "Mounts": [
                 {
                   "Name": "Content",
-                  "RelativePath": "Content"
+                  "Kind": "Source",
+                  "Path": "Content"
                 }
               ],
-              "LocalFolderMounts": [],
               "StarterScene": {
                 "AssetUri": "asset:///Content/Scenes/Main.oscene",
                 "RelativePath": "Content/Scenes/Main.oscene.json",

@@ -2,9 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 using DroidNet.Resources.Generator.Localized_e3b91640;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ProjectExplorer.Templates;
@@ -25,25 +27,20 @@ public class TemplateInfo(string description, string name, Category category) : 
 {
     private string description = description.L();
     private string name = name.L();
-    private string? displayName;
 
     /// <summary>
     /// Gets or sets the localized name of the template.
     /// </summary>
     public required string Name
     {
-        get => this.displayName?.L() ?? this.name;
+        get => this.DisplayName?.L() ?? this.name;
         set => this.name = value.L();
     }
 
     /// <summary>
     /// Gets or sets the non-localized display name from a V0.1 template descriptor.
     /// </summary>
-    public string? DisplayName
-    {
-        get => this.displayName;
-        set => this.displayName = value;
-    }
+    public string? DisplayName { get; set; }
 
     /// <inheritdoc />
     public string? TemplateId { get; set; }
@@ -55,14 +52,10 @@ public class TemplateInfo(string description, string name, Category category) : 
     public string? SourceFolder { get; set; }
 
     /// <summary>
-    /// Gets or sets the authoring mounts declared by the template descriptor.
+    /// Gets or sets the mounts declared by the template descriptor: source mounts whose folders it ships.
     /// </summary>
-    public IList<ProjectMountPoint> AuthoringMounts { get; set; } = [];
-
-    /// <summary>
-    /// Gets or sets the local folder mounts declared by the template descriptor.
-    /// </summary>
-    public IList<LocalFolderMount> LocalFolderMounts { get; set; } = [];
+    [SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "System.Text.Json reads the template descriptor by replacing the collection; a read-only property would stay empty.")]
+    public IList<ProjectMount> Mounts { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the localized description of the template.
@@ -110,6 +103,7 @@ public class TemplateInfo(string description, string name, Category category) : 
     /// <summary>
     /// Gets or sets the starter content assets declared by the template.
     /// </summary>
+    [SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "System.Text.Json reads the template descriptor by replacing the collection; a read-only property would stay empty.")]
     public IList<TemplateStarterContentInfo> StarterContent { get; set; } = [];
 
     /// <summary>
@@ -125,9 +119,11 @@ public class TemplateInfo(string description, string name, Category category) : 
 /// <summary>
 /// Starter scene metadata declared by a project template.
 /// </summary>
+[SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "Part of the template descriptor, read only through TemplateInfo; kept with it.")]
 public sealed record TemplateStarterSceneInfo(AssetPath AssetUri, string? RelativePath, bool OpenOnCreate);
 
 /// <summary>
 /// Starter asset metadata declared by a project template.
 /// </summary>
+[SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "Part of the template descriptor, read only through TemplateInfo; kept with it.")]
 public sealed record TemplateStarterContentInfo(AssetPath AssetUri, string? RelativePath, string? Kind);

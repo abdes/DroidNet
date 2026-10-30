@@ -69,7 +69,7 @@ public sealed class CookSavedSourceReaderTests
             Observation(absentOutside, exists: false),
             Observation(existingOutside, exists: true));
 
-        var inputs = await CookSavedSourceReader.ReadNativeInputsAsync(facts, FileSystemPath.From(root), ImmutableHashSet<FileSystemPath>.Empty, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var inputs = await CookSavedSourceReader.ReadNativeInputsAsync(facts, path => path.IsSameOrInside(FileSystemPath.From(root)) ? path.GetPathBelow(FileSystemPath.From(root)) : null, ImmutableHashSet<FileSystemPath>.Empty, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = inputs.Files.Should().ContainSingle(file => file.SourcePath == FileSystemPath.From(absentInside) && file.Kind == CookSnapshotInputKind.Absent);
         _ = inputs.Omitted.Should().Equal(FileSystemPath.From(absentOutside));

@@ -48,7 +48,7 @@ public sealed class ImportRunTests
             _ = results.Should().ContainSingle("the new models cook as one run");
             _ = results[0].IsPublished.Should().BeTrue(string.Join(Environment.NewLine, results[0].Diagnostics.Select(static issue => issue.Message)));
             _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
-            var records = new ModelImportRecords(workspace.ProjectContext.FileSystem, workspace.Root).All;
+            var records = new ModelImportRecords(workspace.ProjectContext).All;
             _ = records.Should().HaveCount(2);
             _ = SettingOf(records, "Crate.gltf", "import_cameras").GetBoolean().Should().BeFalse();
             _ = SettingOf(records, "Barrel.fbx", "up_axis").GetString().Should().Be("z");
@@ -73,7 +73,7 @@ public sealed class ImportRunTests
             var cook = NativeCook.Create(workspace);
             var first = await cook.Service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", Models), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = first.IsPublished.Should().BeTrue();
-            var before = new ModelImportRecords(workspace.ProjectContext.FileSystem, workspace.Root).All.Single();
+            var before = new ModelImportRecords(workspace.ProjectContext).All.Single();
             var review = await SceneImportReplacement.ReviewAsync(workspace.ProjectContext, Models, "Model", this.TestContext.CancellationToken).ConfigureAwait(false);
 
             var results = await cook.Service.ImportSourcesAsync(
@@ -83,7 +83,7 @@ public sealed class ImportRunTests
 
             _ = results.Should().ContainSingle();
             _ = results[0].Status.Should().BeOneOf(OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings);
-            var after = new ModelImportRecords(workspace.ProjectContext.FileSystem, workspace.Root).All.Single();
+            var after = new ModelImportRecords(workspace.ProjectContext).All.Single();
             _ = after.RecordPath.Should().Be(before.RecordPath, "a replaced model keeps its record");
             _ = after.Settings.SourceIdentity.Should().Be(before.Settings.SourceIdentity);
             _ = after.Settings.Settings.GetProperty("unit_policy").GetString().Should().Be("preserve");
@@ -104,7 +104,7 @@ public sealed class ImportRunTests
         var cook = NativeCook.Create(workspace);
         var first = await cook.Service.ImportSourcesAsync([new(workspace.ProjectContext, source, "Crate", Models)], ImportRunSettings.None, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.Should().ContainSingle().Which.IsPublished.Should().BeTrue();
-        var before = new ModelImportRecords(workspace.ProjectContext.FileSystem, workspace.Root).All.Single();
+        var before = new ModelImportRecords(workspace.ProjectContext).All.Single();
 
         var results = await cook.Service.ImportSourcesAsync(
             [new(workspace.ProjectContext, source, "Crate", Models) { Settings = Settings("Crate", ("unit_policy", "preserve")) }],
@@ -113,7 +113,7 @@ public sealed class ImportRunTests
 
         _ = results.Should().ContainSingle();
         _ = results[0].Status.Should().BeOneOf([OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings], string.Join(Environment.NewLine, results[0].Diagnostics.Select(static issue => issue.Message)));
-        var after = new ModelImportRecords(workspace.ProjectContext.FileSystem, workspace.Root).All;
+        var after = new ModelImportRecords(workspace.ProjectContext).All;
         _ = after.Should().ContainSingle("the model keeps its one record").Which.RecordPath.Should().Be(before.RecordPath);
         _ = after[0].Settings.Settings.GetProperty("unit_policy").GetString().Should().Be("preserve");
     }

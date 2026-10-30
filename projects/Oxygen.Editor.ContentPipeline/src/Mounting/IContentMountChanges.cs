@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 
 namespace Oxygen.Editor.ContentPipeline.Mounting;
 
@@ -13,10 +14,12 @@ public interface IContentMountChanges
     /// <summary>Applies a confirmed content-mount change.</summary>
     /// <param name="expected">The project context accepted when editing began.</param>
     /// <param name="candidate">The candidate configuration.</param>
+    /// <param name="bindings">The changes of the project's own <c>.mounts.json</c>, written with the change and undone
+    /// when it fails.</param>
     /// <param name="cancellationToken">Cancels queued or uncommitted work.</param>
     /// <returns>
     /// <see langword="true"/> once the change is saved, mounted and active; <see langword="false"/> when another project
     /// became active before the saved change could be shown.
     /// </returns>
-    public Task<bool> ChangeMountsAsync(ProjectContext expected, ProjectInfo candidate, CancellationToken cancellationToken = default);
+    public Task<bool> ChangeMountsAsync(ProjectContext expected, ProjectInfo candidate, MountBindings bindings, CancellationToken cancellationToken = default);
 }

@@ -2,7 +2,7 @@
 
 Status: accepted. The engine, the tools and the examples follow it
 (abdes/DroidNet#81, #120); the editor part is
-[editor source mounts](../../../../../design/editor/proposals/source-mounts/README.md).
+[editor mounts](../../../../../design/editor/lld/project-layout-and-templates.md#mounts).
 
 Last updated: 2026-10-29
 
@@ -14,7 +14,7 @@ Read: [at a glance](#at-a-glance), [scenarios](#scenarios),
 [the examples project](#the-examples-project), [decisions](#decisions),
 [accepted designs this touches](#accepted-designs-this-touches). Editor impacts
 are in
-[editor source mounts](../../../../../design/editor/proposals/source-mounts/README.md).
+[editor mounts](../../../../../design/editor/lld/project-layout-and-templates.md#mounts).
 
 ## At a glance
 
@@ -180,7 +180,7 @@ Folders outside the project root are not checked by name; a mount at
 
 The editor's layout also specifies `.imported` and `.oxygen`, which nothing
 writes or reads. The
-[editor proposal](../../../../../design/editor/proposals/source-mounts/README.md#output-folders-retire-imported-and-oxygen)
+[project layout](../../../../../design/editor/lld/project-layout-and-templates.md#output-folders)
 retires them; the engine's `virtual_paths.md` and `VirtualPathCases.json` stop
 naming `.imported`.
 
@@ -571,11 +571,11 @@ migration and dependencies are in
 
 ## Accepted designs this touches
 
-| Document                                                                                                                 | Change                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `src/Oxygen/Cooker/Tools/ImportTool/README.md`                                                                           | Manifest `project_root` and `mounts`; `--root`, `--mounts`, `--mount`; mount-path sources  |
-| `src/Oxygen/Cooker/Tools/PakTool/README.md`                                                                              | Script sealing by mounts; `--script-source-root` removed                                   |
-| `src/Oxygen/Cooker/Docs/Import/async_import_pipeline_v2.md`                                                              | Records with mount-path sources                                                            |
-| `src/Oxygen/Data/LooseCookedIndexFormat.h`, LooseCooked README                                                           | Source field meaning; version 7                                                            |
-| `src/Oxygen/Player` launch schema and docs                                                                               | `source_mounts` replaces `script_source_roots`                                             |
-| `design/editor/lld/project-layout-and-templates.md`, `project-services.md`, `content-pipeline.md`, `script-authoring.md` | See [editor source mounts](../../../../../design/editor/proposals/source-mounts/README.md) |
+| Document                                                                                                                 | Change                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `src/Oxygen/Cooker/Tools/ImportTool/README.md`                                                                           | Manifest `project_root` and `mounts`; `--root`, `--mounts`, `--mount`; mount-path sources             |
+| `src/Oxygen/Cooker/Tools/PakTool/README.md`                                                                              | Script sealing by mounts; `--script-source-root` removed                                              |
+| `src/Oxygen/Cooker/Docs/Import/async_import_pipeline_v2.md`                                                              | Records with mount-path sources                                                                       |
+| `src/Oxygen/Data/LooseCookedIndexFormat.h`, LooseCooked README                                                           | Source field meaning; version 7                                                                       |
+| `src/Oxygen/Player` launch schema and docs                                                                               | `source_mounts` replaces `script_source_roots`                                                        |
+| `design/editor/lld/project-layout-and-templates.md`, `project-services.md`, `content-pipeline.md`, `script-authoring.md` | See [project layout: mounts](../../../../../design/editor/lld/project-layout-and-templates.md#mounts) |

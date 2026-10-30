@@ -39,11 +39,13 @@ public sealed class SceneImportSourceDiscovery(IContentCookCoordinator coordinat
         try
         {
             CookRunContext.Report(new(Message: "Reading source content and dependencies."));
-            // The source's folder is the analysis root and its one mount: a manifest names no absolute path.
+            // The source's folder is the analysis root and its one mount: a manifest names no absolute path, and no
+            // .mounts.json file above the folder applies.
             var execution = new ContentSourceAnalysisExecution(operation.OperationId, directory, scratch, [recipe with { Source = Path.GetFileName(primary) }])
             {
                 Artifacts = artifacts,
                 Mounts = [new ContentImportMount("Source", ".")],
+                MountsFile = ContentImportMountsFile.Empty,
             };
             var report = await native.AnalyzeSourcesAsync(execution, cancellationToken).ConfigureAwait(false);
             coordinator.VerifyWriter(operation);
@@ -54,7 +56,7 @@ public sealed class SceneImportSourceDiscovery(IContentCookCoordinator coordinat
             }
 
             var root = CookSavedSourceReader.FindNativeInputsRoot(facts, FileSystemPath.From(directory));
-            var inputs = await CookSavedSourceReader.ReadNativeInputsAsync(facts, root, ImmutableHashSet<FileSystemPath>.Empty, cancellationToken).ConfigureAwait(false);
+            var inputs = await CookSavedSourceReader.ReadNativeInputsAsync(facts, path => path.IsSameOrInside(root) ? path.GetPathBelow(root) : null, ImmutableHashSet<FileSystemPath>.Empty, cancellationToken).ConfigureAwait(false);
             if (!inputs.Outside.IsEmpty)
             {
                 throw new CookInputDiscoveryException(inputs.OutsideDiagnostics(operation.OperationId, FailureDomain.AssetImport, virtualPath: null));

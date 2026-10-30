@@ -214,7 +214,7 @@ public sealed class AssetRelocationTests
         _ = workspace.Exists("Imports/Content/Models/Robot/robot.gltf.import.json").Should().BeFalse();
         _ = workspace.FileSystem.Directory.EnumerateDirectories(workspace.PathOf("Imports"), "*", SearchOption.AllDirectories)
             .Should().OnlyContain(folder => workspace.FileSystem.Directory.EnumerateFileSystemEntries(folder).Any(), "the record's old folders are removed once empty");
-        _ = moved.Source.Should().Be("../../../../Content/Models/Bot/robot.gltf");
+        _ = moved.Source.Should().Be("/Content/Models/Bot/robot.gltf");
         _ = moved.VirtualPath.Should().Be("/Content/Models/Bot/robot.gltf", "its products are named under its new path");
         _ = moved.SourceIdentity.Should().Be(written.SourceIdentity);
 
@@ -222,9 +222,9 @@ public sealed class AssetRelocationTests
         var renamed = workspace.ReadRecord(written);
         var recordPath = workspace.RecordOf(written);
         _ = recordPath.Replace(Path.DirectorySeparatorChar, '/').Should().Be("Imports/Content/Models/Bot/hero.gltf.import.json");
-        _ = renamed.Source.Should().Be("../../../../Content/Models/Bot/hero.gltf");
+        _ = renamed.Source.Should().Be("/Content/Models/Bot/hero.gltf");
         _ = renamed.VirtualPath.Should().Be("/Content/Models/Bot/hero.gltf");
-        _ = renamed.ResolveSource(workspace.PathOf(recordPath)).Should().Be(workspace.PathOf("Content/Models/Bot/hero.gltf"));
+        _ = renamed.ResolveSource(workspace.Project)!.FullPath.Should().Be(workspace.PathOf("Content/Models/Bot/hero.gltf"));
         _ = renamed.SourceFingerprint!.Files.Should().Equal(written.SourceFingerprint!.Files);
         _ = renamed.Settings.GetProperty("unit_policy").GetString().Should().Be("normalize");
         _ = workspace.Exists("Content/Models/Bot/hero.gltf").Should().BeTrue();
@@ -283,9 +283,47 @@ public sealed class AssetRelocationTests
         _ = await workspace.Service.RelocateAsync(Move("/Content/Models/robot", "/Content/Models/Robot"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var renamed = workspace.ReadRecord(written);
-        _ = renamed.Source.Should().Be("../../../../Content/Models/Robot/robot.gltf");
+        _ = renamed.Source.Should().Be("/Content/Models/Robot/robot.gltf");
         _ = renamed.VirtualPath.Should().Be("/Content/Models/Robot/robot.gltf");
         _ = renamed.SourceIdentity.Should().Be(written.SourceIdentity);
+    }
+
+    /// <summary>
+    /// A rename that changes only the case of a model's folder renames its record's folder too, where the importer
+    /// requires it; undoing the rename restores the old case.
+    /// </summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task RenamingModelFolderCaseRenamesItsRecordFolder()
+    {
+        using var workspace = CreateContent();
+        var written = workspace.WriteModel("Content/Models/robot", "robot.gltf");
+        var history = new HistoryKeeper(this);
+
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Models/robot", "/Content/Models/Robot"), "Rename", history, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = workspace.RecordOf(written).Replace(Path.DirectorySeparatorChar, '/').Should().Be("Imports/Content/Models/Robot/robot.gltf.import.json");
+
+        await history.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = workspace.RecordOf(written).Replace(Path.DirectorySeparatorChar, '/').Should().Be("Imports/Content/Models/robot/robot.gltf.import.json");
+    }
+
+    /// <summary>A failure part-way through a case-only folder rename restores the case of every folder it renamed.</summary>
+    /// <param name="failAfterStep">The number of steps applied before the failure.</param>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    [DataRow(1)]
+    [DataRow(3)]
+    public async Task FailureRestoresFolderCase(int failAfterStep)
+    {
+        using var workspace = CreateContent();
+        _ = workspace.WriteModel("Content/Models/robot", "robot.gltf");
+        var before = workspace.Snapshot();
+        workspace.Service.FailAfterStep = failAfterStep;
+
+        Func<Task> work = () => workspace.Service.RelocateAsync(Move("/Content/Models/robot", "/Content/Models/Robot"), "Rename", new HistoryKeeper(this), this.TestContext.CancellationToken);
+
+        _ = await work.Should().ThrowAsync<AssetRelocationException>().WithMessage("*restored*").ConfigureAwait(false);
+        _ = workspace.Snapshot().Keys.Order(StringComparer.Ordinal).Should().Equal(before.Keys.Order(StringComparer.Ordinal));
     }
 
     /// <summary>

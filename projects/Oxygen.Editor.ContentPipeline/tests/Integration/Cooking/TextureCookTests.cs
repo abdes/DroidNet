@@ -90,7 +90,7 @@ public sealed class TextureCookTests
             1,
             root,
             [new("invalid", "texture-descriptor", "Invalid.otex.json", [], Output: null, Name: "Invalid") { VirtualPath = "/Other/Meter.otex" }]);
-        var invalid = await api.ImportAsync(new(Guid.NewGuid(), workspace.Root, Path.Combine(workspace.Root, ".invalid-native"), invalidManifest), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var invalid = await api.ImportAsync(new(Guid.NewGuid(), workspace.Root, Path.Combine(workspace.Root, ".invalid-native"), invalidManifest) { MountsFile = ContentImportMountsFile.Empty }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = invalid.Succeeded.Should().BeFalse();
         _ = ReadOutputIdentities(workspace.Root).Should().BeEquivalentTo(beforeInvalidImport);
     }

@@ -2,7 +2,7 @@
 
 Status: `agreed`
 
-Last Updated: 2026-10-29
+Last Updated: 2026-10-30
 
 ## 1. Purpose
 
@@ -303,10 +303,12 @@ reports through `IAssetCatalog.Changes`:
   folder through `IAssetFolderSource.FolderChanges` (a rename reports the old
   folder and the new one), after its files. The explorer's Content Folders pane
   reloads its tree on it.
-- **One catalog per file.** The project folder's catalog lists the project's
-  files outside its mounts, so it leaves out every mount folder inside the
-  project (the authoring mounts and the local folders mounted from inside it),
-  and no change is reported twice.
+- **One catalog per file.** Every bound source mount has its catalog and
+  watcher, inside or outside the project folder; a mount this machine cannot
+  read has neither, and gets them when a mount change binds it. The project
+  folder's catalog lists the project's files outside its mounts, so it leaves
+  out every source mount folder inside the project, and no change is reported
+  twice.
 - **Another publication.** Showing another publication keeps the catalog and
   watcher of every authored folder it already watches, so no change made while
   the catalogs are replaced goes unseen. Installing the new catalogs reports

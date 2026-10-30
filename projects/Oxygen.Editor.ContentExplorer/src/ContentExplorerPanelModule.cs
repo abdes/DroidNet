@@ -48,8 +48,7 @@ public sealed class ContentExplorerPanelModule : IScopeModule<IPanelLayer>
         scope.Register<ContentFoldersViewModel>(Reuse.Transient, setup: Setup.With(preventDisposal: true));
         scope.Register<ContentFoldersView>(Reuse.Transient);
 
-        // Dialog views used via Aura's IDialogService + VmToViewConverter.
-        scope.Register<LocalFolderMountDialogViewModel>(Reuse.Transient);
+        // Dialog views used via Aura's IDialogService + VmToViewConverter; the folders view model creates their models.
         scope.Register<LocalFolderMountDialogView>(Reuse.Transient);
 
         scope.Register<AssetsViewModel>(Reuse.Singleton);

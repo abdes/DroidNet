@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
@@ -21,19 +22,19 @@ public sealed partial class ContentPriorityViewModel : ObservableObject
         {
             switch (source.Kind)
             {
-                case CookedContentSourceKind.LocalFolder:
-                    var folder = project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
+                case CookedContentSourceKind.Cooked:
+                    var folder = project.LibraryMounts.Single(mount => mount.Kind == MountKind.Cooked && string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
 
-                    // A folder without an index holds no cooked content to order yet.
-                    if (project.FileSystem.File.Exists(Path.Combine(folder.Root.FullPath, LooseCookedIndex.FileName)))
+                    // A folder without an index, or without a location, holds no cooked content to order yet.
+                    if (folder.Location is { } root && project.FileSystem.File.Exists(Path.Combine(root.FullPath, LooseCookedIndex.FileName)))
                     {
-                        this.Sources.Add(new(source, folder.Name, folder.Root.FullPath));
+                        this.Sources.Add(new(source, folder.Name, root.FullPath));
                     }
 
                     break;
-                case CookedContentSourceKind.PakFile:
-                    var pak = project.PakFileMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
-                    this.Sources.Add(new(source, pak.Name, pak.Path.FullPath));
+                case CookedContentSourceKind.Pak:
+                    var pak = project.LibraryMounts.Single(mount => mount.Kind == MountKind.Pak && string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
+                    this.Sources.Add(new(source, pak.Name, pak.Location?.FullPath ?? string.Empty));
                     break;
                 case CookedContentSourceKind.ProjectOutput:
                     this.Sources.Add(new(source, "Project output", ProjectOutputFolders.CookedPath(project.ProjectRoot.FullPath)));
@@ -57,7 +58,7 @@ public sealed partial class ContentPriorityViewModel : ObservableObject
 
     /// <summary>Returns native mount order, with the highest-priority source last.</summary>
     /// <returns>The order to persist on explicit Apply.</returns>
-    public IReadOnlyList<CookedContentSource> GetMountOrder() => this.Sources.Reverse().Select(static item => item.Source).ToArray();
+    public IReadOnlyList<CookedContentSource> GetMountOrder() => [.. this.Sources.Reverse().Select(static item => item.Source)];
 
     private bool CanIncreasePriority() => this.SelectedSource is { } source && this.Sources.IndexOf(source) > 0;
 

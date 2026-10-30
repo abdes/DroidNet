@@ -26,6 +26,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Windows;
@@ -93,10 +94,13 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
                 PrimaryState = AssetState.Cooked,
             };
             await this.SetCookedOutputsAsync([cooked], token).ConfigureAwait(true);
-            return (Path.GetRelativePath(this.directory.FullName, Path.Combine(this.publishedOutputRoot!, "Materials")), "Published/Content/Materials");
+            return (Path.GetRelativePath(this.directory.FullName, Path.Combine(this.publishedOutputRoot!, "Materials")), ProjectOutputFolders.CookedViewName + "/Content/Materials");
         }
 
-        this.Session.ChangeContext(this.Session.Context with { AuthoringMounts = [new("Game", "Content")] });
+        var renamed = TestProject.InfoOf(this.Session.Context);
+        renamed.Mounts.Clear();
+        renamed.Mounts.Add(new("Game", MountKind.Source, "Content"));
+        this.Session.ChangeContext(TestProject.Open(renamed, this.fileSystem).Context);
         return ("Content/Materials", "Game/Materials");
     }
 
@@ -126,7 +130,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         _ = provider.Setup(value => value.ResolveAsync(this.Material.Identity, It.IsAny<CancellationToken>())).ReturnsAsync(this.Material);
         var info = new ProjectInfo("Explorer", Category.Games, this.directory.FullName)
         {
-            AuthoringMounts = [new("Content", "Content")],
+            Mounts = [new("Content", MountKind.Source, "Content")],
         };
         if (persisted)
         {
@@ -136,8 +140,8 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         this.Session = new(ProjectContext.FromProjectInfo(info, this.fileSystem));
         this.publications = new(this.Session.Context.ProjectId, this.Session.Context.ProjectRoot);
         var mountChanges = new Mock<IContentMountChanges>();
-        _ = mountChanges.Setup(value => value.ChangeMountsAsync(It.IsAny<ProjectContext>(), It.IsAny<ProjectInfo>(), It.IsAny<CancellationToken>()))
-            .Callback((ProjectContext _, ProjectInfo candidate, CancellationToken _) =>
+        _ = mountChanges.Setup(value => value.ChangeMountsAsync(It.IsAny<ProjectContext>(), It.IsAny<ProjectInfo>(), It.IsAny<MountBindings>(), It.IsAny<CancellationToken>()))
+            .Callback((ProjectContext _, ProjectInfo candidate, MountBindings _, CancellationToken _) =>
             {
                 this.MountChanges++;
                 this.Session.ChangeContext(ProjectContext.FromProjectInfo(candidate, this.fileSystem));
@@ -242,7 +246,9 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
                 VirtualPath = AssetPath.Parse("/Art/Shared.omat"),
             },
         };
-        this.Session.ChangeContext(this.Session.Context with { LocalFolderMounts = [new("Library", FileSystemPath.From(root))] });
+        var withLibrary = TestProject.InfoOf(this.Session.Context);
+        withLibrary.Mounts.Add(new("Library", MountKind.Cooked, "Library"));
+        this.Session.ChangeContext(TestProject.Open(withLibrary, this.fileSystem).Context);
         _ = this.Provider.Setup(provider => provider.ResolveAsync(item.Identity, It.IsAny<CancellationToken>())).ReturnsAsync(item);
         this.items.OnNext([item]);
         return item;

@@ -10,6 +10,9 @@
 #include <fstream>
 #include <ios>
 #include <optional>
+#include <ranges>
+#include <set>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -745,6 +748,121 @@ NOLINT_TEST_F(SourceMountsTest, BatchNameConflictIsRefused)
   EXPECT_EQ(diagnostics.front().code, codes::kNameConflict.id);
   EXPECT_EQ(diagnostics.front().source_path, "c.manifest.json");
   EXPECT_EQ(diagnostics.front().object_name, "Content");
+}
+
+// -- Shared cases ------------------------------------------------------------
+
+//! Runs `MountTableCases.json`, which the editor's mount table reader also
+//! runs. Each case gets its own fenced folder.
+class MountTableCasesTest : public TempDirTest {
+protected:
+  static auto Cases() -> const json&
+  {
+    static const auto cases = [] -> json {
+      auto stream = std::ifstream { OXYGEN_COOKER_MOUNT_TABLE_CASES };
+      if (!stream) {
+        throw std::runtime_error("MountTableCases.json is missing");
+      }
+      return json::parse(stream);
+    }();
+    return cases;
+  }
+
+  static auto Expand(std::string text, const fs::path& temp) -> std::string
+  {
+    constexpr auto kToken = std::string_view { "${temp}" };
+    for (auto at = text.find(kToken); at != std::string::npos;
+      at = text.find(kToken)) {
+      text.replace(at, kToken.size(), temp.generic_string());
+    }
+    return text;
+  }
+
+  static auto ToKind(std::string_view kind) -> MountKind
+  {
+    return kind == "Cooked" ? MountKind::kCooked
+      : kind == "Pak"       ? MountKind::kPak
+                            : MountKind::kSource;
+  }
+};
+
+NOLINT_TEST_F(MountTableCasesTest, TablesFollowTheCaseTable)
+{
+  for (const auto& [index, test_case] :
+    std::views::enumerate(Cases().at("cases"))) {
+    const auto name = test_case.at("name").get<std::string>();
+    SCOPED_TRACE(name);
+    const auto temp = TempDir() / std::to_string(index);
+    fs::create_directories(temp);
+    std::ofstream { temp / kMountsFileName } << R"({"version":1,"root":true})";
+    for (const auto& folder : test_case.value("folders", json::array())) {
+      fs::create_directories(temp / folder.get<std::string>());
+    }
+    for (const auto& file : test_case.value("files", json::array())) {
+      const auto path = temp / file.get<std::string>();
+      fs::create_directories(path.parent_path());
+      std::ofstream { path } << "x";
+    }
+    for (const auto& [dir, doc] :
+      test_case.value("mounts_files", json::object()).items()) {
+      fs::create_directories(temp / dir);
+      std::ofstream { temp / dir / kMountsFileName }
+        << Expand(doc.dump(), temp);
+    }
+
+    auto declarations = std::vector<MountDeclaration> {};
+    for (const auto& item : test_case.at("declarations")) {
+      declarations.push_back(MountDeclaration {
+        .name = item.at("name").get<std::string>(),
+        .kind = ToKind(item.at("kind").get<std::string>()),
+        .path = item.contains("path")
+          ? std::optional { Expand(item.at("path").get<std::string>(), temp) }
+          : std::nullopt,
+      });
+    }
+    const auto project = temp / test_case.value("project", "ws/proj");
+    fs::create_directories(project);
+    const auto table = ResolveMountTable(MountTableRequest {
+      .project_root = project,
+      .declarations = std::move(declarations),
+      .form = MountDeclarationForm::kCommittedFile,
+      .declared_in = "Project.oxy",
+      .working_directory = project,
+      .mounts_option = std::nullopt,
+      .owner = MountTableOwner::kProject,
+    });
+
+    const auto& expected = test_case.at("mounts");
+    EXPECT_EQ(table.mounts.size(), expected.size())
+      << DiagnosticSummary(table.diagnostics);
+    for (const auto& item : expected) {
+      const auto mount_name = item.at("name").get<std::string>();
+      const auto mount = table.Find(mount_name);
+      ASSERT_TRUE(mount) << mount_name;
+      EXPECT_EQ(to_string(mount->kind), item.at("kind").get<std::string>());
+      EXPECT_EQ(to_string(mount->scope), item.at("scope").get<std::string>());
+      EXPECT_EQ(to_string(mount->state), item.at("state").get<std::string>());
+      EXPECT_EQ(to_string(mount->origin), item.at("origin").get<std::string>());
+      EXPECT_EQ(mount->origin_file,
+        item.contains("origin_file")
+          ? fs::weakly_canonical(
+              temp / item.at("origin_file").get<std::string>())
+          : fs::path {});
+      EXPECT_EQ(mount->folder,
+        item.contains("folder")
+          ? fs::weakly_canonical(temp / item.at("folder").get<std::string>())
+          : fs::path {});
+    }
+
+    auto actual_codes = std::set<std::string> {};
+    for (const auto& diagnostic : table.diagnostics) {
+      actual_codes.insert(diagnostic.code);
+    }
+    const auto expected_codes
+      = test_case.at("codes").get<std::set<std::string>>();
+    EXPECT_EQ(actual_codes, expected_codes)
+      << DiagnosticSummary(table.diagnostics);
+  }
 }
 
 } // namespace

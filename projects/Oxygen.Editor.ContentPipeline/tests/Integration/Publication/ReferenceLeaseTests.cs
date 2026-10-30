@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -30,7 +31,7 @@ public sealed class ReferenceLeaseTests
     [DataRow(true, true)]
     public async Task ReusedCrossMountRootsStayLeasedThroughNativeWork(bool terminationFailure, bool foreignLibrary)
     {
-        using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var workspace = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
         using var foreignConsumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(workspace, this.TestContext.CancellationToken).ConfigureAwait(false);
         var compatibility = EditorNativeCompatibilityService.ForCooking();
@@ -44,7 +45,7 @@ public sealed class ReferenceLeaseTests
         var consumer = foreignLibrary ? foreignConsumer : workspace;
         if (foreignLibrary)
         {
-            consumer.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(workspace.CookedRoot("Art")))] });
+            consumer.Activate(consumer.ProjectContext.WithCookedLibraries(("Library", workspace.CookedRoot("Art"))));
             service = CreateService(consumer, api, compatibility: compatibility);
         }
 

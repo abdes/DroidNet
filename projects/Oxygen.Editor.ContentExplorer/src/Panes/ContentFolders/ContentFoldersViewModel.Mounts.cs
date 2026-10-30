@@ -9,6 +9,7 @@ using DroidNet.Controls;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
 
@@ -17,6 +18,14 @@ namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 /// <summary>Separates mount presentation, persistence and restoration operations.</summary>
 public partial class ContentFoldersViewModel
 {
+    private static void AddDeclarationOf(ProjectInfo projectInfo, ResolvedMount? mount, string name, bool isExpanded)
+    {
+        if (mount?.Declaration is { } declaration)
+        {
+            projectInfo.Mounts.Add(declaration with { Name = name, IsExpanded = isExpanded });
+        }
+    }
+
     // A new publication reaches the catalog as a burst of record changes; one check on the UI thread covers the burst.
     private void OnCatalogChanged()
     {
@@ -100,9 +109,6 @@ public partial class ContentFoldersViewModel
             && selected.ProjectOutputPaths.Distinct(StringComparer.Ordinal).SequenceEqual(cooked.CookedVirtualPaths!, StringComparer.Ordinal);
     }
 
-    private static string? GetRelativeMountPath(FileSystemPath projectRoot, FileSystemPath path)
-        => !path.IsSameOrInside(projectRoot) ? null : path == projectRoot ? "." : path.GetPathBelow(projectRoot);
-
     private async Task<bool> ShowLocalMountDialogAsync(LocalFolderMountDialogViewModel model)
     {
         if (this.vmToView.Convert(model, typeof(object), parameter: null, language: System.Globalization.CultureInfo.CurrentUICulture.Name) is not UIElement view)
@@ -122,48 +128,25 @@ public partial class ContentFoldersViewModel
             CloseButtonText = string.Empty,
             DefaultButton = DialogButton.Primary,
         };
-        return await dialogService.ShowAsync(spec).ConfigureAwait(true) == DialogButton.Primary;
+        return await dialogService.ShowAsync(spec, session.Lifetime).ConfigureAwait(true) == DialogButton.Primary;
     }
 
     private void AddMountToProjectInfo(ProjectInfo projectInfo, ITreeItem child)
     {
-        string name;
-        string path;
-        string? relative;
         switch (child)
         {
-            case VirtualFolderMountTreeItemAdapter mount:
-                name = mount.MountPointName;
-                path = mount.RootFolder.Location;
-                relative = mount.BackingPathKind == VirtualFolderMountBackingPathKind.ProjectRelative ? mount.BackingPath : null;
+            case VirtualFolderMountTreeItemAdapter { BackingPathKind: VirtualFolderMountBackingPathKind.ProjectRelative } view when ProjectOutputFolders.Contains(view.BackingPath):
+                projectInfo.OutputFolderViews.Add(new OutputFolderView(view.BackingPath, child.IsExpanded));
                 break;
-            case AuthoringMountPointTreeItemAdapter mount:
-                name = mount.MountPoint.Name;
-                path = mount.RootFolder.Location;
-                relative = null;
+            case VirtualFolderMountTreeItemAdapter library:
+                var folder = FileSystemPath.From(library.RootFolder.Location);
+                AddDeclarationOf(projectInfo, session.Context.LibraryMounts.FirstOrDefault(mount => mount.Location == folder), library.MountPointName, child.IsExpanded);
+                break;
+            case AuthoringMountPointTreeItemAdapter authoring:
+                AddDeclarationOf(projectInfo, authoring.MountPoint, authoring.MountPoint.Name, child.IsExpanded);
                 break;
             default:
-                return;
-        }
-
-        var folder = FileSystemPath.From(path);
-        var wasLocal = session.Context.LocalFolderMounts.Any(mount => mount.Root == folder);
-        if (!wasLocal)
-        {
-            relative ??= GetRelativeMountPath(FileSystemPath.From(this.projectRoot!.ProjectRootFolder.Location), folder);
-        }
-
-        if (relative is not null && ProjectOutputFolders.Contains(relative))
-        {
-            projectInfo.OutputFolderViews.Add(new OutputFolderView(relative, child.IsExpanded));
-        }
-        else if (relative is not null)
-        {
-            projectInfo.AuthoringMounts.Add(new ProjectMountPoint(name, relative, child.IsExpanded));
-        }
-        else
-        {
-            projectInfo.LocalFolderMounts.Add(new LocalFolderMount(name, folder, child.IsExpanded));
+                break;
         }
     }
 
@@ -173,7 +156,7 @@ public partial class ContentFoldersViewModel
         try
         {
             var location = isProjectRelative ? storage.NormalizeRelativeTo(root.ProjectRootFolder.Location, backingPath) : backingPath;
-            var folder = await storage.GetFolderFromPathAsync(location).ConfigureAwait(true);
+            var folder = await storage.GetFolderFromPathAsync(location, session.Lifetime).ConfigureAwait(true);
             if (this.selectionDisposed || !ReferenceEquals(context, session.Context))
             {
                 return;
@@ -185,7 +168,7 @@ public partial class ContentFoldersViewModel
                 try
                 {
                     using var selected = await publications.AcquireReadAsync(context, CancellationToken.None).ConfigureAwait(true);
-                    outputPaths = selected.ProjectOutputPaths.Distinct(StringComparer.Ordinal).ToArray();
+                    outputPaths = [.. selected.ProjectOutputPaths.Distinct(StringComparer.Ordinal)];
                     contentExplorerState.SetOutdatedPublication(reason: null);
                 }
                 catch (CookPublicationFormatException outdated)
@@ -225,7 +208,7 @@ public partial class ContentFoldersViewModel
 
     // The engine content is listed first, its folders relative to /Engine; a declared pak's folders are its assets'
     // whole virtual paths, under the pak's mount name. A pak that cannot be read is reported and left out.
-    private async Task MountPaksAsync(ProjectRootTreeItemAdapter root, IProjectInfo projectInfo)
+    private async Task MountPaksAsync(ProjectRootTreeItemAdapter root, ProjectContext project)
     {
         try
         {
@@ -240,16 +223,17 @@ public partial class ContentFoldersViewModel
             this.LogPakMountFailure(failure, AssetPath.Engine.Mount, engineContent.Path);
         }
 
-        foreach (var mount in projectInfo.PakFileMounts)
+        foreach (var mount in project.LibraryMounts.Where(static mount => mount is { Kind: MountKind.Pak, Location: not null }))
         {
+            var location = mount.Location!;
             try
             {
-                var pak = await PakIndex.ReadFileAsync(mount.Path, CancellationToken.None).ConfigureAwait(true);
-                _ = root.MountPak(new(mount.Name, mount.Path, pak.Assets.Select(static asset => asset.VirtualPath.TrimStart('/'))) { IsExpanded = mount.IsExpanded });
+                var pak = await PakIndex.ReadFileAsync(location, CancellationToken.None).ConfigureAwait(true);
+                _ = root.MountPak(new(mount.Name, location, pak.Assets.Select(static asset => asset.VirtualPath.TrimStart('/'))) { IsExpanded = mount.IsExpanded });
             }
             catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
             {
-                this.LogPakMountFailure(failure, mount.Name, mount.Path);
+                this.LogPakMountFailure(failure, mount.Name, location);
             }
         }
     }

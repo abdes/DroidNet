@@ -8,13 +8,13 @@
   "Preview": "Media/Preview.png",
   "SourceFolder": ".",
   "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
-  "AuthoringMounts": [
+  "Mounts": [
     {
       "Name": "Content",
-      "RelativePath": "Content"
+      "Kind": "Source",
+      "Path": "Content"
     }
   ],
-  "LocalFolderMounts": [],
   "StarterScene": {
     "AssetUri": "asset:///Content/Scenes/FirstPerson.oscene",
     "RelativePath": "Content/Scenes/FirstPerson.oscene.json",

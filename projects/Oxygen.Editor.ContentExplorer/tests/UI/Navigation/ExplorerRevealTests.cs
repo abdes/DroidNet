@@ -17,6 +17,7 @@ using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.ContentExplorer.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentExplorer.TestSupport.ExplorerTestData;
 
@@ -140,7 +141,7 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
         _ = view.ViewModel.Should().BeSameAs(fixture.Folders);
         await fixture.Folders.MountLocalFolderCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = fixture.Session.Context.LocalFolderMounts.Should().ContainSingle(mount => mount.Name == "Examples");
+        _ = fixture.Session.Context.LibraryMounts.Should().ContainSingle(mount => mount.Name == "Examples" && mount.Kind == MountKind.Cooked);
         _ = fixture.Folders.ShownItems.Should().Contain(item => item is VirtualFolderMountTreeItemAdapter && item.Label == "Examples", fixture.Diagnostics);
         var displayed = view.FindDescendant<DynamicTree>()!.DisplayedItems.Should().BeAssignableTo<IEnumerable<ITreeItem>>().Subject;
         _ = displayed.Should().Contain(item => item.Label == "Examples");

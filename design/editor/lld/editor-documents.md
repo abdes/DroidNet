@@ -2,7 +2,7 @@
 
 Status: `agreed`
 
-Last Updated: 2026-10-22 03:51
+Last Updated: 2026-10-30
 
 ## 1. Purpose
 
@@ -190,6 +190,16 @@ the file is open, the document service reacts once, the same way for every kind:
 a document without unsaved edits quietly reloads; a dirty one shows the conflict
 banner (Reload, Keep Mine, Save a Copy); one whose file was deleted or moved
 stays open, marked missing on disk, until the user saves it again or closes it.
+
+Another editor session is a change outside the editor too: two sessions, of one
+project or of two projects that mount the same shared folder, may open the same
+file. The editor holds no lock. A session saves only over the version it read,
+so the second save is refused as a conflict while the file differs from what it
+read, and it watches the file, as IDEs and DCC tools do. Exclusive editing
+belongs to source control: Perforce exclusive checkout, or `git lfs lock` for
+binary sources. Every bound source mount, inside or outside the project folder,
+has a catalog and its watcher, so the document service hears a shared file's
+changes as it hears those of `Content`.
 
 #### 5.2.4 Play with unsaved edits
 

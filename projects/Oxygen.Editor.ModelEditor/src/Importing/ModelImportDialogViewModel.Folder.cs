@@ -16,9 +16,9 @@ public sealed partial class ModelImportDialogViewModel
     public string? ContentFolderOf(string folder)
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);
-        foreach (var mount in this.project.AuthoringMounts)
+        foreach (var mount in this.project.SourceMounts)
         {
-            var root = this.project.ProjectRoot.Combine(mount.RelativePath).FullPath;
+            var root = mount.Location!.FullPath;
             var relative = Path.GetRelativePath(root, folder).Replace('\\', '/');
             if (!Path.IsPathRooted(relative) && !string.Equals(relative, "..", StringComparison.Ordinal) && !relative.StartsWith("../", StringComparison.Ordinal))
             {

@@ -53,15 +53,13 @@ public sealed partial class ImportToolContentPipelineApi(
         }
 
         var artifacts = compatibility.Artifacts!;
-        var manifestPath = Path.Combine(execution.OperationRoot, "manifests", $"import-{Guid.NewGuid():N}.json");
-        var reportPath = manifestPath + ".report.json";
-        var capturePath = execution.CapturedInputs is null ? null : manifestPath + ".captures.json";
-        string[] ownedPaths = capturePath is null ? [manifestPath, reportPath] : [manifestPath, reportPath, capturePath];
+        var files = RunFiles.For(Path.Combine(execution.OperationRoot, "manifests", $"import-{Guid.NewGuid():N}.json"));
+        string[] ownedPaths = [files.Manifest, files.Report, files.Mounts, files.Captures];
         Task? retainedWorkerDrain = null;
 
         try
         {
-            return await this.RunImportWorkerAsync(execution, artifacts, manifestPath, reportPath, capturePath, cancellationToken).ConfigureAwait(false);
+            return await this.RunImportWorkerAsync(execution, artifacts, files, cancellationToken).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException ex)
         {
@@ -138,7 +136,7 @@ public sealed partial class ImportToolContentPipelineApi(
         }
     }
 
-    private static ContentPipelineProcessRequest CreateImportRequest(string toolPath, ContentImportManifest manifest, string manifestPath, string inputRoot)
+    private static ContentPipelineProcessRequest CreateImportRequest(string toolPath, ContentImportManifest manifest, RunFiles files, string inputRoot)
     {
         // The context roots are the same for every job that has them, and the ImportTool applies them to the job types
         // that read cooked context; they are not part of the manifest file.
@@ -146,7 +144,7 @@ public sealed partial class ImportToolContentPipelineApi(
             .SelectMany(static root => new[] { "--cooked-context-root", root });
         return new(
             toolPath,
-            ["--no-tui", "--no-color", "--cooked-root", manifest.Output, "batch", "--manifest", manifestPath, "--root", inputRoot, .. contextRoots],
+            ["--no-tui", "--no-color", "--cooked-root", manifest.Output, "batch", "--manifest", files.Manifest, "--root", inputRoot, "--mounts", files.Mounts, .. contextRoots],
             inputRoot);
     }
 
@@ -222,31 +220,40 @@ public sealed partial class ImportToolContentPipelineApi(
             or InvalidOperationException
             or ArgumentException;
 
-    private async Task<NativeImportResult> RunImportWorkerAsync(ContentImportExecution execution, NativeArtifactLease artifacts, string manifestPath, string reportPath, string? capturePath, CancellationToken cancellationToken)
+    private async Task<NativeImportResult> RunImportWorkerAsync(ContentImportExecution execution, NativeArtifactLease artifacts, RunFiles files, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var toolPath = this.GetCompatibleToolPath(artifacts);
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
-        await WriteManifestAsync(execution.Manifest, manifestPath, cancellationToken).ConfigureAwait(false);
-        var request = CreateImportRequest(toolPath, execution.Manifest, manifestPath, execution.InputRoot) with
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(files.Manifest)!);
+        await WriteManifestAsync(execution.Manifest, files.Manifest, cancellationToken).ConfigureAwait(false);
+        await execution.MountsFile.WriteAsync(files.Mounts, cancellationToken).ConfigureAwait(false);
+        var request = CreateImportRequest(toolPath, execution.Manifest, files, execution.InputRoot) with
         {
             Output = CookRunContext.Current is { } progress ? new CookOutput(progress) : null,
         };
 
-        request = request with { Arguments = [.. request.Arguments, "--report", reportPath] };
-        if (capturePath is not null)
+        request = request with { Arguments = [.. request.Arguments, "--report", files.Report] };
+        if (execution.CapturedInputs is { } captured)
         {
-            await WriteCapturedInputsAsync(execution.CapturedInputs!, capturePath, cancellationToken).ConfigureAwait(false);
-            request = request with { Arguments = [.. request.Arguments, "--captured-inputs", capturePath] };
+            await WriteCapturedInputsAsync(captured, files.Captures, cancellationToken).ConfigureAwait(false);
+            request = request with { Arguments = [.. request.Arguments, "--captured-inputs", files.Captures] };
         }
 
-        this.LogImportToolInvoked(toolPath, manifestPath, execution.InputRoot);
+        this.LogImportToolInvoked(toolPath, files.Manifest, execution.InputRoot);
         var result = await this.processRunner.RunAsync(request, cancellationToken).ConfigureAwait(false);
-        return File.Exists(reportPath)
-            ? Import.NativeImportReportReader.Read(await File.ReadAllTextAsync(reportPath, cancellationToken).ConfigureAwait(false), execution, result.ExitCode)
+        return File.Exists(files.Report)
+            ? Import.NativeImportReportReader.Read(await File.ReadAllTextAsync(files.Report, cancellationToken).ConfigureAwait(false), execution, result.ExitCode)
             : result.ExitCode == 0
             ? throw new InvalidDataException("Native source import did not produce its required output report.")
             : new NativeImportResult(Succeeded: false, Diagnostics: [CreateImportFailureDiagnostic(execution.OperationId, result)]);
+    }
+
+    // The files of one ImportTool run, in the operation's folder: what it reads, and the report it writes. A run without
+    // captured inputs writes no captures file.
+    private sealed record RunFiles(string Manifest, string Report, string Mounts, string Captures)
+    {
+        public static RunFiles For(string manifest)
+            => new(manifest, manifest + ".report.json", manifest + ".mounts.json", manifest + ".captures.json");
     }
 
     private sealed class CookOutput(IProgress<CookRunProgress> progress) : IProgress<ContentPipelineProcessOutput>

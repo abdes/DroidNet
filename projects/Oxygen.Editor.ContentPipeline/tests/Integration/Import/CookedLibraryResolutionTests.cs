@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -27,7 +28,7 @@ public sealed class CookedLibraryResolutionTests
     [TestCategory("NativeContent")]
     public async Task SceneCookUsesDeclaredCookedLibraryGeometry()
     {
-        using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var library = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
         using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(library, this.TestContext.CancellationToken).ConfigureAwait(false);
         var compatibility = EditorNativeCompatibilityService.ForCooking();
@@ -36,7 +37,7 @@ public sealed class CookedLibraryResolutionTests
         _ = imported.IsPublished.Should().BeTrue();
         var geometry = imported.CookedAssets.First(static output => output.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
         var root = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Art library", FileSystemPath.From(root))] };
+        var context = consumer.ProjectContext.WithCookedLibraries(("ArtLibrary", root));
         consumer.Activate(context);
         AddGeometryNode(consumer, geometry, "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
@@ -75,7 +76,7 @@ public sealed class CookedLibraryResolutionTests
     public async Task MaterialCookUsesDeclaredCookedLibraryTexture()
     {
         // Arrange
-        using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var library = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
         using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         _ = Directory.CreateDirectory(Path.Combine(library.Root, "Art/Textures"));
         await File.WriteAllBytesAsync(Path.Combine(library.Root, "Art/Textures/Surface.tga"), [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 0, 0, 255], this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -89,7 +90,7 @@ public sealed class CookedLibraryResolutionTests
         var texture = await CreateService(library, api, compatibility: compatibility).CookAssetAsync(AssetPath.Parse("/Art/Textures/Surface.otex"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = texture.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, texture.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         var root = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Art library", FileSystemPath.From(root))] };
+        var context = consumer.ProjectContext.WithCookedLibraries(("ArtLibrary", root));
         consumer.Activate(context);
         var materialPath = Path.Combine(consumer.Root, "Content/Materials/Tiled.omat.json");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(materialPath)!);
@@ -121,8 +122,8 @@ public sealed class CookedLibraryResolutionTests
     [TestCategory("NativeContent")]
     public async Task SceneCookFollowsSavedLibraryPriority()
     {
-        using var older = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
-        using var newer = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var older = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
+        using var newer = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Art", MountKind.Source, "Art")], EngineContentPak.Installed());
         using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
@@ -136,7 +137,7 @@ public sealed class CookedLibraryResolutionTests
             geometry = result.CookedAssets.First(static output => output.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
         }
 
-        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Older", FileSystemPath.From(older.CookedRoot("Art"))), new("Newer", FileSystemPath.From(newer.CookedRoot("Art")))] };
+        var context = consumer.ProjectContext.WithCookedLibraries(("Older", older.CookedRoot("Art")), ("Newer", newer.CookedRoot("Art")));
         consumer.Activate(context);
         AddGeometryNode(consumer, geometry!, "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
@@ -145,7 +146,7 @@ public sealed class CookedLibraryResolutionTests
         var first = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
         _ = first.InputSnapshot!.CookedDependencies.Select(static dependency => dependency.SourceName).Distinct(StringComparer.Ordinal).Should().ContainSingle().Which.Should().Be("Newer");
-        var changed = context with { CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Newer"), new(CookedContentSourceKind.LocalFolder, "Older"), new(CookedContentSourceKind.ProjectOutput)] };
+        var changed = context with { CookedContentOrder = [new(CookedContentSourceKind.Cooked, "Newer"), new(CookedContentSourceKind.Cooked, "Older"), new(CookedContentSourceKind.ProjectOutput)] };
         consumer.Activate(changed);
         var workers = runner.Count;
         _ = (await service.ReadAsync(changed, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.OutOfDate);
@@ -175,7 +176,7 @@ public sealed class CookedLibraryResolutionTests
     {
         var index = Path.Combine(consumer.CookedRoot("Content"), "container.index.bin");
         var before = await File.ReadAllBytesAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var unavailable = context with { LocalFolderMounts = [new("Art library", FileSystemPath.From(Path.Combine(libraryProject, "Offline")))] };
+        var unavailable = context.WithCookedLibraries(("ArtLibrary", Path.Combine(libraryProject, "Offline")));
         consumer.Activate(unavailable);
         _ = (await service.ReadAsync(unavailable, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.InvalidSource);
         var missing = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);

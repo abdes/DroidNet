@@ -29,7 +29,7 @@ public sealed partial class ContentPipelineService
                     OperationId = operation.OperationId,
                     Domain = FailureDomain.ContentPipeline,
                     Severity = DiagnosticSeverity.Error,
-                    Code = AssetCookDiagnosticCodes.CookFailed,
+                    Code = exception is CookMountUnavailableException unavailable ? unavailable.Code : AssetCookDiagnosticCodes.CookFailed,
                     Message = exception.Message,
                     TechnicalMessage = exception.ToString(),
                     ExceptionType = exception.GetType().FullName,
@@ -84,11 +84,11 @@ public sealed partial class ContentPipelineService
 
     // A source renamed only in case is gone under its old name, although the file system still finds it by that name.
     private static bool IsGone(ProjectContext project, ContentCookInput input)
-        => !ExactSourcePath.Exists(project.FileSystem, project.ProjectRoot.FullPath, input.SourceRelativePath);
+        => !CookPaths.ExistsExactly(project, input.SourceCookPath);
 
     // Whether a source published a product that its move or deletion retires.
     private static bool HasRetiredProduct(ProjectContext project, Incremental.CookProvenance previous, ContentCookInput input)
-        => previous.Products.Any(product => input.AssetUri == product.SourceUri && Incremental.CookRootRepair.IsRetired(project.ProjectRoot.FullPath, product));
+        => previous.Products.Any(product => input.AssetUri == product.SourceUri && Incremental.CookRootRepair.IsRetired(project, product));
 
     // Each removed source is reported as an Info diagnostic, so the run names what it removed.
     private static void ReportRetiredSources(Guid operationId, ContentCookInput[] inputs)

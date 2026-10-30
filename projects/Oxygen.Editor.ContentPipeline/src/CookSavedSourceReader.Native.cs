@@ -40,19 +40,19 @@ internal static partial class CookSavedSourceReader
     }
 
     /// <summary>
-    /// Reads native-declared inputs under <paramref name="root"/> and retains their capture requirements.
-    /// A missing file outside the root, such as a DCC's temporary folder, is omitted: no bundle can hold
-    /// it and the import proceeds without it. An existing file outside the root cannot be kept and is
-    /// returned for the caller to refuse.
+    /// Reads native-declared inputs that have a path where they are kept and retains their capture requirements.
+    /// A missing file without one, such as a DCC's temporary folder, is omitted: nothing can hold it and the import
+    /// proceeds without it. An existing file without one cannot be kept and is returned for the caller to refuse.
     /// </summary>
     /// <param name="facts">The native source-analysis result.</param>
-    /// <param name="root">The folder the source's inputs are kept under.</param>
+    /// <param name="pathOf">Gets the path an input is kept under: its cook path, or its path in a source bundle; null
+    /// when it cannot be kept.</param>
     /// <param name="excluded">Operation-generated paths handled separately.</param>
     /// <param name="cancellationToken">Cancels source reads.</param>
     /// <returns>The source inputs with their observations, and the paths outside the root.</returns>
     internal static async Task<NativeSourceInputs> ReadNativeInputsAsync(
         NativeSourceAnalysisJob facts,
-        FileSystemPath root,
+        Func<FileSystemPath, string?> pathOf,
         IReadOnlySet<FileSystemPath> excluded,
         CancellationToken cancellationToken)
     {
@@ -62,7 +62,7 @@ internal static partial class CookSavedSourceReader
         var outside = ImmutableArray.CreateBuilder<FileSystemPath>();
         foreach (var (path, observation, exists) in NamedPaths(facts).Where(named => !excluded.Contains(named.Path)))
         {
-            if (!path.IsSameOrInside(root))
+            if (pathOf(path) is not { } kept)
             {
                 (exists ? outside : omitted).Add(path);
                 continue;
@@ -74,7 +74,7 @@ internal static partial class CookSavedSourceReader
                     ? CookSnapshotInputKind.Probe : CookSnapshotInputKind.File;
             var hash = kind == CookSnapshotInputKind.File
                 ? await HashAsync(path.FullPath, cancellationToken).ConfigureAwait(false) : string.Empty;
-            inputs.Add(new(AssetUri: null, path, path.GetPathBelow(root), hash, kind)
+            inputs.Add(new(AssetUri: null, path, kept, hash, kind)
             {
                 Metadata = metadata,
                 NativeObservations = observation is null ? [] : [observation],

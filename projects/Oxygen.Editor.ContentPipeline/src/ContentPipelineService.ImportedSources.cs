@@ -23,7 +23,7 @@ public sealed partial class ContentPipelineService
     {
         var outputs = ImmutableArray.CreateBuilder<CookProducedSourceFile>();
         var sources = graph.Assets.Where(static input => input.Kind == ContentCookAssetKind.ForeignSource)
-            .ToDictionary(static input => input.SourceRelativePath, StringComparer.Ordinal);
+            .ToDictionary(static input => input.SourceCookPath, StringComparer.Ordinal);
         foreach (var (sourcePath, update) in result.ModelImports)
         {
             if (!sources.TryGetValue(sourcePath, out var source))
@@ -33,8 +33,8 @@ public sealed partial class ContentPipelineService
 
             var record = ModelRecordLookup.Find(snapshot.Operation.Project, source.SourceAbsolutePath);
             var relative = ModelRecordLookup.RelativePath(snapshot.Operation.Project, record);
-            var input = snapshot.Inputs.Single(file => string.Equals(file.RelativePath, relative, StringComparison.Ordinal));
-            var before = await File.ReadAllBytesAsync(Path.Combine(snapshot.InputRoot, relative), cancellationToken).ConfigureAwait(false);
+            var input = snapshot.Inputs.Single(file => string.Equals(file.CookPath, relative, StringComparison.Ordinal));
+            var before = await File.ReadAllBytesAsync(Path.Combine(snapshot.InputRoot, CookPaths.StoragePathOf(relative)), cancellationToken).ConfigureAwait(false);
             if (input.IsAbsent || !string.Equals(Convert.ToHexString(SHA256.HashData(before)), input.DiscoveryHash, StringComparison.Ordinal))
             {
                 throw new InvalidDataException("The captured model import record changed during native cooking.");

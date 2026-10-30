@@ -13,14 +13,15 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="AssetUri">The authored asset URI.</param>
 /// <param name="Kind">The cook asset kind.</param>
 /// <param name="MountName">The authoring mount name.</param>
-/// <param name="SourceRelativePath">The project-relative source path.</param>
+/// <param name="SourceCookPath">The source's cook path (<see cref="CookPaths"/>): its mount path, such as
+/// <c>/Content/Scenes/Main.oscene.json</c>, or for a generated input its path relative to the project root.</param>
 /// <param name="SourceAbsolutePath">The absolute source path.</param>
 /// <param name="Role">The input role.</param>
 public sealed record ContentCookInput(
     AssetPath AssetUri,
     ContentCookAssetKind Kind,
     string MountName,
-    string SourceRelativePath,
+    string SourceCookPath,
     FileSystemPath SourceAbsolutePath,
     ContentCookInputRole Role)
 {

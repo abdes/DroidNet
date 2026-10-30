@@ -316,7 +316,7 @@ public sealed class DocumentScenesTests
         _ = files.Directory.CreateDirectory(files.Path.GetDirectoryName(record)!);
         using (var settings = JsonDocument.Parse("{}"))
         {
-            var created = ModelImportSettings.Create(record, document.File.Path.FullPath, Car.VirtualPath, settings.RootElement, identity);
+            var created = ModelImportSettings.Create(record, Car.VirtualPath, Car.VirtualPath, settings.RootElement, identity);
             await files.File.WriteAllBytesAsync(record, created.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 

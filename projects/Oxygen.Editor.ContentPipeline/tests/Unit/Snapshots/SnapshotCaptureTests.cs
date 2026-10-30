@@ -31,7 +31,7 @@ public sealed class SnapshotCaptureTests
         var snapshot = await workspace.CaptureAsync([unnormalized]).ConfigureAwait(false);
         await File.WriteAllTextAsync(input.SourcePath.FullPath, "later saved material", CancellationToken.None).ConfigureAwait(false);
 
-        _ = (await File.ReadAllTextAsync(Path.Combine(snapshot.InputRoot, input.RelativePath), CancellationToken.None).ConfigureAwait(false)).Should().Be("saved material");
+        _ = (await File.ReadAllTextAsync(Path.Combine(snapshot.InputRoot, input.CookPath), CancellationToken.None).ConfigureAwait(false)).Should().Be("saved material");
         _ = snapshot.Inputs.Should().ContainSingle().Which.SourcePath.Should().Be(input.SourcePath);
     }
 
@@ -57,7 +57,7 @@ public sealed class SnapshotCaptureTests
         }).ConfigureAwait(false);
 
         _ = discoveries.Should().Be(2);
-        _ = (await File.ReadAllTextAsync(Path.Combine(snapshot.InputRoot, input.RelativePath), CancellationToken.None).ConfigureAwait(false)).Should().Be("after");
+        _ = (await File.ReadAllTextAsync(Path.Combine(snapshot.InputRoot, input.CookPath), CancellationToken.None).ConfigureAwait(false)).Should().Be("after");
         _ = Directory.GetDirectories(Path.GetDirectoryName(snapshot.InputRoot)!).Should().ContainSingle();
     }
 
@@ -87,7 +87,7 @@ public sealed class SnapshotCaptureTests
     public async Task InvalidSnapshotPathsAreRejected(string relativePath)
     {
         using var workspace = new CaptureWorkspace();
-        var input = workspace.WriteInput("Content/source.bin", "saved source") with { RelativePath = relativePath };
+        var input = workspace.WriteInput("Content/source.bin", "saved source") with { CookPath = relativePath };
 
         var capture = () => workspace.CaptureAsync([input]);
         _ = await capture.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
@@ -105,7 +105,7 @@ public sealed class SnapshotCaptureTests
         var firstInput = first.WriteInput("Content/source.bin", "same bytes");
         var secondInput = second.WriteInput("Content/source.bin", "same bytes");
         var original = await first.CaptureAsync([firstInput]).ConfigureAwait(false);
-        var relocated = await second.CaptureAsync([secondInput with { RelativePath = "Content\\source.bin" }]).ConfigureAwait(false);
+        var relocated = await second.CaptureAsync([secondInput with { CookPath = "Content\\source.bin" }]).ConfigureAwait(false);
 
         _ = relocated.InputIdentity.Should().Be(original.InputIdentity);
         _ = relocated.InputRoot.Should().NotBe(original.InputRoot);

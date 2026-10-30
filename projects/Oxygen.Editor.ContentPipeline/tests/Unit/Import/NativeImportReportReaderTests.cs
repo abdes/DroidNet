@@ -133,7 +133,10 @@ public sealed class NativeImportReportReaderTests
             Guid.NewGuid(),
             Path.Combine(root, "inputs"),
             root,
-            new(1, output, [new("model", "gltf", "model.gltf", [], Output: null, Name: "Model")]));
+            new(1, output, [new("model", "gltf", "model.gltf", [], Output: null, Name: "Model")]))
+        {
+            MountsFile = ContentImportMountsFile.Empty,
+        };
         var report = JsonNode.Parse("""
             {"report_version":"4","session":{"cooked_root":""},"jobs":[
               {"index":1,"type":"gltf","importer":{"name":"gltf","revision":1},"status":"succeeded","outputs":[{"path":"Models/Model/Geometry/Triangle.ogeo","size_bytes":128}],
@@ -154,7 +157,10 @@ public sealed class NativeImportReportReaderTests
             Guid.NewGuid(),
             Path.Combine(root, "inputs"),
             root,
-            new(1, output, [new("model", "model", "model.gltf", [], Output: null, Name: null) { Record = "Imports/Content/Models/model.gltf.import.json" }]));
+            new(1, output, [new("model", "model", "model.gltf", [], Output: null, Name: null) { Record = "Imports/Content/Models/model.gltf.import.json" }]))
+        {
+            MountsFile = ContentImportMountsFile.Empty,
+        };
         var update = includeUpdate
             ? """
               ,"model_import":{"surface_provenance":{"schema_version":2,"geometries":[]},

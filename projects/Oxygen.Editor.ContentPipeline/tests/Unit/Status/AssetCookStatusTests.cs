@@ -327,7 +327,7 @@ internal sealed partial class AssetCookStatusTests
                         {
                             ReuseFingerprint = plan.Fingerprints[output.SourceAssetUri],
                             SourceInput = graph.Assets.Single(input => input.AssetUri == output.SourceAssetUri),
-                            SourceFiles = [.. graph.Files.Where(file => graph.FileDependencies[output.SourceAssetUri].Contains(file.RelativePath, StringComparer.Ordinal))],
+                            SourceFiles = [.. graph.Files.Where(file => graph.FileDependencies[output.SourceAssetUri].Contains(file.CookPath, StringComparer.Ordinal))],
                             DeclaredOutputs = graph.SourceFacts[output.SourceAssetUri].Outputs,
                             NativeReferences = graph.SourceFacts[output.SourceAssetUri].References,
                             Diagnostics = [.. diagnostics],
@@ -366,7 +366,7 @@ internal sealed partial class AssetCookStatusTests
                     source,
                     [new(output, KindName(source.Kind), "/", Required: true)],
                     [.. references],
-                    [new(source.AssetUri, source.SourceAbsolutePath, source.SourceRelativePath, hash)]);
+                    [new(source.AssetUri, source.SourceAbsolutePath, source.SourceCookPath, hash)]);
             }
         }
     }

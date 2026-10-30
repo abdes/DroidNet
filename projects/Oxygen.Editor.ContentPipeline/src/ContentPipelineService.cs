@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -205,7 +206,7 @@ public sealed partial class ContentPipelineService(
                 Domain = FailureDomain.AssetImport,
                 Severity = DiagnosticSeverity.Error,
                 Code = AssetImportDiagnosticCodes.SourceMissing,
-                Message = $"Cook source is missing: {input.SourceRelativePath}.",
+                Message = $"Cook source is missing: {input.SourceCookPath}.",
                 AffectedVirtualPath = input.AssetUri.VirtualPath,
                 AffectedPath = input.SourceAbsolutePath.FullPath,
             })];
@@ -229,7 +230,7 @@ public sealed partial class ContentPipelineService(
     // A container's products are the ones its job reported; any other source's only product is its own identity.
     private static bool Produced(ContentCookInput input, CookedAssetEntry asset, NativeImportResult import)
         => input.Kind is ContentCookAssetKind.ForeignSource or ContentCookAssetKind.Input
-            ? import.ProductsBySource.TryGetValue(input.SourceRelativePath, out var products) && products.Contains(asset.VirtualPath)
+            ? import.ProductsBySource.TryGetValue(input.SourceCookPath, out var products) && products.Contains(asset.VirtualPath)
             : string.Equals(input.AssetUri.VirtualPath, asset.VirtualPath, StringComparison.Ordinal);
 
     private static List<ContentCookedAsset> CreateCookedAssets(
@@ -295,46 +296,40 @@ public sealed partial class ContentPipelineService(
 
     private static List<ContentCookInput> ResolveFolderInputs(ProjectContext project, AssetPath folderUri)
     {
-        var mount = project.AuthoringMounts.FirstOrDefault(m => string.Equals(m.Name, folderUri.Mount, StringComparison.Ordinal))
+        var mount = project.SourceMounts.FirstOrDefault(m => string.Equals(m.Name, folderUri.Mount, StringComparison.Ordinal))
                     ?? throw new InvalidOperationException($"Project does not declare authoring mount '{folderUri.Mount}'.");
-        if (ProjectOutputFolders.Contains(mount))
-        {
-            return [];
-        }
-
         var absoluteFolder = project.Find(folderUri)!.File.FullPath;
         var files = project.FileSystem;
         return !files.Directory.Exists(absoluteFolder) ? [] : [.. files.Directory.EnumerateFiles(absoluteFolder, "*", SearchOption.AllDirectories)
             .Where(file => IsCookableDescriptorFile(project, file))
             .Select(file => ResolveFileInput(project, mount, file, ContentCookInputRole.Primary))
-            .OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)];
+            .OrderBy(static input => input.SourceCookPath, StringComparer.Ordinal)];
     }
 
     private static List<ContentCookInput> ResolveMountInputs(
         ProjectContext project,
-        ProjectMountPoint mount)
+        ResolvedMount mount)
     {
-        var mountRoot = project.ProjectRoot.Combine(mount.RelativePath);
         var files = project.FileSystem;
-        return !files.Directory.Exists(mountRoot.FullPath) ? [] : [.. files.Directory.EnumerateFiles(mountRoot.FullPath, "*", SearchOption.AllDirectories)
+        return !files.Directory.Exists(mount.Location!.FullPath) ? [] : [.. files.Directory.EnumerateFiles(mount.Location.FullPath, "*", SearchOption.AllDirectories)
             .Where(file => IsCookableDescriptorFile(project, file))
             .Select(file => ResolveFileInput(project, mount, file, ContentCookInputRole.Primary))
-            .OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)];
+            .OrderBy(static input => input.SourceCookPath, StringComparer.Ordinal)];
     }
 
     private static ContentCookInput ResolveFileInput(
         ProjectContext project,
-        ProjectMountPoint mount,
+        ResolvedMount mount,
         string sourceAbsolutePath,
         ContentCookInputRole role)
     {
-        var assetUri = AssetPath.Create(mount.Name, FileSystemPath.From(sourceAbsolutePath).GetPathBelow(project.ProjectRoot.Combine(mount.RelativePath)));
+        var assetUri = AssetPath.Create(mount.Name, FileSystemPath.From(sourceAbsolutePath).GetPathBelow(mount.Location!));
         return CookInputResolver.Resolve(project, assetUri, role);
     }
 
     private static ContentImportManifest PruneReusableJobs(ContentCookScope scope, ContentImportManifest manifest, Guid sourceKey)
     {
-        var skippedSources = scope.Inputs.GroupBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
+        var skippedSources = scope.Inputs.GroupBy(static input => input.SourceCookPath, StringComparer.Ordinal)
             .Where(group => group.All(input => scope.ReusableSources.Contains(input.AssetUri)))
             .Select(static group => group.Key).ToHashSet(StringComparer.Ordinal);
         var keptJobs = manifest.Jobs.Where(job => !skippedSources.Contains(job.AttributedSource)).ToArray();
@@ -370,7 +365,7 @@ public sealed partial class ContentPipelineService(
             var input = scope.Inputs.FirstOrDefault(input => issue.AffectedPath is { } affected && input.SourceAbsolutePath == FileSystemPath.From(affected));
             return input is null ? issue : issue with
             {
-                AffectedPath = Path.Combine(scope.Project.ProjectRoot.FullPath, input.SourceRelativePath),
+                AffectedPath = input.SourceAbsolutePath.FullPath,
                 AffectedVirtualPath = input.AssetUri.VirtualPath,
             };
         });
@@ -382,10 +377,10 @@ public sealed partial class ContentPipelineService(
         return validated with
         {
             ModelImports = importResult.ModelImports,
-            AuxiliaryFilesBySource = scope.Inputs.Where(input => importResult.OutputsBySource.ContainsKey(input.SourceRelativePath))
+            AuxiliaryFilesBySource = scope.Inputs.Where(input => importResult.OutputsBySource.ContainsKey(input.SourceCookPath))
                 .ToImmutableDictionary(
                     static input => input.AssetUri,
-                    input => importResult.OutputsBySource[input.SourceRelativePath].Where(resources.Contains).ToImmutableArray()),
+                    input => importResult.OutputsBySource[input.SourceCookPath].Where(resources.Contains).ToImmutableArray()),
         };
     }
 
@@ -430,7 +425,7 @@ public sealed partial class ContentPipelineService(
     private Task<ContentCookResult> CookProjectCoreAsync(ContentCookOperation operation, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(
             operation,
-            () => [.. operation.Project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)).Select(mount => this.CreateScope(operation.Project, ResolveMountInputs(operation.Project, mount), CookTargetKind.Project))],
+            () => [.. operation.Project.SourceMounts.Select(mount => this.CreateScope(operation.Project, ResolveMountInputs(operation.Project, mount), CookTargetKind.Project))],
             CookTargetKind.Project,
             cancellationToken);
 
@@ -593,7 +588,12 @@ public sealed partial class ContentPipelineService(
             scope.InputRoot,
             CookPublicationPaths.Operation(scope.Project.ProjectRoot.FullPath, operationId),
             manifest)
-        { Artifacts = scope.Artifacts, CapturedInputs = scope.CapturedInputs, Importers = scope.Importers };
+        {
+            MountsFile = ContentImportMountsFile.Of(scope.Project),
+            Artifacts = scope.Artifacts,
+            CapturedInputs = scope.CapturedInputs,
+            Importers = scope.Importers,
+        };
         return this.engineContentPipelineApi.ImportAsync(execution, cancellationToken);
     }
 

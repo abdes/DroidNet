@@ -75,7 +75,7 @@ public sealed partial class CookInputSnapshotCapture
                     return false;
                 }
 
-                var capturedPath = Path.Combine(capturedRoot, input.RelativePath);
+                var capturedPath = Path.Combine(capturedRoot, CookPaths.StoragePathOf(input.CookPath));
                 foreach (var read in observation.Reads)
                 {
                     var digest = read.Offset == 0 && (read.MaxBytes == 0 || read.MaxBytes >= source.Metadata!.Size)

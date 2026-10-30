@@ -68,10 +68,10 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
     private async Task<CookSourceFacts> ReadSourceAsync(ContentCookInput input, CancellationToken cancellationToken)
     {
         var hash = await hashSource(input.SourceAbsolutePath.FullPath, cancellationToken).ConfigureAwait(false);
-        var primary = new CookSnapshotInput(input.AssetUri, input.SourceAbsolutePath, input.SourceRelativePath, hash);
+        var primary = new CookSnapshotInput(input.AssetUri, input.SourceAbsolutePath, input.SourceCookPath, hash);
         if (!this.products.TryGetValue(input.AssetUri, out var prior)
             || prior.SourceInput is null || prior.SourceFiles.IsEmpty
-            || !prior.SourceFiles.Any(file => string.Equals(file.RelativePath, input.SourceRelativePath, StringComparison.Ordinal)
+            || !prior.SourceFiles.Any(file => string.Equals(file.CookPath, input.SourceCookPath, StringComparison.Ordinal)
                 && string.Equals(file.DiscoveryHash, hash, StringComparison.Ordinal)))
         {
             return new(input, [], [], [primary]) { RequiresAnalysis = true };
@@ -81,14 +81,16 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
         var changedProbe = false;
         foreach (var accepted in prior.SourceFiles)
         {
-            var file = accepted with
+            // A file whose mount is no longer bound is read again by an analysis, which reports the mount.
+            if (CookPaths.TryFileOf(project, accepted.CookPath) is not { } sourcePath)
             {
-                SourcePath = project.ProjectRoot.Combine(accepted.RelativePath),
-                NativeObservations = [],
-            };
+                return new(input, [], [], [primary]) { RequiresAnalysis = true };
+            }
+
+            var file = accepted with { SourcePath = sourcePath, NativeObservations = [] };
             if (file.Kind == CookSnapshotInputKind.File)
             {
-                var currentHash = string.Equals(file.RelativePath, primary.RelativePath, StringComparison.Ordinal)
+                var currentHash = string.Equals(file.CookPath, primary.CookPath, StringComparison.Ordinal)
                     ? hash : await hashSource(file.SourcePath.FullPath, cancellationToken).ConfigureAwait(false);
                 files.Add(file with { DiscoveryHash = currentHash });
             }

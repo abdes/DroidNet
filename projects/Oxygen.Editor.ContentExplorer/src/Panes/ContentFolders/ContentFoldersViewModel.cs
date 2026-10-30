@@ -19,6 +19,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
@@ -34,10 +35,6 @@ namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 /// <param name="contentExplorerState">The state of the content explorer.</param>
 /// <param name="dialogService">Shows the pane's dialogs.</param>
 /// <param name="vmToView">Resolves the views of the pane's dialogs.</param>
-/// <param name="loggerFactory">
-///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
-///     process. If <see langword="null" />, logging is disabled.
-/// </param>
 /// <param name="mountChanges">Applies a confirmed change of the content mounts.</param>
 /// <param name="pane">Takes the assets pane's requests to show or create a folder while this pane lives.</param>
 /// <param name="publications">Reads the project's selected cook publication: its output folders and products.</param>
@@ -45,6 +42,10 @@ namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 /// <param name="folders">Reports the folders created, deleted or renamed under the authoring roots.</param>
 /// <param name="hostingContext">Brings catalog notifications to the UI thread.</param>
 /// <param name="engineContent">The engine content pak, shown as a cooked mount.</param>
+/// <param name="loggerFactory">
+///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
+///     process. If <see langword="null" />, logging is disabled.
+/// </param>
 /// <param name="relocation">Renames, moves and copies folders with their references; without it only empty folders rename.</param>
 /// <param name="relocationService">Reports the folders the editor moved or deleted; absent where the editor cannot relocate.</param>
 public partial class ContentFoldersViewModel(
@@ -74,8 +75,7 @@ public partial class ContentFoldersViewModel(
     private ProjectRootTreeItemAdapter? projectRoot;
     private bool suppressTreeSelectionEvents;
     private bool isSubscribed;
-    private IDisposable? catalogSubscription;
-    private IDisposable? folderSubscription;
+    private CancellationTokenSource? subscriptions;
     private int publishedFoldersCheckQueued;
     private int folderReloadQueued;
 
@@ -128,8 +128,9 @@ public partial class ContentFoldersViewModel(
 
             // The assets pane asks this pane to show and create folders.
             pane.Attach(this);
-            this.catalogSubscription = catalog.Changes.Subscribe(_ => this.OnCatalogChanged());
-            this.folderSubscription = folders.FolderChanges.Subscribe(_ => this.OnFoldersChanged());
+            this.subscriptions = CancellationTokenSource.CreateLinkedTokenSource(session.Lifetime);
+            catalog.Changes.Subscribe(_ => this.OnCatalogChanged(), this.subscriptions.Token);
+            folders.FolderChanges.Subscribe(_ => this.OnFoldersChanged(), this.subscriptions.Token);
             relocationService?.FilesChanged += this.OnFilesChanged;
             this.SelectionSettled += this.OnTreeSelectionSettled;
 
@@ -203,8 +204,12 @@ public partial class ContentFoldersViewModel(
             this.selectionDisposed = true;
             this.selectionRequestVersion++;
             pane.Detach(this);
-            this.catalogSubscription?.Dispose();
-            this.folderSubscription?.Dispose();
+            // The tree may be disposed more than once: cancel the subscriptions only the first time.
+            if (Interlocked.Exchange(ref this.subscriptions, null) is { } subscriptions)
+            {
+                subscriptions.Cancel();
+                subscriptions.Dispose();
+            }
             relocationService?.FilesChanged -= this.OnFilesChanged;
             this.SelectionSettled -= this.OnTreeSelectionSettled;
             contentExplorerState.PropertyChanged -= this.OnContentExplorerStatePropertyChanged;
@@ -273,6 +278,30 @@ public partial class ContentFoldersViewModel(
         return current;
     }
 
+    // A folder under a mount is named from the mount; a folder of the project outside the mounts, from the catalog of
+    // the project's own files.
+    private static AssetPath? GetFolderVirtualPath(FolderTreeItemAdapter folder)
+    {
+        var location = FileSystemPath.From(folder.Folder.Location);
+        for (var current = folder.Parent; current is not null; current = current.Parent)
+        {
+            (var root, var mount) = current switch
+            {
+                AuthoringMountPointTreeItemAdapter authoring => (authoring.RootFolder.Location, authoring.VirtualRootPath),
+                VirtualFolderMountTreeItemAdapter mounted => (mounted.RootFolder.Location, mounted.VirtualRootPath),
+                ProjectRootTreeItemAdapter project => (project.ProjectRootFolder.Location, AssetCatalog.ProjectFiles),
+                _ => (null, null),
+            };
+            if (root is not null && mount is not null)
+            {
+                var mountRoot = FileSystemPath.From(root);
+                return location.IsSameOrInside(mountRoot) && mount.TryCombine(location.GetPathBelow(mountRoot), out var path) ? path : null;
+            }
+        }
+
+        return null;
+    }
+
     [RelayCommand(CanExecute = nameof(CanChangeMounts))]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
     private async Task MountKnownLocationAsync(KnownVirtualFolderMount kind)
@@ -293,7 +322,7 @@ public partial class ContentFoldersViewModel(
         }
 
         candidate.OutputFolderViews.Add(view);
-        await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
+        await this.ApplyMountCandidateAsync(expected, candidate, MountBindings.None).ConfigureAwait(true);
         if (session.Context.OutputFolderViews.Any(shown => string.Equals(shown.Folder, view.Folder, StringComparison.Ordinal)))
         {
             contentExplorerState.SetSelectedFolders([AssetPath.Create(view.Name)]);
@@ -307,25 +336,19 @@ public partial class ContentFoldersViewModel(
         var expected = session.Context;
         var candidate = this.GetActiveProjectInfo();
         var names = await this.GetExistingMountPointNamesAsync().ConfigureAwait(true);
-        var model = new LocalFolderMountDialogViewModel(dialogService, names);
+        var model = new LocalFolderMountDialogViewModel(dialogService, names, expected.ProjectRoot);
         if (!await this.ShowLocalMountDialogAsync(model).ConfigureAwait(true) || model.Result is not { } definition)
         {
             return;
         }
 
-        var folder = FileSystemPath.From(definition.AbsoluteFolderPath);
-        var relative = GetRelativeMountPath(expected.ProjectRoot, folder);
+        // A folder saved on this machine only is a placeholder, which the project's own .mounts.json binds to it.
         var isCooked = await storage.DocumentExistsAsync(Path.Combine(definition.AbsoluteFolderPath, LooseCookedIndex.FileName)).ConfigureAwait(true);
-        if (relative is not null && !isCooked)
-        {
-            candidate.AuthoringMounts.Add(new(definition.MountPointName, relative));
-        }
-        else
-        {
-            candidate.LocalFolderMounts.Add(new(definition.MountPointName, folder));
-        }
-
-        await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
+        candidate.Mounts.Add(new(definition.MountPointName, isCooked ? MountKind.Cooked : MountKind.Source, definition.CommittedPath));
+        var bindings = definition.CommittedPath is null
+            ? MountBindings.None.Bind(definition.MountPointName, FileSystemPath.From(definition.AbsoluteFolderPath))
+            : MountBindings.None;
+        await this.ApplyMountCandidateAsync(expected, candidate, bindings).ConfigureAwait(true);
     }
 
     private void RestoreState()
@@ -366,8 +389,11 @@ public partial class ContentFoldersViewModel(
             return;
         }
 
-        projectInfo.LocalFolderMounts.Clear();
-        projectInfo.AuthoringMounts.Clear();
+        foreach (var mount in projectInfo.Mounts.Where(static mount => mount.Kind != MountKind.Pak).ToList())
+        {
+            _ = projectInfo.Mounts.Remove(mount);
+        }
+
         projectInfo.OutputFolderViews.Clear();
 
         var children = await this.projectRoot.Children.ConfigureAwait(true);
@@ -377,22 +403,22 @@ public partial class ContentFoldersViewModel(
         }
 
         RemapPriorityNames(activeProject, projectInfo);
-        await this.ApplyMountCandidateAsync(activeProject, projectInfo).ConfigureAwait(true);
+        await this.ApplyMountCandidateAsync(activeProject, projectInfo, MountBindings.None).ConfigureAwait(true);
     }
 
-    private async Task LoadPersistedMountsAsync(ProjectRootTreeItemAdapter root, ProjectInfo projectInfo, ProjectContext context)
+    private async Task LoadPersistedMountsAsync(ProjectRootTreeItemAdapter root, ProjectContext context)
     {
-        foreach (var view in projectInfo.OutputFolderViews)
+        foreach (var view in context.OutputFolderViews)
         {
             await this.RestoreMountAsync(root, context, view.Name, view.Folder, isProjectRelative: true, view.IsExpanded).ConfigureAwait(true);
         }
 
-        foreach (var mount in projectInfo.LocalFolderMounts)
+        foreach (var mount in context.LibraryMounts.Where(static mount => mount is { Kind: MountKind.Cooked, Location: not null }))
         {
-            await this.RestoreMountAsync(root, context, mount.Name, mount.Root.FullPath, isProjectRelative: false, mount.IsExpanded).ConfigureAwait(true);
+            await this.RestoreMountAsync(root, context, mount.Name, mount.Location!.FullPath, isProjectRelative: false, mount.IsExpanded).ConfigureAwait(true);
         }
 
-        await this.MountPaksAsync(root, projectInfo).ConfigureAwait(true);
+        await this.MountPaksAsync(root, context).ConfigureAwait(true);
     }
 
     private Task PreloadRecentTemplatesAsync() => this.ReloadMountTreeAsync();
@@ -414,19 +440,9 @@ public partial class ContentFoldersViewModel(
             DefaultSceneId = context.DefaultSceneId,
             Settings = session.Settings,
         };
-        foreach (var mount in context.AuthoringMounts)
+        foreach (var mount in context.DeclaredMounts)
         {
-            projectInfo.AuthoringMounts.Add(mount);
-        }
-
-        foreach (var mount in context.LocalFolderMounts)
-        {
-            projectInfo.LocalFolderMounts.Add(mount);
-        }
-
-        foreach (var mount in context.PakFileMounts)
-        {
-            projectInfo.PakFileMounts.Add(mount);
+            projectInfo.Mounts.Add(mount);
         }
 
         foreach (var view in context.OutputFolderViews)
@@ -605,34 +621,10 @@ public partial class ContentFoldersViewModel(
             AuthoringMountPointTreeItemAdapter authoring => authoring.VirtualRootPath,
             VirtualFolderMountTreeItemAdapter virtualMount => virtualMount.VirtualRootPath,
             PakMountTreeItemAdapter pak => pak.VirtualRootPath,
-            FolderTreeItemAdapter folder => this.GetFolderVirtualPath(folder),
+            FolderTreeItemAdapter folder => GetFolderVirtualPath(folder),
             CookedFolderTreeItemAdapter folder => folder.VirtualPath,
             _ => null,
         };
-
-    // A folder under a mount is named from the mount; a folder of the project outside the mounts, from the catalog of
-    // the project's own files.
-    private AssetPath? GetFolderVirtualPath(FolderTreeItemAdapter folder)
-    {
-        var location = FileSystemPath.From(folder.Folder.Location);
-        for (var current = folder.Parent; current is not null; current = current.Parent)
-        {
-            (string? root, AssetPath? mount) = current switch
-            {
-                AuthoringMountPointTreeItemAdapter authoring => (authoring.RootFolder.Location, authoring.VirtualRootPath),
-                VirtualFolderMountTreeItemAdapter mounted => (mounted.RootFolder.Location, mounted.VirtualRootPath),
-                ProjectRootTreeItemAdapter project => (project.ProjectRootFolder.Location, AssetCatalog.ProjectFiles),
-                _ => (null, null),
-            };
-            if (root is not null && mount is not null)
-            {
-                var mountRoot = FileSystemPath.From(root);
-                return location.IsSameOrInside(mountRoot) && mount.TryCombine(location.GetPathBelow(mountRoot), out var path) ? path : null;
-            }
-        }
-
-        return null;
-    }
 
     private void OnMountPointPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Projects.Mounts;
+
 namespace Oxygen.Editor.Projects;
 
 /// <summary>Resolves persisted content priority independently of scan, cook or load completion timing.</summary>
@@ -14,7 +16,7 @@ public static class CookedContentOrdering
     public static IReadOnlyList<CookedContentSource> Resolve(IProjectInfo project)
     {
         ArgumentNullException.ThrowIfNull(project);
-        return Resolve(project.LocalFolderMounts, project.PakFileMounts, project.CookedContentOrder);
+        return Resolve(project.Mounts, project.CookedContentOrder);
     }
 
     /// <summary>Resolves an open project's mount order.</summary>
@@ -24,22 +26,22 @@ public static class CookedContentOrdering
     public static IReadOnlyList<CookedContentSource> Resolve(ProjectContext project)
     {
         ArgumentNullException.ThrowIfNull(project);
-        return Resolve(project.LocalFolderMounts, project.PakFileMounts, project.CookedContentOrder);
+        return Resolve(project.DeclaredMounts, project.CookedContentOrder);
     }
 
     /// <summary>Expands the saved order with newly declared libraries directly below project output.</summary>
-    /// <param name="folders">Local folders in declaration order, oldest first.</param>
-    /// <param name="paks">Pak files in declaration order, oldest first.</param>
+    /// <param name="mounts">The declared mounts; their cooked folders and pak files, in declaration order, oldest first.</param>
     /// <param name="savedOrder">Explicit source priority in mount order, lowest first.</param>
     /// <returns>A complete mount order; callers omit folders that do not contain cooked content.</returns>
     /// <exception cref="InvalidDataException">A library has no name, two libraries share a name, or the saved order names a duplicate or undeclared source.</exception>
-    public static IReadOnlyList<CookedContentSource> Resolve(IEnumerable<LocalFolderMount> folders, IEnumerable<PakFileMount> paks, IEnumerable<CookedContentSource> savedOrder)
+    public static IReadOnlyList<CookedContentSource> Resolve(IEnumerable<ProjectMount> mounts, IEnumerable<CookedContentSource> savedOrder)
     {
-        ArgumentNullException.ThrowIfNull(folders);
-        ArgumentNullException.ThrowIfNull(paks);
+        ArgumentNullException.ThrowIfNull(mounts);
         ArgumentNullException.ThrowIfNull(savedOrder);
-        var libraries = folders.Select(static folder => new CookedContentSource(CookedContentSourceKind.LocalFolder, folder?.Name))
-            .Concat(paks.Select(static pak => new CookedContentSource(CookedContentSourceKind.PakFile, pak?.Name)))
+        var libraries = mounts.Where(static mount => mount.Kind is MountKind.Cooked or MountKind.Pak)
+            .Select(static mount => new CookedContentSource(
+                mount.Kind == MountKind.Cooked ? CookedContentSourceKind.Cooked : CookedContentSourceKind.Pak,
+                mount.Name))
             .ToArray();
         if (libraries.Any(static library => string.IsNullOrWhiteSpace(library.Name)))
         {

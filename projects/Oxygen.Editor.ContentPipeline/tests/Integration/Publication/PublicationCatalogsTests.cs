@@ -8,7 +8,6 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 
@@ -29,7 +28,7 @@ public sealed class PublicationCatalogsTests
         try
         {
             WriteLibrary(library.FullName, 1);
-            consumer.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(library.FullName))] });
+            consumer.Activate(consumer.ProjectContext.WithCookedLibraries(("Library", library.FullName)));
             var project = consumer.Session.Context;
             using var published = await consumer.Publication.AcquireForMountAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
             var recorded = published.Roots.Single(static root => string.Equals(root.Name, "Library", StringComparison.Ordinal));

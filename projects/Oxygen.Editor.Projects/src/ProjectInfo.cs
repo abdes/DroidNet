@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
@@ -24,7 +25,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     /// <summary>
     ///     The current supported project manifest schema version.
     /// </summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -105,13 +106,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     public string? Thumbnail { get; set; }
 
     /// <inheritdoc />
-    public IList<ProjectMountPoint> AuthoringMounts { get; set; } = [];
-
-    /// <inheritdoc />
-    public IList<LocalFolderMount> LocalFolderMounts { get; set; } = [];
-
-    /// <inheritdoc />
-    public IList<PakFileMount> PakFileMounts { get; set; } = [];
+    public IList<ProjectMount> Mounts { get; set; } = [];
 
     /// <inheritdoc />
     public IList<OutputFolderView> OutputFolderViews { get; set; } = [];
@@ -193,9 +188,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
             Name = projectInfo.Name,
             Category = projectInfo.Category,
             Thumbnail = projectInfo.Thumbnail,
-            AuthoringMounts = [.. projectInfo.AuthoringMounts],
-            LocalFolderMounts = [.. projectInfo.LocalFolderMounts],
-            PakFileMounts = [.. projectInfo.PakFileMounts],
+            Mounts = [.. projectInfo.Mounts],
             OutputFolderViews = [.. projectInfo.OutputFolderViews],
             CookedContentOrder = [.. projectInfo.CookedContentOrder],
             DefaultSceneId = projectInfo.DefaultSceneId,
@@ -226,11 +219,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
 
         public string? Thumbnail { get; init; }
 
-        public IList<ProjectMountPoint> AuthoringMounts { get; init; } = [];
-
-        public IList<LocalFolderMount> LocalFolderMounts { get; init; } = [];
-
-        public IList<PakFileMount> PakFileMounts { get; init; } = [];
+        public IList<ProjectMount> Mounts { get; init; } = [];
 
         public IList<OutputFolderView> OutputFolderViews { get; init; } = [];
 

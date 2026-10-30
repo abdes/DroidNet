@@ -83,7 +83,7 @@ public sealed class SourceReplacementTests
             if (persisted)
             {
                 using var writer = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(replica.FullName), this.TestContext.CancellationToken).ConfigureAwait(false);
-                var recovery = await CookPublicationTransaction.LoadAsync(project.Context with { ProjectRoot = FileSystemPath.From(replica.FullName) }, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+                var recovery = await CookPublicationTransaction.LoadAsync(project.ReopenAt(replica.FullName), project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
                 await recovery.RecoverAsync(writer).ConfigureAwait(false);
                 AssertSource(replica.FullName, "old");
                 AssertRecoveredRoot(replica.FullName, "Content", hadPrevious: true);
@@ -193,7 +193,7 @@ public sealed class SourceReplacementTests
     private async Task<CookSourceReplacement> StageSourceAsync(PublicationProject project)
     {
         var published = Path.Combine(project.Root, SourceBundle);
-        var staged = Path.Combine(project.Root, ".build/cook", project.Operation.OperationId.ToString("N"), "inputs", SourceBundle);
+        var staged = Path.Combine(project.Root, ".build/cook", project.Operation.OperationId.ToString("N"), "inputs", CookPaths.StoragePathOf(SourceBundleRoot));
         foreach (var (root, prefix) in new[] { (published, "old"), (staged, "new") })
         {
             foreach (var file in new[] { "model.glb", "model.bin", "buffers/data.bin" })
@@ -204,6 +204,6 @@ public sealed class SourceReplacementTests
             }
         }
 
-        return new(SourceBundle, await CookRootImage.CaptureAsync(published, copyTo: null, this.TestContext.CancellationToken).ConfigureAwait(false));
+        return new(SourceBundleRoot, await CookRootImage.CaptureAsync(published, copyTo: null, this.TestContext.CancellationToken).ConfigureAwait(false));
     }
 }

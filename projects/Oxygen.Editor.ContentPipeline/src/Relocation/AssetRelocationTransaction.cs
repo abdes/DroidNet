@@ -50,7 +50,7 @@ internal static partial class AssetRelocationTransaction
         var journal = new Journal
         {
             Phase = Phase.Applying,
-            Moves = [.. plan.Moves.Select(static move => new JournalMove(move.Source.FullPath, move.Target.FullPath, move.IsDirectory))],
+            Moves = [.. GetFolderCaseRenames(fileSystem, plan.Moves), .. plan.Moves.Select(static move => new JournalMove(move.Source.FullPath, move.Target.FullPath, move.IsDirectory))],
             CreatedDirectories = [.. GetMissingParents(fileSystem, plan.Moves)],
             Edits = [.. plan.Edits.Select(static edit => new JournalEdit(edit.FinalPath.FullPath, edit.Before.Sha256, Hash(edit.AfterContent), edit.BeforeContent))],
         };
@@ -329,6 +329,37 @@ internal static partial class AssetRelocationTransaction
         var folder = Path.GetDirectoryName(path)!;
         return fileSystem.Directory.Exists(folder) && fileSystem.Directory.EnumerateFileSystemEntries(folder, Path.GetFileName(path))
             .Any(entry => string.Equals(Path.GetFileName(entry), Path.GetFileName(path), StringComparison.Ordinal));
+    }
+
+    // A move into folders that differ only in case from its source's folders renames those folders first: a file moved
+    // on its own lands in the existing folder, which keeps its old case. Outer folders come first; a restore reverses
+    // them after the moves.
+    private static List<JournalMove> GetFolderCaseRenames(IFileSystem fileSystem, IEnumerable<RelocationFileMove> moves)
+    {
+        var renames = new List<JournalMove>();
+        foreach (var move in moves)
+        {
+            var folders = new Stack<JournalMove>();
+            for (FileSystemPath? source = move.Source.Parent, target = move.Target.Parent;
+                source is not null && target is not null && source == target && !string.Equals(source.FullPath, target.FullPath, StringComparison.Ordinal);
+                source = source.Parent, target = target.Parent)
+            {
+                if (!string.Equals(source.Name, target.Name, StringComparison.Ordinal) && fileSystem.Directory.Exists(target.FullPath) && !HasExactName(fileSystem, target.FullPath))
+                {
+                    folders.Push(new(GetActualPath(fileSystem, target.FullPath), target.FullPath, IsDirectory: true));
+                }
+            }
+
+            renames.AddRange(folders.Where(folder => !renames.Any(rename => FileSystemPath.From(rename.Target) == FileSystemPath.From(folder.Target))));
+        }
+
+        return renames;
+    }
+
+    private static string GetActualPath(IFileSystem fileSystem, string path)
+    {
+        var folder = Path.GetDirectoryName(path)!;
+        return Path.Combine(folder, Path.GetFileName(fileSystem.Directory.EnumerateFileSystemEntries(folder, Path.GetFileName(path)).First()));
     }
 
     private static List<string> GetMissingParents(IFileSystem fileSystem, IEnumerable<RelocationFileMove> moves)

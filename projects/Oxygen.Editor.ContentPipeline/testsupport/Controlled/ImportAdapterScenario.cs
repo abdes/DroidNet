@@ -11,12 +11,12 @@ internal static class ImportAdapterScenario
     internal static ContentImportExecution CreateExecution(ImportAdapterWorkspace workspace, ContentImportManifest manifest)
     {
         var operationId = Guid.NewGuid();
-        return new(operationId, workspace.Root, Path.Combine(workspace.Root, ".build", "cook", operationId.ToString("N")), manifest);
+        return new(operationId, workspace.Root, Path.Combine(workspace.Root, ".build", "cook", operationId.ToString("N")), manifest) { MountsFile = ContentImportMountsFile.Empty };
     }
 
     internal static ContentImportManifest CreateManifest(ImportAdapterWorkspace workspace) => new(Version: 1, Output: Path.Combine(workspace.Root, ".cooked", "generations", Guid.NewGuid().ToString("N")), Jobs: [new ContentImportJob(Id: "material-red", Type: "material-descriptor", Source: "Content/Materials/Red.omat.json", DependsOn: [], Output: null, Name: "Red") { VirtualPath = "/Content/Materials/Red.omat" },]) { Mounts = [new ContentImportMount("Content", "Content")] };
 
-    internal static ContentSourceAnalysisExecution AnalysisExecution(ImportAdapterWorkspace workspace) => new(Guid.NewGuid(), workspace.Root, Path.Combine(workspace.Root, "operation"), [new("first", "material-descriptor", "first.json", [], Output: null, Name: null) { VirtualPath = "/Content/First.omat" }, new("second", "material-descriptor", "second.json", [], Output: null, Name: null) { VirtualPath = "/Content/Second.omat" }]);
+    internal static ContentSourceAnalysisExecution AnalysisExecution(ImportAdapterWorkspace workspace) => new(Guid.NewGuid(), workspace.Root, Path.Combine(workspace.Root, "operation"), [new("first", "material-descriptor", "first.json", [], Output: null, Name: null) { VirtualPath = "/Content/First.omat" }, new("second", "material-descriptor", "second.json", [], Output: null, Name: null) { VirtualPath = "/Content/Second.omat" }]) { MountsFile = ContentImportMountsFile.Empty };
 
     internal static ImportToolContentPipelineApi CreateQueryApi(ImportAdapterWorkspace workspace, IContentPipelineProcessRunner runner) => new(new FixedToolLocator(workspace.ToolPath), runner, NullLogger<ImportToolContentPipelineApi>.Instance, workspace.Compatibility);
 }

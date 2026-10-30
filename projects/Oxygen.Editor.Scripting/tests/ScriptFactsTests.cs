@@ -6,7 +6,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Subjects;
 using System.Threading.Channels;
 using AwesomeAssertions;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Editor.World.Components;
@@ -63,7 +63,7 @@ public sealed partial class ScriptFactsTests : IDisposable
             Problems = [new ScriptProblem(DiagnosticSeverity.Error, "S0101", "unexpected symbol", "rendered") { Line = 1, Column = 43 }],
         });
         this.results = new RecordingResults(this.published);
-        this.session = new TestSession(this.project.Context with { AuthoringMounts = [] });
+        this.session = new TestSession(this.project.Context with { Mounts = [] });
         this.facts = new ScriptFacts(
             this.session,
             new Catalog(this.changes),
@@ -198,7 +198,7 @@ public sealed partial class ScriptFactsTests : IDisposable
         _ = this.project.WriteFile(MoveFile, MoveSource);
         await this.OpenAsync().ConfigureAwait(false);
 
-        this.session.ChangeContext(this.project.Context with { AuthoringMounts = [] });
+        this.session.ChangeContext(this.project.Context with { Mounts = [] });
 
         _ = this.facts.All.Should().BeEmpty();
         _ = this.facts.Problems.Should().BeEmpty();
@@ -255,7 +255,8 @@ public sealed partial class ScriptFactsTests : IDisposable
     {
         _ = this.project.WriteFile(MoveFile, MoveSource);
         await this.OpenAsync().ConfigureAwait(false);
-        var moved = this.project.Context with { AuthoringMounts = [new ProjectMountPoint(TestProject.ContentMount, "Other")] };
+        var relocated = TestProject.Create(this.project.Context.FileSystem, this.project.Root.FullPath, [new ProjectMount(TestProject.ContentMount, MountKind.Source, "Other")]);
+        var moved = this.project.Context with { Mounts = relocated.Context.Mounts };
         var file = this.project.Root.Combine("Other").Combine("Player").Combine("run.lua");
         WriteRaw(this.project, file);
 
@@ -324,7 +325,7 @@ public sealed partial class ScriptFactsTests : IDisposable
         _ = outputs.WriteFile("/Content/readme.txt", MoveSource);
         WriteRaw(outputs, outputs.Root.Combine(TestProject.ContentMount).Combine(".hidden").Combine("a.lua"));
         WriteRaw(outputs, outputs.Root.Combine(".cooked").Combine("a.lua"));
-        var mounted = this.project.Context with { AuthoringMounts = outputs.Context.AuthoringMounts };
+        var mounted = this.project.Context with { Mounts = outputs.Context.Mounts };
         await this.UntilAsync(() => this.facts.All.Count > 0, () => this.session.ChangeContext(mounted)).ConfigureAwait(false);
 
         // A scan the test awaits analyzes every file it lists, so a file the scan should skip would show by now.

@@ -116,7 +116,7 @@ public sealed class ScriptCookTests
         _ = (await producer.CookCurrentSceneAsync(SceneUri, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
 
         var root = await library.ExportRootAsync("Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Script library", FileSystemPath.From(root))] };
+        var context = consumer.ProjectContext.WithCookedLibraries(("ScriptLibrary", root));
         consumer.Activate(context);
         consumer.WriteText("Content/Local/own.lua", Move);
         IScriptLibrary service = CreateNativeService(consumer);

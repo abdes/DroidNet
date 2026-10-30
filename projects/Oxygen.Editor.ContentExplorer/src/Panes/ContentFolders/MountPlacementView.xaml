@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.ContentExplorer.Panes.ContentFolders.MountPlacementView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--  Where a new mount's folder is saved: committed beside the project, or bound on this machine only.  -->
+    <StackPanel Spacing="4">
+        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="Save the folder" />
+        <RadioButton
+            GroupName="MountPlacement"
+            IsChecked="{x:Bind Placement.SaveInProject, Mode=TwoWay}"
+            IsEnabled="{x:Bind Placement.CanSaveInProject, Mode=OneWay}">
+            <StackPanel>
+                <TextBlock Text="{x:Bind Placement.InProjectText, Mode=OneWay}" TextWrapping="Wrap" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{ThemeResource CaptionTextBlockStyle}"
+                    Text="Shared through the repository: everyone gets the folder at the same place beside the project."
+                    TextWrapping="Wrap" />
+            </StackPanel>
+        </RadioButton>
+        <RadioButton GroupName="MountPlacement" IsChecked="{x:Bind Placement.SaveOnThisMachine, Mode=TwoWay}">
+            <StackPanel>
+                <TextBlock Text="On this machine only, in .mounts.json" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{ThemeResource CaptionTextBlockStyle}"
+                    Text="Project.oxy commits a placeholder; each person binds it to their own folder."
+                    TextWrapping="Wrap" />
+            </StackPanel>
+        </RadioButton>
+    </StackPanel>
+</UserControl>

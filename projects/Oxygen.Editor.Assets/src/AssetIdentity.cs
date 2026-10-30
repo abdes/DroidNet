@@ -25,7 +25,7 @@ public static class AssetIdentity
         var identity = source.VirtualPath ?? effective.Identity;
         var physicalPath = AssetIdentityReducer.TryResolveIndexedDescriptorPath(source);
         var exists = source.IsPackaged || (physicalPath is not null && project.FileSystem.File.Exists(physicalPath.FullPath));
-        var library = source.IsPackaged ? null : project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == source.ContainerPath);
+        var library = source.IsPackaged ? null : project.LibraryMounts.FirstOrDefault(mount => mount.Location == source.ContainerPath);
         return new(
             identity,
             AssetIdentityReducer.GetDisplayName(identity),
@@ -54,8 +54,7 @@ public static class AssetIdentity
     {
         var container = effective.CookedMetadata?.ContainerPath;
         return container is null ? null
-            : project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == container)?.Name
-                ?? project.PakFileMounts.FirstOrDefault(mount => mount.Path == container)?.Name
+            : project.LibraryMounts.FirstOrDefault(mount => mount.Location == container)?.Name
                 ?? (effective.Origin == AssetOrigin.Engine && effective.IsPackaged ? AssetPath.Engine.Mount : null);
     }
 }

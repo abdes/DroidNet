@@ -570,6 +570,13 @@ if(OXYGEN_INSTALL)
     PATTERN
     "*.schema.json"
   )
+  # install-sdk: static
+  install(
+    FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/test/Import/MountTableCases.json"
+    DESTINATION "${OXYGEN_INSTALL_DATA}/conformance"
+    COMPONENT Oxygen_data
+  )
 endif()
 
 oxygen_module_install(

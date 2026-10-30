@@ -59,12 +59,12 @@ public sealed class ProducedSourceMetadataTests
         var published = Path.Combine(project.Root, SourceBundle);
         _ = Directory.CreateDirectory(published);
         await File.WriteAllTextAsync(Path.Combine(published, "model.gltf"), "source", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var captured = Path.Combine(project.Root, ".build/cook", project.Operation.OperationId.ToString("N"), "inputs", SourceBundle);
+        var captured = Path.Combine(project.Root, ".build/cook", project.Operation.OperationId.ToString("N"), "inputs", CookPaths.StoragePathOf(SourceBundleRoot));
         var before = await CookRootImage.CaptureAsync(published, captured, this.TestContext.CancellationToken).ConfigureAwait(false);
         var transaction = await project.PrepareAsync(
             staging,
             this.TestContext.CancellationToken,
-            sourceReplacement: new(SourceBundle, before),
+            sourceReplacement: new(SourceBundleRoot, before),
             producedSourceFiles: [update]).ConfigureAwait(false);
         using var accepted = await transaction.PublishAsync(preview: null, project.Baseline, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await File.ReadAllBytesAsync(Path.Combine(project.Root, update.RelativePath), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(update.After);
@@ -137,7 +137,7 @@ public sealed class ProducedSourceMetadataTests
             if (persisted)
             {
                 using var writer = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(replica.FullName), this.TestContext.CancellationToken).ConfigureAwait(false);
-                var loaded = await CookPublicationTransaction.LoadAsync(project.Context with { ProjectRoot = FileSystemPath.From(replica.FullName) }, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+                var loaded = await CookPublicationTransaction.LoadAsync(project.ReopenAt(replica.FullName), project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
                 await loaded.RecoverAsync(writer).ConfigureAwait(false);
                 foreach (var update in new[] { first, second })
                 {
@@ -242,7 +242,7 @@ public sealed class ProducedSourceMetadataTests
         var primary = projectOwned ? bundle + ".gltf" : "model.gltf";
         var folder = projectOwned ? "Content/Models" : "Content/Models/" + bundle;
         var recordPath = ModelImportSettings.PathFor(project.Root, "/" + folder + "/" + primary);
-        var record = ModelImportSettings.Create(recordPath, Path.Combine(project.Root, folder, primary), "/" + folder + "/" + primary, ModelImportSettings.DefaultSettings(bundle));
+        var record = ModelImportSettings.Create(recordPath, "/" + folder + "/" + primary, "/" + folder + "/" + primary, ModelImportSettings.DefaultSettings(bundle));
         var established = JsonSerializer.SerializeToElement(new
         {
             surface_provenance = new

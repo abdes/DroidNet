@@ -6,10 +6,10 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Input.Testing;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.FileSystem;
@@ -355,7 +355,7 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task CookDropsAnEmptiedMountAndPublishesAnother()
     {
-        using var workspace = new CookWorkspace([new("Content", "Content"), new("Extra", "Extra")], EngineContentPak.Installed());
+        using var workspace = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Extra", MountKind.Source, "Extra")], EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         workspace.WriteMaterial("Extra/Materials/Red.omat.json", "Red");
         var compatibility = EditorNativeCompatibilityService.ForCooking();

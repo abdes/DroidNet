@@ -19,13 +19,14 @@ internal sealed class KeptChangeProblemsTests
 {
     private static readonly AssetPath Harbor = AssetPath.Parse("/Content/Scenes/Harbor.oscene");
     private static readonly AssetPath Dock = AssetPath.Parse("/Content/Scenes/Dock.oscene");
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
     [TestMethod]
     public void ACooksKeptChangeWarnings_BecomeProblems_AndTheNextCookOfTheSceneReplacesThem()
     {
         using var problems = new KeptChangeProblems(Mock.Of<ICookRunService>());
-        var raised = 0;
-        problems.ProblemsChanged += (_, _) => raised++;
+        using var raised = new SemaphoreSlim(0);
+        problems.ProblemsChanged += (_, _) => raised.Release();
 
         problems.Take(Result([Harbor], Issue(Harbor, KeptChangeDiagnostics.InstanceOverrideUnresolved), Issue(Harbor, "scene.descriptor.reference_missing")));
 
@@ -36,7 +37,9 @@ internal sealed class KeptChangeProblemsTests
         problems.Take(Result([Harbor]));
 
         _ = problems.Problems.Should().BeEmpty("the scene cooked again without kept changes");
-        _ = raised.Should().Be(2);
+        _ = raised.Wait(Timeout).Should().BeTrue("the first cook changed the problems");
+        _ = raised.Wait(Timeout).Should().BeTrue("the second cook changed them again");
+        _ = raised.CurrentCount.Should().Be(0);
     }
 
     [TestMethod]

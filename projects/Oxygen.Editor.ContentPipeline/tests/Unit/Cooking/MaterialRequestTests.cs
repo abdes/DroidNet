@@ -32,8 +32,7 @@ public sealed class MaterialRequestTests
             new MaterialCookRequest(
                 AssetPath.Parse("/Content/Materials/Wood.omat"),
                 ProjectRoot: projects.Context.ProjectRoot,
-                MountName: string.Empty,
-                SourceRelativePath: "Content/Materials/Wood.omat.json"),
+                SourceFile: null!),
             CancellationToken.None).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Rejected);
@@ -45,19 +44,17 @@ public sealed class MaterialRequestTests
     /// <returns>The asynchronous validation test.</returns>
     [TestMethod]
     [DataRow("project")]
-    [DataRow("mount")]
     [DataRow("source")]
     [DataRow("kind")]
     public async Task MaterialRequestMustMatchItsActiveProjectIdentity(string mismatch)
     {
         using var projects = CreateProjectContext();
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
-        var request = new MaterialCookRequest(AssetPath.Parse("/Content/Materials/Wood.omat"), projects.Context.ProjectRoot, "Content", "Content/Materials/Wood.omat.json");
+        var request = new MaterialCookRequest(AssetPath.Parse("/Content/Materials/Wood.omat"), projects.Context.ProjectRoot, projects.Context.ProjectRoot.Combine("Content/Materials/Wood.omat.json"));
         request = mismatch switch
         {
             "project" => request with { ProjectRoot = FileSystemPath.From(projects.Context.ProjectRoot.FullPath + "-other") },
-            "mount" => request with { MountName = "Other" },
-            "source" => request with { SourceRelativePath = "Content/Materials/Other.omat.json" },
+            "source" => request with { SourceFile = projects.Context.ProjectRoot.Combine("Content/Materials/Other.omat.json") },
             _ => request with { Material = AssetPath.Parse("/Content/Geometry/Cube.ogeo") },
         };
 

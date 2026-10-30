@@ -505,12 +505,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             }
         }
 
-        // An authoring mount's file is named from the project root; a local folder mount's file from its mount.
-        var relativePath = location.MountKind == ProjectMountKind.Authoring
-            ? location.File.GetPathBelow(project.ProjectRoot)
-            : location.Path.RelativePath;
         _ = await this.cookService.CookMaterialAsync(
-            new MaterialCookRequest(this.document.File.Asset, project.ProjectRoot, location.Path.Mount, relativePath),
+            new MaterialCookRequest(this.document.File.Asset, project.ProjectRoot, location.File),
             CancellationToken.None).ConfigureAwait(true);
     }
 

@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
@@ -33,8 +34,7 @@ internal sealed partial class MaterialCookTests
             new MaterialCookRequest(
                 AssetPath.Parse("/Content/Materials/Wood.omat"),
                 FileSystemPath.From(workspace.Root),
-                "Content",
-                "Content/Materials/Wood.omat.json"),
+                FileSystemPath.From(Path.Combine(workspace.Root, "Content", "Materials", "Wood.omat.json"))),
             CancellationToken.None).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Cooked);
@@ -70,8 +70,7 @@ internal sealed partial class MaterialCookTests
         var request = new MaterialCookRequest(
             AssetPath.Parse("/Content/Materials/Wood.omat"),
             FileSystemPath.From(workspace.Root),
-            "Content",
-            "Content/Materials/Wood.omat.json");
+            FileSystemPath.From(Path.Combine(workspace.Root, "Content", "Materials", "Wood.omat.json")));
 
         var first = await service.CookMaterialAsync(request, CancellationToken.None).ConfigureAwait(false);
         var descriptorPath = Path.Combine(workspace.CookedRoot, "Materials", "Wood.omat");
@@ -110,8 +109,7 @@ internal sealed partial class MaterialCookTests
             new MaterialCookRequest(
                 AssetPath.Parse("/Content/Materials/Gold.omat"),
                 FileSystemPath.From(workspace.Root),
-                "Content",
-                "Authoring/Materials/Gold.omat.json"),
+                FileSystemPath.From(Path.Combine(workspace.Root, "Authoring", "Materials", "Gold.omat.json"))),
             CancellationToken.None).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Cooked);
@@ -143,15 +141,14 @@ internal sealed partial class MaterialCookTests
         var request = new MaterialCookRequest(
             AssetPath.Parse("/Content/Materials/Textured.omat"),
             FileSystemPath.From(workspace.Root),
-            "Content",
-            "Content/Materials/Textured.omat.json");
+            FileSystemPath.From(Path.Combine(workspace.Root, "Content", "Materials", "Textured.omat.json")));
 
         var first = await service.CookMaterialAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var firstTextureInput = first.Cook!.InputSnapshot!.Inputs.Single(input => string.Equals(input.RelativePath, "Content/Textures/Surface.tga", StringComparison.Ordinal));
+        var firstTextureInput = first.Cook!.InputSnapshot!.Inputs.Single(input => string.Equals(input.CookPath, "/Content/Textures/Surface.tga", StringComparison.Ordinal));
         firstImage[^2] = 255;
         await File.WriteAllBytesAsync(imagePath, firstImage, this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await service.CookMaterialAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var secondTextureInput = second.Cook!.InputSnapshot!.Inputs.Single(input => string.Equals(input.RelativePath, "Content/Textures/Surface.tga", StringComparison.Ordinal));
+        var secondTextureInput = second.Cook!.InputSnapshot!.Inputs.Single(input => string.Equals(input.CookPath, "/Content/Textures/Surface.tga", StringComparison.Ordinal));
 
         _ = first.State.Should().Be(MaterialCookState.Cooked);
         _ = second.State.Should().Be(MaterialCookState.Cooked);
@@ -177,8 +174,7 @@ internal sealed partial class MaterialCookTests
             new MaterialCookRequest(
                 AssetPath.Parse("/Content/Materials/Broken.omat"),
                 FileSystemPath.From(workspace.Root),
-                "Content",
-                "Content/Materials/Broken.omat.json"),
+                FileSystemPath.From(Path.Combine(workspace.Root, "Content", "Materials", "Broken.omat.json"))),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Failed);
@@ -207,8 +203,7 @@ internal sealed partial class MaterialCookTests
             new MaterialCookRequest(
                 AssetPath.Parse("/Content/Materials/Invalid.omat"),
                 FileSystemPath.From(workspace.Root),
-                "Content",
-                "Content/Materials/Invalid.omat.json"),
+                FileSystemPath.From(Path.Combine(workspace.Root, "Content", "Materials", "Invalid.omat.json"))),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Failed);
@@ -251,7 +246,7 @@ internal sealed partial class MaterialCookTests
         public MaterialWorkspace(string authoringFolder = "Content")
         {
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-content-pipeline-tests", Guid.NewGuid().ToString("N"));
-            var project = TestProject.Create(new RealFileSystem(), this.Root, [new ProjectMountPoint(TestProject.ContentMount, authoringFolder)]).Context;
+            var project = TestProject.Create(new RealFileSystem(), this.Root, [new ProjectMount(TestProject.ContentMount, MountKind.Source, authoringFolder)]).Context;
             _ = TestProject.SaveProjectFile(project);
             this.Session = new TestSession(project);
             this.CookCoordinator = new ContentCookCoordinator(this.Session, NullLogger<ContentCookCoordinator>.Instance);

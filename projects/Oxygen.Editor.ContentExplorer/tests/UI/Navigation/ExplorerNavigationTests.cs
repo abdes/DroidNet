@@ -19,6 +19,7 @@ using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
@@ -41,7 +42,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
     [DataRow(true)]
     public Task ReusedLayoutDropsOldFolderRowsAndActionTargets(bool tiles) => EnqueueAsync(async () =>
     {
-        using var session = new TestSession(TestProject.Create(new MockFileSystem(), "C:/Navigation").Context with { Name = "Navigation", AuthoringMounts = [] });
+        using var session = new TestSession(TestProject.Create(new MockFileSystem(), "C:/Navigation", Array.Empty<ProjectMount>()).Context with { Name = "Navigation" });
         var state = new ContentExplorerState();
         var geometry = CreateNavigationAsset("/Content/Geometry/Cube.ogeo", AssetKind.Geometry);
         var material = CreateNavigationAsset("/Content/Materials/Blue.omat", AssetKind.Material);
@@ -102,13 +103,13 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         var leaf = CreateNavigationFolder("Leaf", directory.Path + "/Content/Slow/Leaf", []);
         var slow = CreateNavigationFolder("Slow", directory.Path + "/Content/Slow", [leaf], release.Task, entered);
         var fast = CreateNavigationFolder("Fast", directory.Path + "/Content/Fast", []);
-        var content = CreateNavigationFolder("Content", directory.Path + "/Content", [fast, slow]);
+        var content = CreateNavigationFolder("Content", Path.Combine(directory.Path, "Content"), [fast, slow]);
         var root = CreateNavigationFolder("Navigation", directory.Path, [content]);
         var storage = new Mock<IStorageProvider>();
         _ = storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string parent, string child) => parent.TrimEnd('/') + "/" + child);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(content.Location, It.IsAny<CancellationToken>())).ReturnsAsync(content);
-        using var session = new TestSession(TestProject.Create(new RealFileSystem(), root.Location).Context with { Name = "Navigation", AuthoringMounts = [new("Content", "Content") { IsExpanded = false }] });
+        using var session = new TestSession(TestProject.Create(new RealFileSystem(), root.Location, [new ProjectMount("Content", MountKind.Source, "Content", IsExpanded: false)]).Context with { Name = "Navigation" });
         var state = new ContentExplorerState();
         using var model = new ContentFoldersViewModel(session, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(session, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var selected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -155,13 +156,13 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
     {
         using var directory = new NavigationDirectory();
         var props = CreateNavigationFolder("Props", directory.Path + "/Content/Props", []);
-        var content = CreateNavigationFolder("Content", directory.Path + "/Content", [props]);
+        var content = CreateNavigationFolder("Content", Path.Combine(directory.Path, "Content"), [props]);
         var root = CreateNavigationFolder("Navigation", directory.Path, [content]);
         var storage = new Mock<IStorageProvider>();
         _ = storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string parent, string child) => parent.TrimEnd('/') + "/" + child);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(content.Location, It.IsAny<CancellationToken>())).ReturnsAsync(content);
-        using var session = new TestSession(TestProject.Create(new RealFileSystem(), root.Location).Context with { Name = "Navigation", AuthoringMounts = [new("Content", "Content") { IsExpanded = false }] });
+        using var session = new TestSession(TestProject.Create(new RealFileSystem(), root.Location, [new ProjectMount("Content", MountKind.Source, "Content", IsExpanded: false)]).Context with { Name = "Navigation" });
         var state = new ContentExplorerState();
         using var model = new ContentFoldersViewModel(session, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(session, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var shown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -206,13 +207,13 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         }
 
         var config = CreateNavigationFolder("Config", directory.Path + "/Config", []);
-        var content = CreateNavigationFolder("Content", directory.Path + "/Content", []);
+        var content = CreateNavigationFolder("Content", Path.Combine(directory.Path, "Content"), []);
         var root = CreateNavigationFolder("Navigation", directory.Path, [content, config]);
         var storage = new Mock<IStorageProvider>();
         _ = storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string parent, string child) => parent.TrimEnd('/') + "/" + child);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(content.Location, It.IsAny<CancellationToken>())).ReturnsAsync(content);
-        using var session = new TestSession(TestProject.Create(new RealFileSystem(), root.Location).Context with { Name = "Navigation", AuthoringMounts = [new("Content", "Content") { IsExpanded = false }] });
+        using var session = new TestSession(TestProject.Create(new RealFileSystem(), root.Location, [new ProjectMount("Content", MountKind.Source, "Content", IsExpanded: false)]).Context with { Name = "Navigation" });
         var state = new ContentExplorerState();
         using var model = new ContentFoldersViewModel(session, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(session, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var folder = AssetPath.Parse(exists ? "/project/Config" : "/project/Missing");
@@ -257,9 +258,9 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
     {
         using var directory = new NavigationDirectory();
         var root = CreateNavigationFolder("Navigation", directory.Path, []);
-        var content = CreateNavigationFolder("Content", directory.Path + "/Content", []);
+        var content = CreateNavigationFolder("Content", Path.Combine(directory.Path, "Content"), []);
         var cooked = CreateNavigationFolder("Cooked", directory.Path + "/.cooked", []);
-        var libraryRoot = FileSystemPath.From("D:/Library");
+        var libraryRoot = FileSystemPath.From(directory.Path).Combine("Library");
         var library = CreateNavigationFolder("Library", libraryRoot.FullPath, []);
         var storage = new Mock<IStorageProvider>();
         _ = storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string parent, string child) => parent.TrimEnd('/') + "/" + child);
@@ -277,19 +278,17 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         }
 
         var fileSystem = new RealFileSystem();
-        var project = TestProject.Create(fileSystem, root.Location).Context with
+        var project = TestProject.Create(fileSystem, root.Location, [new ProjectMount("Content", MountKind.Source, "Content"), new("Library", MountKind.Cooked, "Library")]).Context with
         {
             Name = "Navigation",
-            AuthoringMounts = [new("Content", "Content")],
             OutputFolderViews = [new(ProjectOutputFolders.Cooked)],
-            LocalFolderMounts = [new("Library", libraryRoot)],
             DefaultSceneId = SceneId.New(),
         };
         using var session = new TestSession(project);
         ProjectInfo? saved = null;
         var mountChanges = new Mock<IContentMountChanges>();
-        _ = mountChanges.Setup(value => value.ChangeMountsAsync(It.IsAny<ProjectContext>(), It.IsAny<ProjectInfo>(), It.IsAny<CancellationToken>()))
-            .Callback((ProjectContext _, ProjectInfo candidate, CancellationToken _) =>
+        _ = mountChanges.Setup(value => value.ChangeMountsAsync(It.IsAny<ProjectContext>(), It.IsAny<ProjectInfo>(), It.IsAny<MountBindings>(), It.IsAny<CancellationToken>()))
+            .Callback((ProjectContext _, ProjectInfo candidate, MountBindings _, CancellationToken _) =>
             {
                 saved = candidate;
                 if (succeeds)
@@ -307,10 +306,10 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         renamed.Label = "LibraryRenamed";
         await model.PendingMountChange.ConfigureAwait(true);
         _ = saved.Should().NotBeNull();
-        _ = saved!.AuthoringMounts.Should().Contain(mount => mount.Name == "Content" && mount.RelativePath == "Content");
+        _ = saved!.Mounts.Should().Contain(new ProjectMount("Content", MountKind.Source, "Content"));
         _ = saved.DefaultSceneId.Should().Be(project.DefaultSceneId);
         _ = saved.OutputFolderViews.Should().Contain(view => view.Folder == ProjectOutputFolders.Cooked);
-        _ = saved.LocalFolderMounts.Should().Contain(mount => mount.Name == "LibraryRenamed" && mount.Root == libraryRoot);
+        _ = saved.Mounts.Should().Contain(new ProjectMount("LibraryRenamed", MountKind.Cooked, "Library"));
         _ = model.HasUnsavedChanges.Should().BeFalse();
         _ = state.SelectedFolders.Should().Equal(AssetPath.Parse(succeeds ? "/LibraryRenamed" : "/Library"));
         var restored = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
@@ -375,7 +374,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
             else
             {
                 // A mount change keeps the session and its project; only the mounts change.
-                session.ChangeContext(first with { AuthoringMounts = [new("Content", "Content")] });
+                session.ChangeContext(TestProject.Open(TestProject.InfoOf(first), new RealFileSystem()).Context);
                 changes.OnNext(new(Oxygen.Managed.Assets.Catalog.AssetChangeKind.Added, AssetPath.Parse("/Cooked/Published.omat")));
             }
         }

@@ -39,7 +39,7 @@ internal sealed partial class CookSourceAnalyzer
         {
             SourceAbsolutePath = FileSystemPath.From(source.Scene!.DescriptorPath),
             Role = ContentCookInputRole.GeneratedDescriptor,
-            DerivedFrom = ContentImportManifestBuilder.ToMountPath(operation.Project, source.Input.SourceRelativePath),
+            DerivedFrom = source.Input.SourceCookPath,
         }));
         var captured = await CookInputSnapshotCapture.CaptureGeneratedAsync(descriptors, cancellationToken).ConfigureAwait(false);
         return new(
@@ -69,7 +69,7 @@ internal sealed partial class CookSourceAnalyzer
                 || product.SourceInput is not { } prior
                 || prior.Kind != facts.Input.Kind
                 || !string.Equals(prior.MountName, facts.Input.MountName, StringComparison.Ordinal)
-                || !string.Equals(prior.SourceRelativePath, facts.Input.SourceRelativePath, StringComparison.Ordinal))
+                || !string.Equals(prior.SourceCookPath, facts.Input.SourceCookPath, StringComparison.Ordinal))
             {
                 continue;
             }

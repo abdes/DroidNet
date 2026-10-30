@@ -57,7 +57,7 @@ public sealed partial class NativeLoopCleanupTests
             new ContentPipelineProcessRunner(),
             NullLogger<ImportToolContentPipelineApi>.Instance,
             compatibility);
-        var execution = new ContentImportExecution(Guid.NewGuid(), root, Path.Combine(root, "operation"), manifest);
+        var execution = new ContentImportExecution(Guid.NewGuid(), root, Path.Combine(root, "operation"), manifest) { MountsFile = ContentImportMountsFile.Empty };
         var result = await api.ImportAsync(execution, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.TechnicalMessage ?? diagnostic.Message)));
         return cookedRoot;

@@ -38,13 +38,13 @@ internal static class AuthoredReferenceFormat
     public static bool IsReferencingSource(string path)
         => AssetFileTypes.Find(path)?.Category is AssetFileCategory.Descriptor or AssetFileCategory.Input or AssetFileCategory.ModelPreview;
 
-    /// <summary>Reads the asset identities a descriptor references in its reference fields.</summary>
+    /// <summary>Reads the asset identities a descriptor references in its reference fields, each with its field.</summary>
     /// <param name="path">The descriptor.</param>
     /// <param name="content">The descriptor bytes.</param>
-    /// <returns>The distinct referenced identities.</returns>
+    /// <returns>Each reference, in the order of its fields.</returns>
     /// <exception cref="JsonException">The descriptor is not JSON.</exception>
     /// <exception cref="AssetFormatException">The descriptor is a texture its reader refuses.</exception>
-    public static IReadOnlyList<AssetPath> ReadReferences(FileSystemPath path, ReadOnlyMemory<byte> content)
+    public static IReadOnlyList<AuthoredReference> ReadReferences(FileSystemPath path, ReadOnlyMemory<byte> content)
     {
         if (IsTexture(path))
         {
@@ -55,9 +55,8 @@ internal static class AuthoredReferenceFormat
 
         var root = JsonNode.Parse(StripBom(content.Span));
         return [.. ReferenceFields(path).SelectMany(field => field.Select(root))
-            .Select(static node => TryParseReference(node.GetValue<string>(), out var identity, out _) ? identity : null)
-            .OfType<AssetPath>()
-            .Distinct()];
+            .Select(static node => TryParseReference(node.GetValue<string>(), out var identity, out _) ? new AuthoredReference(node.GetPath(), identity) : null)
+            .OfType<AuthoredReference>()];
     }
 
     /// <summary>Renames an action or a mapping context inside its input source, keeping the rest of the file.</summary>

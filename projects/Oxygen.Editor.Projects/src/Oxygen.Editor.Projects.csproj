@@ -17,8 +17,15 @@
 
     <ItemGroup>
         <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="JsonSchema.Net" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="System.Linq.Async" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The engine owns the .mounts.json schema and its name rule; the editor reads it as the installed SDK ships it. -->
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.mounts.schema.json"
+                          LogicalName="oxygen.mounts.schema.json" />
     </ItemGroup>
 
     <ItemGroup>

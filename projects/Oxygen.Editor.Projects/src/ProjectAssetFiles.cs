@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -30,7 +31,7 @@ public static class ProjectAssetFiles
     public static string? ValidateDeclaredMountName(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
-        return VirtualPath.ValidateMountName(name, VirtualPathRuleSet.Authored) is { } invalid ? invalid.ToMessage()
+        return !ProjectMounts.IsValidName(name) ? "A mount name starts with a letter, then letters, digits, '_' or '-', up to 64 characters."
             : IsReservedMountName(name) ? "Every project already has a mount with this name; choose another."
             : null;
     }
@@ -71,7 +72,7 @@ public static class ProjectAssetFiles
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(identity);
         return AssetFileTypes.SourcesOf(identity)
-            .Select(source => project.Find(source))
+            .Select(project.Find)
             .FirstOrDefault(location => location is not null && project.FileSystem.File.Exists(location.File.FullPath));
     }
 
@@ -105,14 +106,61 @@ public static class ProjectAssetFiles
             : null;
     }
 
-    private static IEnumerable<Mount> Mounts(ProjectContext project)
+    /// <summary>
+    /// Gets the mount path of a file in a bound source mount, inside or outside the project tree: the mount's name and
+    /// the file's path below the mount's folder, such as <c>/Content/Ship/Ship.glb</c>. Unlike a virtual path, the file's
+    /// name may be any name a file may have.
+    /// </summary>
+    /// <param name="project">The project.</param>
+    /// <param name="file">The file or folder.</param>
+    /// <returns>The mount path, or <see langword="null"/> when no bound source mount holds the file.</returns>
+    public static string? SourceMountPathOf(this ProjectContext project, FileSystemPath file)
     {
-        var root = project.ProjectRoot;
-        return project.AuthoringMounts
-            .Select(mount => new Mount(mount.Name, root.Combine(mount.RelativePath), ProjectMountKind.Authoring))
-            .Concat(project.LocalFolderMounts.Select(static mount => new Mount(mount.Name, mount.Root, ProjectMountKind.LocalFolder)))
-            .Append(new Mount(ProjectFilesMount, root, ProjectMountKind.ProjectFiles));
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(file);
+
+        // Source mounts never overlap, so at most one holds the file.
+        return project.SourceMounts.FirstOrDefault(mount => file != mount.Location && file.IsSameOrInside(mount.Location!)) is { } holder
+            ? "/" + holder.Name + "/" + file.GetPathBelow(holder.Location!)
+            : null;
     }
+
+    /// <summary>Locates a mount path in the bound source mount it names.</summary>
+    /// <param name="project">The project.</param>
+    /// <param name="mountPath">The mount path, such as <c>/Content/Ship/Ship.glb</c>.</param>
+    /// <returns>The mount and the path below its folder, with <c>/</c> separators and empty for the mount itself; or
+    /// <see langword="null"/> when the text is not a mount path, or its mount is not a bound source mount.</returns>
+    public static (ResolvedMount Mount, string PathBelow)? LocateSourceMountPath(this ProjectContext project, string mountPath)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(mountPath);
+        if (mountPath.Length < 2 || mountPath[0] != '/')
+        {
+            return null;
+        }
+
+        var end = mountPath.IndexOf('/', 1);
+        var name = end < 0 ? mountPath[1..] : mountPath[1..end];
+        return project.SourceMounts.FirstOrDefault(mount => string.Equals(mount.Name, name, StringComparison.Ordinal)) is { } mount
+            ? (mount, end < 0 ? string.Empty : mountPath[(end + 1)..])
+            : null;
+    }
+
+    /// <summary>Gets the file a mount path names in a bound source mount.</summary>
+    /// <param name="project">The project.</param>
+    /// <param name="mountPath">The mount path, such as <c>/Content/Ship/Ship.glb</c>.</param>
+    /// <returns>The file, or <see langword="null"/> when the text is not a mount path, or its mount is not a bound
+    /// source mount.</returns>
+    public static FileSystemPath? SourceFileOf(this ProjectContext project, string mountPath)
+        => project.LocateSourceMountPath(mountPath) is var (mount, below)
+            ? below.Length == 0 ? mount.Location : mount.Location!.Combine(below)
+            : null;
+
+    private static IEnumerable<Mount> Mounts(ProjectContext project)
+        => project.Mounts
+            .Where(static mount => mount is { IsBound: true, Kind: MountKind.Source or MountKind.Cooked })
+            .Select(static mount => new Mount(mount.Name, mount.Location!, mount.Kind == MountKind.Source ? ProjectMountKind.Authoring : ProjectMountKind.Cooked))
+            .Append(new Mount(ProjectFilesMount, project.ProjectRoot, ProjectMountKind.ProjectFiles));
 
     private sealed record Mount(string Name, FileSystemPath Root, ProjectMountKind Kind);
 }

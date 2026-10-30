@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using DroidNet.Storage;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
@@ -22,6 +23,20 @@ public sealed class ProjectCreationService(
     IProjectValidationService validation) : IProjectCreationService
 {
     private const string TemplateManifestFileName = "Template.json";
+
+    private const string GitIgnoreFileName = ".gitignore";
+
+    // A new project ignores this machine's mount bindings and the editor's output folders.
+    private static readonly string GitIgnoreText = string.Join(
+        '\n',
+        "# This machine's mount bindings: absolute paths, never committed.",
+        ProjectMounts.FileName,
+        "# Editor output folders.",
+        ProjectOutputFolders.Cooked + "/",
+        ProjectOutputFolders.Build + "/",
+        ProjectOutputFolders.Pipeline + "/",
+        string.Empty);
+
     private static readonly string[] RequiredTemplateFolders =
     [
         "Content",
@@ -215,19 +230,14 @@ public sealed class ProjectCreationService(
             DefaultSceneId = defaultSceneId,
         };
 
-        foreach (var mount in templateDescriptor.AuthoringMounts)
+        foreach (var mount in templateDescriptor.Mounts)
         {
-            projectInfo.AuthoringMounts.Add(mount);
+            projectInfo.Mounts.Add(mount);
         }
 
-        foreach (var mount in templateDescriptor.LocalFolderMounts)
+        if (projectInfo.Mounts.Count == 0)
         {
-            projectInfo.LocalFolderMounts.Add(mount);
-        }
-
-        if (projectInfo.AuthoringMounts.Count == 0)
-        {
-            projectInfo.AuthoringMounts.Add(new ProjectMountPoint("Content", "Content"));
+            projectInfo.Mounts.Add(new ProjectMount(Constants.ContentFolderName, MountKind.Source, Constants.ContentFolderName));
             var contentFolder = await projectFolder.GetFolderAsync("Content", cancellationToken).ConfigureAwait(false);
             await contentFolder.CreateAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -235,6 +245,8 @@ public sealed class ProjectCreationService(
         var manifest = await projectFolder.GetDocumentAsync(Constants.ProjectFileName, cancellationToken)
             .ConfigureAwait(false);
         await manifest.WriteAllTextAsync(ProjectInfo.ToJson(projectInfo), cancellationToken).ConfigureAwait(false);
+        var gitIgnore = await projectFolder.GetDocumentAsync(GitIgnoreFileName, cancellationToken).ConfigureAwait(false);
+        await gitIgnore.WriteAllTextAsync(GitIgnoreText, cancellationToken).ConfigureAwait(false);
     }
 
     // The project-relative path of the file a template's asset reference names: its source in the mount it names.
@@ -249,10 +261,10 @@ public sealed class ProjectCreationService(
             throw new InvalidDataException($"Project template {fieldName} URI must name an asset inside an authoring mount.");
         }
 
-        var mount = descriptor.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, asset.Mount, StringComparison.Ordinal))
+        var mount = descriptor.Mounts.FirstOrDefault(mount => string.Equals(mount.Name, asset.Mount, StringComparison.Ordinal))
             ?? throw new InvalidDataException($"Project template {fieldName} URI targets unknown authoring mount '{asset.Mount}'.");
         var source = AssetFileTypes.SourcesOf(asset)[0];
-        var expectedRelativePath = NormalizeTemplatePath(Path.Combine(mount.RelativePath, source.RelativePath));
+        var expectedRelativePath = NormalizeTemplatePath(Path.Combine(mount.Path!, source.RelativePath));
         if (!string.IsNullOrWhiteSpace(declaredRelativePath))
         {
             var normalizedDeclaredPath = NormalizeTemplatePath(declaredRelativePath);
@@ -285,26 +297,27 @@ public sealed class ProjectCreationService(
             throw new InvalidDataException("Project template Category is required.");
         }
 
-        if (descriptor.AuthoringMounts.Count == 0)
+        if (descriptor.Mounts.Count == 0)
         {
-            throw new InvalidDataException("Project template AuthoringMounts is required.");
+            throw new InvalidDataException("Project template Mounts is required.");
         }
 
-        if (!descriptor.AuthoringMounts.Any(static mount =>
+        if (!descriptor.Mounts.Any(static mount =>
                 string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.Ordinal)
-                && string.Equals(mount.RelativePath, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)))
+                && mount.Kind == MountKind.Source
+                && string.Equals(mount.Path, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)))
         {
-            throw new InvalidDataException("Project template AuthoringMounts must include Content -> Content.");
+            throw new InvalidDataException("Project template Mounts must include the source mount Content -> Content.");
         }
 
-        foreach (var mount in descriptor.AuthoringMounts)
+        if (ProjectMounts.ValidateDeclarations([.. descriptor.Mounts]) is { } refusal)
+        {
+            throw new InvalidDataException($"Project template Mounts are invalid ({refusal.Code}): {refusal.Message}");
+        }
+
+        foreach (var mount in descriptor.Mounts)
         {
             ValidateMount(mount);
-        }
-
-        if (descriptor.AuthoringMounts.Select(static mount => mount.Name).Distinct(VirtualPathComparer.CaseFolded).Count() != descriptor.AuthoringMounts.Count)
-        {
-            throw new InvalidDataException("Project template AuthoringMounts names must differ by more than case.");
         }
 
         if (descriptor.StarterScene is null)
@@ -321,16 +334,16 @@ public sealed class ProjectCreationService(
         }
     }
 
-    private static void ValidateMount(ProjectMountPoint mount)
+    // A template ships its mounts' folders, so each is a source mount with a path inside the template.
+    private static void ValidateMount(ProjectMount mount)
     {
-        RequireDescriptorText(mount.Name, "AuthoringMounts.Name");
-        if (ProjectAssetFiles.ValidateDeclaredMountName(mount.Name) is { } refusal)
+        if (mount.Kind != MountKind.Source)
         {
-            throw new InvalidDataException($"Project template AuthoringMounts.Name '{mount.Name}' is not a mount name the project may declare: {refusal}");
+            throw new InvalidDataException($"Project template mount '{mount.Name}' must be a source mount.");
         }
 
-        RequireDescriptorText(mount.RelativePath, "AuthoringMounts.RelativePath");
-        ValidateRelativeDescriptorPath(mount.RelativePath, "AuthoringMounts.RelativePath");
+        RequireDescriptorText(mount.Path, "Mounts.Path");
+        ValidateRelativeDescriptorPath(mount.Path!, "Mounts.Path");
     }
 
     private static void ValidateRelativeDescriptorPath(string relativePath, string fieldName)
@@ -647,8 +660,7 @@ public sealed class ProjectCreationService(
         string? Preview,
         string? Thumbnail,
         string? SourceFolder,
-        IReadOnlyList<ProjectMountPoint> AuthoringMounts,
-        IReadOnlyList<LocalFolderMount> LocalFolderMounts,
+        IReadOnlyList<ProjectMount> Mounts,
         TemplateStarterScene? StarterScene,
         IReadOnlyList<TemplateStarterContent> StarterContent,
         IReadOnlyList<string> PreviewImages)
@@ -680,8 +692,7 @@ public sealed class ProjectCreationService(
                 descriptor.Preview,
                 thumbnail,
                 descriptor.SourceFolder,
-                descriptor.AuthoringMounts ?? [],
-                descriptor.LocalFolderMounts ?? [],
+                descriptor.Mounts ?? [],
                 descriptor.StarterScene,
                 descriptor.StarterContent ?? [],
                 descriptor.PreviewImages ?? []);
@@ -710,9 +721,7 @@ public sealed class ProjectCreationService(
 
         public string? SourceFolder { get; set; }
 
-        public List<ProjectMountPoint>? AuthoringMounts { get; set; }
-
-        public List<LocalFolderMount>? LocalFolderMounts { get; set; }
+        public List<ProjectMount>? Mounts { get; set; }
 
         public TemplateStarterScene? StarterScene { get; set; }
 

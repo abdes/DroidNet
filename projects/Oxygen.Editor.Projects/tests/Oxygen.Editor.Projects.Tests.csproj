@@ -18,6 +18,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- The engine's mount table cases: the editor's reader must resolve them as the engine does. -->
+        <None Include="$(OxygenSdkDataDir)\conformance\MountTableCases.json" Link="MountTableCases.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions.Testing" />
     </ItemGroup>

@@ -4,6 +4,7 @@
 
 using System.IO.Abstractions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Session;
@@ -44,9 +45,7 @@ internal static class MountChange
     public static ProjectInfo ProjectInfoOf(ProjectContext context, ProjectSettings settings) => new(context.ProjectId, context.Name, context.Category, context.ProjectRoot.FullPath, context.Thumbnail)
     {
         Settings = settings,
-        AuthoringMounts = [.. context.AuthoringMounts],
-        LocalFolderMounts = [.. context.LocalFolderMounts],
-        PakFileMounts = [.. context.PakFileMounts],
+        Mounts = [.. context.DeclaredMounts],
         OutputFolderViews = [.. context.OutputFolderViews],
         CookedContentOrder = [.. context.CookedContentOrder],
         DefaultSceneId = context.DefaultSceneId,
@@ -64,22 +63,10 @@ internal static class MountChange
             return;
         }
 
-        loaded.AuthoringMounts.Clear();
-        foreach (var mount in candidate.AuthoringMounts)
+        loaded.Mounts.Clear();
+        foreach (var mount in candidate.Mounts)
         {
-            loaded.AuthoringMounts.Add(mount);
-        }
-
-        loaded.LocalFolderMounts.Clear();
-        foreach (var mount in candidate.LocalFolderMounts)
-        {
-            loaded.LocalFolderMounts.Add(mount);
-        }
-
-        loaded.PakFileMounts.Clear();
-        foreach (var mount in candidate.PakFileMounts)
-        {
-            loaded.PakFileMounts.Add(mount);
+            loaded.Mounts.Add(mount);
         }
 
         loaded.OutputFolderViews.Clear();
@@ -97,72 +84,19 @@ internal static class MountChange
 
     private static void Validate(IFileSystem fileSystem, ProjectInfo candidate)
     {
-        if (candidate.AuthoringMounts.FirstOrDefault(ProjectOutputFolders.Contains) is { } output)
-        {
-            throw new InvalidDataException($"The output folder '{output.RelativePath}' cannot be the mount '{output.Name}'; output folders are never mounts.");
-        }
-
         if (candidate.OutputFolderViews.Any(static view => view.Folder is not (ProjectOutputFolders.Cooked or ProjectOutputFolders.Build))
-            || candidate.OutputFolderViews.DistinctBy(static view => view.Folder).Count() != candidate.OutputFolderViews.Count)
+            || candidate.OutputFolderViews.DistinctBy(static view => view.Folder, StringComparer.Ordinal).Take(candidate.OutputFolderViews.Count + 1).Count() != candidate.OutputFolderViews.Count)
         {
             throw new InvalidDataException($"The Content Explorer shows {ProjectOutputFolders.Cooked} and {ProjectOutputFolders.Build}, each once.");
         }
 
-        if (HasInvalidAuthoringMountName(candidate) || HasInvalidLibraryMountName(candidate) || HasDuplicateMountNames(candidate))
+        var table = ProjectMounts.Resolve(fileSystem, FileSystemPath.From(candidate.Location!), candidate.Mounts);
+        var errors = table.Findings.Where(static finding => finding.IsError).Select(static error => $"{error.Code}: {error.Message}").ToArray();
+        if (errors.Length > 0)
         {
-            throw new InvalidDataException("Content mount names must be unique folder names.");
-        }
-
-        if (!HasAuthoringContentFolder(candidate))
-        {
-            throw new InvalidDataException("The project must keep at least one authoring content folder.");
-        }
-
-        foreach (var folder in candidate.LocalFolderMounts)
-        {
-            if (!fileSystem.Directory.Exists(folder.Root.FullPath))
-            {
-                throw new DirectoryNotFoundException($"Local folder '{folder.Name}' is unavailable: {folder.Root}.");
-            }
-        }
-
-        foreach (var pak in candidate.PakFileMounts)
-        {
-            if (!PakFileMount.IsPakFile(pak.Path.FullPath))
-            {
-                throw new InvalidDataException($"Pak file mount '{pak.Name}' must name a .pak file: {pak.Path}.");
-            }
-
-            if (!fileSystem.File.Exists(pak.Path.FullPath))
-            {
-                throw new FileNotFoundException($"Pak file '{pak.Name}' is unavailable: {pak.Path}.", pak.Path.FullPath);
-            }
+            throw new InvalidDataException(string.Join(Environment.NewLine, errors));
         }
 
         _ = CookedContentOrdering.Resolve(candidate);
-
-        // An authored content folder's mount name must pass the authored virtual path rules and take no reserved name.
-        static bool HasInvalidAuthoringMountName(ProjectInfo candidate)
-            => candidate.AuthoringMounts.Any(static mount => ProjectAssetFiles.ValidateDeclaredMountName(mount.Name) is not null);
-
-        // A local folder or pak file mount is named by one folder name: not blank, without a path separator or drive,
-        // and not a reserved name.
-        static bool HasInvalidLibraryMountName(ProjectInfo candidate)
-            => LibraryMountNames(candidate).Any(static name => string.IsNullOrWhiteSpace(name) || name.IndexOfAny(['/', '\\', ':']) >= 0
-                || ProjectAssetFiles.IsReservedMountName(name));
-
-        // Mount names share one namespace, case-folded as the virtual file system compares them.
-        static bool HasDuplicateMountNames(ProjectInfo candidate)
-        {
-            var names = candidate.AuthoringMounts.Select(static mount => mount.Name).Concat(LibraryMountNames(candidate)).ToArray();
-            return names.Distinct(VirtualPathComparer.CaseFolded).Take(names.Length + 1).Count() != names.Length;
-        }
-
-        // The project keeps somewhere to author content.
-        static bool HasAuthoringContentFolder(ProjectInfo candidate)
-            => candidate.AuthoringMounts.Count > 0;
-
-        static IEnumerable<string> LibraryMountNames(ProjectInfo candidate)
-            => candidate.LocalFolderMounts.Select(static mount => mount.Name).Concat(candidate.PakFileMounts.Select(static mount => mount.Name));
     }
 }

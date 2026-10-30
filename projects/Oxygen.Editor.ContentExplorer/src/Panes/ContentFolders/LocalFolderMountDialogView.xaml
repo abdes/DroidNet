@@ -34,6 +34,8 @@
             </Grid>
         </StackPanel>
 
+        <local:MountPlacementView Placement="{x:Bind ViewModel.Placement}" />
+
         <TextBlock x:Name="ErrorText" Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" />
     </StackPanel>
 </UserControl>

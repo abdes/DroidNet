@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -26,7 +27,7 @@ public sealed class CapturedInputCookTests
     [TestMethod]
     public async Task ProjectWorkersShareOneSnapshotAcrossMounts()
     {
-        using var workspace = new CookWorkspace([new("Content", "Content"), new("Extra", "Extra")]);
+        using var workspace = new CookWorkspace([new("Content", MountKind.Source, "Content"), new("Extra", MountKind.Source, "Extra")]);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         workspace.WriteMaterial("Extra/Materials/Blue.omat.json", "Blue");
         var invocation = 0;
@@ -80,7 +81,7 @@ public sealed class CapturedInputCookTests
             {
                 workspace.WriteText("Content/Geometry/mesh.bin", "changed live buffer");
                 var job = execution.Manifest.Jobs.Single(static job => string.Equals(job.Type, "geometry-descriptor", StringComparison.Ordinal));
-                var logicalDescriptor = Path.GetFullPath(job.AttributedSource, execution.InputRoot);
+                var logicalDescriptor = execution.MountsFile.Resolve(execution.InputRoot, job.AttributedSource);
                 var descriptorPath = CapturedPath(execution, job.AttributedSource);
                 using var descriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(descriptorPath, token).ConfigureAwait(false));
                 var relative = descriptor.RootElement.GetProperty("buffers")[0].GetProperty("uri").GetString()!;
@@ -97,7 +98,7 @@ public sealed class CapturedInputCookTests
         _ = result.Status.Should().Be(OperationStatus.Succeeded);
         _ = result.InputsAreCurrent.Should().BeFalse();
         _ = workspace.ReadText(source).Should().Be(authored);
-        _ = (await File.ReadAllTextAsync(Path.Combine(result.InputSnapshot!.InputRoot, source), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(authored);
+        _ = (await File.ReadAllTextAsync(Path.Combine(result.InputSnapshot!.InputRoot, CookPaths.StoragePathOf("/" + source)), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(authored);
     }
 
     /// <summary>
@@ -165,7 +166,7 @@ public sealed class CapturedInputCookTests
             {
                 workspace.WriteText(image, "changed live image");
                 var job = execution.Manifest.Jobs.Single(static job => string.Equals(job.Type, "texture-descriptor", StringComparison.Ordinal));
-                var logicalDescriptor = Path.GetFullPath(job.AttributedSource, execution.InputRoot);
+                var logicalDescriptor = execution.MountsFile.Resolve(execution.InputRoot, job.AttributedSource);
                 var descriptorPath = CapturedPath(execution, job.AttributedSource);
                 using var descriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(descriptorPath, token).ConfigureAwait(false));
                 var capturedImage = CapturedPath(execution, Path.GetFullPath(descriptor.RootElement.GetProperty("source").GetString()!, Path.GetDirectoryName(logicalDescriptor)!));
@@ -203,7 +204,7 @@ public sealed class CapturedInputCookTests
         var pipeline = CreateService(workspace, api, new CapturingSceneDescriptorGenerator([]));
         var service = new MaterialCookService(pipeline, workspace.Session, NullLogger<MaterialCookService>.Instance);
 
-        var result = await service.CookMaterialAsync(new(AssetPath.Parse("/" + source[..^5]), workspace.ProjectContext.ProjectRoot, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookMaterialAsync(new(AssetPath.Parse("/" + source[..^5]), workspace.ProjectContext.ProjectRoot, workspace.ProjectContext.ProjectRoot.Combine(source)), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Stale);
         _ = result.Cook!.InputSnapshot.Should().NotBeNull();
@@ -245,7 +246,7 @@ public sealed class CapturedInputCookTests
         var pipeline = CreateService(workspace, api, new CapturingSceneDescriptorGenerator([]));
         var service = new MaterialCookService(pipeline, workspace.Session, NullLogger<MaterialCookService>.Instance);
 
-        var result = await service.CookMaterialAsync(new(AssetPath.Parse("/" + source[..^5]), workspace.ProjectContext.ProjectRoot, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.CookMaterialAsync(new(AssetPath.Parse("/" + source[..^5]), workspace.ProjectContext.ProjectRoot, workspace.ProjectContext.ProjectRoot.Combine(source)), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.State.Should().Be(MaterialCookState.Failed);
         _ = result.OperationId.Should().Be(workspace.CookCoordinator.Runs.Single().OperationId);
@@ -310,7 +311,7 @@ public sealed class CapturedInputCookTests
 
     private static string CapturedPath(ContentImportExecution execution, string source)
     {
-        var logical = Path.GetFullPath(source, execution.InputRoot);
+        var logical = execution.MountsFile.Resolve(execution.InputRoot, source);
         return execution.CapturedInputs!.Inputs.Single(input => string.Equals(input.LogicalPath, logical, StringComparison.OrdinalIgnoreCase)).File!.Path;
     }
 }

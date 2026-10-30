@@ -9,6 +9,7 @@ using DroidNet.Storage;
 using DroidNet.TestHelpers;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Oxygen.Editor.Projects.Mounts;
 
 namespace Oxygen.Editor.Projects.Tests;
 
@@ -44,19 +45,25 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var projectFolderMock = new Mock<IFolder>();
         var projectFileMock = new Mock<IDocument>();
         var projectInfo = new ProjectInfo("name", Category.Games, projectFolderPath, "Media/Preview.png");
-        projectInfo.AuthoringMounts.Add(new ProjectMountPoint(Name: "Content", RelativePath: "Content"));
+        projectInfo.Mounts.Add(new ProjectMount("Content", MountKind.Source, "Content"));
+        projectInfo.Mounts.Add(new ProjectMount("Studio"));
         var json = /*lang=json,strict*/
             $$"""
               {
-                "SchemaVersion": 1,
+                "SchemaVersion": 2,
                 "Id": "{{projectInfo.Id}}",
                 "Name": "name",
                 "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
                 "Thumbnail": "Media/Preview.png",
-                "AuthoringMounts": [
+                "Mounts": [
                     {
                         "Name": "Content",
-                        "RelativePath": "Content"
+                        "Kind": "Source",
+                        "Path": "Content"
+                    },
+                    {
+                        "Name": "Studio",
+                        "Kind": "Source"
                     }
                 ]
               }
@@ -176,7 +183,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
     {
         // Arrange: a project's scenes are its scene files, which loading the project does not read.
         var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
-        var earlier = await this.projectManagerService.StageProjectLoadAsync(projectInfo).ConfigureAwait(false);
+        var earlier = await this.projectManagerService.StageProjectLoadAsync(projectInfo, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // Act
         var result = await this.projectManagerService.LoadProjectAsync(projectInfo).ConfigureAwait(false);
@@ -241,7 +248,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         const string json = /*lang=json,strict*/
             """
             {
-              "SchemaVersion": 1,
+              "SchemaVersion": 2,
               "Name": "name",
               "Category": "C44E7604-B265-40D8-9442-11A01ECE334C"
             }
@@ -268,6 +275,24 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    public void FromJson_RefusesTheVersionWithSeparateMountLists()
+    {
+        const string json = /*lang=json,strict*/
+            """
+            {
+              "SchemaVersion": 1,
+              "Id": "2F8B4E5F-754E-4A4F-B4B4-4D40BD2E5E32",
+              "Name": "name",
+              "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
+              "AuthoringMounts": [{ "Name": "Content", "RelativePath": "Content" }]
+            }
+            """;
+
+        Action act = () => _ = ProjectInfo.FromJson(json);
+        _ = act.Should().Throw<UnsupportedProjectSchemaException>();
+    }
+
+    [TestMethod]
     public void FromJson_ThrowsUnsupportedProjectSchemaException_WhenSchemaVersionUnsupported()
     {
         const string json = /*lang=json,strict*/
@@ -290,7 +315,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         const string json = /*lang=json,strict*/
             """
             {
-              "SchemaVersion": 1,
+              "SchemaVersion": 2,
               "Id": "",
               "Name": "name",
               "Category": "C44E7604-B265-40D8-9442-11A01ECE334C"
@@ -320,7 +345,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
 
         var json = ProjectInfo.ToJson(pi);
 
-        _ = json.Should().Contain("\"SchemaVersion\": 1");
+        _ = json.Should().Contain("\"SchemaVersion\": 2");
         _ = json.Should().NotContain(nameof(ProjectInfo.Location));
         _ = json.Should().NotContain(nameof(ProjectInfo.LastUsedOn));
     }

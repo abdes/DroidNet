@@ -5,6 +5,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
@@ -27,7 +28,7 @@ internal sealed partial class ContentImportManifestBuilderTests
                 AssetPath.Parse("/" + path[..^5]),
                 ContentCookAssetKind.Material,
                 "Content",
-                path,
+                "/" + path,
                 FileSystemPath.From(Path.GetFullPath(path)),
                 ContentCookInputRole.Primary),
             []).Id).ToArray();
@@ -44,7 +45,7 @@ internal sealed partial class ContentImportManifestBuilderTests
             AssetPath.Parse("/Content/Materials/Red.omat"),
             ContentCookAssetKind.Material,
             "Content",
-            "Content/Materials/Red.omat.json",
+            "/Content/Materials/Red.omat.json",
             FileSystemPath.From(Path.Combine(workspace.Root, "Content", "Materials", "Red.omat.json")),
             ContentCookInputRole.Primary);
         var material = builder.BuildJob(input, []);
@@ -56,7 +57,7 @@ internal sealed partial class ContentImportManifestBuilderTests
             {
                 AssetUri = AssetPath.Parse("/Content/Textures/Red.otex"),
                 Kind = ContentCookAssetKind.Texture,
-                SourceRelativePath = "Content/Textures/Red.otex.json",
+                SourceCookPath = "/Content/Textures/Red.otex.json",
             },
             []);
         _ = texture.VirtualPath.Should().Be("/Content/Textures/Red.otex");
@@ -74,17 +75,17 @@ internal sealed partial class ContentImportManifestBuilderTests
             AssetPath.Parse("/Content/Vehicles/Ship/model.gltf"),
             ContentCookAssetKind.ForeignSource,
             "Content",
-            "Content/Vehicles/Ship/model.gltf",
+            "/Content/Vehicles/Ship/model.gltf",
             FileSystemPath.From(Path.GetFullPath("model.gltf")),
             ContentCookInputRole.Primary);
-        var recordPath = "Imports/Content/Vehicles/Ship/model.gltf.import.json";
+        const string recordPath = "Imports/Content/Vehicles/Ship/model.gltf.import.json";
 
         var job = new ContentImportManifestBuilder().BuildJob(input, ["prior"], recordPath);
 
         _ = job.Type.Should().Be("model");
         _ = job.Record.Should().Be(recordPath);
         _ = job.ManifestSource.Should().BeNull("the record names the model's source");
-        _ = job.Source.Should().Be("Content/Vehicles/Ship/model.gltf", "the job stays attributed to the model's file");
+        _ = job.Source.Should().Be("/Content/Vehicles/Ship/model.gltf", "the job stays attributed to the model's file, by its mount path");
         _ = job.DependsOn.Should().Equal("prior");
         _ = job.VirtualPath.Should().BeNull("the record holds the model's identity");
         var json = JsonSerializer.Serialize(job);
@@ -99,7 +100,7 @@ internal sealed partial class ContentImportManifestBuilderTests
             AssetPath.Parse("/Content/Vehicles/Ship/model.gltf"),
             ContentCookAssetKind.ForeignSource,
             "Content",
-            "Content/Vehicles/Ship/model.gltf",
+            "/Content/Vehicles/Ship/model.gltf",
             FileSystemPath.From(Path.GetFullPath("model.gltf")),
             ContentCookInputRole.Primary);
 
@@ -196,7 +197,7 @@ internal sealed partial class ContentImportManifestBuilderTests
         var manifest = new ContentImportManifestBuilder().BuildManifest(scope);
 
         _ = manifest.Mounts.Should().NotBeNull();
-        _ = manifest.Mounts!.Select(static mount => mount.Name).Should().Equal(projectContext.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)).Select(static mount => mount.Name));
+        _ = manifest.Mounts!.Select(static mount => mount.Name).Should().Equal(projectContext.DeclaredMounts.Where(static mount => mount.Kind == MountKind.Source).Select(static mount => mount.Name));
         _ = manifest.Mounts.Should().Contain(new ContentImportMount("Content", "Content"));
         var text = JsonSerializer.Serialize(manifest);
         using var json = JsonDocument.Parse(text);
@@ -206,8 +207,9 @@ internal sealed partial class ContentImportManifestBuilderTests
         _ = text.Should().NotContain(JsonSerializer.Serialize(workspace.Root)[1..^1], "every manifest path is relative");
     }
 
+    /// <summary>Each job reads its source by its mount path, whatever separators its file path has.</summary>
     [TestMethod]
-    public void BuildSceneManifestNormalizesBackslashSourcePaths()
+    public void BuildSceneManifestNamesEachSourceByItsMountPath()
     {
         using var workspace = new ManifestWorkspace();
         var scope = CreateScope(workspace);
@@ -220,8 +222,8 @@ internal sealed partial class ContentImportManifestBuilderTests
 
         var manifest = new ContentImportManifestBuilder().BuildSceneManifest(scope, sceneDescriptor);
 
-        _ = manifest.Jobs[0].Source.Should().Be("Content/Materials/Red.omat.json");
-        _ = manifest.Jobs[0].Id.Should().Be("material:Content/Materials/Red.omat.json");
+        _ = manifest.Jobs[0].Source.Should().Be("/Content/Materials/Red.omat.json");
+        _ = manifest.Jobs[0].Id.Should().Be("material:/Content/Materials/Red.omat.json");
     }
 
     [TestMethod]
@@ -241,7 +243,7 @@ internal sealed partial class ContentImportManifestBuilderTests
         _ = manifest.Output.Should().Be(workspace.Output.Path);
         _ = manifest.Jobs.Should().ContainSingle();
         _ = manifest.Jobs[0].Type.Should().Be("material-descriptor");
-        _ = manifest.Jobs[0].Source.Should().Be("Content/Materials/Red.omat.json");
+        _ = manifest.Jobs[0].Source.Should().Be("/Content/Materials/Red.omat.json");
     }
 
     [TestMethod]
@@ -266,8 +268,8 @@ internal sealed partial class ContentImportManifestBuilderTests
         var manifest = new ContentImportManifestBuilder().BuildSceneManifests(scope, [sceneDescriptor]);
 
         _ = manifest.Jobs.Select(static job => job.Source).Should().Equal(
-            "Content/Materials/Red.omat.json",
-            "Content/Materials/Unreferenced.omat.json",
+            "/Content/Materials/Red.omat.json",
+            "/Content/Materials/Unreferenced.omat.json",
             ".pipeline/Scenes/Main.oscene.json");
     }
 
@@ -293,23 +295,18 @@ internal sealed partial class ContentImportManifestBuilderTests
         _ = villageJob.DependsOn.Should().BeEmpty();
     }
 
-    private static ContentCookInput CreateMaterialInput(ManifestWorkspace workspace, string sourceRelativePath)
-        => new(
-            AssetPath.Parse("/" + sourceRelativePath.Replace('\\', '/')[..^5]),
-            ContentCookAssetKind.Material,
-            "Content",
-            sourceRelativePath,
-            FileSystemPath.From(Path.Combine(workspace.Root, sourceRelativePath.Replace('\\', Path.DirectorySeparatorChar))),
-            ContentCookInputRole.Dependency);
+    // The input of a file, named by its path below the project root, with the cook path the cook gives it.
+    private static ContentCookInput CreateMaterialInput(ManifestWorkspace workspace, string projectPath)
+        => CreateInput(workspace, projectPath, AssetPath.Parse("/" + projectPath.Replace('\\', '/')[..^5]), ContentCookAssetKind.Material, ContentCookInputRole.Dependency);
 
-    private static ContentCookInput CreateGeometryInput(ManifestWorkspace workspace, string sourceRelativePath)
-        => new(
-            AssetPath.Parse("/Content/Geometry/Cube.ogeo"),
-            ContentCookAssetKind.Geometry,
-            "Content",
-            sourceRelativePath,
-            FileSystemPath.From(Path.Combine(workspace.Root, sourceRelativePath.Replace('\\', Path.DirectorySeparatorChar))),
-            ContentCookInputRole.GeneratedDescriptor);
+    private static ContentCookInput CreateGeometryInput(ManifestWorkspace workspace, string projectPath)
+        => CreateInput(workspace, projectPath, AssetPath.Parse("/Content/Geometry/Cube.ogeo"), ContentCookAssetKind.Geometry, ContentCookInputRole.GeneratedDescriptor);
+
+    private static ContentCookInput CreateInput(ManifestWorkspace workspace, string projectPath, AssetPath identity, ContentCookAssetKind kind, ContentCookInputRole role)
+    {
+        var file = FileSystemPath.From(Path.Combine(workspace.Root, projectPath.Replace('\\', Path.DirectorySeparatorChar)));
+        return new(identity, kind, "Content", CookPaths.Of(workspace.Context, file), file, role);
+    }
 
     private static ContentCookScope CreateScope(ManifestWorkspace workspace)
     {

@@ -32,7 +32,7 @@ internal sealed class LateRecordWriter : IModelImportRecordWriter
         var files = documents.Project.Context.FileSystem;
         var path = ModelImportSettings.PathFor(documents.Project.Root.FullPath, source.VirtualPath);
         using var parsed = JsonDocument.Parse(settings);
-        var record = ModelImportSettings.Create(path, documents.Project.PathOf(source.VirtualPath).FullPath, source.VirtualPath, parsed.RootElement);
+        var record = ModelImportSettings.Create(path, source.VirtualPath, source.VirtualPath, parsed.RootElement);
         record = change?.Invoke(record) ?? record;
         _ = files.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         files.File.WriteAllBytes(path, record.ToBytes());

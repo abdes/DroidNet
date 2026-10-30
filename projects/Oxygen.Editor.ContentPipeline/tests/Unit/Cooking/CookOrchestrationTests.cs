@@ -42,7 +42,7 @@ public sealed class CookOrchestrationTests
             && asset.Kind == ContentCookAssetKind.Scene);
         _ = generator.Scope.Should().NotBeNull();
         _ = generator.Scope!.Inputs.Should().ContainSingle(input =>
-            input.SourceRelativePath == "Content/Scenes/Main.oscene.json"
+            input.SourceCookPath == "/Content/Scenes/Main.oscene.json"
             && input.AssetUri == AssetPath.Parse("/Content/Scenes/Main.oscene"));
         _ = api.ImportedManifest.Should().NotBeNull();
         _ = api.ImportedManifest!.Jobs.Should().ContainSingle(job => job.Type == "scene-descriptor");
@@ -110,7 +110,7 @@ public sealed class CookOrchestrationTests
             && asset.CookedAssetUri == AssetPath.Parse("/Content/Materials/Red.omat"));
         _ = api.ImportedManifest.Should().NotBeNull();
         _ = api.ImportedManifest!.Jobs.Should().ContainSingle(job =>
-            job.Type == "material-descriptor" && job.Source == "Content/Materials/Red.omat.json");
+            job.Type == "material-descriptor" && job.Source == "/Content/Materials/Red.omat.json");
         var generatedDescriptor = await File.ReadAllTextAsync(Path.Combine(api.ImportedExecution!.InputRoot, "Content/Materials/Red.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = generatedDescriptor.Should().Contain("\"base_color\"");
         _ = generatedDescriptor.Should().Contain("\"metalness\"");
@@ -296,8 +296,8 @@ public sealed class CookOrchestrationTests
             .ConfigureAwait(false);
         _ = api.ImportedManifest.Should().NotBeNull();
         _ = api.ImportedManifest!.Jobs.Select(static job => job.Source).Should().Equal(
-            "Content/Materials/Nested/Blue.omat.json",
-            "Content/Materials/Red.omat.json");
+            "/Content/Materials/Nested/Blue.omat.json",
+            "/Content/Materials/Red.omat.json");
     }
 
     /// <summary>Generates native scene descriptors for scene files in a folder.</summary>
@@ -342,7 +342,7 @@ public sealed class CookOrchestrationTests
         _ = result.Status.Should().Be(OperationStatus.Succeeded);
         _ = api.ImportedManifests.Should().ContainSingle();
         _ = api.ImportedManifests[0].Jobs.Should().ContainSingle(job =>
-            job.Source == "Content/Materials/Red.omat.json");
+            job.Source == "/Content/Materials/Red.omat.json");
     }
 
     /// <summary>Resolves the selected cooked mount from a cooked virtual folder.</summary>
@@ -366,7 +366,7 @@ public sealed class CookOrchestrationTests
 
     private sealed class InvalidManifestBuilder : IContentImportManifestBuilder
     {
-        public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity) => new ContentImportManifestBuilder().BuildModelJob(sourceRelativePath, dependsOn, name, identity);
+        public ContentImportJob BuildModelJob(string source, IReadOnlyList<string> dependsOn, string name, AssetPath identity) => new ContentImportManifestBuilder().BuildModelJob(source, dependsOn, name, identity);
 
         public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string? modelRecordPath = null) => new ContentImportManifestBuilder().BuildJob(input, dependsOn, modelRecordPath);
 

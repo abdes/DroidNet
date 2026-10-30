@@ -132,7 +132,7 @@ internal sealed partial class PreviewSessionTests
                 });
             var publisher = new Mock<IOperationResultPublisher>();
             _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Add);
-            this.Session = new PreviewSession(this.Engine, publication, this.Catalog.Object, this.coordinator, session, this.sessions, publisher.Object, new OperationStatusReducer());
+            this.Session = new PreviewSession(this.Engine, publication, this.Catalog.Object, this.coordinator, session, this.sessions, new NativeAtomicFileStore(session.Context.FileSystem), publisher.Object, new OperationStatusReducer());
         }
 
         public FakeEngine Engine { get; }

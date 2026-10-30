@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
+using Oxygen.Editor.Projects.Mounts;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.Projects.Tests;
@@ -30,10 +31,10 @@ public partial class ProjectManagerServiceTests
     {
         using var workspace = new AtomicWorkspace();
         var service = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()));
-        var original = new ProjectInfo("Settings", Category.Games, workspace.Root) { AuthoringMounts = [new("Content", "Content")] };
+        var original = new ProjectInfo("Settings", Category.Games, workspace.Root) { Mounts = [new("Content", MountKind.Source, "Content")] };
         _ = (await service.SaveProjectInfoAsync(original).ConfigureAwait(false)).Should().BeTrue();
         var path = Path.Combine(workspace.Root, Constants.ProjectFileName);
-        var external = new ProjectInfo(original.Id, "Externally edited", original.Category, original.Location) { AuthoringMounts = [.. original.AuthoringMounts] };
+        var external = new ProjectInfo(original.Id, "Externally edited", original.Category, original.Location) { Mounts = [.. original.Mounts] };
         await File.WriteAllTextAsync(path, ProjectInfo.ToJson(external), this.CancellationToken).ConfigureAwait(false);
 
         await service.SaveProjectSettingsAsync(workspace.Root, new ProjectSettings { CookOnChange = false }, this.CancellationToken).ConfigureAwait(false);
@@ -41,6 +42,6 @@ public partial class ProjectManagerServiceTests
         var saved = ProjectInfo.FromJson(await File.ReadAllTextAsync(path, this.CancellationToken).ConfigureAwait(false));
         _ = saved.Settings.CookOnChange.Should().BeFalse();
         _ = saved.Name.Should().Be("Externally edited");
-        _ = saved.AuthoringMounts.Should().Equal(original.AuthoringMounts);
+        _ = saved.Mounts.Should().Equal(original.Mounts);
     }
 }

@@ -26,7 +26,7 @@ public static class ModelRecordLookup
     public static ModelImportRecord? TryFind(ProjectContext project, FileSystemPath source)
     {
         ArgumentNullException.ThrowIfNull(project);
-        return new ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath).TryFindBySource(source.FullPath, out var record)
+        return new ModelImportRecords(project).TryFindBySource(source.FullPath, out var record)
             ? record : null;
     }
 

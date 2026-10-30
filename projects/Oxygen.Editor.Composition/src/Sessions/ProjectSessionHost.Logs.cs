@@ -4,6 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 
 namespace Oxygen.Editor.Sessions;
 
@@ -47,8 +48,8 @@ public sealed partial class ProjectSessionHost
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "Project session for '{Project}' follows its new content mounts: {LocalFolders} local folders, {Libraries} libraries.")]
-    private static partial void LogContextChanged(ILogger logger, string project, int localFolders, int libraries);
+        Message = "Project session for '{Project}' follows its new content mounts: {Sources} source mounts, {Libraries} libraries.")]
+    private static partial void LogContextChanged(ILogger logger, string project, int sources, int libraries);
 
     private void LogContextChanged(ProjectContext next)
     {
@@ -57,9 +58,9 @@ public sealed partial class ProjectSessionHost
             return;
         }
 
-        var localFolders = next.LocalFolderMounts.Count;
-        var libraries = next.PakFileMounts.Count;
-        LogContextChanged(this.logger, next.Name, localFolders, libraries);
+        var sources = next.Mounts.Count(static mount => mount.Kind == MountKind.Source);
+        var libraries = next.LibraryMounts.Count();
+        LogContextChanged(this.logger, next.Name, sources, libraries);
     }
 
     [LoggerMessage(

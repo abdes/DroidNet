@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -43,7 +44,7 @@ public sealed class SourceBundleDiscoveryTests
             };
         });
         var retained = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, native, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var root = Path.Combine(workspace.ProjectRoot, retained.DirectoryRelativePath);
+        var root = workspace.Session.Context.SourceFileOf(retained.BundleRoot)!.FullPath;
         _ = retained.Files.Should().ContainSingle();
         _ = Directory.Exists(Path.Combine(root, "empty-textures")).Should().BeTrue();
 
@@ -87,7 +88,7 @@ public sealed class SourceBundleDiscoveryTests
         var native = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var source = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, native, this.TestContext.CancellationToken).ConfigureAwait(false);
         Directory.Delete(originalRoot, recursive: true);
-        var bundle = Path.Combine(workspace.ProjectRoot, source.DirectoryRelativePath);
+        var bundle = workspace.Session.Context.SourceFileOf(source.BundleRoot)!.FullPath;
         var expectedPrimary = bufferBytes is not null ? "Models/model.gltf" : "model.fbx";
         _ = source.PrimaryRelativePath.Should().Be(expectedPrimary);
         _ = (await File.ReadAllTextAsync(Path.Combine(bundle, expectedPrimary), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(original);

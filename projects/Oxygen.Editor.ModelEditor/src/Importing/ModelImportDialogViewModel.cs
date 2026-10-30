@@ -54,7 +54,7 @@ public sealed partial class ModelImportDialogViewModel : ObservableObject, IDisp
 
     /// <summary>Occurs when the dialog selects files itself, after files are added, removed or moved, so the list shows
     /// that selection; <see cref="Selection"/> already holds it.</summary>
-    public event EventHandler<IReadOnlyList<ModelImportFile>>? SelectionRequested;
+    public event EventHandler<ModelImportSelectionEventArgs>? SelectionRequested;
 
     /// <summary>Gets the files, in the order of the run's jobs and of a saved session.</summary>
     public ObservableCollection<ModelImportFile> Files { get; } = [];
@@ -264,12 +264,18 @@ public sealed partial class ModelImportDialogViewModel : ObservableObject, IDisp
     /// <returns>The plan.</returns>
     /// <exception cref="InvalidOperationException">A file cannot be imported.</exception>
     public ModelImportPlan ToPlan()
-        => this.CanImport
-            ? new([.. this.Files.Select(static file => new ModelImportChoice(file.SourcePath, file.Name.Trim(), ImportDestination.Parse(file.DestinationFolder), file.SettingsWithName())
-            {
-                Replaces = file.Replacement?.SourceUri,
-            })], this.Run.ToSettings())
-            : throw new InvalidOperationException("A file of the import cannot be imported.");
+    {
+        if (!this.CanImport)
+        {
+            throw new InvalidOperationException("A file of the import cannot be imported.");
+        }
+
+        ImmutableArray<ModelImportChoice> choices = [.. this.Files.Select(static file => new ModelImportChoice(file.SourcePath, file.Name.Trim(), ImportDestination.Parse(file.DestinationFolder), file.SettingsWithName())
+        {
+            Replaces = file.Replacement?.SourceUri,
+        })];
+        return new(choices, this.Run.ToSettings());
+    }
 
     /// <inheritdoc />
     public void Dispose()
@@ -302,9 +308,9 @@ public sealed partial class ModelImportDialogViewModel : ObservableObject, IDisp
     private AssetPath? ProjectSourceIdentity(string sourcePath)
     {
         var source = FileSystemPath.From(Path.GetFullPath(sourcePath));
-        foreach (var mount in this.project.AuthoringMounts)
+        foreach (var mount in this.project.SourceMounts)
         {
-            var root = this.project.ProjectRoot.Combine(mount.RelativePath);
+            var root = mount.Location!;
             if (source != root && source.IsSameOrInside(root))
             {
                 return AssetPath.Create(mount.Name, source.GetPathBelow(root));
@@ -323,7 +329,7 @@ public sealed partial class ModelImportDialogViewModel : ObservableObject, IDisp
     private void CheckFiles()
     {
         var planned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var records = new ModelImportRecords(this.project.FileSystem, this.project.ProjectRoot.FullPath);
+        var records = new ModelImportRecords(this.project);
         foreach (var file in this.Files)
         {
             file.IsMissing = !this.project.FileSystem.File.Exists(file.SourcePath);
@@ -406,7 +412,7 @@ public sealed partial class ModelImportDialogViewModel : ObservableObject, IDisp
     private void RequestSelection(IReadOnlyList<ModelImportFile> files)
     {
         this.UpdateSelection(files);
-        this.SelectionRequested?.Invoke(this, files);
+        this.SelectionRequested?.Invoke(this, new ModelImportSelectionEventArgs(files));
     }
 
     private void RefreshSelectionText()

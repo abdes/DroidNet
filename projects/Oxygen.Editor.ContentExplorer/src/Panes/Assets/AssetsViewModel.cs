@@ -4,7 +4,6 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Dialogs;
@@ -192,11 +191,11 @@ public partial class AssetsViewModel(
         {
             if (!ReferenceEquals(session.Context, project))
             {
-                await dialogService.ShowMessageAsync("Import model", "The project changed. Select the source again in the current project.").ConfigureAwait(true);
+                await dialogService.ShowMessageAsync("Import model", "The project changed. Select the source again in the current project.", session.Lifetime).ConfigureAwait(true);
                 return;
             }
 
-            var plan = await modelImport.ShowAsync(new ModelImportPromptRequest(this.GetSelectedFolder()) { Files = [.. sourcePaths] }).ConfigureAwait(true);
+            var plan = await modelImport.ShowAsync(new ModelImportPromptRequest(this.GetSelectedFolder()) { Files = [.. sourcePaths] }, session.Lifetime).ConfigureAwait(true);
             if (plan is null || !ReferenceEquals(session.Context, project))
             {
                 return;
@@ -212,7 +211,7 @@ public partial class AssetsViewModel(
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
-            await dialogService.ShowMessageAsync("Import model", error.Message).ConfigureAwait(true);
+            await dialogService.ShowMessageAsync("Import model", error.Message, session.Lifetime).ConfigureAwait(true);
         }
     }
 
@@ -282,24 +281,41 @@ public partial class AssetsViewModel(
             : $"Cooked {result.CookedAssets.Count} assets; reused {result.ReusedAssets.Count}.";
     }
 
+    // A model the dialog was told to replace is checked again here, so the import replaces exactly that model.
+    private static async Task<SceneImportRequest> ToRequestAsync(ProjectContext project, ModelImportChoice model)
+    {
+        var request = new SceneImportRequest(project, model.SourcePath, model.Name, model.DestinationFolder) { Settings = model.Settings };
+        if (model.Replaces is not { } replaced)
+        {
+            return request;
+        }
+
+        var replacement = await SceneImportReplacement.ReviewAsync(project, model.DestinationFolder, model.Name, CancellationToken.None).ConfigureAwait(true);
+        return replacement.SourceUri == replaced
+            ? request with { Replacement = replacement }
+            : throw new InvalidOperationException($"The model {model.Name} would replace changed since its replacement was chosen. Choose Replace again.");
+    }
+
     private async Task ImportImageSourceAsync(ProjectContext project, string sourcePath)
     {
         if (!ReferenceEquals(session.Context, project))
         {
-            await dialogService.ShowMessageAsync("Import texture", "The project changed. Select the image again in the current project.").ConfigureAwait(true);
+            await dialogService.ShowMessageAsync("Import texture", "The project changed. Select the image again in the current project.", session.Lifetime).ConfigureAwait(true);
             return;
         }
 
         var destination = this.GetSelectedTextureFolder(project);
         var model = new TextureImportDialogViewModel(project, sourcePath, destination, textureImport, dialogService);
         var view = new TextureImportDialogView(model);
-        var button = await dialogService.ShowAsync(new DialogSpec("Import texture", view)
-        {
-            PrimaryButtonText = "Import",
-            CloseButtonText = "Cancel",
-            DefaultButton = DialogButton.Primary,
-            PrimaryAction = _ => Task.FromResult(model.Validate()),
-        }).ConfigureAwait(true);
+        var button = await dialogService.ShowAsync(
+            new DialogSpec("Import texture", view)
+            {
+                PrimaryButtonText = "Import",
+                CloseButtonText = "Cancel",
+                DefaultButton = DialogButton.Primary,
+                PrimaryAction = _ => Task.FromResult(model.Validate()),
+            },
+            session.Lifetime).ConfigureAwait(true);
         if (button != DialogButton.Primary || model.Request is not { } request)
         {
             return;
@@ -308,7 +324,7 @@ public partial class AssetsViewModel(
         this.IsOperationResultVisible = false;
         try
         {
-            var textureUri = await textureImport.CreateAsync(request).ConfigureAwait(true);
+            var textureUri = await textureImport.CreateAsync(request, session.Lifetime).ConfigureAwait(true);
             await this.RunSourceImportAsync(
                 project,
                 () => contentPipelineService.CookAssetAsync(textureUri, CancellationToken.None, project),
@@ -334,12 +350,11 @@ public partial class AssetsViewModel(
         var selected = this.GetSelectedFolder();
         var parts = selected.VirtualPath.Trim('/').Split('/');
         var mountName = parts.Length > 0
-            ? project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal))?.Name
+            ? project.SourceMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal))?.Name
             : null;
-        mountName ??= project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal))?.Name
-            ?? (project.AuthoringMounts.Count > 0
-                ? project.AuthoringMounts[0].Name
-                : throw new InvalidOperationException("The project has no authoring mount for texture assets."));
+        mountName ??= project.SourceMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal))?.Name
+            ?? project.SourceMounts.FirstOrDefault()?.Name
+            ?? throw new InvalidOperationException("The project has no authoring mount for texture assets.");
         if (parts.Skip(1).Any(static part => string.Equals(part, "Textures", StringComparison.OrdinalIgnoreCase)))
         {
             return "/" + string.Join('/', parts);
@@ -415,8 +430,9 @@ public partial class AssetsViewModel(
         else if (args.InvokedItem is { Kind: AssetKind.Model, SourcePath: { } sourcePath })
         {
             var project = session.Context;
+
             // An imported model opens in its Model Editor; Reimport is a command of its own.
-            if (new ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath).IsImported(sourcePath.FullPath))
+            if (new ModelImportRecords(project).IsImported(sourcePath.FullPath))
             {
                 await this.OpenDocumentAsync(args.InvokedItem.Identity).ConfigureAwait(true);
             }
@@ -438,7 +454,7 @@ public partial class AssetsViewModel(
 
         try
         {
-            var folder = await storage.GetFolderFromPathAsync(folderPath).ConfigureAwait(true);
+            var folder = await storage.GetFolderFromPathAsync(folderPath, session.Lifetime).ConfigureAwait(true);
 
             Debug.WriteLine($"[AssetsViewModel] Requesting navigation to folder: {folder.Location}");
 
@@ -485,7 +501,7 @@ public partial class AssetsViewModel(
         var enabled = !automaticCooking.CookOnChange;
         try
         {
-            await automaticCooking.SetCookOnChangeAsync(enabled).ConfigureAwait(true);
+            await automaticCooking.SetCookOnChangeAsync(enabled, session.Lifetime).ConfigureAwait(true);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException)
         {
@@ -549,7 +565,7 @@ public partial class AssetsViewModel(
 
         var project = session.Context;
         var folder = this.GetSelectedFolder();
-        return project.AuthoringMounts.Any(mount => string.Equals(folder.Mount, mount.Name, StringComparison.Ordinal));
+        return project.SourceMounts.Any(mount => string.Equals(folder.Mount, mount.Name, StringComparison.Ordinal));
     }
 
     private void OnAssetSelectionChanged(object? sender, PropertyChangedEventArgs args)
@@ -701,7 +717,7 @@ public partial class AssetsViewModel(
     private Task<bool> SaveInputsAsync(CookRunRequest request)
         => documents is null || unsavedInputs is null
             ? Task.FromResult(true)
-            : documents.SaveBeforeAsync(SaveBeforeOperation.Cook, token => unsavedInputs.FindAsync(request, token));
+            : documents.SaveBeforeAsync(SaveBeforeOperation.Cook, token => unsavedInputs.FindAsync(request, token), session.Lifetime);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The view owns this operation boundary and reports failures.")]
     private async Task RunCookAsync(
@@ -836,21 +852,6 @@ public partial class AssetsViewModel(
         };
     }
 
-    // A model the dialog was told to replace is checked again here, so the import replaces exactly that model.
-    private static async Task<SceneImportRequest> ToRequestAsync(ProjectContext project, ModelImportChoice model)
-    {
-        var request = new SceneImportRequest(project, model.SourcePath, model.Name, model.DestinationFolder) { Settings = model.Settings };
-        if (model.Replaces is not { } replaced)
-        {
-            return request;
-        }
-
-        var replacement = await SceneImportReplacement.ReviewAsync(project, model.DestinationFolder, model.Name, CancellationToken.None).ConfigureAwait(true);
-        return replacement.SourceUri == replaced
-            ? request with { Replacement = replacement }
-            : throw new InvalidOperationException($"The model {model.Name} would replace changed since its replacement was chosen. Choose Replace again.");
-    }
-
     // The folder that folder-wide commands act on: the first selected one, or the Content mount when none is.
     private AssetPath GetSelectedFolder()
         => contentExplorerState.SelectedFolders.Order().FirstOrDefault() ?? AssetPath.Content;
@@ -901,7 +902,7 @@ public partial class AssetsViewModel(
                 SuggestedStartFolder = project.ProjectRoot.FullPath,
             };
 
-            if (await dialogService.PickFileAsync(picker, window.AppWindow.Id).ConfigureAwait(true) is { } path)
+            if (await dialogService.PickFileAsync(picker, window.AppWindow.Id, session.Lifetime).ConfigureAwait(true) is { } path)
             {
                 if (TextureImport.IsSupportedImage(path))
                 {
@@ -915,7 +916,7 @@ public partial class AssetsViewModel(
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
-            await dialogService.ShowMessageAsync("Import", error.Message).ConfigureAwait(true);
+            await dialogService.ShowMessageAsync("Import", error.Message, session.Lifetime).ConfigureAwait(true);
         }
     }
 
@@ -935,7 +936,7 @@ public partial class AssetsViewModel(
             {
                 if (assetReveal is null || !await assetReveal.RevealAsync([source]).ConfigureAwait(true))
                 {
-                    await dialogService.ShowMessageAsync("Show source", "The retained model source is no longer available in Content Explorer.").ConfigureAwait(true);
+                    await dialogService.ShowMessageAsync("Show source", "The retained model source is no longer available in Content Explorer.", session.Lifetime).ConfigureAwait(true);
                 }
             }
         }
@@ -945,7 +946,7 @@ public partial class AssetsViewModel(
         }
         catch (Exception error)
         {
-            await dialogService.ShowMessageAsync("Show source", error.Message).ConfigureAwait(true);
+            await dialogService.ShowMessageAsync("Show source", error.Message, session.Lifetime).ConfigureAwait(true);
         }
     }
 
@@ -968,7 +969,7 @@ public partial class AssetsViewModel(
             var results = await import().ConfigureAwait(true);
             if (ReferenceEquals(session.Context, project))
             {
-                await assetProvider.RefreshAsync().ConfigureAwait(true);
+                await assetProvider.RefreshAsync(session.Lifetime).ConfigureAwait(true);
                 this.NotifyCookSelection();
             }
 
@@ -996,7 +997,7 @@ public partial class AssetsViewModel(
             var result = await import().ConfigureAwait(true);
             if (ReferenceEquals(session.Context, project))
             {
-                await assetProvider.RefreshAsync().ConfigureAwait(true);
+                await assetProvider.RefreshAsync(session.Lifetime).ConfigureAwait(true);
                 this.NotifyCookSelection();
             }
 

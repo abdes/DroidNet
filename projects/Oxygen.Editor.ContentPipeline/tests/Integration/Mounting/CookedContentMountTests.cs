@@ -11,13 +11,13 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
+using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Assets.Testing;
-using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Mounting;
@@ -73,10 +73,9 @@ public sealed partial class CookedContentMountTests
     public async Task ExplicitOrderKeepsAnOverrideAboveProjectOutputAndDeduplicatesAliases()
     {
         using var fixture = new MountFixture();
-        var project = fixture.Project with
+        var project = fixture.Project.WithCookedLibraries(("Alias", fixture.First)) with
         {
-            LocalFolderMounts = [.. fixture.Project.LocalFolderMounts, new("Alias", FileSystemPath.From(fixture.First))],
-            CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "First"), new(CookedContentSourceKind.LocalFolder, "Second"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Alias")],
+            CookedContentOrder = [new(CookedContentSourceKind.Cooked, "First"), new(CookedContentSourceKind.Cooked, "Second"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.Cooked, "Alias")],
         };
         using var reader = await fixture.CaptureAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var mounts = await CookedContentMountService.PrepareAsync(project, reader, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -158,7 +157,7 @@ public sealed partial class CookedContentMountTests
     {
         using var fixture = new MountFixture();
         var pak = fixture.WritePak("Props.pak", Guid.CreateVersion7(), digestByte: 0xA1);
-        var project = fixture.Project with { PakFileMounts = [new("Props", FileSystemPath.From(pak.Path))] };
+        var project = fixture.Project.WithPakLibraries(("Props", pak.Path));
         using var reader = await fixture.CaptureAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var root = reader.Roots.Single(static root => string.Equals(root.Name, "Props", StringComparison.Ordinal));
@@ -219,11 +218,7 @@ public sealed partial class CookedContentMountTests
             File.WriteAllBytes(Path.Combine(this.ProjectOutput, CookedGeneration.MarkerFileName), []);
             this.First = this.WriteRoot("First", 2);
             this.Second = this.WriteRoot("Second", 3);
-            this.Project = TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
-            {
-                Name = "Mounts",
-                LocalFolderMounts = [new("First", FileSystemPath.From(this.First)), new("Second", FileSystemPath.From(this.Second))],
-            };
+            this.Project = TestProject.Create(new RealFileSystem(), this.directory.FullName).Context.WithCookedLibraries(("First", this.First), ("Second", this.Second)) with { Name = "Mounts" };
         }
 
         public string ProjectOutput { get; }

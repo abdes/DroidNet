@@ -26,7 +26,7 @@ public static class InputSourceFiles
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(path);
-        return project.AuthoringMounts.Any(mount => string.Equals(mount.Name, path.Mount, StringComparison.Ordinal) && !ProjectOutputFolders.Contains(mount));
+        return project.SourceMounts.Any(mount => string.Equals(mount.Name, path.Mount, StringComparison.Ordinal));
     }
 
     /// <summary>Gets the file of an input source of the project, whether or not it exists.</summary>

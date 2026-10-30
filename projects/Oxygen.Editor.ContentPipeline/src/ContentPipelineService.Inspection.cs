@@ -7,8 +7,8 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -104,8 +104,7 @@ public sealed partial class ContentPipelineService
             return [new(local.Name, local.LibraryPath, split < 0 ? string.Empty : path[(split + 1)..], IsLocal: true)];
         }
 
-        var mounts = project.AuthoringMounts.Where(mount => !ProjectOutputFolders.Contains(mount)
-            && (path.Length == 0 || string.Equals(mount.Name, mountName, StringComparison.Ordinal))).ToArray();
+        var mounts = project.SourceMounts.Where(mount => path.Length == 0 || string.Equals(mount.Name, mountName, StringComparison.Ordinal)).ToArray();
         return mounts.Length == 0 ? throw new InvalidDataException("The inspection scope does not belong to a project content mount.")
             : [.. mounts.Select(mount => new InspectionRoot(mount.Name, publication.FindProjectRoot(mount.Name)?.FullPath, path, IsLocal: false))];
     }
@@ -165,7 +164,7 @@ public sealed partial class ContentPipelineService
         var roots = (isModel ? [] : ordinary).ToDictionary(static root => root.Name, StringComparer.Ordinal);
         foreach (var group in outputScopes.GroupBy(static path => path.Trim('/').Split('/')[0], StringComparer.Ordinal))
         {
-            if (!project.AuthoringMounts.Any(mount => !ProjectOutputFolders.Contains(mount) && string.Equals(mount.Name, group.Key, StringComparison.Ordinal)))
+            if (!project.SourceMounts.Any(mount => string.Equals(mount.Name, group.Key, StringComparison.Ordinal)))
             {
                 continue;
             }

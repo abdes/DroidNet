@@ -11,12 +11,10 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 /// <param name="Material">The material's identity.</param>
 /// <param name="ProjectRoot">The absolute project root.</param>
-/// <param name="MountName">The authoring mount that owns the material source.</param>
-/// <param name="SourceRelativePath">The project-relative material source path.</param>
+/// <param name="SourceFile">The material's source file, in a source mount inside or outside the project tree.</param>
 /// <param name="FailFast">Whether pipeline failures should abort immediately.</param>
 public sealed record MaterialCookRequest(
     AssetPath Material,
     FileSystemPath ProjectRoot,
-    string MountName,
-    string SourceRelativePath,
+    FileSystemPath SourceFile,
     bool FailFast = false);

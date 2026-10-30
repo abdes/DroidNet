@@ -6,11 +6,9 @@ using System.Diagnostics;
 using System.IO.Abstractions;
 using System.Text.Json;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets;
 using AssetPath = Oxygen.Managed.Core.AssetPath;
-using VirtualPath = Oxygen.Managed.Core.VirtualPath;
-using VirtualPathComparer = Oxygen.Managed.Core.VirtualPathComparer;
-using VirtualPathRuleSet = Oxygen.Managed.Core.VirtualPathRuleSet;
 
 namespace Oxygen.Editor.ProjectExplorer.Templates;
 
@@ -165,12 +163,12 @@ public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
             throw new TemplateLoadingException($"Template {fieldName} URI must include an authoring mount.");
         }
 
-        var mount = templateInfo.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, asset.Mount, StringComparison.Ordinal))
+        var mount = templateInfo.Mounts.FirstOrDefault(mount => string.Equals(mount.Name, asset.Mount, StringComparison.Ordinal))
             ?? throw new TemplateLoadingException($"Template {fieldName} URI targets unknown authoring mount `{asset.Mount}`.");
 
         // The template ships the asset's source, such as Main.oscene.json for the scene Main.oscene.
         var source = AssetFileTypes.SourcesOf(asset)[0];
-        var expectedPath = Path.Combine(mount.RelativePath, source.RelativePath).Replace('\\', '/').Trim('/');
+        var expectedPath = Path.Combine(mount.Path!, source.RelativePath).Replace('\\', '/').Trim('/');
         if (!string.IsNullOrWhiteSpace(declaredRelativePath))
         {
             ValidateTemplateRelativePath(declaredRelativePath, $"{fieldName}.RelativePath");
@@ -241,26 +239,28 @@ public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
             throw new TemplateLoadingException("Template descriptor is missing required StarterScene.");
         }
 
-        if (templateInfo.AuthoringMounts.Count == 0)
+        if (templateInfo.Mounts.Count == 0)
         {
-            throw new TemplateLoadingException("Template descriptor is missing required AuthoringMounts.");
+            throw new TemplateLoadingException("Template descriptor is missing required Mounts.");
         }
 
-        if (!templateInfo.AuthoringMounts.Any(static mount =>
+        if (!templateInfo.Mounts.Any(static mount =>
                 string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.Ordinal)
-                && string.Equals(mount.RelativePath, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)))
+                && mount.Kind == MountKind.Source
+                && string.Equals(mount.Path, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)))
         {
-            throw new TemplateLoadingException("Template descriptor AuthoringMounts must include Content -> Content.");
+            throw new TemplateLoadingException("Template descriptor Mounts must include the source mount Content -> Content.");
         }
 
-        if (templateInfo.AuthoringMounts.FirstOrDefault(static mount => ProjectAssetFiles.ValidateDeclaredMountName(mount.Name) is not null) is { } invalid)
+        if (ProjectMounts.ValidateDeclarations([.. templateInfo.Mounts]) is { } refusal)
         {
-            throw new TemplateLoadingException($"Template descriptor AuthoringMounts name `{invalid.Name}` is not a mount name.");
+            throw new TemplateLoadingException($"Template descriptor Mounts are invalid ({refusal.Code}): {refusal.Message}");
         }
 
-        if (templateInfo.AuthoringMounts.Select(static mount => mount.Name).Distinct(VirtualPathComparer.CaseFolded).Count() != templateInfo.AuthoringMounts.Count)
+        // A template ships its mounts' folders, so each is a source mount with a path inside the template.
+        if (templateInfo.Mounts.FirstOrDefault(static mount => mount.Kind != MountKind.Source || mount.Path is null) is { } shipped)
         {
-            throw new TemplateLoadingException("Template descriptor AuthoringMounts names must differ by more than case.");
+            throw new TemplateLoadingException($"Template descriptor mount `{shipped.Name}` must be a source mount with a path.");
         }
     }
 
@@ -329,5 +329,4 @@ public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
             }
         }
     }
-
 }

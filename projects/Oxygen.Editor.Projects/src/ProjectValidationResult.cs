@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 
+using Oxygen.Editor.Projects.Mounts;
+
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
@@ -41,17 +43,25 @@ public sealed record ProjectValidationResult
     public bool IsValid => this.State == ProjectValidationState.Valid;
 
     /// <summary>
+    ///     Gets what resolving the project's mount table found on this machine. A valid project may have warnings,
+    ///     such as an unbound or missing mount; an error makes the project invalid.
+    /// </summary>
+    public IReadOnlyList<MountFinding> MountFindings { get; init; } = [];
+
+    /// <summary>
     ///     Creates a valid result.
     /// </summary>
     /// <param name="projectRoot">The normalized project root path.</param>
     /// <param name="projectInfo">The validated project info.</param>
+    /// <param name="mountFindings">The warnings its mount table has on this machine.</param>
     /// <returns>The validation result.</returns>
-    public static ProjectValidationResult Valid(string projectRoot, IProjectInfo projectInfo)
+    public static ProjectValidationResult Valid(string projectRoot, IProjectInfo projectInfo, IReadOnlyList<MountFinding>? mountFindings = null)
         => new()
         {
             State = ProjectValidationState.Valid,
             ProjectRoot = projectRoot,
             ProjectInfo = projectInfo,
+            MountFindings = mountFindings ?? [],
         };
 
     /// <summary>

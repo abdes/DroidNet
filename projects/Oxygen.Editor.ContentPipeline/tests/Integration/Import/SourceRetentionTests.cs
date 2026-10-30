@@ -6,7 +6,10 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 
@@ -28,7 +31,7 @@ public sealed class SourceRetentionTests
         var operation = () => workspace.Coordinator.RunAsync<int>(
             async (owner, token) =>
             {
-                retained = await workspace.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), "Model", _ => Task.FromResult(new ImportSourceBundle(primary.RelativePath, [primary, buffer])), token).ConfigureAwait(false);
+                retained = await workspace.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), "Model", _ => Task.FromResult(new ImportSourceBundle(primary.CookPath, [primary, buffer])), token).ConfigureAwait(false);
                 throw new InvalidDataException("Subsequent native cook failed.");
             },
             this.TestContext.CancellationToken);
@@ -36,10 +39,10 @@ public sealed class SourceRetentionTests
         File.Delete(primary.SourcePath.FullPath);
         File.Delete(buffer.SourcePath.FullPath);
         _ = retained.Should().NotBeNull();
-        _ = retained!.DirectoryRelativePath.Should().Be("Content/Models/Model");
+        _ = retained!.BundleRoot.Should().Be("/Content/Models/Model");
         _ = retained.PrimaryRelativePath.Should().Be("model.gltf");
         _ = retained.Files.Should().Contain(new RetainedImportSourceFile("buffers/data.bin", buffer.DiscoveryHash));
-        var retainedBuffer = Path.Combine(workspace.ProjectRoot, retained.DirectoryRelativePath, "buffers/data.bin");
+        var retainedBuffer = Path.Combine(workspace.ProjectRoot, "Content", "Models", "Model", "buffers", "data.bin");
         _ = (await File.ReadAllTextAsync(retainedBuffer, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("vertices");
         _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, ".cooked")).Should().BeFalse();
     }
@@ -64,11 +67,11 @@ public sealed class SourceRetentionTests
     public async Task RetentionUsesDeclaredContentMountRoot()
     {
         using var workspace = new RetentionWorkspace();
-        workspace.Session.ChangeContext(workspace.Session.Context with { AuthoringMounts = [new("Content", "Authoring")] });
+        workspace.Session.ChangeContext(TestProject.Create(new RealFileSystem(), workspace.ProjectRoot, [new ProjectMount("Content", MountKind.Source, "Authoring")]).Context);
         var input = workspace.Write("model.glb", "source");
         var result = await workspace.RetainAsync("Model", [input], this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = result.DirectoryRelativePath.Should().Be("Authoring/Models/Model");
-        _ = File.Exists(Path.Combine(workspace.ProjectRoot, result.DirectoryRelativePath, "model.glb")).Should().BeTrue();
+        _ = result.BundleRoot.Should().Be("/Content/Models/Model", "the bundle is named by its mount path, whatever the mount's folder");
+        _ = File.Exists(Path.Combine(workspace.ProjectRoot, "Authoring", "Models", "Model", "model.glb")).Should().BeTrue();
     }
 
     /// <summary>Incomplete or changing discovery cannot expose a partially retained source folder.</summary>
@@ -112,7 +115,7 @@ public sealed class SourceRetentionTests
                 _ =>
                 {
                     workspace.Session.End();
-                    return Task.FromResult(new ImportSourceBundle(input.RelativePath, [input]));
+                    return Task.FromResult(new ImportSourceBundle(input.CookPath, [input]));
                 },
                 token),
             this.TestContext.CancellationToken);
@@ -147,9 +150,9 @@ public sealed class SourceRetentionTests
     {
         using var workspace = new RetentionWorkspace();
         var input = workspace.Write("model.glb", "source");
-        IReadOnlyList<CookSnapshotInput> files = missingPrimary ? [input] : [input, input with { RelativePath = "MODEL.glb" }];
+        IReadOnlyList<CookSnapshotInput> files = missingPrimary ? [input] : [input, input with { CookPath = "MODEL.glb" }];
         var retain = () => workspace.Coordinator.RunAsync(
-            (owner, token) => workspace.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), "Model", _ => Task.FromResult(new ImportSourceBundle(missingPrimary ? "missing.glb" : input.RelativePath, [.. files])), token),
+            (owner, token) => workspace.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), "Model", _ => Task.FromResult(new ImportSourceBundle(missingPrimary ? "missing.glb" : input.CookPath, [.. files])), token),
             this.TestContext.CancellationToken);
         if (missingPrimary)
         {

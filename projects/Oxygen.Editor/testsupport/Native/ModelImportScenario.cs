@@ -8,6 +8,8 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.TestSupport;
@@ -66,16 +68,13 @@ internal sealed class ModelImportScenario : DroidNet.Tests.VisualUserInterfaceTe
             File.Copy(path, target);
         }
 
-        var next = services.Session.Context with
-        {
-            LocalFolderMounts = [new("Library", library)],
-        };
+        var declared = new List<ProjectMount>(services.Session.Context.DeclaredMounts) { new("Library", MountKind.Cooked, "Library") };
+        var next = services.Session.Context with { Mounts = TestProject.Create(services.Session.Context.FileSystem, consumer.ProjectRoot.FullPath, declared).Context.Mounts };
         var manager = new Oxygen.Editor.Projects.ProjectManagerService(services.Storage);
         var saved = await manager.LoadProjectInfoAsync(consumer.ProjectRoot.FullPath).ConfigureAwait(true) ?? throw new InvalidDataException("The consumer project must be saved.");
         var updated = new Oxygen.Editor.Projects.ProjectInfo(next.ProjectId, next.Name, next.Category, next.ProjectRoot.FullPath, next.Thumbnail)
         {
-            AuthoringMounts = [.. next.AuthoringMounts],
-            LocalFolderMounts = [.. next.LocalFolderMounts],
+            Mounts = [.. next.DeclaredMounts],
             CookedContentOrder = [.. next.CookedContentOrder],
         };
         await manager.SaveProjectInfoAsync(updated, saved, cancellationToken).ConfigureAwait(true);

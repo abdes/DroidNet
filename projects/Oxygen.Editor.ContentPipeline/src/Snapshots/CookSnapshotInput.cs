@@ -10,10 +10,11 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 /// <summary>One source dependency discovered before coherent capture.</summary>
 /// <param name="AssetUri">The logical authored identity, when this file is an asset.</param>
 /// <param name="SourcePath">The original absolute source path.</param>
-/// <param name="RelativePath">The preserved path inside the private input root.</param>
+/// <param name="CookPath">The file's cook path (<see cref="CookPaths"/>); in a source bundle's capture, its path in the bundle.
+/// The captured file is kept at <see cref="CookPaths.StoragePathOf"/> of it below the private input root.</param>
 /// <param name="DiscoveryHash">The discovered content hash for a file; empty for probes and absent paths.</param>
 /// <param name="Kind">Whether capture retains bytes, a positive probe or absence.</param>
-public sealed record CookSnapshotInput(AssetPath? AssetUri, FileSystemPath SourcePath, string RelativePath, string DiscoveryHash, CookSnapshotInputKind Kind = CookSnapshotInputKind.File)
+public sealed record CookSnapshotInput(AssetPath? AssetUri, FileSystemPath SourcePath, string CookPath, string DiscoveryHash, CookSnapshotInputKind Kind = CookSnapshotInputKind.File)
 {
     /// <summary>Gets a value indicating whether discovery observed an absent path.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
@@ -21,7 +22,7 @@ public sealed record CookSnapshotInput(AssetPath? AssetUri, FileSystemPath Sourc
 
     /// <summary>Gets a value indicating whether the source root itself was observed as a directory.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
-    public bool IsRootDirectoryProbe => string.Equals(this.RelativePath, ".", StringComparison.Ordinal) && this.Kind == CookSnapshotInputKind.Probe && this.Metadata?.IsDirectory == true;
+    public bool IsRootDirectoryProbe => string.Equals(this.CookPath, ".", StringComparison.Ordinal) && this.Kind == CookSnapshotInputKind.Probe && this.Metadata?.IsDirectory == true;
 
     /// <summary>Gets source metadata: observed fields for a probe, or original file metadata after capture.</summary>
     public Import.NativeSourceFileMetadata? Metadata { get; init; }

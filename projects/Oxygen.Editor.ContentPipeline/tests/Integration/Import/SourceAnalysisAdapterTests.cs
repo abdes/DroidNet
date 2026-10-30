@@ -43,6 +43,7 @@ public sealed class SourceAnalysisAdapterTests
         var manifest = new ContentImportManifest(1, Path.Combine(execution.OperationRoot, "output"), execution.Jobs) { Mounts = mounts };
         var import = new ContentImportExecution(execution.OperationId, execution.InputRoot, execution.OperationRoot, manifest)
         {
+            MountsFile = execution.MountsFile,
             Artifacts = artifacts,
             CapturedInputs = captures,
         };

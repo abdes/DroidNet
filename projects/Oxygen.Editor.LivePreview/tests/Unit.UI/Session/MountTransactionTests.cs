@@ -14,6 +14,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Assets.Persistence;
@@ -43,7 +44,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         fixture.Store.Fail = saveFailure;
         fixture.FailNative = !saveFailure;
         var accepted = fixture.ProjectSession.Context;
-        Func<Task> apply = () => fixture.Session.ChangeMountsAsync(accepted, fixture.Candidate, this.TestContext.CancellationToken);
+        Func<Task> apply = () => fixture.Session.ChangeMountsAsync(accepted, fixture.Candidate, MountBindings.None, this.TestContext.CancellationToken);
         _ = await apply.Should().ThrowAsync<Exception>().ConfigureAwait(true);
         _ = fixture.ProjectSession.Context.Should().BeSameAs(accepted);
         _ = fixture.Activations.Should().BeEmpty("a failed change publishes no context");
@@ -62,7 +63,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         await fixture.InitializeAsync().ConfigureAwait(true);
         var original = await File.ReadAllBytesAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true);
         fixture.Store.AfterCommit = () => _ = fixture.Sessions.CloseAsync();
-        Func<Task> apply = () => fixture.Session.ChangeMountsAsync(fixture.ProjectSession.Context, fixture.Candidate, this.TestContext.CancellationToken);
+        Func<Task> apply = () => fixture.Session.ChangeMountsAsync(fixture.ProjectSession.Context, fixture.Candidate, MountBindings.None, this.TestContext.CancellationToken);
         _ = await apply.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(true);
         _ = fixture.Sessions.Current.Should().BeNull();
         _ = fixture.Activations.Should().BeEmpty("closing changes no mounts, and the change publishes none");
@@ -87,9 +88,9 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             _ = File.ReadAllText(fixture.ManifestPath).Should().Contain("Library");
             _ = fixture.Paused.Should().BeFalse();
         };
-        _ = (await fixture.Session.ChangeMountsAsync(original, fixture.Candidate, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
+        _ = (await fixture.Session.ChangeMountsAsync(original, fixture.Candidate, MountBindings.None, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
         _ = fixture.Activations.Should().ContainSingle().Which.Should().BeSameAs(fixture.ProjectSession.Context, "the session follows the new mounts");
-        _ = fixture.ProjectSession.Context.LocalFolderMounts.Select(static mount => mount.Name).Should().Equal("Library", "Base");
+        _ = fixture.ProjectSession.Context.LibraryMounts.Select(static mount => mount.Name).Should().Equal("Library", "Base");
         _ = fixture.ProjectSession.Context.DefaultSceneId.Should().Be(original.DefaultSceneId);
         _ = ProjectInfo.FromJson(await File.ReadAllTextAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true)).DefaultSceneId.Should().Be(original.DefaultSceneId);
         _ = fixture.Roots.Should().Equal(fixture.Library, fixture.BaseLibrary);
@@ -109,22 +110,21 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         {
             this.BaseLibrary = this.WriteRoot("Base");
             this.Library = this.WriteRoot("Library");
-            var baseMount = new LocalFolderMount("Base", FileSystemPath.From(this.BaseLibrary));
-            var project = TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
+            var project = TestProject.Create(
+                new RealFileSystem(),
+                this.directory.FullName,
+                [new ProjectMount(TestProject.ContentMount, MountKind.Source, TestProject.ContentMount), new ProjectMount("Base", MountKind.Cooked, "Base")]).Context with
             {
                 Name = "Transaction",
                 DefaultSceneId = withDefaultScene ? SceneId.New() : null,
-                LocalFolderMounts = [baseMount],
-                CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.ProjectOutput)],
+                CookedContentOrder = [new(CookedContentSourceKind.Cooked, "Base"), new(CookedContentSourceKind.ProjectOutput)],
             };
             this.Sessions = new TestSessionHost();
             var session = this.Sessions.Open(project);
             this.ProjectSession = session;
-            this.Candidate = TestProject.InfoOf(project with
-            {
-                LocalFolderMounts = [new("Library", FileSystemPath.From(this.Library)), baseMount],
-                CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Library"), new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.ProjectOutput)],
-            });
+            this.Candidate = TestProject.InfoOf(project);
+            this.Candidate.Mounts.Insert(1, new ProjectMount("Library", MountKind.Cooked, "Library"));
+            this.Candidate.CookedContentOrder = [new(CookedContentSourceKind.Cooked, "Library"), new(CookedContentSourceKind.Cooked, "Base"), new(CookedContentSourceKind.ProjectOutput)];
             this.coordinator = new(session, NullLogger<ContentCookCoordinator>.Instance);
             var storage = new NativeStorageProvider(new RealFileSystem());
             this.manager = new(storage, atomicFiles: this.Store);
@@ -133,7 +133,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             _ = catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             this.Roots = [this.BaseLibrary];
             this.ConfigureEngine();
-            this.Session = new(this.engine.Object, this.publication, catalog.Object, this.coordinator, session, this.Sessions, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
+            this.Session = new(this.engine.Object, this.publication, catalog.Object, this.coordinator, session, this.Sessions, this.Store, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
         }
 
         public MountAtomicStore Store { get; } = new();
@@ -173,7 +173,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             _ = (await this.manager.SaveProjectInfoAsync(TestProject.InfoOf(context)).ConfigureAwait(true)).Should().BeTrue();
 
             // Starting publishes the mounted library, the publication the change starts from.
-            _ = (await this.Session.StartAsync().ConfigureAwait(true)).Should().BeTrue();
+            _ = (await this.Session.StartAsync(this.ProjectSession.Lifetime).ConfigureAwait(true)).Should().BeTrue();
 
             // Only the changes after the preview started count.
             this.ProjectSession.ContextChanged += this.OnContextChanged;

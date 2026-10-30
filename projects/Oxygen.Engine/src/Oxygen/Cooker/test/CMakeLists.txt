@@ -84,6 +84,12 @@ oxygen_cooker_test(
     "Import/TexturePackingPolicy_test.cpp"
     "Import/TextureSourceAssembly_test.cpp"
 )
+# The mount table case table shared with the editor's reader.
+target_compile_definitions(
+  Oxygen.Cooker.Import.Unit.Tests
+  PRIVATE
+    OXYGEN_COOKER_MOUNT_TABLE_CASES="${CMAKE_CURRENT_SOURCE_DIR}/Import/MountTableCases.json"
+)
 # Shared builds only: the cooker DLL does not export these internals.
 if(TARGET oxygen-cooker-test-visible-internals)
   target_link_libraries(

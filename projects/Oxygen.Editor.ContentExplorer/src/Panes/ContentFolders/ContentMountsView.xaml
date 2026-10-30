@@ -15,14 +15,14 @@
         </Style>
     </UserControl.Resources>
 
-    <!--  The dialog is opened wide (MaxWidth 760); this width keeps every column readable inside it.  -->
-    <StackPanel MinWidth="600" Spacing="12">
+    <!--  The dialog is opened wide (MaxWidth 900); this width keeps every column readable inside it.  -->
+    <StackPanel MinWidth="720" Spacing="12">
         <TextBlock
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            Text="Mounts expose folders and pak files through stable virtual paths. Unmounting removes the registration, never the files."
+            Text="Project.oxy commits each mount with a relative path or as a placeholder; .mounts.json binds it on this machine. Unmounting removes the registration, never the files."
             TextWrapping="Wrap" />
 
-        <!--  Current mounts: virtual name, backing path, kind, rename and unmount.  -->
+        <!--  Current mounts: name and committed path, kind, where it is on this machine, and its actions.  -->
         <ItemsControl AutomationProperties.Name="Content mounts" ItemsSource="{x:Bind ViewModel.Mounts}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="local:ContentMountRow">
@@ -34,11 +34,14 @@
                         BorderThickness="1"
                         ColumnSpacing="8"
                         CornerRadius="6">
-                        <!--  Fixed kind and action columns keep every row's kind, rename and unmount (or lock) aligned.  -->
+                        <!--  Fixed kind, binding and action columns keep every row's controls aligned.  -->
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="56" />
+                            <ColumnDefinition Width="200" />
                             <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="32" />
                             <ColumnDefinition Width="32" />
                             <ColumnDefinition Width="32" />
                         </Grid.ColumnDefinitions>
@@ -62,10 +65,10 @@
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 IsTextSelectionEnabled="True"
                                 Style="{ThemeResource CaptionTextBlockStyle}"
-                                Text="{x:Bind Path}"
+                                Text="{x:Bind CommittedText}"
                                 TextTrimming="CharacterEllipsis"
                                 TextWrapping="NoWrap"
-                                ToolTipService.ToolTip="{x:Bind Path}" />
+                                ToolTipService.ToolTip="{x:Bind CommittedText}" />
                         </StackPanel>
                         <TextBlock
                             Grid.Column="2"
@@ -73,8 +76,53 @@
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Style="{ThemeResource CaptionTextBlockStyle}"
                             Text="{x:Bind KindLabel}" />
+                        <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon
+                                    FontSize="12"
+                                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                    Glyph="&#xE7BA;"
+                                    Visibility="{x:Bind IsCaution, Mode=OneWay}" />
+                                <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="{x:Bind BindingText, Mode=OneWay}" />
+                            </StackPanel>
+                            <TextBlock
+                                FontFamily="Consolas"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                IsTextSelectionEnabled="True"
+                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                Text="{x:Bind BindingDetail, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap"
+                                ToolTipService.ToolTip="{x:Bind BindingDetail, Mode=OneWay}" />
+                        </StackPanel>
                         <Button
-                            Grid.Column="3"
+                            Grid.Column="4"
+                            HorizontalAlignment="Stretch"
+                            Command="{x:Bind BindCommand}"
+                            Content="{x:Bind BindActionText, Mode=OneWay}"
+                            Style="{ThemeResource AccentButtonStyle}"
+                            Visibility="{x:Bind IsBindButtonVisible, Mode=OneWay}" />
+                        <Button
+                            Grid.Column="4"
+                            HorizontalAlignment="Right"
+                            AutomationProperties.Name="{x:Bind ChangeBindingToolTip, Mode=OneWay}"
+                            Command="{x:Bind BindCommand}"
+                            Style="{StaticResource MountRowButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ChangeBindingToolTip, Mode=OneWay}"
+                            Visibility="{x:Bind IsChangeBindingVisible, Mode=OneWay}">
+                            <FontIcon FontSize="14" Glyph="&#xE8DA;" />
+                        </Button>
+                        <Button
+                            Grid.Column="5"
+                            AutomationProperties.Name="Remove the binding on this machine"
+                            Command="{x:Bind RemoveBindingCommand}"
+                            Style="{StaticResource MountRowButtonStyle}"
+                            ToolTipService.ToolTip="Remove the binding on this machine"
+                            Visibility="{x:Bind IsRemoveBindingVisible, Mode=OneWay}">
+                            <FontIcon FontSize="14" Glyph="&#xE8CD;" />
+                        </Button>
+                        <Button
+                            Grid.Column="6"
                             AutomationProperties.Name="{x:Bind RenameToolTip, Mode=OneWay}"
                             Command="{x:Bind RenameCommand}"
                             Style="{StaticResource MountRowButtonStyle}"
@@ -92,7 +140,7 @@
                             </Grid>
                         </Button>
                         <Button
-                            Grid.Column="4"
+                            Grid.Column="7"
                             AutomationProperties.Name="{x:Bind UnmountToolTip, Mode=OneWay}"
                             Command="{x:Bind UnmountCommand}"
                             Style="{StaticResource MountRowButtonStyle}"
@@ -101,14 +149,14 @@
                             <FontIcon FontSize="14" Glyph="&#xE711;" />
                         </Button>
                         <FontIcon
-                            Grid.Column="4"
+                            Grid.Column="7"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            AutomationProperties.Name="{x:Bind LockedToolTip}"
+                            AutomationProperties.Name="{x:Bind local:ContentMountRow.LockedToolTip}"
                             FontSize="14"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Glyph="&#xE72E;"
-                            ToolTipService.ToolTip="{x:Bind LockedToolTip}"
+                            ToolTipService.ToolTip="{x:Bind local:ContentMountRow.LockedToolTip}"
                             Visibility="{x:Bind IsLocked}" />
                     </Grid>
                 </DataTemplate>
@@ -154,6 +202,7 @@
                 <FontIcon FontSize="14" Glyph="&#xED25;" />
             </Button>
         </Grid>
+        <local:MountPlacementView Placement="{x:Bind ViewModel.Placement}" Visibility="{x:Bind ViewModel.IsExternal, Mode=OneWay}" />
         <InfoBar
             IsClosable="False"
             IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"

@@ -39,7 +39,7 @@ public sealed class ModelContentTests : IDisposable
         this.writer = new RecordWriter(this);
         this.documents = new OpenDocuments([new ModelDocumentKind(this.session, this.writer)], new NativeAtomicFileStore(this.project.Context.FileSystem));
         using var settings = JsonDocument.Parse("""{"name":"Car","unit_policy":"normalize"}""");
-        this.WriteRecord(ModelImportSettings.Create(this.recordPath, path.FullPath, "/Content/Vehicles/Car.glb", settings.RootElement));
+        this.WriteRecord(ModelImportSettings.Create(this.recordPath, "/Content/Vehicles/Car.glb", "/Content/Vehicles/Car.glb", settings.RootElement));
     }
 
     public TestContext TestContext { get; set; }

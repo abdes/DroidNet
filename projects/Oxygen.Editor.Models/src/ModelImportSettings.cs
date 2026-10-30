@@ -6,7 +6,9 @@ using System.Collections.Immutable;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Json.Schema;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Models;
 
@@ -40,8 +42,8 @@ public sealed record ModelImportSettings
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    /// <summary>Gets the primary source file, relative to the record's folder (<c>../Content/Car/Car.glb</c>), or absolute
-    /// when the source is outside the project.</summary>
+    /// <summary>Gets the primary source file by its mount path (<c>/Content/Car/Car.glb</c>), the same in every project
+    /// that mounts its folder, wherever the folder is.</summary>
     public required string Source { get; init; }
 
     /// <summary>Gets the model's identity, under which its products are named (<c>/Content/Car/Car.glb</c>).</summary>
@@ -86,13 +88,9 @@ public sealed record ModelImportSettings
     public static string RelativePathFor(string virtualPath)
     {
         ArgumentNullException.ThrowIfNull(virtualPath);
-        if (virtualPath.Length < 2 || virtualPath[0] != '/' || virtualPath.Contains('\\', StringComparison.Ordinal)
-            || virtualPath[1..].Split('/').Any(static segment => segment is "" or "." or ".."))
-        {
-            throw new ArgumentException($"A model import record is named by its model's virtual path, which '{virtualPath}' is not.", nameof(virtualPath));
-        }
-
-        return RecordsFolder + virtualPath + RecordSuffix;
+        return IsMountPath(virtualPath)
+            ? RecordsFolder + virtualPath + RecordSuffix
+            : throw new ArgumentException($"A model import record is named by its model's virtual path, which '{virtualPath}' is not.", nameof(virtualPath));
     }
 
     /// <summary>Gets the project root a record belongs to, from its path and the virtual path it holds.</summary>
@@ -134,16 +132,15 @@ public sealed record ModelImportSettings
         });
 
     /// <summary>Creates the record of a model before its first import.</summary>
-    /// <param name="recordPath">Where the record will live, <see cref="PathFor"/> of <paramref name="virtualPath"/>; it
-    /// names its source relative to it.</param>
-    /// <param name="sourcePath">The model's primary source file.</param>
+    /// <param name="recordPath">Where the record will live, <see cref="PathFor"/> of <paramref name="virtualPath"/>.</param>
+    /// <param name="source">The mount path of the model's primary source file, such as <c>/Content/Car/Car.glb</c>.</param>
     /// <param name="virtualPath">The model's identity.</param>
     /// <param name="settings">The model import settings.</param>
     /// <param name="sourceIdentity">The model's source identity, a UUIDv7; a new one when omitted.</param>
     /// <returns>The record.</returns>
-    /// <exception cref="ArgumentException">The record path is not the place of <paramref name="virtualPath"/>, or the
-    /// identity is not a UUIDv7.</exception>
-    public static ModelImportSettings Create(string recordPath, string sourcePath, string virtualPath, JsonElement settings, Guid? sourceIdentity = null)
+    /// <exception cref="ArgumentException">The record path is not the place of <paramref name="virtualPath"/>, the source
+    /// is not a mount path, or the identity is not a UUIDv7.</exception>
+    public static ModelImportSettings Create(string recordPath, string source, string virtualPath, JsonElement settings, Guid? sourceIdentity = null)
     {
         _ = ProjectRootOf(recordPath, virtualPath)
             ?? throw new ArgumentException($"A model import record lives at the place of its virtual path '{virtualPath}'.", nameof(recordPath));
@@ -160,7 +157,7 @@ public sealed record ModelImportSettings
             Settings = settings.Clone(),
             SourceIdentity = identity,
             SurfaceProvenance = EmptyProvenance(),
-        }.WithSource(recordPath, sourcePath);
+        }.WithSource(source);
         _ = record.ToBytes();
         return record;
     }
@@ -187,9 +184,15 @@ public sealed record ModelImportSettings
             throw new InvalidDataException("Two node continuity entries of the model import record have one anchor.");
         }
 
+        var source = root.GetProperty("source").GetString()!;
+        if (!IsMountPath(source))
+        {
+            throw new InvalidDataException($"The model import record names its source '{source}', which is not a mount path.");
+        }
+
         return new()
         {
-            Source = root.GetProperty("source").GetString()!,
+            Source = source,
             VirtualPath = root.GetProperty("virtual_path").GetString()!,
             Settings = root.GetProperty("settings").Clone(),
             SourceIdentity = root.GetProperty("source_identity").GetGuid(),
@@ -216,32 +219,24 @@ public sealed record ModelImportSettings
             : throw new InvalidDataException($"The model import record '{recordPath}' is not at the place of its virtual path '{record.VirtualPath}'.");
     }
 
-    /// <summary>Gets the full path of the record's source.</summary>
-    /// <param name="recordPath">The record's path.</param>
-    /// <returns>The source's full path.</returns>
-    public string ResolveSource(string recordPath)
-        => Path.GetFullPath(Path.IsPathRooted(this.Source)
-            ? this.Source
-            : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(recordPath))!, this.Source));
+    /// <summary>Gets the record's source file, through the project's mount table.</summary>
+    /// <param name="project">The project and its mount table.</param>
+    /// <returns>The source file, or <see langword="null"/> when its mount is not a bound source mount on this
+    /// machine.</returns>
+    public FileSystemPath? ResolveSource(ProjectContext project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        return project.SourceFileOf(this.Source);
+    }
 
     /// <summary>Gets the record with its source rewritten, as relocating the model does; nothing else changes.</summary>
-    /// <param name="recordPath">The record's path.</param>
-    /// <param name="sourcePath">The source's new path.</param>
+    /// <param name="source">The mount path of the source's new place, such as <c>/Content/Vehicles/Car.glb</c>.</param>
     /// <returns>The rebound record.</returns>
-    public ModelImportSettings WithSource(string recordPath, string sourcePath)
-    {
-        var folder = Path.GetDirectoryName(Path.GetFullPath(recordPath))!;
-        var projectRoot = ProjectRootOf(recordPath, this.VirtualPath)
-            ?? throw new ArgumentException($"The record is not at the place of its virtual path '{this.VirtualPath}'.", nameof(recordPath));
-        var source = Path.GetFullPath(sourcePath);
-        var relative = Path.GetRelativePath(projectRoot, source);
-        return this with
-        {
-            Source = Path.IsPathRooted(relative) || relative.StartsWith("..", StringComparison.Ordinal)
-                ? source.Replace('\\', '/')
-                : Path.GetRelativePath(folder, source).Replace('\\', '/'),
-        };
-    }
+    /// <exception cref="ArgumentException">The source is not a mount path.</exception>
+    public ModelImportSettings WithSource(string source)
+        => IsMountPath(source)
+            ? this with { Source = source }
+            : throw new ArgumentException($"A model import record names its source by its mount path, which '{source}' is not.", nameof(source));
 
     /// <summary>Gets the record with what an import established: the <c>model_import</c> of the engine's report, its
     /// surface provenance, published, new and vanished nodes and source fingerprint. Nothing else changes.</summary>
@@ -396,6 +391,11 @@ public sealed record ModelImportSettings
 
         writer.WriteEndArray();
     }
+
+    // A mount path, or a virtual path: '/', a mount name, then '/'-separated names, never '.' or '..'.
+    private static bool IsMountPath(string path)
+        => path.Length >= 2 && path[0] == '/' && !path.Contains('\\', StringComparison.Ordinal)
+            && path[1..].Split('/').All(static segment => segment is not ("" or "." or ".."));
 
     private static JsonElement EmptyProvenance()
         => JsonSerializer.SerializeToElement(new { schema_version = 2, geometries = Array.Empty<object>() });

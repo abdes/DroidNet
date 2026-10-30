@@ -29,10 +29,10 @@ public sealed record CookInputSnapshot(
     public NativeCapturedInputSet CreateNativeInputs()
         => new([.. this.Inputs.Select(input =>
         {
-            var logicalPath = this.Operation.Project.ProjectRoot.Combine(input.RelativePath).FullPath;
+            var logicalPath = CookPaths.FileOf(this.Operation.Project, input.CookPath).FullPath;
             NativeCapturedFile? file = input.Kind == CookSnapshotInputKind.File
                 ? new(
-                    Path.Combine(this.InputRoot, input.RelativePath),
+                    Path.Combine(this.InputRoot, CookPaths.StoragePathOf(input.CookPath)),
                     input.Metadata?.Size ?? throw new InvalidOperationException("A captured file is missing its original metadata."),
                     ToLowerHash(input.DiscoveryHash))
                 : null;

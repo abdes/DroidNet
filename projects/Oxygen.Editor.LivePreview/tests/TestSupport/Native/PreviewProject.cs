@@ -4,6 +4,7 @@
 
 using System.Numerics;
 using System.Text.Json;
+using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.Assets;
@@ -100,7 +101,7 @@ internal sealed partial class PreviewProject : IDisposable
     {
         var results = new Mock<IOperationResultPublisher>();
         _ = results.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Add);
-        return new PreviewSession(engine, this.Publication, this.Catalog.Object, this.coordinator, this.Sessions.Session!, this.Sessions, results.Object, new OperationStatusReducer());
+        return new PreviewSession(engine, this.Publication, this.Catalog.Object, this.coordinator, this.Sessions.Session!, this.Sessions, new NativeAtomicFileStore(this.Sessions.Session!.Context.FileSystem), results.Object, new OperationStatusReducer());
     }
 
     /// <inheritdoc/>
