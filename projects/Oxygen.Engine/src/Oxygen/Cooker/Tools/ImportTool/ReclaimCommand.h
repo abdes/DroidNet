@@ -9,14 +9,19 @@
 #include <string>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/SourceMountOptions.h>
 
 namespace oxygen::content::import::tool {
 
 //! Reclaim retired generations through the model import record publication.
 class ReclaimCommand final : public ImportCommand {
 public:
-  ReclaimCommand() = default;
+  explicit ReclaimCommand(const GlobalOptions* global_options)
+    : global_options_ { global_options }
+  {
+  }
   ~ReclaimCommand() override = default;
   OXYGEN_MAKE_NON_COPYABLE(ReclaimCommand)
   OXYGEN_MAKE_NON_MOVABLE(ReclaimCommand)
@@ -30,6 +35,9 @@ public:
   }
 
 private:
+  const GlobalOptions* global_options_ = nullptr;
+  //! The mounts the project's records are found through.
+  SourceMountOptions mount_options_ {};
   std::string record_path_;
   std::string generations_root_;
 };

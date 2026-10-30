@@ -642,23 +642,66 @@ NOLINT_TEST_F(SourceMountsTest, RelativeProjectRootUsesWorkingDirectory)
 
 // -- References --------------------------------------------------------------
 
-//! A mount path names a file of the mount, whatever the referrer's folder.
+//! A mount path names a file of another mount, whatever the referrer's
+//! folder.
 NOLINT_TEST_F(SourceMountsTest, LocateReferenceResolvesAMountPath)
 {
-  fs::create_directories(Project() / "Content" / "Images");
+  fs::create_directories(Project() / "Media" / "Images");
+  const auto table = ResolveMountTable(
+    Request({ Declared("Content", "Content"), Declared("Media", "Media") }));
+  ASSERT_TRUE(table.IsValid()) << DiagnosticSummary(table.diagnostics);
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+
+  const auto located = table.LocateReference(
+    Project() / "Content" / "Materials" / "wood.material.json",
+    CommittedPath { .text = "/Media/Images/wood.png", .field = "source" },
+    findings);
+
+  ASSERT_HAS_VALUE(located) << DiagnosticSummary(findings);
+  EXPECT_TRUE(findings.empty());
+  EXPECT_EQ(located->file, Canonical(Project() / "Media/Images/wood.png"));
+  EXPECT_EQ(located->mount_path, "/Media/Images/wood.png");
+}
+
+//! A file of the referrer's own mount is named relatively: its mount path is
+//! refused with `import.reference_invalid`, naming
+//! `vpath.reference_self_absolute`.
+NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesASelfAbsolutePath)
+{
+  const auto table
+    = ResolveMountTable(Request({ Declared("Content", "Content") }));
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+
+  const auto refused = table.LocateReference(
+    Project() / "Content" / "Materials" / "wood.material.json",
+    CommittedPath { .text = "/Content/Images/wood.png", .field = "source" },
+    findings);
+
+  EXPECT_FALSE(refused.has_value());
+  ASSERT_TRUE(HasDiagnosticCode(findings, "import.reference_invalid"))
+    << DiagnosticSummary(findings);
+  EXPECT_NE(findings.front().message.find("vpath.reference_self_absolute"),
+    std::string::npos);
+  EXPECT_EQ(findings.front().object_path, "source");
+}
+
+//! A relative path may name source media, which asset references refuse.
+NOLINT_TEST_F(SourceMountsTest, LocateReferenceResolvesSourceMedia)
+{
   const auto table
     = ResolveMountTable(Request({ Declared("Content", "Content") }));
   auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
 
   const auto located = table.LocateReference(
-    Project() / "Content" / "Materials" / "wood.material.json",
-    CommittedPath { .text = "/Content/Images/wood.png", .field = "source" },
+    Project() / "Content" / "Textures" / "wood.otex.json",
+    CommittedPath {
+      .text = "../SourceMedia/Images/wood.png",
+      .field = "source",
+    },
     findings);
 
   ASSERT_HAS_VALUE(located) << DiagnosticSummary(findings);
-  EXPECT_TRUE(findings.empty());
-  EXPECT_EQ(located->file, Canonical(Project() / "Content/Images/wood.png"));
-  EXPECT_EQ(located->mount_path, "/Content/Images/wood.png");
+  EXPECT_EQ(located->mount_path, "/Content/SourceMedia/Images/wood.png");
 }
 
 //! A relative path resolves in the referrer's folder when it stays in the
@@ -680,8 +723,9 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceResolvesARelativePathInTheMount)
   EXPECT_EQ(located->mount_path, "/Content/Images/wood.png");
 }
 
-//! A relative path that lands in another mount is refused with
-//! `import.reference_outside_mount`; a mount path may name that mount.
+//! A relative path that climbs out of the referrer's mount is refused with
+//! `import.reference_invalid`, naming `vpath.reference_outside_mount`; a mount
+//! path may name the other mount.
 NOLINT_TEST_F(
   SourceMountsTest, LocateReferenceRefusesARelativePathLeavingTheMount)
 {
@@ -696,8 +740,10 @@ NOLINT_TEST_F(
     CommittedPath { .text = "../Other/wood.png", .field = "source" }, findings);
 
   EXPECT_FALSE(refused.has_value());
-  EXPECT_TRUE(HasDiagnosticCode(findings, codes::kReferenceOutsideMount.id))
+  ASSERT_TRUE(HasDiagnosticCode(findings, "import.reference_invalid"))
     << DiagnosticSummary(findings);
+  EXPECT_NE(findings.front().message.find("vpath.reference_outside_mount"),
+    std::string::npos);
 
   findings.clear();
   const auto named = table.LocateReference(referrer,
@@ -780,9 +826,13 @@ protected:
 
   static auto ToKind(std::string_view kind) -> MountKind
   {
-    return kind == "Cooked" ? MountKind::kCooked
-      : kind == "Pak"       ? MountKind::kPak
-                            : MountKind::kSource;
+    if (kind == "Cooked") {
+      return MountKind::kCooked;
+    }
+    if (kind == "Pak") {
+      return MountKind::kPak;
+    }
+    return MountKind::kSource;
   }
 };
 

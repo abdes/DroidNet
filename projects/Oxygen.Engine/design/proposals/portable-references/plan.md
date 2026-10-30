@@ -155,9 +155,11 @@ ImportTool CLI tests in the [test impact](#test-impact) table.
 
 Deletes: `kRecordsFolder`, `RecordRelativePath`, `PathFor`, `ContentRootOf`,
 `RootOfRecord`, the `Imports/` scan, the record `virtual_path`, the manifest
-`record` field, the content root inputs. Adds: `RecordPathOf`, `IdentityOf`,
-`ScanRecords(MountTable)`, `kModelGenerationsFolder`, the record
-`LocateReference` path, `ModelImportRecordCases.json`.
+`record` field, the content root inputs, `import.reference_outside_mount`.
+Adds: `RecordPathOf`, `IdentityOf`, `ScanRecords(MountTable)`,
+`kModelGenerationsFolder`, the record `LocateReference` path,
+`MountTable::LocateReference` over `ResolveReference`,
+`ModelImportRecordCases.json`.
 
 Unit tests: the shared record cases (path to identity, `source` forms) over an
 in-memory mount table. Docs: ImportTool README records section,
@@ -166,7 +168,8 @@ description.
 
 Integration tests left for S20: `ModelImportRecord_functional_test`,
 `SceneImportRequestBuilder_functional_test`, the model scenario tests, the
-ImportTool record CLI tests, DemoShell `ContentVm_test`. DemoShell's scratch
+ImportTool record CLI tests, DemoShell `ContentVm_test`, and the texture
+descriptor file references of `TextureDescriptorImportRequestBuilder_functional_test`. DemoShell's scratch
 mount (design) lands here so the examples build.
 
 ### S5. Engine mounts
@@ -384,7 +387,7 @@ done only when its rows are gone from the code.
 | `LocateRecordSource` bypassing `LocateReference`                                   | `ModelImportRecord.cpp:624`                                                                                                                                           | S4      |
 | Manifest model job `record`                                                        | `ImportManifest.cpp`, manifest schema, Showcase manifests                                                                                                             | S4, S19 |
 | `--root` record scan                                                               | `ImportRunner.cpp`, `FbxCommand`, `GltfCommand`, README                                                                                                               | S4      |
-| `import.reference_outside_mount` (second code for one rule)                        | `SourceMounts.h`, `LocateReference`                                                                                                                                   | S2      |
+| `import.reference_outside_mount` (second code for one rule)                        | `SourceMounts.h`, `LocateReference`                                                                                                                                   | S4      |
 | `MountKind::kPak`, `"Pak"` kind, folder-only `Cooked`                              | `SourceMounts`, `ImportManifest.cpp:304`, both schemas, `MountTableCases.json`                                                                                        | S5      |
 | Unknown mount kind silently `Source`                                               | `ImportManifest.cpp:304`                                                                                                                                              | S5      |
 | Two mount-name rules                                                               | `IsValidMountName`, `oxygen.mounts.schema.json`, `VirtualPath`                                                                                                        | S5      |

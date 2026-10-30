@@ -220,13 +220,13 @@
             }
           },
           "then": {
-            "required": ["record"],
+            "required": ["virtual_path"],
             "propertyNames": {
               "enum": [
                 "id",
                 "depends_on",
                 "type",
-                "record",
+                "virtual_path",
                 "output",
                 "layout",
                 "cooked_context_roots",
@@ -1067,11 +1067,6 @@
         "id": {
           "type": "string",
           "minLength": 1
-        },
-        "record": {
-          "type": "string",
-          "minLength": 1,
-          "description": "A model job's model import record (oxygen.model-import.schema.json), resolved as job sources are: against the manifest root, or beside the manifest."
         },
         "depends_on": {
           "type": "array",

@@ -41,7 +41,6 @@ struct SceneImportSettings {
   std::string report_path;
   std::string model_record_path;
   std::string recipe_path;
-  std::string content_root;
   //! The model import record the settings come from: its source identity,
   //! surface provenance, node continuity and published nodes. Without one,
   //! the import has a fresh identity on every run.

@@ -67,8 +67,9 @@ struct ContentRootPaths {
   //! The demo's paks.
   std::filesystem::path pak_directory;
   std::filesystem::path cooked_root;
-  //! The demo's transient project of ad-hoc model imports: its own `Imports/`
-  //! and `.cooked/`, away from the examples project.
+  //! The demo's transient project of ad-hoc model imports: its own `Scratch`
+  //! mount, which holds their records, and `.cooked/`, away from the examples
+  //! project.
   std::filesystem::path scratch_root;
 };
 

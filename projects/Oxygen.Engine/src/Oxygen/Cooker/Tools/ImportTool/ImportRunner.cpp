@@ -416,32 +416,26 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
   const GlobalOptions& globals) -> std::expected<void, std::error_code>
 {
   try {
-    // A record belongs to its project, the content root it lives in.
-    auto effective_mounts = mount_options;
-    if (effective_mounts.root.empty() && !settings.model_record_path.empty()) {
-      effective_mounts.root
-        = ModelImportRecord::ContentRootOf(settings.model_record_path).string();
-    }
-    const auto mounts = ResolveSourceMounts(effective_mounts, globals.writer);
+    // Records are found, and their sources located, through the mounts of
+    // the project at `--root`, the working directory by default.
+    const auto mounts = ResolveSourceMounts(mount_options, globals.writer);
     if (!mounts.has_value()) {
       return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
+    // `--record` names a record; `--root` makes the import a record import,
+    // its record at the `--virtual-path` identity.
     const auto apply_recipe = !settings.recipe_path.empty();
-    const auto replay = settings.source_path.empty()
-      && !settings.model_record_path.empty() && !apply_recipe;
-    if (apply_recipe
-      && (!settings.source_path.empty() || settings.content_root.empty())) {
-      throw std::invalid_argument(
-        "--recipe requires --root, without a positional source");
-    }
-    if (replay && !settings.content_root.empty()) {
-      throw std::invalid_argument("Record replay uses its saved project root");
+    const auto by_identity
+      = settings.model_record_path.empty() && !mount_options.root.empty();
+    const auto publishes_record
+      = apply_recipe || !settings.model_record_path.empty() || by_identity;
+    const auto replay
+      = publishes_record && settings.source_path.empty() && !apply_recipe;
+    if (apply_recipe && !settings.source_path.empty()) {
+      throw std::invalid_argument("--recipe takes no positional source");
     }
     // A record import publishes into a generations folder this tool owns,
     // checked before anything writes the record.
-    const auto publishes_record = apply_recipe
-      || !settings.model_record_path.empty()
-      || (!settings.content_root.empty() && !settings.source_path.empty());
     if (publishes_record && settings.cooked_root.empty()) {
       throw std::invalid_argument(
         "Record publication needs --output, a generations folder this tool "
@@ -487,28 +481,48 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
     }
     auto record_path = std::filesystem::path(settings.model_record_path);
     auto notes = std::vector<ImportDiagnostic> {};
-    if (record_path.empty() && !settings.content_root.empty()
-      && !settings.source_path.empty()) {
+    if (by_identity && !apply_recipe) {
       if (settings.virtual_path.empty()) {
         throw std::invalid_argument(
           "--root imports need --virtual-path, the model's identity");
       }
-      auto location = ModelImportRecord::LocateRecord({
-        .content_root = settings.content_root,
-        .source = settings.source_path,
-        .virtual_path = settings.virtual_path,
-        .mounts = make_observer(&*mounts),
-      });
-      record_path = std::move(location.record_path);
-      notes = std::move(location.diagnostics);
+      if (settings.source_path.empty()) {
+        auto findings = std::vector<ImportDiagnostic> {};
+        const auto path = ModelImportRecord::RecordPathOf(
+          *mounts, settings.virtual_path, findings);
+        if (!path.has_value()) {
+          throw std::invalid_argument(
+            "[" + findings.front().code + "] " + findings.front().message);
+        }
+        record_path = *path;
+      } else {
+        auto location = ModelImportRecord::LocateRecord({
+          .source = settings.source_path,
+          .identity = settings.virtual_path,
+          .mounts = make_observer(&*mounts),
+        });
+        record_path = std::move(location.record_path);
+        notes = std::move(location.diagnostics);
+      }
+    } else if (!record_path.empty() && !settings.virtual_path.empty()) {
+      auto findings = std::vector<ImportDiagnostic> {};
+      const auto identity
+        = ModelImportRecord::IdentityOf(*mounts, record_path, findings);
+      if (!identity.has_value()) {
+        throw std::invalid_argument(
+          "[" + findings.front().code + "] " + findings.front().message);
+      }
+      if (*identity != settings.virtual_path) {
+        throw std::invalid_argument("--record " + record_path.generic_string()
+          + " is the record of " + *identity + ", not " + settings.virtual_path
+          + ": a record's identity is where it lives");
+      }
     }
     if (apply_recipe) {
       auto location = ModelImportRecord::SaveRecipeFile(
         {
           .record_path = record_path,
-          .content_root = settings.content_root,
           .source = {},
-          .virtual_path = {},
           .settings_json = std::nullopt,
           .mounts = make_observer(&*mounts),
         },
@@ -524,15 +538,9 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
           throw std::invalid_argument(
             "Source format does not match the import command");
         }
-        if (settings.content_root.empty()) {
-          throw std::invalid_argument("Creating or updating a model import "
-                                      "record requires --root");
-        }
-        record_path = ModelImportRecord::Save({
+        ModelImportRecord::Save({
           .record_path = record_path,
-          .content_root = settings.content_root,
           .source = settings.source_path,
-          .virtual_path = settings.virtual_path,
           .settings_json = ModelImportRecord::MakeSettings(settings),
           .mounts = make_observer(&*mounts),
         });

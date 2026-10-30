@@ -295,8 +295,6 @@ auto FbxCommand::Execute() -> std::expected<void, std::error_code>
   settings.import_lights = !no_import_lights_;
   settings.import_cameras = !no_import_cameras_;
 
-  settings.content_root = mount_options_.root;
-
   return RunSceneImportJob(
     settings, ImportFormat::kFbx, mount_options_, *global_options_);
 }

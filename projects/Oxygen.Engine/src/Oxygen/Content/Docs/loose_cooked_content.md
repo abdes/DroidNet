@@ -496,5 +496,5 @@ A cooked root holds one mount, the one its asset identities name
 RenderScene cooks the examples project's scenes into its own `.cooked/Content`,
 and a record-only model import retains generations in the caller's
 `<generations_root>/<source_identity>/<generation>`; the model import records
-`Imports/<virtual path>.import.json` remain under the content root. No container
+stay in their models' mounts, at `<model identity>.import.json`. No container
 includes another container's files or ignores arbitrary nested indexes.

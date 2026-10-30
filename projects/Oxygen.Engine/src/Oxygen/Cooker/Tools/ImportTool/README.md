@@ -131,7 +131,8 @@ Imports one FBX scene.
 
 Required:
 
-- positional `source`, or `--record <path>` to replay a model import record
+- positional `source`, or a model import record to replay (`--record <path>`,
+  or `--root` with `--virtual-path`)
 - `--virtual-path <path>` with `source`: the model's identity, the virtual path
   of its source file (`/Content/Ship/Ship.glb`). Its materials, geometry,
   textures and scene are named flat under it (`/Content/Ship/Ship.glb/Paint.omat`,
@@ -230,39 +231,53 @@ reads a `.glb`'s JSON chunk only, never its binary chunk.
 
 ### Model import records
 
-A model's import state lives in its model import record,
-`<content_root>/Imports/<virtual path>.import.json`
-(`oxygen.model-import.schema.json`), which the editor reads and writes too. The
-content root is the project root: the model `/Content/Models/Ship.glb` has the
-record `Imports/Content/Models/Ship.glb.import.json`. It holds the source (a
-mount path), the model's virtual path, its settings, and what earlier imports
+A model's import state lives in its model import record
+(`oxygen.model-import.schema.json`), which the editor reads and writes too.
+The record is the model's authored file: it lives in the model's mount at the
+model's identity with the suffix `.import.json`, so the model
+`/Content/Models/Ship.glb` has the record `Models/Ship.glb.import.json` in the
+`Content` mount's folder. The identity is where the record lives; the record
+never repeats it. It holds the source, the settings, and what earlier imports
 established (source identity, surface provenance, node continuity, published
 nodes, source fingerprint). The record holds the source identity, which never
 changes; node and surface IDs derive from it, so they survive moving or
 renaming the model.
 
+The `source` is a file reference from the record, with the grammar of every
+reference: relative within the model's mount (`Ship.glb` beside the record,
+`../SourceMedia/DCC/Ship.glb`), the mount path of a file in another mount
+(`/RawMedia/Cars/Truck.fbx`). One source may have several records, each its
+own model.
+
+Records are found through the mounts of the project at `--root` (the working
+directory by default), with `--mount` and `--mounts` as for any import:
+
 ```powershell
-Oxygen.Cooker.ImportTool gltf model.glb --root H:/Game --virtual-path /Content/model.glb --output H:/Scratch/Generations
-Oxygen.Cooker.ImportTool fbx model.fbx --root H:/Game --record H:/Game/Imports/Content/Models/Ship.glb.import.json --output H:/Scratch/Generations
-Oxygen.Cooker.ImportTool fbx --record H:/Game/Imports/Content/Models/Ship.glb.import.json --output H:/Scratch/Generations
-Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --record H:/Game/Imports/Content/Models/Ship.glb.import.json --root H:/Game --output H:/Scratch/Generations
+Oxygen.Cooker.ImportTool gltf Ship.glb --root H:/Game --virtual-path /Content/Models/Ship.glb --output H:/Scratch/Generations
+Oxygen.Cooker.ImportTool gltf --root H:/Game --virtual-path /Content/Models/Ship.glb --output H:/Scratch/Generations
+Oxygen.Cooker.ImportTool fbx model.fbx --root H:/Game --record H:/Game/Content/Models/Ship.fbx.import.json --output H:/Scratch/Generations
+Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --root H:/Game --output H:/Scratch/Generations
 ```
 
-With `--root` and a source but no `--record`, the tool finds the record,
-matching sources by mount path; the first step that matches decides:
+`--root` with `--virtual-path` names the record at that identity; without a
+source it replays it. With a source and no `--record`, the tool finds the
+record among the records of the bound `Source` mounts, matching sources by
+mount path; the first step that matches decides:
 
-| Step | Finds                                                                | Result                                                                                                                                     |
-| ---- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1    | A record with this virtual path                                      | That record; a different source is rebound to this file (`import.source_rebound`)                                                          |
-| 2    | A record whose source is this file, under another virtual path       | A new record, another model from the same file (`import.source_has_model`)                                                                 |
-| 3    | A record whose source is missing and whose fingerprint is the file's | That record, its source and virtual path rewritten (`import.source_relocated`); several match: none (`import.source_relocation_ambiguous`) |
-| 4    | Nothing                                                              | A new record, with the hints `import.source_copy` and `import.source_relocation_candidate`                                                 |
+| Step | Finds                                                                | Result                                                                                                                                          |
+| ---- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | The record at the identity                                           | That record; a different source is rebound to this file (`import.source_rebound`)                                                               |
+| 2    | A record whose source is this file                                   | A new record at the identity, another model from the same file (`import.source_has_model`)                                                      |
+| 3    | A record whose source is missing and whose fingerprint is the file's | That model, rebound to this file under its own identity (`import.source_relocated`); several match: none (`import.source_relocation_ambiguous`) |
+| 4    | Nothing                                                              | A new record at the identity, with the hints `import.source_copy` and `import.source_relocation_candidate`                                      |
 
-Two records with one virtual path, or one source identity, are refused.
-`--record <record> <source>` rebinds that record to the source. A replay whose
-source is gone fails with `import.source_missing`, which names the command that
-rebinds it. Record imports publish into `--output`, a generations folder the
-tool owns; it is required, and never a project's own output folder.
+Two records with one source identity are refused. `--record <record> <source>`
+rebinds that record to the source; a `--virtual-path` beside `--record` must be
+that record's identity, since moving a record is a relocation, not an import.
+A replay whose source is gone fails with `import.source_missing`, which names
+the command that rebinds it. Record imports publish into `--output`, a
+generations folder the tool owns; it is required, and never a project's own
+output folder.
 
 The publisher commits the import's surface provenance, published nodes and
 source fingerprint to the record together with the validated immutable
@@ -274,8 +289,9 @@ read only. The
 defines publication and lifetime.
 
 `--recipe` saves the settings of a single-job gltf or fbx manifest, without
-`defaults`, into the record. Its sources are mount paths or project-relative paths. The
-command validates format and conflicting options before changing the record.
+`defaults`, into the record of the job's `virtual_path`. Its sources are mount
+paths or project-relative paths. The command validates format and conflicting
+options before changing the record.
 Recipe application and record replay accept reporting and execution options;
 content overrides require a direct source or an updated recipe. Worker budgets
 belong to `--thread-pool-size`/`--concurrency`, outside records.
@@ -283,7 +299,7 @@ belong to `--thread-pool-size`/`--concurrency`, outside records.
 Reclaim unused generations without another import:
 
 ```powershell
-Oxygen.Cooker.ImportTool reclaim --record H:/Game/Imports/Content/Models/Ship.glb.import.json --output H:/Scratch/Generations
+Oxygen.Cooker.ImportTool reclaim --record H:/Game/Content/Models/Ship.glb.import.json --root H:/Game --output H:/Scratch/Generations
 ```
 
 This uses the publisher's record lock and generation leases. It keeps the
@@ -295,12 +311,12 @@ import, recook, packaging and cleanup commands.
 
 ### Model jobs in manifests
 
-A manifest job `{ "type": "model", "record": "Imports/Content/Models/Ship.glb.import.json" }`
-runs a record as the gltf or fbx job its source names, with the record's
-settings, virtual path and identity. The record resolves as a mount path or
-a path relative to the project root. The job may add `id`, `depends_on`,
-`output`, `layout`, `cooked_context_roots` and `source_key`; settings stay in
-the record. Jobs carry no source identity or surface provenance of their own.
+A manifest job `{ "type": "model", "virtual_path": "/Content/Models/Ship.glb" }`
+runs the record at that identity, found through the manifest's mounts, as the
+gltf or fbx job its source names, with the record's settings and identity. The
+job may add `id`, `depends_on`, `output`, `layout`, `cooked_context_roots` and
+`source_key`; settings stay in the record. Jobs carry no source identity or
+surface provenance of their own.
 
 A batch never writes records. Each successful model job's report holds
 `model_import`, the record fields the import established

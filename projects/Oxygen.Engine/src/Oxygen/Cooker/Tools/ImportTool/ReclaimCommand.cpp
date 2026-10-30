@@ -14,12 +14,14 @@
 #include <fmt/base.h>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReclaimCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/SourceMountOptions.h>
 
 namespace oxygen::content::import::tool {
 
@@ -48,14 +50,23 @@ auto ReclaimCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .About(
       "Remove unselected, unleased model import generations without importing")
     .WithOption(std::move(record))
-    .WithOption(std::move(generations));
+    .WithOption(std::move(generations))
+    .WithOptions(BuildSourceMountOptions(mount_options_));
 }
 
 auto ReclaimCommand::Execute() -> std::expected<void, std::error_code>
 {
+  DCHECK_F(global_options_ != nullptr && global_options_->writer,
+    "Global message writer must be set by main");
+  const auto mounts
+    = ResolveSourceMounts(mount_options_, global_options_->writer);
+  if (!mounts.has_value()) {
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  }
   const auto removed = ModelImportRecord::ReclaimUnusedGenerations(
     base::ToNativePath(record_path_),
-    ModelImportGenerations { .root = base::ToNativePath(generations_root_) });
+    ModelImportGenerations { .root = base::ToNativePath(generations_root_) },
+    *mounts);
   fmt::print("Reclaimed {} unused generation(s): {}\n", removed, record_path_);
   return {};
 }

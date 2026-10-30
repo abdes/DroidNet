@@ -63,6 +63,7 @@ oxygen_cooker_test(
     "Import/SurfaceProvenance_test.cpp"
     "Import/MaterialSource_test.cpp"
     "Import/MeshTransformBake_test.cpp"
+    "Import/ModelImportRecordCases_test.cpp"
     "Import/ModelNodeIdentity_test.cpp"
     "Import/Naming_test.cpp"
     "Import/PhysicsImportRequestBuilder_test.cpp"
@@ -87,11 +88,13 @@ oxygen_cooker_test(
     "Import/TexturePackingPolicy_test.cpp"
     "Import/TextureSourceAssembly_test.cpp"
 )
-# The mount table case table shared with the editor's reader.
+# The mount table and model import record case tables shared with the
+# editor's readers.
 target_compile_definitions(
   Oxygen.Cooker.Import.Unit.Tests
   PRIVATE
     OXYGEN_COOKER_MOUNT_TABLE_CASES="${CMAKE_CURRENT_SOURCE_DIR}/Import/MountTableCases.json"
+    OXYGEN_COOKER_MODEL_IMPORT_RECORD_CASES="${CMAKE_CURRENT_SOURCE_DIR}/Import/ModelImportRecordCases.json"
 )
 # Shared builds only: the cooker DLL does not export these internals.
 if(TARGET oxygen-cooker-test-visible-internals)

@@ -64,7 +64,7 @@ namespace {
   {
     auto container = BufferContainer { "/Content/Geometry/geometry.buffers" };
     container.AppendBuffer(Json::parse(R"({
-      "source":"raw/../vertices.bin",
+      "source":"vertices.bin",
       "usage_flags":1,"element_stride":16,"alignment":32,
       "views":[{"name":"triangle","element_offset":0,"element_count":3}]
     })"),
@@ -257,9 +257,10 @@ namespace {
     const auto mounts = ContentAndOtherMountTable(TempDir());
     EXPECT_FALSE(BufferSource::FromDeclarations(declarations,
       "Content/geometry.json", container.Identity(), *mounts, diagnostics));
-    EXPECT_TRUE(
-      HasDiagnosticCode(diagnostics, "import.reference_outside_mount"))
+    ASSERT_TRUE(HasDiagnosticCode(diagnostics, "import.reference_invalid"))
       << DiagnosticSummary(diagnostics);
+    EXPECT_NE(diagnostics.front().message.find("vpath.reference_outside_mount"),
+      std::string::npos);
   }
 } // namespace
 } // namespace oxygen::content::import::test

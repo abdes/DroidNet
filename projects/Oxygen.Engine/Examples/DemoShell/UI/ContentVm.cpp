@@ -303,19 +303,32 @@ auto ContentVm::Update() -> void
 //! `Content` folder, and the local mounts a developer's `.mounts.json` files at
 //! or above the scratch project add, such as a downloads folder. A model's
 //! recorded source is its mount path.
+//! The writable mount of the scratch project, which holds its records.
+constexpr auto kScratchMount = std::string_view { "Scratch" };
+
+//! The scratch project's mounts: its own `Scratch` mount, where its records
+//! live, and the examples' read-only `Content` mount its sources come from.
 auto ScratchMounts(const std::filesystem::path& scratch_root,
   const std::filesystem::path& examples_root) -> content::import::MountTable
 {
   using content::import::MountDeclaration;
+  std::filesystem::create_directories(scratch_root / kScratchMount);
   auto mounts = content::import::ResolveMountTable({
     .project_root = scratch_root,
-    .declarations = { MountDeclaration {
-      .name = "Content",
-      .kind = content::import::MountKind::kSource,
-      .path = (examples_root / "Content")
-                .lexically_relative(scratch_root)
-                .generic_string(),
-    }, },
+    .declarations = {
+      MountDeclaration {
+        .name = std::string { kScratchMount },
+        .kind = content::import::MountKind::kSource,
+        .path = std::string { kScratchMount },
+      },
+      MountDeclaration {
+        .name = "Content",
+        .kind = content::import::MountKind::kSource,
+        .path = (examples_root / "Content")
+                  .lexically_relative(scratch_root)
+                  .generic_string(),
+      },
+    },
     .form = content::import::MountDeclarationForm::kCommittedFile,
     .declared_in = "DemoShell scratch project",
     .working_directory = scratch_root,
@@ -329,6 +342,8 @@ auto ScratchMounts(const std::filesystem::path& scratch_root,
   return mounts;
 }
 
+//! The identity of a scratch import of a source: in the `Scratch` mount, at
+//! the source's path below the examples' source media.
 auto ScratchModelVirtualPath(const std::string_view source_mount_path)
   -> std::string
 {
@@ -336,7 +351,7 @@ auto ScratchModelVirtualPath(const std::string_view source_mount_path)
   const auto relative = source_mount_path.starts_with(kSourceMedia)
     ? source_mount_path.substr(kSourceMedia.size())
     : source_mount_path.substr(1);
-  return "/Content/Scratch/" + std::string(relative);
+  return "/" + std::string(kScratchMount) + "/" + std::string(relative);
 }
 
 auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
@@ -380,16 +395,13 @@ auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
     }
     model.virtual_path = ScratchModelVirtualPath(source->mount_path);
     auto location = content::import::ModelImportRecord::LocateRecord({
-      .content_root = roots.scratch_root,
       .source = source_path,
-      .virtual_path = model.virtual_path,
+      .identity = model.virtual_path,
       .mounts = make_observer(&mounts),
     });
-    location.record_path = content::import::ModelImportRecord::Save({
+    content::import::ModelImportRecord::Save({
       .record_path = location.record_path,
-      .content_root = roots.scratch_root,
       .source = source_path,
-      .virtual_path = model.virtual_path,
       .settings_json = content::import::ModelImportRecord::MakeSettings(model),
       .mounts = make_observer(&mounts),
     });
@@ -1210,7 +1222,7 @@ auto ContentVm::GetGeneratedStorageRoot() const -> std::string
     return {};
   }
   return (file_browser_->GetContentRoots().scratch_root / ".cooked"
-    / content::import::ModelImportRecord::kRecordsFolder)
+    / content::import::ModelImportRecord::kModelGenerationsFolder)
     .string();
 }
 

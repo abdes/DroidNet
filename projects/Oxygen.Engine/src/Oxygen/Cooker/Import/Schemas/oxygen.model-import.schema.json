@@ -2,27 +2,15 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://oxygen-engine.org/schemas/oxygen.model-import.schema.json",
   "title": "Oxygen model import record",
-  "description": "A model's import state: what to import and what earlier imports established. Lives at <content_root>/imports/<source_identity>.import.json; the editor and the ImportTool share it.",
+  "description": "A model's import state: what to import and what earlier imports established. It is the model's authored file: it lives in the model's mount at <model identity>.import.json, which is the model's identity, never repeated in the file. The editor and the ImportTool share it.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "source",
-    "virtual_path",
-    "settings",
-    "source_identity"
-  ],
+  "required": ["schema_version", "source", "settings", "source_identity"],
   "properties": {
     "schema_version": { "const": 1 },
     "source": {
-      "description": "The primary source file, relative to the record's folder or absolute.",
-      "type": "string",
-      "minLength": 1
-    },
-    "virtual_path": {
-      "description": "The model's identity, under which its products are named.",
-      "type": "string",
-      "pattern": "^/.+"
+      "description": "The primary source file, a file reference from the record: relative within the model's mount, the mount path of a file in another mount.",
+      "$ref": "oxygen.reference.schema.json#/definitions/reference"
     },
     "settings": {
       "description": "The model import settings, in the vocabulary of a gltf or fbx import manifest job, without its id, type, source, virtual path or output.",

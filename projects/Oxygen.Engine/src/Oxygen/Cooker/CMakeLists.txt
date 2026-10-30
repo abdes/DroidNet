@@ -576,6 +576,7 @@ if(OXYGEN_INSTALL)
   install(
     FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/test/Import/MountTableCases.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/test/Import/ModelImportRecordCases.json"
     DESTINATION "${OXYGEN_INSTALL_DATA}/conformance"
     COMPONENT Oxygen_data
   )

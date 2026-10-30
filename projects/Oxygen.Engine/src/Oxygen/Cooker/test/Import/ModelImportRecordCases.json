@@ -1,0 +1,112 @@
+{
+  "$comment": "Where a model import record lives and how it names its source. A record is the model's authored file: <identity>.import.json in the identity's mount folder. Its source is a file reference from the record, relative within the model's mount, the mount path of a file in another mount. The engine (ModelImportRecordCases_test.cpp) and the editor both run every case over the mount table below, which needs no folder on disk. Folders are relative to one root; codes are diagnostic codes, and vpath the reference grammar's code an import.reference_invalid names.",
+  "version": 1,
+  "mounts": [
+    { "name": "Content", "folder": "Game/Content" },
+    { "name": "RawMedia", "folder": "Media/Raw" }
+  ],
+  "records": [
+    {
+      "name": "model beside its source",
+      "record": "Game/Content/Cars/Truck.fbx.import.json",
+      "identity": "/Content/Cars/Truck.fbx"
+    },
+    {
+      "name": "model at its mount's root",
+      "record": "Game/Content/Lamp.glb.import.json",
+      "identity": "/Content/Lamp.glb"
+    },
+    {
+      "name": "model of another mount",
+      "record": "Media/Raw/Cars/Truck.fbx.import.json",
+      "identity": "/RawMedia/Cars/Truck.fbx"
+    },
+    {
+      "name": "two settings of one source",
+      "record": "Game/Content/Cars/TruckLod.fbx.import.json",
+      "identity": "/Content/Cars/TruckLod.fbx"
+    },
+    {
+      "name": "file not named as a record",
+      "record": "Game/Content/Cars/Truck.fbx.json",
+      "refusal": "import.model_record_misnamed"
+    },
+    {
+      "name": "suffix without a model",
+      "record": "Game/Content/Cars/.import.json",
+      "refusal": "import.model_record_misnamed"
+    },
+    {
+      "name": "record outside every mount",
+      "record": "Game/Imports/Content/Cars/Truck.fbx.import.json",
+      "refusal": "import.source_outside_mount"
+    },
+    {
+      "name": "record in source media",
+      "record": "Game/Content/SourceMedia/Truck.fbx.import.json",
+      "refusal": "vpath.segment.derived_content"
+    },
+    {
+      "name": "identity of no mount",
+      "identity": "/Props/Truck.fbx",
+      "refusal": "import.source_outside_mount"
+    },
+    {
+      "name": "identity the engine refuses",
+      "identity": "/Content/Cars/",
+      "refusal": "vpath.trailing_slash"
+    }
+  ],
+  "sources": [
+    {
+      "name": "companion beside the record",
+      "identity": "/Content/Cars/Truck.fbx",
+      "source": "/Content/Cars/Truck.fbx",
+      "written": "Truck.fbx"
+    },
+    {
+      "name": "companion of a model named apart from it",
+      "identity": "/Content/Cars/TruckLod.fbx",
+      "source": "/Content/Cars/Truck.fbx",
+      "written": "Truck.fbx"
+    },
+    {
+      "name": "file elsewhere in the mount",
+      "identity": "/Content/Props/Lantern.glb",
+      "source": "/Content/SourceMedia/DCC/Lantern.glb",
+      "written": "../SourceMedia/DCC/Lantern.glb"
+    },
+    {
+      "name": "file in another mount",
+      "identity": "/Content/Cars/Truck.fbx",
+      "source": "/RawMedia/Cars/Truck.fbx",
+      "written": "/RawMedia/Cars/Truck.fbx"
+    },
+    {
+      "name": "own mount named absolutely",
+      "identity": "/Content/Cars/Truck.fbx",
+      "written": "/Content/Cars/Truck.fbx",
+      "refusal": "import.reference_invalid",
+      "vpath": "vpath.reference_self_absolute"
+    },
+    {
+      "name": "relative text leaving the mount",
+      "identity": "/Content/Cars/Truck.fbx",
+      "written": "../../Raw/Cars/Truck.fbx",
+      "refusal": "import.reference_invalid",
+      "vpath": "vpath.reference_outside_mount"
+    },
+    {
+      "name": "a machine's absolute path",
+      "identity": "/Content/Cars/Truck.fbx",
+      "written": "C:/Media/Raw/Cars/Truck.fbx",
+      "refusal": "path.absolute_committed"
+    },
+    {
+      "name": "mount the table does not hold",
+      "identity": "/Content/Cars/Truck.fbx",
+      "written": "/Props/Cars/Truck.fbx",
+      "refusal": "import.source_outside_mount"
+    }
+  ]
+}

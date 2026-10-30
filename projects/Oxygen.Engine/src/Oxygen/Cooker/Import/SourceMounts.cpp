@@ -28,9 +28,11 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 
 namespace oxygen::content::import {
@@ -947,37 +949,35 @@ auto MountTable::LocateReference(const fs::path& referrer,
 {
   const auto holder
     = Canonical(referrer.is_absolute() ? referrer : project_root / referrer);
-  auto located = Locate(*this, holder.parent_path(),
-    Subject {
-      .file = holder,
-      .field = std::string { reference.field },
-      .mount = {},
-    },
-    reference.text, findings);
-  if (!located.has_value() || reference.text.starts_with('/')) {
-    return located;
-  }
-  auto ignored = std::vector<ImportDiagnostic> {};
-  const auto own = MountPathOf(holder, ignored);
-  const auto mount_of
-    = [](const std::string_view mount_path) -> std::string_view {
-    return mount_path.substr(0, mount_path.find('/', 1));
+  const auto subject = Subject {
+    .file = holder,
+    .field = std::string { reference.field },
+    .mount = {},
   };
-  if (own.has_value()
-    && FoldName(mount_of(own->mount_path))
-      == FoldName(mount_of(located->mount_path))) {
-    return located;
+  // A mount path starts with one slash and no root name; any other rooted
+  // path is a machine's absolute path.
+  if (const auto text = ToPath(std::string { reference.text });
+    text.has_root_name()
+    || (text.has_root_directory() && !reference.text.starts_with('/'))) {
+    Reporter { findings }.Report(
+      mount_codes::kAbsoluteCommitted, subject, reference.text);
+    return std::nullopt;
   }
-  Reporter { findings }.Report(mount_codes::kReferenceOutsideMount,
-    Subject {
-      .file = holder,
-      .field = std::string { reference.field },
-      .mount = {},
-    },
-    reference.text,
-    own.has_value() ? mount_of(own->mount_path).substr(1)
-                    : std::string_view {});
-  return std::nullopt;
+  // The reference grammar, anchored at the referrer's mount path; the file
+  // may be source media or derived content, which asset identities refuse.
+  const auto own = MountPathOf(holder, findings);
+  if (!own.has_value()) {
+    return std::nullopt;
+  }
+  const auto resolved = content::ResolveReference(
+    own->mount_path, reference.text, content::VirtualPathRuleSet::kCooked);
+  if (!resolved.has_value()) {
+    findings.push_back(
+      internal::RefuseReference(own->mount_path, holder.generic_string(),
+        reference.text, resolved.error(), std::string { reference.field }));
+    return std::nullopt;
+  }
+  return Locate(*this, project_root, subject, *resolved, findings);
 }
 
 auto IsValidMountName(const std::string_view name) -> bool

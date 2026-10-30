@@ -408,14 +408,15 @@ namespace {
     return MountedSource { .file = *file, .mount_path = authored->mount_path };
   }
 
-  //! The model import record a `model` job names: a mount path, or a path
-  //! relative to the project root.
+  //! The model import record of the model a `model` job names by its
+  //! identity, found at that identity through the manifest's mounts.
   auto ReadModelRecord(const json& job, const MountTable& mounts,
-    const std::string_view field, std::ostream& errors)
-    -> std::shared_ptr<const ModelImportRecordContent>
+    std::ostream& errors) -> std::shared_ptr<const ModelImportRecordContent>
   {
-    const auto path
-      = LocateFile(mounts, job.at("record").get<std::string>(), field, errors);
+    auto findings = std::vector<ImportDiagnostic> {};
+    const auto path = ModelImportRecord::RecordPathOf(
+      mounts, job.at("virtual_path").get<std::string>(), findings);
+    PrintDiagnostics(findings, errors);
     if (!path.has_value()) {
       return {};
     }
@@ -434,7 +435,8 @@ namespace {
   auto MakeModelJob(const json& job, const ModelImportRecordContent& record)
     -> json
   {
-    auto result = json::parse(ModelImportRecord::MakeJob(record));
+    auto result = json::parse(ModelImportRecord::MakeJob(
+      record, job.at("virtual_path").get<std::string>()));
     for (const auto* key : {
            "id",
            "depends_on",
@@ -1914,8 +1916,7 @@ namespace {
       auto model_record = std::shared_ptr<const ModelImportRecordContent> {};
       auto model_job = json {};
       if (entry.value("type", std::string {}) == "model") {
-        model_record = ReadModelRecord(entry, *manifest.mounts,
-          fmt::format("jobs[{}].record", manifest.jobs.size()), error_stream);
+        model_record = ReadModelRecord(entry, *manifest.mounts, error_stream);
         if (!model_record) {
           return std::nullopt;
         }

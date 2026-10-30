@@ -139,16 +139,16 @@ filename-based cached hashes do not establish them.
 
 ## Model import publication
 
-A glTF or FBX model imported from its model import record
-(`<content_root>/Imports/<virtual path>.import.json`) holds its source, virtual
-path, settings and source identity there, and what its imports established:
+A glTF or FBX model imported from its model import record, the model's
+authored file at `<model identity>.import.json` in the model's mount, holds its
+source, settings and source identity there, and what its imports established:
 surface provenance, node continuity, published nodes and source fingerprint.
 Original external files are read inputs; importing never writes metadata beside
 them.
 
 Each attempt cooks into a new private directory under
 `<generations_root>/<source_identity>/<generation-id>`. The generations root is
-a folder the caller owns and names; it is never derived from the content root,
+a folder the caller owns and names; it is never derived from the project,
 whose output folders may belong to another publisher (an editor project's
 `.cooked/` belongs to the editor). An attempt neither modifies a published
 generation nor copies an earlier aggregate root. After successful native
@@ -169,13 +169,15 @@ cooking and publication for native hosts; DemoShell and CLI consume that same
 API and schema. The editor keeps its existing project coordinator and uses the
 shared native provenance value.
 
-`ModelImportRecord` reads and writes a model's import record,
-`<content_root>/Imports/<virtual path>.import.json`
+`ModelImportRecord` reads and writes a model's import record
 (`oxygen.model-import.schema.json`; `/Content/Models/Ship.glb` has
-`Imports/Content/Models/Ship.glb.import.json`), the one store of a model's import state
-for the editor and the ImportTool: source, virtual path, settings, source
-identity, surface provenance, node continuity, published nodes and source
-fingerprint. `Prepare` reserves one unique attempt, and
+`Models/Ship.glb.import.json` in the `Content` mount's folder), the one store of
+a model's import state for the editor and the ImportTool: source, settings,
+source identity, surface provenance, node continuity, published nodes and
+source fingerprint. The identity is the record's location
+(`RecordPathOf`, `IdentityOf`); its `source` is a file reference from the
+record (`MountTable::LocateReference`). Lookups that need every record scan
+the `*.import.json` files of the bound `Source` mounts. `Prepare` reserves one unique attempt, and
 `AsyncImportService::SubmitModelImport` executes it. The selected
 generation is publication state, kept in the caller's
 `<generations_root>/<source_identity>/head.json`, never in the record. See the editor's
@@ -190,6 +192,10 @@ keep their logical spelling. Emitter failures retain the original file error
 through session finalization, even when another emitter has flushed the shared
 writer.
 
+DemoShell's ad-hoc imports are records in its scratch project's own writable
+`Scratch` mount (`/Scratch/DCC/Ship.glb.import.json`), never in the read-only
+examples mount, and their generations live in the scratch project's
+`.cooked/ModelGenerations`.
 DemoShell persists model import record paths (`content.library.import_records`)
 and the active scene's record (`content.active_scene.import_record`). It resolves
 the current generation when restoring the library, so external CLI reimports

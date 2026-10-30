@@ -68,7 +68,7 @@ namespace {
     GltfCommand gltf_command(&global_options);
     InputCommand input_command(&global_options);
     PhysicsSidecarCommand physics_sidecar_command(&global_options);
-    ReclaimCommand reclaim_command;
+    ReclaimCommand reclaim_command(&global_options);
     RemoveCookedCommand remove_cooked_command;
     ScriptCommand script_command(&global_options);
     ScriptingSidecarCommand scripting_sidecar_command(&global_options);
