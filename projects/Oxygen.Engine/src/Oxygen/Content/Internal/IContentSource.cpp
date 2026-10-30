@@ -21,8 +21,8 @@
 
 namespace oxygen::content::internal {
 
-auto IContentSource::FindTextureIndexByKey(const data::AssetKey& key) const
-  -> std::optional<data::pak::core::ResourceIndexT>
+auto IContentSource::FindTextureVirtualPath(const data::AssetKey& key) const
+  -> std::optional<std::string>
 {
   std::call_once(texture_key_once_, [this] -> void {
     for (auto& path : TextureVirtualPaths()) {
@@ -34,7 +34,17 @@ auto IContentSource::FindTextureIndexByKey(const data::AssetKey& key) const
   if (found == texture_paths_by_key_.end()) {
     return std::nullopt;
   }
-  return FindTextureIndexByVirtualPath(found->second);
+  return found->second;
+}
+
+auto IContentSource::FindTextureIndexByKey(const data::AssetKey& key) const
+  -> std::optional<data::pak::core::ResourceIndexT>
+{
+  const auto path = FindTextureVirtualPath(key);
+  if (!path.has_value()) {
+    return std::nullopt;
+  }
+  return FindTextureIndexByVirtualPath(*path);
 }
 
 auto IContentSource::FindPhysicsResource(const data::AssetKey& key) const

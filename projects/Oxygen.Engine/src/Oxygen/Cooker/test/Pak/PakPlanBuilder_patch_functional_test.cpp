@@ -880,7 +880,6 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
     .content_version = 1U,
     .source_key = MakeSourceKey(1U),
   };
-  request.options.embed_browse_index = true;
   const auto build_and_write = [&] -> pak::PakPlanBuilder::BuildResult {
     auto result = pak::PakPlanBuilder {}.Build(request);
     for (const auto& diagnostic : result.diagnostics) {

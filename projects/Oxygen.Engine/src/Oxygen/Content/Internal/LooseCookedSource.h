@@ -7,11 +7,11 @@
 #pragma once
 
 #include <cstdint>
+#include <iterator>
 #include <utility>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/ContentFileReader.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/api_export.h>
@@ -156,7 +156,7 @@ public:
     if (index >= keys.size()) {
       return std::nullopt;
     }
-    return oxygen::base::CheckedAt(keys, index);
+    return *std::ranges::next(keys.begin(), index);
   }
 
   [[nodiscard]] auto CreateAssetDescriptorReader(

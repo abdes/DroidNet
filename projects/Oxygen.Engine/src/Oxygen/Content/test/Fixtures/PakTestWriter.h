@@ -34,8 +34,9 @@ namespace oxygen::content::testing {
 //! Forges a minimal pak for `PakFile` and `AssetLoader` tests.
 /*!
  Header-only. Writes a header, optional buffer table, optional physics region
- and table, an embedded catalog, and a footer, in the same shape the production
- PakWriter emits. The catalog digest is computed the way `PakFile` expects.
+ and table, the listed assets with zero-filled descriptors, the browse index,
+ an embedded catalog, and a footer, in the same shape the production PakWriter
+ emits. The catalog digest is computed the way `PakFile` expects.
 */
 class PakTestWriter final {
 public:
@@ -55,8 +56,20 @@ public:
     //! Asset keys copied into `catalog.deleted`.
     std::vector<data::AssetKey> deleted;
 
-    //! Layers copied into `catalog.dependencies`.
-    std::vector<data::PakCatalogBase> dependencies;
+    //! An asset the pak lists in its directory, browse index and catalog.
+    //! Its descriptor is zero-filled, so it is never loaded.
+    struct Asset {
+      data::AssetKey key;
+      data::AssetType type = data::AssetType::kMaterial;
+      std::string virtual_path;
+    };
+    std::vector<Asset> assets;
+
+    //! The catalog's library, the root of every asset's virtual path.
+    std::string library = "Tests";
+
+    //! Copied into `catalog.dependencies`.
+    std::vector<data::PakCatalogDependency> dependencies;
 
     //! Source identity of both the header and the catalog. Without it the
     //! catalog uses the default identity, whatever `header` holds.
@@ -140,11 +153,20 @@ inline auto PakTestWriter::Encode(const Config& config)
     .source_key = catalog_key,
     .content_version = header.content_version,
     .catalog_digest = {},
+    .library = config.library,
     .entries = {},
     .deleted = config.deleted,
     .bases = {},
     .dependencies = config.dependencies,
   };
+  for (const auto& asset : config.assets) {
+    catalog.entries.push_back({
+      .asset_key = asset.key,
+      .asset_type = asset.type,
+      .descriptor_digest = {},
+      .transitive_resource_digest = {},
+    });
+  }
   catalog.catalog_digest = catalog.ComputeDigest().value();
   const auto catalog_bytes = catalog.Encode().value();
 
@@ -206,10 +228,56 @@ inline auto PakTestWriter::Encode(const Config& config)
     offset += table_bytes.size();
   }
 
-  append(std::as_bytes(std::span(catalog_bytes)));
+  constexpr auto kDescriptorSize = uint32_t { 64U };
+  auto directory = std::vector<data::pak::core::AssetDirectoryEntry> {};
+  for (const auto& asset : config.assets) {
+    directory.push_back({
+      .asset_key = asset.key,
+      .asset_type = asset.type,
+      .entry_offset = 0U,
+      .desc_offset = offset,
+      .desc_size = kDescriptorSize,
+      .references = {},
+    });
+    append(std::vector<std::byte>(kDescriptorSize));
+    offset += kDescriptorSize;
+  }
   footer.directory_offset = offset;
-  footer.directory_size = 0U;
-  footer.asset_count = 0U;
+  footer.directory_size = directory.size() * sizeof(directory.front());
+  footer.asset_count = directory.size();
+  for (auto& entry : directory) {
+    entry.entry_offset = offset;
+    offset += sizeof(entry);
+  }
+  append(std::as_bytes(std::span(directory)));
+
+  // The browse index: its header, one entry per asset, then their paths.
+  auto strings = std::string {};
+  auto browse = std::vector<data::pak::core::PakBrowseIndexEntry> {};
+  for (const auto& asset : config.assets) {
+    browse.push_back({
+      .asset_key = asset.key,
+      .virtual_path_offset
+      = static_cast<data::pak::core::StringTableOffsetT>(strings.size()),
+      .virtual_path_length = static_cast<data::pak::core::StringTableSizeT>(
+        asset.virtual_path.size()),
+    });
+    strings += asset.virtual_path;
+  }
+  auto browse_header = data::pak::core::PakBrowseIndexHeader {};
+  browse_header.entry_count = static_cast<uint32_t>(browse.size());
+  browse_header.string_table_size
+    = static_cast<data::pak::core::StringTableSizeT>(strings.size());
+  footer.browse_index_offset = offset;
+  append(std::as_bytes(std::span { &browse_header, 1U }));
+  append(std::as_bytes(std::span(browse)));
+  append(std::as_bytes(std::span(strings)));
+  footer.browse_index_size = sizeof(browse_header)
+    + (browse.size() * sizeof(data::pak::core::PakBrowseIndexEntry))
+    + strings.size();
+  offset += footer.browse_index_size;
+
+  append(std::as_bytes(std::span(catalog_bytes)));
   footer.catalog_offset = offset;
   footer.catalog_size = catalog_bytes.size();
   append(std::as_bytes(std::span { &footer, 1U }));

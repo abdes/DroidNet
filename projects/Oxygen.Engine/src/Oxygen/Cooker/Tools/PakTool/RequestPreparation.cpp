@@ -26,10 +26,8 @@
 #include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
-#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/CookedSource.h>
-#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::pak::tool {
@@ -84,19 +82,17 @@ namespace {
     return Result<void, RequestPreparationError>::Ok();
   }
 
-  //! Reads the catalogs of the base or dependency paks a request names.
-  //! Read the catalogs of lower-layer paks and add the keys of the textures
-  //! they hold to `texture_keys`.
-  auto ReadLayerCatalogs(const std::span<const std::filesystem::path> paths,
-    const std::string_view role, IRequestPreparationFileSystem& fs,
-    std::unordered_set<data::AssetKey>& texture_keys)
-    -> Result<std::vector<data::PakCatalog>, RequestPreparationError>
+  //! Reads the catalog and the browse index textures of each base or
+  //! dependency pak a request names.
+  auto ReadLayerPaks(const std::span<const std::filesystem::path> paths,
+    const std::string_view role, IRequestPreparationFileSystem& fs)
+    -> Result<std::vector<pak::PakDependency>, RequestPreparationError>
   {
     using ReadResult
-      = Result<std::vector<data::PakCatalog>, RequestPreparationError>;
+      = Result<std::vector<pak::PakDependency>, RequestPreparationError>;
     const auto prefix = "paktool.prepare." + std::string(role);
-    auto catalogs = std::vector<data::PakCatalog> {};
-    catalogs.reserve(paths.size());
+    auto paks = std::vector<pak::PakDependency> {};
+    paks.reserve(paths.size());
     for (const auto& path : paths) {
       if (const auto validated = ValidateFileInput(path, prefix, fs);
         !validated) {
@@ -104,11 +100,15 @@ namespace {
       }
       try {
         const content::PakFile archive(path);
-        catalogs.push_back(archive.Catalog());
+        auto layer = pak::PakDependency {
+          .catalog = archive.Catalog(),
+          .texture_keys = {},
+        };
         for (const auto& texture : archive.BrowseTextures()) {
-          texture_keys.insert(
+          layer.texture_keys.insert(
             data::TextureKeyFromVirtualPath(texture.virtual_path));
         }
+        paks.push_back(std::move(layer));
       } catch (const std::exception& error) {
         return ReadResult::Err(RequestPreparationError {
           .error_code = prefix + "_invalid",
@@ -117,7 +117,7 @@ namespace {
         });
       }
     }
-    return ReadResult::Ok(std::move(catalogs));
+    return ReadResult::Ok(std::move(paks));
   }
 
   auto ValidateSourceInput(const data::CookedSource& source,
@@ -464,19 +464,17 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
     return MakeError("paktool.prepare.base_pak_required",
       "Patch mode requires at least one --base-pak.");
   }
-  auto lower_layer_texture_keys = std::unordered_set<data::AssetKey> {};
-  auto base_catalogs = ReadLayerCatalogs(
-    base_pak_paths, "base_pak", fs, lower_layer_texture_keys);
-  if (!base_catalogs) {
+  auto base_paks = ReadLayerPaks(base_pak_paths, "base_pak", fs);
+  if (!base_paks) {
     return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
-      base_catalogs.error());
+      base_paks.error());
   }
   const auto& dependency_pak_paths = options.request.dependency_paks;
-  auto dependency_catalogs = ReadLayerCatalogs(
-    dependency_pak_paths, "dependency_pak", fs, lower_layer_texture_keys);
-  if (!dependency_catalogs) {
+  auto dependency_paks
+    = ReadLayerPaks(dependency_pak_paths, "dependency_pak", fs);
+  if (!dependency_paks) {
     return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
-      dependency_catalogs.error());
+      dependency_paks.error());
   }
 
   const auto publication_plan = MakeArtifactPublicationPlan(
@@ -583,11 +581,12 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
     : std::filesystem::path {};
   build_request.content_version = options.request.content_version;
   build_request.source_key = source_key.value();
-  build_request.base_catalogs = std::move(*base_catalogs);
-  build_request.dependency_catalogs = std::move(*dependency_catalogs);
-  build_request.lower_layer_texture_keys = std::move(lower_layer_texture_keys);
+  for (auto& base : *base_paks) {
+    build_request.base_catalogs.push_back(std::move(base.catalog));
+    build_request.base_texture_keys.merge(base.texture_keys);
+  }
+  build_request.dependencies = std::move(*dependency_paks);
   build_request.options.deterministic = options.request.deterministic;
-  build_request.options.embed_browse_index = options.request.embed_browse_index;
   build_request.options.compute_crc32 = options.request.compute_crc32;
   build_request.options.fail_on_warnings = options.request.fail_on_warnings;
   build_request.options.emit_manifest_in_full

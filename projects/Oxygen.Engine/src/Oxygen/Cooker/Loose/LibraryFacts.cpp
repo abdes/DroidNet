@@ -20,8 +20,10 @@
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Loose/LibraryFacts.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -96,6 +98,10 @@ namespace {
       .unreadable = std::nullopt,
       .roots = {},
       .external_scripts = {},
+      .assets = {},
+      .textures = {},
+      .deleted = {},
+      .requirements = {},
     };
     const auto index_path = root / import::LooseCookedLayout {}.index_file_name;
     if (files.KindOf(index_path) != PathKind::kFile) {
@@ -110,6 +116,9 @@ namespace {
     for (const auto& key : index.GetAllAssetKeys()) {
       const auto virtual_path = index.FindVirtualPath(key).value_or("");
       AddRoot(roots, virtual_path);
+      if (const auto type = index.FindAssetType(key)) {
+        facts.assets.emplace(key, static_cast<data::AssetType>(*type));
+      }
       const auto relpath = index.FindDescriptorRelPath(key);
       if (index.FindAssetType(key)
           == static_cast<uint8_t>(data::AssetType::kScript)
@@ -119,14 +128,18 @@ namespace {
     }
     for (const auto& file : index.GetFileInventory()) {
       AddRoot(roots, file.virtual_path);
+      if (file.kind == data::loose_cooked::FileKind::kTextureDescriptor) {
+        facts.textures.insert(
+          data::TextureKeyFromVirtualPath(file.virtual_path));
+      }
     }
     facts.roots.assign(roots.begin(), roots.end());
     facts.external_scripts.assign(scripts.begin(), scripts.end());
     return facts;
   }
 
-  //! Checks the header, the footer and the catalog version; a pak states no
-  //! root before its catalog names its library.
+  //! Checks the header and the footer, and reads the browse index and the
+  //! catalog.
   auto ReadPak(const ILibraryFiles& files, const fs::path& pak) -> LibraryFacts
   {
     using data::pak::core::PakFooter;
@@ -144,20 +157,44 @@ namespace {
     const auto footer
       = ReadStruct<PakFooter>(files, pak, *size - sizeof(PakFooter));
     PakFile::CheckFooter(footer, *size);
-    const auto catalog = files.Read(
+    const auto bytes = files.Read(
       pak, { .offset = footer.catalog_offset, .size = footer.catalog_size });
-    if (!catalog.has_value()) {
+    if (!bytes.has_value()) {
       throw Unreadable(pak);
     }
-    if (const auto decoded = data::PakCatalog::Decode(*catalog); !decoded) {
-      throw CookedOpenError(decoded.error());
+    auto catalog = data::PakCatalog::Decode(*bytes);
+    if (!catalog) {
+      throw CookedOpenError(catalog.error());
     }
-    return LibraryFacts {
+    const auto browse = files.Read(pak,
+      {
+        .offset = footer.browse_index_offset,
+        .size = footer.browse_index_size,
+      });
+    if (!browse.has_value()) {
+      throw Unreadable(pak);
+    }
+    auto facts = LibraryFacts {
       .kind = LibraryKind::kPak,
       .unreadable = std::nullopt,
-      .roots = {},
+      .roots = { catalog->library },
       .external_scripts = {},
+      .assets = {},
+      .textures = {},
+      .deleted = {},
+      .requirements = std::move(catalog->dependencies),
     };
+    facts.deleted.insert(catalog->deleted.begin(), catalog->deleted.end());
+    for (const auto& entry : catalog->entries) {
+      facts.assets.emplace(entry.asset_key, entry.asset_type);
+    }
+    for (const auto& texture :
+      PakFile::DecodeBrowseIndex(*browse, footer.texture_table.count)
+        .textures) {
+      facts.textures.insert(
+        data::TextureKeyFromVirtualPath(texture.virtual_path));
+    }
+    return facts;
   }
 
 } // namespace
@@ -177,6 +214,10 @@ auto ReadLibraryFacts(const ILibraryFiles& files, const fs::path& path)
       .unreadable = error,
       .roots = {},
       .external_scripts = {},
+      .assets = {},
+      .textures = {},
+      .deleted = {},
+      .requirements = {},
     };
   }
 }

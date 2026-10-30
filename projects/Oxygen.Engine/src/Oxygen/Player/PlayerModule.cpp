@@ -31,6 +31,7 @@
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Content/ContentMounts.h>
+#include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Control/EventLog.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -170,6 +171,8 @@ struct PlayOutcome {
 struct Remount {
   bool finished { false };
   std::string failure;
+  //! Why the remount failed, when a code names it.
+  std::string_view failure_code;
   std::string scene;
 };
 
@@ -266,6 +269,10 @@ namespace {
       co_await loader->WaitForPendingLoadsAsync();
       auto retirement = loader->CommitPreparedMounts(std::move(prepared));
       retirement.Finish();
+    } catch (const content::DependencyRequirementError& ex) {
+      remount->failure = fmt::format(
+        "the cooked content could not be remounted: {}", ex.what());
+      remount->failure_code = kDependencyMissingCode;
     } catch (const std::exception& ex) {
       remount->failure = fmt::format(
         "the cooked content could not be remounted: {}", ex.what());
@@ -313,11 +320,25 @@ auto PlayerModule::OnHostAttached(const observer_ptr<IAsyncEngine> engine)
     LOG_F(ERROR, "{}: the engine has no asset loader", GetName());
     return false;
   }
+  auto mounted = true;
   for (const auto& mount : launch_.mounts) {
-    if (mount.kind == LaunchMount::Kind::kPakFile) {
-      loader->AddPakFile(mount.path);
-    } else {
-      loader->AddLooseCookedRoot(mount.path);
+    try {
+      if (mount.kind == LaunchMount::Kind::kPakFile) {
+        loader->AddPakFile(mount.path);
+      } else {
+        loader->AddLooseCookedRoot(mount.path);
+      }
+    } catch (const content::DependencyRequirementError& error) {
+      // The process stays up, showing why, so the launcher can fix the
+      // mounts and play again.
+      LOG_F(
+        ERROR, "{}: {}: {}", GetName(), kDependencyMissingCode, error.what());
+      status_ = error.what();
+      session_scene_ = next_scene_;
+      Publish(
+        LifecycleState::kSceneFailed, error.what(), {}, kDependencyMissingCode);
+      mounted = false;
+      break;
     }
     LOG_F(INFO, "{}: mounted '{}'", GetName(), mount.path.string());
   }
@@ -335,9 +356,11 @@ auto PlayerModule::OnHostAttached(const observer_ptr<IAsyncEngine> engine)
       });
   }
 
-  // The player plays as soon as the engine runs.
-  status_ = fmt::format("Loading {}", next_scene_);
-  static_cast<void>(engine->BeginSession());
+  // The player plays as soon as the engine runs and its content mounted.
+  if (mounted) {
+    status_ = fmt::format("Loading {}", next_scene_);
+    static_cast<void>(engine->BeginSession());
+  }
   return true;
 }
 
@@ -572,7 +595,8 @@ auto PlayerModule::FinishRemount() -> void
     LOG_F(ERROR, "{}: {}", GetName(), remount->failure);
     status_ = remount->failure;
     session_scene_ = remount->scene;
-    Publish(LifecycleState::kSceneFailed, remount->failure);
+    Publish(LifecycleState::kSceneFailed, remount->failure, {},
+      remount->failure_code);
     Publish(LifecycleState::kSessionEnded);
     auto failure = commands::CommandResult::Failure(
       commands::ExecutionStatus::kError, remount->failure);

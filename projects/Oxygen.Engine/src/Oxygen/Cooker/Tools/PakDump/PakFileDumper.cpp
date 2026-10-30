@@ -38,6 +38,7 @@
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/ComponentType.h>
@@ -745,18 +746,15 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
 
   Field(ctx_.Out(), "Browse Index Offset", ToHexString(f.browse_index_offset));
   Field(ctx_.Out(), "Browse Index Size", std::to_string(f.browse_index_size));
-  Field(
-    ctx_.Out(), "Browse Index Present", pak.HasBrowseIndex() ? "yes" : "no");
-  if (pak.HasBrowseIndex()) {
-    Field(ctx_.Out(), "Browse Index Entries",
-      std::to_string(pak.BrowseIndex().size()));
-    Field(ctx_.Out(), "Browse Index Textures",
-      std::to_string(pak.BrowseTextures().size()));
-  }
+  Field(ctx_.Out(), "Browse Index Entries",
+    std::to_string(pak.BrowseIndex().size()));
+  Field(ctx_.Out(), "Browse Index Textures",
+    std::to_string(pak.BrowseTextures().size()));
 
   Field(ctx_.Out(), "Catalog Offset", ToHexString(f.catalog_offset));
   Field(ctx_.Out(), "Catalog Size", std::to_string(f.catalog_size));
   const auto& catalog = pak.Catalog();
+  Field(ctx_.Out(), "Library", catalog.library);
   Field(ctx_.Out(), "Catalog Assets", std::to_string(catalog.entries.size()));
   Field(ctx_.Out(), "Deleted Assets", std::to_string(catalog.deleted.size()));
   Field(
@@ -770,15 +768,21 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   Field(
     ctx_.Out(), "Dependencies", std::to_string(catalog.dependencies.size()));
   for (const auto& dependency : catalog.dependencies) {
-    Field(ctx_.Out(), "Dependency Source",
-      oxygen::data::to_string(dependency.source_key), 4);
-    Field(ctx_.Out(), "Dependency Content Version",
-      std::to_string(dependency.content_version), 4);
+    Field(ctx_.Out(), "Dependency Library", dependency.library, 4);
+    Field(ctx_.Out(), "Requirements",
+      std::to_string(dependency.requirements.size()), 4);
+    for (const auto& requirement : dependency.requirements) {
+      const auto kind
+        = requirement.kind == oxygen::data::KeyReferenceKind::kTexture
+        ? std::string("Texture")
+        : std::string(oxygen::data::to_string(requirement.type));
+      Field(ctx_.Out(), kind, to_string(requirement.key), 6);
+    }
   }
 
   Field(ctx_.Out(), "PAK CRC32", fmt::format("0x{:08x}", f.pak_crc32));
 
-  if (ctx_.verbose && pak.HasBrowseIndex()) {
+  if (ctx_.verbose) {
     ctx_.Out() << "\n";
     Separator(ctx_.Out(), "BROWSE INDEX");
     const auto entries = pak.BrowseIndex();

@@ -281,19 +281,25 @@ before the footer. Readers reject missing catalogs and overlapping/out-of-range
 storage.
 
 The packed catalog contains the current catalog version, SourceKey, content
-version, four 32-bit counts (entries, deletions, bases, dependencies), followed
-by entries, deleted keys, ordered base records and ordered dependency records,
-then its SHA-256 digest. Entries store AssetKey, 8-bit AssetType and two SHA-256
-digests (descriptor and resource dependencies). A base or dependency record
-stores SourceKey, 16-bit content version and catalog digest. Bases are a patch's
-exact baseline; dependencies are paks whose assets the archive references
-without containing them, such as the engine content pak. Canonical serialization
-sorts entries/deletions by key but preserves base and dependency precedence. The
-trailing digest covers all preceding canonical bytes, excluding itself.
+version, four 32-bit counts (entries, deletions, bases, dependencies) and the
+pak's library name, followed by entries, deleted keys, ordered base records and
+dependency records, then its SHA-256 digest. A name is an 8-bit byte length and
+its UTF-8 bytes. Entries store AssetKey, 8-bit AssetType and two SHA-256
+digests (descriptor and resource dependencies). A base record stores SourceKey,
+16-bit content version and catalog digest: bases are a patch's exact baseline.
+A dependency record stores a library name, a 32-bit requirement count and the
+requirements, each an 8-bit `KeyReferenceKind`, a key and an 8-bit AssetType:
+an asset with its type, or a texture with `kUnknown`. Dependencies are the
+libraries whose assets and textures the archive references without containing
+them, such as `Engine`. Canonical serialization sorts entries and deletions by
+key, dependencies by library and requirements by kind and key, but preserves
+base precedence. The trailing digest covers all preceding canonical bytes,
+excluding itself.
 
-Entries and deletions are disjoint and duplicate-free; a layer identity appears
-once across bases and dependencies and never names the containing archive. The
-catalog identity and key/type inventory must match the PAK header/directory.
+Entries and deletions are disjoint and duplicate-free; a base identity appears
+once and never names the containing archive; a library is required once, for
+at least one requirement, and is never the archive's own. The catalog identity
+and key/type inventory must match the PAK header/directory.
 `Data::PakCatalog` owns native encoding, decoding and digest validation; Cooker
 JSON is an inspection representation of that same metadata. Runtime layer
 selection belongs to Content.

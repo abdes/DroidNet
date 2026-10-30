@@ -7,9 +7,11 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -31,8 +33,10 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/MemoryFileSystem.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -401,8 +405,10 @@ NOLINT_TEST_F(SourceMountsTest, CookedMountsMayLiveInOutput)
   auto writer = LooseCookedTestWriter {};
   static_cast<void>(writer.Finish());
   files_.AddFiles(Project() / ".cooked" / "Content", writer.Files());
-  files_.AddFile(Project() / ".build" / "content.pak",
-    PakTestWriter::Encode(PakTestWriter::Config {}));
+  auto pak = PakTestWriter::Config {};
+  pak.library = "Pak";
+  files_.AddFile(
+    Project() / ".build" / "content.pak", PakTestWriter::Encode(pak));
 
   const auto table = ResolveMountTable(Request({
     MountDeclaration {
@@ -956,6 +962,55 @@ protected:
       AssetType::kScript, script, script.substr(1), bytes);
   }
 
+  //! The asset type a case names, such as `Material`.
+  static auto ParseAssetType(const std::string& name) -> AssetType
+  {
+    for (auto value = static_cast<uint8_t>(AssetType::kUnknown) + 1U;
+      value <= static_cast<uint8_t>(AssetType::kMaxAssetType); ++value) {
+      if (name == oxygen::data::to_string(static_cast<AssetType>(value))) {
+        return static_cast<AssetType>(value);
+      }
+    }
+    throw std::invalid_argument("unknown asset type in a case");
+  }
+
+  //! Builds the pak a recipe names: its library, its assets and what it
+  //! requires of other libraries.
+  static auto EncodePak(const json& recipe, const bool unsupported)
+    -> std::vector<std::byte>
+  {
+    auto config = PakTestWriter::Config {};
+    if (unsupported) {
+      ++config.header.version;
+    }
+    config.library = recipe.at("roots").at(0).get<std::string>();
+    for (const auto& asset : recipe.value("assets", json::array())) {
+      const auto path = asset.at("path").get<std::string>();
+      config.assets.push_back({
+        .key = AssetKey::FromVirtualPath(path),
+        .type = ParseAssetType(asset.at("type").get<std::string>()),
+        .virtual_path = path,
+      });
+    }
+    for (const auto& required : recipe.value("requirements", json::array())) {
+      const auto library = required.at("library").get<std::string>();
+      auto dependency = std::ranges::find(config.dependencies, library,
+        &oxygen::data::PakCatalogDependency::library);
+      if (dependency == config.dependencies.end()) {
+        config.dependencies.push_back(
+          { .library = library, .requirements = {} });
+        dependency = std::prev(config.dependencies.end());
+      }
+      dependency->requirements.push_back({
+        .kind = oxygen::data::KeyReferenceKind::kAsset,
+        .key
+        = AssetKey::FromVirtualPath(required.at("path").get<std::string>()),
+        .type = ParseAssetType(required.at("type").get<std::string>()),
+      });
+    }
+    return PakTestWriter::Encode(config);
+  }
+
   //! Builds the library a recipe names with the fixture writers.
   static auto AddLibrary(
     MemoryFileSystem& files, const fs::path& temp, const json& recipe) -> void
@@ -963,11 +1018,7 @@ protected:
     const auto path = temp / recipe.at("path").get<std::string>();
     const auto unsupported = recipe.value("format", "current") == "unsupported";
     if (recipe.at("kind") == "pak") {
-      auto config = PakTestWriter::Config {};
-      if (unsupported) {
-        ++config.header.version;
-      }
-      files.AddFile(path, PakTestWriter::Encode(config));
+      files.AddFile(path, EncodePak(recipe, unsupported));
       return;
     }
     auto writer = LooseCookedTestWriter {};
@@ -978,6 +1029,12 @@ protected:
     for (const auto& root : recipe.value("roots", json::array())) {
       AddRoot(writer, root.get<std::string>(), external_script);
       external_script = false;
+    }
+    for (const auto& asset : recipe.value("assets", json::array())) {
+      const auto asset_path = asset.at("path").get<std::string>();
+      writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(asset_path),
+        ParseAssetType(asset.at("type").get<std::string>()), asset_path,
+        asset_path.substr(1), std::vector<std::byte>(8));
     }
     static_cast<void>(writer.Finish());
     files.AddFiles(path, writer.Files());

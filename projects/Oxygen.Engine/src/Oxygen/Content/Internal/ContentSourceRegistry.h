@@ -49,12 +49,12 @@ public:
   struct MountResult final {
     struct SourceKeyConflict final {
       data::SourceKey source_key {};
-      data::SourceInstanceId existing_source_id {};
+      data::SourceInstanceId existing_source_id;
       std::string existing_mount_identity;
     };
 
     MountAction action { MountAction::kMounted };
-    data::SourceInstanceId source_id {};
+    data::SourceInstanceId source_id;
     size_t source_index { 0 };
     std::optional<SourceKeyConflict> source_key_conflict;
   };
@@ -104,7 +104,7 @@ public:
   [[nodiscard]] auto IsSourceTombstoningAsset(
     data::SourceInstanceId source_id, const data::AssetKey& key) const -> bool;
 
-  auto FindSourceIndexById(data::SourceInstanceId source_id) const
+  [[nodiscard]] auto FindSourceIndexById(data::SourceInstanceId source_id) const
     -> std::optional<size_t>;
   auto AssertStructuralConsistency(std::string_view context) const -> void;
 
@@ -134,8 +134,8 @@ private:
 
   struct SourceRecord {
     data::SourceKey key {};
-    std::string mount_identity {};
-    std::weak_ptr<IContentSource> source {};
+    std::string mount_identity;
+    std::weak_ptr<IContentSource> source;
     SourceKind kind { SourceKind::kLoose };
     bool readable = true;
   };
@@ -143,7 +143,11 @@ private:
   auto InstallSource(std::shared_ptr<IContentSource> source,
     data::SourceInstanceId source_id, std::optional<size_t> replaced_index,
     SourceKind kind) -> MountResult;
+  //! Checks the stack `source` makes: every pak's bases sit immediately
+  //! below it, and the layers below every pak meet its requirements, else
+  //! `DependencyRequirementError`; no layer changes an asset's type.
   auto ValidateMount(const IContentSource& source,
+    data::SourceInstanceId source_id,
     std::optional<size_t> replaced_index) const -> void;
   [[nodiscard]] auto FindSourceKeyConflict(
     data::SourceKey source_key, std::string_view mount_identity) const
@@ -161,7 +165,7 @@ private:
     source_key_to_ids_;
   std::vector<std::filesystem::path> pak_paths_;
   std::vector<data::SourceInstanceId> pak_source_ids_;
-  std::shared_ptr<const ContentSourceView> current_view_ {};
+  std::shared_ptr<const ContentSourceView> current_view_;
 };
 
 } // namespace oxygen::content::internal

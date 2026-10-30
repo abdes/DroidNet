@@ -42,6 +42,11 @@ enum class LifecycleState : std::uint8_t {
 //! in an authored scene, never played on its own.
 inline constexpr std::string_view kModelSceneCode = "player.model_scene";
 
+//! The code of a `scene_failed` event for a pak whose requirements the cooked
+//! roots and paks mounted below it do not meet.
+inline constexpr std::string_view kDependencyMissingCode
+  = "player.launch.dependency_missing";
+
 //! Data of a `lifecycle` event; `code` names why a scene was refused.
 [[nodiscard]] auto LifecycleData(LifecycleState state,
   std::string_view scene = {}, std::string_view message = {},

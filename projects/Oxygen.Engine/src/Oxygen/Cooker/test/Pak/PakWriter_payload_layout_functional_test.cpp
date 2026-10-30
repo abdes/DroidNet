@@ -46,9 +46,11 @@ auto AddCatalog(pak::PakPlan::Data& plan) -> void
     .source_key = plan.header.source_key,
     .content_version = plan.header.content_version,
     .catalog_digest = {},
+    .library = "Tests",
     .entries = {},
     .deleted = {},
     .bases = {},
+    .dependencies = {},
   };
   for (size_t index = 0; index < plan.assets.size(); ++index) {
     const auto& asset = plan.assets.at(index);
@@ -66,7 +68,7 @@ auto AddCatalog(pak::PakPlan::Data& plan) -> void
     .bytes = catalog.Encode().value(),
   };
   ASSERT_LE(
-    plan.catalog.offset + plan.catalog.bytes.size(), plan.footer.offset);
+    plan.catalog.offset + plan.catalog.bytes.size(), plan.browse_index.offset);
 }
 
 auto IsAllZero(std::span<const std::byte> bytes) -> bool
@@ -96,12 +98,14 @@ NOLINT_TEST_F(PakWriterPayloadLayoutTest,
   const auto texture_source_path = Root() / "texture_payload.bin";
   const auto texture_descriptor_path = Root() / "texture_descriptor.bin";
   const auto descriptor_source_path = Root() / "descriptor_payload.bin";
-  const auto texture_payload = MakePatternBytes(
-    kTexturePayloadStart, static_cast<size_t>(kTexturePayloadSize));
+  const auto texture_payload
+    = MakePatternBytes(std::byte { kTexturePayloadStart },
+      static_cast<size_t>(kTexturePayloadSize));
   const auto texture_descriptor = std::vector<std::byte>(
     sizeof(core::TextureResourceDesc), std::byte { 0 });
-  const auto descriptor_payload = MakePatternBytes(
-    kDescriptorPayloadStart, static_cast<size_t>(kAssetDescriptorSize));
+  const auto descriptor_payload
+    = MakePatternBytes(std::byte { kDescriptorPayloadStart },
+      static_cast<size_t>(kAssetDescriptorSize));
   cooktest::WriteBytes(texture_source_path, texture_payload);
   cooktest::WriteBytes(texture_descriptor_path, texture_descriptor);
   cooktest::WriteBytes(descriptor_source_path, descriptor_payload);
@@ -157,10 +161,10 @@ NOLINT_TEST_F(PakWriterPayloadLayoutTest,
   ASSERT_EQ(bytes.size(), static_cast<size_t>(kPlannedFileSize));
 
   const auto texture_view
-    = std::span<const std::byte>(bytes.data() + kTextureRegionOffset,
+    = std::span(bytes).subspan(static_cast<size_t>(kTextureRegionOffset),
       static_cast<size_t>(kTexturePayloadSize));
   const auto descriptor_view
-    = std::span<const std::byte>(bytes.data() + kAssetDescriptorOffset,
+    = std::span(bytes).subspan(static_cast<size_t>(kAssetDescriptorOffset),
       static_cast<size_t>(kAssetDescriptorSize));
   EXPECT_TRUE(std::ranges::equal(texture_view, texture_payload));
   EXPECT_TRUE(std::ranges::equal(descriptor_view, descriptor_payload));
@@ -227,14 +231,13 @@ NOLINT_TEST_F(
   const auto bytes = cooktest::ReadBytes(request.output_pak_path);
   ASSERT_EQ(bytes.size(), static_cast<size_t>(kPlannedFileSize));
 
-  EXPECT_TRUE(IsAllZero(std::span<const std::byte>(bytes.data() + kHeaderSize,
+  const auto all = std::span(bytes);
+  EXPECT_TRUE(IsAllZero(all.subspan(static_cast<size_t>(kHeaderSize),
     static_cast<size_t>(kTextureRegionOffset - kHeaderSize))));
+  EXPECT_TRUE(IsAllZero(all.subspan(static_cast<size_t>(kTextureRegionEnd),
+    static_cast<size_t>(kTableOffset - kTextureRegionEnd))));
   EXPECT_TRUE(
-    IsAllZero(std::span<const std::byte>(bytes.data() + kTextureRegionEnd,
-      static_cast<size_t>(kTableOffset - kTextureRegionEnd))));
-  EXPECT_TRUE(IsAllZero(
-    std::span<const std::byte>(bytes.data() + (kFooterOffset + kFooterSize),
-      static_cast<size_t>(kPlannedFileSize - (kFooterOffset + kFooterSize)))));
+    IsAllZero(all.subspan(static_cast<size_t>(kFooterOffset + kFooterSize))));
 }
 
 } // namespace

@@ -53,8 +53,8 @@ inline auto WriteTextureLibrary(const std::filesystem::path& root,
   static_cast<void>(writer.Finish());
 }
 
-//! Packs a loose cooked root into `pak_path`, with a browse index so its
-//! textures are found by virtual path.
+//! Packs a loose cooked root into `pak_path`; its browse index finds its
+//! textures by virtual path.
 inline auto PackLibrary(const std::filesystem::path& loose_root,
   const std::filesystem::path& pak_path) -> std::filesystem::path
 {
@@ -64,11 +64,10 @@ inline auto PackLibrary(const std::filesystem::path& loose_root,
       .sources = { data::CookedSource {
         .kind = data::CookedSourceKind::kLooseCooked,
         .path = loose_root,
-      } },
+      }, },
       .output_pak_path = pak_path,
       .content_version = 1U,
       .source_key = data::SourceKey { Uuid::Generate() },
-      .options = { .embed_browse_index = true },
     });
   if (!built) {
     throw std::runtime_error("The test library pak could not be built");

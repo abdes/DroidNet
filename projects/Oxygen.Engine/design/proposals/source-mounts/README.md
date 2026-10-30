@@ -197,25 +197,33 @@ overlap check.
 
 Every bound `Cooked` mount is read as a library when the table is resolved,
 without loading its assets (`lc::ReadLibraryFacts`): the index of a loose
-cooked root, or the header, footer and catalog of a pak.
+cooked root, or the header, footer, browse index and catalog of a pak.
 
-| Rule                     | Finding                            |
-| ------------------------ | ---------------------------------- |
-| It can be read           | `mount.library_format_unsupported` |
-| Its one root is its name | `mount.library_root_mismatch`      |
-| It has one root          | `mount.library_root_multiple`      |
-| No external script       | `mount.library_external_script`    |
+| Rule                                  | Finding                            |
+| ------------------------------------- | ---------------------------------- |
+| It can be read                        | `mount.library_format_unsupported` |
+| Its one root is its name              | `mount.library_root_mismatch`      |
+| It has one root                       | `mount.library_root_multiple`      |
+| No external script                    | `mount.library_external_script`    |
+| The libraries below provide its needs | `mount.library_dependency_missing` |
 
 A folder without an index, a file that is not a pak, and a format version this
-build cannot read are all `mount.library_format_unsupported`. Only a loose
-root states its roots, the mounts its virtual paths start with, and its
-scripts with an external source; a pak states neither, since its catalog does
-not name its library and PakTool seals scripts.
+build cannot read are all `mount.library_format_unsupported`. A loose root's
+roots are the mounts its virtual paths start with; a pak's one root is the
+library its catalog names. Only a loose root can hold a script with an
+external source: PakTool seals scripts.
+
+A pak also states what it requires of other libraries: assets with their types
+and textures, by key. Each requirement must be held, with its type, by the
+library it names, as the newest valid library bound before the pak in table
+order that holds the key; a pak's deletions hide what lies below it. That is
+the check the runtime makes when it mounts the pak above the others.
 
 A library that breaks a rule is `Invalid`: it stays in the table with its
-finding, a warning, contributes no assets and is never mounted for a job.
-An import job reads its own output root, then the bound libraries of its
-mount table in table order, then its cooked context roots.
+finding, a warning, contributes no assets, provides nothing to the libraries
+after it and is never mounted for a job. An import job reads its own output
+root, then the bound libraries of its mount table in table order, then its
+cooked context roots.
 
 ### Where mounts come from
 

@@ -9,9 +9,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -20,7 +22,9 @@
 namespace {
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
+using oxygen::data::KeyReferenceKind;
 using oxygen::data::PakCatalog;
+using oxygen::data::PakRequirement;
 using oxygen::data::SourceKey;
 
 auto Key(const uint8_t value) -> AssetKey
@@ -45,6 +49,7 @@ auto Catalog() -> PakCatalog
     .source_key = Source(3U),
     .content_version = 2U,
     .catalog_digest = {},
+    .library = "Props",
     .entries = {
       { .asset_key = Key(1U), .asset_type = AssetType::kMaterial,
         .descriptor_digest = {}, .transitive_resource_digest = {}, },
@@ -57,7 +62,16 @@ auto Catalog() -> PakCatalog
       { .source_key = Source(2U), .content_version = 1U, .catalog_digest = {} },
     },
     .dependencies = {
-      { .source_key = Source(6U), .content_version = 1U, .catalog_digest = {} },
+      { .library = "Engine", .requirements = {
+        { .kind = KeyReferenceKind::kAsset, .key = Key(6U),
+          .type = AssetType::kMaterial, },
+        { .kind = KeyReferenceKind::kTexture, .key = Key(7U),
+          .type = AssetType::kUnknown, },
+      }, },
+      { .library = "Vehicles", .requirements = {
+        { .kind = KeyReferenceKind::kAsset, .key = Key(8U),
+          .type = AssetType::kGeometry, },
+      }, },
     },
   };
   catalog.entries.at(0).descriptor_digest.fill(0x11U);
@@ -66,7 +80,6 @@ auto Catalog() -> PakCatalog
   catalog.entries.at(1).transitive_resource_digest.fill(0x44U);
   catalog.bases.at(0).catalog_digest.fill(0x55U);
   catalog.bases.at(1).catalog_digest.fill(0x66U);
-  catalog.dependencies.at(0).catalog_digest.fill(0x77U);
   catalog.catalog_digest = catalog.ComputeDigest().value();
   return catalog;
 }
@@ -80,6 +93,7 @@ NOLINT_TEST(PakCatalogTest, RoundTripPreservesLayerMeaning)
   ASSERT_TRUE(decoded.has_value());
   EXPECT_EQ(decoded->source_key, original.source_key);
   EXPECT_EQ(decoded->content_version, original.content_version);
+  EXPECT_EQ(decoded->library, original.library);
   EXPECT_EQ(decoded->catalog_digest, original.catalog_digest);
   EXPECT_EQ(decoded->deleted, original.deleted);
   EXPECT_EQ(decoded->bases, original.bases);
@@ -103,6 +117,8 @@ NOLINT_TEST(PakCatalogTest, EntryOrderIsCanonicalButBaseOrderIsSemantic)
   const auto encoded = catalog.Encode().value();
   std::ranges::reverse(catalog.entries);
   std::ranges::reverse(catalog.deleted);
+  std::ranges::reverse(catalog.dependencies);
+  std::ranges::reverse(catalog.dependencies.back().requirements);
   EXPECT_EQ(catalog.Encode().value(), encoded);
   std::ranges::reverse(catalog.bases);
   EXPECT_NE(catalog.ComputeDigest().value(), catalog.catalog_digest);
@@ -166,43 +182,77 @@ NOLINT_TEST(PakCatalogTest, BaselineMustBeImmediatelyBelowPatch)
   EXPECT_FALSE(patch.ValidateBaseLayers({}));
 }
 
-//! A layer is a patch baseline or a dependency, never both, and never the
-//! catalog itself.
-NOLINT_TEST(PakCatalogTest, RejectsInvalidDependencies)
+//! The library is part of the catalog: renaming it changes the digest.
+NOLINT_TEST(PakCatalogTest, LibraryIsPartOfTheDigest)
 {
   auto catalog = Catalog();
-  catalog.dependencies.at(0).source_key = catalog.source_key;
+  catalog.library = "Others";
+  EXPECT_NE(catalog.ComputeDigest().value(), catalog.catalog_digest);
+  catalog.library.clear();
   EXPECT_FALSE(catalog.ComputeDigest());
-  catalog = Catalog();
-  catalog.dependencies.push_back(catalog.dependencies.at(0));
-  EXPECT_FALSE(catalog.ComputeDigest());
-  catalog = Catalog();
-  catalog.dependencies.push_back(catalog.bases.at(0));
+  catalog.library = std::string(256U, 'A');
   EXPECT_FALSE(catalog.ComputeDigest());
 }
 
-//! Dependencies must be mounted below in declared order; unlike patch bases,
-//! other layers may sit between them.
-NOLINT_TEST(PakCatalogTest, DependenciesMustBeMountedBelowInOrder)
+//! Every pak names its library, even one that lists nothing.
+NOLINT_TEST(PakCatalogTest, EveryPakNamesItsLibrary)
+{
+  auto empty = PakCatalog { .source_key = Source(3U) };
+  EXPECT_FALSE(empty.ComputeDigest());
+  empty.library = "Props";
+  EXPECT_TRUE(empty.ComputeDigest());
+}
+
+//! A library is required once, never the pak's own, and for something; each
+//! requirement names an asset with its type or a texture, once.
+NOLINT_TEST(PakCatalogTest, RejectsInvalidDependencies)
+{
+  const auto rejects = [](auto edit) -> bool {
+    auto catalog = Catalog();
+    edit(catalog);
+    return !catalog.ComputeDigest();
+  };
+  EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
+    catalog.dependencies.at(0).library = catalog.library;
+  }));
+  EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
+    catalog.dependencies.at(1).library = catalog.dependencies.at(0).library;
+  }));
+  EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
+    catalog.dependencies.at(0).library.clear();
+  }));
+  EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
+    catalog.dependencies.at(0).requirements.clear();
+  }));
+  EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
+    auto& requirements = catalog.dependencies.at(0).requirements;
+    requirements.push_back(requirements.at(0));
+  }));
+  EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
+    catalog.dependencies.at(0).requirements.at(0).type = AssetType::kUnknown;
+  }));
+  EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
+    catalog.dependencies.at(0).requirements.at(1).type = AssetType::kMaterial;
+  }));
+  EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
+    catalog.dependencies.at(0).requirements.at(0).kind
+      = KeyReferenceKind::kPhysicsResource;
+  }));
+  EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
+    catalog.dependencies.at(0).requirements.at(0).key = {};
+  }));
+}
+
+//! An asset and a texture may share a key: a requirement is its kind and key.
+NOLINT_TEST(PakCatalogTest, AcceptsAnAssetAndATextureOfOneKey)
 {
   auto catalog = Catalog();
-  const auto engine = catalog.dependencies.at(0);
-  auto tools = engine;
-  tools.source_key = Source(7U);
-  catalog.dependencies.push_back(tools);
-  const auto content = oxygen::data::PakCatalogBase {
-    .source_key = Source(8U),
-    .content_version = 0U,
-    .catalog_digest = {},
-  };
-
-  EXPECT_TRUE(catalog.ValidateDependencies(
-    std::vector { engine, content, tools, content }));
-  EXPECT_FALSE(catalog.ValidateDependencies(std::vector { engine, content }));
-  EXPECT_FALSE(catalog.ValidateDependencies(std::vector { tools, engine }));
-  auto rebuilt = engine;
-  rebuilt.catalog_digest.at(0) ^= 1U;
-  EXPECT_FALSE(catalog.ValidateDependencies(std::vector { rebuilt, tools }));
+  catalog.dependencies.at(0).requirements.push_back(PakRequirement {
+    .kind = KeyReferenceKind::kTexture,
+    .key = Key(6U),
+    .type = AssetType::kUnknown,
+  });
+  EXPECT_TRUE(catalog.ComputeDigest());
 }
 
 NOLINT_TEST(PakCatalogTest, RejectsTruncationCorruptionAndOversizedCounts)

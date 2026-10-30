@@ -209,8 +209,13 @@ the requirements the registry checks. Docs: PakTool README, `paktool_design.md`,
 `binary_packing_discipline.md`, `patch_resolution_contract.md`,
 `scene-instantiation-and-player.md`.
 
-Integration tests left for S20: `AssetLoader_generation_test` dependency
-cases, `PakBuilder_functional_test` dependency fixture.
+Integration tests left for S20, to move to the
+[cooked content builders](../cooked-content-builders/README.md): the Pak and
+PakTool functional tests whose fixtures build a pak with no content or patch
+bases of another library than their content (24 Pak, 10 PakTool, all failing
+on the one-library rule). The `AssetLoader_generation_test` dependency cases
+and the `PakBuilder_functional_test` dependency fixture moved to requirements
+in this slice.
 
 ### S7. Editor formats
 

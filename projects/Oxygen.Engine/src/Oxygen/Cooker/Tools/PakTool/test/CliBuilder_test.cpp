@@ -82,7 +82,6 @@ NOLINT_TEST(PakToolCliTest, BuildCommandParsesCommonAndFullBuildOptions)
     "--manifest-out",
     "C:/Build/game.manifest.json",
     "--non-deterministic",
-    "--embed-browse-index",
     "--no-crc32",
     "--fail-on-warnings",
     "--diagnostics-file",
@@ -112,7 +111,6 @@ NOLINT_TEST(PakToolCliTest, BuildCommandParsesCommonAndFullBuildOptions)
   EXPECT_EQ(options.request.content_version, 42);
   EXPECT_EQ(options.request.source_key, kSourceKey);
   EXPECT_FALSE(options.request.deterministic);
-  EXPECT_TRUE(options.request.embed_browse_index);
   EXPECT_FALSE(options.request.compute_crc32);
   EXPECT_TRUE(options.request.fail_on_warnings);
   EXPECT_EQ(options.build.manifest_output,

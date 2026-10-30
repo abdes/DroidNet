@@ -9,7 +9,7 @@
     },
     "schema_version": {
       "type": "integer",
-      "const": 3
+      "const": 4
     },
     "source_key": {
       "type": "string",
@@ -23,6 +23,12 @@
     "catalog_digest": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "library": {
+      "description": "The pak's one root: every entry's virtual path lies under this mount name.",
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+      "maxLength": 255
     },
     "entries": {
       "type": "array",
@@ -77,14 +83,14 @@
       "description": "Patch baseline: the exact layers the patch applies to, lowest first.",
       "type": "array",
       "items": {
-        "$ref": "#/definitions/layer"
+        "$ref": "#/definitions/base"
       }
     },
     "dependencies": {
-      "description": "Layers whose assets the pak references without containing them, lowest first.",
+      "description": "The libraries whose assets and textures the pak references without containing them, with what it requires of each.",
       "type": "array",
       "items": {
-        "$ref": "#/definitions/layer"
+        "$ref": "#/definitions/dependency"
       }
     }
   },
@@ -93,13 +99,14 @@
     "source_key",
     "content_version",
     "catalog_digest",
+    "library",
     "entries",
     "deleted",
     "bases",
     "dependencies"
   ],
   "definitions": {
-    "layer": {
+    "base": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -118,6 +125,69 @@
         }
       },
       "required": ["source_key", "content_version", "catalog_digest"]
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "library": {
+          "description": "The library's one root.",
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+          "maxLength": 255
+        },
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "asset"
+                  },
+                  "key": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "Material",
+                      "Geometry",
+                      "Scene",
+                      "Script",
+                      "InputAction",
+                      "InputMappingContext",
+                      "PhysicsMaterial",
+                      "CollisionShape",
+                      "PhysicsScene"
+                    ]
+                  }
+                },
+                "required": ["kind", "key", "type"]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "texture"
+                  },
+                  "key": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                  }
+                },
+                "required": ["kind", "key"]
+              }
+            ]
+          }
+        }
+      },
+      "required": ["library", "requirements"]
     }
   }
 }

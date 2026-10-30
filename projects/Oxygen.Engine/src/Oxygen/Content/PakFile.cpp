@@ -17,6 +17,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <unordered_map>
 #include <unordered_set>
@@ -33,6 +34,7 @@
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
 using oxygen::content::PakFile;
@@ -157,12 +159,6 @@ struct ParsedPakMetadata final {
   PakFooter footer {};
   std::vector<AssetDirectoryEntry> directory {}; // NOLINT
   std::unordered_map<AssetKey, size_t> key_to_index {}; // NOLINT
-};
-
-struct ParsedBrowseIndex final {
-  std::vector<PakFile::BrowseEntry> entries {}; // NOLINT
-  std::unordered_map<std::string_view, AssetKey> vpath_to_key {}; // NOLINT
-  std::vector<PakFile::BrowseTextureEntry> textures {}; // NOLINT
 };
 
 auto ReadPakHeader(oxygen::serio::FileStream<>& stream,
@@ -370,178 +366,106 @@ auto LoadPakMetadata(oxygen::serio::FileStream<>& stream) -> ParsedPakMetadata
   return metadata;
 }
 
-auto LoadBrowseIndex(oxygen::serio::FileStream<>& stream,
-  const size_t file_size, const PakFooter& footer) -> ParsedBrowseIndex
-{
-  LOG_SCOPE_FUNCTION(1);
-
-  ParsedBrowseIndex parsed {};
-  const oxygen::data::pak::core::OffsetT browse_offset
-    = footer.browse_index_offset;
-  const uint64_t browse_size = footer.browse_index_size;
-
-  if (browse_offset == 0 || browse_size == 0) {
-    return parsed;
-  }
-
-  const auto end_offset = browse_offset + browse_size;
-  if (browse_offset >= file_size || end_offset > file_size
-    || end_offset < browse_offset) {
-    LOG_F(ERROR,
-      "Browse index out of bounds: offset={} size={} file_size={} (ignoring)",
-      browse_offset, browse_size, file_size);
-    return parsed;
-  }
-
-  if (auto res = stream.Seek(static_cast<size_t>(browse_offset)); !res) {
-    LOG_F(ERROR, "Failed to seek to browse index offset {}: {}", browse_offset,
-      res.error().message());
-    return parsed;
-  }
-
-  PakFile::Reader reader(stream);
-  auto header_result = reader.Read<PakBrowseIndexHeader>();
-  if (!header_result) {
-    LOG_F(ERROR, "Failed to read browse index header: {}",
-      header_result.error().message());
-    return parsed;
-  }
-
-  const auto header = header_result.value();
-  constexpr std::array<uint8_t, 8> kBrowseMagic
-    = { 'O', 'X', 'P', 'A', 'K', 'B', 'I', 'X' };
-  if (!std::ranges::equal(std::span { header.magic }, kBrowseMagic)) {
-    LOG_F(ERROR, "Browse index magic mismatch (ignoring)");
-    return parsed;
-  }
-
-  if (header.version != oxygen::data::pak::core::kBrowseIndexVersion) {
-    LOG_F(
-      ERROR, "Unsupported browse index version {} (ignoring)", header.version);
-    return parsed;
-  }
-
-  const uint64_t entries_size
-    = (static_cast<uint64_t>(header.entry_count) * sizeof(PakBrowseIndexEntry))
-    + (static_cast<uint64_t>(header.texture_entry_count)
-      * sizeof(PakBrowseIndexTextureEntry));
-  const uint64_t expected_min_size
-    = sizeof(PakBrowseIndexHeader) + entries_size + header.string_table_size;
-  if (expected_min_size > browse_size) {
-    LOG_F(ERROR,
-      "Browse index payload is truncated: expected_at_least={} actual={}",
-      expected_min_size, browse_size);
-    return parsed;
-  }
-
-  std::vector<PakBrowseIndexEntry> entries;
-  entries.reserve(header.entry_count);
-  for (uint32_t i = 0; i < header.entry_count; ++i) {
-    auto entry_result = reader.Read<PakBrowseIndexEntry>();
-    if (!entry_result) {
-      LOG_F(ERROR, "Failed to read browse index entry {}: {}", i,
-        entry_result.error().message());
-      return ParsedBrowseIndex {};
-    }
-    entries.push_back(entry_result.value());
-  }
-  std::vector<PakBrowseIndexTextureEntry> texture_entries;
-  texture_entries.reserve(header.texture_entry_count);
-  for (uint32_t i = 0; i < header.texture_entry_count; ++i) {
-    auto entry_result = reader.Read<PakBrowseIndexTextureEntry>();
-    if (!entry_result) {
-      LOG_F(ERROR, "Failed to read browse index texture entry {}: {}", i,
-        entry_result.error().message());
-      return ParsedBrowseIndex {};
-    }
-    texture_entries.push_back(entry_result.value());
-  }
-
-  auto strings_blob_result
-    = reader.ReadBlob(static_cast<size_t>(header.string_table_size));
-  if (!strings_blob_result) {
-    LOG_F(ERROR, "Failed to read browse index string table: {}",
-      strings_blob_result.error().message());
-    return ParsedBrowseIndex {};
-  }
-  const auto& strings_blob = strings_blob_result.value();
-
-  const auto read_path = [&](const uint64_t off,
-                           const uint64_t len) -> std::optional<std::string> {
-    const uint64_t end = off + len;
-    if (off > header.string_table_size || len > header.string_table_size
-      || end > header.string_table_size || end < off) {
-      LOG_F(ERROR, "Browse index string reference out of bounds (ignoring)");
-      return std::nullopt;
-    }
-    const auto path_bytes
-      = std::span<const std::byte>(strings_blob)
-          .subspan(static_cast<size_t>(off), static_cast<size_t>(len));
-    std::string vpath;
-    vpath.resize(static_cast<size_t>(len));
-    std::ranges::transform(path_bytes, vpath.begin(),
-      [](const std::byte byte) -> char { return std::to_integer<char>(byte); });
-    if (vpath.empty() || vpath.front() != '/') {
-      LOG_F(ERROR, "Browse index virtual path is not canonical (ignoring)");
-      return std::nullopt;
-    }
-    return vpath;
-  };
-
-  parsed.entries.reserve(header.entry_count);
-  for (const auto& e : entries) {
-    auto vpath = read_path(e.virtual_path_offset, e.virtual_path_length);
-    if (!vpath) {
-      return ParsedBrowseIndex {};
-    }
-    parsed.entries.push_back(PakFile::BrowseEntry {
-      .virtual_path = std::move(*vpath),
-      .asset_key = e.asset_key,
-    });
-  }
-  parsed.textures.reserve(header.texture_entry_count);
-  for (const auto& e : texture_entries) {
-    if (e.texture_index == oxygen::data::pak::core::kNoResourceIndex
-      || e.texture_index.get() >= footer.texture_table.count) {
-      LOG_F(ERROR, "Browse index texture is outside the texture table");
-      return ParsedBrowseIndex {};
-    }
-    auto vpath = read_path(e.virtual_path_offset, e.virtual_path_length);
-    if (!vpath) {
-      return ParsedBrowseIndex {};
-    }
-    parsed.textures.push_back(PakFile::BrowseTextureEntry {
-      .virtual_path = std::move(*vpath),
-      .texture_index = e.texture_index,
-    });
-  }
-
-  auto unique_paths = std::unordered_set<std::string_view> {};
-  unique_paths.reserve(parsed.entries.size() + parsed.textures.size());
-  const auto claim = [&unique_paths](const std::string& path) -> bool {
-    if (unique_paths.insert(path).second) {
-      return true;
-    }
-    LOG_F(ERROR, "Browse index contains duplicate virtual path '{}'", path);
-    return false;
-  };
-  parsed.vpath_to_key.reserve(parsed.entries.size());
-  for (const auto& entry : parsed.entries) {
-    if (!claim(entry.virtual_path)) {
-      return ParsedBrowseIndex {};
-    }
-    parsed.vpath_to_key.emplace(entry.virtual_path, entry.asset_key);
-  }
-  for (const auto& entry : parsed.textures) {
-    if (!claim(entry.virtual_path)) {
-      return ParsedBrowseIndex {};
-    }
-  }
-
-  return parsed;
-}
-
 } // namespace
+
+auto PakFile::DecodeBrowseIndex(const std::span<const std::byte> bytes,
+  const uint32_t texture_count) -> BrowseContents
+{
+  const auto corrupt = [](const std::string& message) -> CookedOpenError {
+    return { CookedOpenFailure::kCorrupt, "Browse index: " + message };
+  };
+  serio::ReadOnlyMemoryStream stream(bytes);
+  serio::Reader reader(stream);
+  const auto packed = reader.ScopedAlignment(1);
+  const auto header = reader.Read<PakBrowseIndexHeader>();
+  if (!header) {
+    throw corrupt("truncated header");
+  }
+  constexpr std::array<char, 8> kBrowseMagic
+    = { 'O', 'X', 'P', 'A', 'K', 'B', 'I', 'X' };
+  if (!std::ranges::equal(std::span { header->magic }, kBrowseMagic)) {
+    throw corrupt("magic mismatch");
+  }
+  if (header->version != oxygen::data::pak::core::kBrowseIndexVersion) {
+    throw CookedOpenError(CookedOpenFailure::kUnsupportedVersion,
+      "Unsupported browse index version; recook content");
+  }
+  const uint64_t expected_size = sizeof(PakBrowseIndexHeader)
+    + (uint64_t { header->entry_count } * sizeof(PakBrowseIndexEntry))
+    + (uint64_t { header->texture_entry_count }
+      * sizeof(PakBrowseIndexTextureEntry))
+    + header->string_table_size;
+  if (expected_size > bytes.size()) {
+    throw corrupt("truncated payload");
+  }
+
+  std::vector<PakBrowseIndexEntry> entries(header->entry_count);
+  for (auto& entry : entries) {
+    auto read = reader.Read<PakBrowseIndexEntry>();
+    if (!read) {
+      throw corrupt("truncated entry");
+    }
+    entry = *read;
+  }
+  std::vector<PakBrowseIndexTextureEntry> texture_entries(
+    header->texture_entry_count);
+  for (auto& entry : texture_entries) {
+    auto read = reader.Read<PakBrowseIndexTextureEntry>();
+    if (!read) {
+      throw corrupt("truncated texture entry");
+    }
+    entry = *read;
+  }
+  const auto strings = bytes.subspan(
+    static_cast<size_t>(expected_size - header->string_table_size),
+    static_cast<size_t>(header->string_table_size));
+  const auto read_path
+    = [&](const uint64_t offset, const uint64_t length) -> std::string {
+    if (offset > strings.size() || length > strings.size() - offset) {
+      throw corrupt("string reference out of bounds");
+    }
+    auto path = std::string(static_cast<size_t>(length), char {});
+    std::ranges::transform(
+      strings.subspan(static_cast<size_t>(offset), static_cast<size_t>(length)),
+      path.begin(),
+      [](const std::byte byte) -> char { return std::to_integer<char>(byte); });
+    if (path.empty() || path.front() != '/') {
+      throw corrupt("virtual path is not canonical");
+    }
+    return path;
+  };
+
+  auto contents = BrowseContents {};
+  auto paths = std::unordered_set<std::string> {};
+  const auto claim = [&paths, &corrupt](const std::string& path) -> void {
+    if (!paths.insert(path).second) {
+      throw corrupt("duplicate virtual path '" + path + "'");
+    }
+  };
+  contents.entries.reserve(entries.size());
+  for (const auto& entry : entries) {
+    auto path = read_path(entry.virtual_path_offset, entry.virtual_path_length);
+    claim(path);
+    contents.entries.push_back({
+      .virtual_path = std::move(path),
+      .asset_key = entry.asset_key,
+    });
+  }
+  contents.textures.reserve(texture_entries.size());
+  for (const auto& entry : texture_entries) {
+    if (entry.texture_index == oxygen::data::pak::core::kNoResourceIndex
+      || entry.texture_index.get() >= texture_count) {
+      throw corrupt("texture outside the texture table");
+    }
+    auto path = read_path(entry.virtual_path_offset, entry.virtual_path_length);
+    claim(path);
+    contents.textures.push_back({
+      .virtual_path = std::move(path),
+      .texture_index = entry.texture_index,
+    });
+  }
+  return contents;
+}
 
 auto PakFile::InitializeResourceTablesFromFooter() const -> void
 {
@@ -602,11 +526,28 @@ PakFile::PakFile(const std::filesystem::path& path)
       throw std::runtime_error("Failed to get pak file size");
     }
 
-    auto parsed_browse
-      = LoadBrowseIndex(*meta_stream_, size_result.value(), footer_);
-    browse_index_ = std::move(parsed_browse.entries);
-    browse_vpath_to_key_ = std::move(parsed_browse.vpath_to_key);
-    browse_textures_ = std::move(parsed_browse.textures);
+    // Every pak holds its browse index; the footer check bounds it.
+    if (footer_.browse_index_size == 0U) {
+      throw CookedOpenError(
+        CookedOpenFailure::kCorrupt, "The pak holds no browse index");
+    }
+    if (auto res
+      = meta_stream_->Seek(static_cast<size_t>(footer_.browse_index_offset));
+      !res) {
+      throw std::runtime_error("Failed to seek to the browse index");
+    }
+    auto browse_bytes
+      = Reader(*meta_stream_)
+          .ReadBlob(static_cast<size_t>(footer_.browse_index_size));
+    if (!browse_bytes) {
+      throw std::runtime_error("Failed to read the browse index");
+    }
+    auto browse = DecodeBrowseIndex(*browse_bytes, footer_.texture_table.count);
+    browse_index_ = std::move(browse.entries);
+    browse_textures_ = std::move(browse.textures);
+    for (const auto& entry : browse_index_) {
+      browse_vpath_to_key_.emplace(entry.virtual_path, entry.asset_key);
+    }
   } catch (const CookedOpenError&) {
     throw;
   } catch (const std::runtime_error& ex) {
@@ -695,11 +636,6 @@ auto PakFile::ValidateCrc32Integrity() const -> void
   }
 
   LOG_F(INFO, "CRC32 OK path={} crc32=0x{:08x}", file_path_.string(), computed);
-}
-
-auto PakFile::HasBrowseIndex() const noexcept -> bool
-{
-  return !browse_index_.empty() || !browse_textures_.empty();
 }
 
 auto PakFile::BrowseIndex() const noexcept -> std::span<const BrowseEntry>

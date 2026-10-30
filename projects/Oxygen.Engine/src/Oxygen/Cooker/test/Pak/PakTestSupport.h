@@ -125,6 +125,7 @@ using oxygen::cooker::test::MakeAssetKey;
     .source_key = MakeSourceKey(kBaseCatalogSourceSeed),
     .content_version = kBaseCatalogContentVersion,
     .catalog_digest = {},
+    .library = "Content",
     .entries
     = std::vector<data::PakCatalogEntry>(entries.begin(), entries.end()),
   };
@@ -208,7 +209,6 @@ struct FullRequestOptions final {
   std::vector<data::CookedSource> sources;
   uint16_t content_version = 1U;
   data::SourceKey source_key = MakeSourceKey(0x7DU);
-  bool embed_browse_index = false;
   bool compute_crc32 = true;
 };
 
@@ -228,7 +228,6 @@ struct FullRequestOptions final {
 
     .options = {
       .deterministic = true,
-      .embed_browse_index = options.embed_browse_index,
       .emit_manifest_in_full = false,
       .compute_crc32 = options.compute_crc32,
       .fail_on_warnings = false,

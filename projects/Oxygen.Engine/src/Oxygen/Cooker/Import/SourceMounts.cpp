@@ -35,6 +35,10 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Loose/LibraryFacts.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakCatalog.h>
 
 namespace oxygen::content::import {
 
@@ -801,7 +805,7 @@ namespace {
     //! makes it `Invalid`.
     auto CheckLibrary(Mount& mount, const Subject& subject) -> void
     {
-      const auto facts = lc::ReadLibraryFacts(Files(), mount.folder);
+      auto facts = lc::ReadLibraryFacts(Files(), mount.folder);
       const auto folder = mount.folder.string();
       const auto findings = Reporter { mount.findings };
       if (facts.unreadable.has_value()) {
@@ -819,11 +823,57 @@ namespace {
         findings.Report(mount_codes::kLibraryExternalScript, subject,
           mount.name, folder, script);
       }
+      for (const auto& dependency : facts.requirements) {
+        for (const auto& requirement : dependency.requirements) {
+          if (!IsProvidedBelow(dependency.library, requirement)) {
+            findings.Report(mount_codes::kLibraryDependencyMissing, subject,
+              mount.name, folder, Describe(requirement), dependency.library);
+          }
+        }
+      }
       if (!mount.findings.empty()) {
         mount.state = MountState::kInvalid;
         table_->diagnostics.insert(table_->diagnostics.end(),
           mount.findings.begin(), mount.findings.end());
+        return;
       }
+      libraries_.emplace_back(mount.name, std::move(facts));
+    }
+
+    //! True when the newest valid library bound before this one that holds
+    //! `requirement` is `library` and holds it with the required type, as the
+    //! runtime checks the stack it mounts.
+    [[nodiscard]] auto IsProvidedBelow(const std::string_view library,
+      const data::PakRequirement& requirement) const -> bool
+    {
+      const auto texture = requirement.kind == data::KeyReferenceKind::kTexture;
+      for (const auto& [name, facts] : std::views::reverse(libraries_)) {
+        if (texture) {
+          if (facts.textures.contains(requirement.key)) {
+            return name == library;
+          }
+          continue;
+        }
+        if (facts.deleted.contains(requirement.key)) {
+          return false;
+        }
+        if (const auto found = facts.assets.find(requirement.key);
+          found != facts.assets.end()) {
+          return name == library && found->second == requirement.type;
+        }
+      }
+      return false;
+    }
+
+    //! A requirement as a finding names it, such as `Material 0e1f...`.
+    [[nodiscard]] static auto Describe(const data::PakRequirement& requirement)
+      -> std::string
+    {
+      return fmt::format("{} {}",
+        requirement.kind == data::KeyReferenceKind::kTexture
+          ? std::string_view("texture")
+          : std::string_view(data::to_string(requirement.type)),
+        data::to_string(requirement.key));
     }
 
     //! True when the mount's folder holds files of its own: a `Source`
@@ -884,6 +934,8 @@ namespace {
     Reporter reporter_;
     std::vector<Entry> entries_;
     std::unordered_map<std::string, size_t> by_name_;
+    //! The valid libraries bound so far, lowest first, with their facts.
+    std::vector<std::pair<std::string, lc::LibraryFacts>> libraries_;
   };
 
   //! What a mounts file did to a declared mount: replaced its committed path

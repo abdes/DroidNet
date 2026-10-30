@@ -181,15 +181,6 @@ namespace {
         .StoreTo(&options.deterministic)
         .Build());
 
-    group->Add(Option::WithKey("embed-browse-index")
-        .About("Embed browse index data in the pak")
-        .Long("embed-browse-index")
-        .WithValue<bool>()
-        .DefaultValue(false, "false")
-        .ImplicitValue(true, "true")
-        .StoreTo(&options.embed_browse_index)
-        .Build());
-
     group->Add(Option::WithKey("no-crc32")
         .About("Disable pak CRC32 computation")
         .Long("no-crc32")

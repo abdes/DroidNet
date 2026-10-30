@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <string_view>
 
@@ -16,6 +15,7 @@
 
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Testing/GTest.h>
@@ -48,6 +48,7 @@ auto MakeCatalog() -> data::PakCatalog
     .source_key = MakeSourceKey(0x41U),
     .content_version = 42U,
     .catalog_digest = MakeDigest(0x21U),
+    .library = "Content",
     .entries = {
       MakeEntry(0xB0U, data::AssetType::kScene, 0x31U, 0x41U),
       MakeEntry(0xA0U, data::AssetType::kMaterial, 0x32U, 0x42U),
@@ -61,27 +62,25 @@ auto MakeCatalog() -> data::PakCatalog
       .catalog_digest = MakeDigest(0x61U),
     },
   };
+  catalog.dependencies = {
+    {
+      .library = "Engine",
+      .requirements = {
+        {
+          .kind = data::KeyReferenceKind::kTexture,
+          .key = MakeAssetKey(0xD1U),
+          .type = data::AssetType::kUnknown,
+        },
+        {
+          .kind = data::KeyReferenceKind::kAsset,
+          .key = MakeAssetKey(0xD0U),
+          .type = data::AssetType::kMaterial,
+        },
+      },
+    },
+  };
   catalog.catalog_digest = catalog.ComputeDigest().value();
   return catalog;
-}
-
-auto ExpectCatalogEqual(
-  const data::PakCatalog& lhs, const data::PakCatalog& rhs) -> void
-{
-  EXPECT_EQ(lhs.source_key, rhs.source_key);
-  EXPECT_EQ(lhs.content_version, rhs.content_version);
-  EXPECT_EQ(lhs.catalog_digest, rhs.catalog_digest);
-  EXPECT_EQ(lhs.deleted, rhs.deleted);
-  EXPECT_EQ(lhs.bases, rhs.bases);
-  ASSERT_EQ(lhs.entries.size(), rhs.entries.size());
-  for (size_t i = 0; i < lhs.entries.size(); ++i) {
-    EXPECT_EQ(lhs.entries.at(i).asset_key, rhs.entries.at(i).asset_key);
-    EXPECT_EQ(lhs.entries.at(i).asset_type, rhs.entries.at(i).asset_type);
-    EXPECT_EQ(
-      lhs.entries.at(i).descriptor_digest, rhs.entries.at(i).descriptor_digest);
-    EXPECT_EQ(lhs.entries.at(i).transitive_resource_digest,
-      rhs.entries.at(i).transitive_resource_digest);
-  }
 }
 
 NOLINT_TEST(
@@ -96,7 +95,12 @@ NOLINT_TEST(
   EXPECT_EQ(parsed.value().entries.size(), 2U);
   EXPECT_LT(parsed.value().entries.at(0).asset_key,
     parsed.value().entries.at(1).asset_key);
-  ExpectCatalogEqual(parsed.value(), parsed.value());
+  EXPECT_EQ(parsed.value().library, catalog.library);
+  ASSERT_EQ(parsed.value().dependencies.size(), 1U);
+  EXPECT_EQ(parsed.value().dependencies.front().library, "Engine");
+  EXPECT_THAT(parsed.value().dependencies.front().requirements,
+    ::testing::UnorderedElementsAreArray(
+      catalog.dependencies.front().requirements));
   EXPECT_EQ(text, pak::PakCatalogIo::ToCanonicalJsonString(parsed.value()));
 }
 
@@ -105,6 +109,7 @@ NOLINT_TEST(PakCatalogIoTest, EquivalentCatalogsProduceIdenticalCanonicalOutput)
   auto catalog_a = MakeCatalog();
   auto catalog_b = MakeCatalog();
   std::ranges::reverse(catalog_b.entries);
+  std::ranges::reverse(catalog_b.dependencies.front().requirements);
 
   const auto text_a = pak::PakCatalogIo::ToCanonicalJsonString(catalog_a);
   const auto text_b = pak::PakCatalogIo::ToCanonicalJsonString(catalog_b);
@@ -115,9 +120,11 @@ NOLINT_TEST(PakCatalogIoTest, EquivalentCatalogsProduceIdenticalCanonicalOutput)
 NOLINT_TEST(PakCatalogIoTest, ParseRejectsDuplicateAssetKeys)
 {
   const auto text = std::string_view { R"({
-  "schema_version": 2,
+  "schema_version": 4,
+  "library": "Content",
   "deleted": [],
   "bases": [],
+  "dependencies": [],
   "source_key": "41424344-4546-7748-894a-4b4c4d4e4f50",
   "content_version": 7,
   "catalog_digest": "2121212121212121212121212121212121212121212121212121212121212121",

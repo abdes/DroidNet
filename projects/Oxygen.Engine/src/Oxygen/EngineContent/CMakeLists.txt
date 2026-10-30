@@ -1,7 +1,7 @@
 # The engine content pak: the default material and the procedural shapes,
 # ordinary assets under /Engine that every runtime mounts beneath its content.
 # The cooker generates their descriptors from Oxygen.Data, cooks them into a
-# loose root and packs that root with an embedded browse index.
+# loose root and packs that root as library Engine.
 
 include(RuntimeEnvironment)
 oxygen_get_runtime_launcher(
@@ -56,7 +56,6 @@ add_custom_command(
     "${OXYGEN_ENGINE_CONTENT_WORK}/cooked" --out "${OXYGEN_ENGINE_CONTENT_PAK}"
     --catalog-out "${OXYGEN_ENGINE_CONTENT_WORK}/engine.catalog.json"
     --content-version 1 --source-key "${OXYGEN_ENGINE_CONTENT_SOURCE_KEY}"
-    --embed-browse-index
   DEPENDS
     oxygen-cooker
     oxygen-data

@@ -27,9 +27,11 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Pak/Internal/PakCatalogJson.h>
 #include <Oxygen/Cooker/Pak/Internal/PakCatalog_schema.h>
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormatVersions.h>
@@ -76,7 +78,7 @@ namespace {
     }
 
   private:
-    std::vector<std::string> errors_ {};
+    std::vector<std::string> errors_;
   };
 
   class SchemaValidator final {
@@ -108,7 +110,7 @@ namespace {
     }
 
   private:
-    mutable json_validator validator_ {};
+    mutable json_validator validator_;
   };
 
   template <size_t N>
@@ -117,8 +119,9 @@ namespace {
     auto out = std::string {};
     out.reserve(N * 2U);
     for (const auto byte : bytes) {
-      out.push_back(kHexDigits[(byte >> 4U) & 0x0FU]);
-      out.push_back(kHexDigits[byte & 0x0FU]);
+      const auto value = static_cast<unsigned>(byte);
+      out.push_back(kHexDigits[(value >> 4U) & 0x0FU]);
+      out.push_back(kHexDigits[value & 0x0FU]);
     }
     return out;
   }
@@ -151,7 +154,8 @@ namespace {
       if (high == kInvalidNibble || low == kInvalidNibble) {
         return Result<std::array<uint8_t, N>>::Err(std::errc::invalid_argument);
       }
-      bytes[i] = static_cast<uint8_t>((high << 4U) | low);
+      bytes[i] = static_cast<uint8_t>(
+        (static_cast<unsigned>(high) << 4U) | static_cast<unsigned>(low));
     }
 
     return Result<std::array<uint8_t, N>>::Ok(bytes);
@@ -192,24 +196,23 @@ namespace {
     return Result<AssetType>::Err(std::errc::invalid_argument);
   }
 
-  auto ToJsonLayers(std::span<const data::PakCatalogBase> layers)
-    -> ordered_json
+  auto ToJsonBases(std::span<const data::PakCatalogBase> bases) -> ordered_json
   {
     auto items = ordered_json::array();
-    for (const auto& layer : layers) {
+    for (const auto& base : bases) {
       auto item = ordered_json::object();
-      item["source_key"] = data::to_string(layer.source_key);
-      item["content_version"] = layer.content_version;
-      item["catalog_digest"] = ToHex(layer.catalog_digest);
+      item["source_key"] = data::to_string(base.source_key);
+      item["content_version"] = base.content_version;
+      item["catalog_digest"] = ToHex(base.catalog_digest);
       items.push_back(std::move(item));
     }
     return items;
   }
 
-  auto ParseJsonLayers(const ordered_json& items)
+  auto ParseJsonBases(const ordered_json& items)
     -> std::optional<std::vector<data::PakCatalogBase>>
   {
-    auto layers = std::vector<data::PakCatalogBase> {};
+    auto bases = std::vector<data::PakCatalogBase> {};
     for (const auto& item : items) {
       const auto key = data::SourceKey::FromString(
         item.at("source_key").get_ref<const std::string&>());
@@ -218,13 +221,52 @@ namespace {
       if (!key || !digest) {
         return std::nullopt;
       }
-      layers.push_back({
+      bases.push_back({
         .source_key = *key,
         .content_version = item.at("content_version").get<uint16_t>(),
         .catalog_digest = *digest,
       });
     }
-    return layers;
+    return bases;
+  }
+
+  auto ParseJsonDependencies(const ordered_json& items)
+    -> std::optional<std::vector<data::PakCatalogDependency>>
+  {
+    auto dependencies = std::vector<data::PakCatalogDependency> {};
+    for (const auto& item : items) {
+      auto dependency = data::PakCatalogDependency {
+        .library = item.at("library").get<std::string>(),
+        .requirements = {},
+      };
+      for (const auto& entry : item.at("requirements")) {
+        const auto key = data::AssetKey::FromString(
+          entry.at("key").get_ref<const std::string&>());
+        if (!key) {
+          return std::nullopt;
+        }
+        if (entry.at("kind").get_ref<const std::string&>() == "texture") {
+          dependency.requirements.push_back({
+            .kind = data::KeyReferenceKind::kTexture,
+            .key = *key,
+            .type = data::AssetType::kUnknown,
+          });
+          continue;
+        }
+        const auto type
+          = ParseAssetType(entry.at("type").get_ref<const std::string&>());
+        if (!type) {
+          return std::nullopt;
+        }
+        dependency.requirements.push_back({
+          .kind = data::KeyReferenceKind::kAsset,
+          .key = *key,
+          .type = *type,
+        });
+      }
+      dependencies.push_back(std::move(dependency));
+    }
+    return dependencies;
   }
 
   auto BuildCanonicalDocument(const data::PakCatalog& catalog) -> ordered_json
@@ -239,6 +281,7 @@ namespace {
     root["source_key"] = data::to_string(catalog.source_key);
     root["content_version"] = catalog.content_version;
     root["catalog_digest"] = ToHex(catalog.catalog_digest);
+    root["library"] = catalog.library;
 
     auto json_entries = ordered_json::array();
     for (const auto& entry : entries) {
@@ -257,8 +300,8 @@ namespace {
     for (const auto& key : deleted) {
       root["deleted"].push_back(data::to_string(key));
     }
-    root["bases"] = ToJsonLayers(catalog.bases);
-    root["dependencies"] = ToJsonLayers(catalog.dependencies);
+    root["bases"] = ToJsonBases(catalog.bases);
+    root["dependencies"] = internal::ToJsonDependencies(catalog.dependencies);
 
     return root;
   }
@@ -333,6 +376,7 @@ namespace {
       .source_key = source_key.value(),
       .content_version = document.at("content_version").get<uint16_t>(),
       .catalog_digest = catalog_digest.value(),
+      .library = document.at("library").get<std::string>(),
       .entries = std::move(entries),
       .deleted = {},
       .bases = {},
@@ -347,8 +391,8 @@ namespace {
       catalog.deleted.push_back(*key);
     }
     std::ranges::sort(catalog.deleted);
-    auto bases = ParseJsonLayers(document.at("bases"));
-    auto dependencies = ParseJsonLayers(document.at("dependencies"));
+    auto bases = ParseJsonBases(document.at("bases"));
+    auto dependencies = ParseJsonDependencies(document.at("dependencies"));
     if (!bases || !dependencies) {
       return Result<data::PakCatalog>::Err(std::errc::invalid_argument);
     }
@@ -361,6 +405,43 @@ namespace {
   }
 
 } // namespace
+
+namespace internal {
+
+  auto ToJsonDependencies(
+    std::span<const data::PakCatalogDependency> dependencies) -> ordered_json
+  {
+    auto sorted = std::vector<data::PakCatalogDependency>(
+      dependencies.begin(), dependencies.end());
+    std::ranges::sort(sorted, {}, &data::PakCatalogDependency::library);
+    auto items = ordered_json::array();
+    for (auto& dependency : sorted) {
+      std::ranges::sort(dependency.requirements, {},
+        [](const data::PakRequirement& requirement) -> auto {
+          return std::pair { requirement.kind, requirement.key };
+        });
+      auto requirements = ordered_json::array();
+      for (const auto& requirement : dependency.requirements) {
+        auto item = ordered_json::object();
+        if (requirement.kind == data::KeyReferenceKind::kTexture) {
+          item["kind"] = "texture";
+          item["key"] = data::to_string(requirement.key);
+        } else {
+          item["kind"] = "asset";
+          item["key"] = data::to_string(requirement.key);
+          item["type"] = std::string(data::to_string(requirement.type));
+        }
+        requirements.push_back(std::move(item));
+      }
+      items.push_back(ordered_json {
+        { "library", dependency.library },
+        { "requirements", std::move(requirements) },
+      });
+    }
+    return items;
+  }
+
+} // namespace internal
 
 auto PakCatalogIo::ToCanonicalJsonString(const data::PakCatalog& catalog)
   -> std::string
@@ -405,7 +486,7 @@ auto PakCatalogIo::Write(const std::filesystem::path& path,
   if (!catalog.Validate()) {
     return Result<void>::Err(std::errc::invalid_argument);
   }
-  auto output = std::ofstream(path, std::ios::out | std::ios::trunc);
+  auto output = std::ofstream(path);
   if (!output) {
     return Result<void>::Err(std::errc::io_error);
   }

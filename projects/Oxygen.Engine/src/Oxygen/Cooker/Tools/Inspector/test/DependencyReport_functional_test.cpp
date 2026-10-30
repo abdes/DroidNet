@@ -99,7 +99,6 @@ NOLINT_TEST_F(InspectorDependencyReportTest, ReportsDependenciesFromAPak)
           .kind = data::CookedSourceKind::kLooseCooked,
           .path = loose,
         }, },
-        .embed_browse_index = true,
       }));
   ASSERT_TRUE(built.has_value() && built->summary.diagnostics_error == 0U);
   const auto expected = Report(loose);

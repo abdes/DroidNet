@@ -118,8 +118,7 @@ NOLINT_TEST_F(
   ASSERT_FALSE(
     HasError(pak::PakWriter {}.Write(request, *original.plan).diagnostics));
   {
-    oxygen::serio::FileStream<> archive(
-      request.output_pak_path, std::ios::in | std::ios::out);
+    oxygen::serio::FileStream<> archive(request.output_pak_path);
     const auto offset
       = oxygen::base::CheckedAt(original.plan->Assets(), 0U).offset
       + offsetof(core::AssetHeader, variant_flags);
@@ -165,6 +164,7 @@ NOLINT_TEST_F(PakRepackTest, RepackPreservesSceneBindings)
         .source_key = MakeSourceKey(5U),
         .content_version = 1U,
         .catalog_digest = paktest::MakeDigest(5U),
+        .library = "Content",
         .entries = {},
       });
       auto& base = repack.base_catalogs.at(0);

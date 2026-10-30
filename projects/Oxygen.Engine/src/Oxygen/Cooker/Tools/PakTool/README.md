@@ -60,7 +60,6 @@ Common options:
 | `--source-key <uuidv7>`     | Canonical lowercase UUIDv7 source identity |
 | `--diagnostics-file <path>` | Optional structured build report           |
 | `--non-deterministic`       | Disable deterministic build behavior       |
-| `--embed-browse-index`      | Request browse index embedding             |
 | `--no-crc32`                | Disable pak CRC output                     |
 | `--fail-on-warnings`        | Escalate warnings to build failure         |
 | `--mount <Name>=<dir>`      | Repeatable source mount for script sealing |
@@ -80,19 +79,29 @@ Common options:
 
 ## Lower Layers
 
-A pak can rely on paks mounted beneath it in two ways. Both are recorded in the
-pak's catalog and manifest by identity (source key, content version, catalog
-digest), and the runtime refuses to mount a pak whose requirements do not hold.
+Every pak is one **library**: the one mount its virtual paths start with, such
+as `Engine` or `Props`, which its catalog names. The planner takes it from the
+pak's content, and refuses content under more than one root
+(`pak.plan.root_multiple`) or no content at all (`pak.plan.root_missing`). A
+deletion-only patch names its base's library. Every pak also embeds its browse
+index, the virtual path of each asset and texture it holds.
 
-| Contract   | Option             | Commands       | Runtime requirement                     |
-| ---------- | ------------------ | -------------- | --------------------------------------- |
-| Dependency | `--dependency-pak` | build, patch   | Mounted below, in order; others between |
-| Patch base | `--base-pak`       | patch (needed) | The contiguous layers right below it    |
+A pak can rely on paks mounted beneath it in two ways:
 
-- A **dependency** provides assets the pak references without containing them,
-  the way game content references the engine content pak (`engine.pak`). The
-  planner resolves asset references into dependencies, checks each referenced
-  asset's type, and copies nothing.
+| Contract   | Option             | Commands       | Recorded as                   | Runtime requirement                  |
+| ---------- | ------------------ | -------------- | ----------------------------- | ------------------------------------ |
+| Dependency | `--dependency-pak` | build, patch   | The library and what it needs | Some layer below provides each need  |
+| Patch base | `--base-pak`       | patch (needed) | Identity, version, digest     | The contiguous layers right below it |
+
+- A **dependency** provides assets and textures the pak references without
+  containing them, the way game content references the engine content pak
+  (`engine.pak`). The planner resolves references into the dependencies, the
+  newest first, checks each asset's type, and copies nothing. Each reference
+  that resolves into a dependency becomes a **requirement** of that
+  dependency's library: an asset by key and type, or a texture by key. The
+  catalog and the manifest record the requirements, not the dependency pak's
+  identity, so a rebuilt library that still provides them still satisfies the
+  pak.
 - A **patch base** is the exact stack a patch's deltas apply to: the patch
   classifies every asset as created, replaced, deleted or unchanged against its
   bases, and its deletions hide base assets. A full build has no bases.
@@ -104,8 +113,12 @@ Oxygen.Cooker.PakTool.exe build --loose-source .cooked/Content `
   --source-key 018f8f8f-1234-7abc-8def-0123456789ab
 ```
 
-A dependency matches only the exact catalog the pak was built against, so a pak
-is rebuilt when its dependency's content changes.
+At mount, the runtime resolves each requirement over the layers below the pak,
+loose roots included, and refuses the pak with a `DependencyRequirementError`
+naming every requirement that is missing, deleted, of another type or under
+another library. Only `--dependency-pak` names dependencies: a reference that
+no dependency pak resolves is `pak.plan.asset_reference_missing` or
+`pak.plan.texture_reference_missing`.
 
 ## Published Artifacts
 

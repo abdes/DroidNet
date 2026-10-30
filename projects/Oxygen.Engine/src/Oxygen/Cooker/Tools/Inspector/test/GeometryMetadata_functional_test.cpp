@@ -535,7 +535,6 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSurfacesFromAPak)
           .kind = oxygen::data::CookedSourceKind::kLooseCooked,
           .path = loose,
         }, },
-        .embed_browse_index = true,
       }));
   ASSERT_TRUE(built.has_value());
   for (const auto& diagnostic : built->diagnostics) {

@@ -154,9 +154,9 @@ namespace {
     for (const auto& path : snapshot.base_pak_paths) {
       base_catalogs.push_back(path.string());
     }
-    auto dependency_catalogs = ordered_json::array();
+    auto dependency_paks = ordered_json::array();
     for (const auto& path : snapshot.dependency_pak_paths) {
-      dependency_catalogs.push_back(path.string());
+      dependency_paks.push_back(path.string());
     }
 
     auto source_mounts = ordered_json::object();
@@ -170,12 +170,11 @@ namespace {
       { "content_version", snapshot.request.content_version },
       { "sources", std::move(sources) },
       { "base_paks", std::move(base_catalogs) },
-      { "dependency_paks", std::move(dependency_catalogs) },
+      { "dependency_paks", std::move(dependency_paks) },
       {
         "options",
         ordered_json {
           { "deterministic", snapshot.request.options.deterministic },
-          { "embed_browse_index", snapshot.request.options.embed_browse_index },
           { "compute_crc32", snapshot.request.options.compute_crc32 },
           { "fail_on_warnings", snapshot.request.options.fail_on_warnings },
           {
@@ -361,7 +360,7 @@ auto ToReportJson(const PakToolBuildReportInput& input) -> ordered_json
 {
   return ordered_json {
     { "$schema", std::string(kBuildReportSchemaRef) },
-    { "schema_version", 3 },
+    { "schema_version", 4 },
     { "tool_name", std::string(kToolName) },
     { "tool_version", input.tool_version },
     { "command", input.command },

@@ -127,8 +127,8 @@ NOLINT_TEST_F(
     = std::string { "Descriptors/Input/Gameplay.oimap" };
   const auto scene_desc_rel = std::string { "Descriptors/Scenes/Main.oscene" };
 
-  const auto action_desc_bytes = MakePatternBytes(0x31U, 48U);
-  const auto context_desc_bytes = MakePatternBytes(0x41U, 64U);
+  const auto action_desc_bytes = MakePatternBytes(std::byte { 0x31U }, 48U);
+  const auto context_desc_bytes = MakePatternBytes(std::byte { 0x41U }, 64U);
   const auto scene_desc_bytes
     = oxygen::content::test::MakeEmptySceneDescriptor();
 
@@ -172,7 +172,7 @@ NOLINT_TEST_F(
     { .sources = { CookedSource {
         .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
       .content_version = 1U,
-      .embed_browse_index = true, });
+      });
 
   const auto plan_result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(plan_result.diagnostics));
@@ -288,7 +288,7 @@ NOLINT_TEST_F(
     { .sources = { CookedSource {
         .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
       .content_version = 1U,
-      .embed_browse_index = true, });
+      });
 
   const auto plan_result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(plan_result.diagnostics));
@@ -325,8 +325,8 @@ NOLINT_TEST_F(PakWriterTest, DeterministicModeProducesBitExactOutputs)
   using pak::PakPlanBuilder;
   using pak::PakWriter;
 
-  auto request = paktest::MakeFullRequest(Root() / "deterministic_a.pak",
-    { .content_version = 9U, .embed_browse_index = true });
+  auto request = paktest::MakeFullRequest(
+    Root() / "deterministic_a.pak", { .content_version = 9U });
 
   const auto plan_result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(plan_result.diagnostics));
@@ -386,7 +386,8 @@ NOLINT_TEST_F(PakWriterTest, TextureDescriptorPathsResolveInThePak)
     paktest::FileSpec {
       .kind = data::loose_cooked::FileKind::kTexturesData,
       .relpath = "Resources/textures.data",
-      .payload = MakePatternBytes(0x11U, size_t { 2U } * kTextureBytes),
+      .payload
+      = MakePatternBytes(std::byte { 0x11U }, size_t { 2U } * kTextureBytes),
     },
     paktest::FileSpec {
       .kind = data::loose_cooked::FileKind::kTextureDescriptor,
@@ -400,7 +401,7 @@ NOLINT_TEST_F(PakWriterTest, TextureDescriptorPathsResolveInThePak)
   const auto request = paktest::MakeFullRequest(output_path,
     { .sources = { CookedSource {
         .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
-      .embed_browse_index = true, });
+      });
 
   // Act
   const auto plan_result = PakPlanBuilder {}.Build(request);

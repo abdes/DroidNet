@@ -169,7 +169,7 @@ namespace {
         << " pak_sources="
         << CountSources(options, data::CookedSourceKind::kPak)
         << " base_catalogs=" << options.patch.base_paks.size()
-        << " dependency_catalogs=" << options.request.dependency_paks.size();
+        << " dependency_paks=" << options.request.dependency_paks.size();
     return out.str();
   }
 

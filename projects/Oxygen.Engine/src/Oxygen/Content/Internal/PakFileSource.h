@@ -6,11 +6,11 @@
 
 #pragma once
 
+#include <iterator>
 #include <string>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/ContentFileReader.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 
@@ -35,7 +35,7 @@ public:
   ~PakFileSource() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(PakFileSource)
-  OXYGEN_DEFAULT_MOVABLE(PakFileSource)
+  OXYGEN_MAKE_NON_MOVABLE(PakFileSource)
 
   [[nodiscard]] auto DebugName() const noexcept -> std::string_view override
   {
@@ -96,7 +96,7 @@ public:
     if (index >= directory.size()) {
       return std::nullopt;
     }
-    return oxygen::base::CheckedAt(directory, index).asset_key;
+    return std::ranges::next(directory.begin(), index)->asset_key;
   }
 
   [[nodiscard]] auto CreateAssetDescriptorReader(
@@ -222,9 +222,6 @@ public:
     const data::AssetKey& key) const noexcept
     -> std::optional<std::string> override
   {
-    if (!pak_.HasBrowseIndex()) {
-      return std::nullopt;
-    }
     for (const auto& entry : pak_.BrowseIndex()) {
       if (entry.asset_key == key) {
         return entry.virtual_path;

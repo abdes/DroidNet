@@ -72,7 +72,7 @@ TEST_F(PakFileTest, LoadValidPakFile)
   EXPECT_EQ(
     pak.FormatVersion(), oxygen::data::pak::core::kCurrentPakFormatVersion);
   EXPECT_EQ(pak.ContentVersion(), 42);
-  EXPECT_FALSE(pak.HasBrowseIndex());
+  EXPECT_TRUE(pak.BrowseIndex().empty());
   EXPECT_TRUE(pak.Directory().empty());
 }
 
@@ -102,7 +102,7 @@ TEST_F(PakFileTest, FailsOnMissingEmbeddedCatalog)
   const auto file_size = std::filesystem::file_size(test_pak_path_);
   ASSERT_GE(file_size, sizeof(config.footer));
   {
-    serio::FileStream<> stream(test_pak_path_, std::ios::in | std::ios::out);
+    serio::FileStream<> stream(test_pak_path_);
     ASSERT_TRUE(stream.Seek(file_size - sizeof(config.footer)));
     serio::Writer writer(stream);
     config.footer.directory_offset = sizeof(config.header);

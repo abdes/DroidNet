@@ -96,7 +96,6 @@ protected:
     };
     request.content_version = 42;
     request.source_key = MakeSourceKey();
-    request.options.embed_browse_index = true;
     request.output_pak_path = TempDir() / "release" / "game.pak";
     request.output_manifest_path = TempDir() / "release" / "game.manifest.json";
 
@@ -133,6 +132,7 @@ protected:
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
       },
+      .library = "Content",
       .entries = {
         oxygen::data::PakCatalogEntry {
           .asset_key = MakeAssetKey("11111111-2222-3333-4444-555555555555"),

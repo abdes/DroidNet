@@ -1424,7 +1424,6 @@ namespace {
       .output_pak_path = pak_path,
       .content_version = 1U,
       .source_key = data::SourceKey { Uuid::Generate() },
-      .options = { .embed_browse_index = true },
     });
     if (!built) {
       throw std::runtime_error("The engine test pak could not be built");

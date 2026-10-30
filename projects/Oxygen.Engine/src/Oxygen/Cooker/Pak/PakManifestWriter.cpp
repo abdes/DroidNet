@@ -15,6 +15,7 @@
 #include <ios>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -26,12 +27,14 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Pak/Internal/PakCatalogJson.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakManifestWriter.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PatchManifest.h>
 #include <Oxygen/Data/SourceKey.h>
 
@@ -44,8 +47,8 @@ using nlohmann::ordered_json;
 constexpr auto kDiffBasisIdentifier
   = std::string_view { "descriptor_plus_transitive_resources_v1" };
 constexpr auto kHexCharsPerByte = size_t { 2U };
-constexpr auto kHighNibbleShift = uint8_t { 4U };
-constexpr auto kLowNibbleMask = uint8_t { 0x0FU };
+constexpr auto kHighNibbleShift = 4U;
+constexpr auto kLowNibbleMask = 0x0FU;
 
 auto AddDiagnostic(std::vector<pak::PakDiagnostic>& diagnostics,
   const pak::PakDiagnosticSeverity severity, const std::string_view code,
@@ -87,8 +90,9 @@ auto ToHex(const std::span<const uint8_t> bytes) -> std::string
   auto out = std::string {};
   out.reserve(bytes.size() * kHexCharsPerByte);
   for (const auto byte : bytes) {
-    out.push_back(kHexDigits.at((byte >> kHighNibbleShift) & kLowNibbleMask));
-    out.push_back(kHexDigits.at(byte & kLowNibbleMask));
+    const auto value = static_cast<unsigned>(byte);
+    out.push_back(kHexDigits.at((value >> kHighNibbleShift) & kLowNibbleMask));
+    out.push_back(kHexDigits.at(value & kLowNibbleMask));
   }
   return out;
 }
@@ -263,13 +267,13 @@ auto BuildManifestModel(const pak::PakBuildRequest& request,
       });
     }
   }
-  for (const auto& dependency : request.dependency_catalogs) {
-    manifest.compatibility_envelope.required_dependencies.push_back({
-      .source_key = dependency.source_key,
-      .content_version = dependency.content_version,
-      .catalog_digest = dependency.catalog_digest,
-    });
+  // The pak's catalog states what it requires of each library.
+  auto catalog = data::PakCatalog::Decode(plan.Catalog().bytes);
+  if (!catalog) {
+    throw std::runtime_error(catalog.error().what());
   }
+  manifest.compatibility_envelope.required_dependencies
+    = std::move(catalog->dependencies);
   manifest.diff_basis_identifier = std::string(kDiffBasisIdentifier);
   manifest.patch_source_key = request.source_key;
   manifest.patch_pak_crc32 = pak_crc32;
@@ -336,7 +340,8 @@ auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
         },
         {
           "required_dependencies",
-          to_json_layers(manifest.compatibility_envelope.required_dependencies),
+          oxygen::content::pak::internal::ToJsonDependencies(
+            manifest.compatibility_envelope.required_dependencies),
         },
         {
           "patch_content_version",
@@ -381,7 +386,7 @@ auto WriteManifestFile(const std::filesystem::path& output_path,
     }
   }
 
-  auto stream = std::ofstream(output_path, std::ios::binary | std::ios::trunc);
+  auto stream = std::ofstream(output_path, std::ios::binary);
   if (!stream.is_open()) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       "pak.manifest.write_open_failed",

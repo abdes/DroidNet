@@ -30,16 +30,16 @@ inline constexpr auto kHeaderSize
 inline constexpr auto kFooterSize
   = uint32_t { sizeof(data::pak::core::PakFooter) };
 
-//! Deterministic bytes `start_value, start_value + 1, ...` (wrapping).
+//! Deterministic bytes `start, start + 1, ...` (wrapping).
 [[nodiscard]] inline auto MakePatternBytes(
-  const uint8_t start_value, const size_t byte_count) -> std::vector<std::byte>
+  const std::byte start, const size_t byte_count) -> std::vector<std::byte>
 {
   auto bytes = std::vector<std::byte> {};
   bytes.reserve(byte_count);
+  const auto first = std::to_integer<uint8_t>(start);
   for (size_t i = 0; i < byte_count; ++i) {
-    const auto value
-      = static_cast<uint8_t>(start_value + static_cast<uint8_t>(i));
-    bytes.push_back(static_cast<std::byte>(value));
+    bytes.push_back(static_cast<std::byte>(
+      static_cast<uint8_t>(first + static_cast<uint8_t>(i))));
   }
   return bytes;
 }
@@ -212,7 +212,7 @@ inline auto AddGeometryAsset(PakPlan::Data& plan, const data::AssetKey& key,
   };
 }
 
-//! Layout knobs for `PakWriterFixture::CanonicalPlan`.
+//! Layout knobs for `MakeCanonicalPlan`.
 /*!
  Regions start at `base_offset`. The tables, the directory and the footer
  default to `base_offset`; the directory defaults to the footer offset.
@@ -228,59 +228,74 @@ struct CanonicalPlanSpec final {
   uint64_t texture_table_size = 0U;
 };
 
+//! The source key of every canonical plan.
+[[nodiscard]] inline auto CanonicalSourceKey() -> data::SourceKey
+{
+  return MakeSourceKey(0x7DU);
+}
+
+//! A minimal plan with no resources, assets or catalog, and the empty browse
+//! index every pak holds, right before the footer.
+/*!
+ Negative tests mutate the one field they are about.
+*/
+[[nodiscard]] inline auto MakeCanonicalPlan(const CanonicalPlanSpec& spec = {})
+  -> PakPlan::Data
+{
+  const auto footer_offset = spec.footer_offset.value_or(spec.base_offset);
+  const auto directory_offset = spec.directory_offset.value_or(footer_offset);
+  const auto browse_offset
+    = footer_offset - sizeof(data::pak::core::PakBrowseIndexHeader);
+
+  auto plan = PakPlan::Data {};
+  plan.header = PakHeaderPlan {
+    .offset = 0U,
+    .size_bytes = kHeaderSize,
+    .content_version = spec.content_version,
+    .source_key = CanonicalSourceKey(),
+  };
+  plan.regions = MakeCanonicalRegions(CanonicalRegionSpec {
+    .base_offset = spec.base_offset,
+    .texture_region_size = spec.texture_region_size,
+  });
+  plan.tables = MakeCanonicalTables(CanonicalTableSpec {
+    .texture_table_offset = spec.tables_offset.value_or(spec.base_offset),
+    .texture_count = spec.texture_count,
+    .texture_table_size = spec.texture_table_size,
+  });
+  plan.directory = PakDirectoryPlan {
+    .offset = directory_offset,
+    .size_bytes = 0U,
+    .entries = {},
+  };
+  plan.browse_index = PakBrowseIndexPlan {
+    .offset = browse_offset,
+    .size_bytes = sizeof(data::pak::core::PakBrowseIndexHeader),
+    .entries = {},
+    .textures = {},
+  };
+  plan.footer = PakFooterPlan {
+    .offset = footer_offset,
+    .size_bytes = kFooterSize,
+    .crc32_field_absolute_offset
+    = footer_offset + offsetof(data::pak::core::PakFooter, pak_crc32),
+  };
+  plan.planned_file_size = footer_offset + kFooterSize;
+  return plan;
+}
+
 //! Per-test temp directory plus a valid minimal plan to mutate.
 class PakWriterFixture : public TempDirFixture {
 protected:
   [[nodiscard]] static auto WriterSourceKey() -> data::SourceKey
   {
-    return MakeSourceKey(0x7DU);
+    return CanonicalSourceKey();
   }
 
-  //! A valid minimal plan with no resources, assets or catalog.
-  /*!
-   Negative tests mutate the one field they are about.
-  */
   [[nodiscard]] static auto CanonicalPlan(const CanonicalPlanSpec& spec = {})
     -> PakPlan::Data
   {
-    const auto footer_offset = spec.footer_offset.value_or(spec.base_offset);
-    const auto directory_offset = spec.directory_offset.value_or(footer_offset);
-
-    auto plan = PakPlan::Data {};
-    plan.header = PakHeaderPlan {
-      .offset = 0U,
-      .size_bytes = kHeaderSize,
-      .content_version = spec.content_version,
-      .source_key = WriterSourceKey(),
-    };
-    plan.regions = MakeCanonicalRegions(CanonicalRegionSpec {
-      .base_offset = spec.base_offset,
-      .texture_region_size = spec.texture_region_size,
-    });
-    plan.tables = MakeCanonicalTables(CanonicalTableSpec {
-      .texture_table_offset = spec.tables_offset.value_or(spec.base_offset),
-      .texture_count = spec.texture_count,
-      .texture_table_size = spec.texture_table_size,
-    });
-    plan.directory = PakDirectoryPlan {
-      .offset = directory_offset,
-      .size_bytes = 0U,
-      .entries = {},
-    };
-    plan.browse_index = PakBrowseIndexPlan {
-      .enabled = false,
-      .offset = 0U,
-      .size_bytes = 0U,
-      .entries = {},
-    };
-    plan.footer = PakFooterPlan {
-      .offset = footer_offset,
-      .size_bytes = kFooterSize,
-      .crc32_field_absolute_offset
-      = footer_offset + offsetof(data::pak::core::PakFooter, pak_crc32),
-    };
-    plan.planned_file_size = footer_offset + kFooterSize;
-    return plan;
+    return MakeCanonicalPlan(spec);
   }
 };
 

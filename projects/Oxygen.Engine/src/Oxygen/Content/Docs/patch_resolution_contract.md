@@ -47,9 +47,19 @@ catalog digest in order. Additional lower-priority layers are allowed. A
 cumulative patch replaces earlier patches built against the same original base.
 There are no compatibility opt-outs.
 
+A pak's dependency records state what it requires of other libraries, not which
+paks it was built against. Each requirement, an asset with its type or a texture
+key, resolves over the layers below the pak by the
+[precedence policy](#precedence-policy), loose roots included, with deletions
+terminal. It holds when the providing layer has the required type and the
+providing entry's virtual path lies under the required library. Other layers
+may sit between the pak and its providers.
+
 Validate before changing the active mount set. Install source identity and
-embedded deletion records together. Refreshing a lower layer must also preserve
-the requirements of any patch above it. Reject incompatible asset-type overrides.
+embedded deletion records together. Mounting or refreshing a layer checks the
+bases and the requirements of every pak in the resulting stack, so refreshing a
+lower layer preserves those of the paks above it. Reject incompatible
+asset-type overrides.
 
 New asset graphs capture one immutable ordered layer view; all dependencies share
 that view. Existing objects retain their exact bindings. Cache identity includes
@@ -62,3 +72,6 @@ the binding view, while physical resource identity remains source-local. See
   mapping, runtime emits a collision warning with winner/masked source IDs and
   keys.
 - Invalid patch baselines are errors; mounting leaves the previous view usable.
+- Unmet requirements are a `DependencyRequirementError` that names the pak and
+  each failed requirement: missing, tombstoned, of another type or under
+  another library. Mounting leaves the previous view usable.

@@ -43,7 +43,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       "AcceptsCanonicalPatchReportDocument",
       R"({
     "$schema": "https://oxygen-engine.dev/schemas/oxygen.pak-build-report.schema.json",
-    "schema_version": 3,
+    "schema_version": 4,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "patch",
@@ -69,7 +69,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       "dependency_paks": [],
       "options": {
         "deterministic": true,
-        "embed_browse_index": true,
         "compute_crc32": true,
         "fail_on_warnings": false,
         "emit_manifest_in_full": false
@@ -141,7 +140,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
     SchemaCase {
       "AcceptsFailureReportWithSuppressedManifestPublication",
       R"({
-    "schema_version": 3,
+    "schema_version": 4,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "build",
@@ -156,7 +155,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       "dependency_paks": [],
       "options": {
         "deterministic": true,
-        "embed_browse_index": false,
         "compute_crc32": false,
         "fail_on_warnings": true,
         "emit_manifest_in_full": false
@@ -234,7 +232,7 @@ NOLINT_TEST(PakBuildReportSchemaTest,
   RejectsNonCanonicalRequestFieldsAndUnexpectedProperties)
 {
   const auto doc = json::parse(R"({
-    "schema_version": 3,
+    "schema_version": 4,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "patch",
@@ -254,7 +252,6 @@ NOLINT_TEST(PakBuildReportSchemaTest,
       "dependency_paks": [],
       "options": {
         "deterministic": true,
-        "embed_browse_index": false,
         "compute_crc32": true,
         "fail_on_warnings": false,
         "emit_manifest_in_full": false

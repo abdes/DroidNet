@@ -183,6 +183,7 @@ set(
   "Pak/PakBuildResult.h"
   "Pak/PakBuildReport.h"
   "Pak/PakCatalogIo.h"
+  "Pak/Internal/PakCatalogJson.h"
 )
 
 set(

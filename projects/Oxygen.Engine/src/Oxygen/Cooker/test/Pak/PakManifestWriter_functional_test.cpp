@@ -56,6 +56,7 @@ protected:
       .source_key = MakeSourceKey(static_cast<uint8_t>(0xB1U)),
       .content_version = kContentVersion,
       .catalog_digest = MakeDigest(static_cast<uint8_t>(0xC1U)),
+      .library = "Content",
       .entries
       = std::vector<data::PakCatalogEntry>(entries.begin(), entries.end()),
     };
@@ -103,7 +104,6 @@ NOLINT_TEST_F(
 
     .options = PakBuildOptions {
       .deterministic = true,
-      .embed_browse_index = false,
       .emit_manifest_in_full = false,
       .compute_crc32 = true,
       .fail_on_warnings = false,
@@ -162,7 +162,6 @@ NOLINT_TEST_F(
 
     .options = PakBuildOptions {
       .deterministic = true,
-      .embed_browse_index = false,
       .emit_manifest_in_full = true,
       .compute_crc32 = false,
       .fail_on_warnings = false,
@@ -260,7 +259,6 @@ NOLINT_TEST_F(PakManifestTest, FullModeFailsWhenManifestCannotBeWritten)
 
     .options = PakBuildOptions {
       .deterministic = true,
-      .embed_browse_index = false,
       .emit_manifest_in_full = true,
       .compute_crc32 = true,
       .fail_on_warnings = false,
@@ -348,7 +346,6 @@ NOLINT_TEST_F(PakManifestTest, FullModeManifestEmissionIsBitExactDeterministic)
 
     .options = PakBuildOptions {
       .deterministic = true,
-      .embed_browse_index = false,
       .emit_manifest_in_full = true,
       .compute_crc32 = true,
       .fail_on_warnings = false,

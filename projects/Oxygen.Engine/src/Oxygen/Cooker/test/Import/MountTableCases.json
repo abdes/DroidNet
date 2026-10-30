@@ -1,5 +1,5 @@
 {
-  "$comment": "How a mount table is resolved from a committed declaration and the .mounts.json hierarchy. The engine (SourceMounts_test.cpp) and the editor (MountTableCasesTests) both run every case, so the two readers cannot drift. Paths are relative to a case folder whose own .mounts.json has \"root\": true; ${temp} in a path is that folder. A library is built from its recipe by each harness's own fixture writer: path, kind (loose or pak), roots (the mounts its virtual paths start with; a loose root only), external_script (a script with an external source under its first root) and format (current, or unsupported: a version this build cannot read). Mounts compare by name; codes compare as sets.",
+  "$comment": "How a mount table is resolved from a committed declaration and the .mounts.json hierarchy. The engine (SourceMounts_test.cpp) and the editor (MountTableCasesTests) both run every case, so the two readers cannot drift. Paths are relative to a case folder whose own .mounts.json has \"root\": true; ${temp} in a path is that folder. A library is built from its recipe by each harness's own fixture writer: path, kind (loose or pak), roots (the mounts its virtual paths start with; a pak names exactly one, its library), assets (each a virtual path and an asset type it provides, keyed from the path), requirements (a pak's: each a library, and the virtual path and type of the asset it requires of it), external_script (a script with an external source under its first root; a loose root only) and format (current, or unsupported: a version this build cannot read). Mounts compare by name; codes compare as sets.",
   "version": 1,
   "cases": [
     {
@@ -429,7 +429,7 @@
       "name": "libraries bound to a loose root and a pak",
       "libraries": [
         { "path": "Vendor/Props", "kind": "loose", "roots": ["Props"] },
-        { "path": "Paks/Engine2D.pak", "kind": "pak" }
+        { "path": "Paks/Engine2D.pak", "kind": "pak", "roots": ["Engine2D"] }
       ],
       "mounts_files": {
         "ws/proj": {
@@ -551,7 +551,12 @@
           "roots": ["Props"],
           "format": "unsupported"
         },
-        { "path": "Libs/Vehicles.pak", "kind": "pak", "format": "unsupported" }
+        {
+          "path": "Libs/Vehicles.pak",
+          "kind": "pak",
+          "roots": ["Vehicles"],
+          "format": "unsupported"
+        }
       ],
       "declarations": [
         { "name": "Props", "kind": "Cooked", "path": "../../Libs/Props" },
@@ -765,6 +770,175 @@
         }
       ],
       "codes": ["mount.file_invalid", "mount.unbound"]
+    },
+    {
+      "name": "a pak whose library is not its name",
+      "libraries": [
+        { "path": "Libs/Cars.pak", "kind": "pak", "roots": ["Vehicles"] }
+      ],
+      "declarations": [
+        { "name": "Cars", "kind": "Cooked", "path": "../../Libs/Cars.pak" }
+      ],
+      "mounts": [
+        {
+          "name": "Cars",
+          "kind": "Cooked",
+          "scope": "declared",
+          "state": "Invalid",
+          "origin": "committed",
+          "folder": "Libs/Cars.pak",
+          "role": "Shared"
+        }
+      ],
+      "codes": ["mount.library_root_mismatch"]
+    },
+    {
+      "name": "a pak whose requirement a library below provides",
+      "libraries": [
+        {
+          "path": "Libs/Vehicles",
+          "kind": "loose",
+          "roots": ["Vehicles"],
+          "assets": [{ "path": "/Vehicles/Paint.omat", "type": "Material" }]
+        },
+        {
+          "path": "Libs/Props.pak",
+          "kind": "pak",
+          "roots": ["Props"],
+          "requirements": [
+            {
+              "library": "Vehicles",
+              "path": "/Vehicles/Paint.omat",
+              "type": "Material"
+            }
+          ]
+        }
+      ],
+      "declarations": [
+        { "name": "Vehicles", "kind": "Cooked", "path": "../../Libs/Vehicles" },
+        { "name": "Props", "kind": "Cooked", "path": "../../Libs/Props.pak" }
+      ],
+      "mounts": [
+        {
+          "name": "Vehicles",
+          "kind": "Cooked",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "Libs/Vehicles",
+          "role": "Shared"
+        },
+        {
+          "name": "Props",
+          "kind": "Cooked",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "Libs/Props.pak",
+          "role": "Shared"
+        }
+      ],
+      "codes": []
+    },
+    {
+      "name": "a pak whose requirement only a library above provides",
+      "libraries": [
+        {
+          "path": "Libs/Vehicles",
+          "kind": "loose",
+          "roots": ["Vehicles"],
+          "assets": [{ "path": "/Vehicles/Paint.omat", "type": "Material" }]
+        },
+        {
+          "path": "Libs/Props.pak",
+          "kind": "pak",
+          "roots": ["Props"],
+          "requirements": [
+            {
+              "library": "Vehicles",
+              "path": "/Vehicles/Paint.omat",
+              "type": "Material"
+            }
+          ]
+        }
+      ],
+      "declarations": [
+        { "name": "Props", "kind": "Cooked", "path": "../../Libs/Props.pak" },
+        { "name": "Vehicles", "kind": "Cooked", "path": "../../Libs/Vehicles" }
+      ],
+      "mounts": [
+        {
+          "name": "Props",
+          "kind": "Cooked",
+          "scope": "declared",
+          "state": "Invalid",
+          "origin": "committed",
+          "folder": "Libs/Props.pak",
+          "role": "Shared"
+        },
+        {
+          "name": "Vehicles",
+          "kind": "Cooked",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "Libs/Vehicles",
+          "role": "Shared"
+        }
+      ],
+      "codes": ["mount.library_dependency_missing"]
+    },
+    {
+      "name": "a pak whose requirement a library below provides as another type",
+      "libraries": [
+        {
+          "path": "Libs/Vehicles.pak",
+          "kind": "pak",
+          "roots": ["Vehicles"],
+          "assets": [{ "path": "/Vehicles/Paint.omat", "type": "Geometry" }]
+        },
+        {
+          "path": "Libs/Props.pak",
+          "kind": "pak",
+          "roots": ["Props"],
+          "requirements": [
+            {
+              "library": "Vehicles",
+              "path": "/Vehicles/Paint.omat",
+              "type": "Material"
+            }
+          ]
+        }
+      ],
+      "declarations": [
+        {
+          "name": "Vehicles",
+          "kind": "Cooked",
+          "path": "../../Libs/Vehicles.pak"
+        },
+        { "name": "Props", "kind": "Cooked", "path": "../../Libs/Props.pak" }
+      ],
+      "mounts": [
+        {
+          "name": "Vehicles",
+          "kind": "Cooked",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "Libs/Vehicles.pak",
+          "role": "Shared"
+        },
+        {
+          "name": "Props",
+          "kind": "Cooked",
+          "scope": "declared",
+          "state": "Invalid",
+          "origin": "committed",
+          "folder": "Libs/Props.pak",
+          "role": "Shared"
+        }
+      ],
+      "codes": ["mount.library_dependency_missing"]
     }
   ]
 }

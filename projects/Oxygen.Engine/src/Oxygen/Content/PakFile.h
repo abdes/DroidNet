@@ -152,8 +152,16 @@ public:
     data::pak::core::ResourceIndexT texture_index;
   };
 
-  //! Check whether this pak contains an embedded browse index.
-  OXGN_CNTT_NDAPI auto HasBrowseIndex() const noexcept -> bool;
+  //! The asset and texture entries of a browse index.
+  struct BrowseContents {
+    std::vector<BrowseEntry> entries;
+    std::vector<BrowseTextureEntry> textures;
+  };
+
+  //! Decodes a browse index whose textures index a texture table of
+  //! `texture_count` rows; an unreadable one throws `data::CookedOpenError`.
+  OXGN_CNTT_NDAPI static auto DecodeBrowseIndex(
+    std::span<const std::byte> bytes, uint32_t texture_count) -> BrowseContents;
 
   //! Get the embedded browse index entries.
   OXGN_CNTT_NDAPI auto BrowseIndex() const noexcept

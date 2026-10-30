@@ -59,7 +59,7 @@ struct PakTablePlan {
 };
 
 struct PakAssetPlacementPlan {
-  data::AssetKey asset_key {};
+  data::AssetKey asset_key;
   data::AssetType asset_type = data::AssetType::kUnknown;
   uint64_t offset = 0;
   uint64_t size_bytes = 0;
@@ -78,7 +78,7 @@ struct PakResourcePlacementPlan {
 };
 
 struct PakAssetDirectoryEntryPlan {
-  data::AssetKey asset_key {};
+  data::AssetKey asset_key;
   data::AssetType asset_type = data::AssetType::kUnknown;
   uint64_t entry_offset = 0;
   uint64_t descriptor_offset = 0;
@@ -94,7 +94,7 @@ struct PakDirectoryPlan {
 };
 
 struct PakBrowseEntryPlan {
-  data::AssetKey asset_key {};
+  data::AssetKey asset_key;
   std::string virtual_path;
 };
 
@@ -105,7 +105,6 @@ struct PakBrowseTextureEntryPlan {
 };
 
 struct PakBrowseIndexPlan {
-  bool enabled = false;
   uint64_t offset = 0;
   uint64_t size_bytes = 0;
   std::vector<PakBrowseEntryPlan> entries;
@@ -120,17 +119,17 @@ struct PakFooterPlan {
 
 struct PakCatalogPlan {
   uint64_t offset = 0;
-  std::vector<std::byte> bytes {};
+  std::vector<std::byte> bytes;
 };
 
 struct PakPatchActionRecord {
-  data::AssetKey asset_key {};
+  data::AssetKey asset_key;
   data::AssetType asset_type = data::AssetType::kUnknown;
   PakPatchAction action = PakPatchAction::kUnchanged;
 };
 
 struct PakPatchClosureRecord {
-  data::AssetKey asset_key {};
+  data::AssetKey asset_key;
   std::string resource_kind;
   uint32_t resource_index = 0;
 };

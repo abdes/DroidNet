@@ -9,13 +9,18 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/PakCatalog.h>
 
 namespace oxygen::content::lc {
 
@@ -68,18 +73,28 @@ struct LibraryFacts final {
   //! Why it cannot be read; absent when it can. The other facts are empty
   //! then.
   std::optional<data::CookedOpenError> unreadable;
-  //! The mount names that start its virtual paths, such as `Props`, sorted.
-  //! A pak states none before its catalog names its library.
+  //! The mount names that start its virtual paths, such as `Props`, sorted:
+  //! a loose root's from its index, a pak's the one library its catalog
+  //! names.
   std::vector<std::string> roots;
   //! The virtual paths of its scripts whose source is external, sorted. A pak
   //! has none: PakTool seals scripts.
   std::vector<std::string> external_scripts;
+  //! The assets it provides, with their types; a pak's after its deletions.
+  std::map<data::AssetKey, data::AssetType> assets;
+  //! The keys of the textures it provides (`TextureKeyFromVirtualPath`).
+  std::set<data::AssetKey> textures;
+  //! The lower assets a pak deletes, which nothing below it then provides.
+  std::set<data::AssetKey> deleted;
+  //! What it requires of other libraries. A loose root states none.
+  std::vector<data::PakCatalogDependency> requirements;
 };
 
 /*!
  Reads the facts of the library `path` names: the `container.index.bin` of a
- folder, or the header, footer and catalog of a pak. No asset is loaded; a
- loose root's script descriptors are read only for their external source.
+ folder, or the header, footer, browse index and catalog of a pak. No asset is
+ loaded; a loose root's script descriptors are read only for their external
+ source.
 
  A folder without an index, or a file that is not a pak, is
  `CookedOpenFailure::kWrongFormat`; a file that cannot be read is

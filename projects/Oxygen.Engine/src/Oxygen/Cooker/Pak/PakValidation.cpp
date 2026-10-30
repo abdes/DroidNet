@@ -91,7 +91,7 @@ auto AddDiagnostic(std::vector<pak::PakDiagnostic>& diagnostics,
 
 auto SafeAdd(const uint64_t lhs, const uint64_t rhs, uint64_t& out) -> bool
 {
-  if (rhs > (std::numeric_limits<uint64_t>::max)() - lhs) {
+  if (rhs > std::numeric_limits<uint64_t>::max() - lhs) {
     return false;
   }
   out = lhs + rhs;
@@ -100,7 +100,7 @@ auto SafeAdd(const uint64_t lhs, const uint64_t rhs, uint64_t& out) -> bool
 
 auto SafeMul(const uint64_t lhs, const uint64_t rhs, uint64_t& out) -> bool
 {
-  if (lhs != 0 && rhs > (std::numeric_limits<uint64_t>::max)() / lhs) {
+  if (lhs != 0 && rhs > std::numeric_limits<uint64_t>::max() / lhs) {
     return false;
   }
   out = lhs * rhs;
@@ -482,7 +482,7 @@ auto CollectBrowseRangeAndValidatePaths(ValidationState& state) -> void
   using Phase = pak::PakBuildPhase;
 
   const auto& browse = state.plan->BrowseIndex();
-  if (browse.enabled) {
+  {
     uint64_t end = 0;
     if (!SafeAdd(browse.offset, browse.size_bytes, end)) {
       AddDiagnostic(state.output.diagnostics, Severity::kError,
@@ -522,11 +522,6 @@ auto CollectBrowseRangeAndValidatePaths(ValidationState& state) -> void
           {}, "browse_index", {}, path);
       }
     }
-  } else if (!browse.entries.empty() || !browse.textures.empty()) {
-    AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-      "pak.plan.browse_path_without_index",
-      "Browse virtual paths are populated but browse index is disabled.",
-      std::nullopt, {}, "browse_index");
   }
 }
 
@@ -762,15 +757,14 @@ auto ValidatePatchActionsAgainstBaseCatalogs(ValidationState& state) -> void
     const auto base_it = base_asset_types.find(action.asset_key);
     const auto exists_in_base = base_it != base_asset_types.end();
     if (state.policy->mode == pak::PakPlanMode::kPatch) {
-      if (action.action == pak::PakPatchAction::kReplace
-        || action.action == pak::PakPatchAction::kDelete
-        || action.action == pak::PakPatchAction::kUnchanged) {
-        if (!exists_in_base) {
-          AddDiagnostic(state.output.diagnostics, Severity::kError,
-            Phase::kPlanning, "pak.plan.patch_action_missing_base",
-            "Patch action requires key to exist in base catalogs.",
-            action.asset_key);
-        }
+      if ((action.action == pak::PakPatchAction::kReplace
+            || action.action == pak::PakPatchAction::kDelete
+            || action.action == pak::PakPatchAction::kUnchanged)
+        && !exists_in_base) {
+        AddDiagnostic(state.output.diagnostics, Severity::kError,
+          Phase::kPlanning, "pak.plan.patch_action_missing_base",
+          "Patch action requires key to exist in base catalogs.",
+          action.asset_key);
       }
 
       if (action.action == pak::PakPatchAction::kCreate && exists_in_base) {

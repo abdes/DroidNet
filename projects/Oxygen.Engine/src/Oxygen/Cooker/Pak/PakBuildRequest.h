@@ -29,10 +29,17 @@ OXGN_COOK_NDAPI auto to_string(BuildMode value) noexcept -> std::string_view;
 
 struct PakBuildOptions {
   bool deterministic = true;
-  bool embed_browse_index = false;
   bool emit_manifest_in_full = false;
   bool compute_crc32 = true;
   bool fail_on_warnings = false;
+};
+
+//! A pak this pak references without containing it.
+struct PakDependency {
+  //! Its catalog, which names its library.
+  data::PakCatalog catalog;
+  //! Keys of the textures its browse index lists.
+  std::unordered_set<data::AssetKey> texture_keys;
 };
 
 struct PakBuildRequest {
@@ -45,13 +52,13 @@ struct PakBuildRequest {
   uint16_t content_version = 0;
   data::SourceKey source_key {};
 
-  std::vector<data::PakCatalog> base_catalogs {};
-  //! Catalogs of the paks this pak references without containing them, lowest
-  //! first; full builds and patches alike.
-  std::vector<data::PakCatalog> dependency_catalogs {};
-  //! Keys of the textures the base and dependency paks hold, which assets of
-  //! this pak may reference by key without containing them.
-  std::unordered_set<data::AssetKey> lower_layer_texture_keys {};
+  std::vector<data::PakCatalog> base_catalogs;
+  //! Keys of the textures the base paks hold, which assets of a patch may
+  //! reference by key without containing them.
+  std::unordered_set<data::AssetKey> base_texture_keys;
+  //! The paks this pak references without containing them, lowest first;
+  //! full builds and patches alike.
+  std::vector<PakDependency> dependencies;
   PakBuildOptions options {};
 };
 

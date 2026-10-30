@@ -201,7 +201,7 @@ virtual paths.
 For editor/tooling workflows, `VirtualPathResolver` exists as a helper:
 
 - It maps canonical virtual paths to `data::AssetKey` using mounted cooked
-  indexes (and PAK browse indexes when available).
+  indexes and PAK browse indexes.
 - It uses **last-mounted-wins** in registration order.
 - It logs a `WARNING` when the same virtual path exists in multiple mounts but
   maps to different `AssetKey`s.

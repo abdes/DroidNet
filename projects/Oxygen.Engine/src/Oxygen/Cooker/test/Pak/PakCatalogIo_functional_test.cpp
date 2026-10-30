@@ -48,6 +48,7 @@ auto MakeCatalog() -> data::PakCatalog
     .source_key = MakeSourceKey(0x41U),
     .content_version = 42U,
     .catalog_digest = MakeDigest(0x21U),
+    .library = "Content",
     .entries = {
       MakeEntry(0xB0U, data::AssetType::kScene, 0x31U, 0x41U),
       MakeEntry(0xA0U, data::AssetType::kMaterial, 0x32U, 0x42U),

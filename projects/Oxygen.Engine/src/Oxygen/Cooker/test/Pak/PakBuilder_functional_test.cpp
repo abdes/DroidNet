@@ -12,12 +12,13 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "PakTestSupport.h"
 
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/test/Fixtures/LooseCookedTestWriter.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
@@ -26,6 +27,8 @@
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Cooker/test/Support/TextureLibraryFixture.h>
+#include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
@@ -37,8 +40,16 @@
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
 
+namespace oxygen::engine::internal {
+//! The tag an `AssetLoader` takes, which only the engine and its tests make.
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
+
 namespace {
 namespace data = oxygen::data;
+using oxygen::engine::internal::EngineTagFactory;
 namespace pak = oxygen::content::pak;
 namespace paktest = oxygen::content::pak::test;
 
@@ -173,7 +184,9 @@ NOLINT_TEST_F(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
   writer.WriteAssetDescriptor(key, data::AssetType::kMaterial,
     "/Game/Missing.omat", "Missing.omat", descriptor_bytes, *references,
     content::import::LooseCookedProducer {
-      .source = "/Game/Missing.omat.json", .completes = {} });
+      .source = "/Game/Missing.omat.json",
+      .completes = {},
+    });
   ASSERT_EQ(writer.Finish().assets.size(), 1U);
 
   auto request = pak::PakBuildRequest {};
@@ -268,8 +281,12 @@ protected:
     request.output_manifest_path = Path("layer.manifest.json");
     request.options.emit_manifest_in_full = true;
     request.source_key = MakeSourceKey(4U);
-    request.dependency_catalogs
-      = { oxygen::content::PakFile(Path("engine.pak")).Catalog() };
+    request.dependencies = {
+      {
+        .catalog = oxygen::content::PakFile(Path("engine.pak")).Catalog(),
+        .texture_keys = {},
+      },
+    };
     auto layer = pak::PakBuilder {}.Build(request);
     if (!layer.has_value()) {
       ADD_FAILURE() << "Expected the layer build to report";
@@ -282,7 +299,7 @@ protected:
 };
 
 //! References into a dependency resolve without copying its asset, and the
-//! catalog and manifest require the dependency.
+//! catalog and manifest require the asset of the dependency's library.
 NOLINT_TEST_F(PakBuilderDependencyTest, ReferencesResolveIntoTheDependency)
 {
   // Act
@@ -293,19 +310,38 @@ NOLINT_TEST_F(PakBuilderDependencyTest, ReferencesResolveIntoTheDependency)
   const auto archive = oxygen::content::PakFile(Path("layer.pak"));
   EXPECT_TRUE(archive.FindEntry(owner_key_).has_value());
   EXPECT_FALSE(archive.FindEntry(MakeAssetKey(42U)).has_value());
-  const auto engine = oxygen::content::PakFile(Path("engine.pak")).Catalog();
+  EXPECT_EQ(archive.Catalog().library, "Game");
   EXPECT_TRUE(archive.Catalog().bases.empty());
-  ASSERT_EQ(archive.Catalog().dependencies.size(), 1U);
-  EXPECT_EQ(
-    archive.Catalog().dependencies.front().source_key, engine.source_key);
-  EXPECT_EQ(archive.Catalog().dependencies.front().catalog_digest,
-    engine.catalog_digest);
-  ASSERT_TRUE(layer.patch_manifest.has_value());
+  const auto required = data::PakCatalogDependency {
+    .library = "Engine",
+    .requirements = { {
+      .kind = data::KeyReferenceKind::kAsset,
+      .key = MakeAssetKey(42U),
+      .type = data::AssetType::kMaterial,
+    }, },
+  };
+  EXPECT_THAT(archive.Catalog().dependencies, ::testing::ElementsAre(required));
+  ASSERT_HAS_VALUE(layer.patch_manifest);
   const auto& envelope = layer.patch_manifest->compatibility_envelope;
   EXPECT_TRUE(envelope.required_base_layers.empty());
-  ASSERT_EQ(envelope.required_dependencies.size(), 1U);
-  EXPECT_EQ(
-    envelope.required_dependencies.front().source_key, engine.source_key);
+  EXPECT_THAT(envelope.required_dependencies, ::testing::ElementsAre(required));
+}
+
+//! The requirements the planner writes are the ones the runtime checks: the
+//! layer mounts above its library and is refused without it.
+NOLINT_TEST_F(PakBuilderDependencyTest, LayerMountsOnlyAboveItsLibrary)
+{
+  // Arrange
+  const auto layer = BuildLayer(data::AssetType::kMaterial);
+  ASSERT_EQ(layer.summary.diagnostics_error, 0U);
+  auto with_library = oxygen::content::AssetLoader(EngineTagFactory::Get());
+  auto without_library = oxygen::content::AssetLoader(EngineTagFactory::Get());
+  with_library.AddPakFile(Path("engine.pak"));
+
+  // Act and Assert
+  NOLINT_EXPECT_NO_THROW(with_library.AddPakFile(Path("layer.pak")));
+  NOLINT_EXPECT_THROW(without_library.AddPakFile(Path("layer.pak")),
+    oxygen::content::DependencyRequirementError);
 }
 
 //! A reference into a dependency still checks the referenced asset's type.
@@ -320,16 +356,34 @@ NOLINT_TEST_F(PakBuilderDependencyTest, ReferenceTypesAreChecked)
   EXPECT_FALSE(std::filesystem::exists(Path("layer.pak")));
 }
 
-//! A material that names a texture by key, built beside a library holding that
-//! texture, on top of a lower layer holding it, or with nothing holding it.
+//! A material of library `Game` that names a texture by key, built beside a
+//! source of its own library holding that texture, on top of a dependency
+//! holding it, or with nothing holding it.
 class PakBuilderExternalTextureTest : public PakBuilderTest {
 protected:
-  static constexpr auto kGrid
+  static constexpr auto kOwnGrid
+    = std::string_view { "/Game/Textures/Grid.otex" };
+  static constexpr auto kEngineGrid
     = std::string_view { "/Engine/Textures/Grid.otex" };
 
-  auto Build(std::vector<data::CookedSource> sources,
-    std::unordered_set<data::AssetKey> lower_layer_textures = {})
-    -> pak::PakBuildResult
+  //! Writes a texture library holding `texture` into `root`.
+  static auto WriteGrid(
+    const std::filesystem::path& root, const std::string_view texture) -> void
+  {
+    oxygen::cooker::test::WriteTextureLibrary(root, texture,
+      {
+        .size_bytes = 4U,
+        .width = 1U,
+        .height = 1U,
+        .depth = 1U,
+        .array_layers = 1U,
+        .mip_levels = 1U,
+      });
+  }
+
+  auto Build(const std::string_view texture,
+    std::vector<data::CookedSource> sources,
+    std::vector<pak::PakDependency> dependencies = {}) -> pak::PakBuildResult
   {
     auto descriptor = data::pak::render::MaterialAssetDesc {};
     descriptor.header.asset_type
@@ -337,14 +391,18 @@ protected:
     descriptor.header.version = data::pak::render::kMaterialAssetVersion;
     descriptor.base_color_texture = data::ResourceReferenceIndex { 0U };
     const auto references = data::AssetReferences::Create(
-      { {
-        .kind = data::ResourceKind::kExternalTexture,
-        .index = data::pak::core::ResourceIndexT { 0U },
-      } },
-      { {
-        .key = data::TextureKeyFromVirtualPath(kGrid),
-        .kind = data::KeyReferenceKind::kTexture,
-      } });
+      {
+        {
+          .kind = data::ResourceKind::kExternalTexture,
+          .index = data::pak::core::ResourceIndexT { 0U },
+        },
+      },
+      {
+        {
+          .key = data::TextureKeyFromVirtualPath(texture),
+          .kind = data::KeyReferenceKind::kTexture,
+        },
+      });
     if (!references.has_value()) {
       ADD_FAILURE() << "Expected the reference table to encode";
       return {};
@@ -362,8 +420,7 @@ protected:
     request.output_pak_path = Path("layer.pak");
     request.content_version = 1U;
     request.source_key = MakeSourceKey(6U);
-    request.lower_layer_texture_keys = std::move(lower_layer_textures);
-    request.options.embed_browse_index = true;
+    request.dependencies = std::move(dependencies);
     auto layer = pak::PakBuilder {}.Build(request);
     if (!layer.has_value()) {
       ADD_FAILURE() << "Expected the layer build to report";
@@ -375,38 +432,61 @@ protected:
   data::AssetKey owner_key_ = MakeAssetKey(43U);
 };
 
-//! A texture a source of the pak holds is packed with the material; one a
-//! lower layer holds is left to it.
-NOLINT_TEST_F(PakBuilderExternalTextureTest, HeldTexturesResolve)
+//! A texture a source of the pak holds is packed with the material.
+NOLINT_TEST_F(PakBuilderExternalTextureTest, OwnTextureIsPacked)
 {
   // Arrange
-  const auto library = Path("library");
-  oxygen::cooker::test::WriteTextureLibrary(library, kGrid,
-    { .size_bytes = 4U,
-      .width = 1U,
-      .height = 1U,
-      .depth = 1U,
-      .array_layers = 1U,
-      .mip_levels = 1U });
+  const auto own = Path("own");
+  WriteGrid(own, kOwnGrid);
 
   // Act
-  const auto alongside = Build(
-    { { .kind = data::CookedSourceKind::kLooseCooked, .path = library } });
-  const auto packed = oxygen::content::PakFile(Path("layer.pak"))
-                        .ResolveTextureIndexByVirtualPath(kGrid);
-  const auto below = Build({}, { data::TextureKeyFromVirtualPath(kGrid) });
+  const auto layer = Build(kOwnGrid,
+    { { .kind = data::CookedSourceKind::kLooseCooked, .path = own } });
 
   // Assert
-  EXPECT_EQ(alongside.summary.diagnostics_error, 0U);
-  EXPECT_TRUE(packed.has_value());
-  EXPECT_EQ(below.summary.diagnostics_error, 0U);
+  EXPECT_EQ(layer.summary.diagnostics_error, 0U);
+  const auto archive = oxygen::content::PakFile(Path("layer.pak"));
+  EXPECT_TRUE(archive.ResolveTextureIndexByVirtualPath(kOwnGrid).has_value());
+  EXPECT_TRUE(archive.Catalog().dependencies.empty());
+}
+
+//! A texture a dependency holds is left to it and required of its library.
+NOLINT_TEST_F(PakBuilderExternalTextureTest, DependencyTextureIsRequired)
+{
+  // Arrange
+  const auto engine = Path("engine");
+  WriteGrid(engine, kEngineGrid);
+  const auto engine_pak
+    = oxygen::cooker::test::PackLibrary(engine, Path("engine.pak"));
+  auto dependency = pak::PakDependency {
+    .catalog = oxygen::content::PakFile(engine_pak).Catalog(),
+    .texture_keys = { data::TextureKeyFromVirtualPath(kEngineGrid) },
+  };
+
+  // Act
+  const auto layer = Build(kEngineGrid, {}, { std::move(dependency) });
+
+  // Assert
+  EXPECT_EQ(layer.summary.diagnostics_error, 0U);
+  const auto archive = oxygen::content::PakFile(Path("layer.pak"));
+  EXPECT_FALSE(
+    archive.ResolveTextureIndexByVirtualPath(kEngineGrid).has_value());
+  EXPECT_THAT(archive.Catalog().dependencies,
+    ::testing::ElementsAre(data::PakCatalogDependency {
+      .library = "Engine",
+      .requirements = { {
+        .kind = data::KeyReferenceKind::kTexture,
+        .key = data::TextureKeyFromVirtualPath(kEngineGrid),
+        .type = data::AssetType::kUnknown,
+      } },
+    }));
 }
 
 //! A texture neither the pak nor its lower layers hold refuses the build.
 NOLINT_TEST_F(PakBuilderExternalTextureTest, UnheldTextureIsRefused)
 {
   // Act
-  const auto layer = Build({});
+  const auto layer = Build(kEngineGrid, {});
 
   // Assert
   EXPECT_TRUE(
@@ -486,7 +566,6 @@ NOLINT_TEST_F(PakBuilderTest, FullManifestOptionRequiresOutputManifestPath)
 
     .options = PakBuildOptions {
       .deterministic = true,
-      .embed_browse_index = false,
       .emit_manifest_in_full = true,
       .compute_crc32 = true,
       .fail_on_warnings = false,
@@ -564,7 +643,6 @@ NOLINT_TEST_F(
 
     .options = PakBuildOptions {
       .deterministic = true,
-      .embed_browse_index = false,
       .emit_manifest_in_full = true,
       .compute_crc32 = true,
       .fail_on_warnings = false,
@@ -749,7 +827,6 @@ NOLINT_TEST_F(
 
     .options = {
       .deterministic = true,
-      .embed_browse_index = false,
       .emit_manifest_in_full = false,
       .compute_crc32 = true,
       .fail_on_warnings = true,

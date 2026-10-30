@@ -19,6 +19,7 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -33,6 +34,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/Types.h>
@@ -526,7 +528,6 @@ auto MakeSkeletonPlan(const pak::PakBuildRequest& request) -> pak::PakPlan::Data
     .entries = {},
   };
   data_plan.browse_index = pak::PakBrowseIndexPlan {
-    .enabled = false,
     .offset = 0,
     .size_bytes = 0,
     .entries = {},
@@ -770,7 +771,12 @@ auto ToCatalogEntry(const AggregatedAsset& asset) -> data::PakCatalogEntry
   };
 }
 
+//! What a pak requires of each library it depends on, by library.
+using LibraryRequirements
+  = std::map<std::string, std::vector<data::PakRequirement>>;
+
 auto BuildOutputCatalog(const pak::PakBuildRequest& request,
+  std::string library, const LibraryRequirements& requirements,
   std::span<const AggregatedAsset> assets,
   std::span<const pak::PakPatchActionRecord> actions,
   const std::unordered_set<data::AssetKey>& tombstones) -> data::PakCatalog
@@ -789,16 +795,16 @@ auto BuildOutputCatalog(const pak::PakBuildRequest& request,
     .source_key = request.source_key,
     .content_version = request.content_version,
     .catalog_digest = {},
+    .library = std::move(library),
     .entries = std::move(entries),
     .deleted = {},
     .bases = {},
     .dependencies = {},
   };
-  for (const auto& dependency : request.dependency_catalogs) {
+  for (const auto& [name, required] : requirements) {
     catalog.dependencies.push_back({
-      .source_key = dependency.source_key,
-      .content_version = dependency.content_version,
-      .catalog_digest = dependency.catalog_digest,
+      .library = name,
+      .requirements = required,
     });
   }
   if (request.mode == pak::BuildMode::kPatch) {
@@ -836,6 +842,16 @@ struct SourceTextureRef final {
   uint32_t texture_index { 0 };
 };
 
+//! A dependency pak's effective assets and its textures, for references that
+//! resolve into it.
+struct DependencyLayer final {
+  std::string library;
+  std::unordered_map<data::AssetKey, data::AssetType> assets;
+  //! The lower assets it deletes, which no reference resolves past.
+  std::unordered_set<data::AssetKey> deleted;
+  std::unordered_set<data::AssetKey> textures;
+};
+
 struct PlanningState final {
   explicit PlanningState(const pak::PakBuildRequest& request_in)
     : request(oxygen::observer_ptr<const pak::PakBuildRequest> {
@@ -858,8 +874,13 @@ struct PlanningState final {
   std::unordered_map<data::AssetKey, data::PakCatalogEntry> base_entries;
   //! Every asset type a base layer declares, deleted assets included.
   std::unordered_map<data::AssetKey, data::AssetType> base_asset_types;
-  //! Effective assets of the dependency paks, after their deletions.
-  std::unordered_map<data::AssetKey, data::AssetType> dependency_types;
+  //! The dependency paks, lowest first.
+  std::vector<DependencyLayer> dependencies;
+  //! What the planned assets require of each dependency's library.
+  LibraryRequirements requirements;
+  //! The pak's one root, which its catalog names; unset when its content
+  //! lies under no root or under several.
+  std::optional<std::string> library;
   std::vector<data::PakCatalogBase> layers;
   std::vector<PendingResource> pending_resources;
   //! Buffer descriptor sidecars by the source and source-local buffer index
@@ -1615,15 +1636,12 @@ struct AssetDependencyDigest {
   std::vector<size_t> resources;
 };
 
-//! `lower_layer_textures` holds the texture keys of the base and dependency
-//! paks; null skips checking that external textures exist, for re-measuring a
-//! source pak's own catalog.
+//! A texture referenced by key that no source holds is pinned by the layer
+//! below that holds it, which `ValidateAssetReferences` checks.
 auto ComputeAssetDependencyDigest(std::vector<pak::PakDiagnostic>& diagnostics,
   const SourceResourceDigestState& resources,
   std::span<const SourceResourceDigestState> sources,
-  const AggregatedAsset& asset,
-  const std::unordered_set<data::AssetKey>* lower_layer_textures)
-  -> AssetDependencyDigest
+  const AggregatedAsset& asset) -> AssetDependencyDigest
 {
   AssetDependencyDigest result;
   std::vector<std::pair<uint16_t, oxygen::base::Sha256Digest>> inputs;
@@ -1690,15 +1708,6 @@ auto ComputeAssetDependencyDigest(std::vector<pak::PakDiagnostic>& diagnostics,
           holder->texture_pending_positions,
           holder->texture_index_by_key.at(reference.key),
           static_cast<uint16_t>(data::ResourceKind::kTexture));
-      } else if (lower_layer_textures != nullptr
-        && !lower_layer_textures->contains(reference.key)) {
-        AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-          pak::PakBuildPhase::kPlanning, "pak.plan.texture_reference_missing",
-          "Asset " + data::to_string(asset.key)
-            + " references a texture neither this pak nor its base and "
-              "dependency paks hold: "
-            + data::to_string(reference.key),
-          asset.descriptor_path);
       }
       continue;
     }
@@ -1772,7 +1781,7 @@ auto ValidatePhysicalCatalog(
       continue;
     }
     const auto measured = ComputeAssetDependencyDigest(state.output.diagnostics,
-      context.digests, std::span { &context.digests, 1U }, asset, nullptr);
+      context.digests, std::span { &context.digests, 1U }, asset);
     if (asset.descriptor_digest != entry.descriptor_digest
       || measured.digest != entry.transitive_resource_digest) {
       AddDiagnostic(state.output.diagnostics,
@@ -1841,9 +1850,9 @@ auto CollectSourceData(PlanningState& state) -> void
     return state.tombstones.contains(entry.second);
   });
   for (auto& asset : state.assets) {
-    const auto dependency = ComputeAssetDependencyDigest(
-      state.output.diagnostics, resource_states.at(asset.source_order),
-      resource_states, asset, &state.request->lower_layer_texture_keys);
+    const auto dependency
+      = ComputeAssetDependencyDigest(state.output.diagnostics,
+        resource_states.at(asset.source_order), resource_states, asset);
     asset.transitive_resource_digest = dependency.digest;
     for (const auto index : dependency.resources) {
       AddDependentAssetKey(state.pending_resources.at(index), asset.key);
@@ -1877,8 +1886,8 @@ auto CollectSourceData(PlanningState& state) -> void
     });
 }
 
-//! Validates the dependency paks and records their assets, which references
-//! may resolve into without the assets being copied.
+//! Validates the dependency paks and records their assets and textures, which
+//! references may resolve into without the assets being copied.
 auto CollectDependencies(PlanningState& state) -> void
 {
   auto& diagnostics = state.output.diagnostics;
@@ -1886,7 +1895,9 @@ auto CollectDependencies(PlanningState& state) -> void
   for (const auto& base : state.request->base_catalogs) {
     identities.insert(base.source_key);
   }
-  for (const auto& catalog : state.request->dependency_catalogs) {
+  auto libraries = std::unordered_set<std::string> {};
+  for (const auto& dependency : state.request->dependencies) {
+    const auto& catalog = dependency.catalog;
     if (const auto valid = catalog.Validate(); !valid) {
       AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
         pak::PakBuildPhase::kPlanning, "pak.plan.dependency_catalog_invalid",
@@ -1902,18 +1913,70 @@ auto CollectDependencies(PlanningState& state) -> void
         "and its bases.");
       continue;
     }
-    for (const auto& entry : catalog.entries) {
-      const auto [it, inserted]
-        = state.dependency_types.emplace(entry.asset_key, entry.asset_type);
-      if (!inserted && it->second != entry.asset_type) {
-        AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-          pak::PakBuildPhase::kPlanning,
-          "pak.plan.dependency_catalog_type_mismatch",
-          "Same AssetKey appears in dependencies with different asset_type.");
-      }
+    if (!libraries.insert(catalog.library).second) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning, "pak.plan.dependency_library_repeated",
+        "Two dependency paks are library '" + catalog.library
+          + "'; a pak depends on a library once.");
+      continue;
     }
-    for (const auto& key : catalog.deleted) {
-      state.dependency_types.erase(key);
+    auto layer = DependencyLayer {
+      .library = catalog.library,
+      .assets = {},
+      .deleted = { catalog.deleted.begin(), catalog.deleted.end() },
+      .textures = dependency.texture_keys,
+    };
+    for (const auto& entry : catalog.entries) {
+      layer.assets.emplace(entry.asset_key, entry.asset_type);
+    }
+    state.dependencies.push_back(std::move(layer));
+  }
+}
+
+//! Names the pak's library: the one root of every virtual path its browse
+//! index lists, and of its bases. A deletion-only patch names its base's
+//! library.
+auto NameLibrary(PlanningState& state) -> void
+{
+  auto roots = std::set<std::string> {};
+  const auto add = [&roots](const std::string_view path) -> void {
+    if (const auto root = content::MountRootOf(path); !root.empty()) {
+      roots.emplace(root.substr(1));
+    }
+  };
+  for (const auto& path : state.browse_map | std::views::keys) {
+    add(path);
+  }
+  for (const auto& path : state.browse_textures | std::views::keys) {
+    add(path);
+  }
+  for (const auto& base : state.request->base_catalogs) {
+    roots.insert(base.library);
+  }
+  auto& diagnostics = state.output.diagnostics;
+  if (roots.empty()) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, "pak.plan.root_missing",
+      "The pak lists nothing, so it names no library.");
+    return;
+  }
+  if (roots.size() > 1U) {
+    auto names = std::string {};
+    for (const auto& root : roots) {
+      names += (names.empty() ? "'" : ", '") + root + "'";
+    }
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, "pak.plan.root_multiple",
+      "A pak is one library, but its content lies under " + names);
+    return;
+  }
+  state.library = *roots.begin();
+  for (const auto& layer : state.dependencies) {
+    if (layer.library == *state.library) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning, "pak.plan.dependency_library_conflict",
+        "Dependency pak is library '" + layer.library
+          + "', the library this pak is.");
     }
   }
 }
@@ -1969,11 +2032,79 @@ auto CollectBaseLayers(PlanningState& state) -> void
   }
 }
 
+//! The newest dependency that holds the asset `key`, unless a newer one
+//! deletes it.
+auto FindDependencyAsset(const PlanningState& state, const data::AssetKey& key)
+  -> const DependencyLayer*
+{
+  for (const auto& layer : std::views::reverse(state.dependencies)) {
+    if (layer.deleted.contains(key)) {
+      return nullptr;
+    }
+    if (layer.assets.contains(key)) {
+      return &layer;
+    }
+  }
+  return nullptr;
+}
+
+//! Records that the planned assets require `requirement` of `library`.
+auto Require(PlanningState& state, const std::string& library,
+  const data::PakRequirement& requirement) -> void
+{
+  auto& required = state.requirements[library];
+  if (std::ranges::find(required, requirement) == required.end()) {
+    required.push_back(requirement);
+  }
+}
+
+//! Whether a base or dependency pak holds the texture `key`.
+auto LowerLayerHoldsTexture(
+  const PlanningState& state, const data::AssetKey& key) -> bool
+{
+  return state.request->base_texture_keys.contains(key)
+    || std::ranges::any_of(
+      state.dependencies, [&key](const DependencyLayer& layer) -> bool {
+        return layer.textures.contains(key);
+      });
+}
+
+//! A texture referenced by key is held by a source of this pak, a base pak of
+//! a patch, or a dependency, which it then requires.
+auto ValidateTextureReference(PlanningState& state,
+  const std::unordered_set<data::AssetKey>& source_textures,
+  const AggregatedAsset& asset, const data::AssetKey& key) -> void
+{
+  if (source_textures.contains(key)
+    || state.request->base_texture_keys.contains(key)) {
+    return;
+  }
+  for (const auto& layer : std::views::reverse(state.dependencies)) {
+    if (layer.textures.contains(key)) {
+      Require(state, layer.library,
+        {
+          .kind = data::KeyReferenceKind::kTexture,
+          .key = key,
+          .type = data::AssetType::kUnknown,
+        });
+      return;
+    }
+  }
+  AddDiagnostic(state.output.diagnostics, pak::PakDiagnosticSeverity::kError,
+    pak::PakBuildPhase::kPlanning, "pak.plan.texture_reference_missing",
+    "Asset " + data::to_string(asset.key)
+      + " references a texture neither this pak nor its base and dependency "
+        "paks hold: "
+      + data::to_string(key),
+    asset.descriptor_path);
+}
+
 // Check the original pair before relocation; never repair stale authored input.
 auto ValidateAssetReferences(PlanningState& state) -> void
 {
   // A reference resolves to an asset planned here, an asset of a patch base or
-  // an asset of a dependency, in that order.
+  // an asset of a dependency, in that order; one that resolves into a
+  // dependency is a requirement of its library.
   const auto referenced_type
     = [&state](const data::AssetKey& key) -> std::optional<data::AssetType> {
     if (const auto planned = state.asset_positions.find(key);
@@ -1984,18 +2115,28 @@ auto ValidateAssetReferences(PlanningState& state) -> void
       base != state.base_entries.end()) {
       return base->second.asset_type;
     }
-    if (const auto dependency = state.dependency_types.find(key);
-      dependency != state.dependency_types.end()) {
-      return dependency->second;
+    if (const auto* layer = FindDependencyAsset(state, key)) {
+      const auto type = layer->assets.at(key);
+      Require(state, layer->library,
+        { .kind = data::KeyReferenceKind::kAsset, .key = key, .type = type });
+      return type;
     }
     return std::nullopt;
   };
+  auto source_textures = std::unordered_set<data::AssetKey> {};
+  for (const auto& path : state.browse_textures | std::views::keys) {
+    source_textures.insert(data::TextureKeyFromVirtualPath(path));
+  }
 
   std::vector<size_t> dependency_counts(state.assets.size(), 0U);
   std::vector<std::vector<size_t>> dependents(state.assets.size());
   for (size_t owner = 0; owner < state.assets.size(); ++owner) {
     const auto& asset = state.assets.at(owner);
     for (const auto& reference : asset.references.Keys()) {
+      if (reference.kind == data::KeyReferenceKind::kTexture) {
+        ValidateTextureReference(state, source_textures, asset, reference.key);
+        continue;
+      }
       if (reference.kind != data::KeyReferenceKind::kAsset) {
         continue;
       }
@@ -2382,8 +2523,7 @@ auto SelectPackedResources(PlanningState& state) -> void
   for (const auto& [path, texture] : state.browse_textures) {
     keyed_textures[texture.source_order].insert(texture.texture_index);
     if (!full
-      && state.request->lower_layer_texture_keys.contains(
-        data::TextureKeyFromVirtualPath(path))) {
+      && LowerLayerHoldsTexture(state, data::TextureKeyFromVirtualPath(path))) {
       lower_layer_textures[texture.source_order].insert(texture.texture_index);
     }
   }
@@ -2768,15 +2908,7 @@ auto PlanFileLayout(PlanningState& state) -> void
   }
   cursor += state.data_plan.directory.size_bytes;
 
-  state.data_plan.browse_index = pak::PakBrowseIndexPlan {
-    .enabled = false,
-    .offset = 0,
-    .size_bytes = 0,
-    .entries = {},
-    .textures = {},
-  };
-  if (state.request->options.embed_browse_index
-    && (!state.browse_map.empty() || !state.planned_browse_textures.empty())) {
+  {
     std::vector<pak::PakBrowseEntryPlan> browse_entries;
     browse_entries.reserve(state.browse_map.size());
     for (const auto& entry : state.browse_map) {
@@ -2790,7 +2922,6 @@ auto PlanFileLayout(PlanningState& state) -> void
         -> bool { return lhs.virtual_path < rhs.virtual_path; });
 
     auto browse = pak::PakBrowseIndexPlan {
-      .enabled = true,
       .offset = 0,
       .size_bytes = 0,
       .entries = std::move(browse_entries),
@@ -2812,16 +2943,21 @@ auto PlanFileLayout(PlanningState& state) -> void
     cursor += *browse_payload_size;
   }
 
-  state.output.output_catalog = BuildOutputCatalog(*state.request, state.assets,
-    state.data_plan.patch_actions, state.tombstones);
-  auto catalog_bytes = state.output.output_catalog.Encode();
-  if (!catalog_bytes) {
-    throw std::runtime_error(catalog_bytes.error());
-  }
-  state.data_plan.catalog
-    = { .offset = cursor, .bytes = std::move(*catalog_bytes) };
-  if (!SafeAdd(cursor, state.data_plan.catalog.bytes.size(), cursor)) {
-    throw std::overflow_error("PAK catalog layout overflow");
+  // A pak whose library could not be named, which `NameLibrary` reported, has
+  // no catalog; validation then refuses the plan.
+  if (state.library.has_value()) {
+    state.output.output_catalog
+      = BuildOutputCatalog(*state.request, *state.library, state.requirements,
+        state.assets, state.data_plan.patch_actions, state.tombstones);
+    auto catalog_bytes = state.output.output_catalog.Encode();
+    if (!catalog_bytes) {
+      throw std::runtime_error(catalog_bytes.error());
+    }
+    state.data_plan.catalog
+      = { .offset = cursor, .bytes = std::move(*catalog_bytes) };
+    if (!SafeAdd(cursor, state.data_plan.catalog.bytes.size(), cursor)) {
+      throw std::overflow_error("PAK catalog layout overflow");
+    }
   }
 
   cursor = AlignUp(cursor, AlignmentBytes { kFooterAlignment });
@@ -3003,7 +3139,7 @@ auto ValidateLayoutInvariants(PlanningState& state) -> void
     "pak.plan.stage.layout.file_size_before_footer_end",
     "Planned file size is smaller than footer end.");
 
-  if (state.data_plan.browse_index.enabled) {
+  {
     std::vector<std::byte> browse_payload;
     const auto stored = pak::StoreBrowseIndexPayload(
       state.data_plan.browse_index, browse_payload);
@@ -3119,6 +3255,8 @@ auto PakPlanBuilder::Build(const PakBuildRequest& request) const -> BuildResult
   RunStage(state, "ValidatePatchClassificationInvariants",
     "pak.plan.stage.patch_invariants_exception",
     [&state] -> void { ValidatePatchClassificationInvariants(state); });
+  RunStage(state, "NameLibrary", "pak.plan.stage.library_exception",
+    [&state] -> void { NameLibrary(state); });
   RunStage(state, "SelectPackedResources",
     "pak.plan.stage.select_resources_exception",
     [&state] -> void { SelectPackedResources(state); });

@@ -38,7 +38,6 @@ struct PakToolRequestOptions {
   uint16_t content_version = 0;
   std::string source_key;
   bool deterministic = true;
-  bool embed_browse_index = false;
   bool compute_crc32 = true;
   bool fail_on_warnings = false;
 };

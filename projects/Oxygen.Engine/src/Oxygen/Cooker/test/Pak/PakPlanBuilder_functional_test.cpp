@@ -114,7 +114,7 @@ auto ReadPackedPhysicsPayload(const std::filesystem::path& pak_path,
     return {};
   }
   std::memcpy(&descriptor,
-    bytes.data() + static_cast<std::ptrdiff_t>(*descriptor_offset),
+    std::span(bytes).subspan(static_cast<size_t>(*descriptor_offset)).data(),
     sizeof(descriptor));
   if (descriptor.data_offset + descriptor.size_bytes > bytes.size()) {
     ADD_FAILURE() << "Physics payload lies outside the pak";
@@ -350,7 +350,6 @@ auto ExpectPlansEquivalent(const pak::PakPlan& lhs, const pak::PakPlan& rhs)
     EXPECT_EQ(lhs_entry.descriptor_size, rhs_entry.descriptor_size);
   }
 
-  EXPECT_EQ(lhs.BrowseIndex().enabled, rhs.BrowseIndex().enabled);
   EXPECT_EQ(lhs.BrowseIndex().offset, rhs.BrowseIndex().offset);
   EXPECT_EQ(lhs.BrowseIndex().size_bytes, rhs.BrowseIndex().size_bytes);
   ASSERT_EQ(lhs.BrowseIndex().entries.size(), rhs.BrowseIndex().entries.size());
@@ -432,7 +431,6 @@ NOLINT_TEST_F(
 
   const auto options = pak::PakBuildOptions {
     .deterministic = true,
-    .embed_browse_index = true,
     .emit_manifest_in_full = false,
     .compute_crc32 = true,
     .fail_on_warnings = false,
@@ -747,7 +745,6 @@ NOLINT_TEST_F(
 
     .options = {
       .deterministic = true,
-      .embed_browse_index = true,
       .emit_manifest_in_full = false,
       .compute_crc32 = true,
       .fail_on_warnings = false,
@@ -759,7 +756,6 @@ NOLINT_TEST_F(
   ASSERT_HAS_VALUE(result.plan) << "Expected result.plan to contain a value";
 
   const auto& browse = result.plan->BrowseIndex();
-  ASSERT_TRUE(browse.enabled);
   ASSERT_EQ(browse.entries.size(), 2U);
   EXPECT_LT(
     browse.entries.at(0).virtual_path, browse.entries.at(1).virtual_path);
@@ -909,7 +905,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, PatchRecordsDeletedSidecarAsTombstone)
     .source_key = MakeNonZeroSourceKey(20U),
   };
   const auto base = pak::PakPlanBuilder {}.Build(request);
-  ASSERT_TRUE(base.plan);
+  ASSERT_HAS_VALUE(base.plan);
   ASSERT_FALSE(
     HasError(pak::PakWriter {}.Write(request, *base.plan).diagnostics));
   {
@@ -923,7 +919,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, PatchRecordsDeletedSidecarAsTombstone)
   request.source_key = MakeNonZeroSourceKey(21U);
   request.base_catalogs = { base.output_catalog };
   const auto patch = pak::PakPlanBuilder {}.Build(request);
-  ASSERT_TRUE(patch.plan);
+  ASSERT_HAS_VALUE(patch.plan);
   ASSERT_FALSE(
     HasError(pak::PakWriter {}.Write(request, *patch.plan).diagnostics));
   const oxygen::content::PakFile packed(request.output_pak_path);

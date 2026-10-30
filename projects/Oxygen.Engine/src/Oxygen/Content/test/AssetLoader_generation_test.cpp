@@ -32,6 +32,7 @@
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ContentMounts.h>
+#include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
@@ -40,7 +41,6 @@
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Content/OperationCancelledException.h>
-#include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -1078,18 +1078,33 @@ namespace {
   {
     // Arrange
     const auto engine_pak = temp_dir_ / "engine.pak";
+    const auto engine_material
+      = data::AssetKey::FromVirtualPath("/Engine/Default.omat");
     auto engine_config = PakTestWriter::Config {};
     engine_config.source_key = data::SourceKey { Uuid::Generate() };
+    engine_config.library = "Engine";
+    engine_config.assets = {
+      {
+        .key = engine_material,
+        .type = data::AssetType::kMaterial,
+        .virtual_path = "/Engine/Default.omat",
+      },
+    };
     PakTestWriter(engine_pak).Write(engine_config);
-    const auto engine = PakFile(engine_pak).Catalog();
     const auto content_pak = temp_dir_ / "content.pak";
     auto content_config = PakTestWriter::Config {};
     content_config.source_key = data::SourceKey { Uuid::Generate() };
+    content_config.library = "Content";
     content_config.dependencies = {
       {
-        .source_key = engine.source_key,
-        .content_version = engine.content_version,
-        .catalog_digest = engine.catalog_digest,
+        .library = "Engine",
+        .requirements = {
+          {
+          .kind = data::KeyReferenceKind::kAsset,
+          .key = engine_material,
+          .type = data::AssetType::kMaterial,
+        },
+       },
       },
     };
     PakTestWriter(content_pak).Write(content_config);
@@ -1131,27 +1146,42 @@ namespace {
         engine_config.source_key, content_config.source_key, project_source));
     NOLINT_EXPECT_THROW(static_cast<void>(co::Run(
                           loop, without_engine.PrepareMountsAsync(mounts))),
-      std::invalid_argument);
+      DependencyRequirementError);
   }
 
-  //! A pak built against the engine content pak mounts above other layers that
-  //! sit on the engine pak, and refuses to mount without it.
+  //! A pak that requires an engine asset mounts above other layers that sit on
+  //! the engine pak, and refuses to mount without it.
   NOLINT_TEST_F(AssetLoaderBasicTest, DependentPakRequiresItsDependencyBelow)
   {
     // Arrange
     const auto engine_pak = temp_dir_ / "engine.pak";
+    const auto engine_material
+      = data::AssetKey::FromVirtualPath("/Engine/Default.omat");
     auto engine_config = PakTestWriter::Config {};
     engine_config.source_key = data::SourceKey { Uuid::Generate() };
+    engine_config.library = "Engine";
+    engine_config.assets = {
+      {
+        .key = engine_material,
+        .type = data::AssetType::kMaterial,
+        .virtual_path = "/Engine/Default.omat",
+      },
+    };
     PakTestWriter(engine_pak).Write(engine_config);
-    const auto engine = PakFile(engine_pak).Catalog();
     const auto content_pak = temp_dir_ / "content.pak";
     auto content_config = PakTestWriter::Config {};
     content_config.source_key = data::SourceKey { Uuid::Generate() };
+    content_config.library = "Content";
     content_config.dependencies = {
       {
-        .source_key = engine.source_key,
-        .content_version = engine.content_version,
-        .catalog_digest = engine.catalog_digest,
+        .library = "Engine",
+        .requirements = {
+          {
+            .kind = data::KeyReferenceKind::kAsset,
+            .key = engine_material,
+            .type = data::AssetType::kMaterial,
+          },
+        },
       },
     };
     PakTestWriter(content_pak).Write(content_config);
@@ -1169,7 +1199,7 @@ namespace {
     // Act and Assert
     NOLINT_EXPECT_NO_THROW(with_engine.AddPakFile(content_pak));
     NOLINT_EXPECT_THROW(
-      without_engine.AddPakFile(content_pak), std::invalid_argument);
+      without_engine.AddPakFile(content_pak), DependencyRequirementError);
   }
 
   NOLINT_TEST_F(AssetLoaderBasicTest, SidecarDiscoveryUsesCapturedLayerView)

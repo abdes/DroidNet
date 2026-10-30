@@ -126,6 +126,14 @@ namespace mount_codes {
                    "external source: only a Source mount supplies one; it "
                    "contributes no assets",
       };
+  inline constexpr auto kLibraryDependencyMissing = MountCode<std::string_view,
+    std::string_view, std::string_view, std::string_view> {
+    .id = "mount.library_dependency_missing",
+    .severity = ImportSeverity::kWarning,
+    .message = "library mount '{}' ('{}') requires {} of library '{}', which "
+               "no library mounted below it provides; it contributes no "
+               "assets",
+  };
   inline constexpr auto kParentIgnored = MountCode<std::string_view> {
     .id = "mount.parent_ignored",
     .severity = ImportSeverity::kWarning,

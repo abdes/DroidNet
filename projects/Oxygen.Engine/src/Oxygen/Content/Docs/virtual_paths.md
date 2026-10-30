@@ -11,7 +11,7 @@ the cooker accepts, the editor accepts.
 ## Why these rules
 
 The pak identifies assets by key only; paths appear in string tables (the loose
-index and the optional pak browse index) with `uint32` lengths. Nothing in a
+index and the pak browse index) with `uint32` lengths. Nothing in a
 format limits the length of a path, the number of segments or their characters.
 The limits come from the loose cooked tree, where every segment becomes a file
 or folder name: a segment must be a valid file name on every platform that holds

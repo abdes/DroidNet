@@ -149,7 +149,6 @@ NOLINT_TEST_F(PakToolRequestPreparationTest,
   options.build.manifest_output = TempDir() / "release" / "game.manifest.json";
   options.output.diagnostics_file = TempDir() / "release" / "game.report.json";
   options.request.deterministic = false;
-  options.request.embed_browse_index = true;
   options.request.compute_crc32 = false;
   options.request.fail_on_warnings = true;
 
@@ -172,7 +171,6 @@ NOLINT_TEST_F(PakToolRequestPreparationTest,
     prepared->publication_plan.manifest->staged_path);
   EXPECT_TRUE(prepared->build_request.options.emit_manifest_in_full);
   EXPECT_FALSE(prepared->build_request.options.deterministic);
-  EXPECT_TRUE(prepared->build_request.options.embed_browse_index);
   EXPECT_FALSE(prepared->build_request.options.compute_crc32);
   EXPECT_TRUE(prepared->build_request.options.fail_on_warnings);
   EXPECT_TRUE(
@@ -395,7 +393,10 @@ NOLINT_TEST_F(
   // Assert
   ASSERT_HAS_VALUE(prepared)
     << prepared.error().error_code << ": " << prepared.error().error_message;
-  EXPECT_TRUE(prepared->build_request.lower_layer_texture_keys.contains(
+  ASSERT_EQ(prepared->build_request.dependencies.size(), 1U);
+  const auto& dependency = prepared->build_request.dependencies.front();
+  EXPECT_EQ(dependency.catalog.library, "Engine");
+  EXPECT_TRUE(dependency.texture_keys.contains(
     oxygen::data::TextureKeyFromVirtualPath(kGrid)));
 }
 

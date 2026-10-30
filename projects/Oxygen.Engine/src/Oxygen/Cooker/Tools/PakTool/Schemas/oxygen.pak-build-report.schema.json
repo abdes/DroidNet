@@ -10,7 +10,7 @@
     },
     "schema_version": {
       "type": "integer",
-      "const": 3
+      "const": 4
     },
     "tool_name": {
       "type": "string",
@@ -128,9 +128,6 @@
         "deterministic": {
           "type": "boolean"
         },
-        "embed_browse_index": {
-          "type": "boolean"
-        },
         "compute_crc32": {
           "type": "boolean"
         },
@@ -143,7 +140,6 @@
       },
       "required": [
         "deterministic",
-        "embed_browse_index",
         "compute_crc32",
         "fail_on_warnings",
         "emit_manifest_in_full"

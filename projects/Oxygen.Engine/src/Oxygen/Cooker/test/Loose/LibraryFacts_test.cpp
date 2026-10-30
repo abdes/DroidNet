@@ -16,9 +16,12 @@
 #include <Oxygen/Cooker/Loose/LibraryFacts.h>
 #include <Oxygen/Cooker/test/Support/MemoryFileSystem.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -34,6 +37,9 @@ using oxygen::cooker::test::MemoryFileSystem;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 using oxygen::data::CookedOpenFailure;
+using oxygen::data::KeyReferenceKind;
+using oxygen::data::PakRequirement;
+using oxygen::data::TextureKeyFromVirtualPath;
 using oxygen::data::pak::scripting::ScriptAssetDesc;
 
 //! Libraries built by the loose cooked and pak test writers into memory,
@@ -86,12 +92,15 @@ protected:
   MemoryFileSystem files_;
 };
 
-//! A loose root's roots are the mounts of its virtual paths.
+//! A loose root's roots are the mounts of its virtual paths; it provides its
+//! assets and textures and requires nothing.
 NOLINT_TEST_F(LibraryFactsTest, LooseRootStatesItsRoots)
 {
   auto writer = LooseCookedTestWriter {};
   AddMaterials(writer,
     { "/Props/Materials/Red.omat", "/Props/Crate.omat", "/Vehicles/Car.omat" });
+  writer.WriteFile(oxygen::data::loose_cooked::FileKind::kTextureDescriptor,
+    "Props/Wood.otex", std::vector<std::byte>(8), "/Props/Wood.otex");
 
   const auto facts = ReadLoose(writer);
 
@@ -99,6 +108,12 @@ NOLINT_TEST_F(LibraryFactsTest, LooseRootStatesItsRoots)
   EXPECT_FALSE(facts.unreadable.has_value());
   EXPECT_EQ(facts.roots, (std::vector<std::string> { "Props", "Vehicles" }));
   EXPECT_TRUE(facts.external_scripts.empty());
+  EXPECT_EQ(facts.assets.size(), 3U);
+  EXPECT_EQ(facts.assets.at(AssetKey::FromVirtualPath("/Props/Crate.omat")),
+    AssetType::kMaterial);
+  EXPECT_THAT(facts.textures,
+    ::testing::ElementsAre(TextureKeyFromVirtualPath("/Props/Wood.otex")));
+  EXPECT_TRUE(facts.requirements.empty());
 }
 
 //! Only a script whose descriptor names an external source is reported.
@@ -157,15 +172,63 @@ NOLINT_TEST_F(LibraryFactsTest, TruncatedIndexIsCorrupt)
   EXPECT_EQ(facts.unreadable->Failure(), CookedOpenFailure::kCorrupt);
 }
 
-//! A current pak reads; it states no root before its catalog names one.
-NOLINT_TEST_F(LibraryFactsTest, PakReads)
+//! A pak states its library as its one root, the assets its catalog lists,
+//! what it deletes and what it requires of other libraries.
+NOLINT_TEST_F(LibraryFactsTest, PakStatesItsCatalog)
 {
-  const auto facts = ReadPak(PakTestWriter::Encode(PakTestWriter::Config {}));
+  const auto chair = AssetKey::FromVirtualPath("/Props/Chair.ogeo");
+  const auto removed = AssetKey::FromVirtualPath("/Props/Old.ogeo");
+  const auto requirement = PakRequirement {
+    .kind = KeyReferenceKind::kAsset,
+    .key = AssetKey::FromVirtualPath("/Engine/Default.omat"),
+    .type = AssetType::kMaterial,
+  };
+  auto config = PakTestWriter::Config {};
+  config.library = "Props";
+  config.assets = {
+    {
+      .key = chair,
+      .type = AssetType::kGeometry,
+      .virtual_path = "/Props/Chair.ogeo",
+    },
+  };
+  config.deleted = { removed };
+  config.dependencies = {
+    {
+      .library = "Engine",
+      .requirements = { requirement },
+    },
+  };
+
+  const auto facts = ReadPak(PakTestWriter::Encode(config));
 
   EXPECT_EQ(facts.kind, LibraryKind::kPak);
   EXPECT_FALSE(facts.unreadable.has_value());
-  EXPECT_TRUE(facts.roots.empty());
+  EXPECT_THAT(facts.roots, ::testing::ElementsAre("Props"));
   EXPECT_TRUE(facts.external_scripts.empty());
+  EXPECT_THAT(facts.assets,
+    ::testing::ElementsAre(::testing::Pair(chair, AssetType::kGeometry)));
+  EXPECT_THAT(facts.deleted, ::testing::ElementsAre(removed));
+  ASSERT_EQ(facts.requirements.size(), 1U);
+  EXPECT_EQ(facts.requirements.front().library, "Engine");
+  EXPECT_THAT(facts.requirements.front().requirements,
+    ::testing::ElementsAre(requirement));
+}
+
+//! A pak whose browse index is gone is corrupt: every pak holds one.
+NOLINT_TEST_F(LibraryFactsTest, PakWithoutBrowseIndexIsCorrupt)
+{
+  auto bytes = PakTestWriter::Encode(PakTestWriter::Config {});
+  auto footer = oxygen::data::pak::core::PakFooter {};
+  const auto tail = std::span(bytes).last(sizeof(footer));
+  std::memcpy(&footer, tail.data(), sizeof(footer));
+  footer.browse_index_size = 0U;
+  std::memcpy(tail.data(), &footer, sizeof(footer));
+
+  const auto facts = ReadPak(bytes);
+
+  ASSERT_HAS_VALUE(facts.unreadable);
+  EXPECT_EQ(facts.unreadable->Failure(), CookedOpenFailure::kCorrupt);
 }
 
 //! A pak of another format version is refused as unsupported.

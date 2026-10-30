@@ -112,7 +112,7 @@ auto DataBytes(const std::vector<uint8_t>& seeds) -> std::vector<std::byte>
 {
   auto bytes = std::vector<std::byte> {};
   for (const auto seed : seeds) {
-    const auto row = MakePatternBytes(seed, kResourceBytes);
+    const auto row = MakePatternBytes(std::byte { seed }, kResourceBytes);
     bytes.insert(bytes.end(), row.begin(), row.end());
   }
   return bytes;
@@ -217,7 +217,7 @@ auto Material(const uint8_t seed, const std::string& name,
 auto Geometry(const uint8_t seed, const std::string& name,
   const uint32_t buffer) -> AssetSpec
 {
-  auto bytes = MakePatternBytes(seed, 64U);
+  auto bytes = MakePatternBytes(std::byte { seed }, 64U);
   return AssetSpec {
     .key = MakeAssetKey(seed),
     .asset_type = data::AssetType::kGeometry,
@@ -326,8 +326,8 @@ NOLINT_TEST_F(
       .assets = {},
     },
     0x11U);
-  const auto request = paktest::MakeFullRequest(
-    output, { .sources = { LooseSource(root) }, .embed_browse_index = true });
+  const auto request
+    = paktest::MakeFullRequest(output, { .sources = { LooseSource(root) } });
 
   // Act
   const auto planned = pak::PakPlanBuilder {}.Build(request);
@@ -364,8 +364,8 @@ NOLINT_TEST_F(PakCompactionTest, TextureRecookedUnderANewNameDropsTheOldEntry)
       .assets = {},
     },
     0x12U);
-  const auto request = paktest::MakeFullRequest(
-    output, { .sources = { LooseSource(root) }, .embed_browse_index = true });
+  const auto request
+    = paktest::MakeFullRequest(output, { .sources = { LooseSource(root) } });
 
   // Act
   const auto planned = pak::PakPlanBuilder {}.Build(request);
@@ -468,7 +468,7 @@ NOLINT_TEST_F(
       .sources = { LooseSource(recooked_root) },
       .source_key = paktest::MakeSourceKey(0x7EU),
     });
-  request.lower_layer_texture_keys
+  request.base_texture_keys
     = { data::TextureKeyFromVirtualPath("/Content/Textures/Sky.otex") };
 
   // Act

@@ -141,6 +141,8 @@ m_gtest_program(
   SourceRegistry
   SOURCES
     "ContentSourceRegistry_test.cpp"
+    "ContentSourceRegistry_requirements_test.cpp"
+    "Fixtures/FakeContentSource.h"
     "AssetLoader_test_fixture.cpp"
     "AssetLoader_test.h"
     "Fixtures/LooseCookedTestWriter.h"
@@ -151,4 +153,6 @@ target_sources(
   PRIVATE
     "../Internal/ContentSourceRegistry.cpp"
     "../Internal/ContentSourceRegistry.h"
+    "../Internal/IContentSource.cpp"
+    "../Internal/PatchResolutionPolicy.cpp"
 )

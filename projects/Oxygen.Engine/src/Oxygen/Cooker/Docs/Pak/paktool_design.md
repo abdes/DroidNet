@@ -55,7 +55,9 @@ Current request/result contracts:
   - `content_version`
   - `source_key`
   - `base_catalogs` (patch baseline)
-  - `dependency_catalogs` (paks the output references without containing)
+  - `base_texture_keys` (textures the patch baseline holds)
+  - `dependencies` (paks the output references without containing: each
+    catalog with the texture keys of its browse index)
   - `PakBuildOptions`
 - `PakBuildResult` already exposes:
   - `output_catalog`
@@ -324,7 +326,6 @@ CLI option design rule:
   canonical lowercase UUIDv7 text and is persisted in canonical lowercase UUIDv7
   format.
 - `--non-deterministic` Sets `PakBuildOptions::deterministic = false`.
-- `--embed-browse-index` Sets `PakBuildOptions::embed_browse_index = true`.
 - `--no-crc32`
 - `--fail-on-warnings`
 - `--quiet`
@@ -610,8 +611,10 @@ artifact publication.
 - `content-version` -> `content_version`
 - `source-key` -> `source_key`
 - build flags -> `PakBuildOptions`
-- catalogs read from base PAKs (patch only) -> `base_catalogs`
-- catalogs read from dependency PAKs (both commands) -> `dependency_catalogs`
+- catalogs and browse index textures read from base PAKs (patch only) ->
+  `base_catalogs`, `base_texture_keys`
+- catalogs and browse index textures read from dependency PAKs (both commands)
+  -> `dependencies`
 
 ### 11.2 Result Handling
 
@@ -760,8 +763,9 @@ Stable key references need no relocation. Keyed physics references participate
 in resource closure/digests through the resource table's existing key inventory.
 External texture bindings name a texture key: a texture a source of the build
 holds joins the asset's closure and digest; otherwise a base or dependency pak
-must hold it (PakTool collects their texture keys from their browse indexes), or
-planning reports `pak.plan.texture_reference_missing`. Logical references appear
+must hold it (PakTool collects their texture keys from their browse indexes), a
+dependency's texture becomes a requirement of its library, or planning reports
+`pak.plan.texture_reference_missing`. Logical references appear
 in inspection but do not force inclusion or ownership. The source's typed
 validation establishes descriptor/inventory agreement before publication;
 packaging performs generic graph/table checks rather than introducing another
@@ -782,8 +786,9 @@ field position remain unchanged. The catalog follows directory/browse metadata
 and precedes the footer. Missing catalogs require recooking, with no legacy
 path.
 
-`Data::PakCatalog` owns physical entries, deletions and ordered base records
-`{SourceKey, content_version, catalog_digest}`. Its native codec and external
+`Data::PakCatalog` owns the pak's library, physical entries, deletions,
+ordered base records `{SourceKey, content_version, catalog_digest}` and
+dependency records `{library, requirements}`. Its native codec and external
 JSON represent the same object. Readers validate the catalog digest, PAK
 identity, entry/directory agreement and non-overlapping bounded storage before
 mounting; this metadata check does not hash every resource payload. Packaging
@@ -809,15 +814,26 @@ payloads remain container-local: a changed descriptor may bring unchanged
 payloads it needs. This is asset-level patching, not binary-delta compression.
 
 Dependencies are a separate contract from patch bases. A dependency pak provides
-assets the output references without containing them: game content references
-the engine content pak's basic shapes and default material. The planner resolves
-asset references into dependencies (the referenced asset's type is checked,
-nothing is copied), and the catalog and manifest record each dependency's
-identity, content version and catalog digest. At mount time each dependency must
-already be mounted below the pak, in declared order, with that exact identity;
-unlike bases, other layers may sit between, so Engine → Mod → Game accepts Game
-built against Engine. A full build takes dependencies and no bases; a patch may
-take both.
+assets and textures the output references without containing them: game content
+references the engine content pak's basic shapes and default material. The
+planner resolves references into dependencies, the newest first (the referenced
+asset's type is checked, nothing is copied), and records each one as a
+requirement of the dependency's library: `{kind, key, type}`, an asset with its
+type or a texture with none. Logical and keyed physics references never leave
+the pak. The catalog and manifest record the requirements by library, never the
+dependency pak's identity, so a rebuilt library that still provides them
+satisfies the pak. At mount time each requirement must resolve over the layers
+below the pak, loose roots included, to an entry of the required type under
+the required library, with deletions terminal; unlike bases, other layers may
+sit between, so Engine → Mod → Game accepts Game built against Engine. A full
+build takes dependencies and no bases; a patch may take both.
+
+Every pak is one library: the planner names it from the root of every virtual
+path the pak lists (`pak.plan.root_multiple` for several,
+`pak.plan.root_missing` for none), a patch from its base's library too, and
+refuses a dependency of the same library (`pak.plan.dependency_library_conflict`)
+or two dependencies of one library (`pak.plan.dependency_library_repeated`).
+Every pak embeds its browse index.
 
 This policy follows
 [UE5.7 patch priority](https://dev.epicgames.com/documentation/en-us/unreal-engine/how-to-create-a-patch-in-unreal-engine?application_version=5.7)

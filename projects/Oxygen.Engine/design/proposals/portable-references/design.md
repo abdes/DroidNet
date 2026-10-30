@@ -223,9 +223,9 @@ The pak catalog format goes to version 4:
 | `entries`      | Unchanged                                       | Unchanged                                                        |
 
 A requirement's `kind` is the `KeyReferenceKind` the planner resolved: an
-asset (`AssetKey` and `AssetType`), a texture (texture key) or a physics
-resource (resource key and type). Logical references are internal to a pak
-and are not requirements.
+asset (`AssetKey` and `AssetType`) or a texture (texture key). Logical and
+keyed physics references are internal to a pak (the planner resolves a physics
+resource only in the pak's own sources) and are not requirements.
 
 Every pak embeds its browse index; PakTool's `--embed-browse-index` option is
 deleted and the browse index is always written. The `library` name is checked
@@ -287,7 +287,7 @@ The `record` field is removed.
 | `VirtualPath.h/.cpp`                | `ResolveReference`, `RelativeReference`, the two errors and their `to_string`                                                                                                       |
 | `VirtualPathCases.json`             | `references` table; `TableCoversEveryRefusalCode` includes it                                                                                                                       |
 | `Docs/virtual_paths.md`             | References section; the dot rule is stated for canonical paths only                                                                                                                 |
-| `IContentSource`                    | `FindVirtualPath(key)` and `GetLibrary()`; pak from the catalog, loose from the index                                                                                               |
+| `IContentSource`                    | `FindTextureVirtualPath(key)`; an asset's library is the root of `ResolveVirtualPath(key)`, a pak's from its browse index                                                           |
 | `ContentSourceRegistry`             | Requirement check in `ValidateMount`; `lower_layers` identity list kept only for bases                                                                                              |
 | `PakFile`                           | Typed open failure (`data::CookedOpenError`, `CookedOpenFailure::{kWrongFormat, kUnsupportedVersion, kCorrupt}`) instead of `std::runtime_error` text; `CheckHeader`, `CheckFooter` |
 | `LooseCookedIndex`                  | Typed open failure with the same reasons; `LoadFromBytes`                                                                                                                           |
@@ -298,7 +298,8 @@ The `record` field is removed.
 
 `PakCatalog` keeps `PakCatalogBase` for `bases` and gains
 `PakCatalogDependency { std::string library; std::vector<PakRequirement> }`
-with `PakRequirement { KeyReferenceKind kind; uint128 key; uint16 type }`.
+with `PakRequirement { KeyReferenceKind kind; AssetKey key; AssetType type }`,
+encoded as an 8-bit kind, the key and an 8-bit type (`kUnknown` for a texture).
 Records are variable length; `EncodeContents` and `Decode` write and read them;
 `ValidateStructure` checks that a library appears once and is not the pak's
 own. `kPakCatalogVersion` becomes 4. `PatchCompatibilityEnvelope` keeps
@@ -729,8 +730,8 @@ window.
   the engine receives generation folders, as it does today.
 - **Every pak has a browse index and names its library.** A requirement needs
   the providing asset's root, and an optional index made that fact optional.
-- **Requirements cover assets, textures and physics resources.** The planner
-  already resolves all three across layers; recording only assets would leave
+- **Requirements cover assets and textures.** The planner resolves both
+  across layers; recording only assets would leave
   a removed library texture unchecked.
 - **PakTool keeps one dependency input.** The editor names loose libraries
   before PakTool runs; PakTool cannot see them and needs no new option.

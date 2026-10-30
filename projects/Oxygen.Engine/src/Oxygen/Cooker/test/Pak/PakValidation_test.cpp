@@ -9,20 +9,19 @@
 #include <cstdint>
 #include <filesystem>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "PakTestSupport.h"
+#include "PakWriterTestSupport.h"
 
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
-#include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakPlanPolicy.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
-#include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -30,10 +29,9 @@ namespace {
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
 namespace paktest = oxygen::content::pak::test;
-namespace render = oxygen::data::pak::render;
 
 constexpr auto kContentVersion = uint16_t { 23U };
-constexpr auto kSourceKeySeed = uint8_t { 0x7CU };
+constexpr auto kFooterOffset = uint64_t { 512U };
 constexpr auto kRegionBaseOffset = uint64_t { 256U };
 constexpr auto kRegionSize = uint64_t { 64U };
 constexpr auto kOverlapOffset = uint64_t { 288U };
@@ -74,19 +72,30 @@ protected:
       = paktest::MakeFullRequest(std::filesystem::path("domain_validation.pak"),
         {
           .content_version = kContentVersion,
-          .source_key = paktest::MakeSourceKey(kSourceKeySeed),
+          .source_key = paktest::CanonicalSourceKey(),
         });
 
-    const auto build_result = pak::PakPlanBuilder {}.Build(request);
-    EXPECT_FALSE(paktest::HasError(build_result.diagnostics));
-    if (!build_result.plan.has_value()) {
-      throw std::runtime_error("baseline pak plan build failed: "
-        + oxygen::cooker::test::DiagnosticSummary(build_result.diagnostics));
-    }
+    // An empty pak of library `Tests`: a catalog between the regions and the
+    // browse index, which sits right before the footer.
+    auto data = paktest::MakeCanonicalPlan({
+      .content_version = kContentVersion,
+      .footer_offset = kFooterOffset,
+    });
+    auto catalog = data::PakCatalog {
+      .source_key = data.header.source_key,
+      .content_version = kContentVersion,
+      .catalog_digest = {},
+      .library = "Tests",
+    };
+    catalog.catalog_digest = catalog.ComputeDigest().value();
+    data.catalog = {
+      .offset = kRegionBaseOffset,
+      .bytes = catalog.Encode().value(),
+    };
 
     return BaselinePlanInput {
       .request = std::move(request),
-      .plan = *build_result.plan,
+      .plan = pak::PakPlan(std::move(data)),
     };
   }
 };

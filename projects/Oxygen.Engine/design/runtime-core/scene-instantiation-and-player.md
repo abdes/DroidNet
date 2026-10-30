@@ -174,6 +174,11 @@ launch file for a cooked example scene and runs the player with it.
 - A scene without an active camera, or a scene that fails to load, shows a
   message in the window and reports a lifecycle failure; the process stays up so
   the user can read it.
+- A pak whose requirements the roots and paks mounted below it do not meet
+  ([patch admission](../../src/Oxygen/Content/Docs/patch_resolution_contract.md#compatibility-validation))
+  is refused the same way, at launch or at a Play's remount: `scene_failed`
+  with code `player.launch.dependency_missing` and a message naming the pak and
+  each failed requirement. A refused launch begins no session.
 - Input reaches the scene's mapping contexts. Closing the window, `ngin.quit`,
   or `oxygen.app.request_stop()` ends the process. The toolbar's Stop and
   `ngin.session.end` end only the play session

@@ -46,7 +46,7 @@ namespace physics = oxygen::data::pak::physics;
 namespace script = oxygen::data::pak::scripting;
 namespace serio = oxygen::serio;
 
-constexpr auto kZeroWriteChunkSize = size_t { 64U * 1024U };
+constexpr auto kZeroWriteChunkSize = size_t { 64U } * 1024U;
 constexpr auto kCrcFieldSize = uint64_t { sizeof(uint32_t) };
 
 struct WriterState final {
@@ -101,6 +101,11 @@ auto WriteRawBytes(WriterState& state, const std::span<const std::byte> bytes,
 {
   if (bytes.empty()) {
     return true;
+  }
+  if (!state.stream.has_value()) {
+    AddDiagnostic(state, pak::PakDiagnosticSeverity::kError, write_code,
+      write_error, resource_kind, table_name, asset_key, state.cursor);
+    return false;
   }
 
   const auto write_result = state.stream->Write(bytes);
@@ -164,27 +169,31 @@ auto MoveCursorToOffset(WriterState& state, const uint64_t expected_offset,
   return false;
 }
 
-auto SeekAndWriteCrc32(WriterState& state, const uint64_t crc_field_offset,
-  const uint32_t crc32_value) -> bool
+//! The CRC32 of a written pak and the offset of the footer field it goes in.
+struct CrcPatch final {
+  uint64_t field_offset = 0;
+  uint32_t value = 0;
+};
+
+auto SeekAndWriteCrc32(WriterState& state, const CrcPatch& crc) -> bool
 {
-  const auto seek_result
-    = state.stream->Seek(static_cast<size_t>(crc_field_offset));
-  if (!seek_result) {
+  if (!state.stream.has_value()
+    || !state.stream->Seek(static_cast<size_t>(crc.field_offset))) {
     AddDiagnostic(state, pak::PakDiagnosticSeverity::kError,
       "pak.write.stream_seek_failed",
       "Failed to seek CRC32 field offset for patch write.", {}, {},
-      std::nullopt, crc_field_offset);
+      std::nullopt, crc.field_offset);
     return false;
   }
 
   auto writer = serio::Writer(*state.stream);
   auto packing = writer.ScopedAlignment(1);
   (void)packing;
-  const auto write_result = writer.Write(crc32_value);
+  const auto write_result = writer.Write(crc.value);
   if (!write_result) {
     AddDiagnostic(state, pak::PakDiagnosticSeverity::kError,
       "pak.write.crc_patch_failed", "Failed to patch footer pak_crc32 field.",
-      {}, {}, std::nullopt, crc_field_offset);
+      {}, {}, std::nullopt, crc.field_offset);
     return false;
   }
 
@@ -219,7 +228,7 @@ auto FindTable(const std::span<const pak::PakTablePlan> tables,
 
 template <typename T> auto NarrowTo(const uint64_t value) -> std::optional<T>
 {
-  if (value > static_cast<uint64_t>((std::numeric_limits<T>::max)())) {
+  if (value > static_cast<uint64_t>(std::numeric_limits<T>::max())) {
     return std::nullopt;
   }
   return static_cast<T>(value);
@@ -250,7 +259,7 @@ auto FindResourceIndicesByKind(
   if (it == by_kind.end()) {
     return {};
   }
-  return std::span<const size_t>(it->second.data(), it->second.size());
+  return it->second;
 }
 
 template <typename Record>
@@ -276,12 +285,12 @@ auto BuildPatchedResourceTablePayload(const uint32_t entry_count,
   const std::span<const size_t> resource_indices,
   const std::span<const pak::PakResourcePlacementPlan> resources,
   const std::span<const pak::PakPayloadSourceSlicePlan> descriptor_sources,
-  PatchFn&& patch_record, std::vector<std::byte>& payload) -> bool
+  const PatchFn& patch_record, std::vector<std::byte>& payload) -> bool
 {
   const auto entry_count64 = static_cast<uint64_t>(entry_count);
   const auto payload_size64 = entry_count64 * sizeof(Record);
   if (payload_size64
-    > static_cast<uint64_t>((std::numeric_limits<size_t>::max)())) {
+    > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
     payload.clear();
     return false;
   }
@@ -308,7 +317,9 @@ auto BuildPatchedResourceTablePayload(const uint32_t entry_count,
       return false;
     }
 
-    std::memcpy(payload.data() + (static_cast<size_t>(index) * sizeof(Record)),
+    std::memcpy(std::span(payload)
+                  .subspan(static_cast<size_t>(index) * sizeof(Record))
+                  .data(),
       std::addressof(record), sizeof(Record));
     ++resource_cursor;
   }
@@ -377,8 +388,8 @@ auto BuildFooter(WriterState& state) -> std::optional<core::PakFooter>
   }
 
   const auto& browse = state.plan->BrowseIndex();
-  footer.browse_index_offset = browse.enabled ? browse.offset : 0;
-  footer.browse_index_size = browse.enabled ? browse.size_bytes : 0;
+  footer.browse_index_offset = browse.offset;
+  footer.browse_index_size = browse.size_bytes;
   footer.catalog_offset = state.plan->Catalog().offset;
   footer.catalog_size = state.plan->Catalog().bytes.size();
   footer.pak_crc32 = 0;
@@ -446,8 +457,11 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
   }
 
   try {
-    state.stream.emplace(request.output_pak_path,
-      std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+    // The stream adds binary; the footer CRC is patched back, so the pak is
+    // opened for reading and writing.
+    // NOLINTNEXTLINE(*-signed-bitwise) - std::ios openmode bitmask
+    constexpr auto kMode = std::ios::in | std::ios::out | std::ios::trunc;
+    state.stream.emplace(request.output_pak_path, kMode);
   } catch (const std::exception& ex) {
     AddDiagnostic(state, PakDiagnosticSeverity::kError,
       "pak.write.stream_open_failed",
@@ -490,7 +504,7 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
 
       uint64_t region_end = 0;
       if (region.size_bytes
-        > (std::numeric_limits<uint64_t>::max)() - region.offset) {
+        > std::numeric_limits<uint64_t>::max() - region.offset) {
         AddDiagnostic(state, PakDiagnosticSeverity::kError,
           "pak.write.region_size_overflow",
           "Resource region offset + size overflowed uint64.",
@@ -769,7 +783,7 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
       state, "pak.write.phase_end", "Asset directory write complete.");
   }
 
-  if (!HasWriterErrors(state) && plan.BrowseIndex().enabled) {
+  if (!HasWriterErrors(state)) {
     EmitPhaseMarker(
       state, "pak.write.phase_begin", "Write browse index payload.");
     const auto& browse = plan.BrowseIndex();
@@ -832,14 +846,13 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
     EmitPhaseMarker(state, "pak.write.phase_end", "PakFooter write complete.");
   }
 
-  if (!HasWriterErrors(state)) {
-    if (!MoveCursorToOffset(
-          state, plan.PlannedFileSize(), "planned_file_size")) {
-      AddDiagnostic(state, PakDiagnosticSeverity::kError,
-        "pak.write.final_size_mismatch",
-        "Failed to match planned file size after write phases.",
-        "planned_file_size", {}, std::nullopt, plan.PlannedFileSize());
-    }
+  if (!HasWriterErrors(state)
+    && !MoveCursorToOffset(
+      state, plan.PlannedFileSize(), "planned_file_size")) {
+    AddDiagnostic(state, PakDiagnosticSeverity::kError,
+      "pak.write.final_size_mismatch",
+      "Failed to match planned file size after write phases.",
+      "planned_file_size", {}, std::nullopt, plan.PlannedFileSize());
   }
 
   if (!HasWriterErrors(state)) {
@@ -858,9 +871,12 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
         "footer", std::nullopt, plan.Footer().crc32_field_absolute_offset);
     } else {
       state.output.pak_crc32 = state.crc.Finalize();
-      if (SeekAndWriteCrc32(state, plan.Footer().crc32_field_absolute_offset,
-            state.output.pak_crc32)) {
-        const auto flush_result = state.stream->Flush();
+      if (SeekAndWriteCrc32(state,
+            {
+              .field_offset = plan.Footer().crc32_field_absolute_offset,
+              .value = state.output.pak_crc32,
+            })) {
+        const auto flush_result = state.stream.value().Flush();
         if (!flush_result) {
           AddDiagnostic(state, PakDiagnosticSeverity::kError,
             "pak.write.stream_flush_failed",
