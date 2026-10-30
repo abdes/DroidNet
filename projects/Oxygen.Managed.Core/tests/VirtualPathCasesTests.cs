@@ -18,7 +18,7 @@ namespace Oxygen.Managed.Core.Tests;
 [TestCategory(nameof(VirtualPath))]
 public sealed class VirtualPathCasesTests
 {
-    private static readonly string[] RefusalSections = ["segments", "mounts", "paths"];
+    private static readonly string[] RefusalSections = ["segments", "mounts", "paths", "references"];
 
     private static readonly Lazy<JsonObject> Cases = new(static () =>
         JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "VirtualPathCases.json")))!.AsObject());
@@ -59,12 +59,34 @@ public sealed class VirtualPathCasesTests
         foreach (var entry in Entries("paths"))
         {
             var path = entry["path"]!.GetValue<string>();
-            var rules = string.Equals(entry["rules"]!.GetValue<string>(), "authored", StringComparison.Ordinal) ? VirtualPathRuleSet.Authored : VirtualPathRuleSet.Cooked;
+            var rules = Rules(entry);
 
             var actual = VirtualPath.Validate(path, rules);
 
             _ = Code(actual).Should().Be(Refusal(entry), entry.ToJsonString());
             _ = VirtualPath.IsCanonical(path, rules).Should().Be(Refusal(entry) is null, entry.ToJsonString());
+        }
+    }
+
+    [TestMethod]
+    public void References_FollowTheCaseTable()
+    {
+        foreach (var entry in Entries("references"))
+        {
+            var anchor = AssetPath.Parse(entry["anchor"]!.GetValue<string>());
+            var rules = Rules(entry);
+
+            var resolves = AssetPath.TryResolveReference(anchor, entry["text"]!.GetValue<string>(), rules, out var path, out var error);
+
+            _ = Code(error).Should().Be(Refusal(entry), entry.ToJsonString());
+            if (resolves)
+            {
+                var spelled = entry["spelled"]!.GetValue<string>();
+                _ = path!.VirtualPath.Should().Be(entry["resolved"]!.GetValue<string>(), entry.ToJsonString());
+                _ = path.ToReference(anchor).Should().Be(spelled, entry.ToJsonString());
+                _ = AssetPath.TryResolveReference(anchor, spelled, rules, out var respelled, out _).Should().BeTrue(entry.ToJsonString());
+                _ = respelled.Should().Be(path, entry.ToJsonString());
+            }
         }
     }
 
@@ -101,6 +123,9 @@ public sealed class VirtualPathCasesTests
 
     private static IEnumerable<JsonObject> Entries(string section)
         => Cases.Value[section]!.AsArray().Select(static node => node!.AsObject());
+
+    private static VirtualPathRuleSet Rules(JsonObject entry)
+        => string.Equals(entry["rules"]!.GetValue<string>(), "authored", StringComparison.Ordinal) ? VirtualPathRuleSet.Authored : VirtualPathRuleSet.Cooked;
 
     private static string? Refusal(JsonObject entry) => entry["refusal"]?.GetValue<string>();
 

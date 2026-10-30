@@ -55,8 +55,8 @@ anchors at its own identity, which the import request carries (see
 [import jobs](#import-jobs)).
 
 **Resolution** joins the anchor folder and the text, applies the `..`
-segments, and validates the result as a canonical authored path. It fails
-with:
+segments, and validates the result as a canonical path: an authored path for
+an asset reference, a cooked path for a file reference. It fails with:
 
 | Code                            | When                                                                 |
 | ------------------------------- | -------------------------------------------------------------------- |
@@ -80,12 +80,12 @@ deleted: one refusal, one code.
 
 | Contract        | Engine                                                               | Editor                                                            |
 | --------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Resolve, spell  | `content::ResolveReference`, `content::RelativeReference`            | `AssetPath.ResolveReference`, `AssetPath.ToReference`             |
+| Resolve, spell  | `content::ResolveReference`, `content::RelativeReference`            | `AssetPath.TryResolveReference`, `AssetPath.ToReference`          |
 | Codes           | `VirtualPathError::kReferenceOutsideMount`, `kReferenceSelfAbsolute` | `VirtualPathError.ReferenceOutsideMount`, `ReferenceSelfAbsolute` |
 | File references | `MountTable::LocateReference`                                        | `ProjectContext.LocateReference` (new)                            |
 | Cases           | `Content/VirtualPathCases.json`, new `references` table              | `VirtualPathCasesTests` runs the same table                       |
 
-The `references` table rows are `{anchor, text, resolved | code, spelled}`:
+The `references` table rows are `{anchor, text, rules, resolved | refusal, spelled}`:
 `spelled` is the text `RelativeReference(anchor, resolved)` gives back, so the
 table checks resolution and spelling as one round trip.
 
@@ -447,7 +447,7 @@ the scratch folder; scratch imports are records in that mount
 
 ### Oxygen.Managed.Core
 
-- `AssetPath.ResolveReference(anchor, text)` and `AssetPath.ToReference(anchor)`
+- `AssetPath.TryResolveReference(anchor, text, rules, ...)` and `ToReference(anchor)`
   over `VirtualPath.ValidateSegment` for the canonical tail; the two
   `VirtualPathError` members with codes and messages.
 - `AssetPathJsonConverter` stays the converter of absolute identities (settings,

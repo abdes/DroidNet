@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -43,6 +44,8 @@ enum class VirtualPathError : std::uint8_t {
   kMountOnly,
   kMissingExtension,
   kDerivedContent,
+  kReferenceOutsideMount,
+  kReferenceSelfAbsolute,
 };
 
 //! The stable refusal code, such as `vpath.segment.reserved_character`.
@@ -87,6 +90,41 @@ OXGN_CNTT_NDAPI auto IsCanonicalVirtualPath(std::string_view virtual_path,
 */
 OXGN_CNTT_NDAPI auto MountRootOf(std::string_view virtual_path) noexcept
   -> std::string_view;
+
+//! The virtual path a reference names, read in the file whose identity is
+//! `anchor`.
+/*!
+ Absolute text is a virtual path in another mount. Relative text is one `.` or
+ zero or more `..` segments, then one or more canonical segments, and resolves
+ against the folder that holds `anchor`: `../Textures/Brick.otex` in
+ `/Content/Materials/Wall.omat` is `/Content/Textures/Brick.otex`. The result is
+ checked against `rules`: asset references are authored paths; file references
+ use the cooked rules, which accept derived content such as `SourceMedia`.
+
+ @param anchor The identity of the referring file: a canonical virtual path.
+ @param text The reference as written.
+ @param rules The rules the resolved path is checked against.
+ @return The resolved path; or the anchor's refusal, a refusal of the text's
+   segments, `kReferenceOutsideMount` when the `..` segments climb above the
+   anchor's mount, `kReferenceSelfAbsolute` for absolute text in the anchor's
+   own mount, or the refusal of the resolved path.
+*/
+OXGN_CNTT_NDAPI auto ResolveReference(std::string_view anchor,
+  std::string_view text,
+  VirtualPathRuleSet rules = VirtualPathRuleSet::kAuthored)
+  -> std::expected<std::string, VirtualPathError>;
+
+//! The text that names `target` from the file whose identity is `anchor`.
+/*!
+ The shortest relative text when both are in one mount, such as `Brick.otex`
+ or `../Textures/Brick.otex`, and the target's virtual path otherwise.
+ `ResolveReference(anchor, RelativeReference(anchor, target))` is `target`.
+
+ @param anchor The identity of the referring file: a canonical virtual path.
+ @param target The identity the reference names: a canonical virtual path.
+*/
+OXGN_CNTT_NDAPI auto RelativeReference(
+  std::string_view anchor, std::string_view target) -> std::string;
 
 //! The NFC form of UTF-8 text, or nothing when the text is not valid UTF-8.
 OXGN_CNTT_NDAPI auto ToNfc(std::string_view text) -> std::optional<std::string>;

@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace Oxygen.Managed.Core;
 
 /// <summary>
-/// Why a virtual path, a path segment or a mount name is refused. <see cref="VirtualPathErrorExtensions.ToCode"/> gives
+/// Why a virtual path, a path segment, a mount name or a reference is refused. <see cref="VirtualPathErrorExtensions.ToCode"/> gives
 /// the stable refusal code the engine's implementation returns for the same input.
 /// </summary>
 public enum VirtualPathError
@@ -66,4 +66,10 @@ public enum VirtualPathError
 
     /// <summary>An authored path names derived content (<c>vpath.segment.derived_content</c>).</summary>
     DerivedContent,
+
+    /// <summary>A reference's <c>..</c> segments climb above its anchor's mount (<c>vpath.reference_outside_mount</c>).</summary>
+    ReferenceOutsideMount,
+
+    /// <summary>A reference is absolute text naming its anchor's own mount (<c>vpath.reference_self_absolute</c>).</summary>
+    ReferenceSelfAbsolute,
 }

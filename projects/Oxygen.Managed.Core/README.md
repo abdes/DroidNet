@@ -14,9 +14,10 @@ failure without depending on the module that owns it.
 
 - **Typed identities.** `SceneId`, `NodeId` and `ComponentId` cannot be confused
   with each other or with a bare `Guid`.
-- **Asset names.** `AssetUris` spells an asset's identity as a URI;
-  `VirtualPath` implements the engine's virtual path rules with the same refusal
-  codes, so the editor accepts exactly what the cooker accepts.
+- **Asset names.** `AssetPath` holds an asset's identity and resolves and
+  spells the references authored files hold; `VirtualPath` implements the
+  engine's virtual path rules with the same refusal codes, so the editor accepts
+  exactly what the cooker accepts.
 - **Operation results.** `OperationResult` and `DiagnosticRecord`, with the
   stable codes of every domain, are how modules report outcomes to the user.
 - **Native compatibility.** The editor verifies the installed engine SDK and its
@@ -57,7 +58,7 @@ editor build needs no engine build.
 
 | Folder               | Contents                                                                                                                                                 |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/` (root)        | The identities (`SceneId`, `NodeId`, `ComponentId`, `NodeHandle`), `AssetUris`, the virtual path rules, `ScopedObservableObject` and small shared values |
+| `src/` (root)        | The identities (`SceneId`, `NodeId`, `ComponentId`, `NodeHandle`), `AssetPath`, the virtual path rules, `ScopedObservableObject` and small shared values |
 | `src/Diagnostics/`   | `OperationResult`, `DiagnosticRecord`, their publishing and status contracts, and the diagnostic codes and operation kinds of each domain                |
 | `src/Compatibility/` | The native SDK and Interop verification: the artifact inventory, the verifier, the leases and the editor's compatibility service                         |
 | `src/Services/`      | `OxygenPathFinder`, the Oxygen project and state folders                                                                                                 |
@@ -84,14 +85,36 @@ form they had before the types existed.
 
 ## Naming assets
 
-### Asset URIs
+### Asset paths
 
-An asset is identified by its virtual path, `/<mount>/<path>.<ext>`; the editor
-spells the same identity as an asset URI, `asset:///<mount>/<path>.<ext>`.
-`AssetUris` holds the scheme, the `Engine` and `Content` mounts and the
-`Generated` folder of engine built-ins, builds those URIs, and checks that a URI
-names an asset (`IsAssetUri`, `EnsureAssetUri`). Models that hold links to
-assets, such as a scene's geometry, check the form when the link is set.
+An asset is identified by its virtual path, `/<mount>/<path>.<ext>`. `AssetPath`
+holds one whose mount and segments the rules accept: it parses and combines
+paths, adds and removes the authoring suffix of a source (`.json`), compares
+ordinally as the engine does, and spells the asset URI form
+(`asset:///<mount>/<path>.<ext>`) that `AssetPathJsonConverter` writes.
+
+### References
+
+An authored file names another asset or file by a reference: a virtual path in
+another mount, or text relative to the folder that holds the referring file.
+The grammar and its refusal codes are the engine's
+[references](../Oxygen.Engine/src/Oxygen/Content/Docs/virtual_paths.md#references)
+rules, and both implementations run the `references` table of the shared case
+table.
+
+| Member                                                    | Use                                                                                                                    |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `AssetPath.TryResolveReference(anchor, text, rules, ...)` | The path a reference names, read in the file whose identity is `anchor`; the refusal code when it names none           |
+| `target.ToReference(anchor)`                              | The text a writer stores: the shortest relative text within one mount, the virtual path across mounts                  |
+| `VirtualPathRuleSet`                                      | `Authored` for an asset reference; `Cooked` for a file reference, which may name derived content such as `SourceMedia` |
+
+```csharp
+var anchor = AssetPath.Parse("/Content/Materials/Wall.omat");
+if (AssetPath.TryResolveReference(anchor, "../Textures/Brick.otex", VirtualPathRuleSet.Authored, out var texture, out var error))
+{
+    // texture is /Content/Textures/Brick.otex, and texture.ToReference(anchor) is the text again.
+}
+```
 
 ### Virtual path rules
 

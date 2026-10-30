@@ -103,9 +103,9 @@ public sealed class AssetPathTests
     [DataRow("asset:///Content/Red%20Wood.omat", "/Content/Red Wood.omat")]
     [DataRow("asset:///Content/Red Wood.omat", "/Content/Red Wood.omat")]
     [DataRow("asset:///Content", "/Content")]
-    public void TryParseUri_AssetUri_NamesItsPath(string uri, string expected)
+    public void TryParseUri_AssetUri_NamesItsPath(string text, string expected)
     {
-        _ = AssetPath.TryParseUri(uri, out var path).Should().BeTrue();
+        _ = AssetPath.TryParseUri(text, out var path).Should().BeTrue();
         _ = path!.VirtualPath.Should().Be(expected);
     }
 
@@ -120,8 +120,8 @@ public sealed class AssetPathTests
     [DataRow("asset:///Content/A%2FB.omat")]
     [DataRow("asset:///Content/")]
     [DataRow("asset:///")]
-    public void TryParseUri_NotAnAssetUri_Fails(string? uri)
-        => _ = AssetPath.TryParseUri(uri, out _).Should().BeFalse();
+    public void TryParseUri_NotAnAssetUri_Fails(string? text)
+        => _ = AssetPath.TryParseUri(text, out _).Should().BeFalse();
 
     [TestMethod]
     public void Equality_IsOrdinal()
@@ -183,6 +183,14 @@ public sealed class AssetPathTests
     [DataRow("/Content/Input/Player.input.json", "/Content/Input/Player.input")]
     public void WithoutAuthoringSuffix_SourcePath_IsItsIdentity(string source, string identity)
         => _ = AssetPath.Parse(source).WithoutAuthoringSuffix().Should().Be(AssetPath.Parse(identity));
+
+    [TestMethod]
+    public void ToReference_MountAnchor_Throws()
+    {
+        var act = () => AssetPath.Parse("/Content/Red.omat").ToReference(AssetPath.Content);
+
+        _ = act.Should().Throw<ArgumentException>();
+    }
 
     [TestMethod]
     public void Json_StoresTheAssetUri()

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <expected>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -234,6 +235,10 @@ auto to_string(const VirtualPathError error) noexcept -> const char*
     return "vpath.leaf.missing_extension";
   case VirtualPathError::kDerivedContent:
     return "vpath.segment.derived_content";
+  case VirtualPathError::kReferenceOutsideMount:
+    return "vpath.reference_outside_mount";
+  case VirtualPathError::kReferenceSelfAbsolute:
+    return "vpath.reference_self_absolute";
   }
   return "vpath.unknown";
 }
@@ -349,6 +354,108 @@ auto IsCanonicalVirtualPath(
   const std::string_view virtual_path, const VirtualPathRuleSet rules) -> bool
 {
   return !ValidateVirtualPath(virtual_path, rules).has_value();
+}
+
+auto ResolveReference(const std::string_view anchor,
+  const std::string_view text, const VirtualPathRuleSet rules)
+  -> std::expected<std::string, VirtualPathError>
+{
+  if (const auto error = ValidateVirtualPath(anchor); error.has_value()) {
+    return std::unexpected(*error);
+  }
+  if (text.starts_with('/')) {
+    if (const auto error = ValidateVirtualPath(text, rules);
+      error.has_value()) {
+      return std::unexpected(*error);
+    }
+    if (MountRootOf(text) == MountRootOf(anchor)) {
+      return std::unexpected(VirtualPathError::kReferenceSelfAbsolute);
+    }
+    return std::string { text };
+  }
+  if (text.empty()) {
+    return std::unexpected(VirtualPathError::kEmpty);
+  }
+  if (text.back() == '/') {
+    return std::unexpected(VirtualPathError::kTrailingSlash);
+  }
+
+  // The text, as segments after a leading '/' that Split expects.
+  const auto with_root = std::string { "/" }.append(text);
+  const auto segments = Split(with_root);
+  if (std::ranges::any_of(segments, &std::string_view::empty)) {
+    return std::unexpected(VirtualPathError::kEmptySegment);
+  }
+  auto climb = std::size_t { 0 };
+  auto first = std::size_t { 0 };
+  if (segments.front() == ".") {
+    first = 1;
+  } else {
+    while (first < segments.size() && segments[first] == "..") {
+      ++first;
+    }
+    climb = first;
+  }
+  if (first == segments.size()) {
+    return std::unexpected(VirtualPathError::kDotSegment);
+  }
+  for (auto index = first; index < segments.size(); ++index) {
+    if (const auto error = ValidateVirtualPathSegment(segments[index]);
+      error.has_value()) {
+      return std::unexpected(*error);
+    }
+  }
+
+  // The anchor's folders below its mount, then the climb.
+  auto folders = Split(anchor);
+  folders.pop_back();
+  if (climb >= folders.size()) {
+    return std::unexpected(VirtualPathError::kReferenceOutsideMount);
+  }
+  folders.resize(folders.size() - climb);
+
+  auto resolved = std::string {};
+  for (const auto folder : folders) {
+    resolved.append("/").append(folder);
+  }
+  for (auto index = first; index < segments.size(); ++index) {
+    resolved.append("/").append(segments[index]);
+  }
+  if (const auto error = ValidateVirtualPath(resolved, rules);
+    error.has_value()) {
+    return std::unexpected(*error);
+  }
+  return resolved;
+}
+
+auto RelativeReference(
+  const std::string_view anchor, const std::string_view target) -> std::string
+{
+  if (MountRootOf(anchor) != MountRootOf(target)) {
+    return std::string { target };
+  }
+  // Both start with the mount; the leaf of each is not a folder.
+  const auto from = Split(anchor);
+  const auto to = Split(target);
+  const auto from_folders = from.size() - 1;
+  const auto to_folders = to.size() - 1;
+  auto shared = std::size_t { 0 };
+  while (shared < from_folders && shared < to_folders
+    && from[shared] == to[shared]) {
+    ++shared;
+  }
+
+  auto text = std::string {};
+  for (auto index = shared; index < from_folders; ++index) {
+    text.append("../");
+  }
+  for (auto index = shared; index < to.size(); ++index) {
+    text.append(to[index]);
+    if (index + 1 < to.size()) {
+      text.push_back('/');
+    }
+  }
+  return text;
 }
 
 auto ToNfc(const std::string_view text) -> std::optional<std::string>

@@ -30,6 +30,8 @@ public static class VirtualPathErrorExtensions
         VirtualPathError.MountOnly => "vpath.mount_only",
         VirtualPathError.MissingExtension => "vpath.leaf.missing_extension",
         VirtualPathError.DerivedContent => "vpath.segment.derived_content",
+        VirtualPathError.ReferenceOutsideMount => "vpath.reference_outside_mount",
+        VirtualPathError.ReferenceSelfAbsolute => "vpath.reference_self_absolute",
         _ => throw new ArgumentOutOfRangeException(nameof(error), error, message: null),
     };
 
@@ -55,6 +57,8 @@ public static class VirtualPathErrorExtensions
         VirtualPathError.DerivedContent => "Names starting with a dot, and the SourceMedia folder, are reserved for derived content.",
         VirtualPathError.NotAbsolute => "The path must start with '/'.",
         VirtualPathError.TrailingSlash => "The path must not end with '/'.",
+        VirtualPathError.ReferenceOutsideMount => "The reference climbs above the root of its mount.",
+        VirtualPathError.ReferenceSelfAbsolute => "A reference to its own mount is written relative to the file that holds it.",
         _ => throw new ArgumentOutOfRangeException(nameof(error), error, message: null),
     };
 }

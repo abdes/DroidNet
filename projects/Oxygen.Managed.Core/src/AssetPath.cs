@@ -217,6 +217,46 @@ public sealed class AssetPath : IEquatable<AssetPath>, IComparable<AssetPath>
             : throw new ArgumentException($"'{uri}' is not an '{UriScheme}' URI naming a path the rules accept.", nameof(uri));
     }
 
+    /// <summary>
+    /// Resolves a reference read in the file whose identity is <paramref name="anchor"/>. Absolute text is a virtual path
+    /// in another mount. Relative text is one <c>.</c> or zero or more <c>..</c> segments, then one or more canonical
+    /// segments, and resolves against the folder that holds the anchor: <c>../Textures/Brick.otex</c> in
+    /// <c>/Content/Materials/Wall.omat</c> is <c>/Content/Textures/Brick.otex</c>.
+    /// </summary>
+    /// <param name="anchor">The identity of the referring file.</param>
+    /// <param name="text">The reference as written.</param>
+    /// <param name="rules">
+    /// The rules the resolved path is checked against: <see cref="VirtualPathRuleSet.Authored"/> for an asset reference,
+    /// <see cref="VirtualPathRuleSet.Cooked"/> for a file reference, which may name derived content such as
+    /// <c>SourceMedia</c>.
+    /// </param>
+    /// <param name="path">The resolved path, when the reference resolves.</param>
+    /// <param name="error">
+    /// Why it does not: the anchor's refusal, a refusal of the text's segments,
+    /// <see cref="VirtualPathError.ReferenceOutsideMount"/>, <see cref="VirtualPathError.ReferenceSelfAbsolute"/>, or the
+    /// refusal of the resolved path.
+    /// </param>
+    /// <returns><see langword="true"/> when the reference resolves.</returns>
+    public static bool TryResolveReference(
+        AssetPath anchor,
+        string text,
+        VirtualPathRuleSet rules,
+        [NotNullWhen(true)] out AssetPath? path,
+        [NotNullWhen(false)] out VirtualPathError? error)
+    {
+        ArgumentNullException.ThrowIfNull(anchor);
+        ArgumentNullException.ThrowIfNull(text);
+        path = null;
+        error = Core.VirtualPath.Validate(anchor.VirtualPath);
+        if (error is not null)
+        {
+            return false;
+        }
+
+        error = Resolve(anchor, text, rules, out var resolved);
+        return error is null && TryParse(resolved, out path, out error);
+    }
+
     /// <summary>Gets the path below this one.</summary>
     /// <param name="relativePath">The path below this one, its segments separated by <c>/</c>.</param>
     /// <returns>The path.</returns>
@@ -279,6 +319,39 @@ public sealed class AssetPath : IEquatable<AssetPath>, IComparable<AssetPath>
     public AssetPath WithAuthoringSuffix()
         => this.IsMount ? throw new InvalidOperationException("A mount has no source.") : new(this.VirtualPath + AuthoringSuffix, this.MountLength);
 
+    /// <summary>
+    /// Gets the text that names this path from the file whose identity is <paramref name="anchor"/>: the shortest
+    /// relative text when both are in one mount, such as <c>Brick.otex</c> or <c>../Textures/Brick.otex</c>, and the
+    /// virtual path otherwise. <see cref="TryResolveReference"/> resolves it back to this path.
+    /// </summary>
+    /// <param name="anchor">The identity of the referring file.</param>
+    /// <returns>The reference text.</returns>
+    /// <exception cref="ArgumentException"><paramref name="anchor"/> names a mount, not a file.</exception>
+    public string ToReference(AssetPath anchor)
+    {
+        ArgumentNullException.ThrowIfNull(anchor);
+        if (anchor.IsMount)
+        {
+            throw new ArgumentException("A reference is read in a file, not in a mount.", nameof(anchor));
+        }
+
+        if (!string.Equals(this.Mount, anchor.Mount, StringComparison.Ordinal))
+        {
+            return this.VirtualPath;
+        }
+
+        // Both split to the empty text before the leading '/', the shared mount, then segments; a leaf is not a folder.
+        var from = anchor.VirtualPath.Split('/');
+        var to = this.VirtualPath.Split('/');
+        var shared = 0;
+        while (shared < from.Length - 1 && shared < to.Length - 1 && string.Equals(from[shared], to[shared], StringComparison.Ordinal))
+        {
+            shared++;
+        }
+
+        return string.Concat(Enumerable.Repeat("../", from.Length - 1 - shared)) + string.Join('/', to[shared..]);
+    }
+
     /// <summary>Gets the asset URI of this path, each segment escaped.</summary>
     /// <returns>The URI, such as <c>asset:///Content/Materials/Red%20Wood.omat</c>.</returns>
     [SuppressMessage("Design", "CA1055:URI-like return values should not be strings", Justification = "This text is the asset identity's persisted form; AssetPath owns its escaping. System.Uri has no canonical text for it: ToString() unescapes spaces and non-ASCII but not reserved characters, and OriginalString keeps the caller's spelling.")]
@@ -307,6 +380,71 @@ public sealed class AssetPath : IEquatable<AssetPath>, IComparable<AssetPath>
 
     private static int Compare(AssetPath? left, AssetPath? right)
         => left is null ? (right is null ? 0 : -1) : left.CompareTo(right);
+
+    private static VirtualPathError? Resolve(AssetPath anchor, string text, VirtualPathRuleSet rules, out string resolved)
+    {
+        resolved = text;
+        if (text.StartsWith('/'))
+        {
+            return Core.VirtualPath.Validate(text, rules)
+                ?? (text.AsSpan(1, text.IndexOf('/', 1) - 1).Equals(anchor.Mount, StringComparison.Ordinal) ? VirtualPathError.ReferenceSelfAbsolute : null);
+        }
+
+        if (text.Length == 0)
+        {
+            return VirtualPathError.Empty;
+        }
+
+        if (text[^1] == '/')
+        {
+            return VirtualPathError.TrailingSlash;
+        }
+
+        var segments = text.Split('/');
+        if (Array.Exists(segments, static segment => segment.Length == 0))
+        {
+            return VirtualPathError.EmptySegment;
+        }
+
+        var climb = 0;
+        var first = 0;
+        if (segments[0] is ".")
+        {
+            first = 1;
+        }
+        else
+        {
+            while (first < segments.Length && segments[first] is "..")
+            {
+                first++;
+            }
+
+            climb = first;
+        }
+
+        if (first == segments.Length)
+        {
+            return VirtualPathError.DotSegment;
+        }
+
+        for (var index = first; index < segments.Length; index++)
+        {
+            if (Core.VirtualPath.ValidateSegment(segments[index]) is { } error)
+            {
+                return error;
+            }
+        }
+
+        // The anchor's folders below its mount, then the climb.
+        var folders = anchor.Parent!.IsMount ? [] : anchor.Parent.RelativePath.Split('/');
+        if (climb > folders.Length)
+        {
+            return VirtualPathError.ReferenceOutsideMount;
+        }
+
+        resolved = "/" + anchor.Mount + "/" + string.Join('/', folders[..^climb].Concat(segments[first..]));
+        return Core.VirtualPath.Validate(resolved, rules);
+    }
 
     private static string[] SplitRelative(string? relativePath)
         => string.IsNullOrEmpty(relativePath) ? [] : relativePath.Replace('\\', '/').Split('/');

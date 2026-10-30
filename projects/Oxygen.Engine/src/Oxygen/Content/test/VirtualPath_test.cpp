@@ -71,9 +71,18 @@ constexpr auto kAllErrors = std::array {
   VirtualPathError::kMountOnly,
   VirtualPathError::kMissingExtension,
   VirtualPathError::kDerivedContent,
+  VirtualPathError::kReferenceOutsideMount,
+  VirtualPathError::kReferenceSelfAbsolute,
 };
 static_assert(kAllErrors.size()
-  == static_cast<std::size_t>(VirtualPathError::kDerivedContent) + 1);
+  == static_cast<std::size_t>(VirtualPathError::kReferenceSelfAbsolute) + 1);
+
+auto RulesOf(const nlohmann::json& entry) -> VirtualPathRuleSet
+{
+  return entry.at("rules").get<std::string>() == "authored"
+    ? VirtualPathRuleSet::kAuthored
+    : VirtualPathRuleSet::kCooked;
+}
 
 //! Each segment of the table gets its refusal code, or none.
 NOLINT_TEST(VirtualPathCasesTest, SegmentsFollowTheCaseTable)
@@ -107,9 +116,7 @@ NOLINT_TEST(VirtualPathCasesTest, PathsFollowTheCaseTable)
 {
   for (const auto& entry : LoadCases().at("paths")) {
     const auto path = entry.at("path").get<std::string>();
-    const auto rules = entry.at("rules").get<std::string>() == "authored"
-      ? VirtualPathRuleSet::kAuthored
-      : VirtualPathRuleSet::kCooked;
+    const auto rules = RulesOf(entry);
 
     const auto actual
       = CodeOf(oxygen::content::ValidateVirtualPath(path, rules));
@@ -118,6 +125,34 @@ NOLINT_TEST(VirtualPathCasesTest, PathsFollowTheCaseTable)
     EXPECT_EQ(oxygen::content::IsCanonicalVirtualPath(path, rules),
       entry.at("refusal").is_null())
       << entry.dump();
+  }
+}
+
+//! Each reference of the table resolves to its path, or gets its refusal
+//! code, and the resolved path is spelled back as the table's text.
+NOLINT_TEST(VirtualPathCasesTest, ReferencesFollowTheCaseTable)
+{
+  for (const auto& entry : LoadCases().at("references")) {
+    const auto anchor = entry.at("anchor").get<std::string>();
+
+    const auto actual = oxygen::content::ResolveReference(
+      anchor, entry.at("text").get<std::string>(), RulesOf(entry));
+
+    EXPECT_EQ(actual.has_value() ? nlohmann::json(nullptr)
+                                 : nlohmann::json(to_string(actual.error())),
+      entry.at("refusal"))
+      << entry.dump();
+    if (actual.has_value()) {
+      const auto spelled = entry.at("spelled").get<std::string>();
+      EXPECT_EQ(*actual, entry.at("resolved").get<std::string>())
+        << entry.dump();
+      EXPECT_EQ(oxygen::content::RelativeReference(anchor, *actual), spelled)
+        << entry.dump();
+      EXPECT_EQ(
+        oxygen::content::ResolveReference(anchor, spelled, RulesOf(entry)),
+        actual)
+        << entry.dump();
+    }
   }
 }
 
@@ -153,7 +188,7 @@ NOLINT_TEST(VirtualPathCasesTest, TableCoversEveryRefusalCode)
     known.emplace(to_string(error));
   }
   auto used = std::set<std::string> {};
-  for (const auto* section : { "segments", "mounts", "paths" }) {
+  for (const auto* section : { "segments", "mounts", "paths", "references" }) {
     for (const auto& entry : LoadCases().at(section)) {
       if (!entry.at("refusal").is_null()) {
         used.insert(entry.at("refusal").get<std::string>());

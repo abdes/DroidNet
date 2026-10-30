@@ -123,7 +123,7 @@ functional tests other than spelling cases.
 
 | Engine                                                                                                          | Editor                                                                  |
 | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `content::ResolveReference`, `RelativeReference`, two errors                                                    | `AssetPath.ResolveReference`, `ToReference`, two errors, codes          |
+| `content::ResolveReference`, `RelativeReference`, two errors                                                    | `AssetPath.TryResolveReference`, `ToReference`, two errors, codes       |
 | `VirtualPathCases.json` `references` table (anchors, `..`, `.`, spaces, Unicode, refusals, spelling round trip) | `VirtualPathCasesTests` runs it; `RefusalSections` includes it          |
 | `virtual_paths.md` References section                                                                           | `Oxygen.Managed.Core/README.md` References; `AssetUris` section removed |
 

@@ -538,6 +538,288 @@
       "refusal": "vpath.leaf.missing_extension"
     }
   ],
+  "references": [
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Brick.otex",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Materials/Brick.otex",
+      "spelled": "Brick.otex"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "./Brick.otex",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Materials/Brick.otex",
+      "spelled": "Brick.otex"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Wall.omat",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Materials/Wall.omat",
+      "spelled": "Wall.omat"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Sub/Deep/Trim.omat",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Materials/Sub/Deep/Trim.omat",
+      "spelled": "Sub/Deep/Trim.omat"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "../Textures/Brick.otex",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Textures/Brick.otex",
+      "spelled": "../Textures/Brick.otex"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "../Top.omat",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Top.omat",
+      "spelled": "../Top.omat"
+    },
+    {
+      "anchor": "/Content/A/B/C/Car.ogeo",
+      "text": "../../../Top.omat",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Top.omat",
+      "spelled": "../../../Top.omat"
+    },
+    {
+      "anchor": "/Content/A/B/Wheel.omat",
+      "text": "../B.omat",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/A/B.omat",
+      "spelled": "../B.omat"
+    },
+    {
+      "anchor": "/Content/Wall.omat",
+      "text": "Brick.otex",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Brick.otex",
+      "spelled": "Brick.otex"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "/Engine/Materials/Default.omat",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Engine/Materials/Default.omat",
+      "spelled": "/Engine/Materials/Default.omat"
+    },
+    {
+      "anchor": "/Vehicles/Cars/Truck.fbx/Paint.omat",
+      "text": "../../Shared/Chrome.omat",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Vehicles/Shared/Chrome.omat",
+      "spelled": "../../Shared/Chrome.omat"
+    },
+    {
+      "anchor": "/Content/Guns/Pistol/Grip.omat",
+      "text": "../Sniper Rifle/Stand.fbx/Paint.omat",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Guns/Sniper Rifle/Stand.fbx/Paint.omat",
+      "spelled": "../Sniper Rifle/Stand.fbx/Paint.omat"
+    },
+    {
+      "anchor": "/Content/Mat\u00e9riaux/Bois.omat",
+      "text": "\u6728\u6750/Ch\u00eane.otex",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Mat\u00e9riaux/\u6728\u6750/Ch\u00eane.otex",
+      "spelled": "\u6728\u6750/Ch\u00eane.otex"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Brick%20Wall.otex",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Materials/Brick%20Wall.otex",
+      "spelled": "Brick%20Wall.otex"
+    },
+    {
+      "anchor": "/Content/Input/Car.input",
+      "text": "Car.input/Jump.oiact",
+      "rules": "authored",
+      "refusal": null,
+      "resolved": "/Content/Input/Car.input/Jump.oiact",
+      "spelled": "Car.input/Jump.oiact"
+    },
+    {
+      "anchor": "/Content/Textures/Brick.otex",
+      "text": "../SourceMedia/Brick.png",
+      "rules": "cooked",
+      "refusal": null,
+      "resolved": "/Content/SourceMedia/Brick.png",
+      "spelled": "../SourceMedia/Brick.png"
+    },
+    {
+      "anchor": "/.cooked/Materials/Wall.omat",
+      "text": "../Textures/Brick.otex",
+      "rules": "cooked",
+      "refusal": null,
+      "resolved": "/.cooked/Textures/Brick.otex",
+      "spelled": "../Textures/Brick.otex"
+    },
+    {
+      "anchor": "/Content/Wall.omat",
+      "text": "../Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.reference_outside_mount"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "../../Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.reference_outside_mount"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "/Content/Materials/Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.reference_self_absolute"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "",
+      "rules": "authored",
+      "refusal": "vpath.empty"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": ".",
+      "rules": "authored",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "..",
+      "rules": "authored",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "../..",
+      "rules": "authored",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "./../Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": ".././Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "././Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Sub/../Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Sub/./Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.dot"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Sub/",
+      "rules": "authored",
+      "refusal": "vpath.trailing_slash"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Sub//Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.empty"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Textures\\Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.reserved_character"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "asset:///Content/Materials/Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.empty"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Sniper Rifle /Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.edge_space"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Mate\u0301riaux/Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.not_nfc"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Brick",
+      "rules": "authored",
+      "refusal": "vpath.leaf.missing_extension"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "../SourceMedia/Brick.png",
+      "rules": "authored",
+      "refusal": "vpath.segment.derived_content"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": ".build/Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.derived_content"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "/Engine/Materials/",
+      "rules": "authored",
+      "refusal": "vpath.trailing_slash"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "/Engine",
+      "rules": "authored",
+      "refusal": "vpath.mount_only"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "/Engine/Default",
+      "rules": "authored",
+      "refusal": "vpath.leaf.missing_extension"
+    }
+  ],
   "nfc": [
     {
       "text": "u\u0308",

@@ -74,6 +74,44 @@ Checks run in this order:
 The leaf's last extension is the asset type; every other dot belongs to the
 name.
 
+## References
+
+An authored file names another asset or file by a reference. A reference is
+one of two texts:
+
+| Form     | Text                                                                             | Example                                |
+| -------- | -------------------------------------------------------------------------------- | -------------------------------------- |
+| Absolute | A virtual path in another mount                                                  | `/Engine/Materials/Default.omat`       |
+| Relative | Zero or more `..` segments, or a single `.`, then one or more canonical segments | `Brick.otex`, `../Textures/Brick.otex` |
+
+Segments are plain text in NFC, with no percent-encoding: `Brick%20Wall.otex`
+names a file of that name, and an `asset:///` URI is refused.
+
+`ResolveReference(anchor, text, rules)` reads a reference in the file whose
+identity is `anchor`. Relative text resolves against the folder that holds the
+anchor: `../Textures/Brick.otex` in `/Content/Materials/Wall.omat` is
+`/Content/Textures/Brick.otex`. Checks run in this order:
+
+1. the anchor is a virtual path;
+2. absolute text is a path under `rules`, in another mount than the anchor's
+   (`vpath.reference_self_absolute`);
+3. relative text is not empty (`vpath.empty`), has no trailing `/`
+   (`vpath.trailing_slash`) and no empty segment (`vpath.segment.empty`);
+4. after the leading `.` or `..` segments, at least one segment, each passing
+   the segment rule, so a later `.` or `..` is refused (`vpath.segment.dot`);
+5. the `..` segments stay within the anchor's mount
+   (`vpath.reference_outside_mount`);
+6. the resolved path passes the path rules under `rules`.
+
+An asset reference is checked as an authored path. A file reference, such as a
+texture's image, is checked as a cooked path, so it may name derived content
+such as `SourceMedia`.
+
+`RelativeReference(anchor, target)` gives the text a writer stores: the
+shortest relative text when both are in one mount, and the target's virtual
+path otherwise. It never starts with `./`, and resolving it gives the target
+back.
+
 ## Derived content
 
 A path being authored adds one rule: below the mount, a segment that starts with
