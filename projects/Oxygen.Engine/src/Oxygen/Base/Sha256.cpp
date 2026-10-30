@@ -6,22 +6,20 @@
 
 #include <algorithm>
 #include <array>
-#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <ios>
-#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/Sha256.h>
 
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
@@ -633,34 +631,15 @@ auto ComputeSha256(std::span<const std::byte> data) noexcept -> Sha256Digest
 
 auto ToHexString(const Sha256Digest& digest) -> std::string
 {
-  constexpr auto kDigits = std::string_view { "0123456789abcdef" };
-  constexpr auto kNibbleBits = 4U;
-  constexpr auto kNibbleMask = 0x0FU;
-  auto text = std::string {};
-  text.reserve(digest.size() * 2U);
-  for (const auto byte : digest) {
-    text.push_back(kDigits.at(byte >> kNibbleBits));
-    text.push_back(kDigits.at(byte & kNibbleMask));
-  }
-  return text;
+  return ToHexString(std::as_bytes(std::span { digest }));
 }
 
 auto Sha256DigestFromHex(const std::string_view text) noexcept
   -> std::optional<Sha256Digest>
 {
   auto digest = Sha256Digest {};
-  if (text.size() != digest.size() * 2U) {
+  if (!FromHexString(text, std::as_writable_bytes(std::span { digest }))) {
     return std::nullopt;
-  }
-  constexpr auto kHexRadix = 16;
-  for (size_t index = 0U; index < digest.size(); ++index) {
-    const auto pair = text.substr(index * 2U, 2U);
-    const auto* const end = std::to_address(pair.end());
-    const auto parsed = std::from_chars(
-      std::to_address(pair.begin()), end, digest.at(index), kHexRadix);
-    if (parsed.ec != std::errc {} || parsed.ptr != end) {
-      return std::nullopt;
-    }
   }
   return digest;
 }

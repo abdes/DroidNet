@@ -5,21 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <span>
 
 #include <Oxygen/Cooker/Pak/PakStreamingCrc32.h>
-
-namespace {
-constexpr auto kCrcPolynomial = 0xEDB88320U;
-constexpr auto kFinalXor = 0xFFFFFFFFU;
-constexpr auto kLookupTableSize = size_t { 256U };
-constexpr auto kBitsPerByte = int { 8 };
-constexpr auto kLutIndexMask = 0xFFU;
-} // namespace
 
 namespace oxygen::content::pak {
 
@@ -59,19 +50,18 @@ auto PakStreamingCrc32::Update(const uint64_t absolute_offset,
 
     const auto first_len = static_cast<size_t>(skip_start - chunk_start);
     if (first_len > 0U) {
-      state_ = UpdateCrc32Ieee(bytes.first(first_len), state_);
+      crc_.Update(bytes.first(first_len));
     }
 
     const auto suffix_offset = static_cast<size_t>(skip_end - chunk_start);
     const auto suffix_len = static_cast<size_t>(chunk_end - skip_end);
     if (suffix_len > 0U) {
-      state_
-        = UpdateCrc32Ieee(bytes.subspan(suffix_offset, suffix_len), state_);
+      crc_.Update(bytes.subspan(suffix_offset, suffix_len));
     }
     return true;
   }
 
-  state_ = UpdateCrc32Ieee(bytes, state_);
+  crc_.Update(bytes);
   return true;
 }
 
@@ -85,31 +75,7 @@ auto PakStreamingCrc32::Finalize() const noexcept -> uint32_t
   if (!config_.enabled) {
     return 0U;
   }
-  return state_ ^ kFinalXor;
-}
-
-auto PakStreamingCrc32::UpdateCrc32Ieee(const std::span<const std::byte> bytes,
-  const uint32_t state) noexcept -> uint32_t
-{
-  const auto table = []() consteval -> std::array<uint32_t, kLookupTableSize> {
-    auto lut = std::array<uint32_t, kLookupTableSize> {};
-    for (uint32_t i = 0U; i < kLookupTableSize; ++i) {
-      uint32_t c = i;
-      for (int j = 0; j < kBitsPerByte; ++j) {
-        c = (c & 1U) != 0U ? (kCrcPolynomial ^ (c >> 1U)) : (c >> 1U);
-      }
-      lut[static_cast<size_t>(i)] = c;
-    }
-    return lut;
-  }();
-
-  auto crc = state;
-  for (const auto byte : bytes) {
-    const auto value = static_cast<uint8_t>(byte);
-    const auto index = static_cast<size_t>((crc ^ value) & kLutIndexMask);
-    crc = table[index] ^ (crc >> static_cast<uint32_t>(kBitsPerByte));
-  }
-  return crc;
+  return crc_.Finalize();
 }
 
 } // namespace oxygen::content::pak

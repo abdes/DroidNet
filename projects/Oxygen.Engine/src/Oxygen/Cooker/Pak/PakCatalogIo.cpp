@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -27,6 +26,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Pak/Internal/PakCatalogJson.h>
 #include <Oxygen/Cooker/Pak/Internal/PakCatalog_schema.h>
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
@@ -47,7 +47,6 @@ namespace {
   using nlohmann::json_schema::json_validator;
 
   constexpr auto kSchemaVersion = data::pak::version::kPakCatalogVersion;
-  constexpr auto kHexDigits = std::string_view { "0123456789abcdef" };
 
   class CollectingErrorHandler final : public error_handler {
   public:
@@ -113,54 +112,6 @@ namespace {
     mutable json_validator validator_;
   };
 
-  template <size_t N>
-  auto ToHex(const std::array<uint8_t, N>& bytes) -> std::string
-  {
-    auto out = std::string {};
-    out.reserve(N * 2U);
-    for (const auto byte : bytes) {
-      const auto value = static_cast<unsigned>(byte);
-      out.push_back(kHexDigits[(value >> 4U) & 0x0FU]);
-      out.push_back(kHexDigits[value & 0x0FU]);
-    }
-    return out;
-  }
-
-  auto ParseHexNibble(const char c) noexcept -> uint8_t
-  {
-    constexpr auto kInvalidNibble = uint8_t { 0xFFU };
-    if (c >= '0' && c <= '9') {
-      return static_cast<uint8_t>(c - '0');
-    }
-    if (c >= 'a' && c <= 'f') {
-      return static_cast<uint8_t>(c - 'a' + 10U);
-    }
-    return kInvalidNibble;
-  }
-
-  template <size_t N>
-  auto ParseHexBytes(const std::string_view text)
-    -> Result<std::array<uint8_t, N>>
-  {
-    constexpr auto kInvalidNibble = uint8_t { 0xFFU };
-    if (text.size() != (N * 2U)) {
-      return Result<std::array<uint8_t, N>>::Err(std::errc::invalid_argument);
-    }
-
-    auto bytes = std::array<uint8_t, N> {};
-    for (size_t i = 0; i < N; ++i) {
-      const auto high = ParseHexNibble(text[(i * 2U)]);
-      const auto low = ParseHexNibble(text[(i * 2U) + 1U]);
-      if (high == kInvalidNibble || low == kInvalidNibble) {
-        return Result<std::array<uint8_t, N>>::Err(std::errc::invalid_argument);
-      }
-      bytes[i] = static_cast<uint8_t>(
-        (static_cast<unsigned>(high) << 4U) | static_cast<unsigned>(low));
-    }
-
-    return Result<std::array<uint8_t, N>>::Ok(bytes);
-  }
-
   auto ParseAssetType(const std::string_view text) -> Result<data::AssetType>
   {
     using data::AssetType;
@@ -199,11 +150,11 @@ namespace {
   auto ToJsonBases(std::span<const data::PakCatalogBase> bases) -> ordered_json
   {
     auto items = ordered_json::array();
-    for (const auto& base : bases) {
+    for (const auto& layer : bases) {
       auto item = ordered_json::object();
-      item["source_key"] = data::to_string(base.source_key);
-      item["content_version"] = base.content_version;
-      item["catalog_digest"] = ToHex(base.catalog_digest);
+      item["source_key"] = data::to_string(layer.source_key);
+      item["content_version"] = layer.content_version;
+      item["catalog_digest"] = base::ToHexString(layer.catalog_digest);
       items.push_back(std::move(item));
     }
     return items;
@@ -216,7 +167,7 @@ namespace {
     for (const auto& item : items) {
       const auto key = data::SourceKey::FromString(
         item.at("source_key").get_ref<const std::string&>());
-      const auto digest = ParseHexBytes<32>(
+      const auto digest = base::Sha256DigestFromHex(
         item.at("catalog_digest").get_ref<const std::string&>());
       if (!key || !digest) {
         return std::nullopt;
@@ -280,7 +231,7 @@ namespace {
     root["schema_version"] = kSchemaVersion;
     root["source_key"] = data::to_string(catalog.source_key);
     root["content_version"] = catalog.content_version;
-    root["catalog_digest"] = ToHex(catalog.catalog_digest);
+    root["catalog_digest"] = base::ToHexString(catalog.catalog_digest);
     root["library"] = catalog.library;
 
     auto json_entries = ordered_json::array();
@@ -288,9 +239,10 @@ namespace {
       auto json_entry = ordered_json::object();
       json_entry["asset_key"] = data::to_string(entry.asset_key);
       json_entry["asset_type"] = std::string(data::to_string(entry.asset_type));
-      json_entry["descriptor_digest"] = ToHex(entry.descriptor_digest);
+      json_entry["descriptor_digest"]
+        = base::ToHexString(entry.descriptor_digest);
       json_entry["transitive_resource_digest"]
-        = ToHex(entry.transitive_resource_digest);
+        = base::ToHexString(entry.transitive_resource_digest);
       json_entries.push_back(std::move(json_entry));
     }
     root["entries"] = std::move(json_entries);
@@ -320,10 +272,10 @@ namespace {
       return Result<data::PakCatalog>::Err(source_key.error());
     }
 
-    const auto catalog_digest = ParseHexBytes<32>(
+    const auto catalog_digest = base::Sha256DigestFromHex(
       document.at("catalog_digest").get_ref<const std::string&>());
     if (!catalog_digest.has_value()) {
-      return Result<data::PakCatalog>::Err(catalog_digest.error());
+      return Result<data::PakCatalog>::Err(std::errc::invalid_argument);
     }
 
     auto entries = std::vector<data::PakCatalogEntry> {};
@@ -348,16 +300,16 @@ namespace {
         return Result<data::PakCatalog>::Err(asset_type.error());
       }
 
-      const auto descriptor_digest = ParseHexBytes<32>(
+      const auto descriptor_digest = base::Sha256DigestFromHex(
         item.at("descriptor_digest").get_ref<const std::string&>());
       if (!descriptor_digest.has_value()) {
-        return Result<data::PakCatalog>::Err(descriptor_digest.error());
+        return Result<data::PakCatalog>::Err(std::errc::invalid_argument);
       }
 
-      const auto transitive_digest = ParseHexBytes<32>(
+      const auto transitive_digest = base::Sha256DigestFromHex(
         item.at("transitive_resource_digest").get_ref<const std::string&>());
       if (!transitive_digest.has_value()) {
-        return Result<data::PakCatalog>::Err(transitive_digest.error());
+        return Result<data::PakCatalog>::Err(std::errc::invalid_argument);
       }
 
       entries.push_back(data::PakCatalogEntry {

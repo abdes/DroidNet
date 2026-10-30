@@ -51,6 +51,7 @@ set(
   "AlwaysFalse.h"
   "Compilers.h"
   "Concepts.h"
+  "Crc32.h"
   "Crtp.h"
   "Detail/LogWithAdapters.h"
   "Detail/NamedType_impl.h"
@@ -61,6 +62,7 @@ set(
   "Finally.h"
   "Filesystem.h"
   "Hash.h"
+  "Hex.h"
   "Logging.h"
   "Macros.h"
   "NamedType.h"
@@ -81,6 +83,7 @@ set(
   "StaticVector.h"
   "StringTypes.h"
   "StringUtils.h"
+  "SystemError.h"
   "TypeList.h"
   "Types/Geometry.h"
   "Types/Overload.h"
@@ -92,9 +95,12 @@ set(
 )
 set(
   OXYGEN_BASE_PRIVATE_SOURCES
+  "Crc32.cpp"
   "Detail/loguru.cpp"
   "Filesystem.cpp"
+  "Hex.cpp"
   "Sha256.cpp"
+  "SystemError.cpp"
   "Uuid.cpp"
 )
 set(
@@ -172,6 +178,9 @@ target_link_libraries(${META_MODULE_TARGET} PUBLIC fmt::fmt-header-only)
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("test")
+endif()
+if(OXYGEN_BUILD_BENCHMARKS)
+  add_subdirectory("Benchmarks")
 endif()
 
 # ------------------------------------------------------------------------------

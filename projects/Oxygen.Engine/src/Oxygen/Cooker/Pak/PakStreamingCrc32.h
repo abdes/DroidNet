@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <span>
 
+#include <Oxygen/Base/Crc32.h>
 #include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::pak {
@@ -31,11 +32,8 @@ public:
   OXGN_COOK_NDAPI auto Finalize() const noexcept -> uint32_t;
 
 private:
-  [[nodiscard]] static auto UpdateCrc32Ieee(
-    std::span<const std::byte> bytes, uint32_t state) noexcept -> uint32_t;
-
   Config config_ {};
-  uint32_t state_ = 0xFFFFFFFFU;
+  base::Crc32 crc_;
   uint64_t skipped_bytes_ = 0;
 };
 

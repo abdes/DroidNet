@@ -14,7 +14,6 @@
 #include <fstream>
 #include <ios>
 #include <optional>
-#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -46,9 +45,6 @@ using nlohmann::ordered_json;
 
 constexpr auto kDiffBasisIdentifier
   = std::string_view { "descriptor_plus_transitive_resources_v1" };
-constexpr auto kHexCharsPerByte = size_t { 2U };
-constexpr auto kHighNibbleShift = 4U;
-constexpr auto kLowNibbleMask = 0x0FU;
 
 auto AddDiagnostic(std::vector<pak::PakDiagnostic>& diagnostics,
   const pak::PakDiagnosticSeverity severity, const std::string_view code,
@@ -82,19 +78,6 @@ auto ShouldEmitManifest(const pak::PakBuildRequest& request) -> bool
   return request.mode == pak::BuildMode::kPatch
     || (request.mode == pak::BuildMode::kFull
       && request.options.emit_manifest_in_full);
-}
-
-auto ToHex(const std::span<const uint8_t> bytes) -> std::string
-{
-  constexpr auto kHexDigits = std::string_view { "0123456789abcdef" };
-  auto out = std::string {};
-  out.reserve(bytes.size() * kHexCharsPerByte);
-  for (const auto byte : bytes) {
-    const auto value = static_cast<unsigned>(byte);
-    out.push_back(kHexDigits.at((value >> kHighNibbleShift) & kLowNibbleMask));
-    out.push_back(kHexDigits.at(value & kLowNibbleMask));
-  }
-  return out;
 }
 
 auto SortAssetKeys(std::vector<data::AssetKey>& values) -> void
@@ -321,7 +304,7 @@ auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
       items.push_back(ordered_json {
         { "source_key", data::to_string(layer.source_key) },
         { "content_version", layer.content_version },
-        { "catalog_digest", ToHex(std::span(layer.catalog_digest)) },
+        { "catalog_digest", base::ToHexString(layer.catalog_digest) },
       });
     }
     return items;
@@ -354,7 +337,7 @@ auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
     {
       "patch_pak_digest",
       manifest.patch_pak_digest.has_value()
-        ? ordered_json(ToHex(std::span { *manifest.patch_pak_digest }))
+        ? ordered_json(base::ToHexString(*manifest.patch_pak_digest))
         : ordered_json(nullptr),
     },
     {

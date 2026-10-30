@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
@@ -162,11 +163,8 @@ struct PhysicsTableTraits {
     if (std::any_of(std::begin(desc.content_hash), std::end(desc.content_hash),
           [](const uint8_t byte) -> bool { return byte != 0U; })) {
       signature.append(";h=");
-      constexpr auto kHex = "0123456789abcdef";
-      for (const auto byte : desc.content_hash) {
-        signature.push_back(kHex[(byte >> 4U) & 0x0FU]);
-        signature.push_back(kHex[byte & 0x0FU]);
-      }
+      signature.append(
+        base::ToHexString(std::as_bytes(std::span { desc.content_hash })));
     }
     return signature;
   }

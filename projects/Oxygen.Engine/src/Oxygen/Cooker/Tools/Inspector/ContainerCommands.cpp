@@ -13,6 +13,7 @@
 #include <span>
 #include <string_view>
 
+#include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
@@ -84,9 +85,7 @@ namespace {
     const std::span<const uint8_t, oxygen::data::loose_cooked::kSha256Size>&
       digest) -> void
   {
-    for (const auto b : digest) {
-      os << HexHigh(b) << HexLow(b);
-    }
+    os << base::ToHexString(std::as_bytes(digest));
   }
 
   auto DumpFileRecords(

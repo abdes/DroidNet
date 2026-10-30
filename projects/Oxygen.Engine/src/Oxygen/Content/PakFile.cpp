@@ -23,6 +23,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include <Oxygen/Base/Crc32.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -50,34 +51,6 @@ using oxygen::data::pak::core::PakHeader;
 
 namespace {
 
-auto ComputeCrc32Ieee(std::span<const std::byte> bytes, uint32_t state) noexcept
-  -> uint32_t
-{
-  // Standard IEEE CRC32 (poly 0x04C11DB7 reflected => 0xEDB88320), reflected
-  // in/out, init 0xFFFFFFFF, final XOR 0xFFFFFFFF.
-  static constexpr auto kPoly = 0xEDB88320U;
-
-  auto table = [] consteval -> std::array<uint32_t, 256> {
-    std::array<uint32_t, 256> t {};
-    for (uint32_t i = 0; i < 256; ++i) {
-      uint32_t c = i;
-      for (int j = 0; j < 8; ++j) {
-        c = (c & 1U) ? (kPoly ^ (c >> 1U)) : (c >> 1U);
-      }
-      t.at(static_cast<size_t>(i)) = c;
-    }
-    return t;
-  }();
-
-  uint32_t crc = state;
-  for (const auto b : bytes) {
-    const auto u_b = static_cast<uint8_t>(b);
-    const auto table_index = static_cast<size_t>((crc ^ u_b) & 0xFFU);
-    crc = table.at(table_index) ^ (crc >> 8U);
-  }
-  return crc;
-}
-
 struct Crc32ComputationConfig final {
   size_t file_size { 0 };
   size_t crc_field_absolute_offset { 0 };
@@ -93,7 +66,7 @@ auto ComputePakCrc32(const std::filesystem::path& pak_path,
     = static_cast<size_t>(256) * static_cast<size_t>(1024);
   std::array<std::byte, kChunkSize> buffer {};
 
-  uint32_t crc = 0xFFFFFFFF;
+  oxygen::base::Crc32 crc;
   size_t offset = 0;
 
   while (offset < cfg.file_size) {
@@ -122,24 +95,17 @@ auto ComputePakCrc32(const std::filesystem::path& pak_path,
       const auto rel_start = crc_skip_start - chunk_start;
       const auto rel_end = crc_skip_end - chunk_start;
 
-      if (rel_start > 0) {
-        crc = ComputeCrc32Ieee(
-          std::span<const std::byte>(buffer.data(), rel_start), crc);
-      }
-      if (rel_end < to_read) {
-        crc = ComputeCrc32Ieee(std::span<const std::byte>(buffer).subspan(
-                                 rel_end, to_read - rel_end),
-          crc);
-      }
+      crc.Update(std::span<const std::byte>(buffer.data(), rel_start));
+      crc.Update(
+        std::span<const std::byte>(buffer).subspan(rel_end, to_read - rel_end));
     } else {
-      crc = ComputeCrc32Ieee(
-        std::span<const std::byte>(buffer.data(), to_read), crc);
+      crc.Update(std::span<const std::byte>(buffer.data(), to_read));
     }
 
     offset += to_read;
   }
 
-  return crc ^ 0xFFFFFFFFU;
+  return crc.Finalize();
 }
 // Helper to open a FileStream and throw with logging on error
 auto OpenFileStream(const std::filesystem::path& path)

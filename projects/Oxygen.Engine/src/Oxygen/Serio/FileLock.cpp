@@ -15,7 +15,6 @@
 #ifdef _WIN32
 #  include <Windows.h> // IWYU pragma: keep
 
-#  include <errhandlingapi.h>
 #  include <fileapi.h>
 #  include <handleapi.h>
 #  include <minwinbase.h>
@@ -32,6 +31,7 @@
 #endif
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/SystemError.h>
 #include <Oxygen/Serio/FileLock.h>
 
 namespace oxygen::serio {
@@ -100,13 +100,12 @@ auto FileLock::TryAcquire(const std::filesystem::path& path,
       | (temporary ? static_cast<DWORD>(FILE_FLAG_DELETE_ON_CLOSE) : 0U),
     nullptr);
   if (owner->handle == INVALID_HANDLE_VALUE) {
-    const auto error = GetLastError();
+    const auto error = base::LastSystemError();
+    const auto code = static_cast<DWORD>(error.value());
     // A file another holder is removing refuses to open until it is gone.
-    const auto contended = error == ERROR_SHARING_VIOLATION
-      || (temporary && error == ERROR_ACCESS_DENIED);
-    return contended
-      ? Err(std::errc::device_or_resource_busy)
-      : Err(std::error_code(static_cast<int>(error), std::system_category()));
+    const auto contended = code == ERROR_SHARING_VIOLATION
+      || (temporary && code == ERROR_ACCESS_DENIED);
+    return contended ? Err(std::errc::device_or_resource_busy) : Err(error);
   }
   OVERLAPPED overlapped {};
   const DWORD flags = static_cast<DWORD>(LOCKFILE_FAIL_IMMEDIATELY)
@@ -115,10 +114,10 @@ auto FileLock::TryAcquire(const std::filesystem::path& path,
         : 0U);
   if (LockFileEx(owner->handle, flags, 0, MAXDWORD, MAXDWORD, &overlapped)
     == FALSE) {
-    const auto error = GetLastError();
-    return error == ERROR_LOCK_VIOLATION
+    const auto error = base::LastSystemError();
+    return static_cast<DWORD>(error.value()) == ERROR_LOCK_VIOLATION
       ? Err(std::errc::device_or_resource_busy)
-      : Err(std::error_code(static_cast<int>(error), std::system_category()));
+      : Err(error);
   }
 #else
   const auto flags = static_cast<unsigned>(
@@ -129,16 +128,16 @@ auto FileLock::TryAcquire(const std::filesystem::path& path,
   owner->handle = open(path.c_str(), static_cast<int>(flags),
     static_cast<mode_t>(S_IRUSR) | static_cast<mode_t>(S_IWUSR));
   if (owner->handle < 0) {
-    return Err(std::error_code(errno, std::generic_category()));
+    return Err(base::LastSystemError());
   }
   const auto operation = static_cast<unsigned>(
                            mode == FileLockMode::kExclusive ? LOCK_EX : LOCK_SH)
     | static_cast<unsigned>(LOCK_NB);
   if (flock(owner->handle, static_cast<int>(operation)) != 0) {
-    const auto error = errno;
-    return error == EWOULDBLOCK || error == EAGAIN
+    const auto error = base::LastSystemError();
+    return error.value() == EWOULDBLOCK || error.value() == EAGAIN
       ? Err(std::errc::device_or_resource_busy)
-      : Err(std::error_code(error, std::generic_category()));
+      : Err(error);
   }
   if (open_mode == FileLockOpenMode::kTemporary) {
     // A holder removes the file before it releases, so the locked file must

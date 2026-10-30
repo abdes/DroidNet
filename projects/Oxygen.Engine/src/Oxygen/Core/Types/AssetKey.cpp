@@ -15,6 +15,7 @@
 
 #include <xxhash.h>
 
+#include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 
@@ -24,23 +25,15 @@ namespace {
 
   constexpr auto kCanonicalTextLength = std::size_t { 36U };
 
-  constexpr auto ParseHexNibble(const char c) noexcept -> uint8_t
-  {
-    constexpr auto kInvalidNibble = uint8_t { 0xFFU };
-    if (c >= '0' && c <= '9') {
-      return static_cast<uint8_t>(c - '0');
-    }
-    if (c >= 'a' && c <= 'f') {
-      return static_cast<uint8_t>(c - 'a' + 10);
-    }
-    return kInvalidNibble;
-  }
+  constexpr auto kHyphenPositions
+    = std::array<std::size_t, 4> { 8U, 13U, 18U, 23U };
 
   constexpr auto HasCanonicalHyphens(const std::string_view str) noexcept
     -> bool
   {
-    return str.size() == kCanonicalTextLength && str[8] == '-' && str[13] == '-'
-      && str[18] == '-' && str[23] == '-';
+    return str.size() == kCanonicalTextLength
+      && std::ranges::all_of(kHyphenPositions,
+        [str](const auto position) -> bool { return str[position] == '-'; });
   }
 
 } // namespace
@@ -69,36 +62,19 @@ auto AssetKey::FromCodePath(const std::string_view code_path) -> AssetKey
 
 auto AssetKey::FromString(const std::string_view text) -> Result<AssetKey>
 {
-  constexpr auto kInvalidNibble = uint8_t { 0xFFU };
-
   if (!HasCanonicalHyphens(text)) {
     return Result<AssetKey>::Err(std::errc::invalid_argument);
   }
 
+  // A hyphen anywhere else leaves too few digits for the codec to accept.
+  auto digits = std::string { text };
+  std::erase(digits, '-');
+  const auto is_upper
+    = [](const char c) -> bool { return c >= 'A' && c <= 'F'; };
   auto bytes = ByteArray {};
-  auto byte_index = std::size_t { 0U };
-
-  for (auto i = std::size_t { 0U }; i < text.size();) {
-    if (text[i] == '-') {
-      ++i;
-      continue;
-    }
-    if ((i + 1U) >= text.size() || text[i + 1U] == '-') {
-      return Result<AssetKey>::Err(std::errc::invalid_argument);
-    }
-
-    const auto high = ParseHexNibble(text[i]);
-    const auto low = ParseHexNibble(text[i + 1U]);
-    if (high == kInvalidNibble || low == kInvalidNibble) {
-      return Result<AssetKey>::Err(std::errc::invalid_argument);
-    }
-
-    bytes.at(byte_index) = static_cast<uint8_t>((high << 4U) | low);
-    ++byte_index;
-    i += 2U;
-  }
-
-  if (byte_index != bytes.size()) {
+  if (std::ranges::any_of(digits, is_upper)
+    || !base::FromHexString(
+      digits, std::as_writable_bytes(std::span { bytes }))) {
     return Result<AssetKey>::Err(std::errc::invalid_argument);
   }
 
@@ -107,22 +83,11 @@ auto AssetKey::FromString(const std::string_view text) -> Result<AssetKey>
 
 auto to_string(const AssetKey& value) -> std::string
 {
-  constexpr auto kTextLength = std::size_t { 36U };
-  constexpr auto kHex = std::string_view { "0123456789abcdef" };
-
-  auto out = std::string {};
-  out.reserve(kTextLength);
-
-  const auto* bytes = value.data();
-  for (std::size_t i = 0; i < AssetKey::kSizeBytes; ++i) {
-    const auto b = bytes[i];
-    out.push_back(kHex[b >> 4]);
-    out.push_back(kHex[b & 0x0F]);
-    if (i == 3 || i == 5 || i == 7 || i == 9) {
-      out.push_back('-');
-    }
+  auto out = base::ToHexString(
+    std::as_bytes(std::span { value.data(), AssetKey::kSizeBytes }));
+  for (const auto position : kHyphenPositions) {
+    out.insert(position, 1U, '-');
   }
-
   return out;
 }
 

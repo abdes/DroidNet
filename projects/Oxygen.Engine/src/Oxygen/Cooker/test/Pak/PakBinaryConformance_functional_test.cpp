@@ -19,6 +19,7 @@
 
 #include "PakTestSupport.h"
 
+#include <Oxygen/Base/Crc32.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
@@ -38,38 +39,17 @@ constexpr auto kContentVersion = uint16_t { 17U };
 constexpr auto kSourceKeySeed = uint8_t { 0x91U };
 constexpr auto kIndexGuidSeed = uint8_t { 0x33U };
 constexpr auto kAssetSeed = uint8_t { 0x44U };
-constexpr auto kCrcInitialState = uint32_t { 0xFFFFFFFFU };
-constexpr auto kCrcFinalXor = uint32_t { 0xFFFFFFFFU };
-constexpr auto kCrcReflectedPolynomial = uint32_t { 0xEDB88320U };
-constexpr auto kByteBitCount = uint32_t { 8U };
 constexpr auto kCrcSkipFieldSize = size_t { sizeof(uint32_t) };
-
-auto UpdateCrc32Ieee(
-  const uint32_t state, const std::span<const std::byte> bytes) -> uint32_t
-{
-  auto crc = state;
-  for (const auto byte : bytes) {
-    crc ^= static_cast<uint32_t>(std::to_integer<uint8_t>(byte));
-    for (auto bit = uint32_t { 0U }; bit < kByteBitCount; ++bit) {
-      const auto lsb = (crc & 1U) != 0U;
-      crc >>= 1U;
-      if (lsb) {
-        crc ^= kCrcReflectedPolynomial;
-      }
-    }
-  }
-  return crc;
-}
 
 auto ComputeFileCrc32SkippingRange(const std::span<const std::byte> bytes,
   const size_t skip_offset, const size_t skip_size) -> uint32_t
 {
-  auto state = kCrcInitialState;
   if (skip_offset > bytes.size()) {
     return 0U;
   }
 
-  state = UpdateCrc32Ieee(state, bytes.first(skip_offset));
+  auto crc = oxygen::base::Crc32 {};
+  crc.Update(bytes.first(skip_offset));
 
   auto resume_offset = skip_offset;
   if (skip_size <= (bytes.size() - skip_offset)) {
@@ -77,9 +57,8 @@ auto ComputeFileCrc32SkippingRange(const std::span<const std::byte> bytes,
   } else {
     resume_offset = bytes.size();
   }
-  state = UpdateCrc32Ieee(
-    state, bytes.subspan(resume_offset, bytes.size() - resume_offset));
-  return state ^ kCrcFinalXor;
+  crc.Update(bytes.subspan(resume_offset));
+  return crc.Finalize();
 }
 
 template <typename T>

@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/DependencyRequirementError.h>
@@ -357,7 +358,8 @@ auto ContentSourceRegistry::InstallSource(
 auto ContentSourceRegistry::MountPak(std::filesystem::path normalized_path,
   std::shared_ptr<IContentSource> source, const MountMode mode) -> MountResult
 {
-  const auto existing = std::ranges::find(pak_paths_, normalized_path);
+  const auto existing = std::ranges::find(
+    pak_paths_, base::PathIdentityKey(normalized_path), &base::PathIdentityKey);
   if (mode == MountMode::kRefreshExisting && existing != pak_paths_.end()) {
     const auto pak_index
       = static_cast<size_t>(std::distance(pak_paths_.begin(), existing));
@@ -587,7 +589,8 @@ auto ContentSourceRegistry::IsKnownSource(
 auto ContentSourceRegistry::FindPakId(const std::filesystem::path& path) const
   -> std::optional<data::SourceInstanceId>
 {
-  const auto found = std::ranges::find(pak_paths_, path);
+  const auto found = std::ranges::find(
+    pak_paths_, base::PathIdentityKey(path), &base::PathIdentityKey);
   return found == pak_paths_.end()
     ? std::nullopt
     : std::optional { pak_source_ids_.at(

@@ -38,16 +38,6 @@ namespace oxygen::content::import {
 
 namespace {
 
-  auto AppendHashSlotHex(std::string& out, const base::Sha256Digest& digest)
-    -> void
-  {
-    constexpr auto kHex = "0123456789abcdef";
-    for (const auto byte : digest) {
-      out.push_back(kHex[(byte >> 4U) & 0x0FU]);
-      out.push_back(kHex[byte & 0x0FU]);
-    }
-  }
-
   [[nodiscard]] auto ComputeEffectiveHash(
     const CookedPhysicsResourcePayload& cooked) -> base::Sha256Digest
   {
@@ -69,7 +59,7 @@ namespace {
     identity.append(";n=");
     identity.append(std::to_string(cooked.data.size()));
     identity.append(";h=");
-    AppendHashSlotHex(identity, hash);
+    identity.append(base::ToHexString(hash));
     return identity;
   }
 

@@ -7,37 +7,19 @@
 #pragma once
 
 #include <cstdint>
-#include <iomanip>
-#include <span>
-#include <sstream>
 #include <string>
-#include <string_view>
+
+#include <fmt/format.h>
 
 namespace oxygen::content::inspection {
-
-inline constexpr std::string_view kHexDigits = "0123456789abcdef";
-inline constexpr unsigned kNibbleBits = 4U;
-inline constexpr unsigned kNibbleMask = 0x0FU;
 
 //! Width of the size column, shared by the tabular listings.
 inline constexpr int kSizeColumn = 10;
 
-[[nodiscard]] inline auto HexHigh(const uint8_t byte) -> char
-{
-  return kHexDigits.at(
-    (static_cast<unsigned>(byte) >> kNibbleBits) & kNibbleMask);
-}
-
-[[nodiscard]] inline auto HexLow(const uint8_t byte) -> char
-{
-  return kHexDigits.at(static_cast<unsigned>(byte) & kNibbleMask);
-}
-
+//! The value as `0x` and sixteen lowercase hexadecimal digits.
 [[nodiscard]] inline auto ToHex64(const uint64_t value) -> std::string
 {
-  std::ostringstream ss;
-  ss << "0x" << std::hex << std::setw(16) << std::setfill('0') << value;
-  return ss.str();
+  return fmt::format("{:#018x}", value);
 }
 
 } // namespace oxygen::content::inspection

@@ -14,13 +14,13 @@
 #include <ios>
 #include <optional>
 #include <ratio>
-#include <span>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
@@ -44,22 +44,6 @@ namespace {
   {
     return std::ranges::all_of(
       bytes, [](const auto byte) { return byte == 0U; });
-  }
-
-  [[nodiscard]] auto ToHex(const std::span<const uint8_t> bytes) -> std::string
-  {
-    constexpr auto kHex = std::string_view { "0123456789abcdef" };
-    auto out = std::string {};
-    out.reserve(bytes.size() * 2U);
-
-    for (const auto byte : bytes) {
-      // Integer promotion would make the shifted value a signed int.
-      const auto value = static_cast<unsigned>(byte);
-      out.push_back(kHex.at((value >> 4U) & 0x0FU));
-      out.push_back(kHex.at(value & 0x0FU));
-    }
-
-    return out;
   }
 
   [[nodiscard]] auto ToMillis(
@@ -240,8 +224,8 @@ namespace {
           {
             "catalog_digest",
             catalog_available
-              ? ordered_json(ToHex(std::span {
-                  input.build_result.output_catalog.catalog_digest }))
+              ? ordered_json(base::ToHexString(
+                  input.build_result.output_catalog.catalog_digest))
               : ordered_json(nullptr),
           },
         },

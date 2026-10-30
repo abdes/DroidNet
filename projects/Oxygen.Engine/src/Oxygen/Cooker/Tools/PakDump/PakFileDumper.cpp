@@ -12,13 +12,11 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 #include <ios>
 #include <memory>
 #include <optional>
 #include <ostream>
 #include <span>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -26,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "AssetDumpHelpers.h"
 #include "AssetDumpers.h"
 #include "DumpContext.h"
 #include "PakFileDumper.h"
@@ -54,6 +53,8 @@
 using PrintUtils::Field;
 using PrintUtils::Separator;
 using PrintUtils::SubSeparator;
+
+using oxygen::content::pakdump::asset_dump_helpers::ToHexString;
 
 using oxygen::content::AssetLoader;
 using oxygen::content::PakFile;
@@ -108,25 +109,6 @@ auto PrintResourceTable(std::ostream& out, const std::string& name,
   out << fmt::format(
     "    {:<16}offset=0x{:08x}, count={}, entry_size={} bytes{}\n", name + ":",
     offset, count, entry_size, count == 0 ? " (empty)" : "");
-}
-
-template <typename T> auto ToHexString(T value) -> std::string
-{
-  std::ostringstream oss;
-  oss << "0x" << std::hex << value;
-  return oss.str();
-}
-
-auto ToHexString(const oxygen::data::pak::core::ContentHashDigest& value)
-  -> std::string
-{
-  std::ostringstream oss;
-  oss << "0x";
-  for (const auto byte : value) {
-    oss << std::setw(2) << std::setfill('0') << std::hex
-        << static_cast<unsigned>(byte);
-  }
-  return oss.str();
 }
 
 namespace {

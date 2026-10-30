@@ -9,20 +9,34 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <random>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
 
-#include <fmt/base.h>
-
+#include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Uuid.h>
 
 namespace {
 
 constexpr auto kCanonicalStringSize = std::size_t { 36U };
+
+//! One hyphen-separated group of the canonical `8-4-4-4-12` spelling.
+struct DigitGroup final {
+  std::size_t text_offset;
+  std::size_t byte_offset;
+  std::size_t byte_count;
+};
+
+constexpr auto kDigitGroups = std::array<DigitGroup, 5> {
+  DigitGroup { .text_offset = 0U, .byte_offset = 0U, .byte_count = 4U },
+  DigitGroup { .text_offset = 9U, .byte_offset = 4U, .byte_count = 2U },
+  DigitGroup { .text_offset = 14U, .byte_offset = 6U, .byte_count = 2U },
+  DigitGroup { .text_offset = 19U, .byte_offset = 8U, .byte_count = 2U },
+  DigitGroup { .text_offset = 24U, .byte_offset = 10U, .byte_count = 6U },
+};
 
 struct ThreadState final {
   uint64_t last_timestamp_ms = 0U;
@@ -34,7 +48,7 @@ auto MakeThreadRng() -> std::mt19937_64
 {
   auto rd = std::random_device {};
   auto seed_words = std::array<uint32_t, 8> {};
-  std::ranges::generate(seed_words, [&rd]() -> uint32_t { return rd(); });
+  std::ranges::generate(seed_words, [&rd] -> uint32_t { return rd(); });
   auto seed = std::seed_seq(seed_words.begin(), seed_words.end());
   return std::mt19937_64(seed);
 }
@@ -50,21 +64,6 @@ auto CurrentUnixTimestampMs() -> uint64_t
   }
   return static_cast<uint64_t>(count);
 }
-constexpr auto ParseHexNibble(const char c) noexcept -> uint8_t
-{
-  constexpr auto kInvalidNibble = uint8_t { 0xFFU };
-  if (c >= '0' && c <= '9') {
-    return static_cast<uint8_t>(c - '0');
-  }
-  if (c >= 'a' && c <= 'f') {
-    return static_cast<uint8_t>(c - 'a' + 10);
-  }
-  if (c >= 'A' && c <= 'F') {
-    return static_cast<uint8_t>(c - 'A' + 10);
-  }
-  return kInvalidNibble;
-}
-
 constexpr auto HasCanonicalHyphens(const std::string_view str) noexcept -> bool
 {
   constexpr auto kHyphenPositions
@@ -134,8 +133,9 @@ auto Uuid::Generate() -> Uuid
   bytes[4] = static_cast<uint8_t>((timestamp_ms >> 8U) & 0xFFU);
   bytes[5] = static_cast<uint8_t>(timestamp_ms & 0xFFU);
 
-  bytes[6] = static_cast<uint8_t>((state.sequence_counter >> 8U) & 0x0FU);
-  bytes[7] = static_cast<uint8_t>(state.sequence_counter & 0xFFU);
+  const auto sequence = static_cast<uint32_t>(state.sequence_counter);
+  bytes[6] = static_cast<uint8_t>((sequence >> 8U) & 0x0FU);
+  bytes[7] = static_cast<uint8_t>(sequence & 0xFFU);
 
   bytes[8] = static_cast<uint8_t>((rand_b >> 56U) & 0xFFU);
   bytes[9] = static_cast<uint8_t>((rand_b >> 48U) & 0xFFU);
@@ -182,42 +182,19 @@ auto Uuid::FromBytes(const std::array<std::uint8_t, kSize>& bytes)
 */
 auto Uuid::FromString(const std::string_view str) -> Result<Uuid>
 {
-  constexpr auto kInvalidNibble = uint8_t { 0xFFU };
-
   if (str.size() != kCanonicalStringSize || !HasCanonicalHyphens(str)
     || !HasOnlyLowercaseHexDigits(str)) {
     return Result<Uuid>::Err(std::errc::invalid_argument);
   }
 
   auto bytes = std::array<uint8_t, Uuid::kSize> {};
-  auto byte_index = std::size_t { 0U };
-
-  for (auto i = std::size_t { 0U }; i < str.size();) {
-    if (str[i] == '-') {
-      ++i;
-      continue;
-    }
-    if ((i + 1U) >= str.size() || str[i + 1U] == '-') {
+  const auto out = std::as_writable_bytes(std::span { bytes });
+  for (const auto& group : kDigitGroups) {
+    if (!base::FromHexString(
+          str.substr(group.text_offset, group.byte_count * 2U),
+          out.subspan(group.byte_offset, group.byte_count))) {
       return Result<Uuid>::Err(std::errc::invalid_argument);
     }
-
-    const auto high = ParseHexNibble(str[i]);
-    const auto low = ParseHexNibble(str[i + 1U]);
-    if (high == kInvalidNibble || low == kInvalidNibble) {
-      return Result<Uuid>::Err(std::errc::invalid_argument);
-    }
-
-    if (byte_index >= bytes.size()) {
-      return Result<Uuid>::Err(std::errc::invalid_argument);
-    }
-
-    bytes.at(byte_index) = static_cast<uint8_t>((high << 4U) | low);
-    ++byte_index;
-    i += 2U;
-  }
-
-  if (byte_index != bytes.size()) {
-    return Result<Uuid>::Err(std::errc::invalid_argument);
   }
 
   return FromBytes(bytes);
@@ -247,15 +224,12 @@ auto to_string(const Uuid& uuid) -> std::string
   text.reserve(kCanonicalStringSize);
 
   const auto bytes = as_bytes(uuid);
-  for (auto byte_index = std::size_t { 0U }; const auto byte : bytes) {
-    if (byte_index == 4U || byte_index == 6U || byte_index == 8U
-      || byte_index == 10U) {
+  for (const auto& group : kDigitGroups) {
+    if (group.text_offset != 0U) {
       text.push_back('-');
     }
-
-    fmt::format_to(
-      std::back_inserter(text), "{:02x}", std::to_integer<uint8_t>(byte));
-    ++byte_index;
+    text.append(
+      base::ToHexString(bytes.subspan(group.byte_offset, group.byte_count)));
   }
 
   return text;

@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -30,30 +29,12 @@ namespace {
 // Test Helpers
 // ---------------------------------------------------------------------------
 
-//! Convert a hex string to a Sha256Digest.
+//! The digest a reference vector spells.
 [[nodiscard]] auto HexToDigest(std::string_view hex)
   -> oxygen::base::Sha256Digest
 {
-  oxygen::base::Sha256Digest digest = {};
-  for (size_t i = 0; i < 32 && (i * 2) + 1 < hex.size(); ++i) {
-    const auto hi = hex[i * 2];
-    const auto lo = hex[(i * 2) + 1];
-    auto nibble = [](char c) -> uint8_t {
-      if (c >= '0' && c <= '9') {
-        return static_cast<uint8_t>(c - '0');
-      }
-      if (c >= 'a' && c <= 'f') {
-        return static_cast<uint8_t>(c - 'a' + 10);
-      }
-      if (c >= 'A' && c <= 'F') {
-        return static_cast<uint8_t>(c - 'A' + 10);
-      }
-      return 0;
-    };
-    digest[i] = static_cast<uint8_t>((static_cast<unsigned>(nibble(hi)) << 4U)
-      | static_cast<unsigned>(nibble(lo)));
-  }
-  return digest;
+  return oxygen::base::Sha256DigestFromHex(hex).value_or(
+    oxygen::base::Sha256Digest {});
 }
 
 //! Fills `data` with a fixed byte sequence that is not periodic in any small

@@ -20,6 +20,7 @@
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
@@ -48,18 +49,6 @@ namespace {
   constexpr int kTextureTypeColumn = 14;
   constexpr int kScriptEncodingColumn = 25;
   constexpr int kScriptHashColumn = 66;
-
-  auto ToHexBytes(const std::span<const uint8_t> bytes) -> std::string
-  {
-    auto out = std::string {};
-    out.reserve(2 + (bytes.size() * 2));
-    out.append("0x");
-    for (const auto byte : bytes) {
-      out.push_back(HexHigh(byte));
-      out.push_back(HexLow(byte));
-    }
-    return out;
-  }
 
   auto FindFileRelPath(const oxygen::content::lc::Inspection& inspection,
     const FileKind kind) -> std::optional<std::string>
@@ -319,7 +308,9 @@ namespace {
       out << std::left << std::setw(kScriptEncodingColumn) << format_name
           << " ";
       out << std::left << std::setw(kScriptHashColumn)
-          << ToHexBytes(std::span<const uint8_t, 32>(e.content_hash)) << "\n";
+          << "0x"
+          + base::ToHexString(std::as_bytes(std::span { e.content_hash }))
+          << "\n";
     }
 
     out << "\n  (* = sentinel/reserved index)\n";

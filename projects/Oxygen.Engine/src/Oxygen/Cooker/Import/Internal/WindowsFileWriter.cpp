@@ -21,7 +21,6 @@
 #include <asio/io_context.hpp>
 #include <asio/windows/random_access_handle.hpp>
 #include <asio/write_at.hpp>
-#include <errhandlingapi.h>
 #include <fileapi.h>
 #include <handleapi.h>
 #include <minwindef.h>
@@ -32,6 +31,7 @@
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/SystemError.h>
 #include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
@@ -81,24 +81,16 @@ auto MapWindowsError(DWORD error) -> FileError
   }
 }
 
-//! Create FileErrorInfo from Windows error.
-auto MakeError(FileError code, const std::filesystem::path& path,
-  DWORD win_error = 0) -> FileErrorInfo
-{
-  return FileErrorInfo {
-    .code = code,
-    .path = path,
-    .system_error
-    = std::error_code(static_cast<int>(win_error), std::system_category()),
-    .message = std::system_category().message(static_cast<int>(win_error)),
-  };
-}
-
-//! Create FileErrorInfo from current Windows error.
+//! Create FileErrorInfo from the calling thread's last Windows error.
 auto MakeCurrentError(const std::filesystem::path& path) -> FileErrorInfo
 {
-  const DWORD win_error = GetLastError();
-  return MakeError(MapWindowsError(win_error), path, win_error);
+  const auto error = oxygen::base::LastSystemError();
+  return FileErrorInfo {
+    .code = MapWindowsError(static_cast<DWORD>(error.value())),
+    .path = path,
+    .system_error = error,
+    .message = error.message(),
+  };
 }
 
 //! RAII wrapper for Windows HANDLE.

@@ -2657,11 +2657,8 @@ auto AssetLoader::PinResource(const ResourceKey key) -> ResidencyPin
 auto AssetLoader::GetPakIndex(const PakFile& pak) const
   -> data::SourceInstanceId
 {
-  // Normalize the path of the input pak
-  const auto& pak_path = base::ToLogicalPath(
-    std::filesystem::weakly_canonical(base::ToNativePath(pak.FilePath())));
-
-  if (const auto source_id = impl_->source_registry.FindPakId(pak_path);
+  // The registry matches paths by identity key; the mount canonicalized once.
+  if (const auto source_id = impl_->source_registry.FindPakId(pak.FilePath());
     source_id) {
     return *source_id;
   }

@@ -6,13 +6,12 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <cstring>
-#include <iomanip>
 #include <optional>
 #include <ostream>
 #include <span>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -23,6 +22,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -50,24 +50,18 @@ inline auto PrintAssetKey(const oxygen::data::AssetKey& key, DumpContext& ctx)
   PrintUtils::Field(ctx.Out(), "GUID", oxygen::data::to_string(key));
 }
 
-template <typename T>
-[[nodiscard]] inline auto ToHexString(T value) -> std::string
+//! The integer as `0x` and its lowercase hexadecimal digits.
+template <std::integral T>
+[[nodiscard]] inline auto ToHexString(const T value) -> std::string
 {
-  std::ostringstream oss;
-  oss << "0x" << std::hex << value;
-  return oss.str();
+  return fmt::format("{:#x}", value);
 }
 
+//! The digest as `0x` and its 64 lowercase hexadecimal digits.
 [[nodiscard]] inline auto ToHexString(
   const oxygen::data::pak::core::ContentHashDigest& value) -> std::string
 {
-  std::ostringstream oss;
-  oss << "0x";
-  for (const auto byte : value) {
-    oss << std::setw(2) << std::setfill('0') << std::hex
-        << static_cast<unsigned>(byte);
-  }
-  return oss.str();
+  return "0x" + base::ToHexString(value);
 }
 
 inline auto PrintAssetDescriptorHexPreview(

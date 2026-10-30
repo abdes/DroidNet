@@ -96,10 +96,26 @@ m_gtest_program(
 # Hash utilities tests
 m_gtest_program(Hash SOURCES "Hash_test.cpp")
 m_gtest_program(Sha256 SOURCES "Sha256_test.cpp")
+m_gtest_program(Crc32 SOURCES "Crc32_test.cpp")
+m_gtest_program(Hex SOURCES "Hex_test.cpp")
 m_gtest_program(Filesystem SOURCES "Filesystem_test.cpp")
 
 m_gtest_program(NoInline SOURCES "NoInline_test.cpp")
 m_gtest_program(Result SOURCES "Result_test.cpp")
+m_gtest_program(SystemError SOURCES "SystemError_test.cpp")
 m_gtest_program(ReturnAddress SOURCES "ReturnAddress_test.cpp")
 m_gtest_program(Unreachable SOURCES "Unreachable_test.cpp")
 m_gtest_program(Uuid SOURCES "Uuid_test.cpp")
+
+# -- Aggregate -----------------------------------------------------------------
+
+# Builds every Base test program this platform defines; the list is collected
+# so a new or platform-specific program needs no edit here.
+get_directory_property(base_test_targets BUILDSYSTEM_TARGETS)
+add_custom_target("Oxygen.Base.AllTests" DEPENDS ${base_test_targets})
+set_target_properties(
+  "Oxygen.Base.AllTests"
+  PROPERTIES
+    FOLDER
+      "Testing"
+)

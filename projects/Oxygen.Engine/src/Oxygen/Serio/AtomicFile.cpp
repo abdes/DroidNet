@@ -20,6 +20,7 @@
 #include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Base/SystemError.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/AtomicFile.h>
 
@@ -28,7 +29,6 @@
 
 #  include <AccCtrl.h>
 #  include <AclAPI.h>
-#  include <errhandlingapi.h>
 #  include <fileapi.h>
 #  include <handleapi.h>
 #  include <minwindef.h>
@@ -52,8 +52,7 @@ namespace {
     auto* const handle = CreateFileW(temporary.c_str(), GENERIC_WRITE, 0,
       nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
-      return Result<void>::Err(std::error_code(
-        static_cast<int>(GetLastError()), std::system_category()));
+      return Result<void>::Err(base::LastSystemError());
     }
     const auto close
       = ScopeGuard([handle] noexcept -> void { CloseHandle(handle); });
@@ -62,8 +61,7 @@ namespace {
         static_cast<size_t>(std::numeric_limits<DWORD>::max())));
       DWORD written = 0;
       if (WriteFile(handle, bytes.data(), count, &written, nullptr) == FALSE) {
-        return Result<void>::Err(std::error_code(
-          static_cast<int>(GetLastError()), std::system_category()));
+        return Result<void>::Err(base::LastSystemError());
       }
       if (written == 0U) {
         return Result<void>::Err(std::make_error_code(std::errc::io_error));
@@ -71,14 +69,13 @@ namespace {
       bytes = bytes.subspan(written);
     }
     if (FlushFileBuffers(handle) == FALSE) {
-      return Result<void>::Err(std::error_code(
-        static_cast<int>(GetLastError()), std::system_category()));
+      return Result<void>::Err(base::LastSystemError());
     }
 #else
     const auto descriptor = ::open(temporary.c_str(),
       O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, S_IRUSR | S_IWUSR);
     if (descriptor < 0) {
-      return Result<void>::Err(std::error_code(errno, std::generic_category()));
+      return Result<void>::Err(base::LastSystemError());
     }
     const auto close
       = ScopeGuard([descriptor]() noexcept { ::close(descriptor); });
@@ -88,8 +85,7 @@ namespace {
         if (errno == EINTR) {
           continue;
         }
-        return Result<void>::Err(
-          std::error_code(errno, std::generic_category()));
+        return Result<void>::Err(base::LastSystemError());
       }
       if (written == 0) {
         return Result<void>::Err(std::make_error_code(std::errc::io_error));
@@ -97,18 +93,13 @@ namespace {
       bytes = bytes.subspan(static_cast<size_t>(written));
     }
     if (::fsync(descriptor) != 0) {
-      return Result<void>::Err(std::error_code(errno, std::generic_category()));
+      return Result<void>::Err(base::LastSystemError());
     }
 #endif
     return {};
   }
 
 #ifdef OXYGEN_WINDOWS
-  auto LastWindowsError() -> std::error_code
-  {
-    return { static_cast<int>(GetLastError()), std::system_category() };
-  }
-
   //! Renames the temporary over the destination with POSIX semantics: readers
   //! holding the destination open with shared deletion keep the file they
   //! opened, and the name moves to the new file without waiting for them. A
@@ -123,7 +114,7 @@ namespace {
           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
       if (handle == INVALID_HANDLE_VALUE) {
-        return Result<AtomicFileCommit>::Err(LastWindowsError());
+        return Result<AtomicFileCommit>::Err(base::LastSystemError());
       }
       const auto close
         = ScopeGuard([handle] noexcept -> void { CloseHandle(handle); });
@@ -152,21 +143,21 @@ namespace {
         // rename as MOVEFILE_WRITE_THROUGH would.
         if (FlushFileBuffers(handle) == FALSE) {
           return Ok(
-            AtomicFileCommit { .durability_error = LastWindowsError() });
+            AtomicFileCommit { .durability_error = base::LastSystemError() });
         }
         return Ok(AtomicFileCommit {});
       }
-      const auto error = GetLastError();
-      if (error != ERROR_INVALID_PARAMETER && error != ERROR_NOT_SUPPORTED
-        && error != ERROR_INVALID_FUNCTION) {
-        return Result<AtomicFileCommit>::Err(
-          std::error_code(static_cast<int>(error), std::system_category()));
+      const auto error = base::LastSystemError();
+      const auto code = static_cast<DWORD>(error.value());
+      if (code != ERROR_INVALID_PARAMETER && code != ERROR_NOT_SUPPORTED
+        && code != ERROR_INVALID_FUNCTION) {
+        return Result<AtomicFileCommit>::Err(error);
       }
     }
     if (MoveFileExW(temporary.c_str(), destination.c_str(),
           MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)
       == FALSE) {
-      return Result<AtomicFileCommit>::Err(LastWindowsError());
+      return Result<AtomicFileCommit>::Err(base::LastSystemError());
     }
     return Ok(AtomicFileCommit {});
   }
@@ -194,8 +185,7 @@ namespace {
     DWORD revision = 0;
     if (GetSecurityDescriptorControl(descriptor, &control, &revision)
       == FALSE) {
-      return Result<void>::Err(std::error_code(
-        static_cast<int>(GetLastError()), std::system_category()));
+      return Result<void>::Err(base::LastSystemError());
     }
     // Inherited ACEs in the copied DACL are recomputed from the shared parent.
     const DWORD protection = (control & SE_DACL_PROTECTED) != 0
@@ -220,7 +210,7 @@ namespace {
     struct stat original {};
     if (::stat(destination.c_str(), &original) == 0
       && ::chmod(temporary.c_str(), original.st_mode) != 0) {
-      return Result<void>::Err(std::error_code(errno, std::generic_category()));
+      return Result<void>::Err(base::LastSystemError());
     }
     return {};
   }
@@ -257,21 +247,18 @@ auto WriteFileAtomically(const std::filesystem::path& path,
   return ReplaceDestination(temporary, native_path);
 #else
   if (::rename(temporary.c_str(), path.c_str()) != 0) {
-    return Result<AtomicFileCommit>::Err(
-      std::error_code(errno, std::generic_category()));
+    return Result<AtomicFileCommit>::Err(base::LastSystemError());
   }
   const auto parent
     = path.has_parent_path() ? path.parent_path() : std::filesystem::path(".");
   const auto directory
     = ::open(parent.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
   if (directory < 0) {
-    return Ok(AtomicFileCommit {
-      .durability_error = std::error_code(errno, std::generic_category()) });
+    return Ok(AtomicFileCommit { .durability_error = base::LastSystemError() });
   }
   const auto close = ScopeGuard([directory]() noexcept { ::close(directory); });
   if (::fsync(directory) != 0) {
-    return Ok(AtomicFileCommit {
-      .durability_error = std::error_code(errno, std::generic_category()) });
+    return Ok(AtomicFileCommit { .durability_error = base::LastSystemError() });
   }
   return Ok(AtomicFileCommit {});
 #endif
@@ -285,13 +272,13 @@ auto ReadPublishedFile(const std::filesystem::path& path)
     GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
   if (handle == INVALID_HANDLE_VALUE) {
-    return Result<std::vector<std::byte>>::Err(LastWindowsError());
+    return Result<std::vector<std::byte>>::Err(base::LastSystemError());
   }
   const auto close
     = ScopeGuard([handle] noexcept -> void { CloseHandle(handle); });
   LARGE_INTEGER size {};
   if (GetFileSizeEx(handle, &size) == FALSE) {
-    return Result<std::vector<std::byte>>::Err(LastWindowsError());
+    return Result<std::vector<std::byte>>::Err(base::LastSystemError());
   }
   if (static_cast<uint64_t>(size.QuadPart)
     > std::numeric_limits<size_t>::max()) {
@@ -305,7 +292,7 @@ auto ReadPublishedFile(const std::filesystem::path& path)
       static_cast<size_t>(std::numeric_limits<DWORD>::max())));
     DWORD read = 0;
     if (ReadFile(handle, remaining.data(), count, &read, nullptr) == FALSE) {
-      return Result<std::vector<std::byte>>::Err(LastWindowsError());
+      return Result<std::vector<std::byte>>::Err(base::LastSystemError());
     }
     if (read == 0U) {
       return Result<std::vector<std::byte>>::Err(
@@ -316,15 +303,13 @@ auto ReadPublishedFile(const std::filesystem::path& path)
 #else
   const auto descriptor = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
   if (descriptor < 0) {
-    return Result<std::vector<std::byte>>::Err(
-      std::error_code(errno, std::generic_category()));
+    return Result<std::vector<std::byte>>::Err(base::LastSystemError());
   }
   const auto close
     = ScopeGuard([descriptor]() noexcept { ::close(descriptor); });
   struct stat status {};
   if (::fstat(descriptor, &status) != 0) {
-    return Result<std::vector<std::byte>>::Err(
-      std::error_code(errno, std::generic_category()));
+    return Result<std::vector<std::byte>>::Err(base::LastSystemError());
   }
   auto bytes = std::vector<std::byte>(static_cast<size_t>(status.st_size));
   auto remaining = std::span(bytes);
@@ -334,8 +319,7 @@ auto ReadPublishedFile(const std::filesystem::path& path)
       if (errno == EINTR) {
         continue;
       }
-      return Result<std::vector<std::byte>>::Err(
-        std::error_code(errno, std::generic_category()));
+      return Result<std::vector<std::byte>>::Err(base::LastSystemError());
     }
     if (read == 0) {
       return Result<std::vector<std::byte>>::Err(
