@@ -16,6 +16,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/EngineContent.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
@@ -67,8 +68,16 @@ auto CheckShapeJob(const std::filesystem::path& directory, const json& job)
   EXPECT_THAT(ValidateJson(GeometrySchema(), descriptor), testing::IsEmpty());
   const auto& lod = descriptor.at("lods").at(0);
   EXPECT_EQ(lod.at("procedural").at("generator"), job.at("name"));
-  EXPECT_EQ(lod.at("submeshes").at(0).at("material_ref").get<std::string>(),
-    oxygen::data::MaterialAsset::kDefaultVirtualPath);
+  // The default material is in the geometry's mount, so it is named relative
+  // to the geometry.
+  const auto identity = job.at("virtual_path").get<std::string>();
+  const auto material_ref
+    = lod.at("submeshes").at(0).at("material_ref").get<std::string>();
+  EXPECT_EQ(material_ref,
+    oxygen::content::RelativeReference(
+      identity, oxygen::data::MaterialAsset::kDefaultVirtualPath));
+  EXPECT_EQ(oxygen::content::ResolveReference(identity, material_ref),
+    std::string(oxygen::data::MaterialAsset::kDefaultVirtualPath));
   EXPECT_THAT(job.at("virtual_path").get<std::string>(),
     testing::AllOf(testing::StartsWith("/Engine/"),
       testing::EndsWith("/" + job.at("name").get<std::string>() + ".ogeo")));

@@ -74,8 +74,8 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
   auto errors = std::ostringstream {};
 
   const auto mounts = ContentMountTable(temp.Path());
-  const auto request
-    = BuildGeometryDescriptorRequest(settings, *mounts, errors);
+  const auto request = BuildGeometryDescriptorRequest(
+    settings, "/Content/Geometry/Cube.ogeo", *mounts, errors);
 
   ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << errors.str();
@@ -125,8 +125,8 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
   auto errors = std::ostringstream {};
 
   const auto mounts = ContentMountTable(temp.Path());
-  const auto request
-    = BuildGeometryDescriptorRequest(settings, *mounts, errors);
+  const auto request = BuildGeometryDescriptorRequest(
+    settings, "/Content/Geometry/Cube.ogeo", *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(errors.str(),
@@ -142,8 +142,8 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest, RejectsMissingFile)
   auto errors = std::ostringstream {};
 
   const auto mounts = ContentMountTable(temp.Path());
-  const auto request
-    = BuildGeometryDescriptorRequest(settings, *mounts, errors);
+  const auto request = BuildGeometryDescriptorRequest(
+    settings, "/Content/Geometry/Cube.ogeo", *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(
@@ -180,8 +180,8 @@ NOLINT_TEST(
   auto errors = std::ostringstream {};
 
   const auto mounts = ContentMountTable(temp.Path());
-  const auto request
-    = BuildGeometryDescriptorRequest(settings, *mounts, errors);
+  const auto request = BuildGeometryDescriptorRequest(
+    settings, "/Content/Geometry/Cube.ogeo", *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(

@@ -100,8 +100,14 @@
       "required": ["virtual_path"],
       "properties": {
         "virtual_path": {
-          "type": "string",
-          "minLength": 1
+          "allOf": [
+            {
+              "$ref": "oxygen.reference.schema.json#/definitions/reference"
+            },
+            {
+              "pattern": "\\.otex$"
+            }
+          ]
         },
         "uv_set": {
           "type": "integer",

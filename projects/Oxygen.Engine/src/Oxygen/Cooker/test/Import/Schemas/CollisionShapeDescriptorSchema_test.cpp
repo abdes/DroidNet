@@ -84,6 +84,30 @@ INSTANTIATE_TEST_SUITE_P(Cases, CollisionShapeDescriptorSchemaCaseTest,
       "",
     },
     SchemaCase {
+      "AcceptsRelativeMaterialReference",
+      Shape("floor_box", "ground")
+        .Set("/material_ref", "../Materials/ground.opmat")
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsMaterialReferenceOfAnotherType",
+      Shape("floor_box", "ground")
+        .Set("/material_ref", "../Materials/ground.ocshape")
+        .Text(),
+      false,
+      "/material_ref: ",
+    },
+    SchemaCase {
+      "RejectsStaleIdentityField",
+      Shape("floor_box", "ground")
+        .Set("/virtual_path", "/.cooked/Physics/Shapes/floor_box.ocshape")
+        .Text(),
+      false,
+      "'virtual_path'",
+    },
+    SchemaCase {
       "RejectsTopLevelUnknownFieldDocument",
       HullShape()
         .Set("/unexpected_field", "/.cooked/Physics/Resources/hull.opres")

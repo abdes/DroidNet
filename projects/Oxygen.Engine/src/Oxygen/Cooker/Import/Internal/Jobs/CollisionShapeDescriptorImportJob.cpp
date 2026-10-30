@@ -206,25 +206,13 @@ namespace {
   }
 
   //! Places the descriptor at the job's identity.
-  /*!
-   A descriptor may state its identity too; it must be the one the job cooks.
-  */
   [[nodiscard]] auto ResolveDescriptorTarget(const ImportRequest& request,
-    const json& descriptor_doc, ImportSession& session)
-    -> std::optional<DescriptorTarget>
+    ImportSession& session) -> std::optional<DescriptorTarget>
   {
     auto placement
       = internal::PlaceAsset(request, data::kCollisionShapeDescriptorExtension);
     if (!placement.has_value()) {
       session.AddDiagnostic(std::move(placement.error()));
-      return std::nullopt;
-    }
-    if (descriptor_doc.contains("virtual_path")
-      && descriptor_doc.at("virtual_path").get<std::string>()
-        != placement->virtual_path) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.identity_conflict",
-        "The descriptor's virtual_path differs from the job's", "virtual_path");
       return std::nullopt;
     }
     return DescriptorTarget {
@@ -356,24 +344,33 @@ namespace {
     const AssetTypeMap& primary_assets, const std::string_view material_ref,
     data::AssetKey& out_material_key) -> bool
   {
+    const auto reference = internal::ResolveJobReference(request, material_ref);
+    if (!reference.has_value()) {
+      session.AddDiagnostic(internal::RefuseReference(
+        request, material_ref, reference.error(), "material_ref"));
+      return false;
+    }
+    const auto named
+      = "'" + reference->written + "' resolves to " + reference->resolved;
+
     auto resolved_key = std::optional<data::AssetKey> {};
     auto resolve_error = std::optional<std::string> {};
     try {
-      resolved_key = resolver.ResolveAssetKey(material_ref);
+      resolved_key = resolver.ResolveAssetKey(reference->resolved);
     } catch (const std::exception& ex) {
       resolve_error = ex.what();
     }
     if (resolve_error.has_value()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.material_ref_invalid",
-        "Invalid material_ref virtual path: " + *resolve_error, "material_ref");
+        internal::kReferenceInvalidCode,
+        named + ", which the resolver refuses: " + *resolve_error,
+        "material_ref");
       return false;
     }
     if (!resolved_key.has_value()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.shape.material_ref_unresolved",
-        "Resolved key not found for material_ref: " + std::string(material_ref),
-        "material_ref");
+        "Resolved key not found for material_ref: " + named, "material_ref");
       return false;
     }
 
@@ -385,9 +382,8 @@ namespace {
         found_elsewhere ? "physics.shape.reference_source_mismatch"
                         : "physics.shape.material_ref_unresolved",
         found_elsewhere
-          ? "Resolved material_ref is not in the target source domain"
-          : "Resolved key not found for material_ref: "
-            + std::string(material_ref),
+          ? "Resolved material_ref is not in the target source domain: " + named
+          : "Resolved key not found for material_ref: " + named,
         "material_ref");
       return false;
     }
@@ -395,7 +391,8 @@ namespace {
     if (primary_it->second != data::AssetType::kPhysicsMaterial) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.shape.material_ref_not_physics_material",
-        "Resolved material_ref has unexpected asset type", "material_ref");
+        "Resolved material_ref has unexpected asset type: " + named,
+        "material_ref");
       return false;
     }
 
@@ -790,8 +787,7 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  const auto target
-    = ResolveDescriptorTarget(Request(), descriptor_doc, session);
+  const auto target = ResolveDescriptorTarget(Request(), session);
   if (!target.has_value()) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
       "Collision shape descriptor target resolution failed");

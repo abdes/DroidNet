@@ -129,7 +129,8 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
   CHECK_NOTNULL_F(Request().source_mounts.get(),
     "A buffer container locates its sources through the job's mounts");
   const auto sources = internal::BufferSource::FromDeclarations(buffer_chunks,
-    Request().source_path, *Request().source_mounts, diagnostics);
+    Request().source_path, Request().OutputIdentity(), *Request().source_mounts,
+    diagnostics);
   for (auto& diagnostic : diagnostics) {
     session.AddDiagnostic(std::move(diagnostic));
   }

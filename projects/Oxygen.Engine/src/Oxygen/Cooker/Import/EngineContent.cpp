@@ -16,6 +16,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/EngineContent.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -93,6 +94,12 @@ auto DefaultMaterialDescriptor() -> json
 
 auto GeometryDescriptor(const EngineShape& shape) -> json
 {
+  // The default material is in the geometry's mount, so it is named relative
+  // to the geometry's own identity.
+  const auto material_ref = oxygen::content::RelativeReference(
+    EngineVirtualPath(
+      shape.folder, shape.name, oxygen::data::kGeometryDescriptorExtension),
+    oxygen::data::MaterialAsset::kDefaultVirtualPath);
   return {
     { "$schema", "oxygen.geometry-descriptor.v1" },
     { "name", shape.name },
@@ -119,10 +126,7 @@ auto GeometryDescriptor(const EngineShape& shape) -> json
                   "surface_id",
                   to_string(oxygen::data::ProceduralSurfaceId()),
                 },
-                {
-                  "material_ref",
-                  oxygen::data::MaterialAsset::kDefaultVirtualPath,
-                },
+                { "material_ref", material_ref },
                 {
                   "views",
                   json::array({ json { { "view_ref", "__all__" } } }),

@@ -23,11 +23,6 @@
   },
   "required": ["buffers"],
   "definitions": {
-    "canonical_obuf_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.obuf$"
-    },
     "buffer_view_descriptor": {
       "type": "object",
       "additionalProperties": false,
@@ -105,7 +100,10 @@
           "minLength": 1
         },
         "virtual_path": {
-          "$ref": "#/definitions/canonical_obuf_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.obuf$" }
+          ]
         },
         "usage_flags": {
           "type": "integer",

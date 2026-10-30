@@ -135,10 +135,6 @@ namespace {
     if (descriptor_doc.contains("name")) {
       settings.job_name = descriptor_doc.at("name").get<std::string>();
     }
-    if (descriptor_doc.contains("virtual_path")) {
-      settings.virtual_path
-        = descriptor_doc.at("virtual_path").get<std::string>();
-    }
     if (descriptor_doc.contains("content_hashing")) {
       settings.with_content_hashing
         = descriptor_doc.at("content_hashing").get<bool>();
@@ -251,18 +247,6 @@ auto TextureDescriptorImportSettings::Prepare(const std::string_view bytes,
     return std::nullopt;
   }
   if (!ValidateDescriptorSchema(document, path, diagnostics)) {
-    return std::nullopt;
-  }
-  if (!texture.virtual_path.empty() && document.contains("virtual_path")
-    && document.at("virtual_path").get<std::string>() != texture.virtual_path) {
-    diagnostics.push_back(ImportDiagnostic {
-      .severity = ImportSeverity::kError,
-      .code = "texture.descriptor.identity_conflict",
-      .message = "Texture descriptor virtual_path conflicts with the import "
-                 "job identity",
-      .source_path = path.string(),
-      .object_path = "virtual_path",
-    });
     return std::nullopt;
   }
   CHECK_NOTNULL_F(mounts.get(),

@@ -14,6 +14,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Data/MaterialAsset.h>
 
@@ -31,12 +32,12 @@
 namespace oxygen::cooker::test {
 
 //! The text an authored file whose identity is `anchor` writes to name
-//! `target`: today the target's absolute virtual path.
+//! `target`: relative within one mount, absolute across mounts
+//! (`content::RelativeReference`).
 [[nodiscard]] inline auto SpellReference(
-  [[maybe_unused]] const std::string_view anchor, const std::string_view target)
-  -> std::string
+  const std::string_view anchor, const std::string_view target) -> std::string
 {
-  return std::string { target };
+  return oxygen::content::RelativeReference(anchor, target);
 }
 
 //! The leaf of `identity` without its extension (`Wall` for
@@ -147,12 +148,6 @@ public:
     : AuthoredDocument(std::move(identity), { { "source", source } })
   {
   }
-
-  //! Repeats the identity in the descriptor's `virtual_path`.
-  auto WithIdentityField() -> TextureDescriptor&
-  {
-    return Set("/virtual_path", Identity());
-  }
 };
 
 //! A geometry descriptor (`*.ogeo.json`): one procedural LOD with one submesh
@@ -193,6 +188,7 @@ public:
   }
 
   //! Appends `buffer` to the descriptor's own buffers, naming it `product`.
+  //! A product is named relative to the descriptor, so it is in its mount.
   auto AppendBuffer(nlohmann::json buffer, const std::string_view product)
     -> GeometryDescriptor&
   {
@@ -210,7 +206,7 @@ public:
   {
   }
 
-  //! Appends `buffer`, naming it `product`.
+  //! Appends `buffer`, naming it `product`, relative to the container.
   auto AppendBuffer(nlohmann::json buffer, const std::string_view product)
     -> BufferContainer&
   {
@@ -234,12 +230,6 @@ public:
         })
   {
   }
-
-  //! Repeats the identity in the descriptor's `virtual_path`.
-  auto WithIdentityField() -> CollisionShapeDescriptor&
-  {
-    return Set("/virtual_path", Identity());
-  }
 };
 
 //! A physics material descriptor (`*.opmat.json`).
@@ -249,12 +239,6 @@ public:
   explicit PhysicsMaterialDescriptor(std::string identity)
     : AuthoredDocument(identity, { { "name", StemOf(identity) } })
   {
-  }
-
-  //! Repeats the identity in the descriptor's `virtual_path`.
-  auto WithIdentityField() -> PhysicsMaterialDescriptor&
-  {
-    return Set("/virtual_path", Identity());
   }
 };
 

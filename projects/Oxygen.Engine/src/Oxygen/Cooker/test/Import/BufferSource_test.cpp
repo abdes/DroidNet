@@ -8,6 +8,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -33,6 +34,9 @@ namespace {
   using oxygen::cooker::test::DiagnosticSummary;
   using oxygen::cooker::test::HasDiagnosticCode;
   using oxygen::cooker::test::TempDirTest;
+
+  constexpr auto kContainer
+    = std::string_view { "/Content/Geometry/geometry.buffers" };
 
   //! The buffer declarations of a geometry descriptor, as the source reads
   //! them.
@@ -67,8 +71,8 @@ namespace {
       "/OtherMount/Buffers/vertices.obuf");
     const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    const auto sources = BufferSource::FromDeclarations(
-      declarations, "authored/geometry.json", Mounts(), diagnostics);
+    const auto sources = BufferSource::FromDeclarations(declarations,
+      "authored/geometry.json", container.Identity(), Mounts(), diagnostics);
     ASSERT_HAS_VALUE(sources) << "Expected sources to contain a value";
     ASSERT_EQ(sources->size(), 1U);
     EXPECT_TRUE(diagnostics.empty());
@@ -91,12 +95,79 @@ namespace {
       .AppendBuffer({ { "source", "b.bin" } }, "/Content/Buffers/shared.obuf");
     const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    EXPECT_FALSE(BufferSource::FromDeclarations(
-      declarations, "geometry.json", Mounts(), diagnostics));
+    EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
+      container.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(HasDiagnosticCode(
       diagnostics, "buffer.container.virtual_path_duplicate"));
     ASSERT_FALSE(diagnostics.empty());
     EXPECT_EQ(diagnostics.front().object_path, "buffers[1].virtual_path");
+  }
+
+  NOLINT_TEST_F(BufferSourceTest, NamesProductsRelativeToTheContainer)
+  {
+    auto container = BufferContainer { std::string(kContainer) };
+    container
+      .AppendBuffer({ { "source", "a.bin" } }, "/Content/Geometry/a.obuf")
+      .AppendBuffer({ { "source", "b.bin" } }, "/Content/Buffers/b.obuf");
+    const auto declarations = DeclarationsOf(container);
+    EXPECT_EQ(declarations.at(0).at("virtual_path"), "a.obuf");
+    EXPECT_EQ(declarations.at(1).at("virtual_path"), "../Buffers/b.obuf");
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto sources = BufferSource::FromDeclarations(declarations,
+      "geometry.json", container.Identity(), Mounts(), diagnostics);
+    ASSERT_HAS_VALUE(sources) << DiagnosticSummary(diagnostics);
+    ASSERT_EQ(sources->size(), 2U);
+    EXPECT_EQ(sources->at(0).source_id, "/Content/Geometry/a.obuf");
+    EXPECT_EQ(sources->at(1).source_id, "/Content/Buffers/b.obuf");
+  }
+
+  NOLINT_TEST_F(BufferSourceTest, RejectsTwoSpellingsOfOneProduct)
+  {
+    auto container = BufferContainer { std::string(kContainer) };
+    container
+      .AppendBuffer({ { "source", "a.bin" } }, "/Content/Geometry/a.obuf")
+      .AppendBuffer({ { "source", "b.bin" } }, "/Content/Geometry/a.obuf");
+    auto declarations = DeclarationsOf(container);
+    declarations.at(1)["virtual_path"] = "./a.obuf";
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
+      container.Identity(), Mounts(), diagnostics));
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, "buffer.container.virtual_path_duplicate"))
+      << DiagnosticSummary(diagnostics);
+  }
+
+  NOLINT_TEST_F(BufferSourceTest, RefusesAProductNamedAbsolutelyInItsOwnMount)
+  {
+    auto container = BufferContainer { std::string(kContainer) };
+    container.AppendBuffer(
+      { { "source", "a.bin" } }, "/Content/Buffers/a.obuf");
+    auto declarations = DeclarationsOf(container);
+    declarations.at(0)["virtual_path"] = "/Content/Buffers/a.obuf";
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
+      container.Identity(), Mounts(), diagnostics));
+    ASSERT_FALSE(diagnostics.empty());
+    EXPECT_EQ(diagnostics.front().code, "import.reference_invalid");
+    EXPECT_THAT(diagnostics.front().message,
+      testing::HasSubstr("vpath.reference_self_absolute"));
+    EXPECT_EQ(diagnostics.front().object_path, "buffers[0].virtual_path");
+  }
+
+  NOLINT_TEST_F(BufferSourceTest, RefusesAProductClimbingAboveTheMount)
+  {
+    auto container = BufferContainer { std::string(kContainer) };
+    container.AppendBuffer(
+      { { "source", "a.bin" } }, "/Content/Buffers/a.obuf");
+    auto declarations = DeclarationsOf(container);
+    declarations.at(0)["virtual_path"] = "../../a.obuf";
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
+      container.Identity(), Mounts(), diagnostics));
+    ASSERT_FALSE(diagnostics.empty());
+    EXPECT_EQ(diagnostics.front().code, "import.reference_invalid");
+    EXPECT_THAT(diagnostics.front().message,
+      testing::HasSubstr("vpath.reference_outside_mount"));
   }
 
   NOLINT_TEST_F(BufferSourceTest, RejectsInvalidDeclarationWithSourceLocation)
@@ -106,8 +177,8 @@ namespace {
       "/Content/Buffers/a.obuf");
     const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    EXPECT_FALSE(BufferSource::FromDeclarations(
-      declarations, "geometry.json", Mounts(), diagnostics, "lod.buffers"));
+    EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
+      container.Identity(), Mounts(), diagnostics, "lod.buffers"));
     EXPECT_TRUE(HasDiagnosticCode(
       diagnostics, "buffer.container.schema_validation_failed"));
     ASSERT_FALSE(diagnostics.empty());
@@ -122,8 +193,8 @@ namespace {
       "/Content/Buffers/a.obuf");
     const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    const auto sources = BufferSource::FromDeclarations(
-      declarations, "geometry.json", Mounts(), diagnostics);
+    const auto sources = BufferSource::FromDeclarations(declarations,
+      "geometry.json", container.Identity(), Mounts(), diagnostics);
     ASSERT_HAS_VALUE(sources) << "Expected sources to contain a value";
     ASSERT_EQ(sources->size(), 1U);
     EXPECT_EQ(sources->front().element_stride, 0U);
@@ -134,7 +205,7 @@ namespace {
   {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(
-      Json::object(), "geometry.json", Mounts(), diagnostics));
+      Json::object(), "geometry.json", kContainer, Mounts(), diagnostics));
     EXPECT_TRUE(
       HasDiagnosticCode(diagnostics, "buffer.container.buffers_missing"));
   }
@@ -152,8 +223,8 @@ namespace {
       "/Content/Buffers/a.obuf");
     const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    EXPECT_FALSE(BufferSource::FromDeclarations(
-      declarations, "geometry.json", Mounts(), diagnostics));
+    EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
+      container.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(HasDiagnosticCode(diagnostics, "buffer.view.name_duplicate"));
     ASSERT_EQ(diagnostics.size(), 1U);
     EXPECT_EQ(diagnostics.front().object_path, "buffers[0].views[1].name");
@@ -167,8 +238,8 @@ namespace {
       "/Content/Buffers/vertices.obuf");
     const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    const auto sources = BufferSource::FromDeclarations(
-      declarations, "authored/geometry.json", Mounts(), diagnostics);
+    const auto sources = BufferSource::FromDeclarations(declarations,
+      "authored/geometry.json", container.Identity(), Mounts(), diagnostics);
     ASSERT_HAS_VALUE(sources) << "Expected sources to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     ASSERT_EQ(sources->size(), 1U);
@@ -184,8 +255,8 @@ namespace {
     const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto mounts = ContentAndOtherMountTable(TempDir());
-    EXPECT_FALSE(BufferSource::FromDeclarations(
-      declarations, "Content/geometry.json", *mounts, diagnostics));
+    EXPECT_FALSE(BufferSource::FromDeclarations(declarations,
+      "Content/geometry.json", container.Identity(), *mounts, diagnostics));
     EXPECT_TRUE(
       HasDiagnosticCode(diagnostics, "import.reference_outside_mount"))
       << DiagnosticSummary(diagnostics);

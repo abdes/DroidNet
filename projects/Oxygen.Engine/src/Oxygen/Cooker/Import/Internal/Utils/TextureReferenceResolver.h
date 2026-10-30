@@ -26,7 +26,8 @@ struct ImportRequest;
 namespace internal {
 
   struct TextureReferenceRequest {
-    std::string virtual_path;
+    //! The reference as written in the job's authored file.
+    std::string text;
     std::string object_path;
     std::string diagnostic_prefix;
     //! A texture whose descriptor no longer exists, for example after it was
@@ -45,7 +46,8 @@ namespace internal {
     bool missing { false };
   };
 
-  //! Resolve an authored texture reference: in the job's own output root
+  //! Resolve an authored texture reference against the job's identity
+  //! (`ResolveJobReference`), then look it up: in the job's own output root
   //! first, where it binds a local texture-table entry, then in its cooked
   //! context roots, newest first, where it binds the texture by key without
   //! copying it. Returns `std::nullopt` after reporting an error diagnostic; a

@@ -121,26 +121,6 @@
         "$ref": "#/definitions/curve_point_2d"
       }
     },
-    "canonical_ocshape_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.ocshape$"
-    },
-    "canonical_opmat_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opmat$"
-    },
-    "canonical_opres_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opres$"
-    },
-    "canonical_ogeo_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.ogeo$"
-    },
     "rigid_body_allowed_dof": {
       "type": "object",
       "additionalProperties": false,
@@ -401,10 +381,16 @@
           "$ref": "#/definitions/node_index"
         },
         "shape_ref": {
-          "$ref": "#/definitions/canonical_ocshape_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.ocshape$" }
+          ]
         },
         "material_ref": {
-          "$ref": "#/definitions/canonical_opmat_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.opmat$" }
+          ]
         },
         "body_type": {
           "enum": ["static", "dynamic", "kinematic"]
@@ -467,10 +453,16 @@
           "$ref": "#/definitions/node_index"
         },
         "shape_ref": {
-          "$ref": "#/definitions/canonical_ocshape_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.ocshape$" }
+          ]
         },
         "material_ref": {
-          "$ref": "#/definitions/canonical_opmat_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.opmat$" }
+          ]
         },
         "collision_layer": {
           "$ref": "#/definitions/u16"
@@ -492,7 +484,10 @@
           "$ref": "#/definitions/node_index"
         },
         "shape_ref": {
-          "$ref": "#/definitions/canonical_ocshape_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.ocshape$" }
+          ]
         },
         "mass": {
           "type": "number"
@@ -524,7 +519,10 @@
           "$ref": "#/definitions/u32"
         },
         "inner_shape_ref": {
-          "$ref": "#/definitions/canonical_ocshape_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.ocshape$" }
+          ]
         },
         "backend": {
           "$ref": "#/definitions/character_backend"
@@ -561,7 +559,10 @@
           "$ref": "#/definitions/node_index"
         },
         "source_mesh_ref": {
-          "$ref": "#/definitions/canonical_ogeo_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.ogeo$" }
+          ]
         },
         "collision_layer": {
           "$ref": "#/definitions/u16"
@@ -570,7 +571,10 @@
           "$ref": "#/definitions/u32"
         },
         "collision_mesh_ref": {
-          "$ref": "#/definitions/canonical_ogeo_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.ogeo$" }
+          ]
         },
         "edge_compliance": {
           "type": "number",

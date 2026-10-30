@@ -118,11 +118,12 @@ fresh key, including when staging was seeded from an older index. The native
 writer reidentifies the root while retaining unchanged indexed content.
 
 For a named texture consumed by material or scene references, use a
-`texture-descriptor` job with `virtual_path` in its descriptor, for example
-`"virtual_path": "/Content/Textures/Meter.otex"` under a `/Content` virtual
-mount. The producer writes that exact descriptor location and keeps texture
-tables/data in the configured resource directory. The path is validated before
-import work; both normal and fallback output use it.
+`texture-descriptor` job whose `virtual_path` is the texture's identity, for
+example `"virtual_path": "/Content/Textures/Meter.otex"` under a `/Content`
+virtual mount. The descriptor never states an identity of its own. The producer
+writes that exact descriptor location and keeps texture tables/data in the
+configured resource directory. The path is validated before import work; both
+normal and fallback output use it.
 
 ### `fbx`
 
@@ -490,13 +491,12 @@ Optional:
 - `--report <path>`
 - `--content-hashing <true|false>`
 
-Canonical virtual-path requirements:
-
-- starts with `/`
-- no backslashes
-- no `//`
-- no trailing slash (except root)
-- no `.` or `..` segments
+Reference requirements: the target scene is named by its virtual path, and
+every reference in the payload is an absolute virtual path in another mount or
+text relative to the folder of the target scene, resolved against the target
+scene's identity. Relative text starts with one `./` or any number of `../`,
+then one or more segments; it has no empty segment, no trailing slash, no
+backslash and no later `.` or `..` segment.
 
 Sidecar payload shape:
 
@@ -506,7 +506,7 @@ Sidecar payload shape:
     {
       "node_index": 0,
       "slot_id": "main",
-      "script_virtual_path": "/Descriptors/Scripts/my_script.oscript",
+      "script_virtual_path": "../Scripts/my_script.oscript",
       "execution_order": 0,
       "params": [{ "key": "speed", "type": "float", "value": 1.0 }]
     }
@@ -547,13 +547,12 @@ Optional:
 - `--report <path>`
 - `--content-hashing <true|false>`
 
-Canonical virtual-path requirements:
-
-- starts with `/`
-- no backslashes
-- no `//`
-- no trailing slash (except root)
-- no `.` or `..` segments
+Reference requirements: the target scene is named by its virtual path, and
+every reference in the payload is an absolute virtual path in another mount or
+text relative to the folder of the target scene, resolved against the target
+scene's identity. Relative text starts with one `./` or any number of `../`,
+then one or more segments; it has no empty segment, no trailing slash, no
+backslash and no later `.` or `..` segment.
 
 Minimal payload example:
 
@@ -563,8 +562,8 @@ Minimal payload example:
     "rigid_bodies": [
       {
         "node_index": 0,
-        "shape_ref": "/Content/Physics/Shapes/box.ocshape",
-        "material_ref": "/Content/Physics/Materials/default.opmat",
+        "shape_ref": "../Physics/Shapes/box.ocshape",
+        "material_ref": "../Physics/Materials/default.opmat",
         "body_type": "dynamic"
       }
     ]
@@ -708,8 +707,7 @@ Job rules:
 
 - each job requires `type`
 - non-sidecar jobs require `source`: a mount path (`/Content/...`) or a path
-  relative to `project_root`. The same holds for a model job's `record` and a
-  texture's `sources[].file`
+  relative to `project_root`. The same holds for a model job's `record`
 - a job whose `source` lies in an output folder (a dot-named folder below the
   project root) reads that derived file and names the authored source it
   derives from in `derived_from`, a mount path in a `Source` mount; that
@@ -721,8 +719,17 @@ Job rules:
   `physics-material-descriptor`, `collision-shape-descriptor`) requires
   `virtual_path`, the asset's identity. Its descriptor is written at that path
   below the mount (`/Content/Materials/Wood.omat` lives at
-  `Materials/Wood.omat`), and its key derives from it. A descriptor that states
-  its own `virtual_path` must name the same one.
+  `Materials/Wood.omat`), and its key derives from it. A texture descriptor
+  states no `virtual_path`; one that does fails schema validation.
+- a reference in an authored file is an absolute virtual path in another mount
+  (`/Engine/Materials/Default.omat`) or text relative to the folder of the
+  referring file (`Brick.otex`, `../Textures/Brick.otex`), resolved against the
+  job's identity. Absolute text naming the file's own mount is refused
+  (`vpath.reference_self_absolute`), as is a climb above the mount
+  (`vpath.reference_outside_mount`); unusable text fails with
+  `import.reference_invalid` and a path in no mount with
+  `import.reference_unmounted`. A texture descriptor's `source` and
+  `sources[].file` use the same grammar and name files on disk.
 - an `input` job requires `virtual_path`, the input source's identity
   (`/Content/Input/Player.input`); each action and mapping context is named
   under it (`/Content/Input/Player.input/Jump.oiact`, written at
@@ -736,22 +743,24 @@ Job rules:
 - the single-file `texture`, `script` and `input` commands require
   `--virtual-path`, as do `gltf` and `fbx` without `--record`
 - `texture-descriptor` jobs:
-  - use `source` as descriptor JSON path
+  - use `source` as descriptor JSON path; the identity comes from the job's
+    `virtual_path` only
   - support texture tuning keys (`intent`, `mip_policy`, `output_format`, etc.)
     as manifest-level defaults/job overrides
   - reject non-texture keys (for example scene/script-specific keys)
 - `material-descriptor` jobs:
   - use `source` as descriptor JSON path
   - accept `output`, `name`, and `content_hashing`
-  - descriptor `textures.*.virtual_path` must resolve to mounted cooked roots
+  - descriptor `textures.*.virtual_path` is a reference to a `.otex` asset that
+    resolves to a mounted cooked root
 - `geometry-descriptor` jobs:
   - use `source` as descriptor JSON path
   - accept `output`, `name`, and `content_hashing`
 - `scene-descriptor` jobs:
   - use `source` as descriptor JSON path
   - accept `output`, `name`, and `content_hashing`
-  - resolve geometry/material/script/input/physics references from mounted
-    cooked roots
+  - resolve geometry/material/script/input/physics references, written as
+    references to the job's identity, from mounted cooked roots
 - `input` jobs require:
   - `id`
   - `source`
@@ -821,7 +830,7 @@ Batch example with one output shared at manifest level:
           {
             "node_index": 0,
             "shape_ref": "/Content/Physics/Shapes/backpack_body.ocshape",
-            "material_ref": "/Content/Physics/Materials/default.opmat",
+            "material_ref": "../Physics/Materials/default.opmat",
             "body_type": "dynamic"
           }
         ]

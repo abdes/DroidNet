@@ -78,6 +78,13 @@ auto ImportRequest::OutputIdentity() const -> std::string_view
   if (physics.has_value()) {
     return physics->target_scene_virtual_path;
   }
+  if (buffer_container.has_value()) {
+    constexpr auto kAuthoringSuffix = std::string_view { ".json" };
+    const auto location = std::string_view { source_mount_path };
+    return location.ends_with(kAuthoringSuffix)
+      ? location.substr(0, location.size() - kAuthoringSuffix.size())
+      : location;
+  }
   return {};
 }
 

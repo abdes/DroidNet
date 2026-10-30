@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <iterator>
 #include <memory>
@@ -35,6 +36,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
@@ -155,6 +157,9 @@ namespace {
     observer_ptr<co::ThreadPool> pool;
     observer_ptr<ImportSourceJobAnalysis> report;
     std::stop_token stop;
+    //! The identity of the file being analyzed, which its references are
+    //! relative to.
+    std::string anchor;
     std::unordered_map<std::string, size_t> files;
 
     auto AddFile(const std::filesystem::path& path, const bool required = true)
@@ -198,21 +203,49 @@ namespace {
       co_return text;
     }
 
-    auto Reference(
-      std::string path, const Kind kind, std::string location) const -> void
+    //! Reports a reference text the grammar refuses.
+    auto Refuse(const ImportDependencyRefusal& refusal) const -> void
     {
-      report->references.push_back({
-        .virtual_path = std::move(path),
-        .kind = kind,
-        .object_path = std::move(location),
-        .required = true,
-      });
+      report->diagnostics.push_back(
+        internal::RefuseReference(anchor, report->source_path.string(),
+          refusal.written, refusal.error, refusal.object_path));
     }
 
-    auto Output(std::string path, const Kind kind) const -> void
+    //! Resolves a reference text into `into`, or reports it refused.
+    auto Resolve(std::vector<ImportLogicalDependency>& into,
+      ImportDependencyText text, const VirtualPathRuleSet rules) const -> void
+    {
+      auto resolved = ResolveDependency(anchor, text, rules);
+      if (!resolved.has_value()) {
+        Refuse({
+          .written = std::move(text.written),
+          .object_path = std::move(text.object_path),
+          .error = resolved.error(),
+        });
+        return;
+      }
+      into.push_back(std::move(*resolved));
+    }
+
+    auto Reference(std::string written, const Kind kind, std::string location,
+      const VirtualPathRuleSet rules = VirtualPathRuleSet::kAuthored) const
+      -> void
+    {
+      Resolve(report->references,
+        {
+          .written = std::move(written),
+          .kind = kind,
+          .object_path = std::move(location),
+        },
+        rules);
+    }
+
+    //! A product at a virtual path the job names.
+    auto Output(const std::string& path, const Kind kind) const -> void
     {
       report->outputs.push_back({
-        .virtual_path = std::move(path),
+        .written = path,
+        .virtual_path = path,
         .kind = kind,
         .object_path = {},
         .required = true,
@@ -255,34 +288,30 @@ namespace {
       return internal::PlaceModelProduct(input.request, name, extension)
         .virtual_path;
     };
+    const auto output = [&report](std::string path, const Kind kind,
+                          const bool required) -> void {
+      report.outputs.push_back({
+        .written = path,
+        .virtual_path = std::move(path),
+        .kind = kind,
+        .object_path = {},
+        .required = required,
+      });
+    };
     // A remapped material is produced only when its target is missing.
     const auto& remap = input.request.options.material_remap;
     for (const auto& material : materials.sources) {
-      report.outputs.push_back({
-        .virtual_path = product(
-          material.material.storage_name, data::kMaterialDescriptorExtension),
-        .kind = Kind::kMaterial,
-        .object_path = {},
-        .required = !remap.contains(material.material.storage_name),
-      });
+      output(product(material.material.storage_name,
+               data::kMaterialDescriptorExtension),
+        Kind::kMaterial, !remap.contains(material.material.storage_name));
     }
     for (const auto& source : geometry.sources) {
-      report.outputs.push_back({
-        .virtual_path
-        = product(source.name, data::kGeometryDescriptorExtension),
-        .kind = Kind::kGeometry,
-        .object_path = {},
-        .required = true,
-      });
+      output(product(source.name, data::kGeometryDescriptorExtension),
+        Kind::kGeometry, true);
     }
     for (const auto& texture : textures.sources) {
-      report.outputs.push_back({
-        .virtual_path
-        = product(texture.name, data::kTextureDescriptorExtension),
-        .kind = Kind::kTexture,
-        .object_path = {},
-        .required = false,
-      });
+      output(product(texture.name, data::kTextureDescriptorExtension),
+        Kind::kTexture, false);
       if (!texture.embedded && !texture.source_path.empty()) {
         report.files.push_back(
           { .path = texture.source_path, .required = false });
@@ -298,13 +327,9 @@ namespace {
         report.files.push_back({ .path = std::move(path), .required = true });
       }
     }
-    report.outputs.push_back({
-      .virtual_path
-      = product(input.request.GetSceneName(), data::kSceneDescriptorExtension),
-      .kind = Kind::kScene,
-      .object_path = {},
-      .required = true,
-    });
+    output(
+      product(input.request.GetSceneName(), data::kSceneDescriptorExtension),
+      Kind::kScene, true);
     auto facts = adapter.DescribeSource();
     auto names = internal::ModelProductNames {};
     for (const auto& material : materials.sources) {
@@ -399,7 +424,8 @@ namespace {
           const std::string& location) -> void {
       if (parent.is_object() && parent.contains(field)
         && parent.at(field).is_string()
-        && parent.at(field).get_ref<const std::string&>().starts_with('/')) {
+        && IsInputActionReference(
+          parent.at(field).get_ref<const std::string&>())) {
         context.Reference(parent.at(field).get<std::string>(),
           Kind::kInputAction, location + "." + std::string(field));
       }
@@ -531,23 +557,25 @@ namespace {
       const auto text = co_await context.ReadText(report.source_path);
       CHECK_NOTNULL_F(
         job.mounts.get(), "A manifest job carries its mount table");
-      const auto source = internal::GeometrySource::FromDescriptor(
-        text, report.source_path, *job.mounts, report.diagnostics);
+      const auto source = internal::GeometrySource::FromDescriptor(text,
+        report.source_path, job.virtual_path, *job.mounts, report.diagnostics);
       if (!source) {
         co_return false;
       }
       context.Output(job.virtual_path, Kind::kGeometry);
-      auto local = std::unordered_set<std::string> {};
+      auto local = std::vector<std::string> {};
       for (const auto& buffer : source->buffers) {
-        local.insert(buffer.source_id);
-        context.Output(buffer.source_id, Kind::kBuffer);
+        local.push_back(buffer.source_id);
         context.AddFile(buffer.source_path);
       }
+      auto buffer_refs = std::vector<ImportDependencyText> {};
       const auto buffer_ref
         = [&](const std::string& path, const std::string& location) -> void {
-        if (!local.contains(path)) {
-          context.Reference(path, Kind::kBuffer, location);
-        }
+        buffer_refs.push_back({
+          .written = path,
+          .kind = Kind::kBuffer,
+          .object_path = location,
+        });
       };
       for (size_t i = 0; i < source->lods.size(); ++i) {
         const auto& lod = source->lods.at(i);
@@ -578,6 +606,19 @@ namespace {
             location + ".submeshes[" + std::to_string(submesh)
               + "].material_ref");
         }
+      }
+      for (const auto& buffer : local) {
+        context.Resolve(report.outputs,
+          { .written = buffer, .kind = Kind::kBuffer, .object_path = {} },
+          VirtualPathRuleSet::kCooked);
+      }
+      auto external
+        = ExternalBufferReferences(job.virtual_path, local, buffer_refs);
+      for (const auto& refusal : external.refused) {
+        context.Refuse(refusal);
+      }
+      for (auto& dependency : external.dependencies) {
+        report.references.push_back(std::move(dependency));
       }
       co_return true;
     }
@@ -750,6 +791,7 @@ namespace {
       .pool = observer_ptr { &pool },
       .report = observer_ptr { &report },
       .stop = stop,
+      .anchor = job.virtual_path,
       .files = {},
     };
     auto prepared = false;
@@ -898,6 +940,58 @@ auto ImportManifest::AnalyzeSources(const std::stop_token& stop_token,
     *this, loop, *reader, pool, stop_token, std::move(captured_inputs));
 }
 
+auto ResolveDependency(const std::string_view anchor,
+  const ImportDependencyText& text, const VirtualPathRuleSet rules)
+  -> std::expected<ImportLogicalDependency, VirtualPathError>
+{
+  auto resolved
+    = oxygen::content::ResolveReference(anchor, text.written, rules);
+  if (!resolved.has_value()) {
+    return std::unexpected(resolved.error());
+  }
+  return ImportLogicalDependency {
+    .written = text.written,
+    .virtual_path = std::move(*resolved),
+    .kind = text.kind,
+    .object_path = text.object_path,
+    .required = true,
+  };
+}
+
+auto IsInputActionReference(const std::string_view text) -> bool
+{
+  return text.ends_with(data::kInputActionDescriptorExtension);
+}
+
+auto ExternalBufferReferences(const std::string_view anchor,
+  const std::span<const std::string> local_buffers,
+  const std::span<const ImportDependencyText> references)
+  -> ImportDependencyResolution
+{
+  auto local = std::unordered_set<std::string> {};
+  for (const auto& buffer : local_buffers) {
+    if (auto resolved = oxygen::content::ResolveReference(
+          anchor, buffer, VirtualPathRuleSet::kCooked)) {
+      local.insert(std::move(*resolved));
+    }
+  }
+  auto result = ImportDependencyResolution {};
+  for (const auto& reference : references) {
+    auto resolved
+      = ResolveDependency(anchor, reference, VirtualPathRuleSet::kCooked);
+    if (!resolved.has_value()) {
+      result.refused.push_back({
+        .written = reference.written,
+        .object_path = reference.object_path,
+        .error = resolved.error(),
+      });
+    } else if (!local.contains(resolved->virtual_path)) {
+      result.dependencies.push_back(std::move(*resolved));
+    }
+  }
+  return result;
+}
+
 auto ImportSourceAnalysis::ToJson() const -> std::string
 {
   using nlohmann::json;
@@ -908,6 +1002,7 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
     auto array = json::array();
     for (const auto& dependency : dependencies) {
       array.push_back({
+        { "written", dependency.written },
         { "virtual_path", dependency.virtual_path },
         { "kind", KindName(dependency.kind) },
         { "object_path", dependency.object_path },

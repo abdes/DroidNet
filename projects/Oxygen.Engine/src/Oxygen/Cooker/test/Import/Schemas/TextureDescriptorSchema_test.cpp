@@ -84,6 +84,28 @@ INSTANTIATE_TEST_SUITE_P(Cases, TextureDescriptorSchemaTest,
       "'filter_space'",
     },
     SchemaCase {
+      "RejectsStaleVirtualPath",
+      BrickAlbedo()
+        .Set("/virtual_path", "/Content/Textures/brick_albedo.otex")
+        .Text(),
+      false,
+      "'virtual_path'",
+    },
+    SchemaCase {
+      "AcceptsRelativeSourceReferences",
+      Texture("/Content/Textures/brick.otex", "../Sources/brick.png")
+        .Append("/sources", { { "file", "./faces/px.png" } })
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsSourceWithEmptySegment",
+      Texture("/Content/Textures/brick.otex", "Sources//brick.png").Text(),
+      false,
+      "/source",
+    },
+    SchemaCase {
       "RejectsUnknownNestedFields",
       BrickAlbedo().Set("/decode/unknown_setting", true).Text(),
       false,

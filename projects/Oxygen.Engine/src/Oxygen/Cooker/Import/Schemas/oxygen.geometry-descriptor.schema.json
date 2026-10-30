@@ -46,21 +46,6 @@
   },
   "required": ["name", "lods"],
   "definitions": {
-    "canonical_virtual_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$"
-    },
-    "canonical_obuf_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.obuf$"
-    },
-    "canonical_omat_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.omat$"
-    },
     "vec3": {
       "type": "array",
       "items": {
@@ -190,7 +175,10 @@
           "minLength": 1
         },
         "virtual_path": {
-          "$ref": "#/definitions/canonical_obuf_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.obuf$" }
+          ]
         },
         "usage_flags": {
           "type": "integer",
@@ -289,10 +277,16 @@
       "additionalProperties": false,
       "properties": {
         "vb_ref": {
-          "$ref": "#/definitions/canonical_obuf_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.obuf$" }
+          ]
         },
         "ib_ref": {
-          "$ref": "#/definitions/canonical_obuf_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.obuf$" }
+          ]
         }
       },
       "required": ["vb_ref", "ib_ref"]
@@ -302,19 +296,31 @@
       "additionalProperties": false,
       "properties": {
         "joint_index_ref": {
-          "$ref": "#/definitions/canonical_obuf_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.obuf$" }
+          ]
         },
         "joint_weight_ref": {
-          "$ref": "#/definitions/canonical_obuf_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.obuf$" }
+          ]
         },
         "inverse_bind_ref": {
-          "$ref": "#/definitions/canonical_obuf_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.obuf$" }
+          ]
         },
         "joint_remap_ref": {
-          "$ref": "#/definitions/canonical_obuf_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.obuf$" }
+          ]
         },
         "skeleton_ref": {
-          "$ref": "#/definitions/canonical_virtual_path"
+          "$ref": "oxygen.reference.schema.json#/definitions/reference"
         },
         "joint_count": {
           "type": "integer",
@@ -763,7 +769,10 @@
           "$ref": "oxygen.name.schema.json#/definitions/segment"
         },
         "material_ref": {
-          "$ref": "#/definitions/canonical_omat_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.omat$" }
+          ]
         },
         "bounds": {
           "$ref": "#/definitions/bounds3",

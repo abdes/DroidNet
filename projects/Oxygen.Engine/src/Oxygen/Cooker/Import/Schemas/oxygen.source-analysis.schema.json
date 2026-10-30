@@ -25,8 +25,18 @@
     "logical": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["virtual_path", "kind", "object_path", "required"],
+      "required": [
+        "written",
+        "virtual_path",
+        "kind",
+        "object_path",
+        "required"
+      ],
       "properties": {
+        "written": {
+          "description": "The text as authored; the virtual path itself for a product the job names.",
+          "type": "string"
+        },
         "virtual_path": {
           "type": "string"
         },

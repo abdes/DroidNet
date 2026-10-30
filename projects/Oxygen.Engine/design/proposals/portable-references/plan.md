@@ -135,7 +135,7 @@ when both languages pass the shared table.
 Deletes: the five resolvers, the `canonical_*_path` reference definitions, the
 three identity checks, the texture descriptor identity source, the per-job
 invalid/unmounted reference codes. Adds: `ResolveJobReference`,
-`LookupReference`, `ImportRequest::AnchorIdentity`, `oxygen.reference.schema.json`,
+`LookupReference`, `oxygen.reference.schema.json`,
 the `.oiact` input rule, relative buffer products, written and resolved forms
 in source analysis, the relative built-in geometry material.
 

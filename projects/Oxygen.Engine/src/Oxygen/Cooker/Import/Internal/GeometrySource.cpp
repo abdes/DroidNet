@@ -255,8 +255,9 @@ namespace {
   }
 
   auto ReadSource(const json& document,
-    const std::filesystem::path& source_path, const MountTable& mounts,
-    std::vector<ImportDiagnostic>& diagnostics) -> std::optional<GeometrySource>
+    const std::filesystem::path& source_path, const std::string_view anchor,
+    const MountTable& mounts, std::vector<ImportDiagnostic>& diagnostics)
+    -> std::optional<GeometrySource>
   {
     auto source = GeometrySource {};
     source.name = document.at("name").get<std::string>();
@@ -267,8 +268,9 @@ namespace {
       source.content_hashing = document.at("content_hashing").get<bool>();
     }
     if (document.contains("buffers")) {
-      auto buffers = BufferSource::FromDeclarations(
-        BuildSubmitterBufferChunks(document), source_path, mounts, diagnostics);
+      auto buffers
+        = BufferSource::FromDeclarations(BuildSubmitterBufferChunks(document),
+          source_path, anchor, mounts, diagnostics);
       if (!buffers.has_value()) {
         return std::nullopt;
       }
@@ -433,15 +435,16 @@ auto GeometrySource::DeclaredSurfaces() const -> std::vector<data::SurfaceId>
 }
 
 auto GeometrySource::FromDescriptor(const std::string_view bytes,
-  const std::filesystem::path& source_path, const MountTable& mounts,
-  std::vector<ImportDiagnostic>& diagnostics) -> std::optional<GeometrySource>
+  const std::filesystem::path& source_path, const std::string_view anchor,
+  const MountTable& mounts, std::vector<ImportDiagnostic>& diagnostics)
+  -> std::optional<GeometrySource>
 {
   try {
     const auto document = json::parse(bytes);
     if (!ValidateDescriptorSchema(diagnostics, source_path, document)) {
       return std::nullopt;
     }
-    return ReadSource(document, source_path, mounts, diagnostics);
+    return ReadSource(document, source_path, anchor, mounts, diagnostics);
   } catch (const json::exception& error) {
     AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
       "geometry.descriptor.request_invalid_json", error.what());

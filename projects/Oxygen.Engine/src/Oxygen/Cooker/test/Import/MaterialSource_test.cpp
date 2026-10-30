@@ -51,7 +51,8 @@ namespace {
       const auto& binding = source->textures.*slot.binding;
       EXPECT_TRUE(binding.assigned);
       EXPECT_EQ(binding.source_id,
-        "/Content/Textures/" + std::string(slot.name) + ".otex");
+        document.Spell(
+          "/Content/Textures/" + std::string(slot.name) + ".otex"));
       EXPECT_EQ(binding.uv_set, 1U);
       EXPECT_EQ(binding.uv_transform.scale[0], 2.0F);
       EXPECT_EQ(binding.uv_transform.offset[1], 0.2F);

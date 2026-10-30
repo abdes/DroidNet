@@ -21,6 +21,9 @@
 
 namespace oxygen::content::import::internal {
 
+using oxygen::content::VirtualPathError;
+using oxygen::content::VirtualPathRuleSet;
+
 inline auto IsCanonicalVirtualPath(const std::string_view virtual_path) -> bool
 {
   return oxygen::content::IsCanonicalVirtualPath(virtual_path);
@@ -89,6 +92,89 @@ inline auto TryVirtualPathToRelPath(const ImportRequest& request,
     return false;
   }
   return TryVirtualPathToRelPath(virtual_path, relpath);
+}
+
+//! The diagnostic code of a reference the grammar refuses.
+inline constexpr auto kReferenceInvalidCode = "import.reference_invalid";
+
+//! The diagnostic code of a reference that resolves outside every mounted
+//! cooked root.
+inline constexpr auto kReferenceUnmountedCode = "import.reference_unmounted";
+
+//! A reference as authored and the virtual path it names.
+struct ResolvedReference final {
+  //! The text as written in the authored file.
+  std::string written;
+  //! The canonical virtual path it resolves to.
+  std::string resolved;
+};
+
+//! Resolves a reference read in the job's authored file.
+/*!
+ The anchor is `ImportRequest::OutputIdentity`: the job's identity, or for a
+ sidecar the identity of its target scene, which lives in the same folder as
+ the sidecar. Asset references are checked as authored paths; file references
+ pass `VirtualPathRuleSet::kCooked`, which accepts derived content.
+
+ @return The written and resolved forms, or the `vpath.*` refusal of
+   `content::ResolveReference`.
+*/
+inline auto ResolveJobReference(const ImportRequest& request,
+  const std::string_view text,
+  const VirtualPathRuleSet rules = VirtualPathRuleSet::kAuthored)
+  -> std::expected<ResolvedReference, VirtualPathError>
+{
+  auto resolved
+    = oxygen::content::ResolveReference(request.OutputIdentity(), text, rules);
+  if (!resolved.has_value()) {
+    return std::unexpected(resolved.error());
+  }
+  return ResolvedReference {
+    .written = std::string(text),
+    .resolved = std::move(*resolved),
+  };
+}
+
+//! The diagnostic refusing a reference the grammar does not accept, read in
+//! the file whose identity is `anchor`.
+inline auto RefuseReference(const std::string_view anchor,
+  std::string source_path, const std::string_view text,
+  const VirtualPathError error, std::string object_path) -> ImportDiagnostic
+{
+  return ImportDiagnostic {
+    .severity = ImportSeverity::kError,
+    .code = kReferenceInvalidCode,
+    .message = "'" + std::string(text) + "' read in " + std::string(anchor)
+      + " is not a reference the engine accepts ("
+      + oxygen::content::to_string(error) + ")",
+    .source_path = std::move(source_path),
+    .object_path = std::move(object_path),
+  };
+}
+
+//! The diagnostic refusing a reference the grammar does not accept, read in
+//! the job's authored file.
+inline auto RefuseReference(const ImportRequest& request,
+  const std::string_view text, const VirtualPathError error,
+  std::string object_path) -> ImportDiagnostic
+{
+  return RefuseReference(request.OutputIdentity(), request.source_path.string(),
+    text, error, std::move(object_path));
+}
+
+//! The diagnostic refusing a reference that names no mounted cooked root.
+inline auto RefuseUnmountedReference(const ImportRequest& request,
+  const ResolvedReference& reference, std::string object_path)
+  -> ImportDiagnostic
+{
+  return ImportDiagnostic {
+    .severity = ImportSeverity::kError,
+    .code = kReferenceUnmountedCode,
+    .message = "'" + reference.written + "' resolves to " + reference.resolved
+      + ", which is in no mounted cooked root",
+    .source_path = request.source_path.string(),
+    .object_path = std::move(object_path),
+  };
 }
 
 //! Where a job's identity lives in the cooked root.

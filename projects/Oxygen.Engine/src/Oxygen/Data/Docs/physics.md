@@ -154,12 +154,12 @@ legitimate use of content hashes.
 References between assets use different mechanisms at each layer, and these must
 not be mixed across layers:
 
-| Layer                             | Reference type                                          | Lifecycle                                                          | Breaks when                                                  |
-| --------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------ |
-| **L1 Authoring**                  | Canonical virtual path (human-readable string)          | Persistent across sessions                                         | Asset renamed or moved                                       |
-| **L2 Cooked**                     | `AssetKey` (xxHash3-128 of virtual path)                | Persistent — survives cook reruns                                  | Virtual path changes (intentional — a rename is a new asset) |
-| **L2 Within a sealed collection** | Positional index (`uint32_t` offset into a fixed array) | Valid only within that specific sealed, version-stamped collection | Cook order changes; partial re-cook; identity check mismatch |
-| **L3 Runtime**                    | Generational handle (see Convention 4)                  | Session-scoped; never persisted                                    | Session ends                                                 |
+| Layer                             | Reference type                                                          | Lifecycle                                                          | Breaks when                                                  |
+| --------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------ |
+| **L1 Authoring**                  | Reference as written: relative within the mount, absolute across mounts | Persistent across sessions                                         | Asset renamed or moved                                       |
+| **L2 Cooked**                     | `AssetKey` (xxHash3-128 of virtual path)                                | Persistent — survives cook reruns                                  | Virtual path changes (intentional — a rename is a new asset) |
+| **L2 Within a sealed collection** | Positional index (`uint32_t` offset into a fixed array)                 | Valid only within that specific sealed, version-stamped collection | Cook order changes; partial re-cook; identity check mismatch |
+| **L3 Runtime**                    | Generational handle (see Convention 4)                                  | Session-scoped; never persisted                                    | Session ends                                                 |
 
 Positional indices are the most fragile reference type. They are permitted
 **only within a single sealed, version-stamped collection** and must always be

@@ -81,7 +81,7 @@ namespace {
     std::vector<internal::MountedCookedSource> mounts;
     std::unordered_map<std::string, std::pair<data::AssetKey, data::AssetType>>
       index_cache;
-    std::unordered_map<std::string, std::unique_ptr<data::GeometryAsset>>
+    std::unordered_map<data::AssetKey, std::unique_ptr<data::GeometryAsset>>
       geometries;
   };
 
@@ -159,63 +159,86 @@ namespace {
     return { bytes.begin(), bytes.end() };
   }
 
-  auto ResolveAssetReference(SceneDescriptorExecutionContext& context,
-    std::string_view virtual_path, std::optional<data::AssetType> expected_type,
-    std::string object_path)
-    -> std::optional<std::pair<data::AssetKey, data::AssetType>>
+  //! An asset a reference of the scene names.
+  struct SceneReference final {
+    data::AssetKey key;
+    data::AssetType type = data::AssetType::kUnknown;
+    //! The virtual path the written text resolves to.
+    std::string resolved;
+  };
+
+  //! Resolves a reference as written in the scene file, then looks up the
+  //! asset it names. Reports the refusal and returns nothing when it fails.
+  auto LookupSceneReference(SceneDescriptorExecutionContext& context,
+    const std::string_view written,
+    const std::optional<data::AssetType> expected_type, std::string object_path)
+    -> std::optional<SceneReference>
   {
-    const auto type_mismatch = [&](const data::AssetType found) -> void {
+    const auto reference
+      = internal::ResolveJobReference(context.request, written);
+    if (!reference.has_value()) {
+      context.session.AddDiagnostic(internal::RefuseReference(
+        context.request, written, reference.error(), std::move(object_path)));
+      return std::nullopt;
+    }
+    const auto type_mismatch
+      = [&](const data::AssetType found, const std::string& detail) -> void {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "scene.descriptor.reference_type_mismatch",
         "Reference type mismatch; expected "
           + std::string(data::to_string(*expected_type)) + " but found "
-          + std::string(data::to_string(found)),
+          + std::string(data::to_string(found)) + ": " + detail,
         std::move(object_path));
     };
-    if (const auto it = context.index_cache.find(std::string(virtual_path));
+    if (const auto it = context.index_cache.find(reference->resolved);
       it != context.index_cache.end()) {
       if (expected_type.has_value() && it->second.second != *expected_type) {
-        type_mismatch(it->second.second);
+        type_mismatch(it->second.second,
+          "'" + reference->written + "' resolves to " + reference->resolved);
         return std::nullopt;
       }
-      return it->second;
+      return SceneReference {
+        .key = it->second.first,
+        .type = it->second.second,
+        .resolved = reference->resolved,
+      };
     }
 
-    const auto resolved = internal::ResolveMountedAssetReference(
-      context.mounts, context.request, virtual_path, expected_type);
-    if (resolved.has_value()) {
-      const auto entry = std::make_pair(resolved->key, resolved->type);
-      context.index_cache.insert_or_assign(std::string(virtual_path), entry);
-      return entry;
+    const auto found = internal::LookupReference(
+      context.mounts, context.request, *reference, expected_type);
+    if (found.has_value()) {
+      context.index_cache.insert_or_assign(
+        reference->resolved, std::make_pair(found->key, found->type));
+      return SceneReference {
+        .key = found->key,
+        .type = found->type,
+        .resolved = reference->resolved,
+      };
     }
-    switch (resolved.error().reason) {
-    case internal::AssetReferenceRefusal::kInvalidVirtualPath:
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_virtual_path_invalid",
-        "Reference virtual_path must be canonical", std::move(object_path));
-      break;
+    const auto& refused = found.error();
+    switch (refused.reason) {
     case internal::AssetReferenceRefusal::kUnmounted:
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_virtual_path_unmounted",
-        "Reference virtual_path is outside mounted cooked roots",
-        std::move(object_path));
+      context.session.AddDiagnostic(internal::RefuseUnmountedReference(
+        context.request, *reference, std::move(object_path)));
       break;
     case internal::AssetReferenceRefusal::kMissing:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "scene.descriptor.reference_missing",
-        "Reference virtual_path was not found: " + std::string(virtual_path),
+        "Reference was not found: "
+          + internal::DescribeLookup(*reference, refused),
         std::move(object_path));
       break;
     case internal::AssetReferenceRefusal::kTypeUnknown:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "scene.descriptor.reference_type_unknown",
         "Unable to infer reference asset type from extension: "
-          + std::string(virtual_path),
+          + reference->resolved,
         std::move(object_path));
       break;
     case internal::AssetReferenceRefusal::kTypeMismatch:
-      if (resolved.error().found_type.has_value()) {
-        type_mismatch(*resolved.error().found_type);
+      if (refused.found_type.has_value()) {
+        type_mismatch(
+          *refused.found_type, internal::DescribeLookup(*reference, refused));
       }
       break;
     }
@@ -281,22 +304,22 @@ namespace {
         continue;
       }
       const auto& path = renderable.geometry;
-      if (context.geometries.contains(path)) {
-        continue;
-      }
-      const auto resolved = ResolveAssetReference(
+      const auto resolved = LookupSceneReference(
         context, path, data::AssetType::kGeometry, "renderables.geometry_ref");
       if (!resolved) {
         co_return false;
       }
+      if (context.geometries.contains(resolved->key)) {
+        continue;
+      }
       auto bytes
-        = (co_await ReadListedDescriptor(context, resolved->first, file_reader))
+        = (co_await ReadListedDescriptor(context, resolved->key, file_reader))
             .bytes;
       if (!bytes) {
         // A descriptor this cook writes is not listed in an index yet.
         std::string relative;
         if (internal::TryVirtualPathToRelPath(
-              context.request, path, relative)) {
+              context.request, resolved->resolved, relative)) {
           for (auto mount = context.mounts.rbegin();
             mount != context.mounts.rend() && !bytes; ++mount) {
             const auto candidate = mount->root / relative;
@@ -319,13 +342,13 @@ namespace {
         serio::ReadOnlyMemoryStream stream(bytes.value());
         serio::Reader reader(stream);
         const LoaderContext loader_context {
-          .current_asset_key = resolved->first,
+          .current_asset_key = resolved->key,
           .desc_reader = &reader,
           .work_offline = true,
           .parse_only = true,
         };
         context.geometries.emplace(
-          path, loaders::LoadGeometryAsset(loader_context));
+          resolved->key, loaders::LoadGeometryAsset(loader_context));
       } catch (const std::exception& error) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.geometry_inventory_invalid", error.what(), path);
@@ -396,8 +419,7 @@ namespace {
     observer_ptr<const ImportRequest> request,
     observer_ptr<IAsyncFileReader> reader,
     const std::span<const internal::MountedCookedSource> mounts,
-    std::string virtual_path, std::string object_path,
-    const EnvironmentTextureUse use)
+    std::string text, std::string object_path, const EnvironmentTextureUse use)
     -> co::Co<std::optional<data::TextureTarget>>
   {
     const auto prefix = std::string(EnvironmentTextureDiagnosticPrefix(use));
@@ -410,7 +432,7 @@ namespace {
     const auto reference = co_await internal::ResolveTextureReference(session,
       request, reader, mounts,
       {
-        .virtual_path = std::move(virtual_path),
+        .text = std::move(text),
         .object_path = object_path,
         .diagnostic_prefix = "scene.descriptor.",
         .allow_missing = true,
@@ -605,15 +627,15 @@ namespace {
   {
     auto instances = std::vector<CookedInstance> {};
     for (auto& instance : source.instances) {
-      const auto resolved = ResolveAssetReference(
+      const auto resolved = LookupSceneReference(
         context, instance.scene, data::AssetType::kScene, instance.object_path);
       if (!resolved.has_value()) {
         co_return false;
       }
       // Linking refuses a scene that instances itself.
-      if (resolved->first != scene_key) {
+      if (resolved->key != scene_key) {
         instances.push_back(
-          { .key = resolved->first, .source = observer_ptr { &instance } });
+          { .key = resolved->key, .source = observer_ptr { &instance } });
       }
     }
     auto scenes = co_await ReadInstancedScenes(context, instances, file_reader);
@@ -751,12 +773,12 @@ namespace {
     } else if (const auto* asset
       = std::get_if<internal::SceneSource::AssetReference>(&source.value)) {
       DCHECK_F(property.type == data::schema::ValueType::kAsset);
-      const auto resolved = ResolveAssetReference(
+      const auto resolved = LookupSceneReference(
         context, asset->virtual_path, property.asset_type, source.object_path);
       if (!resolved.has_value()) {
         return false;
       }
-      record.value.as_asset = resolved->first;
+      record.value.as_asset = resolved->key;
     } else {
       DCHECK_F(property.type == data::schema::ValueType::kLodPolicy);
       record.value.as_record_index = data::pak::world::OverrideRecordIndex {
@@ -774,6 +796,7 @@ namespace {
   //! of the cooked scene, with a warning.
   auto LinkOverride(SceneDescriptorExecutionContext& context,
     const internal::SceneSource::Renderable& renderable,
+    const data::AssetKey& geometry_key,
     const internal::SceneSource::Override& source, SceneBuild& build) -> bool
   {
     const auto& property = *source.property;
@@ -786,7 +809,7 @@ namespace {
       DCHECK_F(source.part_id.IsNil());
       break;
     case data::schema::PartKind::kSurface: {
-      const auto& geometry = *context.geometries.at(renderable.geometry);
+      const auto& geometry = *context.geometries.at(geometry_key);
       if (geometry.FindSurface(source.part_id) == nullptr) {
         AddDiagnostic(context.session, context.request,
           ImportSeverity::kWarning, "scene.descriptor.surface_invalid",
@@ -845,20 +868,20 @@ namespace {
       const auto& source_renderable = source.renderables.at(i);
       const auto object_path = "renderables[" + std::to_string(i) + "]";
       const auto resolved_geometry
-        = ResolveAssetReference(context, source_renderable.geometry,
+        = LookupSceneReference(context, source_renderable.geometry,
           data::AssetType::kGeometry, object_path + ".geometry_ref");
       if (!resolved_geometry.has_value()) {
         return std::nullopt;
       }
       for (const auto& source_override : source_renderable.overrides) {
-        if (!LinkOverride(
-              context, source_renderable, source_override, prepared.build)) {
+        if (!LinkOverride(context, source_renderable, resolved_geometry->key,
+              source_override, prepared.build)) {
           return std::nullopt;
         }
       }
       auto renderable = data::pak::world::RenderableRecord {};
       renderable.node_index = source_renderable.node_index;
-      renderable.geometry_key = resolved_geometry->first;
+      renderable.geometry_key = resolved_geometry->key;
       prepared.build.renderables.push_back(renderable);
       prepared.geometry_keys.push_back(renderable.geometry_key);
     }
@@ -866,12 +889,12 @@ namespace {
     const auto scene_key = data::AssetKey::FromVirtualPath(scene_virtual_path);
     prepared.build.instances.reserve(source.instances.size());
     for (auto& instance : source.instances) {
-      const auto resolved = ResolveAssetReference(
+      const auto resolved = LookupSceneReference(
         context, instance.scene, data::AssetType::kScene, instance.object_path);
       if (!resolved.has_value()) {
         return std::nullopt;
       }
-      if (resolved->first == scene_key) {
+      if (resolved->key == scene_key) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.instance_cycle", "A scene cannot instance itself",
           std::move(instance.object_path));
@@ -885,17 +908,17 @@ namespace {
       }
       prepared.build.instances.push_back({
         .node_index = instance.node_index,
-        .scene_key = resolved->first,
+        .scene_key = resolved->key,
       });
     }
     auto starting_contexts = std::unordered_set<data::AssetKey> {};
     for (auto& starting : source.starting_input_contexts) {
-      const auto resolved = ResolveAssetReference(context, starting.context,
+      const auto resolved = LookupSceneReference(context, starting.context,
         data::AssetType::kInputMappingContext, starting.object_path);
       if (!resolved.has_value()) {
         return std::nullopt;
       }
-      if (!starting_contexts.insert(resolved->first).second) {
+      if (!starting_contexts.insert(resolved->key).second) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.starting_input_context_duplicate",
           "An input context can start only once",
@@ -903,7 +926,7 @@ namespace {
         return std::nullopt;
       }
       prepared.build.starting_input_contexts.push_back({
-        .context_key = resolved->first,
+        .context_key = resolved->key,
         .priority = starting.priority,
       });
     }
@@ -962,8 +985,8 @@ namespace {
     }
     prepared.environment_references = std::move(references).Build();
     for (const auto& reference : source.references) {
-      if (!ResolveAssetReference(context, reference.virtual_path,
-            reference.type, reference.object_path)
+      if (!LookupSceneReference(context, reference.virtual_path, reference.type,
+            reference.object_path)
             .has_value()) {
         return std::nullopt;
       }

@@ -11,17 +11,11 @@
     "name": {
       "$ref": "oxygen.name.schema.json#/definitions/segment"
     },
-    "virtual_path": {
-      "type": "string",
-      "pattern": "^/[^\\\\:]+\\.otex$",
-      "description": "Exact descriptor output under the effective virtual mount. Omit for hashed resource naming."
-    },
     "content_hashing": {
       "type": "boolean"
     },
     "source": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "oxygen.reference.schema.json#/definitions/reference"
     },
     "sources": {
       "type": "array",
@@ -104,8 +98,7 @@
       "required": ["file"],
       "properties": {
         "file": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "oxygen.reference.schema.json#/definitions/reference"
         },
         "layer": {
           "type": "integer",

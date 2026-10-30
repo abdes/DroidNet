@@ -27,14 +27,19 @@ namespace oxygen::content::import::internal {
 inline constexpr std::string_view kNameSchemaFileName
   = "oxygen.name.schema.json";
 
+//! The file the import schemas reference for the shared reference definition.
+inline constexpr std::string_view kReferenceSchemaFileName
+  = "oxygen.reference.schema.json";
+
 //! The file the schemas reference for the shared LOD policy definition.
 inline constexpr std::string_view kLodPolicySchemaFileName
   = "oxygen.lod-policy.schema.json";
 
 //! A validator for an embedded import schema.
 /*!
- The schema's references to `oxygen.name.schema.json` and
- `oxygen.lod-policy.schema.json` resolve to the embedded shared schemas.
+ The schema's references to `oxygen.name.schema.json`,
+ `oxygen.reference.schema.json` and `oxygen.lod-policy.schema.json` resolve to
+ the embedded shared schemas.
 
  @throw std::invalid_argument when the schema references any other file.
 */
@@ -47,6 +52,8 @@ inline auto MakeJsonSchemaValidator(const nlohmann::json& schema)
       const auto file = path.substr(path.find_last_of('/') + 1);
       if (file == kNameSchemaFileName) {
         loaded = nlohmann::json::parse(kNameSchema);
+      } else if (file == kReferenceSchemaFileName) {
+        loaded = nlohmann::json::parse(kReferenceSchema);
       } else if (file == kLodPolicySchemaFileName) {
         loaded = nlohmann::json::parse(kLodPolicySchema);
       } else {

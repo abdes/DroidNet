@@ -13,9 +13,6 @@
     "content_hashing": {
       "type": "boolean"
     },
-    "virtual_path": {
-      "$ref": "#/definitions/canonical_opmat_path"
-    },
     "static_friction": {
       "type": "number",
       "minimum": 0.0
@@ -42,11 +39,6 @@
   "definitions": {
     "combine_mode": {
       "enum": ["average", "min", "max", "multiply"]
-    },
-    "canonical_opmat_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opmat$"
     }
   }
 }

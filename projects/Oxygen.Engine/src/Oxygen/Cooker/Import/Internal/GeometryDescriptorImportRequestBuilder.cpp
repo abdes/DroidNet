@@ -24,7 +24,8 @@
 namespace oxygen::content::import::internal {
 
 auto BuildGeometryDescriptorRequest(
-  const GeometryDescriptorImportSettings& settings, const MountTable& mounts,
+  const GeometryDescriptorImportSettings& settings,
+  const std::string_view identity, const MountTable& mounts,
   std::ostream& error_stream,
   std::shared_ptr<const CapturedInputSet> captured_inputs)
   -> std::optional<ImportRequest>
@@ -44,7 +45,7 @@ auto BuildGeometryDescriptorRequest(
 
   auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto source = GeometrySource::FromDescriptor(
-    document->text, descriptor_path, mounts, diagnostics);
+    document->text, descriptor_path, identity, mounts, diagnostics);
   for (const auto& diagnostic : diagnostics) {
     error_stream << "ERROR [" << diagnostic.code << "]: " << diagnostic.message;
     if (!diagnostic.object_path.empty()) {

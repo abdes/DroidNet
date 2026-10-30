@@ -14,14 +14,14 @@
     "content_hashing": {
       "type": "boolean"
     },
-    "virtual_path": {
-      "$ref": "#/definitions/canonical_ocshape_path"
-    },
     "shape_type": {
       "$ref": "#/definitions/shape_type"
     },
     "material_ref": {
-      "$ref": "#/definitions/canonical_opmat_path"
+      "allOf": [
+        { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+        { "pattern": "\\.opmat$" }
+      ]
     },
     "local_position": {
       "$ref": "#/definitions/vec3"
@@ -129,16 +129,6 @@
       },
       "minItems": 3,
       "maxItems": 3
-    },
-    "canonical_ocshape_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.ocshape$"
-    },
-    "canonical_opmat_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opmat$"
     },
     "compound_children": {
       "type": "array",

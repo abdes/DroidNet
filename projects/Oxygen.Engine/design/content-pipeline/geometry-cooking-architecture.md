@@ -24,11 +24,12 @@ Current implementation status snapshot:
 5. Implemented: Loose-cooked emission (`.ogeo` descriptors) via
    `AssetEmitter::Emit` with `AssetType::kGeometry` routing.
 6. Implemented: Buffer sidecar dependency resolution via `.obuf` sidecar file
-   reads (`ResolveBufferSidecarByVirtualPath`), with `container.index.bin` index
+   reads (`ResolveBufferSidecar`), with `container.index.bin` index
    inspection for multi-mount cooked roots.
-7. Implemented: Material asset key resolution via virtual path →
-   `ResolveMaterialKeyByVirtualPath`, using mounted `container.index.bin`
-   entries or deterministic key synthesis for unindexed mounts.
+7. Implemented: Material asset key resolution via reference →
+   `LookupAssetKey`, using mounted `container.index.bin`
+   entries, or the key derived from the path when a mounted root holds the
+   descriptor and no index lists it.
 8. Implemented: Procedural mesh support — `BuildProceduralParamBlob` encodes
    typed generator parameters; `GenerateMeshBuffers` produces vertex/index data
    at cook time to derive vertex and index counts for descriptor fields.
@@ -60,9 +61,9 @@ In scope:
 3. Inline buffer cooking: vertex, index, and skinning buffers declared in the
    geometry descriptor's `buffers` array are cooked via `BufferPipeline` as part
    of the same import job.
-4. External buffer dependency resolution via virtual path → `.obuf` sidecar.
+4. External buffer dependency resolution via reference → `.obuf` sidecar.
 5. Material dependency resolution: each submesh has exactly one `material_ref`
-   (canonical virtual path to a `.omat` file) resolved to an `AssetKey`.
+   (a reference to a `.omat` file) resolved to an `AssetKey`.
 6. LOD hierarchy: 1–8 LODs, each with 1–N submeshes, each submesh with 1–N mesh
    views.
 7. Descriptor finalization: `GeometryPipeline::FinalizeDescriptorBytes` patches
@@ -149,8 +150,8 @@ The following facts were confirmed during the documentation pass:
 | Schema is embedded                             | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kGeometryDescriptorSchema`)                                                                                                                                                          |
 | Binary format is locked                        | `src/Oxygen/Data/PakFormat_geometry.h` (`GeometryAssetDesc`, `static_assert(sizeof(...))==131`; `MeshDesc`, `static_assert(sizeof(...))==145`; `SubMeshDesc`, `static_assert(sizeof(...))==124`; `MeshViewDesc`, `static_assert(sizeof(...))==40`) |
 | Loose cooked layout for geometry               | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kGeometryDescriptorExtension = ".ogeo"`, `GeometryDescriptorRelPath()`, `GeometryVirtualPath()`)                                                                                                   |
-| Buffer sidecar reader exists                   | `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp` (`ResolvedBufferSidecar`, `ResolveBufferSidecarByVirtualPath`)                                                                                                            |
-| Material key resolver exists                   | `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp` (`ResolveMaterialKeyByVirtualPath`)                                                                                                                                       |
+| Buffer sidecar reader exists                   | `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp` (`ResolvedBufferSidecar`, `ResolveBufferSidecar`)                                                                                                                         |
+| Asset key lookup exists                        | `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp` (`LookupAssetKey`), `src/Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h` (`LookupReference`)                                                                  |
 | Index inspection for mounts                    | `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp` (`LoadMountedInspections`, `MountedInspection`, `lc::Inspection`)                                                                                                         |
 | Inline buffer cooking via BufferPipeline       | `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp` (`BufferImportSubmitter`, `BufferPipeline`, `CacheLocalBufferResults`)                                                                                                    |
 | Runtime loader for geometry exists             | `src/Oxygen/Content/Loaders/GeometryLoader.h` (`LoadGeometryAsset`, `LoadMesh`)                                                                                                                                                                    |
@@ -232,8 +233,8 @@ flowchart LR
 
   subgraph Descriptor
     L[PrepareGeometryDescriptor\nBuffer + Material resolution]
-    M["ResolveBufferSidecarByVirtualPath\n.obuf sidecar reads"]
-    N["ResolveMaterialKeyByVirtualPath\ncontainer.index.bin inspection"]
+    M["ResolveBufferSidecar\n.obuf sidecar reads"]
+    N["LookupAssetKey\ncontainer.index.bin inspection"]
   end
 
   subgraph Finalization
@@ -360,30 +361,44 @@ Architectural split:
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h`
    - fields: `material_key_offset` (`DataBlobSizeT`), `key` (`AssetKey`).
 
-10. **Internal Helper - Buffer Sidecar Resolution:**
-    `ResolveBufferSidecarByVirtualPath`
+10. **Internal Helper - Reference Resolution:** `ResolveReferenceText`
     - file:
       `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
-    - role: async coroutine. Validates canonical virtual path (no `..`, no
-      `//`), checks in-memory `buffer_cache` first, then strips mount root to a
-      rel-path, searches all `MountedInspection` roots in reverse order. Reads
-      and parses the `.obuf` sidecar file via `ParseBufferDescriptorSidecar` to
-      obtain `ResourceIndexT`, buffer descriptor, and named views. Caches and
-      returns a `ResolvedBufferSidecar`. Emits
-      `geometry.buffer.sidecar_ambiguous` if multiple candidate files are found.
+    - role: reads a reference in the descriptor through
+      `internal::ResolveJobReference` (file:
+      `src/Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h`).
+      Relative text resolves against the folder of the job identity within its
+      mount; absolute text names another mount. Text the grammar refuses is
+      reported as `import.reference_invalid` (`RefuseReference`) and yields
+      nothing.
 
-11. **Internal Helper - Material Key Resolution:**
-    `ResolveMaterialKeyByVirtualPath`
+11. **Internal Helper - Buffer Sidecar Resolution:** `ResolveBufferSidecar`
     - file:
       `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
-    - role: synchronous. Validates canonical virtual path, checks in-memory
-      `material_cache` first, then searches each `MountedInspection` that has a
-      loaded `container.index.bin` for an asset matching `virtual_path` with
-      `AssetType::kMaterial`. Falls back to deterministic `AssetKey` synthesis
-      from the virtual path if the `.omat` file exists on disk but the index is
-      unavailable (only when `asset_key_policy` is
-      `kDeterministicFromVirtualPath`). Emits `geometry.material.type_mismatch`
-      if the index entry exists but refers to a non-material asset.
+    - role: async coroutine. Resolves the reference, checks the in-memory
+      `buffer_cache` first, then strips the mount root to a rel-path (a
+      reference in no mounted cooked root is `import.reference_unmounted`,
+      `RefuseUnmountedReference`) and searches all mounted cooked roots in
+      reverse order. A match must belong to the geometry's cooked root
+      (`geometry.buffer.foreign_root` otherwise). Reads and parses the `.obuf`
+      sidecar file via `ParseBufferDescriptorSidecar` to obtain
+      `ResourceIndexT`, buffer descriptor, and named views. Caches and returns
+      a `ResolvedBufferSidecar`. Emits `geometry.buffer.sidecar_ambiguous` if
+      multiple candidate files are found.
+
+12. **Internal Helper - Asset Key Lookup:** `LookupAssetKey`
+    - file:
+      `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+    - role: synchronous. Resolves the reference, checks the in-memory
+      `asset_cache`, then asks `internal::LookupReference` (file:
+      `src/Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h`) to
+      search the mounted indexes and roots for the asset, with an expected
+      `AssetType` when the family has one (`kMaterial` for `material_ref`,
+      none for `skeleton_ref`). A refusal is reported with the family's codes:
+      `geometry.material.missing` / `geometry.material.type_mismatch` for
+      materials, `geometry.asset.missing` / `geometry.asset.type_unknown` for
+      skeletons, or `import.reference_unmounted` for a reference in no mounted
+      cooked root. `internal::DescribeLookup` lists the places searched.
 
 ### 6.2 Runtime Classes
 
@@ -543,7 +558,7 @@ Example (`woodfloor_tile.geometry.json`):
   "buffers": [
     {
       "uri": "woodfloor_tile.vb",
-      "virtual_path": "/Content/Buffers/woodfloor_tile.vb.obuf",
+      "virtual_path": "woodfloor_tile.vb.obuf",
       "usage_flags": 1,
       "element_stride": 48,
       "views": [
@@ -552,7 +567,7 @@ Example (`woodfloor_tile.geometry.json`):
     },
     {
       "uri": "woodfloor_tile.ib",
-      "virtual_path": "/Content/Buffers/woodfloor_tile.ib.obuf",
+      "virtual_path": "woodfloor_tile.ib.obuf",
       "usage_flags": 2,
       "element_format": 5,
       "views": [
@@ -566,13 +581,13 @@ Example (`woodfloor_tile.geometry.json`):
       "mesh_type": "standard",
       "bounds": { "min": [-0.5, 0.0, -0.5], "max": [0.5, 0.0, 0.5] },
       "buffers": {
-        "vb_ref": "/Content/Buffers/woodfloor_tile.vb.obuf",
-        "ib_ref": "/Content/Buffers/woodfloor_tile.ib.obuf"
+        "vb_ref": "woodfloor_tile.vb.obuf",
+        "ib_ref": "woodfloor_tile.ib.obuf"
       },
       "submeshes": [
         {
           "name": "floor_surface",
-          "material_ref": "/Content/Materials/woodfloor007.omat",
+          "material_ref": "../Materials/woodfloor007.omat",
           "views": [{ "view_ref": "all_indices" }]
         }
       ]
@@ -586,8 +601,13 @@ Top-level validation rules:
 1. Unknown top-level fields are rejected (`additionalProperties: false`).
 2. `source` is implicit (provided by manifest); it does not appear inside the
    descriptor JSON itself.
-3. All buffer `virtual_path` and submesh `material_ref` values must be canonical
-   virtual paths (see Sections 7.2.3 and 7.2.6).
+3. Every buffer `virtual_path`, `vb_ref`, `ib_ref`, skinning reference,
+   `skeleton_ref` and submesh `material_ref` is a reference in the shared
+   reference grammar (`oxygen.reference.schema.json`; `virtual_paths.md`,
+   References): relative to the descriptor's folder within its mount, absolute
+   only across mounts. The job resolves each against its identity before the
+   lookup. Buffer `virtual_path` names the cooked product relative to the
+   descriptor; buffer `uri` is a file reference.
 4. `name` values follow the segment rule of virtual paths, through the shared
    `oxygen.name.schema.json#/definitions/segment`. The cooker checks what the
    pattern cannot (NFC, unassigned code points, the 255-byte segment) on the
@@ -608,16 +628,16 @@ generator at cook time. Bounds are stored in `GeometryAssetDesc`, `MeshDesc`
 
 Describes one buffer file to cook inline within the geometry job.
 
-| Field            | Required | Type                  | Description                                                                   |
-| ---------------- | -------- | --------------------- | ----------------------------------------------------------------------------- |
-| `uri`            | Yes      | `string` (non-empty)  | Path relative to the descriptor file for the raw buffer data                  |
-| `virtual_path`   | Yes      | `canonical_obuf_path` | Canonical virtual path under which the cooked `.obuf` sidecar is emitted      |
-| `usage_flags`    | No       | `integer ≥ 0`         | `BufferResource::UsageFlags` bitmask                                          |
-| `element_stride` | No       | `integer ≥ 0`         | Fixed per-element byte stride (mutually exclusive with `element_format`)      |
-| `element_format` | No       | `integer` [0, 255]    | Typed element format code (mutually exclusive with non-zero `element_stride`) |
-| `alignment`      | No       | `integer ≥ 1`         | Upload alignment hint                                                         |
-| `content_hash`   | No       | `integer ≥ 0`         | Pre-computed content hash override                                            |
-| `views`          | No       | `array` (≥1 items)    | Named `buffer_view_descriptor` entries (Section 7.2.3.1)                      |
+| Field            | Required | Type                 | Description                                                                   |
+| ---------------- | -------- | -------------------- | ----------------------------------------------------------------------------- |
+| `uri`            | Yes      | `string` (non-empty) | File reference to the raw buffer data                                         |
+| `virtual_path`   | Yes      | `reference (.obuf)`  | Product reference, relative to the descriptor, of the cooked `.obuf` sidecar  |
+| `usage_flags`    | No       | `integer ≥ 0`        | `BufferResource::UsageFlags` bitmask                                          |
+| `element_stride` | No       | `integer ≥ 0`        | Fixed per-element byte stride (mutually exclusive with `element_format`)      |
+| `element_format` | No       | `integer` [0, 255]   | Typed element format code (mutually exclusive with non-zero `element_stride`) |
+| `alignment`      | No       | `integer ≥ 1`        | Upload alignment hint                                                         |
+| `content_hash`   | No       | `integer ≥ 0`        | Pre-computed content hash override                                            |
+| `views`          | No       | `array` (≥1 items)   | Named `buffer_view_descriptor` entries (Section 7.2.3.1)                      |
 
 Constraints:
 
@@ -649,32 +669,32 @@ Exactly one pair must be provided: either `byte_offset`+`byte_length` or
 
 **`mesh_buffer_refs`** (for `"standard"` and `"skinned"`):
 
-| Field    | Required | Type                  | Description                                   |
-| -------- | -------- | --------------------- | --------------------------------------------- |
-| `vb_ref` | Yes      | `canonical_obuf_path` | Virtual path to vertex buffer `.obuf` sidecar |
-| `ib_ref` | Yes      | `canonical_obuf_path` | Virtual path to index buffer `.obuf` sidecar  |
+| Field    | Required | Type                | Description                                |
+| -------- | -------- | ------------------- | ------------------------------------------ |
+| `vb_ref` | Yes      | `reference (.obuf)` | Reference to vertex buffer `.obuf` sidecar |
+| `ib_ref` | Yes      | `reference (.obuf)` | Reference to index buffer `.obuf` sidecar  |
 
 **`skinning_buffer_refs`** (additional fields for `"skinned"`):
 
-| Field                   | Required | Type                     | Description                                          |
-| ----------------------- | -------- | ------------------------ | ---------------------------------------------------- |
-| `joint_index_ref`       | Yes      | `canonical_obuf_path`    | Joint index buffer                                   |
-| `joint_weight_ref`      | Yes      | `canonical_obuf_path`    | Joint weight buffer                                  |
-| `inverse_bind_ref`      | Yes      | `canonical_obuf_path`    | Inverse bind matrix buffer                           |
-| `joint_remap_ref`       | Yes      | `canonical_obuf_path`    | Mesh-to-skeleton index remap buffer                  |
-| `skeleton_ref`          | No       | `canonical_virtual_path` | Skeleton asset virtual path (resolved to `AssetKey`) |
-| `joint_count`           | No       | `integer` [1, 65535]     | Number of joints this LOD references                 |
-| `influences_per_vertex` | No       | `integer` [1, 8]         | Per-vertex bone influence count                      |
-| `flags`                 | No       | `integer ≥ 0`            | Skinning flags (LBS/DQS, normalization)              |
+| Field                   | Required | Type                 | Description                                       |
+| ----------------------- | -------- | -------------------- | ------------------------------------------------- |
+| `joint_index_ref`       | Yes      | `reference (.obuf)`  | Joint index buffer                                |
+| `joint_weight_ref`      | Yes      | `reference (.obuf)`  | Joint weight buffer                               |
+| `inverse_bind_ref`      | Yes      | `reference (.obuf)`  | Inverse bind matrix buffer                        |
+| `joint_remap_ref`       | Yes      | `reference (.obuf)`  | Mesh-to-skeleton index remap buffer               |
+| `skeleton_ref`          | No       | `reference`          | Skeleton asset reference (resolved to `AssetKey`) |
+| `joint_count`           | No       | `integer` [1, 65535] | Number of joints this LOD references              |
+| `influences_per_vertex` | No       | `integer` [1, 8]     | Per-vertex bone influence count                   |
+| `flags`                 | No       | `integer ≥ 0`        | Skinning flags (LBS/DQS, normalization)           |
 
 #### 7.2.5 `submesh_descriptor`
 
-| Field          | Required | Type                  | Description                                                       |
-| -------------- | -------- | --------------------- | ----------------------------------------------------------------- |
-| `material_ref` | Yes      | `canonical_omat_path` | Canonical virtual path to `.omat` material descriptor             |
-| `views`        | Yes      | `array` (≥1 items)    | `submesh_view` entries (Section 7.2.5.1)                          |
-| `name`         | No       | `name`                | Submesh name embedded in `SubMeshDesc` (auto-generated if absent) |
-| `bounds`       | No       | `bounds3`             | Inside the LOD bounds (default); forbidden for procedural LODs    |
+| Field          | Required | Type                | Description                                                       |
+| -------------- | -------- | ------------------- | ----------------------------------------------------------------- |
+| `material_ref` | Yes      | `reference (.omat)` | Reference to the `.omat` material descriptor                      |
+| `views`        | Yes      | `array` (≥1 items)  | `submesh_view` entries (Section 7.2.5.1)                          |
+| `name`         | No       | `name`              | Submesh name embedded in `SubMeshDesc` (auto-generated if absent) |
+| `bounds`       | No       | `bounds3`           | Inside the LOD bounds (default); forbidden for procedural LODs    |
 
 ##### 7.2.5.1 `submesh_view`
 
@@ -793,13 +813,13 @@ Produces `PreparedGeometryDescriptor` (raw descriptor bytes +
 | 1    | **Header** — `GeometryAssetDesc.header.asset_type = kGeometry`, `version = kGeometryAssetVersion`, `lod_count`, `bounding_box_min/max`, `surface_count`, `default_lod_policy` (`MakeDefaultLodPolicy`). `WritePod(writer, asset_desc)`.                                                                 |
 | 2    | **For each LOD** — read `lod_doc` from `lods[i]`. Take `lod_bounds` from the authored bounds or the generated procedural mesh.                                                                                                                                                                          |
 | 3    | **`mesh_type`** — set `MeshDesc.mesh_type` from `"standard"` / `"skinned"` / `"procedural"`.                                                                                                                                                                                                            |
-| 4    | **Standard LOD** — `co_await ResolveBufferSidecarByVirtualPath` for `vb_ref` and `ib_ref`. Validate `kVertexBuffer` / `kIndexBuffer` usage flags. Store `ResourceIndexT` into `mesh_bindings`. Set VB/IB fields to `kNoResourceIndex` (patched later).                                                  |
-| 5    | **Skinned LOD** — additionally resolves `joint_index_ref`, `joint_weight_ref`, `inverse_bind_ref`, `joint_remap_ref` sidecars. Optional `skeleton_ref` resolved via `ResolveAssetKeyByVirtualPath`. Fills extended `MeshBufferBindings` fields.                                                         |
+| 4    | **Standard LOD** — `co_await ResolveBufferSidecar` for `vb_ref` and `ib_ref`. Validate `kVertexBuffer` / `kIndexBuffer` usage flags. Store `ResourceIndexT` into `mesh_bindings`. Set VB/IB fields to `kNoResourceIndex` (patched later).                                                               |
+| 5    | **Skinned LOD** — additionally resolves `joint_index_ref`, `joint_weight_ref`, `inverse_bind_ref`, `joint_remap_ref` sidecars. Optional `skeleton_ref` resolved via `LookupAssetKey`. Fills extended `MeshBufferBindings` fields.                                                                       |
 | 6    | **Procedural LOD** — `BuildProceduralParamBlob` encodes typed generator params. Before the header, `GenerateMeshBuffers` runs once per LOD to count `vertex_count` / `index_count` and bound the mesh.                                                                                                  |
 | 7    | **Submesh count + view count** — accumulate total `mesh_view_count` from all `submeshes[*].views`.                                                                                                                                                                                                      |
 | 8    | **`WritePod(writer, mesh_desc)`** — writes completed `MeshDesc`.                                                                                                                                                                                                                                        |
 | 9    | **Procedural param blob** — if non-empty, writes raw blob bytes immediately after `MeshDesc`.                                                                                                                                                                                                           |
-| 10   | **For each submesh** — for each `submesh_doc` in `lod_doc["submeshes"]`: resolve `material_ref` → `AssetKey` via `ResolveMaterialKeyByVirtualPath`; fill `SubMeshDesc.material_asset_key`; fill bounds. `WritePod(writer, submesh_desc)`.                                                               |
+| 10   | **For each submesh** — for each `submesh_doc` in `lod_doc["submeshes"]`: resolve `material_ref` → `AssetKey` via `LookupAssetKey`; fill `SubMeshDesc.material_asset_key`; fill bounds. `WritePod(writer, submesh_desc)`.                                                                                |
 | 11   | **For each submesh view** — for `"standard"` / `"skinned"`: call `ResolveMeshViewPair` to read `element_offset`/`element_count` from the named VB and IB buffer views into `MeshViewDesc`. For `"procedural"`: `view_ref` must be `"__all__"`, write counts from step 6. `WritePod(writer, view_desc)`. |
 | 12   | **Surface table** — after the last LOD, one `SurfaceDesc` per declared surface in first-declaration order (`MakeSurfaceTable`), then the string table.                                                                                                                                                  |
 
@@ -1047,8 +1067,8 @@ messages written to `error_stream`. Error codes follow the pattern
 | Schema     | `geometry.descriptor.surface_duplicate`        | `surfaces` names a surface more than once                |
 | Schema     | `geometry.descriptor.lod_policy_invalid`       | Lists out of order or unequal screen-space error lists   |
 | I/O        | `geometry.descriptor.index_load_failed`        | `container.index.bin` could not be loaded                |
-| Buffer     | `geometry.buffer.virtual_path_invalid`         | Non-canonical virtual path in `vb_ref`/`ib_ref`          |
-| Buffer     | `geometry.buffer.virtual_path_unmounted`       | Virtual path outside all mounted cooked roots            |
+| Reference  | `import.reference_invalid`                     | Reference text the shared grammar refuses                |
+| Reference  | `import.reference_unmounted`                   | Reference in no mounted cooked root                      |
 | Buffer     | `geometry.buffer.sidecar_ambiguous`            | Multiple `.obuf` files matched across mounts             |
 | Buffer     | `geometry.buffer.sidecar_missing`              | `.obuf` file not found in any mount                      |
 | Buffer     | `geometry.buffer.sidecar_read_failed`          | Binary sidecar file read error                           |
@@ -1058,8 +1078,6 @@ messages written to `error_stream`. Error codes follow the pattern
 | Buffer     | `geometry.buffer.view_overflow`                | View element offset/count exceeds `uint32_t`             |
 | Buffer     | `geometry.buffer.usage_mismatch`               | Buffer sidecar does not advertise required usage flag    |
 | Buffer     | `geometry.buffer.no_submissions`               | No buffer work items were submitted from `buffers` array |
-| Material   | `geometry.material.virtual_path_invalid`       | Non-canonical virtual path in `material_ref`             |
-| Material   | `geometry.material.virtual_path_unmounted`     | Material path outside all mounted cooked roots           |
 | Material   | `geometry.material.type_mismatch`              | Index entry exists but asset type is not `kMaterial`     |
 | Material   | `geometry.material.missing`                    | No `.omat` file found for virtual path                   |
 | Procedural | `geometry.procedural.params_invalid`           | `BuildProceduralParamBlob` failed to encode params       |
@@ -1067,9 +1085,8 @@ messages written to `error_stream`. Error codes follow the pattern
 | Procedural | `geometry.procedural.mesh_too_large`           | Generated vertex/index count exceeds `uint32_t`          |
 | Procedural | `geometry.procedural.view_ref_invalid`         | Procedural `view_ref` is not `"__all__"`                 |
 | Skinning   | `geometry.skinning.skeleton_missing`           | `skeleton_ref` could not be resolved to an `AssetKey`    |
-| Asset      | `geometry.asset.virtual_path_invalid`          | Non-canonical virtual path in `skeleton_ref`             |
-| Asset      | `geometry.asset.virtual_path_unmounted`        | Asset path outside all mounted cooked roots              |
 | Asset      | `geometry.asset.missing`                       | Asset file not found in any mount                        |
+| Asset      | `geometry.asset.type_unknown`                  | Asset type not inferable from the reference extension    |
 
 ---
 

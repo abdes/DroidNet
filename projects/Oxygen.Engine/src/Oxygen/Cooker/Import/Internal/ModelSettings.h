@@ -20,6 +20,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 
@@ -31,9 +32,12 @@ using MaterialRemapKeys = std::map<std::string, data::AssetKey, std::less<>>;
 
 //! Resolve the import's material remap in the cooked roots the job reads.
 /*!
- A target that names no existing material is reported
- (`import.material_remap_target_missing`, a warning), and its source material
- is produced instead.
+ Each target is a reference read in the import's settings: absolute in another
+ mount, or relative to the folder of the model's identity. A target the
+ grammar refuses (`import.reference_invalid`) or that is in no mounted cooked
+ root (`import.reference_unmounted`) is an error. A target that names no
+ existing material is reported (`import.material_remap_target_missing`, a
+ warning), and its source material is produced instead.
 */
 [[nodiscard]] inline auto ResolveMaterialRemap(
   ImportSession& session, const ImportRequest& request) -> MaterialRemapKeys
@@ -46,20 +50,32 @@ using MaterialRemapKeys = std::map<std::string, data::AssetKey, std::less<>>;
   const auto mounts
     = LoadMountedCookedSources(session, request, "import.material_remap.");
   for (const auto& [name, target] : remap) {
-    const auto resolved = ResolveMountedAssetReference(
-      mounts, request, target, data::AssetType::kMaterial);
-    if (resolved.has_value()) {
-      keys.emplace(name, resolved->key);
+    const auto object_path = "material_remap/" + name;
+    const auto reference = ResolveJobReference(request, target);
+    if (!reference.has_value()) {
+      session.AddDiagnostic(
+        RefuseReference(request, target, reference.error(), object_path));
+      continue;
+    }
+    const auto found = LookupReference(
+      mounts, request, *reference, data::AssetType::kMaterial);
+    if (found.has_value()) {
+      keys.emplace(name, found->key);
+      continue;
+    }
+    if (found.error().reason == AssetReferenceRefusal::kUnmounted) {
+      session.AddDiagnostic(
+        RefuseUnmountedReference(request, *reference, object_path));
       continue;
     }
     session.AddDiagnostic({
       .severity = ImportSeverity::kWarning,
       .code = "import.material_remap_target_missing",
-      .message = "Material '" + target
-        + "' does not exist or is not a material; the source material '" + name
-        + "' is produced instead",
+      .message = DescribeLookup(*reference, found.error())
+        + "; it does not exist or is not a material, so the source material '"
+        + name + "' is produced instead",
       .source_path = request.source_path.string(),
-      .object_path = "material_remap/" + name,
+      .object_path = object_path,
     });
   }
   return keys;

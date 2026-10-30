@@ -124,8 +124,8 @@ struct Box final {
   auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto mounts
     = oxygen::cooker::test::ContentMountTable(ProjectDir() / "Content");
-  const auto source = GeometrySource::FromDescriptor(
-    ReadText(descriptor), descriptor, *mounts, diagnostics);
+  const auto source = GeometrySource::FromDescriptor(ReadText(descriptor),
+    descriptor, "/Content/Geometry/Generated.ogeo", *mounts, diagnostics);
   if (!source.has_value() || source->lods.empty()) {
     return std::nullopt;
   }

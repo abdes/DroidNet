@@ -2417,8 +2417,9 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
   }
   if (job_type == "geometry-descriptor") {
     CHECK_NOTNULL_F(mounts.get(), "A manifest job carries its mount table");
-    return AttachOrchestration(internal::BuildGeometryDescriptorRequest(
-      geometry_descriptor, *mounts, error_stream, captured_inputs));
+    return AttachOrchestration(
+      internal::BuildGeometryDescriptorRequest(geometry_descriptor,
+        virtual_path, *mounts, error_stream, captured_inputs));
   }
   if (job_type == "scene-descriptor") {
     return AttachOrchestration(internal::BuildSceneDescriptorRequest(

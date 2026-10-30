@@ -94,8 +94,8 @@ namespace {
     EXPECT_EQ(source->background->enabled, 0U);
     ASSERT_HAS_VALUE(source->post_process)
       << "Expected source->post_process to contain a value";
-    EXPECT_EQ(
-      source->post_process->metering_mask, "/Content/Textures/mask.otex");
+    EXPECT_EQ(source->post_process->metering_mask,
+      document.Spell("/Content/Textures/mask.otex"));
     ASSERT_EQ(source->post_process->curve.size(), 2U);
     EXPECT_FLOAT_EQ(source->post_process->curve.back().metered_ev, 4.0F);
     EXPECT_FLOAT_EQ(source->post_process->curve.back().compensation_ev, 2.0F);
@@ -129,7 +129,8 @@ namespace {
     EXPECT_TRUE(diagnostics.empty());
     ASSERT_EQ(source->renderables.size(), 1U);
     const auto& renderable = source->renderables.front();
-    EXPECT_EQ(renderable.geometry, "/Content/Geometry/body.ogeo");
+    EXPECT_EQ(
+      renderable.geometry, document.Spell("/Content/Geometry/body.ogeo"));
     ASSERT_EQ(renderable.overrides.size(), 1U);
     const auto& material = renderable.overrides.front();
     EXPECT_EQ(material.property->id,
@@ -139,11 +140,12 @@ namespace {
     const auto* path
       = std::get_if<SceneSource::AssetReference>(&material.value);
     ASSERT_NE(path, nullptr);
-    EXPECT_EQ(path->virtual_path, "/Content/Materials/paint.omat");
+    EXPECT_EQ(
+      path->virtual_path, document.Spell("/Content/Materials/paint.omat"));
     ASSERT_EQ(source->references.size(), 6U);
     EXPECT_EQ(source->references.front().type, data::AssetType::kMaterial);
-    EXPECT_EQ(
-      source->references.back().virtual_path, "/Content/Scenes/other.oscene");
+    EXPECT_EQ(source->references.back().virtual_path,
+      document.Spell("/Content/Scenes/other.oscene"));
     EXPECT_FALSE(source->references.back().type.has_value());
     EXPECT_EQ(
       source->references.back().object_path, "references.extra_assets[0]");
@@ -242,7 +244,8 @@ namespace {
     ASSERT_HAS_VALUE(source->sky_light)
       << "Expected source->sky_light to contain a value";
     EXPECT_EQ(source->sky_light->record.enabled, 0U);
-    EXPECT_EQ(source->sky_light->cubemap, "/Content/Textures/sky.otex");
+    EXPECT_EQ(
+      source->sky_light->cubemap, document.Spell("/Content/Textures/sky.otex"));
   }
 
   NOLINT_TEST(SceneSourceTest, RejectsComponentNodeOutsideTheScene)
@@ -282,11 +285,12 @@ namespace {
     EXPECT_TRUE(diagnostics.empty());
     ASSERT_EQ(source->instances.size(), 1U);
     EXPECT_EQ(source->instances.front().node_index, 1U);
-    EXPECT_EQ(source->instances.front().scene, "/Content/Scenes/model.oscene");
+    EXPECT_EQ(source->instances.front().scene,
+      document.Spell("/Content/Scenes/model.oscene"));
     EXPECT_EQ(source->build.starting_camera.node_index, 2U);
     ASSERT_EQ(source->starting_input_contexts.size(), 2U);
     EXPECT_EQ(source->starting_input_contexts.front().context,
-      "/Content/Input/gameplay.oimap");
+      document.Spell("/Content/Input/gameplay.oimap"));
     EXPECT_EQ(source->starting_input_contexts.front().priority, 5);
     EXPECT_EQ(source->starting_input_contexts.back().priority, 0);
   }

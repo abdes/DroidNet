@@ -66,6 +66,8 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
     kNameSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.name.schema.json"
+    kReferenceSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.reference.schema.json"
     kLodPolicySchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.lod-policy.schema.json"
     kCapturedInputsSchema

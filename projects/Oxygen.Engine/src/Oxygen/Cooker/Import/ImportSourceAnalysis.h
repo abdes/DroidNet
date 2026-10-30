@@ -8,11 +8,15 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportSourceObservation.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -33,11 +37,64 @@ enum class ImportDependencyKind : uint8_t {
 };
 
 struct ImportLogicalDependency final {
+  //! The text as authored in the file that holds it; the virtual path itself
+  //! for a product the job names.
+  std::string written;
+  //! The canonical virtual path the text names.
   std::string virtual_path;
   ImportDependencyKind kind = ImportDependencyKind::kAsset;
   std::string object_path;
   bool required = true;
 };
+
+//! A reference as authored, before it is resolved.
+struct ImportDependencyText final {
+  std::string written;
+  ImportDependencyKind kind = ImportDependencyKind::kAsset;
+  std::string object_path;
+};
+
+//! A reference text the grammar refuses.
+struct ImportDependencyRefusal final {
+  std::string written;
+  std::string object_path;
+  VirtualPathError error = VirtualPathError::kEmpty;
+};
+
+//! The dependencies a set of texts resolved to, and the texts refused.
+struct ImportDependencyResolution final {
+  std::vector<ImportLogicalDependency> dependencies;
+  std::vector<ImportDependencyRefusal> refused;
+};
+
+//! Resolves a reference read in the file whose identity is `anchor`.
+/*!
+ @return The dependency, with the text as written and the virtual path it
+   names, or the `vpath.*` refusal of `content::ResolveReference`.
+*/
+OXGN_COOK_NDAPI auto ResolveDependency(std::string_view anchor,
+  const ImportDependencyText& text, VirtualPathRuleSet rules)
+  -> std::expected<ImportLogicalDependency, VirtualPathError>;
+
+//! Whether an input source's text names another source's action: a reference
+//! ends with the input action extension (`.oiact`); any other text names an
+//! action declared in the source itself.
+OXGN_COOK_NDAPI auto IsInputActionReference(std::string_view text) -> bool;
+
+//! The buffer references of a geometry that are not its own buffers.
+/*!
+ A buffer is local to the geometry when a declared buffer resolves to the same
+ virtual path as the reference; both are named relative to the geometry
+ descriptor, so the written texts are compared resolved.
+
+ @param anchor The geometry descriptor's identity.
+ @param local_buffers The written names of the geometry's own buffers.
+ @param references The buffer references the geometry's LODs make.
+*/
+OXGN_COOK_NDAPI auto ExternalBufferReferences(std::string_view anchor,
+  std::span<const std::string> local_buffers,
+  std::span<const ImportDependencyText> references)
+  -> ImportDependencyResolution;
 
 struct ImportFileDependency final {
   std::filesystem::path path;

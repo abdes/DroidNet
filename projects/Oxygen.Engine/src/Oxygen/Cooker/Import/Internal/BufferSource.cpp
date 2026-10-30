@@ -18,11 +18,13 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 
 namespace oxygen::content::import::internal {
@@ -88,8 +90,8 @@ namespace {
 } // namespace
 
 auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
-  const std::filesystem::path& descriptor_path, const MountTable& mounts,
-  std::vector<ImportDiagnostic>& diagnostics,
+  const std::filesystem::path& descriptor_path, const std::string_view anchor,
+  const MountTable& mounts, std::vector<ImportDiagnostic>& diagnostics,
   const std::string_view object_path_prefix)
   -> std::optional<std::vector<BufferSource>>
 {
@@ -130,12 +132,22 @@ auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
     }
     entry.source_path = located->file;
 
-    entry.source_id = buffer_doc.at("virtual_path").get<std::string>();
+    const auto product_field = object_path + ".virtual_path";
+    const auto& product_text
+      = buffer_doc.at("virtual_path").get_ref<const std::string&>();
+    const auto product = oxygen::content::ResolveReference(
+      anchor, product_text, VirtualPathRuleSet::kAuthored);
+    if (!product.has_value()) {
+      diagnostics.push_back(RefuseReference(anchor, descriptor_path.string(),
+        product_text, product.error(), product_field));
+      continue;
+    }
+    entry.source_id = *product;
     if (!seen_source_ids.insert(entry.source_id).second) {
       AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
         "buffer.container.virtual_path_duplicate",
-        "Duplicate buffer virtual_path in descriptor",
-        object_path + ".virtual_path");
+        "Duplicate buffer virtual_path in descriptor: " + entry.source_id,
+        product_field);
       continue;
     }
 

@@ -182,10 +182,14 @@ auto BufferImportSubmitter::SubmitBuffers(
   // Resolve all destinations before starting source reads or pipeline work.
   for (const auto& entry : entries) {
     auto relpath = std::string {};
-    if (!internal::TryVirtualPathToRelPath(entry.source_id, relpath)) {
+    // A product is named relative to its container, so it lives in the
+    // container's mount; an absolute product elsewhere has no cooked root here.
+    if (!internal::TryVirtualPathToRelPath(
+          request_, entry.source_id, relpath)) {
       AddDiagnostic(session_, request_, ImportSeverity::kError,
         "buffer.container.virtual_path_unmounted",
-        "Buffer virtual_path names no mount",
+        "Buffer virtual_path '" + entry.source_id
+          + "' is outside the mount the container cooks into",
         entry.object_path + ".virtual_path");
       continue;
     }

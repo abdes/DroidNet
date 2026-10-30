@@ -317,28 +317,37 @@ struct ResolvedReference {
   std::string written;   // text as authored
   std::string resolved;  // canonical virtual path
 };
-auto ResolveJobReference(const ImportRequest& request, std::string_view text)
-  -> Result<ResolvedReference, ReferenceRefusal>;
-auto LookupReference(MountedCookedSources&, const ImportRequest&,
-  const ResolvedReference&, AssetType expected) -> Result<AssetKey, ReferenceRefusal>;
+auto ResolveJobReference(const ImportRequest& request, std::string_view text,
+  VirtualPathRuleSet rules = kAuthored)
+  -> std::expected<ResolvedReference, VirtualPathError>;
+auto LookupReference(std::span<const MountedCookedSource>, const ImportRequest&,
+  const ResolvedReference&, std::optional<AssetType> expected)
+  -> std::expected<ResolvedAssetReference, AssetReferenceRefused>;
 ```
 
 `ResolveJobReference` lives in `Internal/Utils/VirtualPathResolution.h`, next
-to `PlaceAsset`, and anchors at `request.AnchorIdentity()`. `AnchorIdentity` is
-`asset_virtual_path` for every job that has one, and the sidecar's own identity
-for physics and scripting sidecars (`target_scene_virtual_path` with the
-sidecar suffix), which the request builders set. Every refusal carries the
-written text, the resolved path and the file looked up, so a diagnostic says
-where it looked. The per-job codes for an invalid or unmounted reference
+to `PlaceAsset`, and anchors at `request.OutputIdentity()`: the job's identity,
+or for a physics or scripting sidecar the identity of its target scene, which
+lives in the sidecar's folder, so both anchor at the same folder. Readers
+(`MaterialSource`, `SceneSource`, `GeometrySource`, `BufferSource`) keep the
+text as written; the job resolves each reference where it uses it, so a reader
+needs no identity and analysis reports both forms. `LookupReference` replaces
+`ResolveMountedAssetReference`: it takes the resolved reference and records
+the descriptor files it looked for, which `DescribeLookup` puts in the
+diagnostic. Every refusal names the written text, the resolved path and the
+files looked for. The per-job codes for an invalid or unmounted reference
 (`*_virtual_path_invalid`, `*_unmounted`, `material_ref_invalid` and the rest)
-collapse into `import.reference_invalid` and `import.reference_unmounted`,
+collapse into `import.reference_invalid` (`RefuseReference`, which names the
+`vpath.*` code) and `import.reference_unmounted` (`RefuseUnmountedReference`),
 with the field's JSON pointer as the object path; `reference_missing` and
 `reference_type_mismatch` stay per family because they carry family facts.
+`VirtualPathResolver::ResolveAssetKey` stays the runtime lookup the sidecars
+use, called with the resolved path.
 
 | Job or reader                                   | Change                                                                                                 |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `MaterialSource`, `MaterialDescriptorImportJob` | Texture bindings resolved on read                                                                      |
-| `SceneSource`, `SceneDescriptorImportJob`       | Every reference resolved on read; `index_cache` keyed by resolved path                                 |
+| `MaterialSource`, `MaterialDescriptorImportJob` | Texture bindings resolved where the job binds them                                                     |
+| `SceneSource`, `SceneDescriptorImportJob`       | Every reference resolved where the job uses it; `index_cache` keyed by resolved path                   |
 | `GeometrySource`, `GeometryDescriptorImportJob` | The three local resolvers deleted; buffers, skeleton and material through the one resolver             |
 | `BufferSource`, `BufferImportSubmitter`         | Products resolved against the container; the product's mount is the container's                        |
 | `CollisionShapeDescriptorImportJob`             | Identity check deleted; `material_ref` through the resolver                                            |
@@ -351,8 +360,10 @@ with the field's JSON pointer as the object path; `reference_missing` and
 | `ImportSourceAnalysis`                          | Dependencies report `written` and `resolved`; local buffers compared resolved                          |
 | `EngineContent`                                 | The built-in geometry names its default material relatively                                            |
 
-Schemas: `oxygen.reference.schema.json` defines `reference` (the grammar as a
-pattern) and `file_reference`; it is registered in `Cooker/CMakeLists.txt` and
+Schemas: `oxygen.reference.schema.json` defines `reference`, the grammar as a
+pattern, used by asset and file references alike (the cooker applies the
+derived content rule to asset references only); a field that names one asset
+type adds its extension with `allOf`. It is registered in `Cooker/CMakeLists.txt` and
 installed with the other schemas. The 20 `canonical_*_path` definitions in
 reference positions are deleted; identity patterns in the asset key map and key
 request schemas stay. The input schema's `action_reference` becomes

@@ -109,6 +109,45 @@ INSTANTIATE_TEST_SUITE_P(Cases, InputSchemaCaseTest,
       "",
     },
     SchemaCase {
+      "AcceptsLocalActionName",
+      GameplayMapping("Space")
+        .Action("Jump", "bool")
+        .Set("/contexts/0/mappings/0/action", "Jump")
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "AcceptsActionReferenceRelativeToTheSource",
+      GameplayMapping("Space")
+        .Set("/contexts/0/mappings/0/action", "Car.input/Jump.oiact")
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "AcceptsActionReferenceClimbingFolders",
+      GameplayMapping("Space")
+        .Set("/contexts/0/mappings/0/action", "../Shared.input/Use.oiact")
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsActionNameEndingWithActionExtension",
+      Source().Action("Jump.oiact", "bool").Remove("/contexts").Text(),
+      false,
+      "/actions/0/name",
+    },
+    SchemaCase {
+      "RejectsMappingActionThatIsNeitherNameNorReference",
+      GameplayMapping("Space")
+        .Set("/contexts/0/mappings/0/action", "Car.input/Jump.omat")
+        .Text(),
+      false,
+      "/contexts/0/mappings/0/action",
+    },
+    SchemaCase {
       "RejectsActionReferenceToAnotherAssetType",
       GameplayMapping("W")
         .Reference("/contexts/0/mappings/0/action",

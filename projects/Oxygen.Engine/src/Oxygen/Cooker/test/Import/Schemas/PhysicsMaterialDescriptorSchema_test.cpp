@@ -48,7 +48,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, PhysicsMaterialDescriptorSchemaTest,
     SchemaCase {
       "AcceptsCanonicalDocument",
       Ground()
-        .WithIdentityField()
         .Set("/$schema",
           "./src/Oxygen/Cooker/Import/Schemas/"
           "oxygen.physics-material-descriptor.schema.json")
@@ -70,6 +69,14 @@ INSTANTIATE_TEST_SUITE_P(Cases, PhysicsMaterialDescriptorSchemaTest,
         .Text(),
       false,
       "'unknown_setting'",
+    },
+    SchemaCase {
+      "RejectsStaleIdentityField",
+      Ground()
+        .Set("/virtual_path", "/.cooked/Physics/Materials/ground.opmat")
+        .Text(),
+      false,
+      "'virtual_path'",
     },
     SchemaCase {
       "RejectsNonPositiveDensity",

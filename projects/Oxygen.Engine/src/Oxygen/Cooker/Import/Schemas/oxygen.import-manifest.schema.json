@@ -1435,14 +1435,20 @@
       "default": "from-file"
     },
     "material_remap": {
-      "description": "Source materials replaced by existing materials: a material's name in the import to the virtual path of the material its surfaces use instead. A replaced material is not produced.",
+      "description": "Source materials replaced by existing materials: a material's name in the import to the reference of the material its surfaces use instead: an absolute virtual path in another mount or a path relative to the folder of the model. A replaced material is not produced.",
       "type": "object",
       "propertyNames": {
         "minLength": 1
       },
       "additionalProperties": {
-        "type": "string",
-        "minLength": 1
+        "allOf": [
+          {
+            "$ref": "oxygen.reference.schema.json#/definitions/reference"
+          },
+          {
+            "pattern": "\\.omat$"
+          }
+        ]
       }
     },
     "geometry_import_defaults": {

@@ -25,6 +25,7 @@ namespace oxygen::content::import::internal {
 //! A raw input and the buffer resource it declares, before destination linking.
 struct BufferSource final {
   std::filesystem::path source_path;
+  //! The product's virtual path, resolved against the container's identity.
   std::string source_id;
   std::string object_path;
   std::vector<internal::BufferDescriptorViewSpec> view_specs;
@@ -38,12 +39,15 @@ struct BufferSource final {
   /*!
    Each `source` is a mount path, or a path relative to the descriptor that
    stays in its mount, located through `mounts`
-   (`MountTable::LocateReference`).
+   (`MountTable::LocateReference`). Each `virtual_path` names a product
+   relative to `anchor`, the identity of the container or geometry that
+   declares it, so a product lives in the container's mount; `source_id` is
+   the resolved path, and two declarations resolving to one path are refused.
   */
   OXGN_COOK_NDAPI static auto FromDeclarations(
     const nlohmann::json& buffer_chunks,
-    const std::filesystem::path& descriptor_path, const MountTable& mounts,
-    std::vector<ImportDiagnostic>& diagnostics,
+    const std::filesystem::path& descriptor_path, std::string_view anchor,
+    const MountTable& mounts, std::vector<ImportDiagnostic>& diagnostics,
     std::string_view object_path_prefix = "buffers")
     -> std::optional<std::vector<BufferSource>>;
 };

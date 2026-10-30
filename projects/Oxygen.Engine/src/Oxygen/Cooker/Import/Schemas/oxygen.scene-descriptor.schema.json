@@ -114,51 +114,6 @@
       "minItems": 4,
       "maxItems": 4
     },
-    "canonical_virtual_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$"
-    },
-    "canonical_ogeo_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.ogeo$"
-    },
-    "canonical_omat_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.omat$"
-    },
-    "canonical_oscript_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.oscript$"
-    },
-    "canonical_input_action_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.oiact$"
-    },
-    "canonical_input_mapping_context_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.oimap$"
-    },
-    "canonical_oscene_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.oscene$"
-    },
-    "canonical_physics_scene_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opscene$"
-    },
-    "canonical_otex_path": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.otex$"
-    },
     "node_flags": {
       "type": "object",
       "additionalProperties": false,
@@ -238,7 +193,10 @@
       "required": ["scene_ref"],
       "properties": {
         "scene_ref": {
-          "$ref": "#/definitions/canonical_oscene_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.oscene$" }
+          ]
         },
         "overrides": {
           "description": "This scene's changes of the nodes the instance brings in, per node path.",
@@ -328,7 +286,10 @@
       "required": ["context_ref"],
       "properties": {
         "context_ref": {
-          "$ref": "#/definitions/canonical_input_mapping_context_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.oimap$" }
+          ]
         },
         "priority": {
           "type": "integer",
@@ -347,7 +308,10 @@
           "minimum": 0
         },
         "geometry_ref": {
-          "$ref": "#/definitions/canonical_ogeo_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.ogeo$" }
+          ]
         },
         "overrides": {
           "$ref": "#/definitions/geometry_overrides"
@@ -397,7 +361,14 @@
                 "additionalProperties": false,
                 "minProperties": 1,
                 "properties": {
-                  "/material": { "$ref": "#/definitions/canonical_omat_path" },
+                  "/material": {
+                    "allOf": [
+                      {
+                        "$ref": "oxygen.reference.schema.json#/definitions/reference"
+                      },
+                      { "pattern": "\\.omat$" }
+                    ]
+                  },
                   "/visible": { "type": "boolean" },
                   "/casts_shadows": { "type": "boolean" }
                 }
@@ -885,7 +856,10 @@
           "$ref": "#/definitions/vec3"
         },
         "inscattering_color_cubemap_ref": {
-          "$ref": "#/definitions/canonical_otex_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.otex$" }
+          ]
         },
         "inscattering_color_cubemap_angle": {
           "type": "number"
@@ -988,7 +962,10 @@
           "minimum": 0
         },
         "cubemap_ref": {
-          "$ref": "#/definitions/canonical_otex_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.otex$" }
+          ]
         },
         "illuminance_lux": {
           "type": "number",
@@ -1045,7 +1022,10 @@
           "enum": [0, 1]
         },
         "cubemap_ref": {
-          "$ref": "#/definitions/canonical_otex_path"
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+            { "pattern": "\\.otex$" }
+          ]
         },
         "solid_color_rgb": {
           "$ref": "#/definitions/vec3"
@@ -1196,10 +1176,10 @@
           "default": 1.5
         },
         "auto_exposure_metering_mask": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^/",
-          "description": "Canonical virtual path of a texture descriptor cooked into this scene source; omit for no mask."
+          "allOf": [
+            { "$ref": "oxygen.reference.schema.json#/definitions/reference" }
+          ],
+          "description": "Reference to a texture descriptor cooked into this scene source: an absolute virtual path in another mount or text relative to this file's folder; omit for no mask."
         },
         "auto_exposure_compensation_curve": {
           "type": "array",
@@ -1312,42 +1292,59 @@
         "materials": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/canonical_omat_path"
+            "allOf": [
+              { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+              { "pattern": "\\.omat$" }
+            ]
           },
           "uniqueItems": true
         },
         "scripts": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/canonical_oscript_path"
+            "allOf": [
+              { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+              { "pattern": "\\.oscript$" }
+            ]
           },
           "uniqueItems": true
         },
         "input_actions": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/canonical_input_action_path"
+            "allOf": [
+              { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+              { "pattern": "\\.oiact$" }
+            ]
           },
           "uniqueItems": true
         },
         "input_mapping_contexts": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/canonical_input_mapping_context_path"
+            "allOf": [
+              { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+              { "pattern": "\\.oimap$" }
+            ]
           },
           "uniqueItems": true
         },
         "physics_sidecars": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/canonical_physics_scene_path"
+            "allOf": [
+              { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
+              { "pattern": "\\.opscene$" }
+            ]
           },
           "uniqueItems": true
         },
         "extra_assets": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/canonical_virtual_path"
+            "allOf": [
+              { "$ref": "oxygen.reference.schema.json#/definitions/reference" }
+            ]
           },
           "uniqueItems": true
         }

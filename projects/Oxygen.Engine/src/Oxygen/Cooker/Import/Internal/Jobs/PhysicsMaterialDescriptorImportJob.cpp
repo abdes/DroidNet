@@ -121,25 +121,13 @@ namespace {
   }
 
   //! Places the descriptor at the job's identity.
-  /*!
-   A descriptor may state its identity too; it must be the one the job cooks.
-  */
   [[nodiscard]] auto ResolveDescriptorTarget(const ImportRequest& request,
-    const json& descriptor_doc, ImportSession& session)
-    -> std::optional<DescriptorTarget>
+    ImportSession& session) -> std::optional<DescriptorTarget>
   {
     auto placement = internal::PlaceAsset(
       request, data::kPhysicsMaterialDescriptorExtension);
     if (!placement.has_value()) {
       session.AddDiagnostic(std::move(placement.error()));
-      return std::nullopt;
-    }
-    if (descriptor_doc.contains("virtual_path")
-      && descriptor_doc.at("virtual_path").get<std::string>()
-        != placement->virtual_path) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.material.identity_conflict",
-        "The descriptor's virtual_path differs from the job's", "virtual_path");
       return std::nullopt;
     }
     return DescriptorTarget {
@@ -226,8 +214,7 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  const auto target
-    = ResolveDescriptorTarget(Request(), descriptor_doc, session);
+  const auto target = ResolveDescriptorTarget(Request(), session);
   if (!target.has_value()) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
       "Physics material descriptor target resolution failed");

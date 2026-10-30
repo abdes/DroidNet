@@ -190,6 +190,73 @@ NOLINT_TEST(GeometryDescriptorSchemaTest, RequiresBoundsOnBufferMeshes)
   EXPECT_THAT(ValidateJson(Schema(), doc), IsEmpty());
 }
 
+//! A standard mesh whose references are written as the test says.
+auto BufferMesh() -> GeometryDescriptor
+{
+  auto geometry = Procedural("Capsule");
+  geometry.Remove("/lods/0/procedural")
+    .Set("/lods/0/mesh_type", "standard")
+    .Set("/lods/0/bounds",
+      json::parse(R"({ "min": [-1, -1, -1], "max": [1, 1, 1] })"))
+    .Set("/lods/0/buffers/vb_ref", "Vertices.obuf")
+    .Set("/lods/0/buffers/ib_ref", "../Buffers/Indices.obuf")
+    .Set("/lods/0/submeshes/0/material_ref", "../Materials/Red.omat")
+    .Set("/lods/0/submeshes/0/views/0/view_ref", "surface")
+    .AppendBuffer(
+      { { "uri", "raw/vertices.bin" } }, "/Content/Geometry/Vertices.obuf");
+  return geometry;
+}
+
+//! References are absolute in another mount or relative to the descriptor.
+NOLINT_TEST(GeometryDescriptorSchemaTest, AcceptsRelativeReferences)
+{
+  auto doc = BufferMesh();
+  EXPECT_THAT(ValidateJson(Schema(), doc.Json()), IsEmpty());
+  EXPECT_EQ(doc.Json().at("buffers").at(0).at("virtual_path"), "Vertices.obuf");
+
+  doc.Set("/lods/0/submeshes/0/material_ref", "/Engine/Materials/Default.omat");
+  EXPECT_THAT(ValidateJson(Schema(), doc.Json()), IsEmpty());
+}
+
+NOLINT_TEST(GeometryDescriptorSchemaTest, RefusesAReferenceOfAnotherType)
+{
+  struct Case {
+    std::string_view pointer;
+    std::string_view text;
+  };
+  const auto cases = std::vector<Case> {
+    { .pointer = "/lods/0/buffers/vb_ref", .text = "Vertices.otex" },
+    { .pointer = "/lods/0/buffers/ib_ref", .text = "/Content/Indices.omat" },
+    { .pointer = "/lods/0/submeshes/0/material_ref", .text = "Red.obuf" },
+    { .pointer = "/buffers/0/virtual_path", .text = "Vertices.omat" },
+  };
+  for (const auto& [pointer, text] : cases) {
+    SCOPED_TRACE(std::string(pointer));
+    auto doc = BufferMesh();
+    doc.Set(pointer, std::string(text));
+    EXPECT_THAT(ValidateJson(Schema(), doc.Json()), Not(IsEmpty()));
+  }
+}
+
+NOLINT_TEST(GeometryDescriptorSchemaTest, RefusesMalformedReferences)
+{
+  const auto cases = std::vector<std::string_view> {
+    "",
+    "Dir//Red.omat",
+    "Dir/",
+    "../../../",
+    "A\\B.omat",
+    "asset:///Red.omat",
+    "./../Red.omat",
+  };
+  for (const auto text : cases) {
+    SCOPED_TRACE(std::string(text));
+    auto doc = BufferMesh();
+    doc.Set("/lods/0/submeshes/0/material_ref", std::string(text));
+    EXPECT_THAT(ValidateJson(Schema(), doc.Json()), Not(IsEmpty()));
+  }
+}
+
 NOLINT_TEST(GeometryDescriptorSchemaTest, AcceptsCapsuleParameterBounds)
 {
   const auto cases = std::vector<json> {

@@ -13,7 +13,6 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
-#include <ios>
 #include <limits>
 #include <optional>
 #include <span>
@@ -76,7 +75,7 @@ namespace {
     uint8_t value_type = 0;
     bool consumes_input = false;
     bool cumulative = false;
-    data::AssetKey key {};
+    data::AssetKey key;
     std::string virtual_path;
     std::string descriptor_relpath;
   };
@@ -115,7 +114,7 @@ namespace {
 
   struct BuiltContextAsset final {
     std::string name;
-    data::AssetKey key {};
+    data::AssetKey key;
     std::string virtual_path;
     std::string descriptor_relpath;
     InputMappingContextFlags flags = InputMappingContextFlags::kNone;
@@ -191,8 +190,7 @@ namespace {
     }
     constexpr long double kNsPerSecond = 1000000000.0L;
     const auto raw = static_cast<long double>(seconds) * kNsPerSecond;
-    if (raw
-      > static_cast<long double>((std::numeric_limits<uint64_t>::max)())) {
+    if (raw > static_cast<long double>(std::numeric_limits<uint64_t>::max())) {
       return false;
     }
     out = static_cast<uint64_t>(std::llround(raw));
@@ -490,7 +488,7 @@ namespace {
     if (bytes.size() < kOffset + sizeof(hash)) {
       return;
     }
-    std::memcpy(bytes.data() + kOffset, &hash, sizeof(hash));
+    std::memcpy(std::span(bytes).subspan(kOffset).data(), &hash, sizeof(hash));
   }
 
   auto SerializeAction(const DeclaredAction& action, const bool hashing)
@@ -518,9 +516,9 @@ namespace {
   auto SerializeContext(const BuiltContextAsset& context, const bool hashing,
     std::string& error) -> std::optional<std::vector<std::byte>>
   {
-    if (context.mappings.size() > (std::numeric_limits<uint32_t>::max)()
-      || context.triggers.size() > (std::numeric_limits<uint32_t>::max)()
-      || context.trigger_aux.size() > (std::numeric_limits<uint32_t>::max)()) {
+    if (context.mappings.size() > std::numeric_limits<uint32_t>::max()
+      || context.triggers.size() > std::numeric_limits<uint32_t>::max()
+      || context.trigger_aux.size() > std::numeric_limits<uint32_t>::max()) {
       error = "context record table exceeds uint32 limits";
       return std::nullopt;
     }
@@ -538,11 +536,11 @@ namespace {
     desc.mappings.count = static_cast<uint32_t>(context.mappings.size());
     desc.mappings.entry_size = sizeof(InputActionMappingRecord);
     desc.triggers.offset = desc.mappings.offset
-      + context.mappings.size() * sizeof(InputActionMappingRecord);
+      + (context.mappings.size() * sizeof(InputActionMappingRecord));
     desc.triggers.count = static_cast<uint32_t>(context.triggers.size());
     desc.triggers.entry_size = sizeof(InputTriggerRecord);
     desc.trigger_aux.offset = desc.triggers.offset
-      + context.triggers.size() * sizeof(InputTriggerRecord);
+      + (context.triggers.size() * sizeof(InputTriggerRecord));
     desc.trigger_aux.count = static_cast<uint32_t>(context.trigger_aux.size());
     desc.trigger_aux.entry_size = sizeof(InputTriggerAuxRecord);
 
@@ -717,18 +715,18 @@ namespace {
         out_trigger.linked_action_name
           = node.at("chord_action").get<std::string>();
       }
-      if (node.contains("combo_actions")) {
-        if (!parse_trigger_aux_array(node["combo_actions"],
-              path + ".combo_actions", out_trigger.aux)) {
-          return false;
-        }
+      if (node.contains("combo_actions")
+        && (!parse_trigger_aux_array(
+          node["combo_actions"], path + ".combo_actions", out_trigger.aux))) {
+        return false;
       }
-      if (node.contains("aux")) {
-        if (!parse_trigger_aux_array(
-              node["aux"], path + ".aux", out_trigger.aux)) {
-          return false;
-        }
+
+      if (node.contains("aux")
+        && (!parse_trigger_aux_array(
+          node["aux"], path + ".aux", out_trigger.aux))) {
+        return false;
       }
+
       if (out_trigger.type != InputTriggerType::kCombo
         && !out_trigger.aux.empty()) {
         AddDiagnostic(session, request, ImportSeverity::kWarning,
@@ -868,8 +866,8 @@ namespace {
     return parse_ok;
   }
 
-  //! Resolves a mapping's action: a name this source declares, or the
-  //! virtual path of an action, resolved like every authored reference.
+  //! Resolves a mapping's action: a local name this source declares, or a
+  //! reference to an action, told apart by the `.oiact` suffix.
   class ActionResolver final {
   public:
     ActionResolver(const ParsedInputSource& source, ImportSession& session,
@@ -880,37 +878,53 @@ namespace {
     {
     }
 
-    [[nodiscard]] auto Resolve(const std::string& reference,
+    [[nodiscard]] auto Resolve(const std::string& action,
       const std::string& object_path) -> std::optional<data::AssetKey>
     {
-      if (const auto it = source_.local_action_keys.find(reference);
+      if (!action.ends_with(data::kInputActionDescriptorExtension)) {
+        if (const auto it = source_.local_action_keys.find(action);
+          it != source_.local_action_keys.end()) {
+          return it->second;
+        }
+        Refuse("input.context.action_unresolved",
+          "No action of this source is named '" + action + "'", object_path);
+        return std::nullopt;
+      }
+
+      const auto reference = internal::ResolveJobReference(request_, action);
+      if (!reference.has_value()) {
+        session_.AddDiagnostic(internal::RefuseReference(
+          request_, action, reference.error(), object_path));
+        return std::nullopt;
+      }
+      // A product of this source is not mounted yet; the source declares it.
+      if (const auto it = source_.local_action_keys.find(reference->resolved);
         it != source_.local_action_keys.end()) {
         return it->second;
-      }
-      if (!reference.starts_with('/')) {
-        Refuse("input.context.action_unresolved",
-          "No action of this source is named '" + reference + "'", object_path);
-        return std::nullopt;
       }
       if (!mounts_.has_value()) {
         mounts_ = internal::LoadMountedCookedSources(
           session_, request_, "input.import.");
       }
-      const auto resolved = internal::ResolveMountedAssetReference(
-        *mounts_, request_, reference, AssetType::kInputAction);
+      const auto resolved = internal::LookupReference(
+        *mounts_, request_, *reference, AssetType::kInputAction);
       if (resolved.has_value()) {
         return resolved->key;
       }
       using internal::AssetReferenceRefusal;
-      const auto reason = resolved.error().reason;
-      if (reason == AssetReferenceRefusal::kTypeMismatch
-        || reason == AssetReferenceRefusal::kTypeUnknown) {
+      const auto& refused = resolved.error();
+      if (refused.reason == AssetReferenceRefusal::kUnmounted) {
+        session_.AddDiagnostic(internal::RefuseUnmountedReference(
+          request_, *reference, object_path));
+      } else if (refused.reason == AssetReferenceRefusal::kTypeMismatch
+        || refused.reason == AssetReferenceRefusal::kTypeUnknown) {
         Refuse("input.context.action_type_mismatch",
-          "'" + reference + "' does not name an input action", object_path);
+          internal::DescribeLookup(*reference, refused)
+            + "; it does not name an input action",
+          object_path);
       } else {
         Refuse("input.context.action_unresolved",
-          "No mounted input action has the virtual path '" + reference + "'",
-          object_path);
+          internal::DescribeLookup(*reference, refused), object_path);
       }
       return std::nullopt;
     }
@@ -982,7 +996,7 @@ namespace {
           break;
         }
 
-        if (context.triggers.size() > (std::numeric_limits<uint32_t>::max)()) {
+        if (context.triggers.size() > std::numeric_limits<uint32_t>::max()) {
           AddDiagnostic(session, request, ImportSeverity::kError,
             "input.context.trigger_count_overflow",
             "Trigger table exceeded uint32 limits", mapping_path);
@@ -1159,7 +1173,7 @@ auto InputImportPipeline::Start(co::Nursery& nursery) -> void
   started_ = true;
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    nursery.Start([this]() -> co::Co<> { co_await Worker(); });
+    nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }
 

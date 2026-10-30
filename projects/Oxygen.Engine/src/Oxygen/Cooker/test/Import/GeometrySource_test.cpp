@@ -20,6 +20,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
@@ -71,9 +72,9 @@ namespace {
       .Set("/lods/0/mesh_type", "standard")
       .Set("/lods/0/bounds",
         nlohmann::json::parse(R"({"min":[-1,-1,-1],"max":[1,1,1]})"))
-      .Reference("/lods/0/buffers/vb_ref", "/Content/Buffers/vertices.obuf")
+      .Set("/lods/0/buffers/vb_ref", "../Buffers/vertices.obuf")
       .Reference("/lods/0/buffers/ib_ref", "/Shared/Buffers/indices.obuf")
-      .SubmeshMaterial(0, 0, "/Content/Materials/stone.omat")
+      .Set("/lods/0/submeshes/0/material_ref", "../Materials/stone.omat")
       .Set("/lods/0/submeshes/0/views/0/view_ref", "surface");
     return geometry;
   }
@@ -82,8 +83,9 @@ namespace {
     GeometrySourceTest, RetainsSourcesAndSymbolicReferencesWithoutCookedRoots)
   {
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    const auto source = GeometrySource::FromDescriptor(
-      MakeDescriptor().Text(), "authored/geometry.json", Mounts(), diagnostics);
+    const auto document = MakeDescriptor();
+    const auto source = GeometrySource::FromDescriptor(document.Text(),
+      "authored/geometry.json", document.Identity(), Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     EXPECT_EQ(source->name, "Geometry.v2");
@@ -98,12 +100,17 @@ namespace {
     const auto& lod = source->lods.front();
     const auto* buffers = std::get_if<GeometrySource::Buffers>(&lod.mesh);
     ASSERT_NE(buffers, nullptr);
-    EXPECT_EQ(buffers->vertex, source->buffers.front().source_id);
+    // References stay as written; a product is named by its resolved path.
+    EXPECT_EQ(buffers->vertex, "../Buffers/vertices.obuf");
+    EXPECT_EQ(
+      source->buffers.front().source_id, "/Content/Buffers/vertices.obuf");
+    EXPECT_EQ(ResolveReference(document.Identity(), buffers->vertex),
+      source->buffers.front().source_id);
     EXPECT_EQ(buffers->index, "/Shared/Buffers/indices.obuf");
     ASSERT_EQ(lod.submeshes.size(), 1U);
     const auto& submesh = lod.submeshes.front();
     EXPECT_EQ(submesh.name, "submesh_0");
-    EXPECT_EQ(submesh.material, "/Content/Materials/stone.omat");
+    EXPECT_EQ(submesh.material, "../Materials/stone.omat");
     ASSERT_HAS_VALUE(lod.bounds);
     ASSERT_HAS_VALUE(submesh.bounds);
     // A submesh without authored bounds takes its LOD bounds.
@@ -124,8 +131,8 @@ namespace {
     document.Set("/lods/0/submeshes/0/views/0/bounds",
       nlohmann::json::parse(R"({"min":[0,0,0],"max":[1,0.5,1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    const auto source = GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics);
+    const auto source = GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics);
     if (!source.has_value()) {
       FAIL() << "Expected source to contain a value";
     }
@@ -141,8 +148,8 @@ namespace {
     document.Set("/lods/0/submeshes/0/bounds",
       nlohmann::json::parse(R"({"min":[0,0,0],"max":[2,1,1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics));
+    EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "geometry.descriptor.submesh_bounds_invalid";
@@ -155,8 +162,8 @@ namespace {
     auto document = MakeDescriptor();
     document.Remove("/bounds");
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    const auto source = GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics);
+    const auto source = GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     EXPECT_FALSE(source->bounds.has_value());
   }
@@ -167,8 +174,8 @@ namespace {
     document.Set("/lods/0/submeshes/0/views/0/bounds",
       nlohmann::json::parse(R"({"min":[0,0,0],"max":[2,1,1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics));
+    EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "geometry.descriptor.view_bounds_invalid";
@@ -193,19 +200,21 @@ namespace {
       .Set("/lods/0/skinning/influences_per_vertex", 4)
       .Set("/lods/0/skinning/flags", 1);
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    const auto source = GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics);
+    const auto source = GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     ASSERT_EQ(source->lods.size(), 1U);
     const auto* skin
       = std::get_if<GeometrySource::Skinned>(&source->lods.front().mesh);
     ASSERT_NE(skin, nullptr);
-    EXPECT_EQ(skin->buffers.vertex, "/Content/Buffers/vertices.obuf");
-    EXPECT_EQ(skin->joint_index, "/Content/Buffers/joints.obuf");
-    EXPECT_EQ(skin->joint_weight, "/Content/Buffers/weights.obuf");
-    EXPECT_EQ(skin->inverse_bind, "/Content/Buffers/bind.obuf");
-    EXPECT_EQ(skin->joint_remap, "/Content/Buffers/remap.obuf");
-    EXPECT_EQ(skin->skeleton, "/Content/Skeletons/body.oskel");
+    EXPECT_EQ(skin->buffers.vertex, "../Buffers/vertices.obuf");
+    EXPECT_EQ(
+      skin->joint_index, document.Spell("/Content/Buffers/joints.obuf"));
+    EXPECT_EQ(
+      skin->joint_weight, document.Spell("/Content/Buffers/weights.obuf"));
+    EXPECT_EQ(skin->inverse_bind, document.Spell("/Content/Buffers/bind.obuf"));
+    EXPECT_EQ(skin->joint_remap, document.Spell("/Content/Buffers/remap.obuf"));
+    EXPECT_EQ(skin->skeleton, document.Spell("/Content/Skeletons/body.oskel"));
     EXPECT_EQ(skin->joint_count, 4U);
     EXPECT_EQ(skin->influences_per_vertex, 4U);
     EXPECT_EQ(skin->flags, 1U);
@@ -233,8 +242,8 @@ namespace {
         })
       .Set("/lods/0/submeshes/0/views/0/view_ref", "__all__");
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    const auto source = GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics);
+    const auto source = GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     ASSERT_EQ(source->lods.size(), 1U);
     const auto* procedural
@@ -255,8 +264,8 @@ namespace {
     document.Set(
       "/lods/0/submeshes/0/surface_id", "00000000-0000-0000-0000-000000000000");
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics));
+    EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "geometry.descriptor.surface_id_invalid";
@@ -291,8 +300,8 @@ namespace {
       nlohmann::json::parse(
         R"({"type":"distance","thresholds":[0.5,0.75],"hysteresis_ratio":0.1})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    const auto source = GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics);
+    const auto source = GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     ASSERT_EQ(source->surfaces.size(), 1U);
     EXPECT_EQ(source->surfaces.front().visible, false);
@@ -315,8 +324,8 @@ namespace {
         },
       }));
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics));
+    EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.surface_unknown"));
   }
 
@@ -329,8 +338,8 @@ namespace {
         { { "surface_id", kSurface }, { "casts_shadows", false } },
       }));
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics));
+    EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.surface_duplicate"));
   }
 
@@ -341,8 +350,8 @@ namespace {
       nlohmann::json::parse(
         R"({"type":"distance","thresholds":[0.75,0.5],"hysteresis_ratio":0.1})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics));
+    EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
   }
 
@@ -353,8 +362,8 @@ namespace {
       "/lod_policy", nlohmann::json::parse(R"({"type":"screen_space_error",
         "enter_finer_sse":[1,2],"exit_coarser_sse":[0.5,1.5]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics));
+    EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
   }
 
@@ -366,8 +375,8 @@ namespace {
       "/lod_policy", nlohmann::json::parse(R"({"type":"screen_space_error",
         "enter_finer_sse":[2,1],"exit_coarser_sse":[1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    EXPECT_FALSE(GeometrySource::FromDescriptor(
-      document.Text(), "geometry.json", Mounts(), diagnostics));
+    EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
+      "geometry.json", document.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
   }
 

@@ -11,10 +11,12 @@
 #include <filesystem>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 
@@ -46,10 +48,10 @@ struct ResolvedAssetReference final {
   data::AssetType type = data::AssetType::kUnknown;
 };
 
+struct ResolvedReference;
+
 //! Why a reference to a cooked asset is refused.
 enum class AssetReferenceRefusal : std::uint8_t {
-  //! The reference is not a virtual path the engine accepts.
-  kInvalidVirtualPath,
   //! No mounted index lists it, and it is outside the job's mount.
   kUnmounted,
   //! No mounted index lists it, and no mounted root holds its descriptor.
@@ -64,19 +66,32 @@ enum class AssetReferenceRefusal : std::uint8_t {
 struct AssetReferenceRefused final {
   AssetReferenceRefusal reason = AssetReferenceRefusal::kMissing;
   std::optional<data::AssetType> found_type;
+  //! The descriptor files looked for, highest precedence first; empty for a
+  //! reference outside the job's mount, which only an index can list.
+  std::vector<std::filesystem::path> looked_up;
 };
 
-//! Resolve a reference to a cooked asset by its virtual path.
+//! Look up the cooked asset a resolved reference names.
 /*!
- Every authored reference resolves the same way: the mounted indexes are
- searched from the highest precedence down; a path no index lists resolves to
- a descriptor a mounted root already holds at the path's place in the job's
- mount, typed by its extension. The key is the one the index lists, or the
- one the path derives.
+ Every authored reference is looked up the same way, after
+ `ResolveJobReference` resolved it: the mounted indexes are searched from the
+ highest precedence down; a path no index lists resolves to a descriptor a
+ mounted root already holds at the path's place in the job's mount, typed by
+ its extension. The key is the one the index lists, or the one the path
+ derives.
 */
-[[nodiscard]] auto ResolveMountedAssetReference(
-  std::span<const MountedCookedSource> mounts, const ImportRequest& request,
-  std::string_view virtual_path, std::optional<data::AssetType> expected_type)
+[[nodiscard]] auto LookupReference(std::span<const MountedCookedSource> mounts,
+  const ImportRequest& request, const ResolvedReference& reference,
+  std::optional<data::AssetType> expected_type)
   -> std::expected<ResolvedAssetReference, AssetReferenceRefused>;
+
+//! The sentence that says what a refused lookup looked for, for a diagnostic.
+/*!
+ Names the written and resolved forms and, for a missing descriptor, each file
+ looked for: `'../Textures/Brick.otex' resolves to /Content/Textures/
+ Brick.otex; looked for <root>/Textures/Brick.otex`.
+*/
+OXGN_COOK_NDAPI auto DescribeLookup(const ResolvedReference& reference,
+  const AssetReferenceRefused& refused) -> std::string;
 
 } // namespace oxygen::content::import::internal

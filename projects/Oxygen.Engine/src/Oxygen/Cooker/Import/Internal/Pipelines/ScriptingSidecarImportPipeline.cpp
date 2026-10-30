@@ -53,6 +53,7 @@
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -1206,9 +1207,14 @@ namespace {
   {
     auto declarations = ScriptDeclarationMap {};
     for (const auto& row : parsed.rows) {
+      const auto reference
+        = internal::ResolveJobReference(request, row.script_virtual_path);
+      if (!reference.has_value()) {
+        continue;
+      }
       auto key = std::optional<data::AssetKey> {};
       try {
-        key = resolver.ResolveAssetKey(row.script_virtual_path);
+        key = resolver.ResolveAssetKey(reference->resolved);
       } catch (const std::invalid_argument&) {
         continue;
       }
@@ -1449,13 +1455,21 @@ namespace {
           continue;
         }
 
+        const auto script_reference
+          = internal::ResolveJobReference(*request_, row.script_virtual_path);
+        if (!script_reference.has_value()) {
+          session_->AddDiagnostic(
+            internal::RefuseReference(*request_, row.script_virtual_path,
+              script_reference.error(), object_path + ".script_virtual_path"));
+          continue;
+        }
         auto resolved_script_key = std::optional<data::AssetKey> {};
         try {
           resolved_script_key
-            = resolver_->ResolveAssetKey(row.script_virtual_path);
+            = resolver_->ResolveAssetKey(script_reference->resolved);
         } catch (const std::invalid_argument& ex) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-            "script.sidecar.script_virtual_path_invalid",
+            internal::kReferenceInvalidCode,
             "Script virtual path is invalid: " + std::string(ex.what()),
             object_path + ".script_virtual_path");
           continue;
@@ -1767,12 +1781,19 @@ namespace {
       const data::AssetType declared_type, const std::string& value_path)
       -> std::optional<script::ScriptAssetParamValue>
     {
+      const auto reference
+        = internal::ResolveJobReference(*request_, param.asset_virtual_path);
+      if (!reference.has_value()) {
+        session_->AddDiagnostic(internal::RefuseReference(
+          *request_, param.asset_virtual_path, reference.error(), value_path));
+        return std::nullopt;
+      }
       auto asset_key = std::optional<data::AssetKey> {};
       try {
-        asset_key = resolver_->ResolveAssetKey(param.asset_virtual_path);
+        asset_key = resolver_->ResolveAssetKey(reference->resolved);
       } catch (const std::invalid_argument& ex) {
         AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-          "script.sidecar.param_asset_path_invalid",
+          internal::kReferenceInvalidCode,
           "Asset virtual path of parameter '" + key
             + "' is invalid: " + std::string(ex.what()),
           value_path);

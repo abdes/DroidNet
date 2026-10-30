@@ -227,6 +227,26 @@ INSTANTIATE_TEST_SUITE_P(Cases, PhysicsSidecarSchemaCaseTest,
       "'shape_ref'",
     },
     SchemaCase {
+      "PhysicsSidecarSchemaAcceptsRelativeReferences",
+      Sidecar()
+        .AppendBinding("rigid_bodies", json::parse(R"({ "node_index": 0 })"))
+        .Set("/bindings/rigid_bodies/0/shape_ref", "../Shapes/test.ocshape")
+        .Set("/bindings/rigid_bodies/0/material_ref", "default.opmat")
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "PhysicsSidecarSchemaRejectsReferenceOfAnotherType",
+      Sidecar()
+        .AppendBinding("rigid_bodies", json::parse(R"({ "node_index": 0 })"))
+        .Reference("/bindings/rigid_bodies/0/shape_ref", kMaterial)
+        .Reference("/bindings/rigid_bodies/0/material_ref", kMaterial)
+        .Text(),
+      false,
+      "/bindings/rigid_bodies/0/shape_ref: ",
+    },
+    SchemaCase {
       "PhysicsSidecarSchemaRejectsSoftBodyMissingCollisionFilterFields",
       Sidecar()
         .AppendBinding("soft_bodies", json::parse(R"({

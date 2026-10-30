@@ -340,7 +340,9 @@ struct ImportRequest final {
   OXGN_COOK_NDAPI auto GetTextureDescriptorRelPath() const -> std::string;
 
   //! The identity the job's output belongs to: its own, or, for a sidecar,
-  //! the scene it completes. Empty for a job that names neither.
+  //! the scene it completes, or, for a buffer container, which names no
+  //! identity of its own, its location (`source_mount_path` without the
+  //! authoring suffix). Empty for a job that has none of these.
   OXGN_COOK_NDAPI auto OutputIdentity() const -> std::string_view;
 
   //! The mount the job cooks into: that of `OutputIdentity`.

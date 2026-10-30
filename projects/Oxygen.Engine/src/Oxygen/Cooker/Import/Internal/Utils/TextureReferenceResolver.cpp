@@ -18,8 +18,12 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -31,7 +35,6 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
   TextureReferenceRequest reference)
   -> co::Co<std::optional<ResolvedTextureReference>>
 {
-  const auto virtual_path = reference.virtual_path;
   const auto report_error = [&](const char* code, std::string message) -> void {
     session->AddDiagnostic({
       .severity = ImportSeverity::kError,
@@ -41,11 +44,13 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
       .object_path = reference.object_path,
     });
   };
-  if (!IsCanonicalVirtualPath(virtual_path)) {
-    report_error("texture_virtual_path_invalid",
-      "Texture reference virtual_path must be canonical");
+  const auto resolved = ResolveJobReference(*request, reference.text);
+  if (!resolved.has_value()) {
+    session->AddDiagnostic(RefuseReference(
+      *request, reference.text, resolved.error(), reference.object_path));
     co_return std::nullopt;
   }
+  const auto& virtual_path = resolved->resolved;
 
   // The job's own output binds the texture-table entry it cooks there.
   const auto output_root = BuildMountedCookedRoots(*request).front();
@@ -106,18 +111,23 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
   }
 
   if (!in_output) {
-    report_error("texture_virtual_path_unmounted",
-      "Texture reference virtual_path is in no mounted cooked root");
+    session->AddDiagnostic(
+      RefuseUnmountedReference(*request, *resolved, reference.object_path));
     co_return std::nullopt;
   }
+
+  // Only the job's own output root can hold a descriptor outside an index.
+  const auto looked_for = "'" + resolved->written + "' resolves to "
+    + virtual_path + "; looked for "
+    + (output_root / std::filesystem::path(relpath)).generic_string();
 
   if (reference.allow_missing) {
     session->AddDiagnostic({
       .severity = ImportSeverity::kWarning,
       .code
       = std::string(reference.diagnostic_prefix) + "texture_descriptor_missing",
-      .message = "Texture descriptor virtual_path was not found: "
-        + std::string(virtual_path) + "; cooking continues without it",
+      .message = "Texture descriptor not found: " + looked_for
+        + "; cooking continues without it",
       .source_path = request->source_path.string(),
       .object_path = reference.object_path,
     });
@@ -125,8 +135,7 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
   }
 
   report_error("texture_descriptor_missing",
-    "Texture descriptor virtual_path was not found: "
-      + std::string(virtual_path));
+    "Texture descriptor not found: " + looked_for);
   co_return std::nullopt;
 }
 

@@ -154,11 +154,8 @@ namespace {
 
   auto PhysicsSchemaValidator() -> nlohmann::json_schema::json_validator&
   {
-    thread_local auto validator = [] -> nlohmann::json_schema::json_validator {
-      auto out = nlohmann::json_schema::json_validator {};
-      out.set_root_schema(nlohmann::json::parse(kPhysicsSidecarSchema));
-      return out;
-    }();
+    thread_local auto validator = internal::MakeJsonSchemaValidator(
+      nlohmann::json::parse(kPhysicsSidecarSchema));
     return validator;
   }
 
@@ -1277,17 +1274,26 @@ namespace {
   };
 
   auto ResolveAssetKeyForVirtualPath(BindingValidationContext& ctx,
-    std::string_view virtual_path, std::string_view object_path,
+    std::string_view text, std::string_view object_path,
     const data::AssetType expected_type, const ReferenceCodes& codes)
     -> std::optional<data::AssetKey>
   {
+    const auto reference = internal::ResolveJobReference(*ctx.request, text);
+    if (!reference.has_value()) {
+      ctx.session->AddDiagnostic(internal::RefuseReference(
+        *ctx.request, text, reference.error(), std::string(object_path)));
+      return std::nullopt;
+    }
+    const auto named
+      = "'" + reference->written + "' resolves to " + reference->resolved;
+
     auto resolved_key = std::optional<data::AssetKey> {};
     try {
-      resolved_key = ctx.resolver->ResolveAssetKey(virtual_path);
+      resolved_key = ctx.resolver->ResolveAssetKey(reference->resolved);
     } catch (const std::exception& ex) {
       AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
         std::string(codes.unresolved),
-        "Invalid virtual path: " + std::string(ex.what()),
+        "Invalid virtual path: " + named + ": " + std::string(ex.what()),
         std::string(object_path));
       return std::nullopt;
     }
@@ -1295,7 +1301,7 @@ namespace {
     if (!resolved_key.has_value()) {
       AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
         std::string(codes.unresolved),
-        "Resolved key not found for virtual path: " + std::string(virtual_path),
+        "Resolved key not found for virtual path: " + named,
         std::string(object_path));
       return std::nullopt;
     }
@@ -1319,9 +1325,9 @@ namespace {
         found_in_other_source ? "physics.sidecar.reference_source_mismatch"
                               : std::string(codes.unresolved),
         found_in_other_source
-          ? "Resolved reference is not in the target scene source domain"
-          : "Resolved key not found for virtual path: "
-            + std::string(virtual_path),
+          ? "Resolved reference is not in the target scene source domain: "
+            + named
+          : "Resolved key not found for virtual path: " + named,
         std::string(object_path));
       return std::nullopt;
     }
@@ -1330,7 +1336,7 @@ namespace {
       != expected_type) {
       AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
         std::string(codes.wrong_type),
-        "Resolved reference has unexpected asset type",
+        "Resolved reference has unexpected asset type: " + named,
         std::string(object_path));
       return std::nullopt;
     }

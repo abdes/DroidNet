@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <string_view>
 
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -19,11 +20,12 @@ namespace oxygen::content::import::internal {
 
 //! Build a normalized `ImportRequest` for schema-based geometry descriptors.
 /*!
- Buffer sources the descriptor declares are located through `mounts`.
+ Buffer sources the descriptor declares are located through `mounts`, and its
+ buffer products are named relative to `identity`, the geometry the job cooks.
 */
 OXGN_COOK_API auto BuildGeometryDescriptorRequest(
-  const GeometryDescriptorImportSettings& settings, const MountTable& mounts,
-  std::ostream& error_stream,
+  const GeometryDescriptorImportSettings& settings, std::string_view identity,
+  const MountTable& mounts, std::ostream& error_stream,
   std::shared_ptr<const CapturedInputSet> captured_inputs = {})
   -> std::optional<ImportRequest>;
 

@@ -43,7 +43,6 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -79,7 +78,7 @@ namespace {
     observer_ptr<IAsyncFileReader> reader;
     std::vector<internal::MountedCookedSource> mounts;
     std::unordered_map<std::string, ResolvedBufferSidecar> buffer_cache;
-    std::unordered_map<std::string, data::AssetKey> material_cache;
+    std::unordered_map<std::string, data::AssetKey> asset_cache;
   };
 
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
@@ -150,31 +149,44 @@ namespace {
     }
   }
 
+  //! Resolves a reference read in the geometry descriptor.
+  /*!
+   Reports `import.reference_invalid` and returns nothing for text the
+   grammar refuses.
+  */
+  auto ResolveReferenceText(GeometryExecutionContext& context,
+    const std::string_view text, std::string object_path)
+    -> std::optional<internal::ResolvedReference>
+  {
+    auto reference = internal::ResolveJobReference(context.request, text);
+    if (!reference.has_value()) {
+      context.session.AddDiagnostic(internal::RefuseReference(
+        context.request, text, reference.error(), std::move(object_path)));
+      return std::nullopt;
+    }
+    return std::move(*reference);
+  }
+
   // The caller awaits each resolution inline while it owns `context`.
-  auto ResolveBufferSidecarByVirtualPath(GeometryExecutionContext& context,
-    std::string_view virtual_path, std::string object_path)
+  auto ResolveBufferSidecar(GeometryExecutionContext& context,
+    const std::string_view text, std::string object_path)
     -> co::Co<std::optional<ResolvedBufferSidecar>>
   {
-    if (!internal::IsCanonicalVirtualPath(virtual_path)) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.buffer.virtual_path_invalid",
-        "Buffer reference virtual_path must be canonical",
-        std::move(object_path));
+    const auto reference = ResolveReferenceText(context, text, object_path);
+    if (!reference.has_value()) {
       co_return std::nullopt;
     }
 
-    if (const auto it = context.buffer_cache.find(std::string(virtual_path));
+    if (const auto it = context.buffer_cache.find(reference->resolved);
       it != context.buffer_cache.end()) {
       co_return it->second;
     }
 
     auto relpath = std::string {};
     if (!internal::TryVirtualPathToRelPath(
-          context.request, virtual_path, relpath)) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.buffer.virtual_path_unmounted",
-        "Buffer reference virtual_path is outside mounted cooked roots",
-        std::move(object_path));
+          context.request, reference->resolved, relpath)) {
+      context.session.AddDiagnostic(internal::RefuseUnmountedReference(
+        context.request, *reference, std::move(object_path)));
       co_return std::nullopt;
     }
 
@@ -187,10 +199,12 @@ namespace {
 
     auto matches
       = std::vector<observer_ptr<const internal::MountedCookedSource>> {};
+    auto looked_up = std::vector<std::filesystem::path> {};
     for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
       const auto descriptor_path = it->root / std::filesystem::path(relpath);
       auto ec = std::error_code {};
       if (!std::filesystem::exists(descriptor_path, ec)) {
+        looked_up.push_back(descriptor_path);
         continue;
       }
       matches.emplace_back(&*it);
@@ -198,9 +212,9 @@ namespace {
 
     if (matches.size() > 1U) {
       auto message = std::string {
-        "Buffer descriptor virtual_path resolved to multiple mounted "
+        "Buffer reference resolved to multiple mounted "
         "sidecars; provide a single canonical source: "
-      } + std::string(virtual_path);
+      } + reference->resolved;
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.buffer.sidecar_ambiguous", std::move(message), object_path);
       co_return std::nullopt;
@@ -248,132 +262,87 @@ namespace {
         .descriptor = parsed.descriptor,
         .views = BuildViewMap(parsed.views),
       };
-      context.buffer_cache.insert_or_assign(
-        std::string(virtual_path), resolved);
+      context.buffer_cache.insert_or_assign(reference->resolved, resolved);
       co_return resolved;
     }
 
     AddDiagnostic(context.session, context.request, ImportSeverity::kError,
       "geometry.buffer.sidecar_missing",
-      "Buffer descriptor virtual_path was not found: "
-        + std::string(virtual_path),
+      "Buffer descriptor was not found: "
+        + internal::DescribeLookup(*reference,
+          internal::AssetReferenceRefused {
+            .reason = internal::AssetReferenceRefusal::kMissing,
+            .found_type = std::nullopt,
+            .looked_up = std::move(looked_up),
+          }),
       std::move(object_path));
     co_return std::nullopt;
   }
 
-  auto ResolveMaterialKeyByVirtualPath(GeometryExecutionContext& context,
-    std::string_view virtual_path, std::string object_path)
-    -> std::optional<data::AssetKey>
+  //! The diagnostic codes a family of asset references reports its lookup
+  //! refusals with, and what the family's descriptor is called in them.
+  struct AssetReferenceCodes final {
+    std::string_view missing;
+    std::string_view type;
+    std::string_view noun;
+  };
+
+  //! The key of the asset a reference in the descriptor names.
+  /*!
+   The mounted indexes and roots are searched by `internal::LookupReference`;
+   a refusal is reported with the family's `codes`, or as
+   `import.reference_unmounted` for a reference in no mounted cooked root.
+  */
+  auto LookupAssetKey(GeometryExecutionContext& context,
+    const std::string_view text, std::string object_path,
+    const std::optional<data::AssetType> expected_type,
+    const AssetReferenceCodes& codes) -> std::optional<data::AssetKey>
   {
-    if (!internal::IsCanonicalVirtualPath(virtual_path)) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.material.virtual_path_invalid",
-        "Material reference virtual_path must be canonical",
-        std::move(object_path));
+    const auto reference = ResolveReferenceText(context, text, object_path);
+    if (!reference.has_value()) {
       return std::nullopt;
     }
-
-    if (const auto it = context.material_cache.find(std::string(virtual_path));
-      it != context.material_cache.end()) {
+    if (const auto it = context.asset_cache.find(reference->resolved);
+      it != context.asset_cache.end()) {
       return it->second;
     }
 
-    auto relpath = std::string {};
-    const auto is_mounted = internal::TryVirtualPathToRelPath(
-      context.request, virtual_path, relpath);
-    for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
-      if (it->inspection.has_value()) {
-        for (const auto& asset : it->inspection->Assets()) {
-          if (asset.virtual_path != virtual_path) {
-            continue;
-          }
-
-          const auto type = static_cast<data::AssetType>(asset.asset_type);
-          if (type != data::AssetType::kMaterial) {
-            AddDiagnostic(context.session, context.request,
-              ImportSeverity::kError, "geometry.material.type_mismatch",
-              "Virtual path does not reference a material descriptor",
-              object_path);
-            return std::nullopt;
-          }
-
-          context.material_cache.insert_or_assign(
-            std::string(virtual_path), asset.key);
-          return asset.key;
-        }
-      }
-      const auto descriptor_path = it->root / std::filesystem::path(relpath);
-      std::error_code ec;
-      if (!is_mounted || !std::filesystem::exists(descriptor_path, ec)) {
-        continue;
-      }
-
-      const auto key = oxygen::data::AssetKey::FromVirtualPath(virtual_path);
-      context.material_cache.insert_or_assign(std::string(virtual_path), key);
-      return key;
+    const auto found = internal::LookupReference(
+      context.mounts, context.request, *reference, expected_type);
+    if (found.has_value()) {
+      context.asset_cache.insert_or_assign(reference->resolved, found->key);
+      return found->key;
     }
-
-    if (!is_mounted) {
+    const auto& refused = found.error();
+    switch (refused.reason) {
+    case internal::AssetReferenceRefusal::kUnmounted:
+      context.session.AddDiagnostic(internal::RefuseUnmountedReference(
+        context.request, *reference, std::move(object_path)));
+      break;
+    case internal::AssetReferenceRefusal::kMissing:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.material.virtual_path_unmounted",
-        "Material reference virtual_path is outside mounted cooked roots",
+        std::string(codes.missing),
+        std::string(codes.noun)
+          + " was not found: " + internal::DescribeLookup(*reference, refused),
         std::move(object_path));
-      return std::nullopt;
-    }
-
-    AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-      "geometry.material.missing",
-      "Material descriptor virtual_path was not found: "
-        + std::string(virtual_path),
-      std::move(object_path));
-    return std::nullopt;
-  }
-
-  auto ResolveAssetKeyByVirtualPath(GeometryExecutionContext& context,
-    std::string_view virtual_path, std::string object_path)
-    -> std::optional<data::AssetKey>
-  {
-    if (!internal::IsCanonicalVirtualPath(virtual_path)) {
+      break;
+    case internal::AssetReferenceRefusal::kTypeUnknown:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.asset.virtual_path_invalid",
-        "Asset reference virtual_path must be canonical",
+        std::string(codes.type),
+        "Unable to infer the asset type of " + std::string(codes.noun)
+          + " from its extension: " + reference->resolved,
         std::move(object_path));
-      return std::nullopt;
-    }
-
-    auto relpath = std::string {};
-    const auto is_mounted = internal::TryVirtualPathToRelPath(
-      context.request, virtual_path, relpath);
-    for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
-      if (it->inspection.has_value()) {
-        for (const auto& asset : it->inspection->Assets()) {
-          if (asset.virtual_path == virtual_path) {
-            return asset.key;
-          }
-        }
-      }
-      const auto descriptor_path = it->root / std::filesystem::path(relpath);
-      std::error_code ec;
-      if (!is_mounted || !std::filesystem::exists(descriptor_path, ec)) {
-        continue;
-      }
-
-      return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
-    }
-
-    if (!is_mounted) {
+      break;
+    case internal::AssetReferenceRefusal::kTypeMismatch:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.asset.virtual_path_unmounted",
-        "Asset reference virtual_path is outside mounted cooked roots",
+        std::string(codes.type),
+        std::string(codes.noun) + " names a "
+          + std::string(data::to_string(
+            refused.found_type.value_or(data::AssetType::kUnknown)))
+          + " asset instead: " + internal::DescribeLookup(*reference, refused),
         std::move(object_path));
-      return std::nullopt;
+      break;
     }
-
-    AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-      "geometry.asset.missing",
-      "Asset descriptor virtual_path was not found: "
-        + std::string(virtual_path),
-      std::move(object_path));
     return std::nullopt;
   }
 
@@ -654,9 +623,9 @@ namespace {
         const auto& vb_ref = buffers->vertex;
         const auto& ib_ref = buffers->index;
 
-        auto vb_sidecar_opt = co_await ResolveBufferSidecarByVirtualPath(
+        auto vb_sidecar_opt = co_await ResolveBufferSidecar(
           context, vb_ref, lod_path + ".buffers.vb_ref");
-        auto ib_sidecar_opt = co_await ResolveBufferSidecarByVirtualPath(
+        auto ib_sidecar_opt = co_await ResolveBufferSidecar(
           context, ib_ref, lod_path + ".buffers.ib_ref");
         if (!vb_sidecar_opt.has_value() || !ib_sidecar_opt.has_value()) {
           co_return std::nullopt;
@@ -679,18 +648,14 @@ namespace {
         if (skinned != nullptr) {
           mesh_desc.mesh_type = static_cast<uint8_t>(data::MeshType::kSkinned);
 
-          auto joint_index_sidecar
-            = co_await ResolveBufferSidecarByVirtualPath(context,
-              skinned->joint_index, lod_path + ".skinning.joint_index_ref");
-          auto joint_weight_sidecar
-            = co_await ResolveBufferSidecarByVirtualPath(context,
-              skinned->joint_weight, lod_path + ".skinning.joint_weight_ref");
-          auto inverse_bind_sidecar
-            = co_await ResolveBufferSidecarByVirtualPath(context,
-              skinned->inverse_bind, lod_path + ".skinning.inverse_bind_ref");
-          auto joint_remap_sidecar
-            = co_await ResolveBufferSidecarByVirtualPath(context,
-              skinned->joint_remap, lod_path + ".skinning.joint_remap_ref");
+          auto joint_index_sidecar = co_await ResolveBufferSidecar(context,
+            skinned->joint_index, lod_path + ".skinning.joint_index_ref");
+          auto joint_weight_sidecar = co_await ResolveBufferSidecar(context,
+            skinned->joint_weight, lod_path + ".skinning.joint_weight_ref");
+          auto inverse_bind_sidecar = co_await ResolveBufferSidecar(context,
+            skinned->inverse_bind, lod_path + ".skinning.inverse_bind_ref");
+          auto joint_remap_sidecar = co_await ResolveBufferSidecar(context,
+            skinned->joint_remap, lod_path + ".skinning.joint_remap_ref");
           if (!joint_index_sidecar.has_value()
             || !joint_weight_sidecar.has_value()
             || !inverse_bind_sidecar.has_value()
@@ -723,8 +688,13 @@ namespace {
           mesh_desc.info.skinned.flags = skinned->flags;
           if (skinned->skeleton.has_value()) {
             const auto& skeleton_ref = *skinned->skeleton;
-            const auto skeleton_key = ResolveAssetKeyByVirtualPath(
-              context, skeleton_ref, lod_path + ".skinning.skeleton_ref");
+            const auto skeleton_key = LookupAssetKey(context, skeleton_ref,
+              lod_path + ".skinning.skeleton_ref", std::nullopt,
+              {
+                .missing = "geometry.asset.missing",
+                .type = "geometry.asset.type_unknown",
+                .noun = "Skeleton descriptor",
+              });
             if (!skeleton_key.has_value()) {
               AddDiagnostic(context.session, context.request,
                 ImportSeverity::kError, "geometry.skinning.skeleton_missing",
@@ -802,8 +772,13 @@ namespace {
         submesh_desc.name_offset = strings.Add(submesh_name);
 
         const auto& material_ref = submesh.material;
-        const auto material_key = ResolveMaterialKeyByVirtualPath(
-          context, material_ref, submesh_path + ".material_ref");
+        const auto material_key = LookupAssetKey(context, material_ref,
+          submesh_path + ".material_ref", data::AssetType::kMaterial,
+          {
+            .missing = "geometry.material.missing",
+            .type = "geometry.material.type_mismatch",
+            .noun = "Material descriptor",
+          });
         if (!material_key.has_value()) {
           co_return std::nullopt;
         }
@@ -924,7 +899,7 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     "A geometry descriptor locates its buffers through the job's mounts");
   const auto source = internal::GeometrySource::FromDescriptor(
     descriptor->normalized_descriptor_json, Request().source_path,
-    *Request().source_mounts, diagnostics);
+    Request().OutputIdentity(), *Request().source_mounts, diagnostics);
   AddDiagnostics(session, std::move(diagnostics));
   if (!source.has_value()) {
     ReportPhaseProgress(
@@ -946,7 +921,7 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     .reader = CookedReader(),
     .mounts = {},
     .buffer_cache = {},
-    .material_cache = {},
+    .asset_cache = {},
   };
   context.mounts = internal::LoadMountedCookedSources(
     session, Request(), "geometry.descriptor.");

@@ -149,7 +149,7 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
         = co_await internal::ResolveTextureReference(observer_ptr { &session },
           observer_ptr { &Request() }, observer_ptr { reader }, mounts,
           {
-            .virtual_path = binding.source_id,
+            .text = binding.source_id,
             .object_path = "textures." + std::string(slot.name),
             .diagnostic_prefix = "material.descriptor.",
             .allow_missing = true,

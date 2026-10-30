@@ -104,10 +104,11 @@ struct GeometrySource final {
   OXGN_COOK_NDAPI auto DeclaredSurfaces() const -> std::vector<data::SurfaceId>;
 
   //! Reads a geometry descriptor; its buffer sources are located through
-  //! `mounts` (`BufferSource::FromDeclarations`).
+  //! `mounts` and its buffer products named relative to `anchor`, the
+  //! geometry's identity (`BufferSource::FromDeclarations`).
   OXGN_COOK_NDAPI static auto FromDescriptor(std::string_view bytes,
-    const std::filesystem::path& source_path, const MountTable& mounts,
-    std::vector<ImportDiagnostic>& diagnostics)
+    const std::filesystem::path& source_path, std::string_view anchor,
+    const MountTable& mounts, std::vector<ImportDiagnostic>& diagnostics)
     -> std::optional<GeometrySource>;
 };
 

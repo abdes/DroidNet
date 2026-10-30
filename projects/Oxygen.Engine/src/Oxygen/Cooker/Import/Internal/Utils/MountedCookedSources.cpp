@@ -5,17 +5,28 @@
 //===----------------------------------------------------------------------===//
 
 #include <cctype>
+#include <cstddef>
 #include <exception>
+#include <expected>
+#include <filesystem>
+#include <optional>
+#include <ranges>
+#include <span>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
+#include <Oxygen/Data/AssetType.h>
 
 namespace oxygen::content::import::internal {
 
@@ -103,30 +114,20 @@ auto LoadMountedCookedSources(ImportSession& session,
   return mounts;
 }
 
-auto ResolveMountedAssetReference(
-  const std::span<const MountedCookedSource> mounts,
-  const ImportRequest& request, const std::string_view virtual_path,
+auto LookupReference(const std::span<const MountedCookedSource> mounts,
+  const ImportRequest& request, const ResolvedReference& reference,
   const std::optional<data::AssetType> expected_type)
   -> std::expected<ResolvedAssetReference, AssetReferenceRefused>
 {
-  const auto refuse = [](const AssetReferenceRefusal reason)
-    -> std::expected<ResolvedAssetReference, AssetReferenceRefused> {
-    return std::unexpected(AssetReferenceRefused {
-      .reason = reason,
-      .found_type = std::nullopt,
-    });
-  };
-  if (!IsCanonicalVirtualPath(virtual_path)) {
-    return refuse(AssetReferenceRefusal::kInvalidVirtualPath);
-  }
-
+  const auto& virtual_path = reference.resolved;
   auto relpath = std::string {};
   const auto is_mounted
     = TryVirtualPathToRelPath(request, virtual_path, relpath);
+  auto looked_up = std::vector<std::filesystem::path> {};
   auto found_descriptor = false;
-  for (auto it = mounts.rbegin(); it != mounts.rend(); ++it) {
-    if (it->inspection.has_value()) {
-      for (const auto& asset : it->inspection->Assets()) {
+  for (const auto& mount : std::views::reverse(mounts)) {
+    if (mount.inspection.has_value()) {
+      for (const auto& asset : mount.inspection->Assets()) {
         if (asset.virtual_path == virtual_path) {
           return CheckType(asset.key,
             static_cast<data::AssetType>(asset.asset_type), expected_type);
@@ -134,15 +135,24 @@ auto ResolveMountedAssetReference(
       }
     }
     if (is_mounted) {
+      const auto descriptor = mount.root / std::filesystem::path(relpath);
       std::error_code ec;
-      if (std::filesystem::exists(
-            it->root / std::filesystem::path(relpath), ec)) {
+      if (std::filesystem::exists(descriptor, ec)) {
         found_descriptor = true;
         break;
       }
+      looked_up.push_back(descriptor);
     }
   }
 
+  const auto refuse = [&](const AssetReferenceRefusal reason)
+    -> std::expected<ResolvedAssetReference, AssetReferenceRefused> {
+    return std::unexpected(AssetReferenceRefused {
+      .reason = reason,
+      .found_type = std::nullopt,
+      .looked_up = std::move(looked_up),
+    });
+  };
   if (!is_mounted) {
     return refuse(AssetReferenceRefusal::kUnmounted);
   }
@@ -155,6 +165,24 @@ auto ResolveMountedAssetReference(
   }
   return CheckType(data::AssetKey::FromVirtualPath(virtual_path),
     *inferred_type, expected_type);
+}
+
+auto DescribeLookup(const ResolvedReference& reference,
+  const AssetReferenceRefused& refused) -> std::string
+{
+  auto text = "'" + reference.written + "' resolves to " + reference.resolved;
+  if (refused.looked_up.empty()) {
+    return text;
+  }
+  text.append("; looked for ");
+  for (auto index = std::size_t { 0 }; index < refused.looked_up.size();
+    ++index) {
+    if (index > 0) {
+      text.append(", ");
+    }
+    text.append(refused.looked_up[index].generic_string());
+  }
+  return text;
 }
 
 } // namespace oxygen::content::import::internal

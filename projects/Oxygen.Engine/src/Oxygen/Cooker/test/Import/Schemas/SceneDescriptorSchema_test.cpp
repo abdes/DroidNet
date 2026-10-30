@@ -203,6 +203,45 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
       "",
     },
     SchemaCase {
+      "AcceptsAReferenceRelativeToTheScene",
+      Scene("DemoScene")
+        .Renderable(0, "/Content/Geometry/cube.ogeo")
+        .Set("/renderables/0/geometry_ref", "../Geometry/cube.ogeo")
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "AcceptsAReferenceAbsoluteInAnotherMount",
+      Scene("DemoScene")
+        .Renderable(0, "/Engine/Geometry/cube.ogeo")
+        .Set("/renderables/0/geometry_ref", "/Engine/Geometry/cube.ogeo")
+        .AppendReference(
+          "/references/materials", "/Engine/Materials/Default.omat")
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsAReferenceWithAnInnerParentSegment",
+      Scene("DemoScene")
+        .Renderable(0, "/Content/Geometry/cube.ogeo")
+        .Set("/renderables/0/geometry_ref", "../Geometry/../cube.ogeo")
+        .Text(),
+      false,
+      "/renderables/0/geometry_ref",
+    },
+    SchemaCase {
+      "RejectsAnAssetUriReference",
+      Scene("DemoScene")
+        .Renderable(0, "/Content/Geometry/cube.ogeo")
+        .Set(
+          "/renderables/0/geometry_ref", "asset:///Content/Geometry/cube.ogeo")
+        .Text(),
+      false,
+      "/renderables/0/geometry_ref",
+    },
+    SchemaCase {
       "RejectsAnOverrideKeyItsOwnerDoesNotHave",
       Scene("BadScene")
         .Renderable(0, "/.cooked/Geometry/cube.ogeo")

@@ -94,6 +94,22 @@ INSTANTIATE_TEST_SUITE_P(Cases, MaterialDescriptorSchemaCaseTest,
       "'unknown_setting'",
     },
     SchemaCase {
+      "AcceptsRelativeTextureBinding",
+      WoodFloor()
+        .Set("/textures/base_color/virtual_path", "../Textures/Wood.otex")
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsTextureBindingOfAnotherType",
+      WoodFloor()
+        .Set("/textures/base_color/virtual_path", "../Textures/Wood.png")
+        .Text(),
+      false,
+      "/textures/base_color/virtual_path",
+    },
+    SchemaCase {
       "RequiresTextureVirtualPath",
       WoodFloor().Set("/textures/base_color/uv_set", 0).Text(),
       false,

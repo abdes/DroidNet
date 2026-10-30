@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://oxygen-engine.dev/schemas/oxygen.input.schema.json",
   "title": "Oxygen Input Source Schema",
-  "description": "An input source: a container of input actions and mapping contexts. Each product is named under the source's identity (`/Content/Input/Player.input/Jump.oiact`). A mapping names an action of this source by its name, and an action of another source by its virtual path.",
+  "description": "An input source: a container of input actions and mapping contexts. Each product is named under the source's identity (`/Content/Input/Player.input/Jump.oiact`). A mapping names an action of this source by its name, and any other action by a reference ending with `.oiact`.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -28,15 +28,34 @@
     }
   },
   "$defs": {
-    "action_reference": {
-      "description": "An action: the name of an action this source declares, or the virtual path of an action of another source.",
-      "anyOf": [
+    "local_action_name": {
+      "description": "A name that is not a reference: it does not end with `.oiact`.",
+      "allOf": [
         {
           "$ref": "oxygen.name.schema.json#/definitions/segment"
         },
         {
-          "type": "string",
-          "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.oiact$"
+          "not": {
+            "pattern": "\\.oiact$"
+          }
+        }
+      ]
+    },
+    "action_reference": {
+      "description": "An action: the name of an action this source declares, or a reference ending with `.oiact` (`Car.input/Jump.oiact`, `/Props/Input/Shared.input/Use.oiact`).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/local_action_name"
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "oxygen.reference.schema.json#/definitions/reference"
+            },
+            {
+              "pattern": "\\.oiact$"
+            }
+          ]
         }
       ]
     },
@@ -45,7 +64,7 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "$ref": "oxygen.name.schema.json#/definitions/segment"
+          "$ref": "#/$defs/local_action_name"
         },
         "type": {
           "type": "string",

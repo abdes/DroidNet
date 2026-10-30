@@ -57,10 +57,15 @@ error-index and placeholder recovery. Cubemap discovery records selected faces
 and the rejected suffix probes. Cooking performs payload validation and resolves
 cooked references.
 
-Texture jobs may supply `virtual_path` as their explicit output identity. A
-descriptor may omit that field or repeat it; a conflicting descriptor identity
-is rejected by both analysis and cooking. Tools need not rewrite descriptors to
-assign project asset paths.
+A texture job's identity comes from the job's `virtual_path`; a texture
+descriptor never states one, and a descriptor with a `virtual_path` field fails
+schema validation. A job with no identity is refused with
+`import.asset_virtual_path_missing`, in analysis and in cooking. A reference in
+an authored file is an absolute virtual path in another mount or text relative
+to the folder of the referring file, resolved against the job identity (for a
+sidecar, the identity of its target scene). A descriptor's `source` and
+`sources[].file` follow the same grammar and name files. Tools need not rewrite
+descriptors to assign project asset paths.
 
 The caller binds the report to its toolchain artifact fingerprint;
 `producer_version` is a display version. The CLI protects declared and accessed
