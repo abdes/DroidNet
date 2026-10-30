@@ -32,6 +32,7 @@ using oxygen::content::import::ModelImportRecordContent;
 using oxygen::content::import::Mount;
 using oxygen::content::import::MountKind;
 using oxygen::content::import::MountOrigin;
+using oxygen::content::import::MountRole;
 using oxygen::content::import::MountScope;
 using oxygen::content::import::MountState;
 using oxygen::content::import::MountTable;
@@ -79,6 +80,8 @@ protected:
           .origin = MountOrigin::kCommitted,
           .origin_file = {},
           .state = MountState::kBound,
+          .role = MountRole::kOwn,
+          .findings = {},
         });
       }
       return mounts;

@@ -12,7 +12,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <map>
+#include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -46,12 +50,26 @@ struct DescriptorRecordOverride {
 };
 
 //! Minimal test writer for loose cooked fixtures in Content tests.
+/*!
+ Writes below a cooked root on disk, or, default-constructed, into memory:
+ `Files()` then holds every file it wrote, the index included, by path
+ relative to the root.
+*/
 class LooseCookedTestWriter final {
 public:
+  LooseCookedTestWriter() = default;
+
   explicit LooseCookedTestWriter(std::filesystem::path cooked_root)
     : cooked_root_(std::move(cooked_root))
   {
-    std::filesystem::create_directories(base::ToNativePath(cooked_root_));
+    std::filesystem::create_directories(base::ToNativePath(*cooked_root_));
+  }
+
+  //! The files written in memory, by path relative to the root.
+  [[nodiscard]] auto Files() const
+    -> const std::map<std::string, std::vector<std::byte>>&
+  {
+    return written_;
   }
 
   auto SetSourceKey(const data::SourceKey key) -> void { source_key_ = key; }
@@ -66,18 +84,7 @@ public:
   auto WriteFile(data::loose_cooked::FileKind kind, std::string relpath,
     std::span<const std::byte> bytes, std::string virtual_path = {}) -> void
   {
-    const auto absolute_path = cooked_root_ / std::filesystem::path(relpath);
-    if (const auto parent = absolute_path.parent_path(); !parent.empty()) {
-      std::filesystem::create_directories(base::ToNativePath(parent));
-    }
-
-    std::ofstream out(base::ToNativePath(absolute_path),
-      std::ios::binary | std::ios::trunc | std::ios::out);
-    if (!bytes.empty()) {
-      out.write(reinterpret_cast<const char*>(bytes.data()),
-        static_cast<std::streamsize>(bytes.size()));
-    }
-
+    Emit(relpath, bytes);
     files_.push_back(PendingFileRecord {
       .kind = kind,
       .relpath = std::move(relpath),
@@ -109,18 +116,7 @@ public:
       written.resize(static_cast<size_t>(record_override.size));
     }
 
-    const auto absolute_path
-      = cooked_root_ / std::filesystem::path(descriptor_relpath);
-    if (const auto parent = absolute_path.parent_path(); !parent.empty()) {
-      std::filesystem::create_directories(base::ToNativePath(parent));
-    }
-
-    std::ofstream out(base::ToNativePath(absolute_path),
-      std::ios::binary | std::ios::trunc | std::ios::out);
-    if (!written.empty()) {
-      out.write(reinterpret_cast<const char*>(written.data()),
-        static_cast<std::streamsize>(written.size()));
-    }
+    Emit(descriptor_relpath, written);
 
     const auto digest_bytes = base::IsAllZero(record_override.sha256)
       ? base::ComputeSha256(written)
@@ -139,7 +135,8 @@ public:
     });
   }
 
-  [[nodiscard]] auto Finish() const -> LooseCookedTestWriteResult
+  //! Writes the index; in memory, `index_path` is relative to the root.
+  [[nodiscard]] auto Finish() -> LooseCookedTestWriteResult
   {
     using data::loose_cooked::AssetEntry;
     using data::loose_cooked::FileRecord;
@@ -227,28 +224,21 @@ public:
         reference_bytes.end(), encoded->begin(), encoded->end());
     }
 
-    const auto index_path = cooked_root_ / layout_.index_file_name;
-    std::ofstream out(
-      base::ToNativePath(index_path), std::ios::binary | std::ios::trunc);
-    out.write(reinterpret_cast<const char*>(&header),
-      static_cast<std::streamsize>(sizeof(header)));
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    if (!asset_entries.empty()) {
-      out.write(reinterpret_cast<const char*>(asset_entries.data()),
-        static_cast<std::streamsize>(
-          asset_entries.size() * sizeof(AssetEntry)));
-    }
-    if (!file_records.empty()) {
-      out.write(reinterpret_cast<const char*>(file_records.data()),
-        static_cast<std::streamsize>(file_records.size() * sizeof(FileRecord)));
-    }
-    if (!reference_bytes.empty()) {
-      out.write(reinterpret_cast<const char*>(reference_bytes.data()),
-        static_cast<std::streamsize>(reference_bytes.size()));
-    }
+    auto index = std::vector<std::byte> {};
+    const auto append = [&index](const std::span<const std::byte> bytes) {
+      index.insert(index.end(), bytes.begin(), bytes.end());
+    };
+    append(std::as_bytes(std::span { &header, 1U }));
+    append(std::as_bytes(std::span(strings)));
+    append(std::as_bytes(std::span(asset_entries)));
+    append(std::as_bytes(std::span(file_records)));
+    append(reference_bytes);
+    Emit(layout_.index_file_name, index);
 
     return {
-      .index_path = index_path,
+      .index_path = cooked_root_.has_value()
+        ? *cooked_root_ / layout_.index_file_name
+        : std::filesystem::path(layout_.index_file_name),
       .asset_count = static_cast<uint32_t>(asset_entries.size()),
       .file_record_count = static_cast<uint32_t>(file_records.size()),
     };
@@ -273,6 +263,24 @@ private:
     std::string virtual_path;
   };
 
+  //! Writes one file below the root, or keeps it in memory.
+  auto Emit(const std::string& relpath, const std::span<const std::byte> bytes)
+    -> void
+  {
+    if (!cooked_root_.has_value()) {
+      written_.insert_or_assign(
+        relpath, std::vector<std::byte>(bytes.begin(), bytes.end()));
+      return;
+    }
+    const auto absolute_path = *cooked_root_ / std::filesystem::path(relpath);
+    if (const auto parent = absolute_path.parent_path(); !parent.empty()) {
+      std::filesystem::create_directories(base::ToNativePath(parent));
+    }
+    std::ofstream out(base::ToNativePath(absolute_path), std::ios::binary);
+    std::ranges::transform(bytes, std::ostreambuf_iterator<char>(out),
+      [](const std::byte b) -> char { return static_cast<char>(b); });
+  }
+
   [[nodiscard]] static auto AppendString(
     std::string& table, const std::string& value) -> uint32_t
   {
@@ -293,7 +301,8 @@ private:
       = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
   }
 
-  std::filesystem::path cooked_root_;
+  std::optional<std::filesystem::path> cooked_root_;
+  std::map<std::string, std::vector<std::byte>> written_;
   LooseCookedLayout layout_ {};
   data::SourceKey source_key_ {};
   uint16_t index_version_ = data::loose_cooked::kIndexVersion;

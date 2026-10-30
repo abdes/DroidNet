@@ -6,12 +6,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <ios>
 #include <optional>
 #include <ranges>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -20,10 +22,18 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/test/Fixtures/LooseCookedTestWriter.h>
+#include <Oxygen/Content/test/Fixtures/PakTestWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/MemoryFileSystem.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -31,49 +41,63 @@ namespace {
 namespace fs = std::filesystem;
 namespace codes = oxygen::content::import::mount_codes;
 using nlohmann::json;
+using oxygen::make_observer;
 using oxygen::content::import::CheckMountNameConflicts;
 using oxygen::content::import::CommittedPath;
+using oxygen::content::import::ImportManifest;
 using oxygen::content::import::IsValidMountName;
 using oxygen::content::import::kMountsFileName;
 using oxygen::content::import::MountDeclaration;
 using oxygen::content::import::MountDeclarationForm;
 using oxygen::content::import::MountKind;
 using oxygen::content::import::MountOrigin;
+using oxygen::content::import::MountRole;
 using oxygen::content::import::MountScope;
 using oxygen::content::import::MountState;
 using oxygen::content::import::MountTable;
 using oxygen::content::import::MountTableOwner;
 using oxygen::content::import::MountTableRequest;
+using oxygen::content::import::ParseMountKind;
 using oxygen::content::import::ResolveMountTable;
+using oxygen::content::testing::LooseCookedTestWriter;
+using oxygen::content::testing::PakTestWriter;
 using oxygen::cooker::test::DiagnosticSummary;
 using oxygen::cooker::test::HasDiagnosticCode;
-using oxygen::cooker::test::TempDirTest;
+using oxygen::cooker::test::MemoryFileSystem;
+using oxygen::data::AssetKey;
+using oxygen::data::AssetType;
 
-//! Projects live at `<temp>/ws/proj`. A `.mounts.json` with `"root": true` at
-//! the temp folder fences every walk off from the machine's own files.
-class SourceMountsTest : public TempDirTest {
+//! Projects live at `<root>/ws/proj` on a file system held in memory, under a
+//! root no test creates. A `.mounts.json` with `"root": true` at the root
+//! fences every walk.
+class SourceMountsTest : public testing::Test {
 protected:
   auto SetUp() -> void override
   {
-    WriteMounts(TempDir(), json { { "version", 1 }, { "root", true } });
-    fs::create_directories(Project() / "Content");
+    WriteMounts(Root(), json { { "version", 1 }, { "root", true } });
+    MakeFolder(Project() / "Content");
   }
 
-  [[nodiscard]] auto Workspace() const -> fs::path { return TempDir() / "ws"; }
+  static auto Root() -> fs::path
+  {
+    return fs::current_path().root_path() / "OxygenSourceMounts";
+  }
 
-  [[nodiscard]] auto Project() const -> fs::path
+  [[nodiscard]] static auto Workspace() -> fs::path { return Root() / "ws"; }
+
+  [[nodiscard]] static auto Project() -> fs::path
   {
     return Workspace() / "proj";
   }
 
-  static auto WriteText(const fs::path& path, std::string_view text) -> void
+  auto MakeFolder(const fs::path& folder) -> void { files_.AddFolder(folder); }
+
+  auto WriteText(const fs::path& path, std::string_view text) -> void
   {
-    fs::create_directories(path.parent_path());
-    auto stream = std::ofstream { path, std::ios::binary };
-    stream << text;
+    files_.AddFile(path, text);
   }
 
-  static auto WriteMounts(const fs::path& dir, const json& doc) -> fs::path
+  auto WriteMounts(const fs::path& dir, const json& doc) -> fs::path
   {
     const auto path = dir / kMountsFileName;
     WriteText(path, doc.dump());
@@ -96,6 +120,7 @@ protected:
       .working_directory = Workspace(),
       .mounts_option = std::nullopt,
       .owner = MountTableOwner::kProject,
+      .file_system = make_observer(&files_),
     };
   }
 
@@ -119,8 +144,10 @@ protected:
 
   static auto Canonical(const fs::path& path) -> fs::path
   {
-    return fs::weakly_canonical(path);
+    return path.lexically_normal();
   }
+
+  MemoryFileSystem files_;
 };
 
 //! Expects one mount bound to `folder` by `origin`.
@@ -130,24 +157,25 @@ auto ExpectBound(const MountTable& table, std::string_view name,
   const auto mount = table.Find(name);
   ASSERT_TRUE(mount) << name << "\n" << DiagnosticSummary(table.diagnostics);
   EXPECT_EQ(mount->state, MountState::kBound);
-  EXPECT_EQ(mount->folder, fs::weakly_canonical(folder));
+  EXPECT_EQ(mount->folder, folder.lexically_normal());
   EXPECT_EQ(mount->origin, origin);
 }
 
 // -- Names -------------------------------------------------------------------
 
-//! Names follow `^[A-Za-z][A-Za-z0-9_-]{0,63}$`.
+//! Names follow the virtual path mount rule, without a leading `.`.
 NOLINT_TEST(SourceMountNameTest, FollowsTheNameRule)
 {
   EXPECT_TRUE(IsValidMountName("Content"));
   EXPECT_TRUE(IsValidMountName("a_b-9"));
-  EXPECT_TRUE(IsValidMountName(std::string(64, 'a')));
+  EXPECT_TRUE(IsValidMountName("_Content"));
+  EXPECT_TRUE(IsValidMountName(std::string(255, 'a')));
   EXPECT_FALSE(IsValidMountName(""));
   EXPECT_FALSE(IsValidMountName("9Content"));
-  EXPECT_FALSE(IsValidMountName("_Content"));
+  EXPECT_FALSE(IsValidMountName(".Content"));
   EXPECT_FALSE(IsValidMountName("Con tent"));
   EXPECT_FALSE(IsValidMountName("Con.tent"));
-  EXPECT_FALSE(IsValidMountName(std::string(65, 'a')));
+  EXPECT_FALSE(IsValidMountName(std::string(256, 'a')));
 }
 
 //! An invalid committed name is `mount.name_invalid`.
@@ -212,7 +240,7 @@ NOLINT_TEST_F(SourceMountsTest, DuplicateNamesIgnoringCaseAreRefused)
 //! duplicate, not a binding.
 NOLINT_TEST_F(SourceMountsTest, FileNameDifferingByCaseIsADuplicate)
 {
-  fs::create_directories(Workspace() / "Alt");
+  MakeFolder(Workspace() / "Alt");
   WriteMounts(Project(), MountsDoc({ { "content", "../Alt" } }));
 
   const auto table
@@ -258,7 +286,7 @@ NOLINT_TEST_F(SourceMountsTest, AbsoluteCommittedPathIsRefused)
 //! relative ones resolve against the working directory.
 NOLINT_TEST_F(SourceMountsTest, CommandLineMountsAcceptAbsoluteAndRelative)
 {
-  fs::create_directories(Workspace() / "Rel");
+  MakeFolder(Workspace() / "Rel");
   auto request = Request({
     Declared("Content", (Project() / "Content").generic_string()),
     Declared("Rel", "Rel"),
@@ -276,7 +304,7 @@ NOLINT_TEST_F(SourceMountsTest, CommandLineMountsAcceptAbsoluteAndRelative)
 //! A committed path may leave the project root.
 NOLINT_TEST_F(SourceMountsTest, CommittedPathMayLeaveTheProjectRoot)
 {
-  fs::create_directories(Workspace() / "Media" / "Showcase");
+  MakeFolder(Workspace() / "Media" / "Showcase");
 
   const auto table
     = ResolveMountTable(Request({ Declared("Showcase", "../Media/Showcase") }));
@@ -291,7 +319,7 @@ NOLINT_TEST_F(SourceMountsTest, CommittedPathMayLeaveTheProjectRoot)
 //! Two Source folders may not contain one another.
 NOLINT_TEST_F(SourceMountsTest, NestedFoldersOverlap)
 {
-  fs::create_directories(Project() / "Content" / "Free");
+  MakeFolder(Project() / "Content" / "Free");
 
   const auto table = ResolveMountTable(Request({
     Declared("Studio", "Content"),
@@ -328,7 +356,7 @@ NOLINT_TEST_F(SourceMountsTest, LocalMountOverlapIsRefused)
 //! Sibling folders do not overlap, even when one name prefixes the other.
 NOLINT_TEST_F(SourceMountsTest, SiblingFoldersDoNotOverlap)
 {
-  fs::create_directories(Project() / "ContentExtra");
+  MakeFolder(Project() / "ContentExtra");
 
   const auto table = ResolveMountTable(Request({
     Declared("Content", "Content"),
@@ -342,8 +370,8 @@ NOLINT_TEST_F(SourceMountsTest, SiblingFoldersDoNotOverlap)
 //! root.
 NOLINT_TEST_F(SourceMountsTest, FolderInOutputIsRefused)
 {
-  fs::create_directories(Project() / ".cooked" / "Imports");
-  fs::create_directories(Project() / ".anything");
+  MakeFolder(Project() / ".cooked" / "Imports");
+  MakeFolder(Project() / ".anything");
 
   const auto table = ResolveMountTable(Request({
     Declared("Cache", ".cooked/Imports"),
@@ -359,7 +387,7 @@ NOLINT_TEST_F(SourceMountsTest, FolderInOutputIsRefused)
 //! Dot-named folders outside the project root are not output folders.
 NOLINT_TEST_F(SourceMountsTest, DotFolderOutsideTheProjectIsAllowed)
 {
-  fs::create_directories(Workspace() / ".studio");
+  MakeFolder(Workspace() / ".studio");
 
   const auto table
     = ResolveMountTable(Request({ Declared("Studio", "../.studio") }));
@@ -367,11 +395,14 @@ NOLINT_TEST_F(SourceMountsTest, DotFolderOutsideTheProjectIsAllowed)
   EXPECT_TRUE(table.IsValid()) << DiagnosticSummary(table.diagnostics);
 }
 
-//! Cooked roots and paks live in output folders by design.
-NOLINT_TEST_F(SourceMountsTest, CookedAndPakMountsMayLiveInOutput)
+//! Loose cooked roots and paks live in output folders by design.
+NOLINT_TEST_F(SourceMountsTest, CookedMountsMayLiveInOutput)
 {
-  fs::create_directories(Project() / ".cooked" / "Content");
-  WriteText(Project() / ".build" / "content.pak", "pak");
+  auto writer = LooseCookedTestWriter {};
+  static_cast<void>(writer.Finish());
+  files_.AddFiles(Project() / ".cooked" / "Content", writer.Files());
+  files_.AddFile(Project() / ".build" / "content.pak",
+    PakTestWriter::Encode(PakTestWriter::Config {}));
 
   const auto table = ResolveMountTable(Request({
     MountDeclaration {
@@ -381,33 +412,104 @@ NOLINT_TEST_F(SourceMountsTest, CookedAndPakMountsMayLiveInOutput)
     },
     MountDeclaration {
       .name = "Pak",
-      .kind = MountKind::kPak,
+      .kind = MountKind::kCooked,
       .path = ".build/content.pak",
     },
   }));
 
   EXPECT_TRUE(table.IsValid()) << DiagnosticSummary(table.diagnostics);
+  EXPECT_TRUE(table.diagnostics.empty())
+    << DiagnosticSummary(table.diagnostics);
+}
+
+//! A `Source` mount inside the project root is the project's own; a mount
+//! outside it, or a `Cooked` mount anywhere, is shared.
+NOLINT_TEST_F(SourceMountsTest, RoleFollowsTheProjectRoot)
+{
+  MakeFolder(Workspace() / "Shared");
+  auto writer = LooseCookedTestWriter {};
+  static_cast<void>(writer.Finish());
+  files_.AddFiles(Project() / ".cooked" / "Content", writer.Files());
+
+  const auto table = ResolveMountTable(Request({
+    Declared("Content", "Content"),
+    Declared("Shared", "../Shared"),
+    MountDeclaration {
+      .name = "Cooked",
+      .kind = MountKind::kCooked,
+      .path = ".cooked/Content",
+    },
+  }));
+
+  ASSERT_TRUE(table.IsValid()) << DiagnosticSummary(table.diagnostics);
+  EXPECT_EQ(table.Find("Content")->role, MountRole::kOwn);
+  EXPECT_EQ(table.Find("Shared")->role, MountRole::kShared);
+  EXPECT_EQ(table.Find("Cooked")->role, MountRole::kShared);
+}
+
+//! An `Invalid` library keeps its finding, also in the table's diagnostics,
+//! and stays in the table as a warning.
+NOLINT_TEST_F(SourceMountsTest, InvalidLibraryKeepsItsFinding)
+{
+  MakeFolder(Workspace() / "NotALibrary");
+
+  const auto table = ResolveMountTable(Request({
+    MountDeclaration {
+      .name = "Props",
+      .kind = MountKind::kCooked,
+      .path = "../NotALibrary",
+    },
+  }));
+
+  EXPECT_TRUE(table.IsValid()) << DiagnosticSummary(table.diagnostics);
+  const auto mount = table.Find("Props");
+  ASSERT_TRUE(mount);
+  EXPECT_EQ(mount->state, MountState::kInvalid);
+  ASSERT_EQ(mount->findings.size(), 1U);
+  EXPECT_EQ(mount->findings.front().code, codes::kLibraryFormatUnsupported.id);
+  EXPECT_EQ(mount->findings.front().object_name, "Props");
+  EXPECT_TRUE(
+    HasDiagnosticCode(table.diagnostics, codes::kLibraryFormatUnsupported.id));
 }
 
 // -- Path kind, missing and unbound ------------------------------------------
 
-//! A `Pak` mount names a file; the other kinds name folders.
-NOLINT_TEST_F(SourceMountsTest, PathKindMismatchIsRefused)
+//! A `Source` mount names a folder.
+NOLINT_TEST_F(SourceMountsTest, SourceMountBoundToAFileIsRefused)
 {
   WriteText(Project() / "file.txt", "x");
 
-  const auto table = ResolveMountTable(Request({
-    MountDeclaration {
-      .name = "Pak",
-      .kind = MountKind::kPak,
-      .path = "Content",
-    },
-    Declared("Source", "file.txt"),
-  }));
+  const auto table
+    = ResolveMountTable(Request({ Declared("Source", "file.txt") }));
 
-  EXPECT_EQ(std::ranges::count(table.diagnostics, codes::kPathKind.id,
-              &oxygen::content::import::ImportDiagnostic::code),
-    2);
+  EXPECT_FALSE(table.IsValid());
+  EXPECT_TRUE(HasDiagnosticCode(table.diagnostics, codes::kPathKind.id));
+}
+
+//! Only `Source` and `Cooked` are kinds.
+NOLINT_TEST(SourceMountKindTest, ParsesTheTwoKinds)
+{
+  EXPECT_EQ(ParseMountKind("Source"), MountKind::kSource);
+  EXPECT_EQ(ParseMountKind("Cooked"), MountKind::kCooked);
+  EXPECT_FALSE(ParseMountKind("Pak"));
+  EXPECT_FALSE(ParseMountKind("source"));
+  EXPECT_FALSE(ParseMountKind(""));
+}
+
+//! A manifest mount of another kind is `mount.kind_unknown`, at its field.
+NOLINT_TEST(SourceMountKindTest, ManifestRefusesAnUnknownKind)
+{
+  auto errors = std::ostringstream {};
+
+  const auto manifest = ImportManifest::Parse(
+    R"({"jobs":[],"mounts":[{"name":"Props","kind":"Pak","path":"a.pak"}]})",
+    fs::current_path().root_path() / "OxygenSourceMounts", {}, errors);
+
+  EXPECT_FALSE(manifest.has_value());
+  EXPECT_NE(errors.str().find("[mount.kind_unknown]"), std::string::npos)
+    << errors.str();
+  EXPECT_NE(errors.str().find("mounts[0].kind"), std::string::npos)
+    << errors.str();
 }
 
 //! A folder that does not exist warns and is `Missing`.
@@ -458,7 +560,7 @@ NOLINT_TEST_F(SourceMountsTest, InvalidFileIsRefused)
 {
   const auto cases = std::array {
     json { { "version", 1 }, { "cooked_root", "x" } }.dump(),
-    MountsDoc({ { "Studio", { { "kind", "Pak" }, { "path", "a.pak" } } } })
+    MountsDoc({ { "Studio", { { "kind", "Cooked" }, { "path", "a.pak" } } } })
       .dump(),
     json { { "mounts", json::object() } }.dump(),
     std::string { "{ not json" },
@@ -503,7 +605,7 @@ NOLINT_TEST_F(SourceMountsTest, FileMayOmitMounts)
 //! its own folder.
 NOLINT_TEST_F(SourceMountsTest, ProjectFileOverridesCommittedPath)
 {
-  fs::create_directories(Workspace() / "Alt");
+  MakeFolder(Workspace() / "Alt");
   const auto file
     = WriteMounts(Project(), MountsDoc({ { "Content", "../Alt" } }));
 
@@ -521,8 +623,8 @@ NOLINT_TEST_F(SourceMountsTest, ProjectFileOverridesCommittedPath)
 //! The `--mounts` file overrides the project's own file.
 NOLINT_TEST_F(SourceMountsTest, MountsOptionOverridesProjectFile)
 {
-  fs::create_directories(Workspace() / "Alt");
-  fs::create_directories(Workspace() / "Opt");
+  MakeFolder(Workspace() / "Alt");
+  MakeFolder(Workspace() / "Opt");
   WriteMounts(Project(), MountsDoc({ { "Content", "../Alt" } }));
   const auto option = Workspace() / "run" / "mounts.json";
   WriteText(option, MountsDoc({ { "Content", "../Opt" } }).dump());
@@ -553,8 +655,8 @@ NOLINT_TEST_F(SourceMountsTest, RootMountsOptionIsTheOnlyFileRead)
 //! A parent file binds a placeholder and adds a local Source mount.
 NOLINT_TEST_F(SourceMountsTest, ParentFileBindsPlaceholdersAndAddsLocals)
 {
-  fs::create_directories(Workspace() / "Studio");
-  fs::create_directories(Workspace() / "Local");
+  MakeFolder(Workspace() / "Studio");
+  MakeFolder(Workspace() / "Local");
   WriteMounts(
     Workspace(), MountsDoc({ { "Studio", "Studio" }, { "Extra", "Local" } }));
 
@@ -575,7 +677,7 @@ NOLINT_TEST_F(SourceMountsTest, ParentFileBindsPlaceholdersAndAddsLocals)
 //! names the file and the committed path is used.
 NOLINT_TEST_F(SourceMountsTest, ParentFileCannotRetargetCommittedPath)
 {
-  fs::create_directories(Workspace() / "Elsewhere");
+  MakeFolder(Workspace() / "Elsewhere");
   const auto parent
     = WriteMounts(Workspace(), MountsDoc({ { "Content", "Elsewhere" } }));
 
@@ -593,8 +695,8 @@ NOLINT_TEST_F(SourceMountsTest, ParentFileCannotRetargetCommittedPath)
 //! The project's own file binds a placeholder before any parent file.
 NOLINT_TEST_F(SourceMountsTest, ProjectFileBeatsParentFile)
 {
-  fs::create_directories(Workspace() / "Parent");
-  fs::create_directories(Workspace() / "Own");
+  MakeFolder(Workspace() / "Parent");
+  MakeFolder(Workspace() / "Own");
   WriteMounts(Workspace(), MountsDoc({ { "Studio", "Parent" } }));
   WriteMounts(Project(), MountsDoc({ { "Studio", "../Own" } }));
 
@@ -607,9 +709,9 @@ NOLINT_TEST_F(SourceMountsTest, ProjectFileBeatsParentFile)
 NOLINT_TEST_F(SourceMountsTest, NearestParentWinsAndRootStopsTheWalk)
 {
   const auto nested = Workspace() / "group" / "proj";
-  fs::create_directories(nested / "Content");
-  fs::create_directories(Workspace() / "Near");
-  fs::create_directories(Workspace() / "Far");
+  MakeFolder(nested / "Content");
+  MakeFolder(Workspace() / "Near");
+  MakeFolder(Workspace() / "Far");
   WriteMounts(Workspace() / "group",
     json {
       { "version", 1 },
@@ -646,7 +748,7 @@ NOLINT_TEST_F(SourceMountsTest, RelativeProjectRootUsesWorkingDirectory)
 //! folder.
 NOLINT_TEST_F(SourceMountsTest, LocateReferenceResolvesAMountPath)
 {
-  fs::create_directories(Project() / "Media" / "Images");
+  MakeFolder(Project() / "Media" / "Images");
   const auto table = ResolveMountTable(
     Request({ Declared("Content", "Content"), Declared("Media", "Media") }));
   ASSERT_TRUE(table.IsValid()) << DiagnosticSummary(table.diagnostics);
@@ -729,7 +831,7 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceResolvesARelativePathInTheMount)
 NOLINT_TEST_F(
   SourceMountsTest, LocateReferenceRefusesARelativePathLeavingTheMount)
 {
-  fs::create_directories(Project() / "Other");
+  MakeFolder(Project() / "Other");
   const auto table = ResolveMountTable(
     Request({ Declared("Content", "Content"), Declared("Other", "Other") }));
   ASSERT_TRUE(table.IsValid()) << DiagnosticSummary(table.diagnostics);
@@ -774,7 +876,7 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesAnAbsolutePath)
 //! folder are one folder. The conflict names the declaration that disagrees.
 NOLINT_TEST_F(SourceMountsTest, BatchNameConflictIsRefused)
 {
-  fs::create_directories(Workspace() / "Other");
+  MakeFolder(Workspace() / "Other");
   const auto resolve
     = [&](const std::string& manifest, const std::string& path) -> MountTable {
     auto request = Request({ Declared("Content", path) });
@@ -799,8 +901,8 @@ NOLINT_TEST_F(SourceMountsTest, BatchNameConflictIsRefused)
 // -- Shared cases ------------------------------------------------------------
 
 //! Runs `MountTableCases.json`, which the editor's mount table reader also
-//! runs. Each case gets its own fenced folder.
-class MountTableCasesTest : public TempDirTest {
+//! runs. Each case gets its own folder on a file system held in memory.
+class MountTableCasesTest : public testing::Test {
 protected:
   static auto Cases() -> const json&
   {
@@ -824,15 +926,61 @@ protected:
     return text;
   }
 
-  static auto ToKind(std::string_view kind) -> MountKind
+  static auto ToKind(const std::string_view kind) -> MountKind
   {
-    if (kind == "Cooked") {
-      return MountKind::kCooked;
+    const auto parsed = ParseMountKind(kind);
+    if (!parsed.has_value()) {
+      throw std::invalid_argument("unknown mount kind in a case");
     }
-    if (kind == "Pak") {
-      return MountKind::kPak;
+    return *parsed;
+  }
+
+  //! Adds a material under `root`, and a script with an external source when
+  //! `external_script`.
+  static auto AddRoot(LooseCookedTestWriter& writer, const std::string& root,
+    const bool external_script) -> void
+  {
+    const auto material = "/" + root + "/Materials/Red.omat";
+    writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(material),
+      AssetType::kMaterial, material, material.substr(1),
+      std::vector<std::byte>(8));
+    if (!external_script) {
+      return;
     }
-    return MountKind::kSource;
+    auto desc = oxygen::data::pak::scripting::ScriptAssetDesc {};
+    desc.external_source_path_offset = 1U;
+    auto bytes = std::vector<std::byte>(sizeof(desc));
+    std::memcpy(bytes.data(), &desc, sizeof(desc));
+    const auto script = "/" + root + "/Scripts/Spin.oscript";
+    writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(script),
+      AssetType::kScript, script, script.substr(1), bytes);
+  }
+
+  //! Builds the library a recipe names with the fixture writers.
+  static auto AddLibrary(
+    MemoryFileSystem& files, const fs::path& temp, const json& recipe) -> void
+  {
+    const auto path = temp / recipe.at("path").get<std::string>();
+    const auto unsupported = recipe.value("format", "current") == "unsupported";
+    if (recipe.at("kind") == "pak") {
+      auto config = PakTestWriter::Config {};
+      if (unsupported) {
+        ++config.header.version;
+      }
+      files.AddFile(path, PakTestWriter::Encode(config));
+      return;
+    }
+    auto writer = LooseCookedTestWriter {};
+    if (unsupported) {
+      writer.SetIndexVersion(oxygen::data::loose_cooked::kIndexVersion + 1);
+    }
+    auto external_script = recipe.value("external_script", false);
+    for (const auto& root : recipe.value("roots", json::array())) {
+      AddRoot(writer, root.get<std::string>(), external_script);
+      external_script = false;
+    }
+    static_cast<void>(writer.Finish());
+    files.AddFiles(path, writer.Files());
   }
 };
 
@@ -842,22 +990,22 @@ NOLINT_TEST_F(MountTableCasesTest, TablesFollowTheCaseTable)
     std::views::enumerate(Cases().at("cases"))) {
     const auto name = test_case.at("name").get<std::string>();
     SCOPED_TRACE(name);
-    const auto temp = TempDir() / std::to_string(index);
-    fs::create_directories(temp);
-    std::ofstream { temp / kMountsFileName } << R"({"version":1,"root":true})";
+    const auto temp = fs::current_path().root_path() / "OxygenMountTableCases"
+      / std::to_string(index);
+    auto files = MemoryFileSystem {};
+    files.AddFile(temp / kMountsFileName, R"({"version":1,"root":true})");
     for (const auto& folder : test_case.value("folders", json::array())) {
-      fs::create_directories(temp / folder.get<std::string>());
+      files.AddFolder(temp / folder.get<std::string>());
     }
     for (const auto& file : test_case.value("files", json::array())) {
-      const auto path = temp / file.get<std::string>();
-      fs::create_directories(path.parent_path());
-      std::ofstream { path } << "x";
+      files.AddFile(temp / file.get<std::string>(), "x");
+    }
+    for (const auto& recipe : test_case.value("libraries", json::array())) {
+      AddLibrary(files, temp, recipe);
     }
     for (const auto& [dir, doc] :
       test_case.value("mounts_files", json::object()).items()) {
-      fs::create_directories(temp / dir);
-      std::ofstream { temp / dir / kMountsFileName }
-        << Expand(doc.dump(), temp);
+      files.AddFile(temp / dir / kMountsFileName, Expand(doc.dump(), temp));
     }
 
     auto declarations = std::vector<MountDeclaration> {};
@@ -871,7 +1019,7 @@ NOLINT_TEST_F(MountTableCasesTest, TablesFollowTheCaseTable)
       });
     }
     const auto project = temp / test_case.value("project", "ws/proj");
-    fs::create_directories(project);
+    files.AddFolder(project);
     const auto table = ResolveMountTable(MountTableRequest {
       .project_root = project,
       .declarations = std::move(declarations),
@@ -880,6 +1028,7 @@ NOLINT_TEST_F(MountTableCasesTest, TablesFollowTheCaseTable)
       .working_directory = project,
       .mounts_option = std::nullopt,
       .owner = MountTableOwner::kProject,
+      .file_system = make_observer(&files),
     });
 
     const auto& expected = test_case.at("mounts");
@@ -892,15 +1041,16 @@ NOLINT_TEST_F(MountTableCasesTest, TablesFollowTheCaseTable)
       EXPECT_EQ(to_string(mount->kind), item.at("kind").get<std::string>());
       EXPECT_EQ(to_string(mount->scope), item.at("scope").get<std::string>());
       EXPECT_EQ(to_string(mount->state), item.at("state").get<std::string>());
+      EXPECT_EQ(to_string(mount->role), item.at("role").get<std::string>());
       EXPECT_EQ(to_string(mount->origin), item.at("origin").get<std::string>());
       EXPECT_EQ(mount->origin_file,
         item.contains("origin_file")
-          ? fs::weakly_canonical(
-              temp / item.at("origin_file").get<std::string>())
+          ? (temp / item.at("origin_file").get<std::string>())
+              .lexically_normal()
           : fs::path {});
       EXPECT_EQ(mount->folder,
         item.contains("folder")
-          ? fs::weakly_canonical(temp / item.at("folder").get<std::string>())
+          ? (temp / item.at("folder").get<std::string>()).lexically_normal()
           : fs::path {});
     }
 

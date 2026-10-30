@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -46,6 +47,14 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
 {
   auto index = std::make_unique<internal::LooseCookedIndexImpl>(
     internal::LooseCookedIndexImpl::LoadFromFile(index_path));
+  return LooseCookedIndex(std::move(index));
+}
+
+auto LooseCookedIndex::LoadFromBytes(const std::span<const std::byte> bytes)
+  -> LooseCookedIndex
+{
+  auto index = std::make_unique<internal::LooseCookedIndexImpl>(
+    internal::LooseCookedIndexImpl::LoadFromBytes(bytes));
   return LooseCookedIndex(std::move(index));
 }
 

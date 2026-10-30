@@ -3546,7 +3546,8 @@ namespace {
     content::VirtualPathResolver& resolver) -> bool
   {
     cooked_contexts.clear();
-    cooked_contexts.reserve(1U + request.cooked_context_roots.size());
+    const auto context_roots = internal::ContextCookedRoots(request);
+    cooked_contexts.reserve(1U + context_roots.size());
 
     auto primary_context = SidecarCookedInspectionContext {};
     if (!detail::LoadCookedInspectionContext(session.CookedRoot(), session,
@@ -3555,7 +3556,7 @@ namespace {
     }
     cooked_contexts.push_back(std::move(primary_context));
 
-    for (const auto& context_root : request.cooked_context_roots) {
+    for (const auto& context_root : context_roots) {
       auto context = SidecarCookedInspectionContext {};
       if (!detail::LoadCookedInspectionContext(context_root, session, request,
             kPhysicsSidecarResolverDiagnostics, context)) {

@@ -99,7 +99,8 @@ it, so none is unused:
   format with its own identity; `SpellReference` is the only place a reference
   is spelled. The scripting sidecar keeps `ScriptImportTestSupport.h` as its
   writer. The engine record builder lands in S20, the first slice whose tests
-  write records, and `TestPaths` cooked mounts in S5.
+  write records, and `TestPaths` cooked mounts in S20, with the integration
+  tests that use them (S5's mount tests run over an in-memory file system).
 - Editor: `Oxygen.Managed.Assets.Testing` `AuthoredFiles`; new
   `Oxygen.Editor.Models.Testing` `ModelRecords`; `TestProject.ManifestJson`
   and `TestProject.BindMounts`, the one test writer of `Project.oxy` and of
@@ -176,9 +177,11 @@ mount (design) lands here so the examples build.
 
 Deletes: `MountKind::kPak`, the silent unknown-kind default, the folder-only
 `Cooked` rule, the 64-character mount-name cap. Adds: `kInvalid`, findings,
-roles, `ReadLibraryFacts`, the library checks, cooked folder overlap,
+roles, `ReadLibraryFacts`, the library checks a version 3 pak and a loose root
+can answer (format, roots, external scripts), cooked folder overlap,
 `mount.kind_unknown`, library fixture recipes in `MountTableCases.json`, typed
-pak and index open failures.
+pak and index open failures, the table's `Cooked` mounts in every job's cooked
+roots.
 
 Unit tests: library facts over in-memory loose index and pak bytes (built by
 `LooseCookedTestWriter` and `PakTestWriter` into buffers); mount table cases
@@ -192,7 +195,9 @@ Deletes: exact-identity dependencies, `PakCatalog::ValidateDependencies`, the
 flat `dependency_types` map, `--embed-browse-index` and the optional browse
 index. Adds: catalog version 4, dependency records with requirements, the
 registry requirement check, `DependencyRequirementError`, the Player launch
-error, PakDump output. Rebuilds `engine.pak` and the examples pak.
+error, PakDump output, a pak's root and requirements in its library facts and
+`mount.library_dependency_missing` with pak recipes in `MountTableCases.json`
+(a version 3 catalog names neither). Rebuilds `engine.pak` and the examples pak.
 
 Unit tests: `PakCatalog_test` (encode, decode, structure), the catalog schema
 and sidecar IO tests, requirement checks over fake `IContentSource` layers

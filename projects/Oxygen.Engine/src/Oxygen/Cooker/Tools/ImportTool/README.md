@@ -712,8 +712,15 @@ one of the two and leave the other at its default.
 
 `project_root` is relative to the manifest's folder (default: the folder);
 `--root` replaces it. `mounts` lists the mounts: `name`, optional `kind`
-(`Source`, `Cooked` or `Pak`) and optional `path`, relative to the project root.
-A mount without `path` is a placeholder a `.mounts.json` binds. A cooked root
+(`Source`, the default, or `Cooked`, a library: a loose cooked root or a `.pak`
+file; another kind fails with `mount.kind_unknown`) and optional `path`,
+relative to the project root. A mount without `path` is a placeholder a
+`.mounts.json` binds. A bound `Cooked` mount is read as a library: one that
+cannot be read, whose one root is not its name, that holds more than one root
+or a script with an external source warns with its
+`mount.library_*` finding and is `Invalid`, never mounted. Every job reads
+the valid libraries after its own output root and before its
+`cooked_context_roots`. A cooked root
 holds one mount, the one its identities name (`content::MountRootOf`); a job
 whose identity names another mount is refused with `import.output_mount_mixed`.
 Every path is relative; an absolute path in any
@@ -722,8 +729,8 @@ field is refused with `path.absolute_committed`.
 Job rules:
 
 - each job requires `type`
-- non-sidecar jobs require `source`: a mount path (`/Content/...`) or a path
-  relative to `project_root`. The same holds for a model job's `record`
+- non-sidecar jobs other than `model` require `source`: a mount path
+  (`/Content/...`) or a path relative to `project_root`
 - a job whose `source` lies in an output folder (a dot-named folder below the
   project root) reads that derived file and names the authored source it
   derives from in `derived_from`, a mount path in a `Source` mount; that

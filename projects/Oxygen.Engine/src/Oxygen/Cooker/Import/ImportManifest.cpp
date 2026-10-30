@@ -301,31 +301,44 @@ namespace {
     return relative;
   }
 
-  auto ReadMountKind(const std::string_view kind) -> MountKind
-  {
-    if (kind == to_string(MountKind::kCooked)) {
-      return MountKind::kCooked;
-    }
-    if (kind == to_string(MountKind::kPak)) {
-      return MountKind::kPak;
-    }
-    return MountKind::kSource;
-  }
-
   //! The committed mount declaration of a manifest, its shape checked by the
-  //! schema.
-  auto ReadMountDeclarations(const json& doc) -> std::vector<MountDeclaration>
+  //! schema; a kind other than `Source` or `Cooked` is `mount.kind_unknown`.
+  auto ReadMountDeclarations(const json& doc, const std::string& declared_in,
+    std::ostream& errors) -> std::optional<std::vector<MountDeclaration>>
   {
     auto declarations = std::vector<MountDeclaration> {};
-    for (const auto& entry : doc.value("mounts", json::array())) {
+    auto findings = std::vector<ImportDiagnostic> {};
+    for (const auto& [index, entry] :
+      std::views::enumerate(doc.value("mounts", json::array()))) {
+      const auto name = entry.at("name").get<std::string>();
+      const auto text
+        = entry.value("kind", std::string { to_string(MountKind::kSource) });
+      const auto kind = ParseMountKind(text);
+      if (!kind.has_value()) {
+        const auto& code = mount_codes::kKindUnknown;
+        findings.push_back(ImportDiagnostic {
+          .severity = code.severity,
+          .code = std::string { code.id },
+          .message
+          = fmt::vformat(code.message.get(), fmt::make_format_args(name, text)),
+          .source_path = declared_in,
+          .object_path = fmt::format("mounts[{}].kind", index),
+          .object_name = name,
+        });
+        continue;
+      }
       auto& declaration = declarations.emplace_back(MountDeclaration {
-        .name = entry.at("name").get<std::string>(),
-        .kind = ReadMountKind(entry.value("kind", std::string {})),
+        .name = name,
+        .kind = *kind,
         .path = std::nullopt,
       });
       if (entry.contains("path")) {
         declaration.path = entry.at("path").get<std::string>();
       }
+    }
+    if (!findings.empty()) {
+      PrintDiagnostics(findings, errors);
+      return std::nullopt;
     }
     return declarations;
   }
@@ -1614,11 +1627,16 @@ namespace {
     } else {
       const auto project_root
         = json_data->value("project_root", std::string {});
+      auto declarations
+        = ReadMountDeclarations(*json_data, declared_in, error_stream);
+      if (!declarations.has_value()) {
+        return std::nullopt;
+      }
       manifest.mounts = std::make_shared<const MountTable>(
         ResolveMountTable(MountTableRequest {
           .project_root = options.project_root.value_or(
             (manifest_dir / project_root).lexically_normal()),
-          .declarations = ReadMountDeclarations(*json_data),
+          .declarations = std::move(*declarations),
           .form = MountDeclarationForm::kCommittedFile,
           .declared_in = declared_in,
           .working_directory = std::filesystem::current_path(),

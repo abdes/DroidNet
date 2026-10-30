@@ -33,6 +33,7 @@
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/AtomicFile.h>
@@ -57,7 +58,8 @@ auto ValidateMagic(const IndexHeader& header) -> void
 {
   const auto actual = std::span<const char>(header.magic);
   if (!std::ranges::equal(actual, std::span<const char>(kHeaderMagic))) {
-    throw std::runtime_error("Invalid loose cooked index magic");
+    throw data::CookedOpenError(data::CookedOpenFailure::kWrongFormat,
+      "Invalid loose cooked index magic");
   }
 }
 
@@ -269,7 +271,7 @@ auto ValidateGuid(const IndexHeader& header) -> void
 namespace oxygen::content::internal {
 
 struct LooseCookedIndexImpl::IndexLoadContext {
-  oxygen::observer_ptr<serio::Reader<serio::MemoryStream>> reader;
+  oxygen::observer_ptr<serio::Reader<serio::ReadOnlyMemoryStream>> reader;
   uint64_t file_size;
   uint64_t next_reference_offset = 0;
   IndexHeader header;
@@ -328,14 +330,34 @@ auto LooseCookedIndexImpl::LoadFromLockedFile(
     throw std::runtime_error(
       "Failed to read index file: " + bytes.error().message());
   }
+  return LoadFromBytes(*bytes);
+}
 
-  const auto file_size = bytes->size();
+auto LooseCookedIndexImpl::LoadFromBytes(const std::span<const std::byte> bytes)
+  -> LooseCookedIndexImpl
+{
+  // Every refusal of the bytes is typed: what is not a wrong format or
+  // version is a malformed index.
+  try {
+    return Parse(bytes);
+  } catch (const data::CookedOpenError&) {
+    throw;
+  } catch (const std::runtime_error& ex) {
+    throw data::CookedOpenError(data::CookedOpenFailure::kCorrupt, ex.what());
+  }
+}
+
+auto LooseCookedIndexImpl::Parse(const std::span<const std::byte> bytes)
+  -> LooseCookedIndexImpl
+{
+  const auto file_size = bytes.size();
   if (file_size < sizeof(IndexHeader)) {
-    throw std::runtime_error("Index file too small: " + index_path.string());
+    throw data::CookedOpenError(data::CookedOpenFailure::kWrongFormat,
+      "File too small to hold a loose cooked index header");
   }
 
-  serio::MemoryStream stream(*bytes);
-  serio::Reader<serio::MemoryStream> reader(stream);
+  serio::ReadOnlyMemoryStream stream(bytes);
+  serio::Reader<serio::ReadOnlyMemoryStream> reader(stream);
   LooseCookedIndexImpl out;
   IndexLoadContext context {
     .reader = oxygen::make_observer(&reader),
@@ -385,7 +407,8 @@ auto LooseCookedIndexImpl::LoadAndValidateHeader(IndexLoadContext& context)
   ValidateMagic(header);
 
   if (header.version != data::loose_cooked::kIndexVersion) {
-    throw std::runtime_error("Unsupported loose cooked index version");
+    throw data::CookedOpenError(data::CookedOpenFailure::kUnsupportedVersion,
+      "Unsupported loose cooked index version");
   }
 
   ValidateHeaderFlags(header);

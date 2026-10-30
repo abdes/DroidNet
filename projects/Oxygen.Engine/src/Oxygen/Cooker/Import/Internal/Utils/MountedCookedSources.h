@@ -27,17 +27,18 @@ class ImportSession;
 
 namespace oxygen::content::import::internal {
 
-//! A cooked root a job reads: its own output root or one of its cooked context
-//! roots (a loose cooked root or a pak), with its index when it holds one.
+//! A cooked root a job reads: its own output root, a library of its source's
+//! mount table or one of its cooked context roots (a loose cooked root or a
+//! pak), with its index when it holds one.
 struct MountedCookedSource final {
   std::filesystem::path root;
   std::optional<lc::Inspection> inspection;
 };
 
-//! Load the cooked roots a job reads, lowest precedence first: the job's
-//! output root, then its cooked context roots in order. A root whose index
-//! fails to load reports `<diagnostic_prefix>index_load_failed` and is kept
-//! without an index.
+//! Load the cooked roots a job reads (`BuildMountedCookedRoots`), loose
+//! cooked roots and paks, lowest precedence first. A root whose index fails
+//! to load reports `<diagnostic_prefix>index_load_failed` and is kept without
+//! an index.
 [[nodiscard]] auto LoadMountedCookedSources(ImportSession& session,
   const ImportRequest& request, std::string_view diagnostic_prefix)
   -> std::vector<MountedCookedSource>;

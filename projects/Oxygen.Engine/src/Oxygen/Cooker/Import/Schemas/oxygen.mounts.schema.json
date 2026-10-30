@@ -7,9 +7,10 @@
   "required": ["version"],
   "definitions": {
     "mount_name": {
-      "description": "A mount name: the first segment of every mount path in it.",
+      "description": "A mount name: the first segment of every mount path in it. It follows the virtual path mount rule and never starts with '.'.",
       "type": "string",
-      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+      "maxLength": 255
     }
   },
   "properties": {
@@ -26,7 +27,7 @@
       "default": false
     },
     "mounts": {
-      "description": "Mount name to folder (a .pak file for a Pak mount): absolute, or relative to this file's folder.",
+      "description": "Mount name to folder (a loose cooked root or a .pak file for a Cooked mount): absolute, or relative to this file's folder.",
       "type": "object",
       "propertyNames": {
         "$ref": "#/definitions/mount_name"

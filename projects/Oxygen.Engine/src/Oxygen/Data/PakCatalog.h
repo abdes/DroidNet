@@ -17,13 +17,14 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/api_export.h>
 
 namespace oxygen::data {
 
 struct PakCatalogEntry final {
-  AssetKey asset_key {};
+  AssetKey asset_key;
   AssetType asset_type = AssetType::kUnknown;
   std::array<uint8_t, 32> descriptor_digest {};
   std::array<uint8_t, 32> transitive_resource_digest {};
@@ -43,12 +44,12 @@ struct PakCatalog final {
   uint16_t content_version = 0;
   std::array<uint8_t, 32> catalog_digest {};
   std::vector<PakCatalogEntry> entries;
-  std::vector<AssetKey> deleted {};
+  std::vector<AssetKey> deleted;
   //! Patch baseline: the exact layers this patch's deltas apply to.
-  std::vector<PakCatalogBase> bases {};
+  std::vector<PakCatalogBase> bases;
   //! Layers whose assets this pak references without containing them, such as
   //! the engine content pak, lowest first.
-  std::vector<PakCatalogBase> dependencies {};
+  std::vector<PakCatalogBase> dependencies;
 
   //! Canonical digest of physical entries, deletions and ordered base and
   //! dependency identities.
@@ -66,8 +67,11 @@ struct PakCatalog final {
     -> Result<void, std::string>;
   OXGN_DATA_NDAPI auto Encode() const
     -> Result<std::vector<std::byte>, std::string>;
+  //! Decodes an encoded catalog; a version this build cannot read is
+  //! `CookedOpenFailure::kUnsupportedVersion`, anything malformed
+  //! `kCorrupt`.
   OXGN_DATA_NDAPI static auto Decode(std::span<const std::byte> bytes)
-    -> Result<PakCatalog, std::string>;
+    -> Result<PakCatalog, CookedOpenError>;
 };
 
 } // namespace oxygen::data

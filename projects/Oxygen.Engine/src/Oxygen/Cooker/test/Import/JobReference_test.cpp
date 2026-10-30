@@ -5,14 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -20,9 +23,17 @@ namespace {
 using oxygen::content::VirtualPathError;
 using oxygen::content::VirtualPathRuleSet;
 using oxygen::content::import::ImportRequest;
+using oxygen::content::import::Mount;
+using oxygen::content::import::MountKind;
+using oxygen::content::import::MountOrigin;
+using oxygen::content::import::MountRole;
+using oxygen::content::import::MountScope;
+using oxygen::content::import::MountState;
+using oxygen::content::import::MountTable;
 using oxygen::content::import::PhysicsImportSettings;
 using oxygen::content::import::internal::AssetReferenceRefusal;
 using oxygen::content::import::internal::AssetReferenceRefused;
+using oxygen::content::import::internal::BuildMountedCookedRoots;
 using oxygen::content::import::internal::DescribeLookup;
 using oxygen::content::import::internal::kReferenceInvalidCode;
 using oxygen::content::import::internal::kReferenceUnmountedCode;
@@ -144,6 +155,48 @@ NOLINT_TEST(JobReferenceTest, LookupDescriptionNamesTheFilesLookedFor)
     "'../Textures/Brick.otex' resolves to /Content/Textures/Brick.otex; looked "
     "for C:/Cooked/Content/Textures/Brick.otex, "
     "C:/Base/Content/Textures/Brick.otex");
+}
+
+//! A job reads its output root, then the bound libraries of its source's
+//! mount table in table order, then its cooked context roots; a `Source`
+//! mount and an `Invalid` or missing library are never read.
+NOLINT_TEST(JobReferenceTest, JobReadsTheBoundLibrariesOfItsMountTable)
+{
+  const auto mount = [](const std::string& name, const MountKind kind,
+                       const MountState state) -> Mount {
+    return Mount {
+      .name = name,
+      .kind = kind,
+      .scope = MountScope::kDeclared,
+      .declared_path = std::nullopt,
+      .folder = std::filesystem::path { "C:/Libs" } / name,
+      .origin = MountOrigin::kCommitted,
+      .origin_file = {},
+      .state = state,
+      .role = MountRole::kShared,
+      .findings = {},
+    };
+  };
+  auto table = std::make_shared<MountTable>();
+  table->mounts = {
+    mount("Content", MountKind::kSource, MountState::kBound),
+    mount("Vehicles", MountKind::kCooked, MountState::kBound),
+    mount("Broken", MountKind::kCooked, MountState::kInvalid),
+    mount("Gone", MountKind::kCooked, MountState::kMissing),
+    mount("Props", MountKind::kCooked, MountState::kBound),
+  };
+  auto request = MaterialRequest();
+  request.cooked_root = std::filesystem::path { "C:/Cooked" };
+  request.cooked_context_roots = { std::filesystem::path { "C:/Context" } };
+  request.source_mounts = table;
+
+  EXPECT_EQ(BuildMountedCookedRoots(request),
+    (std::vector<std::filesystem::path> {
+      "C:/Cooked",
+      "C:/Libs/Vehicles",
+      "C:/Libs/Props",
+      "C:/Context",
+    }));
 }
 
 } // namespace

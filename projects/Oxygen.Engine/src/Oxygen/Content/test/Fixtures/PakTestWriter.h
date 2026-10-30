@@ -12,7 +12,9 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <ios>
+#include <iterator>
 #include <optional>
 #include <span>
 #include <utility>
@@ -26,8 +28,6 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Serio/FileStream.h>
-#include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::testing {
 
@@ -70,6 +70,10 @@ public:
   //! Writes the pak to `pak_path_`.
   void Write(const Config& config);
 
+  //! The bytes of the pak `config` describes.
+  [[nodiscard]] static auto Encode(const Config& config)
+    -> std::vector<std::byte>;
+
 private:
   std::filesystem::path pak_path_;
 };
@@ -110,6 +114,15 @@ inline PakTestWriter::PakTestWriter(std::filesystem::path pak_path)
 
 inline void PakTestWriter::Write(const Config& config)
 {
+  std::ofstream out(pak_path_, std::ios::binary);
+  std::ranges::transform(Encode(config), std::ostreambuf_iterator<char>(out),
+    [](const std::byte b) -> char { return static_cast<char>(b); });
+  ASSERT_TRUE(out.good());
+}
+
+inline auto PakTestWriter::Encode(const Config& config)
+  -> std::vector<std::byte>
+{
   // The catalog carries the fixture's default identity unless `source_key`
   // overrides both it and the header, so a test can make the two disagree by
   // editing only `header.source_identity`.
@@ -135,11 +148,11 @@ inline void PakTestWriter::Write(const Config& config)
   catalog.catalog_digest = catalog.ComputeDigest().value();
   const auto catalog_bytes = catalog.Encode().value();
 
-  serio::FileStream<> stream(
-    pak_path_, std::ios::out | std::ios::trunc | std::ios::binary);
-  serio::Writer writer(stream);
-  const auto packed = writer.ScopedAlignment(1U);
-  ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { &header, 1U })));
+  auto bytes = std::vector<std::byte> {};
+  const auto append = [&bytes](const std::span<const std::byte> blob) {
+    bytes.insert(bytes.end(), blob.begin(), blob.end());
+  };
+  append(std::as_bytes(std::span { &header, 1U }));
 
   auto footer = config.footer;
   auto offset = uint64_t { sizeof(header) };
@@ -151,7 +164,7 @@ inline void PakTestWriter::Write(const Config& config)
       .entry_size = sizeof(data::pak::core::BufferResourceDesc),
     };
     const auto buffer_bytes = std::as_bytes(std::span(config.buffers));
-    ASSERT_TRUE(writer.WriteBlob(buffer_bytes));
+    append(buffer_bytes);
     offset += buffer_bytes.size();
   }
 
@@ -178,7 +191,7 @@ inline void PakTestWriter::Write(const Config& config)
 
     for (const auto& entry : config.physics_resources) {
       if (!entry.payload.empty()) {
-        ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span(entry.payload))));
+        append(std::as_bytes(std::span(entry.payload)));
       }
     }
     offset += region_size;
@@ -189,17 +202,18 @@ inline void PakTestWriter::Write(const Config& config)
       .entry_size = sizeof(data::pak::physics::PhysicsResourceDesc),
     };
     const auto table_bytes = std::as_bytes(std::span(descriptors));
-    ASSERT_TRUE(writer.WriteBlob(table_bytes));
+    append(table_bytes);
     offset += table_bytes.size();
   }
 
-  ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span(catalog_bytes))));
+  append(std::as_bytes(std::span(catalog_bytes)));
   footer.directory_offset = offset;
   footer.directory_size = 0U;
   footer.asset_count = 0U;
   footer.catalog_offset = offset;
   footer.catalog_size = catalog_bytes.size();
-  ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { &footer, 1U })));
+  append(std::as_bytes(std::span { &footer, 1U }));
+  return bytes;
 }
 
 } // namespace oxygen::content::testing

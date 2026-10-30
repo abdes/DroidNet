@@ -26,6 +26,7 @@
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
@@ -36,6 +37,8 @@
 
 using oxygen::content::PakFile;
 using oxygen::data::AssetKey;
+using oxygen::data::CookedOpenError;
+using oxygen::data::CookedOpenFailure;
 using oxygen::data::pak::core::AssetDirectoryEntry;
 using oxygen::data::pak::core::PakBrowseIndexEntry;
 using oxygen::data::pak::core::PakBrowseIndexHeader;
@@ -177,37 +180,17 @@ auto ReadPakHeader(oxygen::serio::FileStream<>& stream,
   if (!header_result) {
     LOG_F(
       ERROR, "Failed to read pak header: {}", header_result.error().message());
-    throw std::runtime_error("Failed to read pak header");
+    throw CookedOpenError(
+      CookedOpenFailure::kWrongFormat, "File too small to hold a pak header");
   }
 
   const auto header = header_result.value();
-  const auto source_key_result
-    = oxygen::data::SourceKey::FromBytes(header.source_identity);
-  if (!source_key_result.has_value()) {
-    LOG_F(
-      ERROR, "Invalid pak source_identity: expected canonical UUIDv7 bytes");
-    throw std::runtime_error("Invalid pak file source identity");
-  }
-  source_key_out = source_key_result.value();
+  PakFile::CheckHeader(header);
+  source_key_out
+    = oxygen::data::SourceKey::FromBytes(header.source_identity).value();
   LOG_F(INFO, "format version  : {}", header.version);
   LOG_F(INFO, "content version : {}", header.content_version);
   LOG_F(INFO, "pak source_identity        : {}", source_key_out);
-
-  if (!std::ranges::equal(
-        std::span { header.magic }, oxygen::data::pak::core::kPakHeaderMagic)) {
-    LOG_F(ERROR, "Invalid pak file header magic");
-    throw std::runtime_error("Invalid pak file header magic");
-  }
-
-  if (header.version != oxygen::data::pak::core::kCurrentPakFormatVersion) {
-    const auto msg = std::string("Unsupported PAK format version: ")
-      + std::to_string(header.version) + " (this build loads v"
-      + std::to_string(oxygen::data::pak::core::kCurrentPakFormatVersion)
-      + " only).";
-    LOG_F(ERROR, "{}", msg);
-    throw std::runtime_error(msg);
-  }
-
   return header;
 }
 
@@ -242,15 +225,7 @@ auto ReadPakFooter(oxygen::serio::FileStream<>& stream) -> PakFooter
   LOG_F(INFO, "directory offset : {}", footer.directory_offset);
   LOG_F(INFO, "directory size   : {}", footer.directory_size);
   LOG_F(INFO, "asset count      : {}", footer.asset_count);
-
-  const auto footer_magic = std::as_bytes(std::span { footer.footer_magic });
-  const auto expected_footer_magic
-    = std::as_bytes(std::span { oxygen::data::pak::core::kPakFooterMagic });
-  if (!std::ranges::equal(footer_magic, expected_footer_magic)) {
-    LOG_F(ERROR, "Invalid pak file footer magic");
-    throw std::runtime_error("Invalid pak file footer magic");
-  }
-
+  PakFile::CheckFooter(footer, file_size);
   return footer;
 }
 
@@ -327,15 +302,6 @@ auto LoadPakCatalog(oxygen::serio::FileStream<>& stream,
   const ParsedPakMetadata& metadata) -> oxygen::data::PakCatalog
 {
   const auto& footer = metadata.footer;
-  const auto size = stream.Size();
-  if (!size || *size < sizeof(PakFooter)
-    || footer.catalog_offset < sizeof(PakHeader) || footer.catalog_size == 0U
-    || footer.catalog_offset > *size - sizeof(PakFooter)
-    || footer.catalog_size
-      > *size - sizeof(PakFooter) - footer.catalog_offset) {
-    throw std::runtime_error(
-      "Missing or invalid embedded PAK catalog; recook content");
-  }
   const auto require_before_catalog
     = [&](const uint64_t offset, const uint64_t length) -> void {
     if (length != 0U
@@ -375,7 +341,7 @@ auto LoadPakCatalog(oxygen::serio::FileStream<>& stream,
   }
   auto catalog = oxygen::data::PakCatalog::Decode(*bytes);
   if (!catalog) {
-    throw std::runtime_error(catalog.error());
+    throw CookedOpenError(catalog.error());
   }
   if (catalog->source_key != metadata.source_key
     || catalog->content_version != metadata.header.content_version
@@ -617,27 +583,80 @@ PakFile::PakFile(const std::filesystem::path& path)
   LOG_SCOPE_FUNCTION(1);
   LOG_F(INFO, "file : {}", path.string());
 
-  const auto metadata = LoadPakMetadata(*meta_stream_);
-  catalog_ = LoadPakCatalog(*meta_stream_, metadata);
-  header_ = metadata.header;
-  source_key_ = metadata.source_key;
-  footer_ = metadata.footer;
-  directory_ = metadata.directory;
-  key_to_index_ = metadata.key_to_index;
-  InitializeResourceTablesFromFooter();
+  // Every refusal of the file's bytes is typed: what is not a wrong format
+  // or version is a malformed pak.
+  try {
+    const auto metadata = LoadPakMetadata(*meta_stream_);
+    catalog_ = LoadPakCatalog(*meta_stream_, metadata);
+    header_ = metadata.header;
+    source_key_ = metadata.source_key;
+    footer_ = metadata.footer;
+    directory_ = metadata.directory;
+    key_to_index_ = metadata.key_to_index;
+    InitializeResourceTablesFromFooter();
 
-  const auto size_result = meta_stream_->Size();
-  if (!size_result) {
-    LOG_F(
-      ERROR, "Failed to get pak file size: {}", size_result.error().message());
-    throw std::runtime_error("Failed to get pak file size");
+    const auto size_result = meta_stream_->Size();
+    if (!size_result) {
+      LOG_F(ERROR, "Failed to get pak file size: {}",
+        size_result.error().message());
+      throw std::runtime_error("Failed to get pak file size");
+    }
+
+    auto parsed_browse
+      = LoadBrowseIndex(*meta_stream_, size_result.value(), footer_);
+    browse_index_ = std::move(parsed_browse.entries);
+    browse_vpath_to_key_ = std::move(parsed_browse.vpath_to_key);
+    browse_textures_ = std::move(parsed_browse.textures);
+  } catch (const CookedOpenError&) {
+    throw;
+  } catch (const std::runtime_error& ex) {
+    throw CookedOpenError(CookedOpenFailure::kCorrupt, ex.what());
   }
+}
 
-  auto parsed_browse
-    = LoadBrowseIndex(*meta_stream_, size_result.value(), footer_);
-  browse_index_ = std::move(parsed_browse.entries);
-  browse_vpath_to_key_ = std::move(parsed_browse.vpath_to_key);
-  browse_textures_ = std::move(parsed_browse.textures);
+auto PakFile::CheckHeader(const PakHeader& header) -> void
+{
+  if (!std::ranges::equal(
+        std::span { header.magic }, oxygen::data::pak::core::kPakHeaderMagic)) {
+    LOG_F(ERROR, "Invalid pak file header magic");
+    throw CookedOpenError(
+      CookedOpenFailure::kWrongFormat, "Invalid pak file header magic");
+  }
+  if (header.version != oxygen::data::pak::core::kCurrentPakFormatVersion) {
+    const auto msg = std::string("Unsupported PAK format version: ")
+      + std::to_string(header.version) + " (this build loads v"
+      + std::to_string(oxygen::data::pak::core::kCurrentPakFormatVersion)
+      + " only).";
+    LOG_F(ERROR, "{}", msg);
+    throw CookedOpenError(CookedOpenFailure::kUnsupportedVersion, msg);
+  }
+  if (!oxygen::data::SourceKey::FromBytes(header.source_identity).has_value()) {
+    LOG_F(
+      ERROR, "Invalid pak source_identity: expected canonical UUIDv7 bytes");
+    throw CookedOpenError(
+      CookedOpenFailure::kCorrupt, "Invalid pak file source identity");
+  }
+}
+
+auto PakFile::CheckFooter(const PakFooter& footer, const uint64_t file_size)
+  -> void
+{
+  const auto footer_magic = std::as_bytes(std::span { footer.footer_magic });
+  const auto expected_footer_magic
+    = std::as_bytes(std::span { oxygen::data::pak::core::kPakFooterMagic });
+  if (!std::ranges::equal(footer_magic, expected_footer_magic)) {
+    LOG_F(ERROR, "Invalid pak file footer magic");
+    throw CookedOpenError(
+      CookedOpenFailure::kCorrupt, "Invalid pak file footer magic");
+  }
+  if (file_size < sizeof(PakHeader) + sizeof(PakFooter)
+    || footer.catalog_offset < sizeof(PakHeader) || footer.catalog_size == 0U
+    || footer.catalog_offset > file_size - sizeof(PakFooter)
+    || footer.catalog_size
+      > file_size - sizeof(PakFooter) - footer.catalog_offset) {
+    throw CookedOpenError(CookedOpenFailure::kCorrupt,
+      "Missing or invalid embedded PAK catalog; recook content");
+  }
 }
 
 auto PakFile::ValidateCrc32Integrity() const -> void

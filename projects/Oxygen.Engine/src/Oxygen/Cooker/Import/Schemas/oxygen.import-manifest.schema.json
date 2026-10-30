@@ -174,11 +174,12 @@
           "minLength": 1
         },
         "kind": {
-          "enum": ["Source", "Cooked", "Pak"],
+          "description": "Source, a folder of source files, or Cooked, a library: a loose cooked root or a .pak file. The mount table checks it (mount.kind_unknown).",
+          "type": "string",
           "default": "Source"
         },
         "path": {
-          "description": "The mount's folder (a .pak file for a Pak mount), relative to the project root.",
+          "description": "The mount's folder (a loose cooked root or a .pak file for a Cooked mount), relative to the project root.",
           "type": "string",
           "minLength": 1
         }

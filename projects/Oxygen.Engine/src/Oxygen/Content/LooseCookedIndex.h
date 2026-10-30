@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -18,6 +19,7 @@
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/CookedOpenError.h> // IWYU pragma: export
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 
@@ -35,7 +37,7 @@ struct FileIntegrity final {
   std::string relative_path;
   uint64_t size = 0;
   base::Sha256Digest sha256 {};
-  std::optional<data::loose_cooked::FileKind> kind {};
+  std::optional<data::loose_cooked::FileKind> kind;
   //! Virtual path of a texture descriptor; empty for every other file.
   std::string virtual_path;
   //! Mount path of the source that produced a texture descriptor or an
@@ -75,6 +77,14 @@ public:
     const std::filesystem::path& cooked_root) -> LooseCookedIndex;
   OXGN_CNTT_API static auto LoadFromFile(
     const std::filesystem::path& index_path) -> LooseCookedIndex;
+  //! Loads the bytes of an index file.
+  /*!
+   @throw data::CookedOpenError `kWrongFormat` for bytes that are not an
+     index, `kUnsupportedVersion` for another index version, `kCorrupt` for
+     a malformed index.
+  */
+  OXGN_CNTT_API static auto LoadFromBytes(std::span<const std::byte> bytes)
+    -> LooseCookedIndex;
 
   OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;
 

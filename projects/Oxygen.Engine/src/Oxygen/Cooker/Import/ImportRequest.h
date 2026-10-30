@@ -153,13 +153,13 @@ struct ImportRequest final {
    image, resolve through it (`MountTable::LocateReference`). Set with
    `source_mount_path`; a job reading such a reference requires it.
   */
-  std::shared_ptr<const MountTable> source_mounts {};
+  std::shared_ptr<const MountTable> source_mounts;
 
   //! Optional frozen source inputs; source_path retains its authored identity.
-  std::shared_ptr<const CapturedInputSet> captured_inputs {};
+  std::shared_ptr<const CapturedInputSet> captured_inputs;
 
   //! Pending synchronous preparation reads, transferred to the job observer.
-  std::vector<ImportSourceObservation> preparation_inputs {};
+  std::vector<ImportSourceObservation> preparation_inputs;
 
   //! Identity of the one asset a single-asset job cooks, or of the input
   //! source an input job cooks.
@@ -171,10 +171,10 @@ struct ImportRequest final {
    (`/Content/Input/Player.input/Jump.oiact`), and a model job each material,
    geometry, texture and scene (`/Content/Ship/Ship.glb/Paint.omat`).
   */
-  std::string asset_virtual_path {};
+  std::string asset_virtual_path;
 
   //! Optional additional source files for multi-source imports.
-  std::vector<ImportSource> additional_sources {};
+  std::vector<ImportSource> additional_sources;
 
   //! Optional destination directory (the loose cooked root).
   /*!
@@ -183,7 +183,7 @@ struct ImportRequest final {
     If unset, the importer derives the cooked root from `source_path` and
     `OutputMountRoot`, ensuring the cooked root ends with the mount's name.
   */
-  std::optional<std::filesystem::path> cooked_root {};
+  std::optional<std::filesystem::path> cooked_root;
 
   //! Loose cooked container layout conventions.
   /*!
@@ -194,17 +194,17 @@ struct ImportRequest final {
   LooseCookedLayout loose_cooked_layout = {};
 
   //! Optional explicit source GUID for the cooked container.
-  std::optional<data::SourceKey> source_key {};
+  std::optional<data::SourceKey> source_key;
 
   //! Validated source identity, shared across mesh work items.
-  std::shared_ptr<const SurfaceProvenance> surface_provenance {};
+  std::shared_ptr<const SurfaceProvenance> surface_provenance;
 
   //! The node continuity and published nodes of the model's import record;
   //! set when a model import runs from its record.
-  std::optional<ModelImportInputs> model_import {};
+  std::optional<ModelImportInputs> model_import;
 
   //! Optional human-readable job name for logging and UI.
-  std::optional<std::string> job_name {};
+  std::optional<std::string> job_name;
 
   //! Optional orchestration metadata for batch scheduling.
   /*!
@@ -219,7 +219,7 @@ struct ImportRequest final {
     std::vector<std::string> depends_on;
   };
 
-  std::optional<OrchestrationMetadata> orchestration {};
+  std::optional<OrchestrationMetadata> orchestration;
 
   //! Import options.
   ImportOptions options = {};
@@ -231,7 +231,7 @@ struct ImportRequest final {
 
    * domain rather than format-based import routing.
   */
-  std::optional<PhysicsImportSettings> physics {};
+  std::optional<PhysicsImportSettings> physics;
 
   //! Optional buffer-container request payload.
   /*!
@@ -239,14 +239,14 @@ struct ImportRequest final {
    * buffer-container
    domain rather than format-based import routing.
   */
-  std::optional<BufferContainerPayload> buffer_container {};
+  std::optional<BufferContainerPayload> buffer_container;
 
   //! Optional input-import request payload.
   /*!
    Presence indicates this request must be handled by the input-import domain
    rather than format-based import routing.
   */
-  std::optional<InputPayload> input {};
+  std::optional<InputPayload> input;
 
   //! Optional material-descriptor request payload.
   /*!
@@ -254,7 +254,7 @@ struct ImportRequest final {
    * material-descriptor
    domain rather than format-based import routing.
   */
-  std::optional<MaterialDescriptorPayload> material_descriptor {};
+  std::optional<MaterialDescriptorPayload> material_descriptor;
 
   //! Optional physics material-descriptor request payload.
   /*!
@@ -264,8 +264,7 @@ struct ImportRequest final {
 
    * routing.
   */
-  std::optional<PhysicsMaterialDescriptorPayload>
-    physics_material_descriptor {};
+  std::optional<PhysicsMaterialDescriptorPayload> physics_material_descriptor;
 
   //! Optional collision-shape-descriptor request payload.
   /*!
@@ -274,7 +273,7 @@ struct ImportRequest final {
    * collision-shape-descriptor domain rather than format-based import routing.
 
    */
-  std::optional<CollisionShapeDescriptorPayload> collision_shape_descriptor {};
+  std::optional<CollisionShapeDescriptorPayload> collision_shape_descriptor;
 
   //! Optional geometry-descriptor request payload.
   /*!
@@ -283,7 +282,7 @@ struct ImportRequest final {
    * geometry-descriptor
    domain rather than format-based import routing.
   */
-  std::optional<GeometryDescriptorPayload> geometry_descriptor {};
+  std::optional<GeometryDescriptorPayload> geometry_descriptor;
 
   //! Optional scene-descriptor request payload.
   /*!
@@ -292,20 +291,18 @@ struct ImportRequest final {
    * scene-descriptor
    domain rather than format-based import routing.
   */
-  std::optional<SceneDescriptorPayload> scene_descriptor {};
+  std::optional<SceneDescriptorPayload> scene_descriptor;
 
   //! Optional cooked roots mounted for resolver-only scene lookup context.
   /*!
    The sidecar pipeline mounts these roots in the listed order after the
-
-   * request cooked root, so later entries have higher precedence in
-
-   * `content::VirtualPathResolver`. A repeated root keeps its last position,
-
-   * allowing callers to explicitly place the destination root in this order.
+   request cooked root and the bound `Cooked` mounts of `source_mounts`, so
+   later entries have higher precedence in `content::VirtualPathResolver`. A
+   repeated root keeps its last position, allowing callers to explicitly
+   place the destination root in this order.
 
  */
-  std::vector<std::filesystem::path> cooked_context_roots {};
+  std::vector<std::filesystem::path> cooked_context_roots;
 
   //! Optional inflight scene contexts for sidecar target resolution.
   /*!
@@ -315,7 +312,7 @@ struct ImportRequest final {
 
    * fails with an ambiguity diagnostic.
   */
-  std::vector<InflightSceneContext> inflight_scene_contexts {};
+  std::vector<InflightSceneContext> inflight_scene_contexts;
 
   //! The name of a model's scene: its identity's leaf without the extension.
   /*!

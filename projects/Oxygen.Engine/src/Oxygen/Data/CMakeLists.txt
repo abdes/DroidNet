@@ -69,6 +69,7 @@ set(
   "SurfaceId.h"
   "SurfaceInventory.h"
   "MeshType.h"
+  "CookedOpenError.h"
   "PakCatalog.h"
   "PakFormat.h"
   "PakFormatVersions.h"

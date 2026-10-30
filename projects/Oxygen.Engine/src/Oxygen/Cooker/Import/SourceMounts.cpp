@@ -13,7 +13,6 @@
 #include <ios>
 #include <optional>
 #include <ranges>
-#include <regex>
 #include <span>
 #include <string>
 #include <string_view>
@@ -24,6 +23,7 @@
 #include <vector>
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -34,6 +34,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
+#include <Oxygen/Cooker/Loose/LibraryFacts.h>
 
 namespace oxygen::content::import {
 
@@ -41,9 +42,6 @@ namespace {
 
   namespace fs = std::filesystem;
   using nlohmann::json;
-
-  constexpr std::string_view kBreaksNameRule
-    = "it breaks the mount name rule of oxygen.mounts.schema.json";
 
   //! Where a mounts file stands: the `--mounts` file and the project's own
   //! may override committed paths; a parent file may not.
@@ -176,18 +174,6 @@ namespace {
     observer_ptr<std::vector<ImportDiagnostic>> diagnostics_;
   };
 
-  auto MountNamePattern() -> const std::regex&
-  {
-    static const auto pattern = std::regex {
-      json::parse(kMountsSchema)
-        .at("definitions")
-        .at("mount_name")
-        .at("pattern")
-        .get<std::string>(),
-    };
-    return pattern;
-  }
-
   auto FoldName(std::string_view name) -> std::string
   {
     auto out = std::string { name };
@@ -219,20 +205,81 @@ namespace {
     return fs::path { text };
   }
 
-  //! Resolved through the file system to its final path; a folder that does
-  //! not exist yet goes through its deepest existing parent, and one with no
-  //! existing parent keeps its text form.
-  auto Canonical(const fs::path& path) -> fs::path
+  //! `path` through the file system to its final spelling, without a
+  //! trailing separator.
+  auto Canonical(const IMountFileSystem& files, const fs::path& path)
+    -> fs::path
   {
-    auto ec = std::error_code {};
-    auto out = fs::weakly_canonical(path, ec);
-    if (ec) {
-      out = path.lexically_normal();
-    }
+    auto out = files.Canonical(path);
     if (!out.has_filename() && out.has_relative_path()) {
       out = out.parent_path();
     }
     return out;
+  }
+
+  class RealFileSystem final : public IMountFileSystem {
+  public:
+    [[nodiscard]] auto KindOf(const fs::path& path) const
+      -> lc::PathKind override
+    {
+      auto ec = std::error_code {};
+      const auto status = fs::status(path, ec);
+      if (fs::is_directory(status)) {
+        return lc::PathKind::kFolder;
+      }
+      return fs::exists(status) ? lc::PathKind::kFile : lc::PathKind::kNone;
+    }
+
+    [[nodiscard]] auto SizeOf(const fs::path& path) const
+      -> std::optional<uint64_t> override
+    {
+      auto ec = std::error_code {};
+      const auto size = fs::file_size(path, ec);
+      return ec ? std::nullopt : std::optional { uint64_t { size } };
+    }
+
+    [[nodiscard]] auto Read(
+      const fs::path& path, const lc::ByteRange range) const
+      -> std::optional<std::vector<std::byte>> override
+    {
+      auto stream = std::ifstream { path, std::ios::binary };
+      if (!stream.seekg(static_cast<std::streamoff>(range.offset))) {
+        return std::nullopt;
+      }
+      auto bytes = std::vector<std::byte>(static_cast<size_t>(range.size));
+      // NOLINTNEXTLINE(*-reinterpret-cast): istream reads into chars.
+      stream.read(reinterpret_cast<char*>(bytes.data()),
+        static_cast<std::streamsize>(range.size));
+      if (stream.gcount() != static_cast<std::streamsize>(range.size)) {
+        return std::nullopt;
+      }
+      return bytes;
+    }
+
+    [[nodiscard]] auto Canonical(const fs::path& path) const
+      -> fs::path override
+    {
+      auto ec = std::error_code {};
+      auto out = fs::weakly_canonical(path, ec);
+      return ec ? path.lexically_normal() : out;
+    }
+  };
+
+  //! The whole file `path` as text, or nothing when it cannot be read.
+  auto ReadText(const IMountFileSystem& files, const fs::path& path)
+    -> std::optional<std::string>
+  {
+    const auto size = files.SizeOf(path);
+    const auto bytes = size.has_value()
+      ? files.Read(path, { .offset = 0, .size = *size })
+      : std::optional<std::vector<std::byte>> {};
+    if (!bytes.has_value()) {
+      return std::nullopt;
+    }
+    auto text = std::string(bytes->size(), '\0');
+    std::ranges::transform(*bytes, text.begin(),
+      [](const std::byte b) -> char { return static_cast<char>(b); });
+    return text;
   }
 
   auto Components(const fs::path& path) -> std::vector<fs::path>
@@ -290,9 +337,16 @@ namespace {
   auto CheckName(std::string_view name, MountTableOwner owner,
     const Subject& subject, const Reporter& reporter) -> bool
   {
-    if (!IsValidMountName(name)) {
-      reporter.Report(
-        mount_codes::kNameInvalid, subject, name, kBreaksNameRule);
+    if (name.starts_with('.')) {
+      reporter.Report(mount_codes::kNameInvalid, subject, name,
+        "a mount name never starts with '.'");
+      return false;
+    }
+    if (const auto error = content::ValidateMountName(name);
+      error.has_value()) {
+      reporter.Report(mount_codes::kNameInvalid, subject, name,
+        fmt::format("it breaks the virtual path mount rule ({})",
+          content::to_string(*error)));
       return false;
     }
     if (owner == MountTableOwner::kProject
@@ -305,16 +359,16 @@ namespace {
     return true;
   }
 
-  auto ParseMountsFile(const fs::path& path, const Reporter& reporter)
-    -> std::optional<json>
+  auto ParseMountsFile(const IMountFileSystem& files, const fs::path& path,
+    const Reporter& reporter) -> std::optional<json>
   {
     const auto subject = Subject { .file = path, .field = {}, .mount = {} };
-    auto stream = std::ifstream { path, std::ios::binary };
-    if (!stream) {
+    const auto text = ReadText(files, path);
+    if (!text.has_value()) {
       reporter.Report(mount_codes::kFileInvalid, subject, "it cannot be read");
       return std::nullopt;
     }
-    auto doc = json::parse(stream, nullptr, false);
+    auto doc = json::parse(*text, nullptr, false);
     if (doc.is_discarded() || !doc.is_object()) {
       reporter.Report(
         mount_codes::kFileInvalid, subject, "it is not a JSON object");
@@ -376,10 +430,10 @@ namespace {
 
   //! Reads one mounts file. A file with an error contributes no binding;
   //! `"root": true` still stops the walk.
-  auto ReadMountsFile(const MountsFile& header, MountTableOwner owner,
-    const Reporter& reporter) -> ReadResult
+  auto ReadMountsFile(const IMountFileSystem& files, const MountsFile& header,
+    MountTableOwner owner, const Reporter& reporter) -> ReadResult
   {
-    const auto doc = ParseMountsFile(header.file, reporter);
+    const auto doc = ParseMountsFile(files, header.file, reporter);
     if (!doc.has_value()) {
       return {};
     }
@@ -421,9 +475,11 @@ namespace {
     -> std::vector<MountsFile>
   {
     DLOG_SCOPE_F(1, "Search mounts files");
+    const auto& file_system = *request.file_system;
     auto files = std::vector<MountsFile> {};
     const auto read = [&](const MountsFile& header) -> bool {
-      auto result = ReadMountsFile(header, request.owner, reporter);
+      auto result
+        = ReadMountsFile(file_system, header, request.owner, reporter);
       if (result.file.has_value()) {
         files.push_back(std::move(*result.file));
       } else {
@@ -442,8 +498,7 @@ namespace {
       const auto option = request.mounts_option->is_absolute()
         ? *request.mounts_option
         : request.working_directory / *request.mounts_option;
-      auto ec = std::error_code {};
-      if (!fs::is_regular_file(option, ec)) {
+      if (file_system.KindOf(option) != lc::PathKind::kFile) {
         reporter.Report(mount_codes::kFileInvalid,
           Subject { .file = option, .field = {}, .mount = {} },
           "the file named by --mounts does not exist");
@@ -467,12 +522,11 @@ namespace {
       }
     }
 
-    auto ec = std::error_code {};
     auto dir = project_root;
     auto level = MountsFileLevel::kProject;
     while (true) {
       const auto candidate = dir / kMountsFileName;
-      if (!fs::is_regular_file(candidate, ec)) {
+      if (file_system.KindOf(candidate) != lc::PathKind::kFile) {
         DLOG_F(1, "no {} file in '{}'", level, dir.string());
       } else if (read(MountsFile {
                    .file = candidate,
@@ -540,6 +594,8 @@ namespace {
             .origin = MountOrigin::kNone,
             .origin_file = {},
             .state = MountState::kUnbound,
+            .role = MountRole::kShared,
+            .findings = {},
           },
           .committed = std::nullopt,
           .binding = std::nullopt,
@@ -599,6 +655,8 @@ namespace {
               .origin = MountOrigin::kNone,
               .origin_file = {},
               .state = MountState::kUnbound,
+              .role = MountRole::kShared,
+              .findings = {},
             },
             .committed = std::nullopt,
             .binding = binding,
@@ -667,13 +725,18 @@ namespace {
         Bind(entry);
         table_->mounts.push_back(std::move(entry.mount));
       }
-      CheckSourceFolders();
+      CheckFolders();
     }
 
   private:
     [[nodiscard]] auto DeclaredIn() const -> fs::path
     {
       return fs::path { request_->declared_in };
+    }
+
+    [[nodiscard]] auto Files() const -> const IMountFileSystem&
+    {
+      return *request_->file_system;
     }
 
     [[nodiscard]] auto DescribeOrigin(const Mount& mount) const -> std::string
@@ -704,43 +767,90 @@ namespace {
       const auto& binding = *entry.binding;
       const auto text = ToPath(binding.path_text);
       mount.folder
-        = Canonical(IsAbsoluteText(text) ? text : binding.base / text);
+        = Canonical(Files(), IsAbsoluteText(text) ? text : binding.base / text);
       mount.origin = binding.origin;
       mount.origin_file = binding.origin_file;
+      mount.role = mount.kind == MountKind::kSource
+          && SegmentsBelow(mount.folder, table_->project_root).has_value()
+        ? MountRole::kOwn
+        : MountRole::kShared;
       const auto subject = Subject {
         .file = DescribeOrigin(mount),
         .field = {},
         .mount = mount.name,
       };
 
-      auto ec = std::error_code {};
-      const auto status = fs::status(mount.folder, ec);
-      if (!fs::exists(status)) {
+      const auto kind = Files().KindOf(mount.folder);
+      if (kind == lc::PathKind::kNone) {
         mount.state = MountState::kMissing;
         reporter_.Report(mount_codes::kFolderMissing, subject, mount.name,
           mount.folder.string());
         return;
       }
       mount.state = MountState::kBound;
-      const auto is_folder = fs::is_directory(status);
-      if ((mount.kind == MountKind::kPak) == is_folder) {
-        reporter_.Report(mount_codes::kPathKind, subject, to_string(mount.kind),
-          mount.name, is_folder ? "folder" : "file", mount.folder.string());
+      if (mount.kind == MountKind::kSource && kind == lc::PathKind::kFile) {
+        reporter_.Report(
+          mount_codes::kPathKind, subject, mount.name, mount.folder.string());
+      }
+      if (mount.kind == MountKind::kCooked) {
+        CheckLibrary(mount, subject);
       }
     }
 
-    auto CheckSourceFolders() -> void
+    //! Reads a bound `Cooked` mount as a library; a library rule it breaks
+    //! makes it `Invalid`.
+    auto CheckLibrary(Mount& mount, const Subject& subject) -> void
     {
-      auto sources = std::vector<observer_ptr<const Mount>> {};
+      const auto facts = lc::ReadLibraryFacts(Files(), mount.folder);
+      const auto folder = mount.folder.string();
+      const auto findings = Reporter { mount.findings };
+      if (facts.unreadable.has_value()) {
+        findings.Report(mount_codes::kLibraryFormatUnsupported, subject,
+          mount.name, folder, facts.unreadable->what());
+      }
+      if (facts.roots.size() > 1) {
+        findings.Report(mount_codes::kLibraryRootMultiple, subject, mount.name,
+          folder, fmt::format("'{}'", fmt::join(facts.roots, "', '")));
+      } else if (facts.roots.size() == 1 && facts.roots.front() != mount.name) {
+        findings.Report(mount_codes::kLibraryRootMismatch, subject, mount.name,
+          folder, facts.roots.front());
+      }
+      for (const auto& script : facts.external_scripts) {
+        findings.Report(mount_codes::kLibraryExternalScript, subject,
+          mount.name, folder, script);
+      }
+      if (!mount.findings.empty()) {
+        mount.state = MountState::kInvalid;
+        table_->diagnostics.insert(table_->diagnostics.end(),
+          mount.findings.begin(), mount.findings.end());
+      }
+    }
+
+    //! True when the mount's folder holds files of its own: a `Source`
+    //! folder, or a `Cooked` mount bound to a folder rather than a pak.
+    [[nodiscard]] auto HasFolder(const Mount& mount) const -> bool
+    {
+      if (mount.folder.empty()) {
+        return false;
+      }
+      return mount.kind == MountKind::kSource
+        || Files().KindOf(mount.folder) == lc::PathKind::kFolder;
+    }
+
+    auto CheckFolders() -> void
+    {
+      auto folders = std::vector<observer_ptr<const Mount>> {};
       for (const auto& mount : table_->mounts) {
-        if (mount.kind == MountKind::kSource && !mount.folder.empty()) {
-          sources.push_back(make_observer(&mount));
+        if (HasFolder(mount)) {
+          folders.push_back(make_observer(&mount));
         }
       }
-      for (const auto& [index, mount] : std::views::enumerate(sources)) {
-        CheckOutputFolder(*mount);
+      for (const auto& [index, mount] : std::views::enumerate(folders)) {
+        if (mount->kind == MountKind::kSource) {
+          CheckOutputFolder(*mount);
+        }
         for (const auto& other :
-          std::span(sources).subspan(static_cast<size_t>(index) + 1)) {
+          std::span(folders).subspan(static_cast<size_t>(index) + 1)) {
           if (SegmentsBelow(mount->folder, other->folder).has_value()
             || SegmentsBelow(other->folder, mount->folder).has_value()) {
             reporter_.Report(mount_codes::kFolderOverlap,
@@ -833,9 +943,12 @@ namespace {
                                           : "placeholder nothing binds");
         continue;
       }
-      LOG_F(INFO, "{} [{} {}] {} '{}' from {} '{}'{}", mount.name, mount.kind,
-        mount.scope, mount.state, mount.folder.string(), mount.origin,
-        DescribeOrigin(table, mount), DescribeBinding(mount));
+      LOG_F(INFO, "{} [{} {} {}] {} '{}' from {} '{}'{}", mount.name,
+        mount.kind, mount.scope, mount.role, mount.state, mount.folder.string(),
+        mount.origin, DescribeOrigin(table, mount), DescribeBinding(mount));
+      for (const auto& finding : mount.findings) {
+        LOG_F(INFO, "  {}: [{}] {}", mount.name, finding.code, finding.message);
+      }
     }
   }
 
@@ -902,7 +1015,7 @@ auto MountTable::Find(const std::string_view name) const
 auto MountTable::IsInOutputFolder(const fs::path& file) const -> bool
 {
   const auto canonical
-    = Canonical(file.is_absolute() ? file : project_root / file);
+    = Canonical(*file_system, file.is_absolute() ? file : project_root / file);
   return InOutputFolder(canonical.parent_path(), project_root);
 }
 
@@ -910,7 +1023,7 @@ auto MountTable::MountPathOf(const fs::path& file,
   std::vector<ImportDiagnostic>& findings) const -> std::optional<MountedSource>
 {
   const auto canonical
-    = Canonical(file.is_absolute() ? file : project_root / file);
+    = Canonical(*file_system, file.is_absolute() ? file : project_root / file);
   for (const auto& mount : mounts) {
     if (mount.kind != MountKind::kSource || mount.folder.empty()) {
       continue;
@@ -947,8 +1060,8 @@ auto MountTable::LocateReference(const fs::path& referrer,
   const CommittedPath& reference, std::vector<ImportDiagnostic>& findings) const
   -> std::optional<MountedSource>
 {
-  const auto holder
-    = Canonical(referrer.is_absolute() ? referrer : project_root / referrer);
+  const auto holder = Canonical(
+    *file_system, referrer.is_absolute() ? referrer : project_root / referrer);
   const auto subject = Subject {
     .file = holder,
     .field = std::string { reference.field },
@@ -980,20 +1093,29 @@ auto MountTable::LocateReference(const fs::path& referrer,
   return Locate(*this, project_root, subject, *resolved, findings);
 }
 
+auto RealMountFileSystem() -> const IMountFileSystem&
+{
+  static const auto files = RealFileSystem {};
+  return files;
+}
+
 auto IsValidMountName(const std::string_view name) -> bool
 {
-  return std::regex_match(name.begin(), name.end(), MountNamePattern());
+  return !name.starts_with('.')
+    && !content::ValidateMountName(name).has_value();
 }
 
 auto ResolveMountTable(const MountTableRequest& request) -> MountTable
 {
   auto table = MountTable {
-    .project_root = Canonical(request.project_root.is_absolute()
+    .project_root = Canonical(*request.file_system,
+      request.project_root.is_absolute()
         ? request.project_root
         : request.working_directory / request.project_root),
     .declared_in = request.declared_in,
     .mounts = {},
     .diagnostics = {},
+    .file_system = request.file_system,
   };
   LOG_SCOPE_F(INFO, "Resolve mounts of '{}' ({} declared in '{}')",
     table.project_root.string(), request.declarations.size(),

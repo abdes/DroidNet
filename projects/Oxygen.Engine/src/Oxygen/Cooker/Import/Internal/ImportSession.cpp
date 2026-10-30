@@ -636,7 +636,8 @@ auto ImportSession::Producer() const -> LooseCookedProducer
       return { .source = scene.source_path, .completes = target };
     }
   }
-  for (const auto& root : std::views::reverse(request_.cooked_context_roots)) {
+  const auto context_roots = internal::ContextCookedRoots(request_);
+  for (const auto& root : std::views::reverse(context_roots)) {
     const auto index_path = root / "container.index.bin";
     if (!std::filesystem::exists(base::ToNativePath(index_path))) {
       continue;

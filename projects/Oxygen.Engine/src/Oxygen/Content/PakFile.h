@@ -22,6 +22,7 @@
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PhysicsResource.h>
@@ -83,12 +84,34 @@ public:
   using PhysicsTableT = ResourceTable<data::PhysicsResource>;
 
   //! Open a .pak file for reading.
+  /*!
+   @throw data::CookedOpenError When the file is not a pak, has a format
+     version this build cannot read, or is malformed.
+   @throw std::system_error When the file cannot be opened.
+  */
   OXGN_CNTT_API explicit PakFile(const std::filesystem::path& path);
+
+  //! Checks a pak header: its magic, format version and source identity.
+  /*!
+   @throw data::CookedOpenError `kWrongFormat` for another magic,
+     `kUnsupportedVersion` for another format version, `kCorrupt` for an
+     invalid source identity.
+  */
+  OXGN_CNTT_API static auto CheckHeader(
+    const data::pak::core::PakHeader& header) -> void;
+
+  //! Checks a pak footer of a file of `file_size` bytes: its magic, and that
+  //! the embedded catalog lies between the header and the footer.
+  /*!
+   @throw data::CookedOpenError `kCorrupt` when either check fails.
+  */
+  OXGN_CNTT_API static auto CheckFooter(
+    const data::pak::core::PakFooter& footer, uint64_t file_size) -> void;
 
   ~PakFile() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(PakFile)
-  OXYGEN_DEFAULT_MOVABLE(PakFile)
+  OXYGEN_MAKE_NON_MOVABLE(PakFile)
 
   //=== File Information ===--------------------------------------------------//
 
@@ -126,7 +149,7 @@ public:
   //! texture table index.
   struct BrowseTextureEntry {
     std::string virtual_path;
-    data::pak::core::ResourceIndexT texture_index {};
+    data::pak::core::ResourceIndexT texture_index;
   };
 
   //! Check whether this pak contains an embedded browse index.

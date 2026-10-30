@@ -18,6 +18,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Loose/LibraryFacts.h>
 #include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::import {
@@ -83,12 +84,48 @@ namespace mount_codes {
       .message
       = "mount '{}' folder '{}' does not exist; a source needed from it fails",
     };
-  inline constexpr auto kPathKind = MountCode<std::string_view,
-    std::string_view, std::string_view, std::string_view> {
-    .id = "mount.path_kind",
-    .severity = ImportSeverity::kError,
-    .message = "{} mount '{}' names a {}: '{}'",
-  };
+  inline constexpr auto kKindUnknown
+    = MountCode<std::string_view, std::string_view> {
+        .id = "mount.kind_unknown",
+        .severity = ImportSeverity::kError,
+        .message = "mount '{}' has kind '{}': a mount is Source or Cooked",
+      };
+  inline constexpr auto kPathKind
+    = MountCode<std::string_view, std::string_view> {
+        .id = "mount.path_kind",
+        .severity = ImportSeverity::kError,
+        .message = "Source mount '{}' names a file: '{}'",
+      };
+  inline constexpr auto kLibraryFormatUnsupported
+    = MountCode<std::string_view, std::string_view, std::string_view> {
+        .id = "mount.library_format_unsupported",
+        .severity = ImportSeverity::kWarning,
+        .message = "library mount '{}' ('{}') cannot be read: {}; it "
+                   "contributes no assets",
+      };
+  inline constexpr auto kLibraryRootMismatch
+    = MountCode<std::string_view, std::string_view, std::string_view> {
+        .id = "mount.library_root_mismatch",
+        .severity = ImportSeverity::kWarning,
+        .message = "library mount '{}' ('{}') holds the root '{}': a "
+                   "library's one root is its mount name; it contributes no "
+                   "assets",
+      };
+  inline constexpr auto kLibraryRootMultiple
+    = MountCode<std::string_view, std::string_view, std::string_view> {
+        .id = "mount.library_root_multiple",
+        .severity = ImportSeverity::kWarning,
+        .message = "library mount '{}' ('{}') holds the roots {}: a library "
+                   "has one root; it contributes no assets",
+      };
+  inline constexpr auto kLibraryExternalScript
+    = MountCode<std::string_view, std::string_view, std::string_view> {
+        .id = "mount.library_external_script",
+        .severity = ImportSeverity::kWarning,
+        .message = "library mount '{}' ('{}') holds the script '{}' with an "
+                   "external source: only a Source mount supplies one; it "
+                   "contributes no assets",
+      };
   inline constexpr auto kParentIgnored = MountCode<std::string_view> {
     .id = "mount.parent_ignored",
     .severity = ImportSeverity::kWarning,
@@ -147,10 +184,9 @@ inline constexpr std::string_view kEngineMountName = "Engine";
 enum class MountKind : uint8_t {
   //! A folder of source files.
   kSource = 0,
-  //! A cooked folder.
+  //! A library: a loose cooked root (a folder holding `container.index.bin`)
+  //! or a `.pak` file.
   kCooked,
-  //! A `.pak` file.
-  kPak,
 };
 
 //! Whether a mount has a folder for this run.
@@ -161,6 +197,17 @@ enum class MountState : uint8_t {
   kUnbound,
   //! Its folder (or pak file) does not exist.
   kMissing,
+  //! A `Cooked` mount whose library breaks a library rule (its `findings`):
+  //! it contributes no assets.
+  kInvalid,
+};
+
+//! Whose content a mount holds.
+enum class MountRole : uint8_t {
+  //! A `Source` mount whose canonical folder lies inside the project root.
+  kOwn = 0,
+  //! Any other mount; a `Cooked` mount always.
+  kShared,
 };
 
 //! Which source gave a mount its folder.
@@ -206,10 +253,21 @@ enum class MountTableOwner : uint8_t {
     return "Source";
   case MountKind::kCooked:
     return "Cooked";
-  case MountKind::kPak:
-    return "Pak";
   }
   return "Unknown";
+}
+
+//! The kind `text` names, `Source` or `Cooked`, or nothing for any other
+//! text (`mount_codes::kKindUnknown`).
+[[nodiscard]] inline auto ParseMountKind(const std::string_view text)
+  -> std::optional<MountKind>
+{
+  for (const auto kind : { MountKind::kSource, MountKind::kCooked }) {
+    if (text == to_string(kind)) {
+      return kind;
+    }
+  }
+  return std::nullopt;
 }
 
 [[nodiscard]] inline auto to_string(MountState state) -> std::string_view
@@ -221,6 +279,19 @@ enum class MountTableOwner : uint8_t {
     return "Unbound";
   case MountState::kMissing:
     return "Missing";
+  case MountState::kInvalid:
+    return "Invalid";
+  }
+  return "Unknown";
+}
+
+[[nodiscard]] inline auto to_string(MountRole role) -> std::string_view
+{
+  switch (role) {
+  case MountRole::kOwn:
+    return "Own";
+  case MountRole::kShared:
+    return "Shared";
   }
   return "Unknown";
 }
@@ -251,6 +322,20 @@ enum class MountTableOwner : uint8_t {
   return "Unknown";
 }
 
+//! What a mount table reads from the file system: what paths name, their
+//! canonical spelling, and the bytes of mounts files and libraries.
+class IMountFileSystem : public lc::ILibraryFiles {
+public:
+  //! `path` resolved to its final spelling; a path that does not exist yet
+  //! resolves through its deepest existing parent, and one with no existing
+  //! parent keeps its text form.
+  [[nodiscard]] virtual auto Canonical(const std::filesystem::path& path) const
+    -> std::filesystem::path = 0;
+};
+
+//! The real file system.
+OXGN_COOK_NDAPI auto RealMountFileSystem() -> const IMountFileSystem&;
+
 //! One mount of the committed declaration.
 struct MountDeclaration final {
   std::string name;
@@ -274,6 +359,9 @@ struct MountTableRequest final {
   //! The mounts file named by `--mounts`, if any.
   std::optional<std::filesystem::path> mounts_option;
   MountTableOwner owner = MountTableOwner::kProject;
+  //! The file system the table reads; the table keeps it for its lookups.
+  observer_ptr<const IMountFileSystem> file_system
+    = make_observer(&RealMountFileSystem());
 };
 
 //! One mount of a resolved table. Calculated values are local facts of one
@@ -290,6 +378,10 @@ struct Mount final {
   //! The mounts file that gave the folder; empty for other origins.
   std::filesystem::path origin_file;
   MountState state = MountState::kUnbound;
+  MountRole role = MountRole::kShared;
+  //! The library rules a `Cooked` mount breaks, which make it `Invalid`;
+  //! each is also in the table's diagnostics.
+  std::vector<ImportDiagnostic> findings;
 };
 
 //! A path a committed file holds, and the field that holds it.
@@ -316,6 +408,9 @@ struct MountTable final {
   std::string declared_in;
   std::vector<Mount> mounts;
   std::vector<ImportDiagnostic> diagnostics;
+  //! The file system the table was resolved over and its lookups read.
+  observer_ptr<const IMountFileSystem> file_system
+    = make_observer(&RealMountFileSystem());
 
   //! True when no diagnostic is an error.
   OXGN_COOK_NDAPI auto IsValid() const -> bool;
@@ -379,7 +474,8 @@ struct MountTable final {
     -> std::optional<MountedSource>;
 };
 
-//! True when `name` follows the mount name rule of `oxygen.mounts.schema.json`.
+//! True when `name` follows the mount name rule: the virtual path mount rule
+//! (`content::ValidateMountName`), without a leading `.`.
 OXGN_COOK_NDAPI auto IsValidMountName(std::string_view name) -> bool;
 
 /*!
@@ -392,9 +488,16 @@ OXGN_COOK_NDAPI auto IsValidMountName(std::string_view name) -> bool;
  and adds local mounts; naming a mount with a committed path is ignored with
  `mount.parent_ignored`.
 
- Folders are made canonical before they are checked. The overlap and output
- folder rules apply to `Source` mounts: cooked roots and paks live in output
- folders by design and are never read as sources.
+ Folders are made canonical before they are checked. Folders overlap
+ whatever their kind: a `Source` folder and a `Cooked` folder, a loose cooked
+ root, are compared like two `Source` folders. The output folder rule applies
+ to `Source` mounts: cooked roots and paks live in output folders by design
+ and are never read as sources.
+
+ Every bound `Cooked` mount is read as a library (`lc::ReadLibraryFacts`): a
+ library that cannot be read, holds a root other than the mount's name or
+ more than one root, or holds a script with an external source is `Invalid`
+ with that finding, a warning.
 
  Every mount's folder and origin is logged.
 */

@@ -4,7 +4,7 @@ Status: accepted. The engine, the tools and the examples follow it
 (abdes/DroidNet#81, #120); the editor part is
 [editor mounts](../../../../../design/editor/lld/project-layout-and-templates.md#mounts).
 
-Last updated: 2026-10-29
+Last updated: 2026-10-30
 
 Read: [at a glance](#at-a-glance), [scenarios](#scenarios),
 [today](#today), [the mount contract](#the-mount-contract),
@@ -90,29 +90,29 @@ A mount is a name and a folder. For a `Source` mount, its name is the first
 segment of every path in it: the file `<folder>/Materials/Red.omat.json` of
 mount `Content` is `/Content/Materials/Red.omat.json`. The name is the
 identity: content, cooked indexes and references store names, never folders.
-A `Cooked` or `Pak` mount is different: its name labels the cooked root or pak
-in the table and in a content priority order, and the virtual paths inside it
-are the ones that were cooked into it. Tools and the runtime mount it through
+A `Cooked` mount is different: it is a library, a loose cooked root (a folder
+holding `container.index.bin`) or a `.pak` file, and its name is the one root
+of the virtual paths cooked into it. Tools and the runtime mount it through
 the cooked-content mechanism that is unchanged here; no source is ever read
-from it.
+from it. Its [library rules](#library-mounts) are checked when the table is
+resolved.
 
 A mount has three kinds of facts: what is **declared** in files, what is
 **calculated** from them for one run, and the **rules** a run checks.
 
 #### Declared
 
-| Property | Declared in                                     | Contract                                                                                                                                                         |
-| -------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Name`   | The committed list; `.mounts.json`; `--mount`   | `^[A-Za-z][A-Za-z0-9_-]{0,63}$`                                                                                                                                  |
-| `Kind`   | The committed list only                         | `Source` (a folder of source files, the default), `Cooked` (a cooked folder) or `Pak` (a `.pak` file). A mount that only `.mounts.json` adds is a `Source` mount |
-| `Path`   | The committed list                              | Relative to the project root, and may leave it (`../../Media/Showcase`). Absent for a placeholder. Never absolute                                                |
-| `Path`   | `.mounts.json`                                  | Absolute, the usual form, or relative to that file's folder                                                                                                      |
-| `Path`   | `--mount <Name>=<dir>` (single import commands) | Absolute, or relative to the working directory                                                                                                                   |
+| Property | Declared in                                     | Contract                                                                                                                                                                  |
+| -------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Name`   | The committed list; `.mounts.json`; `--mount`   | The virtual path mount rule (`[A-Za-z_][A-Za-z0-9_-]*`, at most 255 bytes), never starting with `.`                                                                       |
+| `Kind`   | The committed list only                         | `Source` (a folder of source files, the default) or `Cooked` (a library). Another kind is `mount.kind_unknown`. A mount that only `.mounts.json` adds is a `Source` mount |
+| `Path`   | The committed list                              | Relative to the project root, and may leave it (`../../Media/Showcase`). Absent for a placeholder. Never absolute                                                         |
+| `Path`   | `.mounts.json`                                  | Absolute, the usual form, or relative to that file's folder                                                                                                               |
+| `Path`   | `--mount <Name>=<dir>` (single import commands) | Absolute, or relative to the working directory                                                                                                                            |
 
 The committed list is the `Mounts` list of `Project.oxy` in the editor and the
-`mounts` of an import manifest for tools. A `Cooked` or `Pak` mount whose
-location is local is declared there as a placeholder and bound in
-`.mounts.json`.
+`mounts` of an import manifest for tools. A `Cooked` mount whose location is
+local is declared there as a placeholder and bound in `.mounts.json`.
 
 #### Calculated
 
@@ -123,7 +123,8 @@ stored.
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Folder              | The `Path` from the first [source that provides it](#where-mounts-come-from), made absolute against the folder of the file that holds it, then made [canonical](#canonical-folders) |
 | Origin              | Which file or option gave the folder: `--mounts`, a named `.mounts.json`, the committed list, or none                                                                               |
-| State               | `Bound`; `Unbound` (a placeholder nothing binds); `Missing` (a folder that does not exist)                                                                                          |
+| State               | `Bound`; `Unbound` (a placeholder nothing binds); `Missing` (a folder that does not exist); `Invalid` (a library that breaks a [library rule](#library-mounts))                     |
+| Role                | `Own` for a `Source` mount whose Folder lies inside the project root; `Shared` for any other, and always for a `Cooked` mount                                                       |
 | A file's mount path | `/<Name>/<the file's path below the Folder>`, computed from the file's canonical path; a file below no Folder has none                                                              |
 
 #### Rules
@@ -135,8 +136,8 @@ stored.
 | Name follows content | A folder is mounted under one name by every project that mounts it, because the references inside it carry that name. Mounting a studio library as `Studio` here and `Shared` there breaks every reference between its files in one of the two projects ([changing a mount](#changing-a-mount)) |
 | Kind is fixed        | `.mounts.json` binds or overrides a `Path`; it never changes a `Kind`                                                                                                                                                                                                                           |
 | Absolute paths       | Allowed only in `.mounts.json` ([below](#absolute-paths-only-in-mountsjson))                                                                                                                                                                                                                    |
-| No overlap           | Two Folders may not be the same folder or contain one another: a file has exactly one mount path ([why](#why-mounts-may-not-overlap))                                                                                                                                                           |
-| Not in output        | A Folder may not be or lie inside an [output folder](#output-folders)                                                                                                                                                                                                                           |
+| No overlap           | Two Folders, of either kind, may not be the same folder or contain one another: a file has exactly one mount path ([why](#why-mounts-may-not-overlap)). A pak is a file, never compared                                                                                                         |
+| Not in output        | A `Source` Folder may not be or lie inside an [output folder](#output-folders); a library may                                                                                                                                                                                                   |
 
 ### Absolute paths only in `.mounts.json`
 
@@ -192,6 +193,30 @@ there can vanish.
 The check is `mount.folder_in_output`, made on canonical folders like the
 overlap check.
 
+### Library mounts
+
+Every bound `Cooked` mount is read as a library when the table is resolved,
+without loading its assets (`lc::ReadLibraryFacts`): the index of a loose
+cooked root, or the header, footer and catalog of a pak.
+
+| Rule                     | Finding                            |
+| ------------------------ | ---------------------------------- |
+| It can be read           | `mount.library_format_unsupported` |
+| Its one root is its name | `mount.library_root_mismatch`      |
+| It has one root          | `mount.library_root_multiple`      |
+| No external script       | `mount.library_external_script`    |
+
+A folder without an index, a file that is not a pak, and a format version this
+build cannot read are all `mount.library_format_unsupported`. Only a loose
+root states its roots, the mounts its virtual paths start with, and its
+scripts with an external source; a pak states neither, since its catalog does
+not name its library and PakTool seals scripts.
+
+A library that breaks a rule is `Invalid`: it stays in the table with its
+finding, a warning, contributes no assets and is never mounted for a job.
+An import job reads its own output root, then the bound libraries of its
+mount table in table order, then its cooked context roots.
+
 ### Where mounts come from
 
 A tool or the editor builds one mount table before it reads any source. Each
@@ -230,7 +255,9 @@ path is resolved against the project root and made canonical
 | Two mounts with overlapping folders                                  | Error `mount.folder_overlap`, naming both mounts                                                      |
 | A folder inside an output folder                                     | Error `mount.folder_in_output`                                                                        |
 | A bound folder that does not exist                                   | Warning `mount.folder_missing`; a source needed from it is an error at that point                     |
-| A `Pak` mount bound to a folder, or another kind bound to a file     | Error `mount.path_kind`                                                                               |
+| A `Source` mount bound to a file                                     | Error `mount.path_kind`                                                                               |
+| A committed mount of another kind than `Source` or `Cooked`          | Error `mount.kind_unknown`, naming the field                                                          |
+| A library that breaks a [library rule](#library-mounts)              | Warning with the rule's code; the mount is `Invalid`                                                  |
 | A parent `.mounts.json` names a mount the project commits a path for | Warning `mount.parent_ignored`, naming the file; the committed path is used                           |
 | A placeholder `.mounts.json` leaves unbound                          | Warning `mount.unbound`; a source needed from it is `import.mount_unbound`                            |
 | One batch maps one name to two folders                               | Error `mount.name_conflict` before any job runs; two spellings of one canonical folder are one folder |
@@ -320,7 +347,7 @@ entry. Nothing committed refers to it by path.
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `version` | `1`. Another value is refused with `mount.file_version`                                                                                                                                                                           |
 | `root`    | Optional, default `false`. `true` stops the search: no `.mounts.json` above this one is read                                                                                                                                      |
-| `mounts`  | Object: mount name to folder (a `.pak` file for a `Pak` mount). An absolute path, the usual form, or a path relative to this file's folder. `/` or `\` separators                                                                 |
+| `mounts`  | Object: mount name to folder (a loose cooked root or a `.pak` file for a `Cooked` mount). An absolute path, the usual form, or a path relative to this file's folder. `/` or `\` separators                                       |
 | Override  | A name the committed declaration has. In the project's own file: replaces its folder, or binds its placeholder. In a parent file: binds its placeholder only; a name with a committed path is ignored with `mount.parent_ignored` |
 | Addition  | A name the committed declaration lacks: a local mount, available to this machine's imports and cooks                                                                                                                              |
 
@@ -532,8 +559,8 @@ migration and dependencies are in
   (indexes, records, descriptors, script assets, paks) uses mount paths, so
   content survives drives, machines and moved projects.
 - **One mount list with kinds.** A project or manifest declares one mount
-  list; each entry has a name, a kind (`Source`, `Cooked`, `Pak`) and an
-  optional path. One list keeps one name space and one validator.
+  list; each entry has a name, a kind (`Source` or `Cooked`) and an optional
+  path. One list keeps one name space and one validator.
 - **No absolute paths in committed files.** Projects, manifests, descriptors,
   records and scripts hold relative paths, mount paths or placeholders.
   Absolute paths come only from `.mounts.json`, command lines and generated run

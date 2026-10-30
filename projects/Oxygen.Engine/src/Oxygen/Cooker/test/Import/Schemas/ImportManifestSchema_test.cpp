@@ -149,9 +149,9 @@ NOLINT_TEST_P(ImportManifestMountsSchemaTest, ValidatesMountDeclarations)
 INSTANTIATE_TEST_SUITE_P(Cases, ImportManifestMountsSchemaTest,
   ::testing::Values(
     SchemaCase {
-      "AcceptsPakAndPlaceholderMounts",
+      "AcceptsCookedAndPlaceholderMounts",
       R"({"jobs":[],"mounts":[{"name":"Content","path":"."},
-        {"name":"Engine","kind":"Pak"},{"name":"Art"}]})",
+        {"name":"Engine","kind":"Cooked"},{"name":"Art"}]})",
       true,
       "",
     },

@@ -250,6 +250,7 @@ oxygen_cooker_test(
   Loose
   UNIT
   SOURCES
+    "Loose/LibraryFacts_test.cpp"
     "Loose/LooseCookedLayout_test.cpp"
 )
 

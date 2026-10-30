@@ -19,6 +19,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -146,6 +147,11 @@ namespace {
     return Ok(std::move(bytes));
   }
 
+  auto Corrupt(const std::string& message) -> CookedOpenError
+  {
+    return { CookedOpenFailure::kCorrupt, message };
+  }
+
 } // namespace
 
 auto PakCatalog::ComputeDigest() const
@@ -218,10 +224,10 @@ auto PakCatalog::ValidateDependencies(
 }
 
 auto PakCatalog::Decode(const std::span<const std::byte> bytes)
-  -> Result<PakCatalog, std::string>
+  -> Result<PakCatalog, CookedOpenError>
 {
   if (bytes.size() < kHeaderSize + kDigestSize) {
-    return Err(std::string("Truncated PAK catalog"));
+    return Err(Corrupt("Truncated PAK catalog"));
   }
   serio::ReadOnlyMemoryStream stream(bytes);
   serio::Reader reader(stream);
@@ -238,21 +244,22 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
     || !reader.ReadInto(content_version) || !reader.ReadInto(entry_count)
     || !reader.ReadInto(deleted_count) || !reader.ReadInto(base_count)
     || !reader.ReadInto(dependency_count)) {
-    return Err(std::string("Could not decode PAK catalog header"));
+    return Err(Corrupt("Could not decode PAK catalog header"));
   }
   if (version != pak::version::kPakCatalogVersion) {
-    return Err(std::string("Unsupported PAK catalog version; recook content"));
+    return Err(CookedOpenError(CookedOpenFailure::kUnsupportedVersion,
+      "Unsupported PAK catalog version; recook content"));
   }
   if (uint64_t { base_count } + dependency_count
       > std::numeric_limits<uint32_t>::max()
     || ContentSize(entry_count, deleted_count, base_count + dependency_count)
         + kDigestSize
       != bytes.size()) {
-    return Err(std::string("PAK catalog size does not match record counts"));
+    return Err(Corrupt("PAK catalog size does not match record counts"));
   }
   const auto source = SourceKey::FromBytes(source_bytes);
   if (!source) {
-    return Err(std::string("Invalid PAK catalog source identity"));
+    return Err(Corrupt("Invalid PAK catalog source identity"));
   }
   PakCatalog catalog {
     .source_key = *source,
@@ -272,7 +279,7 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
         std::as_writable_bytes(std::span(entry.descriptor_digest)))
       || !reader.ReadBlobInto(
         std::as_writable_bytes(std::span(entry.transitive_resource_digest)))) {
-      return Err(std::string("Could not decode PAK catalog entry"));
+      return Err(Corrupt("Could not decode PAK catalog entry"));
     }
     entry.asset_key = AssetKey::FromBytes(key_bytes);
     entry.asset_type = static_cast<AssetType>(type);
@@ -280,7 +287,7 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
   for (auto& key : catalog.deleted) {
     std::array<uint8_t, AssetKey::kSizeBytes> key_bytes {};
     if (!reader.ReadBlobInto(std::as_writable_bytes(std::span(key_bytes)))) {
-      return Err(std::string("Could not decode PAK catalog deletion"));
+      return Err(Corrupt("Could not decode PAK catalog deletion"));
     }
     key = AssetKey::FromBytes(key_bytes);
   }
@@ -291,21 +298,21 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
         || !reader.ReadInto(layer.content_version)
         || !reader.ReadBlobInto(
           std::as_writable_bytes(std::span(layer.catalog_digest)))) {
-        return Err(std::string("Could not decode PAK catalog layer"));
+        return Err(Corrupt("Could not decode PAK catalog layer"));
       }
       const auto layer_key = SourceKey::FromBytes(source_bytes);
       if (!layer_key) {
-        return Err(std::string("Invalid PAK catalog layer identity"));
+        return Err(Corrupt("Invalid PAK catalog layer identity"));
       }
       layer.source_key = *layer_key;
     }
   }
   if (!reader.ReadBlobInto(
         std::as_writable_bytes(std::span(catalog.catalog_digest)))) {
-    return Err(std::string("Could not decode PAK catalog digest"));
+    return Err(Corrupt("Could not decode PAK catalog digest"));
   }
   if (const auto valid = catalog.Validate(); !valid) {
-    return Err(valid.error());
+    return Err(Corrupt(valid.error()));
   }
   return Ok(std::move(catalog));
 }

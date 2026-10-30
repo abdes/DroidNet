@@ -25,6 +25,7 @@ add_library(
   "ImportHarness.h"
   "JsonSchema.cpp"
   "JsonSchema.h"
+  "MemoryFileSystem.h"
   "ModelImportTestBase.cpp"
   "ModelImportTestBase.h"
   "PipelineHarness.h"

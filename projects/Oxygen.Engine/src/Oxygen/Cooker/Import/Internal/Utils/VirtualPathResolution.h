@@ -13,11 +13,13 @@
 #include <string>
 #include <string_view>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 
 namespace oxygen::content::import::internal {
 
@@ -268,18 +270,40 @@ inline auto PlaceModelProduct(const ImportRequest& request,
   return placement;
 }
 
+//! The cooked roots a job reads besides its output root, lowest precedence
+//! first: the bound `Cooked` mounts of its source's mount table in table
+//! order (an `Invalid` library is never mounted), then its cooked context
+//! roots.
+inline auto ContextCookedRoots(const ImportRequest& request)
+  -> std::vector<std::filesystem::path>
+{
+  auto roots = std::vector<std::filesystem::path> {};
+  if (request.source_mounts != nullptr) {
+    for (const auto& mount : request.source_mounts->mounts) {
+      if (mount.kind == MountKind::kCooked
+        && mount.state == MountState::kBound) {
+        roots.push_back(mount.folder);
+      }
+    }
+  }
+  roots.insert(roots.end(), request.cooked_context_roots.begin(),
+    request.cooked_context_roots.end());
+  return roots;
+}
+
+//! The cooked roots a job reads, lowest precedence first: its output root,
+//! then its context roots (`ContextCookedRoots`).
 inline auto BuildMountedCookedRoots(const ImportRequest& request)
   -> std::vector<std::filesystem::path>
 {
   auto roots = std::vector<std::filesystem::path> {};
-  roots.reserve(1U + request.cooked_context_roots.size());
   if (request.cooked_root.has_value()) {
     roots.push_back(*request.cooked_root);
   } else {
     roots.push_back(request.source_path.parent_path());
   }
-  for (const auto& root : request.cooked_context_roots) {
-    roots.push_back(root);
+  for (auto& root : ContextCookedRoots(request)) {
+    roots.push_back(std::move(root));
   }
   return roots;
 }

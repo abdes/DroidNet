@@ -6,7 +6,6 @@
 
 #include <fstream>
 #include <ios>
-#include <stdexcept>
 #include <system_error>
 
 #include "./AssetLoader_test.h"
@@ -15,6 +14,7 @@
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::content::testing::AssetLoaderBasicTest;
@@ -33,8 +33,8 @@ NOLINT_TEST_F(AssetLoaderBasicTest, TruncatedPakLeavesMountsUnchanged)
   try {
     asset_loader_->AddPakFile(path);
     FAIL() << "Truncated header was accepted";
-  } catch (const std::runtime_error& error) {
-    EXPECT_STREQ(error.what(), "Failed to read pak header");
+  } catch (const oxygen::data::CookedOpenError& error) {
+    EXPECT_EQ(error.Failure(), oxygen::data::CookedOpenFailure::kWrongFormat);
   }
   EXPECT_TRUE(asset_loader_->EnumerateMountedSources().empty());
 }

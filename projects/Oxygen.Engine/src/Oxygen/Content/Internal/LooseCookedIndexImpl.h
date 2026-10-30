@@ -55,6 +55,15 @@ public:
   OXGN_CNTT_NDAPI static auto LoadFromLockedFile(
     const std::filesystem::path& index_path) -> LooseCookedIndexImpl;
 
+  //! Load and validate the bytes of an index file.
+  /*!
+   @throw data::CookedOpenError `kWrongFormat` for bytes that are not an
+     index, `kUnsupportedVersion` for another index version, `kCorrupt` for
+     a malformed index.
+  */
+  OXGN_CNTT_NDAPI static auto LoadFromBytes(std::span<const std::byte> bytes)
+    -> LooseCookedIndexImpl;
+
   //! Hold off in-process index publication while reading `index_path`.
   /*!
    The lock is process-wide and keyed by path identity. Readers in other
@@ -170,6 +179,7 @@ private:
   std::vector<FileInfo> texture_descriptors_;
   data::SourceKey guid_;
 
+  static auto Parse(std::span<const std::byte> bytes) -> LooseCookedIndexImpl;
   static auto LoadAndValidateHeader(IndexLoadContext& context) -> void;
   static auto ReadStringTable(IndexLoadContext& context) -> void;
   static auto ReadAssetEntries(IndexLoadContext& context) -> void;
