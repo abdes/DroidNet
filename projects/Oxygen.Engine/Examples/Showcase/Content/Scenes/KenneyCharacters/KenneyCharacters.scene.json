@@ -36,7 +36,7 @@
         "translation": [-2.2, 0.0, 0.0]
       },
       "instance": {
-        "scene_ref": "/Content/Models/KenneyAnimatedCharacters/Model/characterMedium.fbx/characterMedium.oscene",
+        "scene_ref": "../../Models/KenneyAnimatedCharacters/Model/characterMedium.fbx/characterMedium.oscene",
         "overrides": [
           {
             "path": ["fba67ebd-44a0-9fe4-da6e-d4f22601ed39"],
@@ -48,7 +48,7 @@
                     "id": "6c5b50db-f4b2-2f69-42fc-76dd31b868c5",
                     "layout_revision": "15463d3e34e0718658ccf7baf56574aef72d0477990c3ce617bf12259c82495d",
                     "values": {
-                      "/material": "/Content/Scenes/KenneyCharacters/SkinSurvivor.omat"
+                      "/material": "SkinSurvivor.omat"
                     }
                   }
                 ]
@@ -71,7 +71,7 @@
         "translation": [2.2, 0.0, 0.0]
       },
       "instance": {
-        "scene_ref": "/Content/Models/KenneyAnimatedCharacters/Model/characterMedium.fbx/characterMedium.oscene",
+        "scene_ref": "../../Models/KenneyAnimatedCharacters/Model/characterMedium.fbx/characterMedium.oscene",
         "overrides": [
           {
             "path": ["fba67ebd-44a0-9fe4-da6e-d4f22601ed39"],
@@ -83,7 +83,7 @@
                     "id": "6c5b50db-f4b2-2f69-42fc-76dd31b868c5",
                     "layout_revision": "15463d3e34e0718658ccf7baf56574aef72d0477990c3ce617bf12259c82495d",
                     "values": {
-                      "/material": "/Content/Scenes/KenneyCharacters/SkinZombie.omat"
+                      "/material": "SkinZombie.omat"
                     }
                   }
                 ]
@@ -133,7 +133,7 @@
             "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
             "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
             "values": {
-              "/material": "/Content/Scenes/KenneyCharacters/KcFloor.omat"
+              "/material": "KcFloor.omat"
             }
           }
         ]
@@ -171,10 +171,6 @@
     ]
   },
   "references": {
-    "materials": [
-      "/Content/Scenes/KenneyCharacters/KcFloor.omat",
-      "/Content/Scenes/KenneyCharacters/SkinSurvivor.omat",
-      "/Content/Scenes/KenneyCharacters/SkinZombie.omat"
-    ]
+    "materials": ["KcFloor.omat", "SkinSurvivor.omat", "SkinZombie.omat"]
   }
 }

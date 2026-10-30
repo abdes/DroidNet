@@ -1,7 +1,6 @@
 {
   "name": "bouncy_ball",
   "content_hashing": true,
-  "virtual_path": "/Content/Scenes/BottleOnBox/bouncy_ball.opmat",
   "static_friction": 0.6,
   "dynamic_friction": 0.6,
   "restitution": 0.6,

@@ -14,12 +14,12 @@
     {
       "id": "/Content/Models/Showcase/lampRoundTable.fbx",
       "type": "model",
-      "record": "Imports/Content/Models/Showcase/lampRoundTable.fbx.import.json"
+      "virtual_path": "/Content/Models/Showcase/lampRoundTable.fbx"
     },
     {
       "id": "/Content/Models/Showcase/pottedPlant.fbx",
       "type": "model",
-      "record": "Imports/Content/Models/Showcase/pottedPlant.fbx.import.json"
+      "virtual_path": "/Content/Models/Showcase/pottedPlant.fbx"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/SoFloor.omat",
@@ -200,7 +200,7 @@
         {
           "node_index": 21,
           "slot_id": "c3f05628-a906-5823-a5ef-18ca95536163",
-          "script_virtual_path": "/Content/Scenes/SurfaceOverrides/surface_overrides.oscript",
+          "script_virtual_path": "surface_overrides.oscript",
           "execution_order": 0,
           "params": [
             {
@@ -367,52 +367,52 @@
             {
               "key": "shade_red",
               "type": "asset",
-              "value": "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat"
+              "value": "SoShadeRed.omat"
             },
             {
               "key": "shade_blue",
               "type": "asset",
-              "value": "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat"
+              "value": "SoShadeBlue.omat"
             },
             {
               "key": "pot_teal",
               "type": "asset",
-              "value": "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat"
+              "value": "SoPotTeal.omat"
             },
             {
               "key": "pot_gold",
               "type": "asset",
-              "value": "/Content/Scenes/SurfaceOverrides/SoPotGold.omat"
+              "value": "SoPotGold.omat"
             },
             {
               "key": "lod_purple",
               "type": "asset",
-              "value": "/Content/Scenes/SurfaceOverrides/SoLodPurple.omat"
+              "value": "SoLodPurple.omat"
             },
             {
               "key": "toggle_shade",
               "type": "asset",
-              "value": "/Content/Scenes/SurfaceOverrides/surface_overrides.input/ToggleShadeAction.oiact"
+              "value": "surface_overrides.input/ToggleShadeAction.oiact"
             },
             {
               "key": "toggle_metal_shadow",
               "type": "asset",
-              "value": "/Content/Scenes/SurfaceOverrides/surface_overrides.input/ToggleMetalShadowAction.oiact"
+              "value": "surface_overrides.input/ToggleMetalShadowAction.oiact"
             },
             {
               "key": "cycle_shade_material",
               "type": "asset",
-              "value": "/Content/Scenes/SurfaceOverrides/surface_overrides.input/CycleShadeMaterialAction.oiact"
+              "value": "surface_overrides.input/CycleShadeMaterialAction.oiact"
             },
             {
               "key": "cycle_lod_policy",
               "type": "asset",
-              "value": "/Content/Scenes/SurfaceOverrides/surface_overrides.input/CycleLodPolicyAction.oiact"
+              "value": "surface_overrides.input/CycleLodPolicyAction.oiact"
             },
             {
               "key": "reset_overrides",
               "type": "asset",
-              "value": "/Content/Scenes/SurfaceOverrides/surface_overrides.input/ResetOverridesAction.oiact"
+              "value": "surface_overrides.input/ResetOverridesAction.oiact"
             }
           ]
         }

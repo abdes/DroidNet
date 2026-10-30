@@ -3,8 +3,8 @@
     "rigid_bodies": [
       {
         "node_index": 1,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/floor.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/ground.opmat",
+        "shape_ref": "../PhysicsDomains/floor.ocshape",
+        "material_ref": "../PhysicsDomains/ground.opmat",
         "body_type": "static",
         "motion_quality": "discrete",
         "collision_layer": 1,
@@ -17,8 +17,8 @@
       },
       {
         "node_index": 2,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/ramp.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/ground.opmat",
+        "shape_ref": "../PhysicsDomains/ramp.ocshape",
+        "material_ref": "../PhysicsDomains/ground.opmat",
         "body_type": "static",
         "motion_quality": "discrete",
         "collision_layer": 1,
@@ -29,8 +29,8 @@
       },
       {
         "node_index": 3,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/sphere_bouncy.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/bouncy.opmat",
+        "shape_ref": "../PhysicsDomains/sphere_bouncy.ocshape",
+        "material_ref": "../PhysicsDomains/bouncy.opmat",
         "body_type": "dynamic",
         "motion_quality": "discrete",
         "collision_layer": 2,
@@ -43,8 +43,8 @@
       },
       {
         "node_index": 5,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/cube_unit_dynamic.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/cube_unit_dynamic.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "body_type": "dynamic",
         "motion_quality": "discrete",
         "collision_layer": 2,
@@ -57,8 +57,8 @@
       },
       {
         "node_index": 6,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/cube_unit_dynamic.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/cube_unit_dynamic.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "body_type": "dynamic",
         "motion_quality": "discrete",
         "collision_layer": 2,
@@ -71,8 +71,8 @@
       },
       {
         "node_index": 7,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/stack_cube.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/stack_cube.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "body_type": "dynamic",
         "motion_quality": "discrete",
         "collision_layer": 2,
@@ -85,8 +85,8 @@
       },
       {
         "node_index": 8,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/stack_cube.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/stack_cube.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "body_type": "dynamic",
         "motion_quality": "discrete",
         "collision_layer": 2,
@@ -99,8 +99,8 @@
       },
       {
         "node_index": 9,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/stack_cube.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/stack_cube.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "body_type": "dynamic",
         "motion_quality": "discrete",
         "collision_layer": 2,
@@ -113,8 +113,8 @@
       },
       {
         "node_index": 10,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/stack_cube.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/stack_cube.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "body_type": "dynamic",
         "motion_quality": "discrete",
         "collision_layer": 2,
@@ -127,8 +127,8 @@
       },
       {
         "node_index": 12,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/chassis.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/chassis.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "body_type": "dynamic",
         "motion_quality": "discrete",
         "collision_layer": 2,
@@ -141,8 +141,8 @@
       },
       {
         "node_index": 14,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/wheel.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/wheel.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "body_type": "kinematic",
         "is_sensor": true,
         "motion_quality": "discrete",
@@ -156,8 +156,8 @@
       },
       {
         "node_index": 15,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/wheel.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/wheel.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "body_type": "kinematic",
         "is_sensor": true,
         "motion_quality": "discrete",
@@ -171,8 +171,8 @@
       },
       {
         "node_index": 16,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/wheel.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/wheel.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "body_type": "kinematic",
         "is_sensor": true,
         "motion_quality": "discrete",
@@ -186,8 +186,8 @@
       },
       {
         "node_index": 17,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/wheel.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/wheel.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "body_type": "kinematic",
         "is_sensor": true,
         "motion_quality": "discrete",
@@ -203,8 +203,8 @@
     "colliders": [
       {
         "node_index": 18,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/trigger_zone.ocshape",
-        "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+        "shape_ref": "../PhysicsDomains/trigger_zone.ocshape",
+        "material_ref": "../PhysicsDomains/dynamic.opmat",
         "collision_layer": 4,
         "collision_mask": 65535
       }
@@ -212,7 +212,7 @@
     "characters": [
       {
         "node_index": 11,
-        "shape_ref": "/Content/Scenes/PhysicsDomains/actor.ocshape",
+        "shape_ref": "../PhysicsDomains/actor.ocshape",
         "mass": 90.0,
         "max_slope_angle": 0.785398,
         "step_height": 0.35,
@@ -224,7 +224,7 @@
     "soft_bodies": [
       {
         "node_index": 19,
-        "source_mesh_ref": "/Content/Scenes/PhysicsDomains/softbody_sphere.ogeo",
+        "source_mesh_ref": "../PhysicsDomains/softbody_sphere.ogeo",
         "collision_layer": 2,
         "collision_mask": 65535,
         "global_damping": 0.2,
@@ -251,7 +251,7 @@
       },
       {
         "node_index": 22,
-        "source_mesh_ref": "/Content/Scenes/PhysicsDomains/softbody_cube.ogeo",
+        "source_mesh_ref": "../PhysicsDomains/softbody_cube.ogeo",
         "collision_layer": 2,
         "collision_mask": 65535,
         "global_damping": 0.06,

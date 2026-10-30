@@ -6,7 +6,7 @@
   },
   "starting_input_contexts": [
     {
-      "context_ref": "/Content/Scenes/MultiScript/multi_script_scene.input/RotateRuntimeInputContext.oimap",
+      "context_ref": "multi_script_scene.input/RotateRuntimeInputContext.oimap",
       "priority": 0
     }
   ],
@@ -112,25 +112,19 @@
     ]
   },
   "references": {
-    "materials": [
-      "/Content/Scenes/MultiScript/ScriptedCubeMat.omat",
-      "/Content/Scenes/MultiScript/CompanionOrbMat.omat"
-    ],
-    "scripts": [
-      "/Content/Scenes/MultiScript/orbit-shapes.oscript",
-      "/Content/Scenes/MultiScript/day-night.oscript"
-    ],
+    "materials": ["ScriptedCubeMat.omat", "CompanionOrbMat.omat"],
+    "scripts": ["orbit-shapes.oscript", "day-night.oscript"],
     "input_actions": [
-      "/Content/Scenes/MultiScript/multi_script_scene.input/CycleShapeAction.oiact",
-      "/Content/Scenes/MultiScript/multi_script_scene.input/PulseScaleAction.oiact",
-      "/Content/Scenes/MultiScript/multi_script_scene.input/RotateInvertAction.oiact",
-      "/Content/Scenes/MultiScript/multi_script_scene.input/RotateSpeedDownAction.oiact",
-      "/Content/Scenes/MultiScript/multi_script_scene.input/RotateSpeedUpAction.oiact",
-      "/Content/Scenes/MultiScript/multi_script_scene.input/RotateStopAction.oiact",
-      "/Content/Scenes/MultiScript/multi_script_scene.input/SpawnOrbAction.oiact"
+      "multi_script_scene.input/CycleShapeAction.oiact",
+      "multi_script_scene.input/PulseScaleAction.oiact",
+      "multi_script_scene.input/RotateInvertAction.oiact",
+      "multi_script_scene.input/RotateSpeedDownAction.oiact",
+      "multi_script_scene.input/RotateSpeedUpAction.oiact",
+      "multi_script_scene.input/RotateStopAction.oiact",
+      "multi_script_scene.input/SpawnOrbAction.oiact"
     ],
     "input_mapping_contexts": [
-      "/Content/Scenes/MultiScript/multi_script_scene.input/RotateRuntimeInputContext.oimap"
+      "multi_script_scene.input/RotateRuntimeInputContext.oimap"
     ]
   }
 }

@@ -14,17 +14,17 @@
     {
       "id": "/Content/Models/ChronographWatch-ktx2/ChronographWatch.gltf",
       "type": "model",
-      "record": "Imports/Content/Models/ChronographWatch-ktx2/ChronographWatch.gltf.import.json"
+      "virtual_path": "/Content/Models/ChronographWatch-ktx2/ChronographWatch.gltf"
     },
     {
       "id": "/Content/Models/ChronographWatch-webp/ChronographWatch.gltf",
       "type": "model",
-      "record": "Imports/Content/Models/ChronographWatch-webp/ChronographWatch.gltf.import.json"
+      "virtual_path": "/Content/Models/ChronographWatch-webp/ChronographWatch.gltf"
     },
     {
       "id": "/Content/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf",
       "type": "model",
-      "record": "Imports/Content/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf.import.json"
+      "virtual_path": "/Content/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf"
     },
     {
       "id": "/Content/Scenes/CompressedTextures/Rock030_base_color.otex",

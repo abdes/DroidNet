@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
-  "source": "/Content/SourceMedia/DCC/backpack.glb",
-  "virtual_path": "/Content/Models/backpack.glb",
+  "source": "../SourceMedia/DCC/backpack.glb",
   "settings": {
     "content_hashing": true,
     "name": "backpack_scene"

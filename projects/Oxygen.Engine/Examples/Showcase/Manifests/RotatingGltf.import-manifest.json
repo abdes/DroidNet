@@ -14,12 +14,12 @@
     {
       "id": "/Content/Models/backpack.glb",
       "type": "model",
-      "record": "Imports/Content/Models/backpack.glb.import.json"
+      "virtual_path": "/Content/Models/backpack.glb"
     },
     {
       "id": "/Content/Models/chest.glb",
       "type": "model",
-      "record": "Imports/Content/Models/chest.glb.import.json"
+      "virtual_path": "/Content/Models/chest.glb"
     },
     {
       "id": "/Content/Scenes/RotatingGltf/rotate.oscript",
@@ -60,7 +60,7 @@
         {
           "node_index": 1,
           "slot_id": "69eca852-8985-5202-9504-63a41b0ad7d6",
-          "script_virtual_path": "/Content/Scenes/RotatingGltf/rotate.oscript",
+          "script_virtual_path": "rotate.oscript",
           "execution_order": 0,
           "params": [
             {
@@ -71,19 +71,19 @@
             {
               "key": "speed_up",
               "type": "asset",
-              "value": "/Content/Scenes/RotatingGltf/rotate.input/RotateSpeedUpAction.oiact"
+              "value": "rotate.input/RotateSpeedUpAction.oiact"
             },
             {
               "key": "speed_down",
               "type": "asset",
-              "value": "/Content/Scenes/RotatingGltf/rotate.input/RotateSpeedDownAction.oiact"
+              "value": "rotate.input/RotateSpeedDownAction.oiact"
             }
           ]
         },
         {
           "node_index": 2,
           "slot_id": "69eca852-8985-5202-9504-63a41b0ad7d6",
-          "script_virtual_path": "/Content/Scenes/RotatingGltf/rotate.oscript",
+          "script_virtual_path": "rotate.oscript",
           "execution_order": 0,
           "params": [
             {
@@ -94,12 +94,12 @@
             {
               "key": "speed_up",
               "type": "asset",
-              "value": "/Content/Scenes/RotatingGltf/rotate.input/RotateSpeedUpAction.oiact"
+              "value": "rotate.input/RotateSpeedUpAction.oiact"
             },
             {
               "key": "speed_down",
               "type": "asset",
-              "value": "/Content/Scenes/RotatingGltf/rotate.input/RotateSpeedDownAction.oiact"
+              "value": "rotate.input/RotateSpeedDownAction.oiact"
             }
           ]
         }

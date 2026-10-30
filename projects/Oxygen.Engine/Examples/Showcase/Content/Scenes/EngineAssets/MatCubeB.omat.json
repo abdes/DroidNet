@@ -11,7 +11,7 @@
   },
   "textures": {
     "base_color": {
-      "virtual_path": "/Content/Scenes/EngineAssets/MatCubeB_mask.otex"
+      "virtual_path": "MatCubeB_mask.otex"
     }
   }
 }

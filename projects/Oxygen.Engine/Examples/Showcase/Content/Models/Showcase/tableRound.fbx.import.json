@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
-  "source": "/Content/SourceMedia/DCC/Showcase/tableRound.fbx",
-  "virtual_path": "/Content/Models/Showcase/tableRound.fbx",
+  "source": "../../SourceMedia/DCC/Showcase/tableRound.fbx",
   "settings": {
     "content_hashing": true,
     "name": "tableRound"

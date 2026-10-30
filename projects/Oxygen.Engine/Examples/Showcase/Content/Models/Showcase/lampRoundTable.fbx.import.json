@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
-  "source": "/Content/SourceMedia/DCC/Showcase/lampRoundTable.fbx",
-  "virtual_path": "/Content/Models/Showcase/lampRoundTable.fbx",
+  "source": "../../SourceMedia/DCC/Showcase/lampRoundTable.fbx",
   "settings": {
     "content_hashing": true,
     "name": "lampRoundTable"

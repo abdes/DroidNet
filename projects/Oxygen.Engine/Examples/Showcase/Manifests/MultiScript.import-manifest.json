@@ -86,7 +86,7 @@
         {
           "node_index": 1,
           "slot_id": "f2ed0ffc-0449-5078-9ed5-c5c0a740930b",
-          "script_virtual_path": "/Content/Scenes/MultiScript/orbit-shapes.oscript",
+          "script_virtual_path": "orbit-shapes.oscript",
           "execution_order": 0,
           "params": [
             {
@@ -102,54 +102,54 @@
             {
               "key": "host_material",
               "type": "asset",
-              "value": "/Content/Scenes/MultiScript/ScriptedCubeMat.omat"
+              "value": "ScriptedCubeMat.omat"
             },
             {
               "key": "orb_material",
               "type": "asset",
-              "value": "/Content/Scenes/MultiScript/CompanionOrbMat.omat"
+              "value": "CompanionOrbMat.omat"
             },
             {
               "key": "speed_up",
               "type": "asset",
-              "value": "/Content/Scenes/MultiScript/multi_script_scene.input/RotateSpeedUpAction.oiact"
+              "value": "multi_script_scene.input/RotateSpeedUpAction.oiact"
             },
             {
               "key": "speed_down",
               "type": "asset",
-              "value": "/Content/Scenes/MultiScript/multi_script_scene.input/RotateSpeedDownAction.oiact"
+              "value": "multi_script_scene.input/RotateSpeedDownAction.oiact"
             },
             {
               "key": "stop",
               "type": "asset",
-              "value": "/Content/Scenes/MultiScript/multi_script_scene.input/RotateStopAction.oiact"
+              "value": "multi_script_scene.input/RotateStopAction.oiact"
             },
             {
               "key": "invert",
               "type": "asset",
-              "value": "/Content/Scenes/MultiScript/multi_script_scene.input/RotateInvertAction.oiact"
+              "value": "multi_script_scene.input/RotateInvertAction.oiact"
             },
             {
               "key": "cycle_shape",
               "type": "asset",
-              "value": "/Content/Scenes/MultiScript/multi_script_scene.input/CycleShapeAction.oiact"
+              "value": "multi_script_scene.input/CycleShapeAction.oiact"
             },
             {
               "key": "spawn_orb",
               "type": "asset",
-              "value": "/Content/Scenes/MultiScript/multi_script_scene.input/SpawnOrbAction.oiact"
+              "value": "multi_script_scene.input/SpawnOrbAction.oiact"
             },
             {
               "key": "pulse_scale",
               "type": "asset",
-              "value": "/Content/Scenes/MultiScript/multi_script_scene.input/PulseScaleAction.oiact"
+              "value": "multi_script_scene.input/PulseScaleAction.oiact"
             }
           ]
         },
         {
           "node_index": 4,
           "slot_id": "14b737e9-0bff-5e25-91ee-09b89492f463",
-          "script_virtual_path": "/Content/Scenes/MultiScript/day-night.oscript",
+          "script_virtual_path": "day-night.oscript",
           "execution_order": 1,
           "params": [
             {

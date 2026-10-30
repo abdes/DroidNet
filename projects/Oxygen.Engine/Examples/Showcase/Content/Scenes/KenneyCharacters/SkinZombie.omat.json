@@ -13,7 +13,7 @@
   },
   "textures": {
     "base_color": {
-      "virtual_path": "/Content/Scenes/KenneyCharacters/SkinZombie_base_color.otex"
+      "virtual_path": "SkinZombie_base_color.otex"
     }
   }
 }

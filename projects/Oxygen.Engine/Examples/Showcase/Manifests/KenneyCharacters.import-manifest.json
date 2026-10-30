@@ -14,7 +14,7 @@
     {
       "id": "/Content/Models/KenneyAnimatedCharacters/Model/characterMedium.fbx",
       "type": "model",
-      "record": "Imports/Content/Models/KenneyAnimatedCharacters/Model/characterMedium.fbx.import.json"
+      "virtual_path": "/Content/Models/KenneyAnimatedCharacters/Model/characterMedium.fbx"
     },
     {
       "id": "/Content/Scenes/KenneyCharacters/SkinSurvivor_base_color.otex",

@@ -6,7 +6,7 @@
   },
   "starting_input_contexts": [
     {
-      "context_ref": "/Content/Scenes/PhysicsDomains/physics_domains.input/PhysicsDomainsVehicleContext.oimap",
+      "context_ref": "physics_domains.input/PhysicsDomainsVehicleContext.oimap",
       "priority": 120
     }
   ],
@@ -331,71 +331,71 @@
   "renderables": [
     {
       "node": 1,
-      "geometry_ref": "/Content/Geometry/floor.ogeo"
+      "geometry_ref": "../../Geometry/floor.ogeo"
     },
     {
       "node": 2,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/ramp.ogeo"
+      "geometry_ref": "ramp.ogeo"
     },
     {
       "node": 3,
-      "geometry_ref": "/Content/Geometry/sphere.ogeo"
+      "geometry_ref": "../../Geometry/sphere.ogeo"
     },
     {
       "node": 5,
-      "geometry_ref": "/Content/Geometry/cube.ogeo"
+      "geometry_ref": "../../Geometry/cube.ogeo"
     },
     {
       "node": 6,
-      "geometry_ref": "/Content/Geometry/cube.ogeo"
+      "geometry_ref": "../../Geometry/cube.ogeo"
     },
     {
       "node": 7,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/stack_cube.ogeo"
+      "geometry_ref": "stack_cube.ogeo"
     },
     {
       "node": 8,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/stack_cube.ogeo"
+      "geometry_ref": "stack_cube.ogeo"
     },
     {
       "node": 9,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/stack_cube.ogeo"
+      "geometry_ref": "stack_cube.ogeo"
     },
     {
       "node": 10,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/stack_cube.ogeo"
+      "geometry_ref": "stack_cube.ogeo"
     },
     {
       "node": 11,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/character_capsule.ogeo"
+      "geometry_ref": "character_capsule.ogeo"
     },
     {
       "node": 13,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/chassis_box.ogeo"
+      "geometry_ref": "chassis_box.ogeo"
     },
     {
       "node": 14,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/cylinder_wheel.ogeo"
+      "geometry_ref": "cylinder_wheel.ogeo"
     },
     {
       "node": 15,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/cylinder_wheel.ogeo"
+      "geometry_ref": "cylinder_wheel.ogeo"
     },
     {
       "node": 16,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/cylinder_wheel.ogeo"
+      "geometry_ref": "cylinder_wheel.ogeo"
     },
     {
       "node": 17,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/cylinder_wheel.ogeo"
+      "geometry_ref": "cylinder_wheel.ogeo"
     },
     {
       "node": 19,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/softbody_sphere.ogeo"
+      "geometry_ref": "softbody_sphere.ogeo"
     },
     {
       "node": 22,
-      "geometry_ref": "/Content/Scenes/PhysicsDomains/softbody_cube.ogeo"
+      "geometry_ref": "softbody_cube.ogeo"
     }
   ],
   "cameras": {

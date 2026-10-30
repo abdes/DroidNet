@@ -98,15 +98,15 @@
   ],
   "renderables": [
     {
-      "geometry_ref": "/Content/Geometry/cube.ogeo",
+      "geometry_ref": "../../Geometry/cube.ogeo",
       "node": 1
     },
     {
-      "geometry_ref": "/Content/Geometry/cube.ogeo",
+      "geometry_ref": "../../Geometry/cube.ogeo",
       "node": 2
     },
     {
-      "geometry_ref": "/Content/Geometry/cube.ogeo",
+      "geometry_ref": "../../Geometry/cube.ogeo",
       "node": 3
     }
   ],
@@ -235,6 +235,6 @@
     }
   },
   "references": {
-    "materials": ["/Content/Materials/cube_red.omat"]
+    "materials": ["../../Materials/cube_red.omat"]
   }
 }

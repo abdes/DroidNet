@@ -12,10 +12,10 @@
   },
   "textures": {
     "base_color": {
-      "virtual_path": "/Content/Scenes/EngineAssets/UvProbe_albedo.otex"
+      "virtual_path": "UvProbe_albedo.otex"
     },
     "normal": {
-      "virtual_path": "/Content/Scenes/EngineAssets/UvProbe_normal.otex"
+      "virtual_path": "UvProbe_normal.otex"
     }
   }
 }

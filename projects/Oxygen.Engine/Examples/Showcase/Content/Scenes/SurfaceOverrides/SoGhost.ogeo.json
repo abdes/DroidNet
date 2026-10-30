@@ -17,7 +17,7 @@
         {
           "name": "SoGhost_lod0_surface",
           "surface_id": "c55f1e5d-2d5e-4de8-8b90-c397e355db55",
-          "material_ref": "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat",
+          "material_ref": "SoShadeBlue.omat",
           "views": [
             {
               "view_ref": "__all__"

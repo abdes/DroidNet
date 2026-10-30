@@ -530,8 +530,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
             "rigid_bodies": [
               {
                 "node_index": 0,
-                "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/floor.opmat"
+                "shape_ref": "../Physics/Shapes/floor.ocshape",
+                "material_ref": "../Physics/Materials/floor.opmat"
               }
             ]
           }
@@ -567,13 +567,13 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
             "rigid_bodies": [
               {
                 "node_index": 0,
-                "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/floor.opmat"
+                "shape_ref": "../Physics/Shapes/floor.ocshape",
+                "material_ref": "../Physics/Materials/floor.opmat"
               },
               {
                 "node_index": 1,
-                "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/floor.opmat"
+                "shape_ref": "../Physics/Shapes/floor.ocshape",
+                "material_ref": "../Physics/Materials/floor.opmat"
               }
             ]
           }

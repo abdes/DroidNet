@@ -18,7 +18,7 @@
         {
           "name": "SoPillar_lod0_surface",
           "surface_id": "48bdfd22-1873-48b5-8ae6-ef8495a77914",
-          "material_ref": "/Content/Scenes/SurfaceOverrides/SoPillar.omat",
+          "material_ref": "SoPillar.omat",
           "views": [
             {
               "view_ref": "__all__"

@@ -6,7 +6,7 @@
   },
   "starting_input_contexts": [
     {
-      "context_ref": "/Content/Scenes/RotatingGltf/rotate.input/RotateInputContext.oimap",
+      "context_ref": "rotate.input/RotateInputContext.oimap",
       "priority": 100
     }
   ],
@@ -23,7 +23,7 @@
         "translation": [-1.0, 0.0, 0.0]
       },
       "instance": {
-        "scene_ref": "/Content/Models/backpack.glb/backpack.oscene"
+        "scene_ref": "../../Models/backpack.glb/backpack.oscene"
       }
     },
     {
@@ -34,7 +34,7 @@
         "translation": [1.0, 0.0, 0.0]
       },
       "instance": {
-        "scene_ref": "/Content/Models/chest.glb/chest.oscene"
+        "scene_ref": "../../Models/chest.glb/chest.oscene"
       }
     },
     {

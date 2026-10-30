@@ -13,7 +13,7 @@
   },
   "textures": {
     "base_color": {
-      "virtual_path": "/Content/Scenes/KenneyCharacters/SkinSurvivor_base_color.otex"
+      "virtual_path": "SkinSurvivor_base_color.otex"
     }
   }
 }

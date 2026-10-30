@@ -65,7 +65,7 @@
   "renderables": [
     {
       "node": 1,
-      "geometry_ref": "/Content/Scenes/VsmBug1Flat/cube.ogeo"
+      "geometry_ref": "cube.ogeo"
     }
   ],
   "cameras": {

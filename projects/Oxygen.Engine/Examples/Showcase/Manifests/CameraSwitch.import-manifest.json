@@ -71,7 +71,7 @@
         {
           "node_index": 5,
           "slot_id": "48a16ecd-d2a0-579a-a929-47eee324728d",
-          "script_virtual_path": "/Content/Scenes/CameraSwitch/camera_switch.oscript",
+          "script_virtual_path": "camera_switch.oscript",
           "execution_order": 0,
           "params": [
             {
@@ -91,27 +91,27 @@
             {
               "key": "play_context",
               "type": "asset",
-              "value": "/Content/Scenes/CameraSwitch/camera_switch.input/CameraSwitchPlay.oimap"
+              "value": "camera_switch.input/CameraSwitchPlay.oimap"
             },
             {
               "key": "menu_context",
               "type": "asset",
-              "value": "/Content/Scenes/CameraSwitch/camera_switch.input/CameraSwitchMenu.oimap"
+              "value": "camera_switch.input/CameraSwitchMenu.oimap"
             },
             {
               "key": "next_camera",
               "type": "asset",
-              "value": "/Content/Scenes/CameraSwitch/camera_switch.input/CameraSwitchNext.oiact"
+              "value": "camera_switch.input/CameraSwitchNext.oiact"
             },
             {
               "key": "open_menu",
               "type": "asset",
-              "value": "/Content/Scenes/CameraSwitch/camera_switch.input/CameraSwitchOpenMenu.oiact"
+              "value": "camera_switch.input/CameraSwitchOpenMenu.oiact"
             },
             {
               "key": "close_menu",
               "type": "asset",
-              "value": "/Content/Scenes/CameraSwitch/camera_switch.input/CameraSwitchCloseMenu.oiact"
+              "value": "camera_switch.input/CameraSwitchCloseMenu.oiact"
             }
           ]
         }

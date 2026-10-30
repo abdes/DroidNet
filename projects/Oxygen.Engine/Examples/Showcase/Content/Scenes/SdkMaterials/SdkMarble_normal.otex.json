@@ -1,6 +1,6 @@
 {
   "$schema": "oxygen.texture-descriptor.schema.json",
-  "source": "/Content/SourceMedia/Images/Showcase/Marble001_1K-JPG_NormalGL.jpg",
+  "source": "../../SourceMedia/Images/Showcase/Marble001_1K-JPG_NormalGL.jpg",
   "intent": "normal",
   "decode": {
     "color_space": "linear",

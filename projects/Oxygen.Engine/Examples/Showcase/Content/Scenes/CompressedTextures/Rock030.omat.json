@@ -13,13 +13,13 @@
   },
   "textures": {
     "base_color": {
-      "virtual_path": "/Content/Scenes/CompressedTextures/Rock030_base_color.otex"
+      "virtual_path": "Rock030_base_color.otex"
     },
     "normal": {
-      "virtual_path": "/Content/Scenes/CompressedTextures/Rock030_normal.otex"
+      "virtual_path": "Rock030_normal.otex"
     },
     "roughness": {
-      "virtual_path": "/Content/Scenes/CompressedTextures/Rock030_roughness.otex"
+      "virtual_path": "Rock030_roughness.otex"
     }
   }
 }

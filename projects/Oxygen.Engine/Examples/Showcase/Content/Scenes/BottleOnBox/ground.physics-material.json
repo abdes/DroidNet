@@ -1,7 +1,6 @@
 {
   "name": "ground",
   "content_hashing": true,
-  "virtual_path": "/Content/Scenes/BottleOnBox/ground.opmat",
   "static_friction": 0.9,
   "dynamic_friction": 0.9,
   "restitution": 0.15,

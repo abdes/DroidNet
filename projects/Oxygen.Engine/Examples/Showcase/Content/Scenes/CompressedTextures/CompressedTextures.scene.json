@@ -37,7 +37,7 @@
         "scale": [0.05, 0.05, 0.05]
       },
       "instance": {
-        "scene_ref": "/Content/Models/ChronographWatch-ktx2/ChronographWatch.gltf/ChronographWatch.oscene"
+        "scene_ref": "../../Models/ChronographWatch-ktx2/ChronographWatch.gltf/ChronographWatch.oscene"
       }
     },
     {
@@ -54,7 +54,7 @@
         "scale": [0.05, 0.05, 0.05]
       },
       "instance": {
-        "scene_ref": "/Content/Models/ChronographWatch-webp/ChronographWatch.gltf/ChronographWatch.oscene"
+        "scene_ref": "../../Models/ChronographWatch-webp/ChronographWatch.gltf/ChronographWatch.oscene"
       }
     },
     {
@@ -71,7 +71,7 @@
         "scale": [1.5, 1.5, 1.5]
       },
       "instance": {
-        "scene_ref": "/Content/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf/AnisotropyBarnLamp.oscene"
+        "scene_ref": "../../Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf/AnisotropyBarnLamp.oscene"
       }
     },
     {
@@ -114,7 +114,7 @@
             "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
             "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
             "values": {
-              "/material": "/Content/Scenes/CompressedTextures/Rock030.omat"
+              "/material": "Rock030.omat"
             }
           }
         ]
@@ -152,6 +152,6 @@
     ]
   },
   "references": {
-    "materials": ["/Content/Scenes/CompressedTextures/Rock030.omat"]
+    "materials": ["Rock030.omat"]
   }
 }

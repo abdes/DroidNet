@@ -1,7 +1,6 @@
 {
   "name": "cube_unit_dynamic",
-  "virtual_path": "/Content/Scenes/PhysicsDomains/cube_unit_dynamic.ocshape",
   "shape_type": "box",
-  "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+  "material_ref": "dynamic.opmat",
   "half_extents": [0.5, 0.5, 0.5]
 }

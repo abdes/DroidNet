@@ -65,9 +65,9 @@ class ShowcaseTests(CommandTestCase):
         stale.write_text("{}", encoding="utf-8")
         # An older lowercase folder for a staged one keeps its spelling on a
         # case-insensitive file system unless it is removed.
-        lowercase = project / "imports"
+        lowercase = project / "manifests"
         lowercase.mkdir()
-        (lowercase / "old.import.json").write_text("{}", encoding="utf-8")
+        (lowercase / "Old.import-manifest.json").write_text("{}", encoding="utf-8")
         old_tool = self.root / "RenderScene/Tools/import.ps1"
         old_tool.parent.mkdir(parents=True)
         old_tool.write_text("", encoding="utf-8")
@@ -76,8 +76,8 @@ class ShowcaseTests(CommandTestCase):
         cooked.write_bytes(b"")
         showcase.prepare(PROJECT.resolve(), self.root, "showcase")
         self.assertFalse((project / "scenes").exists())
-        self.assertIn("Imports", [entry.name for entry in project.iterdir()])
-        self.assertNotIn("imports", [entry.name for entry in project.iterdir()])
+        self.assertIn("Manifests", [entry.name for entry in project.iterdir()])
+        self.assertNotIn("manifests", [entry.name for entry in project.iterdir()])
         self.assertFalse(old_tool.exists())
         self.assertTrue(cooked.is_file())
 

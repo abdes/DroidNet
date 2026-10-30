@@ -27,7 +27,6 @@ Examples/Showcase/                # project root
       showcase-assets.json        # pinned downloads: URL, size, SHA-256
       ASSET_CREDITS.md
   Manifests/<Example>.import-manifest.json
-  Imports/                        # model import records, all committed
   Tools/                          # fetch; Generators/ and the schemas
   .cooked/ .build/ .mounts.json   # the editor's outputs, ignored
 ```
@@ -37,7 +36,6 @@ Examples/Showcase/                # project root
 | `Content/`             | Files written for Oxygen: descriptors, scenes, scripts, input, physics   |
 | `Content/SourceMedia/` | Files Oxygen reads but does not define: DCC models, mesh buffers, images |
 | `Manifests/`           | One import manifest per example, naming every job the example needs      |
-| `Imports/`             | Model import records, at their model's identity                          |
 | `Tools/`               | `fetch`, the generators that write sources, and the catalog schemas      |
 
 A cooked identity is its source's mount path with the cooked extension:
@@ -67,14 +65,17 @@ lists every option.
 
 ## Models
 
-A model import record holds a model's source, identity and settings, and what
-earlier imports established. It lives at the model's identity: the model
-`/Content/Models/Showcase/chair.fbx` has the record
-`Imports/Content/Models/Showcase/chair.fbx.import.json`, and its source is
-`/Content/SourceMedia/DCC/Showcase/chair.fbx`. A manifest's `model` job names
-its record, so cooking an example cooks the models it uses.
+A model import record holds a model's source and settings, and what earlier
+imports established. It is the model's authored file and lives at the model's
+identity in its mount: the model `/Content/Models/Showcase/chair.fbx` has the
+record `Content/Models/Showcase/chair.fbx.import.json`, committed with the
+content. The identity is where the record lives, so the record never repeats
+it. Its `source` names the source file relative to the record when they share
+a mount (`../../SourceMedia/DCC/Showcase/chair.fbx`), and by mount path
+otherwise. A manifest's `model` job names the model by `virtual_path`, so
+cooking an example cooks the models it uses.
 
-A model of one's own stays local: it never goes into `Imports/`. The
+A model of one's own stays local: its record is never committed here. The
 [RenderScene guide](../RenderScene/README.md#cook-package-and-play-the-examples)
 says where RenderScene keeps ad-hoc imports.
 

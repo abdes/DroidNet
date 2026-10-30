@@ -58,7 +58,7 @@ def prune(output: Path, staged: set[Path]) -> None:
     """Remove what an earlier staging left that this one does not stage.
 
     A folder spelled in another case than the staged path, such as an older
-    `imports/` for `Imports/`, is removed: on a case-insensitive file system it
+    `manifests/` for `Manifests/`, is removed: on a case-insensitive file system it
     would keep its spelling, and a record must sit at its exact path.
     """
     if not output.is_dir():
@@ -137,8 +137,11 @@ def prepare(source: Path, stage: Path, tag: str) -> list[Path]:
         for job in json.loads(manifest.read_text(encoding="utf-8"))["jobs"]:
             if "source" in job:
                 copy(content / job["source"][len("/Content/") :])
-            if "record" in job:
-                copy(source / job["record"])
+            if job["type"] == "model":
+                # A model's record lives at its identity in the Content mount,
+                # and names its source relative to itself.
+                identity = job["virtual_path"][len("/Content/") :]
+                copy(content / f"{identity}.import.json")
     for name in PROJECT_FILES:
         copy(source / name)
     prune(output, staged)

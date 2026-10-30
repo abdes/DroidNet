@@ -17,7 +17,7 @@
         {
           "name": "SoLodChain_lod0_surface",
           "surface_id": "cd681955-052b-4034-8b6f-0da3d3346b2a",
-          "material_ref": "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat",
+          "material_ref": "SoLod0Green.omat",
           "views": [
             {
               "view_ref": "__all__"
@@ -40,7 +40,7 @@
         {
           "name": "SoLodChain_lod1_surface",
           "surface_id": "cd681955-052b-4034-8b6f-0da3d3346b2a",
-          "material_ref": "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat",
+          "material_ref": "SoLod1Yellow.omat",
           "views": [
             {
               "view_ref": "__all__"
@@ -60,7 +60,7 @@
         {
           "name": "SoLodChain_lod2_surface",
           "surface_id": "cd681955-052b-4034-8b6f-0da3d3346b2a",
-          "material_ref": "/Content/Scenes/SurfaceOverrides/SoLod2Red.omat",
+          "material_ref": "SoLod2Red.omat",
           "views": [
             {
               "view_ref": "__all__"

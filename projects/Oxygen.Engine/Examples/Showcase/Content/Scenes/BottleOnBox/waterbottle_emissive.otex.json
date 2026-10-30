@@ -1,6 +1,6 @@
 {
   "$schema": "oxygen.texture-descriptor.schema.json",
-  "source": "/Content/SourceMedia/Images/BottleOnBox/waterbottle_emissive.png",
+  "source": "../../SourceMedia/Images/BottleOnBox/waterbottle_emissive.png",
   "intent": "emissive",
   "decode": {
     "color_space": "srgb"

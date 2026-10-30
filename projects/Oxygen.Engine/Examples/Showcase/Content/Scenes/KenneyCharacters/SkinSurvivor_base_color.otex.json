@@ -1,6 +1,6 @@
 {
   "$schema": "oxygen.texture-descriptor.schema.json",
-  "source": "/Content/SourceMedia/DCC/KenneyAnimatedCharacters/Skins/survivorFemaleA.png",
+  "source": "../../SourceMedia/DCC/KenneyAnimatedCharacters/Skins/survivorFemaleA.png",
   "intent": "albedo",
   "decode": {
     "color_space": "srgb"

@@ -169,19 +169,19 @@
   "renderables": [
     {
       "node": 1,
-      "geometry_ref": "/Content/Scenes/SdkMaterials/SdkCube.ogeo"
+      "geometry_ref": "SdkCube.ogeo"
     },
     {
       "node": 2,
-      "geometry_ref": "/Content/Scenes/SdkMaterials/SdkCubeB.ogeo"
+      "geometry_ref": "SdkCubeB.ogeo"
     },
     {
       "node": 3,
-      "geometry_ref": "/Content/Scenes/SdkMaterials/SdkCubeC.ogeo"
+      "geometry_ref": "SdkCubeC.ogeo"
     },
     {
       "node": 10,
-      "geometry_ref": "/Content/Scenes/SdkMaterials/SdkCubeD.ogeo"
+      "geometry_ref": "SdkCubeD.ogeo"
     }
   ],
   "cameras": {
@@ -279,9 +279,6 @@
     ]
   },
   "references": {
-    "materials": [
-      "/Content/Scenes/SdkMaterials/SdkMarble.omat",
-      "/Content/Scenes/SdkMaterials/SdkWood.omat"
-    ]
+    "materials": ["SdkMarble.omat", "SdkWood.omat"]
   }
 }

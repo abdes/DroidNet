@@ -91,10 +91,7 @@
     ]
   },
   "references": {
-    "materials": [
-      "/Content/Scenes/ProcCubes/ProcCubeAccentMat.omat",
-      "/Content/Scenes/ProcCubes/ProcCubeBaseMat.omat"
-    ],
-    "scripts": ["/Content/Scenes/ProcCubes/proc_cubes.oscript"]
+    "materials": ["ProcCubeAccentMat.omat", "ProcCubeBaseMat.omat"],
+    "scripts": ["proc_cubes.oscript"]
   }
 }

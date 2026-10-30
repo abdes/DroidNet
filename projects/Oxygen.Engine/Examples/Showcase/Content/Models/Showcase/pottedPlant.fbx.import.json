@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
-  "source": "/Content/SourceMedia/DCC/Showcase/pottedPlant.fbx",
-  "virtual_path": "/Content/Models/Showcase/pottedPlant.fbx",
+  "source": "../../SourceMedia/DCC/Showcase/pottedPlant.fbx",
   "settings": {
     "content_hashing": true,
     "name": "pottedPlant"

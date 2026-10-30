@@ -1,8 +1,7 @@
 {
   "name": "wheel_shape",
-  "virtual_path": "/Content/Scenes/PhysicsDomains/wheel.ocshape",
   "shape_type": "cylinder",
-  "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+  "material_ref": "dynamic.opmat",
   "radius": 0.3,
   "half_height": 0.15
 }

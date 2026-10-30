@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
-  "source": "/Content/SourceMedia/DCC/chest.glb",
-  "virtual_path": "/Content/Models/chest.glb",
+  "source": "../SourceMedia/DCC/chest.glb",
   "settings": {
     "content_hashing": true,
     "name": "chest_scene"

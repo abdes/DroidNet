@@ -1,6 +1,6 @@
 {
   "$schema": "oxygen.texture-descriptor.schema.json",
-  "source": "/Content/SourceMedia/Images/UvProbe/UvProbe_albedo.png",
+  "source": "../../SourceMedia/Images/UvProbe/UvProbe_albedo.png",
   "intent": "albedo",
   "decode": {
     "color_space": "srgb"

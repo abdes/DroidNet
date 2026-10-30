@@ -1,8 +1,7 @@
 {
   "name": "actor",
-  "virtual_path": "/Content/Scenes/PhysicsDomains/actor.ocshape",
   "shape_type": "capsule",
-  "material_ref": "/Content/Scenes/PhysicsDomains/dynamic.opmat",
+  "material_ref": "dynamic.opmat",
   "radius": 0.35,
   "half_height": 0.9
 }

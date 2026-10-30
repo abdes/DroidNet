@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
-  "source": "/Content/SourceMedia/DCC/ChronographWatch-ktx2/ChronographWatch.gltf",
-  "virtual_path": "/Content/Models/ChronographWatch-ktx2/ChronographWatch.gltf",
+  "source": "../../SourceMedia/DCC/ChronographWatch-ktx2/ChronographWatch.gltf",
   "settings": {
     "bake_hdr": false,
     "bake_transforms": false,

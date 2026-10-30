@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
-  "source": "/Content/SourceMedia/DCC/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf",
-  "virtual_path": "/Content/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf",
+  "source": "../../SourceMedia/DCC/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf",
   "settings": {
     "bake_hdr": false,
     "bake_transforms": false,

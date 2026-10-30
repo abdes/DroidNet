@@ -18,7 +18,7 @@
         {
           "name": "character_surface",
           "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
-          "material_ref": "/Content/Scenes/PhysicsDomains/character_teal.omat",
+          "material_ref": "character_teal.omat",
           "views": [
             {
               "view_ref": "__all__"

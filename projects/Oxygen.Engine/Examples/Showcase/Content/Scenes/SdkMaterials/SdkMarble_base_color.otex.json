@@ -1,6 +1,6 @@
 {
   "$schema": "oxygen.texture-descriptor.schema.json",
-  "source": "/Content/SourceMedia/Images/Showcase/Marble001_1K-JPG_Color.jpg",
+  "source": "../../SourceMedia/Images/Showcase/Marble001_1K-JPG_Color.jpg",
   "intent": "albedo",
   "decode": {
     "color_space": "srgb"

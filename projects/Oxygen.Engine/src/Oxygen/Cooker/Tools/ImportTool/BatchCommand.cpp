@@ -43,6 +43,7 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
@@ -216,6 +217,30 @@ namespace {
     }
   }
 
+  //! Resolves the references read in the job's authored file, from `first`
+  //! on, against the job's anchor (`ImportRequest::OutputIdentity`), so they
+  //! compare with the identities the manifest produces.
+  auto ResolveAuthoredRefs(const PreparedJob& job,
+    std::vector<PhysicsDependencyRef>& refs, const size_t first,
+    std::string& error) -> bool
+  {
+    const auto anchor = job.request.OutputIdentity();
+    for (auto index = first; index < refs.size(); ++index) {
+      auto& ref = refs.at(index);
+      const auto resolved
+        = oxygen::content::ResolveReference(anchor, ref.virtual_path);
+      if (!resolved.has_value()) {
+        error = fmt::format(
+          "'{}' at '{}' is not a reference the engine accepts ({})",
+          ref.virtual_path, ref.object_path,
+          oxygen::content::to_string(resolved.error()));
+        return false;
+      }
+      ref.virtual_path = *resolved;
+    }
+    return true;
+  }
+
   auto CollectPhysicsDependencyRefs(PreparedJob& job,
     std::vector<PhysicsDependencyRef>& refs, std::string& error) -> bool
   {
@@ -241,7 +266,7 @@ namespace {
             .object_path = "material_ref",
           });
         }
-        return true;
+        return ResolveAuthoredRefs(job, refs, 0, error);
       }
 
       if (job.job_type != "physics-sidecar") {
@@ -282,6 +307,9 @@ namespace {
       }
       const auto& bindings_doc = doc.at("bindings");
 
+      // The target scene above is the manifest's identity; the bindings are
+      // references read in the sidecar.
+      const auto first_authored = refs.size();
       CollectSidecarRefField(bindings_doc, "rigid_bodies", "shape_ref", refs);
       CollectSidecarRefField(
         bindings_doc, "rigid_bodies", "material_ref", refs);
@@ -289,7 +317,7 @@ namespace {
       CollectSidecarRefField(bindings_doc, "colliders", "material_ref", refs);
       CollectSidecarRefField(bindings_doc, "characters", "shape_ref", refs);
 
-      return true;
+      return ResolveAuthoredRefs(job, refs, first_authored, error);
     } catch (const std::exception& ex) {
       error = fmt::format(
         "physics dependency reference inference failed: {}", ex.what());

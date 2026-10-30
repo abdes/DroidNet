@@ -1,6 +1,6 @@
 {
   "$schema": "oxygen.texture-descriptor.schema.json",
-  "source": "/Content/SourceMedia/Images/Emissive/MatEmissiveMasked_mask.png",
+  "source": "../../SourceMedia/Images/Emissive/MatEmissiveMasked_mask.png",
   "intent": "albedo",
   "decode": {
     "color_space": "srgb"

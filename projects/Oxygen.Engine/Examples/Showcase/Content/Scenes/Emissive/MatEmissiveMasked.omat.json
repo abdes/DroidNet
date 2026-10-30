@@ -13,7 +13,7 @@
   },
   "textures": {
     "base_color": {
-      "virtual_path": "/Content/Scenes/Emissive/MatEmissiveMasked_mask.otex"
+      "virtual_path": "MatEmissiveMasked_mask.otex"
     }
   }
 }

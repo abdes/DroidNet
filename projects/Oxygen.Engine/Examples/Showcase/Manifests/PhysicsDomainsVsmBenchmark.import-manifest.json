@@ -228,45 +228,45 @@
         {
           "node_index": 12,
           "slot_id": "06cd936e-6895-56bc-b6c8-c59f70564e97",
-          "script_virtual_path": "/Content/Scenes/PhysicsDomains/physics_domains_controller.oscript",
+          "script_virtual_path": "../PhysicsDomains/physics_domains_controller.oscript",
           "execution_order": 0,
           "params": [
             {
               "key": "forward",
               "type": "asset",
-              "value": "/Content/Scenes/PhysicsDomains/physics_domains.input/VehicleForwardAction.oiact"
+              "value": "../PhysicsDomains/physics_domains.input/VehicleForwardAction.oiact"
             },
             {
               "key": "reverse",
               "type": "asset",
-              "value": "/Content/Scenes/PhysicsDomains/physics_domains.input/VehicleReverseAction.oiact"
+              "value": "../PhysicsDomains/physics_domains.input/VehicleReverseAction.oiact"
             },
             {
               "key": "steer_left",
               "type": "asset",
-              "value": "/Content/Scenes/PhysicsDomains/physics_domains.input/VehicleSteerLeftAction.oiact"
+              "value": "../PhysicsDomains/physics_domains.input/VehicleSteerLeftAction.oiact"
             },
             {
               "key": "steer_right",
               "type": "asset",
-              "value": "/Content/Scenes/PhysicsDomains/physics_domains.input/VehicleSteerRightAction.oiact"
+              "value": "../PhysicsDomains/physics_domains.input/VehicleSteerRightAction.oiact"
             },
             {
               "key": "brake",
               "type": "asset",
-              "value": "/Content/Scenes/PhysicsDomains/physics_domains.input/VehicleBrakeAction.oiact"
+              "value": "../PhysicsDomains/physics_domains.input/VehicleBrakeAction.oiact"
             },
             {
               "key": "hand_brake",
               "type": "asset",
-              "value": "/Content/Scenes/PhysicsDomains/physics_domains.input/VehicleHandbrakeAction.oiact"
+              "value": "../PhysicsDomains/physics_domains.input/VehicleHandbrakeAction.oiact"
             }
           ]
         },
         {
           "node_index": 21,
           "slot_id": "0c211a92-ee5b-563b-a77e-0d65e0be4c61",
-          "script_virtual_path": "/Content/Scenes/PhysicsDomainsVsmBenchmark/physics_domains_benchmark_camera.oscript",
+          "script_virtual_path": "physics_domains_benchmark_camera.oscript",
           "execution_order": 1,
           "params": [
             {

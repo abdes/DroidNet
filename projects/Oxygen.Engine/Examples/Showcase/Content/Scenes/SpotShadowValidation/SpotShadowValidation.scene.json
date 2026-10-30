@@ -100,15 +100,15 @@
   ],
   "renderables": [
     {
-      "geometry_ref": "/Content/Geometry/floor.ogeo",
+      "geometry_ref": "../../Geometry/floor.ogeo",
       "node": 1
     },
     {
-      "geometry_ref": "/Content/Geometry/cube.ogeo",
+      "geometry_ref": "../../Geometry/cube.ogeo",
       "node": 2
     },
     {
-      "geometry_ref": "/Content/Geometry/cube.ogeo",
+      "geometry_ref": "../../Geometry/cube.ogeo",
       "node": 3
     }
   ],
@@ -148,8 +148,8 @@
   },
   "references": {
     "materials": [
-      "/Content/Materials/floor_default.omat",
-      "/Content/Materials/cube_red.omat"
+      "../../Materials/floor_default.omat",
+      "../../Materials/cube_red.omat"
     ]
   }
 }

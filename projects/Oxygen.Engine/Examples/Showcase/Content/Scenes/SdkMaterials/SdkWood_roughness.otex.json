@@ -1,6 +1,6 @@
 {
   "$schema": "oxygen.texture-descriptor.schema.json",
-  "source": "/Content/SourceMedia/Images/Showcase/Wood051_1K-JPG_Roughness.jpg",
+  "source": "../../SourceMedia/Images/Showcase/Wood051_1K-JPG_Roughness.jpg",
   "intent": "roughness",
   "decode": {
     "color_space": "linear"

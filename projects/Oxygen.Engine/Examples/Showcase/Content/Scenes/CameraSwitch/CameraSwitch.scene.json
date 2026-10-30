@@ -6,7 +6,7 @@
   },
   "starting_input_contexts": [
     {
-      "context_ref": "/Content/Scenes/CameraSwitch/camera_switch.input/CameraSwitchPlay.oimap",
+      "context_ref": "camera_switch.input/CameraSwitchPlay.oimap",
       "priority": 100
     }
   ],
@@ -56,7 +56,7 @@
   "renderables": [
     {
       "node": 1,
-      "geometry_ref": "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo"
+      "geometry_ref": "CameraSwitchCube.ogeo"
     }
   ],
   "cameras": {

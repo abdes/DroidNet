@@ -1,6 +1,6 @@
 {
   "$schema": "oxygen.texture-descriptor.schema.json",
-  "source": "/Content/SourceMedia/Images/webp/Rock030_NormalGL.webp",
+  "source": "../../SourceMedia/Images/webp/Rock030_NormalGL.webp",
   "intent": "normal",
   "decode": {
     "color_space": "linear",

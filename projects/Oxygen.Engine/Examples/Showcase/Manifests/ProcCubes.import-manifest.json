@@ -64,7 +64,7 @@
         {
           "node_index": 1,
           "slot_id": "e173ea63-4864-53de-8c04-ae89e2ac38e1",
-          "script_virtual_path": "/Content/Scenes/ProcCubes/proc_cubes.oscript",
+          "script_virtual_path": "proc_cubes.oscript",
           "execution_order": 0,
           "params": [
             {

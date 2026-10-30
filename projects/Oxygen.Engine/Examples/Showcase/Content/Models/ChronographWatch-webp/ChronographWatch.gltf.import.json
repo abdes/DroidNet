@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
-  "source": "/Content/SourceMedia/DCC/ChronographWatch-webp/ChronographWatch.gltf",
-  "virtual_path": "/Content/Models/ChronographWatch-webp/ChronographWatch.gltf",
+  "source": "../../SourceMedia/DCC/ChronographWatch-webp/ChronographWatch.gltf",
   "settings": {
     "bake_hdr": false,
     "bake_transforms": false,

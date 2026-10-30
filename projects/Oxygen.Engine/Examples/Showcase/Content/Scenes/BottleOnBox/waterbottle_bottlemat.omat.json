@@ -15,22 +15,22 @@
   },
   "textures": {
     "base_color": {
-      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_albedo.otex"
+      "virtual_path": "waterbottle_albedo.otex"
     },
     "normal": {
-      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_normal.otex"
+      "virtual_path": "waterbottle_normal.otex"
     },
     "metallic": {
-      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_orm.otex"
+      "virtual_path": "waterbottle_orm.otex"
     },
     "roughness": {
-      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_orm.otex"
+      "virtual_path": "waterbottle_orm.otex"
     },
     "ambient_occlusion": {
-      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_orm.otex"
+      "virtual_path": "waterbottle_orm.otex"
     },
     "emissive": {
-      "virtual_path": "/Content/Scenes/BottleOnBox/waterbottle_emissive.otex"
+      "virtual_path": "waterbottle_emissive.otex"
     }
   }
 }

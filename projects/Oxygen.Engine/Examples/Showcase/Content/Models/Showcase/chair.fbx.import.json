@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
-  "source": "/Content/SourceMedia/DCC/Showcase/chair.fbx",
-  "virtual_path": "/Content/Models/Showcase/chair.fbx",
+  "source": "../../SourceMedia/DCC/Showcase/chair.fbx",
   "settings": {
     "content_hashing": true,
     "name": "chair"

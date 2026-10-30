@@ -14,7 +14,7 @@
     {
       "id": "/Content/Models/Lantern.glb",
       "type": "model",
-      "record": "Imports/Content/Models/Lantern.glb.import.json"
+      "virtual_path": "/Content/Models/Lantern.glb"
     },
     {
       "id": "/Content/Scenes/Lantern/Sky.otex",

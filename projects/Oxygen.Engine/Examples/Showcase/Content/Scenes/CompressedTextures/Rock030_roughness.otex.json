@@ -1,6 +1,6 @@
 {
   "$schema": "oxygen.texture-descriptor.schema.json",
-  "source": "/Content/SourceMedia/Images/webp/Rock030_Roughness.webp",
+  "source": "../../SourceMedia/Images/webp/Rock030_Roughness.webp",
   "intent": "roughness",
   "decode": {
     "color_space": "linear"

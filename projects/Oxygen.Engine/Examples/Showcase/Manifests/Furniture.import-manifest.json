@@ -14,22 +14,22 @@
     {
       "id": "/Content/Models/Showcase/tableRound.fbx",
       "type": "model",
-      "record": "Imports/Content/Models/Showcase/tableRound.fbx.import.json"
+      "virtual_path": "/Content/Models/Showcase/tableRound.fbx"
     },
     {
       "id": "/Content/Models/Showcase/chair.fbx",
       "type": "model",
-      "record": "Imports/Content/Models/Showcase/chair.fbx.import.json"
+      "virtual_path": "/Content/Models/Showcase/chair.fbx"
     },
     {
       "id": "/Content/Models/Showcase/lampRoundTable.fbx",
       "type": "model",
-      "record": "Imports/Content/Models/Showcase/lampRoundTable.fbx.import.json"
+      "virtual_path": "/Content/Models/Showcase/lampRoundTable.fbx"
     },
     {
       "id": "/Content/Models/Showcase/pottedPlant.fbx",
       "type": "model",
-      "record": "Imports/Content/Models/Showcase/pottedPlant.fbx.import.json"
+      "virtual_path": "/Content/Models/Showcase/pottedPlant.fbx"
     }
   ]
 }

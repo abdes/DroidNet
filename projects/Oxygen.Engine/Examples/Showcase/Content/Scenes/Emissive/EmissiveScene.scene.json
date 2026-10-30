@@ -123,27 +123,27 @@
   "renderables": [
     {
       "node": 1,
-      "geometry_ref": "/Content/Scenes/Emissive/GeoEmissiveRed.ogeo"
+      "geometry_ref": "GeoEmissiveRed.ogeo"
     },
     {
       "node": 2,
-      "geometry_ref": "/Content/Scenes/Emissive/GeoEmissiveGreen.ogeo"
+      "geometry_ref": "GeoEmissiveGreen.ogeo"
     },
     {
       "node": 3,
-      "geometry_ref": "/Content/Scenes/Emissive/GeoEmissiveBlue.ogeo"
+      "geometry_ref": "GeoEmissiveBlue.ogeo"
     },
     {
       "node": 4,
-      "geometry_ref": "/Content/Scenes/Emissive/GeoEmissiveTextured.ogeo"
+      "geometry_ref": "GeoEmissiveTextured.ogeo"
     },
     {
       "node": 5,
-      "geometry_ref": "/Content/Scenes/Emissive/GeoEmissiveMasked.ogeo"
+      "geometry_ref": "GeoEmissiveMasked.ogeo"
     },
     {
       "node": 6,
-      "geometry_ref": "/Content/Scenes/Emissive/GeoReference.ogeo"
+      "geometry_ref": "GeoReference.ogeo"
     }
   ],
   "cameras": {
@@ -160,12 +160,12 @@
   },
   "references": {
     "materials": [
-      "/Content/Scenes/Emissive/MatEmissiveBlue.omat",
-      "/Content/Scenes/Emissive/MatEmissiveGreen.omat",
-      "/Content/Scenes/Emissive/MatEmissiveMasked.omat",
-      "/Content/Scenes/Emissive/MatEmissiveRed.omat",
-      "/Content/Scenes/Emissive/MatEmissiveTextured.omat",
-      "/Content/Scenes/Emissive/MatReference.omat"
+      "MatEmissiveBlue.omat",
+      "MatEmissiveGreen.omat",
+      "MatEmissiveMasked.omat",
+      "MatEmissiveRed.omat",
+      "MatEmissiveTextured.omat",
+      "MatReference.omat"
     ]
   }
 }

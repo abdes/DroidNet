@@ -1,6 +1,5 @@
 {
   "name": "bouncy",
-  "virtual_path": "/Content/Scenes/PhysicsDomains/bouncy.opmat",
   "static_friction": 0.15,
   "dynamic_friction": 0.15,
   "restitution": 0.85,

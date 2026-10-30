@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
-  "source": "/Content/SourceMedia/DCC/KenneyAnimatedCharacters/Model/characterMedium.fbx",
-  "virtual_path": "/Content/Models/KenneyAnimatedCharacters/Model/characterMedium.fbx",
+  "source": "../../../SourceMedia/DCC/KenneyAnimatedCharacters/Model/characterMedium.fbx",
   "settings": {
     "bake_hdr": false,
     "bake_transforms": false,

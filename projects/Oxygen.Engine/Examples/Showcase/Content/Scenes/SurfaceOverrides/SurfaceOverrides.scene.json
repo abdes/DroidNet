@@ -6,7 +6,7 @@
   },
   "starting_input_contexts": [
     {
-      "context_ref": "/Content/Scenes/SurfaceOverrides/surface_overrides.input/SurfaceOverridesContext.oimap",
+      "context_ref": "surface_overrides.input/SurfaceOverridesContext.oimap",
       "priority": 0
     }
   ],
@@ -437,7 +437,7 @@
             "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
             "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
             "values": {
-              "/material": "/Content/Scenes/SurfaceOverrides/SoFloor.omat"
+              "/material": "SoFloor.omat"
             }
           }
         ]
@@ -445,11 +445,11 @@
     },
     {
       "node": 2,
-      "geometry_ref": "/Content/Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo"
+      "geometry_ref": "../../Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo"
     },
     {
       "node": 3,
-      "geometry_ref": "/Content/Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo",
+      "geometry_ref": "../../Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo",
       "overrides": {
         "parts": [
           {
@@ -457,7 +457,7 @@
             "id": "914071b0-c22f-f08b-ea6d-33dd2cec5584",
             "layout_revision": "e3c225623d3dc9c308622770e45e068174145d4525914fc02f9cb41efab0db82",
             "values": {
-              "/material": "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat"
+              "/material": "SoShadeRed.omat"
             }
           }
         ]
@@ -465,19 +465,19 @@
     },
     {
       "node": 4,
-      "geometry_ref": "/Content/Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo"
+      "geometry_ref": "../../Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo"
     },
     {
       "node": 5,
-      "geometry_ref": "/Content/Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo"
+      "geometry_ref": "../../Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo"
     },
     {
       "node": 6,
-      "geometry_ref": "/Content/Models/Showcase/pottedPlant.fbx/Mesh_0.ogeo"
+      "geometry_ref": "../../Models/Showcase/pottedPlant.fbx/Mesh_0.ogeo"
     },
     {
       "node": 7,
-      "geometry_ref": "/Content/Models/Showcase/pottedPlant.fbx/Mesh_0.ogeo",
+      "geometry_ref": "../../Models/Showcase/pottedPlant.fbx/Mesh_0.ogeo",
       "overrides": {
         "parts": [
           {
@@ -485,7 +485,7 @@
             "id": "15f61e58-02db-1303-d223-663d1e95110e",
             "layout_revision": "5936ed2604c9b4f26f4a706a257b45e1be9766b2d1152aefd88d7991adb7f0a8",
             "values": {
-              "/material": "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat"
+              "/material": "SoPotTeal.omat"
             }
           },
           {
@@ -493,7 +493,7 @@
             "id": "5aac8d25-d9b8-dafb-0dfb-da32cd6051c1",
             "layout_revision": "5936ed2604c9b4f26f4a706a257b45e1be9766b2d1152aefd88d7991adb7f0a8",
             "values": {
-              "/material": "/Content/Scenes/SurfaceOverrides/SoPotGold.omat"
+              "/material": "SoPotGold.omat"
             }
           }
         ]
@@ -501,51 +501,51 @@
     },
     {
       "node": 8,
-      "geometry_ref": "/Content/Models/Showcase/pottedPlant.fbx/Mesh_0.ogeo"
+      "geometry_ref": "../../Models/Showcase/pottedPlant.fbx/Mesh_0.ogeo"
     },
     {
       "node": 9,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoPillar.ogeo"
+      "geometry_ref": "SoPillar.ogeo"
     },
     {
       "node": 10,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoPillar.ogeo"
+      "geometry_ref": "SoPillar.ogeo"
     },
     {
       "node": 11,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoGhost.ogeo"
+      "geometry_ref": "SoGhost.ogeo"
     },
     {
       "node": 12,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoGhost.ogeo"
+      "geometry_ref": "SoGhost.ogeo"
     },
     {
       "node": 13,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo"
+      "geometry_ref": "SoLodChain.ogeo"
     },
     {
       "node": 14,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo"
+      "geometry_ref": "SoLodChain.ogeo"
     },
     {
       "node": 15,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo"
+      "geometry_ref": "SoLodChain.ogeo"
     },
     {
       "node": 16,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo"
+      "geometry_ref": "SoLodChain.ogeo"
     },
     {
       "node": 17,
-      "geometry_ref": "/Content/Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo"
+      "geometry_ref": "../../Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo"
     },
     {
       "node": 18,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo"
+      "geometry_ref": "SoLodChain.ogeo"
     },
     {
       "node": 22,
-      "geometry_ref": "/Content/Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo",
+      "geometry_ref": "../../Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo",
       "overrides": {
         "parts": [
           {
@@ -561,7 +561,7 @@
     },
     {
       "node": 23,
-      "geometry_ref": "/Content/Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo",
+      "geometry_ref": "../../Models/Showcase/lampRoundTable.fbx/Mesh_0.ogeo",
       "overrides": {
         "parts": [
           {
@@ -577,7 +577,7 @@
     },
     {
       "node": 24,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoPillar.ogeo",
+      "geometry_ref": "SoPillar.ogeo",
       "overrides": {
         "parts": [
           {
@@ -593,7 +593,7 @@
     },
     {
       "node": 25,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoGhost.ogeo",
+      "geometry_ref": "SoGhost.ogeo",
       "overrides": {
         "parts": [
           {
@@ -609,7 +609,7 @@
     },
     {
       "node": 26,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo",
+      "geometry_ref": "SoLodChain.ogeo",
       "overrides": {
         "values": {
           "/lod_policy": {
@@ -621,7 +621,7 @@
     },
     {
       "node": 27,
-      "geometry_ref": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo",
+      "geometry_ref": "SoLodChain.ogeo",
       "overrides": {
         "values": {
           "/lod_policy": {
@@ -665,27 +665,27 @@
   },
   "references": {
     "materials": [
-      "/Content/Scenes/SurfaceOverrides/SoFloor.omat",
-      "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat",
-      "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat",
-      "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat",
-      "/Content/Scenes/SurfaceOverrides/SoPotGold.omat",
-      "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat",
-      "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat",
-      "/Content/Scenes/SurfaceOverrides/SoLod2Red.omat",
-      "/Content/Scenes/SurfaceOverrides/SoLodPurple.omat",
-      "/Content/Scenes/SurfaceOverrides/SoPillar.omat"
+      "SoFloor.omat",
+      "SoShadeRed.omat",
+      "SoShadeBlue.omat",
+      "SoPotTeal.omat",
+      "SoPotGold.omat",
+      "SoLod0Green.omat",
+      "SoLod1Yellow.omat",
+      "SoLod2Red.omat",
+      "SoLodPurple.omat",
+      "SoPillar.omat"
     ],
-    "scripts": ["/Content/Scenes/SurfaceOverrides/surface_overrides.oscript"],
+    "scripts": ["surface_overrides.oscript"],
     "input_actions": [
-      "/Content/Scenes/SurfaceOverrides/surface_overrides.input/ToggleShadeAction.oiact",
-      "/Content/Scenes/SurfaceOverrides/surface_overrides.input/ToggleMetalShadowAction.oiact",
-      "/Content/Scenes/SurfaceOverrides/surface_overrides.input/CycleShadeMaterialAction.oiact",
-      "/Content/Scenes/SurfaceOverrides/surface_overrides.input/CycleLodPolicyAction.oiact",
-      "/Content/Scenes/SurfaceOverrides/surface_overrides.input/ResetOverridesAction.oiact"
+      "surface_overrides.input/ToggleShadeAction.oiact",
+      "surface_overrides.input/ToggleMetalShadowAction.oiact",
+      "surface_overrides.input/CycleShadeMaterialAction.oiact",
+      "surface_overrides.input/CycleLodPolicyAction.oiact",
+      "surface_overrides.input/ResetOverridesAction.oiact"
     ],
     "input_mapping_contexts": [
-      "/Content/Scenes/SurfaceOverrides/surface_overrides.input/SurfaceOverridesContext.oimap"
+      "surface_overrides.input/SurfaceOverridesContext.oimap"
     ]
   }
 }

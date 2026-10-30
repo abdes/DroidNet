@@ -148,13 +148,22 @@ function Test-ExamplesProject {
             $source = $job.PSObject.Properties['source']?.Value
             $identity = $job.PSObject.Properties['virtual_path']?.Value
             if ($job.type -eq 'model') {
-                $record = Get-Content -LiteralPath (Join-Path $ExamplesRoot $job.record) -Raw | ConvertFrom-Json
-                $dcc = '/Content/SourceMedia/DCC/'
-                $expected = if ($record.source.StartsWith($dcc)) { '/Content/Models/' + $record.source.Substring($dcc.Length) } else { $null }
-                if ($record.virtual_path -cne $expected) {
-                    $problems.Add("$($example.name): record $($job.record) has the identity $($record.virtual_path), not $expected")
+                # A model's record lives at its identity in the Content mount
+                # and names its source relative to itself.
+                $recordFile = Join-Path $ExamplesRoot ($identity.Substring(1) + '.import.json')
+                if (-not (Test-Path -LiteralPath $recordFile)) {
+                    $problems.Add("$($example.name): the model $identity has no record $recordFile")
+                    continue
                 }
-                [void]$produced.Add($record.virtual_path)
+                $record = Get-Content -LiteralPath $recordFile -Raw | ConvertFrom-Json
+                $sourceFile = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $recordFile) $record.source))
+                $sourcePath = '/' + [IO.Path]::GetRelativePath($ExamplesRoot, $sourceFile).Replace('\', '/')
+                $dcc = '/Content/SourceMedia/DCC/'
+                $expected = if ($sourcePath.StartsWith($dcc)) { '/Content/Models/' + $sourcePath.Substring($dcc.Length) } else { $null }
+                if ($identity -cne $expected) {
+                    $problems.Add("$($example.name): the model of $sourcePath is $identity, not $expected")
+                }
+                [void]$produced.Add($identity)
                 continue
             }
             if ($identity) {

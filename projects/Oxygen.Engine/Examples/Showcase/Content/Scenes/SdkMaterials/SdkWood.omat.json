@@ -13,13 +13,13 @@
   },
   "textures": {
     "base_color": {
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_base_color.otex"
+      "virtual_path": "SdkWood_base_color.otex"
     },
     "normal": {
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_normal.otex"
+      "virtual_path": "SdkWood_normal.otex"
     },
     "roughness": {
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex"
+      "virtual_path": "SdkWood_roughness.otex"
     }
   }
 }

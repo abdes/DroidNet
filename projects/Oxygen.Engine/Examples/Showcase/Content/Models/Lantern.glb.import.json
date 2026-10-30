@@ -1,7 +1,6 @@
 {
   "schema_version": 1,
-  "source": "/Content/SourceMedia/DCC/Lantern.glb",
-  "virtual_path": "/Content/Models/Lantern.glb",
+  "source": "../SourceMedia/DCC/Lantern.glb",
   "settings": {
     "content_hashing": true,
     "name": "Lantern"

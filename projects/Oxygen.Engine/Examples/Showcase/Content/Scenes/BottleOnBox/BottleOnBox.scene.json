@@ -114,19 +114,19 @@
   "renderables": [
     {
       "node": 1,
-      "geometry_ref": "/Content/Geometry/floor.ogeo"
+      "geometry_ref": "../../Geometry/floor.ogeo"
     },
     {
       "node": 2,
-      "geometry_ref": "/Content/Geometry/cube.ogeo"
+      "geometry_ref": "../../Geometry/cube.ogeo"
     },
     {
       "node": 3,
-      "geometry_ref": "/Content/Geometry/sphere.ogeo"
+      "geometry_ref": "../../Geometry/sphere.ogeo"
     },
     {
       "node": 4,
-      "geometry_ref": "/Content/Scenes/BottleOnBox/waterbottle_waterbottle_p0_geo.ogeo"
+      "geometry_ref": "waterbottle_waterbottle_p0_geo.ogeo"
     }
   ],
   "cameras": {

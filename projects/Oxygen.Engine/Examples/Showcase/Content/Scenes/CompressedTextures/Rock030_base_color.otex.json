@@ -1,6 +1,6 @@
 {
   "$schema": "oxygen.texture-descriptor.schema.json",
-  "source": "/Content/SourceMedia/Images/webp/Rock030_Color.webp",
+  "source": "../../SourceMedia/Images/webp/Rock030_Color.webp",
   "intent": "albedo",
   "decode": {
     "color_space": "srgb"
