@@ -6,7 +6,9 @@
 
 #include <cstring>
 
-#include <crtdbg.h>
+#ifdef _MSC_VER
+#  include <crtdbg.h>
+#endif
 #include <gtest/gtest.h>
 
 #include <Oxygen/Base/Logging.h>

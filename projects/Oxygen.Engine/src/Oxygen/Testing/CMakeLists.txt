@@ -47,11 +47,12 @@ target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     "gtest_main.cpp"
+    "ScopedTempDir.cpp"
   INTERFACE
     FILE_SET HEADERS
     TYPE HEADERS
     BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
-    FILES "GTest.h" "ScopedLogCapture.h"
+    FILES "GTest.h" "ScopedLogCapture.h" "ScopedTempDir.h"
 )
 
 # Set include directories
