@@ -30,6 +30,15 @@ function(oxygen_apply_build_policy target)
   )
   if(_type STREQUAL "EXECUTABLE")
     oxygen_configure_test_runtime(${target})
+    # Every executable opts into Windows long paths: the linker merges this
+    # manifest into the one it embeds in the binary.
+    if(MSVC)
+      target_sources(
+        ${target}
+        PRIVATE
+          "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/LongPathAware.manifest"
+      )
+    endif()
   endif()
 
   target_compile_options(
