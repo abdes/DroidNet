@@ -193,7 +193,7 @@ any reader or writer of bytes needs, whatever the bytes are.
 | Bounding memory in flight                                                                        | Each consumer: Content's payload budget, Vortex's staging provider          | None: Serio's operations take memory their caller owns               |
 | Cooked formats (pak, catalog, loose index, storage records, signature section) and their loaders | Data                                                                        | Records, sequences and `ByteReader` that formats are read with       |
 | Pak layout rules (4 KiB payload alignment, sections)                                             | Data and the pak builder (Cooker)                                           | Unbuffered reads of aligned regions                                  |
-| Opening a pak for metadata and payloads                                                          | Content (`PakFile`)                                                         | `MappedFile` and `NativeFile`                                        |
+| Opening a pak for metadata and payloads                                                          | Content (`PakFile`)                                                         | `MappedFile` and `AsyncFile`                                         |
 | GDeflate compression and decompression                                                           | Compression module; scheduled by Cooker (compress) and Content (decompress) | Reading and writing the stored bytes                                 |
 | Ed25519 signing and verification                                                                 | Crypto module; used by Cooker (sign) and Content (verify)                   | Verifying each region's digest as it is read                         |
 | Signature trust list and policy                                                                  | Content, Player                                                             | None                                                                 |
@@ -238,36 +238,22 @@ reads and writes streams, or parses a region's bytes in place when they are
 contiguous. **Integrity** hashes or verifies bytes as streams and regions pass
 them; **publication** replaces a file atomically from a stream.
 
+The C++ shape of these layers (headers, the concepts each kind of type
+satisfies, the erased wrappers and the extension points) is the
+[Serio C++ API design](api.md); the sections below state what each layer does.
+
 ### Devices
 
 A device names its offsets; it has no cursor, so one device serves concurrent
-callers without a lock.
-
-```cpp
-//! A position in a device, and a number of bytes: distinct types, so an
-//! offset and a size cannot be swapped (`NamedType`, from Base).
-using ByteOffset = NamedType<uint64_t, struct ByteOffsetTag, ...>;
-using ByteCount = NamedType<uint64_t, struct ByteCountTag, ...>;
-
-class AnyDevice {
-public:
-  virtual auto Size() const noexcept -> Result<ByteCount> = 0;
-  virtual auto ReadAt(ByteOffset offset, std::span<std::byte> out) const noexcept
-    -> Result<size_t> = 0;
-  virtual auto WriteAt(ByteOffset offset, std::span<const std::byte> bytes) noexcept
-    -> Result<void> = 0;
-  virtual auto Reserve(ByteCount size) noexcept -> Result<void> = 0;
-  virtual auto Flush(Durability durability) noexcept -> Result<void> = 0;
-  //! The device's bytes when they are contiguous in memory: a memory file,
-  //! a byte view or a mapped file. Parsers then read views, not copies.
-  virtual auto Contiguous() const noexcept
-    -> std::optional<std::span<const std::byte>> = 0;
-};
-```
+callers without a lock. Offsets and sizes are distinct types (`ByteOffset`,
+`ByteCount`), so they cannot be swapped. A device is any type that satisfies
+the device concepts ([devices](api.md#devices)); `AnyDevice` erases one at a
+coarse boundary ([type erasure](api.md#type-erasure)).
 
 | Device       | Backing                                                                                              | Contiguous | Writes |
 | ------------ | ---------------------------------------------------------------------------------------------------- | ---------- | ------ |
 | `NativeFile` | A Win32 handle (`ReadFile`/`WriteFile` with an `OVERLAPPED` offset) or a POSIX fd (`pread`/`pwrite`) | No         | Yes    |
+| `AsyncFile`  | A `NativeFile` bound to an `IoQueue`, with awaitable operations                                      | No         | Yes    |
 | `MemoryFile` | A growable buffer it owns; a test's or a builder's file                                              | Yes        | Yes    |
 | `MappedFile` | A read-only view of a whole file (`CreateFileMapping`/`MapViewOfFile`, `mmap`)                       | Yes        | No     |
 | `ByteView`   | Bytes the caller owns: an embedded pak, a decoded section                                            | Yes        | No     |
@@ -280,35 +266,38 @@ public:
   with `base::ToNativePath` only at the OS call, so long and UNC paths work
   whatever the machine's long-path policy; the device keeps the logical path
   for diagnostics. It returns the OS error (`base::LastSystemError`) and never
-  throws. The backend is selected by `OXYGEN_WINDOWS`.
+  throws. The platform implementation is chosen by CMake
+  ([platform code](api.md#platform-code)).
 - `Reserve` preallocates (`FileAllocationInfo`, `fallocate`), so a producer
   that knows its size fails early on a full disk and writes unfragmented.
 - `Durability` is `kBuffered` (to the OS) or `kStable` (`FlushFileBuffers`,
   `fsync`).
 - `ReadAt` returns the bytes read; a read that crosses the end returns fewer,
-  and `ReadExactlyAt` fails with `kEndOfData`. All three devices behave the
-  same.
+  and `ReadExactlyAt` fails with `kEndOfData`. Every device behaves the same.
 
 #### Awaitable IO
 
-Every device has both forms of each operation: the blocking `ReadAt` and
-`WriteAt` above, for tools and code that need not be asynchronous, and
-awaitable ones for coroutines:
+Every device has the blocking `ReadAt` and `WriteAt` above, for tools and
+code that need not be asynchronous. Devices that can complete without
+blocking also have awaitable forms, for coroutines:
 
 ```cpp
-auto bytes = co_await file.AsyncReadAt(offset, buffer);  // Result<size_t>
-co_await file.AsyncWriteAt(offset, payload);             // Result<void>
+auto file = queue.Open(path, {.access = Access::kRead});  // Result<AsyncFile>
+auto bytes = co_await file->AsyncReadAt(offset, buffer);  // Result<ByteCount>
+co_await file->AsyncWriteAt(offset, payload);             // Result<void>
 ```
 
-- **On a `NativeFile`** the operation is overlapped IO bound to the awaiting
+- **On an `AsyncFile`** the operation is overlapped IO bound to the awaiting
   loop's `asio::io_context`, through OxCo's asio bridge
   ([OxCo async IO](../../../src/Oxygen/OxCo/Docs/AsyncIO.md)), on
   `asio::random_access_file`: IOCP on Windows, io_uring on Linux
   (`ASIO_HAS_IO_URING`, with liburing). The coroutine suspends; no thread
   blocks; the completion resumes it on the loop thread.
-- **One IO queue per loop; backends live behind it.** `NativeFile::Open`
-  takes the loop's `serio::IoQueue`, and a file's awaitable operations are
-  submitted to the queue, never to the OS directly. The queue holds
+- **One IO queue per loop; backends live behind it.** `IoQueue::Open`
+  returns an `AsyncFile`, and its awaitable operations are submitted to the
+  queue, never to the OS directly. A `NativeFile` opened without a queue has
+  no awaitable form, and `MappedFile` has none either: a consumer that awaits
+  payload reads of a mapped file opens it as an `AsyncFile` too. The queue holds
   everything a backend can differ in:
   - **handles:** registered when a file opens, released when it closes;
   - **submission:** operations collected during a loop turn are submitted
@@ -324,7 +313,8 @@ co_await file.AsyncWriteAt(offset, payload);             // Result<void>
   through asio's `windows::object_handle`) is the second. The queue picks one
   when it is created, from `GetIoRingInfo` and `QueryIoRingCapabilities`,
   falling back to IOCP. No public type or signature names a backend, so
-  adding, dropping or choosing one never changes a caller.
+  adding, dropping or choosing one never changes a caller
+  ([IO queue and backends](api.md#io-queue-and-backends)).
 
 - **On a `MemoryFile` or `ByteView`** the awaitable is ready at once
   (`co::Just`): nothing suspends, so tests and embedded content pay nothing
@@ -334,9 +324,9 @@ co_await file.AsyncWriteAt(offset, payload);             // Result<void>
 - **Cancellation is structural.** A coroutine cancelled by its nursery, an
   `AnyOf` or a timeout cancels its in-flight operation (`CancelIoEx`), and
   resumes only after the OS is done with the buffer. There is no cancel API.
-- **Concurrency and batching are OxCo's:** `co::AllOf` over several reads of
-  one file, a `Nursery` for open-ended loads. No queue object exists; the OS
-  queues the overlapped operations.
+- **Concurrency is OxCo's:** `co::AllOf` over several reads of one file, a
+  `Nursery` for open-ended loads. The `IoQueue` only submits and completes
+  operations; it has no scheduling policy of its own.
 - **Memory is the caller's.** An operation reads into or writes from memory
   its caller owns; Serio allocates nothing per operation and imposes no budget.
   A consumer that starts many reads bounds their buffers itself.
@@ -360,17 +350,16 @@ overlapped IO.
 - **Opened like a `NativeFile`,** from a logical path with share delete, so a
   published file is replaced (never modified) while it is mapped, and the
   mapping keeps showing the complete version it opened.
-- **`Contiguous()` is the view;** `ByteReader` parses it without allocating or
-  copying.
+- **`Bytes()` is the view** (`Contiguous()` on an `AnyDevice`); `ByteReader`
+  parses it without allocating or copying.
 - **`ReadAt` copies from the view** inside a guarded copy (structured
   exception handling on Windows, a `SIGBUS` guard elsewhere) that turns a
   failed page-in into `kIo`, so every copied read stays a `Result`.
 - **A view cannot be guarded.** A device failure while code parses a view
   directly is fatal; the header says so. Views are used for metadata parsed
   once per mount.
-- **The awaitable `ReadAt` is overlapped IO** through the mapping's own file
-  handle, like a `NativeFile`'s, so an awaited read never faults on the loop
-  thread; only `Contiguous()` and the blocking `ReadAt` touch mapped pages.
+- **No awaitable form.** Only the view and the blocking `ReadAt` touch mapped
+  pages, so nothing awaited ever faults on the loop thread.
 - **`Prefetch(region)`** hints that a region will be parsed soon
   (`PrefetchVirtualMemory`, `madvise(MADV_WILLNEED)`), without waiting.
 - A mapping of a multi-GB file only reserves address space on a 64-bit
@@ -381,7 +370,7 @@ overlapped IO.
 A `Region` is a device, a `ByteOffset` and a `ByteCount`, cheap to copy. A pak section, a
 resource payload and a descriptor are regions of the pak's one device; a
 loose root's data file is a region covering its device. `ReadAt` on a region
-is bounds-checked against the region, not the file. `Contiguous()` on a
+is bounds-checked against the region, not the file. `Bytes()` on a
 region of a contiguous device is a subspan.
 
 ### Streams
@@ -533,7 +522,7 @@ benchmark that touches a `NativeFile` runs once per backend.
 
 | Consumer                                                                 | Change                                                                                                                                                                                                                                                                                                                                                     |
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PakFile`                                                                | A `MappedFile` for its metadata, parsed in place, and a `NativeFile` for payloads (or one memory device for both); its parsers take regions; the five streams, the per-lookup mutex and the copies of its directory go                                                                                                                                     |
+| `PakFile`                                                                | A `MappedFile` for its metadata, parsed in place, and an `AsyncFile` for payloads (or one memory device for both); its parsers take regions; the five streams, the per-lookup mutex and the copies of its directory go                                                                                                                                     |
 | `PakFileSource`, `LooseCookedSource`, `ContentFileReader`                | One device per pak or data file, opened at mount; readers are region streams over it; a load opens nothing                                                                                                                                                                                                                                                 |
 | Loaders (`LoaderContext`)                                                | Descriptors read as records; a payload is read with one awaitable read into the loader's destination. Content's payload budget, internal to its loaders and built on `co::Event` waiters, bounds payload buffers in flight: arrival order, no barging, a payload larger than the budget served alone when it is free, a cancelled waiter leaving the queue |
 | `data::TextureResource`, `data::BufferResource`, their loaders           | Own a `ByteBuffer` instead of a `std::vector<uint8_t>`; the loaders read the payload straight into it, bounded by Content's payload budget. The zero-fill and the stream-buffer copy go; the one copy into upload staging remains                                                                                                                          |
