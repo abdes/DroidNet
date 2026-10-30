@@ -338,11 +338,8 @@ public:
       const size_t bytes_size = entry->count * entry->entry_size;
       const auto bytes = data_.subspan(entry->offset, bytes_size);
 
-      std::vector<std::byte> buffer;
-      buffer.assign(bytes.begin(), bytes.end());
-
-      oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-      oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+      oxygen::serio::ReadOnlyMemoryStream stream(bytes);
+      oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(stream);
       auto pack = reader.ScopedAlignment(1);
 
       std::vector<T> decoded;

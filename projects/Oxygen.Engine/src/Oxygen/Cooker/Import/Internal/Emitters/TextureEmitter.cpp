@@ -201,14 +201,13 @@ namespace {
     CheckResult(writer.Write(header), "payload_header");
     CheckResult(writer.Write(layout), "subresource_layout");
 
-    const auto position = stream.Position();
-    CheckResult(position, "stream_position");
-    if (position.value() > data_offset_bytes) {
+    const auto position = stream.Position().get();
+    if (position > data_offset_bytes) {
       return {};
     }
 
     const size_t padding_size
-      = data_offset_bytes - static_cast<uint32_t>(position.value());
+      = data_offset_bytes - static_cast<uint32_t>(position);
     if (padding_size > 0) {
       std::vector padding(padding_size, std::byte { 0 });
       CheckResult(writer.WriteBlob(
@@ -224,7 +223,7 @@ namespace {
     if (with_content_hashing) {
       header.content_hash = util::ComputeContentHash(payload_bytes);
 
-      CheckResult(stream.Seek(0), "stream_seek");
+      CheckResult(stream.Seek(serio::ByteOffset { 0 }), "stream_seek");
       CheckResult(writer.Write(header), "payload_header_hash");
     }
 

@@ -20,7 +20,8 @@
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::testing {
@@ -48,8 +49,11 @@ namespace {
     auto stale_writer = LooseCookedWriter(root);
     auto refreshed_writer = LooseCookedWriter(root);
     {
-      auto stream = serio::FileStream<>(
-        root / "buffers.data", std::ios::out | std::ios::trunc);
+      auto file = serio::NativeFile::Open(root / "buffers.data",
+        { .access = serio::Access::kWrite,
+          .creation = serio::Creation::kCreateAlways });
+      ASSERT_TRUE(file) << file.error().message();
+      auto stream = serio::RegionWriteStream<serio::NativeFile>(*file);
       const auto appended = std::array { std::byte { 1U }, std::byte { 2U } };
       ASSERT_TRUE(stream.Write(appended));
       ASSERT_TRUE(stream.Flush());
@@ -75,7 +79,11 @@ namespace {
     std::filesystem::create_directories(root);
     const auto invalid_path = root / "invalid.omat";
     {
-      serio::FileStream<> stream(invalid_path, std::ios::out);
+      auto file = serio::NativeFile::Open(invalid_path,
+        { .access = serio::Access::kWrite,
+          .creation = serio::Creation::kCreateAlways });
+      ASSERT_TRUE(file) << file.error().message();
+      serio::RegionWriteStream<serio::NativeFile> stream(*file);
       constexpr auto invalid = std::array { std::byte { 1U } };
       ASSERT_TRUE(stream.Write(invalid));
       ASSERT_TRUE(stream.Flush());

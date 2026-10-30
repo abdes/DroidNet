@@ -32,8 +32,9 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SurfaceInventory.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -184,8 +185,17 @@ protected:
         bytes.read(raw.data(), static_cast<std::streamsize>(raw.size()));
         std::memcpy(&header, raw.data(), raw.size());
       }
-      oxygen::serio::FileStream<> stream(path, std::ios::in);
-      oxygen::serio::Reader reader(stream);
+      auto file = oxygen::serio::NativeFile::Open(path, {});
+      if (!file) {
+        ADD_FAILURE() << file.error().message();
+        return result;
+      }
+      auto stream = oxygen::serio::OpenReadStream(*file);
+      if (!stream) {
+        ADD_FAILURE() << stream.error().message();
+        return result;
+      }
+      oxygen::serio::Reader reader(*stream);
       const auto geometry = oxygen::content::loaders::LoadGeometryAsset(
         oxygen::content::LoaderContext {
           .current_asset_key = asset.key,

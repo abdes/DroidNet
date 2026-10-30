@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <ios>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -34,9 +33,10 @@
 #include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 using oxygen::content::PakFile;
 using oxygen::data::AssetKey;
@@ -51,16 +51,22 @@ using oxygen::data::pak::core::PakHeader;
 
 namespace {
 
+using PakStream = oxygen::serio::RegionReadStream<oxygen::serio::NativeFile>;
+
 struct Crc32ComputationConfig final {
   size_t file_size { 0 };
   size_t crc_field_absolute_offset { 0 };
 };
 
-auto ComputePakCrc32(const std::filesystem::path& pak_path,
+auto ComputePakCrc32(const oxygen::serio::NativeFile& file,
   const Crc32ComputationConfig& cfg) -> uint32_t
 {
-  oxygen::serio::FileStream<> stream(pak_path, std::ios::in);
-  oxygen::serio::Reader<oxygen::serio::FileStream<>> reader(stream);
+  auto stream = oxygen::serio::OpenReadStream(file);
+  if (!stream) {
+    throw std::runtime_error(
+      "Failed to open pak for CRC32: " + stream.error().message());
+  }
+  oxygen::serio::Reader<PakStream> reader(*stream);
 
   constexpr size_t kChunkSize
     = static_cast<size_t>(256) * static_cast<size_t>(1024);
@@ -107,16 +113,33 @@ auto ComputePakCrc32(const std::filesystem::path& pak_path,
 
   return crc.Finalize();
 }
-// Helper to open a FileStream and throw with logging on error
-auto OpenFileStream(const std::filesystem::path& path)
-  -> std::unique_ptr<oxygen::serio::FileStream<>>
+// Helper to open the pak file and throw with logging on error
+auto OpenPakFile(const std::filesystem::path& path) -> oxygen::serio::NativeFile
 {
-  try {
-    return std::make_unique<oxygen::serio::FileStream<>>(path, std::ios::in);
-  } catch (const std::system_error& e) {
-    LOG_F(ERROR, "Failed to open pak file '{}': {}", path.string(), e.what());
-    throw;
+  auto file = oxygen::serio::NativeFile::Open(path, {});
+  if (!file) {
+    const std::system_error error(file.error(), "open '" + path.string() + "'");
+    LOG_F(
+      ERROR, "Failed to open pak file '{}': {}", path.string(), error.what());
+    throw error;
   }
+  return std::move(file).value();
+}
+
+// Helper to open a read stream over the pak file and throw with logging on
+// error
+auto OpenPakStream(const oxygen::serio::NativeFile& file)
+  -> std::unique_ptr<PakStream>
+{
+  auto stream = oxygen::serio::OpenReadStream(file);
+  if (!stream) {
+    const std::system_error error(
+      stream.error(), "open '" + file.Path().string() + "'");
+    LOG_F(ERROR, "Failed to open pak file '{}': {}", file.Path().string(),
+      error.what());
+    throw error;
+  }
+  return std::make_unique<PakStream>(std::move(stream).value());
 }
 
 struct ParsedPakMetadata final {
@@ -127,12 +150,12 @@ struct ParsedPakMetadata final {
   std::unordered_map<AssetKey, size_t> key_to_index {}; // NOLINT
 };
 
-auto ReadPakHeader(oxygen::serio::FileStream<>& stream,
-  oxygen::data::SourceKey& source_key_out) -> PakHeader
+auto ReadPakHeader(PakStream& stream, oxygen::data::SourceKey& source_key_out)
+  -> PakHeader
 {
   LOG_SCOPE_FUNCTION(1);
 
-  if (auto res = stream.Seek(0); !res) {
+  if (auto res = stream.Seek(oxygen::serio::ByteOffset { 0 }); !res) {
     LOG_F(ERROR, "Failed to seek to pak header: {}", res.error().message());
     throw std::runtime_error("Failed to seek to pak header");
   }
@@ -156,20 +179,19 @@ auto ReadPakHeader(oxygen::serio::FileStream<>& stream,
   return header;
 }
 
-auto ReadPakFooter(oxygen::serio::FileStream<>& stream) -> PakFooter
+auto ReadPakFooter(PakStream& stream) -> PakFooter
 {
   LOG_SCOPE_FUNCTION(1);
 
   constexpr size_t kPakFooterSize = sizeof(PakFooter);
-  auto size_result = stream.Size();
-  if (!size_result) {
-    LOG_F(
-      ERROR, "Failed to get pak file size: {}", size_result.error().message());
-    throw std::runtime_error("Failed to get pak file size");
+  const size_t file_size = stream.Size().get();
+  if (file_size < kPakFooterSize) {
+    LOG_F(ERROR, "Pak file is smaller than a footer: {} bytes", file_size);
+    throw std::runtime_error("Failed to seek to pak footer");
   }
-
-  const size_t file_size = size_result.value();
-  if (auto res = stream.Seek(file_size - kPakFooterSize); !res) {
+  if (auto res
+    = stream.Seek(oxygen::serio::ByteOffset { file_size - kPakFooterSize });
+    !res) {
     LOG_F(ERROR, "Failed to seek to pak footer: {}", res.error().message());
     throw std::runtime_error("Failed to seek to pak footer");
   }
@@ -191,24 +213,26 @@ auto ReadPakFooter(oxygen::serio::FileStream<>& stream) -> PakFooter
   return footer;
 }
 
-auto ReadPakDirectory(oxygen::serio::FileStream<>& stream,
-  const PakFooter& footer, std::vector<AssetDirectoryEntry>& directory,
+auto ReadPakDirectory(PakStream& stream, const PakFooter& footer,
+  std::vector<AssetDirectoryEntry>& directory,
   std::unordered_map<AssetKey, size_t>& key_to_index) -> void
 {
   LOG_SCOPE_FUNCTION(1);
 
-  const auto file_size = stream.Size();
+  const auto file_size = stream.Size().get();
   constexpr auto kEntrySize = sizeof(AssetDirectoryEntry);
-  if (!file_size || *file_size < sizeof(PakFooter)
+  if (file_size < sizeof(PakFooter)
     || footer.asset_count > footer.directory_size / kEntrySize
     || footer.directory_size != footer.asset_count * kEntrySize
-    || footer.directory_offset > *file_size - sizeof(PakFooter)
+    || footer.directory_offset > file_size - sizeof(PakFooter)
     || footer.directory_size
-      > *file_size - sizeof(PakFooter) - footer.directory_offset) {
+      > file_size - sizeof(PakFooter) - footer.directory_offset) {
     throw std::runtime_error("PAK asset directory is out of bounds");
   }
 
-  if (auto res = stream.Seek(footer.directory_offset); !res) {
+  if (auto res
+    = stream.Seek(oxygen::serio::ByteOffset { footer.directory_offset });
+    !res) {
     LOG_F(
       ERROR, "Failed to seek to directory offset: {}", res.error().message());
     throw std::runtime_error("Failed to seek to directory offset");
@@ -260,8 +284,8 @@ auto ReadPakDirectory(oxygen::serio::FileStream<>& stream,
   }
 }
 
-auto LoadPakCatalog(oxygen::serio::FileStream<>& stream,
-  const ParsedPakMetadata& metadata) -> oxygen::data::PakCatalog
+auto LoadPakCatalog(PakStream& stream, const ParsedPakMetadata& metadata)
+  -> oxygen::data::PakCatalog
 {
   const auto& footer = metadata.footer;
   const auto require_before_catalog
@@ -322,7 +346,7 @@ auto LoadPakCatalog(oxygen::serio::FileStream<>& stream,
   return std::move(*catalog);
 }
 
-auto LoadPakMetadata(oxygen::serio::FileStream<>& stream) -> ParsedPakMetadata
+auto LoadPakMetadata(PakStream& stream) -> ParsedPakMetadata
 {
   ParsedPakMetadata metadata {};
   metadata.header = ReadPakHeader(stream, metadata.source_key);
@@ -464,11 +488,12 @@ auto PakFile::InitializeResourceTablesFromFooter() const -> void
 
 PakFile::PakFile(const std::filesystem::path& path)
   : file_path_(path)
-  , meta_stream_(OpenFileStream(path))
-  , buffer_data_stream_(OpenFileStream(path))
-  , texture_data_stream_(OpenFileStream(path))
-  , script_data_stream_(OpenFileStream(path))
-  , physics_data_stream_(OpenFileStream(path))
+  , file_(OpenPakFile(path))
+  , meta_stream_(OpenPakStream(file_))
+  , buffer_data_stream_(OpenPakStream(file_))
+  , texture_data_stream_(OpenPakStream(file_))
+  , script_data_stream_(OpenPakStream(file_))
+  , physics_data_stream_(OpenPakStream(file_))
 {
   LOG_SCOPE_FUNCTION(1);
   LOG_F(INFO, "file : {}", path.string());
@@ -485,20 +510,13 @@ PakFile::PakFile(const std::filesystem::path& path)
     key_to_index_ = metadata.key_to_index;
     InitializeResourceTablesFromFooter();
 
-    const auto size_result = meta_stream_->Size();
-    if (!size_result) {
-      LOG_F(ERROR, "Failed to get pak file size: {}",
-        size_result.error().message());
-      throw std::runtime_error("Failed to get pak file size");
-    }
-
     // Every pak holds its browse index; the footer check bounds it.
     if (footer_.browse_index_size == 0U) {
       throw CookedOpenError(
         CookedOpenFailure::kCorrupt, "The pak holds no browse index");
     }
     if (auto res
-      = meta_stream_->Seek(static_cast<size_t>(footer_.browse_index_offset));
+      = meta_stream_->Seek(serio::ByteOffset { footer_.browse_index_offset });
       !res) {
       throw std::runtime_error("Failed to seek to the browse index");
     }
@@ -575,13 +593,7 @@ auto PakFile::ValidateCrc32Integrity() const -> void
     return;
   }
 
-  auto size_result = meta_stream_->Size();
-  if (!size_result) {
-    throw std::runtime_error("Failed to get pak file size for CRC32: "
-      + size_result.error().message());
-  }
-
-  const auto file_size = size_result.value();
+  const auto file_size = meta_stream_->Size().get();
   if (file_size < sizeof(PakFooter)) {
     throw std::runtime_error("Pak file too small for CRC32 validation");
   }
@@ -589,7 +601,7 @@ auto PakFile::ValidateCrc32Integrity() const -> void
   const size_t crc_field_absolute_offset
     = (file_size - sizeof(PakFooter)) + offsetof(PakFooter, pak_crc32);
 
-  const auto computed = ComputePakCrc32(file_path_,
+  const auto computed = ComputePakCrc32(file_,
     Crc32ComputationConfig {
       .file_size = file_size,
       .crc_field_absolute_offset = crc_field_absolute_offset,
@@ -638,13 +650,14 @@ auto PakFile::ResolveTextureIndexByVirtualPath(
   return it->texture_index;
 }
 
-auto PakFile::CreateReaderAtOffset(serio::FileStream<>* stream,
-  const uint64_t offset, const std::string_view operation) const -> Reader
+auto PakFile::CreateReaderAtOffset(
+  serio::RegionReadStream<serio::NativeFile>* stream, const uint64_t offset,
+  const std::string_view operation) const -> Reader
 {
   if (stream == nullptr) {
     throw std::runtime_error("PakFile stream is not open");
   }
-  if (const auto res = stream->Seek(static_cast<size_t>(offset)); !res) {
+  if (const auto res = stream->Seek(serio::ByteOffset { offset }); !res) {
     LOG_F(ERROR, "Failed to seek to {} offset {}: {}", operation, offset,
       res.error().message());
     throw std::runtime_error(
@@ -715,8 +728,8 @@ auto PakFile::ReadAssetReferences(const data::AssetKey& key) const
     return {};
   }
   std::scoped_lock lock(mutex_);
-  const auto size = meta_stream_->Size();
-  if (!size || table.offset > *size || byte_count > *size - table.offset) {
+  const auto size = meta_stream_->Size().get();
+  if (table.offset > size || byte_count > size - table.offset) {
     throw std::runtime_error("PAK asset reference block is out of bounds");
   }
   auto reader = CreateReaderAtOffset(
@@ -871,7 +884,7 @@ auto PakFile::ReadScriptResource(
   }
 
   if (const auto seek_res
-    = meta_stream_->Seek(static_cast<size_t>(*desc_offset));
+    = meta_stream_->Seek(serio::ByteOffset { *desc_offset });
     !seek_res) {
     throw std::runtime_error("Failed to seek script resource descriptor");
   }
@@ -892,7 +905,7 @@ auto PakFile::ReadScriptResource(
       throw std::runtime_error("PakFile script data stream is not open");
     }
     if (const auto seek_res
-      = script_data_stream_->Seek(static_cast<size_t>(desc.data_offset));
+      = script_data_stream_->Seek(serio::ByteOffset { desc.data_offset });
       !seek_res) {
       throw std::runtime_error("Failed to seek script resource payload");
     }

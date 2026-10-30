@@ -35,8 +35,9 @@
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Serio/FileStream.h>
-#include <Oxygen/Serio/Writer.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/RegionStream.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace {
 namespace core = oxygen::data::pak::core;
@@ -52,7 +53,9 @@ constexpr auto kCrcFieldSize = uint64_t { sizeof(uint32_t) };
 struct WriterState final {
   const pak::PakBuildRequest* request = nullptr;
   const pak::PakPlan* plan = nullptr;
-  std::optional<serio::FileStream<>> stream;
+  //! The pak file; declared before `stream`, which writes to it.
+  std::optional<serio::NativeFile> file;
+  std::optional<serio::RegionWriteStream<serio::NativeFile>> stream;
   pak::PakWriter::WriteResult output {};
   uint64_t cursor = 0;
   pak::PakStreamingCrc32 crc
@@ -175,10 +178,9 @@ struct CrcPatch final {
   uint32_t value = 0;
 };
 
-auto SeekAndWriteCrc32(WriterState& state, const CrcPatch& crc) -> bool
+auto PatchCrc32(WriterState& state, const CrcPatch& crc) -> bool
 {
-  if (!state.stream.has_value()
-    || !state.stream->Seek(static_cast<size_t>(crc.field_offset))) {
+  if (!state.stream.has_value()) {
     AddDiagnostic(state, pak::PakDiagnosticSeverity::kError,
       "pak.write.stream_seek_failed",
       "Failed to seek CRC32 field offset for patch write.", {}, {},
@@ -186,10 +188,9 @@ auto SeekAndWriteCrc32(WriterState& state, const CrcPatch& crc) -> bool
     return false;
   }
 
-  auto writer = serio::Writer(*state.stream);
-  auto packing = writer.ScopedAlignment(1);
-  (void)packing;
-  const auto write_result = writer.Write(crc.value);
+  const auto write_result
+    = state.stream->PatchAt(serio::ByteOffset { crc.field_offset },
+      std::as_bytes(std::span<const uint32_t, 1>(&crc.value, 1)));
   if (!write_result) {
     AddDiagnostic(state, pak::PakDiagnosticSeverity::kError,
       "pak.write.crc_patch_failed", "Failed to patch footer pak_crc32 field.",
@@ -413,6 +414,7 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
   auto state = WriterState {
     .request = std::addressof(request),
     .plan = std::addressof(plan),
+    .file = std::nullopt,
     .stream = std::nullopt,
     .output = {},
     .cursor = 0,
@@ -456,16 +458,19 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
     return std::move(state.output);
   }
 
-  try {
-    // The stream adds binary; the footer CRC is patched back, so the pak is
-    // opened for reading and writing.
-    // NOLINTNEXTLINE(*-signed-bitwise) - std::ios openmode bitmask
-    constexpr auto kMode = std::ios::in | std::ios::out | std::ios::trunc;
-    state.stream.emplace(request.output_pak_path, kMode);
-  } catch (const std::exception& ex) {
+  // The footer CRC is patched back through the stream, which holds the
+  // unflushed tail, so the file needs write access only.
+  if (auto file = serio::NativeFile::Open(request.output_pak_path,
+        { .access = serio::Access::kWrite,
+          .creation = serio::Creation::kCreateAlways });
+    file) {
+    state.file.emplace(std::move(file).value());
+    state.stream.emplace(*state.file);
+  } else {
     AddDiagnostic(state, PakDiagnosticSeverity::kError,
       "pak.write.stream_open_failed",
-      std::string("Failed to open output pak file for writing: ") + ex.what());
+      std::string("Failed to open output pak file for writing: ")
+        + file.error().message());
     state.output.writing_duration
       = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - start);
@@ -871,7 +876,7 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
         "footer", std::nullopt, plan.Footer().crc32_field_absolute_offset);
     } else {
       state.output.pak_crc32 = state.crc.Finalize();
-      if (SeekAndWriteCrc32(state,
+      if (PatchCrc32(state,
             {
               .field_offset = plan.Footer().crc32_field_absolute_offset,
               .value = state.output.pak_crc32,

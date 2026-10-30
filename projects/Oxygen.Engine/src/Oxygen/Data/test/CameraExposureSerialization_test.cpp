@@ -33,7 +33,7 @@ template <typename Record> auto VerifyPhysicalCameraRoundTrip() -> void
   oxygen::serio::Writer writer(stream);
   ASSERT_TRUE(oxygen::serio::Store(writer, source));
   ASSERT_EQ(stream.Data().size(), sizeof(Record));
-  ASSERT_TRUE(stream.Seek(0));
+  ASSERT_TRUE(stream.Seek(oxygen::serio::ByteOffset { 0 }));
   oxygen::serio::Reader reader(stream);
   auto decoded = oxygen::data::pak::world::MakeDefaultRecord<Record>();
   ASSERT_TRUE(oxygen::serio::Load(reader, decoded));
@@ -94,7 +94,7 @@ NOLINT_TEST(
     oxygen::serio::MemoryStream stream;
     oxygen::serio::Writer writer(stream);
     ASSERT_TRUE(oxygen::serio::Store(writer, source));
-    ASSERT_TRUE(stream.Seek(0));
+    ASSERT_TRUE(stream.Seek(oxygen::serio::ByteOffset { 0 }));
     oxygen::serio::Reader reader(stream);
     auto decoded = MakeDefaultRecord<PerspectiveCameraRecord>();
     ASSERT_TRUE(oxygen::serio::Load(reader, decoded));
@@ -133,7 +133,7 @@ NOLINT_TEST(CameraExposureSerializationTest, OrthographicAspectModeRoundTrips)
     oxygen::serio::MemoryStream stream;
     oxygen::serio::Writer writer(stream);
     ASSERT_TRUE(oxygen::serio::Store(writer, source));
-    ASSERT_TRUE(stream.Seek(0));
+    ASSERT_TRUE(stream.Seek(oxygen::serio::ByteOffset { 0 }));
     oxygen::serio::Reader reader(stream);
     auto decoded = MakeDefaultRecord<OrthographicCameraRecord>();
     ASSERT_TRUE(oxygen::serio::Load(reader, decoded));

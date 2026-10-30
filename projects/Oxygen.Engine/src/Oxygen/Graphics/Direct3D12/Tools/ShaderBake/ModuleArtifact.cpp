@@ -290,7 +290,7 @@ auto ReadModuleArtifactFile(const std::filesystem::path& artifact_path)
     = ValueOrThrow(reader.ReadBlob(reflection_size), "read reflection payload");
 
   const auto final_pos = ValueOrThrow(reader.Position(), "read final position");
-  const auto total_size = ValueOrThrow(stream.Size(), "read oxsm size");
+  const auto total_size = static_cast<size_t>(stream.Size().get());
   if (final_pos != total_size) {
     throw std::runtime_error(
       fmt::format("module artifact `{}` has trailing bytes",

@@ -61,8 +61,9 @@
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace {
 namespace pak = oxygen::content::pak;
@@ -290,8 +291,25 @@ auto ReadFixedRecordFile(const SourceFileSlice& file,
     return false;
   }
 
-  serio::FileStream<> stream(path, std::ios::in);
-  serio::Reader<serio::FileStream<>> reader(stream);
+  auto source = serio::NativeFile::Open(path, {});
+  if (!source) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, errors.read_failed,
+      std::string("Failed to open ") + std::string(errors.label)
+        + " source: " + source.error().message(),
+      path);
+    return false;
+  }
+  auto stream = serio::OpenReadStream(*source);
+  if (!stream) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, errors.read_failed,
+      std::string("Failed to open ") + std::string(errors.label)
+        + " source: " + stream.error().message(),
+      path);
+    return false;
+  }
+  serio::Reader<serio::RegionReadStream<serio::NativeFile>> reader(*stream);
   auto align_guard = reader.ScopedAlignment(1);
   (void)align_guard;
 
@@ -659,8 +677,23 @@ auto ReadFileSliceBytes(const SourceFileSlice& file,
   const auto& path = file.path;
   const auto offset = file.offset;
   const auto size = file.size;
-  auto stream = serio::FileStream<>(path, std::ios::in);
-  serio::Reader<serio::FileStream<>> reader(stream);
+  auto source = serio::NativeFile::Open(path, {});
+  if (!source) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, code,
+      std::string(message_prefix) + " open failed: " + source.error().message(),
+      path);
+    return std::nullopt;
+  }
+  auto stream = serio::OpenReadStream(*source);
+  if (!stream) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, code,
+      std::string(message_prefix) + " open failed: " + stream.error().message(),
+      path);
+    return std::nullopt;
+  }
+  serio::Reader<serio::RegionReadStream<serio::NativeFile>> reader(*stream);
   auto align_guard = reader.ScopedAlignment(1);
   (void)align_guard;
 
@@ -1179,8 +1212,17 @@ auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
       state.tombstones.insert(key);
     }
     const auto file_size = std::filesystem::file_size(source_root);
-    serio::FileStream<> stream(source_root, std::ios::in);
-    serio::Reader reader(stream);
+    auto footer_file = serio::NativeFile::Open(source_root, {});
+    if (!footer_file) {
+      throw std::system_error(
+        footer_file.error(), "open '" + source_root.string() + "'");
+    }
+    auto footer_stream = serio::OpenReadStream(*footer_file);
+    if (!footer_stream) {
+      throw std::system_error(
+        footer_stream.error(), "read '" + source_root.string() + "'");
+    }
+    serio::Reader reader(*footer_stream);
     if (file_size < sizeof(pak_footer)
       || !reader.Seek(file_size - sizeof(pak_footer))
       || !serio::Load(reader, pak_footer)) {

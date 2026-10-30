@@ -68,9 +68,7 @@ namespace {
     if (bytes.empty()) {
       return std::nullopt;
     }
-    auto mutable_bytes = bytes;
-    auto stream = serio::MemoryStream(
-      std::span<std::byte>(mutable_bytes.data(), mutable_bytes.size()));
+    auto stream = serio::ReadOnlyMemoryStream(std::span(bytes));
     auto reader = serio::Reader(stream);
     auto descriptor = reader.Read<phys::CollisionShapeAssetDesc>();
     if (!descriptor.has_value()) {

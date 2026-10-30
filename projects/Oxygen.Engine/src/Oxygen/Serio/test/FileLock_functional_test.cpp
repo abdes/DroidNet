@@ -4,35 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Serio/FileLock.h, Serio/FileLock.cpp
+
 #include <filesystem>
 #include <system_error>
 #include <utility>
 
-#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace oxygen::serio::testing {
 namespace {
 
   class FileLockTest : public ::testing::Test {
   protected:
-    void SetUp() override
-    {
-      root_
-        = std::filesystem::temp_directory_path() / Uuid::Generate().ToString();
-      std::filesystem::create_directories(root_);
-      marker_ = root_ / "lease.lock";
-    }
-
-    void TearDown() override
-    {
-      std::error_code error;
-      std::filesystem::remove_all(root_, error);
-    }
-
-    std::filesystem::path root_;
-    std::filesystem::path marker_;
+    oxygen::testing::ScopedTempDir dir_;
+    const std::filesystem::path marker_ = dir_.Path() / "lease.lock";
   };
 
   NOLINT_TEST_F(FileLockTest, MissingExistingMarkerIsNotCreated)

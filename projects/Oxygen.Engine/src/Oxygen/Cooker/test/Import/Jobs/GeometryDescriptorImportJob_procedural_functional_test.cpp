@@ -383,7 +383,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     EXPECT_FLOAT_EQ(
       ReadStructAt<float>(bytes, params_offset + 12U), test_case.radius);
 
-    auto stream = serio::MemoryStream(std::span<std::byte>(bytes));
+    auto stream = serio::ReadOnlyMemoryStream(std::span(bytes));
     auto reader = serio::Reader(stream);
     auto context = content::LoaderContext {};
     context.desc_reader = &reader;
@@ -488,7 +488,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     ASSERT_HAS_VALUE(output) << "Expected output to contain a value";
     auto bytes = ReadBytes(cooked_root / *output);
 
-    auto stream = serio::MemoryStream(std::span<std::byte>(bytes));
+    auto stream = serio::ReadOnlyMemoryStream(std::span(bytes));
     auto reader = serio::Reader(stream);
     auto context = content::LoaderContext {};
     context.desc_reader = &reader;
@@ -632,7 +632,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   EXPECT_EQ(mesh_desc.info.procedural.params_size, sizeof(uint32_t));
   EXPECT_EQ(ReadStructAt<uint32_t>(descriptor_bytes, params_offset), 2U);
 
-  auto stream = serio::MemoryStream(std::span<std::byte>(descriptor_bytes));
+  auto stream = serio::ReadOnlyMemoryStream(std::span(descriptor_bytes));
   auto reader = serio::Reader(stream);
   auto context = content::LoaderContext {};
   context.desc_reader = &reader;

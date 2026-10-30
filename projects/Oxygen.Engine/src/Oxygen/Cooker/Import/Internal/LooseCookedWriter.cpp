@@ -44,9 +44,10 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/AtomicFile.h>
-#include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::import {
@@ -220,8 +221,14 @@ namespace {
   {
     std::filesystem::create_directories(base::ToNativePath(path.parent_path()));
 
-    // NOLINTNEXTLINE(*-signed-bitwise) - std::ios openmode bitmask
-    serio::FileStream stream(path, std::ios::out | std::ios::trunc);
+    auto file = serio::NativeFile::Open(path,
+      { .access = serio::Access::kWrite,
+        .creation = serio::Creation::kCreateAlways });
+    if (!file) {
+      throw std::system_error(
+        file.error(), "Failed to open cooked file '" + path.string() + "'");
+    }
+    serio::RegionWriteStream<serio::NativeFile> stream(*file);
     ThrowOnError(stream.Write(bytes), "Failed to write cooked file");
     ThrowOnError(stream.Flush(), "Failed to flush cooked file");
   }
@@ -235,7 +242,7 @@ namespace {
       throw std::runtime_error(
         "Failed to read existing index: " + bytes.error().message());
     }
-    serio::MemoryStream stream(*bytes);
+    serio::ReadOnlyMemoryStream stream(*bytes);
     serio::Reader reader(stream);
 
     auto header_result = reader.Read<IndexHeader>();
@@ -549,8 +556,17 @@ struct LooseCookedWriter::Impl final {
     if (descriptor_size > std::numeric_limits<size_t>::max()) {
       throw std::runtime_error("Asset descriptor exceeds addressable size");
     }
-    serio::FileStream<> stream(path_on_disk, std::ios::in);
-    serio::Reader reader(stream);
+    auto file = serio::NativeFile::Open(path_on_disk, {});
+    if (!file) {
+      throw std::system_error(file.error(),
+        "Failed to open registered descriptor '" + path_on_disk.string() + "'");
+    }
+    auto stream = serio::OpenReadStream(*file);
+    if (!stream) {
+      throw std::system_error(stream.error(),
+        "Failed to read registered descriptor '" + path_on_disk.string() + "'");
+    }
+    serio::Reader reader(*stream);
     const auto bytes = reader.ReadBlob(static_cast<size_t>(descriptor_size));
     if (!bytes) {
       throw std::runtime_error(

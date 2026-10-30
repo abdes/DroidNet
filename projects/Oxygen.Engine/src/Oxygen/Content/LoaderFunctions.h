@@ -6,13 +6,13 @@
 
 #pragma once
 
+#include <concepts>
 #include <functional>
 #include <memory>
+#include <type_traits>
 
 #include <Oxygen/Composition/TypeSystem.h>
 #include <Oxygen/Content/LoaderContext.h>
-#include <Oxygen/Serio/FileStream.h>
-#include <Oxygen/Serio/Stream.h>
 
 namespace oxygen::content {
 

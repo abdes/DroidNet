@@ -68,12 +68,10 @@ namespace {
       if (!data_.empty()) {
         std::memcpy(data_.data(), data.data(), data.size());
       }
-      stream_
-        = std::make_unique<oxygen::serio::MemoryStream>(std::span<std::byte>(
-          reinterpret_cast<std::byte*>(data_.data()), data_.size()));
-      reader_
-        = std::make_unique<oxygen::serio::Reader<oxygen::serio::MemoryStream>>(
-          *stream_);
+      stream_ = std::make_unique<oxygen::serio::ReadOnlyMemoryStream>(
+        std::span<const std::byte>(data_));
+      reader_ = std::make_unique<
+        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream>>(*stream_);
     }
 
     ~MemoryAnyReader() override = default;
@@ -118,8 +116,9 @@ namespace {
 
   private:
     std::vector<std::byte> data_;
-    std::unique_ptr<oxygen::serio::MemoryStream> stream_;
-    std::unique_ptr<oxygen::serio::Reader<oxygen::serio::MemoryStream>> reader_;
+    std::unique_ptr<oxygen::serio::ReadOnlyMemoryStream> stream_;
+    std::unique_ptr<oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream>>
+      reader_;
   };
 
   auto ValidateTypeFromDecoded(

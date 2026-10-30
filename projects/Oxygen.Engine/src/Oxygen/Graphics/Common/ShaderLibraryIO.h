@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <ios>
 #include <limits>
 #include <optional>
 #include <ranges>
@@ -18,13 +17,15 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::graphics {
@@ -156,8 +157,15 @@ public:
 
     // Ensure the file handle is released before rename on Windows.
     {
-      serio::FileStream<> stream(tmp_file, std::ios::out | std::ios::trunc);
-      serio::Writer<serio::FileStream<>> w(stream);
+      auto file = serio::NativeFile::Open(tmp_file,
+        { .access = serio::Access::kWrite,
+          .creation = serio::Creation::kCreateAlways });
+      if (!file) {
+        throw std::system_error(
+          file.error(), "open '" + tmp_file.string() + "'");
+      }
+      serio::RegionWriteStream<serio::NativeFile> stream(*file);
+      serio::Writer<serio::RegionWriteStream<serio::NativeFile>> w(stream);
       const auto packed = serio_utils::PackedGuard(w);
       (void)packed;
 
@@ -303,8 +311,16 @@ public:
   [[nodiscard]] static auto ReadFromFile(const std::filesystem::path& file,
     std::string_view expected_backend = {}) -> Library
   {
-    serio::FileStream<> stream(file, std::ios::in);
-    serio::Reader<serio::FileStream<>> r(stream);
+    auto native_file = serio::NativeFile::Open(file, {});
+    if (!native_file) {
+      throw std::system_error(
+        native_file.error(), "open '" + file.string() + "'");
+    }
+    auto stream = serio::OpenReadStream(*native_file);
+    if (!stream) {
+      throw std::system_error(stream.error(), "open '" + file.string() + "'");
+    }
+    serio::Reader<serio::RegionReadStream<serio::NativeFile>> r(*stream);
     const auto packed = serio_utils::PackedGuard(r);
     (void)packed;
 

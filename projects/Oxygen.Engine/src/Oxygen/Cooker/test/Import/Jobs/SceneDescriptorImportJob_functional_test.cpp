@@ -59,8 +59,9 @@
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
-#include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -79,8 +80,11 @@ namespace {
   {
     namespace geometry = data::pak::geometry;
     std::filesystem::create_directories(path.parent_path());
-    // NOLINTNEXTLINE(*-signed-bitwise)
-    serio::FileStream<> stream(path, std::ios::out | std::ios::trunc);
+    auto file = serio::NativeFile::Open(path,
+      { .access = serio::Access::kWrite,
+        .creation = serio::Creation::kCreateAlways });
+    ASSERT_TRUE(file) << file.error().message();
+    serio::RegionWriteStream<serio::NativeFile> stream(*file);
     serio::Writer writer(stream);
     const auto packed = writer.ScopedAlignment(1);
     auto descriptor = geometry::GeometryAssetDesc {};
@@ -124,6 +128,8 @@ namespace {
     write(surface);
     ASSERT_TRUE(writer.WriteBlob(strings.Bytes()));
     ASSERT_TRUE(writer.Flush());
+    const auto flushed = stream.Flush();
+    ASSERT_TRUE(flushed) << flushed.error().message();
   }
 
   using oxygen::cooker::test::HasDiagnosticCode;

@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "InventoryReport.h"
+#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -35,8 +36,9 @@
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/AtomicFile.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::inspection {
 
@@ -55,9 +57,18 @@ namespace {
       if (!relpath.has_value() || !type.has_value()) {
         continue;
       }
-      serio::FileStream<> stream(
-        root / std::filesystem::path(*relpath), std::ios::in);
-      serio::Reader<serio::FileStream<>> reader(stream);
+      const auto descriptor_path = root / std::filesystem::path(*relpath);
+      auto file = serio::NativeFile::Open(descriptor_path, {});
+      if (!file) {
+        throw std::system_error(
+          file.error(), fmt::format("open '{}'", descriptor_path.string()));
+      }
+      auto stream = serio::OpenReadStream(*file);
+      if (!stream) {
+        throw std::system_error(
+          stream.error(), fmt::format("size '{}'", descriptor_path.string()));
+      }
+      serio::Reader<serio::RegionReadStream<serio::NativeFile>> reader(*stream);
       auto pack = reader.ScopedAlignment(1);
       const auto blob = reader.ReadBlob(sizeof(data::pak::core::AssetHeader));
       if (!blob) {

@@ -24,7 +24,8 @@
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::testing {
@@ -102,12 +103,18 @@ TEST_F(PakFileTest, FailsOnMissingEmbeddedCatalog)
   const auto file_size = std::filesystem::file_size(test_pak_path_);
   ASSERT_GE(file_size, sizeof(config.footer));
   {
-    serio::FileStream<> stream(test_pak_path_);
-    ASSERT_TRUE(stream.Seek(file_size - sizeof(config.footer)));
-    serio::Writer writer(stream);
+    auto file = serio::NativeFile::Open(test_pak_path_,
+      { .access = serio::Access::kWrite,
+        .creation = serio::Creation::kOpenExisting });
+    ASSERT_TRUE(file) << file.error().message();
+    using FileWriteStream = serio::RegionWriteStream<serio::NativeFile>;
+    FileWriteStream stream(
+      *file, serio::ByteOffset { file_size - sizeof(config.footer) });
+    serio::Writer<FileWriteStream> writer(stream);
     config.footer.directory_offset = sizeof(config.header);
     ASSERT_TRUE(
       writer.WriteBlob(std::as_bytes(std::span { &config.footer, 1U })));
+    ASSERT_TRUE(stream.Flush());
   }
   EXPECT_THROW(PakFile pak(test_pak_path_), std::runtime_error);
 }

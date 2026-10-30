@@ -29,8 +29,9 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::lc {
 
@@ -211,10 +212,19 @@ auto Inspection::ReadAssetDescriptor(const data::AssetKey& key) const
     }
     return std::move(bytes).value();
   }
-  serio::FileStream<> stream(
-    impl_->root / std::filesystem::path(asset->descriptor_relpath),
-    std::ios::in);
-  serio::Reader reader(stream);
+  const auto descriptor_path
+    = impl_->root / std::filesystem::path(asset->descriptor_relpath);
+  auto file = serio::NativeFile::Open(descriptor_path, {});
+  if (!file) {
+    throw std::system_error(
+      file.error(), "open '" + descriptor_path.string() + "'");
+  }
+  auto stream = serio::OpenReadStream(*file);
+  if (!stream) {
+    throw std::system_error(
+      stream.error(), "read '" + descriptor_path.string() + "'");
+  }
+  serio::Reader reader(*stream);
   auto bytes = reader.ReadBlob(size);
   if (!bytes) {
     throw std::runtime_error("Cannot read the asset descriptor");
@@ -236,8 +246,17 @@ auto Inspection::FindTexture(const std::string_view virtual_path) const
       throw std::runtime_error(
         "Pak texture entry is outside its resource table");
     }
-    serio::FileStream<> stream(impl_->pak->FilePath(), std::ios::in);
-    serio::Reader reader(stream);
+    auto file = serio::NativeFile::Open(impl_->pak->FilePath(), {});
+    if (!file) {
+      throw std::system_error(
+        file.error(), "open '" + impl_->pak->FilePath().string() + "'");
+    }
+    auto stream = serio::OpenReadStream(*file);
+    if (!stream) {
+      throw std::system_error(
+        stream.error(), "read '" + impl_->pak->FilePath().string() + "'");
+    }
+    serio::Reader reader(*stream);
     auto descriptor = data::pak::core::TextureResourceDesc {};
     if (!reader.Seek(*offset)
       || !reader.ReadBlobInto(
@@ -268,8 +287,18 @@ auto Inspection::ReadTextureDescriptor(
     || table == impl_->files.end() || table->size % entry_size != 0) {
     throw std::runtime_error("Texture descriptor or table metadata is invalid");
   }
-  serio::FileStream<> stream(impl_->root / file->relpath, std::ios::in);
-  serio::Reader reader(stream);
+  const auto descriptor_path = impl_->root / file->relpath;
+  auto descriptor_file = serio::NativeFile::Open(descriptor_path, {});
+  if (!descriptor_file) {
+    throw std::system_error(
+      descriptor_file.error(), "open '" + descriptor_path.string() + "'");
+  }
+  auto stream = serio::OpenReadStream(*descriptor_file);
+  if (!stream) {
+    throw std::system_error(
+      stream.error(), "read '" + descriptor_path.string() + "'");
+  }
+  serio::Reader reader(*stream);
   const auto bytes = reader.ReadBlob(data::kTextureResourceDescriptorSize);
   if (!bytes) {
     throw std::runtime_error("Cannot read texture descriptor");
@@ -283,8 +312,18 @@ auto Inspection::ReadTextureDescriptor(
     throw std::runtime_error(
       "Texture descriptor index is outside its resource table");
   }
-  serio::FileStream<> table_stream(impl_->root / table->relpath, std::ios::in);
-  serio::Reader table_reader(table_stream);
+  const auto table_path = impl_->root / table->relpath;
+  auto table_file = serio::NativeFile::Open(table_path, {});
+  if (!table_file) {
+    throw std::system_error(
+      table_file.error(), "open '" + table_path.string() + "'");
+  }
+  auto table_stream = serio::OpenReadStream(*table_file);
+  if (!table_stream) {
+    throw std::system_error(
+      table_stream.error(), "read '" + table_path.string() + "'");
+  }
+  serio::Reader table_reader(*table_stream);
   if (!table_reader.Seek(static_cast<uint64_t>(decoded->index) * entry_size)) {
     throw std::runtime_error("Cannot seek texture resource table");
   }

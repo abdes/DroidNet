@@ -23,8 +23,9 @@
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_render.h> // IWYU pragma: keep
 #include <Oxygen/Data/PakFormat_scripting.h>
-#include <Oxygen/Serio/FileStream.h>
-#include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace {
 namespace audio = oxygen::data::pak::audio;
@@ -574,24 +575,20 @@ auto StorePayloadSourceSlice(const PakPayloadSourceSlicePlan& input,
   }
 
   try {
-    auto stream
-      = serio::FileStream<>(input.source_path, std::ios::binary | std::ios::in);
-    if (!stream.Seek(static_cast<size_t>(input.source_offset))) {
+    auto file = serio::NativeFile::Open(input.source_path, {});
+    if (!file) {
       out_bytes.clear();
       return false;
     }
 
-    auto reader = serio::Reader(stream);
-    auto align_guard = reader.ScopedAlignment(1);
-    (void)align_guard;
-    const auto blob_result = reader.ReadBlob(static_cast<size_t>(*measured));
-    if (!blob_result) {
+    const auto count = static_cast<size_t>(*measured);
+    out_bytes.resize(count);
+    if (!serio::ReadExactlyAt(*file, serio::ByteOffset { input.source_offset },
+          std::span<std::byte>(out_bytes))) {
       out_bytes.clear();
       return false;
     }
-
-    out_bytes.insert(out_bytes.end(), blob_result->begin(), blob_result->end());
-    return out_bytes.size() == static_cast<size_t>(*measured);
+    return true;
   } catch (const std::exception&) {
     out_bytes.clear();
     return false;

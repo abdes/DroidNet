@@ -357,7 +357,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadEntrySizeMismatchThrows)
   };
 
   for (const auto& tc : cases) {
-    MockStream local_stream {};
+    MemoryStream local_stream {};
     Writer local_writer(local_stream);
     Reader local_reader(local_stream);
 
@@ -382,7 +382,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadEntrySizeMismatchThrows)
     WriteEmptyStringTable(local_writer, local_stream);
     ASSERT_TRUE(local_writer.Flush());
 
-    ASSERT_TRUE(local_stream.Seek(0));
+    ASSERT_TRUE(local_stream.Seek(oxygen::serio::ByteOffset { 0 }));
     const auto context = oxygen::content::LoaderContext {
       .current_asset_key = oxygen::data::AssetKey {},
       .desc_reader = &local_reader,

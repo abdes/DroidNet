@@ -31,7 +31,6 @@
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::content::internal {

@@ -47,8 +47,9 @@
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -118,14 +119,21 @@ NOLINT_TEST_F(
   ASSERT_FALSE(
     HasError(pak::PakWriter {}.Write(request, *original.plan).diagnostics));
   {
-    oxygen::serio::FileStream<> archive(request.output_pak_path);
+    auto file = oxygen::serio::NativeFile::Open(request.output_pak_path,
+      { .access = oxygen::serio::Access::kReadWrite,
+        .creation = oxygen::serio::Creation::kOpenExisting });
+    ASSERT_TRUE(file) << file.error().message();
     const auto offset
       = oxygen::base::CheckedAt(original.plan->Assets(), 0U).offset
       + offsetof(core::AssetHeader, variant_flags);
-    ASSERT_TRUE(archive.Seek(offset));
+    oxygen::serio::RegionWriteStream<oxygen::serio::NativeFile> archive(
+      *file, oxygen::serio::ByteOffset { offset });
     oxygen::serio::Writer writer(archive);
     const auto corrupted = std::byte { 'X' };
     ASSERT_TRUE(writer.WriteBlob(std::span { &corrupted, 1U }));
+    ASSERT_TRUE(writer.Flush());
+    const auto flushed = archive.Flush();
+    ASSERT_TRUE(flushed) << flushed.error().message();
   }
   request.sources = {
     {
@@ -218,8 +226,11 @@ NOLINT_TEST_F(PakRepackTest, RepackPreservesSceneBindings)
       const auto texture_offset
         = archive.TexturesTable().GetResourceOffset(**texture_binding);
       ASSERT_HAS_VALUE(texture_offset);
-      serio::FileStream<> stream(repack.output_pak_path, std::ios::in);
-      serio::Reader reader(stream);
+      auto file = serio::NativeFile::Open(repack.output_pak_path, {});
+      ASSERT_TRUE(file) << file.error().message();
+      auto stream = serio::OpenReadStream(*file);
+      ASSERT_TRUE(stream) << stream.error().message();
+      serio::Reader reader(*stream);
       ASSERT_TRUE(reader.Seek(*texture_offset));
       auto texture = core::TextureResourceDesc {};
       ASSERT_TRUE(serio::Load(reader, texture));
@@ -497,8 +508,11 @@ NOLINT_TEST_F(PakRepackTest, BufferAndScriptReferencesSurvivePakRepacking)
       ASSERT_HAS_VALUE(script_binding);
       ASSERT_HAS_VALUE(*script_binding);
       EXPECT_EQ((**script_binding).get(), expected);
-      oxygen::serio::FileStream<> stream(request.output_pak_path, std::ios::in);
-      oxygen::serio::Reader payload_reader(stream);
+      auto file = oxygen::serio::NativeFile::Open(request.output_pak_path, {});
+      ASSERT_TRUE(file) << file.error().message();
+      auto stream = oxygen::serio::OpenReadStream(*file);
+      ASSERT_TRUE(stream) << stream.error().message();
+      oxygen::serio::Reader payload_reader(*stream);
       const auto buffer_offset
         = archive.BuffersTable().GetResourceOffset(**buffer_binding);
       ASSERT_HAS_VALUE(buffer_offset);

@@ -3,6 +3,7 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+// Covers: Serio/Writer.h
 
 #include <algorithm>
 #include <cstddef>
@@ -15,20 +16,32 @@
 #include <system_error>
 #include <vector>
 
-#include "Mocks/MockStream.h"
 #include "gtest/gtest.h"
 
 #include <Oxygen/Base/Endian.h>
+#include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/MemoryFile.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Stream.h>
+#include <Oxygen/Serio/Testing/FaultInjectingDevice.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::ByteSwap;
 using oxygen::IsLittleEndian;
 using oxygen::serio::AnyWriter;
+using oxygen::serio::ByteCount;
+using oxygen::serio::ByteOffset;
+using oxygen::serio::Error;
+using oxygen::serio::MemoryFile;
+using oxygen::serio::MemoryStream;
+using oxygen::serio::RegionWriteStream;
 using oxygen::serio::Writer;
 using oxygen::serio::limits::SequenceSizeType;
-using oxygen::serio::testing::MockStream;
+using oxygen::serio::testing::FaultInjectingDevice;
+using oxygen::serio::testing::FaultOperation;
 
 using testing::Types;
 
@@ -38,15 +51,9 @@ namespace {
 
 class WriterBasicTest : public testing::Test {
 protected:
-  auto SetUp() -> void override
-  {
-    stream_.Reset();
-    verify_pos_ = 0;
-  }
-
-  auto GetWriter() -> Writer<MockStream>& { return writer_; }
+  auto GetWriter() -> Writer<MemoryStream>& { return writer_; }
   auto GetAnyWriter() -> AnyWriter& { return writer_; }
-  auto GetStream() -> MockStream& { return stream_; }
+  auto GetStream() -> MemoryStream& { return stream_; }
 
   template <typename T> auto VerifyWritten(const T& expected) -> void
   {
@@ -60,7 +67,9 @@ protected:
     ASSERT_GE(stream_.Data().size(), verify_pos_ + sizeof(T));
 
     T actual;
-    std::memcpy(&actual, stream_.Data().data() + verify_pos_, sizeof(T));
+    std::memcpy(&actual,
+      std::span(stream_.Data()).subspan(verify_pos_, sizeof(T)).data(),
+      sizeof(T));
     if (!IsLittleEndian() && sizeof(T) > 1) {
       actual = ByteSwap(actual);
     }
@@ -73,9 +82,11 @@ protected:
     // Verify length field alignment
     ASSERT_EQ(verify_pos_ % alignof(uint32_t), 0);
 
-    uint32_t length;
+    uint32_t length = 0;
     ASSERT_GE(stream_.Data().size(), verify_pos_ + sizeof(uint32_t));
-    std::memcpy(&length, stream_.Data().data() + verify_pos_, sizeof(length));
+    std::memcpy(&length,
+      std::span(stream_.Data()).subspan(verify_pos_, sizeof(length)).data(),
+      sizeof(length));
     if (!IsLittleEndian()) {
       length = ByteSwap(length);
     }
@@ -84,9 +95,9 @@ protected:
     ASSERT_EQ(length, expected.length());
     ASSERT_GE(stream_.Data().size(), verify_pos_ + length);
 
-    const std::string actual(
-      reinterpret_cast<const char*>(stream_.Data().data()) + verify_pos_,
-      length);
+    std::string actual(length, '\0');
+    std::memcpy(actual.data(),
+      std::span(stream_.Data()).subspan(verify_pos_, length).data(), length);
     EXPECT_EQ(actual, expected);
     verify_pos_ += length;
 
@@ -97,8 +108,9 @@ protected:
     ASSERT_EQ(verify_pos_ % alignof(uint32_t), 0);
   }
 
-  MockStream stream_;
-  Writer<MockStream> writer_ { stream_ };
+private:
+  MemoryStream stream_;
+  Writer<MemoryStream> writer_ { stream_ };
   size_t verify_pos_ { 0 };
 };
 
@@ -213,7 +225,24 @@ NOLINT_TEST_F(WriterBasicTest, WriteEmptyArray_Success)
 
 //=== Writer Error Tests ===--------------------------------------------------//
 
-class WriterErrorTest : public WriterBasicTest { };
+//! Fixture whose writers reach a fault-injecting device.
+/*!
+  `faulty_stream_` is unbuffered, so every write reaches the device at once and
+  a fault scheduled with `FailOn` surfaces on the write that triggers it.
+*/
+class WriterErrorTest : public WriterBasicTest {
+protected:
+  using FaultyDevice = FaultInjectingDevice<MemoryFile>;
+  using FaultyStream = RegionWriteStream<FaultyDevice>;
+
+  auto GetFaultyDevice() -> FaultyDevice& { return device_; }
+  auto GetFaultyWriter() -> Writer<FaultyStream>& { return faulty_writer_; }
+
+private:
+  FaultyDevice device_ { MemoryFile {} };
+  FaultyStream faulty_stream_ { device_, ByteOffset { 0 }, ByteCount { 0 } };
+  Writer<FaultyStream> faulty_writer_ { faulty_stream_ };
+};
 
 //! Fails when writing a string that exceeds the maximum allowed length.
 NOLINT_TEST_F(WriterErrorTest, WriteString_Fails_WhenTooLarge)
@@ -244,49 +273,52 @@ NOLINT_TEST_F(WriterErrorTest, WriteArray_Fails_WhenTooLarge)
   EXPECT_EQ(result.error(), std::make_error_code(std::errc::message_size));
 }
 
-//! Fails when writing a blob if the stream is in a failure state.
+//! Fails when writing a blob if the device fails.
 NOLINT_TEST_F(WriterErrorTest, WriteBlob_Fails_OnStreamError)
 {
   // Arrange
   const std::vector<std::byte> test_data
     = { std::byte { 'x' }, std::byte { 'y' } };
-  GetStream().ForceFail(true);
+  GetFaultyDevice().FailOn(
+    FaultOperation::kWrite, 0, make_error_code(Error::kIo));
 
   // Act
-  const auto result = GetWriter().WriteBlob(test_data);
+  const auto result = GetFaultyWriter().WriteBlob(test_data);
 
   // Assert
   EXPECT_FALSE(result);
-  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+  EXPECT_EQ(result.error(), Error::kIo);
 }
 
-//! Fails when writing a string if the stream is in a failure state.
+//! Fails when writing a string if the device fails.
 NOLINT_TEST_F(WriterErrorTest, WriteString_Fails_OnStreamError)
 {
   // Arrange
-  GetStream().ForceFail(true);
+  GetFaultyDevice().FailOn(
+    FaultOperation::kWrite, 0, make_error_code(Error::kIo));
 
   // Act
-  const auto result = GetWriter().Write(std::string("fail"));
+  const auto result = GetFaultyWriter().Write(std::string("fail"));
 
   // Assert
   EXPECT_FALSE(result);
-  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+  EXPECT_EQ(result.error(), Error::kIo);
 }
 
-//! Fails when writing an array if the stream is in a failure state.
+//! Fails when writing an array if the device fails.
 NOLINT_TEST_F(WriterErrorTest, WriteArray_Fails_OnStreamError)
 {
   // Arrange
-  GetStream().ForceFail(true);
+  GetFaultyDevice().FailOn(
+    FaultOperation::kWrite, 0, make_error_code(Error::kIo));
   const std::vector<uint32_t> arr = { 1, 2, 3 };
 
   // Act
-  const auto result = GetWriter().Write(arr);
+  const auto result = GetFaultyWriter().Write(arr);
 
   // Assert
   EXPECT_FALSE(result);
-  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+  EXPECT_EQ(result.error(), Error::kIo);
 }
 
 //! AlignTo fails when using invalid alignment values.
@@ -329,7 +361,7 @@ NOLINT_TYPED_TEST(WriterIntegralTest, WriteIntegralType)
 {
   // Arrange
   using ValueType = TypeParam;
-  ValueType value = static_cast<ValueType>(0x5A5A5A5A5A5A5A5AULL);
+  auto value = static_cast<ValueType>(0x5A5A5A5A5A5A5A5AULL);
 
   // Act
   ASSERT_TRUE(this->GetAnyWriter().Write(value));
@@ -488,18 +520,26 @@ NOLINT_TEST_F(WriterBasicTest, Flush_Succeeds)
   ASSERT_TRUE(result);
 }
 
-//! Flush fails when stream is in error state.
+//! Flush fails when the device fails while writing the buffered bytes.
 NOLINT_TEST_F(WriterErrorTest, Flush_Fails_OnStreamError)
 {
-  // Arrange
-  GetStream().ForceFail(true);
+  // Arrange: a buffered stream accepts the write and holds it until Flush.
+  RegionWriteStream<FaultInjectingDevice<MemoryFile>> buffered_stream {
+    GetFaultyDevice(),
+  };
+  Writer<RegionWriteStream<FaultInjectingDevice<MemoryFile>>> writer {
+    buffered_stream,
+  };
+  ASSERT_TRUE(writer.Write(uint32_t { 42 }));
+  GetFaultyDevice().FailOn(
+    FaultOperation::kWrite, 0, make_error_code(Error::kIo));
 
   // Act
-  const auto result = GetWriter().Flush();
+  const auto result = writer.Flush();
 
   // Assert
   EXPECT_FALSE(result);
-  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+  EXPECT_EQ(result.error(), Error::kIo);
 }
 
 //! Position returns correct value after writes.
@@ -515,18 +555,4 @@ NOLINT_TEST_F(WriterBasicTest, Position_AfterWrites)
   EXPECT_EQ(pos_result.value(), sizeof(uint32_t));
 }
 
-//! Position fails when stream is in error state.
-NOLINT_TEST_F(WriterErrorTest, Position_Fails_OnStreamError)
-{
-  // Arrange
-  GetStream().ForceFail(true);
-
-  // Act
-  const auto pos_result = GetWriter().Position();
-
-  // Assert
-  EXPECT_FALSE(pos_result);
-  EXPECT_EQ(pos_result.error(), std::make_error_code(std::errc::io_error));
-}
-
-} //
+} // namespace

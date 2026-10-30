@@ -191,8 +191,7 @@ auto AssetReferences::Encode() const
   if (size > std::numeric_limits<size_t>::max()) {
     return Err(std::string("Asset reference block exceeds addressable size"));
   }
-  std::vector<std::byte> bytes(static_cast<size_t>(size));
-  serio::MemoryStream stream { std::span(bytes) };
+  serio::MemoryStream stream;
   serio::Writer writer(stream);
   const auto packed = writer.ScopedAlignment(1);
   for (const auto& binding : resources_) {
@@ -206,7 +205,8 @@ auto AssetReferences::Encode() const
       return Err(std::string("Could not encode asset key reference"));
     }
   }
-  return Ok(std::move(bytes));
+  const auto written = stream.Data();
+  return Ok(std::vector<std::byte>(written.begin(), written.end()));
 }
 
 auto AssetReferences::ResolveResource(const ResourceReferenceIndex reference,

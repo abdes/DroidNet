@@ -25,7 +25,8 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -47,12 +48,32 @@ namespace {
     });
   }
 
+  using FileWriteStream = serio::RegionWriteStream<serio::NativeFile>;
+
   auto WriteSidecar(const std::filesystem::path& path,
     const Descriptor& descriptor, const std::uint32_t index = 1U) -> void
   {
-    auto stream = serio::FileStream<>(path, std::ios::out);
-    auto writer = serio::Writer(stream);
+    auto file = serio::NativeFile::Open(path,
+      { .access = serio::Access::kWrite,
+        .creation = serio::Creation::kCreateAlways });
+    ASSERT_TRUE(file) << file.error().message();
+    auto stream = FileWriteStream(*file);
+    auto writer = serio::Writer<FileWriteStream>(stream);
     ASSERT_TRUE(writer.WriteBlob(SidecarBytes(descriptor, index)));
+    ASSERT_TRUE(stream.Flush());
+  }
+
+  //! Opens the existing `path` for in-place writes.
+  auto OpenForPatch(const std::filesystem::path& path) -> serio::NativeFile
+  {
+    auto file = serio::NativeFile::Open(path,
+      { .access = serio::Access::kWrite,
+        .creation = serio::Creation::kOpenExisting });
+    if (!file) {
+      throw std::runtime_error(
+        "Test file could not be opened: " + file.error().message());
+    }
+    return std::move(file).value();
   }
 
   struct SourceRecipe {
@@ -82,10 +103,12 @@ namespace {
       std::string(kMeterFile), SidecarBytes(descriptor),
       std::string(kMeterPath));
     const auto written = writer.Finish();
-    auto stream = serio::FileStream<>(written.index_path);
-    auto index = serio::Writer(stream);
-    if (!stream.Seek(offsetof(data::loose_cooked::IndexHeader, source_identity))
-      || !index.Write(recipe.identity) || !stream.Flush()) {
+    auto file = OpenForPatch(written.index_path);
+    auto stream = FileWriteStream(file,
+      serio::ByteOffset {
+        offsetof(data::loose_cooked::IndexHeader, source_identity) });
+    auto index = serio::Writer<FileWriteStream>(stream);
+    if (!index.Write(recipe.identity) || !stream.Flush()) {
       throw std::runtime_error("Test source identity could not be written");
     }
     return descriptor;
@@ -203,10 +226,12 @@ namespace {
     EXPECT_THROW(resolve(), std::runtime_error);
     WriteSidecar(sidecar, descriptor);
     {
-      auto stream = serio::FileStream<>(sidecar);
-      auto writer = serio::Writer(stream);
-      ASSERT_TRUE(stream.Seek(kReservedFieldOffset));
+      auto file = OpenForPatch(sidecar);
+      auto stream
+        = FileWriteStream(file, serio::ByteOffset { kReservedFieldOffset });
+      auto writer = serio::Writer<FileWriteStream>(stream);
       ASSERT_TRUE(writer.Write(std::uint16_t { 1U }));
+      ASSERT_TRUE(stream.Flush());
     }
     EXPECT_THROW(resolve(), std::runtime_error);
   }

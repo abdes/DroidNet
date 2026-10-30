@@ -3,28 +3,47 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+// Covers: Serio/Reader.h
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <new>
+#include <optional>
+#include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
-#include "Mocks/MockStream.h"
 #include "gtest/gtest.h"
 
 #include <Oxygen/Base/Endian.h>
+#include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/MemoryFile.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Region.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Stream.h>
+#include <Oxygen/Serio/Testing/FaultInjectingDevice.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::ByteSwap;
 using oxygen::IsLittleEndian;
 using oxygen::serio::AnyReader;
+using oxygen::serio::ByteOffset;
+using oxygen::serio::Error;
+using oxygen::serio::MemoryFile;
+using oxygen::serio::MemoryStream;
 using oxygen::serio::Reader;
+using oxygen::serio::Region;
+using oxygen::serio::RegionReadStream;
 using oxygen::serio::limits::SequenceSizeType;
-
-using oxygen::serio::testing::MockStream;
+using oxygen::serio::testing::FaultInjectingDevice;
+using oxygen::serio::testing::FaultOperation;
 
 using testing::Types;
 
@@ -32,16 +51,16 @@ namespace {
 
 class ReaderBasicTest : public testing::Test {
 protected:
-  auto GetReader() -> Reader<MockStream>& { return sut_; }
+  auto GetReader() -> Reader<MemoryStream>& { return sut_; }
   auto GetAnyReader() -> AnyReader& { return sut_; }
 
   auto WritePadding(const size_t alignment) -> void
   {
-    const auto pos = stream_.Position().value();
+    const auto pos = static_cast<size_t>(stream_.Position().get());
     const size_t padding = (alignment - (pos % alignment)) % alignment;
     if (padding > 0) {
       const std::vector zeros(padding, 0x00_b);
-      ASSERT_TRUE(stream_.Write(zeros.data(), padding));
+      ASSERT_TRUE(stream_.Write(zeros));
     }
   }
 
@@ -55,10 +74,10 @@ protected:
     if (!IsLittleEndian() && sizeof(T) > 1) {
       auto temp = ByteSwap(value);
       ASSERT_TRUE(
-        stream_.Write(reinterpret_cast<const std::byte*>(&temp), sizeof(T)));
+        stream_.Write(std::as_bytes(std::span(&temp, static_cast<size_t>(1)))));
     } else {
-      ASSERT_TRUE(
-        stream_.Write(reinterpret_cast<const std::byte*>(&value), sizeof(T)));
+      ASSERT_TRUE(stream_.Write(
+        std::as_bytes(std::span(&value, static_cast<size_t>(1)))));
     }
   }
 
@@ -71,10 +90,9 @@ protected:
     if (!IsLittleEndian()) {
       length = ByteSwap(length);
     }
-    ASSERT_TRUE(stream_.Write(
-      reinterpret_cast<const std::byte*>(&length), sizeof(length)));
-    ASSERT_TRUE(stream_.Write(
-      reinterpret_cast<const std::byte*>(str.data()), str.length()));
+    ASSERT_TRUE(
+      stream_.Write(std::as_bytes(std::span(&length, static_cast<size_t>(1)))));
+    ASSERT_TRUE(stream_.Write(std::as_bytes(std::span(str))));
   }
 
   template <typename T> auto WriteArray(const std::vector<T>& values) -> void
@@ -88,20 +106,22 @@ protected:
       WritePadding(alignof(T));
     }
 
-    ASSERT_TRUE(stream_.Write(reinterpret_cast<const std::byte*>(values.data()),
-      values.size() * sizeof(T)));
+    ASSERT_TRUE(stream_.Write(std::as_bytes(std::span(values))));
 
     // Add final alignment padding
     WritePadding(alignof(uint32_t));
   }
 
-  auto SeekTo(size_t pos) -> void { ASSERT_TRUE(stream_.Seek(pos)); }
+  auto SeekTo(const size_t pos) -> void
+  {
+    ASSERT_TRUE(stream_.Seek(ByteOffset { pos }));
+  }
 
-  auto GetStream() -> MockStream& { return stream_; }
+  auto GetStream() -> MemoryStream& { return stream_; }
 
 private:
-  MockStream stream_;
-  Reader<MockStream> sut_ { stream_ };
+  MemoryStream stream_;
+  Reader<MemoryStream> sut_ { stream_ };
 };
 
 //! Reads mixed types (byte, uint32_t, string) and maintains alignment.
@@ -137,7 +157,7 @@ NOLINT_TEST_F(ReaderBasicTest, ReadBlob_Success)
 {
   // Setup
   const std::vector test_data = { 'a'_b, 'b'_b, 'c'_b, 'd'_b, 'e'_b };
-  ASSERT_TRUE(GetStream().Write(test_data.data(), test_data.size()));
+  ASSERT_TRUE(GetStream().Write(test_data));
   SeekTo(0);
 
   // Act
@@ -163,7 +183,7 @@ NOLINT_TEST_F(ReaderBasicTest, ReadBlobTo_Success)
 {
   // Setup
   const std::vector test_data = { '1'_b, '2'_b, '3'_b, '4'_b };
-  ASSERT_TRUE(GetStream().Write(test_data.data(), test_data.size()));
+  ASSERT_TRUE(GetStream().Write(test_data));
   SeekTo(0);
   std::vector<std::byte> buffer(test_data.size());
 
@@ -206,7 +226,7 @@ NOLINT_TYPED_TEST(ReaderIntegralTest, ReadIntegralType)
   using ValueType = TypeParam;
 
   //! Arrange: Write a test value of the current integral type.
-  ValueType value = static_cast<ValueType>(0x5A5A5A5A5A5A5A5AULL);
+  auto value = static_cast<ValueType>(0x5A5A5A5A5A5A5A5AULL);
   this->WritePod(value);
   this->SeekTo(0);
 
@@ -305,7 +325,32 @@ NOLINT_TEST_F(ReaderArrayTest, ReadEmptyArray_Success)
 //=== Reader Error Tests ===--------------------------------------------------//
 
 //! Test fixture for error and failure scenarios in Reader.
-class ReaderErrorTest : public ReaderBasicTest { };
+/*!
+  `InjectReadFault` copies the bytes written so far into a fault-injecting
+  device whose next read fails with `kIo`, and exposes a reader over it. The
+  device outlives the stream and the stream outlives the reader, as the members
+  are destroyed in reverse order of declaration.
+*/
+class ReaderErrorTest : public ReaderBasicTest {
+protected:
+  using FaultyDevice = FaultInjectingDevice<MemoryFile>;
+  using FaultyStream = RegionReadStream<FaultyDevice>;
+
+  auto InjectReadFault() -> void
+  {
+    device_.emplace(MemoryFile::FromBytes(GetStream().Data()).value());
+    device_->FailOn(FaultOperation::kRead, 0, make_error_code(Error::kIo));
+    faulty_stream_.emplace(Region<FaultyDevice>::Whole(*device_).value());
+    faulty_reader_ = std::make_unique<Reader<FaultyStream>>(*faulty_stream_);
+  }
+
+  auto GetFaultyReader() -> Reader<FaultyStream>& { return *faulty_reader_; }
+
+private:
+  std::optional<FaultyDevice> device_;
+  std::optional<FaultyStream> faulty_stream_;
+  std::unique_ptr<Reader<FaultyStream>> faulty_reader_;
+};
 
 //! Fails when reading a string that exceeds the maximum allowed length.
 NOLINT_TEST_F(ReaderErrorTest, ReadString_Fails_WhenTooLarge)
@@ -331,32 +376,32 @@ NOLINT_TEST_F(ReaderErrorTest, ReadArray_Fails_WhenTooLarge)
   EXPECT_EQ(result.error(), std::make_error_code(std::errc::value_too_large));
 }
 
-//! Fails when reading a POD value if the stream is in a failure state.
+//! Fails when reading a POD value if the device fails.
 NOLINT_TEST_F(ReaderErrorTest, Read_Fails_OnStreamError)
 {
   WritePod(uint32_t { 42 });
 
   SeekTo(0); // Reset cursor before reading
 
-  GetStream().ForceFail(true);
-  const auto result = GetReader().Read<uint32_t>();
+  InjectReadFault();
+  const auto result = GetFaultyReader().Read<uint32_t>();
   EXPECT_FALSE(result);
-  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+  EXPECT_EQ(result.error(), Error::kIo);
 }
 
-//! Fails when reading a string if the stream is in a failure state.
+//! Fails when reading a string if the device fails.
 NOLINT_TEST_F(ReaderErrorTest, ReadString_Fails_OnStreamError)
 {
   WriteString("test");
 
   SeekTo(0); // Reset cursor before reading
 
-  GetStream().ForceFail(true);
-  const auto result = GetReader().Read<std::string>();
+  InjectReadFault();
+  const auto result = GetFaultyReader().Read<std::string>();
   EXPECT_FALSE(result);
 }
 
-//! Fails when reading an array if the stream is in a failure state.
+//! Fails when reading an array if the device fails.
 NOLINT_TEST_F(ReaderErrorTest, ReadArray_Fails_OnStreamError)
 {
   const std::vector<uint32_t> test_array = { 1, 2, 3 };
@@ -364,34 +409,34 @@ NOLINT_TEST_F(ReaderErrorTest, ReadArray_Fails_OnStreamError)
 
   SeekTo(0); // Reset cursor before reading
 
-  GetStream().ForceFail(true);
-  const auto result = GetReader().Read<std::vector<int32_t>>();
+  InjectReadFault();
+  const auto result = GetFaultyReader().Read<std::vector<int32_t>>();
   EXPECT_FALSE(result);
 }
 
-//! Fails when reading a blob if the stream is in a failure state.
+//! Fails when reading a blob if the device fails.
 NOLINT_TEST_F(ReaderErrorTest, ReadBlob_Fails_OnStreamError)
 {
   const std::vector test_data = { 'x'_b, 'y'_b };
-  ASSERT_TRUE(GetStream().Write(test_data.data(), test_data.size()));
+  ASSERT_TRUE(GetStream().Write(test_data));
   SeekTo(0);
-  GetStream().ForceFail(true);
-  const auto result = GetReader().ReadBlob(test_data.size());
+  InjectReadFault();
+  const auto result = GetFaultyReader().ReadBlob(test_data.size());
   EXPECT_FALSE(result);
-  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+  EXPECT_EQ(result.error(), Error::kIo);
 }
 
-//! Fails when reading a blob into a buffer if the stream is in a failure state.
+//! Fails when reading a blob into a buffer if the device fails.
 NOLINT_TEST_F(ReaderErrorTest, ReadBlobTo_Fails_OnStreamError)
 {
   const std::vector test_data = { 'z'_b, 'w'_b };
-  ASSERT_TRUE(GetStream().Write(test_data.data(), test_data.size()));
+  ASSERT_TRUE(GetStream().Write(test_data));
   SeekTo(0);
   std::vector<std::byte> buffer(test_data.size());
-  GetStream().ForceFail(true);
-  const auto result = GetReader().ReadBlobInto(buffer);
+  InjectReadFault();
+  const auto result = GetFaultyReader().ReadBlobInto(buffer);
   EXPECT_FALSE(result);
-  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+  EXPECT_EQ(result.error(), Error::kIo);
 }
 
 //! AlignTo fails when using invalid alignment values.
@@ -426,20 +471,22 @@ NOLINT_TEST_F(ReaderErrorTest, AlignTo_Fails_OnInvalidAlignment)
 */
 class ReaderAlignmentGuardTest : public ReaderBasicTest {
 protected:
-  auto WriteAlignedUint32(uint32_t value, size_t alignment) -> void
+  auto WriteAlignedUint32(uint32_t value, const std::align_val_t boundary)
+    -> void
   {
-    // Write padding to align to 'alignment' boundary
-    const auto pos = GetStream().Position().value();
+    // Write padding to align to the 'boundary'
+    const auto alignment = static_cast<size_t>(boundary);
+    const auto pos = static_cast<size_t>(GetStream().Position().get());
     const size_t padding = (alignment - (pos % alignment)) % alignment;
     if (padding > 0) {
       const std::vector zeros(padding, 0x00_b);
-      ASSERT_TRUE(GetStream().Write(zeros.data(), padding));
+      ASSERT_TRUE(GetStream().Write(zeros));
     }
     if (!IsLittleEndian()) {
       value = ByteSwap(value);
     }
     ASSERT_TRUE(GetStream().Write(
-      reinterpret_cast<const std::byte*>(&value), sizeof(value)));
+      std::as_bytes(std::span(&value, static_cast<size_t>(1)))));
   }
 };
 
@@ -454,24 +501,24 @@ NOLINT_TEST_F(
   constexpr uint32_t value3 = 0x44444444;
 
   // Arrange: Write values with required alignments
-  WriteAlignedUint32(value1, 4);
-  const auto pos2 = GetStream().Position().value();
+  WriteAlignedUint32(value1, std::align_val_t { 4 });
+  const auto pos2 = static_cast<size_t>(GetStream().Position().get());
   const size_t pad2
     = (alignof(uint64_t) - (pos2 % alignof(uint64_t))) % alignof(uint64_t);
   if (pad2 > 0) {
     const std::vector zeros(pad2, 0x00_b);
-    ASSERT_TRUE(GetStream().Write(zeros.data(), pad2));
+    ASSERT_TRUE(GetStream().Write(zeros));
   }
   uint64_t v2 = value2;
   if (!IsLittleEndian()) {
     v2 = ByteSwap(v2);
   }
   ASSERT_TRUE(
-    GetStream().Write(reinterpret_cast<const std::byte*>(&v2), sizeof(v2)));
-  WriteAlignedUint32(value3, 4);
+    GetStream().Write(std::as_bytes(std::span(&v2, static_cast<size_t>(1)))));
+  WriteAlignedUint32(value3, std::align_val_t { 4 });
 
   // Act
-  GetStream().Reset();
+  SeekTo(0);
 
   // Assert
   // Outer scope: 4-byte alignment
@@ -502,11 +549,11 @@ NOLINT_TEST_F(ReaderAlignmentGuardTest, ExplicitAlignment_ReadsValuesCorrectly)
   // Arrange
   constexpr uint32_t test_value = 0xCAFEBABE;
   constexpr size_t alignment = 16;
-  WriteAlignedUint32(test_value, alignment);
-  WriteAlignedUint32(0xDEADBEEF, 4);
+  WriteAlignedUint32(test_value, std::align_val_t { alignment });
+  WriteAlignedUint32(0xDEADBEEF, std::align_val_t { 4 });
 
   // Act
-  GetStream().Reset();
+  SeekTo(0);
 
   // Assert
   {
@@ -528,10 +575,10 @@ NOLINT_TEST_F(ReaderAlignmentGuardTest, AutoAlignment_ReadsValueCorrectly)
 {
   // Arrange
   constexpr uint32_t test_value = 0xAABBCCDD;
-  WriteAlignedUint32(test_value, alignof(uint32_t));
+  WriteAlignedUint32(test_value, std::align_val_t { alignof(uint32_t) });
 
   // Act
-  GetStream().Reset();
+  SeekTo(0);
   // No explicit guard: Reader should align automatically
 
   // Assert
@@ -548,11 +595,12 @@ NOLINT_TEST_F(ReaderAlignmentGuardTest, MisalignedData_ReadsWrongValue)
   constexpr uint32_t test_value = 0x12345678;
   // Arrange: Write value with wrong alignment (e.g., offset by 1)
   const std::vector pad(1, 0x00_b);
-  ASSERT_TRUE(GetStream().Write(pad.data(), pad.size()));
-  WriteAlignedUint32(test_value, 1); // Actually unaligned
+  ASSERT_TRUE(GetStream().Write(pad));
+  // Actually unaligned
+  WriteAlignedUint32(test_value, std::align_val_t { 1 });
 
   // Act
-  GetStream().Reset();
+  SeekTo(0);
 
   // Assert
   // Try to read with explicit 4-byte alignment
@@ -586,23 +634,24 @@ NOLINT_TEST_F(ReaderAlignmentGuardTest, AutoTypeAlignment_ReadsValueCorrectly)
   // Arrange
   constexpr uint64_t test_value = 0x1122334455667788ULL;
   // Arrange: Write with 8-byte alignment (alignof(uint64_t))
-  WriteAlignedUint32(0xDEADBEEF, 4); // Write a dummy 4-byte value first
-  const auto pos = GetStream().Position().value();
+  // Write a dummy 4-byte value first
+  WriteAlignedUint32(0xDEADBEEF, std::align_val_t { 4 });
+  const auto pos = static_cast<size_t>(GetStream().Position().get());
   const size_t padding
     = (alignof(uint64_t) - (pos % alignof(uint64_t))) % alignof(uint64_t);
   if (padding > 0) {
     const std::vector zeros(padding, 0x00_b);
-    ASSERT_TRUE(GetStream().Write(zeros.data(), padding));
+    ASSERT_TRUE(GetStream().Write(zeros));
   }
   uint64_t value = test_value;
   if (!IsLittleEndian()) {
     value = ByteSwap(value);
   }
   ASSERT_TRUE(GetStream().Write(
-    reinterpret_cast<const std::byte*>(&value), sizeof(value)));
+    std::as_bytes(std::span(&value, static_cast<size_t>(1)))));
 
   // Act
-  GetStream().Reset();
+  SeekTo(0);
 
   // Assert
   // Read dummy value

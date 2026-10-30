@@ -184,11 +184,8 @@ auto SceneAsset::GetNodes() const noexcept
     const size_t nodes_bytes = node_count_ * sizeof(pak::world::NodeRecord);
     const auto bytes = data_.subspan(desc_.nodes.offset, nodes_bytes);
 
-    std::vector<std::byte> buffer;
-    buffer.assign(bytes.begin(), bytes.end());
-
-    oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-    oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+    oxygen::serio::ReadOnlyMemoryStream stream(bytes);
+    oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(stream);
     auto pack = reader.ScopedAlignment(1);
 
     nodes_cache_.clear();
@@ -969,11 +966,8 @@ auto SceneAsset::TryGetEnvironmentRecordAs(
         "SceneAsset environment record size mismatch (validated by loader)");
     }
 
-    std::vector<std::byte> buffer;
-    buffer.assign(record.bytes.begin(), record.bytes.end());
-
-    oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-    oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+    oxygen::serio::ReadOnlyMemoryStream stream(record.bytes);
+    oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(stream);
     auto packed = reader.ScopedAlignment(1);
 
     RecordT decoded {};

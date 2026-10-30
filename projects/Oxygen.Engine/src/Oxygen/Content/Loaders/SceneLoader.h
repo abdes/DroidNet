@@ -43,11 +43,8 @@ namespace detail {
   inline auto ReadPackedRecord(const std::span<const std::byte> bytes,
     const std::string_view what) -> RecordT
   {
-    std::vector<std::byte> buffer;
-    buffer.assign(bytes.begin(), bytes.end());
-
-    oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-    oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+    oxygen::serio::ReadOnlyMemoryStream stream(bytes);
+    oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(stream);
     auto packed = reader.ScopedAlignment(1);
 
     RecordT record {};

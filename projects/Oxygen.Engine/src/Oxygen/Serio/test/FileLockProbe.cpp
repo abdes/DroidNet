@@ -14,9 +14,9 @@
 #include <Oxygen/Serio/FileLock.h>
 
 #ifdef _WIN32
-auto wmain(int argc, wchar_t* argv[]) -> int
+auto wmain(int argc, wchar_t** argv) -> int
 #else
-auto main(int argc, char* argv[]) -> int
+auto main(int argc, char** argv) -> int
 #endif
 {
   constexpr auto kArgumentCount = 4;

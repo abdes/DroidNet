@@ -9,11 +9,10 @@
 #include <stdexcept>
 #include <utility>
 
-#include "../Mocks/MockStream.h"
-
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
@@ -22,9 +21,9 @@ namespace oxygen::content::testing {
 
 class BinaryAssetLoaderFixtureBase : public ::testing::Test {
 protected:
-  using MockStream = oxygen::content::testing::MockStream;
-  using Writer = oxygen::serio::Writer<MockStream>;
-  using Reader = oxygen::serio::Reader<MockStream>;
+  using MemoryStream = oxygen::serio::MemoryStream;
+  using Writer = oxygen::serio::Writer<MemoryStream>;
+  using Reader = oxygen::serio::Reader<MemoryStream>;
 
   BinaryAssetLoaderFixtureBase()
     : desc_writer_(desc_stream_)
@@ -37,10 +36,10 @@ protected:
   auto MakeLoaderContext(const bool work_offline = false,
     const bool parse_only = false) -> oxygen::content::LoaderContext
   {
-    if (!desc_stream_.Seek(0)) {
+    if (!desc_stream_.Seek(oxygen::serio::ByteOffset { 0 })) {
       throw std::runtime_error("Failed to seek desc_stream");
     }
-    if (!data_stream_.Seek(0)) {
+    if (!data_stream_.Seek(oxygen::serio::ByteOffset { 0 })) {
       throw std::runtime_error("Failed to seek data_stream");
     }
 
@@ -65,8 +64,8 @@ protected:
     return { std::move(context), std::move(collector) };
   }
 
-  MockStream desc_stream_;
-  MockStream data_stream_;
+  MemoryStream desc_stream_;
+  MemoryStream data_stream_;
   Writer desc_writer_;
   Writer data_writer_;
   Reader desc_reader_;

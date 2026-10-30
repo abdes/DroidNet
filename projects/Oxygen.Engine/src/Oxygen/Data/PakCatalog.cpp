@@ -167,8 +167,7 @@ namespace {
     for (auto& dependency : dependencies) {
       std::ranges::sort(dependency.requirements, {}, RequirementOrder);
     }
-    std::vector<std::byte> bytes(static_cast<size_t>(size));
-    serio::MemoryStream stream { std::span(bytes) };
+    serio::MemoryStream stream;
     serio::Writer writer(stream);
     const auto packed = writer.ScopedAlignment(1);
     if (!writer.Write(pak::version::kPakCatalogVersion)
@@ -217,7 +216,8 @@ namespace {
         }
       }
     }
-    return Ok(std::move(bytes));
+    const auto written = stream.Data();
+    return Ok(std::vector<std::byte>(written.begin(), written.end()));
   }
 
   auto Corrupt(const std::string& message) -> CookedOpenError
@@ -291,9 +291,9 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
   // The bytes left before the digest, so that no record count allocates more
   // records than the catalog can hold.
   const auto remaining = [&stream, &bytes] -> uint64_t {
-    const auto position = stream.Position();
-    return position && *position + kDigestSize <= bytes.size()
-      ? bytes.size() - kDigestSize - *position
+    const auto position = stream.Position().get();
+    return position + kDigestSize <= bytes.size()
+      ? bytes.size() - kDigestSize - position
       : 0U;
   };
   const auto read_library = [&reader](std::string& library) -> bool {

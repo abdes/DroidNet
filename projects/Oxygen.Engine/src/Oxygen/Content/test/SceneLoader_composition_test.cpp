@@ -143,7 +143,8 @@ auto MakeComposedScene(const CompositionInput& input) -> std::vector<std::byte>
 auto LoadParseOnly(std::vector<std::byte>& bytes)
   -> std::unique_ptr<oxygen::data::SceneAsset>
 {
-  auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
+  auto stream
+    = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
   auto reader = oxygen::serio::Reader(stream);
   auto context = oxygen::content::LoaderContext {};
   context.desc_reader = &reader;
@@ -221,7 +222,8 @@ NOLINT_TEST(
   input.instances = { { .node_index = 1U, .scene_key = ModelKey() } };
   input.contexts = { { .context_key = GameplayKey(), .priority = 0 } };
   auto bytes = MakeComposedScene(input);
-  auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
+  auto stream
+    = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
   auto reader = oxygen::serio::Reader(stream);
   auto collector
     = std::make_shared<oxygen::content::internal::DependencyCollector>();

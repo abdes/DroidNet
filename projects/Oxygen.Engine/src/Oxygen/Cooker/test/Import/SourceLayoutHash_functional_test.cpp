@@ -32,8 +32,9 @@
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -129,10 +130,18 @@ protected:
     if (!geometry_entry) {
       return {};
     }
-    oxygen::serio::FileStream<> stream(
-      imported.report.cooked_root / geometry_entry->descriptor_relpath,
-      std::ios::in);
-    oxygen::serio::Reader reader(stream);
+    auto file = oxygen::serio::NativeFile::Open(
+      imported.report.cooked_root / geometry_entry->descriptor_relpath, {});
+    EXPECT_TRUE(file) << file.error().message();
+    if (!file) {
+      return {};
+    }
+    auto stream = oxygen::serio::OpenReadStream(*file);
+    EXPECT_TRUE(stream) << stream.error().message();
+    if (!stream) {
+      return {};
+    }
+    oxygen::serio::Reader reader(*stream);
     const oxygen::content::LoaderContext context {
       .current_asset_key = geometry_entry->key,
       .desc_reader = &reader,

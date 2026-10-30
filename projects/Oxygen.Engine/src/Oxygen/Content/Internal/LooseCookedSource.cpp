@@ -6,16 +6,18 @@
 
 #include <cstring>
 #include <filesystem>
-#include <ios>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <string_view>
+#include <system_error>
 
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
 #include <Oxygen/Data/TextureResourceDescriptor.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::internal {
 
@@ -33,8 +35,17 @@ auto LooseCookedSource::FindTextureIndexByVirtualPath(
     throw std::runtime_error(
       "Texture descriptor does not use the current OTEX layout");
   }
-  serio::FileStream<> stream(path, std::ios::in);
-  serio::Reader reader(stream);
+  auto file = serio::NativeFile::Open(path, {});
+  if (!file) {
+    throw std::system_error(file.error(),
+      "Could not open texture descriptor '" + path.string() + "'");
+  }
+  auto stream = serio::OpenReadStream(*file);
+  if (!stream) {
+    throw std::system_error(
+      stream.error(), "Could not open texture descriptor stream");
+  }
+  serio::Reader reader(*stream);
   const auto bytes = reader.ReadBlob(data::kTextureResourceDescriptorSize);
   if (!bytes) {
     throw std::runtime_error("Texture descriptor could not be read");

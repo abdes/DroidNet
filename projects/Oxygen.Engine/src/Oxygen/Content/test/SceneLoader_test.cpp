@@ -14,8 +14,6 @@
 #include <utility>
 #include <vector>
 
-#include "Mocks/MockStream.h"
-
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
@@ -90,7 +88,8 @@ NOLINT_TEST(SceneFlagRecordTest, LoaderPreservesFlagModesAndFollowingTransform)
     .inherited = world::kSceneNodeFlag_CastsShadows
       | world::kSceneNodeFlag_ReceivesShadows,
   });
-  auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
+  auto stream
+    = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
   auto reader = oxygen::serio::Reader(stream);
   auto context = oxygen::content::LoaderContext {};
   context.desc_reader = &reader;
@@ -120,7 +119,8 @@ NOLINT_TEST(
       = MakeSceneWithFlagRecord({ .values = values, .inherited = inherited });
     EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
       std::runtime_error);
-    auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
+    auto stream
+      = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
     auto reader = oxygen::serio::Reader(stream);
     auto context = oxygen::content::LoaderContext {};
     context.desc_reader = &reader;
@@ -144,7 +144,8 @@ NOLINT_TEST(
       &node, sizeof(node));
     EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
       std::runtime_error);
-    auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
+    auto stream
+      = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
     auto reader = oxygen::serio::Reader(stream);
     auto context = oxygen::content::LoaderContext {};
     context.desc_reader = &reader;
@@ -159,7 +160,8 @@ NOLINT_TEST(SceneFlagRecordTest, RejectsRetiredSceneVersionFour)
     = MakeSceneWithFlagRecord({ .values = 0U, .inherited = 0U, .version = 4U });
   EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
     std::runtime_error);
-  auto stream = oxygen::serio::MemoryStream(std::span<std::byte>(bytes));
+  auto stream
+    = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
   auto reader = oxygen::serio::Reader(stream);
   auto context = oxygen::content::LoaderContext {};
   context.desc_reader = &reader;
@@ -258,21 +260,15 @@ NOLINT_TEST(SceneExposureRecordTest, RejectsObsoleteAndMalformedLayouts)
        }) {
     SCOPED_TRACE(offset);
     auto bytes = MakeExposureScene();
-    oxygen::serio::MemoryStream stream { std::span<std::byte>(bytes) };
-    oxygen::serio::Writer writer(stream);
-    const auto packed = writer.ScopedAlignment(1);
-    ASSERT_TRUE(stream.Seek(kRecordStart + offset));
-    ASSERT_TRUE(writer.Write(value));
+    std::memcpy(bytes.data() + kRecordStart + offset, &value, sizeof(value));
     EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
       std::runtime_error);
   }
   auto bytes = MakeExposureScene();
-  oxygen::serio::MemoryStream stream { std::span<std::byte>(bytes) };
-  oxygen::serio::Writer writer(stream);
-  const auto packed = writer.ScopedAlignment(1);
-  ASSERT_TRUE(stream.Seek(kRecordStart + sizeof(Record)
-    + sizeof(world::ExposureCompensationKeyRecord)));
-  ASSERT_TRUE(writer.Write(-4.0F));
+  constexpr auto kBadValue = -4.0F;
+  std::memcpy(bytes.data() + kRecordStart + sizeof(Record)
+      + sizeof(world::ExposureCompensationKeyRecord),
+    &kBadValue, sizeof(kBadValue));
   EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
     std::runtime_error);
 }
@@ -288,9 +284,9 @@ NOLINT_TEST(SceneExposureRecordTest, RejectsSceneVersionFive)
 
 class SceneLoaderTest : public testing::Test {
 protected:
-  using MockStream = oxygen::content::testing::MockStream;
-  using Reader = oxygen::serio::Reader<MockStream>;
-  using Writer = oxygen::serio::Writer<MockStream>;
+  using MemoryStream = oxygen::serio::MemoryStream;
+  using Reader = oxygen::serio::Reader<MemoryStream>;
+  using Writer = oxygen::serio::Writer<MemoryStream>;
 
   SceneLoaderTest()
     : writer_(stream_)
@@ -300,7 +296,7 @@ protected:
 
   auto MakeContextParseOnly() -> oxygen::content::LoaderContext
   {
-    if (!stream_.Seek(0)) {
+    if (!stream_.Seek(oxygen::serio::ByteOffset { 0 })) {
       throw std::runtime_error("Failed to seek stream");
     }
     return oxygen::content::LoaderContext {
@@ -314,7 +310,7 @@ protected:
   auto MakeContextDecode() -> std::pair<oxygen::content::LoaderContext,
     std::shared_ptr<oxygen::content::internal::DependencyCollector>>
   {
-    if (!stream_.Seek(0)) {
+    if (!stream_.Seek(oxygen::serio::ByteOffset { 0 })) {
       throw std::runtime_error("Failed to seek stream");
     }
 
@@ -439,7 +435,7 @@ protected:
   }
 
 private:
-  MockStream stream_;
+  MemoryStream stream_;
   Writer writer_;
   Reader reader_;
 };
@@ -494,7 +490,8 @@ NOLINT_TEST(
   SceneLoaderDependencyTest, SceneWithoutComponentsCollectsNoDependencies)
 {
   auto bytes = MakeSceneWithFlagRecord({ .values = 0U, .inherited = 0U });
-  oxygen::serio::MemoryStream stream { std::span<std::byte>(bytes) };
+  oxygen::serio::ReadOnlyMemoryStream stream { std::span<const std::byte>(
+    bytes) };
   oxygen::serio::Reader reader(stream);
   auto context = oxygen::content::LoaderContext {};
   context.desc_reader = &reader;

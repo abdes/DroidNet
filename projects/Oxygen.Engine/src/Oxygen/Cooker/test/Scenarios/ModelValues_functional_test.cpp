@@ -29,6 +29,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -77,8 +78,9 @@
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -134,9 +136,18 @@ auto DecodeParseOnly(const std::filesystem::path& cooked_root,
   const oxygen::content::lc::Inspection::AssetEntry& entry,
   const Decode& decode)
 {
-  oxygen::serio::FileStream<> stream(
-    cooked_root / entry.descriptor_relpath, std::ios::in);
-  oxygen::serio::Reader reader(stream);
+  const auto descriptor_path = cooked_root / entry.descriptor_relpath;
+  auto file = oxygen::serio::NativeFile::Open(descriptor_path, {});
+  if (!file) {
+    throw std::system_error(
+      file.error(), "open '" + descriptor_path.string() + "'");
+  }
+  auto stream = oxygen::serio::OpenReadStream(*file);
+  if (!stream) {
+    throw std::system_error(
+      stream.error(), "size '" + descriptor_path.string() + "'");
+  }
+  oxygen::serio::Reader reader(*stream);
   const oxygen::content::LoaderContext context {
     .current_asset_key = entry.key,
     .desc_reader = &reader,

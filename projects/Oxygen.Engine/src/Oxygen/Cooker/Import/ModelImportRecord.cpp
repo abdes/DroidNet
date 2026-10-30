@@ -60,8 +60,9 @@
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/FileLock.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::import {
 namespace {
@@ -1343,9 +1344,18 @@ auto ModelImportRecord::ValidateCandidate(const ImportReport& report) -> void
       throw std::invalid_argument(
         "Cooked geometry has no matching recorded provenance");
     }
-    serio::FileStream<> stream(
-      report.cooked_root / asset.descriptor_relpath, std::ios::in);
-    serio::Reader reader(stream);
+    const auto descriptor_path = report.cooked_root / asset.descriptor_relpath;
+    auto descriptor_file = serio::NativeFile::Open(descriptor_path, {});
+    if (!descriptor_file) {
+      throw std::system_error(
+        descriptor_file.error(), "open '" + descriptor_path.string() + "'");
+    }
+    auto stream = serio::OpenReadStream(*descriptor_file);
+    if (!stream) {
+      throw std::system_error(
+        stream.error(), "read '" + descriptor_path.string() + "'");
+    }
+    serio::Reader reader(*stream);
     const auto geometry = loaders::LoadGeometryAsset(LoaderContext {
       .current_asset_key = asset.key,
       .desc_reader = &reader,

@@ -18,6 +18,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -50,8 +51,9 @@
 #include <Oxygen/Data/Schema/Generated.SceneChanges.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::inspection {
 namespace {
@@ -74,13 +76,22 @@ namespace {
       throw std::runtime_error(
         "Descriptor path must stay within its cooked root.");
     }
-    serio::FileStream<> stream(root / relative, std::ios::in);
-    const auto size = stream.Size();
-    if (!size || *size != entry.descriptor_size) {
+    const auto descriptor_path = root / relative;
+    auto file = serio::NativeFile::Open(descriptor_path, {});
+    if (!file) {
+      throw std::system_error(
+        file.error(), fmt::format("open '{}'", descriptor_path.string()));
+    }
+    auto stream = serio::OpenReadStream(*file);
+    if (!stream) {
+      throw std::system_error(
+        stream.error(), fmt::format("size '{}'", descriptor_path.string()));
+    }
+    if (stream->Size().get() != entry.descriptor_size) {
       throw std::runtime_error(
         "Scene descriptor size does not match its index entry.");
     }
-    serio::Reader reader(stream);
+    serio::Reader reader(*stream);
     const LoaderContext context {
       .current_asset_key = entry.key,
       .desc_reader = &reader,

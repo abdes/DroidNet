@@ -15,6 +15,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include <fmt/format.h>
@@ -30,8 +31,9 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::inspection {
 
@@ -105,20 +107,25 @@ namespace {
   auto ReadDescriptorBytes(const std::filesystem::path& descriptor_path)
     -> std::vector<std::byte>
   {
-    using oxygen::serio::FileStream;
     using oxygen::serio::Reader;
 
-    FileStream<> stream(descriptor_path, std::ios::in);
-    const auto size_result = stream.Size();
-    if (!size_result) {
-      throw std::runtime_error("failed to query descriptor size");
+    auto file = oxygen::serio::NativeFile::Open(descriptor_path, {});
+    if (!file) {
+      throw std::system_error(
+        file.error(), fmt::format("open '{}'", descriptor_path.string()));
     }
-    const auto size_bytes = size_result.value();
+    auto stream = oxygen::serio::OpenReadStream(*file);
+    if (!stream) {
+      throw std::system_error(stream.error(),
+        fmt::format("query descriptor size '{}'", descriptor_path.string()));
+    }
+    const auto size_bytes = stream->Size().get();
     if (size_bytes == 0) {
       return {};
     }
 
-    Reader<FileStream<>> reader(stream);
+    Reader<oxygen::serio::RegionReadStream<oxygen::serio::NativeFile>> reader(
+      *stream);
     auto pack = reader.ScopedAlignment(1);
     auto blob = reader.ReadBlob(size_bytes);
     if (!blob) {

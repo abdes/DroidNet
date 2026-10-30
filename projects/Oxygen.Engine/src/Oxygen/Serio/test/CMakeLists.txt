@@ -34,18 +34,59 @@ add_test(NAME "Oxygen.Serio Link Test" COMMAND ${OXYGEN_SERIO_LINK_TEST_TARGET})
 
 include(GTestHelpers)
 
-m_gtest_program(
-  Serio
+# Declares one Serio test executable of a single tier (see README.md):
+# Oxygen.Serio.<Unit|Functional>.Tests, labelled "serio;<tier>".
+function(oxygen_serio_test tier)
+  cmake_parse_arguments(x "" "" "SOURCES" ${ARGN})
+  string(TOLOWER "${tier}" _label)
+  set(_name "Oxygen.Serio.${tier}.Tests")
+  gtest_program(
+    ${_name}
+    SOURCES
+      ${x_SOURCES}
+    DEPS
+      oxygen::serio
+      oxygen::serio::testing
+      oxygen::testing
+    LABELS
+      serio
+      ${_label}
+  )
+  target_include_directories(${_name} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+endfunction()
+
+oxygen_serio_test(
+  Unit
   SOURCES
-    "FileStream_test.cpp"
-    "AtomicFile_test.cpp"
-    "FileLock_test.cpp"
+    "Support/DeviceFactories.h"
+    "Support/StreamFactories.h"
+    "AnyDevice_test.cpp"
+    "ByteBuffer_test.cpp"
+    "Error_test.cpp"
+    "FaultInjectingDevice_test.cpp"
+    "Integration_test.cpp"
+    "MemoryFile_test.cpp"
     "MemoryStream_test.cpp"
     "Reader_test.cpp"
+    "Region_test.cpp"
+    "RegionStream_test.cpp"
+    "StreamConformance_test.cpp"
+    "Types_test.cpp"
     "Writer_test.cpp"
 )
 
-m_gtest_program(SerioFullCycle SOURCES "Integration_test.cpp")
+oxygen_serio_test(
+  Functional
+  SOURCES
+    "Support/DeviceFactories.h"
+    "Support/StreamFactories.h"
+    "AtomicFile_functional_test.cpp"
+    "DeviceConformance_functional_test.cpp"
+    "FileLock_functional_test.cpp"
+    "MappedFile_functional_test.cpp"
+    "NativeFile_functional_test.cpp"
+    "StreamConformance_functional_test.cpp"
+)
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_executable(Oxygen.Serio.FileLockProbe "FileLockProbe.cpp")
@@ -68,4 +109,19 @@ set_tests_properties(
   PROPERTIES
     TIMEOUT
       30
+    LABELS
+      "serio;functional"
+)
+
+# -- Aggregate -----------------------------------------------------------------
+
+# Builds every Serio test program this platform defines; the list is collected
+# so a new program needs no edit here.
+get_directory_property(serio_test_targets BUILDSYSTEM_TARGETS)
+add_custom_target("Oxygen.Serio.AllTests" DEPENDS ${serio_test_targets})
+set_target_properties(
+  "Oxygen.Serio.AllTests"
+  PROPERTIES
+    FOLDER
+      "Testing"
 )

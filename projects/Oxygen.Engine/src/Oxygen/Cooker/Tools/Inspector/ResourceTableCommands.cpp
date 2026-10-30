@@ -18,7 +18,10 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/NoStd.h>
@@ -32,8 +35,9 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::inspection {
 
@@ -77,16 +81,20 @@ namespace {
   auto LoadPackedTable(const std::filesystem::path& table_path)
     -> std::vector<T>
   {
-    using oxygen::serio::FileStream;
     using oxygen::serio::Reader;
 
-    FileStream<> stream(table_path, std::ios::in);
-    const auto size_result = stream.Size();
-    if (!size_result) {
-      throw std::runtime_error("failed to get table size");
+    auto file = oxygen::serio::NativeFile::Open(table_path, {});
+    if (!file) {
+      throw std::system_error(
+        file.error(), fmt::format("open '{}'", table_path.string()));
+    }
+    auto stream = oxygen::serio::OpenReadStream(*file);
+    if (!stream) {
+      throw std::system_error(stream.error(),
+        fmt::format("get table size '{}'", table_path.string()));
     }
 
-    const auto size_bytes = size_result.value();
+    const auto size_bytes = stream->Size().get();
     if (size_bytes == 0) {
       return {};
     }
@@ -98,7 +106,8 @@ namespace {
     const auto count = size_bytes / sizeof(T);
     std::vector<T> entries(count);
 
-    Reader<FileStream<>> reader(stream);
+    Reader<oxygen::serio::RegionReadStream<oxygen::serio::NativeFile>> reader(
+      *stream);
     const auto pack = reader.ScopedAlignment(1);
     auto read_result = reader.ReadBlobInto(
       std::as_writable_bytes(std::span<T>(entries.data(), entries.size())));

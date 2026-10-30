@@ -14,6 +14,8 @@
 #include <type_traits>
 
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -65,8 +67,17 @@ auto ModelImportTestBase::LoadSceneReadback(const ImportReport& report)
   const auto scene_path = report.cooked_root
     / std::filesystem::path(scene_entry->descriptor_relpath);
 
-  FileStream<> scene_stream(scene_path, std::ios::in);
-  Reader<FileStream<>> scene_reader(scene_stream);
+  auto scene_file = serio::NativeFile::Open(scene_path, {});
+  EXPECT_TRUE(scene_file) << scene_file.error().message();
+  if (!scene_file) {
+    return {};
+  }
+  auto scene_stream = serio::OpenReadStream(*scene_file);
+  EXPECT_TRUE(scene_stream) << scene_stream.error().message();
+  if (!scene_stream) {
+    return {};
+  }
+  Reader scene_reader(*scene_stream);
   auto packed = scene_reader.ScopedAlignment(1);
 
   const auto base_pos_res = scene_reader.Position();
@@ -191,8 +202,11 @@ auto ModelImportTestBase::ValidateSceneOutputs(
   const auto scene_path = report.cooked_root
     / std::filesystem::path(scene_entry->descriptor_relpath);
 
-  FileStream<> scene_stream(scene_path, std::ios::in);
-  Reader<FileStream<>> scene_reader(scene_stream);
+  auto scene_file = serio::NativeFile::Open(scene_path, {});
+  ASSERT_TRUE(scene_file) << scene_file.error().message();
+  auto scene_stream = serio::OpenReadStream(*scene_file);
+  ASSERT_TRUE(scene_stream) << scene_stream.error().message();
+  Reader scene_reader(*scene_stream);
   auto packed = scene_reader.ScopedAlignment(1);
 
   const auto base_pos_res = scene_reader.Position();

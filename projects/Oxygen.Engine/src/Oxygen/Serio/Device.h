@@ -1,0 +1,82 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <concepts>
+#include <cstddef>
+#include <span>
+
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/Types.h>
+
+namespace oxygen::serio {
+
+//! Random-access bytes that name their offsets: a file, a mapping, memory.
+/*!
+ A device has no cursor, so one device serves concurrent callers without a
+ lock. Every device honours the same contract, which the conformance suite
+ checks:
+
+ - `const` operations are safe from any number of threads at once;
+ - `ReadAt` across the end returns the bytes that exist, and a read at or past
+   the end returns zero bytes;
+ - a zero-length operation succeeds and does nothing;
+ - errors compare equal to the same `serio::Error` conditions on every device.
+
+ @see WritableDevice, ContiguousDevice, ReadExactlyAt
+*/
+template <class D>
+concept ReadableDevice = std::movable<D>
+  && requires(const D& d, ByteOffset at, std::span<std::byte> out) {
+       { d.Size() } noexcept -> std::same_as<Result<ByteCount>>;
+       { d.ReadAt(at, out) } noexcept -> std::same_as<Result<ByteCount>>;
+     };
+
+//! A device that also writes, preallocates and flushes.
+/*!
+ `WriteAt` writes all of its bytes or fails. A write past the end extends the
+ device; bytes between the old end and the write read as zero. `Reserve`
+ preallocates storage without changing `Size()`.
+*/
+template <class D>
+concept WritableDevice = ReadableDevice<D>
+  && requires(D& d, ByteOffset at, std::span<const std::byte> in,
+    ByteCount size, Durability durability) {
+       { d.WriteAt(at, in) } noexcept -> std::same_as<Result<void>>;
+       { d.Reserve(size) } noexcept -> std::same_as<Result<void>>;
+       { d.Flush(durability) } noexcept -> std::same_as<Result<void>>;
+     };
+
+//! The whole device is one span of memory: parsers read views of it.
+template <class D>
+concept ContiguousDevice = ReadableDevice<D> && requires(const D& d) {
+  { d.Bytes() } noexcept -> std::same_as<std::span<const std::byte>>;
+};
+
+//! Fills `out` from `device` at `at`, or fails with `kEndOfData` when the
+//! device ends first. Device errors propagate unchanged.
+template <ReadableDevice D>
+[[nodiscard]] auto ReadExactlyAt(const D& device, ByteOffset at,
+  std::span<std::byte> out) noexcept -> Result<void>
+{
+  while (!out.empty()) {
+    const auto read = device.ReadAt(at, out);
+    if (!read) {
+      return ::oxygen::Err(read.error());
+    }
+    if (read->get() == 0) {
+      return ::oxygen::Err(make_error_code(Error::kEndOfData));
+    }
+    const auto count = static_cast<size_t>(read->get());
+    out = out.subspan(count);
+    at += *read;
+  }
+  return {};
+}
+
+} // namespace oxygen::serio

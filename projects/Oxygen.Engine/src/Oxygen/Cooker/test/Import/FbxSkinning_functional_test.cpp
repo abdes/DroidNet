@@ -21,8 +21,9 @@
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -62,8 +63,11 @@ namespace {
         continue;
       }
       const auto path = imported.report.cooked_root / asset.descriptor_relpath;
-      serio::FileStream<> stream(path, std::ios::in);
-      serio::Reader reader(stream);
+      auto file = serio::NativeFile::Open(path, {});
+      ASSERT_TRUE(file) << file.error().message();
+      auto stream = serio::OpenReadStream(*file);
+      ASSERT_TRUE(stream) << stream.error().message();
+      serio::Reader reader(*stream);
       const auto geometry = loaders::LoadGeometryAsset(LoaderContext {
         .current_asset_key = asset.key,
         .desc_reader = &reader,

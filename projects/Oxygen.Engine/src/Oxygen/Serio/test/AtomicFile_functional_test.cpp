@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Serio/AtomicFile.h, Serio/AtomicFile.cpp
+
 #include <algorithm>
 #include <cstddef>
 #include <filesystem>
@@ -16,9 +18,9 @@
 #include <vector>
 
 #include <Oxygen/Base/Platforms.h>
-#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 #ifdef OXYGEN_WINDOWS
 #  include <Windows.h> // IWYU pragma: keep
@@ -90,17 +92,6 @@ private:
 
 class AtomicFileTest : public testing::Test {
 protected:
-  void SetUp() override
-  {
-    root_ = std::filesystem::temp_directory_path()
-      / ("oxygen-atomic-" + oxygen::Uuid::Generate().ToString());
-    std::filesystem::create_directory(root_);
-  }
-  void TearDown() override
-  {
-    std::error_code error;
-    std::filesystem::remove_all(root_, error);
-  }
   static auto Bytes(const std::string& text) -> std::span<const std::byte>
   {
     return std::as_bytes(std::span(text.data(), text.size()));
@@ -117,7 +108,8 @@ protected:
       [](const std::byte byte) -> char { return static_cast<char>(byte); });
     return text;
   }
-  std::filesystem::path root_;
+  oxygen::testing::ScopedTempDir dir_;
+  const std::filesystem::path root_ = dir_.Path();
 };
 
 NOLINT_TEST_F(AtomicFileTest, ReplacesCompleteBytesAndLeavesNoTemporaryFiles)

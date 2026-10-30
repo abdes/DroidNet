@@ -16,8 +16,6 @@
 #include <type_traits>
 #include <utility>
 
-#include "Mocks/MockStream.h"
-
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
@@ -27,6 +25,7 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
@@ -37,8 +36,8 @@ namespace {
 
 class InputLoadersTest : public testing::Test {
 protected:
-  using MockStream = oxygen::content::testing::MockStream;
-  using Writer = oxygen::serio::Writer<MockStream>;
+  using MemoryStream = oxygen::serio::MemoryStream;
+  using Writer = oxygen::serio::Writer<MemoryStream>;
 
   InputLoadersTest()
     : writer_(stream_)
@@ -48,7 +47,7 @@ protected:
 
   auto ResetForRead() -> void
   {
-    if (!stream_.Seek(0)) {
+    if (!stream_.Seek(oxygen::serio::ByteOffset { 0 })) {
       throw std::runtime_error("Failed to seek stream");
     }
   }
@@ -139,9 +138,9 @@ protected:
     ASSERT_TRUE(writer_.Flush());
   }
 
-  MockStream stream_;
+  MemoryStream stream_;
   Writer writer_;
-  Reader<MockStream> reader_;
+  Reader<MemoryStream> reader_;
 };
 
 NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetValidDescriptorParses)

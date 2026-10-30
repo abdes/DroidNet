@@ -178,8 +178,8 @@ auto GeometryPipeline::FinalizeDescriptor(
   }
 
   std::vector input_copy(descriptor_bytes.begin(), descriptor_bytes.end());
-  serio::MemoryStream input_stream(
-    std::span(input_copy.data(), input_copy.size()));
+  serio::ReadOnlyMemoryStream input_stream(
+    std::span<const std::byte>(input_copy.data(), input_copy.size()));
   serio::Reader reader(input_stream);
   const auto pack_reader = reader.ScopedAlignment(1);
 
@@ -415,17 +415,16 @@ auto GeometryPipeline::FinalizeDescriptor(
 
     if (!base::IsAllZero(hash)) {
       asset_desc.header.content_hash = hash;
-      serio::MemoryStream patch_stream(
-        std::span(output_bytes.data(), output_bytes.size()));
-      serio::Writer patch_writer(patch_stream);
-      const auto patch_pack = patch_writer.ScopedAlignment(1);
-      if (!patch_writer.WriteBlob(std::as_bytes(
-            std::span<const data::pak::geometry::GeometryAssetDesc, 1>(
-              &asset_desc, 1)))) {
+      // The descriptor was written first, so it is patched in place.
+      const auto desc_bytes = std::as_bytes(
+        std::span<const data::pak::geometry::GeometryAssetDesc, 1>(
+          &asset_desc, 1));
+      if (output_bytes.size() < desc_bytes.size()) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
           "Failed to write geometry asset descriptor hash", "", ""));
         co_return std::nullopt;
       }
+      std::ranges::copy(desc_bytes, output_bytes.begin());
     }
   }
 

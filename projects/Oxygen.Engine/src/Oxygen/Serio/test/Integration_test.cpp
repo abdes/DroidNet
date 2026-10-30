@@ -3,6 +3,7 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+// Covers: Serio/Reader.h, Serio/Writer.h
 
 #include <array>
 #include <cstddef>
@@ -15,6 +16,7 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -36,10 +38,10 @@ namespace oxygen::serio::testing {
 
 //! Composite struct for integration test.
 struct Person {
-  uint32_t id;
+  uint32_t id {};
   std::string name;
   std::vector<float> scores;
-  uint8_t is_active; // 0 = inactive, 1 = active (Do not use bool)
+  uint8_t is_active {}; // 0 = inactive, 1 = active (Do not use bool)
 
   auto operator==(const Person& other) const noexcept -> bool
   {
@@ -167,7 +169,7 @@ NOLINT_TEST(SerioFullCycle, SerializeDeserializeComposite)
   VerifyBufferMatchesHex(mem_stream.Data(), expected_hex);
 
   // Prepare for reading
-  EXPECT_TRUE(mem_stream.Seek(0));
+  EXPECT_TRUE(mem_stream.Seek(oxygen::serio::ByteOffset { 0 }));
   Reader<MemoryStream> reader(mem_stream);
 
   std::vector<Person> loaded_people;
@@ -198,7 +200,7 @@ NOLINT_TEST(SerioFullCycle, SerializeDeserializeUuidRoundTrip)
   ASSERT_TRUE(writer.Flush());
   EXPECT_EQ(stream.Data().size(), Uuid::kSize);
 
-  ASSERT_TRUE(stream.Seek(0));
+  ASSERT_TRUE(stream.Seek(oxygen::serio::ByteOffset { 0 }));
   auto reader = Reader<MemoryStream> { stream };
   auto decoded = Uuid {};
 
@@ -237,7 +239,7 @@ NOLINT_TEST(SerioFullCycle, DeserializeUuidRejectsNonV7Bytes)
   ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { kInvalidUuidBytes })));
   ASSERT_TRUE(writer.Flush());
 
-  ASSERT_TRUE(stream.Seek(0));
+  ASSERT_TRUE(stream.Seek(oxygen::serio::ByteOffset { 0 }));
   auto reader = Reader<MemoryStream> { stream };
   auto decoded = Uuid {};
 

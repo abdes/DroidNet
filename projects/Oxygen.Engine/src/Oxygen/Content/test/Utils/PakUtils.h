@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/Stream.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::testing {
@@ -100,7 +101,7 @@ inline auto MakeV4TexturePayload(const uint32_t data_size,
   return payload;
 }
 
-template <serio::Stream DescS, serio::Stream DataS>
+template <serio::OutputStream DescS, serio::OutputStream DataS>
 auto WriteDescriptorWithData(serio::Writer<DescS>& desc_writer,
   serio::Writer<DataS>& data_writer, const std::string& hexdump,
   const uint32_t size_bytes, const std::byte data_filler)

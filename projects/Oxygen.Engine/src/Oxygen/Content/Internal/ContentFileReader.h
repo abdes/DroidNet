@@ -9,18 +9,20 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <ios>
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/AlignmentGuard.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::internal {
 
@@ -30,7 +32,8 @@ class ContentFileReader final : public serio::AnyReader {
 public:
   explicit ContentFileReader(const std::filesystem::path& path,
     const size_t offset = 0U, const std::optional<size_t> size = {})
-    : stream_(path, std::ios::in)
+    : file_(OpenFile(path))
+    , stream_(OpenStream(file_))
     , reader_(stream_)
     , begin_(offset)
     , end_(RangeEnd(stream_, offset, size))
@@ -101,17 +104,36 @@ public:
   }
 
 private:
-  static auto RangeEnd(serio::FileStream<>& stream, const size_t offset,
+  using Stream = serio::RegionReadStream<serio::NativeFile>;
+
+  static auto OpenFile(const std::filesystem::path& path) -> serio::NativeFile
+  {
+    auto file = serio::NativeFile::Open(path, {});
+    if (!file) {
+      throw std::system_error(
+        file.error(), "Could not open content file '" + path.string() + "'");
+    }
+    return std::move(file).value();
+  }
+
+  static auto OpenStream(const serio::NativeFile& file) -> Stream
+  {
+    auto stream = serio::OpenReadStream(file);
+    if (!stream) {
+      throw std::system_error(
+        stream.error(), "Could not open content file stream");
+    }
+    return std::move(stream).value();
+  }
+
+  static auto RangeEnd(const Stream& stream, const size_t offset,
     const std::optional<size_t> length) -> size_t
   {
-    const auto size = stream.Size();
-    if (!size) {
-      throw std::system_error(size.error(), "Could not read content file size");
-    }
-    if (offset > *size || (length && *length > *size - offset)) {
+    const auto size = static_cast<size_t>(stream.Size().get());
+    if (offset > size || (length && *length > size - offset)) {
       throw std::out_of_range("Content descriptor range exceeds its file");
     }
-    return length ? offset + *length : *size;
+    return length ? offset + *length : size;
   }
 
   auto CheckRemaining(const size_t count) noexcept -> Result<void>
@@ -126,8 +148,9 @@ private:
     return {};
   }
 
-  serio::FileStream<> stream_;
-  serio::Reader<serio::FileStream<>> reader_;
+  serio::NativeFile file_;
+  Stream stream_;
+  serio::Reader<Stream> reader_;
   size_t begin_;
   size_t end_;
 };

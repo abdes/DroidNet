@@ -123,7 +123,6 @@
 #include <Oxygen/OxCo/TaskCancelledException.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/FileLock.h>
-#include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
 using oxygen::content::AssetLoader;
@@ -346,8 +345,6 @@ AssetLoader::AssetLoader(
   , identities_(std::make_unique<internal::ContentIdentityRegistry>())
   , in_flight_ops_(std::make_unique<internal::InFlightOperationTable>())
 {
-  using serio::FileStream;
-
   LOG_SCOPE_FUNCTION(INFO);
 
   owning_thread_id_ = std::this_thread::get_id();

@@ -36,11 +36,6 @@ class IAssetLoader;
 class ContentLoadScope;
 } // namespace oxygen::content
 
-// Remove redundant forward declaration for FileStream as its header is included
-// namespace oxygen::serio {
-// template <typename StreamT> class FileStream;
-// } // namespace oxygen::serio
-
 namespace oxygen::data {
 class SceneAsset;
 class PhysicsSceneAsset;

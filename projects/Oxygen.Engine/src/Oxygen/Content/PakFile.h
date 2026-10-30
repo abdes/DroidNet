@@ -29,8 +29,9 @@
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content {
 
@@ -71,7 +72,7 @@ namespace oxygen::content {
 */
 class PakFile {
 public:
-  using Reader = serio::Reader<serio::FileStream<>>;
+  using Reader = serio::Reader<serio::RegionReadStream<serio::NativeFile>>;
 
   //! Type alias for the buffer resource table.
   using BuffersTableT = ResourceTable<data::BufferResource>;
@@ -300,8 +301,8 @@ public:
 
 private:
   auto InitializeResourceTablesFromFooter() const -> void;
-  auto CreateReaderAtOffset(serio::FileStream<>* stream, uint64_t offset,
-    std::string_view operation) const -> Reader;
+  auto CreateReaderAtOffset(serio::RegionReadStream<serio::NativeFile>* stream,
+    uint64_t offset, std::string_view operation) const -> Reader;
 
   std::filesystem::path file_path_; // Path to the PAK file
 
@@ -310,15 +311,23 @@ private:
   data::pak::core::PakFooter footer_ {};
   data::PakCatalog catalog_ {};
 
+  //! The PAK file, opened once. It outlives every stream below, which read it
+  //! through their own cursors.
+  serio::NativeFile file_;
+
   //! Stream for reading the PAK file metadata (header, footer, directory,
   //! descriptor tables)
-  std::unique_ptr<serio::FileStream<>> meta_stream_;
+  std::unique_ptr<serio::RegionReadStream<serio::NativeFile>> meta_stream_;
 
   //! Streams for reading the data from data regions (aligned)
-  std::unique_ptr<serio::FileStream<>> buffer_data_stream_;
-  std::unique_ptr<serio::FileStream<>> texture_data_stream_;
-  std::unique_ptr<serio::FileStream<>> script_data_stream_;
-  std::unique_ptr<serio::FileStream<>> physics_data_stream_;
+  std::unique_ptr<serio::RegionReadStream<serio::NativeFile>>
+    buffer_data_stream_;
+  std::unique_ptr<serio::RegionReadStream<serio::NativeFile>>
+    texture_data_stream_;
+  std::unique_ptr<serio::RegionReadStream<serio::NativeFile>>
+    script_data_stream_;
+  std::unique_ptr<serio::RegionReadStream<serio::NativeFile>>
+    physics_data_stream_;
 
   std::vector<data::pak::core::AssetDirectoryEntry> directory_;
   mutable std::mutex mutex_;

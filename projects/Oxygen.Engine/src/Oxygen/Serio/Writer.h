@@ -123,12 +123,12 @@ public:
   [[nodiscard]] auto WriteBlob(std::span<const std::byte> blob) noexcept
     -> Result<void> override
   {
-    return stream_.get().Write(blob.data(), blob.size());
+    return stream_.get().Write(blob);
   }
 
   [[nodiscard]] auto Position() const noexcept -> Result<size_t> override
   {
-    return stream_.get().Position();
+    return ::oxygen::Ok(static_cast<size_t>(stream_.get().Position().get()));
   }
 
   /*!
@@ -155,17 +155,13 @@ public:
       return ::oxygen::Err(std::errc::invalid_argument);
     }
 
-    const auto current_pos = stream_.get().Position();
-    if (!current_pos) {
-      return ::oxygen::Err(current_pos.error());
-    }
-
+    const auto current_pos = stream_.get().Position().get();
     const size_t padding
-      = (effective_alignment - (current_pos.value() % effective_alignment))
+      = (effective_alignment - (current_pos % effective_alignment))
       % effective_alignment;
     if (padding > 0) {
-      std::array<std::byte, kMaxAlignment> zeros { std::byte { 0 } };
-      return stream_.get().Write(zeros.data(), padding);
+      constexpr std::array<std::byte, kMaxAlignment> kZeros {};
+      return stream_.get().Write(std::span(kZeros).first(padding));
     }
     return {};
   }

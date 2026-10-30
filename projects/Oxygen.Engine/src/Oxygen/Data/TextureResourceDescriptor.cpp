@@ -50,8 +50,7 @@ auto DecodeTextureResourceDescriptor(const std::span<const std::byte> bytes)
     return Err(
       std::string("Texture descriptor size does not match the current format"));
   }
-  auto buffer = std::vector<std::byte>(bytes.begin(), bytes.end());
-  serio::MemoryStream stream { std::span<std::byte>(buffer) };
+  serio::ReadOnlyMemoryStream stream(bytes);
   serio::Reader reader(stream);
   const auto packed = reader.ScopedAlignment(1);
   auto magic = std::array<char, kMagic.size()> {};

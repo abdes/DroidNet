@@ -11,12 +11,11 @@
 #include <stdexcept>
 #include <vector>
 
-#include "../Mocks/MockStream.h"
-
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
@@ -27,9 +26,9 @@ namespace pak7 = oxygen::data::pak::physics;
 
 class PhysicsLoaderFixtureBase : public ::testing::Test {
 protected:
-  using MockStream = oxygen::content::testing::MockStream;
-  using Reader = oxygen::serio::Reader<MockStream>;
-  using Writer = oxygen::serio::Writer<MockStream>;
+  using MemoryStream = oxygen::serio::MemoryStream;
+  using Reader = oxygen::serio::Reader<MemoryStream>;
+  using Writer = oxygen::serio::Writer<MemoryStream>;
 
   template <typename T>
   static auto WriteAs(Writer& writer, const T& value) -> void
@@ -41,7 +40,8 @@ protected:
 
   //! Ends the descriptor written so far with an empty string table and
   //! records its location in the descriptor's header.
-  static auto WriteEmptyStringTable(Writer& writer, MockStream& stream) -> void
+  static auto WriteEmptyStringTable(Writer& writer, MemoryStream& stream)
+    -> void
   {
     const auto end = writer.Position();
     ASSERT_TRUE(end);
@@ -51,9 +51,10 @@ protected:
       .offset = static_cast<data::pak::core::StringTableOffsetT>(*end),
       .size = strings.Size(),
     };
-    ASSERT_TRUE(stream.Seek(offsetof(data::pak::core::AssetHeader, strings)));
+    ASSERT_TRUE(stream.Seek(oxygen::serio::ByteOffset {
+      offsetof(data::pak::core::AssetHeader, strings) }));
     ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { &table, 1U })));
-    ASSERT_TRUE(stream.SeekEnd());
+    ASSERT_TRUE(stream.Seek(oxygen::serio::ByteOffset { stream.Size().get() }));
   }
 };
 
@@ -69,10 +70,10 @@ protected:
 
   auto MakeContext() -> oxygen::content::LoaderContext
   {
-    if (!desc_stream_.Seek(0)) {
+    if (!desc_stream_.Seek(oxygen::serio::ByteOffset { 0 })) {
       throw std::runtime_error("Failed to seek desc_stream");
     }
-    if (!data_stream_.Seek(0)) {
+    if (!data_stream_.Seek(oxygen::serio::ByteOffset { 0 })) {
       throw std::runtime_error("Failed to seek data_stream");
     }
     return oxygen::content::LoaderContext {
@@ -125,8 +126,8 @@ protected:
     }
   }
 
-  MockStream desc_stream_;
-  MockStream data_stream_;
+  MemoryStream desc_stream_;
+  MemoryStream data_stream_;
   Writer desc_writer_;
   Writer data_writer_;
   Reader desc_reader_;
@@ -143,7 +144,8 @@ protected:
 
   auto MakeContext() -> oxygen::content::LoaderContext
   {
-    EXPECT_TRUE(stream_.Seek(0)) << "Failed to rewind stream";
+    EXPECT_TRUE(stream_.Seek(oxygen::serio::ByteOffset { 0 }))
+      << "Failed to rewind stream";
     return oxygen::content::LoaderContext {
       .current_asset_key = oxygen::data::AssetKey {},
       .desc_reader = &reader_,
@@ -189,7 +191,7 @@ protected:
     ASSERT_TRUE(writer_.Flush()) << "Flush failed";
   }
 
-  MockStream stream_;
+  MemoryStream stream_;
   Writer writer_;
   Reader reader_;
 };

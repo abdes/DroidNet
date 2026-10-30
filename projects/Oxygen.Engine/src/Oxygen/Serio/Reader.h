@@ -23,6 +23,7 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/AlignmentGuard.h>
 #include <Oxygen/Serio/Stream.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::serio {
 
@@ -157,7 +158,7 @@ public:
       return ::oxygen::Ok(std::vector<std::byte> {});
     }
     std::vector<std::byte> buffer(size);
-    auto result = stream_.get().Read(buffer.data(), size);
+    auto result = ReadExactly(stream_.get(), std::span(buffer));
     if (!result) {
       return ::oxygen::Err(result.error());
     }
@@ -167,12 +168,12 @@ public:
   [[nodiscard]] auto ReadBlobInto(std::span<std::byte> buffer) noexcept
     -> Result<void> override
   {
-    return stream_.get().Read(buffer.data(), buffer.size());
+    return ReadExactly(stream_.get(), buffer);
   }
 
   [[nodiscard]] auto Position() noexcept -> Result<size_t> override
   {
-    return stream_.get().Position();
+    return ::oxygen::Ok(static_cast<size_t>(stream_.get().Position().get()));
   }
 
   /*!
@@ -199,28 +200,24 @@ public:
       return ::oxygen::Err(std::errc::invalid_argument);
     }
 
-    const auto current_pos = stream_.get().Position();
-    if (!current_pos) {
-      return ::oxygen::Err(current_pos.error());
-    }
-
+    const auto current_pos = stream_.get().Position().get();
     const size_t padding
-      = (effective_alignment - (current_pos.value() % effective_alignment))
+      = (effective_alignment - (current_pos % effective_alignment))
       % effective_alignment;
     if (padding > 0) {
-      return stream_.get().Forward(padding);
+      return Skip(stream_.get(), CountOf(padding));
     }
     return {};
   }
 
   [[nodiscard]] auto Forward(size_t num_bytes) noexcept -> Result<void> override
   {
-    return stream_.get().Forward(num_bytes);
+    return Skip(stream_.get(), CountOf(num_bytes));
   }
 
   [[nodiscard]] auto Seek(size_t pos) noexcept -> Result<void> override
   {
-    return stream_.get().Seek(pos);
+    return stream_.get().Seek(ByteOffset { pos });
   }
 
 private:

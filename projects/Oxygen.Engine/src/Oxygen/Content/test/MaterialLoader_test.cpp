@@ -78,7 +78,7 @@ protected:
         std::as_bytes(std::span<const ShaderReferenceDesc, 1>(&ref, 1))));
     }
     ASSERT_TRUE(desc_writer_.WriteBlob(strings_.Bytes()));
-    EXPECT_TRUE(desc_stream_.Seek(0));
+    EXPECT_TRUE(desc_stream_.Seek(oxygen::serio::ByteOffset { 0 }));
   }
 
   auto MakeMaterialDescriptor(const std::string_view name) -> MaterialAssetDesc
@@ -326,7 +326,7 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterialTruncatedHeaderThrows)
     auto buf = ParseHexDumpWithOffset(truncated_hexdump, 32);
     ASSERT_TRUE(desc_writer_.WriteBlob(buf));
   }
-  EXPECT_TRUE(desc_stream_.Seek(0));
+  EXPECT_TRUE(desc_stream_.Seek(oxygen::serio::ByteOffset { 0 }));
 
   // Act + Assert: Should throw due to incomplete header
   auto context = CreateLoaderContext();
@@ -480,7 +480,7 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterialShaderReadFailureThrows)
       = ParseHexDumpWithOffset(partial_shader_hexdump, kTruncatedShaderSize);
     ASSERT_TRUE(desc_writer_.WriteBlob(sh_buf));
   }
-  EXPECT_TRUE(desc_stream_.Seek(0));
+  EXPECT_TRUE(desc_stream_.Seek(oxygen::serio::ByteOffset { 0 }));
 
   // Act + Assert: Should throw due to incomplete shader data
   auto context = CreateLoaderContext();

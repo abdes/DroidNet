@@ -6,291 +6,204 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
+#include <cstring>
 #include <span>
-#include <vector>
+#include <utility>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/MemoryFile.h>
 #include <Oxygen/Serio/Stream.h>
-#include <Oxygen/Serio/api_export.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::serio {
 
-//! In-memory stream for reading and writing binary data, designed for static
-//! (compile-time) polymorphism.
+//! A growable in-memory stream that reads and writes at one cursor.
 /*!
-  MemoryStream provides a seekable, resizable stream interface backed by either
-  an internal buffer (std::vector<std::byte>) or an external buffer
-  (std::span<std::byte>). It supports reading, writing, seeking, and clearing
-  operations, making it suitable for serialization, deserialization, and
-  temporary data storage in memory.
+ The stream owns its bytes, a `MemoryFile`, so it reports the same errors as
+ every other stream. A write at the cursor overwrites and extends the bytes; a
+ read at the cursor reads them back after a `Seek`. `Take()` moves the bytes
+ out as a `ByteBuffer` without a copy.
 
-  - If constructed with an external buffer, MemoryStream operates on that buffer
-    without owning it.
-  - If constructed with no buffer, it manages its own internal buffer on the
-    heap.
-
-  All operations are bounds-checked and return a Result type for error handling.
-
-  This class is intentionally designed without any virtual methods or
-  inheritance, and does not use runtime polymorphism. Instead, it is intended to
-  be used with the Stream concept for static (compile-time) polymorphism,
-  enabling efficient, type-safe generic code without the overhead of vtables.
-
-  For use cases requiring runtime polymorphism, see AnyMemoryStream.
-
-  @see AnyMemoryStream, Stream
+ ```cpp
+ MemoryStream stream;
+ Writer<MemoryStream> writer(stream);
+ CHECK_RESULT(writer.Write(value));
+ auto bytes = stream.Take();
+ ```
 */
 class MemoryStream {
 public:
-  OXGN_SERIO_API explicit MemoryStream(
-    std::span<std::byte> buffer = {}) noexcept;
+  MemoryStream() noexcept = default;
 
   ~MemoryStream() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(MemoryStream)
-  OXYGEN_DEFAULT_MOVABLE(MemoryStream)
 
-  OXGN_SERIO_NDAPI auto Read(std::byte* data, size_t size) noexcept
-    -> Result<void>;
+  MemoryStream(MemoryStream&& other) noexcept
+    : file_(std::move(other.file_))
+    , position_(std::exchange(other.position_, ByteOffset { 0 }))
+  {
+  }
 
-  [[nodiscard]] auto Write(const std::span<const std::byte> data) noexcept
+  auto operator=(MemoryStream&& other) noexcept -> MemoryStream&
+  {
+    if (this != &other) {
+      file_ = std::move(other.file_);
+      position_ = std::exchange(other.position_, ByteOffset { 0 });
+    }
+    return *this;
+  }
+
+  [[nodiscard]] auto ReadSome(const std::span<std::byte> out) noexcept
+    -> Result<ByteCount>
+  {
+    const auto read = file_.ReadAt(position_, out);
+    if (read) {
+      position_ += *read;
+    }
+    return read;
+  }
+
+  [[nodiscard]] auto Write(const std::span<const std::byte> in) noexcept
     -> Result<void>
   {
-    return Write(data.data(), data.size());
+    CHECK_RESULT(file_.WriteAt(position_, in));
+    position_ += CountOf(in.size());
+    return {};
   }
 
-  OXGN_SERIO_NDAPI auto Write(const std::byte* data, size_t size) noexcept
-    -> Result<void>;
+  //! Does nothing: the bytes are already in memory.
+  [[nodiscard]] auto Flush() noexcept -> Result<void> { return {}; }
 
-  OXGN_SERIO_NDAPI auto Flush() noexcept -> Result<void>;
-
-  OXGN_SERIO_NDAPI auto Size() const noexcept -> Result<size_t>;
-
-  OXGN_SERIO_NDAPI auto Position() const noexcept -> Result<size_t>;
-
-  OXGN_SERIO_NDAPI auto Seek(size_t pos) noexcept -> Result<void>;
-
-  OXGN_SERIO_NDAPI auto Backward(size_t offset) noexcept -> Result<void>;
-
-  OXGN_SERIO_NDAPI auto Forward(size_t offset) noexcept -> Result<void>;
-
-  OXGN_SERIO_NDAPI auto SeekEnd() noexcept -> Result<void>;
-
-  OXGN_SERIO_API auto Reset() noexcept -> void;
-
-  OXGN_SERIO_NDAPI auto Data() const noexcept -> std::span<const std::byte>;
-
-  //! Clears the internal buffer or fills the external buffer with zeros.
-  OXGN_SERIO_API auto Clear() -> void;
-
-private:
-  std::vector<std::byte> internal_buffer_;
-  std::span<std::byte> external_buffer_;
-  size_t pos_ = 0;
-
-  [[nodiscard]] auto GetBuffer() noexcept -> std::span<std::byte>;
-  [[nodiscard]] auto GetBuffer() const noexcept -> std::span<const std::byte>;
-};
-
-static_assert(Stream<MemoryStream>);
-
-//! Type-erased, polymorphic wrapper for MemoryStream implementing the AnyStream
-//! interface.
-/*!
-  AnyMemoryStream provides a type-erased, that can be used wherever an AnyStream
-  pointer or reference is required. It forwards all stream operations to an
-  internal MemoryStream instance, enabling runtime polymorphism and generic
-  stream handling without exposing the concrete MemoryStream type.
-
-  This is useful for APIs or containers that operate on heterogeneous stream
-  types via the AnyStream interface.
-
-  @see MemoryStream, AnyStream
-*/
-class AnyMemoryStream : public AnyStream {
-public:
-  explicit AnyMemoryStream(const std::span<std::byte> buffer = {}) noexcept
-    : mem_stream_(buffer)
+  [[nodiscard]] auto Position() const noexcept -> ByteOffset
   {
+    return position_;
   }
 
-  ~AnyMemoryStream() override = default;
-
-  OXYGEN_MAKE_NON_COPYABLE(AnyMemoryStream)
-  OXYGEN_DEFAULT_MOVABLE(AnyMemoryStream)
-
-  [[nodiscard]] auto Read(std::byte* data, const size_t size) noexcept
-    -> Result<void> override
+  [[nodiscard]] auto Size() const noexcept -> ByteCount
   {
-    return mem_stream_.Read(data, size);
+    return CountOf(file_.Bytes().size());
   }
 
-  [[nodiscard]] auto Write(const std::byte* data, const size_t size) noexcept
-    -> Result<void> override
+  [[nodiscard]] auto Seek(const ByteOffset at) noexcept -> Result<void>
   {
-    return mem_stream_.Write(data, size);
+    if (at.get() > file_.Bytes().size()) {
+      return ::oxygen::Err(make_error_code(Error::kOutOfBounds));
+    }
+    position_ = at;
+    return {};
   }
 
-  [[nodiscard]] auto Write(const std::span<const std::byte> data) noexcept
-    -> Result<void> override
+  //! Overwrites bytes before the cursor without moving it; `kOutOfBounds`
+  //! when they pass `Position()`.
+  [[nodiscard]] auto PatchAt(const ByteOffset at,
+    const std::span<const std::byte> in) noexcept -> Result<void>
   {
-    return mem_stream_.Write(data);
+    if (at > position_ || in.size() > position_.get() - at.get()) {
+      return ::oxygen::Err(make_error_code(Error::kOutOfBounds));
+    }
+    return file_.WriteAt(at, in);
   }
 
-  [[nodiscard]] auto Flush() noexcept -> Result<void> override
+  //! Grows the storage to hold `size` bytes without changing `Size()`.
+  [[nodiscard]] auto Reserve(const ByteCount size) noexcept -> Result<void>
   {
-    return mem_stream_.Flush();
+    return file_.Reserve(size);
   }
 
-  [[nodiscard]] auto Size() const noexcept -> Result<size_t> override
-  {
-    return mem_stream_.Size();
-  }
-
-  [[nodiscard]] auto Position() const noexcept -> Result<size_t> override
-  {
-    return mem_stream_.Position();
-  }
-
-  [[nodiscard]] auto Seek(const size_t pos) noexcept -> Result<void> override
-  {
-    return mem_stream_.Seek(pos);
-  }
-
-  [[nodiscard]] auto Backward(const size_t offset) noexcept
-    -> Result<void> override
-  {
-    return mem_stream_.Backward(offset);
-  }
-
-  [[nodiscard]] auto Forward(const size_t offset) noexcept
-    -> Result<void> override
-  {
-    return mem_stream_.Forward(offset);
-  }
-
-  [[nodiscard]] auto SeekEnd() noexcept -> Result<void> override
-  {
-    return mem_stream_.SeekEnd();
-  }
-
-  auto Reset() noexcept -> void override { mem_stream_.Reset(); }
-
+  //! The bytes written so far.
   [[nodiscard]] auto Data() const noexcept -> std::span<const std::byte>
   {
-    return mem_stream_.Data();
+    return file_.Bytes();
   }
 
-  auto Clear() -> void { mem_stream_.Clear(); }
+  //! Moves the bytes out, leaving the stream empty at position zero.
+  [[nodiscard]] auto Take() noexcept -> ByteBuffer
+  {
+    position_ = ByteOffset { 0 };
+    return file_.Take();
+  }
+
+  //! Empties the stream and rewinds it, releasing its storage.
+  auto Clear() noexcept -> void
+  {
+    file_ = MemoryFile {};
+    position_ = ByteOffset { 0 };
+  }
 
 private:
-  MemoryStream mem_stream_;
+  MemoryFile file_;
+  ByteOffset position_ { 0 };
 };
 
-//! Read-only memory stream for reading binary data from an immutable buffer.
+static_assert(InputStream<MemoryStream>);
+static_assert(PatchableOutputStream<MemoryStream>);
+
+//! An input stream over bytes its caller owns.
 /*!
-  ReadOnlyMemoryStream provides a seekable, input-only stream interface backed
-  by an external immutable buffer (std::span<const std::byte>). It supports
-  reading and seeking operations, making it suitable for deserialization from
-  mapped memory or pre-allocated read-only buffers.
-
-  This class implements the InputStream concept.
-
-  @see MemoryStream, InputStream
+ The bytes must outlive the stream. It reports the same errors as every other
+ stream.
 */
 class ReadOnlyMemoryStream {
 public:
-  OXGN_SERIO_API explicit ReadOnlyMemoryStream(
-    std::span<const std::byte> buffer = {}) noexcept;
+  explicit ReadOnlyMemoryStream(
+    const std::span<const std::byte> bytes = {}) noexcept
+    : bytes_(bytes)
+  {
+  }
 
   ~ReadOnlyMemoryStream() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(ReadOnlyMemoryStream)
   OXYGEN_DEFAULT_MOVABLE(ReadOnlyMemoryStream)
 
-  OXGN_SERIO_NDAPI auto Read(std::byte* data, size_t size) noexcept
-    -> Result<void>;
-  OXGN_SERIO_NDAPI auto Size() const noexcept -> Result<size_t>;
-  OXGN_SERIO_NDAPI auto Position() const noexcept -> Result<size_t>;
-  OXGN_SERIO_NDAPI auto Seek(size_t pos) noexcept -> Result<void>;
-  OXGN_SERIO_NDAPI auto Backward(size_t offset) noexcept -> Result<void>;
-  OXGN_SERIO_NDAPI auto Forward(size_t offset) noexcept -> Result<void>;
-  OXGN_SERIO_NDAPI auto SeekEnd() noexcept -> Result<void>;
-  OXGN_SERIO_API auto Reset() noexcept -> void;
+  [[nodiscard]] auto ReadSome(const std::span<std::byte> out) noexcept
+    -> Result<ByteCount>
+  {
+    const auto offset = static_cast<size_t>(position_.get());
+    const auto count = (std::min)(out.size(), bytes_.size() - offset);
+    if (count != 0) {
+      std::memcpy(out.data(), bytes_.subspan(offset, count).data(), count);
+    }
+    position_ += CountOf(count);
+    return ::oxygen::Ok(CountOf(count));
+  }
 
-  OXGN_SERIO_NDAPI auto Data() const noexcept -> std::span<const std::byte>;
+  [[nodiscard]] auto Position() const noexcept -> ByteOffset
+  {
+    return position_;
+  }
+
+  [[nodiscard]] auto Size() const noexcept -> ByteCount
+  {
+    return CountOf(bytes_.size());
+  }
+
+  [[nodiscard]] auto Seek(const ByteOffset at) noexcept -> Result<void>
+  {
+    if (at.get() > bytes_.size()) {
+      return ::oxygen::Err(make_error_code(Error::kOutOfBounds));
+    }
+    position_ = at;
+    return {};
+  }
+
+  //! The bytes the stream reads.
+  [[nodiscard]] auto Data() const noexcept -> std::span<const std::byte>
+  {
+    return bytes_;
+  }
 
 private:
-  std::span<const std::byte> buffer_;
-  size_t pos_ = 0;
+  std::span<const std::byte> bytes_;
+  ByteOffset position_ { 0 };
 };
 
 static_assert(InputStream<ReadOnlyMemoryStream>);
-
-//! Type-erased, polymorphic wrapper for ReadOnlyMemoryStream implementing
-//! AnyInputStream.
-class AnyReadOnlyMemoryStream : public AnyInputStream {
-public:
-  explicit AnyReadOnlyMemoryStream(
-    const std::span<const std::byte> buffer = {}) noexcept
-    : mem_stream_(buffer)
-  {
-  }
-
-  ~AnyReadOnlyMemoryStream() override = default;
-
-  OXYGEN_MAKE_NON_COPYABLE(AnyReadOnlyMemoryStream)
-  OXYGEN_DEFAULT_MOVABLE(AnyReadOnlyMemoryStream)
-
-  [[nodiscard]] auto Read(std::byte* data, const size_t size) noexcept
-    -> Result<void> override
-  {
-    return mem_stream_.Read(data, size);
-  }
-
-  [[nodiscard]] auto Size() const noexcept -> Result<size_t> override
-  {
-    return mem_stream_.Size();
-  }
-
-  [[nodiscard]] auto Position() const noexcept -> Result<size_t> override
-  {
-    return mem_stream_.Position();
-  }
-
-  [[nodiscard]] auto Seek(const size_t pos) noexcept -> Result<void> override
-  {
-    return mem_stream_.Seek(pos);
-  }
-
-  [[nodiscard]] auto Backward(const size_t offset) noexcept
-    -> Result<void> override
-  {
-    return mem_stream_.Backward(offset);
-  }
-
-  [[nodiscard]] auto Forward(const size_t offset) noexcept
-    -> Result<void> override
-  {
-    return mem_stream_.Forward(offset);
-  }
-
-  [[nodiscard]] auto SeekEnd() noexcept -> Result<void> override
-  {
-    return mem_stream_.SeekEnd();
-  }
-
-  auto Reset() noexcept -> void override { mem_stream_.Reset(); }
-
-  [[nodiscard]] auto Data() const noexcept -> std::span<const std::byte>
-  {
-    return mem_stream_.Data();
-  }
-
-private:
-  ReadOnlyMemoryStream mem_stream_;
-};
 
 } // namespace oxygen::serio

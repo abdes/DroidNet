@@ -28,7 +28,6 @@
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -50,7 +49,6 @@ using import::AsyncImportService;
 using import::ImportJobId;
 using import::ImportReport;
 using import::ImportRequest;
-using serio::FileStream;
 using serio::Reader;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;

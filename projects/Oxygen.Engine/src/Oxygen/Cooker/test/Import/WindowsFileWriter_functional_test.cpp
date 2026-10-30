@@ -41,7 +41,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/FileLock.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
@@ -121,10 +121,11 @@ NOLINT_TEST_F(
   EXPECT_EQ(oxygen::base::ComputeFileSha256(path),
     oxygen::base::ComputeSha256(ToBytes(replacement)));
   {
-    oxygen::serio::FileStream<> stream(path, std::ios::in);
-    const auto size = stream.Size();
+    auto file = oxygen::serio::NativeFile::Open(path, {});
+    ASSERT_TRUE(file) << file.error().message();
+    const auto size = file->Size();
     ASSERT_HAS_VALUE(size);
-    EXPECT_EQ(size.value(), replacement.size());
+    EXPECT_EQ(size->get(), replacement.size());
   }
   const auto lock_path = path.parent_path() / "generation.lock";
   {

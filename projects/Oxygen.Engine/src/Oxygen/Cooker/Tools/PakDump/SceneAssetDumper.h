@@ -453,8 +453,9 @@ public:
         }
         std::vector<std::byte> buffer;
         buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-        oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
+          stream);
         auto packed = reader.ScopedAlignment(1);
         SkyAtmosphereEnvironmentRecord decoded {};
         const auto res = reader.ReadInto(decoded);
@@ -472,8 +473,9 @@ public:
         }
         std::vector<std::byte> buffer;
         buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-        oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
+          stream);
         auto packed = reader.ScopedAlignment(1);
         VolumetricCloudsEnvironmentRecord decoded {};
         const auto res = reader.ReadInto(decoded);
@@ -490,8 +492,9 @@ public:
         }
         std::vector<std::byte> buffer;
         buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-        oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
+          stream);
         auto packed = reader.ScopedAlignment(1);
         FogEnvironmentRecord decoded {};
         const auto res = reader.ReadInto(decoded);
@@ -508,8 +511,9 @@ public:
         }
         std::vector<std::byte> buffer;
         buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-        oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
+          stream);
         auto packed = reader.ScopedAlignment(1);
         SkyLightEnvironmentRecord decoded {};
         const auto res = reader.ReadInto(decoded);
@@ -526,8 +530,9 @@ public:
         }
         std::vector<std::byte> buffer;
         buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-        oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
+          stream);
         auto packed = reader.ScopedAlignment(1);
         SkySphereEnvironmentRecord decoded {};
         const auto res = reader.ReadInto(decoded);
@@ -544,8 +549,9 @@ public:
         }
         std::vector<std::byte> buffer;
         buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
-        oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
+          stream);
         auto packed = reader.ScopedAlignment(1);
         BackgroundEnvironmentRecord decoded {};
         const auto res = reader.ReadInto(decoded);

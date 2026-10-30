@@ -27,8 +27,8 @@ using testing::Eq;
 using testing::SizeIs;
 
 using AssetHeader = oxygen::data::pak::core::AssetHeader;
-using MemoryStream = oxygen::serio::MemoryStream;
-using Reader = oxygen::serio::Reader<MemoryStream>;
+using ReadOnlyMemoryStream = oxygen::serio::ReadOnlyMemoryStream;
+using Reader = oxygen::serio::Reader<ReadOnlyMemoryStream>;
 
 //=== LoadAssetHeader Basic Tests ===--------------------------------------//
 
@@ -49,7 +49,8 @@ NOLINT_TEST(LoadAssetHeaderBasic, ReturnsCorrectHeader)
     sizeof(kExpectedHashPrefix));
   header->variant_flags = 0xAABBCCDD;
 
-  MemoryStream stream(std::span<std::byte>(buffer.data(), buffer.size()));
+  ReadOnlyMemoryStream stream(
+    std::span<const std::byte>(buffer.data(), buffer.size()));
   Reader reader(stream);
 
   // Act
@@ -77,7 +78,8 @@ NOLINT_TEST(LoadAssetHeaderError, ThrowsOnInvalidAssetType)
   auto* header = reinterpret_cast<AssetHeader*>(buffer.data());
   header->asset_type = 255; // Invalid (assuming kMaxAssetType < 255)
 
-  MemoryStream stream(std::span<std::byte>(buffer.data(), buffer.size()));
+  ReadOnlyMemoryStream stream(
+    std::span<const std::byte>(buffer.data(), buffer.size()));
   Reader reader(stream);
 
   // Act & Assert
@@ -107,7 +109,7 @@ NOLINT_TEST(DescriptorStrings, ResolvesLongAndNonAsciiNames)
   const auto long_offset = strings.Add(long_name);
   const auto unicode_offset = strings.Add(unicode_name);
   auto bytes = MakeDescriptor(strings);
-  MemoryStream stream { std::span<std::byte>(bytes) };
+  ReadOnlyMemoryStream stream { std::span<const std::byte>(bytes) };
   Reader reader(stream);
   auto header = AssetHeader {};
   oxygen::content::loaders::LoadAssetHeader(reader, header);
@@ -135,7 +137,7 @@ NOLINT_TEST(DescriptorStrings, RejectsOffsetOutsideTable)
   auto strings = oxygen::data::DescriptorStringsBuilder {};
   static_cast<void>(strings.Add("Name"));
   auto bytes = MakeDescriptor(strings);
-  MemoryStream stream { std::span<std::byte>(bytes) };
+  ReadOnlyMemoryStream stream { std::span<const std::byte>(bytes) };
   Reader reader(stream);
   auto header = AssetHeader {};
   oxygen::content::loaders::LoadAssetHeader(reader, header);
@@ -157,7 +159,7 @@ NOLINT_TEST(DescriptorStrings, RejectsUnterminatedTable)
   static_cast<void>(strings.Add("Name"));
   auto bytes = MakeDescriptor(strings);
   bytes.back() = std::byte { 'x' };
-  MemoryStream stream { std::span<std::byte>(bytes) };
+  ReadOnlyMemoryStream stream { std::span<const std::byte>(bytes) };
   Reader reader(stream);
   auto header = AssetHeader {};
   oxygen::content::loaders::LoadAssetHeader(reader, header);

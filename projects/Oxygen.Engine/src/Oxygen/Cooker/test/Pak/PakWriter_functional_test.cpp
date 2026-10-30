@@ -15,6 +15,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "PakTestSupport.h"
@@ -37,8 +38,9 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -56,20 +58,25 @@ using paktest::MakePatternBytes;
 
 auto ReadFooter(const std::filesystem::path& path) -> core::PakFooter
 {
-  auto stream = serio::FileStream<>(path, std::ios::in);
-  const auto size_result = stream.Size();
-  if (!size_result.has_value()) {
-    throw std::runtime_error("cannot query size of " + path.string());
+  auto file = serio::NativeFile::Open(path, {});
+  if (!file) {
+    throw std::system_error(file.error(), "cannot open " + path.string());
   }
-  if (size_result.value() < sizeof(core::PakFooter)) {
+  auto stream = serio::OpenReadStream(*file);
+  if (!stream) {
+    throw std::system_error(
+      stream.error(), "cannot query size of " + path.string());
+  }
+  const auto size = stream->Size().get();
+  if (size < sizeof(core::PakFooter)) {
     throw std::runtime_error(
       "file too small for a pak footer: " + path.string());
   }
-  if (!stream.Seek(size_result.value() - sizeof(core::PakFooter))) {
+  if (!stream->Seek(serio::ByteOffset { size - sizeof(core::PakFooter) })) {
     throw std::runtime_error("cannot seek to pak footer in " + path.string());
   }
 
-  auto reader = serio::Reader(stream);
+  auto reader = serio::Reader(*stream);
   auto align_guard = reader.ScopedAlignment(1);
   (void)align_guard;
   auto footer_result = reader.Read<core::PakFooter>();

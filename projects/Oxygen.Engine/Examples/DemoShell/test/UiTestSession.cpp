@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <ios>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -29,7 +28,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::examples::testing {
 namespace {
@@ -126,11 +126,20 @@ namespace {
     const auto byte_count
       = static_cast<size_t>(width) * height * sizeof(unsigned int);
     header.bfSize = header.bfOffBits + static_cast<DWORD>(byte_count);
-    serio::FileStream<> file(path, std::ios::out);
-    return file.Write(std::as_bytes(std::span(&header, 1)))
-      && file.Write(std::as_bytes(std::span(&info.bmiHeader, 1)))
-      && file.Write(std::span(static_cast<const std::byte*>(bits), byte_count))
-      && file.Flush();
+    auto file = serio::NativeFile::Open(path,
+      {
+        .access = serio::Access::kWrite,
+        .creation = serio::Creation::kCreateAlways,
+      });
+    if (!file) {
+      return false;
+    }
+    auto stream = serio::RegionWriteStream<serio::NativeFile>(*file);
+    return stream.Write(std::as_bytes(std::span(&header, 1)))
+      && stream.Write(std::as_bytes(std::span(&info.bmiHeader, 1)))
+      && stream.Write(
+        std::span(static_cast<const std::byte*>(bits), byte_count))
+      && stream.Flush();
   }
 } // namespace
 

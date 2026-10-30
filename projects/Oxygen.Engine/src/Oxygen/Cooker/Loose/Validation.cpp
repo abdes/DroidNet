@@ -13,6 +13,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <unordered_map>
 #include <vector>
 
@@ -40,8 +41,9 @@
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::lc {
 
@@ -55,8 +57,9 @@ auto ValidateRoot(
   using oxygen::data::pak::render::MaterialAssetDesc;
   using oxygen::data::pak::scripting::ScriptAssetDesc;
   using oxygen::data::pak::world::SceneAssetDesc;
-  using oxygen::serio::FileStream;
+  using oxygen::serio::NativeFile;
   using oxygen::serio::Reader;
+  using oxygen::serio::RegionReadStream;
 
   const auto index = LooseCookedIndex::LoadFromRoot(cooked_root);
   index.ValidateContent(cooked_root, check);
@@ -104,12 +107,18 @@ auto ValidateRoot(
         "descriptor file does not exist: " + descriptor_path.generic_string());
     }
 
-    FileStream<> stream(descriptor_path, std::ios::in);
-    const auto descriptor_size_result = stream.Size();
-    if (!descriptor_size_result) {
-      throw std::runtime_error("failed to query descriptor file size");
+    auto file = NativeFile::Open(descriptor_path, {});
+    if (!file) {
+      throw std::system_error(
+        file.error(), "open '" + descriptor_path.generic_string() + "'");
     }
-    const auto descriptor_size = descriptor_size_result.value();
+    auto stream = oxygen::serio::OpenReadStream(*file);
+    if (!stream) {
+      throw std::system_error(stream.error(),
+        "failed to query descriptor file size: "
+          + descriptor_path.generic_string());
+    }
+    const auto descriptor_size = static_cast<size_t>(stream->Size().get());
     if (descriptor_size != asset.descriptor_size) {
       throw std::runtime_error(
         "descriptor size mismatch for " + descriptor_path.generic_string());
@@ -120,7 +129,7 @@ auto ValidateRoot(
         + descriptor_path.generic_string());
     }
 
-    Reader<FileStream<>> reader(stream);
+    Reader<RegionReadStream<NativeFile>> reader(*stream);
     auto pack = reader.ScopedAlignment(1);
     auto blob = reader.ReadBlob(sizeof(AssetHeader));
     if (!blob) {

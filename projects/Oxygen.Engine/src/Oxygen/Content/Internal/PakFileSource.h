@@ -13,6 +13,9 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/Internal/ContentFileReader.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
+#include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::internal {
 
@@ -260,15 +263,16 @@ private:
       return std::nullopt;
     }
 
-    serio::FileStream<> stream(pak_path, std::ios::in);
-    if (!stream.Seek(static_cast<size_t>(
-          file_size - sizeof(data::pak::core::PakFooter)))) {
-      return std::nullopt;
+    const auto file = serio::NativeFile::Open(pak_path, {});
+    if (!file) {
+      throw std::system_error(file.error(), "open '" + pak_path.string() + "'");
     }
 
     data::pak::core::PakFooter footer {};
     const auto footer_bytes = std::as_writable_bytes(std::span { &footer, 1 });
-    auto read_result = stream.Read(footer_bytes.data(), footer_bytes.size());
+    const auto read_result = serio::ReadExactlyAt(*file,
+      serio::ByteOffset { file_size - sizeof(data::pak::core::PakFooter) },
+      footer_bytes);
     if (!read_result) {
       return std::nullopt;
     }

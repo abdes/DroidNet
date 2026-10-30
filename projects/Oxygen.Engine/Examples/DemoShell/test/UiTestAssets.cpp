@@ -8,7 +8,6 @@
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
-#include <ios>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -18,7 +17,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Vortex/test/Fixtures/TextureBinderPayloads.h>
 
 namespace oxygen::examples::testing {
@@ -40,8 +39,12 @@ auto WriteUiTextureFixture(const std::filesystem::path& root) -> void
   }
   const auto write
     = [&root](const char* name, std::span<const std::byte> data) -> void {
-    serio::FileStream<> file(root / name, std::ios::out);
-    if (!file.Write(data) || !file.Flush()) {
+    auto file = serio::NativeFile::Open(root / name,
+      {
+        .access = serio::Access::kWrite,
+        .creation = serio::Creation::kCreateAlways,
+      });
+    if (!file || !file->WriteAt(serio::ByteOffset { 0 }, data)) {
       throw std::runtime_error("Cannot write UI texture fixture");
     }
   };

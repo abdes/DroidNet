@@ -72,8 +72,9 @@
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Unorm16.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::base::CheckedAt;
@@ -165,9 +166,18 @@ protected:
     if (!entry) {
       return {};
     }
-    oxygen::serio::FileStream<> stream(
-      report.cooked_root / entry->descriptor_relpath, std::ios::in);
-    oxygen::serio::Reader reader(stream);
+    auto file = oxygen::serio::NativeFile::Open(
+      report.cooked_root / entry->descriptor_relpath, {});
+    EXPECT_TRUE(file) << file.error().message();
+    if (!file) {
+      return {};
+    }
+    auto stream = oxygen::serio::OpenReadStream(*file);
+    EXPECT_TRUE(stream) << stream.error().message();
+    if (!stream) {
+      return {};
+    }
+    oxygen::serio::Reader reader(*stream);
     const oxygen::content::LoaderContext context {
       .current_asset_key = entry->key,
       .desc_reader = &reader,
@@ -1066,7 +1076,8 @@ protected:
     using oxygen::data::pak::geometry::MeshDesc;
     using oxygen::data::pak::geometry::MeshViewDesc;
     using oxygen::data::pak::geometry::SubMeshDesc;
-    using oxygen::serio::FileStream;
+    using oxygen::serio::NativeFile;
+    using oxygen::serio::OpenReadStream;
     using oxygen::serio::Reader;
 
     const auto temp_dir = temp_->Path() / "async_gltf_case_only_materials";
@@ -1154,10 +1165,19 @@ protected:
       error_ = "Expected geometry_entry to contain a value";
       return;
     }
-    FileStream<> geometry_stream(imported.cooked_root
+    auto geometry_file = NativeFile::Open(imported.cooked_root
         / std::filesystem::path(geometry_entry->descriptor_relpath),
-      std::ios::in);
-    Reader<FileStream<>> geometry_reader(geometry_stream);
+      {});
+    if (!geometry_file) {
+      error_ = geometry_file.error().message();
+      return;
+    }
+    auto geometry_stream = OpenReadStream(*geometry_file);
+    if (!geometry_stream) {
+      error_ = geometry_stream.error().message();
+      return;
+    }
+    Reader geometry_reader(*geometry_stream);
     auto packed = geometry_reader.ScopedAlignment(1);
     GeometryAssetDesc geometry {};
     if (!geometry_reader.ReadBlobInto(
@@ -1248,7 +1268,8 @@ NOLINT_TEST_F(
   CaseOnlyMaterialsTest, CaseOnlySurfacesBindMaterialsWithTheirOwnValues)
 {
   using oxygen::data::pak::render::MaterialAssetDesc;
-  using oxygen::serio::FileStream;
+  using oxygen::serio::NativeFile;
+  using oxygen::serio::OpenReadStream;
   using oxygen::serio::Reader;
 
   ASSERT_TRUE(error_.empty()) << error_;
@@ -1265,10 +1286,13 @@ NOLINT_TEST_F(
     const auto material_entry = std::ranges::find(imported.materials,
       submesh.material_asset_key, &Inspection::AssetEntry::key);
     ASSERT_NE(material_entry, imported.materials.end());
-    FileStream<> material_stream(imported.cooked_root
+    auto material_file = NativeFile::Open(imported.cooked_root
         / std::filesystem::path(material_entry->descriptor_relpath),
-      std::ios::in);
-    Reader<FileStream<>> material_reader(material_stream);
+      {});
+    ASSERT_TRUE(material_file) << material_file.error().message();
+    auto material_stream = OpenReadStream(*material_file);
+    ASSERT_TRUE(material_stream) << material_stream.error().message();
+    Reader material_reader(*material_stream);
     auto material_packed = material_reader.ScopedAlignment(1);
     MaterialAssetDesc material {};
     ASSERT_TRUE(material_reader.ReadBlobInto(

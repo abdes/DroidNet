@@ -173,8 +173,7 @@ inline auto CanParseGeometryDescriptor(std::vector<std::byte> bytes) -> bool
     return false;
   }
 
-  auto stream
-    = serio::MemoryStream(std::span<std::byte>(bytes.data(), bytes.size()));
+  auto stream = serio::ReadOnlyMemoryStream(std::span(bytes));
   auto reader = serio::Reader(stream);
 
   auto context = content::LoaderContext {};

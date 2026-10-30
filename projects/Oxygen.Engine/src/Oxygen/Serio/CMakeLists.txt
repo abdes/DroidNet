@@ -48,25 +48,65 @@ set(
   OXYGEN_SERIO_HEADERS
   "api_export.h"
   "AlignmentGuard.h"
+  "AnyDevice.h"
+  "AnyStream.h"
   "AtomicFile.h"
-  "FileStream.h"
+  "ByteBuffer.h"
+  "ByteView.h"
+  "Device.h"
+  "Error.h"
   "FileLock.h"
+  "MappedFile.h"
+  "MemoryFile.h"
   "MemoryStream.h"
-  "Stream.h"
+  "NativeFile.h"
   "Reader.h"
+  "Region.h"
+  "RegionStream.h"
+  "Stream.h"
+  "Types.h"
   "Writer.h"
+  "Detail/ErasedObject.h"
+  "Detail/GuardedCopy.h"
 )
+set(OXYGEN_SERIO_PRIVATE_HEADERS "Detail/SystemErrors.h")
 set(
   OXYGEN_SERIO_PRIVATE_SOURCES
-  "MemoryStream.cpp"
   "AtomicFile.cpp"
+  "Error.cpp"
   "FileLock.cpp"
+  "MappedFile.cpp"
+  "MemoryFile.cpp"
 )
+
+# Platform implementations: the directory is the only platform switch; public
+# headers carry no platform conditionals.
+if(WIN32)
+  set(OXYGEN_SERIO_OTHER_PLATFORM "Platform/Posix/")
+  list(APPEND OXYGEN_SERIO_PRIVATE_HEADERS "Platform/Windows/Handles.h")
+  list(
+    APPEND
+    OXYGEN_SERIO_PRIVATE_SOURCES
+    "Platform/Windows/MappedFile.cpp"
+    "Platform/Windows/NativeFile.cpp"
+    "Platform/Windows/SystemErrors.cpp"
+  )
+else()
+  set(OXYGEN_SERIO_OTHER_PLATFORM "Platform/Windows/")
+  list(
+    APPEND
+    OXYGEN_SERIO_PRIVATE_SOURCES
+    "Platform/Posix/MappedFile.cpp"
+    "Platform/Posix/NativeFile.cpp"
+    "Platform/Posix/SystemErrors.cpp"
+  )
+endif()
 
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     ${OXYGEN_SERIO_PRIVATE_SOURCES}
+    ${OXYGEN_SERIO_PRIVATE_HEADERS}
     ${OXYGEN_SERIO_HEADERS}
   PUBLIC
     FILE_SET HEADERS
@@ -74,7 +114,14 @@ target_sources(
     FILES ${OXYGEN_SERIO_HEADERS}
 )
 
-arrange_target_files_for_ide(${META_MODULE_TARGET})
+# The other platform's sources and the test support headers belong to other
+# targets: the other platform's build and Oxygen.Serio.Testing.
+arrange_target_files_for_ide(
+  ${META_MODULE_TARGET}
+  EXCLUDE_PATTERNS
+    "^${OXYGEN_SERIO_OTHER_PLATFORM}"
+    "^Testing/"
+)
 
 target_compile_definitions(
   ${META_MODULE_TARGET}
@@ -88,6 +135,36 @@ target_link_libraries(${META_MODULE_TARGET} PUBLIC oxygen::base)
 # ------------------------------------------------------------------------------
 # Tests
 # ------------------------------------------------------------------------------
+
+# Test support (fault injection, the device conformance suite) for Serio's
+# tests and for any module that defines its own device. Linked by tests only.
+if(OXYGEN_BUILD_TESTS)
+  add_library(Oxygen.Serio.Testing INTERFACE)
+  add_library(oxygen::serio::testing ALIAS Oxygen.Serio.Testing)
+  target_sources(
+    Oxygen.Serio.Testing
+    INTERFACE
+      FILE_SET HEADERS
+      BASE_DIRS "${OXYGEN_SOURCE_DIR}"
+      FILES
+        "Testing/DeviceConformance.h"
+        "Testing/FaultInjectingDevice.h"
+        "Testing/StreamConformance.h"
+        "Testing/TestBytes.h"
+  )
+  target_link_libraries(
+    Oxygen.Serio.Testing
+    INTERFACE
+      ${META_MODULE_TARGET}
+      oxygen::testing
+  )
+  set_target_properties(
+    Oxygen.Serio.Testing
+    PROPERTIES
+      FOLDER
+        "Testing"
+  )
+endif()
 
 if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test")
   add_subdirectory("test")
