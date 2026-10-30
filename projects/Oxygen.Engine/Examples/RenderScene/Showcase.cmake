@@ -72,7 +72,7 @@ add_custom_command(
   COMMAND
     "${OXYGEN_SHOWCASE_LAUNCHER}" "${OXYGEN_PWSH_EXECUTABLE}" -NoLogo -NoProfile
     -ExecutionPolicy Bypass -File
-    "${OXYGEN_SHOWCASE_RENDERSCENE}/Tools/cook.ps1" -All -NoTUI -ToolPath
+    "${OXYGEN_SHOWCASE_RENDERSCENE}/Tools/cook.ps1" -All -NoTUI -Quiet -ToolPath
     "$<TARGET_FILE:oxygen-cooker-importtool>" -EnginePak
     "$<GENEX_EVAL:$<TARGET_PROPERTY:oxygen-engine-content,OXYGEN_ENGINE_CONTENT_PAK>>"
   COMMAND

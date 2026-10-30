@@ -63,8 +63,10 @@ Tools/play PhysicsDomains -- -w 1600x900   # player options after --
 
 Run them from `Examples/RenderScene`. In a source checkout each tool selects a
 configured build tree, preferring Release, and builds the engine tool it runs
-first; `-Preset`, `-BuildTree`, `-Config` and `-ToolPath` choose another. In an
-installed SDK the tools are at `share/oxygen/RenderScene/Tools`, beside the
+first; `-Preset`, `-BuildTree`, `-Config` and `-ToolPath` choose another.
+`cook -NoTUI -Quiet` prints only failures and the result, as the build runs
+it. In an installed SDK the tools are at `share/oxygen/RenderScene/Tools`,
+beside the
 cooked content and pak the SDK ships (`.cooked/Content`, `.build/pak`) and
 `share/oxygen/Showcase`, and use the SDK's tools. The launch file `Tools/play`
 writes mounts the cooked root and binds the project's source mounts, so editing

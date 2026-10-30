@@ -1427,7 +1427,9 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
           } else {
             common_context->state.recent_logs.push_back(
               fmt::format("✔ Job {} Completed", DisplayJobNumber(job_index)));
-            writer->Report(
+            // Per-job progress: --quiet keeps a build's output to failures
+            // and the batch summary.
+            writer->Info(
               fmt::format("Job {} Completed", DisplayJobNumber(job_index)));
           }
 

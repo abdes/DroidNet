@@ -37,6 +37,10 @@ references is cooked by that manifest, so each example cooks alone.
 .PARAMETER NoTUI
 Disables the ImportTool text interface (for CI or plain logs).
 
+.PARAMETER Quiet
+Prints only failures and the cook's result, not each job's progress (for
+builds).
+
 .PARAMETER EnginePak
 Engine content pak that resolves /Engine references. Defaults to the installed
 SDK's engine.pak, or in a source checkout to the pak the selected build tree
@@ -66,6 +70,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Check')][switch]$Check,
 
     [switch]$NoTUI,
+    [switch]$Quiet,
     [string]$Preset,
     [string]$BuildTree,
     [string]$Config,
@@ -218,6 +223,7 @@ Write-Host "Cooking: $(($examples | ForEach-Object name) -join ', ')"
 # Global ImportTool options precede the batch subcommand.
 $arguments = @()
 if ($NoTUI) { $arguments += '--no-tui' }
+if ($Quiet) { $arguments += '--quiet' }
 # The cooked root replaces every job's own: the manifests name none.
 $arguments += @('--cooked-root', $ExamplesCookedRoot, 'batch')
 foreach ($example in $examples) { $arguments += @('--manifest', (Get-ExampleManifestPath $example.name)) }
