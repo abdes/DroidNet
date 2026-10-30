@@ -185,7 +185,7 @@ class ModuleIntegrationTests(CommandTestCase):
         root = self.root
         write(
             root / "conanfile.txt",
-            "[requires]\nfmt/12.1.0\nasio/1.36.0\nmagic_enum/0.9.7\n"
+            "[requires]\nfmt/12.1.0\nasio/1.38.2\nmagic_enum/0.9.7\n"
             "[generators]\nCMakeToolchain\nCMakeDeps\n"
             "[options]\nfmt/*:header_only=True\n",
         )

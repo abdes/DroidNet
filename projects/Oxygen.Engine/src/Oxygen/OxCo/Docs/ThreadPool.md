@@ -56,6 +56,11 @@ co::Task<void> ReadPacket(tcp::socket& sock) {
 > that hasn't yet been scheduled. Even without a deadlock, scalability will be
 > poor compared to an async-native implementation.
 
+File and other OS IO is never awaited through `ThreadPool::Run()`. It is
+awaited on the loop thread through the asio bridge (`asio.h`), as described in
+[AsyncIO.md](AsyncIO.md); only the CPU work that follows IO (decoding,
+hashing, compression) moves to the pool.
+
 ThreadPool needs a thread-safe way to notify the main thread of the results
 of each task. Since corral is not tied to any specific event loop, a bit of
 glue must be provided to teach it how to schedule a callback on the main thread.

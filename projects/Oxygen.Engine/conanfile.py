@@ -455,7 +455,7 @@ class OxygenConan(ConanFile):
     def requirements(self):
         self.requires("fmt/12.1.0", transitive_headers=True)
         if self._full_engine or "OxCo" in self._modules:
-            self.requires("asio/1.36.0", transitive_headers=True)
+            self.requires("asio/1.38.2", transitive_headers=True)
         if self._full_engine or "Clap" in self._modules:
             self.requires("magic_enum/0.9.7", transitive_headers=True)
         if not self._full_engine:

@@ -302,7 +302,7 @@ co_await file.AsyncWriteAt(offset, payload);             // Result<void>
 
 - **On a `NativeFile`** the operation is overlapped IO bound to the awaiting
   loop's `asio::io_context`, through OxCo's asio bridge
-  ([OxCo support](../oxco-async-io/README.md)), on
+  ([OxCo async IO](../../../src/Oxygen/OxCo/Docs/AsyncIO.md)), on
   `asio::random_access_file`: IOCP on Windows, io_uring on Linux
   (`ASIO_HAS_IO_URING`, with liburing). The coroutine suspends; no thread
   blocks; the completion resumes it on the loop thread.
@@ -327,7 +327,7 @@ co_await file.AsyncWriteAt(offset, payload);             // Result<void>
   adding, dropping or choosing one never changes a caller.
 
 - **On a `MemoryFile` or `ByteView`** the awaitable is ready at once
-  (`co::Ready`): nothing suspends, so tests and embedded content pay nothing
+  (`co::Just`): nothing suspends, so tests and embedded content pay nothing
   for the asynchronous form.
 - **The awaitables are plain awaitables,** not `co::Co` coroutines, so an
   operation allocates no coroutine frame.
@@ -597,8 +597,9 @@ Three features use Serio and live elsewhere:
    conformance suite. `FileStream` is deleted and its users move to region
    streams over `NativeFile`.
 2. `IoQueue` with the IOCP backend, awaitable IO and `CopyRegion`, after
-   [OxCo's](../oxco-async-io/README.md) asio file IO tests; Serio gains its
-   OxCo and asio dependency, and `ARCHITECTURE.md`'s module table states it.
+   [OxCo's](../../../src/Oxygen/OxCo/Docs/AsyncIO.md) asio file IO tests;
+   Serio gains its OxCo and asio dependency, and `ARCHITECTURE.md`'s module
+   table states it.
 3. The IoRing backend and the small-read benchmark, before any consumer moves.
    If IoRing loses it is deleted and the queue keeps one backend; either way no
    caller changes, and the seam is proven by a second backend while Serio
