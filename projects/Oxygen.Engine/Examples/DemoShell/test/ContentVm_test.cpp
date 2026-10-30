@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
@@ -108,7 +109,12 @@ namespace {
         .cooked_root = root_ / ".cooked",
         .scratch_root = root_,
       });
-      const auto source = root_ / "source.gltf";
+      // The scratch project's mounts, as the demo resolves them: its own
+      // `Scratch` mount, which holds its records, and the examples' `Content`
+      // mount its sources come from.
+      std::filesystem::create_directories(root_ / "Scratch");
+      const auto source = root_ / "Content" / "SourceMedia" / "source.gltf";
+      std::filesystem::create_directories(source.parent_path());
       {
         std::ofstream output(source);
         output
@@ -116,26 +122,36 @@ namespace {
       }
       content::import::SceneImportSettings recipe {};
       recipe.source_path = source.string();
-      recipe.virtual_path = "/.cooked/" + source.filename().generic_string();
+      recipe.virtual_path = "/Scratch/" + source.filename().generic_string();
       using content::import::ModelImportRecord;
       const auto mounts = content::import::ResolveMountTable({
         .project_root = root_,
-        .declarations = { content::import::MountDeclaration {
-          .name = "Content",
-          .kind = content::import::MountKind::kSource,
-          .path = ".",
-        }, },
+        .declarations = {
+          content::import::MountDeclaration {
+            .name = "Scratch",
+            .kind = content::import::MountKind::kSource,
+            .path = "Scratch",
+          },
+          content::import::MountDeclaration {
+            .name = "Content",
+            .kind = content::import::MountKind::kSource,
+            .path = "Content",
+          },
+        },
         .form = content::import::MountDeclarationForm::kCommittedFile,
         .declared_in = "test",
         .working_directory = root_,
         .mounts_option = std::nullopt,
         .owner = content::import::MountTableOwner::kProject,
       });
-      record_ = ModelImportRecord::Save({
-        .record_path = ModelImportRecord::PathFor(root_, recipe.virtual_path),
-        .content_root = root_,
+      auto findings = std::vector<content::import::ImportDiagnostic> {};
+      const auto record = ModelImportRecord::RecordPathOf(
+        mounts, recipe.virtual_path, findings);
+      ASSERT_HAS_VALUE(record);
+      record_ = *record;
+      ModelImportRecord::Save({
+        .record_path = record_,
         .source = source,
-        .virtual_path = recipe.virtual_path,
         .settings_json = ModelImportRecord::MakeSettings(recipe),
         .mounts = make_observer(&mounts),
       });
@@ -148,7 +164,8 @@ namespace {
       ASSERT_TRUE(service.SubmitModelImport(
         ModelImportRecord::Prepare(record_,
           content::import::ModelImportGenerations {
-            .root = root_ / ".cooked" / ModelImportRecord::kRecordsFolder,
+            .root
+            = root_ / ".cooked" / ModelImportRecord::kModelGenerationsFolder,
           },
           mounts),
         [&completed](
@@ -333,25 +350,25 @@ namespace {
     EXPECT_EQ(requested.front().key, scene.scene_key);
   }
 
-  //! An ad-hoc model is identified by its source's mount path under
-  //! `/Content/Scratch`, so two files of one name in two folders are two
-  //! models.
+  //! An ad-hoc model is identified by its source's path below the examples'
+  //! source media, in the scratch project's `Scratch` mount, so two files of
+  //! one name in two folders are two models.
   NOLINT_TEST(ScratchModelVirtualPathTest, NamesTheSourceByItsMountPath)
   {
     EXPECT_EQ(
       ui::ScratchModelVirtualPath("/Content/SourceMedia/DCC/a/Watch.gltf"),
-      "/Content/Scratch/DCC/a/Watch.gltf");
+      "/Scratch/DCC/a/Watch.gltf");
     EXPECT_EQ(
       ui::ScratchModelVirtualPath("/Content/SourceMedia/DCC/b/Watch.gltf"),
-      "/Content/Scratch/DCC/b/Watch.gltf");
+      "/Scratch/DCC/b/Watch.gltf");
   }
 
-  //! A source in a local mount keeps its mount's name, below the scratch
-  //! folder of the Content mount.
+  //! A source in a local mount keeps its mount's name, below the `Scratch`
+  //! mount.
   NOLINT_TEST(ScratchModelVirtualPathTest, KeepsALocalMountsName)
   {
     EXPECT_EQ(ui::ScratchModelVirtualPath("/Downloads/Watch.glb"),
-      "/Content/Scratch/Downloads/Watch.glb");
+      "/Scratch/Downloads/Watch.glb");
   }
 } // namespace
 } // namespace oxygen::examples::testing

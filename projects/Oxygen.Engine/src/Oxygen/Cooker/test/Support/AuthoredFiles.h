@@ -14,8 +14,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Data/MaterialAsset.h>
 
 //! The one writer of each authored format in the Cooker tests.
@@ -109,24 +111,24 @@ public:
     return Derived();
   }
 
-protected:
+private:
   AuthoredDocument(std::string identity, nlohmann::json json)
     : identity_(std::move(identity))
     , json_(std::move(json))
   {
   }
 
-private:
   auto Derived() -> Self& { return static_cast<Self&>(*this); }
 
   std::string identity_;
   nlohmann::json json_;
+  friend Self;
 };
 
 //! A material descriptor (`*.omat.json`).
 class MaterialDescriptor final : public AuthoredDocument<MaterialDescriptor> {
 public:
-  explicit MaterialDescriptor(std::string identity)
+  explicit MaterialDescriptor(const std::string& identity)
     : AuthoredDocument(identity, { { "name", StemOf(identity) } })
   {
   }
@@ -154,26 +156,41 @@ public:
 //! that uses the engine's default material.
 class GeometryDescriptor final : public AuthoredDocument<GeometryDescriptor> {
 public:
-  explicit GeometryDescriptor(std::string identity)
+  explicit GeometryDescriptor(const std::string& identity)
     : AuthoredDocument(identity,
         {
           { "name", StemOf(identity) },
-          { "lods",
-            nlohmann::json::array({ {
-              { "name", "LOD0" },
-              { "mesh_type", "procedural" },
-              { "procedural",
-                { { "generator", "Capsule" }, { "mesh_name", "Capsule" } } },
-              { "submeshes",
-                nlohmann::json::array({ {
-                  { "surface_id", "018f8f8f-1111-7111-8111-111111111111" },
-                  { "material_ref",
-                    SpellReference(
-                      identity, data::MaterialAsset::kDefaultVirtualPath) },
-                  { "views",
-                    nlohmann::json::array({ { { "view_ref", "__all__" } } }) },
-                } }) },
-            } }) },
+          {
+            "lods",
+            nlohmann::json::array({
+              {
+                { "name", "LOD0" },
+                { "mesh_type", "procedural" },
+                {
+                  "procedural",
+                  { { "generator", "Capsule" }, { "mesh_name", "Capsule" } },
+                },
+                {
+                  "submeshes",
+                  nlohmann::json::array({
+                    {
+                      { "surface_id", "018f8f8f-1111-7111-8111-111111111111" },
+                      {
+                        "material_ref",
+                        SpellReference(
+                          identity, data::MaterialAsset::kDefaultVirtualPath),
+                      },
+                      {
+                        "views",
+                        nlohmann::json::array(
+                          { { { "view_ref", "__all__" } } }),
+                      },
+                    },
+                  }),
+                },
+              },
+            }),
+          },
         })
   {
   }
@@ -221,7 +238,7 @@ class CollisionShapeDescriptor final
   : public AuthoredDocument<CollisionShapeDescriptor> {
 public:
   CollisionShapeDescriptor(
-    std::string identity, const std::string_view material)
+    const std::string& identity, const std::string_view material)
     : AuthoredDocument(identity,
         {
           { "shape_type", "box" },
@@ -236,7 +253,7 @@ public:
 class PhysicsMaterialDescriptor final
   : public AuthoredDocument<PhysicsMaterialDescriptor> {
 public:
-  explicit PhysicsMaterialDescriptor(std::string identity)
+  explicit PhysicsMaterialDescriptor(const std::string& identity)
     : AuthoredDocument(identity, { { "name", StemOf(identity) } })
   {
   }
@@ -303,16 +320,20 @@ public:
 //! node.
 class SceneDescriptor final : public AuthoredDocument<SceneDescriptor> {
 public:
-  explicit SceneDescriptor(std::string identity)
+  explicit SceneDescriptor(const std::string& identity)
     : AuthoredDocument(identity,
         {
           { "version", content::import::internal::kSceneDescriptorVersion },
           { "name", StemOf(identity) },
-          { "nodes",
-            nlohmann::json::array({ {
-              { "id", "00000000-0000-4000-8000-000000000001" },
-              { "name", "Root" },
-            } }) },
+          {
+            "nodes",
+            nlohmann::json::array({
+              {
+                { "id", "00000000-0000-4000-8000-000000000001" },
+                { "name", "Root" },
+              },
+            }),
+          },
         })
   {
   }
@@ -323,6 +344,29 @@ public:
   {
     return Append(
       "/renderables", { { "node", node }, { "geometry_ref", Spell(target) } });
+  }
+};
+
+//! A model import record (`<identity>.import.json`) of the model `identity`
+//! that imports the file `source`, a mount path, with default settings and a
+//! fresh source identity. A record the product writes comes from
+//! `ModelImportRecord::Save`; this writer is for hand-shaped records only.
+class ModelImportRecordDocument final
+  : public AuthoredDocument<ModelImportRecordDocument> {
+public:
+  ModelImportRecordDocument(
+    const std::string& identity, const std::string_view source)
+    : AuthoredDocument(identity,
+        {
+          {
+            "schema_version",
+            content::import::ModelImportRecord::kSchemaVersion,
+          },
+          { "source", SpellReference(identity, source) },
+          { "settings", nlohmann::json::object() },
+          { "source_identity", Uuid::Generate().ToString() },
+        })
+  {
   }
 };
 

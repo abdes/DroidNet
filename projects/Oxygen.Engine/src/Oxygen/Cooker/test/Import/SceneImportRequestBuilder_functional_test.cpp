@@ -11,14 +11,17 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -39,6 +42,7 @@ namespace {
 
 using nlohmann::json;
 using oxygen::Uuid;
+using oxygen::content::import::ImportDiagnostic;
 using oxygen::content::import::ImportFormat;
 using oxygen::content::import::ImportManifest;
 using oxygen::content::import::LodGenerationOptions;
@@ -97,20 +101,26 @@ protected:
     return settings;
   }
 
-  //! A new record of `source` at its place in the temp content root.
-  auto SaveRecord(const std::string_view source,
-    const std::string_view virtual_path, const json& settings = json::object())
-    -> std::filesystem::path
+  //! A new record of the model `identity`, at that identity in the temp
+  //! root's `Content` mount, imported from the file of the same name beside
+  //! it.
+  auto SaveRecord(const std::string_view identity,
+    const json& settings = json::object()) -> std::filesystem::path
   {
-    const auto path = ModelImportRecord::PathFor(Root(), virtual_path);
-    return ModelImportRecord::Save({
-      .record_path = path,
-      .content_root = Root(),
-      .source = Path(source),
-      .virtual_path = std::string(virtual_path),
+    auto findings = std::vector<ImportDiagnostic> {};
+    const auto path
+      = ModelImportRecord::RecordPathOf(Mounts(), identity, findings);
+    if (!path.has_value()) {
+      throw std::invalid_argument(
+        "No record location for " + std::string(identity));
+    }
+    ModelImportRecord::Save({
+      .record_path = *path,
+      .source = Path(std::filesystem::path(identity).filename().string()),
       .settings_json = settings.dump(),
       .mounts = oxygen::make_observer(&Mounts()),
     });
+    return *path;
   }
 
 private:
@@ -244,16 +254,17 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, PreparesWithoutDestinationOrFileIo)
   EXPECT_EQ(request->source_path, std::filesystem::path(settings.source_path));
 }
 
-//! A `model` job runs its record as a gltf or fbx job, by the source's
-//! extension: the record's settings, source, virtual path and identity.
+//! A `model` job names its model by identity and runs the model's record as a
+//! gltf or fbx job, by the source's extension: the record's settings, source
+//! and source identity, at the job's identity.
 NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
 {
-  const auto gltf = SaveRecord("model.gltf", "/.cooked/model.gltf",
+  const auto gltf = SaveRecord("/Content/model.gltf",
     json {
       { "name", "the_gltf" },
       { "gltf_scene", "Interior" },
     });
-  const auto fbx = SaveRecord("model.fbx", "/.cooked/model.fbx");
+  const auto fbx = SaveRecord("/Content/model.fbx");
   const auto gltf_identity
     = ModelImportRecord::Read(gltf, Mounts()).source_identity;
   const auto fbx_identity
@@ -267,12 +278,12 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
         json::array({
           {
             { "type", "model" },
-            { "record", gltf.lexically_relative(Root()).generic_string() },
+            { "virtual_path", "/Content/model.gltf" },
           },
           {
             { "id", "the-fbx" },
             { "type", "model" },
-            { "record", fbx.lexically_relative(Root()).generic_string() },
+            { "virtual_path", "/Content/model.fbx" },
           },
         }),
       },
@@ -294,7 +305,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
   const auto second = manifest->jobs[1].BuildRequest(errors);
   ASSERT_HAS_VALUE(first) << errors.str();
   ASSERT_HAS_VALUE(second) << errors.str();
-  EXPECT_EQ(first->asset_virtual_path, "/.cooked/model.gltf");
+  EXPECT_EQ(first->asset_virtual_path, "/Content/model.gltf");
   EXPECT_EQ(first->job_name, "the_gltf");
   EXPECT_EQ(first->options.gltf_scene, "Interior");
   EXPECT_EQ(first->surface_provenance->SourceIdentity(), gltf_identity);
@@ -322,11 +333,12 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, TheChosenGltfSceneIsASetting)
     SceneImportSettings::FromOptions(request->options).gltf_scene, "#2");
 }
 
-//! Identity and provenance belong to the record: a job cannot carry them, and
-//! a `model` job carries nothing of the record's.
+//! Identity and provenance belong to the record: a job cannot carry them, a
+//! `model` job carries nothing of the record's, and a model without a record
+//! is refused.
 NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
 {
-  const auto record = SaveRecord("model.gltf", "/.cooked/model.gltf");
+  static_cast<void>(SaveRecord("/Content/model.gltf"));
   const auto refused = [this](const json& job) -> std::string {
     const auto document = ProjectFields({
       { "version", 1 },
@@ -347,12 +359,12 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
   }));
   static_cast<void>(refused({
     { "type", "model" },
-    { "record", record.lexically_relative(Root()).generic_string() },
+    { "virtual_path", "/Content/model.gltf" },
     { "unit_policy", "preserve" },
   }));
   EXPECT_THAT(refused({
                 { "type", "model" },
-                { "record", "missing.import.json" },
+                { "virtual_path", "/Content/missing.gltf" },
               }),
     testing::HasSubstr("import.model_record_invalid"));
 }
@@ -403,27 +415,22 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
       },
     },
   };
-  const auto record
-    = SaveRecord("model.fbx", "/.cooked/model.fbx", settings_json);
+  static_cast<void>(SaveRecord("/Content/model.fbx", settings_json));
   const auto manifest_path = Path("settings-manifest.json");
   {
     std::ofstream output(manifest_path);
-    output << ProjectFields(
-      {
-        { "version", 1 },
-        {
-          "jobs",
-          json::array({
-            {
-              { "type", "model" },
-              {
-                "record",
-                record.lexically_relative(Root()).generic_string(),
-              },
-            },
-          }),
-        },
-      })
+    output << ProjectFields({
+                              { "version", 1 },
+                              {
+                                "jobs",
+                                json::array({
+                                  {
+                                    { "type", "model" },
+                                    { "virtual_path", "/Content/model.fbx" },
+                                  },
+                                }),
+                              },
+                            })
                 .dump();
     ASSERT_TRUE(output.good());
   }
