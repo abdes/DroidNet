@@ -380,8 +380,10 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   const auto plan = exp_plan.value();
   const uint64_t total_bytes = plan.total_bytes;
 
-  auto staging_exp
-    = provider.Allocate(SizeBytes { total_bytes }, req.debug_name);
+  // Region offsets are placement-aligned relative to the allocation, so the
+  // allocation itself must start on a placement boundary.
+  auto staging_exp = provider.AllocateAligned(SizeBytes { total_bytes },
+    policy.alignment.placement_alignment.get(), req.debug_name);
   if (!staging_exp) {
     return std::unexpected(staging_exp.error());
   }
@@ -475,8 +477,10 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
   }
   const auto plan = exp_plan.value();
   const uint64_t total_bytes = plan.total_bytes;
-  auto staging_exp
-    = provider.Allocate(SizeBytes { total_bytes }, req.debug_name);
+  // Region offsets are placement-aligned relative to the allocation, so the
+  // allocation itself must start on a placement boundary.
+  auto staging_exp = provider.AllocateAligned(SizeBytes { total_bytes },
+    policy.alignment.placement_alignment.get(), req.debug_name);
   if (!staging_exp) {
     return std::unexpected(staging_exp.error());
   }

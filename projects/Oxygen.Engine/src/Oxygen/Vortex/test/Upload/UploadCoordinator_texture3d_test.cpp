@@ -14,6 +14,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -26,12 +27,18 @@
 
 namespace {
 
+using oxygen::graphics::BufferDesc;
+using oxygen::graphics::BufferMemory;
+using oxygen::graphics::BufferUsage;
 using oxygen::graphics::QueueKey;
 using oxygen::graphics::TextureDesc;
+using oxygen::vortex::upload::UploadBufferDesc;
 using oxygen::vortex::upload::UploadDataView;
 using oxygen::vortex::upload::UploadKind;
 using oxygen::vortex::upload::UploadRequest;
 using oxygen::vortex::upload::UploadTextureDesc;
+using oxygen::vortex::upload::UploadTextureSourceSubresource;
+using oxygen::vortex::upload::UploadTextureSourceView;
 using oxygen::vortex::upload::testing::UploadCoordinatorTest;
 namespace frame = oxygen::frame;
 
@@ -88,7 +95,7 @@ NOLINT_TEST_F(
     FAIL() << "Submit failed: error="
            << static_cast<int>(ticket_result.error());
   }
-  const auto ticket = ticket_result.value();
+  const auto& ticket = ticket_result.value();
 
   // Assert
   const auto& log = GfxPtr()->texture_log_;
@@ -162,7 +169,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, Texture3D_FullUpload_ProducerFails_NoCopy)
   // Act
   auto ticket_result = uploader.Submit(req, Staging());
   ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
-  const auto ticket = ticket_result.value();
+  const auto& ticket = ticket_result.value();
 
   // Assert
   EXPECT_TRUE(producer_ran);
@@ -182,6 +189,88 @@ NOLINT_TEST_F(UploadCoordinatorTest, Texture3D_FullUpload_ProducerFails_NoCopy)
   EXPECT_FALSE(res->success);
   EXPECT_EQ(res->error, oxygen::vortex::upload::UploadError::kProducerFailed);
   EXPECT_EQ(res->bytes_uploaded, 0U);
+}
+
+//! A 3D texture upload that follows an odd-sized buffer upload in the same
+//! ring partition still copies from a placement-aligned footprint.
+NOLINT_TEST_F(
+  UploadCoordinatorTest, Texture3D_AfterOddBufferUpload_PlacementAligned)
+{
+  constexpr uint64_t kOddBufferBytes = 100;
+  constexpr uint64_t kPlacementAlignment = 512;
+
+  // Arrange: an odd-sized buffer upload leaves the ring head off any
+  // placement boundary.
+  auto dst_buffer = GfxPtr()->CreateBuffer(BufferDesc {
+    .size_bytes = 1024,
+    .usage = BufferUsage::kNone,
+    .memory = BufferMemory::kDeviceLocal,
+  });
+  std::vector<std::byte> buffer_bytes(kOddBufferBytes);
+  const UploadRequest buffer_req {
+    .kind = UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "OddBuffer",
+    .desc = UploadBufferDesc {
+      .dst = dst_buffer,
+      .size_bytes = kOddBufferBytes,
+      .dst_offset = 0,
+    },
+    .subresources = {},
+    .data = UploadDataView { .bytes = std::span<const std::byte>(
+      buffer_bytes.data(), buffer_bytes.size()), },
+  };
+  auto& uploader = Uploader();
+  ASSERT_TRUE(uploader.Submit(buffer_req, Staging()).has_value());
+  const auto& buffer_log = GfxPtr()->buffer_log_;
+  ASSERT_TRUE(buffer_log.copy_called);
+  ASSERT_NE(
+    (buffer_log.copy_src_offset + kOddBufferBytes) % kPlacementAlignment, 0U);
+
+  // 32x16x8 RGBA8: row = 128 -> 256 bytes, slice = 4096 bytes.
+  constexpr uint32_t row_pitch = 256;
+  constexpr uint32_t slice_pitch = row_pitch * 16;
+  auto tex = GfxPtr()->CreateTexture(TextureDesc {
+    .width = 32,
+    .height = 16,
+    .depth = 8,
+    .array_size = 1,
+    .mip_levels = 1,
+    .sample_count = 1,
+    .sample_quality = 0,
+    .format = oxygen::Format::kRGBA8UNorm,
+    .texture_type = oxygen::TextureType::kTexture3D,
+  });
+  std::vector<std::byte> texels(static_cast<std::size_t>(slice_pitch) * 8U);
+  const UploadRequest tex_req {
+    .kind = UploadKind::kTexture3D,
+    .priority = {},
+    .debug_name = "Tex3DAfterOddBuffer",
+    .desc = UploadTextureDesc {
+      .dst = tex,
+      .width = 32,
+      .height = 16,
+      .depth = 8,
+      .format = oxygen::Format::kRGBA8UNorm,
+    },
+    .subresources = {},
+    .data = UploadTextureSourceView {
+      .subresources = std::vector<UploadTextureSourceSubresource> {
+        { .bytes = std::span<const std::byte>(texels.data(), texels.size()),
+          .row_pitch = row_pitch, .slice_pitch = slice_pitch, },
+      },
+    },
+  };
+
+  // Act
+  ASSERT_TRUE(uploader.Submit(tex_req, Staging()).has_value());
+
+  // Assert
+  const auto& log = GfxPtr()->texture_log_;
+  ASSERT_TRUE(log.copy_called);
+  EXPECT_EQ(log.src, buffer_log.copy_src);
+  ASSERT_EQ(log.regions.size(), 1U);
+  EXPECT_EQ(log.regions.front().buffer_offset % kPlacementAlignment, 0U);
 }
 
 } // namespace

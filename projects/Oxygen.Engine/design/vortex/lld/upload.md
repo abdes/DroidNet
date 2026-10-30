@@ -201,6 +201,11 @@ while an earlier frame may still read it
   `TransientConstantBuffer` as root-CBV records bound by GPU address. Both
   place records with `StagingProvider::AllocateAligned` (stride or 256-byte
   placement) and recycle with the ring's frame slot.
+- **Texture staging.** `SubmitTexture2D` and `SubmitTexture3D` place their
+  staging with `AllocateAligned` at `placement_alignment` (512 bytes, the
+  D3D12 placed-footprint rule). The planner aligns region offsets relative to
+  the allocation, so the allocation itself starts on a placement boundary
+  whatever the ring alignment and earlier allocations in the partition.
 - **Retirement.** Releasing a shader-visible resource uses Graphics
   retirement, which unregisters views and releases the resource after the
   frames that could read it complete. Immediate unregistration is reserved for
