@@ -40,6 +40,7 @@ using oxygen::co::Nursery;
 using oxygen::co::OpenNursery;
 using oxygen::co::Run;
 using oxygen::co::TaskStarted;
+using oxygen::co::detail::NeedsStdRefArguments;
 using oxygen::co::detail::NurseryBodyRetVal;
 using oxygen::co::testing::kNonCancellable;
 using oxygen::co::testing::TestEventLoop;
@@ -49,6 +50,22 @@ using oxygen::co::testing::TestEventLoop;
 namespace {
 
 class NurseryTest : public oxygen::co::testing::OxCoTestFixture { };
+
+//! A member function taking a non-const reference and a const one.
+struct TakesReferences {
+  auto Func(TestEventLoop& el, const int& value) const -> Co<>;
+};
+using TakesReferencesFunc = decltype(&TakesReferences::Func);
+
+// A plain value for the non-const reference selects the overload that names
+// std::ref(); std::ref() or a value for the const reference does not.
+static_assert(NeedsStdRefArguments<TakesReferencesFunc, const TakesReferences*,
+  TestEventLoop, int>::value);
+static_assert(!NeedsStdRefArguments<TakesReferencesFunc, const TakesReferences*,
+  std::reference_wrapper<TestEventLoop>, int>::value);
+static_assert(!NeedsStdRefArguments<TakesReferencesFunc, const TakesReferences*,
+  std::reference_wrapper<TestEventLoop>,
+  std::reference_wrapper<const int>>::value);
 
 //! A member function a nursery starts on an object it keeps by value.
 struct RvalueQualified {

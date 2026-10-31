@@ -10,7 +10,9 @@
 // lambda parameter list before specifiers needs C++23.
 // NOLINTBEGIN(readability-redundant-lambda-parameter-list)
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -64,6 +66,44 @@ namespace detail {
   class TaskStartedTag {
     explicit constexpr TaskStartedTag(TagCtor /*tag*/) { }
   };
+
+  template <class T> inline constexpr bool kIsStdRef = false;
+  template <class T>
+  inline constexpr bool kIsStdRef<std::reference_wrapper<T>> = true;
+
+  //! Whether a member function's parameter `Param`, a non-const lvalue
+  //! reference, would bind to the task's own copy of `Supplied` instead of
+  //! the caller's object, hiding the changes the task makes.
+  template <class Param, class Supplied>
+  inline constexpr bool kBindsMutableReferenceToCopy
+    = std::is_lvalue_reference_v<Param>
+    && !std::is_const_v<std::remove_reference_t<Param>> && !kIsStdRef<Supplied>;
+
+  //! Whether any parameter of member function `Callable`, at `kIndex`, is a
+  //! non-const reference that `Supplied` would pass a plain value to.
+  template <class Callable, class Indices, class... Supplied>
+  struct BindsAnyMutableReferenceToCopy;
+
+  template <class Callable, size_t... kIndex, class... Supplied>
+  struct BindsAnyMutableReferenceToCopy<Callable,
+    std::index_sequence<kIndex...>, Supplied...>
+    : std::bool_constant<(
+        kBindsMutableReferenceToCopy<
+          typename CallableSignature<Callable>::template Arg<kIndex>, Supplied>
+        || ...)> { };
+
+  //! Whether starting member function `Callable` on an object with arguments
+  //! `Supplied` passes a plain value to a non-const reference parameter, which
+  //! must be passed through `std::ref()`.
+  template <class Callable, class... Args>
+  struct NeedsStdRefArguments : std::false_type { };
+
+  template <class Callable, class Object, class... Supplied>
+    requires(std::is_member_function_pointer_v<Callable>
+      && CallableSignature<Callable>::Arity == sizeof...(Supplied))
+  struct NeedsStdRefArguments<Callable, Object, Supplied...>
+    : BindsAnyMutableReferenceToCopy<Callable,
+        std::index_sequence_for<Supplied...>, Supplied...> { };
 
 }; // namespace detail
 
@@ -221,6 +261,19 @@ public:
       && Awaitable<
         std::invoke_result_t<Callable, Args..., detail::TaskStartedTag>>)
   auto Start(Callable callable, Args... args) -> Awaitable auto;
+
+  //! Refuses a member function whose non-const reference parameter would
+  //! receive a plain value: the task would change its own copy, not the
+  //! caller's object. Only this mistake selects this overload, so it names
+  //! the fix instead of an unsatisfied `std::invocable`.
+  template <class Callable, class... Args>
+    requires(detail::NeedsStdRefArguments<Callable, Args...>::value)
+  void Start(Callable /*callable*/, Args... /*args*/)
+  {
+    static_assert(!std::is_same_v<Callable, Callable>,
+      "arguments a member function takes by non-const reference must be "
+      "passed through std::ref()");
+  }
 
   /// Requests cancellation of all tasks.
   void Cancel();
@@ -683,8 +736,12 @@ namespace detail {
    full-expression, as if the member function were called there.
 
    GCC 15 crashes (`gimple_add_tmp_var`) on a pointer-to-member call whose
-   result a coroutine awaits directly; awaiting `Call` instead keeps the
-   member call out of the coroutine without moving any temporary.
+   result a coroutine awaits directly
+   (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=121094); awaiting `Call`
+   instead keeps the member call out of the coroutine without moving any
+   temporary. The bug is targeted at GCC 15.4: once that is the minimum GCC,
+   `MakePromise` can await the member call directly again and this type
+   goes.
   */
   template <class Callable, class Object> struct MemberCallOf {
     template <class... Params> struct Call {
