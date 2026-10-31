@@ -7,26 +7,13 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cmath>
-#include <span>
 
 #include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::serio {
-
-template <typename Tag>
-auto Load(AnyReader& reader, data::StableId<Tag>& id) -> Result<void>
-{
-  auto pack = reader.ScopedAlignment(1);
-  auto bytes = data::StableIdBytes {};
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { bytes })));
-  id = data::StableId<Tag>::FromBytes(bytes);
-  return {};
-}
 
 //=== Scene: Nodes & Components (v2/v3) ===----------------------------------//
 
@@ -63,22 +50,9 @@ inline auto Load(AnyReader& reader,
 inline auto Load(AnyReader& reader,
   data::pak::scripting::ScriptParamRecord& record) -> Result<void>
 {
-  // Not a record: the checks below must run on every element read.
   CHECK_RESULT(LoadRecord(reader, record));
-  using data::pak::scripting::ScriptParamType;
-  if (record.type > ScriptParamType::kNode || record.key_offset == 0) {
-    return Err(std::errc::invalid_argument);
-  }
-  if (record.type == ScriptParamType::kAsset
-    && (record.value.as_asset.asset_type == data::AssetType::kUnknown
-      || record.value.as_asset.asset_type > data::AssetType::kMaxAssetType)) {
-    return Err(std::errc::invalid_argument);
-  }
-  if (record.type == ScriptParamType::kBool
-    && std::to_integer<uint8_t>(
-         std::as_bytes(std::span { &record.value, 1 }).front())
-      > 1U) {
-    return Err(std::errc::invalid_argument);
+  if (!data::pak::scripting::HasValidScriptParamValues(record)) {
+    return ::oxygen::Err(std::errc::invalid_argument);
   }
   return {};
 }
@@ -86,10 +60,10 @@ inline auto Load(AnyReader& reader,
 inline auto Load(AnyReader& reader,
   data::pak::scripting::ScriptParamOverrideRecord& record) -> Result<void>
 {
-  auto pack = reader.ScopedAlignment(1);
-  CHECK_RESULT(reader.ReadInto(record.target));
-  CHECK_RESULT(reader.ReadInto(record.slot_id));
-  CHECK_RESULT(reader.ReadInto(record.param));
+  CHECK_RESULT(LoadRecord(reader, record));
+  if (!data::pak::scripting::HasValidScriptParamValues(record.param)) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
   return {};
 }
 

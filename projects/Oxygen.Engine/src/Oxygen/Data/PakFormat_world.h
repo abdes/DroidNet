@@ -1135,6 +1135,7 @@ static_assert(offsetof(DirectionalLightRecord, intensity_lux) == 93);
 // clang-format off
 namespace oxygen::serio {
 template <> inline constexpr bool kIsRecord<data::ResourceReferenceIndex> = true;
+template <typename Tag> inline constexpr bool kIsRecord<data::StableId<Tag>> = true;
 template <> inline constexpr bool kIsRecord<data::pak::world::SceneDataTable> = true;
 template <> inline constexpr bool kIsRecord<data::pak::world::NodeRef> = true;
 template <> inline constexpr bool kIsRecord<data::pak::world::NodePathRecord> = true;

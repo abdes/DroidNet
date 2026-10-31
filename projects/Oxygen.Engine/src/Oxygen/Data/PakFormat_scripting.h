@@ -6,6 +6,10 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <span>
+
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -114,6 +118,28 @@ struct ScriptParamRecord {
 };
 #pragma pack(pop)
 static_assert(sizeof(ScriptParamRecord) == 25);
+
+//! Whether `record` holds a known type, a key, and a value its type allows;
+//! loading checks this for declarations and overrides alike.
+[[nodiscard]] inline auto HasValidScriptParamValues(
+  const ScriptParamRecord& record) -> bool
+{
+  if (record.type > ScriptParamType::kNode || record.key_offset == 0) {
+    return false;
+  }
+  if (record.type == ScriptParamType::kAsset) {
+    const auto asset_type = record.value.as_asset.asset_type;
+    return asset_type != AssetType::kUnknown
+      && asset_type <= AssetType::kMaxAssetType;
+  }
+  if (record.type == ScriptParamType::kBool) {
+    // Read from bytes, the value may hold any byte; only 0 and 1 are a bool.
+    return std::to_integer<uint8_t>(
+             std::as_bytes(std::span { &record.value, 1 }).front())
+      <= 1U;
+  }
+  return true;
+}
 
 //! Scripting component slot in a scene.
 #pragma pack(push, 1)
