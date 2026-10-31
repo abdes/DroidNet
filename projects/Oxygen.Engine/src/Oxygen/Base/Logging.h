@@ -610,6 +610,11 @@ LOGURU_EXPORT void vlog(Verbosity verbosity, const char* file, unsigned line,
   LOGURU_FORMAT_STRING_TYPE format, fmt::format_args args);
 LOGURU_EXPORT void raw_vlog(Verbosity verbosity, const char* file,
   unsigned line, LOGURU_FORMAT_STRING_TYPE format, fmt::format_args args);
+// Reports, at ERROR and from the call site, a log call that was dropped
+// because the call site is broken. Never throws; if the logger itself fails,
+// the report goes to stderr instead.
+LOGURU_EXPORT void report_dropped_log(
+  const char* file, unsigned line, const char* reason) noexcept;
 
 // Actual logging function. Use the LOG macro instead of calling this directly.
 template <typename... Args>
@@ -617,7 +622,7 @@ void log(const Verbosity verbosity, const char* file, const unsigned line,
   LOGURU_FORMAT_STRING_TYPE format, const Args&... args) noexcept
 {
   if (format == nullptr) {
-    fprintf(stderr, "Null format string at %s:%u, log dropped\n", file, line);
+    report_dropped_log(file, line, "null format string");
     return;
   }
   try {
@@ -631,8 +636,12 @@ void log(const Verbosity verbosity, const char* file, const unsigned line,
         vlog(verbosity, file, line, format, fmt::make_format_args(ms...));
       },
       args...);
+  } catch (const fmt::format_error& ex) {
+    // The format string does not match its arguments: the call site is
+    // broken, the logger is not, so the report goes through the logger.
+    report_dropped_log(file, line, ex.what());
   } catch (const std::exception& ex) {
-    // Catch all exceptions and log them as a fatal error.
+    // The logger or one of its sinks failed; only stderr is left.
     fprintf(stderr, "Exception caught at %s:%u: %s\n", file, line, ex.what());
   } catch (...) {
     // Catch all exceptions and log them as a fatal error.

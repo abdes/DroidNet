@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
@@ -14,6 +12,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 
 NOLINT_TEST(LoggingValues, FormatsSignedAndUnsignedIntegerLimits)
 {
@@ -79,9 +78,12 @@ inline auto to_string(RvalueView const& r) -> std::string_view
 
 namespace {
 
+using oxygen::testing::ScopedLogCapture;
 using ::testing::AllOf;
+using ::testing::ElementsAre;
 using ::testing::Ge;
 using ::testing::HasSubstr;
+using ::testing::IsEmpty;
 using ::testing::Not;
 
 //=== Test Helper Types ===---------------------------------------------------//
@@ -136,10 +138,8 @@ protected:
   void SetUp() override
   {
     saved_verbosity_ = loguru::g_global_verbosity;
-    saved_log_to_stderr_ = loguru::g_log_to_stderr;
     // Default tests to INFO so individual tests don't need to set verbosity.
     loguru::g_global_verbosity = loguru::Verbosity_INFO;
-    loguru::g_log_to_stderr = true;
   }
 
   void TearDown() override
@@ -149,22 +149,20 @@ protected:
     loguru::set_fatal_handler(nullptr);
     loguru::clear_vmodule_overrides();
     loguru::g_global_verbosity = saved_verbosity_;
-    loguru::g_log_to_stderr = saved_log_to_stderr_;
   }
 
   void SetVerbosity(loguru::Verbosity v) { loguru::g_global_verbosity = v; }
 
-  // Helper to capture stderr while running a callable and return the output.
-  template <typename F> auto CaptureStderr(F&& f) -> std::string
+  // Helper to capture the log records a callable emits.
+  template <typename F> auto CaptureLog(F&& f) -> std::string
   {
-    testing::internal::CaptureStderr();
+    const ScopedLogCapture capture;
     std::forward<F>(f)();
-    return testing::internal::GetCapturedStderr();
+    return capture.Text();
   }
 
 private:
   loguru::Verbosity saved_verbosity_ { loguru::Verbosity_OFF };
-  bool saved_log_to_stderr_ { true };
 };
 
 //=== Basic Logging Functionality Tests ===-----------------------------------//
@@ -176,7 +174,7 @@ NOLINT_TEST_F(BasicLoggingFixture, BasicLogging_EmitsWhenVerbosityAllows)
   const std::string expected_content = "Smoke: 1";
 
   // Act
-  auto output = CaptureStderr([] -> void { LOG_F(INFO, "Smoke: {}", 1); });
+  auto output = CaptureLog([] -> void { LOG_F(INFO, "Smoke: {}", 1); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr(expected_content));
@@ -193,7 +191,7 @@ NOLINT_TEST_F(NoExceptLoggingTests, ExceptionSafety_DoesNotThrowOnLog)
   const std::string expected_message = "Test log message";
 
   // Act & Assert
-  std::string output = CaptureStderr([&] -> void {
+  std::string output = CaptureLog([&] -> void {
     NOLINT_EXPECT_NO_THROW({ LOG_F(INFO, expected_message.c_str()); });
   });
 
@@ -208,11 +206,11 @@ NOLINT_TEST_F(
   const char* null_fmt = nullptr;
 
   // Act
-  std::string output = CaptureStderr(
-    [&] { NOLINT_EXPECT_NO_THROW({ LOG_F(INFO, null_fmt); }); });
+  std::string output
+    = CaptureLog([&] { NOLINT_EXPECT_NO_THROW({ LOG_F(INFO, null_fmt); }); });
 
   // Assert
-  EXPECT_THAT(output, HasSubstr("Null format string"));
+  EXPECT_THAT(output, HasSubstr("Log dropped: null format string"));
 }
 
 //! Verify that format errors are reported without throwing exceptions
@@ -220,14 +218,15 @@ NOLINT_TEST_F(
   NoExceptLoggingTests, ExceptionSafety_ReportsFormatErrorsWithoutThrowing)
 {
   // Act
-  std::string output = CaptureStderr([&] -> void {
+  std::string output = CaptureLog([&] -> void {
     NOLINT_EXPECT_NO_THROW({
       LOG_F(INFO, "Invalid format: {0} {1} {2} {bogus}", 42, 3.14, "test");
     });
   });
 
   // Assert
-  EXPECT_THAT(output, HasSubstr("argument not found"));
+  EXPECT_THAT(
+    output, AllOf(HasSubstr("Log dropped: "), HasSubstr("argument not found")));
 }
 
 //! Verify that very long messages are handled without throwing
@@ -237,7 +236,7 @@ NOLINT_TEST_F(NoExceptLoggingTests, ExceptionSafety_HandlesVeryLongMessage)
   const std::string long_msg(10000, 'x');
 
   // Act
-  auto output = CaptureStderr([&] -> void { LOG_F(INFO, "{}", long_msg); });
+  auto output = CaptureLog([&] -> void { LOG_F(INFO, "{}", long_msg); });
 
   // Assert
   EXPECT_THAT(output.size(), Ge(long_msg.size()));
@@ -250,28 +249,24 @@ NOLINT_TEST_F(NoExceptLoggingTests, ExceptionSafety_HandlesNullptrArguments)
   const char* ptr = nullptr;
 
   // Act
-  std::string output = CaptureStderr(
+  std::string output = CaptureLog(
     [&] { NOLINT_EXPECT_NO_THROW({ LOG_F(INFO, "Null pointer: {}", ptr); }); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Null pointer: (null)"));
 }
 
-//! Verify that empty format strings produce output without errors
-NOLINT_TEST_F(NoExceptLoggingTests, ExceptionSafety_EmptyFormatProducesOutput)
+//! Verify that an empty format string emits one empty record without errors
+NOLINT_TEST_F(NoExceptLoggingTests, ExceptionSafety_EmptyFormatEmitsEmptyRecord)
 {
+  // Arrange
+  const ScopedLogCapture capture;
+
   // Act
-  std::string output
-    = CaptureStderr([&] { NOLINT_EXPECT_NO_THROW({ LOG_F(INFO, ""); }); });
+  NOLINT_EXPECT_NO_THROW({ LOG_F(INFO, ""); });
 
   // Assert
-  EXPECT_FALSE(output.empty());
-
-  // Convert to lowercase for case-insensitive search
-  auto lower = output;
-  std::transform(lower.begin(), lower.end(), lower.begin(),
-    [](unsigned char c) -> char { return static_cast<char>(std::tolower(c)); });
-  EXPECT_THAT(lower, AllOf(Not(HasSubstr("error")), Not(HasSubstr("fail"))));
+  EXPECT_THAT(capture.Messages(), ElementsAre(IsEmpty()));
 }
 
 //=== Adapter-Focused Tests ===-----------------------------------------------//
@@ -286,7 +281,7 @@ NOLINT_TEST_F(LogWithAdapterTests, ADLConversion_UsesADLToStringForCustomTypes)
   ADLType x { 42 };
 
   // Act
-  auto output = CaptureStderr([&] -> void { LOG_F(INFO, "{}", x); });
+  auto output = CaptureLog([&] -> void { LOG_F(INFO, "{}", x); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("ADL:42"));
@@ -302,9 +297,9 @@ NOLINT_TEST_F(
   std::string_view sv = "sv";
 
   // Act
-  auto output1 = CaptureStderr([&] -> void { LOG_F(INFO, "{}", cstr); });
-  auto output2 = CaptureStderr([&] -> void { LOG_F(INFO, "{}", str); });
-  auto output3 = CaptureStderr([&] -> void { LOG_F(INFO, "{}", sv); });
+  auto output1 = CaptureLog([&] -> void { LOG_F(INFO, "{}", cstr); });
+  auto output2 = CaptureLog([&] -> void { LOG_F(INFO, "{}", str); });
+  auto output3 = CaptureLog([&] -> void { LOG_F(INFO, "{}", sv); });
 
   // Assert
   EXPECT_THAT(output1, HasSubstr("hello"));
@@ -320,7 +315,7 @@ NOLINT_TEST_F(LogWithAdapterTests, NumericFormatting_FormatsNumericPassthrough)
 
   // Act
   auto output
-    = CaptureStderr([&] -> void { LOG_F(INFO, "{} + {} = {}", i, 3, i + 3); });
+    = CaptureLog([&] -> void { LOG_F(INFO, "{} + {} = {}", i, 3, i + 3); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("7 + 3 = 10"));
@@ -334,7 +329,7 @@ NOLINT_TEST_F(
   MaybeStringLike m {};
 
   // Act
-  auto output = CaptureStderr([&] -> void { LOG_F(INFO, "{}", m); });
+  auto output = CaptureLog([&] -> void { LOG_F(INFO, "{}", m); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("adl-9"));
@@ -347,7 +342,7 @@ NOLINT_TEST_F(LogWithAdapterTests, ADLLookup_FindsADLInOtherNamespace)
   adl_ns::OtherNS o { 7 };
 
   // Act
-  auto output = CaptureStderr([&] -> void { LOG_F(INFO, "{}", o); });
+  auto output = CaptureLog([&] -> void { LOG_F(INFO, "{}", o); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("nsADL:7"));
@@ -360,7 +355,7 @@ NOLINT_TEST_F(LogWithAdapterTests, ADLStringView_HandlesADLReturningStringView)
   adl_sv_ns::ToStringView t { 5 };
 
   // Act
-  auto output = CaptureStderr([&] -> void { LOG_F(INFO, "{}", t); });
+  auto output = CaptureLog([&] -> void { LOG_F(INFO, "{}", t); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("sv-5"));
@@ -374,7 +369,7 @@ NOLINT_TEST_F(
   adl_lifetime::LvalueBacked v { std::string("from-lvalue") };
 
   // Act
-  auto output = CaptureStderr([&] -> void { LOG_F(INFO, "{}", v); });
+  auto output = CaptureLog([&] -> void { LOG_F(INFO, "{}", v); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("from-lvalue"));
@@ -388,7 +383,7 @@ NOLINT_TEST_F(
   adl_lifetime::RvalueView r;
 
   // Act
-  auto output = CaptureStderr([&] -> void { LOG_F(INFO, "{}", r); });
+  auto output = CaptureLog([&] -> void { LOG_F(INFO, "{}", r); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("tmp-view"));
@@ -402,7 +397,7 @@ NOLINT_TEST_F(
   adl_lifetime::LvalueBacked v { std::string("L") };
 
   // Act
-  auto output = CaptureStderr(
+  auto output = CaptureLog(
     [&] -> void { LOG_F(INFO, "{} {} {}", v, std::string("T"), 123); });
 
   // Assert
@@ -416,7 +411,7 @@ NOLINT_TEST_F(LogWithAdapterTests, StringFormatting_FormatsCharArrayAndLiteral)
   char arr[] = "abc"; // char[4]
 
   // Act
-  auto output = CaptureStderr([&] -> void { LOG_F(INFO, "{} {}", arr, "z"); });
+  auto output = CaptureLog([&] -> void { LOG_F(INFO, "{} {}", arr, "z"); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("abc z"));
@@ -426,7 +421,7 @@ NOLINT_TEST_F(LogWithAdapterTests, StringFormatting_FormatsCharArrayAndLiteral)
 NOLINT_TEST_F(LogWithAdapterTests, RvalueHandling_HandlesTemporaryRvalueStrings)
 {
   // Act
-  auto output = CaptureStderr(
+  auto output = CaptureLog(
     [&] -> void { LOG_F(INFO, "{} {}", std::string("x"), std::string("y")); });
 
   // Assert
@@ -437,7 +432,7 @@ NOLINT_TEST_F(LogWithAdapterTests, RvalueHandling_HandlesTemporaryRvalueStrings)
 NOLINT_TEST_F(LogWithAdapterTests, RvalueHandling_FormatsADLRvalueTemporaries)
 {
   // Act
-  auto output = CaptureStderr([&] -> void { LOG_F(INFO, "{}", Rval {}); });
+  auto output = CaptureLog([&] -> void { LOG_F(INFO, "{}", Rval {}); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("R:11"));
@@ -453,7 +448,7 @@ NOLINT_TEST_F(
   const char* name = "unit";
 
   // Act
-  auto output = CaptureStderr([&] -> void {
+  auto output = CaptureLog([&] -> void {
     LOG_F(INFO, "{:.{}f} s: {:s}", duration_sec, precision, name);
   });
 
@@ -479,7 +474,7 @@ NOLINT_TEST_F(LoggingBehaviorTests, FATAL_NotFilteredByGlobalCutoff)
   });
 
   // Act
-  const auto output = CaptureStderr(
+  const auto output = CaptureLog(
     [&] { NOLINT_EXPECT_NO_THROW({ LOG_F(FATAL, "fatal boom {}", 42); }); });
 
   // Assert
@@ -496,7 +491,7 @@ NOLINT_TEST_F(LoggingBehaviorTests, FATAL_NotFilteredByVmoduleOverride)
   });
 
   // Act
-  const auto output = CaptureStderr(
+  const auto output = CaptureLog(
     [&] { NOLINT_EXPECT_NO_THROW({ LOG_F(FATAL, "vmodule boom {}", 7); }); });
 
   // Assert
@@ -511,7 +506,7 @@ NOLINT_TEST_F(LoggingBehaviorTests, Info_StillFilteredByGlobalCutoff)
 
   // Act
   const auto output
-    = CaptureStderr([] -> void { LOG_F(INFO, "quiet message {}", 1); });
+    = CaptureLog([] -> void { LOG_F(INFO, "quiet message {}", 1); });
 
   // Assert
   EXPECT_THAT(output, Not(HasSubstr("quiet message")));
@@ -526,8 +521,8 @@ NOLINT_TEST_F(LoggingBehaviorTests, LogScope_FormatsArguments)
 {
   // Act: both the scope-entry ("{ ") and scope-exit ("} ... s: ") lines
   // must carry the formatted name.
-  const auto output = CaptureStderr(
-    [] -> void { LOG_SCOPE_F(INFO, "framebuffer slot {}", 3); });
+  const auto output
+    = CaptureLog([] -> void { LOG_SCOPE_F(INFO, "framebuffer slot {}", 3); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("{ framebuffer slot 3"));
@@ -538,8 +533,7 @@ NOLINT_TEST_F(LoggingBehaviorTests, LogScope_FormatsArguments)
 NOLINT_TEST_F(LoggingBehaviorTests, LogScope_FormatsPlainMessage)
 {
   // Act
-  const auto output
-    = CaptureStderr([] -> void { LOG_SCOPE_F(INFO, "Staging"); });
+  const auto output = CaptureLog([] -> void { LOG_SCOPE_F(INFO, "Staging"); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("{ Staging"));

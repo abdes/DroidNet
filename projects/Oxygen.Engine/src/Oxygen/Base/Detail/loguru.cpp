@@ -2264,6 +2264,19 @@ void raw_vlog(Verbosity verbosity, const char* file, unsigned line,
     = Message { verbosity, file, line, "", "", "", formatted.c_str() };
   log_message(1, message, false, true);
 }
+
+void report_dropped_log(
+  const char* file, unsigned line, const char* reason) noexcept
+{
+  try {
+    auto text = std::string { "Log dropped: " };
+    text += reason;
+    log_to_everywhere(1, Verbosity_ERROR, file, line, "", text.c_str());
+  } catch (...) {
+    // A sink failed while reporting; stderr is the last resort.
+    fprintf(stderr, "Log dropped at %s:%u: %s\n", file, line, reason);
+  }
+}
 #  else
 void log(
   Verbosity verbosity, const char* file, unsigned line, const char* format, ...)
