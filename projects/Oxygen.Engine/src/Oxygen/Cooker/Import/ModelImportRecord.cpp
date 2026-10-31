@@ -60,6 +60,7 @@
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/FileLock.h>
+#include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/RegionStream.h>
@@ -106,6 +107,16 @@ namespace {
   {
     return base::ComputeSha256(
       std::as_bytes(std::span(text.data(), text.size())));
+  }
+
+  auto FileDigest(const std::filesystem::path& path) -> base::Sha256Digest
+  {
+    const auto digest = serio::ComputeFileSha256(path);
+    if (!digest) {
+      throw std::runtime_error("Model import file hash failed: " + path.string()
+        + ": " + digest.error().message());
+    }
+    return *digest;
   }
 
   auto ReadDigest(const std::string& text) -> base::Sha256Digest
@@ -979,8 +990,8 @@ auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
       return false;
     }
     if (!fingerprint) {
-      fingerprint.emplace(std::filesystem::file_size(base::ToNativePath(file)),
-        base::ComputeFileSha256(file));
+      fingerprint.emplace(
+        std::filesystem::file_size(base::ToNativePath(file)), FileDigest(file));
     }
     return record.source_fingerprint->size == fingerprint->first
       && record.source_fingerprint->sha256 == fingerprint->second;
@@ -1299,7 +1310,7 @@ auto ModelImportRecord::SelectedGeneration(
     throw std::system_error(
       lease.error(), "Selected import generation is unavailable");
   }
-  const auto actual = base::ComputeFileSha256(selected / "container.index.bin");
+  const auto actual = FileDigest(selected / "container.index.bin");
   if (base::ToHexString(actual) != head->index_sha256) {
     throw std::runtime_error(
       "Selected import generation index changed after publication");
@@ -1373,7 +1384,7 @@ auto ModelImportRecord::ValidateCandidate(const ImportReport& report) -> void
       "Recorded provenance contains geometry absent from its generation");
   }
   state_->validated_index
-    = base::ComputeFileSha256(report.cooked_root / "container.index.bin");
+    = FileDigest(report.cooked_root / "container.index.bin");
   state_->validated_provenance = Digest(report.surface_provenance_json);
 }
 
@@ -1394,7 +1405,7 @@ auto ModelImportRecord::Publish(
     || *validated_provenance != Digest(report.surface_provenance_json)
     || Absolute(report.cooked_root) != Absolute(*cooked_root)
     || *validated_index
-      != base::ComputeFileSha256(report.cooked_root / "container.index.bin")) {
+      != FileDigest(report.cooked_root / "container.index.bin")) {
     throw std::invalid_argument(
       "Import candidate was not validated or changed before publication");
   }

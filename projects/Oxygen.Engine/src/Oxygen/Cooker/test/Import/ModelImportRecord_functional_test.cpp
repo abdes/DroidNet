@@ -51,6 +51,7 @@
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Serio/FileLock.h>
+#include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -90,11 +91,21 @@ auto Codes(const ModelImportRecordLocation& location)
   return codes;
 }
 
+auto FileDigest(const std::filesystem::path& file) -> oxygen::base::Sha256Digest
+{
+  const auto digest = oxygen::serio::ComputeFileSha256(file);
+  if (!digest) {
+    ADD_FAILURE() << digest.error().message();
+    return {};
+  }
+  return *digest;
+}
+
 auto Fingerprint(const std::filesystem::path& file) -> ModelSourceFingerprint
 {
   return {
     .size = std::filesystem::file_size(file),
-    .sha256 = oxygen::base::ComputeFileSha256(file),
+    .sha256 = FileDigest(file),
     .files = {},
   };
 }
@@ -304,12 +315,12 @@ NOLINT_TEST_F(ModelImportRecordTest, TwoRecordsWithOneSourceIdentityAreRefused)
 {
   const auto copy = RecordOf("/Content/Models/other.gltf");
   std::filesystem::copy_file(record_, copy);
-  const auto before = oxygen::base::ComputeFileSha256(record_);
+  const auto before = FileDigest(record_);
 
   EXPECT_THROW(SaveRecord(copy, source_), std::invalid_argument);
 
-  EXPECT_EQ(oxygen::base::ComputeFileSha256(record_), before);
-  EXPECT_EQ(oxygen::base::ComputeFileSha256(copy), before);
+  EXPECT_EQ(FileDigest(record_), before);
+  EXPECT_EQ(FileDigest(copy), before);
 }
 
 //! A new record is saved at its model's identity with a fresh UUIDv7 source
@@ -460,7 +471,7 @@ NOLINT_TEST_F(ModelImportRecordTest, WrongRecipeFormatCannotMutateTheRecord)
       << R"({"version":1,"jobs":[{"type":"gltf","source":"Models/source.gltf",
       "virtual_path":"/Content/Models/source.gltf"}]})";
   }
-  const auto before = oxygen::base::ComputeFileSha256(record_);
+  const auto before = FileDigest(record_);
   EXPECT_THROW(ModelImportRecord::SaveRecipeFile(
                  {
                    .record_path = record_,
@@ -470,7 +481,7 @@ NOLINT_TEST_F(ModelImportRecordTest, WrongRecipeFormatCannotMutateTheRecord)
                  },
                  recipe_path, ImportFormat::kFbx),
     std::invalid_argument);
-  EXPECT_EQ(oxygen::base::ComputeFileSha256(record_), before);
+  EXPECT_EQ(FileDigest(record_), before);
 }
 
 //! A replay whose source is gone says so, and how to rebind it.
@@ -598,7 +609,7 @@ NOLINT_TEST_F(
   auto accepted = Candidate(*first);
   first->ValidateCandidate(accepted);
   first->Publish(accepted);
-  const auto before = oxygen::base::ComputeFileSha256(record_);
+  const auto before = FileDigest(record_);
   auto next = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   auto failed = Candidate(*next);
   failed.source_fingerprint = Fingerprint(source_);
@@ -611,7 +622,7 @@ NOLINT_TEST_F(
   EXPECT_THROW(next->Publish(failed, cancel.get_token()), std::runtime_error);
   EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_, Generations()),
     accepted.cooked_root);
-  EXPECT_EQ(oxygen::base::ComputeFileSha256(record_), before);
+  EXPECT_EQ(FileDigest(record_), before);
 }
 
 NOLINT_TEST_F(

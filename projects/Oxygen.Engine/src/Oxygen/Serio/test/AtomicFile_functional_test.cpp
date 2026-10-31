@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Serio/AtomicFile.h, Serio/AtomicFile.cpp
+// Covers: Serio/AtomicFile.h, Serio/AtomicFile.cpp, Serio/Integrity.h (files)
 
 #include <algorithm>
 #include <cstddef>
@@ -15,10 +15,16 @@
 #include <span>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Platforms.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/Integrity.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -200,6 +206,86 @@ NOLINT_TEST_F(AtomicFileTest, ReadPublishedFileReturnsEveryPublishedByte)
 NOLINT_TEST_F(AtomicFileTest, ReadPublishedFileReportsAMissingFile)
 {
   EXPECT_FALSE(oxygen::serio::ReadPublishedFile(root_ / "missing.bin"));
+}
+
+//! A writer streams the content, patches a header once the content is known,
+//! and publishes all of it on commit.
+NOLINT_TEST_F(AtomicFileTest, WriterStreamsPatchesAndPublishes)
+{
+  const auto path = root_ / "index.bin";
+  auto writer = oxygen::serio::AtomicFileWriter::Create(path);
+  ASSERT_HAS_VALUE(writer);
+  const std::string body = "body-of-the-index";
+  const std::string header = "HEAD";
+
+  ASSERT_TRUE(writer->Stream().Write(Bytes("????")));
+  ASSERT_TRUE(writer->Stream().Write(Bytes(body)));
+  ASSERT_TRUE(
+    writer->Stream().PatchAt(oxygen::serio::ByteOffset { 0 }, Bytes(header)));
+  const auto commit = std::move(*writer).Commit();
+
+  ASSERT_TRUE(commit) << commit.error().message();
+  EXPECT_FALSE(commit->durability_error);
+  EXPECT_EQ(Read(path), header + body);
+}
+
+//! Until commit, the destination keeps its bytes; a writer dropped without
+//! commit removes its sibling and leaves the destination as it was.
+NOLINT_TEST_F(AtomicFileTest, AbandonedWriterLeavesTheDestination)
+{
+  const auto path = root_ / "record.json";
+  const std::string before = "before";
+  ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, Bytes(before)));
+  {
+    auto writer = oxygen::serio::AtomicFileWriter::Create(path);
+    ASSERT_HAS_VALUE(writer);
+    ASSERT_TRUE(writer->Stream().Write(Bytes("never-published")));
+    ASSERT_TRUE(writer->Stream().Flush());
+    EXPECT_EQ(Read(path), before);
+  }
+
+  EXPECT_EQ(Read(path), before);
+  EXPECT_EQ(std::distance(std::filesystem::directory_iterator(root_),
+              std::filesystem::directory_iterator {}),
+    1);
+}
+
+//! A published file opened for reading keeps the bytes it opened while a
+//! publication replaces it.
+NOLINT_TEST_F(AtomicFileTest, OpenPublishedFileKeepsTheBytesItOpened)
+{
+  const auto path = root_ / "container.index.bin";
+  const std::string before = "published-before";
+  ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, Bytes(before)));
+  const auto file = oxygen::serio::OpenPublishedFile(path);
+  ASSERT_HAS_VALUE(file);
+
+  const auto replaced
+    = oxygen::serio::WriteFileAtomically(path, Bytes("published-after"));
+  auto bytes = std::vector<std::byte>(before.size());
+  const auto read = oxygen::serio::ReadExactlyAt(
+    *file, oxygen::serio::ByteOffset { 0 }, std::span { bytes });
+
+  ASSERT_TRUE(replaced) << replaced.error().message();
+  ASSERT_TRUE(read);
+  EXPECT_EQ(Text(bytes), before);
+}
+
+//! The SHA-256 of a file is the SHA-256 of its bytes; a missing file is an
+//! error, not an exception.
+NOLINT_TEST_F(AtomicFileTest, ComputeFileSha256HashesTheFile)
+{
+  const auto path = root_ / "payload.bin";
+  const auto text = std::string(70000, 'x') + "tail";
+  ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, Bytes(text)));
+
+  const auto digest = oxygen::serio::ComputeFileSha256(path);
+  const auto missing = oxygen::serio::ComputeFileSha256(root_ / "missing.bin");
+
+  ASSERT_HAS_VALUE(digest);
+  EXPECT_EQ(*digest, oxygen::base::ComputeSha256(Bytes(text)));
+  ASSERT_FALSE(missing);
+  EXPECT_EQ(missing.error(), oxygen::serio::Error::kNotFound);
 }
 
 } // namespace

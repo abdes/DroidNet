@@ -35,7 +35,6 @@
 
 namespace oxygen::content::internal {
 
-using oxygen::base::ComputeFileSha256;
 using oxygen::base::IsAllZero;
 using oxygen::base::Sha256Digest;
 

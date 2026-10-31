@@ -10,9 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <exception>
 #include <filesystem>
-#include <ios>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -23,18 +21,19 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Crc32.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakMeasureStore.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
-#include <Oxygen/Cooker/Pak/PakStreamingCrc32.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Types.h>
@@ -56,14 +55,14 @@ struct WriterState final {
   //! The pak file; declared before `stream`, which writes to it.
   std::optional<serio::NativeFile> file;
   std::optional<serio::RegionWriteStream<serio::NativeFile>> stream;
+  //! Every write goes through it, so the pak CRC (which skips its own footer
+  //! field) comes out of the write pass. Declared after `stream`, which it
+  //! writes to, so it is destroyed first.
+  std::optional<serio::HashingWriteStream<
+    serio::RegionWriteStream<serio::NativeFile>, oxygen::base::Crc32>>
+    hashing;
   pak::PakWriter::WriteResult output {};
   uint64_t cursor = 0;
-  pak::PakStreamingCrc32 crc
-    = pak::PakStreamingCrc32(pak::PakStreamingCrc32::Config {
-      .enabled = false,
-      .skip_offset = 0,
-      .skip_size = 0,
-    });
 };
 
 auto AddDiagnostic(WriterState& state,
@@ -105,24 +104,16 @@ auto WriteRawBytes(WriterState& state, const std::span<const std::byte> bytes,
   if (bytes.empty()) {
     return true;
   }
-  if (!state.stream.has_value()) {
+  if (!state.hashing.has_value()) {
     AddDiagnostic(state, pak::PakDiagnosticSeverity::kError, write_code,
       write_error, resource_kind, table_name, asset_key, state.cursor);
     return false;
   }
 
-  const auto write_result = state.stream->Write(bytes);
+  const auto write_result = state.hashing->Write(bytes);
   if (!write_result) {
     AddDiagnostic(state, pak::PakDiagnosticSeverity::kError, write_code,
       write_error, resource_kind, table_name, asset_key, state.cursor);
-    return false;
-  }
-
-  if (!state.crc.Update(state.cursor, bytes)) {
-    AddDiagnostic(state, pak::PakDiagnosticSeverity::kError,
-      "pak.write.crc_state_error",
-      "CRC32 stream update failed due to offset overflow.", resource_kind,
-      table_name, asset_key, state.cursor);
     return false;
   }
 
@@ -180,7 +171,7 @@ struct CrcPatch final {
 
 auto PatchCrc32(WriterState& state, const CrcPatch& crc) -> bool
 {
-  if (!state.stream.has_value()) {
+  if (!state.hashing.has_value()) {
     AddDiagnostic(state, pak::PakDiagnosticSeverity::kError,
       "pak.write.stream_seek_failed",
       "Failed to seek CRC32 field offset for patch write.", {}, {},
@@ -189,7 +180,7 @@ auto PatchCrc32(WriterState& state, const CrcPatch& crc) -> bool
   }
 
   const auto write_result
-    = state.stream->PatchAt(serio::ByteOffset { crc.field_offset },
+    = state.hashing->PatchAt(serio::ByteOffset { crc.field_offset },
       std::as_bytes(std::span<const uint32_t, 1>(&crc.value, 1)));
   if (!write_result) {
     AddDiagnostic(state, pak::PakDiagnosticSeverity::kError,
@@ -416,13 +407,9 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
     .plan = std::addressof(plan),
     .file = std::nullopt,
     .stream = std::nullopt,
+    .hashing = std::nullopt,
     .output = {},
     .cursor = 0,
-    .crc = PakStreamingCrc32(PakStreamingCrc32::Config {
-      .enabled = request.options.compute_crc32,
-      .skip_offset = plan.Footer().crc32_field_absolute_offset,
-      .skip_size = kCrcFieldSize,
-    }),
   };
 
   const auto start = std::chrono::steady_clock::now();
@@ -461,11 +448,18 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
   // The footer CRC is patched back through the stream, which holds the
   // unflushed tail, so the file needs write access only.
   if (auto file = serio::NativeFile::Open(request.output_pak_path,
-        { .access = serio::Access::kWrite,
-          .creation = serio::Creation::kCreateAlways });
+        {
+          .access = serio::Access::kWrite,
+          .creation = serio::Creation::kCreateAlways,
+        });
     file) {
     state.file.emplace(std::move(file).value());
     state.stream.emplace(*state.file);
+    const auto crc_field = serio::ByteRange {
+      .offset = serio::ByteOffset { plan.Footer().crc32_field_absolute_offset },
+      .count = serio::ByteCount { kCrcFieldSize },
+    };
+    state.hashing.emplace(*state.stream, std::span { &crc_field, 1 });
   } else {
     AddDiagnostic(state, PakDiagnosticSeverity::kError,
       "pak.write.stream_open_failed",
@@ -869,24 +863,17 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
   }
 
   if (!HasWriterErrors(state) && request.options.compute_crc32) {
-    if (state.crc.SkippedByteCount() != kCrcFieldSize) {
-      AddDiagnostic(state, PakDiagnosticSeverity::kError,
-        "pak.write.crc_state_error",
-        "CRC32 stream did not skip exactly pak_crc32 field bytes.", "footer",
-        "footer", std::nullopt, plan.Footer().crc32_field_absolute_offset);
-    } else {
-      state.output.pak_crc32 = state.crc.Finalize();
-      if (PatchCrc32(state,
-            {
-              .field_offset = plan.Footer().crc32_field_absolute_offset,
-              .value = state.output.pak_crc32,
-            })) {
-        const auto flush_result = state.stream.value().Flush();
-        if (!flush_result) {
-          AddDiagnostic(state, PakDiagnosticSeverity::kError,
-            "pak.write.stream_flush_failed",
-            "Failed to flush output pak stream after CRC patch.");
-        }
+    state.output.pak_crc32 = std::get<0>(state.hashing.value().Digests());
+    if (PatchCrc32(state,
+          {
+            .field_offset = plan.Footer().crc32_field_absolute_offset,
+            .value = state.output.pak_crc32,
+          })) {
+      const auto flush_result = state.stream.value().Flush();
+      if (!flush_result) {
+        AddDiagnostic(state, PakDiagnosticSeverity::kError,
+          "pak.write.stream_flush_failed",
+          "Failed to flush output pak stream after CRC patch.");
       }
     }
   }

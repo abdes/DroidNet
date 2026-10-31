@@ -8,14 +8,9 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
-#include <exception>
-#include <filesystem>
-#include <fstream>
-#include <ios>
 #include <span>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
@@ -619,99 +614,6 @@ NOLINT_TEST(Sha256HexTest, FromHexRejectsAnyOtherText)
     EXPECT_FALSE(oxygen::base::Sha256DigestFromHex(text).has_value())
       << "accepted '" << text << "'";
   }
-}
-
-// ---------------------------------------------------------------------------
-// File Hashing Tests
-// ---------------------------------------------------------------------------
-
-class Sha256FileTest : public ::testing::Test {
-protected:
-  std::filesystem::path temp_file_;
-
-  void SetUp() override
-  {
-    temp_file_
-      = std::filesystem::temp_directory_path() / "sha256_test_file.tmp";
-  }
-
-  void TearDown() override
-  {
-    std::error_code ec;
-    std::filesystem::remove(temp_file_, ec);
-  }
-
-  void WriteFile(const std::vector<std::byte>& data)
-  {
-    auto text = std::string(data.size(), '\0');
-    std::ranges::transform(data, text.begin(),
-      [](const std::byte byte) -> char { return static_cast<char>(byte); });
-    WriteFile(std::string_view { text });
-  }
-
-  void WriteFile(std::string_view content)
-  {
-    std::ofstream ofs(temp_file_, std::ios::binary);
-    ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
-  }
-};
-
-//! Verify ComputeFileSha256 produces correct hash for small file.
-NOLINT_TEST_F(Sha256FileTest, SmallFileProducesCorrectHash)
-{
-  // Arrange
-  const std::string content = "Hello, World!";
-  WriteFile(content);
-  const auto expected = oxygen::base::ComputeSha256(ToBytes(content));
-
-  // Act
-  const auto result = oxygen::base::ComputeFileSha256(temp_file_);
-
-  // Assert
-  EXPECT_THAT(result, ElementsAreArray(expected));
-}
-
-//! Verify ComputeFileSha256 produces correct hash for empty file.
-NOLINT_TEST_F(Sha256FileTest, EmptyFileProducesCorrectHash)
-{
-  // Arrange
-  WriteFile("");
-  const auto expected = oxygen::base::ComputeSha256({});
-
-  // Act
-  const auto result = oxygen::base::ComputeFileSha256(temp_file_);
-
-  // Assert
-  EXPECT_THAT(result, ElementsAreArray(expected));
-}
-
-//! Verify ComputeFileSha256 handles file larger than buffer size.
-NOLINT_TEST_F(Sha256FileTest, LargeFileMatchesMemoryHash)
-{
-  // Arrange - Create file larger than 256KB buffer
-  constexpr size_t kSize = size_t { 512 } * 1024;
-  std::vector<std::byte> data(kSize);
-  FillWithPattern(data);
-  WriteFile(data);
-  const auto expected = oxygen::base::ComputeSha256(data);
-
-  // Act
-  const auto result = oxygen::base::ComputeFileSha256(temp_file_);
-
-  // Assert
-  EXPECT_THAT(result, ElementsAreArray(expected));
-}
-
-//! Verify ComputeFileSha256 throws for non-existent file.
-NOLINT_TEST_F(Sha256FileTest, NonExistentFileThrows)
-{
-  // Arrange
-  const auto non_existent = temp_file_.parent_path() / "non_existent_file.xyz";
-
-  // Act & Assert
-  EXPECT_THROW(
-    [[maybe_unused]] auto _ = oxygen::base::ComputeFileSha256(non_existent),
-    std::exception);
 }
 
 // ---------------------------------------------------------------------------

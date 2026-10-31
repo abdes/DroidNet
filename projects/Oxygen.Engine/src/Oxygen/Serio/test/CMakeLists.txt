@@ -67,6 +67,7 @@ oxygen_serio_test(
     "CountingSink_test.cpp"
     "Error_test.cpp"
     "FaultInjectingDevice_test.cpp"
+    "Integrity_test.cpp"
     "Integration_test.cpp"
     "MemoryFile_test.cpp"
     "MemoryStream_test.cpp"

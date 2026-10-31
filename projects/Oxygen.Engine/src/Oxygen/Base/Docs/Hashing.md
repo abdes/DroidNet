@@ -1,8 +1,7 @@
 # Hashes, hex and system errors
 
 Base holds one implementation of each byte primitive the engine shares. These
-work on memory spans; the modules that read files feed them. The one file
-reader left in Base, `ComputeFileSha256`, moves to Serio's region hashing.
+work on memory spans and read no files.
 
 ## Hashes
 

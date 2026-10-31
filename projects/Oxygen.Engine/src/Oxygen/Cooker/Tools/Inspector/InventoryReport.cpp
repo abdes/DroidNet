@@ -7,7 +7,6 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <ios>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -36,6 +35,7 @@
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/RegionStream.h>
@@ -86,6 +86,16 @@ namespace {
     return stale;
   }
 
+  auto FileDigest(const std::filesystem::path& path) -> base::Sha256Digest
+  {
+    const auto digest = serio::ComputeFileSha256(path);
+    if (!digest) {
+      throw std::runtime_error(
+        "Cannot hash '" + path.string() + "': " + digest.error().message());
+    }
+    return *digest;
+  }
+
 } // namespace
 
 auto BuildInventoryReportCommand(InventoryReportOptions& options)
@@ -125,7 +135,7 @@ auto RunInventoryReport(const InventoryReportOptions& options)
       "Inventory report output must be outside the cooked root");
   }
   const auto index_path = root / "container.index.bin";
-  const auto index_digest = base::ComputeFileSha256(index_path);
+  const auto index_digest = FileDigest(index_path);
   const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
   const auto failures = index.CheckContent(root, lc::IntegrityCheck::kFull);
   const auto stale = failures.empty() ? FindStaleDescriptors(root, index)
@@ -203,7 +213,7 @@ auto RunInventoryReport(const InventoryReportOptions& options)
       { "resource_index", std::move(resource_index) },
     });
   }
-  if (base::ComputeFileSha256(index_path) != index_digest) {
+  if (FileDigest(index_path) != index_digest) {
     throw std::runtime_error("Loose cooked index changed during verification");
   }
   const auto report = json {

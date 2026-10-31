@@ -16,13 +16,13 @@
 #include "PakTestSupport.h"
 #include "PakWriterTestSupport.h"
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -54,11 +54,13 @@ auto AddCatalog(pak::PakPlan::Data& plan) -> void
   };
   for (size_t index = 0; index < plan.assets.size(); ++index) {
     const auto& asset = plan.assets.at(index);
+    const auto descriptor_digest = oxygen::serio::ComputeFileSha256(
+      plan.asset_payload_sources.at(index).source_path);
+    ASSERT_HAS_VALUE(descriptor_digest) << descriptor_digest.error().message();
     catalog.entries.push_back({
       .asset_key = asset.asset_key,
       .asset_type = asset.asset_type,
-      .descriptor_digest = oxygen::base::ComputeFileSha256(
-        plan.asset_payload_sources.at(index).source_path),
+      .descriptor_digest = *descriptor_digest,
       .transitive_resource_digest = {},
     });
   }

@@ -7,9 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -36,9 +34,11 @@
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PatchManifest.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/Integrity.h>
 
 namespace {
 namespace base = oxygen::base;
+namespace serio = oxygen::serio;
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
 using nlohmann::ordered_json;
@@ -268,16 +268,16 @@ auto ComputePatchPakDigest(const std::filesystem::path& pak_path,
   std::vector<pak::PakDiagnostic>& diagnostics)
   -> std::optional<std::array<uint8_t, 32>>
 {
-  try {
-    return base::ComputeFileSha256(pak_path);
-  } catch (const std::exception& ex) {
+  const auto digest = serio::ComputeFileSha256(pak_path);
+  if (!digest) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       "pak.manifest.patch_pak_digest_compute_failed",
       std::string("Failed to compute manifest field 'patch_pak_digest': ")
-        + ex.what(),
+        + digest.error().message(),
       pak_path);
     return std::nullopt;
   }
+  return *digest;
 }
 
 auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string

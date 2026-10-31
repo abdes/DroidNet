@@ -12,7 +12,6 @@
 #include <exception>
 #include <filesystem>
 #include <functional>
-#include <ios>
 #include <iterator>
 #include <limits>
 #include <map>
@@ -53,7 +52,6 @@
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
-#include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/PakFormat_audio.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -61,6 +59,7 @@
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/RegionStream.h>
@@ -657,16 +656,17 @@ auto ComputeDescriptorDigestFromFile(
   std::vector<pak::PakDiagnostic>& diagnostics)
   -> std::optional<oxygen::base::Sha256Digest>
 {
-  try {
-    return oxygen::base::ComputeFileSha256(descriptor_path);
-  } catch (const std::exception& ex) {
+  const auto digest = oxygen::serio::ComputeFileSha256(descriptor_path);
+  if (!digest) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       pak::PakBuildPhase::kPlanning,
       "pak.plan.descriptor_digest_compute_failed",
-      std::string("Failed to compute descriptor digest: ") + ex.what(),
+      std::string("Failed to compute descriptor digest: ")
+        + digest.error().message(),
       descriptor_path);
     return std::nullopt;
   }
+  return *digest;
 }
 
 auto ReadFileSliceBytes(const SourceFileSlice& file,

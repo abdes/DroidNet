@@ -16,6 +16,7 @@ target_link_libraries(
   Oxygen.Vortex.GgxMomentTable
   PRIVATE
     oxygen::base
+    oxygen::serio
     nlohmann_json::nlohmann_json
 )
 set_target_properties(

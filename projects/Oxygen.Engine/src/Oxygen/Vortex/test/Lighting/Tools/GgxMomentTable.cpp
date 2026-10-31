@@ -32,6 +32,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Vortex/test/Lighting/Reference/GgxMoments.h>
 #include <Oxygen/Vortex/test/Lighting/Reference/ReferenceQuadrature.h>
 
@@ -274,7 +275,12 @@ auto Run(const std::span<char*> arguments) -> int
     || shape.roughness_nodes > kMaximumDimension || workers > kMaximumWorkers) {
     throw std::invalid_argument("Dimensions must be 2..4097 and workers 1..64");
   }
-  const auto generator_hash = oxygen::base::ComputeFileSha256(args.front());
+  const auto generator_digest = oxygen::serio::ComputeFileSha256(args.front());
+  if (!generator_digest) {
+    throw std::runtime_error("Cannot hash '" + std::string(args.front())
+      + "': " + generator_digest.error().message());
+  }
+  const auto& generator_hash = *generator_digest;
   const auto rows = Generate(shape, workers);
   WriteCandidate(args.at(1), shape, rows, generator_hash);
   return 0;

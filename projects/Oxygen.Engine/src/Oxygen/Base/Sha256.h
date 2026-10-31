@@ -9,7 +9,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
@@ -64,10 +63,6 @@ private:
 
 //! Compute SHA-256 of a memory buffer in one call.
 OXGN_BASE_NDAPI auto ComputeSha256(std::span<const std::byte> data) noexcept
-  -> Sha256Digest;
-
-//! Compute SHA-256 of a file.
-OXGN_BASE_NDAPI auto ComputeFileSha256(const std::filesystem::path& path)
   -> Sha256Digest;
 
 //! Check if a digest is all zeros.

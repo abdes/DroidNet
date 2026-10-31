@@ -61,6 +61,7 @@ set(
   "Device.h"
   "Error.h"
   "FileLock.h"
+  "Integrity.h"
   "IoDriver.h"
   "MappedFile.h"
   "MemoryFile.h"

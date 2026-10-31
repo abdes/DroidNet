@@ -16,10 +16,10 @@
 #include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Serio/Integrity.h>
 
 namespace oxygen::content::internal {
 
@@ -41,12 +41,15 @@ auto LooseCookedIndexImpl::GetFileInventory() const
   std::vector<lc::FileIntegrity> files;
   files.reserve(key_to_asset_info_.size() + kind_to_file_.size()
     + auxiliary_files_.size() + texture_descriptors_.size());
+  // A string in the storage runs from its offset to its NUL terminator.
+  const auto string_at = [this](const uint32_t offset) -> std::string {
+    const auto rest = std::string_view(string_storage_).substr(offset);
+    return std::string(rest.substr(0, rest.find('\0')));
+  };
   for (const auto& [key, asset] : key_to_asset_info_) {
     static_cast<void>(key);
     files.push_back({
-      .relative_path = std::string(std::string_view(string_storage_)
-          .substr(asset.descriptor_relpath_offset)
-          .data()),
+      .relative_path = string_at(asset.descriptor_relpath_offset),
       .size = asset.descriptor_size,
       .sha256 = asset.descriptor_sha256,
       .kind = std::nullopt,
@@ -54,9 +57,6 @@ auto LooseCookedIndexImpl::GetFileInventory() const
       .source_path = {},
     });
   }
-  const auto string_at = [this](const uint32_t offset) -> std::string {
-    return std::string(std::string_view(string_storage_).substr(offset).data());
-  };
   const auto append_file = [&](const auto kind, const FileInfo& file) -> auto {
     files.push_back({
       .relative_path = string_at(file.relpath_offset),
@@ -106,7 +106,10 @@ auto LooseCookedIndexImpl::CheckContent(
            std::filesystem::canonical(base::ToNativePath(entry.path())))
         != base::ToLogicalPath(entry.path()).lexically_normal()) {
       iterator.disable_recursion_pending();
-      issues.push_back({ relative, lc::IntegrityFailure::kLinkedPath });
+      issues.push_back({
+        .relative_path = relative,
+        .reason = lc::IntegrityFailure::kLinkedPath,
+      });
       remaining.erase(relative);
       continue;
     }
@@ -114,7 +117,10 @@ auto LooseCookedIndexImpl::CheckContent(
       continue;
     }
     if (!std::filesystem::is_regular_file(status)) {
-      issues.push_back({ relative, lc::IntegrityFailure::kNotRegular });
+      issues.push_back({
+        .relative_path = relative,
+        .reason = lc::IntegrityFailure::kNotRegular,
+      });
       remaining.erase(relative);
       continue;
     }
@@ -124,21 +130,39 @@ auto LooseCookedIndexImpl::CheckContent(
     }
     const auto found = remaining.find(relative);
     if (found == remaining.end()) {
-      issues.push_back({ relative, lc::IntegrityFailure::kUnexpected });
+      issues.push_back({
+        .relative_path = relative,
+        .reason = lc::IntegrityFailure::kUnexpected,
+      });
       continue;
     }
     const auto& expected = *found->second;
     if (entry.file_size() != expected.size) {
-      issues.push_back({ relative, lc::IntegrityFailure::kSizeMismatch });
-    } else if (check == lc::IntegrityCheck::kFull
-      && base::ComputeFileSha256(entry.path()) != expected.sha256) {
-      issues.push_back({ relative, lc::IntegrityFailure::kDigestMismatch });
+      issues.push_back({
+        .relative_path = relative,
+        .reason = lc::IntegrityFailure::kSizeMismatch,
+      });
+    } else if (check == lc::IntegrityCheck::kFull) {
+      const auto digest = serio::ComputeFileSha256(entry.path());
+      if (!digest) {
+        throw std::runtime_error("cannot hash '" + entry.path().string()
+          + "': " + digest.error().message());
+      }
+      if (*digest != expected.sha256) {
+        issues.push_back({
+          .relative_path = relative,
+          .reason = lc::IntegrityFailure::kDigestMismatch,
+        });
+      }
     }
     remaining.erase(found);
   }
   for (const auto& [relative, file] : remaining) {
     static_cast<void>(file);
-    issues.push_back({ relative, lc::IntegrityFailure::kMissing });
+    issues.push_back({
+      .relative_path = relative,
+      .reason = lc::IntegrityFailure::kMissing,
+    });
   }
   std::ranges::sort(issues, {}, &lc::FileIntegrityIssue::relative_path);
   return issues;
@@ -153,7 +177,7 @@ auto LooseCookedIndexImpl::ValidateContent(
     return;
   }
   const auto& first = issues.front();
-  const auto reason = [&] -> const char* {
+  const auto* const reason = [&] -> const char* {
     switch (first.reason) {
     case lc::IntegrityFailure::kMissing:
       return "Missing loose cooked file: ";

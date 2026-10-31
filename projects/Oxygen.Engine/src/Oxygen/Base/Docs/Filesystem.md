@@ -14,8 +14,8 @@ Pass the result to file opens, metadata queries and directory operations.
 persisting them or comparing them with logical paths. It preserves device paths
 that have no ordinary drive/UNC spelling.
 
-Serio streams, atomic writes, locks, hashing and native importer I/O share this
-conversion. Keep conversion out of rendering and identifier construction.
+Every file open and file-system call in the engine shares this conversion.
+Keep conversion out of rendering and identifier construction.
 These functions may allocate and throw filesystem errors when resolving a path.
 
 `PathIdentityKey` supplies absolute, lexically normalized UTF-8 keys for in-memory

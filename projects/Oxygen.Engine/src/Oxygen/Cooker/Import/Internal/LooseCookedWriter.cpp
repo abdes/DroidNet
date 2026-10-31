@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <ios>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -44,10 +43,12 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/RegionStream.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::import {
@@ -222,8 +223,10 @@ namespace {
     std::filesystem::create_directories(base::ToNativePath(path.parent_path()));
 
     auto file = serio::NativeFile::Open(path,
-      { .access = serio::Access::kWrite,
-        .creation = serio::Creation::kCreateAlways });
+      {
+        .access = serio::Access::kWrite,
+        .creation = serio::Creation::kCreateAlways,
+      });
     if (!file) {
       throw std::system_error(
         file.error(), "Failed to open cooked file '" + path.string() + "'");
@@ -648,7 +651,12 @@ struct LooseCookedWriter::Impl final {
         const auto physical_path = cooked_root_ / file.relpath;
         file.size
           = std::filesystem::file_size(base::ToNativePath(physical_path));
-        file.sha256 = base::ComputeFileSha256(physical_path);
+        const auto digest = serio::ComputeFileSha256(physical_path);
+        if (!digest) {
+          throw std::runtime_error("cannot hash '" + physical_path.string()
+            + "': " + digest.error().message());
+        }
+        file.sha256 = *digest;
       }
       StoreFile_(std::move(file), "Finish.merge_files");
     }

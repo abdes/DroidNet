@@ -9,16 +9,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <ios>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/Sha256.h>
 
@@ -652,40 +647,6 @@ auto IsAllZero(const Sha256Digest& digest) noexcept -> bool
     acc |= b;
   }
   return acc == 0;
-}
-
-auto ComputeFileSha256(const std::filesystem::path& path) -> Sha256Digest
-{
-  std::ifstream in(ToNativePath(path), std::ios::binary);
-  if (!in) {
-    throw std::runtime_error(
-      "Failed to open file for SHA-256: " + path.string());
-  }
-
-  Sha256 hasher;
-
-  // Use larger buffer for better I/O performance (256 KB)
-  constexpr size_t kBufferSize = size_t { 256 } * 1024U;
-  std::array<char, kBufferSize> buffer = {};
-
-  while (true) {
-    in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-    const auto got = in.gcount();
-    if (got > 0) {
-      hasher.Update(std::as_bytes(
-        std::span<const char> { buffer }.first(static_cast<size_t>(got))));
-    }
-
-    if (!in) {
-      if (in.eof()) {
-        break;
-      }
-      throw std::runtime_error(
-        "Failed while reading file for SHA-256: " + path.string());
-    }
-  }
-
-  return hasher.Finalize();
 }
 
 } // namespace oxygen::base

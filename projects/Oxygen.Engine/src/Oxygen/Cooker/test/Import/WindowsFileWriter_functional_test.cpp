@@ -41,12 +41,18 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/FileLock.h>
+#include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::content::import;
+using oxygen::co::Co;
+using oxygen::content::import::FileError;
+using oxygen::content::import::FileErrorInfo;
+using oxygen::content::import::ImportEventLoop;
+using oxygen::content::import::WindowsFileReader;
+using oxygen::content::import::WindowsFileWriter;
+using oxygen::content::import::WriteOptions;
 using oxygen::cooker::test::ReadText;
-using namespace oxygen::co;
 namespace co = oxygen::co;
 
 namespace {
@@ -113,13 +119,19 @@ NOLINT_TEST_F(
       std::vector<std::byte>(
         ToBytes(original).begin(), ToBytes(original).end()));
   });
-  EXPECT_EQ(oxygen::base::ComputeFileSha256(path),
-    oxygen::base::ComputeSha256(ToBytes(original)));
+  {
+    const auto digest = oxygen::serio::ComputeFileSha256(path);
+    ASSERT_HAS_VALUE(digest) << digest.error().message();
+    EXPECT_EQ(*digest, oxygen::base::ComputeSha256(ToBytes(original)));
+  }
 
   const std::string replacement = "atomically replaced bytes";
   ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, ToBytes(replacement)));
-  EXPECT_EQ(oxygen::base::ComputeFileSha256(path),
-    oxygen::base::ComputeSha256(ToBytes(replacement)));
+  {
+    const auto digest = oxygen::serio::ComputeFileSha256(path);
+    ASSERT_HAS_VALUE(digest) << digest.error().message();
+    EXPECT_EQ(*digest, oxygen::base::ComputeSha256(ToBytes(replacement)));
+  }
   {
     auto file = oxygen::serio::NativeFile::Open(path, {});
     ASSERT_TRUE(file) << file.error().message();
@@ -164,7 +176,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteSmallFileWritesContent)
 
 NOLINT_TEST_F(WindowsFileWriterTest, WriteLargerFileWritesContent)
 {
-  std::string content(64 * 1024, 'X'); // 64KB
+  std::string content(size_t { 64 } * 1024, 'X'); // 64KB
   for (size_t i = 0; i < content.size(); ++i) {
     content.at(i) = static_cast<char>('A' + (i % 26));
   }
