@@ -7,12 +7,12 @@
 // Covers: Serio/Device.h, Serio/NativeFile.h, Serio/MappedFile.h,
 // Serio/MemoryFile.h, Serio/ByteView.h, Serio/AnyDevice.h, Serio/Region.h,
 // Serio/Platform/*/NativeFile.cpp, Serio/Platform/*/MappedFile.cpp,
-// Serio/Testing/DeviceConformance.h, Serio/Testing/FaultInjectingDevice.h
+// Serio/test/Support/DeviceConformance.h, Serio/Testing/FaultInjectingDevice.h
 
+#include "Support/DeviceConformance.h"
 #include "Support/DeviceFactories.h"
 #include "gtest/gtest.h"
 
-#include <Oxygen/Serio/Testing/DeviceConformance.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::serio::testing {

@@ -5,13 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 // Covers: Serio/Stream.h, Serio/MemoryStream.h, Serio/RegionStream.h,
-// Serio/AnyStream.h, Serio/Testing/StreamConformance.h
+// Serio/AnyStream.h, Serio/test/Support/StreamConformance.h
 
 #include "Support/DeviceFactories.h"
+#include "Support/StreamConformance.h"
 #include "Support/StreamFactories.h"
 #include "gtest/gtest.h"
 
-#include <Oxygen/Serio/Testing/StreamConformance.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::serio::testing {

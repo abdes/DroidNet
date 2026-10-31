@@ -47,7 +47,7 @@ using oxygen::serio::ByteReader;
 using oxygen::serio::Error;
 
 //! Parses a header, a name and a trailing value out of one buffer.
-class ByteReaderTest : public testing::Test {
+class ByteReaderTest : public ::testing::Test {
 protected:
   static constexpr std::string_view kName = "texture";
   static constexpr uint32_t kTrailer = 0xA5A5'0001U;

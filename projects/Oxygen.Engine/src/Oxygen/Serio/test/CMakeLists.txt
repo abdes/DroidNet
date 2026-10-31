@@ -59,6 +59,7 @@ oxygen_serio_test(
   Unit
   SOURCES
     "Support/DeviceFactories.h"
+    "Support/StreamConformance.h"
     "Support/StreamFactories.h"
     "AnyDevice_test.cpp"
     "ByteBuffer_test.cpp"
@@ -83,7 +84,10 @@ oxygen_serio_test(
 oxygen_serio_test(
   Functional
   SOURCES
+    "Support/AsyncDeviceConformance.h"
+    "Support/DeviceConformance.h"
     "Support/DeviceFactories.h"
+    "Support/StreamConformance.h"
     "Support/StreamFactories.h"
     "AsyncDeviceConformance_functional_test.cpp"
     "AsyncFile_functional_test.cpp"

@@ -57,6 +57,8 @@ public:
 
   //! The buffered, patchable stream of the file's content.
   OXGN_SERIO_NDAPI auto Stream() noexcept -> RegionWriteStream<NativeFile>&;
+  OXGN_SERIO_NDAPI auto Stream() const noexcept
+    -> const RegionWriteStream<NativeFile>&;
 
   //! Publishes what was written; the writer is spent whether it succeeds or
   //! not, and a failure leaves the destination as it was.

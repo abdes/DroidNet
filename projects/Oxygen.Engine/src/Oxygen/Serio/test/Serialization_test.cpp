@@ -90,7 +90,7 @@ static_assert(Storable<bool>);
 static_assert(!Storable<ImplicitCount>);
 
 //! Writes values to a memory stream, then reads them back from its start.
-class SerializationTest : public testing::Test {
+class SerializationTest : public ::testing::Test {
 protected:
   template <typename T> auto Write(const T& value) -> void
   {

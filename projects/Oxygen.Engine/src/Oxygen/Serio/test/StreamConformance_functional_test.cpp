@@ -8,10 +8,10 @@
 // Serio/MappedFile.h
 
 #include "Support/DeviceFactories.h"
+#include "Support/StreamConformance.h"
 #include "Support/StreamFactories.h"
 #include "gtest/gtest.h"
 
-#include <Oxygen/Serio/Testing/StreamConformance.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::serio::testing {

@@ -6,12 +6,12 @@
 
 // Covers: Serio/Operation.h, Serio/AsyncDevice.h, Serio/AsyncFile.h,
 // Serio/AnyDevice.h (AnyAsyncDevice), Serio/Region.h,
-// Serio/Testing/AsyncDeviceConformance.h
+// Serio/test/Support/AsyncDeviceConformance.h
 
+#include "Support/AsyncDeviceConformance.h"
 #include "Support/DeviceFactories.h"
 #include "gtest/gtest.h"
 
-#include <Oxygen/Serio/Testing/AsyncDeviceConformance.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::serio::testing {

@@ -163,8 +163,8 @@ target_link_libraries(
 # Tests
 # ------------------------------------------------------------------------------
 
-# Test support (fault injection, the device conformance suite) for Serio's
-# tests and for any module that defines its own device. Linked by tests only.
+# Test kit (fault injection, test bytes) for Serio's tests and for the tests of
+# any module that reads or writes through Serio. Linked by tests only.
 if(OXYGEN_BUILD_TESTS)
   add_library(Oxygen.Serio.Testing INTERFACE)
   add_library(oxygen::serio::testing ALIAS Oxygen.Serio.Testing)
@@ -173,12 +173,7 @@ if(OXYGEN_BUILD_TESTS)
     INTERFACE
       FILE_SET HEADERS
       BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-      FILES
-        "Testing/AsyncDeviceConformance.h"
-        "Testing/DeviceConformance.h"
-        "Testing/FaultInjectingDevice.h"
-        "Testing/StreamConformance.h"
-        "Testing/TestBytes.h"
+      FILES "Testing/FaultInjectingDevice.h" "Testing/TestBytes.h"
   )
   target_link_libraries(
     Oxygen.Serio.Testing

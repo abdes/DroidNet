@@ -96,6 +96,28 @@ NOLINT_TEST(IntegrityTest, ComputeSha256_HashesARegionOnly)
   EXPECT_EQ(*crc, oxygen::base::ComputeCrc32(inside));
 }
 
+//! A device hashed in pieces leaves out a skipped field that spans two of
+//! its pieces.
+NOLINT_TEST(IntegrityTest, ComputeCrc32_LeavesOutASkippedField)
+{
+  const auto bytes = PatternBytes(kLargeSize);
+  const auto file = MemoryFile::FromBytes(bytes);
+  ASSERT_HAS_VALUE(file);
+  const auto field = ByteRange {
+    .offset = ByteOffset { oxygen::serio::kHashBufferSize.get() - 2 },
+    .count = ByteCount { 4 },
+  };
+
+  const auto crc = oxygen::serio::ComputeCrc32(*file, std::span { &field, 1 });
+  const auto sha = oxygen::serio::ComputeSha256(*file, std::span { &field, 1 });
+
+  const auto kept = Without(bytes, field);
+  ASSERT_HAS_VALUE(crc);
+  ASSERT_HAS_VALUE(sha);
+  EXPECT_EQ(*crc, oxygen::base::ComputeCrc32(kept));
+  EXPECT_EQ(*sha, oxygen::base::ComputeSha256(kept));
+}
+
 //! An empty device hashes to the digests of no bytes.
 NOLINT_TEST(IntegrityTest, ComputeSha256_OfAnEmptyDeviceIsTheEmptyDigest)
 {

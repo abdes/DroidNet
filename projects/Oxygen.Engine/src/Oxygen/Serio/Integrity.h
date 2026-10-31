@@ -293,38 +293,44 @@ private:
   detail::HashSet<H...> hashes_;
 };
 
-//! Hashes all of `source`, a device or a region, reading it once; the
-//! digests come in the order of `H...`.
+//! Hashes all of `source`, a device or a region, reading it once, except the
+//! bytes inside `skips` (a field that holds the checksum itself); the digests
+//! come in the order of `H...`.
 template <IncrementalHash... H, ReadableDevice D>
   requires(sizeof...(H) > 0)
-[[nodiscard]] auto Hash(const D& source) noexcept
+[[nodiscard]] auto Hash(
+  const D& source, const std::span<const ByteRange> skips = {}) noexcept
   -> Result<std::tuple<DigestOf<H>...>>
 {
   auto hashes = detail::HashSet<H...> {};
+  auto at = ByteOffset { 0 };
   CHECK_RESULT(detail::ReadInPieces(
-    source, [&hashes](const std::span<const std::byte> piece) {
-      hashes.Update(piece);
+    source, [&hashes, &at, skips](const std::span<const std::byte> piece) {
+      detail::UpdateExcept(hashes, at, piece, skips);
+      at += CountOf(piece.size());
     }));
   return ::oxygen::Ok(hashes.Digests());
 }
 
-//! The SHA-256 of all of `source`, a device or a region.
+//! The SHA-256 of all of `source`, a device or a region, except `skips`.
 template <ReadableDevice D>
-[[nodiscard]] auto ComputeSha256(const D& source) noexcept
+[[nodiscard]] auto ComputeSha256(
+  const D& source, const std::span<const ByteRange> skips = {}) noexcept
   -> Result<base::Sha256Digest>
 {
-  auto digests = Hash<base::Sha256>(source);
+  auto digests = Hash<base::Sha256>(source, skips);
   if (!digests) {
     return ::oxygen::Err(digests.error());
   }
   return ::oxygen::Ok(std::get<0>(*digests));
 }
 
-//! The CRC32 of all of `source`, a device or a region.
+//! The CRC32 of all of `source`, a device or a region, except `skips`.
 template <ReadableDevice D>
-[[nodiscard]] auto ComputeCrc32(const D& source) noexcept -> Result<uint32_t>
+[[nodiscard]] auto ComputeCrc32(const D& source,
+  const std::span<const ByteRange> skips = {}) noexcept -> Result<uint32_t>
 {
-  auto digests = Hash<base::Crc32>(source);
+  auto digests = Hash<base::Crc32>(source, skips);
   if (!digests) {
     return ::oxygen::Err(digests.error());
   }

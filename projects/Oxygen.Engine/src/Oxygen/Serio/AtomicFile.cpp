@@ -251,6 +251,12 @@ auto AtomicFileWriter::Stream() noexcept -> RegionWriteStream<NativeFile>&
   return state_->stream;
 }
 
+auto AtomicFileWriter::Stream() const noexcept
+  -> const RegionWriteStream<NativeFile>&
+{
+  return state_->stream;
+}
+
 auto AtomicFileWriter::Commit() && -> Result<AtomicFileCommit>
 {
   const auto state = std::move(state_);
