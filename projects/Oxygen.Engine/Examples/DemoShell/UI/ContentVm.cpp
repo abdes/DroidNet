@@ -129,7 +129,6 @@ ContentVm::ContentVm(observer_ptr<ContentSettingsService> settings_service,
     }
   }
 
-  RefreshSources();
   RefreshLibrary();
 }
 
@@ -495,20 +494,40 @@ auto ContentVm::RefreshSources() -> void
   LOG_F(INFO, "ContentVm: Refreshing sources. Model root: '{}'",
     s.model_root.string());
 
+  // A saved root can outlive the folder it named (content moves); scan the
+  // default DCC folder instead, without overwriting the saved choice.
+  auto root = s.model_root;
   std::error_code ec;
-  if (s.model_root.empty()) {
+  if (!root.empty() && file_browser_
+    && !std::filesystem::exists(base::ToNativePath(root), ec) && !ec) {
+    const auto fallback = file_browser_->GetContentRoots().dcc_directory;
+    LOG_F(WARNING,
+      "ContentVm: Model root does not exist: '{}'; scanning the default '{}'",
+      root.string(), fallback.string());
+    root = fallback;
+  }
+  if (root.empty()) {
     LOG_F(WARNING, "ContentVm: Model root is empty. No sources will be found.");
-  } else if (!std::filesystem::exists(base::ToNativePath(s.model_root), ec)) {
-    LOG_F(WARNING, "ContentVm: Model root does not exist: '{}' (error: {})",
-      s.model_root.string(), ec.message());
-  } else if (!std::filesystem::is_directory(
-               base::ToNativePath(s.model_root), ec)) {
-    LOG_F(WARNING, "ContentVm: Model root is not a directory: '{}' (error: {})",
-      s.model_root.string(), ec.message());
+  } else if (!std::filesystem::exists(base::ToNativePath(root), ec)) {
+    if (ec) {
+      LOG_F(WARNING, "ContentVm: Cannot check model root '{}': {}",
+        root.string(), ec.message());
+    } else {
+      LOG_F(
+        WARNING, "ContentVm: Model root does not exist: '{}'", root.string());
+    }
+  } else if (!std::filesystem::is_directory(base::ToNativePath(root), ec)) {
+    if (ec) {
+      LOG_F(WARNING, "ContentVm: Cannot check model root '{}': {}",
+        root.string(), ec.message());
+    } else {
+      LOG_F(WARNING, "ContentVm: Model root is not a directory: '{}'",
+        root.string());
+    }
   } else {
     LOG_F(INFO, "ContentVm: Scanning model root for FBX/GLB/GLTF files...");
     for (const auto& entry : std::filesystem::recursive_directory_iterator(
-           base::ToNativePath(s.model_root), ec)) {
+           base::ToNativePath(root), ec)) {
       if (ec) {
         LOG_F(ERROR, "ContentVm: Error during iteration at '{}': {}",
           entry.path().string(), ec.message());
@@ -530,7 +549,7 @@ auto ContentVm::RefreshSources() -> void
       const auto path = base::ToLogicalPath(entry.path());
       sources.push_back({
         .path = path,
-        .relative_path = path.lexically_relative(s.model_root).generic_string(),
+        .relative_path = path.lexically_relative(root).generic_string(),
         .format = ext == ".fbx" ? content::import::ImportFormat::kFbx
                                 : content::import::ImportFormat::kGltf,
       });
