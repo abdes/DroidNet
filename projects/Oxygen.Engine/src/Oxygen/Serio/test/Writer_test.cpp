@@ -255,7 +255,7 @@ NOLINT_TEST_F(WriterErrorTest, WriteString_Fails_WhenTooLarge)
 
   // Assert
   EXPECT_FALSE(result);
-  EXPECT_EQ(result.error(), std::make_error_code(std::errc::value_too_large));
+  EXPECT_EQ(result.error(), Error::kTooLarge);
 }
 
 //! Fails when writing an array that exceeds the maximum allowed length.
@@ -270,7 +270,7 @@ NOLINT_TEST_F(WriterErrorTest, WriteArray_Fails_WhenTooLarge)
 
   // Assert
   EXPECT_FALSE(result);
-  EXPECT_EQ(result.error(), std::make_error_code(std::errc::message_size));
+  EXPECT_EQ(result.error(), Error::kTooLarge);
 }
 
 //! Fails when writing a blob if the device fails.

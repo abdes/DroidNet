@@ -12,7 +12,6 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
-#include <string>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -68,6 +67,15 @@ public:
   [[nodiscard]] auto Position() noexcept -> Result<size_t> override
   {
     return reader_.Position();
+  }
+
+  [[nodiscard]] auto Remaining() noexcept -> serio::ByteCount override
+  {
+    const auto position = reader_.Position();
+    if (!position || *position < begin_ || *position > end_) {
+      return serio::ByteCount { 0 };
+    }
+    return serio::CountOf(end_ - *position);
   }
 
   [[nodiscard]] auto AlignTo(const size_t alignment) noexcept

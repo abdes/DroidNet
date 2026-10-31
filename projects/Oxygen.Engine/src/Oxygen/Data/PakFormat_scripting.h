@@ -10,6 +10,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Serio/Record.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
@@ -194,6 +195,13 @@ struct ScriptAssetDesc {
 static_assert(sizeof(ScriptAssetDesc) == 83);
 
 } // namespace oxygen::data::pak::scripting
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::pak::scripting::ScriptingComponentRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::scripting::ScriptSlotRecord> = true;
+} // namespace oxygen::serio
+// clang-format on
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

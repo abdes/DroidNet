@@ -8,6 +8,8 @@
 
 #include <cstdint>
 
+#include <Oxygen/Serio/Record.h>
+
 namespace oxygen::data::pak::core {
 
 //! Locates one asset's resource bindings followed by its key references.
@@ -22,3 +24,9 @@ struct AssetReferenceTable {
 static_assert(sizeof(AssetReferenceTable) == 16);
 
 } // namespace oxygen::data::pak::core
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::pak::core::AssetReferenceTable> = true;
+} // namespace oxygen::serio
+// clang-format on

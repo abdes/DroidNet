@@ -64,6 +64,7 @@ enum class InputTriggerBehavior : uint8_t {
 // NOLINTNEXTLINE(*-macro-*)
 #define OXNPUT_ACTION_TRIGGER_BEHAVIOR(name, value) name = value,
 #include <Oxygen/Core/Meta/Input/ActionTriggers.inc>
+#include <Oxygen/Serio/Record.h>
 #undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
 #undef OXNPUT_ACTION_TRIGGER_TYPE // NOLINT
 };
@@ -141,6 +142,15 @@ struct InputTriggerAuxRecord {
 static_assert(sizeof(InputTriggerAuxRecord) == 32);
 
 } // namespace oxygen::data::pak::input
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::pak::input::InputDataTable> = true;
+template <> inline constexpr bool kIsRecord<data::pak::input::InputActionMappingRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::input::InputTriggerRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::input::InputTriggerAuxRecord> = true;
+} // namespace oxygen::serio
+// clang-format on
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

@@ -12,6 +12,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Serio/Record.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
@@ -330,6 +331,14 @@ static_assert(sizeof(MeshViewDesc) == 40);
 static_assert(std::is_trivially_copyable_v<MeshViewDesc>);
 
 } // namespace oxygen::data::pak::geometry
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::pak::geometry::MeshViewDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::geometry::LodPolicyRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::geometry::SurfaceDesc> = true;
+} // namespace oxygen::serio
+// clang-format on
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

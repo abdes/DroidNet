@@ -9,6 +9,7 @@
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/Record.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
@@ -292,6 +293,14 @@ struct TexturePayloadHeader {
 static_assert(sizeof(TexturePayloadHeader) == 28);
 
 } // namespace oxygen::data::pak::render
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::pak::render::ShaderReferenceDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::render::SubresourceLayout> = true;
+template <> inline constexpr bool kIsRecord<data::pak::render::TexturePayloadHeader> = true;
+} // namespace oxygen::serio
+// clang-format on
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

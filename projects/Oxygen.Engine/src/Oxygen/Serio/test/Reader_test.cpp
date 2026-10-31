@@ -361,7 +361,7 @@ NOLINT_TEST_F(ReaderErrorTest, ReadString_Fails_WhenTooLarge)
 
   const auto result = GetReader().Read<std::string>();
   EXPECT_FALSE(result);
-  EXPECT_EQ(result.error(), std::make_error_code(std::errc::value_too_large));
+  EXPECT_EQ(result.error(), Error::kTooLarge);
 }
 
 //! Fails when reading an array that exceeds the maximum allowed length.
@@ -373,7 +373,7 @@ NOLINT_TEST_F(ReaderErrorTest, ReadArray_Fails_WhenTooLarge)
 
   const auto result = GetReader().Read<std::vector<uint32_t>>();
   EXPECT_FALSE(result);
-  EXPECT_EQ(result.error(), std::make_error_code(std::errc::value_too_large));
+  EXPECT_EQ(result.error(), Error::kTooLarge);
 }
 
 //! Fails when reading a POD value if the device fails.

@@ -21,17 +21,7 @@ inline auto Store(AnyWriter& writer,
   if (!data::pak::world::HasValidPerspectiveCameraValues(record)) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
-  auto pack = writer.ScopedAlignment(1);
-  CHECK_RESULT(writer.Write(record.node_index));
-  CHECK_RESULT(writer.Write(record.fov_y));
-  CHECK_RESULT(writer.Write(record.aspect_ratio));
-  CHECK_RESULT(writer.Write(record.near_plane));
-  CHECK_RESULT(writer.Write(record.far_plane));
-  CHECK_RESULT(writer.Write(record.aperture_f));
-  CHECK_RESULT(writer.Write(record.shutter_rate));
-  CHECK_RESULT(writer.Write(record.iso));
-  CHECK_RESULT(writer.Write(record.aspect_mode));
-  return {};
+  return StoreRecord(writer, record);
 }
 
 //! Store the current packed camera record, rejecting invalid volumes.
@@ -41,19 +31,7 @@ inline auto Store(AnyWriter& writer,
   if (!data::pak::world::HasValidOrthographicCameraValues(record)) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
-  auto pack = writer.ScopedAlignment(1);
-  CHECK_RESULT(writer.Write(record.node_index));
-  CHECK_RESULT(writer.Write(record.left));
-  CHECK_RESULT(writer.Write(record.right));
-  CHECK_RESULT(writer.Write(record.bottom));
-  CHECK_RESULT(writer.Write(record.top));
-  CHECK_RESULT(writer.Write(record.near_plane));
-  CHECK_RESULT(writer.Write(record.far_plane));
-  CHECK_RESULT(writer.Write(record.aperture_f));
-  CHECK_RESULT(writer.Write(record.shutter_rate));
-  CHECK_RESULT(writer.Write(record.iso));
-  CHECK_RESULT(writer.Write(record.aspect_mode));
-  return {};
+  return StoreRecord(writer, record);
 }
 
 //! Store only the current exposure prefix; its curve keys follow separately.
@@ -75,45 +53,7 @@ inline auto Store(AnyWriter& writer,
     || !std::ranges::all_of(record.curve_reserved, reserved_is_zero)) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
-  auto pack = writer.ScopedAlignment(1);
-  CHECK_RESULT(writer.Write(record.header.system_type));
-  CHECK_RESULT(writer.Write(record.header.record_size));
-  CHECK_RESULT(writer.Write(record.enabled));
-  CHECK_RESULT(writer.Write(record.tone_mapper));
-  CHECK_RESULT(writer.Write(record.exposure_mode));
-  CHECK_RESULT(writer.Write(record.exposure_compensation_ev));
-  CHECK_RESULT(writer.Write(record.auto_exposure_min_ev));
-  CHECK_RESULT(writer.Write(record.auto_exposure_max_ev));
-  CHECK_RESULT(writer.Write(record.auto_exposure_speed_up));
-  CHECK_RESULT(writer.Write(record.auto_exposure_speed_down));
-  CHECK_RESULT(writer.Write(record.bloom_intensity));
-  CHECK_RESULT(writer.Write(record.bloom_threshold));
-  CHECK_RESULT(writer.Write(record.saturation));
-  CHECK_RESULT(writer.Write(record.contrast));
-  CHECK_RESULT(writer.Write(record.vignette_intensity));
-  CHECK_RESULT(writer.Write(record.exposure_enabled));
-  CHECK_RESULT(writer.Write(record.exposure_key));
-  CHECK_RESULT(writer.Write(record.manual_exposure_ev));
-  CHECK_RESULT(writer.Write(record.auto_exposure_metering_mode));
-  CHECK_RESULT(writer.Write(record.auto_exposure_low_percentile));
-  CHECK_RESULT(writer.Write(record.auto_exposure_high_percentile));
-  CHECK_RESULT(writer.Write(record.auto_exposure_min_log_luminance));
-  CHECK_RESULT(writer.Write(record.auto_exposure_log_luminance_range));
-  CHECK_RESULT(writer.Write(record.auto_exposure_target_luminance));
-  CHECK_RESULT(writer.Write(record.auto_exposure_spot_meter_radius));
-  CHECK_RESULT(writer.Write(record.display_gamma));
-  CHECK_RESULT(writer.Write(record.exposure_extension_version));
-  CHECK_RESULT(writer.Write(record.auto_exposure_black_influence));
-  CHECK_RESULT(writer.Write(record.auto_exposure_transition_distance_ev));
-  CHECK_RESULT(writer.Write(record.auto_exposure_metering_mask.get()));
-  for (const auto value : record.exposure_reserved) {
-    CHECK_RESULT(writer.Write(value));
-  }
-  CHECK_RESULT(writer.Write(record.curve_key_count));
-  for (const auto value : record.curve_reserved) {
-    CHECK_RESULT(writer.Write(value));
-  }
-  return {};
+  return StoreRecord(writer, record);
 }
 
 inline auto Store(AnyWriter& writer,
@@ -122,10 +62,7 @@ inline auto Store(AnyWriter& writer,
   if (!std::isfinite(key.metered_ev) || !std::isfinite(key.compensation_ev)) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
-  auto pack = writer.ScopedAlignment(1);
-  CHECK_RESULT(writer.Write(key.metered_ev));
-  CHECK_RESULT(writer.Write(key.compensation_ev));
-  return {};
+  return StoreRecord(writer, key);
 }
 
 } // namespace oxygen::serio

@@ -97,6 +97,7 @@ enum class AggregateAuthority : uint8_t {
 #define OXPHYS_BINDING_TYPE(name, value) name = (value),
 enum class PhysicsBindingType : uint32_t {
 #include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
+#include <Oxygen/Serio/Record.h>
 };
 #undef OXPHYS_BINDING_TYPE
 // NOLINTEND(*-macro-usage)
@@ -610,6 +611,32 @@ static_assert(sizeof(AggregateBindingRecord) == 13);
 static_assert(offsetof(AggregateBindingRecord, authority) == 12);
 
 } // namespace oxygen::data::pak::physics
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::pak::physics::PhysicsResourceDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::PhysicsMaterialAssetDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::CookedShapePayloadRef> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::ShapeParams> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::CompoundShapeChildDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::CollisionShapeAssetDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::PhysicsComponentTableDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::PhysicsSceneAssetDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::RigidBodyBackendScalars> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::CharacterBackendScalars> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::SoftBodyBackendScalars> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::JointBackendScalars> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::VehicleWheelBackendScalars> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::RigidBodyBindingRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::ColliderBindingRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::CharacterBindingRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::SoftBodyBindingRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::JointBindingRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::VehicleBindingRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::AggregateBindingRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::physics::VehicleWheelBindingRecord> = true;
+} // namespace oxygen::serio
+// clang-format on
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

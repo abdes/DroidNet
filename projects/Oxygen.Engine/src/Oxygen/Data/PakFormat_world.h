@@ -24,6 +24,7 @@
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Serio/Record.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
@@ -1130,6 +1131,33 @@ static_assert(
 static_assert(offsetof(DirectionalLightRecord, intensity_lux) == 93);
 
 } // namespace oxygen::data::pak::world
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::ResourceReferenceIndex> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::SceneDataTable> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::NodeRef> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::NodePathRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::NodePathElement> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::SceneAssetDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::SceneComponentTableDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::NodeRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::RenderableRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::SceneInstanceRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::StartingInputContextRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::OverrideRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::SceneEnvironmentBlockHeader> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::SceneEnvironmentSystemRecordHeader> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::SkyAtmosphereEnvironmentRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::VolumetricCloudsEnvironmentRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::FogEnvironmentRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::SkyLightEnvironmentRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::SkySphereEnvironmentRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::BackgroundEnvironmentRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::LightShadowSettingsRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::world::LightCommonRecord> = true;
+} // namespace oxygen::serio
+// clang-format on
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

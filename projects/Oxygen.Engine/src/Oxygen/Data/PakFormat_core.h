@@ -47,6 +47,7 @@ using OffsetT = uint64_t;
 
 // Resource index type/constants are sourced from Core metadata catalog.
 #include <Oxygen/Core/Meta/Data/ResourceIndex.inc>
+#include <Oxygen/Serio/Record.h>
 
 //! Data blob size type
 using DataBlobSizeT = uint32_t;
@@ -423,6 +424,24 @@ struct AssetHeader {
 static_assert(sizeof(AssetHeader) == 51);
 
 } // namespace oxygen::data::pak::core
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::AssetKey> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::ResourceIndexT> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::ResourceRegion> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::ResourceTable> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::PakHeader> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::PakFooter> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::AssetDirectoryEntry> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::PakBrowseIndexHeader> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::PakBrowseIndexEntry> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::PakBrowseIndexTextureEntry> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::BufferResourceDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::TextureResourceDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::core::AssetHeader> = true;
+} // namespace oxygen::serio
+// clang-format on
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

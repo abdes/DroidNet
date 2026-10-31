@@ -18,6 +18,7 @@
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Composition/Typed.h>
@@ -50,8 +51,8 @@ namespace oxygen::content::internal {
 namespace {
 
   struct SourceReadAccess final {
-    observer_ptr<const ContentSourceRegistry> registry {};
-    data::SourceInstanceId instance {};
+    observer_ptr<const ContentSourceRegistry> registry;
+    data::SourceInstanceId instance;
 
     [[nodiscard]] auto IsReadable() const -> bool
     {
@@ -75,6 +76,8 @@ namespace {
     }
 
     ~MemoryAnyReader() override = default;
+    OXYGEN_MAKE_NON_COPYABLE(MemoryAnyReader)
+    OXYGEN_MAKE_NON_MOVABLE(MemoryAnyReader)
 
     auto ReadBlob(size_t size) noexcept
       -> oxygen::Result<std::vector<std::byte>> override
@@ -91,6 +94,11 @@ namespace {
     auto Position() noexcept -> oxygen::Result<size_t> override
     {
       return reader_->Position();
+    }
+
+    auto Remaining() noexcept -> oxygen::serio::ByteCount override
+    {
+      return reader_->Remaining();
     }
 
     auto AlignTo(size_t alignment) noexcept -> oxygen::Result<void> override
@@ -153,7 +161,7 @@ namespace {
     return false;
   }
 
-  template <typename Fn> auto WithResourceType(const TypeId type, Fn&& fn)
+  template <typename Fn> auto WithResourceType(const TypeId type, const Fn& fn)
   {
     if (type == data::TextureResource::ClassTypeId()) {
       return fn.template operator()<data::TextureResource>();
@@ -187,7 +195,7 @@ namespace {
 
   struct PreparedResourceDecode final {
     ResourceLoadPipeline::ResourceLoadFn loader;
-    data::SourceInstanceId source_instance {};
+    data::SourceInstanceId source_instance;
     std::unique_ptr<serio::AnyReader> desc_reader;
     std::unique_ptr<serio::AnyReader> buf_reader;
     std::unique_ptr<serio::AnyReader> tex_reader;
@@ -198,7 +206,7 @@ namespace {
 
   struct ResolvedSourceForDecode final {
     std::shared_ptr<const IContentSource> source;
-    data::SourceInstanceId source_instance {};
+    data::SourceInstanceId source_instance;
   };
 
   auto ResolveSourceById(const ContentSourceRegistry& source_registry,

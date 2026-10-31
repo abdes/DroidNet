@@ -8,13 +8,23 @@
 
 #include <array>
 #include <bit>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <optional>
 #include <span>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Endian.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/AlignmentGuard.h>
+#include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/Record.h>
 #include <Oxygen/Serio/Stream.h>
 
 namespace oxygen::serio {
@@ -47,7 +57,7 @@ public:
     const limits::SequenceSizeType max) noexcept -> Result<void>
   {
     if (size > max) {
-      return ::oxygen::Err(std::errc::value_too_large);
+      return ::oxygen::Err(make_error_code(Error::kTooLarge));
     }
     CHECK_RESULT(AlignTo(alignof(limits::SequenceSizeType)));
     CHECK_RESULT(Write(size));
@@ -134,7 +144,8 @@ public:
   /*!
    Aligns the stream position to the specified alignment boundary by adding
    padding (0x0) bytes if necessary. If a scoped alignment is active, it
-   overrides the requested alignment. No action is taken if already aligned.
+   overrides the requested alignment. No action is taken if already aligned, and
+   an effective alignment of 1 costs nothing.
 
    @param alignment The alignment boundary in bytes (power of two, 1 to 256).
    @return Result of the alignment operation; error if the alignment is invalid
@@ -149,6 +160,9 @@ public:
     if (const auto current = CurrentAlignment(); current != 0) {
       // override alignment with the top of the stack
       effective_alignment = current;
+    }
+    if (effective_alignment == 1) {
+      return {};
     }
     if (effective_alignment == 0 || !std::has_single_bit(effective_alignment)
       || effective_alignment > kMaxAlignment) {
@@ -239,28 +253,42 @@ auto Store(AnyWriter& writer, T value) -> Result<void>
     std::span(reinterpret_cast<const std::byte*>(&value), sizeof(T)));
 }
 
-//! Serializes trivially copyable POD types by raw byte copy.
-/*! Aligns to the natural alignment of T and writes the in-memory
-    representation without endianness conversion. Intended for packed
-    structs used in asset formats (e.g., PAK descriptors).
-
- @tparam T Trivially copyable non-arithmetic POD type
- @param writer Writer to serialize to
- @param value Value to serialize
- @return Result of the write operation
-
- @see Store, AnyWriter
-*/
+//! Serializes an enum value via its underlying type.
 template <typename T>
-auto Store(AnyWriter& writer, const T& value) -> Result<void>
-  requires(std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>
-    && !std::is_integral_v<T> && !std::is_floating_point_v<T>)
+auto Store(AnyWriter& writer, const T value) -> Result<void>
+  requires(std::is_enum_v<T>)
 {
-  static_assert(std::has_unique_object_representations_v<T>,
-    "Type must have a unique object representation for binary serialization");
+  return writer.Write(std::to_underlying(value));
+}
+
+//! Serializes a `bool` as one byte, 0 or 1. Only a `bool` binds here, so a
+//! type without its own `Store` never converts to `bool` silently.
+template <std::same_as<bool> T>
+auto Store(AnyWriter& writer, const T value) -> Result<void>
+{
+  return writer.Write(static_cast<uint8_t>(value ? 1U : 0U));
+}
+
+//! Writes `value` as one copy of its bytes, aligned like any value to its
+//! natural alignment unless a `ScopedAlignment()` is set.
+/*!
+ @see kIsRecord, RecordLayout, LoadRecord
+*/
+template <RecordLayout T>
+auto StoreRecord(AnyWriter& writer, const T& value) -> Result<void>
+{
   CHECK_RESULT(writer.AlignTo(alignof(T)));
-  const auto bytes = std::as_bytes(std::span(&value, static_cast<size_t>(1)));
-  return writer.WriteBlob(bytes);
+  return writer.WriteBlob(std::as_bytes(std::span { &value, 1 }));
+}
+
+//! Serializes a record (`StoreRecord`).
+template <Record T>
+auto Store(AnyWriter& writer, const T& value) -> Result<void>
+{
+  static_assert(RecordLayout<T>,
+    "a record must be trivially copyable, without padding, on a "
+    "little-endian target");
+  return StoreRecord(writer, value);
 }
 
 //! Serializes a std::string as a 32-bit length prefix followed by raw bytes.
@@ -280,7 +308,7 @@ auto Store(AnyWriter& writer, const T& value) -> Result<void>
 inline auto Store(AnyWriter& writer, const std::string& value) -> Result<void>
 {
   if (value.length() > limits::kMaxStringLength) {
-    return ::oxygen::Err(std::errc::value_too_large);
+    return ::oxygen::Err(make_error_code(Error::kTooLarge));
   }
 
   // Write the length of the string, bounds-checked and properly aligned.
@@ -314,120 +342,78 @@ inline auto Store(AnyWriter& writer, const Uuid& value) -> Result<void>
   return writer.WriteBlob(oxygen::as_bytes(value));
 }
 
-//! Serializes a std::vector as a 32-bit length prefix followed by each element.
-/*!
- Encodes the vector as a 32-bit unsigned length (platform endianness), followed
- by each element encoded in sequence. The length and each element are aligned in
- the stream according to its natural alignment, unless a specific packing
- directive is currently set with `ScopedAlignment()`.
+namespace detail {
+  //! Writes a sequence: its 32-bit length prefix, then its elements. Records
+  //! and arithmetic elements are written as one copy after aligning once to
+  //! their natural alignment; other elements one by one.
+  template <typename T>
+  auto StoreSequence(AnyWriter& writer, const std::span<const T> elements)
+    -> Result<void>
+  {
+    if (elements.size() > limits::kMaxArrayLength) {
+      return ::oxygen::Err(make_error_code(Error::kTooLarge));
+    }
+    CHECK_RESULT(writer.WriteSequenceSize(
+      static_cast<limits::SequenceSizeType>(elements.size()),
+      limits::kMaxArrayLength));
+    if (elements.empty()) {
+      return {};
+    }
+    if constexpr (BulkElement<T>) {
+      CHECK_RESULT(writer.AlignTo(alignof(T)));
+      return writer.WriteBlob(std::as_bytes(elements));
+    } else {
+      for (const auto& element : elements) {
+        CHECK_RESULT(writer.Write(element));
+      }
+      return {};
+    }
+  }
+} // namespace detail
 
- @tparam T Element type
- @param writer Writer to serialize to
- @param value Vector to serialize
- @return Result of the write operation
-
- @see Store, AnyWriter
-*/
+//! Serializes a std::vector as a sequence (`detail::StoreSequence`).
 template <typename T>
 auto Store(AnyWriter& writer, const std::vector<T>& value) -> Result<void>
 {
-  if (value.size() > limits::kMaxArrayLength) {
-    return ::oxygen::Err(std::errc::message_size);
+  if constexpr (std::is_same_v<T, bool>) {
+    if (value.size() > limits::kMaxArrayLength) {
+      return ::oxygen::Err(make_error_code(Error::kTooLarge));
+    }
+    CHECK_RESULT(writer.WriteSequenceSize(
+      static_cast<limits::SequenceSizeType>(value.size()),
+      limits::kMaxArrayLength));
+    for (const bool element : value) {
+      CHECK_RESULT(writer.Write(element));
+    }
+    return {};
+  } else {
+    return detail::StoreSequence(writer, std::span<const T> { value });
   }
-
-  // Write the size of the array, bounds-checked and properly aligned.
-  CHECK_RESULT(writer.WriteSequenceSize(
-    static_cast<limits::SequenceSizeType>(value.size()),
-    limits::kMaxArrayLength));
-
-  // Align for array elements if needed
-  if constexpr (sizeof(T) > 1) {
-    CHECK_RESULT(writer.AlignTo(alignof(T)));
-  }
-
-  // Write array data
-  for (const auto& item : value) {
-    CHECK_RESULT(writer.Write(item));
-  }
-
-  return {};
 }
 
-//! Serializes a std::array as a 32-bit length prefix followed by each element.
-/*!
- Encodes the array as a 32-bit unsigned length (platform endianness), followed
- by each element encoded in sequence. The length and each element are aligned in
- the stream according to its natural alignment, unless a specific packing
- directive is currently set with `ScopedAlignment()`.
-
- @tparam T Element type
- @tparam N Array size
- @param writer Writer to serialize to
- @param value Array to serialize
- @return Result of the write operation
-
- @see Store, AnyWriter
-*/
-template <typename T, std::size_t N>
+//! Serializes a std::array as a sequence (`detail::StoreSequence`).
+template <typename T, size_t N>
 auto Store(AnyWriter& writer, const std::array<T, N>& value) -> Result<void>
 {
-  if (N > limits::kMaxArrayLength) {
-    return ::oxygen::Err(std::errc::message_size);
-  }
-
-  // Write the size of the array, bounds-checked and properly aligned.
-  CHECK_RESULT(writer.WriteSequenceSize(
-    static_cast<limits::SequenceSizeType>(N), limits::kMaxArrayLength));
-
-  // Align for array elements if needed
-  if constexpr (sizeof(T) > 1) {
-    CHECK_RESULT(writer.AlignTo(alignof(T)));
-  }
-
-  // Write array data
-  for (const auto& item : value) {
-    CHECK_RESULT(writer.Write(item));
-  }
-
-  return {};
+  return detail::StoreSequence(writer, std::span<const T> { value });
 }
 
-//! Serializes a std::span as a 32-bit length prefix followed by each element.
-/*!
- Encodes the span as a 32-bit unsigned length (platform endianness), followed
- by each element encoded in sequence. The length and each element are aligned in
- the stream according to their natural alignment, unless a specific packing
- directive is currently set with `ScopedAlignment()`.
-
- @tparam T Element type
- @param writer Writer to serialize to
- @param value Span to serialize
- @return Result of the write operation
-
- @see Store, AnyWriter
-*/
-template <typename T>
-auto Store(AnyWriter& writer, const std::span<T>& value) -> Result<void>
+//! Serializes a std::span as a sequence (`detail::StoreSequence`).
+template <typename T, size_t Extent>
+auto Store(AnyWriter& writer, const std::span<T, Extent> value) -> Result<void>
 {
-  if (value.size() > limits::kMaxArrayLength) {
-    return ::oxygen::Err(std::errc::message_size);
+  return detail::StoreSequence(writer, std::span<const T> { value });
+}
+
+//! Serializes a std::optional: a `bool` that says whether a value follows,
+//! then the value.
+template <typename T>
+auto Store(AnyWriter& writer, const std::optional<T>& value) -> Result<void>
+{
+  CHECK_RESULT(writer.Write(value.has_value()));
+  if (value) {
+    CHECK_RESULT(writer.Write(*value));
   }
-
-  // Write the size of the array, bounds-checked and properly aligned.
-  CHECK_RESULT(writer.WriteSequenceSize(
-    static_cast<limits::SequenceSizeType>(value.size()),
-    limits::kMaxArrayLength));
-
-  // Align for array elements if needed
-  if constexpr (sizeof(T) > 1) {
-    CHECK_RESULT(writer.AlignTo(alignof(T)));
-  }
-
-  // Write array data
-  for (const auto& item : value) {
-    CHECK_RESULT(writer.Write(item));
-  }
-
   return {};
 }
 
