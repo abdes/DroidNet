@@ -47,12 +47,12 @@ catalog digest in order. Additional lower-priority layers are allowed. A
 cumulative patch replaces earlier patches built against the same original base.
 There are no compatibility opt-outs.
 
-A pak's dependency records state what it requires of other libraries, not which
+A pak's dependency records state what it requires of other mounts, not which
 paks it was built against. Each requirement, an asset with its type or a texture
 key, resolves over the layers below the pak by the
 [precedence policy](#precedence-policy), loose roots included, with deletions
 terminal. It holds when the providing layer has the required type and the
-providing entry's virtual path lies under the required library. Other layers
+providing entry's virtual path lies under the required mount. Other layers
 may sit between the pak and its providers.
 
 Validate before changing the active mount set. Install source identity and
@@ -74,4 +74,4 @@ the binding view, while physical resource identity remains source-local. See
 - Invalid patch baselines are errors; mounting leaves the previous view usable.
 - Unmet requirements are a `DependencyRequirementError` that names the pak and
   each failed requirement: missing, tombstoned, of another type or under
-  another library. Mounting leaves the previous view usable.
+  another mount. Mounting leaves the previous view usable.

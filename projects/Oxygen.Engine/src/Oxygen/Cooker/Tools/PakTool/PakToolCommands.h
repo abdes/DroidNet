@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
@@ -31,7 +32,7 @@ namespace oxygen::content::pak::tool {
 class PakToolCommand final : public oxygen::content::toolkit::ToolCommand {
 public:
   PakToolCommand(pak::BuildMode mode, PakToolCliOptions& options,
-    IRequestPreparationFileSystem& prep_fs, IArtifactFileSystem& artifact_fs);
+    cooked::CookerStorage& storage);
 
   [[nodiscard]] auto Name() const -> std::string_view override;
   [[nodiscard]] auto BuildCommand() -> std::shared_ptr<clap::Command> override;
@@ -41,17 +42,15 @@ public:
 private:
   pak::BuildMode mode_;
   observer_ptr<PakToolCliOptions> options_;
-  observer_ptr<IRequestPreparationFileSystem> prep_fs_;
-  observer_ptr<IArtifactFileSystem> artifact_fs_;
+  observer_ptr<cooked::CookerStorage> storage_;
 };
 
-//! Runs the PakTool command line `argv` on the given streams and file systems.
+//! Runs the PakTool command line `argv` on the given streams and storage.
 /*!
  The seam the tests and `main` share: it builds the commands over one option
  set and returns the process exit code (`PakToolExitCode`).
 */
 [[nodiscard]] auto RunPakToolApp(std::span<char*> argv, std::ostream& out,
-  std::ostream& err, IRequestPreparationFileSystem& prep_fs,
-  IArtifactFileSystem& artifact_fs) -> int;
+  std::ostream& err, cooked::CookerStorage& storage) -> int;
 
 } // namespace oxygen::content::pak::tool

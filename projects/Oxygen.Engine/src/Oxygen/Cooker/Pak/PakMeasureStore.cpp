@@ -6,14 +6,11 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <exception>
-#include <filesystem>
 #include <ios>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <span>
-#include <system_error>
 #include <vector>
 
 #include <Oxygen/Cooker/Pak/PakMeasureStore.h>
@@ -24,7 +21,6 @@
 #include <Oxygen/Data/PakFormat_render.h> // IWYU pragma: keep
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Serio/Device.h>
-#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace {
@@ -504,8 +500,8 @@ auto StoreBrowseIndexPayload(
     out_bytes);
 }
 
-auto MeasurePayloadSourceSlice(const PakPayloadSourceSlicePlan& input)
-  -> std::optional<uint64_t>
+auto MeasurePayloadSourceSlice(internal::PakSourceDevices& sources,
+  const PakPayloadSourceSlicePlan& input) -> std::optional<uint64_t>
 {
   if (input.size_bytes == 0U) {
     return uint64_t { 0U };
@@ -524,11 +520,11 @@ auto MeasurePayloadSourceSlice(const PakPayloadSourceSlicePlan& input)
     return std::nullopt;
   }
 
-  std::error_code ec;
-  const auto file_size = std::filesystem::file_size(input.source_path, ec);
-  if (ec) {
+  const auto size = sources.Size(input.source_path);
+  if (!size) {
     return std::nullopt;
   }
+  const auto file_size = size->get();
 
   if (input.source_offset > file_size) {
     return std::nullopt;
@@ -540,10 +536,11 @@ auto MeasurePayloadSourceSlice(const PakPayloadSourceSlicePlan& input)
   return input.size_bytes;
 }
 
-auto StorePayloadSourceSlice(const PakPayloadSourceSlicePlan& input,
-  std::vector<std::byte>& out_bytes) -> bool
+auto StorePayloadSourceSlice(internal::PakSourceDevices& sources,
+  const PakPayloadSourceSlicePlan& input, std::vector<std::byte>& out_bytes)
+  -> bool
 {
-  const auto measured = MeasurePayloadSourceSlice(input);
+  const auto measured = MeasurePayloadSourceSlice(sources, input);
   if (!measured.has_value()) {
     out_bytes.clear();
     return false;
@@ -574,25 +571,13 @@ auto StorePayloadSourceSlice(const PakPayloadSourceSlicePlan& input,
     return out_bytes.size() == count;
   }
 
-  try {
-    auto file = serio::NativeFile::Open(input.source_path, {});
-    if (!file) {
-      out_bytes.clear();
-      return false;
-    }
-
-    const auto count = static_cast<size_t>(*measured);
-    out_bytes.resize(count);
-    if (!serio::ReadExactlyAt(*file, serio::ByteOffset { input.source_offset },
-          std::span<std::byte>(out_bytes))) {
-      out_bytes.clear();
-      return false;
-    }
-    return true;
-  } catch (const std::exception&) {
+  out_bytes.resize(static_cast<size_t>(*measured));
+  if (!sources.ReadInto(input.source_path,
+        serio::ByteOffset { input.source_offset }, out_bytes)) {
     out_bytes.clear();
     return false;
   }
+  return true;
 }
 
 } // namespace oxygen::content::pak

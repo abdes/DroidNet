@@ -12,13 +12,11 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <variant>
 
 #include "ScriptMetadata.h"
-#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -28,14 +26,16 @@
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
-#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::inspection {
 
@@ -127,21 +127,21 @@ auto RunScriptMetadataReport(const ScriptMetadataOptions& options)
     = std::filesystem::absolute(options.cooked_root).lexically_normal();
   const auto output_path
     = std::filesystem::absolute(options.output).lexically_normal();
-  if (output_path == root / "container.index.bin") {
+  if (output_path == root / oxygen::data::loose_cooked::kIndexFileName) {
     throw std::runtime_error(
       "Script metadata output must not replace its source index.");
   }
-  lc::Inspection inspection;
-  inspection.LoadFromRoot(root);
+  const auto content
+    = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
   auto scripts = json::array();
-  for (const auto& entry : inspection.Assets()) {
-    const auto relative
-      = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
-    if (output_path == root / relative) {
+  for (const auto& entry : content.Assets()) {
+    if (content.Source().kind == data::CookedSourceKind::kLooseCooked
+      && output_path
+        == content.DescriptorStored(entry.key).file.lexically_normal()) {
       throw std::runtime_error(
         "Script metadata output must not replace a source descriptor.");
     }
-    if (entry.asset_type != static_cast<uint8_t>(data::AssetType::kScript)) {
+    if (entry.type != data::AssetType::kScript) {
       continue;
     }
     if (!options.virtual_path.empty()
@@ -149,27 +149,13 @@ auto RunScriptMetadataReport(const ScriptMetadataOptions& options)
       continue;
     }
     try {
-      if (relative.empty() || relative.has_root_path()
-        || *relative.begin() == "..") {
-        throw std::runtime_error(
-          "Descriptor path must stay within its cooked root.");
-      }
-      const auto descriptor_path = root / relative;
-      auto file = serio::NativeFile::Open(descriptor_path, {});
-      if (!file) {
-        throw std::system_error(
-          file.error(), fmt::format("open '{}'", descriptor_path.string()));
-      }
-      auto stream = serio::OpenReadStream(*file);
-      if (!stream) {
-        throw std::system_error(
-          stream.error(), fmt::format("size '{}'", descriptor_path.string()));
-      }
-      if (stream->Size().get() != entry.descriptor_size) {
+      const auto bytes = content.Descriptor(entry.key);
+      if (bytes.size() != entry.descriptor_size.get()) {
         throw std::runtime_error(
           "Script descriptor size does not match its index entry.");
       }
-      serio::Reader reader(*stream);
+      serio::ReadOnlyMemoryStream stream(bytes);
+      serio::Reader reader(stream);
       const LoaderContext context {
         .current_asset_key = entry.key,
         .desc_reader = &reader,

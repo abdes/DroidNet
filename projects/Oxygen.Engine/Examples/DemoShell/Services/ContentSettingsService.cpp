@@ -19,7 +19,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 
@@ -113,9 +112,6 @@ namespace {
   constexpr auto kTexTuningBc7QualityKey = "content.import.tuning.bc7_quality";
   constexpr auto kTexTuningHdrHandlingKey
     = "content.import.tuning.hdr_handling";
-
-  // Layout Keys
-  constexpr auto kLayoutResourcesDirKey = "content.layout.resources_dir";
 } // namespace
 
 auto ContentSettingsService::GetExplorerSettings() const
@@ -330,30 +326,6 @@ auto ContentSettingsService::SetTextureTuning(
     static_cast<float>(static_cast<int>(t.bc7_quality)));
   settings->SetFloat(kTexTuningHdrHandlingKey,
     static_cast<float>(static_cast<int>(t.hdr_handling)));
-  ++epoch_;
-}
-
-auto ContentSettingsService::GetDefaultLayout() const
-  -> content::import::LooseCookedLayout
-{
-  content::import::LooseCookedLayout l;
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  if (auto val = settings->GetString(kLayoutResourcesDirKey)) {
-    l.resources_dir = *val;
-  }
-
-  return l;
-}
-
-auto ContentSettingsService::SetDefaultLayout(
-  const content::import::LooseCookedLayout& l) -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  settings->SetString(kLayoutResourcesDirKey, l.resources_dir);
   ++epoch_;
 }
 

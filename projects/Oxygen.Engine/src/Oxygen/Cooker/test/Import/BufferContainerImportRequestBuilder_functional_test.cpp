@@ -18,9 +18,9 @@
 #include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -29,8 +29,8 @@ using oxygen::content::import::BufferContainerImportSettings;
 using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::internal::BuildBufferContainerRequest;
 using oxygen::cooker::test::kContentHashingDefault;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   -> BufferContainerImportSettings

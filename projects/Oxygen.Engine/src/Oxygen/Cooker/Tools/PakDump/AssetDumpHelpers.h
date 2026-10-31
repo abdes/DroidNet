@@ -175,13 +175,8 @@ template <typename T>
   -> std::optional<std::vector<std::byte>>
 {
   try {
-    auto reader = pak.CreateReader(entry);
-    const auto bytes_to_read = static_cast<size_t>(entry.desc_size);
-    auto data_result = reader.ReadBlob(bytes_to_read);
-    if (!data_result.has_value()) {
-      return std::nullopt;
-    }
-    return data_result.value();
+    const auto bytes = pak.DescriptorBytes(entry);
+    return std::vector<std::byte>(bytes.begin(), bytes.end());
   } catch (...) {
     return std::nullopt;
   }

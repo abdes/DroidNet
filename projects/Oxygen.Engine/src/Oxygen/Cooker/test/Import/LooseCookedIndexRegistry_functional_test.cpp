@@ -14,9 +14,9 @@
 
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
@@ -24,6 +24,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 namespace co = oxygen::co;
@@ -33,8 +34,9 @@ NOLINT_TEST(
   LooseCookedIndexRegistryTest, IndexParticipantsAwaitPublicationAndCanReenter)
 {
   imp::ImportEventLoop loop;
-  imp::LooseCookedIndexRegistry indexes;
-  const oxygen::cooker::test::ScopedTempDir temp;
+  imp::LooseCookedIndexRegistry indexes(
+    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
+  const oxygen::testing::ScopedTempDir temp;
   const auto root = temp.Path() / "oxygen_index_publication";
   std::filesystem::create_directories(root);
   auto first = indexes.BeginSession(root, std::nullopt);
@@ -78,8 +80,9 @@ NOLINT_TEST(LooseCookedIndexRegistryTest,
   ConflictingSourceIdentityCannotJoinAnIndexCohort)
 {
   imp::ImportEventLoop loop;
-  imp::LooseCookedIndexRegistry indexes;
-  const oxygen::cooker::test::ScopedTempDir temp;
+  imp::LooseCookedIndexRegistry indexes(
+    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
+  const oxygen::testing::ScopedTempDir temp;
   const auto root = temp.Path() / "oxygen_source_identity_cohort";
   std::filesystem::create_directories(root);
   const auto expected = oxygen::data::SourceKey { oxygen::Uuid::Generate() };
@@ -97,8 +100,9 @@ NOLINT_TEST(
   LooseCookedIndexRegistryTest, FailedIndexPublicationReachesEveryParticipant)
 {
   imp::ImportEventLoop loop;
-  imp::LooseCookedIndexRegistry indexes;
-  const oxygen::cooker::test::ScopedTempDir temp;
+  imp::LooseCookedIndexRegistry indexes(
+    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
+  const oxygen::testing::ScopedTempDir temp;
   const auto root = temp.Path() / "oxygen_index_publication_failure";
   std::filesystem::create_directories(root);
   auto first = indexes.BeginSession(root, std::nullopt);
@@ -139,8 +143,9 @@ NOLINT_TEST(
   LooseCookedIndexRegistryTest, LastIndexAbortWakesWaitersAndAllowsRetry)
 {
   imp::ImportEventLoop loop;
-  imp::LooseCookedIndexRegistry indexes;
-  const oxygen::cooker::test::ScopedTempDir temp;
+  imp::LooseCookedIndexRegistry indexes(
+    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
+  const oxygen::testing::ScopedTempDir temp;
   const auto root = temp.Path() / "oxygen_index_publication_abort";
   std::filesystem::create_directories(root);
   auto first = indexes.BeginSession(root, std::nullopt);
@@ -178,8 +183,9 @@ NOLINT_TEST(
   LooseCookedIndexRegistryTest, CancelledIndexWaiterDoesNotRetireTwice)
 {
   imp::ImportEventLoop loop;
-  imp::LooseCookedIndexRegistry indexes;
-  const oxygen::cooker::test::ScopedTempDir temp;
+  imp::LooseCookedIndexRegistry indexes(
+    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
+  const oxygen::testing::ScopedTempDir temp;
   const auto root = temp.Path() / "oxygen_index_waiter_cancel";
   std::filesystem::create_directories(root);
   auto first = indexes.BeginSession(root, std::nullopt);

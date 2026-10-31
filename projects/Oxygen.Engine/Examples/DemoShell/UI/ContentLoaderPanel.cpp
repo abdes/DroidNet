@@ -35,7 +35,6 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
@@ -52,7 +51,6 @@ namespace {
   using content::import::ImportContentFlags;
   using content::import::ImportOptions;
   using content::import::ImportPipelineConcurrency;
-  using content::import::LooseCookedLayout;
   using TextureTuning = content::import::ImportOptions::TextureTuning;
 
   // Commands that act on the content library and the importer.
@@ -130,7 +128,7 @@ namespace {
   constexpr std::string_view kFaceSize = "demo.content.texture.face_size";
   constexpr std::string_view kCubeLayout = "demo.content.texture.cube_layout";
 
-  // Importer service and output layout.
+  // Importer service.
   constexpr std::string_view kThreadPool = "demo.content.importer.threads";
 
   constexpr auto kPruningModes = std::array {
@@ -266,20 +264,6 @@ namespace {
       .label = "Scene",
       .command = "demo.content.importer.scene",
       .member = &content::import::ImportConcurrency::scene,
-    },
-  };
-
-  //! An output layout directory, its command and its layout member.
-  struct LayoutField {
-    const char* label;
-    std::string_view command;
-    std::string LooseCookedLayout::* member;
-  };
-  constexpr auto kLayoutFields = std::array {
-    LayoutField {
-      .label = "Resources Dir",
-      .command = "demo.content.layout.resources_dir",
-      .member = &LooseCookedLayout::resources_dir,
     },
   };
 
@@ -723,16 +707,6 @@ namespace {
     commands.AddAction(Name(kRestartImporter), "Restart Importer",
       "Restart the import service with its current settings",
       [vm] -> void { vm->RestartImportService(); });
-    for (const auto& field : kLayoutFields) {
-      const auto member = field.member;
-      commands.AddText(std::string(field.command), field.label,
-        "Output layout of new generations",
-        [vm, member](const std::string& value) -> void {
-          auto layout = vm->GetLayout();
-          layout.*member = value;
-          vm->SetLayout(layout);
-        });
-    }
   }
 
   auto HelpMarker(const char* description) -> void
@@ -1294,8 +1268,8 @@ auto ContentLoaderPanel::DrawAdvancedSection() -> void
   if (ImGui::CollapsingHeader("Importer", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawImporterSettings();
   }
-  if (ImGui::CollapsingHeader("Output Layout")) {
-    DrawOutputLayout();
+  if (ImGui::CollapsingHeader("Output")) {
+    DrawOutput();
   }
 
   ImGui::Separator();
@@ -1357,35 +1331,12 @@ auto ContentLoaderPanel::DrawImporterSettings() -> void
   }
 }
 
-auto ContentLoaderPanel::DrawOutputLayout() -> void
+auto ContentLoaderPanel::DrawOutput() -> void
 {
   ImGui::TextWrapped(
     "Generated storage: %s", vm_->GetGeneratedStorageRoot().c_str());
   ImGui::TextUnformatted(
     "Each import publishes an immutable source generation.");
-  auto layout = vm_->GetLayout();
-
-  ImGui::PushID("OutputLayoutTable");
-  if (ImGui::BeginTable(
-        "##OutputLayoutTable", 2, ImGuiTableFlags_SizingStretchProp)) {
-    ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 140.0F);
-    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-    for (const auto& field : kLayoutFields) {
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::AlignTextToFramePadding();
-      ImGui::TextUnformatted(field.label);
-      ImGui::TableNextColumn();
-      ImGui::SetNextItemWidth(-1.0F);
-      auto& value = layout.*field.member;
-      if (CommittedTextField(
-            (std::string("##") + field.label).c_str(), value)) {
-        commands_->RunText(field.command, value);
-      }
-    }
-    ImGui::EndTable();
-  }
-  ImGui::PopID();
 }
 
 auto ContentLoaderPanel::GetName() const noexcept -> std::string_view

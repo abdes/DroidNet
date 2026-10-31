@@ -237,6 +237,8 @@ if(OXYGEN_BUILD_UI_TESTS)
     PRIVATE
       gdi32
       user32
+      # The test kit lives in the build tree only; installs never need it.
+      $<BUILD_INTERFACE:oxygen::cooker::testing>
   )
 
   # The runner hosts the DemoShell on an empty scene and runs the DemoShell's

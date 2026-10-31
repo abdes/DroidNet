@@ -21,7 +21,7 @@ namespace {
 
   namespace co = oxygen::co;
 
-  class PhysicsImportPipelineTest : public testing::Test {
+  class PhysicsImportPipelineTest : public ::testing::Test {
   protected:
     ImportEventLoop loop_;
   };

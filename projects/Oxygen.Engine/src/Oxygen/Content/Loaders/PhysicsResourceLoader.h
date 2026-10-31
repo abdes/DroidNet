@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -14,6 +15,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/LoaderFunctions.h>
+#include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/PhysicsResource.h>
@@ -53,20 +55,13 @@ inline auto LoadPhysicsResource(LoaderContext context)
   LOG_F(1, "data offset    : {}", desc.data_offset);
   LOG_F(1, "data size      : {}", desc.size_bytes);
 
+  const auto payload
+    = TakePayload(context, desc.size_bytes, "physics resource");
+  const auto payload_bytes = payload.Bytes();
+  // PhysicsResource owns a vector: the payload is copied into it.
   std::vector<uint8_t> data_buffer(desc.size_bytes);
-  if (desc.size_bytes > 0) {
-    constexpr std::size_t phys_index
-      = IndexOf<data::PhysicsResource, ResourceTypeList>::value;
-    DCHECK_NOTNULL_F(std::get<phys_index>(context.data_readers),
-      "expecting data reader for PhysicsResource to be valid");
-    auto& data_reader = *std::get<phys_index>(context.data_readers);
-
-    check_result(data_reader.Seek(desc.data_offset), "Physics Data");
-    // Create a span of std::byte over the same memory
-    std::span<std::byte> byte_view(
-      reinterpret_cast<std::byte*>(data_buffer.data()), data_buffer.size());
-    auto data_result = data_reader.ReadBlobInto(byte_view);
-    check_result(data_result, "Physics Data");
+  if (!payload_bytes.empty()) {
+    std::memcpy(data_buffer.data(), payload_bytes.data(), payload_bytes.size());
   }
 
   return std::make_unique<data::PhysicsResource>(desc, std::move(data_buffer));

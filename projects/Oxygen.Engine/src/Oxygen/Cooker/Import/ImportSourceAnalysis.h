@@ -83,12 +83,13 @@ OXGN_COOK_NDAPI auto IsInputActionReference(std::string_view text) -> bool;
 
 //! The buffer references of a geometry that are not its own buffers.
 /*!
- A buffer is local to the geometry when a declared buffer resolves to the same
- virtual path as the reference; both are named relative to the geometry
- descriptor, so the written texts are compared resolved.
+ A buffer is local to the geometry when a reference resolves to the identity
+ of one of the geometry's own buffers; references are written relative to
+ the geometry descriptor, so they are compared resolved.
 
  @param anchor The geometry descriptor's identity.
- @param local_buffers The written names of the geometry's own buffers.
+ @param local_buffers The identities of the geometry's own buffers, as
+   `GeometrySource` resolves them.
  @param references The buffer references the geometry's LODs make.
 */
 OXGN_COOK_NDAPI auto ExternalBufferReferences(std::string_view anchor,

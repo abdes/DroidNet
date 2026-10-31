@@ -29,6 +29,7 @@
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -36,12 +37,14 @@
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
-#include <Oxygen/Cooker/test/Support/TextureLibraryFixture.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -75,6 +78,9 @@ namespace {
   using oxygen::cooker::test::ReadBytes;
   using oxygen::cooker::test::WriteBytes;
   using oxygen::cooker::test::WriteText;
+  using oxygen::cooker::testing::LooseCookedRoot;
+  using oxygen::cooker::testing::Materialize;
+  using oxygen::cooker::testing::SeedBytes;
 
   auto WriteSurfaceGeometry(const std::filesystem::path& path) -> void
   {
@@ -243,12 +249,12 @@ namespace {
       "name":"Level",
       "nodes":[{"name":"root"},
         {"name":"model","parent":0,
-         "instance":{"scene_ref":"/.cooked/Scenes/Model.oscene"}},
+         "instance":{"scene_ref":"Model.oscene"}},
         {"name":"camera","parent":0}],
       "cameras":{"perspective":[{"node":2,"aspect_mode":"auto"}]},
       "starting_camera":{"node":2},
       "starting_input_contexts":[
-        {"context_ref":"/.cooked/Input/gameplay.oimap","priority":3}]
+        {"context_ref":"../Input/gameplay.oimap","priority":3}]
     })"));
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
@@ -316,8 +322,7 @@ namespace {
                          const std::string_view instanced) -> std::string {
       auto node = nlohmann::json { { "name", "root" } };
       if (!instanced.empty()) {
-        const auto path
-          = "/.cooked/Scenes/" + std::string(instanced) + ".oscene";
+        const auto path = std::string(instanced) + ".oscene";
         node.emplace("instance",
           nlohmann::json {
             { "scene_ref", path },
@@ -381,7 +386,7 @@ namespace {
       "name":"Level",
       "nodes":[{"name":"root"},
         {"name":"rig","parent":0,
-         "instance":{"scene_ref":"/.cooked/Scenes/Rig.oscene"}}]
+         "instance":{"scene_ref":"Rig.oscene"}}]
     })");
     level.at("nodes").at(1).at("instance")["overrides"]
       = nlohmann::json::array({ change(kEye), change(kStranger) });
@@ -459,7 +464,7 @@ namespace {
     const auto root = TempDir() / "mask_reference";
     std::filesystem::create_directories(root);
     constexpr auto kDescriptor = R"({"name":"MaskScene","nodes":[{}],
-      "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/.cooked/Textures/Meter.otex"}}})";
+      "environment":{"post_process_volume":{"auto_exposure_metering_mask":"../Textures/Meter.otex"}}})";
     WriteMeteringMaskSidecar(root, Format::kRGBA8UNorm, 4U);
     const auto success = Import(MakeRequest(root, kDescriptor));
     ASSERT_HAS_VALUE(success);
@@ -515,21 +520,14 @@ namespace {
     SceneDescriptorImportJobTest, MeteringMaskFromAContextRootBindsByKey)
   {
     // Arrange
-    constexpr auto kMask = std::string_view { "/Library/Textures/Meter.otex" };
     const auto root = TempDir() / "context_mask_reference";
     const auto library = TempDir() / "mask_library";
     std::filesystem::create_directories(root);
-    oxygen::cooker::test::WriteTextureLibrary(library, kMask,
-      {
-        .size_bytes = 4U,
-        .texture_type = static_cast<uint8_t>(TextureType::kTexture2D),
-        .width = 1U,
-        .height = 1U,
-        .depth = 1U,
-        .array_layers = 1U,
-        .mip_levels = 1U,
-        .format = static_cast<uint8_t>(Format::kRGBA8UNorm),
-      });
+    auto library_root = LooseCookedRoot { "Library" };
+    const auto mask_row = library_root.AddTexture(SeedBytes(1U));
+    const auto kMask
+      = library_root.DescribeTexture("Textures/Meter.otex", mask_row);
+    Materialize(library_root.Files(), library);
     auto request = MakeRequest(root, R"({"name":"MaskScene","nodes":[{}],
       "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/Library/Textures/Meter.otex"}}})");
     request.cooked_context_roots = { library };
@@ -699,10 +697,11 @@ namespace {
   auto WriteIndexedReference(const std::filesystem::path& root,
     const data::AssetKey& key, const data::AssetType type) -> void
   {
-    auto writer = LooseCookedWriter(root);
+    auto writer
+      = LooseCookedWriter(root, oxygen::content::cooked::RealCookerStorage());
     const auto fixture = type == data::AssetType::kGeometry
-      ? content::test::GeometryDescriptor("Mesh")
-      : content::test::MaterialDescriptor("Wrong");
+      ? oxygen::cooker::testing::GeometryDescriptor("Mesh")
+      : oxygen::cooker::testing::MaterialDescriptor("Wrong");
     writer.WriteAssetDescriptor(key, type, "/Art/Geometry/Mesh.ogeo",
       type == data::AssetType::kGeometry ? "Geometry/Mesh.ogeo"
                                          : "Materials/Wrong.omat",
@@ -728,7 +727,7 @@ namespace {
     WriteIndexedReference(output, own_key, data::AssetType::kGeometry);
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
     const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
-      "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
+      "renderables":[{"node":0,"geometry_ref":"../Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { false, true }) {
       auto request = MakeRequest(output, descriptor);
       request.asset_virtual_path = "/Art/Scenes/Scene.oscene";
@@ -764,7 +763,7 @@ namespace {
     WriteText(output / "Geometry/Mesh.ogeo", "new descriptor");
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
     const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
-      "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
+      "renderables":[{"node":0,"geometry_ref":"../Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { true, false }) {
       auto request = MakeRequest(output, descriptor);
       request.asset_virtual_path = "/Art/Scenes/Scene.oscene";
@@ -833,7 +832,7 @@ namespace {
       "renderables": [
         {
           "node": 1,
-          "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+          "geometry_ref": "../Geometry/cube.ogeo",
           "overrides": {
             "values": {
               "/lod_policy": { "type": "distance", "thresholds": [8], "hysteresis_ratio": 0.1 }
@@ -843,7 +842,7 @@ namespace {
               "id": "00000000-0000-0000-0000-000000000001",
               "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001",
               "values": {
-                "/material": "/.cooked/Materials/cube.omat",
+                "/material": "../Materials/cube.omat",
                 "/visible": false,
                 "/casts_shadows": true
               }
@@ -852,10 +851,10 @@ namespace {
         }
       ],
       "references": {
-        "scripts": ["/.cooked/Scripts/spin.oscript"],
-        "input_actions": ["/.cooked/Input/jump.oiact"],
-        "input_mapping_contexts": ["/.cooked/Input/gameplay.oimap"],
-        "physics_sidecars": ["/.cooked/Scenes/DemoScene.opscene"]
+        "scripts": ["../Scripts/spin.oscript"],
+        "input_actions": ["../Input/jump.oiact"],
+        "input_mapping_contexts": ["../Input/gameplay.oimap"],
+        "physics_sidecars": ["DemoScene.opscene"]
       }
     })"));
 
@@ -916,7 +915,7 @@ namespace {
       "renderables": [
         {
           "node": 1,
-          "geometry_ref": "/.cooked/Geometry/missing.ogeo"
+          "geometry_ref": "../Geometry/missing.ogeo"
         }
       ]
     })"));
@@ -1116,7 +1115,7 @@ namespace {
           "second_fog_height_offset": 10.0,
           "fog_inscattering_luminance": [1.0, 0.9, 0.8],
           "sky_atmosphere_ambient_contribution_color_scale": [0.2, 0.3, 0.4],
-          "inscattering_color_cubemap_ref": "/.cooked/Textures/fog_probe.otex",
+          "inscattering_color_cubemap_ref": "../Textures/fog_probe.otex",
           "inscattering_color_cubemap_angle": 0.5,
           "inscattering_texture_tint": [0.7, 0.6, 0.5],
           "fully_directional_inscattering_color_distance": 100.0,
@@ -1143,7 +1142,7 @@ namespace {
         "sky_light": {
           "enabled": true,
           "source": 1,
-          "cubemap_ref": "/.cooked/Textures/sky_probe.otex",
+          "cubemap_ref": "../Textures/sky_probe.otex",
           "intensity": 1.5,
           "tint_rgb": [0.8, 0.9, 1.0],
           "diffuse_intensity": 1.1,
@@ -1158,7 +1157,7 @@ namespace {
         "sky_sphere": {
           "enabled": true,
           "source": 0,
-          "cubemap_ref": "/.cooked/Textures/backdrop.otex",
+          "cubemap_ref": "../Textures/backdrop.otex",
           "solid_color_rgb": [0.1, 0.2, 0.3],
           "intensity": 2.0,
           "rotation_radians": 1.25,
@@ -1399,10 +1398,12 @@ namespace {
     -> std::filesystem::path
   {
     const auto loose = work / "engine_loose";
-    const auto geometry = content::test::GeometryDescriptor("Cube");
-    const auto material = content::test::MaterialDescriptor("Default");
+    const auto geometry = oxygen::cooker::testing::GeometryDescriptor("Cube");
+    const auto material
+      = oxygen::cooker::testing::MaterialDescriptor("Default");
     {
-      auto writer = LooseCookedWriter(loose);
+      auto writer = LooseCookedWriter(
+        loose, oxygen::content::cooked::RealCookerStorage());
       writer.WriteAssetDescriptor(data::AssetKey::FromVirtualPath(kEngineCube),
         data::AssetType::kGeometry, kEngineCube,
         "Generated/BasicShapes/Cube.ogeo", geometry.bytes, geometry.references,

@@ -12,6 +12,7 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Cooker/Pak/Internal/PakSourceDevices.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/api_export.h>
 
@@ -19,15 +20,19 @@ namespace oxygen::content::pak {
 
 struct PakResourceTableSerializationInput final {
   uint32_t entry_count = 0;
-  std::span<const PakResourcePlacementPlan> resources {};
+  std::span<const PakResourcePlacementPlan> resources;
 };
 
+//! The size of a payload slice: its inline bytes, or a slice of a source file
+//! read through `files`; nothing when it lies outside them.
 OXGN_COOK_NDAPI auto MeasurePayloadSourceSlice(
-  const PakPayloadSourceSlicePlan& input) -> std::optional<uint64_t>;
+  internal::PakSourceDevices& sources, const PakPayloadSourceSlicePlan& input)
+  -> std::optional<uint64_t>;
 
+//! The bytes of a payload slice, read through `files`.
 OXGN_COOK_NDAPI auto StorePayloadSourceSlice(
-  const PakPayloadSourceSlicePlan& input, std::vector<std::byte>& out_bytes)
-  -> bool;
+  internal::PakSourceDevices& sources, const PakPayloadSourceSlicePlan& input,
+  std::vector<std::byte>& out_bytes) -> bool;
 
 OXGN_COOK_NDAPI auto MeasureTextureTablePayload(
   const PakResourceTableSerializationInput& input) -> std::optional<uint64_t>;

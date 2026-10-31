@@ -131,7 +131,7 @@ protected:
       return {};
     }
     auto file = oxygen::serio::NativeFile::Open(
-      imported.report.cooked_root / geometry_entry->descriptor_relpath, {});
+      inspection.DescriptorStored(geometry_entry->key).file, {});
     EXPECT_TRUE(file) << file.error().message();
     if (!file) {
       return {};

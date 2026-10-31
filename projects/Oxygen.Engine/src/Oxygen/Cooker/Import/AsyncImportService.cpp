@@ -325,8 +325,10 @@ struct AsyncImportService::Impl {
     // Create platform-specific file writer via factory
     file_writer_ = CreateAsyncFileWriter(*event_loop_);
 
-    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
-    index_registry_ = std::make_unique<LooseCookedIndexRegistry>();
+    table_registry_ = std::make_unique<ResourceTableRegistry>(
+      *file_writer_, config_.cooked_storage);
+    index_registry_
+      = std::make_unique<LooseCookedIndexRegistry>(config_.cooked_storage);
 
     // Create thread pool for CPU-bound work (pipelines, mesh processing)
     thread_pool_ = std::make_unique<co::ThreadPool>(

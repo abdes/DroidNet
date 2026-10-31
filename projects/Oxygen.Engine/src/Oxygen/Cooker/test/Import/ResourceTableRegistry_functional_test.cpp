@@ -6,6 +6,7 @@
 
 // Covers: Import/Internal/ResourceTableRegistry.cpp
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -15,22 +16,28 @@
 #include <stdexcept>
 #include <utility>
 
+#include "LooseCookedWriterTestSupport.h"
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/testing/MemoryFileSystem.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 namespace co = oxygen::co;
@@ -140,22 +147,20 @@ private:
 
 NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
 {
-  const oxygen::cooker::test::ScopedTempDir temp;
+  const oxygen::testing::ScopedTempDir temp;
   imp::ImportEventLoop loop;
   HeldCompletionWriter writer(loop);
   writer.HoldTableWrites();
-  imp::ResourceTableRegistry tables(writer);
+  imp::ResourceTableRegistry tables(writer,
+    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
   const auto root = temp.Path() / "oxygen_table_admission";
-  const imp::LooseCookedLayout layout;
   auto first = tables.BeginSession(root);
-  const auto inserted
-    = tables.BufferAggregator(root, layout)
-        .AcquireOrInsert("first",
-          [] -> std::pair<oxygen::data::pak::core::BufferResourceDesc,
-               oxygen::content::import::WriteReservation> {
-            return std::pair { oxygen::data::pak::core::BufferResourceDesc {},
-              imp::WriteReservation {} };
-          });
+  const auto inserted = tables.BufferAggregator(root).AcquireOrInsert("first",
+    [] -> std::pair<oxygen::data::pak::core::BufferResourceDesc,
+         oxygen::content::import::WriteReservation> {
+      return std::pair { oxygen::data::pak::core::BufferResourceDesc {},
+        imp::WriteReservation {} };
+    });
   uint32_t second_index = 0;
   bool admitted = false;
   co::Event attempting;
@@ -163,8 +168,9 @@ NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
   co::Run(loop, [&] -> co::Co<> {
     OXCO_WITH_NURSERY(tasks)
     {
-      tasks.Start(
-        [&] -> co::Co<> { EXPECT_TRUE(co_await tables.EndSession(first)); });
+      tasks.Start([&] -> co::Co<> {
+        EXPECT_TRUE((co_await tables.EndSession(first)).ok);
+      });
       co_await writer.table_write_held;
       EXPECT_FALSE(first.IsActive());
       EXPECT_THROW(
@@ -175,7 +181,7 @@ NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
         admitted = true;
         auto second = tables.BeginSession(root);
         second_index
-          = tables.BufferAggregator(root, layout)
+          = tables.BufferAggregator(root)
               .AcquireOrInsert("second",
                 [] -> std::pair<oxygen::data::pak::core::BufferResourceDesc,
                      oxygen::content::import::WriteReservation> {
@@ -185,7 +191,7 @@ NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
                   };
                 })
               .index;
-        EXPECT_TRUE(co_await tables.EndSession(second));
+        EXPECT_TRUE((co_await tables.EndSession(second)).ok);
         finished.Trigger();
       });
       co_await attempting;
@@ -197,5 +203,69 @@ NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
   });
   EXPECT_TRUE(admitted);
   EXPECT_EQ(second_index, inserted.index + 1U);
+}
+
+//! The last session of a cohort writes the tables and reports the digest of
+//! each as it wrote it; the sessions before it write nothing.
+//! A table the cooked root holds but that cannot be read as rows fails the
+//! import: starting it empty would publish a table that drops the root's
+//! existing resources.
+NOLINT_TEST(ResourceTableRegistryTest, UnreadableExistingTableFailsTheImport)
+{
+  // Arrange
+  imp::ImportEventLoop loop;
+  const auto writer = imp::CreateAsyncFileWriter(loop);
+  auto storage = oxygen::cooker::testing::MemoryFileSystem {};
+  const auto root = oxygen::content::testing::MemoryRoot() / "broken_table";
+  // One byte: not a whole number of buffer rows.
+  storage.AddFile(root / imp::internal::loose_layout::kBuffersTable,
+    std::array { std::byte { 1U } });
+  imp::ResourceTableRegistry tables(*writer, oxygen::make_observer(&storage));
+
+  // Act + Assert
+  EXPECT_THROW(
+    static_cast<void>(tables.BufferAggregator(root)), imp::ResourceTableError);
+  EXPECT_EQ(storage.SizeOf(root / imp::internal::loose_layout::kBuffersTable),
+    oxygen::serio::ByteCount { 1U });
+}
+
+NOLINT_TEST(ResourceTableRegistryTest, LastSessionReportsTheTablesItWrote)
+{
+  // Arrange
+  const oxygen::testing::ScopedTempDir temp;
+  imp::ImportEventLoop loop;
+  const auto writer = imp::CreateAsyncFileWriter(loop);
+  auto& storage = oxygen::content::cooked::RealCookerStorage();
+  imp::ResourceTableRegistry tables(*writer, oxygen::make_observer(&storage));
+  const auto root = temp.Path() / "oxygen_table_digests";
+  auto first = tables.BeginSession(root);
+  auto second = tables.BeginSession(root);
+  static_cast<void>(tables.BufferAggregator(root).AcquireOrInsert("only",
+    [] -> std::pair<oxygen::data::pak::core::BufferResourceDesc,
+         imp::WriteReservation> {
+      return std::pair { oxygen::data::pak::core::BufferResourceDesc {},
+        imp::WriteReservation {} };
+    }));
+
+  // Act
+  auto first_end = imp::ResourceTableRegistry::SessionEnd {};
+  auto second_end = imp::ResourceTableRegistry::SessionEnd {};
+  co::Run(loop, [&] -> co::Co<> {
+    first_end = co_await tables.EndSession(first);
+    second_end = co_await tables.EndSession(second);
+  });
+
+  // Assert
+  EXPECT_TRUE(first_end.ok);
+  EXPECT_TRUE(first_end.written.empty());
+  ASSERT_TRUE(second_end.ok);
+  ASSERT_EQ(second_end.written.size(), 1U);
+  const auto& table = second_end.written.front();
+  EXPECT_EQ(table.kind, oxygen::data::loose_cooked::FileKind::kBuffersTable);
+  const auto bytes = oxygen::content::cooked::ReadWholeFile(
+    storage, root / imp::internal::loose_layout::kBuffersTable);
+  ASSERT_HAS_VALUE(bytes);
+  EXPECT_EQ(table.digest.size, bytes->size());
+  EXPECT_EQ(table.digest.sha256, oxygen::base::ComputeSha256(*bytes));
 }
 } // namespace

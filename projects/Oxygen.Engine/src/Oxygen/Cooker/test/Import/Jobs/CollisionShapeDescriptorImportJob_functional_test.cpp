@@ -21,9 +21,10 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -92,16 +93,14 @@ namespace {
   auto AssetTypeForKey(const std::filesystem::path& cooked_root,
     const data::AssetKey& key) -> std::optional<data::AssetType>
   {
-    auto inspection = lc::Inspection {};
     try {
-      inspection.LoadFromRoot(cooked_root);
+      const auto content
+        = cooked::CookedContent::Open(cooked::RealCookerStorage(), cooked_root);
+      if (const auto* const asset = content.FindAsset(key)) {
+        return asset->type;
+      }
     } catch (...) {
       return std::nullopt;
-    }
-    for (const auto& asset : inspection.Assets()) {
-      if (asset.key == key) {
-        return static_cast<data::AssetType>(asset.asset_type);
-      }
     }
     return std::nullopt;
   }
@@ -127,8 +126,7 @@ namespace {
             "static_friction": 0.95,
             "dynamic_friction": 0.70,
             "restitution": 0.05,
-            "density": 1800.0,
-            "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
+            "density": 1800.0
           })",
         };
     return request;
@@ -168,9 +166,8 @@ namespace {
     const auto shape_descriptor = json {
       { "name", "floor_box" },
       { "shape_type", "box" },
-      { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
+      { "material_ref", "../Materials/ground.opmat" },
       { "half_extents", json::array({ 25.0F, 0.5F, 25.0F }) },
-      { "virtual_path", "/.cooked/Physics/Shapes/floor_box.ocshape" },
     };
 
     const auto report = Import(MakeCollisionShapeRequest(
@@ -222,9 +219,8 @@ namespace {
     const auto shape_descriptor = json {
       { "name", "convex_hull_shape" },
       { "shape_type", "convex_hull" },
-      { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
+      { "material_ref", "../Materials/ground.opmat" },
       { "unexpected_field", "/.cooked/Physics/Resources/shape_payload.opres" },
-      { "virtual_path", "/.cooked/Physics/Shapes/hull.ocshape" },
     };
 
     const auto report = Import(MakeCollisionShapeRequest(
@@ -251,8 +247,7 @@ namespace {
     const auto shape_descriptor = json {
       { "name", "convex_hull_inline_payload" },
       { "shape_type", "convex_hull" },
-      { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
-      { "virtual_path", "/.cooked/Physics/Shapes/hull_inline.ocshape" },
+      { "material_ref", "../Materials/ground.opmat" },
     };
 
     const auto report = Import(MakeCollisionShapeRequest(
@@ -294,8 +289,7 @@ namespace {
     const auto shape_descriptor = json {
       { "name", "compound_shape" },
       { "shape_type", "compound" },
-      { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
-      { "virtual_path", "/.cooked/Physics/Shapes/compound_shape.ocshape" },
+      { "material_ref", "../Materials/ground.opmat" },
       {
         "children",
         json::array({
@@ -368,8 +362,7 @@ namespace {
     const auto shape_descriptor = json {
       { "name", "bad_compound_child_payload" },
       { "shape_type", "compound" },
-      { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
-      { "virtual_path", "/.cooked/Physics/Shapes/bad_compound.ocshape" },
+      { "material_ref", "../Materials/ground.opmat" },
       {
         "children",
         json::array({
@@ -393,7 +386,7 @@ namespace {
   }
 
   NOLINT_TEST_F(CollisionShapeDescriptorImportJobTest,
-    DocumentVirtualPathDifferingFromTheRequestIsRefused)
+    DocumentStatingAVirtualPathIsRefusedBySchema)
   {
     const auto cooked_root = TempDir() / "identity_conflict";
     std::filesystem::create_directories(cooked_root);
@@ -407,7 +400,7 @@ namespace {
     const auto shape_descriptor = json {
       { "name", "floor_box" },
       { "shape_type", "box" },
-      { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
+      { "material_ref", "../Materials/ground.opmat" },
       { "half_extents", json::array({ 25.0F, 0.5F, 25.0F }) },
       { "virtual_path", "/.cooked/Physics/Shapes/other.ocshape" },
     };
@@ -418,7 +411,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "physics.shape.identity_conflict"));
+      report->diagnostics, "physics.shape.schema_validation_failed"));
   }
 
 } // namespace

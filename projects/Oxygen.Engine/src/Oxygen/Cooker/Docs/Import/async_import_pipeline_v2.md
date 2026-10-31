@@ -299,14 +299,13 @@ remain valid through generation replacement.
 
 These types ALREADY EXIST in `src/Oxygen/Cooker/Import/`. **DO NOT REDEFINE:**
 
-| Type                | Header                | Description                                   |
-| ------------------- | --------------------- | --------------------------------------------- |
-| `ImportRequest`     | `ImportRequest.h`     | Source path, cooked layout, options           |
-| `ImportReport`      | `ImportReport.h`      | Result with success flag, diagnostics, counts |
-| `ImportDiagnostic`  | `ImportDiagnostics.h` | Warning/error with severity, code, message    |
-| `ImportSeverity`    | `ImportDiagnostics.h` | `kInfo`, `kWarning`, `kError`                 |
-| `ImportOptions`     | `ImportOptions.h`     | Import configuration options                  |
-| `LooseCookedLayout` | `LooseCookedLayout.h` | Output directory layout                       |
+| Type               | Header                | Description                                   |
+| ------------------ | --------------------- | --------------------------------------------- |
+| `ImportRequest`    | `ImportRequest.h`     | Source path, cooked root, options             |
+| `ImportReport`     | `ImportReport.h`      | Result with success flag, diagnostics, counts |
+| `ImportDiagnostic` | `ImportDiagnostics.h` | Warning/error with severity, code, message    |
+| `ImportSeverity`   | `ImportDiagnostics.h` | `kInfo`, `kWarning`, `kError`                 |
+| `ImportOptions`    | `ImportOptions.h`     | Import configuration options                  |
 
 **Only define NEW types that don't exist:**
 
@@ -364,7 +363,6 @@ public:
 struct ImportRequest {
   std::filesystem::path source_path;
   std::optional<std::filesystem::path> cooked_root;
-  LooseCookedLayout loose_cooked_layout;
   std::optional<data::SourceKey> source_key;
   ImportOptions options;
 };
@@ -1112,7 +1110,6 @@ class TextureEmitter {
 public:
   explicit TextureEmitter(
     IAsyncFileWriter& file_writer,
-    const LooseCookedLayout& layout,
     const std::filesystem::path& cooked_root);
 
   //! Emit a cooked texture. Returns stable table index.

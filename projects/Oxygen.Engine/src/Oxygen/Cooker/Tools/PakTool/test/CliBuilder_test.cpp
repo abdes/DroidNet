@@ -9,12 +9,12 @@
 #include <array>
 #include <filesystem>
 
-#include "ArtifactPublication.h"
 #include "PakToolOptions.h"
 #include "RequestPreparation.h"
 
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/CommandLineContext.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
@@ -25,12 +25,11 @@
 namespace {
 
 using oxygen::clap::CmdLineArgumentsError;
+using oxygen::content::cooked::RealCookerStorage;
 using oxygen::content::pak::BuildMode;
 using oxygen::content::pak::tool::PakToolCliOptions;
 using oxygen::content::pak::tool::PakToolCommand;
 using oxygen::content::pak::tool::PakToolInfo;
-using oxygen::content::pak::tool::RealArtifactFileSystem;
-using oxygen::content::pak::tool::RealRequestPreparationFileSystem;
 using oxygen::content::toolkit::ToolApp;
 using oxygen::content::toolkit::ToolCommand;
 
@@ -41,8 +40,8 @@ constexpr auto kSourceKey = "01234567-89ab-7def-8123-456789abcdef";
 class ParseOnlyTool {
 public:
   explicit ParseOnlyTool(PakToolCliOptions& options)
-    : build_(BuildMode::kFull, options, prep_fs_, artifact_fs_)
-    , patch_(BuildMode::kPatch, options, prep_fs_, artifact_fs_)
+    : build_(BuildMode::kFull, options, RealCookerStorage())
+    , patch_(BuildMode::kPatch, options, RealCookerStorage())
     , app_(PakToolInfo(), std::array<ToolCommand*, 2> { &build_, &patch_ })
   {
   }
@@ -50,8 +49,6 @@ public:
   [[nodiscard]] auto Cli() -> oxygen::clap::Cli& { return app_.Cli(); }
 
 private:
-  RealRequestPreparationFileSystem prep_fs_;
-  RealArtifactFileSystem artifact_fs_;
   PakToolCommand build_;
   PakToolCommand patch_;
   ToolApp app_;

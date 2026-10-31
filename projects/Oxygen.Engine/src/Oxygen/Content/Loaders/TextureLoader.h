@@ -68,20 +68,7 @@ inline auto LoadTextureResource(LoaderContext context)
   LOG_F(2, "format           : {}", nostd::to_string(tex_format));
   LOG_F(2, "alignment        : {}", desc.alignment);
 
-  std::vector<uint8_t> payload(desc.size_bytes);
-  if (desc.size_bytes > 0) {
-    constexpr std::size_t tex_index
-      = IndexOf<data::TextureResource, ResourceTypeList>::value;
-    DCHECK_NOTNULL_F(std::get<tex_index>(context.data_readers),
-      "expecting data reader for TextureResource to be valid");
-    auto& data_reader = *std::get<tex_index>(context.data_readers);
-
-    std::span<std::byte> byte_view(
-      reinterpret_cast<std::byte*>(payload.data()), payload.size());
-    check_result(data_reader.Seek(desc.data_offset), "Texture Payload");
-    auto data_result = data_reader.ReadBlobInto(byte_view);
-    check_result(data_result, "Texture Payload");
-  }
+  auto payload = TakePayload(context, desc.size_bytes, "texture resource");
 
   return std::make_unique<data::TextureResource>(desc, std::move(payload));
 }

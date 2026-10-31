@@ -18,7 +18,6 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -28,7 +27,6 @@ namespace {
 
 using oxygen::content::import::ImportContentFlags;
 using oxygen::content::import::ImportRequest;
-using oxygen::content::import::LooseCookedLayout;
 using oxygen::content::import::test::ModelImportTestBase;
 namespace world = oxygen::data::pak::world;
 
@@ -58,7 +56,6 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, ImportsTexturedFbxScene)
     .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
     .additional_sources = {},
     .cooked_root = temp_dir,
-    .loose_cooked_layout = LooseCookedLayout {},
     .source_key = std::nullopt,
     .options = {},
   };

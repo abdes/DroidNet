@@ -29,7 +29,6 @@ namespace {
   NOLINT_TEST_F(ScriptingSidecarImportJobContextTest,
     SidecarPathOnlySuccessWithInflightSceneContext)
   {
-    using data::loose_cooked::FileKind;
     using data::pak::scripting::ScriptingComponentRecord;
 
     const ScopedTempDir temp;
@@ -63,7 +62,8 @@ namespace {
 
     const auto sidecar_source = cooked_root / "input" / "scene.sidescript.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+        inflight_scene->virtual_path, script_asset->virtual_path))));
 
     auto request = MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -82,11 +82,7 @@ namespace {
     ASSERT_HAS_VALUE(patched_scene) << "Expected patched scene to be present";
     EXPECT_EQ(patched_scene->key, inflight_scene->key);
 
-    const auto files = inspection_after.Files();
-    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) -> auto {
-      return file.relpath.ends_with("script-bindings.table")
-        || file.relpath.ends_with("script-bindings.data");
-    }));
+    EXPECT_FALSE(StoresScriptBindingsFile(inspection_after));
 
     const auto scene_bytes
       = ReadBytes(cooked_root / patched_scene->descriptor_relpath);
@@ -203,7 +199,8 @@ namespace {
 
     const auto sidecar_source = cooked_root / "input" / "precedence.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(
+        SpellReference(scene_a->virtual_path, script_asset->virtual_path))));
 
     auto request = MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -226,7 +223,6 @@ namespace {
   NOLINT_TEST_F(ScriptingSidecarImportJobContextTest,
     ContextResolvedSceneLoadsScriptsTablesFromWinningCookedContext)
   {
-    using data::loose_cooked::FileKind;
     using data::pak::scripting::ScriptingComponentRecord;
 
     const ScopedTempDir temp;
@@ -263,7 +259,8 @@ namespace {
     const auto context_sidecar_source
       = context_root / "input" / "seed_context_sidecar.json";
     WriteText(context_sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(context_script->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+        context_scene->virtual_path, context_script->virtual_path))));
     ASSERT_TRUE(Submit(MakeSidecarRequest({
                          .source_path = context_sidecar_source,
                          .cooked_root = context_root,
@@ -289,7 +286,8 @@ namespace {
     const auto request_sidecar_source
       = request_root / "input" / "context_resolve_sidecar.json";
     WriteText(request_sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(request_script->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+        context_scene->virtual_path, request_script->virtual_path))));
 
     auto request = MakeSidecarRequest({
       .source_path = request_sidecar_source,
@@ -306,11 +304,7 @@ namespace {
     ASSERT_HAS_VALUE(patched_scene) << "Expected patched scene to be present";
     EXPECT_EQ(patched_scene->key, context_scene->key);
 
-    const auto files = request_inspection_after.Files();
-    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) -> auto {
-      return file.relpath.ends_with("script-bindings.table")
-        || file.relpath.ends_with("script-bindings.data");
-    }));
+    EXPECT_FALSE(StoresScriptBindingsFile(request_inspection_after));
 
     const auto scene_bytes
       = ReadBytes(request_root / patched_scene->descriptor_relpath);
@@ -323,7 +317,6 @@ namespace {
   NOLINT_TEST_F(ScriptingSidecarImportJobContextTest,
     ContextParityInflightAndStandaloneProduceEquivalentSerializedState)
   {
-    using data::loose_cooked::FileKind;
 
     const ScopedTempDir temp;
     const auto concurrent_root = temp.Path() / "script_sidecar_parity_a";
@@ -379,9 +372,11 @@ namespace {
     const auto sidecar_source_b
       = standalone_root / "input" / "parity_sidecar.json";
     WriteText(sidecar_source_a,
-      MakeSidecarPayload(MakeSpeedBinding(script_a->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(
+        SpellReference(inflight_scene->virtual_path, script_a->virtual_path))));
     WriteText(sidecar_source_b,
-      MakeSidecarPayload(MakeSpeedBinding(script_b->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(
+        SpellReference(inflight_scene->virtual_path, script_b->virtual_path))));
 
     auto concurrent_request = MakeSidecarRequest({
       .source_path = sidecar_source_a,

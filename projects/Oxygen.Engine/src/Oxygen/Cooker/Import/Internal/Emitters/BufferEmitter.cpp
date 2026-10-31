@@ -25,8 +25,8 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -81,19 +81,19 @@ namespace {
 } // namespace
 
 BufferEmitter::BufferEmitter(IAsyncFileWriter& file_writer,
-  BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+  BufferTableAggregator& table_aggregator,
   const std::filesystem::path& cooked_root)
-  : BufferEmitter(file_writer, table_aggregator, layout, cooked_root, Config {})
+  : BufferEmitter(file_writer, table_aggregator, cooked_root, Config {})
 {
 }
 
 BufferEmitter::BufferEmitter(IAsyncFileWriter& file_writer,
-  BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+  BufferTableAggregator& table_aggregator,
   const std::filesystem::path& cooked_root, Config config)
   : file_writer_(file_writer)
   , table_aggregator_(table_aggregator)
   , config_(std::move(config))
-  , data_path_(cooked_root / layout.BuffersDataRelPath())
+  , data_path_(cooked_root / internal::loose_layout::kBuffersData)
 {
   DLOG_F(INFO, "Created buffer emitter: data='{}'", data_path_.string());
 }

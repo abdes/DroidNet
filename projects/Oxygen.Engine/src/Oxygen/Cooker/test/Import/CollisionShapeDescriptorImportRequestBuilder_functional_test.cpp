@@ -17,9 +17,9 @@
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -27,8 +27,8 @@ using nlohmann::json;
 using oxygen::content::import::CollisionShapeDescriptorImportSettings;
 using oxygen::content::import::internal::BuildCollisionShapeDescriptorRequest;
 using oxygen::cooker::test::kContentHashingDefault;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   -> CollisionShapeDescriptorImportSettings
@@ -55,8 +55,7 @@ NOLINT_TEST(CollisionShapeDescriptorImportRequestBuilderTest,
       "content_hashing": false,
       "shape_type": "box",
       "material_ref": "/.cooked/Physics/Materials/ground.opmat",
-      "half_extents": [25.0, 0.5, 25.0],
-      "virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape"
+      "half_extents": [25.0, 0.5, 25.0]
     })");
 
   const auto settings = MakeBaseSettings(descriptor_path);
@@ -79,8 +78,8 @@ NOLINT_TEST(CollisionShapeDescriptorImportRequestBuilderTest,
     request->collision_shape_descriptor->normalized_descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "floor_box");
   EXPECT_EQ(normalized.at("shape_type").get<std::string>(), "box");
-  EXPECT_EQ(normalized.at("virtual_path").get<std::string>(),
-    "/.cooked/Physics/Shapes/floor_box.ocshape");
+  // Identity comes from the job, never from the descriptor.
+  EXPECT_FALSE(normalized.contains("virtual_path"));
 }
 
 //! Verifies descriptor schema violations fail request construction.

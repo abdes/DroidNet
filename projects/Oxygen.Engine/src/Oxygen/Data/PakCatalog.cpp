@@ -42,12 +42,12 @@ namespace {
     = SourceKey::kSizeBytes + sizeof(uint16_t) + kDigestSize;
   constexpr uint64_t kRequirementSize
     = sizeof(uint8_t) + AssetKey::kSizeBytes + sizeof(uint8_t);
-  //! A library name is stored with a one-byte size.
-  constexpr size_t kMaxLibrarySize = std::numeric_limits<uint8_t>::max();
+  //! A mount name is stored with a one-byte size.
+  constexpr size_t kMaxMountSize = std::numeric_limits<uint8_t>::max();
 
-  auto IsValidLibrary(const std::string_view library) noexcept -> bool
+  auto IsValidMount(const std::string_view mount) noexcept -> bool
   {
-    return !library.empty() && library.size() <= kMaxLibrarySize;
+    return !mount.empty() && mount.size() <= kMaxMountSize;
   }
 
   auto IsValidRequirement(const PakRequirement& requirement) noexcept -> bool
@@ -76,12 +76,12 @@ namespace {
 
   auto ContentSize(const PakCatalog& catalog) noexcept -> uint64_t
   {
-    auto size = kHeaderSize + sizeof(uint8_t) + catalog.library.size()
+    auto size = kHeaderSize + sizeof(uint8_t) + catalog.mount.size()
       + (uint64_t { catalog.entries.size() } * kEntrySize)
       + (uint64_t { catalog.deleted.size() } * AssetKey::kSizeBytes)
       + (uint64_t { catalog.bases.size() } * kBaseSize);
     for (const auto& dependency : catalog.dependencies) {
-      size += sizeof(uint8_t) + dependency.library.size() + sizeof(uint32_t)
+      size += sizeof(uint8_t) + dependency.mount.size() + sizeof(uint32_t)
         + (uint64_t { dependency.requirements.size() } * kRequirementSize);
     }
     return size;
@@ -95,8 +95,8 @@ namespace {
       || catalog.dependencies.size() > kMaxCount) {
       return Err(std::string("Invalid PAK catalog identity or record count"));
     }
-    if (!IsValidLibrary(catalog.library)) {
-      return Err(std::string("Invalid PAK catalog library name"));
+    if (!IsValidMount(catalog.mount)) {
+      return Err(std::string("Invalid PAK catalog mount name"));
     }
     std::unordered_set<AssetKey> keys;
     for (const auto& entry : catalog.entries) {
@@ -119,12 +119,11 @@ namespace {
           std::string("Invalid, repeated or self-referencing PAK base"));
       }
     }
-    // A library is required once, never the pak's own, and for something.
-    std::unordered_set<std::string_view> libraries;
+    // A mount is required once, never the pak's own, and for something.
+    std::unordered_set<std::string_view> mounts;
     for (const auto& dependency : catalog.dependencies) {
-      if (!IsValidLibrary(dependency.library)
-        || dependency.library == catalog.library
-        || !libraries.insert(dependency.library).second
+      if (!IsValidMount(dependency.mount) || dependency.mount == catalog.mount
+        || !mounts.insert(dependency.mount).second
         || dependency.requirements.empty()
         || dependency.requirements.size() > kMaxCount) {
         return Err(
@@ -141,11 +140,11 @@ namespace {
     return Result<void, std::string>::Ok();
   }
 
-  auto WriteLibrary(serio::Writer<serio::MemoryStream>& writer,
-    const std::string_view library) -> bool
+  auto WriteMount(serio::Writer<serio::MemoryStream>& writer,
+    const std::string_view mount) -> bool
   {
-    return writer.Write(static_cast<uint8_t>(library.size()))
-      && writer.WriteBlob(std::as_bytes(std::span(library)));
+    return writer.Write(static_cast<uint8_t>(mount.size()))
+      && writer.WriteBlob(std::as_bytes(std::span(mount)));
   }
 
   auto EncodeContents(const PakCatalog& catalog)
@@ -163,7 +162,7 @@ namespace {
     auto dependencies = catalog.dependencies;
     std::ranges::sort(entries, {}, &PakCatalogEntry::asset_key);
     std::ranges::sort(deleted);
-    std::ranges::sort(dependencies, {}, &PakCatalogDependency::library);
+    std::ranges::sort(dependencies, {}, &PakCatalogDependency::mount);
     for (auto& dependency : dependencies) {
       std::ranges::sort(dependency.requirements, {}, RequirementOrder);
     }
@@ -177,7 +176,7 @@ namespace {
       || !writer.Write(static_cast<uint32_t>(deleted.size()))
       || !writer.Write(static_cast<uint32_t>(catalog.bases.size()))
       || !writer.Write(static_cast<uint32_t>(dependencies.size()))
-      || !WriteLibrary(writer, catalog.library)) {
+      || !WriteMount(writer, catalog.mount)) {
       return Err(std::string("Could not encode PAK catalog header"));
     }
     for (const auto& entry : entries) {
@@ -203,7 +202,7 @@ namespace {
       }
     }
     for (const auto& dependency : dependencies) {
-      if (!WriteLibrary(writer, dependency.library)
+      if (!WriteMount(writer, dependency.mount)
         || !writer.Write(
           static_cast<uint32_t>(dependency.requirements.size()))) {
         return Err(std::string("Could not encode PAK catalog dependency"));
@@ -296,13 +295,13 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
       ? bytes.size() - kDigestSize - position
       : 0U;
   };
-  const auto read_library = [&reader](std::string& library) -> bool {
+  const auto read_mount = [&reader](std::string& mount) -> bool {
     uint8_t size = 0;
     if (!reader.ReadInto(size)) {
       return false;
     }
-    library.resize(size);
-    return reader.ReadBlobInto(std::as_writable_bytes(std::span(library)))
+    mount.resize(size);
+    return reader.ReadBlobInto(std::as_writable_bytes(std::span(mount)))
       .has_value();
   };
   uint32_t version = 0;
@@ -319,11 +318,11 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
   uint32_t deleted_count = 0;
   uint32_t base_count = 0;
   uint32_t dependency_count = 0;
-  auto library = std::string {};
+  auto mount = std::string {};
   if (!reader.ReadBlobInto(std::as_writable_bytes(std::span(source_bytes)))
     || !reader.ReadInto(content_version) || !reader.ReadInto(entry_count)
     || !reader.ReadInto(deleted_count) || !reader.ReadInto(base_count)
-    || !reader.ReadInto(dependency_count) || !read_library(library)) {
+    || !reader.ReadInto(dependency_count) || !read_mount(mount)) {
     return Err(Corrupt("Could not decode PAK catalog header"));
   }
   if ((uint64_t { entry_count } * kEntrySize)
@@ -341,7 +340,7 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
     .source_key = *source,
     .content_version = content_version,
     .catalog_digest = {},
-    .library = std::move(library),
+    .mount = std::move(mount),
     .entries = std::vector<PakCatalogEntry>(entry_count),
     .deleted = std::vector<AssetKey>(deleted_count),
     .bases = std::vector<PakCatalogBase>(base_count),
@@ -383,7 +382,7 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
   }
   for (auto& dependency : catalog.dependencies) {
     uint32_t requirement_count = 0;
-    if (!read_library(dependency.library) || !reader.ReadInto(requirement_count)
+    if (!read_mount(dependency.mount) || !reader.ReadInto(requirement_count)
       || uint64_t { requirement_count } * kRequirementSize > remaining()) {
       return Err(Corrupt("Could not decode PAK catalog dependency"));
     }

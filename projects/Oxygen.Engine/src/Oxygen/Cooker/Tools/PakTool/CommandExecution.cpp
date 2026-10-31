@@ -9,7 +9,10 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
@@ -23,6 +26,7 @@
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
 #include <Oxygen/Cooker/Tools/PakTool/ScriptSealing.h>
+#include <Oxygen/Cooker/Tools/PakTool/StagedSourceStorage.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -163,6 +167,10 @@ namespace {
     }
 
     LogInfoMessage(message);
+    for (const auto& issue : publication_result.issues) {
+      LogWarningMessage(
+        "PakTool publication [" + issue.code + "]: " + issue.message);
+    }
   }
 
   auto MarkReportIntent(ArtifactPublicationResult& publication_result,
@@ -186,7 +194,8 @@ namespace {
   auto EmitReport(const std::string& tool_version, const std::string& command,
     const std::string& command_line, const PakToolRequestSnapshot& snapshot,
     const ArtifactPublicationPlan& publication_plan,
-    PakToolCommandResult& command_result) -> void
+    cooked::CookerStorage& storage, PakToolCommandResult& command_result)
+    -> void
   {
     if (!publication_plan.report.has_value()) {
       return;
@@ -206,8 +215,8 @@ namespace {
       .success = command_result.exit_code == PakToolExitCode::kSuccess,
     };
 
-    command_result.report_write_result
-      = WriteReportFile(publication_plan.report->final_path, report_input);
+    command_result.report_write_result = WriteReportFile(
+      storage, publication_plan.report->final_path, report_input);
     if (!command_result.report_write_result.success) {
       if (command_result.publication_result.report.has_value()) {
         command_result.publication_result.report->published = false;
@@ -237,11 +246,10 @@ namespace {
 
   auto CleanupFailedBuildArtifacts(
     const ArtifactPublicationPlan& publication_plan,
-    IArtifactFileSystem& artifact_fs,
+    cooked::CookerStorage& storage,
     ArtifactPublicationResult& publication_result) -> void
   {
     auto cleanup_intent = ArtifactPublicationIntent {
-      .create_parent_directories = true,
       .publish_pak = false,
       .publish_catalog = false,
       .publish_manifest = false,
@@ -250,7 +258,7 @@ namespace {
       .suppress_stale_manifest_on_skip = true,
     };
     publication_result
-      = PublishArtifacts(publication_plan, cleanup_intent, artifact_fs);
+      = PublishArtifacts(publication_plan, cleanup_intent, storage);
   }
 
 } // namespace
@@ -258,14 +266,13 @@ namespace {
 auto ExecutePakToolCommand(const pak::BuildMode mode,
   const std::string& command, const std::string& command_line,
   const std::string& tool_version, const PakToolCliOptions& options,
-  IRequestPreparationFileSystem& prep_fs, IArtifactFileSystem& artifact_fs)
-  -> PakToolCommandResult
+  cooked::CookerStorage& storage) -> PakToolCommandResult
 {
   auto command_result = PakToolCommandResult {};
   LogInfoMessage("PakTool command starting: command='" + command + "' mode='"
     + std::string(to_string(mode)) + "' line='" + command_line + "'");
 
-  const auto prepared = PreparePakToolRequest(mode, options, prep_fs);
+  const auto prepared = PreparePakToolRequest(mode, options, storage);
   if (!prepared.has_value()) {
     LogPreparationFailure(prepared.error());
     command_result.exit_code = PakToolExitCode::kPreparationFailure;
@@ -290,9 +297,12 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
     = request.publication_plan.pak.final_path.has_parent_path()
     ? request.publication_plan.pak.final_path.parent_path()
     : std::filesystem::temp_directory_path();
+  // The build reads its sources through the staged storage: a sealed loose
+  // source is a staged root that shows the rest of its original root.
+  auto sources_storage = StagedSourceStorage(storage);
   const auto sealed_request
     = SealLooseCookedSourcesForPakBuild(request.build_request, sealing_parent,
-      request.request_snapshot.source_mounts);
+      request.request_snapshot.source_mounts, sources_storage);
   if (!sealed_request.has_value()) {
     LogScriptSealingFailure(sealed_request.error());
     command_result.exit_code = PakToolExitCode::kPreparationFailure;
@@ -305,10 +315,10 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
   }
 
   // The sealed sources are staged for this build only; they go however it ends.
-  const auto staged_roots = sealed_request->staged_loose_roots;
+  const auto staged_files = sealed_request->staged_files;
   const auto staged_source_cleanup
-    = ScopeGuard([&staged_roots] noexcept -> void {
-        CleanupStagedLooseRoots(staged_roots);
+    = ScopeGuard([&storage, &staged_files] noexcept -> void {
+        CleanupStagedFiles(storage, staged_files);
       });
 
   if (sealed_request->sealed_script_assets > 0U) {
@@ -317,12 +327,14 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
       + std::to_string(sealed_request->staged_loose_roots.size()));
   }
 
+  auto build_request = sealed_request->build_request;
+  build_request.storage = make_observer(&sources_storage);
   auto builder = pak::PakBuilder {};
   LogInfoMessage("PakTool invoking PakBuilder");
-  const auto build_result = builder.Build(sealed_request->build_request);
+  const auto build_result = builder.Build(build_request);
   if (!build_result.has_value()) {
     CleanupFailedBuildArtifacts(
-      request.publication_plan, artifact_fs, command_result.publication_result);
+      request.publication_plan, storage, command_result.publication_result);
     command_result.exit_code = PakToolExitCode::kRuntimeFailure;
     command_result.error_code = "paktool.build.runtime_failure";
     command_result.error_message = "PakBuilder returned a runtime failure.";
@@ -334,7 +346,7 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
         + "]: " + command_result.publication_result.error_message);
     }
     EmitReport(tool_version, command, command_line, request.request_snapshot,
-      request.publication_plan, command_result);
+      request.publication_plan, storage, command_result);
     return command_result;
   }
 
@@ -352,12 +364,15 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
     + std::to_string(command_result.build_result.summary.diagnostics_error)
     + ")");
 
-  const auto staged_catalog_write
-    = pak::PakCatalogIo::Write(request.publication_plan.catalog.staged_path,
-      command_result.build_result.output_catalog);
+  // A failed build publishes no catalog, and has no valid one to stage.
+  const auto build_success = !HasBuildErrors(command_result.build_result);
+  const auto staged_catalog_write = build_success
+    ? pak::PakCatalogIo::Write(request.publication_plan.catalog.staged_path,
+        command_result.build_result.output_catalog, storage)
+    : Result<void> {};
   if (!staged_catalog_write.has_value()) {
     CleanupFailedBuildArtifacts(
-      request.publication_plan, artifact_fs, command_result.publication_result);
+      request.publication_plan, storage, command_result.publication_result);
     command_result.exit_code = PakToolExitCode::kRuntimeFailure;
     command_result.error_code = "paktool.catalog.write_failed";
     command_result.error_message
@@ -375,15 +390,15 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
         + "]: " + command_result.publication_result.error_message);
     }
     EmitReport(tool_version, command, command_line, request.request_snapshot,
-      request.publication_plan, command_result);
+      request.publication_plan, storage, command_result);
     return command_result;
   }
-  LogInfoMessage("PakTool staged catalog persisted: path='"
-    + PathForLog(request.publication_plan.catalog.staged_path) + "'");
+  if (build_success) {
+    LogInfoMessage("PakTool staged catalog persisted: path='"
+      + PathForLog(request.publication_plan.catalog.staged_path) + "'");
+  }
 
-  const auto build_success = !HasBuildErrors(command_result.build_result);
   auto publish_intent = ArtifactPublicationIntent {
-    .create_parent_directories = true,
     .publish_pak = build_success,
     .publish_catalog = build_success,
     .publish_manifest = build_success
@@ -395,7 +410,7 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
   };
 
   command_result.publication_result
-    = PublishArtifacts(request.publication_plan, publish_intent, artifact_fs);
+    = PublishArtifacts(request.publication_plan, publish_intent, storage);
   if (!command_result.publication_result.success) {
     command_result.exit_code = PakToolExitCode::kRuntimeFailure;
     command_result.error_code = command_result.publication_result.error_code;
@@ -405,7 +420,7 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
       + command_result.publication_result.error_code
       + "]: " + command_result.publication_result.error_message);
     EmitReport(tool_version, command, command_line, request.request_snapshot,
-      request.publication_plan, command_result);
+      request.publication_plan, storage, command_result);
     return command_result;
   }
   LogPublicationResult(command_result.publication_result);
@@ -413,7 +428,7 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
   command_result.exit_code = build_success ? PakToolExitCode::kSuccess
                                            : PakToolExitCode::kBuildFailure;
   EmitReport(tool_version, command, command_line, request.request_snapshot,
-    request.publication_plan, command_result);
+    request.publication_plan, storage, command_result);
   LogInfoMessage("PakTool command finished: exit_code="
     + std::to_string(static_cast<int>(command_result.exit_code)));
   return command_result;

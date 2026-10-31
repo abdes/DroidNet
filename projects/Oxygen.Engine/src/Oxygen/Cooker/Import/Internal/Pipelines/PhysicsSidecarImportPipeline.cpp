@@ -17,7 +17,6 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <fstream>
 #include <ios>
 #include <limits>
 #include <map>
@@ -69,6 +68,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
@@ -82,9 +82,6 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
-#include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -106,7 +103,6 @@ namespace oxygen::content::import {
 namespace {
 
   namespace phys = data::pak::physics;
-  namespace lc = oxygen::content::lc;
   using core::meta::physics::PhysicsBackend;
   using SidecarCookedInspectionContext = detail::CookedInspectionContext;
   using SidecarResolvedSceneState = detail::ResolvedSceneState;
@@ -242,7 +238,6 @@ namespace {
     phys::SoftBodyBindingRecord record {};
     std::string source_mesh_ref;
     data::AssetKey source_mesh_asset_key;
-    std::string source_mesh_descriptor_relpath;
     data::AssetReferences source_mesh_references;
     std::optional<std::string> collision_mesh_ref;
     std::vector<uint32_t> pinned_vertices;
@@ -1243,12 +1238,13 @@ namespace {
   }
 
   using AssetRecordMap
-    = std::unordered_map<data::AssetKey, const lc::AssetEntry*>;
+    = std::unordered_map<data::AssetKey, const cooked::CookedAsset*>;
 
-  auto BuildAssetRecordMap(const lc::Inspection& inspection) -> AssetRecordMap
+  auto BuildAssetRecordMap(const cooked::CookedContent& content)
+    -> AssetRecordMap
   {
     auto out = AssetRecordMap {};
-    const auto assets = inspection.Assets();
+    const auto assets = content.Assets();
     out.reserve(assets.size());
     for (const auto& asset : assets) {
       out.insert_or_assign(asset.key, &asset);
@@ -1310,13 +1306,8 @@ namespace {
     if (target_it == ctx.target_assets->end()) {
       bool found_in_other_source = false;
       for (const auto& context : ctx.cooked_contexts) {
-        for (const auto& asset : context.inspection.Assets()) {
-          if (asset.key == *resolved_key) {
-            found_in_other_source = true;
-            break;
-          }
-        }
-        if (found_in_other_source) {
+        if (context.content.FindAsset(*resolved_key) != nullptr) {
+          found_in_other_source = true;
           break;
         }
       }
@@ -1332,8 +1323,7 @@ namespace {
       return std::nullopt;
     }
 
-    if (static_cast<data::AssetType>(target_it->second->asset_type)
-      != expected_type) {
+    if (target_it->second->type != expected_type) {
       AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
         std::string(codes.wrong_type),
         "Resolved reference has unexpected asset type: " + named,
@@ -1595,16 +1585,13 @@ namespace {
       }
       records.at(i).source_mesh_asset_key = *source_mesh_key;
       const auto source_mesh_entry = ctx.target_assets->find(*source_mesh_key);
-      if (source_mesh_entry == ctx.target_assets->end()
-        || source_mesh_entry->second->descriptor_relpath.empty()) {
+      if (source_mesh_entry == ctx.target_assets->end()) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.source_mesh_ref_unresolved",
-          "Resolved source mesh has no descriptor path in target cooked root",
+          "Resolved source mesh has no descriptor in target cooked root",
           base_path + ".source_mesh_ref");
         continue;
       }
-      records.at(i).source_mesh_descriptor_relpath
-        = source_mesh_entry->second->descriptor_relpath;
       records.at(i).source_mesh_references
         = source_mesh_entry->second->references;
 
@@ -2095,39 +2082,6 @@ namespace {
     std::vector<data::pak::geometry::MeshViewDesc> mesh_views;
   };
 
-  struct LoadedBufferResources final {
-    std::vector<data::pak::core::BufferResourceDesc> table;
-    std::vector<std::byte> data;
-  };
-
-  auto ReadBinaryFile(const std::filesystem::path& path,
-    std::vector<std::byte>& out, std::string& error) -> bool
-  {
-    auto in = std::ifstream(path, std::ios::binary);
-    if (!in.is_open()) {
-      error = "failed opening file '" + path.string() + "'";
-      return false;
-    }
-    in.seekg(0, std::ios::end);
-    const auto end = in.tellg();
-    if (end < 0) {
-      error = "failed reading file size for '" + path.string() + "'";
-      return false;
-    }
-    out.resize(static_cast<size_t>(end));
-    in.seekg(0, std::ios::beg);
-    if (!out.empty()) {
-      auto buffer = std::string(out.size(), '\0');
-      in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-      if (!(in.good() || in.eof())) {
-        error = "failed reading file bytes from '" + path.string() + "'";
-        return false;
-      }
-      std::ranges::copy(std::as_bytes(std::span { buffer }), out.begin());
-    }
-    return true;
-  }
-
   template <typename T>
   auto ReadPodAt(std::span<const std::byte> bytes, const size_t offset, T& out)
     -> bool
@@ -2237,64 +2191,31 @@ namespace {
     return true;
   }
 
-  auto LoadBufferResources(const std::filesystem::path& cooked_root,
-    const LooseCookedLayout& layout, LoadedBufferResources& out,
-    std::string& error) -> bool
-  {
-    auto table_bytes = std::vector<std::byte> {};
-    auto data_bytes = std::vector<std::byte> {};
-    const auto table_path
-      = cooked_root / std::filesystem::path(layout.BuffersTableRelPath());
-    const auto data_path
-      = cooked_root / std::filesystem::path(layout.BuffersDataRelPath());
-    if (!ReadBinaryFile(table_path, table_bytes, error)) {
-      return false;
-    }
-    if (!ReadBinaryFile(data_path, data_bytes, error)) {
-      return false;
-    }
-
-    if (table_bytes.size() % sizeof(data::pak::core::BufferResourceDesc)
-      != 0U) {
-      error = "buffers table has invalid size";
-      return false;
-    }
-
-    out.table.resize(
-      table_bytes.size() / sizeof(data::pak::core::BufferResourceDesc));
-    if (!table_bytes.empty()) {
-      std::memcpy(out.table.data(), table_bytes.data(), table_bytes.size());
-    }
-    out.data = std::move(data_bytes);
-    return true;
-  }
-
-  auto ReadBufferPayload(const LoadedBufferResources& resources,
+  //! Reads row `index` of `buffers` and its payload.
+  auto ReadBufferPayload(const cooked::CookedResourceTable& buffers,
     const data::pak::core::ResourceIndexT index,
     data::pak::core::BufferResourceDesc& descriptor,
-    std::span<const std::byte>& payload, std::string& error) -> bool
+    std::vector<std::byte>& payload, std::string& error) -> bool
   {
     if (index == data::pak::core::kNoResourceIndex) {
       error = "geometry references kNoResourceIndex buffer";
       return false;
     }
-    const auto table_index = static_cast<size_t>(static_cast<uint32_t>(index));
-    if (table_index >= resources.table.size()) {
+    if (index.get() >= buffers.RowCount()) {
       error = "geometry references out-of-range buffer resource index";
       return false;
     }
 
-    descriptor = resources.table.at(table_index);
-    const auto offset = static_cast<size_t>(descriptor.data_offset);
-    const auto size = static_cast<size_t>(descriptor.size_bytes);
-    if (offset > resources.data.size()
-      || resources.data.size() - offset < size) {
-      error = "buffer payload range exceeds buffers.data size";
+    try {
+      descriptor = buffers.Row<data::pak::core::BufferResourceDesc>(index);
+      payload = buffers.Payload(index);
+    } catch (const std::out_of_range&) {
+      error = "buffer payload range exceeds the buffers data";
+      return false;
+    } catch (const std::exception& ex) {
+      error = std::string("buffer resource cannot be read: ") + ex.what();
       return false;
     }
-
-    payload
-      = std::span<const std::byte> { resources.data }.subspan(offset, size);
     return true;
   }
 
@@ -2566,24 +2487,20 @@ namespace {
 
   auto BuildSurfaceMeshFromStandard(
     const SoftBodyGeometryTopologyInput& topology,
-    const std::filesystem::path& cooked_root, const LooseCookedLayout& layout,
-    SoftBodySurfaceMesh& out, std::string& error) -> bool
+    const cooked::CookedContent& content, SoftBodySurfaceMesh& out,
+    std::string& error) -> bool
   {
-    auto resources = LoadedBufferResources {};
-    if (!LoadBufferResources(cooked_root, layout, resources, error)) {
-      return false;
-    }
-
+    const auto& buffers = content.ResourceTable(data::ResourceKind::kBuffer);
     auto vertex_descriptor = data::pak::core::BufferResourceDesc {};
     auto index_descriptor = data::pak::core::BufferResourceDesc {};
-    auto vertex_payload = std::span<const std::byte> {};
-    auto index_payload = std::span<const std::byte> {};
+    auto vertex_payload = std::vector<std::byte> {};
+    auto index_payload = std::vector<std::byte> {};
 
-    if (!ReadBufferPayload(resources, topology.vertex_buffer, vertex_descriptor,
+    if (!ReadBufferPayload(buffers, topology.vertex_buffer, vertex_descriptor,
           vertex_payload, error)) {
       return false;
     }
-    if (!ReadBufferPayload(resources, topology.index_buffer, index_descriptor,
+    if (!ReadBufferPayload(buffers, topology.index_buffer, index_descriptor,
           index_payload, error)) {
       return false;
     }
@@ -2605,19 +2522,16 @@ namespace {
   }
 
   auto BuildSoftBodySurfaceMesh(const SoftBodyBindingSource& source,
-    const std::filesystem::path& target_cooked_root,
-    const LooseCookedLayout& layout, SoftBodySurfaceMesh& out,
+    const cooked::CookedContent& target_content, SoftBodySurfaceMesh& out,
     std::string& error) -> bool
   {
-    if (source.source_mesh_descriptor_relpath.empty()) {
-      error = "soft-body source mesh descriptor path is unresolved";
-      return false;
-    }
-
-    const auto descriptor_path = target_cooked_root
-      / std::filesystem::path(source.source_mesh_descriptor_relpath);
     auto descriptor_bytes = std::vector<std::byte> {};
-    if (!ReadBinaryFile(descriptor_path, descriptor_bytes, error)) {
+    try {
+      descriptor_bytes
+        = target_content.Descriptor(source.source_mesh_asset_key);
+    } catch (const std::exception& ex) {
+      error = std::string("soft-body source mesh descriptor cannot be read: ")
+        + ex.what();
       return false;
     }
 
@@ -2629,8 +2543,7 @@ namespace {
 
     switch (topology.kind) {
     case SoftBodyGeometryTopologyInput::Kind::kStandard:
-      return BuildSurfaceMeshFromStandard(
-        topology, target_cooked_root, layout, out, error);
+      return BuildSurfaceMeshFromStandard(topology, target_content, out, error);
     case SoftBodyGeometryTopologyInput::Kind::kProcedural:
       return BuildSurfaceMeshFromProcedural(topology, out, error);
     }
@@ -2828,15 +2741,14 @@ namespace {
   }
 
   auto CookJoltSoftBodyBlob(const SoftBodyBindingSource& source,
-    const std::filesystem::path& target_cooked_root,
-    const LooseCookedLayout& layout, std::vector<std::byte>& out_blob,
-    SoftBodyCookError& error) -> bool
+    const cooked::CookedContent& target_content,
+    std::vector<std::byte>& out_blob, SoftBodyCookError& error) -> bool
   {
     EnsureJoltAllocatorReady();
 
     auto surface_mesh = SoftBodySurfaceMesh {};
     if (!BuildSoftBodySurfaceMesh(
-          source, target_cooked_root, layout, surface_mesh, error.reason)) {
+          source, target_content, surface_mesh, error.reason)) {
       return false;
     }
     WeldSurfaceMesh(surface_mesh);
@@ -3110,14 +3022,12 @@ namespace {
   }
 
   auto CookSoftBodyTopologyBlob(const SoftBodyBindingSource& source,
-    const std::filesystem::path& target_cooked_root,
-    const LooseCookedLayout& layout, std::vector<std::byte>& out_blob,
-    SoftBodyCookError& error) -> bool
+    const cooked::CookedContent& target_content,
+    std::vector<std::byte>& out_blob, SoftBodyCookError& error) -> bool
   {
     switch (source.record.topology_format) {
     case phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary:
-      return CookJoltSoftBodyBlob(
-        source, target_cooked_root, layout, out_blob, error);
+      return CookJoltSoftBodyBlob(source, target_content, out_blob, error);
     case phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary:
       error.reason = "physx soft-body cooking is not implemented";
       return false;
@@ -3197,17 +3107,16 @@ namespace {
 
   auto EmitSoftBodyTopologyResources(
     std::vector<SoftBodyBindingSource>& records, ImportSession& session,
-    const ImportRequest& request,
-    const std::filesystem::path& target_cooked_root,
-    const LooseCookedLayout& layout) -> bool
+    const ImportRequest& request, const cooked::CookedContent& target_content)
+    -> bool
   {
     const auto with_hashing
       = EffectiveContentHashingEnabled(request.options.with_content_hashing);
     for (size_t i = 0; i < records.size(); ++i) {
       auto blob_bytes = std::vector<std::byte> {};
       auto cook_error = SoftBodyCookError {};
-      if (!CookSoftBodyTopologyBlob(records.at(i), target_cooked_root, layout,
-            blob_bytes, cook_error)) {
+      if (!CookSoftBodyTopologyBlob(
+            records.at(i), target_content, blob_bytes, cook_error)) {
         LOG_F(ERROR,
           "PhysicsSidecarImportPipeline: soft-body topology cooking failed "
           "(source_mesh_ref='{}' code='{}' reason='{}')",
@@ -3281,11 +3190,10 @@ namespace {
 
   auto EmitBackendCookedBindingResources(PhysicsSidecarDocument& parsed,
     ImportSession& session, const ImportRequest& request,
-    const std::filesystem::path& target_cooked_root,
-    const LooseCookedLayout& layout) -> bool
+    const cooked::CookedContent& target_content) -> bool
   {
     return EmitSoftBodyTopologyResources(
-             parsed.soft_bodies, session, request, target_cooked_root, layout)
+             parsed.soft_bodies, session, request, target_content)
       && EmitJointConstraintResources(parsed.joints, session, request)
       && EmitVehicleConstraintResources(parsed.vehicles, session, request);
   }
@@ -3549,20 +3457,21 @@ namespace {
     const auto context_roots = internal::ContextCookedRoots(request);
     cooked_contexts.reserve(1U + context_roots.size());
 
-    auto primary_context = SidecarCookedInspectionContext {};
-    if (!detail::LoadCookedInspectionContext(session.CookedRoot(), session,
-          request, kPhysicsSidecarResolverDiagnostics, primary_context)) {
+    auto primary_context
+      = detail::LoadCookedInspectionContext(session.CookedRoot(), session,
+        request, kPhysicsSidecarResolverDiagnostics);
+    if (!primary_context) {
       return false;
     }
-    cooked_contexts.push_back(std::move(primary_context));
+    cooked_contexts.push_back(std::move(*primary_context));
 
     for (const auto& context_root : context_roots) {
-      auto context = SidecarCookedInspectionContext {};
-      if (!detail::LoadCookedInspectionContext(context_root, session, request,
-            kPhysicsSidecarResolverDiagnostics, context)) {
+      auto context = detail::LoadCookedInspectionContext(
+        context_root, session, request, kPhysicsSidecarResolverDiagnostics);
+      if (!context) {
         return false;
       }
-      cooked_contexts.push_back(std::move(context));
+      cooked_contexts.push_back(std::move(*context));
     }
 
     for (const auto& context : cooked_contexts) {
@@ -3595,7 +3504,7 @@ namespace {
       return false;
     }
 
-    const auto target_assets = BuildAssetRecordMap(target_context->inspection);
+    const auto target_assets = BuildAssetRecordMap(target_context->content);
     const auto requested_backend = ResolveRequestedPhysicsBackend(request);
     if (requested_backend == PhysicsBackend::kNone) {
       AddDiagnostic(session, request, ImportSeverity::kError,
@@ -3629,8 +3538,8 @@ namespace {
     if (session.HasErrors()) {
       return false;
     }
-    return EmitBackendCookedBindingResources(parsed, session, request,
-      target_context->cooked_root, request.loose_cooked_layout);
+    return EmitBackendCookedBindingResources(
+      parsed, session, request, target_context->content);
   }
 
   auto BuildPhysicsSidecarTables(const PhysicsSidecarDocument& parsed,
@@ -3974,14 +3883,6 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  auto* const reader = session->CookedReader().get();
-  if (reader == nullptr) {
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      "physics.sidecar.io_unavailable",
-      "Physics sidecar import requires an async file reader");
-    co_return false;
-  }
-
   auto cooked_contexts = std::vector<SidecarCookedInspectionContext> {};
   auto resolver = content::VirtualPathResolver {};
   if (!LoadCookedContextsAndMountResolver(
@@ -3989,9 +3890,9 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  auto resolved_scene_state = co_await detail::ResolveTargetSceneState(*session,
-    request, resolver, cooked_contexts, *reader,
-    physics.target_scene_virtual_path, kPhysicsSidecarResolverDiagnostics);
+  auto resolved_scene_state = detail::ResolveTargetSceneState(*session, request,
+    resolver, cooked_contexts, physics.target_scene_virtual_path,
+    kPhysicsSidecarResolverDiagnostics);
   if (!resolved_scene_state.has_value()) {
     co_return false;
   }
@@ -4005,6 +3906,8 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   references.AddLogical(
     resolved_scene_state->scene_key, data::AssetType::kScene);
   const auto tables = BuildPhysicsSidecarTables(*parsed, references);
+  // The contexts keep files of the cooked root open; the emission writes it.
+  cooked_contexts.clear();
   if (!SerializeAndEmitPhysicsSidecar(*resolved_scene_state, request, tables,
         *session, std::move(references).Build())) {
     co_return false;

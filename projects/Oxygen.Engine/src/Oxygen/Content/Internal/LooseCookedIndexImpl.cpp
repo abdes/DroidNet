@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
@@ -28,17 +29,17 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Content/Internal/LooseCookedIndexCodec.h> // IWYU pragma: keep
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Serio/AtomicFile.h>
-#include <Oxygen/Serio/MemoryStream.h>
-#include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/ByteReader.h>
+#include <Oxygen/Serio/MappedFile.h>
+#include <Oxygen/Serio/Types.h>
 
 using oxygen::data::loose_cooked::AssetEntry;
 using oxygen::data::loose_cooked::FileKind;
@@ -129,68 +130,6 @@ auto ExtractNullTerminatedString(std::string_view table, const uint32_t offset)
   return { tail.data(), len };
 }
 
-auto ValidateNoDotSegments(const std::string_view path) -> void
-{
-  size_t pos = 0;
-  while (pos <= path.size()) {
-    const auto next = path.find('/', pos);
-    const auto len
-      = (next == std::string_view::npos) ? (path.size() - pos) : (next - pos);
-    const auto segment = path.substr(pos, len);
-    if (segment == ".") {
-      throw std::runtime_error("Index path must not contain '.'");
-    }
-    if (segment == "..") {
-      throw std::runtime_error("Index path must not contain '..'");
-    }
-
-    if (next == std::string_view::npos) {
-      break;
-    }
-    pos = next + 1;
-  }
-}
-
-auto ValidateRelativePath(const std::string_view relpath) -> void
-{
-  if (relpath == "container.index.bin"
-    || relpath == data::loose_cooked::kGenerationLeaseFileName) {
-    throw std::runtime_error("Reserved path in loose cooked inventory");
-  }
-  if (relpath.empty()) {
-    throw std::runtime_error("Index path must not be empty");
-  }
-
-  if (relpath.contains('\\')) {
-    throw std::runtime_error("Index path must use '/' as the separator");
-  }
-  if (relpath.contains(':')) {
-    throw std::runtime_error("Index path must not contain ':'");
-  }
-  if (relpath.front() == '/') {
-    throw std::runtime_error("Index path must be container-relative");
-  }
-  if (relpath.back() == '/') {
-    throw std::runtime_error("Index path must not end with '/'");
-  }
-  if (relpath.contains("//")) {
-    throw std::runtime_error("Index path must not contain '//'");
-  }
-
-  ValidateNoDotSegments(relpath);
-
-  std::filesystem::path p(relpath);
-  if (p.is_absolute() || p.has_root_path() || p.has_root_name()) {
-    throw std::runtime_error("Index path must be container-relative");
-  }
-
-  for (const auto& part : p) {
-    if (part == "..") {
-      throw std::runtime_error("Index path must not contain '..'");
-    }
-  }
-}
-
 auto RequireCanonicalVirtualPath(const std::string_view virtual_path) -> void
 {
   if (const auto error = content::ValidateVirtualPath(virtual_path);
@@ -271,12 +210,11 @@ auto ValidateGuid(const IndexHeader& header) -> void
 namespace oxygen::content::internal {
 
 struct LooseCookedIndexImpl::IndexLoadContext {
-  oxygen::observer_ptr<serio::Reader<serio::ReadOnlyMemoryStream>> reader;
+  oxygen::observer_ptr<serio::ByteReader> reader;
   uint64_t file_size;
   uint64_t next_reference_offset = 0;
   IndexHeader header;
   oxygen::observer_ptr<LooseCookedIndexImpl> index;
-  std::string_view stored_table {}; // NOLINT
   std::unordered_set<std::string_view> unique_virtual_paths {}; // NOLINT
   std::unordered_set<std::string_view> unique_file_paths {}; // NOLINT
 };
@@ -324,50 +262,67 @@ auto LooseCookedIndexImpl::LoadFromFile(const std::filesystem::path& index_path)
 auto LooseCookedIndexImpl::LoadFromLockedFile(
   const std::filesystem::path& index_path) -> LooseCookedIndexImpl
 {
-  // A shared read never blocks the cooker replacing the published index.
-  auto bytes = serio::ReadPublishedFile(index_path);
-  if (!bytes) {
+  // The mapping shares deletion, so it never blocks the cooker replacing the
+  // published index, and keeps showing the version it mapped.
+  auto mapped = serio::MappedFile::Open(index_path);
+  if (!mapped) {
     throw std::runtime_error(
-      "Failed to read index file: " + bytes.error().message());
+      "Failed to map index file: " + mapped.error().message());
   }
-  return LoadFromBytes(*bytes);
+  return Load(std::move(*mapped));
 }
 
 auto LooseCookedIndexImpl::LoadFromBytes(const std::span<const std::byte> bytes)
   -> LooseCookedIndexImpl
 {
+  return Load(std::vector<std::byte>(bytes.begin(), bytes.end()));
+}
+
+auto LooseCookedIndexImpl::LoadFromBytes(std::vector<std::byte>&& bytes)
+  -> LooseCookedIndexImpl
+{
+  return Load(std::move(bytes));
+}
+
+auto LooseCookedIndexImpl::Load(IndexBytes bytes) -> LooseCookedIndexImpl
+{
+  LooseCookedIndexImpl out;
+  out.bytes_ = std::move(bytes);
   // Every refusal of the bytes is typed: what is not a wrong format or
   // version is a malformed index.
   try {
-    return Parse(bytes);
+    out.Parse();
   } catch (const data::CookedOpenError&) {
     throw;
   } catch (const std::runtime_error& ex) {
     throw data::CookedOpenError(data::CookedOpenFailure::kCorrupt, ex.what());
   }
+  // Moving the index moves its bytes, which its views keep pointing into.
+  return out;
 }
 
-auto LooseCookedIndexImpl::Parse(const std::span<const std::byte> bytes)
-  -> LooseCookedIndexImpl
+auto LooseCookedIndexImpl::Parse() -> void
 {
+  const auto bytes = std::holds_alternative<serio::MappedFile>(bytes_)
+    ? std::get<serio::MappedFile>(bytes_).Bytes()
+    : std::span<const std::byte>(std::get<std::vector<std::byte>>(bytes_));
   const auto file_size = bytes.size();
   if (file_size < sizeof(IndexHeader)) {
     throw data::CookedOpenError(data::CookedOpenFailure::kWrongFormat,
       "File too small to hold a loose cooked index header");
   }
 
-  serio::ReadOnlyMemoryStream stream(bytes);
-  serio::Reader<serio::ReadOnlyMemoryStream> reader(stream);
-  LooseCookedIndexImpl out;
+  auto reader = serio::ByteReader(bytes);
   IndexLoadContext context {
     .reader = oxygen::make_observer(&reader),
     .file_size = file_size,
     .next_reference_offset = 0,
     .header = {},
-    .index = oxygen::make_observer(&out),
+    .index = oxygen::make_observer(this),
   };
 
   LoadAndValidateHeader(context);
+  content_version_ = context.header.content_version;
   const auto reference_start = context.header.file_records_offset
     + (uint64_t { context.header.file_record_count } * sizeof(FileRecord));
   ValidateSectionRange(file_size, reference_start, 0, "reference block start");
@@ -379,19 +334,18 @@ auto LooseCookedIndexImpl::Parse(const std::span<const std::byte> bytes)
       "Loose cooked reference blocks do not cover the index tail");
   }
   ReadFileRecords(context);
-  ValidateFilePairs(out);
+  ValidateFilePairs(*this);
 
-  out.reference_storage_offset_ = reference_start;
-  if (!reader.Seek(reference_start)) {
+  reference_tail_offset_ = reference_start;
+  if (!reader.Seek(serio::ByteOffset { reference_start })) {
     throw std::runtime_error("Failed to seek loose cooked reference blocks");
   }
-  auto reference_bytes = reader.ReadBlob(file_size - reference_start);
-  if (!reference_bytes) {
+  const auto tail
+    = reader.ReadBytes(serio::ByteCount { file_size - reference_start });
+  if (!tail) {
     throw std::runtime_error("Failed to read loose cooked reference blocks");
   }
-  out.reference_storage_ = std::move(*reference_bytes);
-
-  return out;
+  reference_tail_ = *tail;
 }
 
 auto LooseCookedIndexImpl::LoadAndValidateHeader(IndexLoadContext& context)
@@ -452,32 +406,28 @@ auto LooseCookedIndexImpl::ReadStringTable(IndexLoadContext& context) -> void
 {
   context.index->guid_ = ParseSourceKeyOrThrow(context.header.source_identity,
     "Loose cooked index must have a non-zero UUIDv7 source identity");
-  context.index->string_storage_.resize(context.header.string_table_size);
-  if (auto res = context.reader->Seek(context.header.string_table_offset);
+  if (auto res = context.reader->Seek(
+        serio::ByteOffset { context.header.string_table_offset });
     !res) {
     throw std::runtime_error(
       "Failed to seek to string table: " + res.error().message());
   }
-  const auto result = context.reader->ReadBlobInto(std::span(
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    reinterpret_cast<std::byte*>(context.index->string_storage_.data()),
-    context.index->string_storage_.size()));
-  if (!result) {
+  const auto table = context.reader->ReadStringView(
+    serio::ByteCount { context.header.string_table_size });
+  if (!table) {
     throw std::runtime_error(
-      std::string("Failed to read string table: " + result.error().message()));
+      "Failed to read string table: " + table.error().message());
   }
-
-  if (context.index->string_storage_.empty()
-    || context.index->string_storage_.front() != '\0') {
+  if (table->empty() || table->front() != '\0') {
     throw std::runtime_error("String table must start with a NUL byte");
   }
-  context.stored_table = std::string_view(context.index->string_storage_.data(),
-    context.index->string_storage_.size());
+  context.index->string_table_ = *table;
 }
 
 auto LooseCookedIndexImpl::ReadAssetEntries(IndexLoadContext& context) -> void
 {
-  if (auto res = context.reader->Seek(context.header.asset_entries_offset);
+  if (auto res = context.reader->Seek(
+        serio::ByteOffset { context.header.asset_entries_offset });
     !res) {
     throw std::runtime_error(
       "Failed to seek to asset entries: " + res.error().message());
@@ -512,13 +462,13 @@ auto LooseCookedIndexImpl::ReadAssetEntries(IndexLoadContext& context) -> void
     ValidateStringOffset(context.header, entry.source_path_offset);
 
     const auto descriptor_rel = ExtractNullTerminatedString(
-      context.stored_table, entry.descriptor_relpath_offset);
+      context.index->string_table_, entry.descriptor_relpath_offset);
     const auto virtual_path = ExtractNullTerminatedString(
-      context.stored_table, entry.virtual_path_offset);
+      context.index->string_table_, entry.virtual_path_offset);
     const auto source_path = ExtractNullTerminatedString(
-      context.stored_table, entry.source_path_offset);
+      context.index->string_table_, entry.source_path_offset);
 
-    ValidateRelativePath(descriptor_rel);
+    data::loose_cooked::RequireIndexRelPath(descriptor_rel);
     RequireCanonicalVirtualPath(virtual_path);
     RequireCanonicalVirtualPath(source_path);
     if (!context.unique_file_paths.insert(descriptor_rel).second) {
@@ -583,11 +533,9 @@ auto LooseCookedIndexImpl::FindAssetReferences(const data::AssetKey& key) const
   const auto& table = found->second.references;
   const auto size
     = data::AssetReferences::EncodedSize(table.resource_count, table.key_count);
-  const auto offset
-    = size == 0U ? 0U : table.offset - reference_storage_offset_;
-  const auto bytes
-    = std::span(reference_storage_)
-        .subspan(static_cast<size_t>(offset), static_cast<size_t>(size));
+  const auto offset = size == 0U ? 0U : table.offset - reference_tail_offset_;
+  const auto bytes = reference_tail_.subspan(
+    static_cast<size_t>(offset), static_cast<size_t>(size));
   auto decoded = data::AssetReferences::Decode(
     bytes, table.resource_count, table.key_count);
   if (!decoded) {
@@ -602,7 +550,8 @@ auto LooseCookedIndexImpl::ReadFileRecords(IndexLoadContext& context) -> void
     return;
   }
 
-  if (auto res = context.reader->Seek(context.header.file_records_offset);
+  if (auto res = context.reader->Seek(
+        serio::ByteOffset { context.header.file_records_offset });
     !res) {
     throw std::runtime_error(
       "Failed to seek to file records: " + res.error().message());
@@ -620,8 +569,8 @@ auto LooseCookedIndexImpl::ReadFileRecords(IndexLoadContext& context) -> void
 
     ValidateStringOffset(context.header, record.relpath_offset);
     const auto rel = ExtractNullTerminatedString(
-      context.stored_table, record.relpath_offset);
-    ValidateRelativePath(rel);
+      context.index->string_table_, record.relpath_offset);
+    data::loose_cooked::RequireIndexRelPath(rel);
     if (!context.unique_file_paths.insert(rel).second) {
       throw std::runtime_error("Duplicate content path in loose cooked index");
     }
@@ -637,9 +586,9 @@ auto LooseCookedIndexImpl::ReadFileRecords(IndexLoadContext& context) -> void
     ValidateStringOffset(context.header, record.virtual_path_offset);
     ValidateStringOffset(context.header, record.source_path_offset);
     const auto virtual_path = ExtractNullTerminatedString(
-      context.stored_table, record.virtual_path_offset);
+      context.index->string_table_, record.virtual_path_offset);
     const auto source_path = ExtractNullTerminatedString(
-      context.stored_table, record.source_path_offset);
+      context.index->string_table_, record.source_path_offset);
     if (record.kind == FileKind::kTextureDescriptor) {
       RequireCanonicalVirtualPath(virtual_path);
       RequireCanonicalVirtualPath(source_path);
@@ -733,8 +682,7 @@ auto LooseCookedIndexImpl::FindDescriptorRelPath(
   }
 
   try {
-    const auto table
-      = std::string_view(string_storage_.data(), string_storage_.size());
+    const auto table = string_table_;
     return ExtractNullTerminatedString(
       table, it->second.descriptor_relpath_offset);
   } catch (...) {
@@ -774,8 +722,7 @@ auto LooseCookedIndexImpl::FindSourcePath(
   }
 
   try {
-    const auto table
-      = std::string_view(string_storage_.data(), string_storage_.size());
+    const auto table = string_table_;
     return ExtractNullTerminatedString(table, it->second.source_path_offset);
   } catch (...) {
     return std::nullopt;
@@ -791,8 +738,7 @@ auto LooseCookedIndexImpl::FindVirtualPath(
   }
 
   try {
-    const auto table
-      = std::string_view(string_storage_.data(), string_storage_.size());
+    const auto table = string_table_;
     return ExtractNullTerminatedString(table, it->second.virtual_path_offset);
   } catch (...) {
     return std::nullopt;
@@ -819,8 +765,7 @@ auto LooseCookedIndexImpl::FindAssetKeyByVirtualPath(
   std::string_view virtual_path) const noexcept -> std::optional<data::AssetKey>
 {
   try {
-    const auto table
-      = std::string_view(string_storage_.data(), string_storage_.size());
+    const auto table = string_table_;
 
     for (const auto& [offset, key] : virtual_path_offset_to_key_) {
       const auto stored = ExtractNullTerminatedString(table, offset);
@@ -839,8 +784,7 @@ auto LooseCookedIndexImpl::FindTextureDescriptorRelPath(
   -> std::optional<std::string_view>
 {
   try {
-    const auto table
-      = std::string_view(string_storage_.data(), string_storage_.size());
+    const auto table = string_table_;
     for (const auto& file : texture_descriptors_) {
       if (ExtractNullTerminatedString(table, file.virtual_path_offset)
         == virtual_path) {
@@ -856,8 +800,7 @@ auto LooseCookedIndexImpl::FindTextureDescriptorRelPath(
 auto LooseCookedIndexImpl::TextureDescriptorVirtualPaths() const
   -> std::vector<std::string>
 {
-  const auto table
-    = std::string_view(string_storage_.data(), string_storage_.size());
+  const auto table = string_table_;
   std::vector<std::string> paths;
   paths.reserve(texture_descriptors_.size());
   for (const auto& file : texture_descriptors_) {
@@ -876,8 +819,7 @@ auto LooseCookedIndexImpl::FindFileRelPath(FileKind kind) const noexcept
   }
 
   try {
-    const auto table
-      = std::string_view(string_storage_.data(), string_storage_.size());
+    const auto table = string_table_;
     return ExtractNullTerminatedString(table, it->second.relpath_offset);
   } catch (...) {
     return std::nullopt;

@@ -6,27 +6,24 @@
 
 // Covers: Pak/PakBuilder.cpp
 
-#include <algorithm>
+#include <cstddef>
 #include <cstdint>
-#include <filesystem>
-#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#include "PakTestSupport.h"
-
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/DependencyRequirementError.h>
-#include <Oxygen/Content/PakFile.h>
-#include <Oxygen/Content/test/Fixtures/LooseCookedTestWriter.h>
-#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
-#include <Oxygen/Cooker/Pak/PakBuilder.h>
-#include <Oxygen/Cooker/test/Support/TestValues.h>
-#include <Oxygen/Cooker/test/Support/TextureLibraryFixture.h>
+#include <Oxygen/Cooker/Pak/PakBuildResult.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -34,11 +31,12 @@
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakCatalog.h>
-#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
-#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace oxygen::engine::internal {
 //! The tag an `AssetLoader` takes, which only the engine and its tests make.
@@ -49,114 +47,137 @@ struct EngineTagFactory {
 
 namespace {
 namespace data = oxygen::data;
-using oxygen::engine::internal::EngineTagFactory;
+namespace fixtures = oxygen::cooker::testing;
 namespace pak = oxygen::content::pak;
-namespace paktest = oxygen::content::pak::test;
+namespace render = oxygen::data::pak::render;
+namespace script = oxygen::data::pak::scripting;
 
-auto MakeNonZeroSourceKey() -> data::SourceKey
+using oxygen::cooker::test::HasDiagnostic;
+using oxygen::cooker::test::HasNoErrors;
+using oxygen::cooker::testing::LooseCookedRoot;
+using oxygen::cooker::testing::Materialize;
+using oxygen::cooker::testing::PakWorkspace;
+using oxygen::engine::internal::EngineTagFactory;
+using oxygen::serio::testing::BytesEqual;
+
+//=== Helpers ===-------------------------------------------------------------//
+
+//! The bytes of a plain material named `name`.
+auto MaterialBytes(const std::string_view name) -> std::vector<std::byte>
 {
-  return paktest::MakeSourceKey(static_cast<uint8_t>(1U));
+  return fixtures::MaterialDescriptor(name).bytes;
 }
 
-using paktest::MakeSourceKey;
+//! The bytes of a script with no bytecode.
+auto ScriptBytes() -> std::vector<std::byte>
+{
+  auto desc = script::ScriptAssetDesc {};
+  desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScript);
+  desc.header.version = script::kScriptAssetVersion;
+  return data::MakeDescriptorBytes(desc);
+}
 
-using paktest::MakeAssetKey;
+//! The references of an asset that names the asset `target` of type `type`.
+auto ReferencesTo(const data::AssetKey& target, const data::AssetType type)
+  -> data::AssetReferences
+{
+  return data::AssetReferences::Create({},
+    {
+      {
+        .key = target,
+        .kind = data::KeyReferenceKind::kAsset,
+        .expected_type = type,
+      },
+    })
+    .value();
+}
 
-using paktest::HasDiagnosticCode;
+//! Adds a plain material at `leaf`; returns its key.
+auto AddMaterial(LooseCookedRoot& library, const std::string_view leaf)
+  -> data::AssetKey
+{
+  return library.Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = std::string(leaf),
+    .descriptor = MaterialBytes(leaf),
+  });
+}
 
-class PakBuilderTest : public paktest::TempDirFixture { };
+//=== Reference graphs ===----------------------------------------------------//
+
+//! What the owner material's reference to `Target.omat` finds.
+enum class Target : uint8_t {
+  kAbsent,
+  kScript,
+  kMaterialReferencingOwner,
+};
 
 //! One invalid reference graph and the diagnostic the planner must report.
 struct ReferenceGraphCase final {
   const char* name;
+  Target target;
   const char* code;
 };
 
 class PakBuilderReferenceGraphTest
-  : public PakBuilderTest,
-    public ::testing::WithParamInterface<ReferenceGraphCase> { };
+  : public ::testing::TestWithParam<ReferenceGraphCase> { };
 
 NOLINT_TEST_P(PakBuilderReferenceGraphTest, RejectsInvalidAssetReferenceGraph)
 {
-  const auto owner_key = MakeAssetKey(41U);
-  const auto target_key = MakeAssetKey(42U);
-  auto descriptor = data::pak::render::MaterialAssetDesc {};
-  descriptor.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kMaterial);
-  descriptor.header.version = data::pak::render::kMaterialAssetVersion;
-  const auto bytes = data::MakeDescriptorBytes(descriptor);
-  auto script_descriptor = data::pak::scripting::ScriptAssetDesc {};
-  script_descriptor.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kScript);
-  script_descriptor.header.version = data::pak::scripting::kScriptAssetVersion;
-  const auto script_bytes = data::MakeDescriptorBytes(script_descriptor);
-  const auto owner_references = data::AssetReferences::Create({},
-    {
-      {
-        .key = target_key,
-        .kind = data::KeyReferenceKind::kAsset,
-        .expected_type = data::AssetType::kMaterial,
-      },
+  // Arrange: forged metadata; production writers reject these graphs.
+  auto workspace = PakWorkspace {};
+  auto game = LooseCookedRoot {};
+  const auto owner = game.KeyOf("Owner.omat");
+  const auto target = game.KeyOf("Target.omat");
+  game.Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = "Owner.omat",
+    .descriptor = MaterialBytes("Owner"),
+    .references = ReferencesTo(target, data::AssetType::kMaterial),
+  });
+  if (GetParam().target == Target::kScript) {
+    game.Add({
+      .type = data::AssetType::kScript,
+      .leaf = "Target.oscript",
+      .descriptor = ScriptBytes(),
+      .key = target,
     });
-  ASSERT_HAS_VALUE(owner_references);
-
-  {
-    const auto* const code = GetParam().code;
-    const auto root = Path(code);
-    // Deliberately forge metadata: production writers reject these pairs.
-    auto writer = oxygen::content::testing::LooseCookedTestWriter(root);
-    writer.WriteAssetDescriptor(owner_key, data::AssetType::kMaterial,
-      "/Game/Owner.omat", "Owner.omat", bytes, *owner_references);
-    if (std::string_view(code) != "pak.plan.asset_reference_missing") {
-      const bool cycle
-        = std::string_view(code) == "pak.plan.asset_reference_cycle";
-      const auto references = cycle
-        ? data::AssetReferences::Create({},
-            {
-              {
-                .key = owner_key,
-                .kind = data::KeyReferenceKind::kAsset,
-                .expected_type = data::AssetType::kMaterial,
-              },
-            })
-        : data::AssetReferences::Create({}, {});
-      ASSERT_HAS_VALUE(references);
-      writer.WriteAssetDescriptor(target_key,
-        cycle ? data::AssetType::kMaterial : data::AssetType::kScript,
-        cycle ? "/Game/Target.omat" : "/Game/Target.oscript",
-        cycle ? "Target.omat" : "Target.oscript", cycle ? bytes : script_bytes,
-        *references);
-    }
-    static_cast<void>(writer.Finish());
-    auto request = pak::PakBuildRequest {};
-    request.sources = {
-      { .kind = data::CookedSourceKind::kLooseCooked, .path = root },
-    };
-    request.output_pak_path = root / "output.pak";
-    request.content_version = 1U;
-    request.source_key = MakeNonZeroSourceKey();
-    const auto result = pak::PakBuilder {}.Build(request);
-    ASSERT_HAS_VALUE(result);
-    EXPECT_TRUE(HasDiagnosticCode(result->diagnostics, code));
-    EXPECT_FALSE(std::filesystem::exists(request.output_pak_path));
+  } else if (GetParam().target == Target::kMaterialReferencingOwner) {
+    game.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = "Target.omat",
+      .descriptor = MaterialBytes("Target"),
+      .references = ReferencesTo(owner, data::AssetType::kMaterial),
+    });
   }
+  const auto request = workspace.FullRequest({ workspace.Add(game) });
+
+  // Act
+  const auto result = PakWorkspace::Build(request);
+
+  // Assert
+  EXPECT_THAT(result.diagnostics, HasDiagnostic(GetParam().code));
+  EXPECT_FALSE(workspace.Exists(request.output_pak_path));
 }
 
 INSTANTIATE_TEST_SUITE_P(InvalidGraphs, PakBuilderReferenceGraphTest,
-  ::testing::Values(
-    ReferenceGraphCase { "MissingTarget", "pak.plan.asset_reference_missing" },
-    ReferenceGraphCase {
-      "TypeMismatch", "pak.plan.asset_reference_type_mismatch" },
-    ReferenceGraphCase { "Cycle", "pak.plan.asset_reference_cycle" }),
-  [](const ::testing::TestParamInfo<ReferenceGraphCase>& info) -> std::string {
-    return std::string(info.param.name);
-  });
+  ::testing::Values(ReferenceGraphCase { "MissingTarget", Target::kAbsent,
+                      "pak.plan.asset_reference_missing" },
+    ReferenceGraphCase { "TypeMismatch", Target::kScript,
+      "pak.plan.asset_reference_type_mismatch" },
+    ReferenceGraphCase { "Cycle", Target::kMaterialReferencingOwner,
+      "pak.plan.asset_reference_cycle" }),
+  [](const auto& info) { return std::string(info.param.name); });
 
-NOLINT_TEST_F(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
+//=== Sentinel texture references ===-----------------------------------------//
+
+//! The error-texture and no-texture sentinels a material references survive a
+//! pack from loose content and a repack from that pak.
+NOLINT_TEST(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
 {
-  namespace content = oxygen::content;
-  namespace render = data::pak::render;
-  const auto key = MakeAssetKey(42U);
+  // Arrange
+  auto workspace = PakWorkspace {};
+  auto game = LooseCookedRoot {};
   const auto references = data::AssetReferences::Create(
     {
       {
@@ -170,132 +191,86 @@ NOLINT_TEST_F(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
     },
     {});
   ASSERT_HAS_VALUE(references);
+  auto desc = render::MaterialAssetDesc {};
+  desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
+  desc.header.version = render::kMaterialAssetVersion;
+  desc.base_color_texture = data::ResourceReferenceIndex { 0U };
+  desc.emissive_texture = data::ResourceReferenceIndex { 1U };
+  const auto descriptor = data::MakeDescriptorBytes(desc);
+  const auto material = game.Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = "Missing.omat",
+    .descriptor = descriptor,
+    .references = *references,
+  });
+  const auto packed
+    = workspace.FullRequest({ workspace.Add(game) }, "packed.pak");
+  const auto repacked = workspace.FullRequest(
+    { PakWorkspace::PakSource(packed.output_pak_path) }, "repacked.pak");
 
-  auto descriptor = render::MaterialAssetDesc {};
-  descriptor.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kMaterial);
-  descriptor.header.version = render::kMaterialAssetVersion;
-  descriptor.base_color_texture = data::ResourceReferenceIndex { 0U };
-  descriptor.emissive_texture = data::ResourceReferenceIndex { 1U };
-  const auto descriptor_bytes = data::MakeDescriptorBytes(descriptor);
-  const auto loose_root = Path("loose");
-  auto writer = content::import::LooseCookedWriter(loose_root);
-  writer.SetSourceKey(MakeNonZeroSourceKey());
-  writer.WriteAssetDescriptor(key, data::AssetType::kMaterial,
-    "/Game/Missing.omat", "Missing.omat", descriptor_bytes, *references,
-    content::import::LooseCookedProducer {
-      .source = "/Game/Missing.omat.json",
-      .completes = {},
-    });
-  ASSERT_EQ(writer.Finish().assets.size(), 1U);
+  for (const auto& request : { packed, repacked }) {
+    SCOPED_TRACE(request.output_pak_path.generic_string());
 
-  auto request = pak::PakBuildRequest {};
-  request.mode = pak::BuildMode::kFull;
-  request.sources = {
-    { .kind = data::CookedSourceKind::kLooseCooked, .path = loose_root },
-  };
-  request.content_version = 1U;
-  request.source_key = MakeSourceKey(2U);
-  for (const auto* const filename : { "packed.pak", "repacked.pak" }) {
-    request.output_pak_path = Path(filename);
-    const auto built = pak::PakBuilder {}.Build(request);
-    ASSERT_HAS_VALUE(built);
-    for (const auto& diagnostic : built->diagnostics) {
-      EXPECT_NE(diagnostic.severity, pak::PakDiagnosticSeverity::kError)
-        << diagnostic.message;
-    }
-    ASSERT_EQ(built->summary.diagnostics_error, 0U);
+    // Act
+    const auto result = PakWorkspace::Build(request);
 
-    auto archive = content::PakFile(request.output_pak_path);
-    archive.ValidateCrc32Integrity();
-    const auto entry = archive.FindEntry(key);
-    ASSERT_HAS_VALUE(entry);
-    const auto loaded_references = archive.ReadAssetReferences(key);
-    EXPECT_EQ(loaded_references, *references);
-    auto bytes_reader = archive.CreateReader(*entry);
-    const auto bytes = bytes_reader.ReadBlob(entry->desc_size);
-    ASSERT_HAS_VALUE(bytes);
-    EXPECT_TRUE(std::ranges::equal(*bytes, descriptor_bytes));
-
-    request.sources = {
-      { .kind = data::CookedSourceKind::kPak, .path = request.output_pak_path },
-    };
+    // Assert
+    ASSERT_THAT(result.diagnostics, HasNoErrors());
+    const auto archive = workspace.Open(request.output_pak_path);
+    EXPECT_EQ(archive.Pak().ReadAssetReferences(material), *references);
+    EXPECT_THAT(archive.Descriptor(material), BytesEqual(descriptor));
   }
 }
 
-//! A full build that depends on another pak, whose owner material references
-//! the dependency's material with the given expected type.
-class PakBuilderDependencyTest : public PakBuilderTest {
+//=== Dependencies ===--------------------------------------------------------//
+
+//! A full build of the `Game` layer above the `Engine` library: the layer's
+//! owner material references the library's target material with an expected
+//! type. Derives from `TempDirTest` for the `AssetLoader`, which mounts real
+//! files only.
+class PakBuilderDependencyTest : public oxygen::testing::TempDirTest {
 protected:
+  //! Packs `engine.pak`, then builds `layer.pak` and its manifest above it.
   auto BuildLayer(const data::AssetType expected_type) -> pak::PakBuildResult
   {
-    const auto target_key = MakeAssetKey(42U);
-    auto descriptor = data::pak::render::MaterialAssetDesc {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kMaterial);
-    descriptor.header.version = data::pak::render::kMaterialAssetVersion;
-    const auto bytes = data::MakeDescriptorBytes(descriptor);
-    const auto none = data::AssetReferences::Create({}, {});
-    const auto owner_references = data::AssetReferences::Create({},
-      {
-        {
-          .key = target_key,
-          .kind = data::KeyReferenceKind::kAsset,
-          .expected_type = expected_type,
-        },
-      });
-    if (!none.has_value() || !owner_references.has_value()) {
-      ADD_FAILURE() << "Expected the reference tables to encode";
-      return {};
-    }
+    auto engine = LooseCookedRoot { "Engine" };
+    target_ = AddMaterial(engine, "Target.omat");
+    const auto engine_pak = workspace_.PackOrThrow(
+      workspace_.FullRequest({ workspace_.Add(engine) }, "engine.pak"));
 
-    const auto engine_root = Path("engine");
-    auto engine_writer
-      = oxygen::content::testing::LooseCookedTestWriter(engine_root);
-    engine_writer.WriteAssetDescriptor(target_key, data::AssetType::kMaterial,
-      "/Engine/Target.omat", "Target.omat", bytes, *none);
-    static_cast<void>(engine_writer.Finish());
-    auto request = pak::PakBuildRequest {};
-    request.sources = {
-      { .kind = data::CookedSourceKind::kLooseCooked, .path = engine_root },
-    };
-    request.output_pak_path = Path("engine.pak");
-    request.content_version = 1U;
-    request.source_key = MakeSourceKey(3U);
-    const auto engine = pak::PakBuilder {}.Build(request);
-    if (!engine.has_value() || engine->summary.diagnostics_error != 0U) {
-      ADD_FAILURE() << "Expected the dependency pak to build";
-      return {};
-    }
-
-    const auto layer_root = Path("layer");
-    auto layer_writer
-      = oxygen::content::testing::LooseCookedTestWriter(layer_root);
-    layer_writer.WriteAssetDescriptor(owner_key_, data::AssetType::kMaterial,
-      "/Game/Owner.omat", "Owner.omat", bytes, *owner_references);
-    static_cast<void>(layer_writer.Finish());
-    request.sources = {
-      { .kind = data::CookedSourceKind::kLooseCooked, .path = layer_root },
-    };
-    request.output_pak_path = Path("layer.pak");
-    request.output_manifest_path = Path("layer.manifest.json");
+    auto game = LooseCookedRoot { "Game" };
+    owner_ = game.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = "Owner.omat",
+      .descriptor = MaterialBytes("Owner"),
+      .references = ReferencesTo(target_, expected_type),
+    });
+    auto request
+      = workspace_.FullRequest({ workspace_.Add(game) }, "layer.pak");
+    request.output_manifest_path = PakWorkspace::PakPath("layer.manifest.json");
     request.options.emit_manifest_in_full = true;
-    request.source_key = MakeSourceKey(4U);
     request.dependencies = {
-      {
-        .catalog = oxygen::content::PakFile(Path("engine.pak")).Catalog(),
-        .texture_keys = {},
-      },
+      { .catalog = engine_pak.Pak().Catalog(), .texture_keys = {} },
     };
-    auto layer = pak::PakBuilder {}.Build(request);
-    if (!layer.has_value()) {
-      ADD_FAILURE() << "Expected the layer build to report";
-      return {};
-    }
-    return std::move(*layer);
+    return PakWorkspace::Build(request);
   }
 
-  data::AssetKey owner_key_ = MakeAssetKey(41U);
+  //! The requirement the layer states of the `Engine` mount.
+  [[nodiscard]] auto Required() const -> data::PakCatalogDependency
+  {
+    return {
+      .mount = "Engine",
+      .requirements = { {
+        .kind = data::KeyReferenceKind::kAsset,
+        .key = target_,
+        .type = data::AssetType::kMaterial,
+      } },
+    };
+  }
+
+  PakWorkspace workspace_;
+  data::AssetKey owner_;
+  data::AssetKey target_;
 };
 
 //! References into a dependency resolve without copying its asset, and the
@@ -306,25 +281,20 @@ NOLINT_TEST_F(PakBuilderDependencyTest, ReferencesResolveIntoTheDependency)
   const auto layer = BuildLayer(data::AssetType::kMaterial);
 
   // Assert
-  EXPECT_EQ(layer.summary.diagnostics_error, 0U);
-  const auto archive = oxygen::content::PakFile(Path("layer.pak"));
-  EXPECT_TRUE(archive.FindEntry(owner_key_).has_value());
-  EXPECT_FALSE(archive.FindEntry(MakeAssetKey(42U)).has_value());
-  EXPECT_EQ(archive.Catalog().library, "Game");
+  EXPECT_THAT(layer.diagnostics, HasNoErrors());
+  const auto packed = workspace_.Open(PakWorkspace::PakPath("layer.pak"));
+  const auto& archive = packed.Pak();
+  EXPECT_TRUE(archive.FindEntry(owner_).has_value());
+  EXPECT_FALSE(archive.FindEntry(target_).has_value());
+  EXPECT_EQ(archive.Catalog().mount, "Game");
   EXPECT_TRUE(archive.Catalog().bases.empty());
-  const auto required = data::PakCatalogDependency {
-    .library = "Engine",
-    .requirements = { {
-      .kind = data::KeyReferenceKind::kAsset,
-      .key = MakeAssetKey(42U),
-      .type = data::AssetType::kMaterial,
-    }, },
-  };
-  EXPECT_THAT(archive.Catalog().dependencies, ::testing::ElementsAre(required));
+  EXPECT_THAT(
+    archive.Catalog().dependencies, ::testing::ElementsAre(Required()));
   ASSERT_HAS_VALUE(layer.patch_manifest);
   const auto& envelope = layer.patch_manifest->compatibility_envelope;
   EXPECT_TRUE(envelope.required_base_layers.empty());
-  EXPECT_THAT(envelope.required_dependencies, ::testing::ElementsAre(required));
+  EXPECT_THAT(
+    envelope.required_dependencies, ::testing::ElementsAre(Required()));
 }
 
 //! The requirements the planner writes are the ones the runtime checks: the
@@ -333,14 +303,20 @@ NOLINT_TEST_F(PakBuilderDependencyTest, LayerMountsOnlyAboveItsLibrary)
 {
   // Arrange
   const auto layer = BuildLayer(data::AssetType::kMaterial);
-  ASSERT_EQ(layer.summary.diagnostics_error, 0U);
+  ASSERT_THAT(layer.diagnostics, HasNoErrors());
+  const auto engine_pak = TempPath("engine.pak");
+  const auto layer_pak = TempPath("layer.pak");
+  Materialize(workspace_.Storage().Bytes(PakWorkspace::PakPath("engine.pak")),
+    engine_pak);
+  Materialize(
+    workspace_.Storage().Bytes(PakWorkspace::PakPath("layer.pak")), layer_pak);
   auto with_library = oxygen::content::AssetLoader(EngineTagFactory::Get());
   auto without_library = oxygen::content::AssetLoader(EngineTagFactory::Get());
-  with_library.AddPakFile(Path("engine.pak"));
+  with_library.AddPakFile(engine_pak);
 
   // Act and Assert
-  NOLINT_EXPECT_NO_THROW(with_library.AddPakFile(Path("layer.pak")));
-  NOLINT_EXPECT_THROW(without_library.AddPakFile(Path("layer.pak")),
+  NOLINT_EXPECT_NO_THROW(with_library.AddPakFile(layer_pak));
+  NOLINT_EXPECT_THROW(without_library.AddPakFile(layer_pak),
     oxygen::content::DependencyRequirementError);
 }
 
@@ -351,102 +327,79 @@ NOLINT_TEST_F(PakBuilderDependencyTest, ReferenceTypesAreChecked)
   const auto layer = BuildLayer(data::AssetType::kScript);
 
   // Assert
-  EXPECT_TRUE(HasDiagnosticCode(
-    layer.diagnostics, "pak.plan.asset_reference_type_mismatch"));
-  EXPECT_FALSE(std::filesystem::exists(Path("layer.pak")));
+  EXPECT_THAT(
+    layer.diagnostics, HasDiagnostic("pak.plan.asset_reference_type_mismatch"));
+  EXPECT_FALSE(workspace_.Exists(PakWorkspace::PakPath("layer.pak")));
 }
+
+//=== Textures named by key ===-----------------------------------------------//
 
 //! A material of library `Game` that names a texture by key, built beside a
 //! source of its own library holding that texture, on top of a dependency
 //! holding it, or with nothing holding it.
-class PakBuilderExternalTextureTest : public PakBuilderTest {
+class PakBuilderExternalTextureTest : public ::testing::Test {
 protected:
-  static constexpr auto kOwnGrid
-    = std::string_view { "/Game/Textures/Grid.otex" };
-  static constexpr auto kEngineGrid
-    = std::string_view { "/Engine/Textures/Grid.otex" };
+  static constexpr auto kGrid = std::string_view { "Textures/Grid.otex" };
 
-  //! Writes a texture library holding `texture` into `root`.
-  static auto WriteGrid(
-    const std::filesystem::path& root, const std::string_view texture) -> void
-  {
-    oxygen::cooker::test::WriteTextureLibrary(root, texture,
-      {
-        .size_bytes = 4U,
-        .width = 1U,
-        .height = 1U,
-        .depth = 1U,
-        .array_layers = 1U,
-        .mip_levels = 1U,
-      });
-  }
-
-  auto Build(const std::string_view texture,
+  //! Builds `layer.pak`: `sources`, then the owner material naming the
+  //! texture at `texture`, above `dependencies`.
+  auto BuildLayer(const std::string_view texture,
     std::vector<data::CookedSource> sources,
     std::vector<pak::PakDependency> dependencies = {}) -> pak::PakBuildResult
   {
-    auto descriptor = data::pak::render::MaterialAssetDesc {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kMaterial);
-    descriptor.header.version = data::pak::render::kMaterialAssetVersion;
-    descriptor.base_color_texture = data::ResourceReferenceIndex { 0U };
-    const auto references = data::AssetReferences::Create(
-      {
+    auto desc = render::MaterialAssetDesc {};
+    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
+    desc.header.version = render::kMaterialAssetVersion;
+    desc.base_color_texture = data::ResourceReferenceIndex { 0U };
+    auto game = LooseCookedRoot {};
+    owner_ = game.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = "Owner.omat",
+      .descriptor = data::MakeDescriptorBytes(desc),
+      .references = data::AssetReferences::Create(
         {
-          .kind = data::ResourceKind::kExternalTexture,
-          .index = data::pak::core::ResourceIndexT { 0U },
+          {
+            .kind = data::ResourceKind::kExternalTexture,
+            .index = data::pak::core::ResourceIndexT { 0U },
+          },
         },
-      },
-      {
         {
-          .key = data::TextureKeyFromVirtualPath(texture),
-          .kind = data::KeyReferenceKind::kTexture,
-        },
-      });
-    if (!references.has_value()) {
-      ADD_FAILURE() << "Expected the reference table to encode";
-      return {};
-    }
-    const auto layer_root = Path("layer");
-    auto writer = oxygen::content::testing::LooseCookedTestWriter(layer_root);
-    writer.WriteAssetDescriptor(owner_key_, data::AssetType::kMaterial,
-      "/Game/Owner.omat", "Owner.omat", data::MakeDescriptorBytes(descriptor),
-      *references);
-    static_cast<void>(writer.Finish());
-    sources.push_back(
-      { .kind = data::CookedSourceKind::kLooseCooked, .path = layer_root });
-    auto request = pak::PakBuildRequest {};
-    request.sources = std::move(sources);
-    request.output_pak_path = Path("layer.pak");
-    request.content_version = 1U;
-    request.source_key = MakeSourceKey(6U);
+          {
+            .key = data::TextureKeyFromVirtualPath(texture),
+            .kind = data::KeyReferenceKind::kTexture,
+          },
+        })
+        .value(),
+    });
+    sources.push_back(workspace_.Add(game));
+    auto request = workspace_.FullRequest(std::move(sources), "layer.pak");
     request.dependencies = std::move(dependencies);
-    auto layer = pak::PakBuilder {}.Build(request);
-    if (!layer.has_value()) {
-      ADD_FAILURE() << "Expected the layer build to report";
-      return {};
-    }
-    return std::move(*layer);
+    return PakWorkspace::Build(request);
   }
 
-  data::AssetKey owner_key_ = MakeAssetKey(43U);
+  //! Tells the texture library of `Game` from the owner's.
+  static constexpr auto kTextureLibrarySeed = uint8_t { 2U };
+
+  PakWorkspace workspace_;
+  data::AssetKey owner_;
 };
 
 //! A texture a source of the pak holds is packed with the material.
 NOLINT_TEST_F(PakBuilderExternalTextureTest, OwnTextureIsPacked)
 {
   // Arrange
-  const auto own = Path("own");
-  WriteGrid(own, kOwnGrid);
+  auto textures = LooseCookedRoot { "Game", kTextureLibrarySeed };
+  const auto grid = textures.DescribeTexture(
+    kGrid, textures.AddTexture(oxygen::cooker::testing::SeedBytes(1U)));
 
   // Act
-  const auto layer = Build(kOwnGrid,
-    { { .kind = data::CookedSourceKind::kLooseCooked, .path = own } });
+  const auto layer = BuildLayer(grid, { workspace_.Add(textures) });
 
   // Assert
-  EXPECT_EQ(layer.summary.diagnostics_error, 0U);
-  const auto archive = oxygen::content::PakFile(Path("layer.pak"));
-  EXPECT_TRUE(archive.ResolveTextureIndexByVirtualPath(kOwnGrid).has_value());
+  EXPECT_THAT(layer.diagnostics, HasNoErrors());
+  const auto packed = workspace_.Open(PakWorkspace::PakPath("layer.pak"));
+  const auto& archive = packed.Pak();
+  EXPECT_TRUE(archive.ResolveTextureIndexByVirtualPath(grid).has_value());
   EXPECT_TRUE(archive.Catalog().dependencies.empty());
 }
 
@@ -454,29 +407,30 @@ NOLINT_TEST_F(PakBuilderExternalTextureTest, OwnTextureIsPacked)
 NOLINT_TEST_F(PakBuilderExternalTextureTest, DependencyTextureIsRequired)
 {
   // Arrange
-  const auto engine = Path("engine");
-  WriteGrid(engine, kEngineGrid);
-  const auto engine_pak
-    = oxygen::cooker::test::PackLibrary(engine, Path("engine.pak"));
+  auto engine = LooseCookedRoot { "Engine" };
+  const auto grid = engine.DescribeTexture(
+    kGrid, engine.AddTexture(oxygen::cooker::testing::SeedBytes(1U)));
+  const auto engine_pak = workspace_.PackOrThrow(
+    workspace_.FullRequest({ workspace_.Add(engine) }, "engine.pak"));
   auto dependency = pak::PakDependency {
-    .catalog = oxygen::content::PakFile(engine_pak).Catalog(),
-    .texture_keys = { data::TextureKeyFromVirtualPath(kEngineGrid) },
+    .catalog = engine_pak.Pak().Catalog(),
+    .texture_keys = { data::TextureKeyFromVirtualPath(grid) },
   };
 
   // Act
-  const auto layer = Build(kEngineGrid, {}, { std::move(dependency) });
+  const auto layer = BuildLayer(grid, {}, { std::move(dependency) });
 
   // Assert
-  EXPECT_EQ(layer.summary.diagnostics_error, 0U);
-  const auto archive = oxygen::content::PakFile(Path("layer.pak"));
-  EXPECT_FALSE(
-    archive.ResolveTextureIndexByVirtualPath(kEngineGrid).has_value());
+  EXPECT_THAT(layer.diagnostics, HasNoErrors());
+  const auto packed = workspace_.Open(PakWorkspace::PakPath("layer.pak"));
+  const auto& archive = packed.Pak();
+  EXPECT_FALSE(archive.ResolveTextureIndexByVirtualPath(grid).has_value());
   EXPECT_THAT(archive.Catalog().dependencies,
     ::testing::ElementsAre(data::PakCatalogDependency {
-      .library = "Engine",
+      .mount = "Engine",
       .requirements = { {
         .kind = data::KeyReferenceKind::kTexture,
-        .key = data::TextureKeyFromVirtualPath(kEngineGrid),
+        .key = data::TextureKeyFromVirtualPath(grid),
         .type = data::AssetType::kUnknown,
       } },
     }));
@@ -486,135 +440,122 @@ NOLINT_TEST_F(PakBuilderExternalTextureTest, DependencyTextureIsRequired)
 NOLINT_TEST_F(PakBuilderExternalTextureTest, UnheldTextureIsRefused)
 {
   // Act
-  const auto layer = Build(kEngineGrid, {});
+  const auto layer
+    = BuildLayer(LooseCookedRoot { "Engine" }.VirtualPath(kGrid), {});
 
   // Assert
-  EXPECT_TRUE(
-    HasDiagnosticCode(layer.diagnostics, "pak.plan.texture_reference_missing"));
-  EXPECT_FALSE(std::filesystem::exists(Path("layer.pak")));
+  EXPECT_THAT(
+    layer.diagnostics, HasDiagnostic("pak.plan.texture_reference_missing"));
+  EXPECT_FALSE(workspace_.Exists(PakWorkspace::PakPath("layer.pak")));
 }
+
+//=== Request validation ===--------------------------------------------------//
 
 //! Bases are the exact stack a patch applies to; a full build is rejected.
-NOLINT_TEST_F(PakBuilderTest, FullBuildRejectsBaseCatalogs)
+NOLINT_TEST(PakBuilderTest, FullBuildRejectsBaseCatalogs)
 {
   // Arrange
-  auto request = pak::PakBuildRequest {};
-  request.mode = pak::BuildMode::kFull;
-  request.output_pak_path = Path("full.pak");
-  request.content_version = 1U;
-  request.source_key = MakeSourceKey(5U);
-  request.base_catalogs = { data::PakCatalog {} };
+  auto workspace = PakWorkspace {};
+  auto request = workspace.FullRequest({}, "full.pak");
+  request.base_catalogs = { LooseCookedRoot {}.BaseCatalog() };
 
   // Act
-  const auto result = pak::PakBuilder {}.Build(request);
+  const auto result = PakWorkspace::Build(request);
 
   // Assert
-  ASSERT_HAS_VALUE(result);
-  EXPECT_TRUE(HasDiagnosticCode(
-    result->diagnostics, "pak.request.full_forbids_base_catalogs"));
-  EXPECT_FALSE(std::filesystem::exists(request.output_pak_path));
+  EXPECT_THAT(result.diagnostics,
+    HasDiagnostic("pak.request.full_forbids_base_catalogs"));
+  EXPECT_FALSE(workspace.Exists(request.output_pak_path));
 }
 
-NOLINT_TEST_F(PakBuilderTest, PatchRequestValidationEmitsAllModeErrors)
+//! A patch with no identity, no bases and no manifest path reports all three
+//! errors at once.
+NOLINT_TEST(PakBuilderTest, PatchRequestValidationEmitsAllModeErrors)
 {
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildRequest;
+  // Arrange
+  auto workspace = PakWorkspace {};
+  auto request = workspace.PatchRequest({}, {});
+  request.output_manifest_path.clear();
+  request.content_version = 0U;
+  request.source_key = {};
 
-  const PakBuildRequest request {
-    .mode = BuildMode::kPatch,
-    .sources = {},
-    .output_pak_path = Path("api_validation_output.pak"),
-    .output_manifest_path = {},
-    .content_version = 0,
-    .source_key = {},
-    .base_catalogs = {},
+  // Act
+  const auto result = PakWorkspace::Build(request);
 
-    .options = {},
-  };
-
-  PakBuilder builder;
-  const auto result_or_error = builder.Build(request);
-
-  ASSERT_HAS_VALUE(result_or_error);
-  const auto& result = result_or_error.value();
-
+  // Assert
   EXPECT_EQ(result.summary.diagnostics_error, 3U);
-  EXPECT_TRUE(
-    HasDiagnosticCode(result.diagnostics, "pak.request.source_key_zero"));
-  EXPECT_TRUE(HasDiagnosticCode(
-    result.diagnostics, "pak.request.patch_requires_base_catalogs"));
-  EXPECT_TRUE(HasDiagnosticCode(
-    result.diagnostics, "pak.request.patch_requires_output_manifest_path"));
+  EXPECT_THAT(result.diagnostics, HasDiagnostic("pak.request.source_key_zero"));
+  EXPECT_THAT(result.diagnostics,
+    HasDiagnostic("pak.request.patch_requires_base_catalogs"));
+  EXPECT_THAT(result.diagnostics,
+    HasDiagnostic("pak.request.patch_requires_output_manifest_path"));
 }
 
-NOLINT_TEST_F(PakBuilderTest, FullManifestOptionRequiresOutputManifestPath)
+NOLINT_TEST(PakBuilderTest, FullManifestOptionRequiresOutputManifestPath)
 {
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildOptions;
-  using pak::PakBuildRequest;
+  // Arrange
+  auto workspace = PakWorkspace {};
+  auto request = workspace.FullRequest({});
+  request.options.emit_manifest_in_full = true;
 
-  const PakBuildRequest request {
-    .mode = BuildMode::kFull,
-    .sources = {},
-    .output_pak_path = Path("full_manifest_option_output.pak"),
-    .output_manifest_path = {},
-    .content_version = 1,
-    .source_key = MakeNonZeroSourceKey(),
-    .base_catalogs = {},
+  // Act
+  const auto result = PakWorkspace::Build(request);
 
-    .options = PakBuildOptions {
-      .deterministic = true,
-      .emit_manifest_in_full = true,
-      .compute_crc32 = true,
-      .fail_on_warnings = false,
-    },
-  };
-
-  PakBuilder builder;
-  const auto result_or_error = builder.Build(request);
-
-  ASSERT_HAS_VALUE(result_or_error);
-  const auto& result = result_or_error.value();
-
+  // Assert
   EXPECT_EQ(result.summary.diagnostics_error, 1U);
-  EXPECT_TRUE(HasDiagnosticCode(result.diagnostics,
-    "pak.request.full_manifest_requires_output_manifest_path"));
+  EXPECT_THAT(result.diagnostics,
+    HasDiagnostic("pak.request.full_manifest_requires_output_manifest_path"));
 }
 
-NOLINT_TEST_F(PakBuilderTest, ValidRequestWritesPakAndReportsTelemetry)
+//=== Builds ===--------------------------------------------------------------//
+
+//! A full build of the `Game` library holding one plain material.
+class PakBuilderBuildTest : public ::testing::Test {
+protected:
+  static constexpr auto kMaterialLeaf
+    = std::string_view { "Materials/Main.omat" };
+
+  //! The library's one material.
+  [[nodiscard]] static auto Material() -> data::AssetKey
+  {
+    return LooseCookedRoot {}.KeyOf(kMaterialLeaf);
+  }
+
+  //! Its descriptor's digest.
+  [[nodiscard]] static auto MaterialDigest() -> oxygen::base::Sha256Digest
+  {
+    return oxygen::base::ComputeSha256(MaterialBytes(kMaterialLeaf));
+  }
+
+  //! The library as a source of the workspace.
+  auto Source() -> data::CookedSource
+  {
+    auto game = LooseCookedRoot {};
+    static_cast<void>(AddMaterial(game, kMaterialLeaf));
+    return workspace_.Add(game);
+  }
+
+  PakWorkspace workspace_;
+};
+
+NOLINT_TEST_F(PakBuilderBuildTest, ValidRequestWritesPakAndReportsTelemetry)
 {
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildRequest;
+  // Arrange
+  const auto request = workspace_.FullRequest({ Source() });
 
-  const PakBuildRequest request {
-    .mode = BuildMode::kFull,
-    .sources = {},
-    .output_pak_path = Path("valid_request_output.pak"),
-    .output_manifest_path = {},
-    .content_version = 1,
-    .source_key = MakeNonZeroSourceKey(),
-    .base_catalogs = {},
+  // Act
+  const auto result = PakWorkspace::Build(request);
 
-    .options = {},
-  };
-
-  PakBuilder builder;
-  const auto result_or_error = builder.Build(request);
-
-  ASSERT_HAS_VALUE(result_or_error);
-  const auto& result = result_or_error.value();
-
-  EXPECT_EQ(result.summary.diagnostics_error, 0U);
-  EXPECT_FALSE(HasDiagnosticCode(
-    result.diagnostics, "pak.write.phase3_writer_unavailable"));
+  // Assert
+  EXPECT_THAT(result.diagnostics, HasNoErrors());
+  EXPECT_THAT(result.diagnostics,
+    ::testing::Not(HasDiagnostic("pak.write.phase3_writer_unavailable")));
   EXPECT_GT(result.file_size, 0U);
   EXPECT_NE(result.pak_crc32, 0U);
   EXPECT_EQ(result.output_catalog.source_key, request.source_key);
   EXPECT_EQ(result.output_catalog.content_version, request.content_version);
-  EXPECT_TRUE(result.output_catalog.entries.empty());
+  ASSERT_EQ(result.output_catalog.entries.size(), 1U);
+  EXPECT_EQ(result.output_catalog.entries.front().asset_key, Material());
   EXPECT_NE(
     result.output_catalog.catalog_digest, data::PakCatalog {}.catalog_digest);
   EXPECT_FALSE(result.patch_manifest.has_value());
@@ -625,330 +566,159 @@ NOLINT_TEST_F(PakBuilderTest, ValidRequestWritesPakAndReportsTelemetry)
 }
 
 NOLINT_TEST_F(
-  PakBuilderTest, FullBuildWithManifestEmitsPatchManifestAndTelemetry)
+  PakBuilderBuildTest, FullBuildWithManifestEmitsPatchManifestAndTelemetry)
 {
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildOptions;
-  using pak::PakBuildRequest;
+  // Arrange
+  auto request = workspace_.FullRequest({ Source() });
+  request.output_manifest_path = PakWorkspace::PakPath("out.manifest.json");
+  request.options.emit_manifest_in_full = true;
 
-  const PakBuildRequest request {
-    .mode = BuildMode::kFull,
-    .sources = {},
-    .output_pak_path = Path("full_manifest_output.pak"),
-    .output_manifest_path = Path("full_manifest_output.manifest.json"),
-    .content_version = 1,
-    .source_key = MakeNonZeroSourceKey(),
-    .base_catalogs = {},
+  // Act
+  const auto result = PakWorkspace::Build(request);
 
-    .options = PakBuildOptions {
-      .deterministic = true,
-      .emit_manifest_in_full = true,
-      .compute_crc32 = true,
-      .fail_on_warnings = false,
-    },
-  };
-
-  PakBuilder builder;
-  const auto result_or_error = builder.Build(request);
-
-  ASSERT_HAS_VALUE(result_or_error);
-  const auto& result = result_or_error.value();
-  EXPECT_EQ(result.summary.diagnostics_error, 0U);
+  // Assert
+  EXPECT_THAT(result.diagnostics, HasNoErrors());
   EXPECT_TRUE(result.patch_manifest.has_value());
   EXPECT_TRUE(result.telemetry.manifest_duration.has_value());
 }
 
 NOLINT_TEST_F(
-  PakBuilderTest, FullBuildReturnsOutputCatalogEntriesForEmittedAssets)
+  PakBuilderBuildTest, FullBuildReturnsOutputCatalogEntriesForEmittedAssets)
 {
-  using data::CookedSource;
-  using data::CookedSourceKind;
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildRequest;
+  // Arrange
+  constexpr auto kContentVersion = uint16_t { 7U };
+  auto request = workspace_.FullRequest({ Source() });
+  request.content_version = kContentVersion;
 
-  const auto source = Root() / "full_catalog_source";
-  const auto asset = paktest::AssetSpec {
-    .key = MakeAssetKey(static_cast<uint8_t>(0x41U)),
-    .asset_type = data::AssetType::kMaterial,
-    .descriptor_relpath = "Descriptors/material.desc",
-    .virtual_path = "/Game/Materials/Main.omat",
-    .descriptor_size = 32U,
-    .descriptor_sha = paktest::MakeDigest(static_cast<uint8_t>(0x61U)),
-  };
-  ASSERT_TRUE(paktest::WriteLooseIndex(source,
-    std::span<const paktest::AssetSpec>(&asset, 1U),
-    std::span<const paktest::FileSpec> {}, static_cast<uint8_t>(0x31U)));
+  // Act
+  const auto result = PakWorkspace::Build(request);
 
-  const PakBuildRequest request {
-    .mode = BuildMode::kFull,
-    .sources = { CookedSource {
-      .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
-    .output_pak_path = Path("full_catalog_output.pak"),
-    .output_manifest_path = {},
-    .content_version = 7,
-    .source_key = MakeNonZeroSourceKey(),
-    .base_catalogs = {},
-
-    .options = {},
-  };
-
-  PakBuilder builder;
-  const auto result_or_error = builder.Build(request);
-
-  ASSERT_HAS_VALUE(result_or_error);
-  const auto& result = result_or_error.value();
-  EXPECT_EQ(result.summary.diagnostics_error, 0U);
-  ASSERT_EQ(result.output_catalog.entries.size(), 1U);
+  // Assert
+  EXPECT_THAT(result.diagnostics, HasNoErrors());
   EXPECT_EQ(result.output_catalog.source_key, request.source_key);
-  EXPECT_EQ(result.output_catalog.content_version, request.content_version);
-  EXPECT_EQ(result.output_catalog.entries.at(0).asset_key, asset.key);
-  EXPECT_EQ(result.output_catalog.entries.at(0).asset_type, asset.asset_type);
-  EXPECT_EQ(result.output_catalog.entries.at(0).descriptor_digest,
-    asset.descriptor_sha);
-  const auto expected_transitive_digest = asset.descriptor_sha;
-  EXPECT_EQ(result.output_catalog.entries.at(0).transitive_resource_digest,
-    expected_transitive_digest);
+  EXPECT_EQ(result.output_catalog.content_version, kContentVersion);
+  ASSERT_EQ(result.output_catalog.entries.size(), 1U);
+  const auto& entry = result.output_catalog.entries.front();
+  EXPECT_EQ(entry.asset_key, Material());
+  EXPECT_EQ(entry.asset_type, data::AssetType::kMaterial);
+  EXPECT_EQ(entry.descriptor_digest, MaterialDigest());
+  // A material binding no resource digests to its descriptor alone.
+  EXPECT_EQ(entry.transitive_resource_digest, MaterialDigest());
   EXPECT_NE(
     result.output_catalog.catalog_digest, data::PakCatalog {}.catalog_digest);
 }
 
-NOLINT_TEST_F(
-  PakBuilderTest, PatchBuildReturnsOutputCatalogEntriesForEmittedPatchAssets)
+NOLINT_TEST_F(PakBuilderBuildTest,
+  PatchBuildReturnsOutputCatalogEntriesForEmittedPatchAssets)
 {
-  using data::CookedSource;
-  using data::CookedSourceKind;
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildRequest;
+  // Arrange
+  constexpr auto kContentVersion = uint16_t { 5U };
+  const auto stale = oxygen::base::ComputeSha256(MaterialBytes("Stale"));
+  auto request = workspace_.PatchRequest({ Source() },
+    { LooseCookedRoot {}.BaseCatalog({
+      {
+        .asset_key = Material(),
+        .asset_type = data::AssetType::kMaterial,
+        .descriptor_digest = stale,
+        .transitive_resource_digest = stale,
+      },
+    }) });
+  request.content_version = kContentVersion;
 
-  const auto source = Root() / "patch_catalog_source";
-  const auto asset_key = MakeAssetKey(static_cast<uint8_t>(0x51U));
-  const auto asset = paktest::AssetSpec {
-    .key = asset_key,
-    .asset_type = data::AssetType::kMaterial,
-    .descriptor_relpath = "Descriptors/material.desc",
-    .virtual_path = "/Game/Materials/Patch.omat",
-    .descriptor_size = 24U,
-    .descriptor_sha = paktest::MakeDigest(static_cast<uint8_t>(0x71U)),
-  };
-  ASSERT_TRUE(paktest::WriteLooseIndex(source,
-    std::span<const paktest::AssetSpec>(&asset, 1U),
-    std::span<const paktest::FileSpec> {}, static_cast<uint8_t>(0x41U)));
+  // Act
+  const auto result = PakWorkspace::Build(request);
 
-  data::PakCatalog base_catalog {};
-  base_catalog.source_key = MakeSourceKey(static_cast<uint8_t>(0x21U));
-  base_catalog.content_version = 5U;
-  base_catalog.entries = {
-    data::PakCatalogEntry {
-      .asset_key = asset_key,
-      .asset_type = data::AssetType::kMaterial,
-      .descriptor_digest = paktest::MakeDigest(static_cast<uint8_t>(0x11U)),
-      .transitive_resource_digest
-      = paktest::MakeDigest(static_cast<uint8_t>(0x11U)),
-    },
-  };
-
-  base_catalog.catalog_digest = base_catalog.ComputeDigest().value();
-
-  const PakBuildRequest request {
-    .mode = BuildMode::kPatch,
-    .sources = { CookedSource {
-      .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
-    .output_pak_path = Path("patch_catalog_output.pak"),
-    .output_manifest_path = Path("patch_catalog_output.manifest"),
-    .content_version = 5U,
-    .source_key = MakeNonZeroSourceKey(),
-    .base_catalogs = { base_catalog },
-
-    .options = {},
-  };
-
-  PakBuilder builder;
-  const auto result_or_error = builder.Build(request);
-
-  ASSERT_HAS_VALUE(result_or_error);
-  const auto& result = result_or_error.value();
-  EXPECT_EQ(result.summary.diagnostics_error, 0U);
+  // Assert
+  EXPECT_THAT(result.diagnostics, HasNoErrors());
   EXPECT_EQ(result.summary.patch_replaced, 1U);
-  ASSERT_EQ(result.output_catalog.entries.size(), 1U);
   EXPECT_EQ(result.output_catalog.source_key, request.source_key);
-  EXPECT_EQ(result.output_catalog.content_version, request.content_version);
-  EXPECT_EQ(result.output_catalog.entries.at(0).asset_key, asset.key);
-  EXPECT_EQ(result.output_catalog.entries.at(0).asset_type, asset.asset_type);
-  EXPECT_EQ(result.output_catalog.entries.at(0).descriptor_digest,
-    asset.descriptor_sha);
-  const auto expected_transitive_digest = asset.descriptor_sha;
-  EXPECT_EQ(result.output_catalog.entries.at(0).transitive_resource_digest,
-    expected_transitive_digest);
+  EXPECT_EQ(result.output_catalog.content_version, kContentVersion);
+  ASSERT_EQ(result.output_catalog.entries.size(), 1U);
+  const auto& entry = result.output_catalog.entries.front();
+  EXPECT_EQ(entry.asset_key, Material());
+  EXPECT_EQ(entry.asset_type, data::AssetType::kMaterial);
+  EXPECT_EQ(entry.descriptor_digest, MaterialDigest());
+  EXPECT_EQ(entry.transitive_resource_digest, MaterialDigest());
   EXPECT_NE(
     result.output_catalog.catalog_digest, data::PakCatalog {}.catalog_digest);
   EXPECT_TRUE(result.patch_manifest.has_value());
   EXPECT_TRUE(result.telemetry.manifest_duration.has_value());
 }
 
+//! A pak the current builder wrote raises no warning when repacked, so a
+//! strict policy does not fail the build.
 NOLINT_TEST_F(
-  PakBuilderTest, CurrentPakInputBuildsWithoutWarningsUnderStrictPolicy)
+  PakBuilderBuildTest, CurrentPakInputBuildsWithoutWarningsUnderStrictPolicy)
 {
-  using data::CookedSource;
-  using data::CookedSourceKind;
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildRequest;
+  // Arrange
+  const auto base = workspace_.FullRequest({ Source() }, "base.pak");
+  ASSERT_THAT(PakWorkspace::Build(base).diagnostics, HasNoErrors());
+  auto request = workspace_.FullRequest(
+    { PakWorkspace::PakSource(base.output_pak_path) }, "strict.pak");
+  request.options.fail_on_warnings = true;
 
-  const auto base_pak_path = Path("warning_source_base.pak");
-  const PakBuildRequest seed_request {
-    .mode = BuildMode::kFull,
-    .sources = {},
-    .output_pak_path = base_pak_path,
-    .output_manifest_path = {},
-    .content_version = 1,
-    .source_key = MakeNonZeroSourceKey(),
-    .base_catalogs = {},
+  // Act
+  const auto result = PakWorkspace::Build(request);
 
-    .options = {},
-  };
-
-  PakBuilder builder;
-  const auto seed_result_or_error = builder.Build(seed_request);
-  ASSERT_HAS_VALUE(seed_result_or_error);
-  ASSERT_EQ(seed_result_or_error.value().summary.diagnostics_error, 0U);
-
-  const PakBuildRequest request {
-    .mode = BuildMode::kFull,
-    .sources
-    = { CookedSource { .kind = CookedSourceKind::kPak, .path = base_pak_path } },
-    .output_pak_path = Path("warning_escalated_output.pak"),
-    .output_manifest_path = {},
-    .content_version = 1,
-    .source_key = MakeNonZeroSourceKey(),
-    .base_catalogs = {},
-
-    .options = {
-      .deterministic = true,
-      .emit_manifest_in_full = false,
-      .compute_crc32 = true,
-      .fail_on_warnings = true,
-    },
-  };
-
-  const auto result_or_error = builder.Build(request);
-  ASSERT_HAS_VALUE(result_or_error);
-  const auto& result = result_or_error.value();
-
+  // Assert
   EXPECT_EQ(result.summary.diagnostics_warning, 0U);
-  EXPECT_EQ(result.summary.diagnostics_error, 0U);
-  EXPECT_FALSE(
-    HasDiagnosticCode(result.diagnostics, "pak.request.fail_on_warnings"));
+  EXPECT_THAT(result.diagnostics, HasNoErrors());
+  EXPECT_THAT(result.diagnostics,
+    ::testing::Not(HasDiagnostic("pak.request.fail_on_warnings")));
   EXPECT_TRUE(result.telemetry.planning_duration.has_value());
   EXPECT_TRUE(result.telemetry.writing_duration.has_value());
 }
 
-NOLINT_TEST_F(PakBuilderTest, PlannerRejectsBaseCatalogTypeMismatch)
+//=== Patches over base catalogs ===------------------------------------------//
+
+//! Two bases of one library may not disagree on an asset's type.
+NOLINT_TEST(PakBuilderTest, PlannerRejectsBaseCatalogTypeMismatch)
 {
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildRequest;
-  constexpr auto kBaseSourceKeyASeed = static_cast<uint8_t>(11);
-  constexpr auto kBaseSourceKeyBSeed = static_cast<uint8_t>(12);
+  // Arrange
+  auto workspace = PakWorkspace {};
+  const auto game = LooseCookedRoot {};
+  const auto asset = game.KeyOf("Asset");
+  const auto request = workspace.PatchRequest({},
+    {
+      game.BaseCatalog(
+        { { .asset_key = asset, .asset_type = data::AssetType::kGeometry } },
+        0U),
+      game.BaseCatalog(
+        { { .asset_key = asset, .asset_type = data::AssetType::kMaterial } },
+        1U),
+    });
 
-  const auto asset_key = MakeAssetKey(static_cast<uint8_t>(77));
+  // Act
+  const auto result = PakWorkspace::Build(request);
 
-  data::PakCatalogEntry entry_a {};
-  entry_a.asset_key = asset_key;
-  entry_a.asset_type = data::AssetType::kGeometry;
-
-  data::PakCatalogEntry entry_b {};
-  entry_b.asset_key = asset_key;
-  entry_b.asset_type = data::AssetType::kMaterial;
-
-  data::PakCatalog base_a {};
-  base_a.source_key = MakeSourceKey(kBaseSourceKeyASeed);
-  base_a.content_version = 1;
-  base_a.entries = { entry_a };
-  base_a.catalog_digest = base_a.ComputeDigest().value();
-
-  data::PakCatalog base_b {};
-  base_b.source_key = MakeSourceKey(kBaseSourceKeyBSeed);
-  base_b.content_version = 1;
-  base_b.entries = { entry_b };
-  base_b.catalog_digest = base_b.ComputeDigest().value();
-
-  const PakBuildRequest request {
-    .mode = BuildMode::kPatch,
-    .sources = {},
-    .output_pak_path = Path("type_mismatch_output.pak"),
-    .output_manifest_path = Path("type_mismatch_output.manifest"),
-    .content_version = 1,
-    .source_key = MakeNonZeroSourceKey(),
-    .base_catalogs = { base_a, base_b },
-
-    .options = {},
-  };
-
-  PakBuilder builder;
-  const auto result_or_error = builder.Build(request);
-
-  ASSERT_HAS_VALUE(result_or_error);
-  const auto& result = result_or_error.value();
-  EXPECT_TRUE(HasDiagnosticCode(
-    result.diagnostics, "pak.plan.base_catalog_type_mismatch"));
+  // Assert
+  EXPECT_THAT(
+    result.diagnostics, HasDiagnostic("pak.plan.base_catalog_type_mismatch"));
 }
 
-NOLINT_TEST_F(PakBuilderTest, PatchModeClassifiesMissingSourceAsDelete)
+//! A patch with no sources deletes every asset of its base.
+NOLINT_TEST(PakBuilderTest, PatchModeClassifiesMissingSourceAsDelete)
 {
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildRequest;
-  constexpr auto kBaseSourceSeed = static_cast<uint8_t>(21);
-  constexpr auto kAssetASeed = static_cast<uint8_t>(31);
-  constexpr auto kAssetBSeed = static_cast<uint8_t>(32);
+  // Arrange
+  auto workspace = PakWorkspace {};
+  const auto game = LooseCookedRoot {};
+  const auto base = game.BaseCatalog({
+    { .asset_key = game.KeyOf("Mesh.ogeo"),
+      .asset_type = data::AssetType::kGeometry },
+    { .asset_key = game.KeyOf("Wood.omat"),
+      .asset_type = data::AssetType::kMaterial },
+  });
+  const auto request = workspace.PatchRequest({}, { base });
 
-  data::PakCatalog base_catalog {};
-  base_catalog.source_key = MakeSourceKey(kBaseSourceSeed);
-  base_catalog.content_version = 1;
-  base_catalog.entries = {
-    data::PakCatalogEntry {
-      .asset_key = MakeAssetKey(kAssetASeed),
-      .asset_type = data::AssetType::kGeometry,
-      .descriptor_digest = {},
-      .transitive_resource_digest = {},
-    },
-    data::PakCatalogEntry {
-      .asset_key = MakeAssetKey(kAssetBSeed),
-      .asset_type = data::AssetType::kMaterial,
-      .descriptor_digest = {},
-      .transitive_resource_digest = {},
-    },
-  };
-  const auto expected_deleted
-    = static_cast<uint32_t>(base_catalog.entries.size());
+  // Act
+  const auto result = PakWorkspace::Build(request);
 
-  base_catalog.catalog_digest = base_catalog.ComputeDigest().value();
-
-  const PakBuildRequest request {
-    .mode = BuildMode::kPatch,
-    .sources = {},
-    .output_pak_path = Path("patch_classification_output.pak"),
-    .output_manifest_path = Path("patch_classification_output.manifest"),
-    .content_version = 1,
-    .source_key = MakeNonZeroSourceKey(),
-    .base_catalogs = { base_catalog },
-
-    .options = {},
-  };
-
-  PakBuilder builder;
-  const auto result_or_error = builder.Build(request);
-
-  ASSERT_HAS_VALUE(result_or_error);
-  const auto& result = result_or_error.value();
+  // Assert
+  EXPECT_THAT(result.diagnostics, HasNoErrors());
   EXPECT_EQ(result.summary.patch_created, 0U);
   EXPECT_EQ(result.summary.patch_replaced, 0U);
-  EXPECT_EQ(result.summary.patch_deleted, expected_deleted);
+  EXPECT_EQ(result.summary.patch_deleted, base.entries.size());
   EXPECT_EQ(result.summary.patch_unchanged, 0U);
-  EXPECT_EQ(result.summary.diagnostics_error, 0U);
 }
 
 } // namespace

@@ -40,7 +40,7 @@ struct PakCatalogBase final {
   auto operator==(const PakCatalogBase&) const -> bool = default;
 };
 
-//! An asset or a texture a pak references and another library provides.
+//! An asset or a texture a pak references and another mount provides.
 /*!
  An asset requirement names the asset's key and type; a texture requirement
  names the texture key (`TextureKeyFromVirtualPath`) and type
@@ -55,10 +55,10 @@ struct PakRequirement final {
   auto operator==(const PakRequirement&) const -> bool = default;
 };
 
-//! A library a pak depends on, by its name, and what the pak requires of it.
+//! A mount a pak depends on, by its name, and what the pak requires of it.
 struct PakCatalogDependency final {
-  //! The library's one root, such as `Engine`.
-  std::string library;
+  //! The mount's name, such as `Engine`.
+  std::string mount;
   std::vector<PakRequirement> requirements;
 
   auto operator==(const PakCatalogDependency&) const -> bool = default;
@@ -69,16 +69,16 @@ struct PakCatalog final {
   uint16_t content_version = 0;
   std::array<uint8_t, 32> catalog_digest {};
   //! The pak's one root name: every entry's virtual path lies under it.
-  std::string library;
+  std::string mount;
   std::vector<PakCatalogEntry> entries;
   std::vector<AssetKey> deleted;
   //! Patch baseline: the exact layers this patch's deltas apply to.
   std::vector<PakCatalogBase> bases;
-  //! Libraries whose assets and textures this pak references without
+  //! Mounts whose assets and textures this pak references without
   //! containing them, such as `Engine`.
   std::vector<PakCatalogDependency> dependencies;
 
-  //! Canonical digest of the library, physical entries, deletions, ordered
+  //! Canonical digest of the mount name, physical entries, deletions, ordered
   //! base identities and dependencies.
   OXGN_DATA_NDAPI auto ComputeDigest() const
     -> Result<base::Sha256Digest, std::string>;

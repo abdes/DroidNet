@@ -25,10 +25,10 @@
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
@@ -36,61 +36,6 @@ namespace oxygen::content::import {
 namespace {
 
   //! Validate path segments don't contain `.` or `..`.
-  auto ValidateNoDotSegments(
-    const std::string_view path, const std::string_view what) -> void
-  {
-    size_t pos = 0;
-    while (pos <= path.size()) {
-      const auto next = path.find('/', pos);
-      const auto len
-        = (next == std::string_view::npos) ? (path.size() - pos) : (next - pos);
-      const auto segment = path.substr(pos, len);
-      if (segment == ".") {
-        throw std::runtime_error(std::string(what) + " must not contain '.'");
-      }
-      if (segment == "..") {
-        throw std::runtime_error(std::string(what) + " must not contain '..'");
-      }
-
-      if (next == std::string_view::npos) {
-        break;
-      }
-      pos = next + 1;
-    }
-  }
-
-  //! Validate container-relative path (e.g., "Materials/Wood.omat").
-  auto ValidateRelativePath(const std::string_view relpath) -> void
-  {
-    if (relpath.empty()) {
-      throw std::runtime_error("Relative path must not be empty");
-    }
-
-    if (relpath.find('\\') != std::string_view::npos) {
-      throw std::runtime_error("Relative path must use '/' as the separator");
-    }
-    if (relpath.find(':') != std::string_view::npos) {
-      throw std::runtime_error("Relative path must not contain ':'");
-    }
-    if (relpath.front() == '/') {
-      throw std::runtime_error("Relative path must be container-relative");
-    }
-    if (relpath.back() == '/') {
-      throw std::runtime_error("Relative path must not end with '/'");
-    }
-    if (relpath.find("//") != std::string_view::npos) {
-      throw std::runtime_error("Relative path must not contain '//'");
-    }
-
-    ValidateNoDotSegments(relpath, "Relative path");
-
-    std::filesystem::path p(relpath);
-    if (p.is_absolute() || p.has_root_path() || p.has_root_name()) {
-      throw std::runtime_error("Relative path must be container-relative");
-    }
-  }
-
-  //! Validate virtual path (e.g., "/.cooked/Materials/Wood").
   auto RequireCanonicalVirtualPath(const std::string_view virtual_path) -> void
   {
     if (const auto error = oxygen::content::ValidateVirtualPath(virtual_path);
@@ -102,16 +47,13 @@ namespace {
 
 } // namespace
 
-AssetEmitter::AssetEmitter(IAsyncFileWriter& file_writer,
-  const LooseCookedLayout& layout, const std::filesystem::path& cooked_root,
-  const bool compute_sha256)
+AssetEmitter::AssetEmitter(
+  IAsyncFileWriter& file_writer, const std::filesystem::path& cooked_root)
   : file_writer_(file_writer)
   , cooked_root_(cooked_root)
-  , compute_sha256_(compute_sha256)
 {
-  (void)layout; // TODO: layout is available for future use if needed
-  DLOG_F(INFO, "Created asset emitter: cooked_root='{}' sha256={}",
-    cooked_root_.string(), compute_sha256_);
+  DLOG_F(
+    INFO, "Created asset emitter: cooked_root='{}'", cooked_root_.string());
 }
 
 AssetEmitter::~AssetEmitter()
@@ -132,7 +74,7 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
 
   // Validate paths (must match PAK format requirements)
   RequireCanonicalVirtualPath(virtual_path);
-  ValidateRelativePath(descriptor_relpath);
+  data::loose_cooked::RequireIndexRelPath(descriptor_relpath);
   ValidateAssetDescriptor(asset_type, key, bytes, references);
 
   if (const auto it = key_by_virtual_path_.find(std::string(virtual_path));
@@ -147,10 +89,7 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
       "Conflicting descriptor path mapping in loose cooked container");
   }
 
-  std::optional<base::Sha256Digest> sha256;
-  if (compute_sha256_) {
-    sha256 = base::ComputeSha256(bytes);
-  }
+  const auto sha256 = base::ComputeSha256(bytes);
 
   // Build full path for the descriptor file
   const auto descriptor_path = cooked_root_ / descriptor_relpath;
@@ -174,7 +113,7 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
   }
 
   RequireCanonicalVirtualPath(virtual_path);
-  ValidateRelativePath(descriptor_relpath);
+  data::loose_cooked::RequireIndexRelPath(descriptor_relpath);
   ValidateAssetDescriptor(asset_type, key, bytes, references);
 
   if (const auto it = key_by_virtual_path_.find(std::string(virtual_path));
@@ -189,10 +128,7 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
       "Conflicting descriptor path mapping in loose cooked container");
   }
 
-  std::optional<base::Sha256Digest> sha256;
-  if (compute_sha256_) {
-    sha256 = base::ComputeSha256(bytes);
-  }
+  const auto sha256 = base::ComputeSha256(bytes);
 
   const auto descriptor_path = cooked_root_ / descriptor_relpath;
   const auto write_result = co_await file_writer_.Write(descriptor_path, bytes,
@@ -228,8 +164,7 @@ auto AssetEmitter::Records() const noexcept
 auto AssetEmitter::RecordAsset(const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
   std::string_view descriptor_relpath, const uint64_t descriptor_size,
-  data::AssetReferences references, std::optional<base::Sha256Digest> sha256)
-  -> void
+  data::AssetReferences references, const base::Sha256Digest& sha256) -> void
 {
   if (const auto it = record_index_by_key_.find(key);
     it != record_index_by_key_.end()) {
@@ -258,7 +193,7 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
     record.virtual_path = std::string(virtual_path);
     record.descriptor_relpath = std::string(descriptor_relpath);
     record.descriptor_size = descriptor_size;
-    record.descriptor_sha256 = std::move(sha256);
+    record.descriptor_sha256 = sha256;
     record.references = std::move(references);
     return;
   }
@@ -269,7 +204,7 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
     .virtual_path = std::string(virtual_path),
     .descriptor_relpath = std::string(descriptor_relpath),
     .descriptor_size = descriptor_size,
-    .descriptor_sha256 = std::move(sha256),
+    .descriptor_sha256 = sha256,
     .references = std::move(references),
   };
 

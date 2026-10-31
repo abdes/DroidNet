@@ -18,10 +18,10 @@
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -33,8 +33,8 @@ using oxygen::cooker::test::ContentAndOtherMountTable;
 using oxygen::cooker::test::ContentMountTable;
 using oxygen::cooker::test::DiagnosticSummary;
 using oxygen::cooker::test::HasDiagnosticCode;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   -> TextureDescriptorImportSettings
@@ -67,14 +67,13 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
   }
   EXPECT_EQ(prepared->virtual_path, settings.texture.virtual_path);
   EXPECT_TRUE(diagnostics.empty());
-  EXPECT_TRUE(settings.Prepare(
+  // A descriptor never names its own identity: the schema refuses the property.
+  EXPECT_FALSE(settings.Prepare(
     R"({"source":"image.png","virtual_path":"/Content/Textures/Retained.otex"})",
     diagnostics));
-  EXPECT_FALSE(settings.Prepare(
-    R"({"source":"image.png","virtual_path":"/Content/Textures/Different.otex"})",
-    diagnostics));
-  ASSERT_EQ(diagnostics.size(), 1U);
-  EXPECT_EQ(diagnostics.front().code, "texture.descriptor.identity_conflict");
+  EXPECT_TRUE(HasDiagnosticCode(
+    diagnostics, "texture.descriptor.schema_validation_failed"))
+    << DiagnosticSummary(diagnostics);
 }
 
 NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
@@ -86,7 +85,6 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
   WriteText(descriptor_path,
     R"({
       "source": "images/brick_albedo.png",
-      "virtual_path": "/Content/Textures/brick.otex",
       "intent": "albedo",
       "decode": {
         "flip_y": true
@@ -102,6 +100,7 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
     })");
 
   auto settings = MakeBaseSettings(descriptor_path);
+  settings.texture.virtual_path = "/Content/Textures/brick.otex";
   auto errors = std::ostringstream {};
 
   const auto request = BuildTextureDescriptorRequest(settings, errors);
@@ -171,10 +170,11 @@ NOLINT_TEST(
     = (temp.Path() / "descriptor-preparation" / "texture.json").string();
   settings.mounts = ContentMountTable(temp.Path());
   settings.texture.job_name = "Default";
+  settings.texture.virtual_path = "/Content/Layers.otex";
   settings.texture.flip_y = true;
   std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
   const auto prepared = settings.Prepare(R"({
-    "source":"images/base.png","name":"Layers","virtual_path":"/Content/Layers.otex",
+    "source":"images/base.png","name":"Layers",
     "sources":[{"file":"images/layer.png","layer":1,"mip":0,"slice":0}],
     "decode":{"flip_y":false},"mips":{"policy":"none"}
   })",
@@ -198,9 +198,30 @@ NOLINT_TEST(
       / "images/layer.png"));
 }
 
-//! A `source` that is a mount path (`/Content/...`) is located in the mount,
-//! whatever folder the descriptor is in.
-NOLINT_TEST(TextureDescriptorPreparationTest, ResolvesAMountPathSource)
+//! A `source` in the descriptor's own mount is relative to the descriptor's
+//! folder, however far up it climbs inside the mount.
+NOLINT_TEST(
+  TextureDescriptorPreparationTest, ResolvesAnOwnMountSourceRelatively)
+{
+  const ScopedTempDir temp;
+  auto settings = TextureDescriptorImportSettings {};
+  settings.descriptor_path
+    = (temp.Path() / "Textures" / "brick.texture.json").string();
+  settings.mounts = ContentMountTable(temp.Path());
+  std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
+
+  const auto prepared
+    = settings.Prepare(R"({"source":"../Images/brick.png"})", diagnostics);
+
+  ASSERT_HAS_VALUE(prepared) << DiagnosticSummary(diagnostics);
+  EXPECT_TRUE(diagnostics.empty());
+  EXPECT_EQ(std::filesystem::path(prepared->source_path),
+    std::filesystem::weakly_canonical(temp.Path() / "Images" / "brick.png"));
+}
+
+//! A `source` that is an absolute mount path to the descriptor's own mount is
+//! refused: inside its mount a reference is relative.
+NOLINT_TEST(TextureDescriptorPreparationTest, RefusesAnAbsoluteOwnMountSource)
 {
   const ScopedTempDir temp;
   auto settings = TextureDescriptorImportSettings {};
@@ -212,14 +233,35 @@ NOLINT_TEST(TextureDescriptorPreparationTest, ResolvesAMountPathSource)
   const auto prepared = settings.Prepare(
     R"({"source":"/Content/Images/brick.png"})", diagnostics);
 
+  EXPECT_FALSE(prepared.has_value());
+  ASSERT_TRUE(HasDiagnosticCode(diagnostics, "import.reference_invalid"))
+    << DiagnosticSummary(diagnostics);
+  EXPECT_THAT(DiagnosticSummary(diagnostics),
+    ::testing::HasSubstr("vpath.reference_self_absolute"));
+}
+
+//! A `source` that is an absolute mount path to another mount is located in
+//! that mount, whatever folder the descriptor is in.
+NOLINT_TEST(TextureDescriptorPreparationTest, ResolvesAnotherMountPathSource)
+{
+  const ScopedTempDir temp;
+  auto settings = TextureDescriptorImportSettings {};
+  settings.descriptor_path
+    = (temp.Path() / "Content" / "Textures" / "brick.texture.json").string();
+  settings.mounts = ContentAndOtherMountTable(temp.Path());
+  std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
+
+  const auto prepared
+    = settings.Prepare(R"({"source":"/Other/brick.png"})", diagnostics);
+
   ASSERT_HAS_VALUE(prepared) << DiagnosticSummary(diagnostics);
   EXPECT_TRUE(diagnostics.empty());
   EXPECT_EQ(std::filesystem::path(prepared->source_path),
-    std::filesystem::weakly_canonical(temp.Path() / "Images" / "brick.png"));
+    std::filesystem::weakly_canonical(temp.Path() / "Other" / "brick.png"));
 }
 
-//! A relative `source` that lands in another mount is refused with
-//! `import.reference_outside_mount`.
+//! A relative `source` that climbs above the descriptor's mount is refused
+//! with `import.reference_invalid` naming `vpath.reference_outside_mount`.
 NOLINT_TEST(
   TextureDescriptorPreparationTest, RefusesARelativeSourceLeavingItsMount)
 {
@@ -234,8 +276,10 @@ NOLINT_TEST(
     = settings.Prepare(R"({"source":"../../Other/brick.png"})", diagnostics);
 
   EXPECT_FALSE(prepared.has_value());
-  EXPECT_TRUE(HasDiagnosticCode(diagnostics, "import.reference_outside_mount"))
+  ASSERT_TRUE(HasDiagnosticCode(diagnostics, "import.reference_invalid"))
     << DiagnosticSummary(diagnostics);
+  EXPECT_THAT(DiagnosticSummary(diagnostics),
+    ::testing::HasSubstr("vpath.reference_outside_mount"));
 }
 
 NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,

@@ -20,6 +20,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
@@ -60,13 +61,9 @@ auto ResourceDescriptorEmitter::EmitTexture(const std::string_view virtual_path,
       .index = resource_index,
       .descriptor = descriptor,
     }));
-  records_.insert_or_assign(relpath,
-    Record {
-      .relpath = relpath,
-      .size_bytes = bytes->size(),
-      .virtual_path = std::string(virtual_path),
-    });
-  QueueWrite(relpath, bytes);
+  if (RecordOnce(relpath, bytes, std::string(virtual_path))) {
+    QueueWrite(relpath, bytes);
+  }
   return relpath;
 }
 
@@ -84,14 +81,35 @@ auto ResourceDescriptorEmitter::EmitBufferAtRelPath(
   auto bytes = std::make_shared<std::vector<std::byte>>(
     internal::SerializeBufferDescriptorSidecar(
       resource_index, descriptor, views));
-  records_.insert_or_assign(path,
-    Record {
-      .relpath = path,
-      .size_bytes = bytes->size(),
-      .virtual_path = {},
-    });
-  QueueWrite(std::move(path), bytes);
+  if (RecordOnce(path, bytes, {})) {
+    QueueWrite(std::move(path), bytes);
+  }
   return std::string(relpath);
+}
+
+auto ResourceDescriptorEmitter::RecordOnce(const std::string& relpath,
+  const std::shared_ptr<std::vector<std::byte>>& bytes,
+  std::string virtual_path) -> bool
+{
+  const auto sha256 = base::ComputeSha256(*bytes);
+  if (const auto it = records_.find(relpath); it != records_.end()) {
+    // A cook is deterministic: the same descriptor path always holds the same
+    // bytes. Writing it again could finish before the first write, leaving
+    // bytes the recorded digest does not describe.
+    if (it->second.size_bytes != bytes->size() || it->second.sha256 != sha256) {
+      throw std::runtime_error("resource descriptor '" + relpath
+        + "' was emitted twice with different bytes");
+    }
+    return false;
+  }
+  records_.emplace(relpath,
+    Record {
+      .relpath = relpath,
+      .size_bytes = bytes->size(),
+      .sha256 = sha256,
+      .virtual_path = std::move(virtual_path),
+    });
+  return true;
 }
 
 auto ResourceDescriptorEmitter::QueueWrite(std::string relpath,

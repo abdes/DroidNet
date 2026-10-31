@@ -43,8 +43,6 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -70,8 +68,6 @@
 namespace oxygen::content::import::detail {
 
 namespace {
-
-  namespace lc = oxygen::content::lc;
 
   struct SceneDescriptorExecutionContext final {
     // NOLINTBEGIN(*-avoid-const-or-ref-data-members)
@@ -255,40 +251,23 @@ namespace {
 
   //! Reads the descriptor of an asset a mounted source lists, newest first.
   auto ReadListedDescriptor(const SceneDescriptorExecutionContext& context,
-    const data::AssetKey& key, IAsyncFileReader& file_reader)
-    -> co::Co<ListedDescriptor>
+    const data::AssetKey& key) -> ListedDescriptor
   {
     for (auto mount = context.mounts.rbegin(); mount != context.mounts.rend();
       ++mount) {
-      if (!mount->inspection) {
+      if (!mount->content || mount->content->FindAsset(key) == nullptr) {
         continue;
       }
-      const auto assets = mount->inspection->Assets();
-      const auto asset = std::ranges::find(assets, key, &lc::AssetEntry::key);
-      if (asset == assets.end()) {
-        continue;
+      try {
+        return ListedDescriptor {
+          .listed = true,
+          .bytes = mount->content->Descriptor(key),
+        };
+      } catch (const std::exception&) {
+        return ListedDescriptor { .listed = true, .bytes = std::nullopt };
       }
-      if (mount->inspection->IsPak()) {
-        try {
-          co_return ListedDescriptor {
-            .listed = true,
-            .bytes = mount->inspection->ReadAssetDescriptor(key),
-          };
-        } catch (const std::exception&) {
-          co_return ListedDescriptor { .listed = true, .bytes = std::nullopt };
-        }
-      }
-      auto read = co_await file_reader.ReadFile(
-        mount->root / std::filesystem::path(asset->descriptor_relpath));
-      if (!read) {
-        co_return ListedDescriptor { .listed = true, .bytes = std::nullopt };
-      }
-      co_return ListedDescriptor {
-        .listed = true,
-        .bytes = std::move(read.value()),
-      };
     }
-    co_return ListedDescriptor {};
+    return ListedDescriptor {};
   }
 
   auto LoadSurfaceInventories(SceneDescriptorExecutionContext& context,
@@ -312,9 +291,7 @@ namespace {
       if (context.geometries.contains(resolved->key)) {
         continue;
       }
-      auto bytes
-        = (co_await ReadListedDescriptor(context, resolved->key, file_reader))
-            .bytes;
+      auto bytes = ReadListedDescriptor(context, resolved->key).bytes;
       if (!bytes) {
         // A descriptor this cook writes is not listed in an index yet.
         std::string relative;
@@ -492,13 +469,11 @@ namespace {
   //! The cooked geometry `key` names, parsed for its surfaces; null when it
   //! is not cooked or cannot be parsed.
   auto ReadGeometry(const SceneDescriptorExecutionContext& context,
-    const data::AssetKey& key, IAsyncFileReader& file_reader)
-    -> co::Co<std::shared_ptr<const data::GeometryAsset>>
+    const data::AssetKey& key) -> std::shared_ptr<const data::GeometryAsset>
   {
-    auto bytes
-      = (co_await ReadListedDescriptor(context, key, file_reader)).bytes;
+    auto bytes = ReadListedDescriptor(context, key).bytes;
     if (!bytes) {
-      co_return nullptr;
+      return nullptr;
     }
     try {
       serio::ReadOnlyMemoryStream stream(bytes.value());
@@ -509,9 +484,9 @@ namespace {
         .work_offline = true,
         .parse_only = true,
       };
-      co_return loaders::LoadGeometryAsset(loader_context);
+      return loaders::LoadGeometryAsset(loader_context);
     } catch (const std::exception&) {
-      co_return nullptr;
+      return nullptr;
     }
   }
 
@@ -527,8 +502,7 @@ namespace {
   //! Reads the cooked scenes reachable through `instances`. A scene not
   //! cooked yet is absent: its own cook checks it.
   auto ReadInstancedScenes(SceneDescriptorExecutionContext& context,
-    std::span<const CookedInstance> instances, IAsyncFileReader& file_reader)
-    -> co::Co<std::optional<SceneMap>>
+    std::span<const CookedInstance> instances) -> std::optional<SceneMap>
   {
     struct Pending final {
       data::AssetKey key;
@@ -547,7 +521,7 @@ namespace {
       if (!visited.insert(key).second) {
         continue;
       }
-      auto listed = co_await ReadListedDescriptor(context, key, file_reader);
+      auto listed = ReadListedDescriptor(context, key);
       if (!listed.listed) {
         continue;
       }
@@ -556,7 +530,7 @@ namespace {
           "scene.descriptor.instance_unreadable",
           "Cannot read an instanced scene: " + data::to_string(key),
           std::string(object_path));
-        co_return std::nullopt;
+        return std::nullopt;
       }
       try {
         auto scene = std::make_shared<const data::SceneAsset>(
@@ -573,10 +547,10 @@ namespace {
           "An instanced scene is invalid; re-cook it: "
             + std::string(error.what()),
           std::string(object_path));
-        co_return std::nullopt;
+        return std::nullopt;
       }
     }
-    co_return scenes;
+    return scenes;
   }
 
   //! The change a descriptor instance makes, as composition reads it. Only
@@ -622,15 +596,14 @@ namespace {
    is not checked.
   */
   auto ComposeInstances(SceneDescriptorExecutionContext& context,
-    const data::AssetKey& scene_key, internal::SceneSource& source,
-    IAsyncFileReader& file_reader) -> co::Co<bool>
+    const data::AssetKey& scene_key, internal::SceneSource& source) -> bool
   {
     auto instances = std::vector<CookedInstance> {};
     for (auto& instance : source.instances) {
       const auto resolved = LookupSceneReference(
         context, instance.scene, data::AssetType::kScene, instance.object_path);
       if (!resolved.has_value()) {
-        co_return false;
+        return false;
       }
       // Linking refuses a scene that instances itself.
       if (resolved->key != scene_key) {
@@ -638,9 +611,9 @@ namespace {
           { .key = resolved->key, .source = observer_ptr { &instance } });
       }
     }
-    auto scenes = co_await ReadInstancedScenes(context, instances, file_reader);
+    auto scenes = ReadInstancedScenes(context, instances);
     if (!scenes.has_value()) {
-      co_return false;
+      return false;
     }
     const auto resolve =
       [&scenes](
@@ -714,8 +687,8 @@ namespace {
           if (node != nullptr && node->renderable.has_value()) {
             const auto geometry_key = node->renderable->geometry_key;
             if (!geometries.contains(geometry_key)) {
-              geometries.emplace(geometry_key,
-                co_await ReadGeometry(context, geometry_key, file_reader));
+              geometries.emplace(
+                geometry_key, ReadGeometry(context, geometry_key));
             }
             const auto& geometry = geometries.at(geometry_key);
             if (geometry
@@ -752,7 +725,7 @@ namespace {
         }
       }
     }
-    co_return valid;
+    return valid;
   }
 
   //! Encodes the value of one override as its property's value type,
@@ -1110,9 +1083,8 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       textures.sky_sphere_cubemap)) {
     co_return co_await FinalizeWithTelemetry(session);
   }
-  if (!co_await ComposeInstances(context,
-        data::AssetKey::FromVirtualPath(placement->virtual_path), *source,
-        *CookedReader())) {
+  if (!ComposeInstances(context,
+        data::AssetKey::FromVirtualPath(placement->virtual_path), *source)) {
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Scene descriptor instances do not compose");
     co_return co_await FinalizeWithTelemetry(session);

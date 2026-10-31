@@ -69,12 +69,12 @@ m_gtest_program(
     "AssetLoader_scripting_test.cpp"
     "AssetLoader_test_fixture.cpp"
     "AssetLoader_test.h"
-    "Fixtures/LooseCookedTestLayout.h"
     "Utils/PakUtils.h"
 )
 target_link_libraries(
   "${META_MODULE_NAME}.AssetLoader.Tests"
   PRIVATE
+    oxygen::cooker::testing
     oxygen::input
 )
 
@@ -86,8 +86,16 @@ m_gtest_program(
     "LooseCookedIndex_test.cpp"
     "LooseCookedSource_test.cpp"
     "VirtualPathResolver_test.cpp"
-    "Fixtures/LooseCookedTestLayout.h"
-    "Fixtures/LooseCookedTestWriter.h"
+)
+target_link_libraries(
+  "${META_MODULE_NAME}.LooseCooked.Tests"
+  PRIVATE
+    oxygen::cooker::testing
+)
+target_sources(
+  "${META_MODULE_NAME}.LooseCooked.Tests"
+  PRIVATE
+    "../Internal/IContentSource.cpp"
 )
 
 m_gtest_program(
@@ -103,7 +111,34 @@ m_gtest_program(
     "TextureLoader_test.cpp"
 )
 
+m_gtest_program(PayloadBudget SOURCES "PayloadBudget_test.cpp")
+
+m_gtest_program(
+  ContentSources
+  SOURCES
+    "PakFileSource_test.cpp"
+    "RegionReader_test.cpp"
+)
+target_link_libraries(
+  "${META_MODULE_NAME}.ContentSources.Tests"
+  PRIVATE
+    oxygen::cooker::testing
+    oxygen::serio::testing
+)
+# The source interface's out-of-line members are internal to the library.
+target_sources(
+  "${META_MODULE_NAME}.ContentSources.Tests"
+  PRIVATE
+    "../Internal/IContentSource.cpp"
+)
+
 m_gtest_program(PakFile SOURCES "PakFile_test.cpp")
+target_link_libraries(
+  "${META_MODULE_NAME}.PakFile.Tests"
+  PRIVATE
+    oxygen::cooker::testing
+    oxygen::serio::testing
+)
 
 find_package(nlohmann_json CONFIG REQUIRED)
 m_gtest_program(VirtualPath SOURCES "VirtualPath_test.cpp")
@@ -126,6 +161,11 @@ target_sources(
     "../Internal/PatchResolutionPolicy.cpp"
     "../Internal/PatchResolutionPolicy.h"
 )
+target_link_libraries(
+  "Oxygen.Content.PatchResolution.Tests"
+  PRIVATE
+    oxygen::cooker::testing
+)
 
 m_gtest_program(
   LoadersPhysics
@@ -144,8 +184,11 @@ m_gtest_program(
     "Fixtures/FakeContentSource.h"
     "AssetLoader_test_fixture.cpp"
     "AssetLoader_test.h"
-    "Fixtures/LooseCookedTestWriter.h"
-    "Fixtures/LooseCookedTestLayout.h"
+)
+target_link_libraries(
+  "Oxygen.Content.SourceRegistry.Tests"
+  PRIVATE
+    oxygen::cooker::testing
 )
 target_sources(
   "Oxygen.Content.SourceRegistry.Tests"

@@ -51,14 +51,14 @@
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/Types.h>
-#include <Oxygen/Cooker/Loose/Validation.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
@@ -132,11 +132,10 @@ struct CookedModel {
 using CookedModelCheck = std::function<void(const CookedModel&)>;
 
 template <typename Decode>
-auto DecodeParseOnly(const std::filesystem::path& cooked_root,
-  const oxygen::content::lc::Inspection::AssetEntry& entry,
-  const Decode& decode)
+auto DecodeParseOnly(const oxygen::content::cooked::CookedContent& content,
+  const oxygen::content::cooked::CookedAsset& entry, const Decode& decode)
 {
-  const auto descriptor_path = cooked_root / entry.descriptor_relpath;
+  const auto descriptor_path = content.DescriptorStored(entry.key).file;
   auto file = oxygen::serio::NativeFile::Open(descriptor_path, {});
   if (!file) {
     throw std::system_error(
@@ -159,28 +158,20 @@ auto DecodeParseOnly(const std::filesystem::path& cooked_root,
 
 //! Copies the one vertex buffer and the one index buffer of the cooked root
 //! into `model`. A single-mesh model cooks exactly one of each.
-auto ReadCookedMeshBuffers(const std::filesystem::path& cooked_root,
-  const oxygen::content::lc::Inspection& inspection, CookedModel& model) -> void
+auto ReadCookedMeshBuffers(
+  const oxygen::content::cooked::CookedContent& content, CookedModel& model)
+  -> void
 {
   using oxygen::data::BufferResource;
   using BufferDesc = oxygen::data::pak::core::BufferResourceDesc;
-  const auto file_path = [&](const oxygen::content::lc::FileKind kind)
-    -> std::optional<std::filesystem::path> {
-    const auto files = inspection.Files();
-    const auto it = std::ranges::find_if(
-      files, [kind](const auto& file) -> auto { return file.kind == kind; });
-    if (it == files.end()) {
-      return std::nullopt;
-    }
-    return cooked_root / it->relpath;
-  };
-  const auto table_path
-    = file_path(oxygen::content::lc::FileKind::kBuffersTable);
-  const auto data_path = file_path(oxygen::content::lc::FileKind::kBuffersData);
-  ASSERT_HAS_VALUE(table_path);
-  ASSERT_HAS_VALUE(data_path);
-  const auto table_bytes = oxygen::cooker::test::ReadBytes(*table_path);
-  const auto data_bytes = oxygen::cooker::test::ReadBytes(*data_path);
+  const auto& buffers
+    = content.ResourceTable(oxygen::data::ResourceKind::kBuffer);
+  const auto& table_path = buffers.RowsStored().file;
+  const auto& data_path = buffers.DataStored().file;
+  ASSERT_FALSE(table_path.empty());
+  ASSERT_FALSE(data_path.empty());
+  const auto table_bytes = oxygen::cooker::test::ReadBytes(table_path);
+  const auto data_bytes = oxygen::cooker::test::ReadBytes(data_path);
   ASSERT_EQ(table_bytes.size() % sizeof(BufferDesc), 0U);
   std::vector<BufferDesc> table(table_bytes.size() / sizeof(BufferDesc));
   std::memcpy(table.data(), table_bytes.data(), table_bytes.size());
@@ -384,10 +375,11 @@ protected:
     ASSERT_TRUE(second.report.success);
     auto identities = [](const auto& report) -> auto {
       const auto inspection = LoadInspection(report.cooked_root);
-      std::vector<std::tuple<std::string, oxygen::data::AssetKey, uint8_t>>
+      std::vector<std::tuple<std::string, oxygen::data::AssetKey,
+        oxygen::data::AssetType>>
         result;
       for (const auto& asset : inspection.Assets()) {
-        result.emplace_back(asset.virtual_path, asset.key, asset.asset_type);
+        result.emplace_back(asset.virtual_path, asset.key, asset.type);
       }
       std::ranges::sort(result);
       return result;
@@ -402,9 +394,9 @@ protected:
   static auto LoadAndVerify(const oxygen::content::import::ImportReport& report,
     const CookedModelCheck& verify) -> void
   {
-    oxygen::content::lc::ValidateRoot(
-      report.cooked_root, oxygen::content::lc::IntegrityCheck::kFull);
     const auto inspection = LoadInspection(report.cooked_root);
+    oxygen::content::cooked::Validate(
+      inspection, oxygen::content::lc::IntegrityCheck::kFull);
     const auto scene_entry
       = FindAssetOfType(inspection, oxygen::data::AssetType::kScene);
     const auto geometry_entry
@@ -416,20 +408,19 @@ protected:
     ASSERT_HAS_VALUE(material_entry);
     auto model = CookedModel {};
     model.scene = DecodeParseOnly(
-      report.cooked_root, *scene_entry, [](const auto& context) -> auto {
+      inspection, *scene_entry, [](const auto& context) -> auto {
         return oxygen::content::loaders::LoadSceneAsset(context);
       });
     model.geometry = DecodeParseOnly(
-      report.cooked_root, *geometry_entry, [](const auto& context) -> auto {
+      inspection, *geometry_entry, [](const auto& context) -> auto {
         return oxygen::content::loaders::LoadGeometryAsset(context);
       });
     model.material = DecodeParseOnly(
-      report.cooked_root, *material_entry, [](const auto& context) -> auto {
+      inspection, *material_entry, [](const auto& context) -> auto {
         return oxygen::content::loaders::LoadMaterialAsset(context);
       });
     ASSERT_TRUE(model.scene && model.geometry && model.material);
-    ASSERT_NO_FATAL_FAILURE(
-      ReadCookedMeshBuffers(report.cooked_root, inspection, model));
+    ASSERT_NO_FATAL_FAILURE(ReadCookedMeshBuffers(inspection, model));
     verify(model);
   }
 };
@@ -717,12 +708,11 @@ auto Reports(const oxygen::content::import::ImportReport& report,
 
 //! The geometry anchor of the one geometry `inspection` lists: its storage
 //! name.
-auto GeometryAnchor(const oxygen::content::lc::Inspection& inspection)
+auto GeometryAnchor(const oxygen::content::cooked::CookedContent& inspection)
   -> std::string
 {
   for (const auto& entry : inspection.Assets()) {
-    if (entry.asset_type
-      == static_cast<uint8_t>(oxygen::data::AssetType::kGeometry)) {
+    if (entry.type == oxygen::data::AssetType::kGeometry) {
       return std::filesystem::path(entry.virtual_path).stem().string();
     }
   }
@@ -852,10 +842,9 @@ NOLINT_TEST_F(ModelValuesTest, GltfMaterialRemapBindsTheExistingMaterial)
   };
   const auto entries_under = [&](const std::string& prefix,
                                const AssetType type) {
-    auto entries = std::vector<oxygen::content::lc::Inspection::AssetEntry> {};
+    auto entries = std::vector<oxygen::content::cooked::CookedAsset> {};
     for (const auto& entry : LoadInspection(root / "cooked").Assets()) {
-      if (entry.asset_type == static_cast<uint8_t>(type)
-        && entry.virtual_path.starts_with(prefix + "/")) {
+      if (entry.type == type && entry.virtual_path.starts_with(prefix + "/")) {
         entries.push_back(entry);
       }
     }
@@ -869,8 +858,12 @@ NOLINT_TEST_F(ModelValuesTest, GltfMaterialRemapBindsTheExistingMaterial)
 
   const auto [second, second_path] = import_model("second",
     {
-      { "Scalar", existing.front().virtual_path },
-      { "Ghost", "/Content/Ghost.omat" },
+      { "Scalar",
+        oxygen::cooker::test::SpellReference(
+          oxygen::cooker::test::ModelVirtualPath(
+            root / "second" / "second.gltf"),
+          existing.front().virtual_path) },
+      { "Ghost", "Ghost.omat" },
     });
   ASSERT_TRUE(second.success);
   EXPECT_TRUE(
@@ -878,8 +871,8 @@ NOLINT_TEST_F(ModelValuesTest, GltfMaterialRemapBindsTheExistingMaterial)
   EXPECT_TRUE(entries_under(second_path, AssetType::kMaterial).empty());
   const auto geometries = entries_under(second_path, AssetType::kGeometry);
   ASSERT_EQ(geometries.size(), 1U);
-  const auto geometry = DecodeParseOnly(
-    root / "cooked", geometries.front(), [](const auto& context) -> auto {
+  const auto geometry = DecodeParseOnly(LoadInspection(root / "cooked"),
+    geometries.front(), [](const auto& context) -> auto {
       return oxygen::content::loaders::LoadGeometryAsset(context);
     });
   ASSERT_TRUE(geometry);
@@ -890,7 +883,7 @@ NOLINT_TEST_F(ModelValuesTest, GltfMaterialRemapBindsTheExistingMaterial)
     existing.front().key);
 
   const auto [third, third_path]
-    = import_model("third", { { "Scalar", "/Content/Missing.omat" } });
+    = import_model("third", { { "Scalar", "Missing.omat" } });
   ASSERT_TRUE(third.success);
   EXPECT_TRUE(Warns(
     third, "import.material_remap_target_missing", "material_remap/Scalar"));

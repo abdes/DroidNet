@@ -154,8 +154,13 @@ ImportJob::ImportJob(ImportJobParams params)
     CHECK_NOTNULL_F(generation_writer_,
       "Model import records require an isolated native writer");
     file_writer_ = observer_ptr { generation_writer_.get() };
-    generation_tables_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
-    generation_index_ = std::make_unique<LooseCookedIndexRegistry>();
+    CHECK_NOTNULL_F(index_registry_,
+      "Model import records require the service's index registry");
+    // The generation's registries share the service's file system.
+    const auto storage = index_registry_->Storage();
+    generation_tables_
+      = std::make_unique<ResourceTableRegistry>(*file_writer_, storage);
+    generation_index_ = std::make_unique<LooseCookedIndexRegistry>(storage);
     table_registry_ = observer_ptr { generation_tables_.get() };
     index_registry_ = observer_ptr { generation_index_.get() };
   }
@@ -207,7 +212,7 @@ auto ImportJob::Request() const -> const ImportRequest& { return request_; }
  Ensure the request has a concrete cooked root and create it on disk.
 
  Uses the request's explicit cooked root when provided. Otherwise, derives a
- cooked root from the source path and loose cooked layout. If the source path
+ cooked root from the source path and the output mount. If the source path
  cannot be resolved, falls back to the process temp directory.
 */
 auto ImportJob::WritableCookedRoot() const -> std::filesystem::path

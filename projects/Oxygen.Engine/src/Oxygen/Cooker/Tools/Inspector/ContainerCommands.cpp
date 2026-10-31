@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <iomanip>
@@ -15,107 +16,103 @@
 
 #include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Content/PakFile.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/Validation.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/ContainerCommands.h>
 #include <Oxygen/Cooker/Tools/Inspector/CookedRootCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/DumpFormat.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/CookedSource.h>
 
 namespace oxygen::content::inspection {
 
 namespace {
 
-  using oxygen::data::loose_cooked::FileKind;
-
-  auto AssetTypeToString(const uint8_t asset_type) -> std::string_view
-  {
-    using oxygen::data::AssetType;
-
-    const auto max = static_cast<uint8_t>(AssetType::kMaxAssetType);
-    if (asset_type > max) {
-      return "unknown";
-    }
-
-    return nostd::to_string(static_cast<AssetType>(asset_type));
-  }
-
-  // TODO: replace with nostd::to_string defined with the enum itself
-  auto FileKindToString(const FileKind kind) -> std::string_view
+  auto TableKindToString(const cooked::TableKind kind) -> std::string_view
   {
     switch (kind) {
-    case FileKind::kBuffersTable:
-      return "buffers.table";
-    case FileKind::kBuffersData:
-      return "buffers.data";
-    case FileKind::kTexturesTable:
-      return "textures.table";
-    case FileKind::kTexturesData:
-      return "textures.data";
-    case FileKind::kScriptsTable:
-      return "scripts.table";
-    case FileKind::kScriptsData:
-      return "scripts.data";
-    case FileKind::kPhysicsTable:
-      return "physics.table";
-    case FileKind::kPhysicsData:
-      return "physics.data";
-    case FileKind::kAuxiliary:
-      return "auxiliary";
-    case FileKind::kTextureDescriptor:
-      return "texture";
-    case FileKind::kUnknown:
-    default:
-      return "unknown";
+    case cooked::TableKind::kBuffer:
+      return "buffers";
+    case cooked::TableKind::kTexture:
+      return "textures";
+    case cooked::TableKind::kScript:
+      return "scripts";
+    case cooked::TableKind::kPhysics:
+      return "physics";
+    case cooked::TableKind::kAudio:
+      return "audio";
     }
+    return "unknown";
   }
 
-  constexpr int kFileKindColumn = 15;
+  constexpr int kFileKindColumn = 20;
   constexpr int kFilePathColumn = 34;
 
-  auto DumpHexSha256(std::ostream& os,
-    const std::span<const uint8_t, oxygen::data::loose_cooked::kSha256Size>&
-      digest) -> void
+  constexpr auto kTableKinds = std::array {
+    cooked::TableKind::kBuffer,
+    cooked::TableKind::kTexture,
+    cooked::TableKind::kScript,
+    cooked::TableKind::kPhysics,
+    cooked::TableKind::kAudio,
+  };
+
+  auto DumpHexSha256(std::ostream& os, const base::Sha256Digest& digest) -> void
   {
-    os << base::ToHexString(std::as_bytes(digest));
+    os << base::ToHexString(std::as_bytes(std::span(digest)));
   }
 
-  auto DumpFileRecords(
-    const std::span<const oxygen::content::lc::Inspection::FileEntry> entries,
-    std::ostream& os) -> void
+  //! The resource tables, named textures and sidecars of `content`.
+  auto DumpStorage(const cooked::CookedContent& content, std::ostream& os)
+    -> void
   {
-    if (entries.empty()) {
-      os << "(none)\n";
-      return;
+    os << "Kind                  Rows        Stored File\n";
+    os << "--------------------  ----------  "
+          "----------------------------------\n";
+    for (const auto kind : kTableKinds) {
+      const auto& table = content.ResourceTable(kind);
+      os << std::left << std::setw(kFileKindColumn) << TableKindToString(kind)
+         << "  " << std::right << std::setw(kSizeColumn) << table.RowCount()
+         << "  ";
+      if (table.RowCount() > 0U) {
+        os << table.RowsStored().file.generic_string();
+      }
+      os << "\n";
     }
 
-    os << "Kind             Path                                Size        "
-          "Virtual Path\n";
-    os << "---------------  ----------------------------------  ----------  "
-          "------------\n";
+    os << "\nNamed Textures(" << content.NamedTextures().size() << ") ";
+    if (content.NamedTextures().empty()) {
+      os << "(none)\n";
+    }
+    for (const auto& texture : content.NamedTextures()) {
+      os << "- vpath='" << texture.virtual_path << "' row=" << texture.row.get()
+         << "\n";
+    }
 
-    for (const auto& e : entries) {
-      os << std::left << std::setw(kFileKindColumn) << FileKindToString(e.kind)
-         << "  ";
-      os << std::left << std::setw(kFilePathColumn) << e.relpath << "  ";
-      os << std::right << std::setw(kSizeColumn) << e.size;
-      if (!e.virtual_path.empty()) {
-        os << "  " << e.virtual_path;
+    os << "\nSidecars(" << content.Sidecars().size() << ") ";
+    if (content.Sidecars().empty()) {
+      os << "(none)\n";
+    }
+    for (const auto& sidecar : content.Sidecars()) {
+      os << std::left << std::setw(kFilePathColumn) << sidecar.name << "  "
+         << std::right << std::setw(kSizeColumn)
+         << sidecar.stored.range.count.get();
+      if (!sidecar.source_path.empty()) {
+        os << "  " << sidecar.source_path;
       }
       os << "\n";
     }
   }
 
-  auto DumpAssets(
-    const std::span<const oxygen::content::lc::Inspection::AssetEntry> entries,
+  auto DumpAssets(const std::span<const cooked::CookedAsset> entries,
     std::ostream& os, const bool show_digests) -> void
   {
     if (entries.empty()) {
@@ -125,26 +122,18 @@ namespace {
 
     for (const auto& e : entries) {
       os << "- key='" << oxygen::data::to_string(e.key) << "'";
-      os << " type='" << AssetTypeToString(e.asset_type) << "'(";
-      os << static_cast<unsigned>(e.asset_type) << ")'";
+      os << " type='" << nostd::to_string(e.type) << "'("
+         << static_cast<unsigned>(e.type) << ")'";
 
       if (!e.virtual_path.empty()) {
         os << " vpath='" << e.virtual_path << "'";
       }
 
-      if (!e.descriptor_relpath.empty()) {
-        os << " desc='" << e.descriptor_relpath << "'";
-      }
-
-      os << " desc_size=" << e.descriptor_size;
+      os << " desc_size=" << e.descriptor_size.get();
 
       if (show_digests) {
-        if (e.descriptor_sha256) {
-          os << " desc_sha256=";
-          DumpHexSha256(os,
-            std::span<const uint8_t, oxygen::data::loose_cooked::kSha256Size>(
-              e.descriptor_sha256->data(), e.descriptor_sha256->size()));
-        }
+        os << " desc_sha256=";
+        DumpHexSha256(os, e.descriptor_sha256);
       }
 
       os << "\n";
@@ -156,17 +145,15 @@ namespace {
   {
     const std::filesystem::path cooked_root(opts.cooked_root);
 
-    if (std::filesystem::is_regular_file(cooked_root)) {
-      const oxygen::content::PakFile pak(cooked_root);
-      pak.ValidateCrc32Integrity();
-      if (!opts.quiet) {
-        out << "OK: valid pak: " << cooked_root.string() << "\n";
-      }
-      return {};
-    }
-    oxygen::content::lc::ValidateRoot(cooked_root);
+    const auto content
+      = cooked::CookedContent::Open(cooked::RealCookerStorage(), cooked_root);
+    cooked::Validate(content);
     if (!opts.quiet) {
-      out << "OK: valid loose cooked root: " << cooked_root.string() << "\n";
+      out << "OK: valid "
+          << (content.Source().kind == data::CookedSourceKind::kPak
+                 ? "pak"
+                 : "loose cooked root")
+          << ": " << cooked_root.string() << "\n";
     }
     return {};
   }
@@ -176,23 +163,24 @@ namespace {
   {
     const std::filesystem::path cooked_root(opts.cooked_root);
 
-    oxygen::content::lc::Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
+    const auto content
+      = cooked::CookedContent::Open(cooked::RealCookerStorage(), cooked_root);
 
     const bool dump_assets = opts.assets || (!opts.assets && !opts.files);
     const bool dump_files = opts.files || (!opts.assets && !opts.files);
 
     out << "Cooked Root : " << cooked_root.string() << "\n";
-    out << "Index GUID  : " << nostd::to_string(inspection.Guid()) << "\n";
+    out << "Source Key  : " << nostd::to_string(content.Summary().source_key)
+        << "\n";
 
     if (dump_assets) {
-      out << "\nAssets (" << inspection.Assets().size() << ")\n";
-      DumpAssets(inspection.Assets(), out, opts.show_digests);
+      out << "\nAssets (" << content.Assets().size() << ")\n";
+      DumpAssets(content.Assets(), out, opts.show_digests);
     }
 
     if (dump_files) {
-      out << "\nFile Records (" << inspection.Files().size() << ")\n";
-      DumpFileRecords(inspection.Files(), out);
+      out << "\nStorage\n";
+      DumpStorage(content, out);
     }
 
     return {};

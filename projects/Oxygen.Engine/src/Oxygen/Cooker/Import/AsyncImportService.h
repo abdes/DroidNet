@@ -16,6 +16,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
@@ -170,6 +172,11 @@ public:
      * `script.asset.compiler_unavailable`.
     */
     ScriptCompileCallback script_compile_callback {};
+
+    //! Where every job of the service reads and writes cooked roots' indexes,
+    //! tables and descriptors; payloads go through the async file writer.
+    observer_ptr<cooked::CookerStorage> cooked_storage
+      = make_observer(&cooked::RealCookerStorage());
   };
 
   //! Construct and start the import thread.

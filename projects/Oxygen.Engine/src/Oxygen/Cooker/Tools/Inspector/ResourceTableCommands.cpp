@@ -6,44 +6,35 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <filesystem>
 #include <iomanip>
 #include <ios>
 #include <memory>
-#include <optional>
 #include <ostream>
 #include <span>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <vector>
-
-#include <fmt/format.h>
 
 #include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/CookedRootCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/DumpFormat.h>
 #include <Oxygen/Cooker/Tools/Inspector/ResourceTableCommands.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Serio/NativeFile.h>
-#include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::inspection {
 
 namespace {
-
-  using oxygen::data::loose_cooked::FileKind;
 
   constexpr int kOffsetColumn = 19;
   constexpr int kStrideColumn = 6;
@@ -54,68 +45,28 @@ namespace {
   constexpr int kScriptEncodingColumn = 25;
   constexpr int kScriptHashColumn = 66;
 
-  auto FindFileRelPath(const oxygen::content::lc::Inspection& inspection,
-    const FileKind kind) -> std::optional<std::string>
-  {
-    for (const auto& entry : inspection.Files()) {
-      if (entry.kind == kind) {
-        return entry.relpath;
-      }
-    }
-    return std::nullopt;
-  }
-
-  auto FindFileRelPathBySuffix(
-    const oxygen::content::lc::Inspection& inspection,
-    const std::string_view suffix) -> std::optional<std::string>
-  {
-    for (const auto& entry : inspection.Files()) {
-      if (entry.relpath.ends_with(suffix)) {
-        return entry.relpath;
-      }
-    }
-    return std::nullopt;
-  }
-
+  //! Every row of the table of `kind`, row zero included.
   template <typename T>
-  auto LoadPackedTable(const std::filesystem::path& table_path)
-    -> std::vector<T>
+  auto LoadRows(const cooked::CookedContent& content,
+    const oxygen::data::ResourceKind kind) -> std::vector<T>
   {
-    using oxygen::serio::Reader;
-
-    auto file = oxygen::serio::NativeFile::Open(table_path, {});
-    if (!file) {
-      throw std::system_error(
-        file.error(), fmt::format("open '{}'", table_path.string()));
+    const auto& table = content.ResourceTable(kind);
+    auto entries = std::vector<T> {};
+    entries.reserve(table.RowCount());
+    for (uint32_t row = 0U; row < table.RowCount(); ++row) {
+      entries.push_back(table.Row<T>(ResourceIndexT { row }));
     }
-    auto stream = oxygen::serio::OpenReadStream(*file);
-    if (!stream) {
-      throw std::system_error(stream.error(),
-        fmt::format("get table size '{}'", table_path.string()));
-    }
-
-    const auto size_bytes = stream->Size().get();
-    if (size_bytes == 0) {
-      return {};
-    }
-
-    if (size_bytes % sizeof(T) != 0) {
-      throw std::runtime_error("table size is not a multiple of entry size");
-    }
-
-    const auto count = size_bytes / sizeof(T);
-    std::vector<T> entries(count);
-
-    Reader<oxygen::serio::RegionReadStream<oxygen::serio::NativeFile>> reader(
-      *stream);
-    const auto pack = reader.ScopedAlignment(1);
-    auto read_result = reader.ReadBlobInto(
-      std::as_writable_bytes(std::span<T>(entries.data(), entries.size())));
-    if (!read_result) {
-      throw std::runtime_error("failed to read table file");
-    }
-
     return entries;
+  }
+
+  //! Where the rows of the table of `kind` are stored, for the report header.
+  auto TableLocation(const cooked::CookedContent& content,
+    const oxygen::data::ResourceKind kind, const std::filesystem::path& root)
+    -> std::string
+  {
+    const auto& table = content.ResourceTable(kind);
+    return table.RowCount() > 0U ? table.RowsStored().file.string()
+                                 : root.string();
   }
 
   auto RunDumpBuffers(std::ostream& out, const std::string& cooked_root_path)
@@ -123,27 +74,22 @@ namespace {
   {
     const std::filesystem::path cooked_root(cooked_root_path);
 
-    oxygen::content::lc::Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
+    const auto content
+      = cooked::CookedContent::Open(cooked::RealCookerStorage(), cooked_root);
 
-    const auto relpath = FindFileRelPath(inspection, FileKind::kBuffersTable);
-    if (!relpath) {
-      return std::unexpected(
-        toolkit::ToolError::Failed("buffers.table not found in index"));
-    }
-
-    const auto table_path = cooked_root / *relpath;
-    auto entries = LoadPackedTable<oxygen::data::pak::core::BufferResourceDesc>(
-      table_path);
+    constexpr auto kind = oxygen::data::ResourceKind::kBuffer;
+    const auto table_path = TableLocation(content, kind, cooked_root);
+    const auto entries
+      = LoadRows<oxygen::data::pak::core::BufferResourceDesc>(content, kind);
 
     if (entries.empty()) {
-      out << "No buffers found in: '" << table_path.string() << "'\n";
+      out << "No buffers found in: '" << table_path << "'\n";
       return {};
     }
 
     out << "Dumping " << entries.size() - 1 << " user buffers ("
         << entries.size() << " total entries including sentinel) in: '"
-        << table_path.string() << "'\n\n";
+        << table_path << "'\n\n";
 
     // clang-format off
     out << "Idx  Offset              Size       Stride  Format          Usage Flags                      Hash\n";
@@ -177,22 +123,16 @@ namespace {
   {
     const std::filesystem::path cooked_root(cooked_root_path);
 
-    oxygen::content::lc::Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
+    const auto content
+      = cooked::CookedContent::Open(cooked::RealCookerStorage(), cooked_root);
 
-    const auto relpath = FindFileRelPath(inspection, FileKind::kTexturesTable);
-    if (!relpath) {
-      return std::unexpected(
-        toolkit::ToolError::Failed("textures.table not found in index"));
-    }
+    constexpr auto kind = oxygen::data::ResourceKind::kTexture;
+    const auto table_path = TableLocation(content, kind, cooked_root);
+    const auto entries
+      = LoadRows<oxygen::data::pak::core::TextureResourceDesc>(content, kind);
 
-    const auto table_path = cooked_root / *relpath;
-    auto entries
-      = LoadPackedTable<oxygen::data::pak::core::TextureResourceDesc>(
-        table_path);
-
-    out << "Dumping " << entries.size() << " textures in: '"
-        << table_path.string() << "'\n\n";
+    out << "Dumping " << entries.size() << " textures in: '" << table_path
+        << "'\n\n";
 
     if (entries.empty()) {
       out << "(none)\n";
@@ -233,28 +173,23 @@ namespace {
   {
     const std::filesystem::path cooked_root(cooked_root_path);
 
-    oxygen::content::lc::Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
+    const auto content
+      = cooked::CookedContent::Open(cooked::RealCookerStorage(), cooked_root);
 
-    const auto relpath = FindFileRelPathBySuffix(inspection, "physics.table");
-    if (!relpath) {
-      return std::unexpected(
-        toolkit::ToolError::Failed("physics.table not found in index"));
-    }
-
-    const auto table_path = cooked_root / *relpath;
-    auto entries
-      = LoadPackedTable<oxygen::data::pak::physics::PhysicsResourceDesc>(
-        table_path);
+    constexpr auto kind = oxygen::data::ResourceKind::kPhysics;
+    const auto table_path = TableLocation(content, kind, cooked_root);
+    const auto entries
+      = LoadRows<oxygen::data::pak::physics::PhysicsResourceDesc>(
+        content, kind);
 
     if (entries.empty()) {
-      out << "No physics resources found in: '" << table_path.string() << "'\n";
+      out << "No physics resources found in: '" << table_path << "'\n";
       return {};
     }
 
     out << "Dumping " << entries.size() - 1 << " user physics resources ("
         << entries.size() << " total entries including sentinel) in: '"
-        << table_path.string() << "'\n\n";
+        << table_path << "'\n\n";
 
     out << "Idx  Offset              Size       Format                    "
            "SHA256\n";

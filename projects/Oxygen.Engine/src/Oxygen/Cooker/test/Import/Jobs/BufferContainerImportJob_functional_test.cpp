@@ -25,6 +25,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -176,11 +177,14 @@ namespace {
           json {
             {
               "source",
-              oxygen::cooker::test::MountPathIn(TempDir(), buffer_source),
+              oxygen::cooker::test::SpellReference(
+                oxygen::cooker::test::SourceMountPath(
+                  TempDir() / "inline.buffers.json"),
+                oxygen::cooker::test::MountPathIn(TempDir(), buffer_source)),
             },
             {
               "virtual_path",
-              "/.cooked/Resources/Buffers/character_vertices.obuf",
+              "Buffers/character_vertices.obuf",
             },
             { "usage_flags", 3U },
             { "element_stride", 16U },
@@ -194,6 +198,7 @@ namespace {
     request.source_path = TempDir() / "inline.buffers.json";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
+    request.asset_virtual_path = "/.cooked/Resources/inline.buffers";
     request.cooked_root = cooked_root;
     request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {
@@ -303,9 +308,12 @@ namespace {
           json {
             {
               "source",
-              oxygen::cooker::test::MountPathIn(TempDir(), buffer_source),
+              oxygen::cooker::test::SpellReference(
+                oxygen::cooker::test::SourceMountPath(
+                  TempDir() / "inline.buffers.json"),
+                oxygen::cooker::test::MountPathIn(TempDir(), buffer_source)),
             },
-            { "virtual_path", "/.cooked/Resources/Buffers/mesh_indices.obuf" },
+            { "virtual_path", "Buffers/mesh_indices.obuf" },
             { "usage_flags", 2U },
             { "element_format", 10U },
             {
@@ -327,6 +335,7 @@ namespace {
     request.source_path = TempDir() / "inline.buffers.json";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
+    request.asset_virtual_path = "/.cooked/Resources/inline.buffers";
     request.cooked_root = cooked_root;
     request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {

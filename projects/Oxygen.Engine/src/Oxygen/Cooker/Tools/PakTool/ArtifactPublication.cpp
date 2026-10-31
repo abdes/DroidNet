@@ -14,6 +14,8 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
 
 namespace oxygen::content::pak::tool {
@@ -29,15 +31,15 @@ namespace {
 
   struct ArtifactContext {
     ArtifactKind kind;
-    const ArtifactPaths* paths = nullptr;
-    ArtifactPublicationState* state = nullptr;
+    observer_ptr<const ArtifactPaths> paths;
+    observer_ptr<ArtifactPublicationState> state;
     bool remove_stale_final_on_skip = false;
   };
 
   struct PublishedArtifact {
     ArtifactKind kind;
-    const ArtifactPaths* paths = nullptr;
-    ArtifactPublicationState* state = nullptr;
+    observer_ptr<const ArtifactPaths> paths;
+    observer_ptr<ArtifactPublicationState> state;
     bool had_backup = false;
   };
 
@@ -86,48 +88,72 @@ namespace {
     state.publish_requested = publish_requested;
   }
 
+  [[nodiscard]] auto IsFile(const cooked::CookerStorage& storage,
+    const std::filesystem::path& path) -> bool
+  {
+    return !path.empty() && storage.KindOf(path) == cooked::PathKind::kFile;
+  }
+
+  [[nodiscard]] auto Failure(const std::string_view what,
+    const ArtifactKind kind, const std::error_code& error) -> std::string
+  {
+    return std::string(what) + " " + ToString(kind)
+      + " artifact: " + error.message();
+  }
+
   auto CleanupStagedFile(
-    IArtifactFileSystem& fs, ArtifactPublicationState& state) -> void
+    cooked::CookerStorage& storage, ArtifactPublicationState& state) -> void
   {
-    if (state.staged_path.empty()) {
+    if (!IsFile(storage, state.staged_path)) {
       state.cleaned_staged = true;
       return;
     }
-    if (!fs.Exists(state.staged_path)) {
-      state.cleaned_staged = true;
-      return;
-    }
-
-    const auto ec = fs.RemoveFile(state.staged_path);
-    if (!ec && !fs.Exists(state.staged_path)) {
+    if (const auto removed = storage.Remove(state.staged_path);
+      removed && !IsFile(storage, state.staged_path)) {
       state.cleaned_staged = true;
     }
   }
 
-  auto CleanupBackupFile(
-    IArtifactFileSystem& fs, const std::filesystem::path& backup_path) -> void
+  auto AddIssue(ArtifactPublicationResult& result, const std::string_view code,
+    std::string message, const std::filesystem::path& path) -> void
   {
-    if (backup_path.empty() || !fs.Exists(backup_path)) {
-      return;
-    }
-    [[maybe_unused]] const auto ec = fs.RemoveFile(backup_path);
+    result.issues.push_back(ArtifactPublicationIssue {
+      .code = std::string(code),
+      .message = std::move(message) + " ('" + path.string() + "')",
+    });
   }
 
-  auto RemoveStaleFinalIfRequested(IArtifactFileSystem& fs,
+  //! Removes the backup of `paths` once its final file exists again. A backup
+  //! whose final file is gone is the only copy left, and stays.
+  auto CleanupBackupFile(cooked::CookerStorage& storage,
+    const ArtifactPaths& paths, const ArtifactKind kind,
+    ArtifactPublicationResult& result) -> void
+  {
+    if (!IsFile(storage, paths.backup_path)
+      || !IsFile(storage, paths.final_path)) {
+      return;
+    }
+    if (const auto removed = storage.Remove(paths.backup_path); !removed) {
+      AddIssue(result, "paktool.publish.cleanup_failed",
+        Failure("Failed to remove the backup of the", kind, removed.error()),
+        paths.backup_path);
+    }
+  }
+
+  auto RemoveStaleFinalIfRequested(cooked::CookerStorage& storage,
     const ArtifactContext& artifact, ArtifactPublicationResult& result) -> bool
   {
     if (!artifact.remove_stale_final_on_skip
-      || artifact.paths->final_path.empty()
-      || !fs.Exists(artifact.paths->final_path)) {
+      || !IsFile(storage, artifact.paths->final_path)) {
       return true;
     }
 
-    const auto ec = fs.RemoveFile(artifact.paths->final_path);
-    if (ec) {
+    if (const auto removed = storage.Remove(artifact.paths->final_path);
+      !removed) {
       SetError(result,
         { .code = "paktool.publish.remove_stale_final_failed",
-          .message = std::string("Failed to remove stale final ")
-            + ToString(artifact.kind) + " artifact." });
+          .message = Failure(
+            "Failed to remove stale final", artifact.kind, removed.error()) });
       return false;
     }
 
@@ -135,55 +161,42 @@ namespace {
     return true;
   }
 
-  auto EnsureDirectories(const ArtifactContext& artifact,
-    const ArtifactPublicationIntent& intent, IArtifactFileSystem& fs,
-    ArtifactPublicationResult& result) -> bool
-  {
-    if (!intent.create_parent_directories) {
-      return true;
-    }
-
-    const auto parent = artifact.paths->final_path.parent_path();
-    if (parent.empty()) {
-      return true;
-    }
-
-    const auto ec = fs.CreateDirectories(parent);
-    if (ec) {
-      SetError(result,
-        { .code = "paktool.publish.create_directories_failed",
-          .message = std::string("Failed to create output directory for ")
-            + ToString(artifact.kind) + " artifact." });
-      return false;
-    }
-    return true;
-  }
-
-  auto RestorePublishedArtifacts(
-    std::vector<PublishedArtifact>& published, IArtifactFileSystem& fs) -> void
+  //! Puts back what earlier publications of this run replaced: the backup
+  //! where there was one, nothing where there was none.
+  auto RestorePublishedArtifacts(std::vector<PublishedArtifact>& published,
+    cooked::CookerStorage& storage, ArtifactPublicationResult& result) -> void
   {
     for (auto it = published.rbegin(); it != published.rend(); ++it) {
       const auto& artifact = *it;
-      if (fs.Exists(artifact.paths->final_path)) {
-        [[maybe_unused]] const auto remove_ec
-          = fs.RemoveFile(artifact.paths->final_path);
-      }
-
-      if (artifact.had_backup && fs.Exists(artifact.paths->backup_path)) {
-        const auto ec
-          = fs.Rename(artifact.paths->backup_path, artifact.paths->final_path);
-        if (!ec) {
-          artifact.state->restored_backup = true;
+      if (!artifact.had_backup) {
+        if (const auto removed = storage.Remove(artifact.paths->final_path);
+          !removed) {
+          AddIssue(result, "paktool.publish.restore_failed",
+            Failure("Failed to remove the newly published", artifact.kind,
+              removed.error()),
+            artifact.paths->final_path);
         }
+        continue;
       }
+      if (const auto restored
+        = storage.Move(artifact.paths->backup_path, artifact.paths->final_path);
+        !restored) {
+        AddIssue(result, "paktool.publish.restore_failed",
+          Failure("Failed to restore the backup of the", artifact.kind,
+            restored.error()),
+          artifact.paths->backup_path);
+        continue;
+      }
+      artifact.state->restored_backup = true;
     }
   }
 
   auto PublishOneArtifact(const ArtifactContext& artifact,
-    IArtifactFileSystem& fs, ArtifactPublicationResult& result,
+    cooked::CookerStorage& storage, ArtifactPublicationResult& result,
     std::vector<PublishedArtifact>& published) -> bool
   {
-    if (!fs.Exists(artifact.paths->staged_path)) {
+    const auto& paths = *artifact.paths;
+    if (!IsFile(storage, paths.staged_path)) {
       SetError(result,
         { .code = "paktool.publish.staged_missing",
           .message = std::string("Missing staged ") + ToString(artifact.kind)
@@ -191,38 +204,41 @@ namespace {
       return false;
     }
 
-    CleanupBackupFile(fs, artifact.paths->backup_path);
-
+    // The backup replaces any left by an earlier run.
     auto had_backup = false;
-    if (fs.Exists(artifact.paths->final_path)) {
-      const auto backup_ec
-        = fs.Rename(artifact.paths->final_path, artifact.paths->backup_path);
-      if (backup_ec) {
+    if (IsFile(storage, paths.final_path)) {
+      if (const auto moved = storage.Move(paths.final_path, paths.backup_path);
+        !moved) {
         SetError(result,
           { .code = "paktool.publish.backup_rename_failed",
-            .message = std::string("Failed to move existing final ")
-              + ToString(artifact.kind) + " artifact out of the way." });
+            .message = Failure("Failed to move aside the existing final",
+              artifact.kind, moved.error()) });
         return false;
       }
       had_backup = true;
     }
 
-    const auto publish_ec
-      = fs.Rename(artifact.paths->staged_path, artifact.paths->final_path);
-    if (publish_ec) {
-      if (had_backup && fs.Exists(artifact.paths->backup_path)) {
-        [[maybe_unused]] const auto restore_ec
-          = fs.Rename(artifact.paths->backup_path, artifact.paths->final_path);
+    if (const auto moved = storage.Move(paths.staged_path, paths.final_path);
+      !moved) {
+      if (had_backup) {
+        if (const auto restored
+          = storage.Move(paths.backup_path, paths.final_path);
+          !restored) {
+          AddIssue(result, "paktool.publish.restore_failed",
+            Failure("Failed to restore the backup of the", artifact.kind,
+              restored.error()),
+            paths.backup_path);
+        }
       }
       SetError(result,
         { .code = "paktool.publish.rename_failed",
-          .message = std::string("Failed to publish staged ")
-            + ToString(artifact.kind) + " artifact." });
+          .message = Failure(
+            "Failed to publish staged", artifact.kind, moved.error()) });
       return false;
     }
 
     artifact.state->published = true;
-    artifact.state->cleaned_staged = !fs.Exists(artifact.paths->staged_path);
+    artifact.state->cleaned_staged = !IsFile(storage, paths.staged_path);
     published.push_back(PublishedArtifact {
       .kind = artifact.kind,
       .paths = artifact.paths,
@@ -233,40 +249,6 @@ namespace {
   }
 
 } // namespace
-
-auto RealArtifactFileSystem::Exists(const std::filesystem::path& path) const
-  -> bool
-{
-  return std::filesystem::exists(path);
-}
-
-auto RealArtifactFileSystem::CreateDirectories(
-  const std::filesystem::path& path) -> std::error_code
-{
-  auto ec = std::error_code {};
-  if (!path.empty()) {
-    std::filesystem::create_directories(path, ec);
-  }
-  return ec;
-}
-
-auto RealArtifactFileSystem::RemoveFile(const std::filesystem::path& path)
-  -> std::error_code
-{
-  auto ec = std::error_code {};
-  if (!path.empty()) {
-    std::filesystem::remove(path, ec);
-  }
-  return ec;
-}
-
-auto RealArtifactFileSystem::Rename(const std::filesystem::path& from,
-  const std::filesystem::path& to) -> std::error_code
-{
-  auto ec = std::error_code {};
-  std::filesystem::rename(from, to, ec);
-  return ec;
-}
 
 auto MakeArtifactPublicationPlan(const std::filesystem::path& pak_path,
   const std::filesystem::path& catalog_path,
@@ -307,7 +289,7 @@ auto MakeArtifactPublicationPlan(const std::filesystem::path& pak_path,
 }
 
 auto PublishArtifacts(const ArtifactPublicationPlan& plan,
-  const ArtifactPublicationIntent& intent, IArtifactFileSystem& fs)
+  const ArtifactPublicationIntent& intent, cooked::CookerStorage& storage)
   -> ArtifactPublicationResult
 {
   const auto publish_start = std::chrono::steady_clock::now();
@@ -330,40 +312,31 @@ auto PublishArtifacts(const ArtifactPublicationPlan& plan,
   artifacts.reserve(4);
   artifacts.push_back(ArtifactContext {
     .kind = ArtifactKind::kPak,
-    .paths = &plan.pak,
-    .state = &result.pak,
+    .paths = make_observer(&plan.pak),
+    .state = make_observer(&result.pak),
     .remove_stale_final_on_skip = false,
   });
   artifacts.push_back(ArtifactContext {
     .kind = ArtifactKind::kCatalog,
-    .paths = &plan.catalog,
-    .state = &result.catalog,
+    .paths = make_observer(&plan.catalog),
+    .state = make_observer(&result.catalog),
     .remove_stale_final_on_skip = intent.suppress_stale_catalog_on_skip,
   });
   if (plan.manifest.has_value() && result.manifest.has_value()) {
     artifacts.push_back(ArtifactContext {
       .kind = ArtifactKind::kManifest,
-      .paths = &*plan.manifest,
-      .state = &*result.manifest,
+      .paths = make_observer(&*plan.manifest),
+      .state = make_observer(&*result.manifest),
       .remove_stale_final_on_skip = intent.suppress_stale_manifest_on_skip,
     });
   }
   if (plan.report.has_value() && result.report.has_value()) {
     artifacts.push_back(ArtifactContext {
       .kind = ArtifactKind::kReport,
-      .paths = &*plan.report,
-      .state = &*result.report,
+      .paths = make_observer(&*plan.report),
+      .state = make_observer(&*result.report),
       .remove_stale_final_on_skip = false,
     });
-  }
-
-  for (const auto& artifact : artifacts) {
-    if (!EnsureDirectories(artifact, intent, fs, result)) {
-      result.publish_duration
-        = std::chrono::duration_cast<std::chrono::microseconds>(
-          std::chrono::steady_clock::now() - publish_start);
-      return result;
-    }
   }
 
   auto published = std::vector<PublishedArtifact> {};
@@ -371,30 +344,33 @@ auto PublishArtifacts(const ArtifactPublicationPlan& plan,
 
   for (const auto& artifact : artifacts) {
     if (!artifact.state->publish_requested) {
-      if (!RemoveStaleFinalIfRequested(fs, artifact, result)) {
+      if (!RemoveStaleFinalIfRequested(storage, artifact, result)) {
         for (const auto& published_artifact : published) {
-          CleanupBackupFile(fs, published_artifact.paths->backup_path);
+          CleanupBackupFile(storage, *published_artifact.paths,
+            published_artifact.kind, result);
         }
-        CleanupStagedFile(fs, *artifact.state);
+        CleanupStagedFile(storage, *artifact.state);
         result.publish_duration
           = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - publish_start);
         return result;
       }
 
-      CleanupStagedFile(fs, *artifact.state);
+      CleanupStagedFile(storage, *artifact.state);
       continue;
     }
 
-    if (!PublishOneArtifact(artifact, fs, result, published)) {
-      RestorePublishedArtifacts(published, fs);
+    if (!PublishOneArtifact(artifact, storage, result, published)) {
+      RestorePublishedArtifacts(published, storage, result);
 
       for (const auto& published_artifact : published) {
-        CleanupBackupFile(fs, published_artifact.paths->backup_path);
+        CleanupBackupFile(
+          storage, *published_artifact.paths, published_artifact.kind, result);
       }
       for (const auto& cleanup_artifact : artifacts) {
-        CleanupStagedFile(fs, *cleanup_artifact.state);
-        CleanupBackupFile(fs, cleanup_artifact.paths->backup_path);
+        CleanupStagedFile(storage, *cleanup_artifact.state);
+        CleanupBackupFile(
+          storage, *cleanup_artifact.paths, cleanup_artifact.kind, result);
       }
 
       result.publish_duration
@@ -405,7 +381,8 @@ auto PublishArtifacts(const ArtifactPublicationPlan& plan,
   }
 
   for (const auto& published_artifact : published) {
-    CleanupBackupFile(fs, published_artifact.paths->backup_path);
+    CleanupBackupFile(
+      storage, *published_artifact.paths, published_artifact.kind, result);
   }
 
   result.success = true;

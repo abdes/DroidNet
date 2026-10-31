@@ -314,7 +314,7 @@ import, recook, packaging and cleanup commands.
 A manifest job `{ "type": "model", "virtual_path": "/Content/Models/Ship.glb" }`
 runs the record at that identity, found through the manifest's mounts, as the
 gltf or fbx job its source names, with the record's settings and identity. The
-job may add `id`, `depends_on`, `output`, `layout`, `cooked_context_roots` and
+job may add `id`, `depends_on`, `output`, `cooked_context_roots` and
 `source_key`; settings stay in the record. Jobs carry no source identity or
 surface provenance of their own.
 
@@ -680,9 +680,6 @@ Top-level fields:
     "scene": { "workers": 2, "queue_capacity": 32 }
   },
   "defaults": {
-    "layout": {
-      "resources_dir": "Resources"
-    },
     "texture": { "output": "..." },
     "scene": { "output": "..." },
     "script": {
@@ -712,14 +709,14 @@ one of the two and leave the other at its default.
 
 `project_root` is relative to the manifest's folder (default: the folder);
 `--root` replaces it. `mounts` lists the mounts: `name`, optional `kind`
-(`Source`, the default, or `Cooked`, a library: a loose cooked root or a `.pak`
+(`Source`, the default, or `Cooked`, a cooked source: a loose cooked root or a `.pak`
 file; another kind fails with `mount.kind_unknown`) and optional `path`,
 relative to the project root. A mount without `path` is a placeholder a
-`.mounts.json` binds. A bound `Cooked` mount is read as a library: one that
+`.mounts.json` binds. A bound `Cooked` mount is read as a cooked source: one that
 cannot be read, whose one root is not its name, that holds more than one root
 or a script with an external source warns with its
-`mount.library_*` finding and is `Invalid`, never mounted. Every job reads
-the valid libraries after its own output root and before its
+`mount.cooked_*` finding and is `Invalid`, never mounted. Every job reads
+the valid cooked sources after its own output root and before its
 `cooked_context_roots`. A cooked root
 holds one mount, the one its identities name (`content::MountRootOf`); a job
 whose identity names another mount is refused with `import.output_mount_mixed`.
@@ -792,9 +789,10 @@ Job rules:
     other sources this source maps
   - optional `output`
   - allowed keys are exactly: `id`, `type`, `source`, `virtual_path`,
-    `depends_on`, `output`, `layout`, `source_key`
-- layout overrides are shared across all importers via manifest `layout` or
-  `defaults.layout`: `resources_dir`. It places the resource tables; every descriptor is placed by its identity.
+    `depends_on`, `output`, `cooked_context_roots`, `source_key`
+- the cooked root's layout is fixed: every descriptor is placed by its
+  identity, and the resource tables and data live under `Resources/` (physics
+  under `Physics/Resources/`). A manifest has no `layout` field.
 - `script-sidecar` requires exactly one of:
   - `source`
   - `bindings` (inline array)

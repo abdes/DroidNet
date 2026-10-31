@@ -77,13 +77,17 @@ public:
     const std::filesystem::path& cooked_root) -> LooseCookedIndex;
   OXGN_CNTT_API static auto LoadFromFile(
     const std::filesystem::path& index_path) -> LooseCookedIndex;
-  //! Loads the bytes of an index file.
+  //! Loads the bytes of an index file, which the index copies.
   /*!
    @throw data::CookedOpenError `kWrongFormat` for bytes that are not an
      index, `kUnsupportedVersion` for another index version, `kCorrupt` for
      a malformed index.
   */
   OXGN_CNTT_API static auto LoadFromBytes(std::span<const std::byte> bytes)
+    -> LooseCookedIndex;
+  //! Loads the bytes of an index file, which the index takes and parses in
+  //! place.
+  OXGN_CNTT_API static auto LoadFromBytes(std::vector<std::byte>&& bytes)
     -> LooseCookedIndex;
 
   OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;

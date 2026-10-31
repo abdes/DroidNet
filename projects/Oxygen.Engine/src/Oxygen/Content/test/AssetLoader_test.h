@@ -6,24 +6,23 @@
 
 #pragma once
 
-#include <filesystem>
 #include <memory>
 
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace oxygen::content::testing {
 
 //! AssetLoader fixture with isolated temporary storage.
-class AssetLoaderBasicTest : public ::testing::Test {
+class AssetLoaderBasicTest : public oxygen::testing::TempDirTest {
 protected:
   using Tag = oxygen::engine::internal::EngineTagFactory;
 
   auto SetUp() -> void override;
   auto TearDown() -> void override;
 
-  std::filesystem::path temp_dir_;
   std::unique_ptr<AssetLoader> asset_loader_;
 };
 

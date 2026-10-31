@@ -23,7 +23,6 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
@@ -74,7 +73,7 @@ class IAsyncFileWriter;
  ### Usage Pattern
 
  ```cpp
- BufferEmitter emitter(file_writer, layout, cooked_root);
+ BufferEmitter emitter(file_writer, table_aggregator, cooked_root);
 
  // During import (returns immediately)
  auto vb_idx = emitter.Emit(vertex_buffer_payload);  // Returns 0
@@ -101,20 +100,18 @@ public:
     std::function<void(ImportDiagnostic)> on_dedup_diagnostic;
   };
 
-  //! Create a buffer emitter for the given layout.
+  //! Create a buffer emitter writing under a cooked root.
   /*!
    @param file_writer Async file writer for output operations.
-   @param
-   * layout      Loose cooked layout defining paths.
-   @param cooked_root Root
-   * directory for cooked output.
+   @param table_aggregator Shared buffer table aggregator.
+   @param cooked_root Root directory for cooked output.
   */
   OXGN_COOK_API BufferEmitter(IAsyncFileWriter& file_writer,
-    BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+    BufferTableAggregator& table_aggregator,
     const std::filesystem::path& cooked_root);
 
   OXGN_COOK_API BufferEmitter(IAsyncFileWriter& file_writer,
-    BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+    BufferTableAggregator& table_aggregator,
     const std::filesystem::path& cooked_root, Config config);
 
   OXGN_COOK_API ~BufferEmitter();

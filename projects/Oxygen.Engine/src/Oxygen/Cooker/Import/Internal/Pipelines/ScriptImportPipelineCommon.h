@@ -35,17 +35,6 @@ inline auto DeriveScriptName(const std::filesystem::path& source_path)
   return "Script";
 }
 
-inline auto BuildScriptsTableRelPath(const ImportRequest& request)
-  -> std::string
-{
-  return request.loose_cooked_layout.ScriptsTableRelPath();
-}
-
-inline auto BuildScriptsDataRelPath(const ImportRequest& request) -> std::string
-{
-  return request.loose_cooked_layout.ScriptsDataRelPath();
-}
-
 //! The external source path a script asset stores: its source's mount path,
 //! `/<Mount>/<path in mount>`. Nothing when the source lies in no mount.
 inline auto BuildExternalSourcePath(const ImportRequest& request)

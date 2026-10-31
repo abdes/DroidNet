@@ -32,12 +32,13 @@ oxygen_cooker_test(
   FUNCTIONAL
   DEPS
     oxygen-cooker-paktool-core
+    oxygen::content
+    oxygen::serio::testing
     nlohmann_json_schema_validator
   SOURCES
     "App_functional_test.cpp"
-    "ArtifactPublication_functional_test.cpp"
-    "BuildReportJson_functional_test.cpp"
     "CommandExecution_functional_test.cpp"
+    "PakToolTestSupport.h"
     "RequestPreparation_functional_test.cpp"
     "ScriptSealing_functional_test.cpp"
 )

@@ -6,18 +6,50 @@
 
 #pragma once
 
+#include <cstring>
+#include <span>
 #include <stdexcept>
 #include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::testing {
+
+//! The payload the resource descriptor at the start of `descriptor` names,
+//! read from `data` as the pipeline reads it from a source: its `size_bytes`
+//! at its `data_offset`. Empty when `data` does not hold it, as a payload the
+//! pipeline could not read never reaches a loader.
+template <class DescT>
+auto StagePayload(const std::span<const std::byte> descriptor,
+  const std::span<const std::byte> data) -> oxygen::serio::ByteBuffer
+{
+  auto desc = DescT {};
+  if (descriptor.size() < sizeof(desc)) {
+    return {};
+  }
+  std::memcpy(&desc, descriptor.data(), sizeof(desc));
+  if (desc.data_offset > data.size()
+    || desc.size_bytes > data.size() - desc.data_offset) {
+    return {};
+  }
+  auto payload = oxygen::serio::ByteBuffer::Allocate(
+    oxygen::serio::CountOf(desc.size_bytes))
+                   .value();
+  if (desc.size_bytes != 0U) {
+    std::memcpy(payload.Bytes().data(),
+      data.subspan(static_cast<size_t>(desc.data_offset)).data(),
+      desc.size_bytes);
+  }
+  return payload;
+}
 
 class BinaryAssetLoaderFixtureBase : public ::testing::Test {
 protected:
@@ -46,11 +78,20 @@ protected:
     return oxygen::content::LoaderContext {
       .current_asset_key = oxygen::data::AssetKey {},
       .desc_reader = &desc_reader_,
-      .data_readers = std::make_tuple(
-        &data_reader_, &data_reader_, &data_reader_, &data_reader_),
       .work_offline = work_offline,
       .parse_only = parse_only,
     };
+  }
+
+  //! A context for a resource loader of `DescT` descriptors, handed the
+  //! payload the descriptor names in the data stream.
+  template <class DescT>
+  auto MakeResourceContext() -> oxygen::content::LoaderContext
+  {
+    auto context = MakeLoaderContext(false, false);
+    payload_ = StagePayload<DescT>(desc_stream_.Data(), data_stream_.Data());
+    context.payload = observer_ptr { &payload_ };
+    return context;
   }
 
   auto MakeDecodeLoaderContext() -> std::pair<oxygen::content::LoaderContext,
@@ -70,6 +111,7 @@ protected:
   Writer data_writer_;
   Reader desc_reader_;
   Reader data_reader_;
+  oxygen::serio::ByteBuffer payload_;
 };
 
 } // namespace oxygen::content::testing

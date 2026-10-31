@@ -49,7 +49,7 @@ auto Catalog() -> PakCatalog
     .source_key = Source(3U),
     .content_version = 2U,
     .catalog_digest = {},
-    .library = "Props",
+    .mount = "Props",
     .entries = {
       { .asset_key = Key(1U), .asset_type = AssetType::kMaterial,
         .descriptor_digest = {}, .transitive_resource_digest = {}, },
@@ -62,13 +62,13 @@ auto Catalog() -> PakCatalog
       { .source_key = Source(2U), .content_version = 1U, .catalog_digest = {} },
     },
     .dependencies = {
-      { .library = "Engine", .requirements = {
+      { .mount = "Engine", .requirements = {
         { .kind = KeyReferenceKind::kAsset, .key = Key(6U),
           .type = AssetType::kMaterial, },
         { .kind = KeyReferenceKind::kTexture, .key = Key(7U),
           .type = AssetType::kUnknown, },
       }, },
-      { .library = "Vehicles", .requirements = {
+      { .mount = "Vehicles", .requirements = {
         { .kind = KeyReferenceKind::kAsset, .key = Key(8U),
           .type = AssetType::kGeometry, },
       }, },
@@ -93,7 +93,7 @@ NOLINT_TEST(PakCatalogTest, RoundTripPreservesLayerMeaning)
   ASSERT_TRUE(decoded.has_value());
   EXPECT_EQ(decoded->source_key, original.source_key);
   EXPECT_EQ(decoded->content_version, original.content_version);
-  EXPECT_EQ(decoded->library, original.library);
+  EXPECT_EQ(decoded->mount, original.mount);
   EXPECT_EQ(decoded->catalog_digest, original.catalog_digest);
   EXPECT_EQ(decoded->deleted, original.deleted);
   EXPECT_EQ(decoded->bases, original.bases);
@@ -182,28 +182,28 @@ NOLINT_TEST(PakCatalogTest, BaselineMustBeImmediatelyBelowPatch)
   EXPECT_FALSE(patch.ValidateBaseLayers({}));
 }
 
-//! The library is part of the catalog: renaming it changes the digest.
-NOLINT_TEST(PakCatalogTest, LibraryIsPartOfTheDigest)
+//! The mount is part of the catalog: renaming it changes the digest.
+NOLINT_TEST(PakCatalogTest, MountIsPartOfTheDigest)
 {
   auto catalog = Catalog();
-  catalog.library = "Others";
+  catalog.mount = "Others";
   EXPECT_NE(catalog.ComputeDigest().value(), catalog.catalog_digest);
-  catalog.library.clear();
+  catalog.mount.clear();
   EXPECT_FALSE(catalog.ComputeDigest());
-  catalog.library = std::string(256U, 'A');
+  catalog.mount = std::string(256U, 'A');
   EXPECT_FALSE(catalog.ComputeDigest());
 }
 
-//! Every pak names its library, even one that lists nothing.
-NOLINT_TEST(PakCatalogTest, EveryPakNamesItsLibrary)
+//! Every pak names its mount, even one that lists nothing.
+NOLINT_TEST(PakCatalogTest, EveryPakNamesItsMount)
 {
   auto empty = PakCatalog { .source_key = Source(3U) };
   EXPECT_FALSE(empty.ComputeDigest());
-  empty.library = "Props";
+  empty.mount = "Props";
   EXPECT_TRUE(empty.ComputeDigest());
 }
 
-//! A library is required once, never the pak's own, and for something; each
+//! A mount is required once, never the pak's own, and for something; each
 //! requirement names an asset with its type or a texture, once.
 NOLINT_TEST(PakCatalogTest, RejectsInvalidDependencies)
 {
@@ -213,13 +213,13 @@ NOLINT_TEST(PakCatalogTest, RejectsInvalidDependencies)
     return !catalog.ComputeDigest();
   };
   EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
-    catalog.dependencies.at(0).library = catalog.library;
+    catalog.dependencies.at(0).mount = catalog.mount;
   }));
   EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
-    catalog.dependencies.at(1).library = catalog.dependencies.at(0).library;
+    catalog.dependencies.at(1).mount = catalog.dependencies.at(0).mount;
   }));
   EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
-    catalog.dependencies.at(0).library.clear();
+    catalog.dependencies.at(0).mount.clear();
   }));
   EXPECT_TRUE(rejects([](PakCatalog& catalog) -> void {
     catalog.dependencies.at(0).requirements.clear();

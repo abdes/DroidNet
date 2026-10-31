@@ -84,7 +84,7 @@ Because the mount root is part of the identity,
 | `TypeSuffix`  | **Oxygen descriptor extension** (lowercase, dot-prefixed); determines which descriptor reader handles the file — see table below | `.opmat`, `.ocshape`, `.opscene`                                                  |
 
 The type suffix is the Oxygen cooked descriptor extension, not an arbitrary
-convention. The following suffixes are defined by `LooseCookedLayout`:
+convention. The following suffixes are defined by the loose cooked layout:
 
 | Type suffix | Asset class                   |
 | ----------- | ----------------------------- |
@@ -668,7 +668,7 @@ is used internally:
   share the same artifact definitions but differ in output layout:
 
   - **Loose Cooking (development mode)** — the cooker writes cooked artifacts
-    directly to a _LooseCookedLayout_ directory tree on the local filesystem.
+    directly to a loose cooked root on the local filesystem.
     This layout is designed for fast iteration: re-cooking a single asset
     updates only the affected files without invalidating unrelated outputs. The
     layout consists of:
@@ -695,7 +695,7 @@ is used internally:
       script bindings, all catalogued in the same index.
 
   - **PAK Builder (production mode)** — a separate offline tool that reads a
-    fully cooked LooseCookedLayout (validated against its index) and repackages
+    fully cooked loose root (validated against its index) and repackages
     all of its assets and resource files into a single PAK bundle. The PAK is
     the only format the shipping runtime consumes; it is never written directly
     by the cooker. The PAK builder:
@@ -901,7 +901,7 @@ is used internally:
 ### Illustrative Scenario
 
 > **Layout Assumptions:** All L2 cooked binary paths in these scenarios assume
-> the default configuration of `oxygen::content::import::LooseCookedLayout`
+> the fixed loose cooked layout (`Import/Internal/LooseCookedLayout.h`)
 > relative to the cooked root:
 >
 > - Physics shapes: `Physics/Shapes/*.ocshape`
@@ -918,7 +918,7 @@ simulation, exercising every abstraction defined above.
 | Actor                    | Role                                                                                       |
 | ------------------------ | ------------------------------------------------------------------------------------------ |
 | Artist                   | Works in the engine editor; never touches binary data.                                     |
-| Cooker Tool              | Offline CLI that reads an `import-manifest.json` and emits `LooseCookedLayout` artifacts.  |
+| Cooker Tool              | Offline CLI that reads an `import-manifest.json` and emits loose cooked roots.             |
 | Runtime Scene Loader     | Loads the loose scene artifact and deserializes the scene graph.                           |
 | Physics Sidecar Hydrator | Reads the loose physics sidecar artifact and drives L3 instantiation.                      |
 | Physics Backend          | Either **Jolt Physics** or **NVIDIA PhysX** — identical interface, divergent binary paths. |
@@ -957,7 +957,7 @@ No binary data exists yet. This is pure L1.
 The cooker tool is invoked with an `import-manifest.json` that defines the cook
 jobs and their dependency graph for this scene. It processes the L1 files
 according to the manifest and emits binary artifacts into the
-`LooseCookedLayout`.
+the loose cooked layout.
 
 _Collision shape:_ Because `Sphere` is an analytic primitive, no mesh cooking is
 required. The cooker writes a `CollisionShapeAssetDesc` with

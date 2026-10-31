@@ -235,8 +235,8 @@ The authoritative definition is in `LoaderContext.h`.
 - `source_token`: identity-safe handle to the mounted source (used for
   `internal::ResourceRef`)
 - `desc_reader`: positioned at the start of the descriptor to decode
-- `data_readers`: per-resource-type readers positioned at the start of each
-  resource data region (do not use `desc_reader` for data regions)
+- `payload`: for a resource, the buffer its payload was read into; the
+  loader moves it into the resource it builds
 - `work_offline`: CPU-only mode flag (no renderer/GPU side effects)
 - `dependency_collector`: optional identity-only dependency handoff for async
   decode

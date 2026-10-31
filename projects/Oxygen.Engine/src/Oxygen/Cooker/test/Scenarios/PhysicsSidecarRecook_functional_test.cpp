@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 // Covers: Import/AsyncImportService.cpp,
-//   Import/Internal/Jobs/PhysicsSidecarImportJob.cpp, Loose/Inspection.cpp
+//   Import/Internal/Jobs/PhysicsSidecarImportJob.cpp, Cooked/CookedContent.cpp
 
 #include <algorithm>
 #include <array>
@@ -28,17 +28,18 @@
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -50,6 +51,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace oxygen::content::import::test {
 
@@ -190,8 +192,15 @@ namespace {
     return it != table.end() ? &(*it) : nullptr;
   }
 
-  auto FindInspectionAsset(const lc::Inspection& inspection,
-    const data::AssetKey& key) -> std::optional<lc::Inspection::AssetEntry>
+  auto OpenCooked(const std::filesystem::path& cooked_root)
+    -> cooked::CookedContent
+  {
+    return cooked::CookedContent::Open(
+      cooked::RealCookerStorage(), cooked_root);
+  }
+
+  auto FindInspectionAsset(const cooked::CookedContent& inspection,
+    const data::AssetKey& key) -> std::optional<cooked::CookedAsset>
   {
     for (const auto& asset : inspection.Assets()) {
       if (asset.key == key) {
@@ -266,7 +275,6 @@ namespace {
       { "dynamic_friction", 0.70F },
       { "restitution", 0.05F },
       { "density", 1800.0F },
-      { "virtual_path", kMaterialVirtualPath },
     };
 
     auto request = ImportRequest {};
@@ -289,8 +297,9 @@ namespace {
     const auto descriptor = json {
       { "name", "chassis_compound" },
       { "shape_type", "compound" },
-      { "material_ref", kMaterialVirtualPath },
-      { "virtual_path", kShapeVirtualPath },
+      { "material_ref",
+        oxygen::cooker::test::SpellReference(
+          kShapeVirtualPath, kMaterialVirtualPath) },
       {
         "children",
         json::array({
@@ -353,8 +362,12 @@ namespace {
             json::array({
               json {
                 { "node_index", 1U },
-                { "shape_ref", kShapeVirtualPath },
-                { "material_ref", kMaterialVirtualPath },
+                { "shape_ref",
+                  oxygen::cooker::test::SpellReference(
+                    kSceneVirtualPath, kShapeVirtualPath) },
+                { "material_ref",
+                  oxygen::cooker::test::SpellReference(
+                    kSceneVirtualPath, kMaterialVirtualPath) },
                 { "body_type", "dynamic" },
                 { "motion_quality", "linear_cast" },
                 { "mass", 1350.0F },
@@ -374,7 +387,9 @@ namespace {
             json::array({
               json {
                 { "node_index", 2U },
-                { "source_mesh_ref", kGeometryVirtualPath },
+                { "source_mesh_ref",
+                  oxygen::cooker::test::SpellReference(
+                    kSceneVirtualPath, kGeometryVirtualPath) },
                 { "collision_layer", 2U },
                 { "collision_mask", 0xFFFFFFFFU },
                 { "edge_compliance", 0.0002F },
@@ -693,7 +708,8 @@ namespace {
     const auto table_raw = std::as_bytes(std::span(table_entries));
     table_bytes.insert(table_bytes.end(), table_raw.begin(), table_raw.end());
 
-    auto writer = LooseCookedWriter(cooked_root);
+    auto writer = LooseCookedWriter(
+      cooked_root, oxygen::content::cooked::RealCookerStorage());
     writer.WriteAssetDescriptor(key, data::AssetType::kGeometry, virtual_path,
       relpath, std::span<const std::byte>(descriptor_bytes),
       data::AssetReferences::Create(
@@ -713,15 +729,12 @@ namespace {
         .source = std::string(virtual_path) + ".json",
         .completes = {},
       });
+    // The index must record the tables, or the cooked content has no buffers.
+    writer.WriteFile(data::loose_cooked::FileKind::kBuffersTable,
+      internal::loose_layout::kBuffersTable, table_bytes);
+    writer.WriteFile(data::loose_cooked::FileKind::kBuffersData,
+      internal::loose_layout::kBuffersData, buffer_data);
     (void)writer.Finish();
-
-    const auto layout = LooseCookedLayout {};
-    const auto table_path
-      = cooked_root / std::filesystem::path(layout.BuffersTableRelPath());
-    const auto data_path
-      = cooked_root / std::filesystem::path(layout.BuffersDataRelPath());
-    oxygen::cooker::test::WriteBytes(table_path, table_bytes);
-    oxygen::cooker::test::WriteBytes(data_path, buffer_data);
   }
 
   struct CookedSnapshot {
@@ -733,11 +746,11 @@ namespace {
     base::Sha256Digest physics_table_digest {};
     base::Sha256Digest physics_data_digest {};
     std::vector<phys::PhysicsResourceDesc> physics_table;
-    std::optional<lc::Inspection::AssetEntry> scene_asset;
-    std::optional<lc::Inspection::AssetEntry> sidecar_asset;
-    std::optional<lc::Inspection::AssetEntry> material_asset;
-    std::optional<lc::Inspection::AssetEntry> shape_asset;
-    std::optional<lc::Inspection::AssetEntry> geometry_asset;
+    std::optional<cooked::CookedAsset> scene_asset;
+    std::optional<cooked::CookedAsset> sidecar_asset;
+    std::optional<cooked::CookedAsset> material_asset;
+    std::optional<cooked::CookedAsset> shape_asset;
+    std::optional<cooked::CookedAsset> geometry_asset;
   };
 
   //! Cooks geometry, scene, material and compound shape. Returns an error
@@ -810,8 +823,7 @@ namespace {
     snapshot.physics_table
       = ParsePhysicsResourceTable(path("Physics/Resources/physics.table"));
 
-    auto inspection = lc::Inspection {};
-    inspection.LoadFromRoot(cooked_root);
+    const auto inspection = OpenCooked(cooked_root);
     snapshot.scene_asset = FindInspectionAsset(
       inspection, data::AssetKey::FromVirtualPath(kSceneVirtualPath));
     snapshot.sidecar_asset = FindInspectionAsset(
@@ -843,7 +855,7 @@ namespace {
 
     static auto SetUpTestSuite() -> void
     {
-      temp_ = std::make_unique<oxygen::cooker::test::ScopedTempDir>();
+      temp_ = std::make_unique<oxygen::testing::ScopedTempDir>();
       try {
         Cook();
       } catch (const std::exception& error) {
@@ -939,7 +951,7 @@ namespace {
       resources.vehicle = *vehicle_resource;
     }
 
-    static inline std::unique_ptr<oxygen::cooker::test::ScopedTempDir> temp_;
+    static inline std::unique_ptr<oxygen::testing::ScopedTempDir> temp_;
     static inline std::string error_;
     static inline std::filesystem::path cooked_root_;
     static inline ImportReport sidecar_report_ {};
@@ -953,7 +965,7 @@ namespace {
   protected:
     static auto SetUpTestSuite() -> void
     {
-      temp_ = std::make_unique<oxygen::cooker::test::ScopedTempDir>();
+      temp_ = std::make_unique<oxygen::testing::ScopedTempDir>();
       try {
         Cook();
       } catch (const std::exception& error) {
@@ -1002,7 +1014,7 @@ namespace {
       error_ = TakeCookedSnapshot(cooked_root, after_);
     }
 
-    static inline std::unique_ptr<oxygen::cooker::test::ScopedTempDir> temp_;
+    static inline std::unique_ptr<oxygen::testing::ScopedTempDir> temp_;
     static inline std::string error_;
     static inline CookedSnapshot before_;
     static inline CookedSnapshot after_;
@@ -1247,7 +1259,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   });
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
-  const oxygen::cooker::test::ScopedTempDir temp;
+  const oxygen::testing::ScopedTempDir temp;
   const auto cooked_root = temp.Path() / "incremental_recook_stability";
   std::filesystem::create_directories(cooked_root);
 
@@ -1291,8 +1303,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   const auto shape_digest_before = ComputeFileDigest(shape_path);
   const auto geometry_digest_before = ComputeFileDigest(geometry_path);
 
-  auto before_inspection = lc::Inspection {};
-  before_inspection.LoadFromRoot(cooked_root);
+  const auto before_inspection = OpenCooked(cooked_root);
   const auto scene_asset_before = FindInspectionAsset(
     before_inspection, data::AssetKey::FromVirtualPath(kSceneVirtualPath));
   const auto material_asset_before = FindInspectionAsset(
@@ -1329,8 +1340,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   EXPECT_EQ(geometry_digest_before, geometry_digest_after);
   EXPECT_NE(sidecar_digest_before, sidecar_digest_after);
 
-  auto after_inspection = lc::Inspection {};
-  after_inspection.LoadFromRoot(cooked_root);
+  const auto after_inspection = OpenCooked(cooked_root);
   const auto scene_asset_after = FindInspectionAsset(
     after_inspection, data::AssetKey::FromVirtualPath(kSceneVirtualPath));
   const auto material_asset_after = FindInspectionAsset(
@@ -1440,7 +1450,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   });
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
-  const oxygen::cooker::test::ScopedTempDir temp;
+  const oxygen::testing::ScopedTempDir temp;
   const auto cooked_root = temp.Path() / "backend_mismatch_hard_fail";
   std::filesystem::create_directories(cooked_root);
 
@@ -1488,7 +1498,7 @@ namespace {
     });
     [[maybe_unused]] auto stop_service
       = oxygen::Finally([&service] -> void { service.Stop(); });
-    const oxygen::cooker::test::ScopedTempDir temp;
+    const oxygen::testing::ScopedTempDir temp;
     const auto cooked_root = temp.Path() / temp_name;
     std::filesystem::create_directories(cooked_root);
 

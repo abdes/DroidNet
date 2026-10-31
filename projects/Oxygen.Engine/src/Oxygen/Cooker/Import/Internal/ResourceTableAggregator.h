@@ -10,27 +10,41 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <mutex>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
-#include <system_error>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::import {
+
+//! A cooked root's resource table that an import cannot read or create, so
+//! the import must not write the table over it.
+class ResourceTableError final : public std::runtime_error {
+public:
+  ResourceTableError(
+    const std::filesystem::path& table, const std::string& problem)
+    : std::runtime_error("Resource table '" + table.string() + "' " + problem)
+  {
+  }
+};
 
 struct WriteReservation {
   uint64_t reservation_start = 0;
@@ -46,17 +60,8 @@ struct TextureTableTraits {
   //! texel), inserted by packing tooling.  No generic sentinel needed.
   static constexpr bool kReserveSentinelAtZero = false;
 
-  [[nodiscard]] static auto TablePath(const LooseCookedLayout& layout)
-    -> std::filesystem::path
-  {
-    return layout.TexturesTableRelPath();
-  }
-
-  [[nodiscard]] static auto DataPath(const LooseCookedLayout& layout)
-    -> std::filesystem::path
-  {
-    return layout.TexturesDataRelPath();
-  }
+  static constexpr auto kTableRelPath = internal::loose_layout::kTexturesTable;
+  static constexpr auto kDataRelPath = internal::loose_layout::kTexturesData;
 
   [[nodiscard]] static auto SignatureForDescriptor(const Descriptor& desc)
     -> std::string
@@ -94,17 +99,8 @@ struct BufferTableTraits {
   //! start at index 1.
   static constexpr bool kReserveSentinelAtZero = true;
 
-  [[nodiscard]] static auto TablePath(const LooseCookedLayout& layout)
-    -> std::filesystem::path
-  {
-    return layout.BuffersTableRelPath();
-  }
-
-  [[nodiscard]] static auto DataPath(const LooseCookedLayout& layout)
-    -> std::filesystem::path
-  {
-    return layout.BuffersDataRelPath();
-  }
+  static constexpr auto kTableRelPath = internal::loose_layout::kBuffersTable;
+  static constexpr auto kDataRelPath = internal::loose_layout::kBuffersData;
 
   [[nodiscard]] static auto SignatureForDescriptor(const Descriptor& desc)
     -> std::string
@@ -137,17 +133,8 @@ struct PhysicsTableTraits {
   //! (kNoResourceIndex). Real resources start at index 1.
   static constexpr bool kReserveSentinelAtZero = true;
 
-  [[nodiscard]] static auto TablePath(const LooseCookedLayout& layout)
-    -> std::filesystem::path
-  {
-    return layout.PhysicsTableRelPath();
-  }
-
-  [[nodiscard]] static auto DataPath(const LooseCookedLayout& layout)
-    -> std::filesystem::path
-  {
-    return layout.PhysicsDataRelPath();
-  }
+  static constexpr auto kTableRelPath = internal::loose_layout::kPhysicsTable;
+  static constexpr auto kDataRelPath = internal::loose_layout::kPhysicsData;
 
   [[nodiscard]] static auto SignatureForDescriptor(const Descriptor& desc)
     -> std::string
@@ -181,14 +168,18 @@ public:
     Reservation reservation {};
   };
 
+  //! Loads the table of `cooked_root` held by `storage`; payloads and the
+  //! table are written through `file_writer`.
   ResourceTableAggregator(IAsyncFileWriter& file_writer,
-    const LooseCookedLayout& layout, const std::filesystem::path& cooked_root)
+    cooked::CookerStorage& storage, const std::filesystem::path& cooked_root)
     : file_writer_(file_writer)
-    , table_path_(cooked_root / Traits::TablePath(layout))
-    , data_path_(cooked_root / Traits::DataPath(layout))
+    , storage_(make_observer(&storage))
+    , table_path_(cooked_root / Traits::kTableRelPath)
+    , data_path_(cooked_root / Traits::kDataRelPath)
   {
     data_file_size_.store(
-      GetExistingDataSize(data_path_), std::memory_order_release);
+      storage_->SizeOf(data_path_).value_or(serio::ByteCount { 0 }).get(),
+      std::memory_order_release);
     LoadExistingTable();
     EnsureSentinelAtZero();
   }
@@ -212,8 +203,8 @@ public:
       return AcquireResult { .index = it->second, .is_new = false };
     }
 
-    const uint32_t index = next_index_++;
     EnsureTableFileExists();
+    const uint32_t index = next_index_++;
     auto [descriptor, reservation] = builder();
     table_.push_back(descriptor);
     index_by_signature_.emplace(signature, index);
@@ -277,7 +268,19 @@ public:
     }
 
     DLOG_F(INFO, "ResourceTableAggregator: wrote {} bytes", result.value());
+    written_ = LooseCookedFileDigest {
+      .size = stream.Data().size(),
+      .sha256 = base::ComputeSha256(stream.Data()),
+    };
     co_return true;
+  }
+
+  //! The size and digest of the table `Finalize` wrote; nothing before it
+  //! writes one, or when it fails.
+  [[nodiscard]] auto Written() const noexcept
+    -> const std::optional<LooseCookedFileDigest>&
+  {
+    return written_;
   }
 
   auto Count() const noexcept -> uint32_t
@@ -349,68 +352,51 @@ private:
 
   auto EnsureTableFileExists() -> void
   {
-    if (std::filesystem::exists(base::ToNativePath(table_path_))) {
+    if (storage_->KindOf(table_path_) != cooked::PathKind::kNone) {
       return;
     }
 
-    std::error_code ec;
-    std::filesystem::create_directories(
-      base::ToNativePath(table_path_.parent_path()), ec);
-    if (ec) {
-      LOG_F(ERROR,
-        "ResourceTableAggregator: failed to create directory '{}' ({})",
-        table_path_.parent_path().string(), ec.message());
-      return;
-    }
-
-    std::ofstream out(
-      base::ToNativePath(table_path_), std::ios::binary | std::ios::trunc);
-    if (!out) {
-      LOG_F(ERROR, "ResourceTableAggregator: failed to create table '{}'",
-        table_path_.string());
+    if (const auto created
+      = cooked::PublishWholeFile(*storage_, table_path_, {});
+      !created) {
+      throw ResourceTableError(
+        table_path_, "cannot be created: " + created.error().message());
     }
   }
 
+  //! Loads the table the cooked root holds. Only a missing table starts
+  //! empty: starting over a table that cannot be read would publish a table
+  //! that drops every resource the root already holds.
   auto LoadExistingTable() -> void
   {
-    if (!std::filesystem::exists(base::ToNativePath(table_path_))) {
+    const auto kind = storage_->KindOf(table_path_);
+    if (kind == cooked::PathKind::kNone) {
+      return;
+    }
+    if (kind != cooked::PathKind::kFile) {
+      throw ResourceTableError(table_path_, "is not a file");
+    }
+
+    const auto bytes = cooked::ReadWholeFile(*storage_, table_path_);
+    if (!bytes) {
+      throw ResourceTableError(
+        table_path_, "cannot be read: " + bytes.error().message());
+    }
+    if (bytes->empty()) {
       return;
     }
 
-    std::ifstream in(
-      base::ToNativePath(table_path_), std::ios::binary | std::ios::ate);
-    if (!in) {
-      LOG_F(WARNING,
-        "ResourceTableAggregator: failed to open existing table '{}'",
-        table_path_.string());
-      return;
-    }
-
-    const auto size = in.tellg();
-    if (size <= 0) {
-      return;
-    }
-
-    const auto size_bytes = static_cast<size_t>(size);
+    const auto size_bytes = bytes->size();
     if (size_bytes % sizeof(Descriptor) != 0) {
-      LOG_F(WARNING,
-        "ResourceTableAggregator: invalid table size {} for '{}' (entry size "
-        "{})",
-        size_bytes, table_path_.string(), sizeof(Descriptor));
-      return;
+      throw ResourceTableError(table_path_,
+        "holds " + std::to_string(size_bytes) + " bytes, not a whole number of "
+          + std::to_string(sizeof(Descriptor)) + "-byte rows");
     }
 
     const auto count = size_bytes / sizeof(Descriptor);
     std::vector<Descriptor> loaded(count);
-    in.seekg(0, std::ios::beg);
-    in.read(reinterpret_cast<char*>(loaded.data()),
-      static_cast<std::streamsize>(size_bytes));
-    if (!in) {
-      LOG_F(WARNING,
-        "ResourceTableAggregator: failed to read existing table '{}'",
-        table_path_.string());
-      return;
-    }
+    std::ranges::copy(
+      *bytes, std::as_writable_bytes(std::span(loaded)).begin());
 
     std::scoped_lock lock(mutex_);
     table_ = std::move(loaded);
@@ -428,6 +414,7 @@ private:
   }
 
   IAsyncFileWriter& file_writer_;
+  observer_ptr<cooked::CookerStorage> storage_;
   std::filesystem::path table_path_;
   std::filesystem::path data_path_;
   mutable std::mutex mutex_;
@@ -438,6 +425,7 @@ private:
   std::atomic<uint64_t> requests_ { 0 };
   std::atomic<uint64_t> new_entries_this_run_ { 0 };
   std::atomic<bool> finalize_started_ { false };
+  std::optional<LooseCookedFileDigest> written_;
 
   [[nodiscard]] static constexpr auto AlignUp(
     const uint64_t value, const uint64_t alignment) noexcept -> uint64_t
@@ -447,19 +435,6 @@ private:
     }
     const auto remainder = value % alignment;
     return (remainder == 0) ? value : (value + (alignment - remainder));
-  }
-
-  [[nodiscard]] static auto GetExistingDataSize(
-    const std::filesystem::path& data_path) -> uint64_t
-  {
-    std::error_code ec;
-    const auto size
-      = std::filesystem::file_size(base::ToNativePath(data_path), ec);
-    if (!ec) {
-      return size;
-    }
-
-    return 0;
   }
 };
 

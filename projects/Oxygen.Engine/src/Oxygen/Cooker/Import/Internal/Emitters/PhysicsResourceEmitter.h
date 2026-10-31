@@ -25,7 +25,6 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
@@ -58,11 +57,11 @@ public:
   };
 
   OXGN_COOK_API PhysicsResourceEmitter(IAsyncFileWriter& file_writer,
-    PhysicsTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+    PhysicsTableAggregator& table_aggregator,
     const std::filesystem::path& cooked_root);
 
   OXGN_COOK_API PhysicsResourceEmitter(IAsyncFileWriter& file_writer,
-    PhysicsTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+    PhysicsTableAggregator& table_aggregator,
     const std::filesystem::path& cooked_root, Config config);
 
   OXGN_COOK_API ~PhysicsResourceEmitter();

@@ -9,7 +9,7 @@
     },
     "schema_version": {
       "type": "integer",
-      "const": 4
+      "const": 5
     },
     "source_key": {
       "type": "string",
@@ -24,8 +24,8 @@
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
-    "library": {
-      "description": "The pak's one root: every entry's virtual path lies under this mount name.",
+    "mount": {
+      "description": "The pak's one mount: every entry's virtual path lies under this mount name.",
       "type": "string",
       "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
       "maxLength": 255
@@ -87,7 +87,7 @@
       }
     },
     "dependencies": {
-      "description": "The libraries whose assets and textures the pak references without containing them, with what it requires of each.",
+      "description": "The mounts whose assets and textures the pak references without containing them, with what it requires of each.",
       "type": "array",
       "items": {
         "$ref": "#/definitions/dependency"
@@ -99,7 +99,7 @@
     "source_key",
     "content_version",
     "catalog_digest",
-    "library",
+    "mount",
     "entries",
     "deleted",
     "bases",
@@ -130,8 +130,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "library": {
-          "description": "The library's one root.",
+        "mount": {
+          "description": "The mount's name.",
           "type": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
           "maxLength": 255
@@ -187,7 +187,7 @@
           }
         }
       },
-      "required": ["library", "requirements"]
+      "required": ["mount", "requirements"]
     }
   }
 }

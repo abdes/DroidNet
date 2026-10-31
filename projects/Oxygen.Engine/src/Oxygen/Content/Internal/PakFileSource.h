@@ -6,33 +6,58 @@
 
 #pragma once
 
+#include <array>
 #include <iterator>
+#include <memory>
+#include <optional>
+#include <span>
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Content/Internal/ContentFileReader.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
-#include <Oxygen/Serio/Device.h>
-#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Content/Internal/RegionReader.h>
+#include <Oxygen/Content/Internal/ResourceTypes.h>
+#include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/Region.h>
 #include <Oxygen/Serio/Types.h>
+
+namespace oxygen::serio {
+class IoDriver;
+} // namespace oxygen::serio
 
 namespace oxygen::content::internal {
 
+//! A mounted pak: its mapped metadata and the device its payloads are awaited
+//! from, both opened when it is mounted.
 class PakFileSource final : public IContentSource {
 public:
   OXYGEN_TYPED(PakFileSource)
 
 public:
-  explicit PakFileSource(
-    const std::filesystem::path& pak_path, const bool verify_content_hashes)
-    : pak_(pak_path)
+  //! Mounts the pak at `pak_path`; with `driver`, its payloads are awaited
+  //! through it.
+  PakFileSource(const std::filesystem::path& pak_path,
+    const bool verify_content_hashes,
+    std::shared_ptr<serio::IoDriver> driver = {})
+    : pak_(pak_path, VerificationOf(verify_content_hashes), std::move(driver))
     , debug_name_(pak_.FilePath().string())
-    , footer_(ReadFooter(pak_path))
   {
-    if (verify_content_hashes) {
-      pak_.ValidateCrc32Integrity();
-    }
+    Mount();
+  }
+
+  //! Mounts the pak `device` holds, a contiguous device such as memory;
+  //! `name` stands for its path.
+  PakFileSource(serio::AnyDevice device, std::filesystem::path name,
+    const bool verify_content_hashes)
+    : pak_(std::move(device), std::move(name),
+        VerificationOf(verify_content_hashes))
+    , debug_name_(pak_.FilePath().string())
+  {
+    Mount();
   }
 
   ~PakFileSource() override = default;
@@ -110,51 +135,21 @@ public:
     if (!entry.has_value()) {
       return nullptr;
     }
-
-    return std::make_unique<ContentFileReader>(pak_.FilePath(),
-      static_cast<size_t>(entry->desc_offset), entry->desc_size);
-  }
-
-  [[nodiscard]] auto CreateBufferTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (pak_.GetResourceTable<data::BufferResource>() == nullptr) {
-      return nullptr;
+    auto region = serio::AnyRegion::Make(pak_.Device(),
+      {
+        .offset = serio::ByteOffset { entry->desc_offset },
+        .count = serio::ByteCount { entry->desc_size },
+      });
+    if (!region) {
+      throw std::out_of_range("PAK asset descriptor is out of bounds");
     }
-    return std::make_unique<ContentFileReader>(pak_.FilePath(), 0);
+    return std::make_unique<RegionReader<serio::AnyDevice>>(*region);
   }
 
   [[nodiscard]] auto ReadAssetReferenceMetadata(const data::AssetKey& key) const
     -> data::AssetReferences override
   {
     return pak_.ReadAssetReferences(key);
-  }
-
-  [[nodiscard]] auto CreateTextureTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (pak_.GetResourceTable<data::TextureResource>() == nullptr) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(pak_.FilePath(), 0);
-  }
-
-  [[nodiscard]] auto CreateScriptTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (pak_.GetResourceTable<data::ScriptResource>() == nullptr) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(pak_.FilePath(), 0);
-  }
-
-  [[nodiscard]] auto CreatePhysicsTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (pak_.GetResourceTable<data::PhysicsResource>() == nullptr) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(pak_.FilePath(), 0);
   }
 
   [[nodiscard]] auto GetBufferTable() const noexcept
@@ -181,44 +176,15 @@ public:
     return pak_.GetResourceTable<data::PhysicsResource>();
   }
 
-  [[nodiscard]] auto CreateBufferDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
+  [[nodiscard]] auto PayloadRegion(const TypeId resource_type) const noexcept
+    -> std::optional<serio::Region<serio::AnyAsyncDevice>> override
   {
-    if (!footer_ || pak_.GetResourceTable<data::BufferResource>() == nullptr) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(
-      pak_.FilePath(), static_cast<size_t>(footer_->buffer_region.offset));
-  }
-
-  [[nodiscard]] auto CreateTextureDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!footer_ || pak_.GetResourceTable<data::TextureResource>() == nullptr) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(
-      pak_.FilePath(), static_cast<size_t>(footer_->texture_region.offset));
-  }
-
-  [[nodiscard]] auto CreateScriptDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!footer_ || pak_.GetResourceTable<data::ScriptResource>() == nullptr) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(
-      pak_.FilePath(), static_cast<size_t>(footer_->script_region.offset));
-  }
-
-  [[nodiscard]] auto CreatePhysicsDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!footer_ || pak_.GetResourceTable<data::PhysicsResource>() == nullptr) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(
-      pak_.FilePath(), static_cast<size_t>(footer_->physics_region.offset));
+    return VisitResourceType(
+      resource_type,
+      [this]<typename T>() -> Payloads {
+        return payloads_.at(kResourceTypeIndex<T>);
+      },
+      []() -> Payloads { return std::nullopt; });
   }
 
   [[nodiscard]] auto ResolveVirtualPath(
@@ -254,41 +220,59 @@ public:
   [[nodiscard]] auto Pak() const noexcept -> const PakFile& { return pak_; }
 
 private:
-  [[nodiscard]] static auto ReadFooter(const std::filesystem::path& pak_path)
-    -> std::optional<data::pak::core::PakFooter>
+  using Payloads = std::optional<serio::Region<serio::AnyAsyncDevice>>;
+
+  [[nodiscard]] auto ResourceRowSpace(const TypeId resource_type) const noexcept
+    -> std::span<const std::byte> override
   {
-    std::error_code ec;
-    const auto file_size = std::filesystem::file_size(pak_path, ec);
-    if (ec || file_size < sizeof(data::pak::core::PakFooter)) {
-      return std::nullopt;
-    }
+    using Space = std::span<const std::byte>;
+    // Pak table offsets are offsets of the pak.
+    return VisitResourceType(
+      resource_type,
+      [this]<typename T>() -> Space {
+        return pak_.HasTableOf<T>() ? pak_.Bytes() : Space {};
+      },
+      []() -> Space { return {}; });
+  }
 
-    const auto file = serio::NativeFile::Open(pak_path, {});
-    if (!file) {
-      throw std::system_error(file.error(), "open '" + pak_path.string() + "'");
-    }
+  //! A verified mount checks the pak's CRC32 in the pass that opens it.
+  static auto VerificationOf(const bool verify_content_hashes) noexcept
+    -> PakFile::Verification
+  {
+    return verify_content_hashes ? PakFile::Verification::kCrc32
+                                 : PakFile::Verification::kNone;
+  }
 
-    data::pak::core::PakFooter footer {};
-    const auto footer_bytes = std::as_writable_bytes(std::span { &footer, 1 });
-    const auto read_result = serio::ReadExactlyAt(*file,
-      serio::ByteOffset { file_size - sizeof(data::pak::core::PakFooter) },
-      footer_bytes);
-    if (!read_result) {
-      return std::nullopt;
-    }
+  auto Mount() -> void
+  {
+    const auto& footer = pak_.Footer();
+    PayloadsOf<data::TextureResource>(footer.texture_region);
+    PayloadsOf<data::BufferResource>(footer.buffer_region);
+    PayloadsOf<data::ScriptResource>(footer.script_region);
+    PayloadsOf<data::PhysicsResource>(footer.physics_region);
+  }
 
-    // Basic magic check.
-    if (!std::ranges::equal(std::span { footer.footer_magic },
-          data::pak::core::kPakFooterMagic)) {
-      return std::nullopt;
+  //! Records the payload region of `T`, when the pak holds a table of them.
+  template <PakResource T>
+  auto PayloadsOf(const data::pak::core::ResourceRegion& region) -> void
+  {
+    if (!pak_.HasTableOf<T>()) {
+      return;
     }
-
-    return footer;
+    auto payloads = serio::Region<serio::AnyAsyncDevice>::Make(pak_.Payloads(),
+      {
+        .offset = serio::ByteOffset { region.offset },
+        .count = serio::ByteCount { region.size },
+      });
+    if (!payloads) {
+      throw std::runtime_error("PAK payload region is out of bounds");
+    }
+    payloads_.at(kResourceTypeIndex<T>) = *payloads;
   }
 
   PakFile pak_;
   std::string debug_name_;
-  std::optional<data::pak::core::PakFooter> footer_;
+  std::array<Payloads, kResourceTypeCount> payloads_ {};
 };
 
 } // namespace oxygen::content::internal

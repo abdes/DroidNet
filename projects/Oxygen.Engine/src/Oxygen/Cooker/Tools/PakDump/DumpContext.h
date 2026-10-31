@@ -7,7 +7,6 @@
 
 #include <cstddef>
 #include <filesystem>
-#include <fstream>
 #include <ostream>
 
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>

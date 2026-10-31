@@ -28,8 +28,8 @@ enum class RequirementFailure : uint8_t {
   kTombstoned,
   //! The providing layer holds an asset of another type.
   kTypeMismatch,
-  //! The providing layer's entry lies under another library.
-  kLibraryMismatch,
+  //! The providing layer's entry lies under another mount.
+  kMountMismatch,
 };
 
 OXGN_CNTT_NDAPI auto to_string(RequirementFailure value) noexcept
@@ -37,14 +37,14 @@ OXGN_CNTT_NDAPI auto to_string(RequirementFailure value) noexcept
 
 //! A requirement the layers below a pak do not meet, and why.
 struct FailedRequirement final {
-  //! The library the pak requires it of.
-  std::string library;
+  //! The mount the pak requires it of.
+  std::string mount;
   data::PakRequirement requirement;
   RequirementFailure failure = RequirementFailure::kMissing;
   //! The type found, for `kTypeMismatch`.
   std::optional<data::AssetType> found_type;
-  //! The library found, for `kLibraryMismatch`.
-  std::string found_library;
+  //! The mount found, for `kMountMismatch`.
+  std::string found_mount;
 };
 
 //! A pak whose requirements the layers mounted below it do not meet.

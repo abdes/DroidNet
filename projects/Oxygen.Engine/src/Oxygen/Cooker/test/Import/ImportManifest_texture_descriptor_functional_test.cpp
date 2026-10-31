@@ -17,18 +17,18 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
 using oxygen::ColorSpace;
 using oxygen::content::import::ImportManifest;
 using oxygen::content::import::TextureIntent;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 NOLINT_TEST(ImportManifestTextureDescriptorTest,
   CarriesExplicitRootIdentitiesIntoNativeRequests)

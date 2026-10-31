@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <cstring>
 #include <iterator>
 #include <stdexcept>
@@ -17,13 +18,30 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::loaders {
+
+//! Takes the payload a resource loader was handed, checking that it holds the
+//! `size_bytes` its descriptor names; `what` names the resource in errors.
+inline auto TakePayload(const LoaderContext& context, const uint64_t size_bytes,
+  const char* what) -> serio::ByteBuffer
+{
+  if (size_bytes == 0U) {
+    return {};
+  }
+  if (!context.payload || context.payload->Size().get() != size_bytes) {
+    throw std::runtime_error(fmt::format(
+      "error reading {}: payload of {} bytes was not read", what, size_bytes));
+  }
+  return std::move(*context.payload);
+}
 
 inline auto AddRangeEnd(size_t& end, const size_t offset, const size_t size)
   -> void

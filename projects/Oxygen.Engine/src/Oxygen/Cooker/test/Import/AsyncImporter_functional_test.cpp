@@ -17,6 +17,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
@@ -30,13 +31,13 @@
 #include <Oxygen/Cooker/Import/Internal/ImportJobParams.h>
 #include <Oxygen/Cooker/Import/Internal/JobEntry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 using namespace std::chrono_literals;
 using namespace oxygen::content::import;
@@ -77,7 +78,7 @@ private:
 
 class AsyncImporterJobTest : public ::testing::Test {
 protected:
-  oxygen::cooker::test::ScopedTempDir cooked_dir_;
+  oxygen::testing::ScopedTempDir cooked_dir_;
   ImportEventLoop loop_;
   std::unique_ptr<IAsyncFileReader> file_reader_;
   std::unique_ptr<IAsyncFileWriter> file_writer_;
@@ -94,7 +95,8 @@ protected:
   {
     file_reader_ = CreateAsyncFileReader(loop_);
     file_writer_ = CreateAsyncFileWriter(loop_);
-    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_,
+      oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
     thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
     config_.file_writer = file_writer_.get();
     config_.table_registry = table_registry_.get();
@@ -280,7 +282,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJobCallsProgressCallback)
 
 class AsyncImporterCancellationTest : public ::testing::Test {
 protected:
-  oxygen::cooker::test::ScopedTempDir cooked_dir_;
+  oxygen::testing::ScopedTempDir cooked_dir_;
   ImportEventLoop loop_;
   AsyncImporter::Config config_ { .channel_capacity = 8 };
   std::unique_ptr<IAsyncFileReader> file_reader_;
@@ -292,7 +294,8 @@ protected:
   {
     file_reader_ = CreateAsyncFileReader(loop_);
     file_writer_ = CreateAsyncFileWriter(loop_);
-    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_,
+      oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
     thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
     config_.file_writer = file_writer_.get();
     config_.table_registry = table_registry_.get();

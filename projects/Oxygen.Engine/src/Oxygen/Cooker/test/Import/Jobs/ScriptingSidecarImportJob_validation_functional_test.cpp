@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -62,7 +63,7 @@ namespace {
       = cooked_root / "input" / "diagnostics_fields_sidecar.json";
     WriteText(sidecar_source,
       MakeSidecarPayload(
-        MakeSpeedBinding("Scripts/not_canonical_script_path.oscript")));
+        MakeSpeedBinding("../../not_canonical_script_path.oscript")));
 
     const auto report = Submit(MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -97,7 +98,8 @@ namespace {
       = cooked_root / "input" / "summary_sidecar_failure.json";
     WriteText(sidecar_source,
       MakeSidecarPayload(
-        MakeSpeedBinding(CanonicalScriptVirtualPath("missing_script"))));
+        MakeSpeedBinding(SpellReference(scene_asset->virtual_path,
+          CanonicalScriptVirtualPath("missing_script")))));
 
     const auto report = Submit(MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -128,7 +130,8 @@ namespace {
 
     const auto sidecar_source = cooked_root / "input" / "cycle_reject.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(scene_asset->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(
+        SpellReference(scene_asset->virtual_path, scene_asset->virtual_path))));
 
     const auto report = Submit(MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -166,14 +169,15 @@ namespace {
         SidecarBindingSpec {
           .node_index = kOutOfRangeNode,
           .slot_id = "00000000-0000-4000-8000-0000000000e1",
-          .script_virtual_path = CanonicalScriptVirtualPath("missing"),
+          .script_virtual_path = SpellReference(
+            scene_asset->virtual_path, CanonicalScriptVirtualPath("missing")),
           .execution_order = 1,
           .params = {},
         },
         SidecarBindingSpec {
           .node_index = 0U,
           .slot_id = "00000000-0000-4000-8000-0000000000e2",
-          .script_virtual_path = "Scripts/not_canonical.oscript",
+          .script_virtual_path = "../../not_canonical.oscript",
           .execution_order = 2,
           .params = {},
         },
@@ -278,7 +282,8 @@ namespace {
     const auto sidecar_source = cooked_root / "input" / "scene.sidescript.json";
     WriteText(sidecar_source,
       MakeSidecarPayload(
-        MakeSpeedBinding(CanonicalScriptVirtualPath("does_not_exist"))));
+        MakeSpeedBinding(SpellReference(scene_asset->virtual_path,
+          CanonicalScriptVirtualPath("does_not_exist")))));
 
     const auto report = Submit(MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -376,14 +381,16 @@ namespace {
         SidecarBindingSpec {
           .node_index = 0,
           .slot_id = std::string(kMainSlotId),
-          .script_virtual_path = script_asset->virtual_path,
+          .script_virtual_path = SpellReference(
+            scene_asset->virtual_path, script_asset->virtual_path),
           .execution_order = std::nullopt,
           .params = {},
         },
         SidecarBindingSpec {
           .node_index = 0,
           .slot_id = std::string(kMainSlotId),
-          .script_virtual_path = script_asset->virtual_path,
+          .script_virtual_path = SpellReference(
+            scene_asset->virtual_path, script_asset->virtual_path),
           .execution_order = std::nullopt,
           .params = {},
         },
@@ -411,7 +418,8 @@ namespace {
     ASSERT_HAS_VALUE(cooked.scene) << "Expected scene asset to be present";
     ASSERT_HAS_VALUE(cooked.script) << "Expected script asset to be present";
 
-    auto binding = MakeSpeedBinding(cooked.script->virtual_path);
+    auto binding = MakeSpeedBinding(
+      SpellReference(cooked.scene->virtual_path, cooked.script->virtual_path));
     binding.slot_id = "main";
     const auto sidecar_source = cooked_root / "input" / "bad_slot.json";
     WriteText(sidecar_source, MakeSidecarPayload(binding));
@@ -446,7 +454,8 @@ namespace {
       MakeSidecarPayload(SidecarBindingSpec {
         .node_index = kOutOfRangeNode,
         .slot_id = std::string(kMainSlotId),
-        .script_virtual_path = script_asset->virtual_path,
+        .script_virtual_path
+        = SpellReference(scene_asset->virtual_path, script_asset->virtual_path),
         .execution_order = std::nullopt,
         .params = {},
       }));
@@ -483,8 +492,7 @@ namespace {
 
     const auto sidecar_source = cooked_root / "input" / "invalid_path.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(
-        MakeSpeedBinding("Scripts/not_absolute_or_virtual_path.oscript")));
+      MakeSidecarPayload(MakeSpeedBinding("../../not_a_reference.oscript")));
 
     const auto report = Submit(MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -492,8 +500,43 @@ namespace {
       .scene_virtual_path = scene_asset->virtual_path,
     }));
     EXPECT_FALSE(report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.script_virtual_path_invalid"));
+    const auto refused = std::ranges::find(report.diagnostics,
+      std::string_view { "import.reference_invalid" }, &ImportDiagnostic::code);
+    ASSERT_NE(refused, report.diagnostics.end());
+    EXPECT_NE(refused->message.find("vpath.reference_outside_mount"),
+      std::string::npos);
+    EXPECT_EQ(refused->object_path, "bindings[0].script_virtual_path");
+  }
+
+  //! Absolute text naming the scene's own mount is refused: a reference to the
+  //! own mount is relative.
+  NOLINT_TEST_F(ScriptingSidecarImportJobValidationTest,
+    RejectsAbsoluteScriptReferenceInTheOwnMount)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "script_sidecar_self_absolute";
+    const auto cooked = CookSceneWithScript({
+      .cooked_root = cooked_root,
+      .script_text = SpeedScriptSource("77"),
+    });
+    ASSERT_HAS_VALUE(cooked.scene) << "Expected scene asset to be present";
+    ASSERT_HAS_VALUE(cooked.script) << "Expected script asset to be present";
+
+    const auto sidecar_source = cooked_root / "input" / "self_absolute.json";
+    WriteText(sidecar_source,
+      MakeSidecarPayload(MakeSpeedBinding(cooked.script->virtual_path)));
+
+    const auto report = Submit(MakeSidecarRequest({
+      .source_path = sidecar_source,
+      .cooked_root = cooked_root,
+      .scene_virtual_path = cooked.scene->virtual_path,
+    }));
+    EXPECT_FALSE(report.success);
+    const auto refused = std::ranges::find(report.diagnostics,
+      std::string_view { "import.reference_invalid" }, &ImportDiagnostic::code);
+    ASSERT_NE(refused, report.diagnostics.end());
+    EXPECT_NE(refused->message.find("vpath.reference_self_absolute"),
+      std::string::npos);
   }
 
 } // namespace

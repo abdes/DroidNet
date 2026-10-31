@@ -9,9 +9,8 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -23,7 +22,9 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/Internal/PakCatalogJson.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
@@ -250,7 +251,7 @@ auto BuildManifestModel(const pak::PakBuildRequest& request,
       });
     }
   }
-  // The pak's catalog states what it requires of each library.
+  // The pak's catalog states what it requires of each mount.
   auto catalog = data::PakCatalog::Decode(plan.Catalog().bytes);
   if (!catalog) {
     throw std::runtime_error(catalog.error().what());
@@ -264,11 +265,16 @@ auto BuildManifestModel(const pak::PakBuildRequest& request,
   return manifest;
 }
 
-auto ComputePatchPakDigest(const std::filesystem::path& pak_path,
+auto ComputePatchPakDigest(
+  const oxygen::content::cooked::CookerStorageReader& storage,
+  const std::filesystem::path& pak_path,
   std::vector<pak::PakDiagnostic>& diagnostics)
   -> std::optional<std::array<uint8_t, 32>>
 {
-  const auto digest = serio::ComputeFileSha256(pak_path);
+  auto device = storage.Open(pak_path);
+  const auto digest = device
+    ? serio::ComputeSha256(*device)
+    : oxygen::Result<oxygen::base::Sha256Digest>(::oxygen::Err(device.error()));
   if (!digest) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       "pak.manifest.patch_pak_digest_compute_failed",
@@ -351,36 +357,27 @@ auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
   return document.dump(2);
 }
 
-auto WriteManifestFile(const std::filesystem::path& output_path,
-  const std::string_view payload, std::vector<pak::PakDiagnostic>& diagnostics)
-  -> void
+auto WriteManifestFile(oxygen::content::cooked::CookerStorage& storage,
+  const std::filesystem::path& output_path, const std::string_view payload,
+  std::vector<pak::PakDiagnostic>& diagnostics) -> void
 {
-  const auto parent = output_path.parent_path();
-  if (!parent.empty()) {
-    std::error_code ec;
-    std::filesystem::create_directories(parent, ec);
-    if (ec) {
-      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-        "pak.manifest.create_parent_directory_failed",
-        std::string("Failed to create manifest parent directory: ")
-          + ec.message(),
-        parent);
-      return;
-    }
-  }
-
-  auto stream = std::ofstream(output_path, std::ios::binary);
-  if (!stream.is_open()) {
+  auto publication = storage.Publish(output_path);
+  if (!publication) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       "pak.manifest.write_open_failed",
-      "Failed to open output_manifest_path for writing.", output_path);
+      "Failed to open output_manifest_path for writing: "
+        + publication.error().message(),
+      output_path);
     return;
   }
-
-  stream.write(payload.data(), static_cast<std::streamsize>(payload.size()));
-  if (!stream.good()) {
+  auto& out = **publication;
+  const auto written = out.Write(std::as_bytes(std::span(payload)));
+  const auto flushed = written ? out.Flush() : written;
+  const auto committed = flushed ? out.Commit() : flushed;
+  if (!committed) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      "pak.manifest.write_failed", "Failed to write manifest payload.",
+      "pak.manifest.write_failed",
+      "Failed to write manifest payload: " + committed.error().message(),
       output_path);
   }
 }
@@ -413,15 +410,15 @@ auto PakManifestWriter::Write(const PakBuildRequest& request,
 
   ValidateManifestByMode(request, plan, manifest, output.diagnostics);
   if (!HasManifestErrors(output.diagnostics)) {
-    manifest.patch_pak_digest
-      = ComputePatchPakDigest(request.output_pak_path, output.diagnostics);
+    manifest.patch_pak_digest = ComputePatchPakDigest(
+      *request.storage, request.output_pak_path, output.diagnostics);
     ValidateManifestRequiredFields(manifest, output.diagnostics);
   }
 
   if (!HasManifestErrors(output.diagnostics)) {
     const auto payload = SerializeManifestToJson(manifest);
-    WriteManifestFile(
-      request.output_manifest_path, payload, output.diagnostics);
+    WriteManifestFile(*request.storage, request.output_manifest_path, payload,
+      output.diagnostics);
   }
 
   if (!HasManifestErrors(output.diagnostics)) {

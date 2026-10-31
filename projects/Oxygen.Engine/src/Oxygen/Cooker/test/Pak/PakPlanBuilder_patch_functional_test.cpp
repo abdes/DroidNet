@@ -7,110 +7,91 @@
 // Covers: Pak/PakPlanBuilder.cpp, Pak/PakMeasureStore.cpp
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <initializer_list>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "PakSceneTestSupport.h"
-#include "PakTestSupport.h"
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
-#include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
-#include <Oxygen/Cooker/Pak/PakWriter.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/test/Support/TestValues.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 namespace base = oxygen::base;
-namespace cooktest = oxygen::cooker::test;
 namespace data = oxygen::data;
-namespace lc = oxygen::data::loose_cooked;
+namespace fixtures = oxygen::cooker::testing;
 namespace pak = oxygen::content::pak;
-namespace paktest = oxygen::content::pak::test;
-namespace core = oxygen::data::pak::core;
 namespace render = oxygen::data::pak::render;
 
-constexpr auto kDigestPrimaryByteIndex = size_t { 0U };
+using oxygen::ResourceIndexT;
+using oxygen::cooker::test::HasDiagnostic;
+using oxygen::cooker::test::HasNoErrors;
+using oxygen::cooker::testing::BaseEntry;
+using oxygen::cooker::testing::LooseCookedRoot;
+using oxygen::cooker::testing::Materialize;
+using oxygen::cooker::testing::PakWorkspace;
+using oxygen::cooker::testing::SeedBytes;
+using oxygen::serio::testing::BytesEqual;
+using pak::PakPatchAction;
 
-using paktest::AssetSpec;
-using paktest::BuildSceneDescriptorWithScriptingSlots;
-using paktest::FileSpec;
-using paktest::HasDiagnosticCode;
-using paktest::HasError;
-using paktest::MakeAssetKey;
-using paktest::MakeBaseCatalog;
-using paktest::MakeSceneScriptAssets;
-using paktest::MakeSourceKey;
+//=== Helpers ===-------------------------------------------------------------//
 
-//! Writing a loose index cannot fail today; a helper still must not carry on
-//! silently if it ever does.
-auto RequireWritten(const bool written) -> void
+auto ActionOf(const pak::PakPlan& plan, const data::AssetKey& key)
+  -> std::optional<PakPatchAction>
 {
-  if (!written) {
-    throw std::runtime_error("cannot write the loose cooked index");
+  const auto actions = plan.PatchActions();
+  const auto it
+    = std::ranges::find(actions, key, &pak::PakPatchActionRecord::asset_key);
+  if (it == actions.end()) {
+    return std::nullopt;
   }
+  return it->action;
 }
 
-auto MakeSingleByteDigest(const uint8_t seed) -> base::Sha256Digest
+auto ContainsAsset(const pak::PakPlan& plan, const data::AssetKey& key) -> bool
 {
-  auto digest = base::Sha256Digest {};
-  digest.fill(0U);
-  digest.at(kDigestPrimaryByteIndex) = seed;
-  return digest;
+  return std::ranges::contains(
+    plan.Assets(), key, &pak::PakAssetPlacementPlan::asset_key);
 }
 
-//! Where a texture's bytes are in its data file.
-struct TextureSlice final {
-  uint64_t data_offset = 0U;
-  uint32_t size_bytes = 0U;
-};
-
-auto BuildTextureRecord(const TextureSlice& slice) -> core::TextureResourceDesc
+auto FindTable(const pak::PakPlan& plan, const std::string_view name)
+  -> const pak::PakTablePlan*
 {
-  auto record = core::TextureResourceDesc {};
-  record.data_offset = slice.data_offset;
-  record.size_bytes = slice.size_bytes;
-  record.texture_type = 1U;
-  record.compression_type = 0U;
-  record.width = 1U;
-  record.height = 1U;
-  record.depth = 1U;
-  record.array_layers = 1U;
-  record.mip_levels = 1U;
-  record.format = 0U;
-  record.alignment = 256U;
-  return record;
-}
-auto EmptyDigest() -> base::Sha256Digest
-{
-  static const auto kEmptyDigest
-    = base::ComputeSha256(std::span<const std::byte> {});
-  return kEmptyDigest;
+  const auto tables = plan.Tables();
+  const auto it = std::ranges::find_if(
+    tables, [name](const pak::PakTablePlan& table) -> bool {
+      return table.table_name == name;
+    });
+  return it == tables.end() ? nullptr : std::addressof(*it);
 }
 
 auto FindCatalogEntry(const data::PakCatalog& catalog,
@@ -121,689 +102,318 @@ auto FindCatalogEntry(const data::PakCatalog& catalog,
   return it == catalog.entries.end() ? nullptr : std::addressof(*it);
 }
 
-auto FindAction(const pak::PakPlan& plan, const data::AssetKey& key)
-  -> const pak::PakPatchActionRecord*
-{
-  const auto actions = plan.PatchActions();
-  const auto it = std::ranges::find_if(
-    actions, [&key](const pak::PakPatchActionRecord& record) -> bool {
-      return record.asset_key == key;
-    });
-  if (it == actions.end()) {
-    return nullptr;
-  }
-  return std::addressof(*it);
-}
-
-auto ContainsAsset(const pak::PakPlan& plan, const data::AssetKey& key) -> bool
-{
-  return std::ranges::any_of(
-    plan.Assets(), [&key](const pak::PakAssetPlacementPlan& asset) -> bool {
-      return asset.asset_key == key;
-    });
-}
-
-auto MakeCatalogEntry(const data::AssetKey& key, const data::AssetType type,
-  const base::Sha256Digest& descriptor_digest,
-  const base::Sha256Digest& transitive_digest) -> data::PakCatalogEntry
-{
-  return data::PakCatalogEntry {
-    .asset_key = key,
-    .asset_type = type,
-    .descriptor_digest = descriptor_digest,
-    .transitive_resource_digest = transitive_digest,
-  };
-}
-
-auto MakePatchRequest(const std::filesystem::path& pak_path,
-  std::initializer_list<data::CookedSource> sources,
-  std::span<const data::PakCatalog> base_catalogs) -> pak::PakBuildRequest
-{
-  constexpr auto kPatchContentVersion = uint16_t { 42U };
-  constexpr auto kPatchSourceSeed = uint8_t { 0xA5U };
-
-  return paktest::MakePatchRequest(pak_path,
-    std::vector<data::PakCatalog>(base_catalogs.begin(), base_catalogs.end()),
-    {
-      .sources
-      = std::vector<data::CookedSource>(sources.begin(), sources.end()),
-      .content_version = kPatchContentVersion,
-      .source_key = MakeSourceKey(kPatchSourceSeed),
-    });
-}
-
+//! The plan's patch actions, by asset key.
 auto PatchActionSignature(const pak::PakPlan& plan)
-  -> std::vector<std::pair<data::AssetKey, pak::PakPatchAction>>
+  -> std::vector<std::pair<data::AssetKey, PakPatchAction>>
 {
-  auto signature
-    = std::vector<std::pair<data::AssetKey, pak::PakPatchAction>> {};
-  signature.reserve(plan.PatchActions().size());
+  auto signature = std::vector<std::pair<data::AssetKey, PakPatchAction>> {};
   for (const auto& action : plan.PatchActions()) {
     signature.emplace_back(action.asset_key, action.action);
   }
-  std::ranges::sort(signature, [](const auto& lhs, const auto& rhs) -> auto {
+  std::ranges::sort(signature, [](const auto& lhs, const auto& rhs) -> bool {
     return lhs.first < rhs.first;
   });
   return signature;
 }
 
-//! The four-way classification scenario.
-/*!
-  Create and replace come from loose sources, unchanged matches the base
-  catalog, and delete only exists in the base catalog. The two requests list
-  the same sources in different orders.
-*/
-struct ClassificationScenario final {
-  data::AssetKey create_key;
-  data::AssetKey replace_key;
-  data::AssetKey unchanged_key;
-  data::AssetKey delete_key;
-  pak::PakBuildRequest request_a;
-  pak::PakBuildRequest request_b;
-};
-
-class PakPlanBuilderPatchTest : public paktest::TempDirFixture {
-protected:
-  [[nodiscard]] auto MakeClassificationScenario() const
-    -> ClassificationScenario;
-};
-
-auto PakPlanBuilderPatchTest::MakeClassificationScenario() const
-  -> ClassificationScenario
+//! The codes of the error diagnostics.
+auto ErrorCodes(const std::span<const pak::PakDiagnostic> diagnostics)
+  -> std::vector<std::string>
 {
-  using data::CookedSource;
-  using data::CookedSourceKind;
-
-  constexpr auto kDescSize = uint64_t { 24U };
-  constexpr auto kCreateAssetSeed = uint8_t { 0x10U };
-  constexpr auto kReplaceAssetSeed = uint8_t { 0x11U };
-  constexpr auto kUnchangedAssetSeed = uint8_t { 0x12U };
-  constexpr auto kDeleteAssetSeed = uint8_t { 0x13U };
-  constexpr auto kCreateDescriptorSeed = uint8_t { 0x31U };
-  constexpr auto kReplaceDescriptorSeed = uint8_t { 0x32U };
-  constexpr auto kBaseReplaceDescriptorSeed = uint8_t { 0x52U };
-  constexpr auto kUnchangedDescriptorSeed = uint8_t { 0x33U };
-  constexpr auto kDeleteDescriptorSeed = uint8_t { 0x44U };
-  constexpr auto kTexturePayloadBytes = size_t { 19U };
-  constexpr auto kBufferPayloadBytes = size_t { 17U };
-  constexpr auto kCreateGuidSeed = uint8_t { 1U };
-  constexpr auto kReplaceGuidSeed = uint8_t { 2U };
-  constexpr auto kUnchangedGuidSeed = uint8_t { 3U };
-
-  const auto source_create = Root() / "a_create";
-  const auto source_replace = Root() / "b_replace";
-  const auto source_unchanged = Root() / "c_unchanged";
-
-  const auto create_key = MakeAssetKey(kCreateAssetSeed);
-  const auto replace_key = MakeAssetKey(kReplaceAssetSeed);
-  const auto unchanged_key = MakeAssetKey(kUnchangedAssetSeed);
-  const auto delete_key = MakeAssetKey(kDeleteAssetSeed);
-
-  auto create_asset = AssetSpec {
-    .key = create_key,
-    .asset_type = data::AssetType::kMaterial,
-    .descriptor_relpath = "create.desc",
-    .virtual_path = "/Game/Patch/Create.asset",
-    .descriptor_size = kDescSize,
-    .descriptor_sha = {},
-  };
-  create_asset.descriptor_sha.at(0) = kCreateDescriptorSeed;
-
-  auto replace_asset = AssetSpec {
-    .key = replace_key,
-    .asset_type = data::AssetType::kMaterial,
-    .descriptor_relpath = "replace.desc",
-    .virtual_path = "/Game/Patch/Replace.asset",
-    .descriptor_size = kDescSize,
-    .descriptor_sha = {},
-  };
-  replace_asset.descriptor_sha.at(0) = kReplaceDescriptorSeed;
-
-  auto unchanged_asset = AssetSpec {
-    .key = unchanged_key,
-    .asset_type = data::AssetType::kScene,
-    .descriptor_relpath = "unchanged.desc",
-    .virtual_path = "/Game/Patch/Unchanged.asset",
-    .descriptor_size = oxygen::content::test::MakeEmptySceneDescriptor().size(),
-    .descriptor_sha = {},
-    .descriptor_payload = oxygen::content::test::MakeEmptySceneDescriptor(),
-  };
-  unchanged_asset.descriptor_sha.at(0) = kUnchangedDescriptorSeed;
-
-  const auto replace_files = std::array<FileSpec, 4> {
-    FileSpec {
-      .kind = lc::FileKind::kTexturesTable,
-      .relpath = "Resources/textures.table",
-      .payload = std::vector<std::byte>(sizeof(core::TextureResourceDesc)),
-    },
-    FileSpec {
-      .kind = lc::FileKind::kTexturesData,
-      .relpath = "Resources/textures.data",
-      .payload = std::vector<std::byte>(kTexturePayloadBytes),
-    },
-    FileSpec {
-      .kind = lc::FileKind::kBuffersTable,
-      .relpath = "Resources/buffers.table",
-      .payload = std::vector<std::byte>(sizeof(core::BufferResourceDesc)),
-    },
-    FileSpec {
-      .kind = lc::FileKind::kBuffersData,
-      .relpath = "Resources/buffers.data",
-      .payload = std::vector<std::byte>(kBufferPayloadBytes),
-    },
-  };
-
-  RequireWritten(paktest::WriteLooseIndex(source_create,
-    std::span<const AssetSpec>(&create_asset, 1U), std::span<const FileSpec> {},
-    kCreateGuidSeed));
-  RequireWritten(paktest::WriteLooseIndex(source_replace,
-    std::span<const AssetSpec>(&replace_asset, 1U),
-    std::span<const FileSpec>(replace_files.data(), replace_files.size()),
-    kReplaceGuidSeed));
-  RequireWritten(paktest::WriteLooseIndex(source_unchanged,
-    std::span<const AssetSpec>(&unchanged_asset, 1U),
-    std::span<const FileSpec> {}, kUnchangedGuidSeed));
-
-  const auto base_entries = std::array<data::PakCatalogEntry, 3> {
-    MakeCatalogEntry(replace_key, data::AssetType::kMaterial,
-      MakeSingleByteDigest(kBaseReplaceDescriptorSeed),
-      MakeSingleByteDigest(kBaseReplaceDescriptorSeed)),
-    MakeCatalogEntry(unchanged_key, data::AssetType::kScene,
-      MakeSingleByteDigest(kUnchangedDescriptorSeed),
-      MakeSingleByteDigest(kUnchangedDescriptorSeed)),
-    MakeCatalogEntry(delete_key, data::AssetType::kScript,
-      MakeSingleByteDigest(kDeleteDescriptorSeed), EmptyDigest()),
-  };
-  const auto base_catalog
-    = MakeBaseCatalog(std::span<const data::PakCatalogEntry>(
-      base_entries.data(), base_entries.size()));
-
-  auto request_a = MakePatchRequest(Root() / "patch_a.pak",
-    {
-      CookedSource {
-        .kind = CookedSourceKind::kLooseCooked,
-        .path = source_unchanged,
-      },
-      CookedSource {
-        .kind = CookedSourceKind::kLooseCooked,
-        .path = source_create,
-      },
-      CookedSource {
-        .kind = CookedSourceKind::kLooseCooked,
-        .path = source_replace,
-      },
-    },
-    std::span<const data::PakCatalog>(&base_catalog, 1U));
-  auto request_b = MakePatchRequest(Root() / "patch_b.pak",
-    {
-      CookedSource {
-        .kind = CookedSourceKind::kLooseCooked,
-        .path = source_replace,
-      },
-      CookedSource {
-        .kind = CookedSourceKind::kLooseCooked,
-        .path = source_unchanged,
-      },
-      CookedSource {
-        .kind = CookedSourceKind::kLooseCooked,
-        .path = source_create,
-      },
-    },
-    std::span<const data::PakCatalog>(&base_catalog, 1U));
-
-  return ClassificationScenario {
-    .create_key = create_key,
-    .replace_key = replace_key,
-    .unchanged_key = unchanged_key,
-    .delete_key = delete_key,
-    .request_a = std::move(request_a),
-    .request_b = std::move(request_b),
-  };
+  auto codes = std::vector<std::string> {};
+  for (const auto& diagnostic : diagnostics) {
+    if (diagnostic.severity == pak::PakDiagnosticSeverity::kError) {
+      codes.push_back(diagnostic.code);
+    }
+  }
+  return codes;
 }
 
-NOLINT_TEST_F(PakPlanBuilderPatchTest, ClassifiesCreateReplaceUnchangedDelete)
+//=== Classification ===------------------------------------------------------//
+
+//! The four-way classification scenario.
+/*!
+ Create, replace and unchanged come from one loose library each; delete exists
+ only in the base catalog. The base held another version of the replaced
+ material and the very descriptor of the unchanged scene.
+*/
+struct Classification final {
+  data::AssetKey created;
+  data::AssetKey replaced;
+  data::AssetKey unchanged;
+  data::AssetKey deleted;
+  //! The sources of the created, replaced and unchanged assets, in order.
+  std::vector<data::CookedSource> sources;
+  data::PakCatalog base;
+};
+
+auto MakeClassification(PakWorkspace& workspace) -> Classification
 {
-  const auto scenario = MakeClassificationScenario();
+  auto created = LooseCookedRoot { "Game", 1U };
+  auto replaced = LooseCookedRoot { "Game", 2U };
+  auto unchanged = LooseCookedRoot { "Game", 3U };
+  const auto scene = fixtures::MakeEmptySceneDescriptor();
 
-  const auto result = pak::PakPlanBuilder {}.Build(scenario.request_a);
-  ASSERT_FALSE(HasError(result.diagnostics));
+  auto out = Classification {};
+  out.created = created.Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = "Patch/Create.omat",
+    .descriptor = fixtures::MaterialDescriptor("Create").bytes,
+  });
+  out.replaced = replaced.Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = "Patch/Replace.omat",
+    .descriptor = fixtures::MaterialDescriptor("Replace").bytes,
+  });
+  out.unchanged = unchanged.Add({
+    .type = data::AssetType::kScene,
+    .leaf = "Patch/Unchanged.oscene",
+    .descriptor = scene,
+  });
+  out.deleted = created.KeyOf("Patch/Delete.oscript");
+  out.sources = {
+    workspace.Add(created),
+    workspace.Add(replaced),
+    workspace.Add(unchanged),
+  };
+  out.base = created.BaseCatalog({
+    BaseEntry(out.replaced, data::AssetType::kMaterial,
+      fixtures::MaterialDescriptor("Replace (base)").bytes),
+    BaseEntry(out.unchanged, data::AssetType::kScene, scene),
+    BaseEntry(out.deleted, data::AssetType::kScript,
+      oxygen::serio::testing::PatternBytes(sizeof(uint64_t))),
+  });
+  return out;
+}
+
+NOLINT_TEST(PakPlanBuilderPatchTest, ClassifiesCreateReplaceUnchangedDelete)
+{
+  auto workspace = PakWorkspace {};
+  const auto scenario = MakeClassification(workspace);
+
+  const auto result = pak::PakPlanBuilder {}.Build(
+    workspace.PatchRequest(scenario.sources, { scenario.base }));
+
+  ASSERT_THAT(result.diagnostics, HasNoErrors());
   ASSERT_HAS_VALUE(result.plan);
-
-  const auto* create_action = FindAction(*result.plan, scenario.create_key);
-  const auto* replace_action = FindAction(*result.plan, scenario.replace_key);
-  const auto* unchanged_action
-    = FindAction(*result.plan, scenario.unchanged_key);
-  const auto* delete_action = FindAction(*result.plan, scenario.delete_key);
-  ASSERT_NE(create_action, nullptr);
-  ASSERT_NE(replace_action, nullptr);
-  ASSERT_NE(unchanged_action, nullptr);
-  ASSERT_NE(delete_action, nullptr);
-  EXPECT_EQ(create_action->action, pak::PakPatchAction::kCreate);
-  EXPECT_EQ(replace_action->action, pak::PakPatchAction::kReplace);
-  EXPECT_EQ(unchanged_action->action, pak::PakPatchAction::kUnchanged);
-  EXPECT_EQ(delete_action->action, pak::PakPatchAction::kDelete);
-
+  EXPECT_EQ(ActionOf(*result.plan, scenario.created), PakPatchAction::kCreate);
+  EXPECT_EQ(
+    ActionOf(*result.plan, scenario.replaced), PakPatchAction::kReplace);
+  EXPECT_EQ(
+    ActionOf(*result.plan, scenario.unchanged), PakPatchAction::kUnchanged);
+  EXPECT_EQ(ActionOf(*result.plan, scenario.deleted), PakPatchAction::kDelete);
   // Only create and replace carry descriptors.
-  EXPECT_TRUE(ContainsAsset(*result.plan, scenario.create_key));
-  EXPECT_TRUE(ContainsAsset(*result.plan, scenario.replace_key));
-  EXPECT_FALSE(ContainsAsset(*result.plan, scenario.unchanged_key));
-  EXPECT_FALSE(ContainsAsset(*result.plan, scenario.delete_key));
-
+  EXPECT_TRUE(ContainsAsset(*result.plan, scenario.created));
+  EXPECT_TRUE(ContainsAsset(*result.plan, scenario.replaced));
+  EXPECT_FALSE(ContainsAsset(*result.plan, scenario.unchanged));
+  EXPECT_FALSE(ContainsAsset(*result.plan, scenario.deleted));
   EXPECT_EQ(result.summary.patch_created, 1U);
   EXPECT_EQ(result.summary.patch_replaced, 1U);
   EXPECT_EQ(result.summary.patch_deleted, 1U);
   EXPECT_EQ(result.summary.patch_unchanged, 1U);
 }
 
-NOLINT_TEST_F(PakPlanBuilderPatchTest, ClassificationIsDeterministic)
+//! The order of the sources does not change the classification.
+NOLINT_TEST(PakPlanBuilderPatchTest, ClassificationIsDeterministic)
 {
-  const auto scenario = MakeClassificationScenario();
-
+  auto workspace = PakWorkspace {};
+  const auto scenario = MakeClassification(workspace);
+  auto reversed = scenario.sources;
+  std::ranges::reverse(reversed);
   const auto builder = pak::PakPlanBuilder {};
-  const auto result_a = builder.Build(scenario.request_a);
-  const auto result_b = builder.Build(scenario.request_b);
 
-  ASSERT_FALSE(HasError(result_a.diagnostics));
-  ASSERT_FALSE(HasError(result_b.diagnostics));
-  ASSERT_HAS_VALUE(result_a.plan);
-  ASSERT_HAS_VALUE(result_b.plan);
+  const auto in_order = builder.Build(
+    workspace.PatchRequest(scenario.sources, { scenario.base }, "a.pak"));
+  const auto in_reverse = builder.Build(
+    workspace.PatchRequest(std::move(reversed), { scenario.base }, "b.pak"));
 
-  EXPECT_EQ(
-    PatchActionSignature(*result_a.plan), PatchActionSignature(*result_b.plan));
+  ASSERT_THAT(in_order.diagnostics, HasNoErrors());
+  ASSERT_THAT(in_reverse.diagnostics, HasNoErrors());
+  ASSERT_HAS_VALUE(in_order.plan);
+  ASSERT_HAS_VALUE(in_reverse.plan);
+  EXPECT_EQ(PatchActionSignature(*in_order.plan),
+    PatchActionSignature(*in_reverse.plan));
 }
 
-NOLINT_TEST_F(
-  PakPlanBuilderPatchTest, PatchModeUsesPatchLocalResourcesAndClosure)
+//=== Patch-local resources ===-----------------------------------------------//
+
+//! A patch carries only the resources its created and replaced assets bind:
+//! the unchanged asset's library holds a buffer the patch leaves out.
+NOLINT_TEST(PakPlanBuilderPatchTest, PatchModeUsesPatchLocalResourcesAndClosure)
 {
-  using data::CookedSource;
-  using data::CookedSourceKind;
+  auto workspace = PakWorkspace {};
+  auto replaced = LooseCookedRoot { "Game", 1U };
+  const auto texture = replaced.AddTexture(SeedBytes(1U));
+  auto textured = fixtures::TexturedMaterialDescriptor("Replace", texture);
+  const auto replace_key = replaced.Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = "Patch/Replace.omat",
+    .descriptor = std::move(textured.bytes),
+    .references = std::move(textured.references),
+  });
+  auto unchanged = LooseCookedRoot { "Game", 2U };
+  unchanged.AddBuffer(SeedBytes(2U)); // No asset binds it.
+  const auto unchanged_bytes = fixtures::MaterialDescriptor("Unchanged").bytes;
+  const auto unchanged_key = unchanged.Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = "Patch/Unchanged.omat",
+    .descriptor = unchanged_bytes,
+  });
+  const auto base = unchanged.BaseCatalog({
+    BaseEntry(replace_key, data::AssetType::kMaterial,
+      fixtures::MaterialDescriptor("Replace (base)").bytes),
+    BaseEntry(unchanged_key, data::AssetType::kMaterial, unchanged_bytes),
+  });
 
-  constexpr auto kDescSize = uint64_t { 20U };
-  constexpr auto kReplaceAssetSeed = uint8_t { 0x21U };
-  constexpr auto kUnchangedAssetSeed = uint8_t { 0x22U };
-  constexpr auto kReplaceDescriptorSeed = uint8_t { 0x71U };
-  constexpr auto kBaseReplaceDescriptorSeed = uint8_t { 0x73U };
-  constexpr auto kUnchangedDescriptorSeed = uint8_t { 0x72U };
-  constexpr auto kReplaceTexturePayloadBytes = size_t { 23U };
-  constexpr auto kUnchangedBufferPayloadBytes = size_t { 29U };
-  constexpr auto kReplaceGuidSeed = uint8_t { 5U };
-  constexpr auto kUnchangedGuidSeed = uint8_t { 6U };
+  const auto result = pak::PakPlanBuilder {}.Build(workspace.PatchRequest(
+    { workspace.Add(unchanged), workspace.Add(replaced) }, { base }));
 
-  const auto source_replace = Root() / "a_replace";
-  const auto source_unchanged = Root() / "b_unchanged";
-
-  const auto replace_key = MakeAssetKey(kReplaceAssetSeed);
-  const auto unchanged_key = MakeAssetKey(kUnchangedAssetSeed);
-
-  auto replace_asset = AssetSpec {
-    .key = replace_key,
-    .asset_type = data::AssetType::kMaterial,
-    .descriptor_relpath = "replace.desc",
-    .virtual_path = "/Game/Patch/Replace2.asset",
-    .descriptor_size = kDescSize,
-    .descriptor_sha = {},
-  };
-  replace_asset.descriptor_sha.at(0) = kReplaceDescriptorSeed;
-  // The replaced asset binds texture 1; row 0 is the table's sentinel.
-  replace_asset.references = data::AssetReferences::Create(
-    {
-      data::ResourceBinding {
-        .kind = data::ResourceKind::kTexture,
-        .index = core::ResourceIndexT { 1U },
-      },
-    },
-    {})
-                               .value();
-  auto replace_textures = std::array<core::TextureResourceDesc, 2> {};
-  replace_textures.at(1).size_bytes = kReplaceTexturePayloadBytes;
-  const auto replace_texture_bytes = std::as_bytes(std::span(replace_textures));
-
-  auto unchanged_asset = AssetSpec {
-    .key = unchanged_key,
-    .asset_type = data::AssetType::kMaterial,
-    .descriptor_relpath = "unchanged.desc",
-    .virtual_path = "/Game/Patch/Unchanged2.asset",
-    .descriptor_size = kDescSize,
-    .descriptor_sha = {},
-  };
-  unchanged_asset.descriptor_sha.at(0) = kUnchangedDescriptorSeed;
-
-  const auto replace_files = std::array<FileSpec, 2> {
-    FileSpec {
-      .kind = lc::FileKind::kTexturesTable,
-      .relpath = "Resources/textures.table",
-      .payload = std::vector<std::byte>(
-        replace_texture_bytes.begin(), replace_texture_bytes.end()),
-    },
-    FileSpec {
-      .kind = lc::FileKind::kTexturesData,
-      .relpath = "Resources/textures.data",
-      .payload = std::vector<std::byte>(kReplaceTexturePayloadBytes),
-    },
-  };
-  const auto unchanged_files = std::array<FileSpec, 2> {
-    FileSpec {
-      .kind = lc::FileKind::kBuffersTable,
-      .relpath = "Resources/buffers.table",
-      .payload = std::vector<std::byte>(sizeof(core::BufferResourceDesc)),
-    },
-    FileSpec {
-      .kind = lc::FileKind::kBuffersData,
-      .relpath = "Resources/buffers.data",
-      .payload = std::vector<std::byte>(kUnchangedBufferPayloadBytes),
-    },
-  };
-
-  ASSERT_TRUE(paktest::WriteLooseIndex(source_replace,
-    std::span<const AssetSpec>(&replace_asset, 1U),
-    std::span<const FileSpec>(replace_files.data(), replace_files.size()),
-    kReplaceGuidSeed));
-  ASSERT_TRUE(paktest::WriteLooseIndex(source_unchanged,
-    std::span<const AssetSpec>(&unchanged_asset, 1U),
-    std::span<const FileSpec>(unchanged_files.data(), unchanged_files.size()),
-    kUnchangedGuidSeed));
-
-  const auto base_entries = std::array<data::PakCatalogEntry, 2> {
-    MakeCatalogEntry(replace_key, data::AssetType::kMaterial,
-      MakeSingleByteDigest(kBaseReplaceDescriptorSeed),
-      MakeSingleByteDigest(kBaseReplaceDescriptorSeed)),
-    MakeCatalogEntry(unchanged_key, data::AssetType::kMaterial,
-      MakeSingleByteDigest(kUnchangedDescriptorSeed),
-      MakeSingleByteDigest(kUnchangedDescriptorSeed)),
-  };
-  const auto base_catalog
-    = MakeBaseCatalog(std::span<const data::PakCatalogEntry>(
-      base_entries.data(), base_entries.size()));
-  const auto request = MakePatchRequest(Root() / "patch_local.pak",
-    {
-      CookedSource {
-        .kind = CookedSourceKind::kLooseCooked,
-        .path = source_unchanged,
-      },
-      CookedSource {
-        .kind = CookedSourceKind::kLooseCooked,
-        .path = source_replace,
-      },
-    },
-    std::span<const data::PakCatalog>(&base_catalog, 1U));
-
-  const auto result = pak::PakPlanBuilder {}.Build(request);
-  ASSERT_FALSE(HasError(result.diagnostics));
+  ASSERT_THAT(result.diagnostics, HasNoErrors());
   ASSERT_HAS_VALUE(result.plan);
-
-  const auto* replace_action = FindAction(*result.plan, replace_key);
-  const auto* unchanged_action = FindAction(*result.plan, unchanged_key);
-  ASSERT_NE(replace_action, nullptr);
-  ASSERT_NE(unchanged_action, nullptr);
-  EXPECT_EQ(replace_action->action, pak::PakPatchAction::kReplace);
-  EXPECT_EQ(unchanged_action->action, pak::PakPatchAction::kUnchanged);
-
+  EXPECT_EQ(ActionOf(*result.plan, replace_key), PakPatchAction::kReplace);
+  EXPECT_EQ(ActionOf(*result.plan, unchanged_key), PakPatchAction::kUnchanged);
   EXPECT_TRUE(ContainsAsset(*result.plan, replace_key));
   EXPECT_FALSE(ContainsAsset(*result.plan, unchanged_key));
   ASSERT_EQ(result.plan->Resources().size(), 1U);
-  EXPECT_EQ(result.plan->Resources()[0].resource_kind, "texture");
-
-  const auto tables = result.plan->Tables();
-  const auto texture_table_it
-    = std::ranges::find_if(tables, [](const auto& table) -> auto {
-        return table.table_name == "texture_table";
-      });
-  const auto buffer_table_it
-    = std::ranges::find_if(tables, [](const auto& table) -> auto {
-        return table.table_name == "buffer_table";
-      });
-  ASSERT_NE(texture_table_it, tables.end());
-  ASSERT_NE(buffer_table_it, tables.end());
-  // The bound texture and the null entry that reserves index zero.
-  EXPECT_EQ(texture_table_it->count, 2U);
-  EXPECT_EQ(buffer_table_it->count, 0U);
-
+  EXPECT_EQ(
+    base::CheckedAt(result.plan->Resources(), 0U).resource_kind, "texture");
+  const auto* texture_table = FindTable(*result.plan, "texture_table");
+  const auto* buffer_table = FindTable(*result.plan, "buffer_table");
+  ASSERT_NE(texture_table, nullptr);
+  ASSERT_NE(buffer_table, nullptr);
+  // The bound texture and the empty row that reserves index zero.
+  EXPECT_EQ(texture_table->count, 2U);
+  EXPECT_EQ(buffer_table->count, 0U);
   const auto closure = result.plan->PatchClosure();
   ASSERT_EQ(closure.size(), 1U);
-  EXPECT_EQ(closure[0].asset_key, replace_key);
-  EXPECT_EQ(closure[0].resource_kind, "texture");
-  EXPECT_FALSE(HasDiagnosticCode(
-    result.diagnostics, "pak.plan.stage.patch.closure_incomplete"));
+  EXPECT_EQ(base::CheckedAt(closure, 0U).asset_key, replace_key);
+  EXPECT_EQ(base::CheckedAt(closure, 0U).resource_kind, "texture");
+  EXPECT_THAT(result.diagnostics,
+    ::testing::Not(HasDiagnostic("pak.plan.stage.patch.closure_incomplete")));
 }
 
-NOLINT_TEST_F(PakPlanBuilderPatchTest, ReplaceAssetTypeMismatchIsRejected)
+//! A replacement keeps the asset type the base gave its key.
+NOLINT_TEST(PakPlanBuilderPatchTest, ReplaceAssetTypeMismatchIsRejected)
 {
-  using data::CookedSource;
-  using data::CookedSourceKind;
+  auto workspace = PakWorkspace {};
+  auto game = LooseCookedRoot {};
+  const auto scene = game.Add({
+    .type = data::AssetType::kScene,
+    .leaf = "Patch/TypeMismatch.oscene",
+    .descriptor = fixtures::MakeEmptySceneDescriptor(),
+  });
+  // The base held a material under the scene's key.
+  const auto base = game.BaseCatalog({
+    BaseEntry(scene, data::AssetType::kMaterial,
+      fixtures::MaterialDescriptor("Base").bytes),
+  });
 
-  constexpr auto kAssetSeed = uint8_t { 0x31U };
-  constexpr auto kSourceDescriptorSeed = uint8_t { 0x55U };
-  constexpr auto kBaseDescriptorSeed = uint8_t { 0x12U };
-  constexpr auto kGuidSeed = uint8_t { 11U };
+  const auto result = pak::PakPlanBuilder {}.Build(
+    workspace.PatchRequest({ workspace.Add(game) }, { base }));
 
-  const auto source = Root() / "type_mismatch";
-  const auto key = MakeAssetKey(kAssetSeed);
-
-  auto source_asset = AssetSpec {
-    .key = key,
-    .asset_type = data::AssetType::kScene,
-    .descriptor_relpath = "scene.desc",
-    .virtual_path = "/Game/Patch/TypeMismatch.asset",
-    .descriptor_size = oxygen::content::test::MakeEmptySceneDescriptor().size(),
-    .descriptor_sha = {},
-    .descriptor_payload = oxygen::content::test::MakeEmptySceneDescriptor(),
-  };
-  source_asset.descriptor_sha.at(0) = kSourceDescriptorSeed;
-  ASSERT_TRUE(paktest::WriteLooseIndex(source,
-    std::span<const AssetSpec>(&source_asset, 1U), std::span<const FileSpec> {},
-    kGuidSeed));
-
-  const auto base_entries = std::array<data::PakCatalogEntry, 1> {
-    MakeCatalogEntry(key, data::AssetType::kMaterial,
-      MakeSingleByteDigest(kBaseDescriptorSeed), EmptyDigest()),
-  };
-  const auto base_catalog
-    = MakeBaseCatalog(std::span<const data::PakCatalogEntry>(
-      base_entries.data(), base_entries.size()));
-  const auto request = MakePatchRequest(Root() / "type_mismatch.pak",
-    { CookedSource { .kind = CookedSourceKind::kLooseCooked, .path = source } },
-    std::span<const data::PakCatalog>(&base_catalog, 1U));
-
-  const auto result = pak::PakPlanBuilder {}.Build(request);
-  ASSERT_TRUE(HasError(result.diagnostics));
   EXPECT_FALSE(result.plan.has_value());
-  EXPECT_TRUE(
-    HasDiagnosticCode(result.diagnostics, "pak.plan.replace_type_mismatch"));
+  EXPECT_THAT(ErrorCodes(result.diagnostics),
+    ::testing::ElementsAre("pak.plan.replace_type_mismatch"));
 }
 
-NOLINT_TEST_F(PakPlanBuilderPatchTest,
+//=== Patching one library ===------------------------------------------------//
+
+//! A library whose materials A and B each bind their own texture.
+struct TwoMaterials final {
+  LooseCookedRoot library;
+  data::AssetKey a;
+  data::AssetKey b;
+};
+
+auto MakeTwoMaterials(const uint8_t seed,
+  const std::span<const std::byte> a_payload,
+  const std::span<const std::byte> b_payload) -> TwoMaterials
+{
+  auto library = LooseCookedRoot { "Game", seed };
+  const auto texture_a = library.AddTexture(a_payload);
+  const auto texture_b = library.AddTexture(b_payload);
+  const auto add = [&library](const std::string_view name,
+                     const ResourceIndexT texture) -> data::AssetKey {
+    auto fixture = fixtures::TexturedMaterialDescriptor(name, texture);
+    return library.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = std::string(name) + ".omat",
+      .descriptor = std::move(fixture.bytes),
+      .references = std::move(fixture.references),
+    });
+  };
+  const auto a = add("MatA", texture_a);
+  const auto b = add("MatB", texture_b);
+  return { .library = std::move(library), .a = a, .b = b };
+}
+
+//! Within one loose source, only the material whose texture payload changed
+//! is replaced.
+NOLINT_TEST(PakPlanBuilderPatchTest,
   PatchModeOnlyReplacesChangedAssetWithinSingleLooseCookedSource)
 {
-  using data::CookedSource;
-  using data::CookedSourceKind;
-
-  const auto patch_source = Root() / "single_source_patch";
-
-  const auto asset_a_key = MakeAssetKey(0x61U);
-  const auto asset_b_key = MakeAssetKey(0x62U);
-
-  const auto material_a_bytes
-    = oxygen::content::test::TexturedMaterialDescriptor(
-      "MatA", oxygen::ResourceIndexT { 1U })
-        .bytes;
-  const auto material_b_bytes
-    = oxygen::content::test::TexturedMaterialDescriptor(
-      "MatB", oxygen::ResourceIndexT { 2U })
-        .bytes;
-
-  const auto material_a_sha = base::ComputeSha256(material_a_bytes);
-  const auto material_b_sha = base::ComputeSha256(material_b_bytes);
-
-  const auto texture_fallback_payload
-    = std::vector<std::byte>(8U, std::byte { 0x01 });
-  const auto texture_a_payload = std::vector<std::byte>(8U, std::byte { 0x11 });
-  const auto texture_b_payload_base
-    = std::vector<std::byte>(8U, std::byte { 0x22 });
-  auto texture_b_payload_patch = std::vector<std::byte>(8U, std::byte { 0x22 });
-  texture_b_payload_patch.at(0) = std::byte { 0x33 };
-
-  const auto texture_records = std::array {
-    BuildTextureRecord({
-      .data_offset = 0U,
-      .size_bytes = static_cast<uint32_t>(texture_fallback_payload.size()),
-    }),
-    BuildTextureRecord({
-      .data_offset = texture_fallback_payload.size(),
-      .size_bytes = static_cast<uint32_t>(texture_a_payload.size()),
-    }),
-    BuildTextureRecord({
-      .data_offset = texture_fallback_payload.size() + texture_a_payload.size(),
-      .size_bytes = static_cast<uint32_t>(texture_b_payload_base.size()),
-    }),
-  };
-  const auto texture_record_bytes = std::as_bytes(std::span(texture_records));
-  const auto textures_table_bytes = std::vector<std::byte>(
-    texture_record_bytes.begin(), texture_record_bytes.end());
-
-  auto textures_data_base = texture_fallback_payload;
-  textures_data_base.insert(textures_data_base.end(), texture_a_payload.begin(),
-    texture_a_payload.end());
-  textures_data_base.insert(textures_data_base.end(),
-    texture_b_payload_base.begin(), texture_b_payload_base.end());
-
-  auto textures_data_patch = texture_fallback_payload;
-  textures_data_patch.insert(textures_data_patch.end(),
-    texture_a_payload.begin(), texture_a_payload.end());
-  textures_data_patch.insert(textures_data_patch.end(),
-    texture_b_payload_patch.begin(), texture_b_payload_patch.end());
-
-  const auto assets = std::array<AssetSpec, 2> {
-    AssetSpec {
-      .key = asset_a_key,
-      .asset_type = data::AssetType::kMaterial,
-      .descriptor_relpath = "Materials/MatA.omat",
-      .virtual_path = "/Game/MatA.omat",
-      .descriptor_size = material_a_bytes.size(),
-      .descriptor_sha = material_a_sha,
-      .descriptor_payload = material_a_bytes,
-      .references = data::AssetReferences::Create(
-        {
-          {
-            .kind = data::ResourceKind::kTexture,
-            .index = oxygen::ResourceIndexT { 1U },
-          },
-        },
-        {})
-        .value(),
-    },
-    AssetSpec {
-      .key = asset_b_key,
-      .asset_type = data::AssetType::kMaterial,
-      .descriptor_relpath = "Materials/MatB.omat",
-      .virtual_path = "/Game/MatB.omat",
-      .descriptor_size = material_b_bytes.size(),
-      .descriptor_sha = material_b_sha,
-      .descriptor_payload = material_b_bytes,
-      .references = data::AssetReferences::Create(
-        {
-          {
-            .kind = data::ResourceKind::kTexture,
-            .index = oxygen::ResourceIndexT { 2U },
-          },
-        },
-        {})
-        .value(),
-    },
-  };
-
-  const auto base_files = std::array<FileSpec, 2> {
-    FileSpec {
-      .kind = lc::FileKind::kTexturesTable,
-      .relpath = "Resources/textures.table",
-      .payload = textures_table_bytes,
-    },
-    FileSpec {
-      .kind = lc::FileKind::kTexturesData,
-      .relpath = "Resources/textures.data",
-      .payload = textures_data_base,
-    },
-  };
-  const auto patch_files = std::array<FileSpec, 2> {
-    FileSpec {
-      .kind = lc::FileKind::kTexturesTable,
-      .relpath = "Resources/textures.table",
-      .payload = textures_table_bytes,
-    },
-    FileSpec {
-      .kind = lc::FileKind::kTexturesData,
-      .relpath = "Resources/textures.data",
-      .payload = textures_data_patch,
-    },
-  };
-
-  ASSERT_TRUE(paktest::WriteLooseIndex(patch_source,
-    std::span<const AssetSpec>(assets.data(), assets.size()),
-    std::span<const FileSpec>(patch_files.data(), patch_files.size()), 0x92U));
-  // The base catalog comes from planning the base state with the production
-  // code, so its digests are whatever the planner computes for unchanged
-  // inputs.
-  const auto base_source = Root() / "single_source_base";
-  ASSERT_TRUE(paktest::WriteLooseIndex(base_source,
-    std::span<const AssetSpec>(assets.data(), assets.size()),
-    std::span<const FileSpec>(base_files.data(), base_files.size()), 0x91U));
-
+  auto workspace = PakWorkspace {};
+  const auto shared_payload = SeedBytes(1U);
+  const auto base_payload = SeedBytes(2U);
+  const auto patched_payload = SeedBytes(3U);
+  const auto base_state = MakeTwoMaterials(1U, shared_payload, base_payload);
+  const auto patched_state
+    = MakeTwoMaterials(2U, shared_payload, patched_payload);
+  const auto base_source = workspace.Add(base_state.library);
+  const auto patched_source = workspace.Add(patched_state.library);
   const auto builder = pak::PakPlanBuilder {};
-  const auto base_build
-    = builder.Build(paktest::MakeFullRequest(Root() / "single_base.pak",
-      { .sources = { CookedSource {
-          .kind = CookedSourceKind::kLooseCooked, .path = base_source, }, }, }));
-  ASSERT_FALSE(HasError(base_build.diagnostics))
-    << cooktest::DiagnosticSummary(base_build.diagnostics);
-  const auto& base_catalog = base_build.output_catalog;
+  // The base catalog comes from planning the base state, so its digests are
+  // whatever the planner computes for unchanged inputs.
+  const auto base = builder.Build(workspace.FullRequest({ base_source }));
+  ASSERT_THAT(base.diagnostics, HasNoErrors());
+  const auto request
+    = workspace.PatchRequest({ patched_source }, { base.output_catalog });
 
-  const auto patch_request = MakePatchRequest(Root() / "single_patch.pak",
-    {
-      CookedSource {
-        .kind = CookedSourceKind::kLooseCooked,
-        .path = patch_source,
-      },
-    },
-    std::span<const data::PakCatalog>(&base_catalog, 1U));
+  const auto patch = builder.Build(request);
 
-  const auto patch_result = builder.Build(patch_request);
-  ASSERT_FALSE(HasError(patch_result.diagnostics))
-    << cooktest::DiagnosticSummary(patch_result.diagnostics);
-  ASSERT_HAS_VALUE(patch_result.plan);
-
-  const auto* action_a = FindAction(*patch_result.plan, asset_a_key);
-  const auto* action_b = FindAction(*patch_result.plan, asset_b_key);
-  ASSERT_NE(action_a, nullptr);
-  ASSERT_NE(action_b, nullptr);
-  EXPECT_EQ(action_a->action, pak::PakPatchAction::kUnchanged);
-  EXPECT_EQ(action_b->action, pak::PakPatchAction::kReplace);
-
-  EXPECT_FALSE(ContainsAsset(*patch_result.plan, asset_a_key));
-  EXPECT_TRUE(ContainsAsset(*patch_result.plan, asset_b_key));
-  ASSERT_EQ(patch_result.plan->Resources().size(), 1U);
-  EXPECT_EQ(patch_result.plan->Resources()[0].resource_kind, "texture");
-
-  const auto closure = patch_result.plan->PatchClosure();
+  ASSERT_THAT(patch.diagnostics, HasNoErrors());
+  ASSERT_HAS_VALUE(patch.plan);
+  EXPECT_EQ(ActionOf(*patch.plan, base_state.a), PakPatchAction::kUnchanged);
+  EXPECT_EQ(ActionOf(*patch.plan, base_state.b), PakPatchAction::kReplace);
+  EXPECT_FALSE(ContainsAsset(*patch.plan, base_state.a));
+  EXPECT_TRUE(ContainsAsset(*patch.plan, base_state.b));
+  ASSERT_EQ(patch.plan->Resources().size(), 1U);
+  EXPECT_EQ(
+    base::CheckedAt(patch.plan->Resources(), 0U).resource_kind, "texture");
+  const auto closure = patch.plan->PatchClosure();
   ASSERT_EQ(closure.size(), 1U);
-  EXPECT_EQ(closure[0].asset_key, asset_b_key);
-  EXPECT_EQ(closure[0].resource_kind, "texture");
+  EXPECT_EQ(base::CheckedAt(closure, 0U).asset_key, base_state.b);
+  EXPECT_EQ(base::CheckedAt(closure, 0U).resource_kind, "texture");
+  EXPECT_EQ(patch.summary.patch_created, 0U);
+  EXPECT_EQ(patch.summary.patch_replaced, 1U);
+  EXPECT_EQ(patch.summary.patch_deleted, 0U);
+  EXPECT_EQ(patch.summary.patch_unchanged, 1U);
+}
 
-  EXPECT_EQ(patch_result.summary.patch_created, 0U);
-  EXPECT_EQ(patch_result.summary.patch_replaced, 1U);
-  EXPECT_EQ(patch_result.summary.patch_deleted, 0U);
-  EXPECT_EQ(patch_result.summary.patch_unchanged, 1U);
+//! The planner's own transitive digests move with the inputs only: A's
+//! texture is the same in both states, B's payload differs.
+NOLINT_TEST(PakPlanBuilderPatchTest, TransitiveDigestsMoveWithResourcePayloads)
+{
+  auto workspace = PakWorkspace {};
+  const auto shared_payload = SeedBytes(1U);
+  const auto base_state = MakeTwoMaterials(1U, shared_payload, SeedBytes(2U));
+  const auto patched_state
+    = MakeTwoMaterials(2U, shared_payload, SeedBytes(3U));
+  const auto builder = pak::PakPlanBuilder {};
 
-  // The planner's own digests must move with the inputs only: A's resources
-  // are identical in both states, B's texture payload differs.
-  const auto patched
-    = builder.Build(paktest::MakeFullRequest(Root() / "single_patched.pak",
-      { .sources = { CookedSource {
-          .kind = CookedSourceKind::kLooseCooked, .path = patch_source, }, }, }));
-  ASSERT_FALSE(HasError(patched.diagnostics))
-    << cooktest::DiagnosticSummary(patched.diagnostics);
-  const auto* base_a = FindCatalogEntry(base_catalog, asset_a_key);
-  const auto* base_b = FindCatalogEntry(base_catalog, asset_b_key);
-  const auto* patched_a = FindCatalogEntry(patched.output_catalog, asset_a_key);
-  const auto* patched_b = FindCatalogEntry(patched.output_catalog, asset_b_key);
+  const auto base = builder.Build(
+    workspace.FullRequest({ workspace.Add(base_state.library) }, "base.pak"));
+  const auto patched = builder.Build(workspace.FullRequest(
+    { workspace.Add(patched_state.library) }, "patched.pak"));
+
+  ASSERT_THAT(base.diagnostics, HasNoErrors());
+  ASSERT_THAT(patched.diagnostics, HasNoErrors());
+  const auto* base_a = FindCatalogEntry(base.output_catalog, base_state.a);
+  const auto* base_b = FindCatalogEntry(base.output_catalog, base_state.b);
+  const auto* patched_a
+    = FindCatalogEntry(patched.output_catalog, patched_state.a);
+  const auto* patched_b
+    = FindCatalogEntry(patched.output_catalog, patched_state.b);
   ASSERT_NE(base_a, nullptr);
   ASSERT_NE(base_b, nullptr);
   ASSERT_NE(patched_a, nullptr);
@@ -814,173 +424,165 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
     base_b->transitive_resource_digest, patched_b->transitive_resource_digest);
 }
 
-NOLINT_TEST_F(PakPlanBuilderPatchTest, PatchPreservesSceneLocalScriptDescriptor)
+//=== Scenes ===--------------------------------------------------------------//
+
+NOLINT_TEST(PakPlanBuilderPatchTest, PatchPreservesSceneLocalScriptDescriptor)
 {
-  const auto source = Root() / "scene";
-  const auto assets = MakeSceneScriptAssets(1U);
-  ASSERT_TRUE(paktest::WriteLooseIndex(source, assets, {}, 1U));
-  const auto base = MakeBaseCatalog({});
-  const auto request = MakePatchRequest(Root() / "scene-patch.pak",
-    { { .kind = data::CookedSourceKind::kLooseCooked, .path = source } },
-    std::span(&base, 1U));
-  const auto result = pak::PakPlanBuilder {}.Build(request);
-  ASSERT_FALSE(HasError(result.diagnostics))
-    << cooktest::DiagnosticSummary(result.diagnostics);
-  ASSERT_HAS_VALUE(result.plan);
-  ASSERT_FALSE(
-    HasError(pak::PakWriter {}.Write(request, *result.plan).diagnostics));
-  auto archive = oxygen::content::PakFile(request.output_pak_path);
-  const auto entry = archive.FindEntry(MakeAssetKey(1U));
-  ASSERT_HAS_VALUE(entry);
-  auto reader = archive.CreateReader(*entry);
-  const auto bytes = reader.ReadBlob(entry->desc_size);
-  ASSERT_HAS_VALUE(bytes);
-  EXPECT_EQ(*bytes, BuildSceneDescriptorWithScriptingSlots(1U));
+  auto workspace = PakWorkspace {};
+  const auto scripts = pak::test::MakeSceneScripts(1U);
+
+  const auto packed = workspace.PackOrThrow(workspace.PatchRequest(
+    { workspace.Add(scripts.root) }, { scripts.root.BaseCatalog() }));
+
+  EXPECT_THAT(packed.Descriptor(scripts.scene),
+    BytesEqual(pak::test::BuildSceneDescriptorWithScriptingSlots(1U)));
 }
 
-NOLINT_TEST_F(PakPlanBuilderPatchTest,
-  IncrementalPatchRevertsReplacementAndPreservesDeletion)
+//! A patch of a pak over that pak's own catalog changes nothing.
+NOLINT_TEST(PakPlanBuilderPatchTest, UnchangedPatchEmitsNoAssets)
 {
-  const auto root = Root() / "source";
+  auto workspace = PakWorkspace {};
+  const auto full = workspace.FullRequest(
+    { workspace.Add(pak::test::MakeSceneMask(1U).root) }, "scene.pak");
+  const auto base = workspace.Pack(full);
+  ASSERT_THAT(base.Diagnostics(), HasNoErrors());
+  const auto request
+    = workspace.PatchRequest({ PakWorkspace::PakSource(full.output_pak_path) },
+      { base.planned.output_catalog }, "unchanged.pak");
+
+  const auto unchanged = pak::PakPlanBuilder {}.Build(request);
+
+  ASSERT_THAT(unchanged.diagnostics, HasNoErrors());
+  ASSERT_HAS_VALUE(unchanged.plan);
+  EXPECT_TRUE(unchanged.plan->Assets().empty());
+}
+
+//=== Incremental patches mounted by the resolver ===-------------------------//
+
+//! The resolver mounts real files: the paks are exported to the test's
+//! directory.
+class PakPlanBuilderPatchMountTest : public oxygen::testing::TempDirTest {
+protected:
+  [[nodiscard]] auto Workspace() noexcept -> PakWorkspace&
+  {
+    return workspace_;
+  }
+
+  //! Packs `request`; returns its plan, whose output catalog a later patch
+  //! builds on.
+  auto Pack(const pak::PakBuildRequest& request)
+    -> pak::PakPlanBuilder::BuildResult
+  {
+    const auto packed = workspace_.Pack(request);
+    EXPECT_THAT(packed.Diagnostics(), HasNoErrors());
+    EXPECT_TRUE(packed.written.has_value());
+    return packed.planned;
+  }
+
+  //! Exports the pak `request` published; returns where it is on disk.
+  auto Export(const pak::PakBuildRequest& request) const
+    -> std::filesystem::path
+  {
+    const auto disk_path
+      = TempPath(request.output_pak_path.filename().string());
+    Materialize(workspace_.Storage().Bytes(request.output_pak_path), disk_path);
+    return disk_path;
+  }
+
+private:
+  PakWorkspace workspace_;
+};
+
+//! A material with base color red `red`.
+auto TintedMaterial(const float red) -> std::vector<std::byte>
+{
   auto material = render::MaterialAssetDesc {};
   material.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
   material.header.version = render::kMaterialAssetVersion;
-  const auto material_bytes = [&] -> std::vector<std::byte> {
-    return data::MakeDescriptorBytes(material);
-  };
-  auto original_bytes = material_bytes();
-  auto assets = std::array {
-    AssetSpec {
-      .key = MakeAssetKey(1U),
-      .asset_type = data::AssetType::kMaterial,
-      .descriptor_relpath = "M.omat",
-      .virtual_path = "/Game/M.omat",
-      .descriptor_size = original_bytes.size(),
-      .descriptor_sha = oxygen::base::ComputeSha256(original_bytes),
-      .descriptor_payload = original_bytes,
-      .references = {},
-    },
-    AssetSpec {
-      .key = MakeAssetKey(2U),
-      .asset_type = data::AssetType::kMaterial,
-      .descriptor_relpath = "D.omat",
-      .virtual_path = "/Game/D.omat",
-      .descriptor_size = original_bytes.size(),
-      .descriptor_sha = oxygen::base::ComputeSha256(original_bytes),
-      .descriptor_payload = original_bytes,
-      .references = {},
-    },
-  };
-  ASSERT_TRUE(paktest::WriteLooseIndex(root, assets, {}, 1U));
-  auto request = pak::PakBuildRequest {
-    .mode = pak::BuildMode::kFull,
-    .sources
-    = { { .kind = data::CookedSourceKind::kLooseCooked, .path = root } },
-    .output_pak_path = Root() / "base.pak",
-    .content_version = 1U,
-    .source_key = MakeSourceKey(1U),
-  };
-  const auto build_and_write = [&] -> pak::PakPlanBuilder::BuildResult {
-    auto result = pak::PakPlanBuilder {}.Build(request);
-    for (const auto& diagnostic : result.diagnostics) {
-      EXPECT_NE(diagnostic.severity, pak::PakDiagnosticSeverity::kError)
-        << diagnostic.code << ": " << diagnostic.message;
-    }
-    if (result.plan) {
-      EXPECT_FALSE(
-        HasError(pak::PakWriter {}.Write(request, *result.plan).diagnostics));
-    }
-    return result;
-  };
-  const auto base = build_and_write();
+  material.base_color[0] = red;
+  return data::MakeDescriptorBytes(material);
+}
+
+//! A base holds M and D; patch 1 tints M and drops D; patch 2, over both,
+//! reverts M. Mounted in order, the resolver sees D deleted; flattened, the
+//! paks hold M as it was and record D's deletion.
+NOLINT_TEST_F(PakPlanBuilderPatchMountTest,
+  IncrementalPatchRevertsReplacementAndPreservesDeletion)
+{
+  const auto original = TintedMaterial(1.0F);
+  auto base_state = LooseCookedRoot { "Game", 1U };
+  const auto kept = base_state.Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = "M.omat",
+    .descriptor = original,
+  });
+  const auto dropped = base_state.Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = "D.omat",
+    .descriptor = original,
+  });
+  auto tinted_state = LooseCookedRoot { "Game", 2U };
+  tinted_state.Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = "M.omat",
+    .descriptor = TintedMaterial(0.25F),
+  });
+  auto reverted_state = LooseCookedRoot { "Game", 3U };
+  reverted_state.Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = "M.omat",
+    .descriptor = original,
+  });
+  auto& workspace = Workspace();
+
+  const auto base_request
+    = workspace.FullRequest({ workspace.Add(base_state) }, "base.pak");
+  const auto base = Pack(base_request);
   ASSERT_HAS_VALUE(base.plan);
 
-  material.base_color[0] = 0.25F;
-  assets.at(0).descriptor_payload = material_bytes();
-  assets.at(0).descriptor_sha
-    = oxygen::base::ComputeSha256(assets.at(0).descriptor_payload);
-  ASSERT_TRUE(
-    paktest::WriteLooseIndex(root, std::span(assets).first(1U), {}, 2U));
-  request.mode = pak::BuildMode::kPatch;
-  request.source_key = MakeSourceKey(2U);
-  request.output_pak_path = Root() / "p1.pak";
-  request.output_manifest_path = Root() / "p1.manifest.json";
-  request.base_catalogs = { base.output_catalog };
-  const auto p1 = build_and_write();
+  const auto p1_request = workspace.PatchRequest(
+    { workspace.Add(tinted_state) }, { base.output_catalog }, "p1.pak");
+  const auto p1 = Pack(p1_request);
   ASSERT_HAS_VALUE(p1.plan);
-  EXPECT_EQ(p1.output_catalog.deleted, std::vector { assets.at(1).key });
+  EXPECT_EQ(p1.output_catalog.deleted, std::vector { dropped });
   ASSERT_EQ(p1.output_catalog.entries.size(), 1U);
 
-  assets.at(0).descriptor_payload = original_bytes;
-  assets.at(0).descriptor_sha = oxygen::base::ComputeSha256(original_bytes);
-  ASSERT_TRUE(
-    paktest::WriteLooseIndex(root, std::span(assets).first(1U), {}, 3U));
-  request.source_key = MakeSourceKey(3U);
-  request.output_pak_path = Root() / "p2.pak";
-  request.output_manifest_path = Root() / "p2.manifest.json";
-  request.base_catalogs.push_back(p1.output_catalog);
-  const auto p2 = build_and_write();
+  const auto p2_request
+    = workspace.PatchRequest({ workspace.Add(reverted_state) },
+      { base.output_catalog, p1.output_catalog }, "p2.pak");
+  const auto p2 = Pack(p2_request);
   ASSERT_HAS_VALUE(p2.plan);
   ASSERT_EQ(p2.plan->PatchActions().size(), 1U);
   EXPECT_EQ(base::CheckedAt(p2.plan->PatchActions(), 0U).action,
-    pak::PakPatchAction::kReplace);
-  EXPECT_EQ(
-    base::CheckedAt(p2.plan->PatchActions(), 0U).asset_key, assets.at(0).key);
+    PakPatchAction::kReplace);
+  EXPECT_EQ(base::CheckedAt(p2.plan->PatchActions(), 0U).asset_key, kept);
   EXPECT_TRUE(p2.output_catalog.deleted.empty());
 
-  oxygen::content::VirtualPathResolver resolver;
-  EXPECT_THROW(resolver.AddPakFile(Root() / "p1.pak"), std::invalid_argument);
-  resolver.AddPakFile(Root() / "base.pak");
-  EXPECT_EQ(resolver.ResolveAssetKey("/Game/D.omat"), assets.at(1).key);
-  resolver.AddPakFile(Root() / "p1.pak");
-  EXPECT_FALSE(resolver.ResolveAssetKey("/Game/D.omat").has_value());
-  resolver.AddPakFile(Root() / "p2.pak");
-  EXPECT_EQ(resolver.ResolveAssetKey("/Game/M.omat"), assets.at(0).key);
+  auto resolver = oxygen::content::VirtualPathResolver {};
+  const auto base_pak = Export(base_request);
+  const auto p1_pak = Export(p1_request);
+  const auto p2_pak = Export(p2_request);
+  EXPECT_THROW(resolver.AddPakFile(p1_pak), std::invalid_argument);
+  resolver.AddPakFile(base_pak);
+  EXPECT_EQ(
+    resolver.ResolveAssetKey(base_state.VirtualPath("D.omat")), dropped);
+  resolver.AddPakFile(p1_pak);
+  EXPECT_FALSE(
+    resolver.ResolveAssetKey(base_state.VirtualPath("D.omat")).has_value());
+  resolver.AddPakFile(p2_pak);
+  EXPECT_EQ(resolver.ResolveAssetKey(base_state.VirtualPath("M.omat")), kept);
 
-  request.mode = pak::BuildMode::kFull;
-  request.base_catalogs.clear();
-  request.output_manifest_path.clear();
-  request.output_pak_path = Root() / "flattened.pak";
-  request.source_key = MakeSourceKey(4U);
-  request.sources = {
-    { .kind = data::CookedSourceKind::kPak, .path = Root() / "base.pak" },
-    { .kind = data::CookedSourceKind::kPak, .path = Root() / "p1.pak" },
-    { .kind = data::CookedSourceKind::kPak, .path = Root() / "p2.pak" },
-  };
-  const auto flattened = build_and_write();
-  ASSERT_HAS_VALUE(flattened.plan);
-  const oxygen::content::PakFile archive(request.output_pak_path);
-  EXPECT_FALSE(archive.FindEntry(assets.at(1).key).has_value());
-  EXPECT_EQ(archive.Catalog().deleted, std::vector { assets.at(1).key });
-  const auto entry = archive.FindEntry(assets.at(0).key);
-  ASSERT_HAS_VALUE(entry);
-  auto reader = archive.CreateReader(*entry);
-  const auto bytes = reader.ReadBlob(entry->desc_size);
-  ASSERT_HAS_VALUE(bytes);
-  EXPECT_EQ(*bytes, original_bytes);
-}
-
-NOLINT_TEST_F(PakPlanBuilderPatchTest, UnchangedPatchEmitsNoAssets)
-{
-  const auto source_pak = paktest::BuildSceneMaskPak(Root());
-
-  auto request = source_pak.request;
-  request.mode = pak::BuildMode::kPatch;
-  request.sources = {
+  const auto flatten = workspace.FullRequest(
     {
-      .kind = data::CookedSourceKind::kPak,
-      .path = request.output_pak_path,
+      PakWorkspace::PakSource(base_request.output_pak_path),
+      PakWorkspace::PakSource(p1_request.output_pak_path),
+      PakWorkspace::PakSource(p2_request.output_pak_path),
     },
-  };
-  request.output_pak_path = Root() / "unchanged.pak";
-  request.output_manifest_path = Root() / "unchanged.manifest.json";
-  request.source_key = MakeSourceKey(6U);
-  request.base_catalogs = { source_pak.catalog };
-
-  const auto unchanged = pak::PakPlanBuilder {}.Build(request);
-  ASSERT_FALSE(HasError(unchanged.diagnostics));
-  ASSERT_HAS_VALUE(unchanged.plan);
-  EXPECT_TRUE(unchanged.plan->Assets().empty());
+    "flattened.pak");
+  const auto flattened = workspace.PackOrThrow(flatten);
+  EXPECT_FALSE(flattened.Pak().FindEntry(dropped).has_value());
+  EXPECT_EQ(flattened.Pak().Catalog().deleted, std::vector { dropped });
+  EXPECT_THAT(flattened.Descriptor(kept), BytesEqual(original));
 }
 
 } // namespace

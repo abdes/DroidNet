@@ -12,11 +12,14 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
@@ -30,22 +33,22 @@ class ResourceTableRegistry final {
 public:
   class SharedTableLockGuard;
 
-  OXGN_COOK_API explicit ResourceTableRegistry(IAsyncFileWriter& file_writer);
+  //! Keeps the resource tables of cooked roots held by `storage`; payloads
+  //! and tables are written through `file_writer`.
+  OXGN_COOK_API ResourceTableRegistry(
+    IAsyncFileWriter& file_writer, observer_ptr<cooked::CookerStorage> storage);
 
   OXYGEN_MAKE_NON_COPYABLE(ResourceTableRegistry)
   OXYGEN_MAKE_NON_MOVABLE(ResourceTableRegistry)
 
   OXGN_COOK_NDAPI auto TextureAggregator(
-    const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
-    -> TextureTableAggregator&;
+    const std::filesystem::path& cooked_root) -> TextureTableAggregator&;
 
   OXGN_COOK_NDAPI auto BufferAggregator(
-    const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
-    -> BufferTableAggregator&;
+    const std::filesystem::path& cooked_root) -> BufferTableAggregator&;
 
   OXGN_COOK_NDAPI auto PhysicsAggregator(
-    const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
-    -> PhysicsTableAggregator&;
+    const std::filesystem::path& cooked_root) -> PhysicsTableAggregator&;
 
   OXGN_COOK_NDAPI auto LockScriptsTable(
     const std::filesystem::path& cooked_root) -> co::Co<SharedTableLockGuard>;
@@ -54,9 +57,23 @@ public:
   OXGN_COOK_NDAPI auto BeginSession(const std::filesystem::path& cooked_root)
     -> ImportSessionToken;
 
+  //! A table the last session of a cohort wrote.
+  struct WrittenTable final {
+    data::loose_cooked::FileKind kind = data::loose_cooked::FileKind::kUnknown;
+    LooseCookedFileDigest digest;
+  };
+
+  //! What ending a session did to the tables of its root.
+  struct SessionEnd final {
+    //! False when the cohort was aborted or a table could not be written.
+    bool ok = true;
+    //! The tables this session wrote, as the last one of its cohort.
+    std::vector<WrittenTable> written;
+  };
+
   //! Complete a session and finalize tables if it was the last one.
   OXGN_COOK_API auto EndSession(ImportSessionToken& participation)
-    -> co::Co<bool>;
+    -> co::Co<SessionEnd>;
 
   //! Await a previous cohort's table writes before entering this root.
   OXGN_COOK_NDAPI auto WaitForFinalization(
@@ -77,6 +94,7 @@ private:
     -> co::Co<SharedTableLockGuard>;
 
   IAsyncFileWriter& file_writer_;
+  observer_ptr<cooked::CookerStorage> storage_;
   std::mutex mutex_;
   std::unordered_map<std::string, std::unique_ptr<TextureTableAggregator>>
     texture_tables_;

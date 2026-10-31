@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -11,7 +12,7 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
-#include <tuple>
+#include <system_error>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -29,7 +30,10 @@
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
+#include <Oxygen/Content/Internal/PayloadBudget.h>
+#include <Oxygen/Content/Internal/RegionReader.h>
 #include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
+#include <Oxygen/Content/Internal/ResourceTypes.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
@@ -43,9 +47,12 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/Serio/AlignmentGuard.h>
-#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/AsyncDevice.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/ByteView.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Region.h>
 
 namespace oxygen::content::internal {
 namespace {
@@ -59,74 +66,6 @@ namespace {
       return instance == data::SourceInstanceId {}
       || (registry && registry->AcquireSource(instance));
     }
-  };
-
-  class MemoryAnyReader final : public oxygen::serio::AnyReader {
-  public:
-    explicit MemoryAnyReader(std::span<const uint8_t> data)
-    {
-      data_.resize(data.size());
-      if (!data_.empty()) {
-        std::memcpy(data_.data(), data.data(), data.size());
-      }
-      stream_ = std::make_unique<oxygen::serio::ReadOnlyMemoryStream>(
-        std::span<const std::byte>(data_));
-      reader_ = std::make_unique<
-        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream>>(*stream_);
-    }
-
-    ~MemoryAnyReader() override = default;
-    OXYGEN_MAKE_NON_COPYABLE(MemoryAnyReader)
-    OXYGEN_MAKE_NON_MOVABLE(MemoryAnyReader)
-
-    auto ReadBlob(size_t size) noexcept
-      -> oxygen::Result<std::vector<std::byte>> override
-    {
-      return reader_->ReadBlob(size);
-    }
-
-    auto ReadBlobInto(std::span<std::byte> buffer) noexcept
-      -> oxygen::Result<void> override
-    {
-      return reader_->ReadBlobInto(buffer);
-    }
-
-    auto Position() noexcept -> oxygen::Result<size_t> override
-    {
-      return reader_->Position();
-    }
-
-    auto Remaining() noexcept -> oxygen::serio::ByteCount override
-    {
-      return reader_->Remaining();
-    }
-
-    auto AlignTo(size_t alignment) noexcept -> oxygen::Result<void> override
-    {
-      return reader_->AlignTo(alignment);
-    }
-
-    auto ScopedAlignment(uint16_t alignment) noexcept(false)
-      -> oxygen::serio::AlignmentGuard override
-    {
-      return reader_->ScopedAlignment(alignment);
-    }
-
-    auto Forward(size_t num_bytes) noexcept -> oxygen::Result<void> override
-    {
-      return reader_->Forward(num_bytes);
-    }
-
-    auto Seek(size_t pos) noexcept -> oxygen::Result<void> override
-    {
-      return reader_->Seek(pos);
-    }
-
-  private:
-    std::vector<std::byte> data_;
-    std::unique_ptr<oxygen::serio::ReadOnlyMemoryStream> stream_;
-    std::unique_ptr<oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream>>
-      reader_;
   };
 
   auto ValidateTypeFromDecoded(
@@ -161,23 +100,6 @@ namespace {
     return false;
   }
 
-  template <typename Fn> auto WithResourceType(const TypeId type, const Fn& fn)
-  {
-    if (type == data::TextureResource::ClassTypeId()) {
-      return fn.template operator()<data::TextureResource>();
-    }
-    if (type == data::BufferResource::ClassTypeId()) {
-      return fn.template operator()<data::BufferResource>();
-    }
-    if (type == data::ScriptResource::ClassTypeId()) {
-      return fn.template operator()<data::ScriptResource>();
-    }
-    if (type == data::PhysicsResource::ClassTypeId()) {
-      return fn.template operator()<data::PhysicsResource>();
-    }
-    throw std::invalid_argument("Unsupported resource type for loading");
-  }
-
   auto AcquirePublication(const ContentPublication& publication,
     ResourceLoadPipeline::ContentCache& cache, ContentReleaseQueue& releases,
     const CheckoutOwner owner) -> ContentAcquisition
@@ -193,14 +115,22 @@ namespace {
     });
   }
 
+  using Payloads = std::optional<serio::Region<serio::AnyAsyncDevice>>;
+
+  //! A payload read into the buffer its loader takes, with the budget lease
+  //! that bounds it until the loader has taken it.
+  struct LoadedPayload final {
+    serio::ByteBuffer bytes;
+    PayloadBudget::Lease lease;
+  };
+
   struct PreparedResourceDecode final {
     ResourceLoadPipeline::ResourceLoadFn loader;
     data::SourceInstanceId source_instance;
     std::unique_ptr<serio::AnyReader> desc_reader;
-    std::unique_ptr<serio::AnyReader> buf_reader;
-    std::unique_ptr<serio::AnyReader> tex_reader;
-    std::unique_ptr<serio::AnyReader> script_reader;
-    std::unique_ptr<serio::AnyReader> phys_reader;
+    //! Where the descriptor's payload lies, in the space of `payloads`.
+    serio::ByteRange extent;
+    Payloads payloads;
     std::shared_ptr<const IContentSource> source_content;
   };
 
@@ -237,57 +167,94 @@ namespace {
     return loader_it->second;
   }
 
-  auto ResolveDescriptorOffsetAndReader(const IContentSource& source,
-    const TypeId resource_type,
-    const data::pak::core::ResourceIndexT resource_index)
-    -> std::optional<
-      std::pair<std::unique_ptr<serio::AnyReader>, data::pak::core::OffsetT>>
+  //! The size of the descriptor of `resource_type`.
+  auto DescriptorSizeOf(const TypeId resource_type) -> size_t
   {
-    std::unique_ptr<serio::AnyReader> desc_reader;
-    std::optional<data::pak::core::OffsetT> offset;
+    return WithResourceType(resource_type,
+      []<typename T>() -> size_t { return sizeof(typename T::DescT); });
+  }
 
-    if (resource_type == data::TextureResource::ClassTypeId()) {
-      const auto* table = source.GetTextureTable();
-      desc_reader = source.CreateTextureTableReader();
-      if (!table || !desc_reader) {
-        return std::nullopt;
-      }
-      offset = table->GetResourceOffset(resource_index);
-    } else if (resource_type == data::BufferResource::ClassTypeId()) {
-      const auto* table = source.GetBufferTable();
-      desc_reader = source.CreateBufferTableReader();
-      if (!table || !desc_reader) {
-        return std::nullopt;
-      }
-      offset = table->GetResourceOffset(resource_index);
-    } else if (resource_type == data::ScriptResource::ClassTypeId()) {
-      const auto* table = source.GetScriptTable();
-      desc_reader = source.CreateScriptTableReader();
-      if (!table || !desc_reader) {
-        return std::nullopt;
-      }
-      offset = table->GetResourceOffset(resource_index);
-    } else if (resource_type == data::PhysicsResource::ClassTypeId()) {
-      const auto* table = source.GetPhysicsTable();
-      desc_reader = source.CreatePhysicsTableReader();
-      if (!table || !desc_reader) {
-        return std::nullopt;
-      }
-      offset = table->GetResourceOffset(resource_index);
-    } else {
-      return std::nullopt;
+  //! The payload extent the descriptor `row` of `resource_type` names.
+  auto PayloadExtentOf(const TypeId resource_type,
+    const std::span<const std::byte> row) -> serio::ByteRange
+  {
+    return WithResourceType(
+      resource_type, [row]<typename T>() -> serio::ByteRange {
+        auto desc = typename T::DescT {};
+        if (row.size() < sizeof(desc)) {
+          throw std::runtime_error("Resource descriptor is truncated");
+        }
+        std::memcpy(&desc, row.data(), sizeof(desc));
+        return {
+          .offset = serio::ByteOffset { desc.data_offset },
+          .count = serio::ByteCount { desc.size_bytes },
+        };
+      });
+  }
+
+  //! Awaits the payload `extent` of `payloads` into a buffer of its size,
+  //! once the budget has room for it.
+  auto ReadPayload(const Payloads payloads, const serio::ByteRange extent,
+    const observer_ptr<PayloadBudget> budget) -> co::Co<LoadedPayload>
+  {
+    if (extent.count.get() == 0) {
+      co_return LoadedPayload {};
     }
-
-    if (!offset.has_value()) {
-      return std::nullopt;
+    if (!payloads) {
+      throw std::runtime_error("The source holds no payloads of this resource");
     }
-
-    if (auto seek_res = desc_reader->Seek(static_cast<size_t>(*offset));
-      !seek_res) {
-      return std::nullopt;
+    const auto region = IContentSource::PayloadWithin(*payloads, extent);
+    if (!region) {
+      throw std::runtime_error("Resource payload lies outside its region");
     }
+    auto lease = co_await budget->Acquire(extent.count);
+    auto buffer = serio::ByteBuffer::Allocate(extent.count);
+    if (!buffer) {
+      throw std::system_error(buffer.error(), "Allocate a resource payload");
+    }
+    const auto read = co_await serio::AsyncReadExactlyAt(
+      *region, serio::ByteOffset { 0 }, buffer->Bytes());
+    if (!read) {
+      throw std::system_error(read.error(), "Read a resource payload");
+    }
+    co_return LoadedPayload {
+      .bytes = std::move(buffer).value(),
+      .lease = std::move(lease),
+    };
+  }
 
-    return std::make_pair(std::move(desc_reader), *offset);
+  //! Decodes `prepared` on `pool` once its payload is in memory.
+  auto DecodePrepared(PreparedResourceDecode prepared,
+    const observer_ptr<co::ThreadPool> pool,
+    const observer_ptr<PayloadBudget> budget, const bool work_offline,
+    const LoadPriorityClass default_priority, const LoadRequest request)
+    -> co::Co<std::shared_ptr<void>>
+  {
+    // The lease stays in this frame, on the loop thread, until the loader has
+    // taken the buffer.
+    auto payload = co_await ReadPayload(
+      std::move(prepared.payloads), prepared.extent, budget);
+    co_return co_await pool->Run(
+      [prepared = std::move(prepared), bytes = std::move(payload.bytes),
+        work_offline, default_priority,
+        request] mutable -> std::shared_ptr<void> {
+        const auto source_key = prepared.source_content
+          ? prepared.source_content->GetSourceKey()
+          : data::SourceKey {};
+        auto context = LoaderContext {
+          .current_asset_key = {},
+          .source_instance = prepared.source_instance,
+          .desc_reader = prepared.desc_reader.get(),
+          .payload = observer_ptr { &bytes },
+          .work_offline = work_offline,
+          .default_priority_class = default_priority,
+          .request_priority = request.priority,
+          .request_intent = request.intent,
+          .source_content = prepared.source_content,
+          .source_key = source_key,
+        };
+        return prepared.loader(context);
+      });
   }
 
   auto PrepareResourceDecode(const ContentSourceRegistry& source_registry,
@@ -307,61 +274,22 @@ namespace {
       return std::nullopt;
     }
 
-    auto descriptor_opt = ResolveDescriptorOffsetAndReader(
-      *source, resource_type, resource_index);
-    if (!descriptor_opt.has_value()) {
+    const auto row
+      = source->ResourceDescriptorBytes(resource_type, resource_index);
+    if (!row) {
       return std::nullopt;
     }
 
     PreparedResourceDecode prepared {};
     prepared.loader = std::move(*loader_opt);
     prepared.source_instance = resolved_source->source_instance;
-    prepared.desc_reader = std::move(descriptor_opt->first);
+    prepared.desc_reader
+      = RegionReader<serio::ByteView>::Owning(serio::ByteView(*row));
+    prepared.extent = PayloadExtentOf(resource_type, *row);
+    prepared.payloads = source->PayloadRegion(resource_type);
     prepared.source_content = source;
-    prepared.buf_reader = source->CreateBufferDataReader();
-    prepared.tex_reader = source->CreateTextureDataReader();
-    prepared.script_reader = source->CreateScriptDataReader();
-    prepared.phys_reader = source->CreatePhysicsDataReader();
 
     return prepared;
-  }
-
-  auto BuildLoaderContextFromPrepared(PreparedResourceDecode& prepared,
-    const bool work_offline, const LoadPriorityClass default_priority_class,
-    const LoadRequest& request) -> LoaderContext
-  {
-    return LoaderContext {
-      .current_asset_key = {},
-      .source_instance = prepared.source_instance,
-      .desc_reader = prepared.desc_reader.get(),
-      .data_readers
-      = std::make_tuple(prepared.buf_reader.get(), prepared.tex_reader.get(),
-        prepared.script_reader.get(), prepared.phys_reader.get()),
-      .work_offline = work_offline,
-      .default_priority_class = default_priority_class,
-      .request_priority = request.priority,
-      .request_intent = request.intent,
-      .source_content = prepared.source_content,
-      .source_key = prepared.source_content->GetSourceKey(),
-    };
-  }
-
-  auto BuildCookedLoaderContext(serio::AnyReader* cooked_reader,
-    const bool work_offline, const LoadPriorityClass default_priority_class,
-    const LoadRequest& request) -> LoaderContext
-  {
-    return LoaderContext {
-      .current_asset_key = {},
-      .source_instance = {},
-      .desc_reader = cooked_reader,
-      .data_readers = std::make_tuple(
-        cooked_reader, cooked_reader, cooked_reader, cooked_reader),
-      .work_offline = work_offline,
-      .default_priority_class = default_priority_class,
-      .request_priority = request.priority,
-      .request_intent = request.intent,
-      .source_content = nullptr,
-    };
   }
 
   template <typename DecodeFn>
@@ -504,7 +432,8 @@ ResourceLoadPipeline::ResourceLoadPipeline(
   const ResourceLoaderMap& resource_loaders, ContentCache& content_cache,
   InFlightOperationTable& in_flight_ops,
   const std::shared_ptr<ContentReleaseQueue>& releases,
-  const observer_ptr<co::ThreadPool> thread_pool, const bool work_offline,
+  const observer_ptr<co::ThreadPool> thread_pool,
+  const observer_ptr<PayloadBudget> payload_budget, const bool work_offline,
   Callbacks callbacks)
   : source_registry_(source_registry)
   , identities_(identities)
@@ -513,6 +442,7 @@ ResourceLoadPipeline::ResourceLoadPipeline(
   , in_flight_ops_(in_flight_ops)
   , releases_(releases)
   , thread_pool_(thread_pool)
+  , payload_budget_(payload_budget)
   , work_offline_(work_offline)
   , callbacks_(std::move(callbacks))
 {
@@ -553,13 +483,8 @@ auto ResourceLoadPipeline::LoadErased(const TypeId resource_type,
     const auto default_priority = callbacks_.default_priority_class
       ? callbacks_.default_priority_class()
       : LoadPriorityClass::kDefault;
-    auto decoded = co_await thread_pool_->Run(
-      [offline = work_offline_, prepared = std::move(*prepared_opt), request,
-        default_priority] mutable -> std::shared_ptr<void> {
-        auto context = BuildLoaderContextFromPrepared(
-          prepared, offline, default_priority, request);
-        return prepared.loader(context);
-      });
+    auto decoded = co_await DecodePrepared(std::move(*prepared_opt),
+      thread_pool_, payload_budget_, work_offline_, default_priority, request);
     co_return source_registry_.AcquireSource(source_id) ? std::move(decoded)
                                                         : nullptr;
   };
@@ -613,16 +538,22 @@ auto ResourceLoadPipeline::LoadErasedFromCooked(const TypeId resource_type,
     const auto default_priority = callbacks_.default_priority_class
       ? callbacks_.default_priority_class()
       : LoadPriorityClass::kDefault;
-    co_return co_await thread_pool_->Run(
-      [offline = work_offline_, owned_bytes, loader = std::move(*loader_opt),
-        request, default_priority] mutable -> std::shared_ptr<void> {
-        std::span<const uint8_t> span(owned_bytes->data(), owned_bytes->size());
-        auto reader = std::make_unique<MemoryAnyReader>(span);
-        auto context = BuildCookedLoaderContext(
-          reader.get(), offline, default_priority, request);
-
-        return loader(context);
-      });
+    // Cooked bytes are a descriptor followed by its payload, whose data
+    // offset is an offset of the bytes.
+    const auto bytes = std::as_bytes(std::span(*owned_bytes));
+    const auto device = serio::AnyAsyncDevice(serio::ByteView(bytes));
+    auto prepared = PreparedResourceDecode {
+      .loader = std::move(*loader_opt),
+      .source_instance = {},
+      .desc_reader
+      = RegionReader<serio::ByteView>::Owning(serio::ByteView(bytes.first(
+        (std::min)(bytes.size(), DescriptorSizeOf(resource_type))))),
+      .extent = PayloadExtentOf(resource_type, bytes),
+      .payloads = serio::Region<serio::AnyAsyncDevice>::Whole(device).value(),
+      .source_content = nullptr,
+    };
+    co_return co_await DecodePrepared(std::move(prepared), thread_pool_,
+      payload_budget_, work_offline_, default_priority, request);
   };
 
   const auto request_sequence = callbacks_.next_request_sequence

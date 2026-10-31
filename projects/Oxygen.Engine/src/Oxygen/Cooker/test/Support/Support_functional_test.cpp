@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Test/Support/TempDir.cpp, Test/Support/FileIo.cpp,
+// Covers: Testing/ScopedTempDir.cpp, Test/Support/FileIo.cpp,
 // Test/Support/TestPaths.cpp, Test/Support/JsonSchema.cpp
 
 #include <array>
@@ -22,13 +22,16 @@
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
 using namespace oxygen::cooker::test;
+using oxygen::testing::ScopedTempDir;
+using oxygen::testing::TempDirTest;
 
 NOLINT_TEST(ScopedTempDirTest, CreatesDirectoryAndRemovesItOnDestruction)
 {

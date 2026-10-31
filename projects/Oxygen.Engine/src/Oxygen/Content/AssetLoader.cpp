@@ -65,6 +65,7 @@
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
+#include <Oxygen/Content/Internal/PayloadBudget.h>
 #include <Oxygen/Content/Internal/PhysicsBindings.h>
 #include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
@@ -123,6 +124,7 @@
 #include <Oxygen/OxCo/TaskCancelledException.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/FileLock.h>
+#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/Reader.h>
 
 using oxygen::content::AssetLoader;
@@ -329,6 +331,21 @@ auto ReadInputMappingContextAssetDesc(const internal::IContentSource& source,
 
   return result;
 }
+
+//! The driver sources open payload files through, on `loop`; none without
+//! one.
+auto CreateIoDriver(const oxygen::observer_ptr<asio::io_context> loop)
+  -> std::shared_ptr<oxygen::serio::IoDriver>
+{
+  if (!loop) {
+    return nullptr;
+  }
+  auto driver = oxygen::serio::IoDriver::Create(*loop);
+  if (!driver) {
+    throw std::system_error(driver.error(), "Create the content IO driver");
+  }
+  return std::make_shared<oxygen::serio::IoDriver>(std::move(driver).value());
+}
 } // namespace
 
 //=== Basic methods ==========================================================//
@@ -338,6 +355,7 @@ AssetLoader::AssetLoader(
   : impl_(std::make_unique<Impl>())
   , releases_(std::make_shared<internal::ContentReleaseQueue>())
   , thread_pool_(config.thread_pool)
+  , io_driver_(CreateIoDriver(config.io_context))
   , work_offline_(config.work_offline)
   , verify_content_hashes_(config.verify_content_hashes)
   , residency_policy_(config.residency_policy)
@@ -353,9 +371,12 @@ AssetLoader::AssetLoader(
     = std::make_unique<internal::SceneCatalogQueryService>();
   script_query_service_ = std::make_unique<internal::ScriptQueryService>();
 
+  payload_budget_ = std::make_unique<internal::PayloadBudget>(
+    serio::ByteCount { config.payload_budget_bytes });
   resource_load_pipeline_ = std::make_unique<internal::ResourceLoadPipeline>(
     impl_->source_registry, *identities_, resource_loaders_, content_cache_,
-    *in_flight_ops_, releases_, thread_pool_, work_offline_,
+    *in_flight_ops_, releases_, thread_pool_,
+    observer_ptr { payload_budget_.get() }, work_offline_,
     internal::ResourceLoadPipeline::Callbacks {
       .assert_owning_thread = [this] -> void { AssertOwningThread(); },
       .on_resource_published = [this](const ResourceKey key) -> void {
@@ -455,7 +476,7 @@ auto AssetLoader::MountEngineContentPak() -> void
   }
   static_cast<void>(impl_->source_registry.MountPak(*engine_content_pak_,
     std::make_shared<internal::PakFileSource>(
-      *engine_content_pak_, verify_content_hashes_),
+      *engine_content_pak_, verify_content_hashes_, io_driver_),
     internal::ContentSourceRegistry::MountMode::kAppend));
   ++impl_->mount_revision;
   LOG_F(INFO, "Mounted engine content pak: {}", engine_content_pak_->string());
@@ -994,7 +1015,7 @@ auto AssetLoader::MountPakFile(const std::filesystem::path& path)
   }
 
   auto new_source = std::make_unique<internal::PakFileSource>(
-    normalized, verify_content_hashes_);
+    normalized, verify_content_hashes_, io_driver_);
   const auto source_key = new_source->GetSourceKey();
   const bool was_already_mounted
     = std::ranges::find(impl_->source_registry.PakPaths(), normalized)
@@ -1076,7 +1097,8 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
   auto new_source = std::make_unique<internal::LooseCookedSource>(normalized,
     verify_content_hashes_
       ? internal::LooseCookedSource::OpenMode::kVerifyContent
-      : internal::LooseCookedSource::OpenMode::kValidateMetadata);
+      : internal::LooseCookedSource::OpenMode::kValidateMetadata,
+    serio::FileLock {}, io_driver_);
   const auto source_key = new_source->GetSourceKey();
 
   auto clear_content_caches = [this] -> void {
@@ -1161,7 +1183,7 @@ auto AssetLoader::DoMountLooseCookedGeneration(
     verify_content_hashes_
       ? internal::LooseCookedSource::OpenMode::kVerifyContent
       : internal::LooseCookedSource::OpenMode::kValidateMetadata,
-    std::move(lock).value());
+    std::move(lock).value(), io_driver_);
   const auto key = source->GetSourceKey();
   static_cast<void>(
     impl_->source_registry.MountGeneration(std::move(source), replaces));
@@ -1195,15 +1217,15 @@ auto AssetLoader::PrepareMountsAsync(std::vector<ContentMount> mounts)
   state->epoch = releases_;
   state->revision = impl_->mount_revision;
   return PrepareMountSetAsync(std::move(state), thread_pool_,
-    engine_content_pak_, std::move(mounts), verify_content_hashes_);
+    engine_content_pak_, std::move(mounts), verify_content_hashes_, io_driver_);
 }
 
 auto AssetLoader::PrepareMountSetAsync(
   std::unique_ptr<internal::MountReplacementState> state,
   const observer_ptr<co::ThreadPool> pool,
   std::optional<std::filesystem::path> engine_content_pak,
-  std::vector<ContentMount> mounts, const bool verify_content)
-  -> co::Co<PreparedMountSet>
+  std::vector<ContentMount> mounts, const bool verify_content,
+  std::shared_ptr<serio::IoDriver> driver) -> co::Co<PreparedMountSet>
 {
   if (state->lifetime.expired() || state->epoch->IsClosed()) {
     throw OperationCancelledException(
@@ -1215,61 +1237,62 @@ auto AssetLoader::PrepareMountSetAsync(
     throw OperationCancelledException(
       "Content mounts changed before preparation began");
   }
-  auto sources = co_await pool->Run([engine_pak = std::move(engine_content_pak),
-                                      requested = std::move(mounts),
-                                      verify = verify_content]
+  auto sources = co_await pool->Run(
+    [engine_pak = std::move(engine_content_pak), requested = std::move(mounts),
+      verify = verify_content, driver = std::move(driver)]
     -> std::vector<internal::ContentSourceRegistry::PreparedSource> {
-    std::vector<internal::ContentSourceRegistry::PreparedSource> prepared;
-    prepared.reserve(requested.size() + 1);
-    // The engine content stays beneath every replacement set.
-    if (engine_pak) {
-      prepared.push_back({
-        .source
-        = std::make_shared<internal::PakFileSource>(*engine_pak, verify),
-        .kind = internal::ContentSourceRegistry::PreparedSourceKind::kPak,
-        .pak_path = *engine_pak,
-      });
-    }
-    for (const auto& mount : requested) {
-      const auto normalized = base::ToLogicalPath(
-        std::filesystem::weakly_canonical(base::ToNativePath(mount.path)));
-      if (mount.kind == ContentMount::Kind::kPakFile) {
+      std::vector<internal::ContentSourceRegistry::PreparedSource> prepared;
+      prepared.reserve(requested.size() + 1);
+      // The engine content stays beneath every replacement set.
+      if (engine_pak) {
         prepared.push_back({
-          .source
-          = std::make_shared<internal::PakFileSource>(normalized, verify),
+          .source = std::make_shared<internal::PakFileSource>(
+            *engine_pak, verify, driver),
           .kind = internal::ContentSourceRegistry::PreparedSourceKind::kPak,
-          .pak_path = normalized,
+          .pak_path = *engine_pak,
         });
-        continue;
       }
-      const auto marker
-        = normalized / data::loose_cooked::kGenerationLeaseFileName;
-      if (std::filesystem::exists(base::ToNativePath(marker))) {
-        auto lease
-          = serio::FileLock::TryAcquire(marker, serio::FileLockMode::kShared);
-        if (!lease) {
-          throw std::system_error(
-            lease.error(), "Acquire candidate generation lease");
+      for (const auto& mount : requested) {
+        const auto normalized = base::ToLogicalPath(
+          std::filesystem::weakly_canonical(base::ToNativePath(mount.path)));
+        if (mount.kind == ContentMount::Kind::kPakFile) {
+          prepared.push_back({
+            .source = std::make_shared<internal::PakFileSource>(
+              normalized, verify, driver),
+            .kind = internal::ContentSourceRegistry::PreparedSourceKind::kPak,
+            .pak_path = normalized,
+          });
+          continue;
         }
-        prepared.push_back({
-          .source = std::make_shared<internal::LooseCookedSource>(normalized,
-            verify ? internal::LooseCookedSource::OpenMode::kVerifyContent
-                   : internal::LooseCookedSource::OpenMode::kValidateMetadata,
-            std::move(lease).value()),
-          .kind
-          = internal::ContentSourceRegistry::PreparedSourceKind::kGeneration,
-        });
-      } else {
-        prepared.push_back({
-          .source = std::make_shared<internal::LooseCookedSource>(normalized,
-            verify ? internal::LooseCookedSource::OpenMode::kVerifyContent
-                   : internal::LooseCookedSource::OpenMode::kValidateMetadata),
-          .kind = internal::ContentSourceRegistry::PreparedSourceKind::kLoose,
-        });
+        const auto marker
+          = normalized / data::loose_cooked::kGenerationLeaseFileName;
+        if (std::filesystem::exists(base::ToNativePath(marker))) {
+          auto lease
+            = serio::FileLock::TryAcquire(marker, serio::FileLockMode::kShared);
+          if (!lease) {
+            throw std::system_error(
+              lease.error(), "Acquire candidate generation lease");
+          }
+          prepared.push_back({
+            .source = std::make_shared<internal::LooseCookedSource>(normalized,
+              verify ? internal::LooseCookedSource::OpenMode::kVerifyContent
+                     : internal::LooseCookedSource::OpenMode::kValidateMetadata,
+              std::move(lease).value(), driver),
+            .kind
+            = internal::ContentSourceRegistry::PreparedSourceKind::kGeneration,
+          });
+        } else {
+          prepared.push_back({
+            .source = std::make_shared<internal::LooseCookedSource>(normalized,
+              verify ? internal::LooseCookedSource::OpenMode::kVerifyContent
+                     : internal::LooseCookedSource::OpenMode::kValidateMetadata,
+              serio::FileLock {}, driver),
+            .kind = internal::ContentSourceRegistry::PreparedSourceKind::kLoose,
+          });
+        }
       }
-    }
-    return prepared;
-  });
+      return prepared;
+    });
   if (state->lifetime.expired() || state->epoch->IsClosed()) {
     throw OperationCancelledException(
       "Loader stopped during mount preparation");
@@ -2160,10 +2183,6 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
     throw std::runtime_error(
       "Selected asset source did not provide its descriptor");
   }
-  auto buf_reader = source_content->CreateBufferDataReader();
-  auto tex_reader = source_content->CreateTextureDataReader();
-  auto script_reader = source_content->CreateScriptDataReader();
-  auto phys_reader = source_content->CreatePhysicsDataReader();
   auto collector = std::make_shared<internal::DependencyCollector>();
 
   const auto registered = asset_loaders_.find(type_id);
@@ -2177,10 +2196,7 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
   auto decoded = co_await thread_pool_->Run(
     [key, source_content, collector, decoder = std::move(decoder),
       offline = work_offline_, default_priority, request,
-      desc_reader = std::move(desc_reader), buf_reader = std::move(buf_reader),
-      tex_reader = std::move(tex_reader),
-      script_reader = std::move(script_reader),
-      phys_reader = std::move(phys_reader),
+      desc_reader = std::move(desc_reader),
       source_instance] mutable -> DecodedAssetAsyncResult {
       auto references = source_content->ReadAssetReferences(key);
       LoaderContext context {
@@ -2189,8 +2205,6 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
         .desc_reader = desc_reader.get(),
         .asset_references
         = observer_ptr<const data::AssetReferences> { &references },
-        .data_readers = std::make_tuple(buf_reader.get(), tex_reader.get(),
-          script_reader.get(), phys_reader.get()),
         .work_offline = offline,
         .default_priority_class = default_priority,
         .request_priority = request.priority,

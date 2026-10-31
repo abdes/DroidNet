@@ -29,7 +29,6 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 
 namespace oxygen::content {
@@ -206,9 +205,6 @@ public:
   auto SetServiceConfig(
     const content::import::AsyncImportService::Config& config) -> void;
   auto RestartImportService() -> void;
-
-  [[nodiscard]] auto GetLayout() const -> content::import::LooseCookedLayout;
-  auto SetLayout(const content::import::LooseCookedLayout& layout) -> void;
 
   // --- Diagnostics ---
 

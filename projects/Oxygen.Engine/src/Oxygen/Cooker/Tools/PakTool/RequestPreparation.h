@@ -9,8 +9,8 @@
 #include <filesystem>
 #include <string>
 
-#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
 #include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
@@ -30,38 +30,10 @@ struct PreparedPakToolRequest {
   ArtifactPublicationPlan publication_plan {};
 };
 
-class IRequestPreparationFileSystem {
-public:
-  IRequestPreparationFileSystem() = default;
-  virtual ~IRequestPreparationFileSystem() = default;
-  OXYGEN_MAKE_NON_COPYABLE(IRequestPreparationFileSystem)
-  OXYGEN_MAKE_NON_MOVABLE(IRequestPreparationFileSystem)
-
-  [[nodiscard]] virtual auto Exists(const std::filesystem::path& path) const
-    -> bool = 0;
-  [[nodiscard]] virtual auto IsDirectory(
-    const std::filesystem::path& path) const -> bool = 0;
-  [[nodiscard]] virtual auto IsRegularFile(
-    const std::filesystem::path& path) const -> bool = 0;
-  virtual auto CreateDirectories(const std::filesystem::path& path)
-    -> std::error_code = 0;
-};
-
-class RealRequestPreparationFileSystem final
-  : public IRequestPreparationFileSystem {
-public:
-  [[nodiscard]] auto Exists(const std::filesystem::path& path) const
-    -> bool override;
-  [[nodiscard]] auto IsDirectory(const std::filesystem::path& path) const
-    -> bool override;
-  [[nodiscard]] auto IsRegularFile(const std::filesystem::path& path) const
-    -> bool override;
-  auto CreateDirectories(const std::filesystem::path& path)
-    -> std::error_code override;
-};
-
+//! Checks the request's inputs and outputs through `storage`, and plans where
+//! its artifacts are staged and published.
 [[nodiscard]] auto PreparePakToolRequest(pak::BuildMode mode,
-  const PakToolCliOptions& options, IRequestPreparationFileSystem& fs)
+  const PakToolCliOptions& options, const cooked::CookerStorageReader& storage)
   -> Result<PreparedPakToolRequest, RequestPreparationError>;
 
 } // namespace oxygen::content::pak::tool

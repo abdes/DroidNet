@@ -6,12 +6,9 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <optional>
 #include <span>
 #include <string>
@@ -20,14 +17,14 @@
 #include <unordered_set>
 #include <vector>
 
-#include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 namespace data = oxygen::data;
@@ -212,90 +209,21 @@ NOLINT_TEST(PatchResolutionPolicyTest,
 }
 
 auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
-  const data::AssetKey& key, const std::string_view descriptor_relpath,
-  const std::string_view virtual_path, const uint8_t guid_seed) -> void
+  const data::AssetKey& key, const std::string_view leaf,
+  const uint8_t identity_seed) -> void
 {
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  std::filesystem::create_directories(cooked_root);
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += descriptor_relpath;
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += virtual_path;
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-
-  for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
-    oxygen::base::CheckedAt(std::span { header.source_identity }, i)
-      = static_cast<uint8_t>(guid_seed + i);
-  }
-  oxygen::base::CheckedAt(std::span { header.source_identity }, 6)
-    = static_cast<uint8_t>(
-      (oxygen::base::CheckedAt(std::span { header.source_identity }, 6) & 0x0FU)
-      | 0x70U);
-  oxygen::base::CheckedAt(std::span { header.source_identity }, 8)
-    = static_cast<uint8_t>(
-      (oxygen::base::CheckedAt(std::span { header.source_identity }, 8) & 0x3FU)
-      | 0x80U);
-
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  AssetEntry entry {};
-  entry.asset_key = key;
-  entry.descriptor_relpath_offset = off_desc;
-  entry.virtual_path_offset = off_vpath;
-  entry.source_path_offset = off_vpath;
-  entry.asset_type = 0;
-  entry.descriptor_size = 0;
-  std::ranges::copy(oxygen::base::ComputeSha256({}), entry.descriptor_sha256);
-
-  const auto index_path = cooked_root / "container.index.bin";
-  std::ofstream out(index_path, std::ios::binary);
-  out.write(reinterpret_cast<const char*>(&header), sizeof(header));
-  out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-  out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
+  auto loose
+    = oxygen::cooker::testing::LooseCookedRoot { ".cooked", identity_seed };
+  static_cast<void>(loose.Add({ .leaf = std::string(leaf), .key = key }));
+  oxygen::cooker::testing::Materialize(loose.Files(), cooked_root);
 }
 
-class PatchResolutionRuntimeTest : public testing::Test {
+class PatchResolutionRuntimeTest : public oxygen::testing::TempDirTest {
 protected:
-  void SetUp() override
-  {
-    static auto counter = std::atomic_uint64_t { 0U };
-    const auto id = ++counter;
-    root_ = std::filesystem::temp_directory_path() / "oxygen_patch_resolution"
-      / std::to_string(id);
-    std::filesystem::create_directories(root_);
-  }
-
-  void TearDown() override { std::filesystem::remove_all(root_); }
-
   [[nodiscard]] auto RootPath() const -> const std::filesystem::path&
   {
-    return root_;
+    return TempDir();
   }
-
-private:
-  std::filesystem::path root_ {};
 };
 
 NOLINT_TEST_F(PatchResolutionRuntimeTest, LastMountedWinsForVirtualPathLookup)
@@ -306,8 +234,8 @@ NOLINT_TEST_F(PatchResolutionRuntimeTest, LastMountedWinsForVirtualPathLookup)
   const auto key0 = MakeAssetKey(kAssetSeedA);
   const auto key1 = MakeAssetKey(kAssetSeedB);
 
-  WriteSingleAssetIndex(root0, key0, "A0.bin", kVirtualPath, kBaseGuidSeed);
-  WriteSingleAssetIndex(root1, key1, "A1.bin", kVirtualPath, kAltGuidSeed);
+  WriteSingleAssetIndex(root0, key0, "Asset.bin", kBaseGuidSeed);
+  WriteSingleAssetIndex(root1, key1, "Asset.bin", kAltGuidSeed);
 
   oxygen::content::VirtualPathResolver resolver;
   resolver.AddLooseCookedRoot(root0);

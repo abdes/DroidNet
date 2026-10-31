@@ -18,10 +18,10 @@
 #include <vector>
 
 #include "AssetLoader_test.h"
-#include "Fixtures/LooseCookedTestWriter.h"
 
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
@@ -85,32 +85,15 @@ namespace {
   auto WriteSource(const std::filesystem::path& root, const SourceRecipe recipe)
     -> Descriptor
   {
-    auto descriptor = Descriptor {};
+    auto descriptor = cooker::testing::LooseCookedRoot::OnePixelTexture();
     descriptor.width = recipe.width;
-    descriptor.height = 1U;
-    descriptor.depth = 1U;
-    descriptor.array_layers = 1U;
-    descriptor.mip_levels = 1U;
-    descriptor.size_bytes = 4U;
-    auto records = std::array { Descriptor {}, descriptor };
     const auto payload = std::array<std::byte, 4> {};
-    auto writer = LooseCookedTestWriter(root);
-    writer.WriteFile(data::loose_cooked::FileKind::kTexturesTable,
-      "textures.table", std::as_bytes(std::span { records }));
-    writer.WriteFile(
-      data::loose_cooked::FileKind::kTexturesData, "textures.data", payload);
-    writer.WriteFile(data::loose_cooked::FileKind::kTextureDescriptor,
-      std::string(kMeterFile), SidecarBytes(descriptor),
-      std::string(kMeterPath));
-    const auto written = writer.Finish();
-    auto file = OpenForPatch(written.index_path);
-    auto stream = FileWriteStream(file,
-      serio::ByteOffset {
-        offsetof(data::loose_cooked::IndexHeader, source_identity) });
-    auto index = serio::Writer<FileWriteStream>(stream);
-    if (!index.Write(recipe.identity) || !stream.Flush()) {
-      throw std::runtime_error("Test source identity could not be written");
-    }
+    auto source
+      = cooker::testing::LooseCookedRoot { "Content", recipe.identity };
+    const auto row = source.AddTexture(payload, descriptor);
+    source.DescribeTexture(kMeterFile, row);
+    cooker::testing::Materialize(source.Files(), root);
+    descriptor.size_bytes = static_cast<std::uint32_t>(payload.size());
     return descriptor;
   }
 
@@ -131,8 +114,8 @@ namespace {
   NOLINT_TEST_F(AssetLoaderBasicTest, TexturePathResolvesInTheNewestMount)
   {
     // Arrange
-    const auto first = temp_dir_ / "first";
-    const auto second = temp_dir_ / "second";
+    const auto first = TempDir() / "first";
+    const auto second = TempDir() / "second";
     static_cast<void>(WriteSource(first, { .identity = 31U, .width = 1U }));
     static_cast<void>(WriteSource(second, { .identity = 32U, .width = 2U }));
 
@@ -163,8 +146,8 @@ namespace {
   NOLINT_TEST_F(AssetLoaderBasicTest, ExternalTextureBindingResolvesByKey)
   {
     // Arrange
-    const auto first = temp_dir_ / "first";
-    const auto second = temp_dir_ / "second";
+    const auto first = TempDir() / "first";
+    const auto second = TempDir() / "second";
     static_cast<void>(WriteSource(first, { .identity = 33U, .width = 1U }));
     static_cast<void>(WriteSource(second, { .identity = 34U, .width = 2U }));
     auto material = data::MaterialAsset(
@@ -202,7 +185,7 @@ namespace {
   NOLINT_TEST_F(AssetLoaderBasicTest, TexturePathRejectsInvalidDescriptors)
   {
     // Arrange
-    const auto root = temp_dir_ / "source";
+    const auto root = TempDir() / "source";
     const auto descriptor = WriteSource(root, { .identity = 33U, .width = 1U });
     asset_loader_->AddLooseCookedRoot(root);
     const auto sidecar = root / std::filesystem::path(kMeterFile);
@@ -242,7 +225,7 @@ namespace {
 NOLINT_TEST_F(AssetLoaderBasicTest,
   TextureSourceIdentityRebindsToFreshRuntimeKeyAfterRefresh)
 {
-  const auto root = temp_dir_ / "source";
+  const auto root = TempDir() / "source";
   static_cast<void>(WriteSource(root, { .identity = 1U, .width = 1U }));
   asset_loader_->AddLooseCookedRoot(root);
   const auto source = asset_loader_->EnumerateMountedSources().front();

@@ -50,7 +50,6 @@ namespace {
   NOLINT_TEST_F(ScriptingSidecarImportJobBindingTest,
     ScriptingSidecarBindsScriptToSceneNode)
   {
-    using data::loose_cooked::FileKind;
     using data::pak::scripting::ScriptingComponentRecord;
 
     const ScopedTempDir temp;
@@ -66,7 +65,8 @@ namespace {
 
     const auto sidecar_source = cooked_root / "input" / "scene.sidescript.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+        scene_asset->virtual_path, script_asset->virtual_path))));
 
     const auto sidecar_report = Submit(MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -76,11 +76,7 @@ namespace {
     ASSERT_TRUE(sidecar_report.success);
 
     const auto inspection_after_sidecar = LoadInspection(cooked_root);
-    const auto files = inspection_after_sidecar.Files();
-    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) -> auto {
-      return file.relpath.ends_with("script-bindings.table")
-        || file.relpath.ends_with("script-bindings.data");
-    }));
+    EXPECT_FALSE(StoresScriptBindingsFile(inspection_after_sidecar));
 
     const auto scene_bytes
       = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
@@ -107,7 +103,8 @@ namespace {
 
     const auto sidecar_source = cooked_root / "input" / "slot_id.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(cooked.script->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+        cooked.scene->virtual_path, cooked.script->virtual_path))));
     ASSERT_TRUE(Submit(MakeSidecarRequest({
                          .source_path = sidecar_source,
                          .cooked_root = cooked_root,
@@ -125,7 +122,6 @@ namespace {
   NOLINT_TEST_F(ScriptingSidecarImportJobBindingTest,
     InlineBindingsPayloadBindsScriptToSceneNode)
   {
-    using data::loose_cooked::FileKind;
     using data::pak::scripting::ScriptingComponentRecord;
 
     const ScopedTempDir temp;
@@ -141,15 +137,12 @@ namespace {
 
     const auto sidecar_report
       = Submit(MakeInlineSidecarRequest(cooked_root, scene_asset->virtual_path,
-        MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path))));
+        MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+          scene_asset->virtual_path, script_asset->virtual_path)))));
     ASSERT_TRUE(sidecar_report.success);
 
     const auto inspection_after_sidecar = LoadInspection(cooked_root);
-    const auto files = inspection_after_sidecar.Files();
-    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) -> auto {
-      return file.relpath.ends_with("script-bindings.table")
-        || file.relpath.ends_with("script-bindings.data");
-    }));
+    EXPECT_FALSE(StoresScriptBindingsFile(inspection_after_sidecar));
 
     const auto scene_bytes
       = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
@@ -179,7 +172,8 @@ namespace {
 
     const auto sidecar_source = cooked_root / "input" / "callback_sidecar.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+        scene_asset->virtual_path, script_asset->virtual_path))));
 
     const auto capture = SubmitAndCaptureCallbacks(Service(),
       MakeSidecarRequest({
@@ -213,7 +207,8 @@ namespace {
 
     const auto sidecar_source = cooked_root / "input" / "counter_sidecar.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+        scene_asset->virtual_path, script_asset->virtual_path))));
 
     const auto report = Submit(MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -305,7 +300,8 @@ namespace {
 
     const auto sidecar_source = cooked_root / "input" / "dispatch_cooked.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+        scene_asset->virtual_path, script_asset->virtual_path))));
 
     const auto report = Submit(MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -351,7 +347,8 @@ namespace {
     const auto sidecar_source
       = cooked_root / "input" / "dispatch_inflight.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+        inflight_scene->virtual_path, script_asset->virtual_path))));
 
     auto request = MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -396,7 +393,8 @@ namespace {
 
     const auto sidecar_source = cooked_root / "input" / "dispatch_batch.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(base_script->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(
+        SpellReference(scene_asset->virtual_path, base_script->virtual_path))));
 
     const auto extra_script_source = cooked_root / "input" / "extra_batch.luau";
     WriteText(extra_script_source, SpeedScriptSource("2"));
@@ -461,8 +459,8 @@ namespace {
     const auto sidecar_source
       = cooked_root / "input" / "dependency_ordering.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(
-        MakeSpeedBinding(CanonicalScriptVirtualPath("deferred"))));
+      MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+        scene_asset->virtual_path, CanonicalScriptVirtualPath("deferred")))));
 
     const auto first_report = Submit(MakeSidecarRequest({
       .source_path = sidecar_source,
@@ -488,7 +486,8 @@ namespace {
     ASSERT_HAS_VALUE(deferred_script)
       << "Expected deferred script to be present";
     WriteText(sidecar_source,
-      MakeSidecarPayload(MakeSpeedBinding(deferred_script->virtual_path)));
+      MakeSidecarPayload(MakeSpeedBinding(SpellReference(
+        scene_asset->virtual_path, deferred_script->virtual_path))));
 
     const auto second_report = Submit(MakeSidecarRequest({
       .source_path = sidecar_source,

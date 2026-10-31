@@ -10,10 +10,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <optional>
 #include <ratio>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -21,6 +20,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
@@ -367,7 +367,8 @@ auto ToCanonicalJsonString(const PakToolBuildReportInput& input) -> std::string
   return text;
 }
 
-auto WriteReportFile(const std::filesystem::path& output_path,
+auto WriteReportFile(cooked::CookerStorage& storage,
+  const std::filesystem::path& output_path,
   const PakToolBuildReportInput& input) -> ReportWriteResult
 {
   if (output_path.empty()) {
@@ -378,36 +379,30 @@ auto WriteReportFile(const std::filesystem::path& output_path,
     };
   }
 
-  const auto parent = output_path.parent_path();
-  if (!parent.empty()) {
-    auto ec = std::error_code {};
-    std::filesystem::create_directories(parent, ec);
-    if (ec) {
-      return ReportWriteResult {
-        .success = false,
-        .error_code = "paktool.report.create_parent_directory_failed",
-        .error_message = "Failed to create report parent directory.",
-      };
-    }
-  }
-
-  auto output = std::ofstream(output_path, std::ios::binary);
-  if (!output.is_open()) {
+  auto publication = storage.Publish(output_path);
+  if (!publication) {
     return ReportWriteResult {
       .success = false,
       .error_code = "paktool.report.write_open_failed",
-      .error_message = "Failed to open report output path for writing.",
+      .error_message = "Failed to open report output path for writing: "
+        + publication.error().message(),
     };
   }
 
   const auto payload = ToCanonicalJsonString(input);
-  output << payload;
-  output.flush();
-  if (!output.good()) {
+  auto written = (*publication)->Write(std::as_bytes(std::span(payload)));
+  if (written) {
+    written = (*publication)->Flush();
+  }
+  if (written) {
+    written = (*publication)->Commit();
+  }
+  if (!written) {
     return ReportWriteResult {
       .success = false,
       .error_code = "paktool.report.write_failed",
-      .error_message = "Failed to write report payload.",
+      .error_message
+      = "Failed to write report payload: " + written.error().message(),
     };
   }
 

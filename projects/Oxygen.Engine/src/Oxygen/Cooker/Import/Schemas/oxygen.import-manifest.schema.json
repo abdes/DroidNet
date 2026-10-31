@@ -146,9 +146,6 @@
         "$ref": "#/definitions/mount_declaration"
       }
     },
-    "layout": {
-      "$ref": "#/definitions/layout_settings"
-    },
     "output": {
       "description": "The cooked root, relative to this manifest's folder.",
       "type": "string"
@@ -174,7 +171,7 @@
           "minLength": 1
         },
         "kind": {
-          "description": "Source, a folder of source files, or Cooked, a library: a loose cooked root or a .pak file. The mount table checks it (mount.kind_unknown).",
+          "description": "Source, a folder of source files, or Cooked, a cooked source: a loose cooked root or a .pak file. The mount table checks it (mount.kind_unknown).",
           "type": "string",
           "default": "Source"
         },
@@ -229,7 +226,6 @@
                 "type",
                 "virtual_path",
                 "output",
-                "layout",
                 "cooked_context_roots",
                 "source_key"
               ]
@@ -254,7 +250,6 @@
                 "derived_from",
                 "sources",
                 "output",
-                "layout",
                 "name",
                 "virtual_path",
                 "verbose",
@@ -303,7 +298,6 @@
                 "source",
                 "derived_from",
                 "output",
-                "layout",
                 "name",
                 "content_hashing",
                 "source_key"
@@ -328,7 +322,6 @@
                 "source",
                 "derived_from",
                 "output",
-                "layout",
                 "name",
                 "virtual_path",
                 "content_hashing",
@@ -355,7 +348,6 @@
                 "source",
                 "derived_from",
                 "output",
-                "layout",
                 "name",
                 "virtual_path",
                 "content_hashing",
@@ -381,7 +373,6 @@
                 "source",
                 "derived_from",
                 "output",
-                "layout",
                 "name",
                 "virtual_path",
                 "content_hashing",
@@ -407,7 +398,6 @@
                 "source",
                 "derived_from",
                 "output",
-                "layout",
                 "name",
                 "virtual_path",
                 "content_hashing",
@@ -434,7 +424,6 @@
                 "source",
                 "derived_from",
                 "output",
-                "layout",
                 "name",
                 "virtual_path",
                 "content_hashing",
@@ -528,7 +517,6 @@
                 "bindings",
                 "target_scene_virtual_path",
                 "output",
-                "layout",
                 "name",
                 "verbose",
                 "content_hashing",
@@ -556,7 +544,6 @@
                 "virtual_path",
                 "depends_on",
                 "output",
-                "layout",
                 "cooked_context_roots",
                 "source_key"
               ]
@@ -604,20 +591,8 @@
         "input": {
           "$ref": "#/definitions/input_settings"
         },
-        "layout": {
-          "$ref": "#/definitions/layout_settings"
-        },
         "source_key": {
           "$ref": "#/definitions/source_key"
-        }
-      },
-      "additionalProperties": false
-    },
-    "layout_settings": {
-      "type": "object",
-      "properties": {
-        "resources_dir": {
-          "type": "string"
         }
       },
       "additionalProperties": false
@@ -1119,9 +1094,6 @@
         },
         "name": {
           "type": "string"
-        },
-        "layout": {
-          "$ref": "#/definitions/layout_settings"
         },
         "verbose": {
           "type": "boolean"

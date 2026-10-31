@@ -5,17 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <atomic>
-#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <exception>
 #include <expected>
 #include <filesystem>
-#include <fstream>
-#include <ios>
+#include <functional>
+#include <iterator>
 #include <limits>
 #include <optional>
 #include <span>
@@ -24,23 +22,23 @@
 #include <string_view>
 #include <system_error>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "RequestSnapshot.h"
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
-#include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/ScriptSealing.h>
+#include <Oxygen/Cooker/Tools/PakTool/StagedSourceStorage.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -54,6 +52,8 @@
 namespace oxygen::content::pak::tool {
 
 namespace {
+
+  namespace loose_layout = import::internal::loose_layout;
 
   constexpr auto kSealedSourcesDirName = "oxygen_paktool_sealed_sources";
 
@@ -90,6 +90,41 @@ namespace {
     uint32_t sealed_asset_count = 0;
   };
 
+  //! Where sealing reads and publishes, and every file it published, so that
+  //! cleanup removes exactly those.
+  struct SealingStorage {
+    observer_ptr<StagedSourceStorage> storage;
+    observer_ptr<std::vector<std::filesystem::path>> published;
+
+    [[nodiscard]] auto Read(const std::filesystem::path& path) const
+      -> std::optional<std::vector<std::byte>>
+    {
+      auto bytes = cooked::ReadWholeFile(*storage, path);
+      if (!bytes) {
+        return std::nullopt;
+      }
+      return std::move(bytes).value();
+    }
+
+    [[nodiscard]] auto Write(const std::filesystem::path& path,
+      const std::span<const std::byte> bytes) const -> bool
+    {
+      if (!cooked::PublishWholeFile(*storage, path, bytes)) {
+        return false;
+      }
+      if (std::ranges::find(*published, path) == published->end()) {
+        published->push_back(path);
+      }
+      return true;
+    }
+  };
+
+  //! A sealed script descriptor: its new references and what was written.
+  struct SealedDescriptor {
+    data::AssetReferences references;
+    import::LooseCookedFileDigest written;
+  };
+
   [[nodiscard]] auto MakeError(std::string code, std::string message,
     const std::filesystem::path& source_path = {},
     const std::filesystem::path& descriptor_path = {},
@@ -108,94 +143,11 @@ namespace {
       });
   }
 
-  [[nodiscard]] auto ReadFileBytes(const std::filesystem::path& path)
-    -> std::optional<std::vector<std::byte>>
-  {
-    auto in = std::ifstream(base::ToNativePath(path), std::ios::binary);
-    if (!in.is_open()) {
-      return std::nullopt;
-    }
-
-    in.seekg(0, std::ios::end);
-    const auto size = in.tellg();
-    if (size < 0) {
-      return std::nullopt;
-    }
-    in.seekg(0, std::ios::beg);
-
-    auto chars = std::vector<char>(static_cast<size_t>(size));
-    auto bytes = std::vector<std::byte>(chars.size());
-    if (!bytes.empty()) {
-      in.read(chars.data(), static_cast<std::streamsize>(chars.size()));
-      std::ranges::transform(chars, bytes.begin(),
-        [](const char c) -> std::byte { return static_cast<std::byte>(c); });
-      if (!in) {
-        return std::nullopt;
-      }
-    }
-    return bytes;
-  }
-
-  auto WriteFileBytes(
-    const std::filesystem::path& path, std::span<const std::byte> bytes) -> bool
-  {
-    std::error_code ec {};
-    std::filesystem::create_directories(
-      base::ToNativePath(path.parent_path()), ec);
-    if (ec) {
-      return false;
-    }
-
-    auto out = std::ofstream(base::ToNativePath(path),
-      static_cast<std::ios::openmode>(static_cast<unsigned>(std::ios::binary)
-        | static_cast<unsigned>(std::ios::trunc)));
-    if (!out.is_open()) {
-      return false;
-    }
-    if (!bytes.empty()) {
-      auto chars = std::vector<char>(bytes.size());
-      std::ranges::transform(bytes, chars.begin(),
-        [](const std::byte b) -> char { return static_cast<char>(b); });
-      out.write(chars.data(), static_cast<std::streamsize>(chars.size()));
-    }
-    return static_cast<bool>(out);
-  }
-
   [[nodiscard]] auto HasParentTraversal(const std::filesystem::path& path)
     -> bool
   {
     return std::ranges::any_of(
       path, [](const auto& part) -> bool { return part == ".."; });
-  }
-
-  [[nodiscard]] auto ComputeDescriptorSha256(const std::filesystem::path& path)
-    -> std::optional<base::Sha256Digest>
-  {
-    const auto bytes = ReadFileBytes(path);
-    if (!bytes.has_value()) {
-      return std::nullopt;
-    }
-    return base::ComputeSha256(
-      std::span<const std::byte>(bytes->data(), bytes->size()));
-  }
-
-  [[nodiscard]] auto ReadLooseCookedIndexHeader(
-    const std::filesystem::path& index_path)
-    -> std::optional<data::loose_cooked::IndexHeader>
-  {
-    auto in = std::ifstream(base::ToNativePath(index_path), std::ios::binary);
-    if (!in.is_open()) {
-      return std::nullopt;
-    }
-
-    auto header = data::loose_cooked::IndexHeader {};
-    auto header_chars = std::array<char, sizeof(header)> {};
-    in.read(header_chars.data(), header_chars.size());
-    if (!in) {
-      return std::nullopt;
-    }
-    std::memcpy(&header, header_chars.data(), sizeof(header));
-    return header;
   }
 
   [[nodiscard]] auto ComputeContentHash64(
@@ -231,6 +183,7 @@ namespace {
   //! The file an external source's mount path, `/<Mount>/<path in mount>`,
   //! names in its source mount's folder.
   [[nodiscard]] auto ResolveExternalSourcePath(
+    const cooked::CookerStorageReader& storage,
     const SourceMountFolders& source_mounts,
     const std::string_view external_source_path)
     -> std::expected<std::filesystem::path, UnresolvedSource>
@@ -263,7 +216,7 @@ namespace {
       });
     }
     auto candidate = (mount->second / in_mount).lexically_normal();
-    if (!std::filesystem::is_regular_file(base::ToNativePath(candidate))) {
+    if (storage.KindOf(candidate) != cooked::PathKind::kFile) {
       return std::unexpected(UnresolvedSource {
         .code = "paktool.script_seal.external_source_unresolvable",
         .message = "External script source was not found in its source mount.",
@@ -322,42 +275,16 @@ namespace {
         + std::to_string(id));
   }
 
-  auto CopyCookedRoot(const std::filesystem::path& from,
-    const std::filesystem::path& to) -> std::error_code
+  [[nodiscard]] auto LoadScriptTables(const SealingStorage& io,
+    const std::filesystem::path& cooked_root) -> std::optional<ScriptTables>
   {
-    const auto native_from = base::ToNativePath(from);
-    const auto native_to = base::ToNativePath(to);
-    auto ec = std::error_code {};
-    std::filesystem::remove_all(native_to, ec);
-    if (ec) {
-      return ec;
-    }
-    std::filesystem::create_directories(native_to.parent_path(), ec);
-    if (ec) {
-      return ec;
-    }
-    std::filesystem::copy(
-      native_from, native_to, std::filesystem::copy_options::recursive, ec);
-    if (ec) {
-      auto cleanup_error = std::error_code {};
-      std::filesystem::remove_all(native_to, cleanup_error);
-    }
-    return ec;
-  }
-
-  [[nodiscard]] auto LoadScriptTables(const std::filesystem::path& cooked_root)
-    -> std::optional<ScriptTables>
-  {
-    const auto layout = import::LooseCookedLayout {};
-    const auto table_path
-      = cooked_root / std::filesystem::path(layout.ScriptsTableRelPath());
-    const auto data_path
-      = cooked_root / std::filesystem::path(layout.ScriptsDataRelPath());
+    const auto table_path = cooked_root / loose_layout::kScriptsTable;
+    const auto data_path = cooked_root / loose_layout::kScriptsData;
 
     const auto table_exists
-      = std::filesystem::exists(base::ToNativePath(table_path));
+      = io.storage->KindOf(table_path) == cooked::PathKind::kFile;
     const auto data_exists
-      = std::filesystem::exists(base::ToNativePath(data_path));
+      = io.storage->KindOf(data_path) == cooked::PathKind::kFile;
     if (table_exists != data_exists) {
       return std::nullopt;
     }
@@ -370,8 +297,8 @@ namespace {
       return tables;
     }
 
-    const auto table_bytes = ReadFileBytes(table_path);
-    const auto data_bytes = ReadFileBytes(data_path);
+    const auto table_bytes = io.Read(table_path);
+    const auto data_bytes = io.Read(data_path);
     if (!table_bytes.has_value() || !data_bytes.has_value()) {
       return std::nullopt;
     }
@@ -391,34 +318,36 @@ namespace {
     return tables;
   }
 
-  auto PersistScriptTables(const std::filesystem::path& cooked_root,
-    const ScriptTables& tables) -> bool
+  auto PersistScriptTables(const SealingStorage& io,
+    const std::filesystem::path& cooked_root, const ScriptTables& tables)
+    -> bool
   {
-    const auto layout = import::LooseCookedLayout {};
-    const auto table_path
-      = cooked_root / std::filesystem::path(layout.ScriptsTableRelPath());
-    const auto data_path
-      = cooked_root / std::filesystem::path(layout.ScriptsDataRelPath());
-
-    return WriteFileBytes(table_path,
-             std::as_bytes(std::span<const ScriptResourceDesc>(
-               tables.entries.data(), tables.entries.size())))
-      && WriteFileBytes(data_path,
-        std::span<const std::byte>(
-          tables.data_blob.data(), tables.data_blob.size()));
+    return io.Write(cooked_root / loose_layout::kScriptsTable,
+             std::as_bytes(std::span(tables.entries)))
+      && io.Write(cooked_root / loose_layout::kScriptsData,
+        std::span<const std::byte>(tables.data_blob));
   }
 
+  //! The relative path of the descriptor of `key` in a loose root, as its
+  //! index records it; empty when the index has none.
+  [[nodiscard]] auto DescriptorRelPath(
+    const lc::LooseCookedIndex& index, const data::AssetKey& key) -> std::string
+  {
+    return std::string(index.FindDescriptorRelPath(key).value_or(""));
+  }
+
+  //! Parses the script descriptor `descriptor_bytes` of `asset_entry`, stored
+  //! at `descriptor_path` below its root.
   [[nodiscard]] auto ReadScriptAssetContext(
-    const std::filesystem::path& cooked_root, const lc::AssetEntry& asset_entry)
+    const cooked::CookedAsset& asset_entry, std::string descriptor_relpath,
+    std::filesystem::path descriptor_path,
+    const std::optional<std::vector<std::byte>>& descriptor_bytes)
     -> std::optional<ScriptAssetPatchContext>
   {
-    if (static_cast<AssetType>(asset_entry.asset_type) != AssetType::kScript) {
+    if (asset_entry.type != AssetType::kScript) {
       return std::nullopt;
     }
 
-    const auto descriptor_path
-      = cooked_root / std::filesystem::path(asset_entry.descriptor_relpath);
-    const auto descriptor_bytes = ReadFileBytes(descriptor_path);
     if (!descriptor_bytes.has_value()
       || descriptor_bytes->size() < sizeof(ScriptAssetDesc)) {
       return std::nullopt;
@@ -443,12 +372,28 @@ namespace {
     return ScriptAssetPatchContext {
       .key = asset_entry.key,
       .virtual_path = asset_entry.virtual_path,
-      .descriptor_relpath = asset_entry.descriptor_relpath,
-      .descriptor_path = descriptor_path,
+      .descriptor_relpath = std::move(descriptor_relpath),
+      .descriptor_path = std::move(descriptor_path),
       .descriptor = descriptor,
       .descriptor_bytes = *descriptor_bytes,
       .strings = std::move(strings),
     };
+  }
+
+  //! The script descriptor of `asset_entry` as the loose root `root` stores it.
+  [[nodiscard]] auto ReadStagedScriptAssetContext(const SealingStorage& io,
+    const std::filesystem::path& root, const lc::LooseCookedIndex& index,
+    const cooked::CookedAsset& asset_entry)
+    -> std::optional<ScriptAssetPatchContext>
+  {
+    auto relpath = DescriptorRelPath(index, asset_entry.key);
+    if (relpath.empty()) {
+      return std::nullopt;
+    }
+    auto path = root / std::filesystem::path(relpath);
+    const auto bytes = io.Read(path);
+    return ReadScriptAssetContext(
+      asset_entry, std::move(relpath), std::move(path), bytes);
   }
 
   [[nodiscard]] auto AppendEmbeddedSourceResource(ScriptTables& tables,
@@ -561,22 +506,24 @@ namespace {
     return sealed;
   }
 
-  [[nodiscard]] auto RewriteStagedScriptDescriptor(
+  [[nodiscard]] auto RewriteStagedScriptDescriptor(const SealingStorage& io,
     const std::filesystem::path& original_root,
-    const std::filesystem::path& staged_root, const lc::AssetEntry& asset_entry,
-    ScriptTables& tables, const SourceMountFolders& source_mounts)
-    -> Result<std::optional<data::AssetReferences>, ScriptSealingError>
+    const std::filesystem::path& staged_root, const lc::LooseCookedIndex& index,
+    const cooked::CookedAsset& asset_entry, ScriptTables& tables,
+    const SourceMountFolders& source_mounts)
+    -> Result<std::optional<SealedDescriptor>, ScriptSealingError>
   {
-    const auto context = ReadScriptAssetContext(staged_root, asset_entry);
+    const auto context
+      = ReadStagedScriptAssetContext(io, staged_root, index, asset_entry);
     if (!context.has_value()) {
-      return Result<std::optional<data::AssetReferences>,
-        ScriptSealingError>::Err(ScriptSealingError {
-        .error_code = "paktool.script_seal.script_descriptor_invalid",
-        .error_message = "Failed to parse staged script descriptor.",
-        .source_path = original_root,
-        .descriptor_path
-        = staged_root / std::filesystem::path(asset_entry.descriptor_relpath),
-      });
+      return Result<std::optional<SealedDescriptor>, ScriptSealingError>::Err(
+        ScriptSealingError {
+          .error_code = "paktool.script_seal.script_descriptor_invalid",
+          .error_message = "Failed to parse staged script descriptor.",
+          .source_path = original_root,
+          .descriptor_path = staged_root
+            / std::filesystem::path(DescriptorRelPath(index, asset_entry.key)),
+        });
     }
 
     auto descriptor = context->descriptor;
@@ -586,8 +533,8 @@ namespace {
           & static_cast<uint32_t>(ScriptAssetFlags::kAllowExternalSource))
       != 0U;
     if (!allows_external) {
-      return Result<std::optional<data::AssetReferences>,
-        ScriptSealingError>::Ok(std::nullopt);
+      return Result<std::optional<SealedDescriptor>, ScriptSealingError>::Ok(
+        std::nullopt);
     }
 
     // Compiled scripts ship their bytecode; only source-only scripts need
@@ -597,56 +544,56 @@ namespace {
       const auto external_source
         = TryGetExternalSourcePath(descriptor, context->strings);
       if (!external_source.has_value()) {
-        return Result<std::optional<data::AssetReferences>,
-          ScriptSealingError>::Err(ScriptSealingError {
-          .error_code = "paktool.script_seal.external_source_missing",
-          .error_message
-          = "Script descriptor requires external source sealing but does not "
-            "carry a valid external source path.",
-          .source_path = original_root,
-          .descriptor_path = context->descriptor_path,
-        });
+        return Result<std::optional<SealedDescriptor>, ScriptSealingError>::Err(
+          ScriptSealingError {
+            .error_code = "paktool.script_seal.external_source_missing",
+            .error_message
+            = "Script descriptor requires external source sealing but does not "
+              "carry a valid external source path.",
+            .source_path = original_root,
+            .descriptor_path = context->descriptor_path,
+          });
       }
 
-      const auto resolved_path
-        = ResolveExternalSourcePath(source_mounts, *external_source);
+      const auto resolved_path = ResolveExternalSourcePath(
+        *io.storage, source_mounts, *external_source);
       if (!resolved_path.has_value()) {
-        return Result<std::optional<data::AssetReferences>,
-          ScriptSealingError>::Err(ScriptSealingError {
-          .error_code = std::string(resolved_path.error().code),
-          .error_message = std::string(resolved_path.error().message),
-          .source_path = original_root,
-          .descriptor_path = context->descriptor_path,
-          .external_source_path = std::string(*external_source),
-        });
+        return Result<std::optional<SealedDescriptor>, ScriptSealingError>::Err(
+          ScriptSealingError {
+            .error_code = std::string(resolved_path.error().code),
+            .error_message = std::string(resolved_path.error().message),
+            .source_path = original_root,
+            .descriptor_path = context->descriptor_path,
+            .external_source_path = std::string(*external_source),
+          });
       }
 
-      const auto source_bytes = ReadFileBytes(*resolved_path);
+      const auto source_bytes = io.Read(*resolved_path);
       if (!source_bytes.has_value()) {
-        return Result<std::optional<data::AssetReferences>,
-          ScriptSealingError>::Err(ScriptSealingError {
-          .error_code = "paktool.script_seal.external_source_read_failed",
-          .error_message = "Failed to read external script source bytes.",
-          .source_path = original_root,
-          .descriptor_path = context->descriptor_path,
-          .resolved_path = *resolved_path,
-          .external_source_path = std::string(*external_source),
-        });
+        return Result<std::optional<SealedDescriptor>, ScriptSealingError>::Err(
+          ScriptSealingError {
+            .error_code = "paktool.script_seal.external_source_read_failed",
+            .error_message = "Failed to read external script source bytes.",
+            .source_path = original_root,
+            .descriptor_path = context->descriptor_path,
+            .resolved_path = *resolved_path,
+            .external_source_path = std::string(*external_source),
+          });
       }
 
       const auto source_index = AppendEmbeddedSourceResource(tables,
         std::span<const std::byte>(source_bytes->data(), source_bytes->size()));
       if (!source_index.has_value()) {
-        return Result<std::optional<data::AssetReferences>,
-          ScriptSealingError>::Err(ScriptSealingError {
-          .error_code = "paktool.script_seal.script_table_append_failed",
-          .error_message
-          = "Failed to append sealed script source to staged scripts.table.",
-          .source_path = original_root,
-          .descriptor_path = context->descriptor_path,
-          .resolved_path = *resolved_path,
-          .external_source_path = std::string(*external_source),
-        });
+        return Result<std::optional<SealedDescriptor>, ScriptSealingError>::Err(
+          ScriptSealingError {
+            .error_code = "paktool.script_seal.script_table_append_failed",
+            .error_message
+            = "Failed to append sealed script source to staged scripts.table.",
+            .source_path = original_root,
+            .descriptor_path = context->descriptor_path,
+            .resolved_path = *resolved_path,
+            .external_source_path = std::string(*external_source),
+          });
       }
       descriptor.source_resource_index
         = references.AddResource(data::ResourceKind::kScript, *source_index);
@@ -655,141 +602,72 @@ namespace {
     ClearExternalSourceContract(descriptor);
     const auto descriptor_bytes = BuildSealedDescriptor(*context, descriptor);
     if (!descriptor_bytes) {
-      return Result<std::optional<data::AssetReferences>,
-        ScriptSealingError>::Err(ScriptSealingError {
-        .error_code = "paktool.script_seal.script_descriptor_invalid",
-        .error_message = "Failed to parse staged script descriptor.",
-        .source_path = original_root,
-        .descriptor_path = context->descriptor_path,
-      });
+      return Result<std::optional<SealedDescriptor>, ScriptSealingError>::Err(
+        ScriptSealingError {
+          .error_code = "paktool.script_seal.script_descriptor_invalid",
+          .error_message = "Failed to parse staged script descriptor.",
+          .source_path = original_root,
+          .descriptor_path = context->descriptor_path,
+        });
     }
-    if (!WriteFileBytes(context->descriptor_path, *descriptor_bytes)) {
-      return Result<std::optional<data::AssetReferences>,
-        ScriptSealingError>::Err(ScriptSealingError {
-        .error_code = "paktool.script_seal.script_descriptor_write_failed",
-        .error_message = "Failed to persist sealed script descriptor bytes.",
-        .source_path = original_root,
-        .descriptor_path = context->descriptor_path,
-      });
+    if (!io.Write(context->descriptor_path, *descriptor_bytes)) {
+      return Result<std::optional<SealedDescriptor>, ScriptSealingError>::Err(
+        ScriptSealingError {
+          .error_code = "paktool.script_seal.script_descriptor_write_failed",
+          .error_message = "Failed to persist sealed script descriptor bytes.",
+          .source_path = original_root,
+          .descriptor_path = context->descriptor_path,
+        });
     }
 
-    return Result<std::optional<data::AssetReferences>, ScriptSealingError>::Ok(
-      std::optional { std::move(references).Build() });
+    return Result<std::optional<SealedDescriptor>, ScriptSealingError>::Ok(
+      SealedDescriptor {
+        .references = std::move(references).Build(),
+        .written = {
+          .size = descriptor_bytes->size(),
+          .sha256 = base::ComputeSha256(*descriptor_bytes),
+        },
+      });
   }
 
-  auto RefreshStagedLooseCookedIndex(const std::filesystem::path& staged_root,
-    const lc::Inspection& inspection,
-    const std::unordered_map<data::AssetKey, data::AssetReferences>&
-      sealed_references) -> Result<void, ScriptSealingError>
+  //! Publishes the staged root's index: the original index, which the staged
+  //! root shows, with the sealed descriptors and the script tables replaced.
+  //! Nothing sealing left as it was is registered, so nothing is read again.
+  auto RefreshStagedLooseCookedIndex(const SealingStorage& io,
+    const std::filesystem::path& staged_root,
+    const cooked::CookedContent& content, const lc::LooseCookedIndex& index,
+    const std::unordered_map<data::AssetKey, SealedDescriptor>& sealed,
+    const ScriptTables& tables) -> Result<void, ScriptSealingError>
   {
-    const auto index_path = staged_root / "container.index.bin";
-    const auto index_header = ReadLooseCookedIndexHeader(index_path);
-    if (!index_header.has_value()) {
-      return Result<void, ScriptSealingError>::Err(ScriptSealingError {
-        .error_code = "paktool.script_seal.index_header_read_failed",
-        .error_message
-        = "Failed to read the staged loose-cooked index header before "
-          "refreshing metadata.",
-        .source_path = staged_root,
-        .resolved_path = index_path,
-      });
-    }
-
-    auto source_identity_bytes
-      = std::array<std::uint8_t, data::SourceKey::kSizeBytes> {};
-    std::copy_n(index_header->source_identity.begin(),
-      source_identity_bytes.size(), source_identity_bytes.begin());
-    const auto source_key = data::SourceKey::FromBytes(source_identity_bytes);
-    if (!source_key.has_value()) {
-      return Result<void, ScriptSealingError>::Err(ScriptSealingError {
-        .error_code = "paktool.script_seal.index_source_key_invalid",
-        .error_message
-        = "The staged loose-cooked index carries an invalid UUIDv7 source "
-          "identity.",
-        .source_path = staged_root,
-        .resolved_path = index_path,
-      });
-    }
-
-    auto remove_ec = std::error_code {};
-    std::filesystem::remove(base::ToNativePath(index_path), remove_ec);
-    if (remove_ec) {
-      return Result<void, ScriptSealingError>::Err(ScriptSealingError {
-        .error_code = "paktool.script_seal.index_remove_failed",
-        .error_message = remove_ec.message(),
-        .source_path = staged_root,
-        .resolved_path = index_path,
-      });
-    }
-
-    auto writer = import::LooseCookedWriter(staged_root);
-    writer.SetSourceKey(source_key.value());
-    writer.SetContentVersion(index_header->content_version);
-    auto seen_file_kinds = std::unordered_set<data::loose_cooked::FileKind> {};
-
-    for (const auto& asset : inspection.Assets()) {
-      const auto digest = ComputeDescriptorSha256(
-        staged_root / std::filesystem::path(asset.descriptor_relpath));
-      if (!digest.has_value()) {
-        return Result<void, ScriptSealingError>::Err(ScriptSealingError {
-          .error_code = "paktool.script_seal.index_descriptor_hash_failed",
-          .error_message
-          = "Failed to compute descriptor digest while refreshing the staged "
-            "loose-cooked index.",
-          .source_path = staged_root,
-          .descriptor_path
-          = staged_root / std::filesystem::path(asset.descriptor_relpath),
-        });
-      }
-
-      const auto sealed = sealed_references.find(asset.key);
-      const auto& references
-        = sealed == sealed_references.end() ? asset.references : sealed->second;
-      writer.RegisterExternalAssetDescriptor(asset.key,
-        static_cast<AssetType>(asset.asset_type), asset.virtual_path,
-        asset.descriptor_relpath, 0, references,
-        import::LooseCookedProducer {
-          .source = asset.source_path,
-          .completes = {},
-        },
-        *digest);
-    }
-
-    for (const auto& file : inspection.Files()) {
-      const auto file_path = staged_root / std::filesystem::path(file.relpath);
-      if (!std::filesystem::exists(base::ToNativePath(file_path))) {
-        continue;
-      }
-      if (file.kind == data::loose_cooked::FileKind::kTextureDescriptor) {
-        writer.RegisterExternalTextureDescriptor(file.relpath,
-          file.virtual_path,
+    try {
+      auto writer = import::LooseCookedWriter(staged_root, *io.storage);
+      for (const auto& asset : content.Assets()) {
+        const auto sealed_asset = sealed.find(asset.key);
+        if (sealed_asset == sealed.end()) {
+          continue;
+        }
+        writer.RegisterProducedAssetDescriptor(asset.key, asset.type,
+          asset.virtual_path, DescriptorRelPath(index, asset.key),
+          sealed_asset->second.written, sealed_asset->second.references,
           import::LooseCookedProducer {
-            .source = file.source_path,
+            .source = asset.source_path,
             .completes = {},
           });
-      } else {
-        writer.RegisterExternalFile(file.kind, file.relpath);
       }
-      seen_file_kinds.insert(file.kind);
-    }
-
-    const auto layout = import::LooseCookedLayout {};
-    const auto scripts_table_relpath = layout.ScriptsTableRelPath();
-    const auto scripts_data_relpath = layout.ScriptsDataRelPath();
-    if (!seen_file_kinds.contains(data::loose_cooked::FileKind::kScriptsTable)
-      && std::filesystem::exists(base::ToNativePath(
-        staged_root / std::filesystem::path(scripts_table_relpath)))) {
-      writer.RegisterExternalFile(
-        data::loose_cooked::FileKind::kScriptsTable, scripts_table_relpath);
-    }
-    if (!seen_file_kinds.contains(data::loose_cooked::FileKind::kScriptsData)
-      && std::filesystem::exists(base::ToNativePath(
-        staged_root / std::filesystem::path(scripts_data_relpath)))) {
-      writer.RegisterExternalFile(
-        data::loose_cooked::FileKind::kScriptsData, scripts_data_relpath);
-    }
-
-    try {
+      const auto table_bytes = std::as_bytes(std::span(tables.entries));
+      const auto data_bytes = std::span<const std::byte>(tables.data_blob);
+      writer.RegisterExternalFile(data::loose_cooked::FileKind::kScriptsTable,
+        loose_layout::kScriptsTable,
+        import::LooseCookedFileDigest {
+          .size = table_bytes.size(),
+          .sha256 = base::ComputeSha256(table_bytes),
+        });
+      writer.RegisterExternalFile(data::loose_cooked::FileKind::kScriptsData,
+        loose_layout::kScriptsData,
+        import::LooseCookedFileDigest {
+          .size = data_bytes.size(),
+          .sha256 = base::ComputeSha256(data_bytes),
+        });
       static_cast<void>(writer.Finish());
     } catch (const std::exception& ex) {
       return Result<void, ScriptSealingError>::Err(ScriptSealingError {
@@ -798,11 +676,12 @@ namespace {
         .source_path = staged_root,
       });
     }
-
+    io.published->push_back(staged_root / loose_layout::kIndexFileName);
     return Result<void, ScriptSealingError>::Ok();
   }
 
-  [[nodiscard]] auto SealLooseCookedSource(const data::CookedSource& source,
+  [[nodiscard]] auto SealLooseCookedSource(const SealingStorage& io,
+    const data::CookedSource& source,
     const std::filesystem::path& staging_parent, const size_t source_index,
     const SourceMountFolders& source_mounts)
     -> Result<SealedLooseSourceResult, ScriptSealingError>
@@ -819,9 +698,17 @@ namespace {
         });
     }
 
-    auto inspection = lc::Inspection {};
+    auto content = std::optional<cooked::CookedContent> {};
+    auto index = std::optional<lc::LooseCookedIndex> {};
     try {
-      inspection.LoadFromRoot(*normalized_root);
+      content.emplace(
+        cooked::CookedContent::Open(*io.storage, *normalized_root));
+      const auto index_bytes = cooked::ReadWholeFile(
+        *io.storage, *normalized_root / loose_layout::kIndexFileName);
+      if (!index_bytes) {
+        throw std::system_error(index_bytes.error(), "read the source's index");
+      }
+      index.emplace(lc::LooseCookedIndex::LoadFromBytes(*index_bytes));
     } catch (const std::exception& ex) {
       return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
         ScriptSealingError {
@@ -832,19 +719,27 @@ namespace {
     }
 
     auto needs_sealing = false;
-    for (const auto& asset : inspection.Assets()) {
-      if (static_cast<AssetType>(asset.asset_type) != AssetType::kScript) {
+    for (const auto& asset : content->Assets()) {
+      if (asset.type != AssetType::kScript) {
         continue;
       }
-      const auto context = ReadScriptAssetContext(*normalized_root, asset);
+      auto relpath = DescriptorRelPath(*index, asset.key);
+      auto descriptor_path = *normalized_root / std::filesystem::path(relpath);
+      auto bytes = std::optional<std::vector<std::byte>> {};
+      try {
+        bytes = content->Descriptor(asset.key);
+      } catch (const std::exception&) {
+        bytes.reset();
+      }
+      const auto context = ReadScriptAssetContext(
+        asset, std::move(relpath), descriptor_path, bytes);
       if (!context.has_value()) {
         return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
           ScriptSealingError {
             .error_code = "paktool.script_seal.script_descriptor_invalid",
             .error_message = "Failed to parse loose-cooked script descriptor.",
             .source_path = source.path,
-            .descriptor_path = *normalized_root
-              / std::filesystem::path(asset.descriptor_relpath),
+            .descriptor_path = std::move(descriptor_path),
           });
       }
 
@@ -868,22 +763,17 @@ namespace {
       .staging_parent = staging_parent,
       .source_index = source_index,
     });
-    if (const auto ec = CopyCookedRoot(*normalized_root, staged_root); ec) {
-      return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
-        ScriptSealingError {
-          .error_code = "paktool.script_seal.staging_copy_failed",
-          .error_message = ec.message(),
-          .source_path = source.path,
-          .resolved_path = staged_root,
-        });
-    }
-
-    const auto cleanup_staged_root = [&staged_root] -> void {
-      CleanupStagedLooseRoots(
-        std::span<const std::filesystem::path>(&staged_root, size_t { 1 }));
+    // The staged root holds only what sealing changes; it shows the rest of
+    // the original root.
+    io.storage->Stage(staged_root, *normalized_root);
+    const auto published_before = io.published->size();
+    const auto cleanup_staged_root = [&io, published_before] -> void {
+      const auto staged = std::span(*io.published).subspan(published_before);
+      CleanupStagedFiles(*io.storage, staged);
+      io.published->resize(published_before);
     };
 
-    auto tables = LoadScriptTables(staged_root);
+    auto tables = LoadScriptTables(io, staged_root);
     if (!tables.has_value()) {
       cleanup_staged_root();
       return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
@@ -898,21 +788,20 @@ namespace {
     }
 
     auto sealed_count = uint32_t { 0 };
-    std::unordered_map<data::AssetKey, data::AssetReferences> sealed_references;
-    for (const auto& asset : inspection.Assets()) {
-      if (static_cast<AssetType>(asset.asset_type) != AssetType::kScript) {
+    std::unordered_map<data::AssetKey, SealedDescriptor> sealed_descriptors;
+    for (const auto& asset : content->Assets()) {
+      if (asset.type != AssetType::kScript) {
         continue;
       }
-      auto sealed = RewriteStagedScriptDescriptor(
-        *normalized_root, staged_root, asset, *tables, source_mounts);
+      auto sealed = RewriteStagedScriptDescriptor(io, *normalized_root,
+        staged_root, *index, asset, *tables, source_mounts);
       if (!sealed.has_value()) {
         cleanup_staged_root();
         return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
           sealed.error());
       }
-      auto& references = *sealed;
-      if (references) {
-        sealed_references.emplace(asset.key, std::move(*references));
+      if (auto& descriptor = *sealed) {
+        sealed_descriptors.emplace(asset.key, std::move(*descriptor));
         ++sealed_count;
       }
     }
@@ -923,7 +812,7 @@ namespace {
         SealedLooseSourceResult {});
     }
 
-    if (!PersistScriptTables(staged_root, *tables)) {
+    if (!PersistScriptTables(io, staged_root, *tables)) {
       cleanup_staged_root();
       return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
         ScriptSealingError {
@@ -936,7 +825,7 @@ namespace {
     }
 
     if (const auto refreshed = RefreshStagedLooseCookedIndex(
-          staged_root, inspection, sealed_references);
+          io, staged_root, *content, *index, sealed_descriptors, *tables);
       !refreshed) {
       cleanup_staged_root();
       return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
@@ -958,12 +847,17 @@ namespace {
 auto SealLooseCookedSourcesForPakBuild(
   const pak::PakBuildRequest& build_request,
   const std::filesystem::path& staging_parent,
-  const SourceMountFolders& source_mounts)
+  const SourceMountFolders& source_mounts, StagedSourceStorage& storage)
   -> Result<ScriptSealingResult, ScriptSealingError>
 {
   auto sealed_request = build_request;
   auto staged_loose_roots = std::vector<std::filesystem::path> {};
+  auto staged_files = std::vector<std::filesystem::path> {};
   auto sealed_script_assets = uint32_t { 0 };
+  const auto io = SealingStorage {
+    .storage = make_observer(&storage),
+    .published = make_observer(&staged_files),
+  };
 
   for (size_t i = 0; i < sealed_request.sources.size(); ++i) {
     const auto& source = sealed_request.sources.at(i);
@@ -972,10 +866,9 @@ auto SealLooseCookedSourcesForPakBuild(
     }
 
     const auto sealed_root
-      = SealLooseCookedSource(source, staging_parent, i, source_mounts);
+      = SealLooseCookedSource(io, source, staging_parent, i, source_mounts);
     if (!sealed_root.has_value()) {
-      CleanupStagedLooseRoots(
-        std::span<const std::filesystem::path>(staged_loose_roots));
+      CleanupStagedFiles(storage, staged_files);
       return MakeError(sealed_root.error().error_code,
         sealed_root.error().error_message, sealed_root.error().source_path,
         sealed_root.error().descriptor_path, sealed_root.error().resolved_path,
@@ -993,52 +886,39 @@ auto SealLooseCookedSourcesForPakBuild(
     ScriptSealingResult {
       .build_request = std::move(sealed_request),
       .staged_loose_roots = std::move(staged_loose_roots),
+      .staged_files = std::move(staged_files),
       .sealed_script_assets = sealed_script_assets,
     });
 }
 
-auto CleanupStagedLooseRoots(
-  std::span<const std::filesystem::path> staged_loose_roots) -> void
+auto CleanupStagedFiles(cooked::CookerStorage& storage,
+  const std::span<const std::filesystem::path> staged_files) -> void
 {
-  auto staging_parents = std::vector<std::filesystem::path> {};
-  staging_parents.reserve(staged_loose_roots.size());
-
-  for (const auto& staged_root : staged_loose_roots) {
-    if (staged_root.empty()) {
-      continue;
+  auto folders = std::vector<std::filesystem::path> {};
+  for (const auto& file : staged_files) {
+    if (const auto removed = storage.Remove(file); !removed) {
+      LOG_F(WARNING, "PakTool failed to remove staged file '{}' [{}]",
+        file.string(), removed.error().message());
     }
-
-    const auto parent = staged_root.parent_path();
-    if (!parent.empty() && parent.filename() == kSealedSourcesDirName) {
-      staging_parents.push_back(parent);
-    }
-
-    auto ec = std::error_code {};
-    std::filesystem::remove_all(base::ToNativePath(staged_root), ec);
-    if (ec) {
-      LOG_F(WARNING, "PakTool failed to clean staged loose root '{}' [{}]",
-        staged_root.string(), ec.message());
-    } else {
-      LOG_F(
-        INFO, "PakTool cleaned staged loose root '{}'", staged_root.string());
+    // Every folder up to and including the sealed sources folder is staging.
+    for (auto folder = file.parent_path(); folder.has_relative_path();
+      folder = folder.parent_path()) {
+      folders.push_back(folder);
+      if (folder.filename() == kSealedSourcesDirName) {
+        break;
+      }
     }
   }
-
-  std::ranges::sort(staging_parents);
-  const auto duplicates = std::ranges::unique(staging_parents);
-  staging_parents.erase(duplicates.begin(), duplicates.end());
-
-  for (const auto& parent : staging_parents) {
-    auto ec = std::error_code {};
-    const auto removed
-      = std::filesystem::remove(base::ToNativePath(parent), ec);
-    if (ec) {
-      LOG_F(WARNING,
-        "PakTool failed to remove sealed-sources staging directory '{}' [{}]",
-        parent.string(), ec.message());
-    } else if (removed) {
-      LOG_F(INFO, "PakTool removed sealed-sources staging directory '{}'",
-        parent.string());
+  // Deepest first, so a folder is emptied before its parent is tried.
+  std::ranges::sort(folders, std::ranges::greater {},
+    [](const std::filesystem::path& folder) -> size_t {
+      return static_cast<size_t>(std::distance(folder.begin(), folder.end()));
+    });
+  folders.erase(std::ranges::unique(folders).begin(), folders.end());
+  for (const auto& folder : folders) {
+    if (const auto removed = storage.RemoveEmptyFolder(folder); !removed) {
+      LOG_F(WARNING, "PakTool failed to remove staging folder '{}' [{}]",
+        folder.string(), removed.error().message());
     }
   }
 }

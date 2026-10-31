@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 // Standard library
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
@@ -16,6 +18,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project
@@ -421,6 +424,37 @@ NOLINT_TEST_F(
   // Assert
   EXPECT_EQ(tex.GetTextureType(), oxygen::TextureType::kUnknown);
   EXPECT_EQ(tex.GetFormat(), oxygen::Format::kUnknown);
+}
+
+//! A texture keeps the buffer its loader read the payload into: no copy.
+NOLINT_TEST(TextureResourceBasicTest, OwnsTheBufferItIsGiven)
+{
+  using oxygen::data::pak::core::TextureResourceDesc;
+  auto desc = TextureResourceDesc {
+    .texture_type = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D),
+    .width = 4,
+    .height = 4,
+    .depth = 1,
+    .array_layers = 1,
+    .mip_levels = 1,
+    .format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm),
+    .alignment = 256,
+  };
+  const auto bytes = MakeValidPayload(desc.array_layers, desc.mip_levels,
+    /*bytes_per_subresource=*/64U, desc.content_hash);
+  desc.size_bytes = static_cast<uint32_t>(bytes.size());
+  auto buffer
+    = oxygen::serio::ByteBuffer::Allocate(oxygen::serio::CountOf(bytes.size()))
+        .value();
+  std::memcpy(buffer.Bytes().data(), bytes.data(), bytes.size());
+  const auto* const storage = buffer.Bytes().data();
+
+  const TextureResource tex { desc, std::move(buffer) };
+
+  // NOLINTNEXTLINE(*-reinterpret-cast)
+  EXPECT_EQ(
+    reinterpret_cast<const std::byte*>(tex.GetPayload().data()), storage);
+  EXPECT_TRUE(std::ranges::equal(tex.GetPayload(), bytes));
 }
 
 } // namespace

@@ -16,7 +16,6 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 
 namespace oxygen::examples {
 
@@ -65,12 +64,6 @@ public:
     -> content::import::ImportOptions::TextureTuning;
   virtual auto SetTextureTuning(
     const content::import::ImportOptions::TextureTuning& tuning) -> void;
-
-  // --- Layout ---
-  [[nodiscard]] virtual auto GetDefaultLayout() const
-    -> content::import::LooseCookedLayout;
-  virtual auto SetDefaultLayout(
-    const content::import::LooseCookedLayout& layout) -> void;
 
   // --- Mounted Sources ---
   [[nodiscard]] virtual auto GetMountedPakPaths() const

@@ -61,6 +61,7 @@
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/TaskCancelledException.h>
 
@@ -308,14 +309,11 @@ auto AssetLoader::DecodeAndPublishAssetAsync(data::AssetKey key,
 template <typename T>
 auto AssetLoader::BindAssetAsync(const data::AssetKey& key,
   const data::Asset& parent, internal::ContentBindingBuilder& bindings,
-  LoadRequest request) -> co::Co<std::shared_ptr<T>>
+  LoadRequest request) -> co::Co<>
 {
   bindings.RequireOpen();
-  if (key.IsNil()) {
-    co_return nullptr;
-  }
-  if (!bindings.TryBeginAsset(key, T::ClassTypeId())) {
-    co_return bindings.FindAsset<T>(key);
+  if (key.IsNil() || !bindings.TryBeginAsset(key, T::ClassTypeId())) {
+    co_return;
   }
   const auto source = ResolveScopedRoot(key, std::nullopt, request.scope);
   if (!source) {
@@ -331,20 +329,16 @@ auto AssetLoader::BindAssetAsync(const data::AssetKey& key,
       fmt::format("Required {} dependency {} could not load for asset {}",
         T::ClassTypeNamePretty(), key, parent.GetAssetKey()));
   }
-  co_return bindings.AddAsset<T>(std::move(acquired));
+  static_cast<void>(bindings.AddAsset<T>(std::move(acquired)));
 }
 
 template <typename T>
 auto AssetLoader::BindResourceAsync(ResourceKey key,
-  internal::ContentBindingBuilder& bindings, LoadRequest request)
-  -> co::Co<std::shared_ptr<T>>
+  internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
   bindings.RequireOpen();
-  if (key.get() == 0U || key.IsError()) {
-    co_return nullptr;
-  }
-  if (!bindings.TryBeginResource(key)) {
-    co_return bindings.FindResource<T>(key);
+  if (key.get() == 0U || key.IsError() || !bindings.TryBeginResource(key)) {
+    co_return;
   }
   auto acquired = co_await resource_load_pipeline_->LoadErased(
     T::ClassTypeId(), key, request, CheckoutOwner::kInternal);
@@ -354,7 +348,7 @@ auto AssetLoader::BindResourceAsync(ResourceKey key,
       fmt::format("Required {} resource {} could not load",
         T::ClassTypeNamePretty(), key.get()));
   }
-  co_return bindings.AddResource<T>(key, std::move(acquired));
+  static_cast<void>(bindings.AddResource<T>(key, std::move(acquired)));
 }
 
 template <typename T>
@@ -362,19 +356,30 @@ auto AssetLoader::BindCollectedResourcesAsync(
   const internal::DependencyCollector& collector,
   internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
+  auto keys = std::vector<ResourceKey> {};
   for (const auto& reference : collector.ResourceRefDependencies()) {
     if (reference.resource_type_id == T::ClassTypeId()) {
-      static_cast<void>(co_await BindResourceAsync<T>(
-        BindResourceRefToKey(reference), bindings, request));
+      keys.push_back(BindResourceRefToKey(reference));
     }
   }
   for (const auto key : collector.ResourceKeyDependencies()) {
     const auto kind
       = identities_->FindResourceKind(internal::ContentId { key.get() });
     if (kind && internal::ResourceTypeId(*kind) == T::ClassTypeId()) {
-      static_cast<void>(co_await BindResourceAsync<T>(key, bindings, request));
+      keys.push_back(key);
     }
   }
+  // Independent loads start together, so their payload reads are in flight
+  // on the device at once.
+  OXCO_WITH_NURSERY(nursery)
+  {
+    for (const auto key : keys) {
+      nursery.Start([this, key, &bindings, request]() -> co::Co<> {
+        co_await BindResourceAsync<T>(key, bindings, request);
+      });
+    }
+    co_return co::kJoin;
+  };
 }
 
 auto AssetLoader::BindDependenciesAsync(data::MaterialAsset& asset,
@@ -396,20 +401,40 @@ auto AssetLoader::BindDependenciesAsync(data::MaterialAsset& asset,
     asset.GetTransmissionTextureKey(),
     asset.GetThicknessTextureKey(),
   };
-  for (const auto key : keys) {
-    static_cast<void>(co_await BindResourceAsync<data::TextureResource>(
-      key, bindings, request));
-  }
-  co_await BindCollectedResourcesAsync<data::TextureResource>(
-    collector, bindings, request);
+  OXCO_WITH_NURSERY(nursery)
+  {
+    for (const auto key : keys) {
+      nursery.Start([this, key, &bindings, request]() -> co::Co<> {
+        co_await BindResourceAsync<data::TextureResource>(
+          key, bindings, request);
+      });
+    }
+    nursery.Start([this, &collector, &bindings, request]() -> co::Co<> {
+      co_await BindCollectedResourcesAsync<data::TextureResource>(
+        collector, bindings, request);
+    });
+    co_return co::kJoin;
+  };
 }
 
 auto AssetLoader::BindDependenciesAsync(data::GeometryAsset& asset,
   const internal::DependencyCollector& collector,
   internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
-  co_await BindCollectedResourcesAsync<data::BufferResource>(
-    collector, bindings, request);
+  OXCO_WITH_NURSERY(nursery)
+  {
+    nursery.Start([this, &collector, &bindings, request]() -> co::Co<> {
+      co_await BindCollectedResourcesAsync<data::BufferResource>(
+        collector, bindings, request);
+    });
+    for (const auto& key : collector.AssetDependencies()) {
+      nursery.Start([this, key, &asset, &bindings, request]() -> co::Co<> {
+        co_await BindAssetAsync<data::MaterialAsset>(
+          key, asset, bindings, request);
+      });
+    }
+    co_return co::kJoin;
+  };
   LoadedGeometryBuffersByIndex buffers;
   for (const auto& reference : collector.ResourceRefDependencies()) {
     if (reference.resource_type_id != data::BufferResource::ClassTypeId()) {
@@ -432,8 +457,7 @@ auto AssetLoader::BindDependenciesAsync(data::GeometryAsset& asset,
   }
   LoadedGeometryMaterialsByKey materials;
   for (const auto& key : collector.AssetDependencies()) {
-    if (auto material = co_await BindAssetAsync<data::MaterialAsset>(
-          key, asset, bindings, request)) {
+    if (auto material = bindings.FindAsset<data::MaterialAsset>(key)) {
       materials.insert_or_assign(key, std::move(material));
     }
   }
@@ -444,40 +468,61 @@ auto AssetLoader::BindDependenciesAsync(data::SceneAsset& asset,
   const internal::DependencyCollector& collector,
   internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
-  co_await BindCollectedResourcesAsync<data::TextureResource>(
-    collector, bindings, request);
-  co_await BindCollectedResourcesAsync<data::BufferResource>(
-    collector, bindings, request);
-  for (const auto& renderable :
-    asset.GetComponents<data::pak::world::RenderableRecord>()) {
-    static_cast<void>(co_await BindAssetAsync<data::GeometryAsset>(
-      renderable.geometry_key, asset, bindings, request));
-  }
-  for (const auto& record :
-    asset.GetComponents<data::pak::world::OverrideRecord>()) {
-    const auto* property
-      = data::schema::FindOverrideProperty(record.override_id);
-    // The scene validated every override against the schema when it loaded.
-    DCHECK_NOTNULL_F(property);
-    if (property->type == data::schema::ValueType::kAsset) {
-      co_await BindSceneAssetValueAsync(
-        record.value.as_asset, property->asset_type, asset, bindings, request);
+  OXCO_WITH_NURSERY(nursery)
+  {
+    nursery.Start([this, &collector, &bindings, request]() -> co::Co<> {
+      co_await BindCollectedResourcesAsync<data::TextureResource>(
+        collector, bindings, request);
+    });
+    nursery.Start([this, &collector, &bindings, request]() -> co::Co<> {
+      co_await BindCollectedResourcesAsync<data::BufferResource>(
+        collector, bindings, request);
+    });
+    for (const auto& renderable :
+      asset.GetComponents<data::pak::world::RenderableRecord>()) {
+      nursery.Start([this, key = renderable.geometry_key, &asset, &bindings,
+                      request]() -> co::Co<> {
+        co_await BindAssetAsync<data::GeometryAsset>(
+          key, asset, bindings, request);
+      });
     }
-  }
-  for (const auto& component :
-    asset.GetComponents<data::pak::scripting::ScriptingComponentRecord>()) {
-    const auto slots = GetHydratedScriptSlots(asset, component);
-    for (const auto& slot : slots) {
-      static_cast<void>(co_await BindAssetAsync<data::ScriptAsset>(
-        slot.script_asset_key, asset, bindings, request));
-      for (const auto& value : slot.params | std::views::values) {
-        if (const auto* param = std::get_if<data::ScriptAssetParam>(&value)) {
-          co_await BindSceneAssetValueAsync(
-            param->key, param->asset_type, asset, bindings, request);
+    for (const auto& record :
+      asset.GetComponents<data::pak::world::OverrideRecord>()) {
+      const auto* property
+        = data::schema::FindOverrideProperty(record.override_id);
+      // The scene validated every override against the schema when it
+      // loaded.
+      DCHECK_NOTNULL_F(property);
+      if (property->type == data::schema::ValueType::kAsset) {
+        nursery.Start(
+          [this, key = record.value.as_asset, type = property->asset_type,
+            &asset, &bindings, request]() -> co::Co<> {
+            co_await BindSceneAssetValueAsync(
+              key, type, asset, bindings, request);
+          });
+      }
+    }
+    for (const auto& component :
+      asset.GetComponents<data::pak::scripting::ScriptingComponentRecord>()) {
+      for (const auto& slot : GetHydratedScriptSlots(asset, component)) {
+        nursery.Start([this, key = slot.script_asset_key, &asset, &bindings,
+                        request]() -> co::Co<> {
+          co_await BindAssetAsync<data::ScriptAsset>(
+            key, asset, bindings, request);
+        });
+        for (const auto& value : slot.params | std::views::values) {
+          if (const auto* param = std::get_if<data::ScriptAssetParam>(&value)) {
+            nursery.Start([this, key = param->key, type = param->asset_type,
+                            &asset, &bindings, request]() -> co::Co<> {
+              co_await BindSceneAssetValueAsync(
+                key, type, asset, bindings, request);
+            });
+          }
         }
       }
     }
-  }
+    co_return co::kJoin;
+  };
 }
 
 auto AssetLoader::BindSceneAssetValueAsync(const data::AssetKey& key,
@@ -492,24 +537,21 @@ auto AssetLoader::BindSceneAssetValueAsync(const data::AssetKey& key,
   }
   switch (type) {
   case data::AssetType::kMaterial:
-    static_cast<void>(co_await BindAssetAsync<data::MaterialAsset>(
-      key, asset, bindings, request));
+    co_await BindAssetAsync<data::MaterialAsset>(key, asset, bindings, request);
     break;
   case data::AssetType::kGeometry:
-    static_cast<void>(co_await BindAssetAsync<data::GeometryAsset>(
-      key, asset, bindings, request));
+    co_await BindAssetAsync<data::GeometryAsset>(key, asset, bindings, request);
     break;
   case data::AssetType::kScript:
-    static_cast<void>(co_await BindAssetAsync<data::ScriptAsset>(
-      key, asset, bindings, request));
+    co_await BindAssetAsync<data::ScriptAsset>(key, asset, bindings, request);
     break;
   case data::AssetType::kInputAction:
-    static_cast<void>(co_await BindAssetAsync<data::InputActionAsset>(
-      key, asset, bindings, request));
+    co_await BindAssetAsync<data::InputActionAsset>(
+      key, asset, bindings, request);
     break;
   case data::AssetType::kInputMappingContext:
-    static_cast<void>(co_await BindAssetAsync<data::InputMappingContextAsset>(
-      key, asset, bindings, request));
+    co_await BindAssetAsync<data::InputMappingContextAsset>(
+      key, asset, bindings, request);
     break;
   default:
     break;
@@ -528,18 +570,26 @@ auto AssetLoader::BindDependenciesAsync(data::InputMappingContextAsset& asset,
   const internal::DependencyCollector& /*collector*/,
   internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
+  auto keys = std::vector<data::AssetKey> {};
   for (const auto& mapping : asset.GetMappings()) {
-    static_cast<void>(co_await BindAssetAsync<data::InputActionAsset>(
-      mapping.action_asset_key, asset, bindings, request));
+    keys.push_back(mapping.action_asset_key);
   }
   for (const auto& trigger : asset.GetTriggers()) {
-    static_cast<void>(co_await BindAssetAsync<data::InputActionAsset>(
-      trigger.linked_action_asset_key, asset, bindings, request));
+    keys.push_back(trigger.linked_action_asset_key);
   }
   for (const auto& auxiliary : asset.GetTriggerAuxRecords()) {
-    static_cast<void>(co_await BindAssetAsync<data::InputActionAsset>(
-      auxiliary.action_asset_key, asset, bindings, request));
+    keys.push_back(auxiliary.action_asset_key);
   }
+  OXCO_WITH_NURSERY(nursery)
+  {
+    for (const auto& key : keys) {
+      nursery.Start([this, key, &asset, &bindings, request]() -> co::Co<> {
+        co_await BindAssetAsync<data::InputActionAsset>(
+          key, asset, bindings, request);
+      });
+    }
+    co_return co::kJoin;
+  };
 }
 
 auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,

@@ -21,10 +21,10 @@
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileReader.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -33,7 +33,7 @@ namespace co = oxygen::co;
 namespace {
 
 //! Test fixture with temporary file creation.
-class WindowsFileReaderTest : public oxygen::cooker::test::TempDirTest {
+class WindowsFileReaderTest : public oxygen::testing::TempDirTest {
 protected:
   auto SetUp() -> void override
   {

@@ -25,9 +25,9 @@
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -467,14 +467,14 @@ NOLINT_TEST_F(MaterialPipelineTest, CollectLongShaderStringsStoredWhole)
   const auto& bytes = result.cooked->descriptor_bytes;
   const auto refs = ReadShaderRefs(bytes, 1U);
   ASSERT_EQ(refs.size(), 1U);
-  EXPECT_EQ(
-    content::test::ReadDescriptorString(bytes, refs.at(0).source_path_offset),
+  EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
+              bytes, refs.at(0).source_path_offset),
     source_path);
-  EXPECT_EQ(
-    content::test::ReadDescriptorString(bytes, refs.at(0).entry_point_offset),
+  EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
+              bytes, refs.at(0).entry_point_offset),
     entry_point);
-  EXPECT_EQ(
-    content::test::ReadDescriptorString(bytes, refs.at(0).defines_offset),
+  EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
+              bytes, refs.at(0).defines_offset),
     defines);
 }
 

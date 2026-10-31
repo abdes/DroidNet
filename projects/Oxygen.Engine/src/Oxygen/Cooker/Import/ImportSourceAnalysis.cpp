@@ -532,7 +532,6 @@ namespace {
       co_return true;
     }
     auto& report = *context.report;
-    const auto& layout = job.loose_cooked_layout;
     if (job.job_type == "material-descriptor") {
       report.source_path = job.material_descriptor.descriptor_path;
       const auto text = co_await context.ReadText(report.source_path);
@@ -607,10 +606,9 @@ namespace {
               + "].material_ref");
         }
       }
+      // A local buffer's id is its resolved identity, a product of the job.
       for (const auto& buffer : local) {
-        context.Resolve(report.outputs,
-          { .written = buffer, .kind = Kind::kBuffer, .object_path = {} },
-          VirtualPathRuleSet::kCooked);
+        context.Output(buffer, Kind::kBuffer);
       }
       auto external
         = ExternalBufferReferences(job.virtual_path, local, buffer_refs);
@@ -705,7 +703,6 @@ namespace {
       if (!request) {
         throw std::invalid_argument(errors.str());
       }
-      request->loose_cooked_layout = layout;
       // Refuses an identity in no mount, as the cook would.
       static_cast<void>(request->GetTextureDescriptorRelPath());
       context.Output(request->asset_virtual_path, Kind::kTexture);
@@ -740,7 +737,6 @@ namespace {
       if (!request) {
         throw std::invalid_argument(errors.str());
       }
-      request->loose_cooked_layout = layout;
       auto bytes = std::vector<std::byte> {};
       auto glb = false;
       if (request->GetFormat() == ImportFormat::kGltf) {
@@ -968,13 +964,9 @@ auto ExternalBufferReferences(const std::string_view anchor,
   const std::span<const ImportDependencyText> references)
   -> ImportDependencyResolution
 {
-  auto local = std::unordered_set<std::string> {};
-  for (const auto& buffer : local_buffers) {
-    if (auto resolved = oxygen::content::ResolveReference(
-          anchor, buffer, VirtualPathRuleSet::kCooked)) {
-      local.insert(std::move(*resolved));
-    }
-  }
+  // Local buffers are resolved identities already.
+  const auto local = std::unordered_set<std::string>(
+    local_buffers.begin(), local_buffers.end());
   auto result = ImportDependencyResolution {};
   for (const auto& reference : references) {
     auto resolved

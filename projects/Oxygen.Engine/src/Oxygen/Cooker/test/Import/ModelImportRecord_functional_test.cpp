@@ -30,6 +30,7 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -44,7 +45,6 @@
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SceneIds.h>
@@ -53,6 +53,7 @@
 #include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -110,7 +111,7 @@ auto Fingerprint(const std::filesystem::path& file) -> ModelSourceFingerprint
   };
 }
 
-class ModelImportRecordTest : public oxygen::cooker::test::TempDirTest {
+class ModelImportRecordTest : public oxygen::testing::TempDirTest {
 protected:
   void SetUp() override
   {
@@ -194,7 +195,8 @@ protected:
     }
     const auto cooked_root = *request.cooked_root;
     const auto source_key = *request.source_key;
-    oxygen::content::import::LooseCookedWriter writer(cooked_root);
+    oxygen::content::import::LooseCookedWriter writer(
+      cooked_root, oxygen::content::cooked::RealCookerStorage());
     writer.SetSourceKey(source_key);
     static_cast<void>(writer.Finish());
     auto report = ImportReport {};

@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-10-30
+Last updated: 2026-10-31
 
 This plan implements the [proposal](README.md) as specified by the
 [design](design.md). It orders the work into slices, says what each slice
@@ -11,12 +11,45 @@ ledger: every old form found in the code, with the slice that removes it.
 
 ## Contents
 
+- [Status](#status)
 - [Rules for every slice](#rules-for-every-slice)
 - [Order](#order)
 - [Slices](#slices)
 - [Debt ledger](#debt-ledger)
 - [Test impact](#test-impact)
 - [Commits](#commits)
+
+## Status
+
+| Slice | Status                                                         |
+| ----- | -------------------------------------------------------------- |
+| S0    | Done                                                           |
+| S1    | Done, committed                                                |
+| S2    | Done, committed                                                |
+| S3    | Done, committed                                                |
+| S4    | Done, committed                                                |
+| S5    | Done, committed                                                |
+| S6    | Done, committed, with the Serio step 6 and cooked sources work |
+| S6a   | Not started (design for owner review first)                    |
+| S6b   | Not started                                                    |
+| S6c   | Not started                                                    |
+| S6d   | Not started                                                    |
+| S6e   | Not started (last engine slice)                                |
+| S7    | Not started                                                    |
+| S8    | Not started                                                    |
+| S9    | Not started                                                    |
+| S10   | Not started                                                    |
+| S11   | Not started                                                    |
+| S12   | Not started                                                    |
+| S13   | Not started                                                    |
+| S14   | Not started (waits on S18)                                     |
+| S15   | Not started (waits on S18)                                     |
+| S16   | Not started (waits on S18)                                     |
+| S17   | Not started (waits on S18)                                     |
+| S18   | Not started                                                    |
+| S19   | Not started                                                    |
+| S20   | Not started                                                    |
+| S21   | Not started                                                    |
 
 ## Rules for every slice
 
@@ -48,6 +81,16 @@ flowchart LR
   S2 --> S5[S5 engine mounts]
   S3 --> S4[S4 engine records]
   S5 --> S6[S6 engine paks]
+  S6 --> S6a[S6a Serio API completion]
+  S6 --> S6b[S6b pak format 11 tests]
+  S6 --> S6c[S6c DemoShell cooked roots]
+  S6a --> S6d[S6d resource digests]
+  S6b --> S6d
+  S6a --> S6e[S6e cooked content builders]
+  S6b --> S6e
+  S6c --> S6e
+  S6d --> S6e
+  S6e --> S20
   S3 --> S7[S7 editor formats]
   S4 --> S9[S9 editor records]
   S5 --> S8[S8 editor projects]
@@ -76,6 +119,12 @@ flowchart LR
 
 S18 (mockups) has no code dependency and starts with S1, so the owner's UX
 decisions are in before S14.
+
+S6a to S6e finish the engine side of S6 and of the
+[Serio IO](../serio-io/README.md) and [cooked sources](../cooked-sources/README.md)
+work. They change no editor code; editor work they require is a task of the
+editor slice named in their rows. S6e, the builders and the tests that move
+onto them, comes last, by the owner's decision.
 
 ## Slices
 
@@ -196,7 +245,7 @@ flat `dependency_types` map, `--embed-browse-index` and the optional browse
 index. Adds: catalog version 4, dependency records with requirements, the
 registry requirement check, `DependencyRequirementError`, the Player launch
 error, PakDump output, a pak's root and requirements in its library facts and
-`mount.library_dependency_missing` with pak recipes in `MountTableCases.json`
+`mount.cooked_dependency_missing` with pak recipes in `MountTableCases.json`
 (a version 3 catalog names neither). Rebuilds `engine.pak` and the examples pak.
 
 Unit tests: `PakCatalog_test` (encode, decode, structure), the catalog schema
@@ -216,6 +265,107 @@ bases of another library than their content (24 Pak, 10 PakTool, all failing
 on the one-library rule). The `AssetLoader_generation_test` dependency cases
 and the `PakBuilder_functional_test` dependency fixture moved to requirements
 in this slice.
+
+### S6a. Serio API completion
+
+Closes the gaps consumers worked around, in Serio itself, so the API is
+complete and consistent. The design goes into `serio-io/api.md` first and the
+owner reviews it before code.
+
+Deletes: `Content/Internal/BlockingReads.h`, `Content/Internal/RegionReader.h`,
+the hand-written span copies into a `ByteBuffer` (`TextureResource.h`,
+`BufferResource.cpp`, `StagePayload`) and the `reinterpret_cast` views of one as
+`uint8_t`, the test-only span constructors of `TextureResource` and
+`BufferResource`, `RealCookerStorage::Move`'s `MoveFileExW` and its
+check-then-act pre-checks, and the verified pak mount's blocking CRC pass on a
+thread pool worker. Adds:
+
+- Awaiting a blocking device: either an inline `IoDriver` mode, so a consumer
+  never branches on a missing driver, or one explicitly named adapter whose
+  name says the awaiting thread blocks; reads and writes; keeps
+  `Contiguous()`, erasure and regions; states which devices are awaitable by
+  themselves (`MappedFile` never silently). `ScriptQueryService`'s payload
+  reads follow it.
+- An owning reader of a region or of a device it owns, itself an `AnyReader`;
+  `RegionReadStream` caps its buffer at its region; the writer side reviewed
+  the same way.
+- Copying bytes into a `ByteBuffer`, and its view as unsigned bytes. Script
+  and physics resources then own the `ByteBuffer` their loader read, as
+  texture and buffer resources do, with one payload copy fewer; their other
+  producers (the collision shape job, PakDump, the Scripting source resolver,
+  `ScriptQueryService`) copy into one.
+- The replacing rename `AtomicFile` uses, exposed for `CookerStorage::Move`.
+- A verified pak mount hashes through the driver with async reads.
+- An audit of every IO helper written outside `src/Oxygen/Serio`; each is a
+  Serio gap closed here or stays, with the reason.
+
+Unit tests: each new API's own tests in Serio (conformance where it is a
+device), and the moved consumers' tests. Docs: `serio-io/api.md`,
+`serio-io/README.md`, Serio and Content READMEs.
+
+### S6b. Pak format 11 tests
+
+`PakWriter`'s own tests lay out plans by hand with 256-byte payload offsets,
+which the planner no longer produces. Moves them to format 11 layouts: every
+payload on a 4 KiB boundary and every region padded to one, as
+`pak.plan.*_payload_alignment_mismatch` checks. Deletes the 256-byte layouts
+of `PakWriterTestSupport.h`. Unit tests: the writer tests, which keep proving
+the writer lays out a given plan. Docs: `binary_packing_discipline.md` if it
+states the old offsets.
+
+### S6c. DemoShell cooked roots
+
+Deletes: identifying a loose source by `<root>/container.index.bin` in
+`ContentVm` (persisted mount lists included) and its test; "library" in
+DemoShell's content UI, view model and services (`BrowseForLibrary`,
+`BrowseTarget::kLibraryFile`, `MakeLibraryBrowserConfig`,
+`content.library.*` settings keys). Adds: loose sources by their cooked root
+(`data::CookedSource`); mount vocabulary in the UI, the commands and the
+settings keys. What happens to a user's saved `content.library.*` values is
+the owner's decision, taken at the start of the slice. Unit tests:
+`ContentVm_test`; the DemoShell UI tests through the cooked content builders.
+
+### S6d. Resource digests
+
+Every texture, buffer and physics resource carries a full SHA-256 in its table
+entry, computed by its producer from the bytes it holds, so no import reads a
+data file again. Deletes: the 8-byte truncated `content_hash` of texture and
+buffer descriptors (and of the `.otex` sidecar), the whole-file digest of
+`*.data` files and `LooseCookedWriter::Finish`'s hash pass over them,
+`content_hashing` everywhere (`ImportOptions::with_content_hashing`, the
+manifest key, the schemas, descriptor overrides, the ImportTool flags, the
+asset header hash switches) and every non-SHA fingerprint fallback used when
+a hash was zero. Adds: the widened table entries, with a format version bump;
+full verification of loose data files per resource from their table entries
+(`CheckContent`, `ValidateContent`, `CookedContent::VerifyStorage`, verified
+mounts); the producers' digests (texture and buffer emitters and pipelines,
+mesh build, script pipeline, `BufferSource` JSON input, the table aggregators'
+dedup signatures). The inventory, about 70 production and 40 test files, is
+`resource-digest-inventory.md` of the loose index session. Editor: the
+editor's ImportTool and manifest options lose `content_hashing` in S9's
+import slice.
+
+Unit and functional tests: the encoder and readers of the widened entries,
+per-resource verification and its refusals, each producer's digest; the
+Vortex fixtures that key textures by `content_hash`. Docs: the Data format
+docs, ImportTool README, the import manifest schema docs.
+
+### S6e. Cooked content builders
+
+By the owner's decision, the last engine slice. Implements steps 5 and 6 of
+the [cooked content builders](../cooked-content-builders/README.md): the
+descriptor builders (`SceneBuilder`, `PhysicsSidecarBuilder` with bindings,
+`DescriptorDefects`) and `ModelRecord`, each with its hardening tests; moves
+every test the proposal's "What it replaces" table lists onto them and
+deletes the hand-written builders (the scene builders of the AssetLoader,
+Pak, Import, Inspector and ModelImport tests, the sidecar of
+`AssetLoader_physics_test` and `PhysicsLoaderTestFixtures.h`, the forged
+`.otex` files of the material and scene descriptor import job tests, the
+hand-written model records); reviews the test bodies migrated in steps 1 to
+4; moves the engine integration tests (`AssetLoader` mounting, the Player,
+the examples) onto the builders and `Materialize`. Done when no engine test
+lays out a cooked artifact or a descriptor by hand outside a format's own
+reader tests.
 
 ### S7. Editor formats
 
@@ -411,6 +561,14 @@ done only when its rows are gone from the code.
 | `.cooked/Content` and `/Content` hard-coded in the examples                        | DemoMain, VortexBasic, DemoShell, RenderScene tools, `RuntimePaths.cpp`, `Showcase.cmake`, `generate_city.py`, test CMake lists, `test_showcase.py`                   | S19     |
 | `cook.ps1 -Check` second implementation of R2 and R4                               | `Examples/RenderScene/Tools/cook.ps1`                                                                                                                                 | S19     |
 | DemoShell scratch records in `Imports/`, borrowed `kRecordsFolder`                 | `ContentVm.cpp`, `FileBrowserService`                                                                                                                                 | S4      |
+| Content adapters standing in for Serio APIs                                        | `BlockingReads.h`, `RegionReader.h`, span copies into `ByteBuffer`, `reinterpret_cast` byte views                                                                     | S6a     |
+| Test-only span constructors                                                        | `TextureResource`, `BufferResource`                                                                                                                                   | S6a     |
+| A second replacing rename, with check-then-act pre-checks                          | `RealCookerStorage::Move`                                                                                                                                             | S6a     |
+| A blocking CRC pass on a pool worker                                               | Verified pak mount (`PrepareMountSetAsync`)                                                                                                                           | S6a     |
+| 256-byte payload layouts in writer tests                                           | `PakWriterTestSupport.h`                                                                                                                                              | S6b     |
+| A loose source named by its index file; "library" in the content UI                | DemoShell `ContentVm`, `ContentLoaderPanel`, `ContentSettingsService`, `FileBrowserService`, `DemoShell.cpp`, `ContentVm_test`                                        | S6c     |
+| Truncated resource hashes, whole-file data hashes, `content_hashing`               | Texture and buffer descriptors, `.otex`, `LooseCookedWriter::Finish`, `ImportOptions`, manifest schema, ImportTool, emitters and pipelines                            | S6d     |
+| Hand-built scene and sidecar descriptors, forged `.otex` files in tests            | The tests the builders proposal's "What it replaces" table lists                                                                                                      | S6e     |
 
 ### Editor
 
@@ -479,6 +637,7 @@ Counts are test cases.
 | S4       | `ModelImportRecord` (40), `SceneImportRequestBuilder` (11), glTF scenario (30), `ModelValues` (8), `ImporterRevision` (14); ImportTool record CLI (3); DemoShell `ContentVm_test`; `test_showcase.py` (4)                                                                                                                     | none                                                                                                                                                                                                                                                    |
 | S5       | none (mount tests are unit after S5)                                                                                                                                                                                                                                                                                          | none                                                                                                                                                                                                                                                    |
 | S6       | `AssetLoader_generation_test` (2), `PakBuilder_functional_test` dependency fixture (2)                                                                                                                                                                                                                                        | `CookedContentMountTests` (9)                                                                                                                                                                                                                           |
+| S6a-S6e  | none left broken: each slice fixes the engine tests it changes, and S6e moves the engine integration tests                                                                                                                                                                                                                    | none                                                                                                                                                                                                                                                    |
 | S8       | none                                                                                                                                                                                                                                                                                                                          | `CookedLibraryResolutionTests` (3), `TransitiveLibraryTests` (2), `CrossMountImportTests` (2), `MaterialKeyPriorityTests` (1); ContentExplorer UI pak and cooked rows                                                                                   |
 | S9       | none                                                                                                                                                                                                                                                                                                                          | Import integration tests (49), `ProducedSourceMetadataTests` (6); ContentExplorer UI model rows                                                                                                                                                         |
 | S10      | none                                                                                                                                                                                                                                                                                                                          | Cooking integration tests (`MaterialCookTests`, `TextureCookTests`, `CookRepairTests`, incremental, input, script, preview, analysis reuse: 54), `SourceDependencyDiscoveryTests` (11), inspection (3), the ~20 classes moved out of `tests/Unit` in S1 |

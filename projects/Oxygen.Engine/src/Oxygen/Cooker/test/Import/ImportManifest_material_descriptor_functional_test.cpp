@@ -18,17 +18,17 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
 using nlohmann::json;
 using oxygen::content::import::ImportManifest;
 using oxygen::cooker::test::kContentHashingDefault;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   BuildsMaterialDescriptorRequestWithDefaultsAndDescriptorOverrides)
@@ -92,57 +92,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   const auto normalized
     = json::parse(request->material_descriptor->normalized_descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "WoodFloor");
-}
-
-//! The job's `virtual_path` is the identity; the shared layout only carries the
-//! container conventions and never chooses where the descriptor goes.
-NOLINT_TEST(ImportManifestMaterialDescriptorTest,
-  SharedLayoutDoesNotChooseMaterialDescriptorIdentity)
-{
-  const ScopedTempDir temp;
-  const auto manifest_path
-    = temp.Path() / "material_shared_layout" / "import_manifest.json";
-  const auto root = manifest_path.parent_path();
-  const auto descriptor_path = root / "Materials" / "wood.material.json";
-  WriteText(descriptor_path,
-    R"({
-      "name": "WoodFloor",
-      "domain": "opaque"
-    })");
-
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
-      "mounts": [{ "name": "Content", "path": "." }],
-      "layout": {
-        "resources_dir": "ResourcesTop"
-      },
-      "defaults": {
-        "layout": {
-          "resources_dir": "ResourcesDefault"
-        }
-      },
-      "output": "material-layout-cooked",
-      "jobs": [
-        {
-          "type": "material-descriptor",
-          "source": "Materials/wood.material.json",
-          "virtual_path": "/.cooked/Wood/Floor.omat"
-        }
-      ]
-    })");
-
-  auto errors = std::ostringstream {};
-  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
-  ASSERT_EQ(manifest->jobs.size(), 1U);
-  EXPECT_EQ(manifest->jobs.at(0).virtual_path, "/.cooked/Wood/Floor.omat");
-
-  auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
-  EXPECT_EQ(request->asset_virtual_path, "/.cooked/Wood/Floor.omat");
-  EXPECT_EQ(request->loose_cooked_layout.resources_dir, "ResourcesDefault");
 }
 
 NOLINT_TEST(ImportManifestMaterialDescriptorTest,
@@ -270,115 +219,49 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     ::testing::HasSubstr("material.descriptor.schema_validation_failed"));
 }
 
-//! Per-job layout overrides keep the global defaults for what they omit, while
-//! each job's identity comes from its own `virtual_path`.
-NOLINT_TEST(
-  ImportManifestMaterialDescriptorTest, JobLayoutOverridesRetainGlobalDefaults)
+//! The cooked layout is fixed: a manifest that still sets `layout`, at the top,
+//! in its defaults or on a job, is refused by the schema as an unknown field.
+NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsLayoutField)
 {
+  // Arrange
   const ScopedTempDir temp;
-  const auto path
-    = temp.Path() / "job_layout_overrides" / "import_manifest.json";
+  const auto path = temp.Path() / "fixed_cooked_root" / "import_manifest.json";
   WriteText(
     path.parent_path() / "shared.material.json", R"({"name":"Shared"})");
-  const json document = {
+  const auto layout = json { { "resources_dir", "Resources" } };
+  const auto job = json {
+    { "type", "material-descriptor" },
+    { "source", "shared.material.json" },
+    { "virtual_path", "/Content/Materials/Shared.omat" },
+  };
+  const auto base = json {
     { "version", 1 },
     {
       "mounts",
-      nlohmann::json::array({ { { "name", "Content" }, { "path", "." } } }),
+      json::array({ { { "name", "Content" }, { "path", "." } } }),
     },
     { "output", ".cooked" },
-    {
-      "layout",
-      {
-        { "resources_dir", "Common" },
-      },
-    },
-    {
-      "jobs",
-      json::array({
-        {
-          { "type", "material-descriptor" },
-          { "source", "shared.material.json" },
-          { "virtual_path", "/Content/Materials/A/Shared.omat" },
-          {
-            "layout",
-            {
-              { "resources_dir", "Resources/A" },
-            },
-          },
-        },
-        {
-          { "type", "material-descriptor" },
-          { "source", "shared.material.json" },
-          { "virtual_path", "/Content/Materials/B/Shared.omat" },
-          {
-            "layout",
-            {
-              { "resources_dir", "Resources/B" },
-            },
-          },
-        },
-        {
-          { "type", "material-descriptor" },
-          { "source", "shared.material.json" },
-          { "virtual_path", "/Content/Shared.omat" },
-        },
-      }),
-    },
+    { "jobs", json::array({ job }) },
   };
-  WriteText(path, document.dump());
-  std::ostringstream errors;
-  const auto manifest = ImportManifest::Load(path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
-  const auto requests = manifest->BuildRequests(errors);
-  ASSERT_EQ(requests.size(), 3U) << errors.str();
-  EXPECT_EQ(
-    requests.at(0).asset_virtual_path, "/Content/Materials/A/Shared.omat");
-  EXPECT_EQ(
-    requests.at(1).asset_virtual_path, "/Content/Materials/B/Shared.omat");
-  EXPECT_EQ(requests.at(2).asset_virtual_path, "/Content/Shared.omat");
-  EXPECT_EQ(requests.at(0).loose_cooked_layout.resources_dir, "Resources/A");
-  EXPECT_EQ(requests.at(1).loose_cooked_layout.resources_dir, "Resources/B");
-  EXPECT_EQ(requests.at(2).loose_cooked_layout.resources_dir, "Common");
-  EXPECT_EQ(requests.at(0).cooked_root, requests.at(1).cooked_root);
-  EXPECT_EQ(requests.at(0).OutputMountRoot(), "/Content");
-}
+  auto top = base;
+  top["layout"] = layout;
+  auto defaults = base;
+  defaults["defaults"] = json { { "layout", layout } };
+  auto per_job = base;
+  per_job["jobs"][0]["layout"] = layout;
 
-//! Malformed job overrides, and the per-type folders the layout no longer has,
-//! are rejected before job construction.
-NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsMalformedJobLayout)
-{
-  const ScopedTempDir temp;
-  const auto path = temp.Path() / "invalid_job_layout" / "import_manifest.json";
-  for (const auto& layout : {
-         json("invalid"),
-         json { { "resources_dir", 12 } },
-         json { { "materials_subdir", "Materials" } },
-       }) {
-    WriteText(path,
-      json {
-        { "version", 1 },
-        {
-          "mounts",
-          nlohmann::json::array({ { { "name", "Content" }, { "path", "." } } }),
-        },
-        { "output", ".cooked" },
-        {
-          "jobs",
-          json::array({
-            {
-              { "type", "material-descriptor" },
-              { "source", "shared.material.json" },
-              { "virtual_path", "/.cooked/Materials/Shared.omat" },
-              { "layout", layout },
-            },
-          }),
-        },
-      }
-        .dump());
+  for (const auto& document : { top, defaults, per_job }) {
+    WriteText(path, document.dump());
     std::ostringstream errors;
-    EXPECT_FALSE(ImportManifest::Load(path, {}, errors).has_value());
-    EXPECT_FALSE(errors.str().empty());
+
+    // Act
+    const auto manifest = ImportManifest::Load(path, {}, errors);
+
+    // Assert
+    EXPECT_FALSE(manifest.has_value()) << document.dump();
+    EXPECT_THAT(
+      errors.str(), ::testing::HasSubstr("manifest schema validation failed"));
+    EXPECT_THAT(errors.str(), ::testing::HasSubstr("layout"));
   }
 }
 

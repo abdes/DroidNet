@@ -18,7 +18,6 @@
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -184,14 +183,6 @@ struct ImportRequest final {
     `OutputMountRoot`, ensuring the cooked root ends with the mount's name.
   */
   std::optional<std::filesystem::path> cooked_root;
-
-  //! Loose cooked container layout conventions.
-  /*!
-   Destination container layout used by the cook pipeline: where bulk resource
-   blobs (tables/data) are written. Descriptors are placed at their identity
-   in the mount's cooked root.
-  */
-  LooseCookedLayout loose_cooked_layout = {};
 
   //! Optional explicit source GUID for the cooked container.
   std::optional<data::SourceKey> source_key;

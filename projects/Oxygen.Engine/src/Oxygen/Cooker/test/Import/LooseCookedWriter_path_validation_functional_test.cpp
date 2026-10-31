@@ -15,14 +15,14 @@
 #include "LooseCookedWriterTestSupport.h"
 
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::testing {
-namespace fixtures = oxygen::content::test;
+namespace fixtures = oxygen::cooker::testing;
 
 namespace {
 
@@ -32,7 +32,7 @@ namespace {
     return std::string(name) + ".omat";
   }
   using oxygen::content::import::LooseCookedWriter;
-  using oxygen::cooker::test::ScopedTempDir;
+  using oxygen::cooker::testing::MemoryFileSystem;
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::FileKind;
 
@@ -57,8 +57,8 @@ namespace {
   {
     const auto suffix
       = std::string("loose_cooked_writer_bad_path_") + GetParam().case_name;
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / suffix;
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / suffix;
 
     const auto key = MakeFirstByteAssetKey(0x44);
 
@@ -69,7 +69,7 @@ namespace {
       = std::string("/.cooked/Materials/") + MaterialFile("A");
     const auto valid_relpath = "Materials/" + MaterialFile("A");
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
 
     switch (GetParam().target) {
     case PathTarget::kVirtualPath:

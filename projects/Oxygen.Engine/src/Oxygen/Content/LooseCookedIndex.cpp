@@ -39,7 +39,7 @@ auto LooseCookedIndex::operator=(LooseCookedIndex&&) noexcept
 auto LooseCookedIndex::LoadFromRoot(const std::filesystem::path& cooked_root)
   -> LooseCookedIndex
 {
-  return LoadFromFile(cooked_root / "container.index.bin");
+  return LoadFromFile(cooked_root / oxygen::data::loose_cooked::kIndexFileName);
 }
 
 auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
@@ -55,6 +55,14 @@ auto LooseCookedIndex::LoadFromBytes(const std::span<const std::byte> bytes)
 {
   auto index = std::make_unique<internal::LooseCookedIndexImpl>(
     internal::LooseCookedIndexImpl::LoadFromBytes(bytes));
+  return LooseCookedIndex(std::move(index));
+}
+
+auto LooseCookedIndex::LoadFromBytes(std::vector<std::byte>&& bytes)
+  -> LooseCookedIndex
+{
+  auto index = std::make_unique<internal::LooseCookedIndexImpl>(
+    internal::LooseCookedIndexImpl::LoadFromBytes(std::move(bytes)));
   return LooseCookedIndex(std::move(index));
 }
 

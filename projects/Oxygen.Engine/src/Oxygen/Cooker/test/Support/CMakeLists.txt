@@ -17,7 +17,6 @@ add_library(
   Oxygen.Cooker.TestSupport
   STATIC
   "AuthoredFiles.h"
-  "DescriptorFixtures.h"
   "Diagnostics.h"
   "FileIo.cpp"
   "FileIo.h"
@@ -25,14 +24,11 @@ add_library(
   "ImportHarness.h"
   "JsonSchema.cpp"
   "JsonSchema.h"
-  "MemoryFileSystem.h"
   "ModelImportTestBase.cpp"
   "ModelImportTestBase.h"
   "PipelineHarness.h"
   "SceneDescriptorTestData.h"
   "SourceLayoutTestSupport.h"
-  "TempDir.cpp"
-  "TempDir.h"
   "TestImages.cpp"
   "TestImages.h"
   "TestImportJob.cpp"
@@ -40,7 +36,6 @@ add_library(
   "TestPaths.cpp"
   "TestPaths.h"
   "TestValues.h"
-  "TextureLibraryFixture.h"
 )
 set_target_properties(
   Oxygen.Cooker.TestSupport
@@ -52,6 +47,7 @@ target_link_libraries(
   Oxygen.Cooker.TestSupport
   PUBLIC
     oxygen::cooker
+    oxygen::cooker::testing
     oxygen::content
     oxygen::testing
     nlohmann_json::nlohmann_json

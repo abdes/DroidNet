@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
@@ -62,7 +63,8 @@ protected:
   {
     file_reader_ = CreateAsyncFileReader(loop_);
     file_writer_ = CreateAsyncFileWriter(loop_);
-    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_,
+      oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
     thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
   }
 };

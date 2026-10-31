@@ -26,23 +26,22 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
-#include <Oxygen/Cooker/Loose/Validation.h>
-#include <Oxygen/Cooker/Pak/PakBuildReport.h>
-#include <Oxygen/Cooker/Pak/PakBuilder.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/GeometryMetadata.h>
-#include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
-#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -54,11 +53,11 @@
 #include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
 namespace geometry = oxygen::data::pak::geometry;
-namespace lc = oxygen::data::loose_cooked;
 using oxygen::content::inspection::GeometryMetadataOptions;
 
 //! `RunGeometryMetadataReport` as the tool runs it: the error, if any, goes to
@@ -70,9 +69,17 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
   });
 }
 
-using oxygen::content::lc::ValidateRoot;
-using oxygen::content::pak::test::AssetSpec;
-using oxygen::content::pak::test::FileSpec;
+//! Throws when the loose cooked root `root` is not one the runtime loads.
+auto ValidateRoot(const std::filesystem::path& root) -> void
+{
+  using namespace oxygen::content::cooked;
+  Validate(CookedContent::Open(RealCookerStorage(), root));
+}
+
+using oxygen::cooker::testing::LooseAsset;
+using oxygen::cooker::testing::LooseCookedRoot;
+using oxygen::cooker::testing::Materialize;
+using oxygen::cooker::testing::PakWorkspace;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetReferences;
 using oxygen::data::SurfaceId;
@@ -110,71 +117,47 @@ auto AppendRecords(
   bytes.insert(bytes.end(), records.begin(), records.end());
 }
 
-//! Buffer table and data shared by every LOD: one triangle's vertices and
-//! indices, at table entries 1 and 2 (entry 0 is the reserved fallback).
-auto TriangleBufferFiles() -> std::vector<FileSpec>
+//! Adds the buffers shared by every LOD: one triangle's vertices and indices,
+//! at table entries 1 and 2 (entry 0 is the reserved fallback).
+auto AddTriangleBuffers(LooseCookedRoot& library) -> void
 {
-  auto table = std::array<oxygen::data::pak::core::BufferResourceDesc, 3> {};
-  auto& vertices = table.at(1);
-  vertices.size_bytes = kTriangleSize * sizeof(oxygen::data::Vertex);
-  vertices.usage_flags = 0x01U;
-  vertices.element_stride = sizeof(oxygen::data::Vertex);
-  auto& indices = table.at(2);
-  indices.data_offset = vertices.size_bytes;
-  indices.size_bytes = kTriangleSize * sizeof(uint32_t);
-  indices.usage_flags = 0x02U;
-  indices.element_format = static_cast<uint8_t>(oxygen::Format::kR32UInt);
-
-  auto table_bytes = std::vector<std::byte> {};
-  AppendRecords(table_bytes, table);
   const auto vertex_data = std::array<oxygen::data::Vertex, kTriangleSize> {};
   const auto index_data = std::array<uint32_t, kTriangleSize> { 0U, 1U, 2U };
-  auto data_bytes = std::vector<std::byte> {};
-  AppendRecords(data_bytes, vertex_data);
-  AppendRecords(data_bytes, index_data);
-
-  const auto layout = oxygen::content::import::LooseCookedLayout {};
-  return {
-    FileSpec {
-      .kind = lc::FileKind::kBuffersTable,
-      .relpath = layout.BuffersTableRelPath(),
-      .payload = std::move(table_bytes),
-    },
-    FileSpec {
-      .kind = lc::FileKind::kBuffersData,
-      .relpath = layout.BuffersDataRelPath(),
-      .payload = std::move(data_bytes),
-    },
-  };
+  library.AddBuffer(std::as_bytes(std::span(vertex_data)),
+    {
+      .usage_flags = 0x01U,
+      .element_stride = sizeof(oxygen::data::Vertex),
+    });
+  library.AddBuffer(std::as_bytes(std::span(index_data)),
+    {
+      .usage_flags = 0x02U,
+      .element_format = static_cast<uint8_t>(oxygen::Format::kR32UInt),
+    });
 }
 
-auto DescriptorAsset(const std::string_view virtual_path,
-  const oxygen::data::AssetType type, const std::string_view relpath,
-  std::vector<std::byte> bytes, AssetReferences references) -> AssetSpec
+//! The `Content` library holding the triangle buffers.
+auto ContentRoot() -> LooseCookedRoot
 {
-  return AssetSpec {
-    .key = AssetKey::FromVirtualPath(virtual_path),
-    .asset_type = type,
-    .descriptor_relpath = std::string(relpath),
-    .virtual_path = std::string(virtual_path),
-    .descriptor_size = bytes.size(),
-    .descriptor_payload = std::move(bytes),
+  auto library = LooseCookedRoot { "Content" };
+  AddTriangleBuffers(library);
+  return library;
+}
+
+//! The descriptor at `virtual_path`, below the `Content` root.
+auto DescriptorAsset(const std::string_view virtual_path,
+  const oxygen::data::AssetType type, std::vector<std::byte> bytes,
+  AssetReferences references) -> LooseAsset
+{
+  constexpr auto kRoot = std::string_view { "/Content/" };
+  return LooseAsset {
+    .type = type,
+    .leaf = std::string(virtual_path.substr(kRoot.size())),
+    .descriptor = std::move(bytes),
     .references = std::move(references),
   };
 }
 
-//! Writes the root without the cooker's descriptor validation, so fixtures
-//! can also hold the invalid descriptors the inspector must reject.
-auto WriteRoot(const std::filesystem::path& root,
-  const std::span<const AssetSpec> assets) -> void
-{
-  const auto files = TriangleBufferFiles();
-  if (!oxygen::content::pak::test::WriteLooseIndex(root, assets, files, 1U)) {
-    throw std::runtime_error("Could not write the inspection root");
-  }
-}
-
-auto GeometryAsset(const GeometryFixture& fixture) -> AssetSpec
+auto GeometryAsset(const GeometryFixture& fixture) -> LooseAsset
 {
   auto descriptor = geometry::GeometryAssetDesc {};
   descriptor.header.asset_type
@@ -256,15 +239,15 @@ auto GeometryAsset(const GeometryFixture& fixture) -> AssetSpec
       },
     });
   return DescriptorAsset(kGeometryPath, oxygen::data::AssetType::kGeometry,
-    "Geometry/Inspection.ogeo", std::move(bytes),
-    std::move(references).value());
+    std::move(bytes), std::move(references).value());
 }
 
 auto WriteGeometryRoot(const std::filesystem::path& root,
   const GeometryFixture& fixture = {}) -> void
 {
-  const auto assets = std::array { GeometryAsset(fixture) };
-  WriteRoot(root, assets);
+  auto library = ContentRoot();
+  library.Add(GeometryAsset(fixture));
+  Materialize(library.Files(), root);
 }
 
 auto ExpectedLayoutRevision() -> oxygen::base::Sha256Digest
@@ -374,30 +357,28 @@ auto WriteOverrideScene(const std::filesystem::path& root,
         .expected_type = oxygen::data::AssetType::kMaterial,
       },
     });
-  const auto assets = std::array {
-    GeometryAsset({}),
-    DescriptorAsset("/Content/Scenes/Inspection.oscene",
-      oxygen::data::AssetType::kScene, "Scenes/Inspection.oscene",
-      std::move(bytes), std::move(references).value()),
-  };
-  WriteRoot(root, assets);
+  auto library = ContentRoot();
+  library.Add(GeometryAsset({}));
+  library.Add(DescriptorAsset("/Content/Scenes/Inspection.oscene",
+    oxygen::data::AssetType::kScene, std::move(bytes),
+    std::move(references).value()));
+  Materialize(library.Files(), root);
 }
 
-class InspectorGeometryMetadataTest
-  : public oxygen::content::pak::test::TempDirFixture {
+class InspectorGeometryMetadataTest : public oxygen::testing::TempDirTest {
 protected:
   auto Report() -> int
   {
     return RunGeometryMetadataReport({
-      .cooked_root = Root().string(),
-      .output = Path("geometries.json").string(),
+      .cooked_root = TempDir().string(),
+      .output = TempPath("geometries.json").string(),
       .virtual_path = {},
     });
   }
 
   auto ReadReport() -> nlohmann::json
   {
-    std::ifstream input(Path("geometries.json"));
+    std::ifstream input(TempPath("geometries.json"));
     auto report = nlohmann::json::parse(input);
     static const auto schema = oxygen::cooker::test::LoadSchema(
       "Tools/Inspector/Schemas/oxygen.cooked-geometries.schema.json");
@@ -409,8 +390,8 @@ protected:
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSeparateSurfacesAcrossLods)
 {
-  WriteGeometryRoot(Root());
-  EXPECT_NO_THROW(ValidateRoot(Root()));
+  WriteGeometryRoot(TempDir());
+  EXPECT_NO_THROW(ValidateRoot(TempDir()));
   ASSERT_EQ(Report(), 0);
   const auto report = ReadReport();
   ASSERT_EQ(report.at("geometries").size(), 1U);
@@ -452,18 +433,18 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSeparateSurfacesAcrossLods)
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsRetiredGeometryVersion)
 {
-  WriteGeometryRoot(Root(), { .version = 1 });
-  EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
+  WriteGeometryRoot(TempDir(), { .version = 1 });
+  EXPECT_THROW(ValidateRoot(TempDir()), std::runtime_error);
   EXPECT_EQ(Report(), 2);
-  EXPECT_FALSE(std::filesystem::exists(Path("geometries.json")));
+  EXPECT_FALSE(std::filesystem::exists(TempPath("geometries.json")));
 }
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, FiltersByNativeVirtualPath)
 {
-  WriteGeometryRoot(Root());
+  WriteGeometryRoot(TempDir());
   EXPECT_EQ(RunGeometryMetadataReport({
-              .cooked_root = Root().string(),
-              .output = Path("geometries.json").string(),
+              .cooked_root = TempDir().string(),
+              .output = TempPath("geometries.json").string(),
               .virtual_path = "/Content/Geometry/Absent.ogeo",
             }),
     0);
@@ -472,45 +453,46 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, FiltersByNativeVirtualPath)
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsNilSurfaceIdentity)
 {
-  WriteGeometryRoot(Root(), { .first_surface = {} });
-  EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
+  WriteGeometryRoot(TempDir(), { .first_surface = {} });
+  EXPECT_THROW(ValidateRoot(TempDir()), std::runtime_error);
   EXPECT_EQ(Report(), 2);
-  EXPECT_FALSE(std::filesystem::exists(Path("geometries.json")));
+  EXPECT_FALSE(std::filesystem::exists(TempPath("geometries.json")));
 }
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, DoesNotOverwriteSourceDescriptor)
 {
-  WriteGeometryRoot(Root());
-  EXPECT_EQ(RunGeometryMetadataReport({
-              .cooked_root = Root().string(),
-              .output = Path("Geometry/Inspection.ogeo").string(),
-              .virtual_path = {},
-            }),
+  WriteGeometryRoot(TempDir());
+  EXPECT_EQ(
+    RunGeometryMetadataReport({
+      .cooked_root = TempDir().string(),
+      .output = TempPath("Descriptors/Geometry/Inspection.ogeo").string(),
+      .virtual_path = {},
+    }),
     2);
-  EXPECT_NO_THROW(ValidateRoot(Root()));
+  EXPECT_NO_THROW(ValidateRoot(TempDir()));
 }
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, AcceptsLocalSurfaceOverride)
 {
-  WriteGeometryRoot(Root());
-  WriteOverrideScene(Root(), MakeSurfaceId(2), ExpectedLayoutRevision());
-  EXPECT_NO_THROW(ValidateRoot(Root()));
+  WriteGeometryRoot(TempDir());
+  WriteOverrideScene(TempDir(), MakeSurfaceId(2), ExpectedLayoutRevision());
+  EXPECT_NO_THROW(ValidateRoot(TempDir()));
 }
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsUnknownLocalSurfaceOverride)
 {
-  WriteGeometryRoot(Root());
-  WriteOverrideScene(Root(), MakeSurfaceId(3), ExpectedLayoutRevision());
-  EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
+  WriteGeometryRoot(TempDir());
+  WriteOverrideScene(TempDir(), MakeSurfaceId(3), ExpectedLayoutRevision());
+  EXPECT_THROW(ValidateRoot(TempDir()), std::runtime_error);
 }
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsStaleLocalSurfaceLayout)
 {
-  WriteGeometryRoot(Root());
+  WriteGeometryRoot(TempDir());
   auto revision = ExpectedLayoutRevision();
   revision.front() ^= 1U;
-  WriteOverrideScene(Root(), MakeSurfaceId(2), revision);
-  EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
+  WriteOverrideScene(TempDir(), MakeSurfaceId(2), revision);
+  EXPECT_THROW(ValidateRoot(TempDir()), std::runtime_error);
 }
 
 //! A pak reports the same surface inventory as the loose root it was packed
@@ -518,33 +500,20 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsStaleLocalSurfaceLayout)
 NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSurfacesFromAPak)
 {
   // Arrange
-  const auto loose = Path("loose");
-  const auto material = oxygen::content::test::MaterialDescriptor("Shared");
-  const auto assets = std::array {
-    GeometryAsset({}),
-    DescriptorAsset("/Content/Materials/Shared.omat",
-      oxygen::data::AssetType::kMaterial, "Materials/Shared.omat",
-      material.bytes, material.references),
-  };
-  WriteRoot(loose, assets);
-  const auto pak = Path("content.pak");
-  const auto built = oxygen::content::pak::PakBuilder {}.Build(
-    oxygen::content::pak::test::MakeFullRequest(pak,
-      {
-        .sources = { oxygen::data::CookedSource {
-          .kind = oxygen::data::CookedSourceKind::kLooseCooked,
-          .path = loose,
-        }, },
-      }));
-  ASSERT_TRUE(built.has_value());
-  for (const auto& diagnostic : built->diagnostics) {
-    EXPECT_NE(
-      diagnostic.severity, oxygen::content::pak::PakDiagnosticSeverity::kError)
-      << diagnostic.code;
-  }
+  const auto loose = TempPath("loose");
+  const auto material = oxygen::cooker::testing::MaterialDescriptor("Shared");
+  auto library = ContentRoot();
+  library.Add(GeometryAsset({}));
+  library.Add(DescriptorAsset(kSharedMaterialPath,
+    oxygen::data::AssetType::kMaterial, material.bytes, material.references));
+  Materialize(library.Files(), loose);
+  auto workspace = PakWorkspace {};
+  workspace.PackOrThrow(workspace.FullRequest({ workspace.Add(library) }));
+  const auto pak = TempPath("content.pak");
+  Materialize(workspace.Storage().Bytes(PakWorkspace::PakPath("out.pak")), pak);
   ASSERT_EQ(RunGeometryMetadataReport({
               .cooked_root = loose.string(),
-              .output = Path("loose.json").string(),
+              .output = TempPath("loose.json").string(),
               .virtual_path = {},
             }),
     0);
@@ -552,13 +521,13 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSurfacesFromAPak)
   // Act
   const auto exit_code = RunGeometryMetadataReport({
     .cooked_root = pak.string(),
-    .output = Path("geometries.json").string(),
+    .output = TempPath("geometries.json").string(),
     .virtual_path = "/Content/Geometry/Inspection.ogeo",
   });
 
   // Assert
   ASSERT_EQ(exit_code, 0);
-  std::ifstream expected(Path("loose.json"));
+  std::ifstream expected(TempPath("loose.json"));
   EXPECT_EQ(ReadReport(), nlohmann::json::parse(expected));
 }
 

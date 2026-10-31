@@ -18,12 +18,12 @@
 #include <vector>
 
 #include "./AssetLoader_test.h"
-#include "Fixtures/LooseCookedTestLayout.h"
-#include "Fixtures/LooseCookedTestWriter.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -45,7 +45,6 @@ using oxygen::co::testing::TestEventLoop;
 using oxygen::content::AssetLoader;
 using oxygen::content::AssetLoaderConfig;
 using oxygen::content::testing::AssetLoaderBasicTest;
-using oxygen::content::testing::LooseCookedLayout;
 
 using oxygen::data::SceneAsset;
 
@@ -59,8 +58,6 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   using oxygen::data::pak::world::NodeRecord;
   using oxygen::data::pak::world::SceneAssetDesc;
   using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
-
-  const LooseCookedLayout layout {};
 
   // Arrange: write cooked scene descriptor bytes.
   SceneAssetDesc desc {};
@@ -99,14 +96,14 @@ auto WriteLooseCookedSceneWithSingleRootNode(
                 .data(),
     &env_header, sizeof(env_header));
 
-  const auto descriptor_relpath
-    = std::string(layout.scenes_subdir) + "/TestScene.scene";
-
-  oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
-  writer.WriteAssetDescriptor(scene_key, AssetType::kScene,
-    std::string(layout.virtual_mount_root) + "/" + descriptor_relpath,
-    descriptor_relpath, bytes);
-  static_cast<void>(writer.Finish());
+  auto root = oxygen::cooker::testing::LooseCookedRoot { "test" };
+  root.Add({
+    .type = AssetType::kScene,
+    .leaf = "TestScene.scene",
+    .descriptor = std::move(bytes),
+    .key = scene_key,
+  });
+  oxygen::cooker::testing::Materialize(root.Files(), cooked_root);
 }
 
 //! Fixture for AssetLoader dependency tests
@@ -123,7 +120,7 @@ class AssetLoaderSceneTest : public AssetLoaderBasicTest { };
 NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetLooseCookedSceneLoads)
 {
   // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_scene";
+  const auto cooked_root = TempDir() / "loose_cooked_scene";
   const auto scene_key
     = oxygen::data::AssetKey::FromVirtualPath("/test/test_scene_loose.asset");
   WriteLooseCookedSceneWithSingleRootNode(cooked_root, scene_key);

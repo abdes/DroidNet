@@ -31,10 +31,10 @@
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace oxygen::content::import::test {
 namespace {
@@ -384,7 +384,7 @@ namespace {
       "\"iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAYAAACzzX7wAAAAG0lEQV"
       "R4nGP4oCHyX2SLzX9cNAM+SRDNQLEJACwzQuGP5hyxAAAAAElFTkSuQmCC\"\n"
     };
-    const auto dir = oxygen::cooker::test::ScopedTempDir {};
+    const auto dir = oxygen::testing::ScopedTempDir {};
     auto text = oxygen::cooker::test::ReadText(
       oxygen::cooker::test::ModelPath("static_textured_triangle.fbx"));
     const auto insert_after
@@ -515,7 +515,7 @@ namespace {
   [[nodiscard]] auto PrepareFbxAuthoredBy(const std::string_view application)
     -> adapters::ModelTexturePreparation
   {
-    const auto dir = oxygen::cooker::test::ScopedTempDir {};
+    const auto dir = oxygen::testing::ScopedTempDir {};
     const auto fixture
       = oxygen::cooker::test::ModelPath("static_normal_triangle.fbx");
     auto text = oxygen::cooker::test::ReadText(fixture);

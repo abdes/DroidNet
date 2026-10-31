@@ -56,7 +56,7 @@ private:
   auto DrawImportSettings() -> void;
   auto DrawTextureTuningSettings() -> void;
   auto DrawImporterSettings() -> void;
-  auto DrawOutputLayout() -> void;
+  auto DrawOutput() -> void;
   auto DrawProgress(bool is_importing, bool is_scene_loading) -> void;
   auto RunBrowseSelection() -> void;
 

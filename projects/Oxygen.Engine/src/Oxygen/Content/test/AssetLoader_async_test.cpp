@@ -170,7 +170,7 @@ auto CheckCallbackCompletion(TestEventLoop* loop, std::filesystem::path root,
 NOLINT_TEST_F(
   AssetLoaderAsyncTest, CallbackPublishesOnceAndDrainIncludesFollowup)
 {
-  const auto root = temp_dir_ / "source";
+  const auto root = TempDir() / "source";
   const auto key
     = oxygen::data::AssetKey::FromVirtualPath("/test/Surface.omat");
   oxygen::content::testing::WriteMaterialSource(
@@ -183,7 +183,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   AssetLoaderAsyncTest, StopDuringDecodeCompletesWithNullAndReleasesCapture)
 {
-  const auto root = temp_dir_ / "source";
+  const auto root = TempDir() / "source";
   const auto key
     = oxygen::data::AssetKey::FromVirtualPath("/test/Surface.omat");
   oxygen::content::testing::WriteMaterialSource(
@@ -317,7 +317,7 @@ auto ExpectStopDrainsDirectLoad(TestEventLoop* loop, std::filesystem::path root,
 
 NOLINT_TEST_F(AssetLoaderAsyncTest, StopDrainsDirectAssetDecodeAndPublication)
 {
-  const auto root = temp_dir_ / "source";
+  const auto root = TempDir() / "source";
   const auto key
     = oxygen::data::AssetKey::FromVirtualPath("/test/Surface.omat");
   oxygen::content::testing::WriteTexturedMaterialSource(root, key);
@@ -329,7 +329,7 @@ NOLINT_TEST_F(AssetLoaderAsyncTest, StopDrainsDirectAssetDecodeAndPublication)
 NOLINT_TEST_F(
   AssetLoaderAsyncTest, StopDrainsDirectResourceDecodeAndPublication)
 {
-  const auto root = temp_dir_ / "source";
+  const auto root = TempDir() / "source";
   const auto key
     = oxygen::data::AssetKey::FromVirtualPath("/test/Surface.omat");
   oxygen::content::testing::WriteTexturedMaterialSource(root, key);
@@ -341,7 +341,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   AssetLoaderAsyncTest, StopDrainsDirectCookedResourceDecodeAndPublication)
 {
-  const auto root = temp_dir_ / "source";
+  const auto root = TempDir() / "source";
   const auto key
     = oxygen::data::AssetKey::FromVirtualPath("/test/Surface.omat");
   oxygen::content::testing::WriteTexturedMaterialSource(root, key);

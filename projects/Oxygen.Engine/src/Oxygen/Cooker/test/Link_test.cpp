@@ -4,27 +4,35 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Loose/Inspection.cpp, Loose/Validation.cpp
+// Covers: Cooked/CookedContent.cpp, Cooked/Validate.cpp
 
 #include <cstdlib>
 #include <filesystem>
 
 #include <Oxygen/Content/LooseCookedIndex.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/Validation.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Cooked/Validate.h>
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-  oxygen::content::lc::Inspection inspection {};
+  namespace cooked = oxygen::content::cooked;
 
-  [[maybe_unused]] const auto assets = inspection.Assets();
-  [[maybe_unused]] const auto files = inspection.Files();
-  [[maybe_unused]] const auto source_identity = inspection.Guid();
+  using OpenFn
+    = auto (*)(const cooked::CookerStorageReader&, const std::filesystem::path&)
+        ->cooked::CookedContent;
+  using ReadSummaryFn
+    = auto (*)(const cooked::CookerStorageReader&, const std::filesystem::path&)
+        ->cooked::CookedSummary;
+  using ValidateFn = auto (*)(
+    const cooked::CookedContent&, oxygen::content::lc::IntegrityCheck)
+                       ->void;
 
-  using ValidateRootFn = auto (*)(
-    const std::filesystem::path&, oxygen::content::lc::IntegrityCheck)
-                           ->void;
-  volatile ValidateRootFn validate_root = &oxygen::content::lc::ValidateRoot;
+  volatile OpenFn open = &cooked::CookedContent::Open;
+  volatile ReadSummaryFn read_summary = &cooked::ReadCookedSummary;
+  volatile ValidateFn validate = &cooked::Validate;
 
-  return validate_root == nullptr ? EXIT_FAILURE : EXIT_SUCCESS;
+  return open == nullptr || read_summary == nullptr || validate == nullptr
+    ? EXIT_FAILURE
+    : EXIT_SUCCESS;
 }

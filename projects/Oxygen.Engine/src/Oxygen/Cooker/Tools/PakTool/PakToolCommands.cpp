@@ -344,12 +344,10 @@ auto PakToolInfo() -> toolkit::ToolInfo
 }
 
 PakToolCommand::PakToolCommand(const pak::BuildMode mode,
-  PakToolCliOptions& options, IRequestPreparationFileSystem& prep_fs,
-  IArtifactFileSystem& artifact_fs)
+  PakToolCliOptions& options, cooked::CookerStorage& storage)
   : mode_(mode)
   , options_(&options)
-  , prep_fs_(&prep_fs)
-  , artifact_fs_(&artifact_fs)
+  , storage_(&storage)
 {
 }
 
@@ -377,9 +375,8 @@ auto PakToolCommand::Run(toolkit::ToolContext& context) -> toolkit::ToolResult
     writer.Info("paktool.command", FormatCommandSummary(mode_, options));
     writer.Info("paktool.outputs", FormatOutputSummary(mode_, options));
 
-    auto result
-      = ExecutePakToolCommand(mode_, std::string(Name()), context.CommandLine(),
-        OXYGEN_PAKTOOL_VERSION, options, *prep_fs_, *artifact_fs_);
+    auto result = ExecutePakToolCommand(mode_, std::string(Name()),
+      context.CommandLine(), OXYGEN_PAKTOOL_VERSION, options, *storage_);
 
     if (!result.error_code.empty()) {
       const auto phase_code
@@ -417,12 +414,11 @@ auto PakToolCommand::Run(toolkit::ToolContext& context) -> toolkit::ToolResult
 }
 
 auto RunPakToolApp(std::span<char*> argv, std::ostream& out, std::ostream& err,
-  IRequestPreparationFileSystem& prep_fs, IArtifactFileSystem& artifact_fs)
-  -> int
+  cooked::CookerStorage& storage) -> int
 {
   auto options = PakToolCliOptions {};
-  auto build = PakToolCommand(BuildMode::kFull, options, prep_fs, artifact_fs);
-  auto patch = PakToolCommand(BuildMode::kPatch, options, prep_fs, artifact_fs);
+  auto build = PakToolCommand(BuildMode::kFull, options, storage);
+  auto patch = PakToolCommand(BuildMode::kPatch, options, storage);
   auto commands = std::array<toolkit::ToolCommand*, 2> { &build, &patch };
 
   return toolkit::RunTool(PakToolInfo(), commands,

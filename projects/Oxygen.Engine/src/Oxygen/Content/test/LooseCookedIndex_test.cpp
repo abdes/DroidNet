@@ -4,1745 +4,559 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
-#include <bit>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
-#include <iterator>
-#include <ostream>
+#include <functional>
 #include <span>
-#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
-
-#include "./AssetLoader_test.h"
-#include "Fixtures/LooseCookedTestLayout.h"
-#include "Fixtures/LooseCookedTestWriter.h"
-#include <gtest/gtest.h>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/PakFormat_render.h>
-
-using oxygen::content::testing::AssetLoaderBasicTest;
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Writer.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
-using oxygen::content::testing::LooseCookedLayout;
+using oxygen::content::internal::LooseCookedIndexImpl;
+using oxygen::content::lc::IntegrityCheck;
+using oxygen::content::lc::IntegrityFailure;
+using oxygen::content::lc::LooseCookedIndex;
+using oxygen::data::AssetKey;
+using oxygen::data::AssetType;
+using oxygen::data::CookedOpenError;
+using oxygen::data::CookedOpenFailure;
+using oxygen::data::loose_cooked::AssetEntry;
+using oxygen::data::loose_cooked::FileKind;
+using oxygen::data::loose_cooked::FileRecord;
+using oxygen::data::loose_cooked::IndexContent;
+using oxygen::data::loose_cooked::IndexedAsset;
+using oxygen::data::loose_cooked::IndexedFile;
+using oxygen::data::loose_cooked::IndexHeader;
 
-//! Fixture for AssetLoader dependency tests
-class LooseCookedIndexTest : public AssetLoaderBasicTest {
-protected:
-  auto SetUp() -> void override
-  {
-    AssetLoaderBasicTest::SetUp();
-    asset_loader_->SetVerifyContentHashes(true);
-  }
-};
+using Bytes = std::vector<std::byte>;
 
-//! Writes the object representation of a trivially copyable value.
-template <typename T>
-auto WriteObject(std::ostream& out, const T& value) -> void
+constexpr auto kSource = std::string_view { "/Content/Ship/Ship.glb" };
+
+//! A fixed UUIDv7 source identity.
+auto TestSourceKey() -> oxygen::data::SourceKey
 {
-  const auto bytes = std::bit_cast<std::array<char, sizeof(T)>>(value);
-  out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+  auto bytes = std::array<uint8_t, 16> {};
+  for (uint8_t i = 0; i < bytes.size(); ++i) {
+    bytes.at(i) = static_cast<uint8_t>(i + 1);
+  }
+  bytes.at(6) = static_cast<uint8_t>((bytes.at(6) & 0x0FU) | 0x70U);
+  bytes.at(8) = static_cast<uint8_t>((bytes.at(8) & 0x3FU) | 0x80U);
+  return oxygen::data::SourceKey::FromBytes(bytes).value();
 }
 
-auto WriteBytes(std::ostream& out, const std::span<const std::byte> bytes)
+auto DigestOf(const std::string_view text) -> oxygen::base::Sha256Digest
+{
+  return oxygen::base::ComputeSha256(std::as_bytes(std::span(text)));
+}
+
+//! A material asset; its key is derived from `key_path`, which defaults to
+//! the virtual path and must be canonical.
+auto Material(const std::string_view virtual_path,
+  const std::string_view relpath, const std::string_view key_path = {})
+  -> IndexedAsset
+{
+  return {
+    .key
+    = AssetKey::FromVirtualPath(key_path.empty() ? virtual_path : key_path),
+    .asset_type = AssetType::kMaterial,
+    .virtual_path = std::string(virtual_path),
+    .descriptor_relpath = std::string(relpath),
+    .descriptor_size = relpath.size(),
+    .descriptor_sha256 = DigestOf(relpath),
+    .references = {},
+    .source_path = std::string(kSource),
+  };
+}
+
+auto File(const FileKind kind, const std::string_view relpath) -> IndexedFile
+{
+  return {
+    .kind = kind,
+    .relpath = std::string(relpath),
+    .size = relpath.size(),
+    .sha256 = DigestOf(relpath),
+    .virtual_path = {},
+    .source_path = {},
+  };
+}
+
+auto Encode(const std::span<const IndexedAsset> assets,
+  const std::span<const IndexedFile> files = {}) -> Bytes
+{
+  auto stream = oxygen::serio::MemoryStream {};
+  auto writer = oxygen::serio::Writer(stream);
+  const auto encoded = oxygen::data::loose_cooked::EncodeLooseCookedIndex(
+    IndexContent {
+      .source_key = TestSourceKey(),
+      .content_version = 7,
+      .assets = assets,
+      .files = files,
+    },
+    writer);
+  EXPECT_TRUE(encoded.has_value());
+  const auto bytes = stream.Data();
+  return { bytes.begin(), bytes.end() };
+}
+
+auto HeaderOf(const Bytes& bytes) -> IndexHeader
+{
+  auto header = IndexHeader {};
+  std::memcpy(&header, bytes.data(), sizeof(header));
+  return header;
+}
+
+//! Overwrites the bytes at `offset` with the object representation of
+//! `value`, to forge what the encoder never writes.
+template <typename T>
+auto Patch(Bytes& bytes, const uint64_t offset, const T& value) -> void
+{
+  std::memcpy(bytes.data() + offset, &value, sizeof(T));
+}
+
+//! Replaces the string `valid` of the encoded string table with `broken`, of
+//! the same length: the encoder refuses what the loader must refuse, so a
+//! refusal test damages valid bytes.
+auto ReplaceString(Bytes& bytes, const std::string_view valid,
+  const std::string_view broken) -> void
+{
+  ASSERT_EQ(valid.size(), broken.size());
+  auto whole = std::string(1, '\0') + std::string(valid) + '\0';
+  const auto text = std::string_view(
+    reinterpret_cast<const char*>(bytes.data()), bytes.size());
+  const auto at = text.find(whole);
+  ASSERT_NE(at, std::string_view::npos) << valid;
+  std::memcpy(bytes.data() + at + 1, broken.data(), broken.size());
+}
+
+auto PatchHeader(Bytes& bytes, const std::function<void(IndexHeader&)>& edit)
   -> void
 {
-  for (const auto byte : bytes) {
-    out.put(static_cast<char>(byte));
+  auto header = HeaderOf(bytes);
+  edit(header);
+  Patch(bytes, 0, header);
+}
+
+auto AssetEntryOffset(const Bytes& bytes, const size_t index) -> uint64_t
+{
+  return HeaderOf(bytes).asset_entries_offset + (index * sizeof(AssetEntry));
+}
+
+auto FileRecordOffset(const Bytes& bytes, const size_t index) -> uint64_t
+{
+  return HeaderOf(bytes).file_records_offset + (index * sizeof(FileRecord));
+}
+
+//! The failure loading `bytes` raises; the test fails when they load.
+auto RefusalOf(const Bytes& bytes) -> std::pair<CookedOpenFailure, std::string>
+{
+  try {
+    static_cast<void>(LooseCookedIndexImpl::LoadFromBytes(bytes));
+  } catch (const CookedOpenError& error) {
+    return { error.Failure(), error.what() };
   }
+  ADD_FAILURE() << "the index loaded";
+  return {};
 }
 
-auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
+auto ExpectCorrupt(const Bytes& bytes, const std::string_view message) -> void
 {
-  for (uint8_t i = 0; i < 16; ++i) {
-    header.source_identity.at(i) = static_cast<uint8_t>(i + 1);
-  }
-  header.source_identity.at(6)
-    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
-  header.source_identity.at(8)
-    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
+  const auto [failure, what] = RefusalOf(bytes);
+  EXPECT_EQ(failure, CookedOpenFailure::kCorrupt) << what;
+  EXPECT_THAT(what, testing::HasSubstr(std::string(message)));
 }
 
-auto WriteMinimalIndex(const std::filesystem::path& index_path) -> void
+//=== Encoding and loading ===------------------------------------------------//
+
+//! Everything the encoder writes reads back through the loader.
+NOLINT_TEST(LooseCookedIndexLoadTest, EncodedContentReadsBack)
 {
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = 1; // NUL terminator only
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_size = sizeof(FileRecord);
-
-  std::ofstream out(index_path, std::ios::binary);
-  WriteObject(out, header);
-  const char zero = 0;
-  out.write(&zero, 1);
-}
-
-//! Test: Index loads wait for an in-process publication to finish
-/*!
- Scenario: Holds the exclusive index file lock through a differently spelled
- path while the index is absent, as during a replace. A concurrent load must
- wait and read the republished index instead of failing on the missing file.
-*/
-NOLINT_TEST_F(LooseCookedIndexTest, LoadFromRootWaitsForExclusivePublication)
-{
-  using oxygen::content::internal::LooseCookedIndexImpl;
-  using oxygen::content::lc::LooseCookedIndex;
-
   // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-  WriteMinimalIndex(index_path);
-  auto publication = LooseCookedIndexImpl::LockFileExclusive(
-    cooked_root / "." / "container.index.bin");
-  std::filesystem::remove(index_path);
+  auto references = oxygen::data::AssetReferences::Create(
+    { { .kind = oxygen::data::ResourceKind::kTexture,
+      .index = oxygen::data::pak::core::ResourceIndexT { 3U } } },
+    { { .key = AssetKey::FromVirtualPath("/Content/Materials/Base.omat"),
+      .kind = oxygen::data::KeyReferenceKind::kAsset,
+      .expected_type = AssetType::kMaterial } });
+  ASSERT_HAS_VALUE(references);
+  auto wood = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  wood.references = std::move(*references);
+  const auto assets = std::array {
+    wood,
+    Material("/Content/Materials/Base.omat", "Materials/Base.omat"),
+  };
+  auto sky = File(FileKind::kTextureDescriptor, "Textures/Sky.otex");
+  sky.virtual_path = "/Content/Textures/Sky.otex";
+  // A texture descriptor records the source that produced it.
+  sky.source_path = std::string(kSource);
+  const auto files = std::array {
+    File(FileKind::kTexturesTable, "Resources/textures.table"),
+    File(FileKind::kTexturesData, "Resources/textures.data"),
+    sky,
+  };
 
   // Act
-  auto load_error = std::string {};
-  auto reader = std::thread([&cooked_root, &load_error] -> void {
-    try {
-      static_cast<void>(LooseCookedIndex::LoadFromRoot(cooked_root));
-    } catch (const std::exception& ex) {
-      load_error = ex.what();
-    }
-  });
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  WriteMinimalIndex(index_path);
-  publication.unlock();
-  reader.join();
+  const auto index = LooseCookedIndexImpl::LoadFromBytes(Encode(assets, files));
 
   // Assert
-  EXPECT_TRUE(load_error.empty()) << load_error;
+  EXPECT_EQ(index.Guid(), TestSourceKey());
+  EXPECT_EQ(index.ContentVersion(), 7U);
+  ASSERT_EQ(index.GetAllAssetKeys().size(), 2U);
+  for (const auto& asset : assets) {
+    EXPECT_EQ(index.FindDescriptorRelPath(asset.key), asset.descriptor_relpath);
+    EXPECT_EQ(index.FindVirtualPath(asset.key), asset.virtual_path);
+    EXPECT_EQ(index.FindSourcePath(asset.key), kSource);
+    EXPECT_EQ(index.FindDescriptorSize(asset.key), asset.descriptor_size);
+    EXPECT_EQ(index.FindAssetType(asset.key),
+      static_cast<uint8_t>(AssetType::kMaterial));
+    EXPECT_EQ(index.FindAssetKeyByVirtualPath(asset.virtual_path), asset.key);
+    const auto stored = index.FindAssetReferences(asset.key);
+    ASSERT_HAS_VALUE(stored);
+    EXPECT_EQ(*stored, asset.references);
+  }
+  EXPECT_EQ(
+    index.FindFileRelPath(FileKind::kTexturesData), "Resources/textures.data");
+  EXPECT_EQ(index.FindTextureDescriptorRelPath("/Content/Textures/Sky.otex"),
+    "Textures/Sky.otex");
+  const auto inventory = index.GetFileInventory();
+  ASSERT_EQ(inventory.size(), assets.size() + files.size());
 }
 
-//! Test: Descriptor SHA-256 verification uses the standard digest
-/*!
- Scenario: Writes a descriptor file containing "abc" and records the known
- SHA-256 digest in the index. Verifies that mounting succeeds.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootDescriptorShaMatchesAbcSucceeds)
+//! Equal content encodes to equal bytes, whatever order it is listed in.
+NOLINT_TEST(LooseCookedIndexLoadTest, EncodingIgnoresListingOrder)
 {
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
   // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  {
-    std::ofstream out(cooked_root / "Abc.bin", std::ios::binary);
-    out.write("abc", 3);
-  }
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "Abc.bin";
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "/.cooked/Abc.bin";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  oxygen::data::AssetKey key {};
-  AssetEntry entry {};
-  entry.asset_key = key;
-  entry.descriptor_relpath_offset = off_desc;
-  entry.virtual_path_offset = off_vpath;
-  entry.source_path_offset = off_vpath;
-  entry.asset_type = 0;
-  entry.descriptor_size = 3;
-
-  // Known SHA-256("abc")
-  const std::array<uint8_t, 32> expected = {
-    0xba,
-    0x78,
-    0x16,
-    0xbf,
-    0x8f,
-    0x01,
-    0xcf,
-    0xea,
-    0x41,
-    0x41,
-    0x40,
-    0xde,
-    0x5d,
-    0xae,
-    0x22,
-    0x23,
-    0xb0,
-    0x03,
-    0x61,
-    0xa3,
-    0x96,
-    0x17,
-    0x7a,
-    0x9c,
-    0xb4,
-    0x10,
-    0xff,
-    0x61,
-    0xf2,
-    0x00,
-    0x15,
-    0xad,
-  };
-  std::copy_n(
-    expected.begin(), expected.size(), std::begin(entry.descriptor_sha256));
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, entry);
-  }
-
-  // Act & Assert
-  EXPECT_NO_THROW({ asset_loader_->AddLooseCookedRoot(cooked_root); });
-}
-
-//! Test: Minimal loose cooked index parses successfully
-/*!
- Scenario: Writes the smallest valid `container.index.bin` (empty asset list)
- and verifies that `AssetLoader::AddLooseCookedRoot(...)` accepts it.
-*/
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootMinimalIndexSucceeds)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = 1; // "\0"
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    const char zero = 0;
-    out.write(&zero, 1);
-  }
+  const auto wood
+    = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  const auto base
+    = Material("/Content/Materials/Base.omat", "Materials/Base.omat");
+  const auto table = File(FileKind::kBuffersTable, "Resources/buffers.table");
+  const auto data = File(FileKind::kBuffersData, "Resources/buffers.data");
 
   // Act
-  EXPECT_NO_THROW({ asset_loader_->AddLooseCookedRoot(cooked_root); });
+  const auto first
+    = Encode(std::array { wood, base }, std::array { table, data });
+  const auto second
+    = Encode(std::array { base, wood }, std::array { data, table });
+
+  // Assert
+  EXPECT_EQ(first, second);
 }
 
-//! Test: Schema version mismatch rejects the index
-/*!
- Scenario: Writes a well-formed file with an unsupported schema version and
- verifies that mounting fails.
-*/
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnsupportedVersionThrows)
+//! An index of nothing is a valid index.
+NOLINT_TEST(LooseCookedIndexLoadTest, EmptyIndexLoads)
 {
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
+  // Act
+  const auto index = LooseCookedIndexImpl::LoadFromBytes(Encode({}));
 
+  // Assert
+  EXPECT_TRUE(index.GetAllAssetKeys().empty());
+  EXPECT_TRUE(index.GetFileInventory().empty());
+}
+
+//! Owned bytes load in place, like a mapped file.
+NOLINT_TEST(LooseCookedIndexLoadTest, OwnedBytesLoad)
+{
   // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
+  const auto wood
+    = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  auto bytes = Encode(std::array { wood });
 
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = 999;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = 1;
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
+  // Act
+  const auto index = LooseCookedIndex::LoadFromBytes(std::move(bytes));
 
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    const char zero = 0;
-    out.write(&zero, 1);
-  }
+  // Assert
+  EXPECT_EQ(index.FindVirtualPath(wood.key), wood.virtual_path);
+}
+
+//=== Header refusals ===-----------------------------------------------------//
+
+//! Bytes that are not an index are a wrong format, not a corrupt index.
+NOLINT_TEST(LooseCookedIndexHeaderTest, ForeignBytesAreAWrongFormat)
+{
+  // Arrange
+  auto wrong_magic = Encode({});
+  wrong_magic.front() = std::byte { 'X' };
+  const auto too_small = Bytes(sizeof(IndexHeader) - 1);
 
   // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
+  EXPECT_EQ(RefusalOf(wrong_magic).first, CookedOpenFailure::kWrongFormat);
+  EXPECT_EQ(RefusalOf(too_small).first, CookedOpenFailure::kWrongFormat);
 }
 
-//! Test: Index rejects a string table that overlaps the header
-/*!
- Scenario: Writes an index whose string table offset points into the header.
- Verifies that mounting fails.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootStringTableBeforeHeaderThrows)
+NOLINT_TEST(LooseCookedIndexHeaderTest, AnotherVersionIsUnsupported)
 {
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
   // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = 0; // Invalid: overlaps header
-  header.string_table_size = 1; // "\0"
-  header.asset_entries_offset = sizeof(IndexHeader);
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    const char zero = 0;
-    out.write(&zero, 1);
-  }
+  auto bytes = Encode({});
+  PatchHeader(bytes, [](IndexHeader& header) -> void { header.version = 999; });
 
   // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
+  EXPECT_EQ(RefusalOf(bytes).first, CookedOpenFailure::kUnsupportedVersion);
 }
 
-//! Test: Index rejects asset entries that overlap the string table
-/*!
- Scenario: Writes an index where asset entries begin before the end of the
- string table. Verifies that mounting fails.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootAssetEntriesOverlapStringTableThrows)
+NOLINT_TEST(LooseCookedIndexHeaderTest, MalformedHeadersAreCorrupt)
 {
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
+  using oxygen::data::loose_cooked::kHasFileRecords;
+  using oxygen::data::loose_cooked::kHasVirtualPaths;
 
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
+  struct Case {
+    std::string_view message;
+    std::function<void(IndexHeader&)> edit;
+  };
+  const auto cases = std::array {
+    Case {
+      .message = "String table must start after index header",
+      .edit = [](IndexHeader& h) -> void { h.string_table_offset = 8; },
+    },
+    Case {
+      .message = "Asset entries must start after the end of the string table",
+      .edit = [](IndexHeader& h) -> void { --h.asset_entries_offset; },
+    },
+    Case {
+      .message = "Unsupported IndexHeader flags",
+      .edit = [](IndexHeader& h) -> void { h.flags |= 0x80U; },
+    },
+    Case {
+      .message = "must declare virtual-path support",
+      .edit = [](IndexHeader& h) -> void { h.flags = kHasFileRecords; },
+    },
+    Case {
+      .message = "flags disallow file records",
+      .edit = [](IndexHeader& h) -> void { h.flags = kHasVirtualPaths; },
+    },
+    Case {
+      .message = "non-zero UUIDv7 source identity",
+      .edit = [](IndexHeader& h) -> void { h.source_identity = {}; },
+    },
+    Case {
+      .message = "Unexpected AssetEntry size",
+      .edit = [](IndexHeader& h) -> void { ++h.asset_entry_size; },
+    },
+  };
+  const auto files = std::array {
+    File(FileKind::kBuffersTable, "Resources/buffers.table"),
+    File(FileKind::kBuffersData, "Resources/buffers.data"),
+  };
+  for (const auto& test_case : cases) {
+    // Arrange
+    auto bytes = Encode({}, files);
+    PatchHeader(bytes, test_case.edit);
 
-  std::string strings;
-  strings.push_back('\0');
-  strings += "A.bin";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset = header.string_table_offset; // Invalid overlap
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
+    // Act & Assert
+    ExpectCorrupt(bytes, test_case.message);
   }
+}
+
+//=== Asset entry refusals ===------------------------------------------------//
+
+//! Virtual paths are canonical; a custom mount root is one.
+NOLINT_TEST(LooseCookedIndexAssetTest, VirtualPathsMustBeCanonical)
+{
+  // Arrange
+  const auto custom = Material("/Props/Wood.omat", "Wood.omat");
+  const auto no_slash
+    = Material("Content/Wood.omat", "Wood.omat", "/Content/Wood.omat");
+  const auto dot_dot
+    = Material("/Content/../Wood.omat", "Wood.omat", "/Content/Wood.omat");
 
   // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
+  EXPECT_NO_THROW(static_cast<void>(
+    LooseCookedIndexImpl::LoadFromBytes(Encode(std::array { custom }))));
+  ExpectCorrupt(
+    Encode(std::array { no_slash }), "Virtual path is not canonical");
+  ExpectCorrupt(
+    Encode(std::array { dot_dot }), "Virtual path is not canonical");
 }
 
-//! Test: Virtual paths must start with '/'
-/*!
- Scenario: Writes an index with a virtual path that does not start with '/'.
- Verifies that mounting fails.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootVirtualPathMissingLeadingSlashThrows)
+NOLINT_TEST(LooseCookedIndexAssetTest, ContentPathsMustBeContainerRelative)
 {
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
+  struct Case {
+    //! A valid path, encoded, then replaced by `relpath`.
+    std::string_view valid;
+    std::string_view relpath;
+    std::string_view message;
+  };
+  const auto cases = std::array {
+    Case { .valid = "Materials/Wood.omat",
+      .relpath = "Materials\\Wood.omat",
+      .message = "'/' as the separator" },
+    Case { .valid = "AMaterials/Wood.omat",
+      .relpath = "/Materials/Wood.omat",
+      .message = "container-relative" },
+    Case { .valid = "Materials/xx/Wood.omat",
+      .relpath = "Materials/../Wood.omat",
+      .message = "'..'" },
+    Case { .valid = "container.index.bxn",
+      .relpath = "container.index.bin",
+      .message = "Reserved path" },
+  };
+  for (const auto& test_case : cases) {
+    // Arrange
+    auto bytes = Encode(
+      std::array { Material("/Content/Materials/Wood.omat", test_case.valid) });
+    ReplaceString(bytes, test_case.valid, test_case.relpath);
 
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "A.bin";
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "Content/A.bin"; // Invalid: missing leading '/'
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  oxygen::data::AssetKey key {};
-  AssetEntry entry {};
-  entry.asset_key = key;
-  entry.descriptor_relpath_offset = off_desc;
-  entry.virtual_path_offset = off_vpath;
-  entry.source_path_offset = off_vpath;
-  entry.asset_type = 0;
-  entry.descriptor_size = 0;
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, entry);
+    // Act & Assert
+    ExpectCorrupt(bytes, test_case.message);
   }
+}
+
+NOLINT_TEST(LooseCookedIndexAssetTest, IdentitiesListedTwiceAreCorrupt)
+{
+  // Arrange
+  const auto assets = std::array {
+    Material("/Content/Materials/A.omat", "Materials/A.omat"),
+    Material("/Content/Materials/B.omat", "Materials/B.omat"),
+  };
+  const auto encoded = Encode(assets);
+  auto first = AssetEntry {};
+  std::memcpy(
+    &first, encoded.data() + AssetEntryOffset(encoded, 0), sizeof(first));
+  auto same_key = encoded;
+  Patch(same_key,
+    AssetEntryOffset(same_key, 1) + offsetof(AssetEntry, asset_key),
+    first.asset_key);
+  auto same_path = encoded;
+  Patch(same_path,
+    AssetEntryOffset(same_path, 1) + offsetof(AssetEntry, virtual_path_offset),
+    first.virtual_path_offset);
+  auto same_file = encoded;
+  Patch(same_file,
+    AssetEntryOffset(same_file, 1)
+      + offsetof(AssetEntry, descriptor_relpath_offset),
+    first.descriptor_relpath_offset);
 
   // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
+  ExpectCorrupt(same_key, "Duplicate AssetKey");
+  ExpectCorrupt(same_path, "Duplicate virtual path");
+  ExpectCorrupt(same_file, "Duplicate content path");
 }
 
-//! Test: Virtual paths must not contain '..'
-/*!
- Scenario: Writes an index with a virtual path containing a '..' segment.
- Verifies that mounting fails.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootVirtualPathContainsDotDotThrows)
+NOLINT_TEST(LooseCookedIndexAssetTest, DescriptorWithoutDigestIsCorrupt)
 {
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
   // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "A.bin";
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "/.cooked/../A.bin"; // Invalid: contains '..'
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  oxygen::data::AssetKey key {};
-  AssetEntry entry {};
-  entry.asset_key = key;
-  entry.descriptor_relpath_offset = off_desc;
-  entry.virtual_path_offset = off_vpath;
-  entry.source_path_offset = off_vpath;
-  entry.asset_type = 0;
-  entry.descriptor_size = 0;
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, entry);
-  }
+  auto bytes = Encode(
+    std::array { Material("/Content/Materials/A.omat", "Materials/A.omat") });
+  Patch(bytes,
+    AssetEntryOffset(bytes, 0) + offsetof(AssetEntry, descriptor_sha256),
+    oxygen::base::Sha256Digest {});
 
   // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
+  ExpectCorrupt(bytes, "Missing descriptor SHA-256");
 }
 
-//! Test: Virtual paths accept custom mount roots
-/*!
- Scenario: Writes an index with a virtual path under `/Custom`.
- Verifies
- * that mounting succeeds.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootVirtualPathCustomMountSucceeds)
+//=== File record refusals ===------------------------------------------------//
+
+//! Each resource table comes with its data file, and each data file with its
+//! table.
+NOLINT_TEST(LooseCookedIndexFileTest, TablesAndDataFilesComeInPairs)
 {
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
+  struct Pair {
+    FileKind table;
+    FileKind data;
+  };
+  const auto pairs = std::array {
+    Pair { .table = FileKind::kBuffersTable, .data = FileKind::kBuffersData },
+    Pair { .table = FileKind::kTexturesTable, .data = FileKind::kTexturesData },
+    Pair { .table = FileKind::kScriptsTable, .data = FileKind::kScriptsData },
+    Pair { .table = FileKind::kPhysicsTable, .data = FileKind::kPhysicsData },
+  };
+  for (const auto& pair : pairs) {
+    // Arrange
+    const auto table = File(pair.table, "Resources/x.table");
+    const auto data = File(pair.data, "Resources/x.data");
 
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-  // The asset entry references this descriptor path.
-  std::ofstream(cooked_root / "A.bin", std::ios::binary).close();
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "A.bin";
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "/Custom/A.bin";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  oxygen::data::AssetKey key {};
-  AssetEntry entry {};
-  entry.asset_key = key;
-  entry.descriptor_relpath_offset = off_desc;
-  entry.virtual_path_offset = off_vpath;
-  entry.source_path_offset = off_vpath;
-  entry.asset_type = 0;
-  entry.descriptor_size = 0;
-  std::ranges::copy(
-    oxygen::base::ComputeSha256({}), std::begin(entry.descriptor_sha256));
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, entry);
+    // Act & Assert
+    EXPECT_NO_THROW(static_cast<void>(LooseCookedIndexImpl::LoadFromBytes(
+      Encode({}, std::array { table, data }))));
+    ExpectCorrupt(Encode({}, std::array { table }), "must provide both");
+    ExpectCorrupt(Encode({}, std::array { data }), "must provide both");
   }
-
-  // Act & Assert
-  EXPECT_NO_THROW({ asset_loader_->AddLooseCookedRoot(cooked_root); });
 }
 
-//! Test: Descriptor relpaths must not contain '\\'
-/*!
- Scenario: Writes an index with a descriptor relpath using Windows-style
- separators. Verifies that mounting fails.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootRelPathContainsBackslashThrows)
+NOLINT_TEST(LooseCookedIndexFileTest, MalformedRecordsAreCorrupt)
 {
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
+  // Records are in path order: the auxiliary file, then the table and data.
+  const auto files = std::array {
+    File(FileKind::kAuxiliary, "Ships/Hull.obuf"),
+    File(FileKind::kBuffersTable, "buffers.table"),
+    File(FileKind::kBuffersData, "buffers.data"),
+  };
+  struct Case {
+    std::string_view message;
+    std::function<void(Bytes&)> edit;
+  };
+  const auto kind_at = [](const Bytes& bytes) -> uint64_t {
+    return FileRecordOffset(bytes, 0) + offsetof(FileRecord, kind);
+  };
+  const auto cases = std::array {
+    Case {
+      .message = "Unsupported FileKind",
+      .edit = [&](Bytes& bytes) -> void {
+        Patch(bytes, kind_at(bytes), uint16_t { 99 });
+      },
+    },
+    Case {
+      .message = "Duplicate FileKind record",
+      .edit = [&](Bytes& bytes) -> void {
+        Patch(bytes, kind_at(bytes), FileKind::kBuffersTable);
+      },
+    },
+    Case {
+      .message = "Missing file SHA-256",
+      .edit = [](Bytes& bytes) -> void {
+        Patch(bytes, FileRecordOffset(bytes, 0) + offsetof(FileRecord, sha256),
+          oxygen::base::Sha256Digest {});
+      },
+    },
+  };
+  for (const auto& test_case : cases) {
+    // Arrange
+    auto bytes = Encode({}, files);
+    test_case.edit(bytes);
 
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "Materials\\A.bin"; // Invalid: contains '\\'
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "/.cooked/A.bin";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  oxygen::data::AssetKey key {};
-  AssetEntry entry {};
-  entry.asset_key = key;
-  entry.descriptor_relpath_offset = off_desc;
-  entry.virtual_path_offset = off_vpath;
-  entry.source_path_offset = off_vpath;
-  entry.asset_type = 0;
-  entry.descriptor_size = 0;
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, entry);
+    // Act & Assert
+    ExpectCorrupt(bytes, test_case.message);
   }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: Unknown file kinds are rejected
-/*!
- Scenario: Writes a valid index with a single file record whose kind is
- `FileKind::kUnknown`. Verifies that mounting fails.
-*/
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnknownFileKindThrows)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_path = static_cast<uint32_t>(strings.size());
-  strings += "Resources/unknown.bin";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 1;
-  header.file_record_size = sizeof(FileRecord);
-
-  FileRecord record {};
-  record.kind = FileKind::kUnknown;
-  record.relpath_offset = off_path;
-  record.size = 0;
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, record);
-  }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: Duplicate file-kind records are rejected
-/*!
- Scenario: Writes a valid index with two file records of the same kind and
- verifies that mounting fails.
-*/
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDuplicateFileKindThrows)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_a = static_cast<uint32_t>(strings.size());
-  strings += "Resources/textures.table";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 2;
-  header.file_record_size = sizeof(FileRecord);
-
-  FileRecord r0 {};
-  r0.kind = FileKind::kTexturesTable;
-  r0.relpath_offset = off_a;
-  r0.size = 0;
-
-  FileRecord r1 {};
-  r1.kind = FileKind::kTexturesTable;
-  r1.relpath_offset = off_a;
-  r1.size = 0;
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, r0);
-    WriteObject(out, r1);
-  }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: Duplicate AssetKey entries are rejected
-/*!
- Scenario: Writes an index with two asset entries that share the same AssetKey.
- Verifies that mounting fails.
-*/
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDuplicateAssetKeyThrows)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "A.bin";
-  strings.push_back('\0');
-  const auto off_vpath_a = static_cast<uint32_t>(strings.size());
-  strings += "/.cooked/A.bin";
-  strings.push_back('\0');
-  const auto off_desc_b = static_cast<uint32_t>(strings.size());
-  strings += "B.bin";
-  strings.push_back('\0');
-  const auto off_vpath_b = static_cast<uint32_t>(strings.size());
-  strings += "/.cooked/B.bin";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 2;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  oxygen::data::AssetKey key {};
-
-  AssetEntry a {};
-  a.asset_key = key;
-  a.descriptor_relpath_offset = off_desc;
-  a.virtual_path_offset = off_vpath_a;
-  a.source_path_offset = off_vpath_a;
-  a.asset_type = 0;
-  a.descriptor_size = 0;
-
-  AssetEntry b {};
-  b.asset_key = key;
-  b.descriptor_relpath_offset = off_desc_b;
-  b.virtual_path_offset = off_vpath_b;
-  b.source_path_offset = off_vpath_b;
-  b.asset_type = 0;
-  b.descriptor_size = 0;
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, a);
-    WriteObject(out, b);
-  }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: Duplicate virtual path strings are rejected
-/*!
- Scenario: Writes an index with two different virtual-path string-table offsets
- that contain the same virtual path text. Verifies that mounting fails.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootDuplicateVirtualPathStringThrows)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc_a = static_cast<uint32_t>(strings.size());
-  strings += "A.bin";
-  strings.push_back('\0');
-  const auto off_desc_b = static_cast<uint32_t>(strings.size());
-  strings += "B.bin";
-  strings.push_back('\0');
-
-  const auto off_vpath_1 = static_cast<uint32_t>(strings.size());
-  strings += "/.cooked/Same.bin";
-  strings.push_back('\0');
-  const auto off_vpath_2 = static_cast<uint32_t>(strings.size());
-  strings += "/.cooked/Same.bin";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 2;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  const auto key_a = oxygen::data::AssetKey::FromBytes(
-    std::array<uint8_t, oxygen::data::AssetKey::kSizeBytes> { 0x11 });
-  const auto key_b = oxygen::data::AssetKey::FromBytes(
-    std::array<uint8_t, oxygen::data::AssetKey::kSizeBytes> { 0x22 });
-
-  AssetEntry a {};
-  a.asset_key = key_a;
-  a.descriptor_relpath_offset = off_desc_a;
-  a.virtual_path_offset = off_vpath_1;
-  a.source_path_offset = off_vpath_1;
-  a.asset_type = 0;
-  a.descriptor_size = 0;
-
-  AssetEntry b {};
-  b.asset_key = key_b;
-  b.descriptor_relpath_offset = off_desc_b;
-  b.virtual_path_offset = off_vpath_2;
-  b.source_path_offset = off_vpath_2;
-  b.asset_type = 0;
-  b.descriptor_size = 0;
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, a);
-    WriteObject(out, b);
-  }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: Table/data pairs must be complete when present
-/*!
- Scenario: Writes a loose cooked root where textures.table is indexed, but
- textures.data is missing. Verifies that mounting fails.
-*/
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
-{
-  using oxygen::data::AssetType;
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::render::MaterialAssetDesc;
-
-  const LooseCookedLayout layout {};
-  using oxygen::data::pak::core::TextureResourceDesc;
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root / layout.materials_subdir);
-  std::filesystem::create_directories(cooked_root / layout.resources_dir);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  // Write a minimal textures.table (fallback + one record) but do not write
-  // textures.data.
-  TextureResourceDesc fallback_desc {};
-  TextureResourceDesc test_desc {};
-  {
-    std::ofstream out(
-      cooked_root / layout.resources_dir / layout.textures_table_file_name,
-      std::ios::binary);
-    WriteObject(out, fallback_desc);
-    WriteObject(out, test_desc);
-  }
-
-  MaterialAssetDesc material_desc {};
-  material_desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  material_desc.header.version
-    = oxygen::data::pak::render::kMaterialAssetVersion;
-  {
-    const auto material_file
-      = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
-    std::ofstream out(
-      cooked_root / layout.materials_subdir / material_file, std::ios::binary);
-    WriteBytes(out, oxygen::data::MakeDescriptorBytes(material_desc));
-  }
-
-  // Build index string table.
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += std::string(layout.materials_subdir) + "/"
-    + LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += layout.MaterialVirtualPath("TestMaterial");
-  strings.push_back('\0');
-  const auto off_tex_table = static_cast<uint32_t>(strings.size());
-  strings += layout.TexturesTableRelPath();
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
-  header.file_record_count = 1;
-  header.file_record_size = sizeof(FileRecord);
-
-  oxygen::data::AssetKey key {};
-  AssetEntry asset_entry {};
-  asset_entry.asset_key = key;
-  asset_entry.descriptor_relpath_offset = off_desc;
-  asset_entry.virtual_path_offset = off_vpath;
-  asset_entry.source_path_offset = off_vpath;
-  asset_entry.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  asset_entry.descriptor_size
-    = oxygen::data::MakeDescriptorBytes(material_desc).size();
-
-  FileRecord tex_table_record {};
-  tex_table_record.kind = FileKind::kTexturesTable;
-  tex_table_record.relpath_offset = off_tex_table;
-  tex_table_record.size = sizeof(TextureResourceDesc) * 2;
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, asset_entry);
-    WriteObject(out, tex_table_record);
-  }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: Table/data pairs must be complete (data without table)
-/*!
- Scenario: Writes a loose cooked root where textures.data is indexed, but
- textures.table is missing. Verifies that mounting fails.
-*/
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDataWithoutTableThrows)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_tex_data = static_cast<uint32_t>(strings.size());
-  strings += "Resources/textures.data";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 1;
-  header.file_record_size = sizeof(FileRecord);
-
-  FileRecord tex_data_record {};
-  tex_data_record.kind = FileKind::kTexturesData;
-  tex_data_record.relpath_offset = off_tex_data;
-  tex_data_record.size = 0;
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, tex_data_record);
-  }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: Script table/data file kinds are accepted when provided as a pair
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootScriptTableAndDataPairSucceeds)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root / "Resources");
-  const auto index_path = cooked_root / "container.index.bin";
-
-  {
-    std::ofstream out(
-      cooked_root / "Resources" / "scripts.table", std::ios::binary);
-  }
-  {
-    std::ofstream out(
-      cooked_root / "Resources" / "scripts.data", std::ios::binary);
-  }
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_scripts_table = static_cast<uint32_t>(strings.size());
-  strings += "Resources/scripts.table";
-  strings.push_back('\0');
-  const auto off_scripts_data = static_cast<uint32_t>(strings.size());
-  strings += "Resources/scripts.data";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 2;
-  header.file_record_size = sizeof(FileRecord);
-
-  FileRecord scripts_table_record {};
-  scripts_table_record.kind = FileKind::kScriptsTable;
-  scripts_table_record.relpath_offset = off_scripts_table;
-  scripts_table_record.size = 0;
-  scripts_table_record.sha256 = oxygen::base::ComputeSha256({});
-
-  FileRecord scripts_data_record {};
-  scripts_data_record.kind = FileKind::kScriptsData;
-  scripts_data_record.relpath_offset = off_scripts_data;
-  scripts_data_record.size = 0;
-  scripts_data_record.sha256 = oxygen::base::ComputeSha256({});
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, scripts_table_record);
-    WriteObject(out, scripts_data_record);
-  }
-
-  EXPECT_NO_THROW({ asset_loader_->AddLooseCookedRoot(cooked_root); });
-}
-
-//! Test: Script table/data must be provided as a complete pair
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootScriptDataWithoutTableThrows)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_scripts_data = static_cast<uint32_t>(strings.size());
-  strings += "Resources/scripts.data";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 1;
-  header.file_record_size = sizeof(FileRecord);
-
-  FileRecord scripts_data_record {};
-  scripts_data_record.kind = FileKind::kScriptsData;
-  scripts_data_record.relpath_offset = off_scripts_data;
-  scripts_data_record.size = 0;
-  scripts_data_record.sha256 = oxygen::base::ComputeSha256({});
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, scripts_data_record);
-  }
-
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: Physics table/data file kinds are accepted when provided as a pair.
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootPhysicsTableAndDataPairSucceeds)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root / "Resources");
-  const auto index_path = cooked_root / "container.index.bin";
-
-  {
-    std::ofstream out(
-      cooked_root / "Resources" / "physics.table", std::ios::binary);
-  }
-  {
-    std::ofstream out(
-      cooked_root / "Resources" / "physics.data", std::ios::binary);
-  }
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_physics_table = static_cast<uint32_t>(strings.size());
-  strings += "Resources/physics.table";
-  strings.push_back('\0');
-  const auto off_physics_data = static_cast<uint32_t>(strings.size());
-  strings += "Resources/physics.data";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 2;
-  header.file_record_size = sizeof(FileRecord);
-
-  FileRecord physics_table_record {};
-  physics_table_record.kind = FileKind::kPhysicsTable;
-  physics_table_record.relpath_offset = off_physics_table;
-  physics_table_record.size = 0;
-  physics_table_record.sha256 = oxygen::base::ComputeSha256({});
-
-  FileRecord physics_data_record {};
-  physics_data_record.kind = FileKind::kPhysicsData;
-  physics_data_record.relpath_offset = off_physics_data;
-  physics_data_record.size = 0;
-  physics_data_record.sha256 = oxygen::base::ComputeSha256({});
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, physics_table_record);
-    WriteObject(out, physics_data_record);
-  }
-
-  EXPECT_NO_THROW({ asset_loader_->AddLooseCookedRoot(cooked_root); });
-}
-
-//! Test: Physics table/data must be provided as a complete pair.
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootPhysicsDataWithoutTableThrows)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_physics_data = static_cast<uint32_t>(strings.size());
-  strings += "Resources/physics.data";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 1;
-  header.file_record_size = sizeof(FileRecord);
-
-  FileRecord physics_data_record {};
-  physics_data_record.kind = FileKind::kPhysicsData;
-  physics_data_record.relpath_offset = off_physics_data;
-  physics_data_record.size = 0;
-  physics_data_record.sha256 = oxygen::base::ComputeSha256({});
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, physics_data_record);
-  }
-
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: File-record legacy SHA bytes are ignored
-/*!
- Scenario: The loose cooked index v1 used to store file-level SHA-256 digests
- in file records. That field has been removed and replaced with reserved bytes.
-
- Writes textures.table and textures.data with correct sizes, and fills the
- reserved bytes of the textures.table FileRecord with non-zero data to emulate
- a legacy SHA-256 field.
-
- Verifies that mounting succeeds.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootMissingFileDigestsRejected)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::core::TextureResourceDesc;
-
-  const LooseCookedLayout layout {};
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root / layout.resources_dir);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  // Write minimal resources.
-  TextureResourceDesc fallback_desc {};
-  TextureResourceDesc test_desc {};
-  {
-    std::ofstream out(
-      cooked_root / layout.resources_dir / layout.textures_table_file_name,
-      std::ios::binary);
-    WriteObject(out, fallback_desc);
-    WriteObject(out, test_desc);
-  }
-  {
-    std::ofstream out(
-      cooked_root / layout.resources_dir / layout.textures_data_file_name,
-      std::ios::binary);
-  }
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_table = static_cast<uint32_t>(strings.size());
-  strings += layout.TexturesTableRelPath();
-  strings.push_back('\0');
-  const auto off_data = static_cast<uint32_t>(strings.size());
-  strings += layout.TexturesDataRelPath();
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 2;
-  header.file_record_size = sizeof(FileRecord);
-
-  FileRecord table_record {};
-  table_record.kind = FileKind::kTexturesTable;
-  table_record.relpath_offset = off_table;
-  table_record.size = sizeof(TextureResourceDesc) * 2;
-
-  FileRecord data_record {};
-  data_record.kind = FileKind::kTexturesData;
-  data_record.relpath_offset = off_data;
-  data_record.size = 0;
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, table_record);
-    WriteObject(out, data_record);
-  }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::runtime_error);
-}
-
-//! Test: Descriptor SHA-256 mismatch rejects the root
-/*!
- Scenario: Writes a valid descriptor file with correct size, but provides a
- non-zero, incorrect descriptor SHA-256 in the index. Verifies mounting fails.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootDescriptorShaMismatchThrows)
-{
-  using oxygen::data::AssetType;
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::render::MaterialAssetDesc;
-
-  const LooseCookedLayout layout {};
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root / layout.materials_subdir);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  MaterialAssetDesc material_desc {};
-  material_desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  material_desc.header.version
-    = oxygen::data::pak::render::kMaterialAssetVersion;
-  {
-    const auto material_file
-      = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
-    std::ofstream out(
-      cooked_root / layout.materials_subdir / material_file, std::ios::binary);
-    WriteBytes(out, oxygen::data::MakeDescriptorBytes(material_desc));
-  }
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += std::string(layout.materials_subdir) + "/"
-    + LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += layout.MaterialVirtualPath("TestMaterial");
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  oxygen::data::AssetKey key {};
-  AssetEntry entry {};
-  entry.asset_key = key;
-  entry.descriptor_relpath_offset = off_desc;
-  entry.virtual_path_offset = off_vpath;
-  entry.source_path_offset = off_vpath;
-  entry.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  entry.descriptor_size
-    = oxygen::data::MakeDescriptorBytes(material_desc).size();
-  entry.descriptor_sha256[0] = 0x01; // Non-zero, intentionally incorrect
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, entry);
-  }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: Unknown header flags are rejected
-/*!
- Scenario: Writes a minimal index with an unknown flags bit set. Verifies that
- mounting fails.
-*/
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnknownFlagsThrows)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = 0x80000000U;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = 1; // "\0"
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    const char zero = 0;
-    out.write(&zero, 1);
-  }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: Non-zero flags must declare virtual-path support
-/*!
- Scenario: Writes a minimal index with non-zero flags that omit
- `kHasVirtualPaths`. Verifies that mounting fails.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootFlagsMissingVirtualPathsThrows)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = 1;
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    const char zero = 0;
-    out.write(&zero, 1);
-  }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: File records are disallowed unless declared by flags
-/*!
- Scenario: Writes an index with file records but omits `kHasFileRecords`.
- Verifies that mounting fails.
-*/
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRootFileRecordsWithoutFlagThrows)
-{
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_root";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_file = static_cast<uint32_t>(strings.size());
-  strings += "Resources/textures.table";
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 1;
-  header.file_record_size = sizeof(FileRecord);
-
-  FileRecord record {};
-  record.kind = FileKind::kTexturesTable;
-  record.relpath_offset = off_file;
-  record.size = 0;
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-    WriteObject(out, record);
-  }
-
-  // Act & Assert
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
-}
-
-//! Test: Verify that an index without a GUID (all zeros) is rejected.
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootNoGuidThrows)
-{
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  const auto cooked_root = temp_dir_ / "loose_cooked_no_guid";
-  std::filesystem::create_directories(cooked_root);
-  const auto index_path = cooked_root / "container.index.bin";
-
-  IndexHeader header {};
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = 0;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = 1; // "\0"
-  header.asset_entries_offset = sizeof(IndexHeader) + 1;
-  header.asset_count = 0;
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  // Leave GUID as zeros (default initialization)
-
-  {
-    std::ofstream out(index_path, std::ios::binary);
-    WriteObject(out, header);
-    const char zero = 0;
-    out.write(&zero, 1);
-  }
-
-  EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
 }
 
 //! A texture descriptor record keeps the virtual path it is addressed by.
-NOLINT_TEST_F(LooseCookedIndexTest, TextureDescriptorRecordKeepsItsVirtualPath)
+NOLINT_TEST(LooseCookedIndexFileTest, TextureDescriptorKeepsItsVirtualPath)
 {
-  using oxygen::data::loose_cooked::FileKind;
-
   // Arrange
-  const auto root = temp_dir_ / "textures";
-  const auto bytes = std::array<std::byte, 4> {};
-  {
-    auto writer = oxygen::content::testing::LooseCookedTestWriter(root);
-    writer.WriteFile(FileKind::kTextureDescriptor, "Textures/Sky.otex", bytes,
-      "/Content/Textures/Sky.otex");
-    static_cast<void>(writer.Finish());
-  }
+  auto sky = File(FileKind::kTextureDescriptor, "Textures/Sky.otex");
+  sky.virtual_path = "/Content/Textures/Sky.otex";
+  // A texture descriptor records the source that produced it.
+  sky.source_path = std::string(kSource);
 
   // Act
   const auto inventory
-    = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(root)
+    = LooseCookedIndexImpl::LoadFromBytes(Encode({}, std::array { sky }))
         .GetFileInventory();
 
   // Assert
@@ -1753,51 +567,188 @@ NOLINT_TEST_F(LooseCookedIndexTest, TextureDescriptorRecordKeepsItsVirtualPath)
 
 //! A texture descriptor needs a canonical virtual path of its own; no other
 //! file record may carry one.
-NOLINT_TEST_F(LooseCookedIndexTest, InvalidFileRecordVirtualPathsAreRejected)
+NOLINT_TEST(LooseCookedIndexFileTest, InvalidFileVirtualPathsAreCorrupt)
 {
-  using oxygen::data::loose_cooked::FileKind;
+  // A texture descriptor and an auxiliary file, both valid; each case then
+  // points one record's virtual path elsewhere in the string table.
+  auto sky = File(FileKind::kTextureDescriptor, "Textures/Sky.otex");
+  sky.virtual_path = "/Content/Textures/Sky.otex";
+  sky.source_path = std::string(kSource);
+  const auto hull = File(FileKind::kAuxiliary, "Ship/Hull.obuf");
+  const auto valid = Encode({}, std::array { hull, sky });
+  // Files are encoded in path order: the hull's record, then the sky's.
+  constexpr auto kHull = size_t { 0 };
+  constexpr auto kSky = size_t { 1 };
+  const auto sky_record = [&valid] -> FileRecord {
+    auto record = FileRecord {};
+    std::memcpy(
+      &record, valid.data() + FileRecordOffset(valid, kSky), sizeof(record));
+    return record;
+  }();
+  const auto vpath_field = offsetof(FileRecord, virtual_path_offset);
 
   struct Case {
-    FileKind kind;
-    std::string virtual_path;
+    std::string_view name;
+    size_t record;
+    uint32_t virtual_path_offset;
   };
   const auto cases = std::array {
-    Case { .kind = FileKind::kTextureDescriptor, .virtual_path = {} },
-    Case {
-      .kind = FileKind::kTextureDescriptor,
-      .virtual_path = "Content/Textures/Sky.otex",
-    },
-    Case {
-      .kind = FileKind::kAuxiliary,
-      .virtual_path = "/Content/Textures/Sky.otex",
-    },
-    Case {
-      .kind = FileKind::kTextureDescriptor,
-      .virtual_path = "/Content/Materials/Wood.omat",
-    },
+    // The table's leading NUL: an empty virtual path.
+    Case { .name = "texture without virtual path",
+      .record = kSky,
+      .virtual_path_offset = 0U },
+    // Past the leading '/': `Content/Textures/Sky.otex`, not canonical.
+    Case { .name = "texture with a relative virtual path",
+      .record = kSky,
+      .virtual_path_offset = sky_record.virtual_path_offset + 1U },
+    Case { .name = "auxiliary file with a virtual path",
+      .record = kHull,
+      .virtual_path_offset = sky_record.virtual_path_offset },
   };
-  const auto bytes = std::array<std::byte, 4> {};
-  auto index = 0;
   for (const auto& test_case : cases) {
     // Arrange
-    const auto root = temp_dir_ / ("case" + std::to_string(index++));
-    {
-      auto writer = oxygen::content::testing::LooseCookedTestWriter(root);
-      writer.WriteAssetDescriptor(
-        oxygen::data::AssetKey::FromVirtualPath("/Content/Materials/Wood.omat"),
-        oxygen::data::AssetType::kMaterial, "/Content/Materials/Wood.omat",
-        "Materials/Wood.omat", bytes);
-      writer.WriteFile(
-        test_case.kind, "Textures/Sky.otex", bytes, test_case.virtual_path);
-      static_cast<void>(writer.Finish());
-    }
+    auto bytes = valid;
+    Patch(bytes, FileRecordOffset(bytes, test_case.record) + vpath_field,
+      test_case.virtual_path_offset);
 
     // Act & Assert
-    EXPECT_THROW(static_cast<void>(
-                   oxygen::content::lc::LooseCookedIndex::LoadFromRoot(root)),
-      std::runtime_error)
-      << test_case.virtual_path;
+    const auto [failure, what] = RefusalOf(bytes);
+    EXPECT_EQ(failure, CookedOpenFailure::kCorrupt)
+      << test_case.name << ": " << what;
   }
+}
+
+//! A texture descriptor and an asset never share a virtual path.
+NOLINT_TEST(LooseCookedIndexFileTest, TextureAndAssetShareNoVirtualPath)
+{
+  // Arrange
+  const auto wood
+    = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  auto sky = File(FileKind::kTextureDescriptor, "Textures/Sky.otex");
+  sky.virtual_path = "/Content/Textures/Sky.otex";
+  // A texture descriptor records the source that produced it.
+  sky.source_path = std::string(kSource);
+  auto bytes = Encode(std::array { wood }, std::array { sky });
+  auto entry = AssetEntry {};
+  std::memcpy(&entry, bytes.data() + AssetEntryOffset(bytes, 0), sizeof(entry));
+  Patch(bytes,
+    FileRecordOffset(bytes, 0) + offsetof(FileRecord, virtual_path_offset),
+    entry.virtual_path_offset);
+
+  // Act & Assert
+  ExpectCorrupt(bytes, "Duplicate virtual path");
+}
+
+//=== Files on disk ===-------------------------------------------------------//
+
+class LooseCookedIndexFileSystemTest : public oxygen::testing::TempDirTest {
+protected:
+  //! Publishes `bytes` as the file `relpath` of the cooked root.
+  auto Publish(const std::string_view relpath,
+    const std::span<const std::byte> bytes) const -> void
+  {
+    const auto path = TempPath(relpath);
+    std::filesystem::create_directories(path.parent_path());
+    ASSERT_HAS_VALUE(oxygen::serio::WriteFileAtomically(path, bytes));
+  }
+
+  auto PublishText(
+    const std::string_view relpath, const std::string_view text) const -> void
+  {
+    Publish(relpath, std::as_bytes(std::span(text)));
+  }
+
+  [[nodiscard]] auto IndexPath() const -> std::filesystem::path
+  {
+    return TempPath("container.index.bin");
+  }
+};
+
+//! A loaded index maps its file and keeps the version it mapped while the
+//! cooker publishes another.
+NOLINT_TEST_F(LooseCookedIndexFileSystemTest, MappedIndexSurvivesRepublication)
+{
+  // Arrange
+  const auto wood
+    = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  const auto base
+    = Material("/Content/Materials/Base.omat", "Materials/Base.omat");
+  Publish("container.index.bin", Encode(std::array { wood }));
+  const auto index = LooseCookedIndexImpl::LoadFromFile(IndexPath());
+
+  // Act
+  Publish("container.index.bin", Encode(std::array { base }));
+
+  // Assert
+  EXPECT_EQ(index.FindVirtualPath(wood.key), wood.virtual_path);
+  EXPECT_FALSE(index.FindVirtualPath(base.key).has_value());
+  EXPECT_EQ(
+    LooseCookedIndexImpl::LoadFromFile(IndexPath()).FindVirtualPath(base.key),
+    base.virtual_path);
+}
+
+//! Index loads wait for an in-process publication to finish.
+/*!
+ Holds the exclusive index file lock through a differently spelled path while
+ the index is absent, as during a replace. A concurrent load must wait and
+ read the republished index instead of failing on the missing file.
+*/
+NOLINT_TEST_F(
+  LooseCookedIndexFileSystemTest, LoadFromRootWaitsForExclusivePublication)
+{
+  // Arrange
+  Publish("container.index.bin", Encode({}));
+  auto publication = LooseCookedIndexImpl::LockFileExclusive(
+    TempPath("./container.index.bin"));
+  std::filesystem::remove(IndexPath());
+
+  // Act
+  auto load_error = std::string {};
+  auto reader = std::thread([this, &load_error] -> void {
+    try {
+      static_cast<void>(LooseCookedIndex::LoadFromRoot(TempDir()));
+    } catch (const std::exception& ex) {
+      load_error = ex.what();
+    }
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  Publish("container.index.bin", Encode({}));
+  publication.unlock();
+  reader.join();
+
+  // Assert
+  EXPECT_TRUE(load_error.empty()) << load_error;
+}
+
+//! A full check hashes each descriptor against its indexed digest.
+NOLINT_TEST_F(LooseCookedIndexFileSystemTest, DescriptorDigestsAreChecked)
+{
+  // Arrange
+  const auto wood
+    = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  PublishText(wood.descriptor_relpath, wood.descriptor_relpath);
+  auto forged = wood;
+  forged.descriptor_sha256 = DigestOf("forged");
+  Publish("container.index.bin", Encode(std::array { wood }));
+  const auto valid = LooseCookedIndexImpl::LoadFromFile(IndexPath());
+  Publish("container.index.bin", Encode(std::array { forged }));
+  const auto mismatched = LooseCookedIndexImpl::LoadFromFile(IndexPath());
+
+  // Act
+  const auto valid_issues
+    = valid.CheckContent(TempDir(), IntegrityCheck::kFull);
+  const auto issues = mismatched.CheckContent(TempDir(), IntegrityCheck::kFull);
+  const auto metadata_issues
+    = mismatched.CheckContent(TempDir(), IntegrityCheck::kMetadata);
+
+  // Assert
+  EXPECT_TRUE(valid_issues.empty());
+  ASSERT_EQ(issues.size(), 1U);
+  EXPECT_EQ(issues.front().relative_path, wood.descriptor_relpath);
+  EXPECT_EQ(issues.front().reason, IntegrityFailure::kDigestMismatch);
+  EXPECT_TRUE(metadata_issues.empty());
+  EXPECT_THROW(mismatched.ValidateContent(TempDir(), IntegrityCheck::kFull),
+    std::runtime_error);
 }
 
 } // namespace

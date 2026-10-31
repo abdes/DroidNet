@@ -7,142 +7,85 @@
 // Covers: Pak/PakValidation.cpp, Pak/PakPlanPolicy.cpp
 
 #include <cstdint>
-#include <filesystem>
-#include <span>
-#include <string>
-#include <string_view>
 #include <utility>
-#include <vector>
 
-#include "PakTestSupport.h"
 #include "PakWriterTestSupport.h"
 
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanPolicy.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
-#include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
-namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
 namespace paktest = oxygen::content::pak::test;
 
+using oxygen::cooker::test::HasDiagnostic;
+using oxygen::cooker::test::HasNoErrors;
+
 constexpr auto kContentVersion = uint16_t { 23U };
-constexpr auto kFooterOffset = uint64_t { 512U };
 constexpr auto kRegionBaseOffset = uint64_t { 256U };
 constexpr auto kRegionSize = uint64_t { 64U };
 constexpr auto kOverlapOffset = uint64_t { 288U };
+constexpr auto kPayloadBoundary
+  = uint64_t { oxygen::data::pak::core::kPakPayloadAlignment };
 
-struct BaselinePlanInput final {
-  pak::PakBuildRequest request;
-  pak::PakPlan plan;
-};
-
-auto ClonePlanData(const pak::PakPlan& plan) -> pak::PakPlan::Data
-{
-  auto out = pak::PakPlan::Data {};
-  out.header = plan.Header();
-  out.regions.assign(plan.Regions().begin(), plan.Regions().end());
-  out.tables.assign(plan.Tables().begin(), plan.Tables().end());
-  out.assets.assign(plan.Assets().begin(), plan.Assets().end());
-  out.resources.assign(plan.Resources().begin(), plan.Resources().end());
-  out.asset_payload_sources.assign(
-    plan.AssetPayloadSources().begin(), plan.AssetPayloadSources().end());
-  out.resource_payload_sources.assign(
-    plan.ResourcePayloadSources().begin(), plan.ResourcePayloadSources().end());
-  out.directory = plan.Directory();
-  out.browse_index = plan.BrowseIndex();
-  out.footer = plan.Footer();
-  out.patch_actions.assign(
-    plan.PatchActions().begin(), plan.PatchActions().end());
-  out.patch_closure.assign(
-    plan.PatchClosure().begin(), plan.PatchClosure().end());
-  out.planned_file_size = plan.PlannedFileSize();
-  return out;
-}
-
-class PakDomainValidationTest : public ::testing::Test {
+//! Validates canonical plans, empty paks of library `Game`, that each test
+//! mutates in the one field it is about.
+class PakDomainValidationTest : public paktest::PakWriterFixture {
 protected:
-  auto MakeBaselinePlan() -> BaselinePlanInput
+  [[nodiscard]] static auto BaselinePlan() -> pak::PakPlan::Data
   {
-    auto request
-      = paktest::MakeFullRequest(std::filesystem::path("domain_validation.pak"),
-        {
-          .content_version = kContentVersion,
-          .source_key = paktest::CanonicalSourceKey(),
-        });
+    return CanonicalPlan({ .content_version = kContentVersion });
+  }
 
-    // An empty pak of library `Tests`: a catalog between the regions and the
-    // browse index, which sits right before the footer.
-    auto data = paktest::MakeCanonicalPlan({
-      .content_version = kContentVersion,
-      .footer_offset = kFooterOffset,
-    });
-    auto catalog = data::PakCatalog {
-      .source_key = data.header.source_key,
-      .content_version = kContentVersion,
-      .catalog_digest = {},
-      .library = "Tests",
-    };
-    catalog.catalog_digest = catalog.ComputeDigest().value();
-    data.catalog = {
-      .offset = kRegionBaseOffset,
-      .bytes = catalog.Encode().value(),
-    };
-
-    return BaselinePlanInput {
-      .request = std::move(request),
-      .plan = pak::PakPlan(std::move(data)),
-    };
+  //! Validates `plan` against a full build request of the same version.
+  [[nodiscard]] auto Validate(pak::PakPlan::Data plan)
+    -> pak::PakValidation::Result
+  {
+    const auto request = Request(kContentVersion, "domain_validation.pak");
+    return pak::PakValidation::Validate(pak::PakPlan(std::move(plan)),
+      pak::DerivePakPlanPolicy(request), request);
   }
 };
 
 NOLINT_TEST_F(PakDomainValidationTest, BaselinePlannerOutputPassesValidation)
 {
-  auto baseline = MakeBaselinePlan();
-  const auto policy = pak::DerivePakPlanPolicy(baseline.request);
-  const auto result
-    = pak::PakValidation::Validate(baseline.plan, policy, baseline.request);
+  const auto result = Validate(BaselinePlan());
 
   EXPECT_TRUE(result.success);
-  EXPECT_FALSE(paktest::HasError(result.diagnostics));
+  EXPECT_THAT(result.diagnostics, HasNoErrors());
 }
 
 NOLINT_TEST_F(PakDomainValidationTest, RejectsOverlappingSections)
 {
-  auto baseline = MakeBaselinePlan();
-  auto data = ClonePlanData(baseline.plan);
-  ASSERT_GE(data.regions.size(), 2U);
+  auto plan = BaselinePlan();
+  ASSERT_GE(plan.regions.size(), 2U);
+  auto& first = plan.regions.at(0);
+  auto& second = plan.regions.at(1);
+  first.offset = kRegionBaseOffset;
+  first.size_bytes = kRegionSize;
+  first.alignment = 1U;
+  second.offset = kOverlapOffset;
+  second.size_bytes = kRegionSize;
+  second.alignment = 1U;
 
-  data.regions.at(0).offset = kRegionBaseOffset;
-  data.regions.at(0).size_bytes = kRegionSize;
-  data.regions.at(0).alignment = 1U;
-  data.regions.at(1).offset = kOverlapOffset;
-  data.regions.at(1).size_bytes = kRegionSize;
-  data.regions.at(1).alignment = 1U;
-
-  const auto policy = pak::DerivePakPlanPolicy(baseline.request);
-  const auto result = pak::PakValidation::Validate(
-    pak::PakPlan(std::move(data)), policy, baseline.request);
+  const auto result = Validate(std::move(plan));
 
   EXPECT_FALSE(result.success);
-  const auto has_region_overlap
-    = paktest::HasDiagnosticCode(result.diagnostics, "pak.plan.region_overlap");
-  const auto has_section_overlap = paktest::HasDiagnosticCode(
-    result.diagnostics, "pak.plan.section_overlap");
-  EXPECT_TRUE(has_region_overlap || has_section_overlap);
+  EXPECT_THAT(result.diagnostics,
+    ::testing::AnyOf(HasDiagnostic("pak.plan.region_overlap"),
+      HasDiagnostic("pak.plan.section_overlap")));
 }
 
 NOLINT_TEST_F(PakDomainValidationTest, RejectsTableEntrySizeMismatch)
 {
-  auto baseline = MakeBaselinePlan();
-  auto data = ClonePlanData(baseline.plan);
-  ASSERT_FALSE(data.tables.empty());
-
-  auto& table = data.tables.front();
+  auto plan = BaselinePlan();
+  ASSERT_FALSE(plan.tables.empty());
+  auto& table = plan.tables.front();
   table.table_name = "texture_table";
   table.count = 1U;
   table.expected_entry_size = static_cast<uint32_t>(
@@ -151,13 +94,43 @@ NOLINT_TEST_F(PakDomainValidationTest, RejectsTableEntrySizeMismatch)
   table.size_bytes = table.entry_size;
   table.alignment = 1U;
 
-  const auto policy = pak::DerivePakPlanPolicy(baseline.request);
-  const auto result = pak::PakValidation::Validate(
-    pak::PakPlan(std::move(data)), policy, baseline.request);
+  const auto result = Validate(std::move(plan));
 
   EXPECT_FALSE(result.success);
-  EXPECT_TRUE(paktest::HasDiagnosticCode(
-    result.diagnostics, "pak.plan.table_entry_size_mismatch"));
+  EXPECT_THAT(
+    result.diagnostics, HasDiagnostic("pak.plan.table_entry_size_mismatch"));
+}
+
+//! A payload must start on a payload boundary, whatever smaller alignment its
+//! descriptor records.
+NOLINT_TEST_F(PakDomainValidationTest, RejectsAPayloadOffItsBoundary)
+{
+  auto plan = BaselinePlan();
+  auto& region = plan.regions.front();
+  region.offset = kPayloadBoundary;
+  region.size_bytes = kPayloadBoundary;
+  plan.resources = {
+    paktest::MakeTexturePlacement(kPayloadBoundary + kRegionSize, kRegionSize),
+  };
+
+  const auto result = Validate(std::move(plan));
+
+  EXPECT_THAT(result.diagnostics,
+    HasDiagnostic("pak.plan.resource_payload_alignment_mismatch"));
+}
+
+//! A region holding payloads is padded to a payload boundary.
+NOLINT_TEST_F(PakDomainValidationTest, RejectsAnUnpaddedPayloadRegion)
+{
+  auto plan = BaselinePlan();
+  auto& region = plan.regions.front();
+  region.offset = kPayloadBoundary;
+  region.size_bytes = kRegionSize;
+
+  const auto result = Validate(std::move(plan));
+
+  EXPECT_THAT(result.diagnostics,
+    HasDiagnostic("pak.plan.region_payload_alignment_mismatch"));
 }
 
 } // namespace

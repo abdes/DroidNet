@@ -15,13 +15,13 @@
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <system_error>
 #include <vector>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/CookedRootCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/DescriptorCommands.h>
@@ -31,9 +31,6 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Serio/NativeFile.h>
-#include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::inspection {
 
@@ -104,36 +101,6 @@ namespace {
     }
   }
 
-  auto ReadDescriptorBytes(const std::filesystem::path& descriptor_path)
-    -> std::vector<std::byte>
-  {
-    using oxygen::serio::Reader;
-
-    auto file = oxygen::serio::NativeFile::Open(descriptor_path, {});
-    if (!file) {
-      throw std::system_error(
-        file.error(), fmt::format("open '{}'", descriptor_path.string()));
-    }
-    auto stream = oxygen::serio::OpenReadStream(*file);
-    if (!stream) {
-      throw std::system_error(stream.error(),
-        fmt::format("query descriptor size '{}'", descriptor_path.string()));
-    }
-    const auto size_bytes = stream->Size().get();
-    if (size_bytes == 0) {
-      return {};
-    }
-
-    Reader<oxygen::serio::RegionReadStream<oxygen::serio::NativeFile>> reader(
-      *stream);
-    auto pack = reader.ScopedAlignment(1);
-    auto blob = reader.ReadBlob(size_bytes);
-    if (!blob) {
-      throw std::runtime_error("failed to read descriptor");
-    }
-    return *blob;
-  }
-
   template <typename T>
   auto ReadStructAt(const std::vector<std::byte>& bytes, const size_t offset)
     -> std::optional<T>
@@ -153,21 +120,20 @@ namespace {
     using oxygen::data::pak::input::InputActionAssetDesc;
 
     const std::filesystem::path cooked_root(cooked_root_path);
-    oxygen::content::lc::Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
+    const auto content
+      = cooked::CookedContent::Open(cooked::RealCookerStorage(), cooked_root);
 
     size_t count = 0;
-    for (const auto& asset : inspection.Assets()) {
-      if (asset.asset_type != static_cast<uint8_t>(AssetType::kInputAction)) {
+    for (const auto& asset : content.Assets()) {
+      if (asset.type != AssetType::kInputAction) {
         continue;
       }
 
       ++count;
       out << "InputAction key='" << oxygen::data::to_string(asset.key)
-          << "' desc='" << asset.descriptor_relpath << "'\n";
+          << "' vpath='" << asset.virtual_path << "'\n";
 
-      const auto descriptor = ReadDescriptorBytes(
-        cooked_root / std::filesystem::path(asset.descriptor_relpath));
+      const auto descriptor = content.Descriptor(asset.key);
       if (descriptor.size() < sizeof(InputActionAssetDesc)) {
         out << "  ! descriptor too small\n";
         continue;
@@ -202,22 +168,20 @@ namespace {
     using oxygen::data::pak::input::InputTriggerRecord;
 
     const std::filesystem::path cooked_root(cooked_root_path);
-    oxygen::content::lc::Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
+    const auto content
+      = cooked::CookedContent::Open(cooked::RealCookerStorage(), cooked_root);
 
     size_t count = 0;
-    for (const auto& asset : inspection.Assets()) {
-      if (asset.asset_type
-        != static_cast<uint8_t>(AssetType::kInputMappingContext)) {
+    for (const auto& asset : content.Assets()) {
+      if (asset.type != AssetType::kInputMappingContext) {
         continue;
       }
       ++count;
 
       out << "InputMappingContext key='" << oxygen::data::to_string(asset.key)
-          << "' desc='" << asset.descriptor_relpath << "'\n";
+          << "' vpath='" << asset.virtual_path << "'\n";
 
-      const auto descriptor = ReadDescriptorBytes(
-        cooked_root / std::filesystem::path(asset.descriptor_relpath));
+      const auto descriptor = content.Descriptor(asset.key);
       if (descriptor.size() < sizeof(InputMappingContextAssetDesc)) {
         out << "  ! descriptor too small\n";
         continue;
@@ -310,12 +274,12 @@ namespace {
     using oxygen::data::pak::physics::PhysicsSceneAssetDesc;
 
     const std::filesystem::path cooked_root(cooked_root_path);
-    oxygen::content::lc::Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
+    const auto content
+      = cooked::CookedContent::Open(cooked::RealCookerStorage(), cooked_root);
 
     size_t count = 0;
-    for (const auto& asset : inspection.Assets()) {
-      const auto type = static_cast<AssetType>(asset.asset_type);
+    for (const auto& asset : content.Assets()) {
+      const auto type = asset.type;
       if (type != AssetType::kPhysicsMaterial
         && type != AssetType::kCollisionShape
         && type != AssetType::kPhysicsScene) {
@@ -323,12 +287,11 @@ namespace {
       }
       ++count;
 
-      const auto descriptor = ReadDescriptorBytes(
-        cooked_root / std::filesystem::path(asset.descriptor_relpath));
+      const auto descriptor = content.Descriptor(asset.key);
 
       if (type == AssetType::kPhysicsMaterial) {
         out << "PhysicsMaterial key='" << oxygen::data::to_string(asset.key)
-            << "' desc='" << asset.descriptor_relpath << "'\n";
+            << "' vpath='" << asset.virtual_path << "'\n";
         if (descriptor.size() < sizeof(PhysicsMaterialAssetDesc)) {
           out << "  ! descriptor too small\n";
           continue;
@@ -350,7 +313,7 @@ namespace {
 
       if (type == AssetType::kCollisionShape) {
         out << "CollisionShape key='" << oxygen::data::to_string(asset.key)
-            << "' desc='" << asset.descriptor_relpath << "'\n";
+            << "' vpath='" << asset.virtual_path << "'\n";
         if (descriptor.size() < sizeof(CollisionShapeAssetDesc)) {
           out << "  ! descriptor too small\n";
           continue;
@@ -379,7 +342,7 @@ namespace {
       }
 
       out << "PhysicsScene key='" << oxygen::data::to_string(asset.key)
-          << "' desc='" << asset.descriptor_relpath << "'\n";
+          << "' vpath='" << asset.virtual_path << "'\n";
       if (descriptor.size() < sizeof(PhysicsSceneAssetDesc)) {
         out << "  ! descriptor too small\n";
         continue;
@@ -443,15 +406,13 @@ namespace {
     -> toolkit::ToolResult
   {
     const std::filesystem::path cooked_root(cooked_root_path);
-    oxygen::content::lc::Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
-    for (const auto& asset : inspection.Assets()) {
-      if (asset.asset_type
-        != static_cast<uint8_t>(oxygen::data::AssetType::kScene)) {
+    const auto content
+      = cooked::CookedContent::Open(cooked::RealCookerStorage(), cooked_root);
+    for (const auto& asset : content.Assets()) {
+      if (asset.type != oxygen::data::AssetType::kScene) {
         continue;
       }
-      const auto bytes
-        = ReadDescriptorBytes(cooked_root / asset.descriptor_relpath);
+      const auto bytes = content.Descriptor(asset.key);
       const auto scene = oxygen::data::SceneAsset(asset.key, bytes);
       out << "Scene: " << asset.virtual_path << "\n";
       for (const auto& component : scene.GetComponents<

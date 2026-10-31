@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -132,26 +133,6 @@ public:
   {
     return nullptr;
   }
-  [[nodiscard]] auto CreateBufferTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    return nullptr;
-  }
-  [[nodiscard]] auto CreateTextureTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    return nullptr;
-  }
-  [[nodiscard]] auto CreateScriptTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    return nullptr;
-  }
-  [[nodiscard]] auto CreatePhysicsTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    return nullptr;
-  }
   [[nodiscard]] auto GetBufferTable() const noexcept
     -> const ResourceTable<data::BufferResource>* override
   {
@@ -172,25 +153,17 @@ public:
   {
     return nullptr;
   }
-  [[nodiscard]] auto CreateBufferDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
+  [[nodiscard]] auto PayloadRegion(
+    const TypeId /*resource_type*/) const noexcept
+    -> std::optional<serio::Region<serio::AnyAsyncDevice>> override
   {
-    return nullptr;
+    return std::nullopt;
   }
-  [[nodiscard]] auto CreateTextureDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
+  [[nodiscard]] auto ResourceRowSpace(
+    const TypeId /*resource_type*/) const noexcept
+    -> std::span<const std::byte> override
   {
-    return nullptr;
-  }
-  [[nodiscard]] auto CreateScriptDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    return nullptr;
-  }
-  [[nodiscard]] auto CreatePhysicsDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    return nullptr;
+    return {};
   }
   [[nodiscard]] auto ResolveVirtualPath(
     const data::AssetKey& key) const noexcept

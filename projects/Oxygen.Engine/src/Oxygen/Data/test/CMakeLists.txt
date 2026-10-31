@@ -42,6 +42,8 @@ m_gtest_program(
     "GeometryAsset_test.cpp"
     "HalfFloat_test.cpp"
     "IndexBufferView_test.cpp"
+    "LooseCookedIndexEncoder_test.cpp"
+    "LooseCookedPaths_test.cpp"
     "SurfaceInventory_test.cpp"
     "Mesh_test.cpp"
     "MeshBoundingSphere_test.cpp"
@@ -59,6 +61,12 @@ m_gtest_program(
     "TextureResource_test.cpp"
     "ToStringConverters_test.cpp"
     "Vertex_test.cpp"
+)
+
+target_link_libraries(
+  "${META_MODULE_NAME}.All.Tests"
+  PRIVATE
+    oxygen::serio::testing
 )
 
 m_gtest_program(

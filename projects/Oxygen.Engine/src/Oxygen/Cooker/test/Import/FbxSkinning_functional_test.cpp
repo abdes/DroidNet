@@ -58,11 +58,10 @@ namespace {
     const auto inspection = LoadInspection(imported.report.cooked_root);
     auto skinned_lods = std::size_t { 0 };
     for (const auto& asset : inspection.Assets()) {
-      if (asset.asset_type
-        != static_cast<uint8_t>(data::AssetType::kGeometry)) {
+      if (asset.type != data::AssetType::kGeometry) {
         continue;
       }
-      const auto path = imported.report.cooked_root / asset.descriptor_relpath;
+      const auto path = inspection.DescriptorStored(asset.key).file;
       auto file = serio::NativeFile::Open(path, {});
       ASSERT_TRUE(file) << file.error().message();
       auto stream = serio::OpenReadStream(*file);

@@ -78,10 +78,15 @@ inline constexpr std::array<char, 8> kPakHeaderMagic
 inline constexpr std::array<char, 8> kPakFooterMagic
   = { 'O', 'X', 'P', 'A', 'K', 'E', 'N', 'D' };
 
-//! Current PAK binary format version (v8 only).
+//! Current PAK binary format version; a build reads only this version.
 constexpr uint16_t kPakVersion = version::kPakVersion;
 inline constexpr uint32_t kBrowseIndexVersion = version::kBrowseIndexVersion;
 [[maybe_unused]] constexpr uint16_t kCurrentPakFormatVersion = kPakVersion;
+
+//! The boundary every resource payload of a pak starts on, and every resource
+//! region is padded to: 4 KiB, so a payload can be read unbuffered or handed
+//! to DirectStorage as it lies in the file.
+inline constexpr uint64_t kPakPayloadAlignment = 4096U;
 
 //=== PAK File Format Structures ===------------------------------------------//
 
@@ -107,10 +112,11 @@ static_assert(sizeof(PakHeader) == 256);
 
 //! Resource region offset/size descriptor.
 /*!
- A regions is a contiguous block of data within the PAK file, containing blobs
- of a specific type (e.g., textures, buffers, audio). All resource data blobs
- within a region are aligned to their required boundaries for direct memory
- mapping, and padded with null bytes as needed.
+ A region is a contiguous block of data within the PAK file, containing blobs
+ of a specific type (e.g., textures, buffers, audio). A region that holds
+ payloads starts on a `kPakPayloadAlignment` boundary and is padded with null
+ bytes to one; every payload in it starts on such a boundary too, which also
+ satisfies the smaller alignment its descriptor records.
 
  @see ResourceTable, PakFooter
 */

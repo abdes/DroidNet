@@ -18,10 +18,10 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/AssetKeyMap.h>
-#include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -36,24 +36,23 @@ auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> int
     [&] { return oxygen::content::inspection::RunAssetKeyMap(options); });
 }
 
-class InspectorAssetKeyMapTest
-  : public oxygen::content::pak::test::TempDirFixture {
+class InspectorAssetKeyMapTest : public oxygen::testing::TempDirTest {
 protected:
   auto Run(const json& request) -> int
   {
     {
-      std::ofstream input(Path("request.json"));
+      std::ofstream input(TempPath("request.json"));
       input << request.dump();
     }
     return RunAssetKeyMap({
-      .input = Path("request.json").string(),
-      .output = Path("report.json").string(),
+      .input = TempPath("request.json").string(),
+      .output = TempPath("report.json").string(),
     });
   }
 
   auto Read() -> json
   {
-    std::ifstream report(Path("report.json"));
+    std::ifstream report(TempPath("report.json"));
     return json::parse(report);
   }
 };
@@ -128,10 +127,10 @@ NOLINT_TEST_F(InspectorAssetKeyMapTest, EmptyBatchIsValid)
 
 NOLINT_TEST_F(InspectorAssetKeyMapTest, MissingInputFailsWithoutCreatingReport)
 {
-  EXPECT_EQ(RunAssetKeyMap(
-              { Path("missing.json").string(), Path("report.json").string() }),
+  EXPECT_EQ(RunAssetKeyMap({ TempPath("missing.json").string(),
+              TempPath("report.json").string() }),
     2);
-  EXPECT_FALSE(std::filesystem::exists(Path("report.json")));
+  EXPECT_FALSE(std::filesystem::exists(TempPath("report.json")));
 }
 
 } // namespace

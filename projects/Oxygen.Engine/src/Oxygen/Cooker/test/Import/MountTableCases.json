@@ -1,5 +1,5 @@
 {
-  "$comment": "How a mount table is resolved from a committed declaration and the .mounts.json hierarchy. The engine (SourceMounts_test.cpp) and the editor (MountTableCasesTests) both run every case, so the two readers cannot drift. Paths are relative to a case folder whose own .mounts.json has \"root\": true; ${temp} in a path is that folder. A library is built from its recipe by each harness's own fixture writer: path, kind (loose or pak), roots (the mounts its virtual paths start with; a pak names exactly one, its library), assets (each a virtual path and an asset type it provides, keyed from the path), requirements (a pak's: each a library, and the virtual path and type of the asset it requires of it), external_script (a script with an external source under its first root; a loose root only) and format (current, or unsupported: a version this build cannot read). Mounts compare by name; codes compare as sets.",
+  "$comment": "How a mount table is resolved from a committed declaration and the .mounts.json hierarchy. The engine (SourceMounts_test.cpp) and the editor (MountTableCasesTests) both run every case, so the two readers cannot drift. Paths are relative to a case folder whose own .mounts.json has \"root\": true; ${temp} in a path is that folder. A cooked source (cooked_sources) is built from its recipe by each harness's own fixture writer: path, kind (loose or pak), roots (the mounts its virtual paths start with; a pak names exactly one, its mount), assets (each a virtual path and an asset type it provides, keyed from the path), requirements (a pak's: each a mount, and the virtual path and type of the asset it requires of it), external_script (a script with an external source under its first root; a loose root only) and format (current, or unsupported: a version this build cannot read). Mounts compare by name; codes compare as sets.",
   "version": 1,
   "cases": [
     {
@@ -426,8 +426,8 @@
       "codes": ["mount.name_duplicate"]
     },
     {
-      "name": "libraries bound to a loose root and a pak",
-      "libraries": [
+      "name": "cooked mounts bound to a loose root and a pak",
+      "cooked_sources": [
         { "path": "Vendor/Props", "kind": "loose", "roots": ["Props"] },
         { "path": "Paks/Engine2D.pak", "kind": "pak", "roots": ["Engine2D"] }
       ],
@@ -469,8 +469,8 @@
       "codes": []
     },
     {
-      "name": "a library in an output folder",
-      "libraries": [
+      "name": "a cooked source in an output folder",
+      "cooked_sources": [
         { "path": "ws/proj/.cooked/Props", "kind": "loose", "roots": ["Props"] }
       ],
       "declarations": [
@@ -509,7 +509,7 @@
       "codes": ["mount.path_kind"]
     },
     {
-      "name": "a cooked mount bound to something that is not a library",
+      "name": "a cooked mount bound to something that is not a cooked source",
       "folders": ["Vendor/cooked"],
       "files": ["Vendor/file"],
       "declarations": [
@@ -540,11 +540,11 @@
           "role": "Shared"
         }
       ],
-      "codes": ["mount.library_format_unsupported"]
+      "codes": ["mount.cooked_format_unsupported"]
     },
     {
-      "name": "libraries of a format this build cannot read",
-      "libraries": [
+      "name": "cooked sources of a format this build cannot read",
+      "cooked_sources": [
         {
           "path": "Libs/Props",
           "kind": "loose",
@@ -586,11 +586,11 @@
           "role": "Shared"
         }
       ],
-      "codes": ["mount.library_format_unsupported"]
+      "codes": ["mount.cooked_format_unsupported"]
     },
     {
-      "name": "a library whose root is not its name",
-      "libraries": [
+      "name": "a cooked source whose root is not its mount name",
+      "cooked_sources": [
         { "path": "Libs/Cars", "kind": "loose", "roots": ["Vehicles"] }
       ],
       "declarations": [
@@ -607,11 +607,11 @@
           "role": "Shared"
         }
       ],
-      "codes": ["mount.library_root_mismatch"]
+      "codes": ["mount.cooked_root_mismatch"]
     },
     {
-      "name": "a library with more than one root",
-      "libraries": [
+      "name": "a cooked source with more than one root",
+      "cooked_sources": [
         {
           "path": "Libs/Props",
           "kind": "loose",
@@ -632,11 +632,11 @@
           "role": "Shared"
         }
       ],
-      "codes": ["mount.library_root_multiple"]
+      "codes": ["mount.cooked_root_multiple"]
     },
     {
-      "name": "a library with an external script",
-      "libraries": [
+      "name": "a cooked source with an external script",
+      "cooked_sources": [
         {
           "path": "Libs/Props",
           "kind": "loose",
@@ -658,12 +658,12 @@
           "role": "Shared"
         }
       ],
-      "codes": ["mount.library_external_script"]
+      "codes": ["mount.cooked_external_script"]
     },
     {
-      "name": "a library folder inside a source folder",
+      "name": "a cooked folder inside a source folder",
       "folders": ["ws/proj/Content"],
-      "libraries": [
+      "cooked_sources": [
         {
           "path": "ws/proj/Content/Cooked",
           "kind": "loose",
@@ -772,8 +772,8 @@
       "codes": ["mount.file_invalid", "mount.unbound"]
     },
     {
-      "name": "a pak whose library is not its name",
-      "libraries": [
+      "name": "a pak whose root is not its mount name",
+      "cooked_sources": [
         { "path": "Libs/Cars.pak", "kind": "pak", "roots": ["Vehicles"] }
       ],
       "declarations": [
@@ -790,11 +790,11 @@
           "role": "Shared"
         }
       ],
-      "codes": ["mount.library_root_mismatch"]
+      "codes": ["mount.cooked_root_mismatch"]
     },
     {
-      "name": "a pak whose requirement a library below provides",
-      "libraries": [
+      "name": "a pak whose requirement a mount below provides",
+      "cooked_sources": [
         {
           "path": "Libs/Vehicles",
           "kind": "loose",
@@ -807,7 +807,7 @@
           "roots": ["Props"],
           "requirements": [
             {
-              "library": "Vehicles",
+              "mount": "Vehicles",
               "path": "/Vehicles/Paint.omat",
               "type": "Material"
             }
@@ -841,8 +841,8 @@
       "codes": []
     },
     {
-      "name": "a pak whose requirement only a library above provides",
-      "libraries": [
+      "name": "a pak whose requirement only a mount above provides",
+      "cooked_sources": [
         {
           "path": "Libs/Vehicles",
           "kind": "loose",
@@ -855,7 +855,7 @@
           "roots": ["Props"],
           "requirements": [
             {
-              "library": "Vehicles",
+              "mount": "Vehicles",
               "path": "/Vehicles/Paint.omat",
               "type": "Material"
             }
@@ -886,11 +886,11 @@
           "role": "Shared"
         }
       ],
-      "codes": ["mount.library_dependency_missing"]
+      "codes": ["mount.cooked_dependency_missing"]
     },
     {
-      "name": "a pak whose requirement a library below provides as another type",
-      "libraries": [
+      "name": "a pak whose requirement a mount below provides as another type",
+      "cooked_sources": [
         {
           "path": "Libs/Vehicles.pak",
           "kind": "pak",
@@ -903,7 +903,7 @@
           "roots": ["Props"],
           "requirements": [
             {
-              "library": "Vehicles",
+              "mount": "Vehicles",
               "path": "/Vehicles/Paint.omat",
               "type": "Material"
             }
@@ -938,7 +938,7 @@
           "role": "Shared"
         }
       ],
-      "codes": ["mount.library_dependency_missing"]
+      "codes": ["mount.cooked_dependency_missing"]
     }
   ]
 }

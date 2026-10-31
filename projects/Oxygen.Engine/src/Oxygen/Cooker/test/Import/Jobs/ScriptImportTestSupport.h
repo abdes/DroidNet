@@ -21,6 +21,8 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -28,11 +30,10 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -41,16 +42,18 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace oxygen::content::import::test {
 
 namespace lc = oxygen::content::lc;
 using oxygen::cooker::test::HasDiagnosticCode;
 using oxygen::cooker::test::ReadBytes;
-using oxygen::cooker::test::ScopedTempDir;
+using oxygen::cooker::test::SpellReference;
 using oxygen::cooker::test::SubmitAndWait;
 using oxygen::cooker::test::WriteText;
 using oxygen::data::AssetType;
+using oxygen::testing::ScopedTempDir;
 
 inline auto CountSeverity(const std::vector<ImportDiagnostic>& diagnostics,
   const ImportSeverity severity) -> uint32_t
@@ -232,46 +235,81 @@ struct AssetRef final {
   std::string source_path;
 };
 
-inline auto FindFirstAssetByType(const lc::Inspection& inspection,
+//! The path of the descriptor of `key` below the loose root `content` reads:
+//! where the writer lays it out.
+inline auto DescriptorRelPath(const cooked::CookedContent& content,
+  const data::AssetKey& key) -> std::string
+{
+  return content.DescriptorStored(key)
+    .file.lexically_relative(content.Source().path)
+    .generic_string();
+}
+
+inline auto MakeAssetRef(const cooked::CookedContent& content,
+  const cooked::CookedAsset& entry) -> AssetRef
+{
+  return AssetRef {
+    .key = entry.key,
+    .virtual_path = entry.virtual_path,
+    .descriptor_relpath = DescriptorRelPath(content, entry.key),
+    .references = entry.references,
+    .type = entry.type,
+    .source_path = entry.source_path,
+  };
+}
+
+inline auto FindFirstAssetByType(const cooked::CookedContent& content,
   const AssetType type) -> std::optional<AssetRef>
 {
-  for (const auto& entry : inspection.Assets()) {
-    if (static_cast<AssetType>(entry.asset_type) != type) {
+  for (const auto& entry : content.Assets()) {
+    if (entry.type != type) {
       continue;
     }
-    return AssetRef {
-      .key = entry.key,
-      .virtual_path = entry.virtual_path,
-      .descriptor_relpath = entry.descriptor_relpath,
-      .references = entry.references,
-      .type = static_cast<AssetType>(entry.asset_type),
-      .source_path = entry.source_path,
-    };
+    return MakeAssetRef(content, entry);
   }
   return std::nullopt;
 }
 
-inline auto FindScriptAssetByDescriptorName(const lc::Inspection& inspection,
-  const std::string_view descriptor_name) -> std::optional<AssetRef>
+inline auto FindScriptAssetByDescriptorName(
+  const cooked::CookedContent& content, const std::string_view descriptor_name)
+  -> std::optional<AssetRef>
 {
-  for (const auto& asset : inspection.Assets()) {
-    if (static_cast<AssetType>(asset.asset_type) != AssetType::kScript) {
+  for (const auto& asset : content.Assets()) {
+    if (asset.type != AssetType::kScript) {
       continue;
     }
     const auto name
-      = std::filesystem::path(asset.descriptor_relpath).filename().string();
+      = content.DescriptorStored(asset.key).file.filename().string();
     if (name != descriptor_name) {
       continue;
     }
-    return AssetRef {
-      .key = asset.key,
-      .virtual_path = asset.virtual_path,
-      .descriptor_relpath = asset.descriptor_relpath,
-      .references = asset.references,
-      .type = AssetType::kScript,
-    };
+    return MakeAssetRef(content, asset);
   }
   return std::nullopt;
+}
+
+//! Whether `content` stores a file named like the retired script-binding
+//! tables: among its resource tables or its sidecars.
+inline auto StoresScriptBindingsFile(const cooked::CookedContent& content)
+  -> bool
+{
+  const auto is_bindings_file = [](const std::string& name) -> bool {
+    return name.ends_with("script-bindings.table")
+      || name.ends_with("script-bindings.data");
+  };
+  for (const auto kind :
+    { data::ResourceKind::kBuffer, data::ResourceKind::kTexture,
+      data::ResourceKind::kScript, data::ResourceKind::kPhysics }) {
+    const auto& table = content.ResourceTable(kind);
+    if (is_bindings_file(table.RowsStored().file.generic_string())
+      || is_bindings_file(table.DataStored().file.generic_string())) {
+      return true;
+    }
+  }
+  return std::ranges::any_of(content.Sidecars(),
+    [&is_bindings_file](const cooked::CookedSidecar& sidecar) -> bool {
+      return is_bindings_file(sidecar.name);
+    });
 }
 
 struct SceneScriptState {
@@ -388,7 +426,7 @@ inline auto MakeSpeedBinding(const std::string_view script_virtual_path,
   };
 }
 
-class ScriptingImportTestBase : public testing::Test {
+class ScriptingImportTestBase : public ::testing::Test {
 protected:
   AsyncImportService::Config config_ {
     .thread_pool_size = 2,
@@ -441,16 +479,15 @@ protected:
   }
 
   [[nodiscard]] static auto LoadInspection(
-    const std::filesystem::path& cooked_root) -> lc::Inspection
+    const std::filesystem::path& cooked_root) -> cooked::CookedContent
   {
-    auto inspection = lc::Inspection {};
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-    return inspection;
+    return cooked::CookedContent::Open(
+      cooked::RealCookerStorage(), cooked_root);
   }
 
   //! Scene and script assets found in a cooked root, plus its inspection.
   struct SceneAndScript final {
-    lc::Inspection inspection;
+    cooked::CookedContent inspection;
     std::optional<AssetRef> scene;
     std::optional<AssetRef> script;
   };

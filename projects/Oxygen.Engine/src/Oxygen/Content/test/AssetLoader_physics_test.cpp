@@ -19,15 +19,16 @@
 #include <vector>
 
 #include "AssetLoader_test.h"
-#include "Fixtures/LooseCookedTestWriter.h"
-#include "Fixtures/PakTestWriter.h"
 
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
+#include <Oxygen/Cooker/testing/CookedPak.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -49,6 +50,13 @@ namespace oxygen::content::testing {
 namespace {
   namespace physics = data::pak::physics;
   using co::testing::TestEventLoop;
+  using cooker::testing::CookedPak;
+  using cooker::testing::LooseCookedRoot;
+  using cooker::testing::SourceKeyOf;
+
+  //! The identity of the root that owns the sidecar; the dependency roots take
+  //! their payload byte as theirs.
+  constexpr auto kOwnerSeed = uint8_t { 10U };
 
   const auto kScene = data::AssetKey::FromVirtualPath("/test/scene.oscene");
   const auto kSidecar = data::AssetKey::FromVirtualPath("/test/scene.opscene");
@@ -84,11 +92,12 @@ namespace {
     append(table);
     append(body);
     data::AppendDescriptorStrings(bytes, data::DescriptorStringsBuilder {});
-    LooseCookedTestWriter writer(root);
-    writer.SetSourceKey(data::SourceKey { Uuid::Generate() });
-    writer.WriteAssetDescriptor(kSidecar, data::AssetType::kPhysicsScene,
-      "/test/scene.opscene", "scene.opscene", bytes,
-      data::AssetReferences::Create({},
+    auto owner = LooseCookedRoot { "test", kOwnerSeed };
+    owner.Add({
+      .type = data::AssetType::kPhysicsScene,
+      .leaf = "scene.opscene",
+      .descriptor = std::move(bytes),
+      .references = data::AssetReferences::Create({},
         {
           {
             .key = kScene,
@@ -106,8 +115,10 @@ namespace {
             .expected_type = data::AssetType::kPhysicsMaterial,
           },
         })
-        .value());
-    static_cast<void>(writer.Finish());
+        .value(),
+      .key = kSidecar,
+    });
+    cooker::testing::Materialize(owner.Files(), root);
     const auto lease = serio::FileLock::TryAcquire(
       root / data::loose_cooked::kGenerationLeaseFileName,
       serio::FileLockMode::kExclusive, serio::FileLockOpenMode::kOpenOrCreate);
@@ -125,8 +136,7 @@ namespace {
   auto WriteDependencies(const std::filesystem::path& root,
     const uint8_t payload, const DependencyCase scenario) -> void
   {
-    LooseCookedTestWriter writer(root);
-    writer.SetSourceKey(data::SourceKey { Uuid::Generate() });
+    auto dependencies = LooseCookedRoot { "test", payload };
     physics::CollisionShapeAssetDesc shape {};
     shape.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kCollisionShape);
@@ -139,9 +149,11 @@ namespace {
       .payload_asset_key = kPayload,
       .payload_type = physics::ShapePayloadType::kConvex,
     };
-    writer.WriteAssetDescriptor(kShape, data::AssetType::kCollisionShape,
-      "/test/shape.oshape", "shape.oshape", data::MakeDescriptorBytes(shape),
-      data::AssetReferences::Create({},
+    dependencies.Add({
+      .type = data::AssetType::kCollisionShape,
+      .leaf = "shape.oshape",
+      .descriptor = data::MakeDescriptorBytes(shape),
+      .references = data::AssetReferences::Create({},
         {
           {
             .key = kMaterial,
@@ -154,30 +166,29 @@ namespace {
             .expected_type = data::AssetType::kUnknown,
           },
         })
-        .value());
+        .value(),
+      .key = kShape,
+    });
     if (scenario != DependencyCase::kMissingMaterial) {
       physics::PhysicsMaterialAssetDesc material {};
       material.header.asset_type
         = static_cast<uint8_t>(data::AssetType::kPhysicsMaterial);
       material.header.version = physics::kPhysicsMaterialAssetVersion;
       material.restitution = static_cast<float>(payload) / 10.0F;
-      writer.WriteAssetDescriptor(kMaterial, data::AssetType::kPhysicsMaterial,
-        "/test/material.opmat", "material.opmat",
-        data::MakeDescriptorBytes(material));
+      dependencies.Add({
+        .type = data::AssetType::kPhysicsMaterial,
+        .leaf = "material.opmat",
+        .descriptor = data::MakeDescriptorBytes(material),
+        .key = kMaterial,
+      });
     }
     const std::array data { static_cast<std::byte>(payload) };
     physics::PhysicsResourceDesc resource {};
     resource.resource_asset_key = kPayload;
-    resource.size_bytes
-      = static_cast<data::pak::core::DataBlobSizeT>(data.size());
     std::ranges::copy(
       base::ComputeSha256(data), std::begin(resource.content_hash));
-    const std::array table { physics::PhysicsResourceDesc {}, resource };
-    writer.WriteFile(data::loose_cooked::FileKind::kPhysicsTable,
-      "physics.table", std::as_bytes(std::span(table)));
-    writer.WriteFile(
-      data::loose_cooked::FileKind::kPhysicsData, "physics.data", data);
-    static_cast<void>(writer.Finish());
+    dependencies.AddPhysics(data, resource);
+    cooker::testing::Materialize(dependencies.Files(), root);
     const auto lease = serio::FileLock::TryAcquire(
       root / data::loose_cooked::kGenerationLeaseFileName,
       serio::FileLockMode::kExclusive, serio::FileLockOpenMode::kOpenOrCreate);
@@ -322,7 +333,7 @@ namespace {
   {
     TestEventLoop loop;
     co::Run(
-      loop, ExercisePhysicsBindings(&loop, temp_dir_, DependencyCase::kValid));
+      loop, ExercisePhysicsBindings(&loop, TempDir(), DependencyCase::kValid));
   }
   NOLINT_TEST_F(
     AssetLoaderBasicTest, MissingPhysicsMaterialPreventsSidecarPublication)
@@ -330,7 +341,7 @@ namespace {
     TestEventLoop loop;
     co::Run(loop,
       ExercisePhysicsBindings(
-        &loop, temp_dir_, DependencyCase::kMissingMaterial));
+        &loop, TempDir(), DependencyCase::kMissingMaterial));
   }
   NOLINT_TEST_F(
     AssetLoaderBasicTest, InvalidShapeVersionPreventsSidecarPublication)
@@ -338,7 +349,7 @@ namespace {
     TestEventLoop loop;
     co::Run(loop,
       ExercisePhysicsBindings(
-        &loop, temp_dir_, DependencyCase::kWrongShapeVersion));
+        &loop, TempDir(), DependencyCase::kWrongShapeVersion));
   }
   //! Mounts a pak whose physics table holds the reserved entry 0 and a 4-byte
   //! payload at entry 1, then loads entry 1 through the pak's source key.
@@ -346,17 +357,16 @@ namespace {
     TestEventLoop* loop, const std::filesystem::path pak_path) -> co::Co<>
   {
     const auto payload = std::vector<std::byte>(4U, std::byte { 2 });
-    auto config = PakTestWriter::Config {};
-    auto entry = PakTestWriter::Config::PhysicsEntry {};
-    entry.desc.resource_asset_key = kPayload;
-    const auto hash = base::ComputeSha256(payload);
-    std::ranges::copy(hash, std::begin(entry.desc.content_hash));
-    entry.payload = payload;
-    config.physics_resources
-      = { PakTestWriter::Config::PhysicsEntry {}, std::move(entry) };
-    PakTestWriter(pak_path).Write(config);
-    const auto source_key
-      = data::SourceKey::FromBytes(config.header.source_identity).value();
+    auto root = LooseCookedRoot { "test" };
+    auto resource = physics::PhysicsResourceDesc {};
+    resource.resource_asset_key = kPayload;
+    std::ranges::copy(
+      base::ComputeSha256(payload), std::begin(resource.content_hash));
+    static_cast<void>(root.AddPhysics(payload, resource));
+    static_cast<void>(root.Material("Anchor.omat"));
+    const auto source_key = SourceKeyOf(kOwnerSeed);
+    cooker::testing::Materialize(
+      CookedPak { std::move(root) }.Identity(source_key).Encode(), pak_path);
 
     co::ThreadPool pool(*loop, 2);
     AssetLoaderConfig loader_config {};
@@ -391,7 +401,7 @@ namespace {
   NOLINT_TEST_F(AssetLoaderBasicTest, LoadsPhysicsResourcePayloadFromPak)
   {
     TestEventLoop loop;
-    co::Run(loop, LoadPhysicsPayloadFromPak(&loop, temp_dir_ / "physics.pak"));
+    co::Run(loop, LoadPhysicsPayloadFromPak(&loop, TempDir() / "physics.pak"));
   }
 } // namespace
 } // namespace oxygen::content::testing

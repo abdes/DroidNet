@@ -24,7 +24,7 @@ namespace {
 
   namespace co = oxygen::co;
 
-  class ScriptImportPipelineTest : public testing::Test {
+  class ScriptImportPipelineTest : public ::testing::Test {
   protected:
     ImportEventLoop loop_;
   };

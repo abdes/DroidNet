@@ -18,19 +18,19 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <vector>
 
 #include "RequestSnapshot.h"
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/ScriptSealing.h>
+#include <Oxygen/Cooker/Tools/PakTool/StagedSourceStorage.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -41,16 +41,17 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
-using oxygen::content::import::LooseCookedLayout;
 using oxygen::content::import::LooseCookedWriter;
 using oxygen::content::pak::BuildMode;
 using oxygen::content::pak::PakBuildRequest;
-using oxygen::content::pak::tool::CleanupStagedLooseRoots;
+using oxygen::content::pak::tool::CleanupStagedFiles;
 using oxygen::content::pak::tool::SealLooseCookedSourcesForPakBuild;
 using oxygen::content::pak::tool::SourceMountFolders;
+using oxygen::content::pak::tool::StagedSourceStorage;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 using oxygen::data::CookedSource;
@@ -77,14 +78,6 @@ protected:
       }
     }
     std::filesystem::create_directories(oxygen::base::ToNativePath(root_));
-  }
-
-  void TearDown() override
-  {
-    // The long-path variant needs native-path removal; ScopedTempDir would
-    // not delete it.
-    std::error_code ec {};
-    std::filesystem::remove_all(oxygen::base::ToNativePath(temp_.Path()), ec);
   }
 
   [[nodiscard]] auto Root() const -> const std::filesystem::path&
@@ -143,7 +136,8 @@ protected:
     descriptor.flags = ScriptAssetFlags::kAllowExternalSource;
     auto strings = oxygen::data::DescriptorStringsBuilder {};
     descriptor.external_source_path_offset = strings.Add(stored);
-    LooseCookedWriter writer(cooked);
+    LooseCookedWriter writer(
+      cooked, oxygen::content::cooked::RealCookerStorage());
     const auto virtual_path = std::string("/.cooked/rooted.oscript");
     writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
       AssetType::kScript, virtual_path, "rooted.oscript",
@@ -161,15 +155,18 @@ protected:
         .path = cooked,
       },
     };
-    const auto sealed = SealLooseCookedSourcesForPakBuild(request,
-      Root() / "staging", SourceMountFolders { { "Content", content_root } });
+    auto staged
+      = StagedSourceStorage(oxygen::content::cooked::RealCookerStorage());
+    const auto sealed
+      = SealLooseCookedSourcesForPakBuild(request, Root() / "staging",
+        SourceMountFolders { { "Content", content_root } }, staged);
     ASSERT_FALSE(sealed.has_value()) << stored;
     EXPECT_EQ(sealed.error().error_code, code) << stored;
     EXPECT_EQ(sealed.error().external_source_path, stored);
   }
 
 private:
-  oxygen::cooker::test::ScopedTempDir temp_;
+  oxygen::testing::ScopedTempDir temp_;
   std::filesystem::path root_;
 };
 
@@ -182,7 +179,6 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     = content_root / "scenes" / "proc-cubes" / "proc_cubes.lua";
   WriteTextFile(external_script_path, "return { update = function() end }\n");
 
-  const auto layout = LooseCookedLayout {};
   const auto script_virtual_path = std::string("/.cooked/proc_cubes.oscript");
   const auto script_relpath = std::string("proc_cubes.oscript");
   const auto script_key = AssetKey::FromVirtualPath(script_virtual_path);
@@ -196,7 +192,8 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   auto strings = oxygen::data::DescriptorStringsBuilder {};
   descriptor.external_source_path_offset = strings.Add(stored_external_path);
 
-  auto writer = LooseCookedWriter(cooked_root);
+  auto writer = LooseCookedWriter(
+    cooked_root, oxygen::content::cooked::RealCookerStorage());
   const auto source_key = SourceKey::FromString(kSourceKey);
   ASSERT_HAS_VALUE(source_key);
   writer.SetSourceKey(source_key.value());
@@ -219,8 +216,11 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     },
   };
 
-  const auto sealed = SealLooseCookedSourcesForPakBuild(request,
-    Root() / "staging", SourceMountFolders { { "Content", content_root } });
+  auto& storage = oxygen::content::cooked::RealCookerStorage();
+  auto staged = StagedSourceStorage(storage);
+  const auto sealed
+    = SealLooseCookedSourcesForPakBuild(request, Root() / "staging",
+      SourceMountFolders { { "Content", content_root } }, staged);
   ASSERT_HAS_VALUE(sealed) << sealed.error().error_code << ": "
                            << sealed.error().error_message;
   ASSERT_EQ(sealed->sealed_script_assets, 1U);
@@ -244,10 +244,8 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   const auto path_bytes = std::as_bytes(std::span(stored_external_path));
   EXPECT_TRUE(std::ranges::search(staged_bytes, path_bytes).empty());
 
-  const auto scripts_table_path
-    = staged_root / std::filesystem::path(layout.ScriptsTableRelPath());
-  const auto scripts_data_path
-    = staged_root / std::filesystem::path(layout.ScriptsDataRelPath());
+  const auto scripts_table_path = staged_root / "Resources" / "scripts.table";
+  const auto scripts_data_path = staged_root / "Resources" / "scripts.data";
   EXPECT_TRUE(
     std::filesystem::exists(oxygen::base::ToNativePath(scripts_table_path)));
   EXPECT_TRUE(
@@ -291,10 +289,10 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     const auto file_relpath = staged_index.FindFileRelPath(
       oxygen::data::loose_cooked::FileKind::kScriptsTable);
     ASSERT_HAS_VALUE(file_relpath);
-    EXPECT_EQ(file_relpath.value_or(""), layout.ScriptsTableRelPath());
+    EXPECT_EQ(file_relpath.value_or(""), "Resources/scripts.table");
   }
 
-  CleanupStagedLooseRoots(sealed->staged_loose_roots);
+  CleanupStagedFiles(storage, sealed->staged_files);
   EXPECT_FALSE(
     std::filesystem::exists(oxygen::base::ToNativePath(staged_root)));
   EXPECT_FALSE(
@@ -367,5 +365,82 @@ INSTANTIATE_TEST_SUITE_P(PathLengths, PakToolScriptSealingTest, testing::Bool(),
   [](const testing::TestParamInfo<bool>& info) -> const char* {
     return info.param ? "LongPaths" : "ShortPaths";
   });
+
+//! Sealing stages only what it changes: underneath, the staged root holds the
+//! sealed descriptor, the script tables and the index; through the staged
+//! storage, it shows every other file of the original root, which stays as it
+//! was. Cleanup removes exactly what sealing staged.
+NOLINT_TEST(
+  PakToolScriptSealingOverlayTest, StagedRootHoldsOnlyWhatSealingChanged)
+{
+  using oxygen::content::cooked::PathKind;
+
+  // Arrange
+  auto memory = oxygen::cooker::testing::MemoryFileSystem {};
+  // An absolute path, as sealing requires; nothing is written to disk.
+  const auto base = std::filesystem::temp_directory_path() / "memory";
+  const auto content = base / "Content";
+  const auto cooked = base / "cooked";
+  memory.AddFile(content / "spin.lua", "return 1");
+  memory.AddFile(cooked / "Ship/Hull.obuf", "hull");
+  auto descriptor = ScriptAssetDesc {};
+  descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
+  descriptor.header.version = oxygen::data::pak::scripting::kScriptAssetVersion;
+  descriptor.flags = ScriptAssetFlags::kAllowExternalSource;
+  auto strings = oxygen::data::DescriptorStringsBuilder {};
+  descriptor.external_source_path_offset = strings.Add("/Content/spin.lua");
+  {
+    auto writer = LooseCookedWriter(cooked, memory);
+    writer.WriteAssetDescriptor(
+      AssetKey::FromVirtualPath("/.cooked/spin.oscript"), AssetType::kScript,
+      "/.cooked/spin.oscript", "spin.oscript",
+      oxygen::data::MakeDescriptorBytes(descriptor, strings), {},
+      oxygen::content::import::LooseCookedProducer {
+        .source = "/Content/spin.lua",
+        .completes = {},
+      });
+    writer.RegisterExternalAuxiliaryFile("Ship/Hull.obuf",
+      oxygen::content::import::LooseCookedProducer {
+        .source = "/Content/Ship.glb",
+        .completes = {},
+      });
+    static_cast<void>(writer.Finish());
+  }
+  auto request = PakBuildRequest {};
+  request.mode = BuildMode::kFull;
+  request.sources = {
+    CookedSource { .kind = CookedSourceKind::kLooseCooked, .path = cooked },
+  };
+  auto staged = StagedSourceStorage(memory);
+
+  // Act
+  const auto sealed = SealLooseCookedSourcesForPakBuild(request,
+    base / "staging", SourceMountFolders { { "Content", content } }, staged);
+
+  // Assert
+  ASSERT_HAS_VALUE(sealed) << sealed.error().error_code << ": "
+                           << sealed.error().error_message;
+  const auto& staged_root = sealed->build_request.sources.at(0).path;
+  EXPECT_EQ(memory.KindOf(staged_root / "spin.oscript"), PathKind::kFile);
+  EXPECT_EQ(memory.KindOf(staged_root / "Ship/Hull.obuf"), PathKind::kNone);
+  EXPECT_EQ(staged.KindOf(staged_root / "Ship/Hull.obuf"), PathKind::kFile);
+  const auto index_bytes = oxygen::content::cooked::ReadWholeFile(
+    staged, staged_root / oxygen::data::loose_cooked::kIndexFileName);
+  ASSERT_HAS_VALUE(index_bytes);
+  const auto index
+    = oxygen::content::lc::LooseCookedIndex::LoadFromBytes(*index_bytes);
+  const auto inventory = index.GetFileInventory();
+  EXPECT_TRUE(std::ranges::any_of(inventory, [](const auto& file) -> bool {
+    return file.relative_path == "Ship/Hull.obuf";
+  }));
+
+  // Cleanup removes the staged root and the sealed sources folder; the
+  // staging parent, the pak's output folder, stays.
+  CleanupStagedFiles(memory, sealed->staged_files);
+  EXPECT_EQ(memory.KindOf(staged_root), PathKind::kNone);
+  EXPECT_EQ(memory.KindOf(staged_root.parent_path()), PathKind::kNone);
+  EXPECT_EQ(memory.KindOf(base / "staging"), PathKind::kFolder);
+  EXPECT_EQ(memory.KindOf(cooked / "Ship/Hull.obuf"), PathKind::kFile);
+}
 
 } // namespace

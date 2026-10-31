@@ -17,16 +17,16 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
 using nlohmann::json;
 using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::ImportManifest;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   BuildsGeometryDescriptorRequestWithDefaultsAndDescriptorOverrides)

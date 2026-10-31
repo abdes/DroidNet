@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
@@ -237,7 +238,7 @@ TextureEmitter::TextureEmitter(IAsyncFileWriter& file_writer,
   : file_writer_(file_writer)
   , table_aggregator_(table_aggregator)
   , config_(std::move(config))
-  , data_path_(config_.cooked_root / config_.layout.TexturesDataRelPath())
+  , data_path_(config_.cooked_root / internal::loose_layout::kTexturesData)
 {
   if (config_.packing_policy_id.empty()) {
     config_.packing_policy_id = DefaultPackingPolicyId();

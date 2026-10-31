@@ -8,13 +8,29 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <utility>
 
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 
 namespace oxygen::content::testing {
+
+//! The folder under which the writer tests put their cooked roots in memory.
+[[nodiscard]] inline auto MemoryRoot() -> std::filesystem::path
+{
+  return "/memory";
+}
+
+//! Whether `path` names a file or a folder of `storage`.
+[[nodiscard]] inline auto Exists(
+  const oxygen::content::cooked::CookerStorageReader& storage,
+  const std::filesystem::path& path) -> bool
+{
+  return storage.KindOf(path) != oxygen::content::cooked::PathKind::kNone;
+}
 
 //! Asset key whose first byte is `seed` and whose other bytes are zero.
 [[nodiscard]] inline auto MakeFirstByteAssetKey(const uint8_t seed)

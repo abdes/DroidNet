@@ -158,8 +158,9 @@ This is the conceptual role of the core types (names match the code).
   - Provides deterministic release/unload cascades.
 - `LoaderContext`
   - Passed by value into every loader.
-  - Provides `desc_reader` (descriptor stream) and `data_readers` (data region
-    readers) plus `source_instance`, `work_offline` policy, optional
+  - Provides `desc_reader` (descriptor stream) and, for a resource,
+    `payload` (its payload buffer, read before the loader runs) plus
+    `source_instance`, `work_offline` policy, optional
     `DependencyCollector` for identity-only dependency recording, and optional
     `source_pak` / `source_content` source views.
 - `ResourceTable<T>`

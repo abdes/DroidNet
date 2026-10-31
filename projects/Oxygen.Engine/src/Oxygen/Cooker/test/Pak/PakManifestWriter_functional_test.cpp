@@ -6,365 +6,272 @@
 
 // Covers: Pak/PakManifestWriter.cpp
 
-#include <array>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <optional>
-#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
-
-#include "PakTestSupport.h"
 
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
-#include <Oxygen/Cooker/Pak/PakBuilder.h>
+#include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/Pak/PakManifestWriter.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
-#include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TestValues.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 namespace data = oxygen::data;
+namespace fixtures = oxygen::cooker::testing;
 namespace pak = oxygen::content::pak;
-namespace paktest = oxygen::content::pak::test;
-namespace cooktest = oxygen::cooker::test;
+
+using oxygen::cooker::test::HasDiagnostic;
+using oxygen::cooker::test::HasNoErrors;
+using oxygen::cooker::testing::LooseCookedRoot;
+using oxygen::cooker::testing::PakWorkspace;
+using pak::BuildMode;
 
 constexpr auto kContentVersion = uint16_t { 7U };
 constexpr auto kPatchDiffBasisIdentifier
   = std::string_view { "descriptor_plus_transitive_resources_v1" };
 
-using paktest::MakeSourceKey;
+//! The base of the `Game` library holding a material and a geometry.
+auto TwoAssetBase() -> data::PakCatalog
+{
+  const auto game = LooseCookedRoot {};
+  return game.BaseCatalog({
+    { .asset_key = game.KeyOf("Wood.omat"),
+      .asset_type = data::AssetType::kMaterial },
+    { .asset_key = game.KeyOf("Mesh.ogeo"),
+      .asset_type = data::AssetType::kGeometry },
+  });
+}
 
-using paktest::MakeAssetKey;
-
-using paktest::MakeDigest;
-
-using paktest::HasDiagnosticCode;
-
-class PakManifestTest : public paktest::TempDirFixture {
+//! A full build of the `Game` library holding one material, emitting its
+//! manifest in full.
+class PakManifestTest : public ::testing::Test {
 protected:
-  [[nodiscard]] auto MakeBaseCatalog(
-    std::span<const data::PakCatalogEntry> entries) const -> data::PakCatalog
+  static constexpr auto kMaterialLeaf = std::string_view { "Wood.omat" };
+
+  //! The library's one material.
+  [[nodiscard]] static auto Material() -> data::AssetKey
   {
-    auto catalog = data::PakCatalog {
-      .source_key = MakeSourceKey(static_cast<uint8_t>(0xB1U)),
-      .content_version = kContentVersion,
-      .catalog_digest = MakeDigest(static_cast<uint8_t>(0xC1U)),
-      .library = "Content",
-      .entries
-      = std::vector<data::PakCatalogEntry>(entries.begin(), entries.end()),
-    };
-    catalog.catalog_digest = catalog.ComputeDigest().value();
-    return catalog;
+    return LooseCookedRoot {}.KeyOf(kMaterialLeaf);
   }
+
+  //! The full build of the library that emits `full.manifest.json`.
+  auto FullRequest() -> pak::PakBuildRequest
+  {
+    auto game = LooseCookedRoot {};
+    static_cast<void>(game.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = std::string(kMaterialLeaf),
+      .descriptor = fixtures::MaterialDescriptor("Wood").bytes,
+    }));
+    auto request = workspace_.FullRequest({ workspace_.Add(game) }, "full.pak");
+    request.output_manifest_path = PakWorkspace::PakPath("full.manifest.json");
+    request.content_version = kContentVersion;
+    request.options.emit_manifest_in_full = true;
+    return request;
+  }
+
+  PakWorkspace workspace_;
 };
 
+//=== Patch manifests ===-----------------------------------------------------//
+
+//! A patch with no sources deletes every base asset, and its envelope
+//! requires each base, in order.
 NOLINT_TEST_F(
   PakManifestTest, PatchModeEmitsManifestWithDeletedSetAndCompatibilityEnvelope)
 {
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildOptions;
-  using pak::PakBuildRequest;
+  // Arrange
+  const auto base = TwoAssetBase();
+  auto request = workspace_.PatchRequest({}, { base });
+  request.content_version = kContentVersion;
 
-  const auto key_a = MakeAssetKey(static_cast<uint8_t>(0x21U));
-  const auto key_b = MakeAssetKey(static_cast<uint8_t>(0x22U));
-  const auto base_entries = std::array<data::PakCatalogEntry, 2> {
-    data::PakCatalogEntry {
-      .asset_key = key_a,
-      .asset_type = data::AssetType::kMaterial,
-      .descriptor_digest = MakeDigest(static_cast<uint8_t>(0x31U)),
-      .transitive_resource_digest = MakeDigest(static_cast<uint8_t>(0x41U)),
-    },
-    data::PakCatalogEntry {
-      .asset_key = key_b,
-      .asset_type = data::AssetType::kGeometry,
-      .descriptor_digest = MakeDigest(static_cast<uint8_t>(0x32U)),
-      .transitive_resource_digest = MakeDigest(static_cast<uint8_t>(0x42U)),
-    },
-  };
+  // Act
+  const auto result = PakWorkspace::Build(request);
 
-  const auto request = PakBuildRequest {
-    .mode = BuildMode::kPatch,
-    .sources = {},
-    .output_pak_path = Path("patch_build.pak"),
-    .output_manifest_path = Path("patch_build.manifest.json"),
-    .content_version = kContentVersion,
-    .source_key = MakeSourceKey(static_cast<uint8_t>(0xA1U)),
-    .base_catalogs
-    = std::vector<data::PakCatalog> {
-        MakeBaseCatalog(std::span<const data::PakCatalogEntry>(base_entries)),
-      },
-
-    .options = PakBuildOptions {
-      .deterministic = true,
-      .emit_manifest_in_full = false,
-      .compute_crc32 = true,
-      .fail_on_warnings = false,
-    },
-  };
-
-  PakBuilder builder;
-  const auto build_result = builder.Build(request);
-  ASSERT_HAS_VALUE(build_result);
-  const auto& result = build_result.value();
-
-  EXPECT_EQ(result.summary.diagnostics_error, 0U);
+  // Assert
+  EXPECT_THAT(result.diagnostics, HasNoErrors());
   ASSERT_HAS_VALUE(result.patch_manifest);
-  ASSERT_TRUE(std::filesystem::exists(request.output_manifest_path));
+  ASSERT_TRUE(workspace_.Exists(request.output_manifest_path));
   ASSERT_HAS_VALUE(result.telemetry.manifest_duration);
-
   const auto& manifest = *result.patch_manifest;
   EXPECT_TRUE(manifest.created.empty());
   EXPECT_TRUE(manifest.replaced.empty());
-  EXPECT_EQ(manifest.deleted.size(), base_entries.size());
+  EXPECT_EQ(manifest.deleted.size(), base.entries.size());
   EXPECT_EQ(manifest.diff_basis_identifier, kPatchDiffBasisIdentifier);
   EXPECT_EQ(manifest.patch_source_key, request.source_key);
-  EXPECT_EQ(manifest.compatibility_envelope.patch_content_version,
-    request.content_version);
+  EXPECT_EQ(
+    manifest.compatibility_envelope.patch_content_version, kContentVersion);
   const auto& bases = manifest.compatibility_envelope.required_base_layers;
-  ASSERT_EQ(bases.size(), request.base_catalogs.size());
-  for (size_t index = 0; index < bases.size(); ++index) {
-    EXPECT_EQ(
-      bases.at(index).source_key, request.base_catalogs.at(index).source_key);
-    EXPECT_EQ(bases.at(index).content_version,
-      request.base_catalogs.at(index).content_version);
-    EXPECT_EQ(bases.at(index).catalog_digest,
-      request.base_catalogs.at(index).catalog_digest);
-  }
+  ASSERT_EQ(bases.size(), 1U);
+  EXPECT_EQ(bases.front().source_key, base.source_key);
+  EXPECT_EQ(bases.front().content_version, base.content_version);
+  EXPECT_EQ(bases.front().catalog_digest, base.catalog_digest);
   EXPECT_TRUE(manifest.patch_pak_digest.has_value());
   ASSERT_HAS_VALUE(manifest.patch_pak_crc32);
   EXPECT_EQ(*manifest.patch_pak_crc32, result.pak_crc32);
 }
 
+//! The writer checks the patch sets are disjoint before it emits anything.
 NOLINT_TEST_F(
-  PakManifestTest, FullModeEmitManifestInFullWritesManifestWithFullSemantics)
+  PakManifestTest, ManifestValidationRejectsNonDisjointPatchSetsPreEmit)
 {
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildOptions;
-  using pak::PakBuildRequest;
-
-  const auto request = PakBuildRequest {
-    .mode = BuildMode::kFull,
-    .sources = {},
-    .output_pak_path = Path("full_build.pak"),
-    .output_manifest_path = Path("full_build.manifest.json"),
-    .content_version = kContentVersion,
-    .source_key = MakeSourceKey(static_cast<uint8_t>(0xA2U)),
-    .base_catalogs = {},
-
-    .options = PakBuildOptions {
-      .deterministic = true,
-      .emit_manifest_in_full = true,
-      .compute_crc32 = false,
-      .fail_on_warnings = false,
+  // Arrange
+  const auto base = LooseCookedRoot {}.BaseCatalog();
+  const auto request = workspace_.PatchRequest({}, { base });
+  auto plan = pak::PakPlan::Data {};
+  plan.catalog.bytes = base.Encode().value();
+  plan.patch_actions = {
+    {
+      .asset_key = Material(),
+      .asset_type = data::AssetType::kMaterial,
+      .action = pak::PakPatchAction::kCreate,
+    },
+    {
+      .asset_key = Material(),
+      .asset_type = data::AssetType::kMaterial,
+      .action = pak::PakPatchAction::kDelete,
     },
   };
 
-  PakBuilder builder;
-  const auto build_result = builder.Build(request);
-  ASSERT_HAS_VALUE(build_result);
-  const auto& result = build_result.value();
+  // Act
+  const auto written = pak::PakManifestWriter {}.Write(
+    request, pak::PakPlan(std::move(plan)), uint32_t { 0U });
 
-  EXPECT_EQ(result.summary.diagnostics_error, 0U);
+  // Assert
+  EXPECT_THAT(
+    written.diagnostics, HasDiagnostic("pak.manifest.patch_sets_not_disjoint"));
+  EXPECT_FALSE(written.manifest.has_value());
+  EXPECT_FALSE(workspace_.Exists(request.output_manifest_path));
+}
+
+//=== Full manifests ===------------------------------------------------------//
+
+//! A full build lists every asset it packs as created, and requires no base.
+NOLINT_TEST_F(
+  PakManifestTest, FullModeEmitManifestInFullWritesManifestWithFullSemantics)
+{
+  // Arrange
+  auto request = FullRequest();
+  request.options.compute_crc32 = false;
+
+  // Act
+  const auto result = PakWorkspace::Build(request);
+
+  // Assert
+  EXPECT_THAT(result.diagnostics, HasNoErrors());
   ASSERT_HAS_VALUE(result.patch_manifest);
-  ASSERT_TRUE(std::filesystem::exists(request.output_manifest_path));
+  ASSERT_TRUE(workspace_.Exists(request.output_manifest_path));
   ASSERT_HAS_VALUE(result.telemetry.manifest_duration);
-
   const auto& manifest = *result.patch_manifest;
-  EXPECT_TRUE(manifest.created.empty());
+  EXPECT_THAT(manifest.created, ::testing::ElementsAre(Material()));
   EXPECT_TRUE(manifest.replaced.empty());
   EXPECT_TRUE(manifest.deleted.empty());
   EXPECT_TRUE(manifest.compatibility_envelope.required_base_layers.empty());
-  EXPECT_EQ(manifest.compatibility_envelope.patch_content_version,
-    request.content_version);
+  EXPECT_EQ(
+    manifest.compatibility_envelope.patch_content_version, kContentVersion);
   EXPECT_EQ(manifest.diff_basis_identifier, kPatchDiffBasisIdentifier);
   EXPECT_EQ(manifest.patch_source_key, request.source_key);
   EXPECT_TRUE(manifest.patch_pak_digest.has_value());
   EXPECT_TRUE(manifest.patch_pak_crc32.has_value());
-  const auto manifest_text = cooktest::ReadText(request.output_manifest_path);
-  EXPECT_THAT(manifest_text, ::testing::HasSubstr("\n  \"created\": []"));
-  EXPECT_THAT(
-    manifest_text, ::testing::HasSubstr("\n  \"compatibility_envelope\": {"));
-}
-
-NOLINT_TEST_F(PakManifestTest, PatchModeFailsWhenManifestCannotBeWritten)
-{
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildRequest;
-
-  const auto base_entries = std::array<data::PakCatalogEntry, 1> {
-    data::PakCatalogEntry {
-      .asset_key = MakeAssetKey(static_cast<uint8_t>(0x23U)),
-      .asset_type = data::AssetType::kMaterial,
-      .descriptor_digest = MakeDigest(static_cast<uint8_t>(0x33U)),
-      .transitive_resource_digest = MakeDigest(static_cast<uint8_t>(0x43U)),
-    },
-  };
-  const auto manifest_as_directory = Path("patch_manifest_as_directory");
-  std::filesystem::create_directories(manifest_as_directory);
-
-  const auto request = PakBuildRequest {
-    .mode = BuildMode::kPatch,
-    .sources = {},
-    .output_pak_path = Path("patch_fail_manifest.pak"),
-    .output_manifest_path = manifest_as_directory,
-    .content_version = kContentVersion,
-    .source_key = MakeSourceKey(static_cast<uint8_t>(0xA3U)),
-    .base_catalogs
-    = std::vector<data::PakCatalog> {
-        MakeBaseCatalog(std::span<const data::PakCatalogEntry>(base_entries)),
-      },
-
-    .options = {},
-  };
-
-  PakBuilder builder;
-  const auto build_result = builder.Build(request);
-  ASSERT_HAS_VALUE(build_result);
-  const auto& result = build_result.value();
-
-  EXPECT_GT(result.summary.diagnostics_error, 0U);
-  EXPECT_TRUE(
-    HasDiagnosticCode(result.diagnostics, "pak.manifest.write_open_failed"));
-  EXPECT_FALSE(result.patch_manifest.has_value());
-}
-
-NOLINT_TEST_F(PakManifestTest, FullModeFailsWhenManifestCannotBeWritten)
-{
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildOptions;
-  using pak::PakBuildRequest;
-
-  const auto manifest_as_directory = Path("full_manifest_as_directory");
-  std::filesystem::create_directories(manifest_as_directory);
-
-  const auto request = PakBuildRequest {
-    .mode = BuildMode::kFull,
-    .sources = {},
-    .output_pak_path = Path("full_fail_manifest.pak"),
-    .output_manifest_path = manifest_as_directory,
-    .content_version = kContentVersion,
-    .source_key = MakeSourceKey(static_cast<uint8_t>(0xA4U)),
-    .base_catalogs = {},
-
-    .options = PakBuildOptions {
-      .deterministic = true,
-      .emit_manifest_in_full = true,
-      .compute_crc32 = true,
-      .fail_on_warnings = false,
-    },
-  };
-
-  PakBuilder builder;
-  const auto build_result = builder.Build(request);
-  ASSERT_HAS_VALUE(build_result);
-  const auto& result = build_result.value();
-
-  EXPECT_GT(result.summary.diagnostics_error, 0U);
-  EXPECT_TRUE(
-    HasDiagnosticCode(result.diagnostics, "pak.manifest.write_open_failed"));
-  EXPECT_FALSE(result.patch_manifest.has_value());
-}
-
-NOLINT_TEST_F(
-  PakManifestTest, ManifestValidationRejectsNonDisjointPatchSetsPreEmit)
-{
-  using pak::BuildMode;
-  using pak::PakBuildRequest;
-  using pak::PakManifestWriter;
-  using pak::PakPatchAction;
-  using pak::PakPatchActionRecord;
-  using pak::PakPlan;
-
-  const auto conflicting_key = MakeAssetKey(static_cast<uint8_t>(0x61U));
-  const auto empty_base_entries = std::array<data::PakCatalogEntry, 0> {};
-  const auto request = PakBuildRequest {
-    .mode = BuildMode::kPatch,
-    .sources = {},
-    .output_pak_path = Path("pre_emit_validation.pak"),
-    .output_manifest_path = Path("pre_emit_validation.manifest.json"),
-    .content_version = kContentVersion,
-    .source_key = MakeSourceKey(static_cast<uint8_t>(0xA5U)),
-    .base_catalogs
-    = std::vector<data::PakCatalog> {
-        MakeBaseCatalog(std::span<const data::PakCatalogEntry>(empty_base_entries)),
-      },
-
-    .options = {},
-  };
-
-  auto plan_data = PakPlan::Data {};
-  plan_data.patch_actions = {
-    PakPatchActionRecord {
-      .asset_key = conflicting_key,
-      .asset_type = data::AssetType::kMaterial,
-      .action = PakPatchAction::kCreate,
-    },
-    PakPatchActionRecord {
-      .asset_key = conflicting_key,
-      .asset_type = data::AssetType::kMaterial,
-      .action = PakPatchAction::kDelete,
-    },
-  };
-
-  PakManifestWriter writer;
-  const auto write_result = writer.Write(
-    request, PakPlan(std::move(plan_data)), static_cast<uint32_t>(0U));
-
-  EXPECT_TRUE(HasDiagnosticCode(
-    write_result.diagnostics, "pak.manifest.patch_sets_not_disjoint"));
-  EXPECT_FALSE(write_result.manifest.has_value());
-  EXPECT_FALSE(std::filesystem::exists(request.output_manifest_path));
+  const auto text = workspace_.Text(request.output_manifest_path);
+  EXPECT_THAT(text,
+    ::testing::HasSubstr(
+      "\n  \"created\": [\n    \"" + data::to_string(Material()) + "\"\n  ]"));
+  EXPECT_THAT(text, ::testing::HasSubstr("\n  \"compatibility_envelope\": {"));
 }
 
 NOLINT_TEST_F(PakManifestTest, FullModeManifestEmissionIsBitExactDeterministic)
 {
-  using pak::BuildMode;
-  using pak::PakBuilder;
-  using pak::PakBuildOptions;
-  using pak::PakBuildRequest;
+  // Arrange
+  const auto request = FullRequest();
+  ASSERT_THAT(PakWorkspace::Build(request).diagnostics, HasNoErrors());
+  const auto first = workspace_.Text(request.output_manifest_path);
+  ASSERT_FALSE(first.empty());
 
-  const auto manifest_path = Path("deterministic.manifest.json");
-  const auto request = PakBuildRequest {
-    .mode = BuildMode::kFull,
-    .sources = {},
-    .output_pak_path = Path("deterministic.pak"),
-    .output_manifest_path = manifest_path,
-    .content_version = kContentVersion,
-    .source_key = MakeSourceKey(static_cast<uint8_t>(0xA6U)),
-    .base_catalogs = {},
+  // Act
+  const auto rebuilt = PakWorkspace::Build(request);
 
-    .options = PakBuildOptions {
-      .deterministic = true,
-      .emit_manifest_in_full = true,
-      .compute_crc32 = true,
-      .fail_on_warnings = false,
-    },
-  };
+  // Assert
+  ASSERT_THAT(rebuilt.diagnostics, HasNoErrors());
+  EXPECT_EQ(workspace_.Text(request.output_manifest_path), first);
+}
 
-  PakBuilder builder;
-  const auto first_result = builder.Build(request);
-  ASSERT_HAS_VALUE(first_result);
-  ASSERT_EQ(first_result.value().summary.diagnostics_error, 0U);
-  const auto first_bytes = cooktest::ReadBytes(manifest_path);
-  ASSERT_FALSE(first_bytes.empty());
+//=== Manifests that cannot be written ===------------------------------------//
 
-  const auto second_result = builder.Build(request);
-  ASSERT_HAS_VALUE(second_result);
-  ASSERT_EQ(second_result.value().summary.diagnostics_error, 0U);
-  const auto second_bytes = cooktest::ReadBytes(manifest_path);
+//! Builds whose manifest destination refuses to be published.
+class PakManifestUnwritableTest : public ::testing::Test {
+protected:
+  //! `request`, its manifest destination refusing publication.
+  [[nodiscard]] auto Unwritable(pak::PakBuildRequest request)
+    -> pak::PakBuildRequest
+  {
+    workspace_.Storage().FailPublishing(request.output_manifest_path);
+    return request;
+  }
 
-  EXPECT_EQ(first_bytes, second_bytes);
+  //! The pak of the `Game` library holding one material.
+  auto GamePak() -> std::filesystem::path
+  {
+    auto game = LooseCookedRoot {};
+    static_cast<void>(game.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = "Wood.omat",
+      .descriptor = fixtures::MaterialDescriptor("Wood").bytes,
+    }));
+    const auto request
+      = workspace_.FullRequest({ workspace_.Add(game) }, "game.pak");
+    static_cast<void>(workspace_.PackOrThrow(request));
+    return request.output_pak_path;
+  }
+
+  PakWorkspace workspace_;
+};
+
+NOLINT_TEST_F(
+  PakManifestUnwritableTest, PatchModeFailsWhenManifestCannotBeWritten)
+{
+  // Arrange
+  const auto request
+    = Unwritable(workspace_.PatchRequest({}, { TwoAssetBase() }));
+
+  // Act
+  const auto result = PakWorkspace::Build(request);
+
+  // Assert
+  EXPECT_THAT(
+    result.diagnostics, HasDiagnostic("pak.manifest.write_open_failed"));
+  EXPECT_FALSE(result.patch_manifest.has_value());
+  EXPECT_FALSE(workspace_.Exists(request.output_manifest_path));
+}
+
+NOLINT_TEST_F(
+  PakManifestUnwritableTest, FullModeFailsWhenManifestCannotBeWritten)
+{
+  // Arrange
+  auto request = workspace_.FullRequest({ PakWorkspace::PakSource(GamePak()) });
+  request.output_manifest_path = PakWorkspace::PakPath("out.manifest.json");
+  request.options.emit_manifest_in_full = true;
+  request = Unwritable(std::move(request));
+
+  // Act
+  const auto result = PakWorkspace::Build(request);
+
+  // Assert
+  EXPECT_THAT(
+    result.diagnostics, HasDiagnostic("pak.manifest.write_open_failed"));
+  EXPECT_FALSE(result.patch_manifest.has_value());
+  EXPECT_FALSE(workspace_.Exists(request.output_manifest_path));
 }
 
 } // namespace

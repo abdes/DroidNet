@@ -17,17 +17,17 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
 using nlohmann::json;
 using oxygen::content::import::ImportManifest;
 using oxygen::cooker::test::kContentHashingDefault;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   BuildsCollisionShapeDescriptorRequestWithDefaultsAndDescriptorOverrides)
@@ -42,9 +42,8 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
       "name": "floor_box",
       "content_hashing": false,
       "shape_type": "box",
-      "material_ref": "/.cooked/Physics/Materials/ground.opmat",
-      "half_extents": [25.0, 0.5, 25.0],
-      "virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape"
+      "material_ref": "../Materials/ground.opmat",
+      "half_extents": [25.0, 0.5, 25.0]
     })");
 
   const auto* const manifest_json = R"({
@@ -106,9 +105,8 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
     R"({
       "name": "floor_box",
       "shape_type": "box",
-      "material_ref": "/.cooked/Physics/Materials/ground.opmat",
-      "half_extents": [25.0, 0.5, 25.0],
-      "virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape"
+      "material_ref": "../Materials/ground.opmat",
+      "half_extents": [25.0, 0.5, 25.0]
     })");
 
   WriteText(manifest_path,

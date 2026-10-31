@@ -8,6 +8,7 @@
 
 #include <array>
 #include <expected>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -28,6 +29,7 @@
 #include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedStreamCapture.h>
 
 namespace {
 
@@ -41,6 +43,7 @@ using oxygen::content::toolkit::ToolInfo;
 using oxygen::content::toolkit::ToolLifecycle;
 using oxygen::content::toolkit::ToolResult;
 using oxygen::content::toolkit::ToolStreams;
+using oxygen::testing::ScopedStreamCapture;
 
 constexpr int kCustomExitCode = 7;
 constexpr int kParseHandlerExitCode = 9;
@@ -213,11 +216,11 @@ NOLINT_TEST_F(ToolAppTest, HelpRunsNoCommand)
 NOLINT_TEST_F(ToolAppTest, HelpGoesToTheToolOutput)
 {
   ScriptedCommand command("scan", ScriptedCommand::Outcome::kSucceed);
-  testing::internal::CaptureStdout();
+  const ScopedStreamCapture process_stdout { std::cout };
 
   const auto code = Invoke({ "--help" }, command);
 
-  const auto process_output = testing::internal::GetCapturedStdout();
+  const auto process_output = process_stdout.Text();
   EXPECT_EQ(code, static_cast<int>(ExitCode::kOk));
   EXPECT_THAT(Stdout(), testing::HasSubstr("scan"));
   EXPECT_TRUE(process_output.empty());

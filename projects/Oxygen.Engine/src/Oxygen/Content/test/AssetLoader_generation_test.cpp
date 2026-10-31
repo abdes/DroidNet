@@ -24,11 +24,8 @@
 #include <vector>
 
 #include "AssetLoader_test.h"
-#include "Fixtures/LooseCookedTestWriter.h"
-#include "Fixtures/PakTestWriter.h"
 
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ContentMounts.h>
@@ -43,6 +40,11 @@
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Cooker/testing/CookedPak.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -54,7 +56,6 @@
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
-#include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -81,12 +82,27 @@ namespace {
 
   using co::testing::TestEventLoop;
 
+  using cooker::testing::CookedPak;
+  using cooker::testing::LooseCookedRoot;
+  using cooker::testing::SourceKeyOf;
+
+  //! The identities of the roots a test writes side by side.
+  constexpr auto kFirstSeed = std::uint8_t { 1U };
+  constexpr auto kSecondSeed = std::uint8_t { 2U };
+  constexpr auto kThirdSeed = std::uint8_t { 3U };
+  //! The identities of the engine and content paks of the pak tests.
+  constexpr auto kEngineSeed = std::uint8_t { 0x21U };
+  constexpr auto kContentSeed = std::uint8_t { 0x22U };
+
   struct GenerationRecipe {
     data::AssetKey material;
     float emission = 0.0F;
     std::uint8_t payload = 0;
     data::AssetKey scene_material;
     data::AssetKey script;
+    //! The identity of the root; rewriting a root with the same seed refreshes
+    //! it, and roots mounted together take distinct seeds.
+    std::uint8_t seed = kFirstSeed;
   };
 
   //! Loose cooked roots as a mount set, lowest precedence first.
@@ -196,9 +212,101 @@ namespace {
     return bytes;
   }
 
+  auto BoundCubeKey() -> data::AssetKey
+  {
+    return data::AssetKey::FromVirtualPath("/test/bound-cube.ogeo");
+  }
+
+  //! Adds the cube the generation scene renders, whose only submesh is
+  //! painted with `material`.
+  auto AddBoundCube(LooseCookedRoot& source, const data::AssetKey& material)
+    -> void
+  {
+    data::pak::geometry::GeometryAssetDesc geometry {};
+    geometry.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kGeometry);
+    geometry.header.version = data::pak::geometry::kGeometryAssetVersion;
+    geometry.lod_count = 1U;
+    geometry.surface_count = 1U;
+    auto strings = data::DescriptorStringsBuilder {};
+    data::pak::geometry::MeshDesc mesh {};
+    mesh.name_offset = strings.Add("Cube/Mesh");
+    mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kProcedural);
+    mesh.info.procedural = {};
+    mesh.submesh_count = 1U;
+    mesh.mesh_view_count = 1U;
+    data::pak::geometry::SubMeshDesc submesh {};
+    submesh.name_offset = strings.Add("fixture");
+    submesh.surface_id
+      = data::SurfaceId::FromStableIdentity("generation-test-slot");
+    submesh.material_asset_key = material;
+    submesh.mesh_view_count = 1U;
+    constexpr data::pak::geometry::MeshViewDesc view {
+      .first_index = 0U,
+      .index_count = 36U,
+      .first_vertex = 0U,
+      .vertex_count = 24U,
+    };
+    const data::pak::geometry::SurfaceDesc surface {
+      .surface_id = submesh.surface_id,
+      .flags = data::pak::geometry::kSurfaceFlag_Visible,
+    };
+    std::vector<std::byte> geometry_bytes;
+    cooker::testing::AppendRecord(geometry_bytes, geometry);
+    cooker::testing::AppendRecord(geometry_bytes, mesh);
+    cooker::testing::AppendRecord(geometry_bytes, submesh);
+    cooker::testing::AppendRecord(geometry_bytes, view);
+    cooker::testing::AppendRecord(geometry_bytes, surface);
+    data::AppendDescriptorStrings(geometry_bytes, strings);
+    source.Add({
+      .type = data::AssetType::kGeometry,
+      .leaf = "bound-cube.ogeo",
+      .descriptor = std::move(geometry_bytes),
+      .references = data::AssetReferences::Create({},
+        {
+          {
+            .key = material,
+            .kind = data::KeyReferenceKind::kAsset,
+            .expected_type = data::AssetType::kMaterial,
+          },
+        })
+        .value(),
+      .key = BoundCubeKey(),
+    });
+  }
+
+  //! Adds the script whose one-byte bytecode is `recipe.payload`.
+  auto AddGenerationScript(
+    LooseCookedRoot& source, const GenerationRecipe& recipe) -> void
+  {
+    const auto payload = std::array { recipe.payload };
+    const auto row = source.AddScript(std::as_bytes(std::span { payload }));
+    data::pak::scripting::ScriptAssetDesc descriptor {};
+    descriptor.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kScript);
+    descriptor.header.version = data::pak::scripting::kScriptAssetVersion;
+    descriptor.bytecode_resource_index = data::ResourceReferenceIndex { 0U };
+    source.Add({
+      .type = data::AssetType::kScript,
+      .leaf = "reload.oscript",
+      .descriptor = data::MakeDescriptorBytes(descriptor),
+      .references = data::AssetReferences::Create(
+        {
+          {
+            .kind = data::ResourceKind::kScript,
+            .index = row,
+          },
+        },
+        {})
+        .value(),
+      .key = recipe.script.IsNil()
+        ? data::AssetKey::FromVirtualPath("/test/generation.oscript")
+        : recipe.script,
+    });
+  }
+
   auto WriteGeneration(const std::filesystem::path& root,
-    const GenerationRecipe recipe, data::SourceKey source = {})
-    -> data::SourceKey
+    const GenerationRecipe recipe) -> data::SourceKey
   {
     std::filesystem::create_directories(root);
     auto exclusive = serio::FileLock::TryAcquire(
@@ -207,19 +315,13 @@ namespace {
     if (!exclusive) {
       throw std::system_error(exclusive.error());
     }
-    if (source.IsNil()) {
-      source = data::SourceKey { Uuid::Generate() };
-    }
-    LooseCookedTestWriter writer(root);
-    writer.SetSourceKey(source);
-    const auto scene = SceneBytes(recipe.scene_material);
+    auto source = LooseCookedRoot { "test", recipe.seed };
     std::vector<data::KeyReference> scene_keys;
     if (!recipe.scene_material.IsNil()) {
-      const auto geometry_key
-        = data::AssetKey::FromVirtualPath("/test/bound-cube.ogeo");
+      AddBoundCube(source, recipe.scene_material);
       scene_keys = {
         {
-          .key = geometry_key,
+          .key = BoundCubeKey(),
           .kind = data::KeyReferenceKind::kAsset,
           .expected_type = data::AssetType::kGeometry,
         },
@@ -229,104 +331,31 @@ namespace {
           .expected_type = data::AssetType::kMaterial,
         },
       };
-      data::pak::geometry::GeometryAssetDesc geometry {};
-      geometry.header.asset_type
-        = static_cast<uint8_t>(data::AssetType::kGeometry);
-      geometry.header.version = data::pak::geometry::kGeometryAssetVersion;
-      geometry.lod_count = 1U;
-      geometry.surface_count = 1U;
-      auto strings = data::DescriptorStringsBuilder {};
-      data::pak::geometry::MeshDesc mesh {};
-      mesh.name_offset = strings.Add("Cube/Mesh");
-      mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kProcedural);
-      mesh.info.procedural = {};
-      mesh.submesh_count = 1U;
-      mesh.mesh_view_count = 1U;
-      data::pak::geometry::SubMeshDesc submesh {};
-      submesh.name_offset = strings.Add("fixture");
-      submesh.surface_id
-        = data::SurfaceId::FromStableIdentity("generation-test-slot");
-      submesh.material_asset_key = recipe.scene_material;
-      submesh.mesh_view_count = 1U;
-      constexpr data::pak::geometry::MeshViewDesc view {
-        .first_index = 0U,
-        .index_count = 36U,
-        .first_vertex = 0U,
-        .vertex_count = 24U,
-      };
-      const data::pak::geometry::SurfaceDesc surface {
-        .surface_id = submesh.surface_id,
-        .flags = data::pak::geometry::kSurfaceFlag_Visible,
-      };
-      std::vector<std::byte> geometry_bytes;
-      const auto append = [&geometry_bytes](const auto& record) -> void {
-        const auto bytes = std::as_bytes(std::span(&record, 1U));
-        geometry_bytes.insert(geometry_bytes.end(), bytes.begin(), bytes.end());
-      };
-      append(geometry);
-      append(mesh);
-      append(submesh);
-      append(view);
-      append(surface);
-      data::AppendDescriptorStrings(geometry_bytes, strings);
-      writer.WriteAssetDescriptor(geometry_key, data::AssetType::kGeometry,
-        "/test/bound-cube.ogeo", "bound-cube.ogeo", geometry_bytes,
-        data::AssetReferences::Create({},
-          {
-            {
-              .key = recipe.scene_material,
-              .kind = data::KeyReferenceKind::kAsset,
-              .expected_type = data::AssetType::kMaterial,
-            },
-          })
-          .value());
     }
-    writer.WriteAssetDescriptor(SceneKey(), data::AssetType::kScene,
-      "/test/generation.oscene", "scene.oscene", scene,
-      data::AssetReferences::Create({}, std::move(scene_keys)).value());
+    source.Add({
+      .type = data::AssetType::kScene,
+      .leaf = "generation.oscene",
+      .descriptor = SceneBytes(recipe.scene_material),
+      .references
+      = data::AssetReferences::Create({}, std::move(scene_keys)).value(),
+      .key = SceneKey(),
+    });
     if (!recipe.material.IsNil()) {
       data::pak::render::MaterialAssetDesc material {};
       material.header.asset_type
         = static_cast<std::uint8_t>(data::AssetType::kMaterial);
       material.header.version = data::pak::render::kMaterialAssetVersion;
       material.emissive_factor[0] = recipe.emission;
-      writer.WriteAssetDescriptor(recipe.material, data::AssetType::kMaterial,
-        "/test/material.omat", "material.omat",
-        data::MakeDescriptorBytes(material));
+      source.Add({
+        .type = data::AssetType::kMaterial,
+        .leaf = "material.omat",
+        .descriptor = data::MakeDescriptorBytes(material),
+        .key = recipe.material,
+      });
     }
-    {
-      const auto script_key = recipe.script.IsNil()
-        ? data::AssetKey::FromVirtualPath("/test/generation.oscript")
-        : recipe.script;
-      data::pak::scripting::ScriptAssetDesc descriptor {};
-      descriptor.header.asset_type
-        = static_cast<uint8_t>(data::AssetType::kScript);
-      descriptor.header.version = data::pak::scripting::kScriptAssetVersion;
-      descriptor.bytecode_resource_index = data::ResourceReferenceIndex { 0U };
-      writer.WriteAssetDescriptor(script_key, data::AssetType::kScript,
-        "/test/reload.oscript", "reload.oscript",
-        data::MakeDescriptorBytes(descriptor),
-        data::AssetReferences::Create(
-          {
-            {
-              .kind = data::ResourceKind::kScript,
-              .index = ResourceIndexT { 1U },
-            },
-          },
-          {})
-          .value());
-    }
-    data::pak::scripting::ScriptResourceDesc script {};
-    script.size_bytes = 1U;
-    const auto table
-      = std::array { data::pak::scripting::ScriptResourceDesc {}, script };
-    writer.WriteFile(data::loose_cooked::FileKind::kScriptsTable,
-      "scripts.table", std::as_bytes(std::span { table }));
-    const auto payload = std::array { recipe.payload };
-    writer.WriteFile(data::loose_cooked::FileKind::kScriptsData, "scripts.data",
-      std::as_bytes(std::span { payload }));
-    static_cast<void>(writer.Finish());
-    return source;
+    AddGenerationScript(source, recipe);
+    cooker::testing::Materialize(source.Files(), root);
+    return source.SourceKey();
   }
 
   auto CookedScriptBytes(const uint8_t payload) -> std::vector<uint8_t>
@@ -358,12 +387,21 @@ namespace {
     const auto material_key = MaterialKey();
     const auto unrelated_key
       = data::AssetKey::FromVirtualPath("/Other/material.omat");
-    const auto old_source = WriteGeneration(
-      old_root, { .material = material_key, .emission = 1.0F, .payload = 1U });
-    const auto new_source = WriteGeneration(
-      new_root, { .material = material_key, .emission = 2.0F, .payload = 2U });
+    const auto old_source = WriteGeneration(old_root,
+      { .material = material_key,
+        .emission = 1.0F,
+        .payload = 1U,
+        .seed = kFirstSeed });
+    const auto new_source = WriteGeneration(new_root,
+      { .material = material_key,
+        .emission = 2.0F,
+        .payload = 2U,
+        .seed = kSecondSeed });
     static_cast<void>(WriteGeneration(unrelated_root,
-      { .material = unrelated_key, .emission = 3.0F, .payload = 3U }));
+      { .material = unrelated_key,
+        .emission = 3.0F,
+        .payload = 3U,
+        .seed = kThirdSeed }));
     co::ThreadPool pool(*loop, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr { &pool };
@@ -538,7 +576,7 @@ namespace {
                     .key = *old_key, .bytes = injected }),
         nullptr);
 
-      EXPECT_EQ(WriteGeneration(root, { .payload = 2U }, source), source);
+      EXPECT_EQ(WriteGeneration(root, { .payload = 2U }), source);
       std::filesystem::remove(
         root / data::loose_cooked::kGenerationLeaseFileName);
       loader.AddLooseCookedRoot(root);
@@ -619,12 +657,18 @@ namespace {
     const auto first_root = root / "first";
     const auto second_root = root / "second";
     const auto material_key = MaterialKey();
-    const auto owner_source
-      = WriteGeneration(owner_root, { .scene_material = material_key });
+    const auto owner_source = WriteGeneration(
+      owner_root, { .scene_material = material_key, .seed = kThirdSeed });
     const auto first_source = WriteGeneration(first_root,
-      { .material = material_key, .emission = 1.0F, .payload = 1U });
+      { .material = material_key,
+        .emission = 1.0F,
+        .payload = 1U,
+        .seed = kFirstSeed });
     const auto second_source = WriteGeneration(second_root,
-      { .material = material_key, .emission = 2.0F, .payload = 2U });
+      { .material = material_key,
+        .emission = 2.0F,
+        .payload = 2U,
+        .seed = kSecondSeed });
     co::ThreadPool pool(*loop, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr { &pool };
@@ -704,13 +748,16 @@ namespace {
     geometry_desc.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kGeometry);
     geometry_desc.header.version = data::pak::geometry::kGeometryAssetVersion;
-    LooseCookedTestWriter writer(geometry_root);
-    writer.WriteAssetDescriptor(geometry_key, data::AssetType::kGeometry,
-      "/test/geometry.ogeo", "geometry.ogeo",
-      data::MakeDescriptorBytes(geometry_desc));
-    static_cast<void>(writer.Finish());
-    static_cast<void>(WriteGeneration(
-      material_root, { .material = MaterialKey(), .emission = 2.0F }));
+    auto geometry_source = LooseCookedRoot { "test", kThirdSeed };
+    geometry_source.Add({
+      .type = data::AssetType::kGeometry,
+      .leaf = "geometry.ogeo",
+      .descriptor = data::MakeDescriptorBytes(geometry_desc),
+      .key = geometry_key,
+    });
+    cooker::testing::Materialize(geometry_source.Files(), geometry_root);
+    static_cast<void>(WriteGeneration(material_root,
+      { .material = MaterialKey(), .emission = 2.0F, .seed = kFirstSeed }));
     co::ThreadPool pool(*loop, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr { &pool };
@@ -770,10 +817,16 @@ namespace {
     const auto old_root = root / "old";
     const auto new_root = root / "new";
     const auto material_key = MaterialKey();
-    const auto old_source = WriteGeneration(
-      old_root, { .material = material_key, .emission = 1.0F, .payload = 1U });
-    const auto new_source = WriteGeneration(
-      new_root, { .material = material_key, .emission = 2.0F, .payload = 2U });
+    const auto old_source = WriteGeneration(old_root,
+      { .material = material_key,
+        .emission = 1.0F,
+        .payload = 1U,
+        .seed = kFirstSeed });
+    const auto new_source = WriteGeneration(new_root,
+      { .material = material_key,
+        .emission = 2.0F,
+        .payload = 2U,
+        .seed = kSecondSeed });
     co::ThreadPool pool(*loop, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr { &pool };
@@ -832,10 +885,10 @@ namespace {
     const auto old_key = MaterialKey();
     const auto new_key
       = data::AssetKey::FromVirtualPath("/test/replacement.omat");
-    const auto old_source
-      = WriteGeneration(old_root, { .material = old_key, .emission = 1.0F });
-    static_cast<void>(
-      WriteGeneration(new_root, { .material = new_key, .emission = 2.0F }));
+    const auto old_source = WriteGeneration(
+      old_root, { .material = old_key, .emission = 1.0F, .seed = kFirstSeed });
+    static_cast<void>(WriteGeneration(new_root,
+      { .material = new_key, .emission = 2.0F, .seed = kSecondSeed }));
     co::ThreadPool pool(*loop, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr { &pool };
@@ -919,7 +972,7 @@ namespace {
     AssetLoaderBasicTest, PreparedMountSetCommitsBeforeRetirementCallbacks)
   {
     TestEventLoop loop;
-    co::Run(loop, ExerciseAtomicMountSet(&loop, temp_dir_));
+    co::Run(loop, ExerciseAtomicMountSet(&loop, TempDir()));
   }
 
   //! A running loader that has loaded from `old_root`, and the root of the
@@ -954,10 +1007,12 @@ namespace {
 
   NOLINT_TEST_F(AssetLoaderBasicTest, PreparedMountSetRejectsRestartedLoader)
   {
-    const auto old_root = temp_dir_ / "old";
-    const auto new_root = temp_dir_ / "new";
-    static_cast<void>(WriteGeneration(old_root, { .material = MaterialKey() }));
-    static_cast<void>(WriteGeneration(new_root, { .material = MaterialKey() }));
+    const auto old_root = TempDir() / "old";
+    const auto new_root = TempDir() / "new";
+    static_cast<void>(WriteGeneration(
+      old_root, { .material = MaterialKey(), .seed = kFirstSeed }));
+    static_cast<void>(WriteGeneration(
+      new_root, { .material = MaterialKey(), .seed = kSecondSeed }));
     TestEventLoop loop;
     co::ThreadPool pool(loop, 2);
     AssetLoaderConfig config {};
@@ -995,10 +1050,12 @@ namespace {
 
   NOLINT_TEST_F(AssetLoaderBasicTest, MountRetirementObserverMayDestroyLoader)
   {
-    const auto old_root = temp_dir_ / "old";
-    const auto new_root = temp_dir_ / "new";
-    static_cast<void>(WriteGeneration(old_root, { .material = MaterialKey() }));
-    static_cast<void>(WriteGeneration(new_root, { .material = MaterialKey() }));
+    const auto old_root = TempDir() / "old";
+    const auto new_root = TempDir() / "new";
+    static_cast<void>(WriteGeneration(
+      old_root, { .material = MaterialKey(), .seed = kFirstSeed }));
+    static_cast<void>(WriteGeneration(
+      new_root, { .material = MaterialKey(), .seed = kSecondSeed }));
     TestEventLoop loop;
     co::ThreadPool pool(loop, 2);
     AssetLoaderConfig config {};
@@ -1026,15 +1083,52 @@ namespace {
     retirement.Finish();
   }
 
+  auto EngineMaterialKey() -> data::AssetKey
+  {
+    return data::AssetKey::FromVirtualPath("/Engine/Default.omat");
+  }
+
+  //! The pak of the `Engine` mount that holds the default material.
+  auto EnginePak() -> CookedPak
+  {
+    auto engine = LooseCookedRoot { "Engine" };
+    static_cast<void>(engine.Material("Default.omat"));
+    auto pak = CookedPak { std::move(engine) };
+    pak.Identity(SourceKeyOf(kEngineSeed));
+    return pak;
+  }
+
+  //! The pak of the `Content` mount whose material references the engine's
+  //! default material, so it requires it of the `Engine` mount.
+  auto ContentPak(const CookedPak& engine) -> CookedPak
+  {
+    auto content = LooseCookedRoot { "Content" };
+    content.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = "Wood.omat",
+      .descriptor = cooker::testing::MaterialDescriptor("Wood").bytes,
+      .references = data::AssetReferences::Create({},
+        {
+          {
+            .key = EngineMaterialKey(),
+            .kind = data::KeyReferenceKind::kAsset,
+            .expected_type = data::AssetType::kMaterial,
+          },
+        })
+        .value(),
+    });
+    auto pak = CookedPak { std::move(content) };
+    pak.DependsOn(engine).Identity(SourceKeyOf(kContentSeed));
+    return pak;
+  }
+
   NOLINT_TEST_F(AssetLoaderBasicTest, EngineContentPakStaysBeneathEveryMountSet)
   {
     // Arrange
-    const auto engine_pak = temp_dir_ / "engine.pak";
-    const auto engine_source = data::SourceKey { Uuid::Generate() };
-    auto pak = PakTestWriter::Config {};
-    pak.source_key = engine_source;
-    PakTestWriter(engine_pak).Write(pak);
-    const auto project = temp_dir_ / "project";
+    const auto engine_pak = TempDir() / "engine.pak";
+    const auto engine_source = SourceKeyOf(kEngineSeed);
+    cooker::testing::Materialize(EnginePak().Encode(), engine_pak);
+    const auto project = TempDir() / "project";
     const auto project_source
       = WriteGeneration(project, { .material = MaterialKey() });
     TestEventLoop loop;
@@ -1044,7 +1138,7 @@ namespace {
     config.path_finder.emplace(PathFinderConfig::Create()
                                  .WithEngineContentPakPath(engine_pak)
                                  .BuildShared(),
-      temp_dir_);
+      TempDir());
     AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
     const auto mounted_keys = [&loader] -> std::vector<data::SourceKey> {
       auto keys = std::vector<data::SourceKey> {};
@@ -1077,38 +1171,12 @@ namespace {
   NOLINT_TEST_F(AssetLoaderBasicTest, PreparedMountSetMountsPakFiles)
   {
     // Arrange
-    const auto engine_pak = temp_dir_ / "engine.pak";
-    const auto engine_material
-      = data::AssetKey::FromVirtualPath("/Engine/Default.omat");
-    auto engine_config = PakTestWriter::Config {};
-    engine_config.source_key = data::SourceKey { Uuid::Generate() };
-    engine_config.library = "Engine";
-    engine_config.assets = {
-      {
-        .key = engine_material,
-        .type = data::AssetType::kMaterial,
-        .virtual_path = "/Engine/Default.omat",
-      },
-    };
-    PakTestWriter(engine_pak).Write(engine_config);
-    const auto content_pak = temp_dir_ / "content.pak";
-    auto content_config = PakTestWriter::Config {};
-    content_config.source_key = data::SourceKey { Uuid::Generate() };
-    content_config.library = "Content";
-    content_config.dependencies = {
-      {
-        .library = "Engine",
-        .requirements = {
-          {
-          .kind = data::KeyReferenceKind::kAsset,
-          .key = engine_material,
-          .type = data::AssetType::kMaterial,
-        },
-       },
-      },
-    };
-    PakTestWriter(content_pak).Write(content_config);
-    const auto project = temp_dir_ / "project";
+    const auto engine_pak = TempDir() / "engine.pak";
+    const auto engine = EnginePak();
+    cooker::testing::Materialize(engine.Encode(), engine_pak);
+    const auto content_pak = TempDir() / "content.pak";
+    cooker::testing::Materialize(ContentPak(engine).Encode(), content_pak);
+    const auto project = TempDir() / "project";
     const auto project_source
       = WriteGeneration(project, { .material = MaterialKey() });
     TestEventLoop loop;
@@ -1119,7 +1187,7 @@ namespace {
       PathFinderConfig::Create()
         .WithEngineContentPakPath(engine_pak)
         .BuildShared(),
-      temp_dir_);
+      TempDir());
     AssetLoader with_engine(
       engine::internal::EngineTagFactory::Get(), with_engine_config);
     AssetLoaderConfig without_engine_config {};
@@ -1143,7 +1211,7 @@ namespace {
     // Assert
     EXPECT_THAT(keys,
       ::testing::UnorderedElementsAre(
-        engine_config.source_key, content_config.source_key, project_source));
+        SourceKeyOf(kEngineSeed), SourceKeyOf(kContentSeed), project_source));
     NOLINT_EXPECT_THROW(static_cast<void>(co::Run(
                           loop, without_engine.PrepareMountsAsync(mounts))),
       DependencyRequirementError);
@@ -1154,44 +1222,18 @@ namespace {
   NOLINT_TEST_F(AssetLoaderBasicTest, DependentPakRequiresItsDependencyBelow)
   {
     // Arrange
-    const auto engine_pak = temp_dir_ / "engine.pak";
-    const auto engine_material
-      = data::AssetKey::FromVirtualPath("/Engine/Default.omat");
-    auto engine_config = PakTestWriter::Config {};
-    engine_config.source_key = data::SourceKey { Uuid::Generate() };
-    engine_config.library = "Engine";
-    engine_config.assets = {
-      {
-        .key = engine_material,
-        .type = data::AssetType::kMaterial,
-        .virtual_path = "/Engine/Default.omat",
-      },
-    };
-    PakTestWriter(engine_pak).Write(engine_config);
-    const auto content_pak = temp_dir_ / "content.pak";
-    auto content_config = PakTestWriter::Config {};
-    content_config.source_key = data::SourceKey { Uuid::Generate() };
-    content_config.library = "Content";
-    content_config.dependencies = {
-      {
-        .library = "Engine",
-        .requirements = {
-          {
-            .kind = data::KeyReferenceKind::kAsset,
-            .key = engine_material,
-            .type = data::AssetType::kMaterial,
-          },
-        },
-      },
-    };
-    PakTestWriter(content_pak).Write(content_config);
-    const auto project = temp_dir_ / "project";
+    const auto engine_pak = TempDir() / "engine.pak";
+    const auto engine = EnginePak();
+    cooker::testing::Materialize(engine.Encode(), engine_pak);
+    const auto content_pak = TempDir() / "content.pak";
+    cooker::testing::Materialize(ContentPak(engine).Encode(), content_pak);
+    const auto project = TempDir() / "project";
     static_cast<void>(WriteGeneration(project, { .material = MaterialKey() }));
     AssetLoaderConfig config {};
     config.path_finder.emplace(PathFinderConfig::Create()
                                  .WithEngineContentPakPath(engine_pak)
                                  .BuildShared(),
-      temp_dir_);
+      TempDir());
     AssetLoader with_engine(engine::internal::EngineTagFactory::Get(), config);
     AssetLoader without_engine(engine::internal::EngineTagFactory::Get());
     with_engine.AddLooseCookedRoot(project);
@@ -1202,30 +1244,34 @@ namespace {
       without_engine.AddPakFile(content_pak), DependencyRequirementError);
   }
 
+  //! A root of the `test` mount holding the physics sidecar of `target`.
+  //! A root that holds only the physics sidecar of the scene `target`, whose
+  //! descriptor is the test's scene: the scene lives in another source.
+  auto SidecarRoot(const data::AssetKey& target, const std::uint8_t seed)
+    -> LooseCookedRoot
+  {
+    auto root = LooseCookedRoot { "test", seed };
+    root.Add({
+      .type = data::AssetType::kPhysicsScene,
+      .leaf = "scene.opscene",
+      .descriptor
+      = cooker::testing::PhysicsSidecarDescriptor(target, SceneBytes({})).bytes,
+    });
+    return root;
+  }
+
   NOLINT_TEST_F(AssetLoaderBasicTest, SidecarDiscoveryUsesCapturedLayerView)
   {
     const auto sidecar_key
       = data::AssetKey::FromVirtualPath("/test/scene.opscene");
     const auto unrelated_scene
       = data::AssetKey::FromVirtualPath("/test/other.oscene");
-    const auto write_sidecar = [&](const std::filesystem::path& root,
-                                 const data::AssetKey& target) -> void {
-      LooseCookedTestWriter writer(root);
-      writer.SetSourceKey(data::SourceKey { Uuid::Generate() });
-      data::pak::physics::PhysicsSceneAssetDesc descriptor {};
-      descriptor.header.asset_type
-        = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
-      descriptor.header.version = data::pak::physics::kPhysicsSceneAssetVersion;
-      descriptor.target_scene_key = target;
-      writer.WriteAssetDescriptor(sidecar_key, data::AssetType::kPhysicsScene,
-        "/test/scene.opscene", "scene.opscene",
-        data::MakeDescriptorBytes(descriptor));
-      static_cast<void>(writer.Finish());
-    };
-    const auto base = temp_dir_ / "base";
-    const auto replacement = temp_dir_ / "replacement";
-    write_sidecar(base, SceneKey());
-    write_sidecar(replacement, unrelated_scene);
+    const auto base = TempDir() / "base";
+    const auto replacement = TempDir() / "replacement";
+    cooker::testing::Materialize(
+      SidecarRoot(SceneKey(), kFirstSeed).Files(), base);
+    cooker::testing::Materialize(
+      SidecarRoot(unrelated_scene, kSecondSeed).Files(), replacement);
     AssetLoader loader(engine::internal::EngineTagFactory::Get());
     loader.AddLooseCookedRoot(base);
     const auto original = loader.BeginLoadScope();
@@ -1249,28 +1295,24 @@ namespace {
   {
     const auto sidecar_key
       = data::AssetKey::FromVirtualPath("/test/scene.opscene");
-    const auto base = temp_dir_ / "base";
-    {
-      LooseCookedTestWriter writer(base);
-      writer.SetSourceKey(data::SourceKey { Uuid::Generate() });
-      data::pak::physics::PhysicsSceneAssetDesc descriptor {};
-      descriptor.header.asset_type
-        = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
-      descriptor.header.version = data::pak::physics::kPhysicsSceneAssetVersion;
-      descriptor.target_scene_key = SceneKey();
-      writer.WriteAssetDescriptor(sidecar_key, data::AssetType::kPhysicsScene,
-        "/test/scene.opscene", "scene.opscene",
-        data::MakeDescriptorBytes(descriptor));
-      static_cast<void>(writer.Finish());
-    }
-    // A patch pak with no assets whose catalog deletes the sidecar.
-    const auto patch = temp_dir_ / "patch.pak";
-    auto config = PakTestWriter::Config {};
-    config.deleted = { sidecar_key };
-    PakTestWriter(patch).Write(config);
+    // The base pak holds the scene and its sidecar; the patch above it holds
+    // only another asset, so the sidecar is deleted by the patch.
+    const auto base = TempDir() / "base.pak";
+    auto base_root = LooseCookedRoot { "test", kFirstSeed };
+    static_cast<void>(base_root.Scene("generation.oscene"));
+    static_cast<void>(
+      base_root.PhysicsSidecar("scene.opscene", "generation.oscene"));
+    const auto base_pak = CookedPak { std::move(base_root) };
+    cooker::testing::Materialize(base_pak.Encode(), base);
+    auto kept = LooseCookedRoot { "test", kSecondSeed };
+    static_cast<void>(kept.Material("kept.omat"));
+    auto patch_pak = CookedPak { std::move(kept) };
+    patch_pak.PatchOf(base_pak);
+    const auto patch = TempDir() / "patch.pak";
+    cooker::testing::Materialize(patch_pak.Encode(), patch);
 
     AssetLoader loader(engine::internal::EngineTagFactory::Get());
-    loader.AddLooseCookedRoot(base);
+    loader.AddPakFile(base);
     const auto original = loader.BeginLoadScope();
     const auto scene_bytes = SceneBytes({});
     data::SceneAsset scene(SceneKey(), scene_bytes);
@@ -1285,35 +1327,35 @@ namespace {
     RevocationDuringDependenciesReleasesTemporaryCheckouts)
   {
     TestEventLoop loop;
-    co::Run(loop, ExerciseRevokedGeometryDependencies(&loop, temp_dir_));
+    co::Run(loop, ExerciseRevokedGeometryDependencies(&loop, TempDir()));
   }
 
   NOLINT_TEST_F(
     AssetLoaderBasicTest, SameSourceKeyRefreshDoesNotAliasCachedPayloads)
   {
     TestEventLoop loop;
-    co::Run(loop, ExerciseMutableRefresh(&loop, temp_dir_ / "mutable"));
+    co::Run(loop, ExerciseMutableRefresh(&loop, TempDir() / "mutable"));
   }
 
   NOLINT_TEST_F(
     AssetLoaderBasicTest, ExternalDependencyBindingsSurviveRootReplacement)
   {
     TestEventLoop loop;
-    co::Run(loop, ExerciseExternalBinding(&loop, temp_dir_));
+    co::Run(loop, ExerciseExternalBinding(&loop, TempDir()));
   }
 
   NOLINT_TEST_F(AssetLoaderBasicTest,
     ReplacementRetainsAnInFlightSourceBeforeDecodeCompletes)
   {
     TestEventLoop loop;
-    co::Run(loop, ExerciseInFlightGeneration(&loop, temp_dir_));
+    co::Run(loop, ExerciseInFlightGeneration(&loop, TempDir()));
   }
 
   NOLINT_TEST_F(
     AssetLoaderBasicTest, RetiredGenerationsRetainTheirOwnAssetsAndPayloads)
   {
     TestEventLoop loop;
-    co::Run(loop, ExerciseRetainedGeneration(&loop, temp_dir_));
+    co::Run(loop, ExerciseRetainedGeneration(&loop, TempDir()));
   }
 
 } // namespace

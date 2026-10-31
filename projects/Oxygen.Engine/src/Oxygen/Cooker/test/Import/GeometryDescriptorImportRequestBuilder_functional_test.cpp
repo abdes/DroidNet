@@ -18,9 +18,9 @@
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -29,8 +29,8 @@ using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::GeometryDescriptorImportSettings;
 using oxygen::content::import::internal::BuildGeometryDescriptorRequest;
 using oxygen::cooker::test::ContentMountTable;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   -> GeometryDescriptorImportSettings

@@ -16,6 +16,8 @@
 #include <utility>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -43,7 +45,13 @@ public:
     std::optional<LooseCookedWriteResult> write_result {};
   };
 
-  OXGN_COOK_API LooseCookedIndexRegistry() = default;
+  //! Keeps the writers of cooked roots held by `storage`.
+  OXGN_COOK_API explicit LooseCookedIndexRegistry(
+    observer_ptr<cooked::CookerStorage> storage);
+
+  //! The file system every writer of this registry goes through.
+  OXGN_COOK_NDAPI auto Storage() const noexcept
+    -> observer_ptr<cooked::CookerStorage>;
 
   OXYGEN_MAKE_NON_COPYABLE(LooseCookedIndexRegistry)
   OXYGEN_MAKE_NON_MOVABLE(LooseCookedIndexRegistry)
@@ -57,19 +65,28 @@ public:
     const std::optional<data::SourceKey>& source_key) -> ImportSessionToken;
 
   //! Register a file record in the shared index writer.
+  /*! @see LooseCookedWriter::RegisterExternalFile */
   OXGN_COOK_API auto RegisterExternalFile(
     const std::filesystem::path& cooked_root, data::loose_cooked::FileKind kind,
-    std::string_view relpath) -> void;
+    std::string_view relpath,
+    const std::optional<LooseCookedFileDigest>& produced = std::nullopt)
+    -> void;
 
   //! Register a texture descriptor record under its virtual path.
+  /*! @see LooseCookedWriter::RegisterExternalTextureDescriptor */
   OXGN_COOK_API auto RegisterExternalTextureDescriptor(
     const std::filesystem::path& cooked_root, std::string_view relpath,
-    std::string_view virtual_path, const LooseCookedProducer& producer) -> void;
+    std::string_view virtual_path, const LooseCookedProducer& producer,
+    const std::optional<LooseCookedFileDigest>& produced = std::nullopt)
+    -> void;
 
   //! Register an auxiliary file record its producer produces.
+  /*! @see LooseCookedWriter::RegisterExternalAuxiliaryFile */
   OXGN_COOK_API auto RegisterExternalAuxiliaryFile(
     const std::filesystem::path& cooked_root, std::string_view relpath,
-    const LooseCookedProducer& producer) -> void;
+    const LooseCookedProducer& producer,
+    const std::optional<LooseCookedFileDigest>& produced = std::nullopt)
+    -> void;
 
   //! Retire the outputs a complete re-cook no longer writes.
   /*! @see LooseCookedWriter::RetireUnwrittenOutputs */
@@ -77,15 +94,15 @@ public:
     const std::filesystem::path& cooked_root, const LooseCookedRecook& recook)
     -> void;
 
-  //! Register an asset record in the shared index writer.
-  OXGN_COOK_API auto RegisterExternalAssetDescriptor(
+  //! Registers an asset descriptor a producer wrote, validated and hashed, in
+  //! the shared index writer
+  //! (`LooseCookedWriter::RegisterProducedAssetDescriptor`).
+  OXGN_COOK_API auto RegisterProducedAssetDescriptor(
     const std::filesystem::path& cooked_root, const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
-    std::string_view descriptor_relpath, uint64_t descriptor_size,
+    std::string_view descriptor_relpath, const LooseCookedFileDigest& produced,
     const data::AssetReferences& references,
-    const LooseCookedProducer& producer,
-    const std::optional<base::Sha256Digest>& descriptor_sha256 = std::nullopt)
-    -> void;
+    const LooseCookedProducer& producer) -> void;
 
   //! Retire participation and await the cohort's index publication.
   /*! All participants receive the published identity. Only the writing session
@@ -121,6 +138,7 @@ private:
   auto GetEntry(const std::filesystem::path& cooked_root)
     -> std::shared_ptr<Entry>;
 
+  observer_ptr<cooked::CookerStorage> storage_;
   std::mutex mutex_;
   std::unordered_map<std::string, std::shared_ptr<Entry>> entries_;
 };

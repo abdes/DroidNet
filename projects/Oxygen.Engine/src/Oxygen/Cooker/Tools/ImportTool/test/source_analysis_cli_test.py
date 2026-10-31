@@ -1,16 +1,15 @@
 """Source-analysis command integration and input-protection regressions."""
 
-import json
 import hashlib
+import json
 import os
-from pathlib import Path
+import struct
 import subprocess
 import sys
-import struct
 import tempfile
 import unittest
 import zlib
-
+from pathlib import Path
 
 IMPORT_TOOL = Path(sys.argv.pop(1)).resolve()
 _SCENE_SCHEMA = (
@@ -249,12 +248,15 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         original = '{"name":"Published"}'
         source.write_text(original, encoding="utf-8")
         replacement = "/.cooked/Textures/Replacement.otex"
+        # The material is in the same mount: it names the texture relatively.
         entry = self.capture(
             source.name,
             json.dumps(
                 {
                     "name": "Published",
-                    "textures": {"base_color": {"virtual_path": replacement}},
+                    "textures": {
+                        "base_color": {"virtual_path": "../Textures/Replacement.otex"}
+                    },
                 }
             ),
         )
@@ -387,7 +389,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                 {
                     "name": "RedMaterial",
                     "textures": {
-                        "base_color": {"virtual_path": texture_path},
+                        "base_color": {"virtual_path": "../Textures/Red.otex"},
                     },
                 }
             ),
@@ -415,7 +417,9 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         self.assertTrue(list((self.root / "cooked").rglob("*.otex")))
         self.assertTrue(list((self.root / "cooked").rglob("*.omat")))
 
-    def test_texture_job_identity_conflict_is_rejected_by_analysis_and_cooking(self):
+    def test_texture_descriptor_cannot_name_its_identity(self):
+        # A texture's identity comes from its job; the descriptor is refused
+        # when it carries one, in analysis and in cooking alike.
         self.capture(
             "texture.json",
             json.dumps(
@@ -434,14 +438,14 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         report = json.loads((self.root / "analysis.json").read_text(encoding="utf-8"))
         self.assertTrue(
             any(
-                issue["code"] == "texture.descriptor.identity_conflict"
+                issue["code"] == "texture.descriptor.schema_validation_failed"
                 for issue in report["jobs"][0]["diagnostics"]
             )
         )
         result = self.batch(jobs)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "texture.descriptor.identity_conflict", result.stdout + result.stderr
+            "texture.descriptor.schema_validation_failed", result.stdout + result.stderr
         )
 
     def test_model_imports_keep_logical_paths(self):
@@ -473,8 +477,10 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         self.capture("vertices.bin", vertices)
         self.capture("indices.bin", struct.pack("<3I", 0, 1, 2))
         bounds = {"min": [0, 0, 0], "max": [1, 1, 0]}
-        vb = "/.cooked/Resources/Buffers/vertices.obuf"
-        ib = "/.cooked/Resources/Buffers/indices.obuf"
+        # The geometry is /.cooked/Geometry/Triangle.ogeo: its references to
+        # the same mount are relative to /.cooked/Geometry.
+        vb = "../Resources/Buffers/vertices.obuf"
+        ib = "../Resources/Buffers/indices.obuf"
         buffers = [
             {
                 "uri": name,
@@ -501,7 +507,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                     "submeshes": [
                         {
                             "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-                            "material_ref": "/.cooked/Materials/Stone.omat",
+                            "material_ref": "../Materials/Stone.omat",
                             "views": [{"view_ref": "surface"}],
                         }
                     ],
@@ -524,7 +530,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                     "renderables": [
                         {
                             "node": 0,
-                            "geometry_ref": "/.cooked/Geometry/Triangle.ogeo",
+                            "geometry_ref": "../Geometry/Triangle.ogeo",
                         }
                     ],
                 }

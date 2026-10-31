@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <string>
 
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
@@ -36,10 +37,11 @@ struct PakToolCommandResult {
   ReportWriteResult report_write_result {};
 };
 
+//! Prepares, builds and publishes one pak; the pak, its catalog, manifest and
+//! report are written and published through `storage`.
 [[nodiscard]] auto ExecutePakToolCommand(pak::BuildMode mode,
   const std::string& command, const std::string& command_line,
   const std::string& tool_version, const PakToolCliOptions& options,
-  IRequestPreparationFileSystem& prep_fs, IArtifactFileSystem& artifact_fs)
-  -> PakToolCommandResult;
+  cooked::CookerStorage& storage) -> PakToolCommandResult;
 
 } // namespace oxygen::content::pak::tool

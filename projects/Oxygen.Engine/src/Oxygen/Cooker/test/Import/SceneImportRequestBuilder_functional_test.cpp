@@ -31,12 +31,12 @@
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
-#include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -64,8 +64,7 @@ constexpr std::string_view kSourceIdentity
 
 auto Identity() -> Uuid { return Uuid::FromString(kSourceIdentity).value(); }
 
-class SceneImportRequestBuilderTest
-  : public oxygen::content::pak::test::TempDirFixture {
+class SceneImportRequestBuilderTest : public oxygen::testing::TempDirTest {
 protected:
   //! The project's mounts: `Content` on the temp root, where the sources,
   //! records and manifests of these tests live.
@@ -73,11 +72,11 @@ protected:
   {
     if (mounts_.mounts.empty()) {
       mounts_ = ResolveMountTable(MountTableRequest {
-        .project_root = Root(),
+        .project_root = TempDir(),
         .declarations
         = { MountDeclaration { .name = "Content", .path = std::string(".") } },
         .declared_in = "import-manifest.json",
-        .working_directory = Root(),
+        .working_directory = TempDir(),
       });
     }
     return mounts_;
@@ -95,9 +94,9 @@ protected:
   auto Settings() -> SceneImportSettings
   {
     auto settings = SceneImportSettings {};
-    settings.source_path = Path("model.gltf").string();
+    settings.source_path = TempPath("model.gltf").string();
     settings.virtual_path = "/.cooked/model.gltf";
-    settings.cooked_root = Path("cooked").string();
+    settings.cooked_root = TempPath("cooked").string();
     return settings;
   }
 
@@ -116,7 +115,7 @@ protected:
     }
     ModelImportRecord::Save({
       .record_path = *path,
-      .source = Path(std::filesystem::path(identity).filename().string()),
+      .source = TempPath(std::filesystem::path(identity).filename().string()),
       .settings_json = settings.dump(),
       .mounts = oxygen::make_observer(&Mounts()),
     });
@@ -150,13 +149,13 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, WithoutARecordTheIdentityIsFresh)
 //! job's identity names.
 NOLINT_TEST_F(SceneImportRequestBuilderTest, TheSourceIsRecordedAsItsMountPath)
 {
-  std::filesystem::create_directories(Path("Materials"));
+  std::filesystem::create_directories(TempPath("Materials"));
   {
-    std::ofstream output(Path("Materials/Red.omat.json"));
+    std::ofstream output(TempPath("Materials/Red.omat.json"));
     output << R"({ "name": "Red" })";
     ASSERT_TRUE(output.good());
   }
-  const auto manifest_path = Path("import-manifest.json");
+  const auto manifest_path = TempPath("import-manifest.json");
   {
     std::ofstream output(manifest_path);
     output << ProjectFields(
@@ -269,7 +268,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
     = ModelImportRecord::Read(gltf, Mounts()).source_identity;
   const auto fbx_identity
     = ModelImportRecord::Read(fbx, Mounts()).source_identity;
-  const auto manifest_path = Path("import-manifest.json");
+  const auto manifest_path = TempPath("import-manifest.json");
   {
     const auto document = ProjectFields({
       { "version", 1 },
@@ -346,7 +345,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
     });
     std::ostringstream errors;
     EXPECT_FALSE(
-      ImportManifest::Parse(document.dump(), Root(), {}, errors).has_value())
+      ImportManifest::Parse(document.dump(), TempDir(), {}, errors).has_value())
       << job.dump();
     return errors.str();
   };
@@ -416,7 +415,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
     },
   };
   static_cast<void>(SaveRecord("/Content/model.fbx", settings_json));
-  const auto manifest_path = Path("settings-manifest.json");
+  const auto manifest_path = TempPath("settings-manifest.json");
   {
     std::ofstream output(manifest_path);
     output << ProjectFields({
@@ -536,7 +535,7 @@ NOLINT_TEST_F(
   }
 
   const auto refused = [&](const json& defaults) -> bool {
-    const auto path = Path("refused-manifest.json");
+    const auto path = TempPath("refused-manifest.json");
     {
       std::ofstream output(path);
       output << ProjectFields({

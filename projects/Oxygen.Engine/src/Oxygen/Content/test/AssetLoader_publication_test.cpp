@@ -134,7 +134,7 @@ namespace {
   NOLINT_TEST_F(
     AssetLoaderBasicTest, SharedTextureBindingIsPinnedAndEvictedExactlyOnce)
   {
-    const auto root = temp_dir_ / "source";
+    const auto root = TempDir() / "source";
     const auto key = data::AssetKey::FromVirtualPath("/test/Surface.omat");
     const auto source = WriteTexturedMaterialSource(root, key);
     TestEventLoop loop;
@@ -144,8 +144,8 @@ namespace {
   NOLINT_TEST_F(
     AssetLoaderBasicTest, NewestMountWinsWithoutChangingQualifiedPublications)
   {
-    const auto first = temp_dir_ / "red";
-    const auto second = temp_dir_ / "blue";
+    const auto first = TempDir() / "red";
+    const auto second = TempDir() / "blue";
     const auto key = data::AssetKey::FromVirtualPath("/test/Surface.omat");
     const auto red
       = WriteMaterialSource(first, key, { 1.0F, 0.0F, 0.0F, 1.0F });

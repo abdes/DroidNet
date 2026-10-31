@@ -36,8 +36,8 @@ namespace {
   using oxygen::cooker::test::HasDiagnosticCode;
   using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::WriteText;
-  using testing::HasSubstr;
-  using testing::Not;
+  using ::testing::HasSubstr;
+  using ::testing::Not;
 
   constexpr auto kGroundIdentity = std::string_view { "/Content/Ground.omat" };
 
@@ -244,7 +244,7 @@ namespace {
 
     // Assert
     EXPECT_THAT(sources,
-      testing::ElementsAre("/Studio/Materials/Steel.omat.json",
+      ::testing::ElementsAre("/Studio/Materials/Steel.omat.json",
         "/Studio/Materials/Steel.omat.json"));
   }
 

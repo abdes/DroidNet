@@ -66,6 +66,14 @@
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
+namespace asio {
+class io_context;
+} // namespace asio
+
+namespace oxygen::serio {
+class IoDriver;
+} // namespace oxygen::serio
+
 namespace oxygen::content {
 
 namespace internal {
@@ -77,6 +85,7 @@ namespace internal {
   struct SharedContentResult;
   class EvictionRegistry;
   class InFlightOperationTable;
+  class PayloadBudget;
   struct PhysicsBindings;
   class ResourceLoadPipeline;
   class SceneCatalogQueryService;
@@ -104,6 +113,23 @@ struct AssetLoaderConfig final {
        fast rather than falling back to synchronous work.
   */
   observer_ptr<co::ThreadPool> thread_pool;
+
+  //! The loop the loader's coroutines run on, which completes their IO.
+  /*!
+   When set, mounted sources open their payload files through an IO driver
+   bound to it, and loads await payload reads without blocking the loop.
+   Without it, awaited payload reads block the loop thread for each read: a
+   unit test's loop or a tool, never the engine.
+  */
+  observer_ptr<asio::io_context> io_context;
+
+  //! The payload bytes loads may hold in flight, read but not yet taken by
+  //! their resources.
+  /*!
+   A load waits, in arrival order, until its payload fits; a payload larger
+   than the budget loads alone.
+  */
+  uint64_t payload_budget_bytes { 256ULL * 1024ULL * 1024ULL };
 
   //! Enforce that offline loads must not perform GPU work.
   /*!
@@ -1145,8 +1171,8 @@ private:
     std::unique_ptr<internal::MountReplacementState> state,
     observer_ptr<co::ThreadPool> pool,
     std::optional<std::filesystem::path> engine_content_pak,
-    std::vector<ContentMount> mounts, bool verify_content)
-    -> co::Co<PreparedMountSet>;
+    std::vector<ContentMount> mounts, bool verify_content,
+    std::shared_ptr<serio::IoDriver> driver) -> co::Co<PreparedMountSet>;
   //! Mounts the engine content pak, when configured, beneath every other
   //! source.
   auto MountEngineContentPak() -> void;
@@ -1325,14 +1351,16 @@ private:
     LoadRequest request, uint64_t operation_id,
     std::shared_ptr<internal::ContentReleaseQueue> releases)
     -> co::Co<internal::SharedContentResult>;
+  //! Binds the asset `key` of `parent`, once per binding set; the bound asset
+  //! is read from `bindings` once every concurrent bind has joined.
   template <typename T>
   auto BindAssetAsync(const data::AssetKey& key, const data::Asset& parent,
-    internal::ContentBindingBuilder& bindings, LoadRequest request)
-    -> co::Co<std::shared_ptr<T>>;
+    internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
+  //! Binds the resource `key`, once per binding set; the bound resource is
+  //! read from `bindings` once every concurrent bind has joined.
   template <typename T>
   auto BindResourceAsync(ResourceKey key,
-    internal::ContentBindingBuilder& bindings, LoadRequest request)
-    -> co::Co<std::shared_ptr<T>>;
+    internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
   template <typename T>
   auto BindCollectedResourcesAsync(
     const internal::DependencyCollector& collector,
@@ -1468,6 +1496,10 @@ private:
 
   observer_ptr<co::ThreadPool> thread_pool_;
 
+  //! The driver mounted sources open payload files through; empty without
+  //! an io_context. Sources share it, so it outlives their files.
+  std::shared_ptr<serio::IoDriver> io_driver_;
+
   bool work_offline_ { false };
 
   bool verify_content_hashes_ { false };
@@ -1485,6 +1517,8 @@ private:
 
   //=== In-flight Deduplication ===------------------------------------------//
   std::unique_ptr<internal::InFlightOperationTable> in_flight_ops_;
+  //! Declared before the pipeline, which reads payloads within it.
+  std::unique_ptr<internal::PayloadBudget> payload_budget_;
   std::unique_ptr<internal::ResourceLoadPipeline> resource_load_pipeline_;
   std::unique_ptr<internal::SceneCatalogQueryService>
     scene_catalog_query_service_;

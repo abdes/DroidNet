@@ -20,7 +20,6 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
-#include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -59,7 +58,8 @@ namespace {
         MakeSidecarPayload(SidecarBindingSpec {
           .node_index = 0,
           .slot_id = std::string(kMainSlotId),
-          .script_virtual_path = script.virtual_path,
+          .script_virtual_path
+          = SpellReference(scene.virtual_path, script.virtual_path),
           .execution_order = std::nullopt,
           .params = nlohmann::json::parse(params_json),
         }));
@@ -96,11 +96,9 @@ namespace {
       const data::AssetKey& scene) -> data::AssetReferences
     {
       const auto inspection = LoadInspection(cooked_root);
-      const auto entry
-        = std::ranges::find(inspection.Assets(), scene, &lc::AssetEntry::key);
-      EXPECT_NE(entry, inspection.Assets().end());
-      return entry == inspection.Assets().end() ? data::AssetReferences {}
-                                                : entry->references;
+      const auto* const entry = inspection.FindAsset(scene);
+      EXPECT_NE(entry, nullptr);
+      return entry == nullptr ? data::AssetReferences {} : entry->references;
     }
   };
 
@@ -210,13 +208,13 @@ namespace {
       = SceneReferences(cooked_root, cooked.scene->key);
     auto material = std::optional<AssetRef> {};
     for (const auto& entry : cooked.inspection.Assets()) {
-      if (static_cast<AssetType>(entry.asset_type) == AssetType::kMaterial
+      if (entry.type == AssetType::kMaterial
         && !HasAssetReference(
           base_references, entry.key, AssetType::kMaterial)) {
         material = AssetRef {
           .key = entry.key,
           .virtual_path = entry.virtual_path,
-          .descriptor_relpath = entry.descriptor_relpath,
+          .descriptor_relpath = DescriptorRelPath(cooked.inspection, entry.key),
           .references = entry.references,
           .type = AssetType::kMaterial,
         };
@@ -229,7 +227,8 @@ namespace {
     const auto with_asset
       = ApplySidecar(cooked_root, *cooked.scene, *cooked.script,
         R"([ { "key": "orb", "type": "asset", "value": ")"
-          + material->virtual_path + R"(" } ])");
+          + SpellReference(cooked.scene->virtual_path, material->virtual_path)
+          + R"(" } ])");
     ASSERT_TRUE(with_asset.success);
     const auto state = ReadSceneScriptState(cooked_root, *cooked.scene);
     const auto references_with_asset
@@ -268,10 +267,11 @@ namespace {
     const auto wrong_kind
       = ApplySidecar(cooked_root, *cooked.scene, *cooked.script,
         R"([ { "key": "orb", "type": "asset", "value": ")"
-          + geometry->virtual_path + R"(" } ])");
+          + SpellReference(cooked.scene->virtual_path, geometry->virtual_path)
+          + R"(" } ])");
     const auto missing = ApplySidecar(cooked_root, *cooked.scene,
       *cooked.script,
-      R"([ { "key": "orb", "type": "asset", "value": "/.cooked/Materials/none.omat" } ])");
+      R"([ { "key": "orb", "type": "asset", "value": "../Materials/none.omat" } ])");
 
     EXPECT_FALSE(wrong_kind.success);
     const auto kind_diagnostic

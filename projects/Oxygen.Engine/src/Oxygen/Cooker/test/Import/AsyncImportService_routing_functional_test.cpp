@@ -22,9 +22,9 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -40,7 +40,7 @@ auto StopService(AsyncImportService& service) -> void { service.Stop(); }
 
 //=== Request Routing Tests ===-----------------------------------------------//
 
-class AsyncImportServiceRoutingTest : public oxygen::cooker::test::TempDirTest {
+class AsyncImportServiceRoutingTest : public oxygen::testing::TempDirTest {
 protected:
   AsyncImportService::Config config_ { .thread_pool_size = 2 };
 };

@@ -24,8 +24,9 @@
 
 #include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/ScriptMetadata.h>
-#include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -33,6 +34,7 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -48,11 +50,14 @@ auto RunScriptMetadataReport(const ScriptMetadataOptions& options) -> int
   });
 }
 
-using oxygen::content::pak::test::AssetSpec;
+using oxygen::cooker::testing::LooseAsset;
+using oxygen::cooker::testing::LooseCookedRoot;
+using oxygen::cooker::testing::Materialize;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 using oxygen::data::ScriptParam;
 
+constexpr auto kScriptLeaf = "Scripts/Turret.oscript";
 constexpr auto kScriptPath = "/Content/Scripts/Turret.oscript";
 
 auto Record(const std::string_view key, const ScriptParam& value,
@@ -68,7 +73,7 @@ auto Record(const std::string_view key, const ScriptParam& value,
 
 //! A script declaring one parameter of each kind the report distinguishes.
 auto ScriptAsset(const uint8_t version = scripting::kScriptAssetVersion)
-  -> AssetSpec
+  -> LooseAsset
 {
   auto strings = oxygen::data::DescriptorStringsBuilder {};
   const auto declarations = std::array {
@@ -100,40 +105,35 @@ auto ScriptAsset(const uint8_t version = scripting::kScriptAssetVersion)
   bytes.insert(bytes.end(), records.begin(), records.end());
   oxygen::data::AppendDescriptorStrings(bytes, strings);
   auto references = oxygen::data::AssetReferences::Create({}, {});
-  return AssetSpec {
-    .key = AssetKey::FromVirtualPath(kScriptPath),
-    .asset_type = AssetType::kScript,
-    .descriptor_relpath = "Scripts/Turret.oscript",
-    .virtual_path = kScriptPath,
-    .descriptor_size = bytes.size(),
-    .descriptor_payload = std::move(bytes),
+  return LooseAsset {
+    .type = AssetType::kScript,
+    .leaf = kScriptLeaf,
+    .descriptor = std::move(bytes),
     .references = std::move(references).value(),
   };
 }
 
-class InspectorScriptMetadataTest
-  : public oxygen::content::pak::test::TempDirFixture {
+class InspectorScriptMetadataTest : public oxygen::testing::TempDirTest {
 protected:
   auto WriteRoot(const uint8_t version = scripting::kScriptAssetVersion) -> void
   {
-    const auto assets = std::array { ScriptAsset(version) };
-    if (!oxygen::content::pak::test::WriteLooseIndex(Root(), assets, {}, 1U)) {
-      throw std::runtime_error("Could not write the inspection root");
-    }
+    auto library = LooseCookedRoot { "Content" };
+    library.Add(ScriptAsset(version));
+    Materialize(library.Files(), TempDir());
   }
 
   auto Report(std::string virtual_path = {}) -> int
   {
     return RunScriptMetadataReport({
-      .cooked_root = Root().string(),
-      .output = Path("scripts.json").string(),
+      .cooked_root = TempDir().string(),
+      .output = TempPath("scripts.json").string(),
       .virtual_path = std::move(virtual_path),
     });
   }
 
   auto ReadReport() -> nlohmann::json
   {
-    std::ifstream input(Path("scripts.json"));
+    std::ifstream input(TempPath("scripts.json"));
     auto report = nlohmann::json::parse(input);
     static const auto schema = oxygen::cooker::test::LoadSchema(
       "Tools/Inspector/Schemas/oxygen.cooked-scripts.schema.json");
@@ -179,7 +179,7 @@ NOLINT_TEST_F(InspectorScriptMetadataTest, RejectsRetiredScriptVersion)
 {
   WriteRoot(static_cast<uint8_t>(scripting::kScriptAssetVersion - 1U));
   EXPECT_EQ(Report(), 2);
-  EXPECT_FALSE(std::filesystem::exists(Path("scripts.json")));
+  EXPECT_FALSE(std::filesystem::exists(TempPath("scripts.json")));
 }
 
 } // namespace

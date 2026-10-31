@@ -11,8 +11,10 @@
 #include <string>
 #include <vector>
 
+#include "LooseCookedWriterTestSupport.h"
+
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -21,7 +23,7 @@ namespace oxygen::content::testing {
 namespace {
 
   using oxygen::content::import::LooseCookedWriter;
-  using oxygen::cooker::test::ScopedTempDir;
+  using oxygen::cooker::testing::MemoryFileSystem;
   using oxygen::data::loose_cooked::FileKind;
 
   //! A resource table written without the data file it requires.
@@ -36,15 +38,15 @@ namespace {
 
   NOLINT_TEST_P(LooseCookedWriterFilePairsTest, FinishThrowsWhenDataFileMissing)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path()
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot()
       / (std::string("loose_cooked_writer_pairs_") + GetParam().case_name);
 
     const std::vector<std::byte> bytes = {
       std::byte { 0x10 },
     };
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     writer.WriteFile(GetParam().table_kind, GetParam().table_relpath, bytes);
 
     EXPECT_THROW(

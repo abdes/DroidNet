@@ -12,9 +12,9 @@
 
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -23,7 +23,7 @@ using oxygen::content::import::DecodeImageRgba8FromFile;
 using oxygen::content::import::DecodeOptions;
 using oxygen::content::import::DecodeToScratchImage;
 
-class ImageDecodeTest : public oxygen::cooker::test::TempDirTest { };
+class ImageDecodeTest : public oxygen::testing::TempDirTest { };
 
 [[nodiscard]] auto MakeBmp2x2() -> std::vector<std::byte>
 {

@@ -33,13 +33,13 @@ NOLINT_TEST(PakCatalogSchemaTest, AcceptsCanonicalCatalogDocument)
 {
   const auto doc = json::parse(R"({
     "$schema": "./src/Oxygen/Cooker/Pak/Schemas/oxygen.pak-catalog.schema.json",
-    "schema_version": 4,
-    "library": "Props",
+    "schema_version": 5,
+    "mount": "Props",
     "deleted": [],
     "bases": [],
     "dependencies": [
       {
-        "library": "Engine",
+        "mount": "Engine",
         "requirements": [
           {
             "kind": "asset",
@@ -75,8 +75,8 @@ NOLINT_TEST(PakCatalogSchemaTest, AcceptsCanonicalCatalogDocument)
 NOLINT_TEST(PakCatalogSchemaTest, RejectsUnknownAssetTypeAndUnknownFields)
 {
   const auto doc = json::parse(R"({
-    "schema_version": 4,
-    "library": "Props",
+    "schema_version": 5,
+    "mount": "Props",
     "deleted": [],
     "bases": [],
     "dependencies": [],
@@ -102,8 +102,8 @@ NOLINT_TEST(PakCatalogSchemaTest, RejectsUnknownAssetTypeAndUnknownFields)
 NOLINT_TEST(PakCatalogSchemaTest, RejectsNonCanonicalKeyAndDigestFormats)
 {
   const auto doc = json::parse(R"({
-    "schema_version": 4,
-    "library": "Props",
+    "schema_version": 5,
+    "mount": "Props",
     "deleted": [],
     "bases": [],
     "dependencies": [],
@@ -127,17 +127,17 @@ NOLINT_TEST(PakCatalogSchemaTest, RejectsNonCanonicalKeyAndDigestFormats)
 }
 
 //! A requirement is an asset with its type or a texture without one, and a
-//! dependency requires something of a named library.
+//! dependency requires something of a named mount.
 NOLINT_TEST(PakCatalogSchemaTest, RejectsMalformedDependencies)
 {
   const auto doc = json::parse(R"({
-    "schema_version": 4,
-    "library": "Props",
+    "schema_version": 5,
+    "mount": "Props",
     "deleted": [],
     "bases": [],
     "dependencies": [
       {
-        "library": "Engine",
+        "mount": "Engine",
         "requirements": [
           { "kind": "asset", "key": "22222222-3333-4444-5555-666666666666" },
           {
@@ -147,8 +147,8 @@ NOLINT_TEST(PakCatalogSchemaTest, RejectsMalformedDependencies)
           }
         ]
       },
-      { "library": "Vehicles", "requirements": [] },
-      { "library": "1Bad", "requirements": [] }
+      { "mount": "Vehicles", "requirements": [] },
+      { "mount": "1Bad", "requirements": [] }
     ],
     "source_key": "01234567-89ab-7def-8123-456789abcdef",
     "content_version": 7,
@@ -160,7 +160,7 @@ NOLINT_TEST(PakCatalogSchemaTest, RejectsMalformedDependencies)
   EXPECT_THAT(errors, Contains(HasSubstr("/dependencies/0/requirements/0")));
   EXPECT_THAT(errors, Contains(HasSubstr("/dependencies/0/requirements/1")));
   EXPECT_THAT(errors, Contains(HasSubstr("/dependencies/1/requirements")));
-  EXPECT_THAT(errors, Contains(HasSubstr("/dependencies/2/library")));
+  EXPECT_THAT(errors, Contains(HasSubstr("/dependencies/2/mount")));
 }
 
 } // namespace

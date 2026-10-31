@@ -17,8 +17,8 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Loose/LibraryFacts.h>
 #include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::import {
@@ -96,43 +96,42 @@ namespace mount_codes {
         .severity = ImportSeverity::kError,
         .message = "Source mount '{}' names a file: '{}'",
       };
-  inline constexpr auto kLibraryFormatUnsupported
+  inline constexpr auto kCookedFormatUnsupported
     = MountCode<std::string_view, std::string_view, std::string_view> {
-        .id = "mount.library_format_unsupported",
+        .id = "mount.cooked_format_unsupported",
         .severity = ImportSeverity::kWarning,
-        .message = "library mount '{}' ('{}') cannot be read: {}; it "
+        .message = "Cooked mount '{}' ('{}') cannot be read: {}; it "
                    "contributes no assets",
       };
-  inline constexpr auto kLibraryRootMismatch
+  inline constexpr auto kCookedRootMismatch
     = MountCode<std::string_view, std::string_view, std::string_view> {
-        .id = "mount.library_root_mismatch",
+        .id = "mount.cooked_root_mismatch",
         .severity = ImportSeverity::kWarning,
-        .message = "library mount '{}' ('{}') holds the root '{}': a "
-                   "library's one root is its mount name; it contributes no "
+        .message = "Cooked mount '{}' ('{}') holds the root '{}': a cooked "
+                   "source's one root is its mount name; it contributes no "
                    "assets",
       };
-  inline constexpr auto kLibraryRootMultiple
+  inline constexpr auto kCookedRootMultiple
     = MountCode<std::string_view, std::string_view, std::string_view> {
-        .id = "mount.library_root_multiple",
+        .id = "mount.cooked_root_multiple",
         .severity = ImportSeverity::kWarning,
-        .message = "library mount '{}' ('{}') holds the roots {}: a library "
-                   "has one root; it contributes no assets",
+        .message = "Cooked mount '{}' ('{}') holds the roots {}: a cooked "
+                   "source has one root; it contributes no assets",
       };
-  inline constexpr auto kLibraryExternalScript
+  inline constexpr auto kCookedExternalScript
     = MountCode<std::string_view, std::string_view, std::string_view> {
-        .id = "mount.library_external_script",
+        .id = "mount.cooked_external_script",
         .severity = ImportSeverity::kWarning,
-        .message = "library mount '{}' ('{}') holds the script '{}' with an "
+        .message = "Cooked mount '{}' ('{}') holds the script '{}' with an "
                    "external source: only a Source mount supplies one; it "
                    "contributes no assets",
       };
-  inline constexpr auto kLibraryDependencyMissing = MountCode<std::string_view,
+  inline constexpr auto kCookedDependencyMissing = MountCode<std::string_view,
     std::string_view, std::string_view, std::string_view> {
-    .id = "mount.library_dependency_missing",
+    .id = "mount.cooked_dependency_missing",
     .severity = ImportSeverity::kWarning,
-    .message = "library mount '{}' ('{}') requires {} of library '{}', which "
-               "no library mounted below it provides; it contributes no "
-               "assets",
+    .message = "Cooked mount '{}' ('{}') requires {} of mount '{}', which no "
+               "mount below it provides; it contributes no assets",
   };
   inline constexpr auto kParentIgnored = MountCode<std::string_view> {
     .id = "mount.parent_ignored",
@@ -192,8 +191,8 @@ inline constexpr std::string_view kEngineMountName = "Engine";
 enum class MountKind : uint8_t {
   //! A folder of source files.
   kSource = 0,
-  //! A library: a loose cooked root (a folder holding `container.index.bin`)
-  //! or a `.pak` file.
+  //! A cooked source: a loose cooked root (a folder holding
+  //! `container.index.bin`) or a `.pak` file.
   kCooked,
 };
 
@@ -205,8 +204,8 @@ enum class MountState : uint8_t {
   kUnbound,
   //! Its folder (or pak file) does not exist.
   kMissing,
-  //! A `Cooked` mount whose library breaks a library rule (its `findings`):
-  //! it contributes no assets.
+  //! A `Cooked` mount whose cooked source breaks a mount rule (its
+  //! `findings`): it contributes no assets.
   kInvalid,
 };
 
@@ -331,8 +330,9 @@ enum class MountTableOwner : uint8_t {
 }
 
 //! What a mount table reads from the file system: what paths name, their
-//! canonical spelling, and the bytes of mounts files and libraries.
-class IMountFileSystem : public lc::ILibraryFiles {
+//! canonical spelling, and the bytes of mounts files and cooked sources. It
+//! cannot publish.
+class IMountFileSystem : public virtual cooked::CookerStorageReader {
 public:
   //! `path` resolved to its final spelling; a path that does not exist yet
   //! resolves through its deepest existing parent, and one with no existing
@@ -387,7 +387,7 @@ struct Mount final {
   std::filesystem::path origin_file;
   MountState state = MountState::kUnbound;
   MountRole role = MountRole::kShared;
-  //! The library rules a `Cooked` mount breaks, which make it `Invalid`;
+  //! The cooked source rules a `Cooked` mount breaks, which make it `Invalid`;
   //! each is also in the table's diagnostics.
   std::vector<ImportDiagnostic> findings;
 };
@@ -502,10 +502,10 @@ OXGN_COOK_NDAPI auto IsValidMountName(std::string_view name) -> bool;
  to `Source` mounts: cooked roots and paks live in output folders by design
  and are never read as sources.
 
- Every bound `Cooked` mount is read as a library (`lc::ReadLibraryFacts`): a
- library that cannot be read, holds a root other than the mount's name or
- more than one root, or holds a script with an external source is `Invalid`
- with that finding, a warning.
+ Every bound `Cooked` mount's summary is read (`cooked::ReadCookedSummary`): a
+ cooked source that cannot be read, holds a mount other than the mount's name
+ or more than one mount, or holds a script with an external source is
+ `Invalid` with that finding, a warning.
 
  Every mount's folder and origin is logged.
 */

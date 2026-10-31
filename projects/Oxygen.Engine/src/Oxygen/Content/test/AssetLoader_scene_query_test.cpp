@@ -16,11 +16,12 @@
 #include <vector>
 
 #include "AssetLoader_test.h"
-#include "Fixtures/LooseCookedTestWriter.h"
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -246,17 +247,21 @@ protected:
     auto loop_b = Instancing({ .name = "LoopB", .source = LoopAKey() });
     loop_b_holder_ = loop_b.Node(kHolder).node_id;
 
-    const auto root = temp_dir_ / "scene_query";
-    auto writer = oxygen::content::testing::LooseCookedTestWriter(root);
+    const auto root = TempDir() / "scene_query";
+    auto source = oxygen::cooker::testing::LooseCookedRoot { "test" };
     const auto write_scene
-      = [&writer](const AssetKey& key, const std::string_view name,
+      = [&source](const AssetKey& key, const std::string_view name,
           const SceneAssetBuilder& builder,
-          std::vector<data::KeyReference> references) {
-          const auto file = std::string(name) + ".oscene";
-          writer.WriteAssetDescriptor(key, data::AssetType::kScene,
-            "/test/query/" + file, file, builder.Bytes(),
-            data::AssetReferences::Create({}, std::move(references)).value());
-        };
+          std::vector<data::KeyReference> references) -> void {
+      source.Add({
+        .type = data::AssetType::kScene,
+        .leaf = "query/" + std::string(name) + ".oscene",
+        .descriptor = builder.Bytes(),
+        .references
+        = data::AssetReferences::Create({}, std::move(references)).value(),
+        .key = key,
+      });
+    };
     write_scene(ModelKey(), "Model", model,
       {
         AssetReference(WheelGeometryKey(), data::AssetType::kGeometry),
@@ -276,15 +281,22 @@ protected:
     auto geometry = data::pak::geometry::GeometryAssetDesc {};
     geometry.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kGeometry);
-    writer.WriteAssetDescriptor(WheelGeometryKey(), data::AssetType::kGeometry,
-      std::string(kWheelGeometryPath), "Wheel.ogeo",
-      data::MakeDescriptorBytes(geometry));
+    source.Add({
+      .type = data::AssetType::kGeometry,
+      .leaf = "query/Wheel.ogeo",
+      .descriptor = data::MakeDescriptorBytes(geometry),
+      .key = WheelGeometryKey(),
+    });
     auto paint = data::pak::render::MaterialAssetDesc {};
     paint.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
     paint.header.version = data::pak::render::kMaterialAssetVersion;
-    writer.WriteAssetDescriptor(PaintKey(), data::AssetType::kMaterial,
-      std::string(kPaintPath), "Paint.omat", data::MakeDescriptorBytes(paint));
-    static_cast<void>(writer.Finish());
+    source.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = "query/Paint.omat",
+      .descriptor = data::MakeDescriptorBytes(paint),
+      .key = PaintKey(),
+    });
+    oxygen::cooker::testing::Materialize(source.Files(), root);
     asset_loader_->AddLooseCookedRoot(root);
   }
 

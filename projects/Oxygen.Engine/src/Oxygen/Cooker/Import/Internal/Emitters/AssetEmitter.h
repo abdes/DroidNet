@@ -21,7 +21,6 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/FileError.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -53,8 +52,8 @@ struct EmittedAssetRecord {
   //! Size of descriptor bytes written.
   uint64_t descriptor_size = 0;
 
-  //! SHA-256 hash of the descriptor bytes (for index validation).
-  std::optional<base::Sha256Digest> descriptor_sha256;
+  //! SHA-256 of the descriptor bytes, hashed as they were emitted.
+  base::Sha256Digest descriptor_sha256 {};
   data::AssetReferences references;
 };
 
@@ -81,7 +80,7 @@ struct EmittedAssetRecord {
  ### Usage Pattern
 
  ```cpp
- AssetEmitter emitter(file_writer, layout, cooked_root);
+ AssetEmitter emitter(file_writer, cooked_root);
 
  // During import
  emitter.Emit(material_key, AssetType::kMaterial,
@@ -106,16 +105,13 @@ struct EmittedAssetRecord {
 */
 class AssetEmitter final {
 public:
-  //! Create an asset emitter for the given layout.
+  //! Create an asset emitter writing under a cooked root.
   /*!
    @param file_writer Async file writer for output operations.
-   @param layout      Loose cooked layout defining paths.
    @param cooked_root Root directory for cooked output.
-   @param compute_sha256 Whether to compute SHA-256 hashes for records.
   */
-  OXGN_COOK_API AssetEmitter(IAsyncFileWriter& file_writer,
-    const LooseCookedLayout& layout, const std::filesystem::path& cooked_root,
-    bool compute_sha256 = true);
+  OXGN_COOK_API AssetEmitter(
+    IAsyncFileWriter& file_writer, const std::filesystem::path& cooked_root);
 
   OXGN_COOK_API ~AssetEmitter();
 
@@ -203,7 +199,7 @@ private:
   auto RecordAsset(const data::AssetKey& key, data::AssetType asset_type,
     std::string_view virtual_path, std::string_view descriptor_relpath,
     uint64_t descriptor_size, data::AssetReferences references,
-    std::optional<base::Sha256Digest> sha256) -> void;
+    const base::Sha256Digest& sha256) -> void;
 
   auto QueueDescriptorWrite(const std::filesystem::path& descriptor_path,
     std::string_view descriptor_relpath, std::span<const std::byte> bytes)
@@ -214,8 +210,6 @@ private:
 
   IAsyncFileWriter& file_writer_;
   std::filesystem::path cooked_root_;
-
-  bool compute_sha256_ = true;
 
   std::atomic<bool> finalize_started_ { false };
 

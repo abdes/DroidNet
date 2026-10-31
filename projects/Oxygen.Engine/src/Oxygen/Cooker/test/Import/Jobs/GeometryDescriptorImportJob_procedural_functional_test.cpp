@@ -25,8 +25,8 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
@@ -73,7 +73,7 @@ namespace {
               json::array({
                 {
                   { "surface_id", GeneratedSurfaceId("Capsule") },
-                  { "material_ref", "/.cooked/Materials/default.omat" },
+                  { "material_ref", "../Materials/default.omat" },
                   { "views", json::array({ { { "view_ref", "__all__" } } }) },
                 },
               }),
@@ -119,7 +119,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
             json::array({
               json {
                 { "surface_id", GeneratedSurfaceId("Cube") },
-                { "material_ref", "/.cooked/Materials/default.omat" },
+                { "material_ref", "../Materials/default.omat" },
                 {
                   "views",
                   json::array({ json { { "view_ref", "__all__" } } }),
@@ -188,7 +188,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
             json::array({
               json {
                 { "surface_id", GeneratedSurfaceId("Cube") },
-                { "material_ref", "/.cooked/Materials/default.omat" },
+                { "material_ref", "../Materials/default.omat" },
                 {
                   "views",
                   json::array({ json { { "view_ref", "__all__" } } }),
@@ -261,7 +261,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
             json::array({
               json {
                 { "surface_id", GeneratedSurfaceId("Plane") },
-                { "material_ref", "/.cooked/Materials/default.omat" },
+                { "material_ref", "../Materials/default.omat" },
                 {
                   "views",
                   json::array({ json { { "view_ref", "__all__" } } }),
@@ -370,8 +370,8 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     const auto mesh_desc
       = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, mesh_offset);
     EXPECT_TRUE(mesh_desc.IsProcedural());
-    EXPECT_EQ(
-      oxygen::content::test::ReadDescriptorString(bytes, mesh_desc.name_offset),
+    EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
+                bytes, mesh_desc.name_offset),
       "Capsule/Capsule");
     EXPECT_EQ(mesh_desc.info.procedural.params_size, 16U);
     EXPECT_EQ(ReadStructAt<uint32_t>(bytes, params_offset),
@@ -585,7 +585,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
             json::array({
               json {
                 { "surface_id", GeneratedSurfaceId("IcoSphere") },
-                { "material_ref", "/.cooked/Materials/default.omat" },
+                { "material_ref", "../Materials/default.omat" },
                 {
                   "views",
                   json::array({ json { { "view_ref", "__all__" } } }),
@@ -626,7 +626,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   const auto mesh_desc = ReadStructAt<data::pak::geometry::MeshDesc>(
     descriptor_bytes, mesh_offset);
   EXPECT_TRUE(mesh_desc.IsProcedural());
-  EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+  EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
               descriptor_bytes, mesh_desc.name_offset),
     "IcoSphere/SoftBall");
   EXPECT_EQ(mesh_desc.info.procedural.params_size, sizeof(uint32_t));
@@ -694,7 +694,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
             json::array({
               json {
                 { "surface_id", GeneratedSurfaceId("SubdividedCube") },
-                { "material_ref", "/.cooked/Materials/default.omat" },
+                { "material_ref", "../Materials/default.omat" },
                 {
                   "views",
                   json::array({ json { { "view_ref", "__all__" } } }),

@@ -17,9 +17,9 @@
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportSettings.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -27,8 +27,8 @@ using nlohmann::json;
 using oxygen::content::import::PhysicsMaterialDescriptorImportSettings;
 using oxygen::content::import::internal::BuildPhysicsMaterialDescriptorRequest;
 using oxygen::cooker::test::kContentHashingDefault;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   -> PhysicsMaterialDescriptorImportSettings
@@ -57,8 +57,7 @@ NOLINT_TEST(PhysicsMaterialDescriptorImportRequestBuilderTest,
       "restitution": 0.05,
       "density": 1800.0,
       "combine_mode_friction": "max",
-      "combine_mode_restitution": "average",
-      "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
+      "combine_mode_restitution": "average"
     })");
 
   const auto settings = MakeBaseSettings(descriptor_path);
@@ -80,8 +79,8 @@ NOLINT_TEST(PhysicsMaterialDescriptorImportRequestBuilderTest,
   const auto normalized = json::parse(
     request->physics_material_descriptor->normalized_descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "ground");
-  EXPECT_EQ(normalized.at("virtual_path").get<std::string>(),
-    "/.cooked/Physics/Materials/ground.opmat");
+  // Identity comes from the job, never from the descriptor.
+  EXPECT_FALSE(normalized.contains("virtual_path"));
 }
 
 NOLINT_TEST(PhysicsMaterialDescriptorImportRequestBuilderTest,

@@ -40,7 +40,6 @@ struct ImportSourceAnalysis;
 struct ImportManifestJob {
   std::string job_type;
   std::optional<data::SourceKey> source_key {};
-  LooseCookedLayout loose_cooked_layout;
   TextureImportSettings texture;
   SceneImportSettings fbx;
   SceneImportSettings gltf;
@@ -86,7 +85,6 @@ struct ImportManifestJob {
 
 struct ImportManifestDefaults {
   std::optional<data::SourceKey> source_key {};
-  LooseCookedLayout loose_cooked_layout;
   TextureImportSettings texture;
   SceneImportSettings fbx;
   SceneImportSettings gltf;

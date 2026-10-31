@@ -15,7 +15,7 @@
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -27,18 +27,18 @@ class ImportSession;
 
 namespace oxygen::content::import::internal {
 
-//! A cooked root a job reads: its own output root, a library of its source's
-//! mount table or one of its cooked context roots (a loose cooked root or a
-//! pak), with its index when it holds one.
+//! A cooked root a job reads: its own output root, a cooked source of its
+//! source's mount table or one of its cooked context roots (a loose cooked
+//! root or a pak), with its content when it is a cooked source that opens.
 struct MountedCookedSource final {
   std::filesystem::path root;
-  std::optional<lc::Inspection> inspection;
+  std::optional<cooked::CookedContent> content;
 };
 
 //! Load the cooked roots a job reads (`BuildMountedCookedRoots`), loose
-//! cooked roots and paks, lowest precedence first. A root whose index fails
-//! to load reports `<diagnostic_prefix>index_load_failed` and is kept without
-//! an index.
+//! cooked roots and paks, lowest precedence first. A root whose content fails
+//! to open reports `<diagnostic_prefix>index_load_failed` and is kept without
+//! content.
 [[nodiscard]] auto LoadMountedCookedSources(ImportSession& session,
   const ImportRequest& request, std::string_view diagnostic_prefix)
   -> std::vector<MountedCookedSource>;

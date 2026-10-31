@@ -17,17 +17,17 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
 using nlohmann::json;
 using oxygen::content::import::ImportManifest;
 using oxygen::cooker::test::kContentHashingDefault;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   BuildsPhysicsMaterialDescriptorRequestWithDefaultsAndDescriptorOverrides)
@@ -46,8 +46,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
       "restitution": 0.05,
       "density": 1500.0,
       "combine_mode_friction": "max",
-      "combine_mode_restitution": "average",
-      "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
+      "combine_mode_restitution": "average"
     })");
 
   const auto* const manifest_json = R"({
@@ -112,8 +111,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
       "static_friction": 0.95,
       "dynamic_friction": 0.70,
       "restitution": 0.05,
-      "density": 1500.0,
-      "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
+      "density": 1500.0
     })");
 
   WriteText(manifest_path,

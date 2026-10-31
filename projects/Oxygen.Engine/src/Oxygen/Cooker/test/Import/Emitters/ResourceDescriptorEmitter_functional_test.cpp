@@ -8,6 +8,7 @@
 
 #include <fstream>
 #include <memory>
+#include <stdexcept>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Cooker/Import/FileError.h>
@@ -15,16 +16,14 @@
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 using oxygen::co::Co;
 using oxygen::content::import::ImportEventLoop;
-using oxygen::content::import::LooseCookedLayout;
 using oxygen::content::import::ResourceDescriptorEmitter;
 using oxygen::content::import::WindowsFileWriter;
 namespace co = oxygen::co;
@@ -32,7 +31,7 @@ namespace co = oxygen::co;
 namespace {
 
 //! Fixture owning an event loop, a file writer and a temporary directory.
-class WindowsFileWriterTest : public oxygen::cooker::test::TempDirTest {
+class WindowsFileWriterTest : public oxygen::testing::TempDirTest {
 protected:
   auto SetUp() -> void override
   {
@@ -52,16 +51,15 @@ protected:
 
 NOLINT_TEST_F(WindowsFileWriterTest, EmitterRetainsErrorAfterSharedWriterFlush)
 {
-  const LooseCookedLayout layout;
   {
-    std::ofstream blocked_directory(TempDir() / layout.resources_dir);
+    std::ofstream blocked_directory(TempDir() / "Resources");
     blocked_directory << "not a directory";
   }
   ResourceDescriptorEmitter emitter(*writer_, TempDir());
   const oxygen::data::pak::core::TextureResourceDesc descriptor {};
-  static_cast<void>(emitter.EmitTexture(
-    "/.cooked/" + layout.resources_dir + "/Ship.glb/Paint.base_color.otex",
-    oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
+  static_cast<void>(
+    emitter.EmitTexture("/.cooked/Resources/Ship.glb/Paint.base_color.otex",
+      oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
   co::Run(*loop_, [&] -> Co<> {
     const auto first_flush = co_await writer_->Flush();
     EXPECT_FALSE(first_flush.has_value());
@@ -75,6 +73,41 @@ NOLINT_TEST_F(WindowsFileWriterTest, EmitterRetainsErrorAfterSharedWriterFlush)
     EXPECT_EQ(
       result.error().path, oxygen::base::ToLogicalPath(result.error().path));
   });
+}
+
+//! Emitting an equal texture descriptor again records it once: the cook is
+//! deterministic, so the second emit has nothing to write.
+NOLINT_TEST_F(WindowsFileWriterTest, EqualDescriptorEmittedTwiceIsRecordedOnce)
+{
+  ResourceDescriptorEmitter emitter(*writer_, TempDir());
+  const oxygen::data::pak::core::TextureResourceDesc descriptor {};
+  const auto index = oxygen::data::pak::core::ResourceIndexT { 1U };
+  const auto first
+    = emitter.EmitTexture("/.cooked/Textures/Sky.otex", index, descriptor);
+  const auto second
+    = emitter.EmitTexture("/.cooked/Textures/Sky.otex", index, descriptor);
+
+  co::Run(*loop_,
+    [&] -> Co<> { EXPECT_TRUE((co_await emitter.Finalize()).has_value()); });
+  EXPECT_EQ(first, second);
+  EXPECT_EQ(emitter.Records().size(), 1U);
+}
+
+//! Emitting other bytes at a path already emitted is refused: two writes
+//! could finish in either order, leaving bytes the record does not describe.
+NOLINT_TEST_F(WindowsFileWriterTest, OtherDescriptorAtAnEmittedPathIsRefused)
+{
+  ResourceDescriptorEmitter emitter(*writer_, TempDir());
+  const oxygen::data::pak::core::TextureResourceDesc descriptor {};
+  static_cast<void>(emitter.EmitTexture("/.cooked/Textures/Sky.otex",
+    oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
+
+  EXPECT_THROW(
+    static_cast<void>(emitter.EmitTexture("/.cooked/Textures/Sky.otex",
+      oxygen::data::pak::core::ResourceIndexT { 2U }, descriptor)),
+    std::runtime_error);
+  co::Run(*loop_,
+    [&] -> Co<> { EXPECT_TRUE((co_await emitter.Finalize()).has_value()); });
 }
 
 } // namespace

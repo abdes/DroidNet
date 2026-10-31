@@ -12,14 +12,15 @@
 #include <optional>
 #include <utility>
 
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace oxygen::cooker::test {
 
@@ -93,11 +94,10 @@ auto ImportServiceTest::Import(content::import::ImportRequest request)
 }
 
 auto ImportServiceTest::LoadInspection(const std::filesystem::path& cooked_root)
-  -> content::lc::Inspection
+  -> content::cooked::CookedContent
 {
-  content::lc::Inspection inspection;
-  inspection.LoadFromRoot(cooked_root);
-  return inspection;
+  return content::cooked::CookedContent::Open(
+    content::cooked::RealCookerStorage(), cooked_root);
 }
 
 void ImportServiceTest::TearDown()
@@ -105,7 +105,7 @@ void ImportServiceTest::TearDown()
   if (service_ != nullptr) {
     service_->Stop();
   }
-  TempDirTest::TearDown();
+  oxygen::testing::TempDirTest::TearDown();
 }
 
 } // namespace oxygen::cooker::test

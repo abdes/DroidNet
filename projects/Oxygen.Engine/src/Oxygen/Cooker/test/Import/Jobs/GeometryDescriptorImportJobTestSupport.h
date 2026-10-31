@@ -31,21 +31,21 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace oxygen::content::import::test {
 
 using nlohmann::json;
 using oxygen::cooker::test::HasDiagnosticCode;
 using oxygen::cooker::test::ReadBytes;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::SubmitAndWait;
 using oxygen::cooker::test::WriteBytes;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 template <typename T>
 auto ReadStructAt(const std::vector<std::byte>& bytes, const size_t offset) -> T

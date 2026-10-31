@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -14,68 +13,107 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
-#include <system_error>
 #include <vector>
 
-#include "Fixtures/LooseCookedTestWriter.h"
-
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/testing/CookedBytes.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PhysicsResource.h>
+#include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 using oxygen::content::internal::LooseCookedSource;
 using oxygen::content::lc::LooseCookedIndex;
-using oxygen::content::testing::DescriptorRecordOverride;
-using oxygen::content::testing::LooseCookedTestWriter;
+using oxygen::cooker::testing::CookedBytes;
+using oxygen::cooker::testing::LooseCookedRoot;
+using oxygen::cooker::testing::MaterialDescriptor;
+using oxygen::cooker::testing::Materialize;
+using oxygen::cooker::testing::SeedBytes;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 using oxygen::data::loose_cooked::FileKind;
+using oxygen::data::pak::core::ResourceIndexT;
 
 namespace {
 
-auto MakeAssetKey(const std::uint8_t seed) -> AssetKey
+constexpr auto kMount = "Content";
+constexpr auto kUnsupportedIndexVersion = uint16_t { 999U };
+constexpr auto kForgedDescriptorSize = uint64_t { 16U };
+constexpr auto kForgedDigestByte = uint8_t { 0xABU };
+
+//! A key no root of these tests lists.
+auto AbsentKey() -> AssetKey
 {
-  auto bytes = std::array<std::uint8_t, AssetKey::kSizeBytes> {};
-  bytes.at(0) = seed;
-  return AssetKey::FromBytes(bytes);
+  return AssetKey::FromVirtualPath("/Content/absent.omat");
 }
 
-class LooseCookedSourceTest : public ::testing::Test {
-protected:
-  void SetUp() override
-  {
-    const auto* const test_info
-      = ::testing::UnitTest::GetInstance()->current_test_info();
-    const auto temp_dir = std::filesystem::temp_directory_path();
-    cooked_root_ = temp_dir
-      / ("LooseCookedSourceTest_Root_" + std::string(test_info->name()));
-    std::error_code ec;
-    std::filesystem::remove_all(cooked_root_, ec);
-    std::filesystem::create_directories(cooked_root_, ec);
-  }
+//! A root of the mount with one buffer, so with a buffers table and data file.
+auto RootWithBuffers() -> LooseCookedRoot
+{
+  auto root = LooseCookedRoot { kMount };
+  static_cast<void>(root.AddBuffer(SeedBytes(1U)));
+  return root;
+}
 
-  void TearDown() override
+//! A root of the mount with one material, `test.omat`.
+auto RootWithMaterial() -> LooseCookedRoot
+{
+  auto root = LooseCookedRoot { kMount };
+  static_cast<void>(root.Material("test.omat"));
+  return root;
+}
+
+//! A root of the mount with one auxiliary member of one byte per relpath.
+auto RootWithMembers(const std::vector<std::string>& relpaths)
+  -> LooseCookedRoot
+{
+  auto root = LooseCookedRoot { kMount };
+  for (const auto& relpath : relpaths) {
+    root.AddFile(FileKind::kAuxiliary, relpath, SeedBytes(42U, 1U));
+  }
+  return root;
+}
+
+//! Changes the first byte of the file at `path`, keeping its size.
+auto ChangeFirstByte(const std::filesystem::path& path) -> void
+{
+  auto file
+    = std::fstream(path, std::ios::in | std::ios::out | std::ios::binary);
+  auto first = char { 0 };
+  file.get(first);
+  file.seekp(0);
+  file.put(static_cast<char>(first ^ 1));
+}
+
+class LooseCookedSourceTest : public oxygen::testing::TempDirTest {
+protected:
+  //! Puts `root` on disk, as the cooked root under test.
+  auto Write(const LooseCookedRoot& root) const -> void
   {
-    std::error_code ec;
-    std::filesystem::remove_all(cooked_root_, ec);
+    Materialize(root.Files(), CookedRoot());
   }
 
   auto WriteValidEmptyIndex() const -> void
   {
-    LooseCookedTestWriter writer(CookedRoot());
-    (void)writer.Finish();
+    Write(LooseCookedRoot { kMount });
   }
 
   [[nodiscard]] auto CookedRoot() const -> const std::filesystem::path&
   {
-    return cooked_root_;
+    return TempDir();
   }
-
-private:
-  std::filesystem::path cooked_root_;
 };
 
 TEST_F(LooseCookedSourceTest, ConstructorMissingIndexFileThrows)
@@ -99,17 +137,9 @@ TEST_F(LooseCookedSourceTest, ConstructorValidEmptyIndexInitializes)
 
 TEST_F(LooseCookedSourceTest, ConstructorFileMissingThrows)
 {
-  {
-    LooseCookedTestWriter writer(CookedRoot());
-    const std::vector<std::byte> data { std::byte { 0 } };
-    writer.WriteFile(FileKind::kBuffersTable, "buffers.table", data);
-    writer.WriteFile(FileKind::kBuffersData, "buffers.data", data);
-    (void)writer.Finish();
-  }
+  Write(RootWithBuffers());
 
   // Remove the data file, but retain the index entry.
-  // We can do this safely because writer releases files when it goes out of
-  // scope.
   std::filesystem::remove(CookedRoot() / "buffers.data");
 
   EXPECT_THROW(
@@ -120,15 +150,33 @@ TEST_F(LooseCookedSourceTest, ConstructorFileMissingThrows)
     std::runtime_error);
 }
 
+//! A mounted root stays importable: an import opens a data file the mount
+//! holds to append to it, sharing only reads, as the importer's writer does.
+TEST_F(LooseCookedSourceTest, MountedDataFileAcceptsAnAppendingWriter)
+{
+  Write(RootWithBuffers());
+  const auto source = LooseCookedSource(
+    CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+  ASSERT_TRUE(source.PayloadRegion(oxygen::data::BufferResource::ClassTypeId())
+      .has_value());
+
+  auto writer = oxygen::serio::NativeFile::Open(CookedRoot() / "buffers.data",
+    {
+      .access = oxygen::serio::Access::kReadWrite,
+      .sharing = oxygen::serio::Sharing::kRead,
+    });
+  ASSERT_HAS_VALUE(writer);
+  const auto size = writer->Size();
+  ASSERT_HAS_VALUE(size);
+  const auto appended = SeedBytes(2U);
+  const auto written
+    = writer->WriteAt(oxygen::serio::ByteOffset { size->get() }, appended);
+  ASSERT_HAS_VALUE(written);
+}
+
 TEST_F(LooseCookedSourceTest, ConstructorFileSizeMismatchThrows)
 {
-  {
-    LooseCookedTestWriter writer(CookedRoot());
-    const std::vector<std::byte> data { std::byte { 0 } };
-    writer.WriteFile(FileKind::kBuffersTable, "buffers.table", data);
-    writer.WriteFile(FileKind::kBuffersData, "buffers.data", data);
-    (void)writer.Finish();
-  }
+  Write(RootWithBuffers());
 
   // Corrupt the size of the file on disk to be 2
   const auto table_path = CookedRoot() / "buffers.table";
@@ -144,15 +192,9 @@ TEST_F(LooseCookedSourceTest, ConstructorFileSizeMismatchThrows)
 
 TEST_F(LooseCookedSourceTest, ConstructorDescriptorMissingThrows)
 {
-  {
-    LooseCookedTestWriter writer(CookedRoot());
-    const std::vector<std::byte> data { std::byte { 0 } };
-    writer.WriteAssetDescriptor(MakeAssetKey(1U), AssetType::kMaterial,
-      "/Content/test.omat", "test.omat", data);
-    (void)writer.Finish();
-  }
+  Write(RootWithMaterial());
 
-  std::filesystem::remove(CookedRoot() / "test.omat");
+  std::filesystem::remove(CookedRoot() / "Descriptors/test.omat");
 
   EXPECT_THROW(
     {
@@ -164,21 +206,10 @@ TEST_F(LooseCookedSourceTest, ConstructorDescriptorMissingThrows)
 
 TEST_F(LooseCookedSourceTest, ConstructorDescriptorSha256MismatchThrows)
 {
-  {
-    LooseCookedTestWriter writer(CookedRoot());
-    const std::vector<std::byte> data { std::byte { 0 } };
-    writer.WriteAssetDescriptor(MakeAssetKey(1U), AssetType::kMaterial,
-      "/Content/test.omat", "test.omat", data);
-    (void)writer.Finish();
-  }
+  Write(RootWithMaterial());
 
   // Malform the file data to break its SHA256 checksum, preserving size
-  const auto path = CookedRoot() / "test.omat";
-  const char new_data = 1;
-  {
-    std::ofstream os(path, std::ios::binary);
-    os.write(&new_data, 1);
-  }
+  ChangeFirstByte(CookedRoot() / "Descriptors/test.omat");
 
   // Without verification, loads fine despite invalid hash mismatch
   EXPECT_NO_THROW({
@@ -195,43 +226,37 @@ TEST_F(LooseCookedSourceTest, ConstructorDescriptorSha256MismatchThrows)
     std::runtime_error);
 }
 
-TEST_F(LooseCookedSourceTest, ReadersReturnNullWhenFilesOmitted)
+TEST_F(LooseCookedSourceTest, HoldsNoResourcesWhenFilesOmitted)
 {
   WriteValidEmptyIndex();
   {
     LooseCookedSource source(
       CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
 
-    EXPECT_EQ(source.CreateBufferTableReader(), nullptr);
-    EXPECT_EQ(source.CreateBufferDataReader(), nullptr);
-    EXPECT_EQ(source.CreateTextureTableReader(), nullptr);
-    EXPECT_EQ(source.CreateTextureDataReader(), nullptr);
-    EXPECT_EQ(source.CreateScriptTableReader(), nullptr);
-    EXPECT_EQ(source.CreateScriptDataReader(), nullptr);
-    EXPECT_EQ(source.CreatePhysicsTableReader(), nullptr);
-    EXPECT_EQ(source.CreatePhysicsDataReader(), nullptr);
-
-    EXPECT_EQ(source.CreateAssetDescriptorReader(MakeAssetKey(1U)), nullptr);
+    for (const auto type : {
+           oxygen::data::BufferResource::ClassTypeId(),
+           oxygen::data::TextureResource::ClassTypeId(),
+           oxygen::data::ScriptResource::ClassTypeId(),
+           oxygen::data::PhysicsResource::ClassTypeId(),
+         }) {
+      EXPECT_FALSE(source.PayloadRegion(type).has_value()) << type;
+      EXPECT_FALSE(
+        source.ResourceDescriptorBytes(type, ResourceIndexT { 0 }).has_value())
+        << type;
+    }
+    EXPECT_EQ(source.CreateAssetDescriptorReader(AbsentKey()), nullptr);
   }
 }
 
 TEST_F(LooseCookedSourceTest, FullIntegrityChecksEveryAuxiliaryFile)
 {
-  const std::array bytes { std::byte { 42 } };
-  LooseCookedTestWriter writer(CookedRoot());
-  writer.WriteFile(FileKind::kAuxiliary, "Resources/first.obuf", bytes);
-  writer.WriteFile(FileKind::kAuxiliary, "Resources/second.obuf", bytes);
-  static_cast<void>(writer.Finish());
+  Write(RootWithMembers({ "Resources/first.obuf", "Resources/second.obuf" }));
   EXPECT_NO_THROW({
     LooseCookedSource source(
       CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
   });
 
-  {
-    std::ofstream changed(
-      CookedRoot() / "Resources/second.obuf", std::ios::binary);
-    changed.put('!');
-  }
+  ChangeFirstByte(CookedRoot() / "Resources/second.obuf");
   EXPECT_NO_THROW({
     LooseCookedSource source(
       CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
@@ -246,10 +271,7 @@ TEST_F(LooseCookedSourceTest, FullIntegrityChecksEveryAuxiliaryFile)
 
 TEST_F(LooseCookedSourceTest, MetadataAdmissionRejectsExtraAndMissingMembers)
 {
-  const std::array bytes { std::byte { 42 } };
-  LooseCookedTestWriter writer(CookedRoot());
-  writer.WriteFile(FileKind::kAuxiliary, "Resources/first.obuf", bytes);
-  static_cast<void>(writer.Finish());
+  Write(RootWithMembers({ "Resources/first.obuf" }));
   const auto extra = CookedRoot() / "stray.bin";
   {
     std::ofstream output(extra);
@@ -274,8 +296,7 @@ TEST_F(LooseCookedSourceTest, MetadataAdmissionRejectsExtraAndMissingMembers)
 TEST_F(LooseCookedSourceTest, NestedContainersAreNotMembershipExceptions)
 {
   WriteValidEmptyIndex();
-  LooseCookedTestWriter nested(CookedRoot() / "nested");
-  static_cast<void>(nested.Finish());
+  Materialize(LooseCookedRoot { kMount }.Files(), CookedRoot() / "nested");
   EXPECT_THROW(
     {
       LooseCookedSource source(
@@ -298,12 +319,9 @@ TEST_F(LooseCookedSourceTest, GenerationMarkerIsTheOnlyNonContentMember)
 
 TEST_F(LooseCookedSourceTest, FullIntegritySupportsLongMemberPaths)
 {
-  LooseCookedTestWriter writer(CookedRoot());
   const auto relative
     = std::string(120, 'a') + "/" + std::string(120, 'b') + ".obuf";
-  const std::array bytes { std::byte { 42 } };
-  writer.WriteFile(FileKind::kAuxiliary, relative, bytes);
-  static_cast<void>(writer.Finish());
+  Write(RootWithMembers({ relative }));
   EXPECT_GT((CookedRoot() / relative).native().size(), 260U);
   EXPECT_NO_THROW({
     LooseCookedSource source(
@@ -311,39 +329,40 @@ TEST_F(LooseCookedSourceTest, FullIntegritySupportsLongMemberPaths)
   });
 }
 
-//! Forged descriptor size/digest and index version round-trip through the
-//! index.
-TEST_F(LooseCookedSourceTest, WriterForgesDescriptorRecordAndIndexVersion)
+//! A descriptor size and digest the index records instead of the file's
+//! round-trip through the index.
+TEST_F(LooseCookedSourceTest, IndexKeepsForgedDescriptorSizeAndDigest)
 {
   // Arrange
-  const auto key = MakeAssetKey(7U);
-  const std::array bytes { std::byte { 1 }, std::byte { 2 } };
-  auto forged_sha = std::array<std::uint8_t, 32> {};
-  forged_sha.fill(0xABU);
-  {
-    LooseCookedTestWriter writer(CookedRoot());
-    writer.WriteAssetDescriptor(key, AssetType::kMaterial, "/Content/a.omat",
-      "a.omat", bytes, {},
-      DescriptorRecordOverride { .size = 16U, .sha256 = forged_sha });
-    (void)writer.Finish();
-  }
+  auto forged_sha = oxygen::base::Sha256Digest {};
+  forged_sha.fill(kForgedDigestByte);
+  auto root = LooseCookedRoot { kMount };
+  const auto key = root.Add({
+    .type = AssetType::kMaterial,
+    .leaf = "a.omat",
+    .descriptor = MaterialDescriptor("a").bytes,
+    .recorded_size = kForgedDescriptorSize,
+    .recorded_sha256 = forged_sha,
+  });
+  Write(root);
 
   // Act
   const auto index = LooseCookedIndex::LoadFromRoot(CookedRoot());
 
   // Assert
-  EXPECT_EQ(
-    index.FindDescriptorSize(key), std::optional<std::uint64_t> { 16U });
+  EXPECT_EQ(index.FindDescriptorSize(key),
+    std::optional<std::uint64_t> { kForgedDescriptorSize });
   ASSERT_HAS_VALUE(index.FindDescriptorSha256(key));
   EXPECT_TRUE(std::ranges::equal(*index.FindDescriptorSha256(key), forged_sha));
-  EXPECT_EQ(std::filesystem::file_size(CookedRoot() / "a.omat"), 16U);
+}
 
-  // Arrange: an unsupported index version must be rejected by the reader.
-  {
-    LooseCookedTestWriter writer(CookedRoot());
-    writer.SetIndexVersion(999U);
-    (void)writer.Finish();
-  }
+//! An unsupported index version must be rejected by the reader.
+TEST_F(LooseCookedSourceTest, IndexOfAnUnsupportedVersionIsRejected)
+{
+  // Arrange
+  auto files = RootWithMaterial().Files();
+  CookedBytes::SetIndexVersion(files, kUnsupportedIndexVersion);
+  Materialize(files, CookedRoot());
 
   // Act + Assert
   EXPECT_THROW(

@@ -6,19 +6,39 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <iterator>
+#include <memory>
+#include <optional>
+#include <span>
 #include <utility>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Content/Internal/ContentFileReader.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
+#include <Oxygen/Content/Internal/ResourceTypes.h>
 #include <Oxygen/Content/api_export.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/FileLock.h>
+#include <Oxygen/Serio/MappedFile.h>
+#include <Oxygen/Serio/Region.h>
+
+namespace oxygen::serio {
+class IoDriver;
+} // namespace oxygen::serio
 
 namespace oxygen::content::internal {
 
+//! A mounted loose cooked root.
+/*!
+ Mounting maps the resource tables and opens the data files (through the
+ loader's IO driver when it has one), so a load opens nothing but the asset
+ descriptor it reads: the loose layout keeps each in a file of its own. An
+ index-only source, for lookups while a cook has unpublished files, opens
+ nothing but the index.
+*/
 class LooseCookedSource final : public IContentSource {
 public:
   OXYGEN_TYPED(LooseCookedSource)
@@ -31,13 +51,17 @@ public:
     kVerifyContent,
   };
 
+  //! Mounts the root `cooked_root`; with `driver`, its payloads are awaited
+  //! through it.
   explicit LooseCookedSource(std::filesystem::path cooked_root,
-    const OpenMode mode, serio::FileLock generation_lock = {})
+    const OpenMode mode, serio::FileLock generation_lock = {},
+    std::shared_ptr<serio::IoDriver> driver = {})
     : cooked_root_(std::move(cooked_root))
     , debug_name_(cooked_root_.string())
     , generation_lock_(std::move(generation_lock))
+    , driver_(std::move(driver))
     , index_(LooseCookedIndexImpl::LoadFromFile(
-        cooked_root_ / "container.index.bin"))
+        cooked_root_ / oxygen::data::loose_cooked::kIndexFileName))
   {
     using oxygen::data::loose_cooked::FileKind;
 
@@ -85,6 +109,9 @@ public:
     }
 
     ValidateTableDataPairs();
+    if (mode != OpenMode::kIndexOnly) {
+      OpenFiles();
+    }
   }
 
   ~LooseCookedSource() override = default;
@@ -167,9 +194,7 @@ public:
     if (!rel.has_value()) {
       return nullptr;
     }
-
-    return std::make_unique<ContentFileReader>(
-      cooked_root_ / std::filesystem::path(*rel));
+    return OpenDescriptor(cooked_root_ / std::filesystem::path(*rel));
   }
 
   OXGN_CNTT_NDAPI auto FindTextureIndexByVirtualPath(
@@ -191,42 +216,6 @@ public:
         "Asset reference inventory is not in this source");
     }
     return std::move(*references);
-  }
-
-  [[nodiscard]] auto CreateBufferTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!buffers_table_path_) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(*buffers_table_path_);
-  }
-
-  [[nodiscard]] auto CreateTextureTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!textures_table_path_) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(*textures_table_path_);
-  }
-
-  [[nodiscard]] auto CreateScriptTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!scripts_table_path_) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(*scripts_table_path_);
-  }
-
-  [[nodiscard]] auto CreatePhysicsTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!physics_table_path_) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(*physics_table_path_);
   }
 
   [[nodiscard]] auto GetBufferTable() const noexcept
@@ -253,41 +242,8 @@ public:
     return physics_table_ ? &(*physics_table_) : nullptr;
   }
 
-  [[nodiscard]] auto CreateBufferDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!buffers_data_path_) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(*buffers_data_path_);
-  }
-
-  [[nodiscard]] auto CreateTextureDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!textures_data_path_) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(*textures_data_path_);
-  }
-
-  [[nodiscard]] auto CreateScriptDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!scripts_data_path_) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(*scripts_data_path_);
-  }
-
-  [[nodiscard]] auto CreatePhysicsDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!physics_data_path_) {
-      return nullptr;
-    }
-    return std::make_unique<ContentFileReader>(*physics_data_path_);
-  }
+  OXGN_CNTT_NDAPI auto PayloadRegion(TypeId resource_type) const noexcept
+    -> std::optional<serio::Region<serio::AnyAsyncDevice>> override;
 
   [[nodiscard]] auto ResolveVirtualPath(
     const data::AssetKey& key) const noexcept
@@ -300,6 +256,34 @@ public:
   }
 
 private:
+  //! The files of one resource type, opened at mount.
+  struct ResourceFiles {
+    std::optional<serio::MappedFile> table;
+    std::optional<serio::AnyAsyncDevice> data;
+    //! All of `data` as the mount found it: the payloads the mounted index
+    //! names lie in it, whatever an import appends later.
+    std::optional<serio::Region<serio::AnyAsyncDevice>> payloads;
+  };
+
+  OXGN_CNTT_NDAPI auto ResourceRowSpace(TypeId resource_type) const noexcept
+    -> std::span<const std::byte> override;
+
+  //! The files of the resource type `resource_type` names; null for any other
+  //! type.
+  [[nodiscard]] auto FilesOf(TypeId resource_type) const noexcept
+    -> const ResourceFiles*;
+
+  //! The files of the resource type `T`.
+  template <typename T> [[nodiscard]] auto FilesOf() noexcept -> ResourceFiles&
+  {
+    return files_.at(kResourceTypeIndex<T>);
+  }
+
+  OXGN_CNTT_API auto OpenFiles() -> void;
+
+  OXGN_CNTT_NDAPI static auto OpenDescriptor(const std::filesystem::path& path)
+    -> std::unique_ptr<serio::AnyReader>;
+
   auto ValidateTableDataPairs() const -> void
   {
     const auto buffers_table = buffers_table_path_.has_value();
@@ -465,6 +449,8 @@ private:
   std::filesystem::path cooked_root_;
   std::string debug_name_;
   serio::FileLock generation_lock_;
+  //! Declared before the files: the driver outlives the files it opened.
+  std::shared_ptr<serio::IoDriver> driver_;
   LooseCookedIndexImpl index_;
 
   std::optional<std::filesystem::path> buffers_table_path_;
@@ -480,6 +466,8 @@ private:
   std::optional<ResourceTable<data::TextureResource>> textures_table_;
   std::optional<ResourceTable<data::ScriptResource>> scripts_table_;
   std::optional<ResourceTable<data::PhysicsResource>> physics_table_;
+  //! Indexed by `kResourceTypeIndex`.
+  std::array<ResourceFiles, kResourceTypeCount> files_ {};
 };
 
 } // namespace oxygen::content::internal

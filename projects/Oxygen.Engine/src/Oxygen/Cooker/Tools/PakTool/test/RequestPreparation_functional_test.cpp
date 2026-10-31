@@ -6,106 +6,45 @@
 
 // Covers: Tools/PakTool/RequestPreparation.cpp
 
-#include <array>
-#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <system_error>
 #include <utility>
 
 #include "PakToolOptions.h"
+#include "PakToolTestSupport.h"
 
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
-#include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
-#include <Oxygen/Cooker/test/Support/TextureLibraryFixture.h>
+#include <Oxygen/Cooker/testing/CookedPak.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/CookedSource.h>
-#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
+using oxygen::content::cooked::RealCookerStorage;
 using oxygen::content::pak::BuildMode;
-using oxygen::content::pak::tool::IRequestPreparationFileSystem;
 using oxygen::content::pak::tool::PakToolCliOptions;
 using oxygen::content::pak::tool::PreparePakToolRequest;
-using oxygen::content::pak::tool::RealRequestPreparationFileSystem;
+using oxygen::content::pak::tool::test::WriteGamePak;
 using oxygen::cooker::test::WriteText;
+using oxygen::cooker::testing::CookedPak;
+using oxygen::cooker::testing::LooseCookedRoot;
+using oxygen::cooker::testing::Materialize;
+using oxygen::cooker::testing::SeedBytes;
 
 constexpr auto kSourceKey = "01234567-89ab-7def-8123-456789abcdef";
 
-class FailingCreateDirectoriesFileSystem final
-  : public IRequestPreparationFileSystem {
-public:
-  explicit FailingCreateDirectoriesFileSystem(std::filesystem::path fail_path)
-    : fail_path_(std::move(fail_path))
-  {
-  }
-
-  [[nodiscard]] auto Exists(const std::filesystem::path& path) const
-    -> bool override
-  {
-    return std::filesystem::exists(path);
-  }
-
-  [[nodiscard]] auto IsDirectory(const std::filesystem::path& path) const
-    -> bool override
-  {
-    auto ec = std::error_code {};
-    return std::filesystem::is_directory(path, ec) && !ec;
-  }
-
-  [[nodiscard]] auto IsRegularFile(const std::filesystem::path& path) const
-    -> bool override
-  {
-    auto ec = std::error_code {};
-    return std::filesystem::is_regular_file(path, ec) && !ec;
-  }
-
-  auto CreateDirectories(const std::filesystem::path& path)
-    -> std::error_code override
-  {
-    if (path == fail_path_) {
-      return std::make_error_code(std::errc::permission_denied);
-    }
-
-    auto ec = std::error_code {};
-    std::filesystem::create_directories(path, ec);
-    return ec;
-  }
-
-private:
-  std::filesystem::path fail_path_;
-};
-
-class PakToolRequestPreparationTest : public oxygen::cooker::test::TempDirTest {
+class PakToolRequestPreparationTest : public oxygen::testing::TempDirTest {
 protected:
-  static auto WriteBasePak(
-    const std::filesystem::path& path, const uint16_t content_version) -> void
-  {
-    std::filesystem::create_directories(path.parent_path());
-    std::array<uint8_t, oxygen::data::SourceKey::kSizeBytes> identity {};
-    identity.at(0) = static_cast<uint8_t>(content_version);
-    identity.at(6) = 0x70U;
-    identity.at(8) = 0x80U;
-    const auto key = oxygen::data::SourceKey::FromBytes(identity);
-    ASSERT_HAS_VALUE(key);
-    const auto result = oxygen::content::pak::PakBuilder {}.Build({
-      .mode = BuildMode::kFull,
-      .sources = {},
-      .output_pak_path = path,
-      .content_version = content_version,
-      .source_key = *key,
-    });
-    ASSERT_HAS_VALUE(result);
-    ASSERT_EQ(result->summary.diagnostics_error, 0U);
-  }
-
   [[nodiscard]] static auto MakeOptions() -> PakToolCliOptions
   {
     auto options = PakToolCliOptions {};
@@ -152,8 +91,9 @@ NOLINT_TEST_F(PakToolRequestPreparationTest,
   options.request.compute_crc32 = false;
   options.request.fail_on_warnings = true;
 
-  auto fs = RealRequestPreparationFileSystem {};
-  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kFull, options, storage);
 
   ASSERT_HAS_VALUE(prepared)
     << prepared.error().error_code << ": " << prepared.error().error_message;
@@ -173,10 +113,10 @@ NOLINT_TEST_F(PakToolRequestPreparationTest,
   EXPECT_FALSE(prepared->build_request.options.deterministic);
   EXPECT_FALSE(prepared->build_request.options.compute_crc32);
   EXPECT_TRUE(prepared->build_request.options.fail_on_warnings);
-  EXPECT_TRUE(
+  // Preparation only plans: the outputs' folders are created when the
+  // artifacts are published.
+  EXPECT_FALSE(
     std::filesystem::exists(options.request.output_pak.parent_path()));
-  EXPECT_TRUE(
-    std::filesystem::exists(options.output.diagnostics_file.parent_path()));
 }
 
 NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsInvalidSourceKeyText)
@@ -187,8 +127,9 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsInvalidSourceKeyText)
   options.request.catalog_output
     = TempDir() / "release" / "game.pakcatalog.json";
 
-  auto fs = RealRequestPreparationFileSystem {};
-  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kFull, options, storage);
 
   ASSERT_FALSE(prepared.has_value());
   EXPECT_EQ(prepared.error().error_code, "paktool.prepare.invalid_source_key");
@@ -213,8 +154,9 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, ResolvesSourceMountsForSealing)
   options.request.project_root = project;
   options.request.source_mounts = { "Content=" + content.string() };
 
-  auto fs = RealRequestPreparationFileSystem {};
-  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kFull, options, storage);
 
   ASSERT_HAS_VALUE(prepared)
     << prepared.error().error_code << ": " << prepared.error().error_message;
@@ -233,8 +175,9 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, NoMountOptionsMeanNoSourceMounts)
   options.request.catalog_output
     = TempDir() / "release" / "game.pakcatalog.json";
 
-  auto fs = RealRequestPreparationFileSystem {};
-  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kFull, options, storage);
 
   ASSERT_HAS_VALUE(prepared)
     << prepared.error().error_code << ": " << prepared.error().error_message;
@@ -249,8 +192,9 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsMalformedMountOption)
     = TempDir() / "release" / "game.pakcatalog.json";
   options.request.source_mounts = { "Content" };
 
-  auto fs = RealRequestPreparationFileSystem {};
-  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kFull, options, storage);
 
   ASSERT_FALSE(prepared.has_value());
   EXPECT_EQ(
@@ -271,8 +215,9 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsInvalidSourceMounts)
   options.request.source_mounts
     = { "Bad Name=" + (project / "Content").string() };
 
-  auto fs = RealRequestPreparationFileSystem {};
-  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kFull, options, storage);
 
   ASSERT_FALSE(prepared.has_value());
   EXPECT_EQ(
@@ -294,8 +239,9 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsMissingSourcePath)
   options.request.catalog_output
     = TempDir() / "release" / "game.pakcatalog.json";
 
-  auto fs = RealRequestPreparationFileSystem {};
-  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kFull, options, storage);
 
   ASSERT_FALSE(prepared.has_value());
   EXPECT_EQ(prepared.error().error_code, "paktool.prepare.source_missing");
@@ -315,8 +261,9 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsInvalidBasePakPayload)
     = TempDir() / "release" / "game_patch.manifest.json";
   options.patch.base_paks = { base_catalog };
 
-  auto fs = RealRequestPreparationFileSystem {};
-  const auto prepared = PreparePakToolRequest(BuildMode::kPatch, options, fs);
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kPatch, options, storage);
 
   ASSERT_FALSE(prepared.has_value());
   EXPECT_EQ(prepared.error().error_code, "paktool.prepare.base_pak_invalid");
@@ -332,8 +279,9 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsPatchModeWithoutBasePaks)
   options.patch.manifest_output
     = TempDir() / "release" / "game_patch.manifest.json";
 
-  auto fs = RealRequestPreparationFileSystem {};
-  const auto prepared = PreparePakToolRequest(BuildMode::kPatch, options, fs);
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kPatch, options, storage);
 
   ASSERT_FALSE(prepared.has_value());
   EXPECT_EQ(prepared.error().error_code, "paktool.prepare.base_pak_required");
@@ -345,8 +293,8 @@ NOLINT_TEST_F(
   auto options = MakeOptions();
   const auto base_a = TempDir() / "bases" / "base_a.pak";
   const auto base_b = TempDir() / "bases" / "base_b.pak";
-  WriteBasePak(base_a, 10);
-  WriteBasePak(base_b, 11);
+  WriteGamePak(base_a, "BaseA", 0x70U);
+  WriteGamePak(base_b, "BaseB", 0x71U);
 
   options.request.output_pak = TempDir() / "release" / "game_patch.pak";
   options.request.catalog_output
@@ -355,8 +303,9 @@ NOLINT_TEST_F(
     = TempDir() / "release" / "game_patch.manifest.json";
   options.patch.base_paks = { base_a, base_b };
 
-  auto fs = RealRequestPreparationFileSystem {};
-  const auto prepared = PreparePakToolRequest(BuildMode::kPatch, options, fs);
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kPatch, options, storage);
 
   ASSERT_HAS_VALUE(prepared)
     << prepared.error().error_code << ": " << prepared.error().error_message;
@@ -371,33 +320,29 @@ NOLINT_TEST_F(
   PakToolRequestPreparationTest, PrepareRequestCollectsDependencyTextureKeys)
 {
   // Arrange
-  constexpr auto kGrid = std::string_view { "/Engine/Textures/Grid.otex" };
   auto options = MakeOptions();
-  const auto library = TempDir() / "engine_loose";
-  oxygen::cooker::test::WriteTextureLibrary(library, kGrid,
-    {
-      .size_bytes = 4U,
-      .width = 1U,
-      .height = 1U,
-      .depth = 1U,
-      .array_layers = 1U,
-      .mip_levels = 1U,
-    });
-  options.request.dependency_paks
-    = { oxygen::cooker::test::PackLibrary(library, TempDir() / "engine.pak") };
-  auto fs = RealRequestPreparationFileSystem {};
+  auto engine = LooseCookedRoot { "Engine" };
+  const auto grid_row = engine.AddTexture(SeedBytes(1U));
+  const auto grid = engine.DescribeTexture("Textures/Grid.otex", grid_row);
+  // A pak holds at least one asset: a material that uses the texture.
+  engine.Material("Materials/Grid.omat", grid_row);
+  const auto engine_pak = TempDir() / "engine.pak";
+  Materialize(CookedPak { std::move(engine) }.Encode(), engine_pak);
+  options.request.dependency_paks = { engine_pak };
+  const auto& storage = RealCookerStorage();
 
   // Act
-  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kFull, options, storage);
 
   // Assert
   ASSERT_HAS_VALUE(prepared)
     << prepared.error().error_code << ": " << prepared.error().error_message;
   ASSERT_EQ(prepared->build_request.dependencies.size(), 1U);
   const auto& dependency = prepared->build_request.dependencies.front();
-  EXPECT_EQ(dependency.catalog.library, "Engine");
+  EXPECT_EQ(dependency.catalog.mount, "Engine");
   EXPECT_TRUE(dependency.texture_keys.contains(
-    oxygen::data::TextureKeyFromVirtualPath(kGrid)));
+    oxygen::data::TextureKeyFromVirtualPath(grid)));
 }
 
 NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsConflictingToolPaths)
@@ -407,30 +352,33 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsConflictingToolPaths)
   options.request.output_pak = shared_output;
   options.request.catalog_output = shared_output;
 
-  auto fs = RealRequestPreparationFileSystem {};
-  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kFull, options, storage);
 
   ASSERT_FALSE(prepared.has_value());
   EXPECT_EQ(prepared.error().error_code, "paktool.prepare.path_conflict");
   EXPECT_EQ(prepared.error().path, shared_output);
 }
 
-NOLINT_TEST_F(
-  PakToolRequestPreparationTest, RejectsOutputParentDirectoryCreationFailure)
+//! An output whose parent is a file is refused before anything is built; a
+//! missing parent is created when the artifact is published.
+NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsOutputParentThatIsAFile)
 {
   auto options = MakeOptions();
-  const auto fail_parent = TempDir() / "blocked";
-  options.request.output_pak = fail_parent / "game.pak";
+  const auto blocked = TempDir() / "blocked";
+  WriteText(blocked, "a file, not a folder");
+  options.request.output_pak = blocked / "game.pak";
   options.request.catalog_output
     = TempDir() / "release" / "game.pakcatalog.json";
 
-  auto fs = FailingCreateDirectoriesFileSystem(fail_parent);
-  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kFull, options, RealCookerStorage());
 
   ASSERT_FALSE(prepared.has_value());
   EXPECT_EQ(prepared.error().error_code,
-    "paktool.prepare.output_pak_parent.create_parent_failed");
-  EXPECT_EQ(prepared.error().path, fail_parent);
+    "paktool.prepare.output_pak_parent.parent_not_directory");
+  EXPECT_EQ(prepared.error().path, blocked);
 }
 
 } // namespace

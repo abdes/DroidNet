@@ -1,0 +1,233 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <cstddef>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <span>
+#include <system_error>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/MappedFile.h>
+#include <Oxygen/Serio/Types.h>
+
+namespace oxygen::content::cooked {
+
+namespace {
+
+  namespace fs = std::filesystem;
+
+  //! A publication through `serio::AtomicFileWriter`.
+  class AtomicPublication final : public Publication {
+  public:
+    explicit AtomicPublication(serio::AtomicFileWriter writer) noexcept
+      : writer_(std::move(writer))
+    {
+    }
+
+    [[nodiscard]] auto Write(const std::span<const std::byte> in) noexcept
+      -> Result<void> override
+    {
+      return Writer().Stream().Write(in);
+    }
+
+    [[nodiscard]] auto Flush() noexcept -> Result<void> override
+    {
+      return Writer().Stream().Flush();
+    }
+
+    [[nodiscard]] auto Position() const noexcept -> serio::ByteOffset override
+    {
+      return writer_ ? writer_->Stream().Position() : serio::ByteOffset { 0 };
+    }
+
+    [[nodiscard]] auto PatchAt(const serio::ByteOffset at,
+      const std::span<const std::byte> in) noexcept -> Result<void> override
+    {
+      return Writer().Stream().PatchAt(at, in);
+    }
+
+    [[nodiscard]] auto Commit() noexcept -> Result<void> override
+    {
+      if (!writer_) {
+        return ::oxygen::Err(
+          std::make_error_code(std::errc::bad_file_descriptor));
+      }
+      auto writer = std::move(*writer_);
+      writer_.reset();
+      CHECK_RESULT(std::move(writer).Commit());
+      return {};
+    }
+
+  private:
+    auto Writer() noexcept -> serio::AtomicFileWriter&
+    {
+      // A spent publication streams nowhere: Commit is its last call.
+      return *writer_; // NOLINT(bugprone-unchecked-optional-access)
+    }
+
+    std::optional<serio::AtomicFileWriter> writer_;
+  };
+
+  class RealFiles final : public CookerStorage {
+  public:
+    [[nodiscard]] auto KindOf(const fs::path& path) const -> PathKind override
+    {
+      auto ec = std::error_code {};
+      const auto status = fs::status(path, ec);
+      if (fs::is_directory(status)) {
+        return PathKind::kFolder;
+      }
+      return fs::exists(status) ? PathKind::kFile : PathKind::kNone;
+    }
+
+    [[nodiscard]] auto Open(const fs::path& path) const
+      -> Result<serio::AnyDevice> override
+    {
+      auto file = serio::MappedFile::Open(path);
+      if (!file) {
+        return ::oxygen::Err(file.error());
+      }
+      return ::oxygen::Ok(serio::AnyDevice(std::move(file).value()));
+    }
+
+    [[nodiscard]] auto Publish(const fs::path& path)
+      -> Result<std::unique_ptr<Publication>> override
+    {
+      CHECK_RESULT(CreateParent(path));
+      auto writer = serio::AtomicFileWriter::Create(path);
+      if (!writer) {
+        return ::oxygen::Err(writer.error());
+      }
+      return ::oxygen::Ok(std::unique_ptr<Publication>(
+        std::make_unique<AtomicPublication>(std::move(writer).value())));
+    }
+
+    [[nodiscard]] auto Remove(const fs::path& path) -> Result<void> override
+    {
+      auto ec = std::error_code {};
+      fs::remove(base::ToNativePath(path), ec);
+      if (ec) {
+        return ::oxygen::Err(ec);
+      }
+      return {};
+    }
+
+    [[nodiscard]] auto RemoveEmptyFolder(const fs::path& path)
+      -> Result<bool> override
+    {
+      const auto native = base::ToNativePath(path);
+      auto ec = std::error_code {};
+      if (!fs::is_directory(native, ec) || ec) {
+        return ::oxygen::Ok(false);
+      }
+      if (!fs::is_empty(native, ec) || ec) {
+        return ::oxygen::Ok(false);
+      }
+      fs::remove(native, ec);
+      if (ec) {
+        return ::oxygen::Err(ec);
+      }
+      return ::oxygen::Ok(true);
+    }
+
+    [[nodiscard]] auto Move(const fs::path& from, const fs::path& to)
+      -> Result<void> override
+    {
+      const auto native_from = base::ToNativePath(from);
+      const auto native_to = base::ToNativePath(to);
+      auto ec = std::error_code {};
+      if (!fs::is_regular_file(native_from, ec)) {
+        return ::oxygen::Err(
+          std::make_error_code(std::errc::no_such_file_or_directory));
+      }
+      if (fs::is_directory(native_to, ec)) {
+        return ::oxygen::Err(std::make_error_code(std::errc::is_a_directory));
+      }
+      // Replaces `to` in one step (MoveFileExW with MOVEFILE_REPLACE_EXISTING
+      // on Windows, rename(2) elsewhere).
+      fs::rename(native_from, native_to, ec);
+      if (ec) {
+        return ::oxygen::Err(ec);
+      }
+      return {};
+    }
+
+    [[nodiscard]] auto SizeOf(const fs::path& path) const
+      -> std::optional<serio::ByteCount> override
+    {
+      const auto native = base::ToNativePath(path);
+      auto ec = std::error_code {};
+      if (!fs::is_regular_file(native, ec) || ec) {
+        return std::nullopt;
+      }
+      const auto size = fs::file_size(native, ec);
+      if (ec) {
+        return std::nullopt;
+      }
+      return serio::ByteCount { size };
+    }
+
+  private:
+    static auto CreateParent(const fs::path& path) -> Result<void>
+    {
+      if (const auto parent = path.parent_path(); !parent.empty()) {
+        auto ec = std::error_code {};
+        fs::create_directories(base::ToNativePath(parent), ec);
+        if (ec) {
+          return ::oxygen::Err(ec);
+        }
+      }
+      return {};
+    }
+  };
+
+} // namespace
+
+auto RealCookerStorage() -> CookerStorage&
+{
+  // Stateless: one instance serves every caller.
+  static auto storage = RealFiles {};
+  return storage;
+}
+
+auto ReadWholeFile(const CookerStorageReader& storage, const fs::path& path)
+  -> Result<std::vector<std::byte>>
+{
+  auto device = storage.Open(path);
+  if (!device) {
+    return ::oxygen::Err(device.error());
+  }
+  const auto size = device->Size();
+  if (!size) {
+    return ::oxygen::Err(size.error());
+  }
+  auto bytes = std::vector<std::byte>(static_cast<size_t>(size->get()));
+  CHECK_RESULT(serio::ReadExactlyAt(*device, serio::ByteOffset { 0 }, bytes));
+  return ::oxygen::Ok(std::move(bytes));
+}
+
+auto PublishWholeFile(CookerStorage& storage, const fs::path& path,
+  const std::span<const std::byte> bytes) -> Result<void>
+{
+  auto publication = storage.Publish(path);
+  if (!publication) {
+    return ::oxygen::Err(publication.error());
+  }
+  CHECK_RESULT((*publication)->Write(bytes));
+  CHECK_RESULT((*publication)->Flush());
+  return (*publication)->Commit();
+}
+
+} // namespace oxygen::content::cooked

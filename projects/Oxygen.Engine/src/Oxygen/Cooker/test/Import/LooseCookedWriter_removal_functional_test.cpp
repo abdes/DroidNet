@@ -7,6 +7,7 @@
 // Covers: Import/Internal/LooseCookedWriter.cpp (removals)
 
 #include <cstddef>
+#include <exception>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -15,18 +16,18 @@
 
 #include "LooseCookedWriterTestSupport.h"
 
-#include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/Validation.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::testing {
-namespace fixtures = oxygen::content::test;
+namespace fixtures = oxygen::cooker::testing;
 
 namespace {
 
@@ -35,11 +36,10 @@ namespace {
   {
     return std::string(name) + ".omat";
   }
+  using oxygen::content::cooked::CookedContent;
   using oxygen::content::import::LooseCookedWriter;
-  using oxygen::content::lc::Inspection;
   using oxygen::content::lc::IntegrityCheck;
-  using oxygen::content::lc::LooseCookedIndex;
-  using oxygen::cooker::test::ScopedTempDir;
+  using oxygen::cooker::testing::MemoryFileSystem;
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::FileKind;
 
@@ -54,9 +54,10 @@ namespace {
   }
 
   //! Cooks materials A and B into a fresh root.
-  auto CookTwoMaterials(const std::filesystem::path& cooked_root) -> void
+  auto CookTwoMaterials(
+    MemoryFileSystem& storage, const std::filesystem::path& cooked_root) -> void
   {
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     const auto bytes
       = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
           .bytes;
@@ -69,11 +70,16 @@ namespace {
     static_cast<void>(writer.Finish());
   }
 
-  auto HasMatchingContent(const std::filesystem::path& cooked_root) -> bool
+  auto HasMatchingContent(const MemoryFileSystem& storage,
+    const std::filesystem::path& cooked_root) -> bool
   {
-    return LooseCookedIndex::LoadFromRoot(cooked_root)
-      .CheckContent(cooked_root, IntegrityCheck::kFull)
-      .empty();
+    try {
+      cooked::Validate(
+        CookedContent::Open(storage, cooked_root), IntegrityCheck::kFull);
+      return true;
+    } catch (const std::exception&) {
+      return false;
+    }
   }
 
   /*!
@@ -84,23 +90,22 @@ namespace {
   NOLINT_TEST(LooseCookedWriterRemovalTest,
     RemoveAssetDescriptorKeepsTheOtherAssetsAndDeletesItsFile)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_removal";
-    CookTwoMaterials(cooked_root);
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "loose_cooked_writer_removal";
+    CookTwoMaterials(storage, cooked_root);
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     writer.RemoveAssetDescriptor(VirtualPath("A"));
     const auto result = writer.Finish();
 
     EXPECT_EQ(result.removed_files, std::vector { DescriptorPath("A") });
-    EXPECT_FALSE(std::filesystem::exists(cooked_root / DescriptorPath("A")));
-    EXPECT_TRUE(std::filesystem::exists(cooked_root / DescriptorPath("B")));
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-    ASSERT_EQ(inspection.Assets().size(), 1U);
-    EXPECT_EQ(inspection.Assets().front().virtual_path, VirtualPath("B"));
-    EXPECT_TRUE(HasMatchingContent(cooked_root));
-    EXPECT_NO_THROW(lc::ValidateRoot(cooked_root));
+    EXPECT_FALSE(Exists(storage, cooked_root / DescriptorPath("A")));
+    EXPECT_TRUE(Exists(storage, cooked_root / DescriptorPath("B")));
+    const auto content = CookedContent::Open(storage, cooked_root);
+    ASSERT_EQ(content.Assets().size(), 1U);
+    EXPECT_EQ(content.Assets().front().virtual_path, VirtualPath("B"));
+    EXPECT_TRUE(HasMatchingContent(storage, cooked_root));
+    EXPECT_NO_THROW(cooked::Validate(content));
   }
 
   /*!
@@ -111,17 +116,17 @@ namespace {
   NOLINT_TEST(LooseCookedWriterRemovalTest,
     RemovingTheLastAssetsOfAFolderDeletesTheFolder)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_empty_folder";
-    CookTwoMaterials(cooked_root);
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "loose_cooked_writer_empty_folder";
+    CookTwoMaterials(storage, cooked_root);
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     writer.RemoveAssetDescriptor(VirtualPath("A"));
     writer.RemoveAssetDescriptor(VirtualPath("B"));
     static_cast<void>(writer.Finish());
 
-    EXPECT_FALSE(std::filesystem::exists(cooked_root / "Materials"));
-    EXPECT_TRUE(std::filesystem::exists(cooked_root / "container.index.bin"));
+    EXPECT_FALSE(Exists(storage, cooked_root / "Materials"));
+    EXPECT_TRUE(Exists(storage, cooked_root / "container.index.bin"));
   }
 
   /*!
@@ -132,45 +137,43 @@ namespace {
   NOLINT_TEST(LooseCookedWriterRemovalTest,
     RemoveAssetDescriptorAppliesToTheIndexPublishedAtFinish)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_late_removal";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "loose_cooked_writer_late_removal";
 
-    LooseCookedWriter remover(cooked_root);
+    LooseCookedWriter remover(cooked_root, storage);
     remover.RemoveAssetDescriptor(VirtualPath("A"));
-    CookTwoMaterials(cooked_root);
+    CookTwoMaterials(storage, cooked_root);
     static_cast<void>(remover.Finish());
 
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-    ASSERT_EQ(inspection.Assets().size(), 1U);
-    EXPECT_EQ(inspection.Assets().front().virtual_path, VirtualPath("B"));
-    EXPECT_FALSE(std::filesystem::exists(cooked_root / DescriptorPath("A")));
+    const auto content = CookedContent::Open(storage, cooked_root);
+    ASSERT_EQ(content.Assets().size(), 1U);
+    EXPECT_EQ(content.Assets().front().virtual_path, VirtualPath("B"));
+    EXPECT_FALSE(Exists(storage, cooked_root / DescriptorPath("A")));
   }
 
   NOLINT_TEST(
     LooseCookedWriterRemovalTest, RemoveAssetDescriptorNotInTheIndexThrows)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_unknown";
-    CookTwoMaterials(cooked_root);
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "loose_cooked_writer_unknown";
+    CookTwoMaterials(storage, cooked_root);
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     writer.RemoveAssetDescriptor(VirtualPath("C"));
 
     EXPECT_THROW(static_cast<void>(writer.Finish()), std::runtime_error);
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-    EXPECT_EQ(inspection.Assets().size(), 2U);
+    const auto content = CookedContent::Open(storage, cooked_root);
+    EXPECT_EQ(content.Assets().size(), 2U);
   }
 
   NOLINT_TEST(
     LooseCookedWriterRemovalTest, RemoveAssetDescriptorThisWriterWritesThrows)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_rewrite";
-    CookTwoMaterials(cooked_root);
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "loose_cooked_writer_rewrite";
+    CookTwoMaterials(storage, cooked_root);
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x11),
       AssetType::kMaterial, VirtualPath("A"), DescriptorPath("A"),
       fixtures::MaterialDescriptor("again", fixtures::MaterialVariant::kPlain)
@@ -188,35 +191,35 @@ namespace {
   NOLINT_TEST(
     LooseCookedWriterRemovalTest, RemoveAuxiliaryFileDropsItsRecordAndDeletesIt)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_auxiliary";
-    CookTwoMaterials(cooked_root);
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "loose_cooked_writer_auxiliary";
+    CookTwoMaterials(storage, cooked_root);
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       const std::vector bytes { std::byte { 0x01 } };
       writer.WriteFile(FileKind::kAuxiliary, "Aux/A.bin", bytes);
       writer.WriteFile(FileKind::kAuxiliary, "Aux/B.bin", bytes);
       static_cast<void>(writer.Finish());
     }
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     writer.RemoveAuxiliaryFile("Aux/A.bin");
     const auto result = writer.Finish();
 
     EXPECT_EQ(result.removed_files, std::vector<std::string> { "Aux/A.bin" });
-    EXPECT_FALSE(std::filesystem::exists(cooked_root / "Aux/A.bin"));
-    EXPECT_TRUE(std::filesystem::exists(cooked_root / "Aux/B.bin"));
-    EXPECT_TRUE(HasMatchingContent(cooked_root));
+    EXPECT_FALSE(Exists(storage, cooked_root / "Aux/A.bin"));
+    EXPECT_TRUE(Exists(storage, cooked_root / "Aux/B.bin"));
+    EXPECT_TRUE(HasMatchingContent(storage, cooked_root));
   }
 
   NOLINT_TEST(
     LooseCookedWriterRemovalTest, RemoveAuxiliaryFileNotInTheIndexThrows)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_no_auxiliary";
-    CookTwoMaterials(cooked_root);
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "loose_cooked_writer_no_auxiliary";
+    CookTwoMaterials(storage, cooked_root);
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     writer.RemoveAuxiliaryFile("Aux/A.bin");
 
     EXPECT_THROW(static_cast<void>(writer.Finish()), std::runtime_error);

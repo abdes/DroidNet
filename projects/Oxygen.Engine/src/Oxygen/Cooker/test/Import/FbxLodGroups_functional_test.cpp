@@ -173,11 +173,10 @@ protected:
     }
     const auto inspection = LoadInspection(imported.report.cooked_root);
     for (const auto& asset : inspection.Assets()) {
-      if (asset.asset_type
-        != static_cast<uint8_t>(data::AssetType::kGeometry)) {
+      if (asset.type != data::AssetType::kGeometry) {
         continue;
       }
-      const auto path = imported.report.cooked_root / asset.descriptor_relpath;
+      const auto path = inspection.DescriptorStored(asset.key).file;
       auto header = data::pak::geometry::GeometryAssetDesc {};
       {
         std::ifstream bytes(path, std::ios::binary);

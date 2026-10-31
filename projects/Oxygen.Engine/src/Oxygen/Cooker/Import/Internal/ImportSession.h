@@ -17,6 +17,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -280,6 +281,8 @@ private:
   observer_ptr<co::ThreadPool> thread_pool_;
   observer_ptr<ResourceTableRegistry> table_registry_;
   observer_ptr<LooseCookedIndexRegistry> index_registry_;
+  //! The file system of the index registry, which the service shares.
+  observer_ptr<cooked::CookerStorage> storage_;
   std::filesystem::path cooked_root_;
   LooseCookedWriter cooked_writer_;
 

@@ -18,6 +18,8 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/Region.h>
 
 namespace oxygen::content::internal {
 
@@ -55,36 +57,25 @@ auto ScriptQueryService::ReadScriptResourceForAsset(
     return nullptr;
   }
 
-  auto table_reader = source->CreateScriptTableReader();
-  auto data_reader = source->CreateScriptDataReader();
-  if (!table_reader || !data_reader) {
-    return nullptr;
-  }
-
-  const auto offset_opt = script_table->GetResourceOffset(resource_index);
-  if (!offset_opt.has_value()) {
-    return nullptr;
-  }
-  if (auto seek_result = table_reader->Seek(*offset_opt); !seek_result) {
-    return nullptr;
-  }
-
-  auto desc_blob
-    = table_reader->ReadBlob(sizeof(data::pak::scripting::ScriptResourceDesc));
-  if (!desc_blob) {
+  const auto row = source->ResourceDescriptorBytes(
+    data::ScriptResource::ClassTypeId(), resource_index);
+  if (!row || row->size() != sizeof(data::pak::scripting::ScriptResourceDesc)) {
     return nullptr;
   }
   data::pak::scripting::ScriptResourceDesc desc {};
-  std::memcpy(&desc, desc_blob->data(), sizeof(desc));
+  std::memcpy(&desc, row->data(), sizeof(desc));
 
+  // A synchronous query: the payload is read with the device's blocking read.
   std::vector<uint8_t> data_buffer(desc.size_bytes);
   if (desc.size_bytes > 0) {
-    if (auto data_seek_result = data_reader->Seek(desc.data_offset);
-      !data_seek_result) {
-      return nullptr;
-    }
-    const auto byte_view = std::as_writable_bytes(std::span(data_buffer));
-    if (auto read_result = data_reader->ReadBlobInto(byte_view); !read_result) {
+    const auto region = source->PayloadOf(data::ScriptResource::ClassTypeId(),
+      {
+        .offset = serio::ByteOffset { desc.data_offset },
+        .count = serio::ByteCount { desc.size_bytes },
+      });
+    if (!region
+      || !serio::ReadExactlyAt(*region, serio::ByteOffset { 0 },
+        std::as_writable_bytes(std::span(data_buffer)))) {
       return nullptr;
     }
   }

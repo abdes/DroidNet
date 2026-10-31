@@ -55,8 +55,8 @@ concept LoadFunctionForStream = requires(F f, LoaderContext context) {
      types. It is always passed by value and contains all necessary state for
      loading.
    - The function must read from `context.desc_reader` and may use other fields
-     as needed. It must not retain ownership of the context or any temporary
-     resources.
+     as needed. A resource loader takes its payload from `context.payload`. It
+ must not retain ownership of the context or any temporary resources.
    - Return: A fully initialized `std::unique_ptr<T>` (where T satisfies
 
  `IsTyped`).

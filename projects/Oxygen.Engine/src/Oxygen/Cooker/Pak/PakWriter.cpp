@@ -22,6 +22,9 @@
 #include <vector>
 
 #include <Oxygen/Base/Crc32.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Pak/Internal/PakSourceDevices.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
@@ -34,8 +37,6 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/Integrity.h>
-#include <Oxygen/Serio/NativeFile.h>
-#include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace {
@@ -49,17 +50,19 @@ namespace serio = oxygen::serio;
 constexpr auto kZeroWriteChunkSize = size_t { 64U } * 1024U;
 constexpr auto kCrcFieldSize = uint64_t { sizeof(uint32_t) };
 
+using Publication = oxygen::content::cooked::Publication;
+
 struct WriterState final {
-  const pak::PakBuildRequest* request = nullptr;
-  const pak::PakPlan* plan = nullptr;
-  //! The pak file; declared before `stream`, which writes to it.
-  std::optional<serio::NativeFile> file;
-  std::optional<serio::RegionWriteStream<serio::NativeFile>> stream;
+  oxygen::observer_ptr<const pak::PakBuildRequest> request;
+  oxygen::observer_ptr<const pak::PakPlan> plan;
+  //! The source files payloads are copied from, each opened once.
+  pak::internal::PakSourceDevices sources;
+  //! The pak being published; declared before `hashing`, which writes to it.
+  std::unique_ptr<Publication> publication;
   //! Every write goes through it, so the pak CRC (which skips its own footer
-  //! field) comes out of the write pass. Declared after `stream`, which it
-  //! writes to, so it is destroyed first.
-  std::optional<serio::HashingWriteStream<
-    serio::RegionWriteStream<serio::NativeFile>, oxygen::base::Crc32>>
+  //! field) comes out of the write pass. Declared after `publication`, which
+  //! it writes to, so it is destroyed first.
+  std::optional<serio::HashingWriteStream<Publication, oxygen::base::Crc32>>
     hashing;
   pak::PakWriter::WriteResult output {};
   uint64_t cursor = 0;
@@ -255,7 +258,7 @@ auto FindResourceIndicesByKind(
 }
 
 template <typename Record>
-auto LoadRecordFromSource(
+auto LoadRecordFromSource(pak::internal::PakSourceDevices& sources,
   const pak::PakPayloadSourceSlicePlan& source, Record& record) -> bool
 {
   if (source.source_path.empty() || source.size_bytes != sizeof(Record)) {
@@ -263,7 +266,7 @@ auto LoadRecordFromSource(
   }
 
   auto payload = std::vector<std::byte> {};
-  if (!StorePayloadSourceSlice(source, payload)
+  if (!StorePayloadSourceSlice(sources, source, payload)
     || payload.size() != sizeof(Record)) {
     return false;
   }
@@ -273,8 +276,8 @@ auto LoadRecordFromSource(
 }
 
 template <typename Record, typename PatchFn>
-auto BuildPatchedResourceTablePayload(const uint32_t entry_count,
-  const std::span<const size_t> resource_indices,
+auto BuildPatchedResourceTablePayload(pak::internal::PakSourceDevices& sources,
+  const uint32_t entry_count, const std::span<const size_t> resource_indices,
   const std::span<const pak::PakResourcePlacementPlan> resources,
   const std::span<const pak::PakPayloadSourceSlicePlan> descriptor_sources,
   const PatchFn& patch_record, std::vector<std::byte>& payload) -> bool
@@ -304,7 +307,7 @@ auto BuildPatchedResourceTablePayload(const uint32_t entry_count,
     }
 
     auto record = Record {};
-    if (!LoadRecordFromSource(descriptor_sources[resource_pos], record)
+    if (!LoadRecordFromSource(sources, descriptor_sources[resource_pos], record)
       || !patch_record(resource, record)) {
       return false;
     }
@@ -403,10 +406,10 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
   -> WriteResult
 {
   auto state = WriterState {
-    .request = std::addressof(request),
-    .plan = std::addressof(plan),
-    .file = std::nullopt,
-    .stream = std::nullopt,
+    .request = oxygen::make_observer(std::addressof(request)),
+    .plan = oxygen::make_observer(std::addressof(plan)),
+    .sources = pak::internal::PakSourceDevices(*request.storage),
+    .publication = nullptr,
     .hashing = std::nullopt,
     .output = {},
     .cursor = 0,
@@ -445,26 +448,21 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
     return std::move(state.output);
   }
 
-  // The footer CRC is patched back through the stream, which holds the
-  // unflushed tail, so the file needs write access only.
-  if (auto file = serio::NativeFile::Open(request.output_pak_path,
-        {
-          .access = serio::Access::kWrite,
-          .creation = serio::Creation::kCreateAlways,
-        });
-    file) {
-    state.file.emplace(std::move(file).value());
-    state.stream.emplace(*state.file);
+  // The pak replaces its destination only once it is complete; the footer CRC
+  // is patched back through the publication before it commits.
+  if (auto publication = request.storage->Publish(request.output_pak_path);
+    publication) {
+    state.publication = std::move(publication).value();
     const auto crc_field = serio::ByteRange {
       .offset = serio::ByteOffset { plan.Footer().crc32_field_absolute_offset },
       .count = serio::ByteCount { kCrcFieldSize },
     };
-    state.hashing.emplace(*state.stream, std::span { &crc_field, 1 });
+    state.hashing.emplace(*state.publication, std::span { &crc_field, 1 });
   } else {
     AddDiagnostic(state, PakDiagnosticSeverity::kError,
       "pak.write.stream_open_failed",
       std::string("Failed to open output pak file for writing: ")
-        + file.error().message());
+        + publication.error().message());
     state.output.writing_duration
       = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - start);
@@ -531,7 +529,8 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
         }
 
         auto payload = std::vector<std::byte> {};
-        const auto stored = StorePayloadSourceSlice(source, payload);
+        const auto stored
+          = StorePayloadSourceSlice(state.sources, source, payload);
         if (!stored) {
           AddDiagnostic(state, PakDiagnosticSeverity::kError,
             "pak.write.resource_store_failed",
@@ -585,8 +584,9 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
 
       if (table.table_name == "texture_table") {
         store_ok = BuildPatchedResourceTablePayload<core::TextureResourceDesc>(
-          table.count, FindResourceIndicesByKind(resources_by_kind, "texture"),
-          resources, descriptor_sources,
+          state.sources, table.count,
+          FindResourceIndicesByKind(resources_by_kind, "texture"), resources,
+          descriptor_sources,
           [](const pak::PakResourcePlacementPlan& resource,
             core::TextureResourceDesc& record) -> bool {
             const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
@@ -602,8 +602,9 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
           payload);
       } else if (table.table_name == "buffer_table") {
         store_ok = BuildPatchedResourceTablePayload<core::BufferResourceDesc>(
-          table.count, FindResourceIndicesByKind(resources_by_kind, "buffer"),
-          resources, descriptor_sources,
+          state.sources, table.count,
+          FindResourceIndicesByKind(resources_by_kind, "buffer"), resources,
+          descriptor_sources,
           [](const pak::PakResourcePlacementPlan& resource,
             core::BufferResourceDesc& record) -> bool {
             const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
@@ -629,8 +630,9 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
         store_ok = StoreAudioTablePayload(input, payload);
       } else if (table.table_name == "script_resource_table") {
         store_ok = BuildPatchedResourceTablePayload<script::ScriptResourceDesc>(
-          table.count, FindResourceIndicesByKind(resources_by_kind, "script"),
-          resources, descriptor_sources,
+          state.sources, table.count,
+          FindResourceIndicesByKind(resources_by_kind, "script"), resources,
+          descriptor_sources,
           [](const pak::PakResourcePlacementPlan& resource,
             script::ScriptResourceDesc& record) -> bool {
             const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
@@ -645,7 +647,7 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
       } else if (table.table_name == "physics_resource_table") {
         store_ok
           = BuildPatchedResourceTablePayload<physics::PhysicsResourceDesc>(
-            table.count,
+            state.sources, table.count,
             FindResourceIndicesByKind(resources_by_kind, "physics"), resources,
             descriptor_sources,
             [](const pak::PakResourcePlacementPlan& resource,
@@ -709,7 +711,8 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
       }
 
       auto payload = std::vector<std::byte> {};
-      const auto stored = StorePayloadSourceSlice(source, payload);
+      const auto stored
+        = StorePayloadSourceSlice(state.sources, source, payload);
       if (!stored) {
         AddDiagnostic(state, PakDiagnosticSeverity::kError,
           "pak.write.asset_descriptor_store_failed",
@@ -855,7 +858,7 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
   }
 
   if (!HasWriterErrors(state)) {
-    const auto flush_result = state.stream->Flush();
+    const auto flush_result = state.hashing->Flush();
     if (!flush_result) {
       AddDiagnostic(state, PakDiagnosticSeverity::kError,
         "pak.write.stream_flush_failed", "Failed to flush output pak stream.");
@@ -869,7 +872,7 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
             .field_offset = plan.Footer().crc32_field_absolute_offset,
             .value = state.output.pak_crc32,
           })) {
-      const auto flush_result = state.stream.value().Flush();
+      const auto flush_result = state.hashing->Flush();
       if (!flush_result) {
         AddDiagnostic(state, PakDiagnosticSeverity::kError,
           "pak.write.stream_flush_failed",
@@ -880,6 +883,14 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
 
   if (!request.options.compute_crc32) {
     state.output.pak_crc32 = 0U;
+  }
+
+  if (!HasWriterErrors(state)) {
+    if (const auto committed = state.publication->Commit(); !committed) {
+      AddDiagnostic(state, PakDiagnosticSeverity::kError,
+        "pak.write.publish_failed",
+        "Failed to publish the output pak: " + committed.error().message());
+    }
   }
 
   if (!HasWriterErrors(state)) {

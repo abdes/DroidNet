@@ -26,20 +26,20 @@
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/LodPolicyValidation.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace oxygen::content::import::test {
 namespace {
   using internal::GeometrySource;
   using oxygen::cooker::test::ContentMountTable;
   using oxygen::cooker::test::GeometryDescriptor;
-  using oxygen::cooker::test::TempDirTest;
+  using oxygen::testing::TempDirTest;
 
   //! The project's `Content` mount is the temporary root.
   class GeometrySourceTest : public TempDirTest {
@@ -437,10 +437,10 @@ namespace {
       three.type, data::pak::geometry::LodPolicyType::kScreenSpaceError);
     ASSERT_EQ(three.boundary_count, 2U);
     EXPECT_THAT(std::span<const float>(three.enter_finer_sse).first(3),
-      testing::ElementsAre(256.0F, 128.0F, 0.0F));
+      ::testing::ElementsAre(256.0F, 128.0F, 0.0F));
     EXPECT_THAT(std::span<const float>(three.exit_coarser_sse).first(3),
-      testing::ElementsAre(
-        testing::FloatEq(204.8F), testing::FloatEq(102.4F), 0.0F));
+      ::testing::ElementsAre(
+        ::testing::FloatEq(204.8F), ::testing::FloatEq(102.4F), 0.0F));
     EXPECT_TRUE(data::IsValidLodPolicy(three));
   }
 
@@ -459,11 +459,11 @@ namespace {
       policy.type, data::pak::geometry::LodPolicyType::kScreenSpaceError);
     ASSERT_EQ(policy.boundary_count, 3U);
     EXPECT_THAT(std::span<const float>(policy.enter_finer_sse).first(4),
-      testing::ElementsAre(testing::FloatNear(1'000'000.0F, 1.0F),
-        testing::FloatEq(200.0F), testing::FloatEq(4.0F), 0.0F));
+      ::testing::ElementsAre(::testing::FloatNear(1'000'000.0F, 1.0F),
+        ::testing::FloatEq(200.0F), ::testing::FloatEq(4.0F), 0.0F));
     EXPECT_THAT(std::span<const float>(policy.exit_coarser_sse).first(4),
-      testing::ElementsAre(testing::FloatNear(800'000.0F, 1.0F),
-        testing::FloatEq(160.0F), testing::FloatEq(3.2F), 0.0F));
+      ::testing::ElementsAre(::testing::FloatNear(800'000.0F, 1.0F),
+        ::testing::FloatEq(160.0F), ::testing::FloatEq(3.2F), 0.0F));
     EXPECT_TRUE(data::IsValidLodPolicy(policy));
     EXPECT_EQ(internal::MakeGeneratedLodPolicy({}, kRadius).type,
       data::schema::geometry::kLodPolicyDefault.type);

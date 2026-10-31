@@ -22,6 +22,8 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
@@ -39,11 +41,8 @@
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/Types.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -56,6 +55,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace co = oxygen::co;
 namespace import = oxygen::content::import;
@@ -64,7 +64,7 @@ using oxygen::observer_ptr;
 namespace {
 
 //! Test fixture for ImportSession tests.
-class ImportSessionTest : public oxygen::cooker::test::TempDirTest {
+class ImportSessionTest : public oxygen::testing::TempDirTest {
 protected:
   using CookedBufferPayload = import::CookedBufferPayload;
   using CookedTexturePayload = import::CookedTexturePayload;
@@ -87,8 +87,10 @@ protected:
     loop_ = std::make_unique<ImportEventLoop>();
     reader_ = CreateAsyncFileReader(*loop_);
     writer_ = std::make_unique<FileWriter>(*loop_);
-    table_registry_ = std::make_unique<ResourceTableRegistry>(*writer_);
-    index_registry_ = std::make_unique<LooseCookedIndexRegistry>();
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*writer_,
+      oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
+    index_registry_ = std::make_unique<LooseCookedIndexRegistry>(
+      oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
     thread_pool_ = std::make_unique<ThreadPool>(*loop_, 1);
   }
 
@@ -721,8 +723,6 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithDiagnosticsIncludesInReport)
 
 NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
 {
-  using oxygen::data::loose_cooked::FileKind;
-
   co::Run(*loop_, [&] -> co::Co<> {
     auto request = MakeRequest();
     if (!request.cooked_root.has_value()) {
@@ -756,7 +756,7 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
       });
     const auto descriptor_relpath = std::string("Wood.omat");
     const auto virtual_path = "/.cooked/" + descriptor_relpath;
-    const auto descriptor = oxygen::content::test::MaterialDescriptor("Wood");
+    const auto descriptor = oxygen::cooker::testing::MaterialDescriptor("Wood");
 
     const auto tex_idx
       = session.TextureEmitter().Emit(MakeTestTexturePayload(), "test_texture");
@@ -779,48 +779,38 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
       co_return;
     }
 
-    oxygen::content::lc::Inspection inspection;
-    inspection.LoadFromFile(index_path);
-
-    const auto find_file_relpath
-      = [&inspection](const FileKind kind) -> std::optional<std::string> {
-      const auto files = inspection.Files();
-      const auto it
-        = std::ranges::find(files, kind, &oxygen::content::lc::FileEntry::kind);
-      if (it == files.end()) {
-        return std::nullopt;
-      }
-      return it->relpath;
+    const auto content = oxygen::content::cooked::CookedContent::Open(
+      oxygen::content::cooked::RealCookerStorage(),
+      request.cooked_root.value());
+    const auto& root = request.cooked_root.value();
+    const auto relative_to_root
+      = [&root](const std::filesystem::path& file) -> std::string {
+      return file.lexically_relative(root).generic_string();
     };
 
-    const auto textures_data = find_file_relpath(FileKind::kTexturesData);
-    const auto textures_table = find_file_relpath(FileKind::kTexturesTable);
-    EXPECT_TRUE(textures_data.has_value());
-    EXPECT_TRUE(textures_table.has_value());
-    if (textures_data.has_value() && textures_table.has_value()) {
-      EXPECT_EQ(
-        *textures_data, request.loose_cooked_layout.TexturesDataRelPath());
-      EXPECT_EQ(
-        *textures_table, request.loose_cooked_layout.TexturesTableRelPath());
-    }
+    const auto& textures
+      = content.ResourceTable(oxygen::data::ResourceKind::kTexture);
+    EXPECT_FALSE(textures.DataStored().file.empty());
+    EXPECT_FALSE(textures.RowsStored().file.empty());
+    EXPECT_EQ(
+      relative_to_root(textures.DataStored().file), "Resources/textures.data");
+    EXPECT_EQ(
+      relative_to_root(textures.RowsStored().file), "Resources/textures.table");
 
-    const auto buffers_data = find_file_relpath(FileKind::kBuffersData);
-    const auto buffers_table = find_file_relpath(FileKind::kBuffersTable);
-    EXPECT_TRUE(buffers_data.has_value());
-    EXPECT_TRUE(buffers_table.has_value());
-    if (buffers_data.has_value() && buffers_table.has_value()) {
-      EXPECT_EQ(
-        *buffers_data, request.loose_cooked_layout.BuffersDataRelPath());
-      EXPECT_EQ(
-        *buffers_table, request.loose_cooked_layout.BuffersTableRelPath());
-    }
+    const auto& buffers
+      = content.ResourceTable(oxygen::data::ResourceKind::kBuffer);
+    EXPECT_FALSE(buffers.DataStored().file.empty());
+    EXPECT_FALSE(buffers.RowsStored().file.empty());
+    EXPECT_EQ(
+      relative_to_root(buffers.DataStored().file), "Resources/buffers.data");
+    EXPECT_EQ(
+      relative_to_root(buffers.RowsStored().file), "Resources/buffers.table");
 
-    const auto assets = inspection.Assets();
-    const auto asset
-      = std::ranges::find(assets, kKey, &oxygen::content::lc::AssetEntry::key);
-    EXPECT_TRUE(asset != assets.end());
-    if (asset != assets.end()) {
-      EXPECT_EQ(asset->descriptor_relpath, descriptor_relpath);
+    const auto* const asset = content.FindAsset(kKey);
+    EXPECT_NE(asset, nullptr);
+    if (asset != nullptr) {
+      EXPECT_EQ(relative_to_root(content.DescriptorStored(kKey).file),
+        descriptor_relpath);
       EXPECT_EQ(asset->virtual_path, virtual_path);
     }
 
@@ -839,7 +829,7 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeRefusesAnIdentityOfAnotherMount)
       bytes.front() = seed;
       return oxygen::data::AssetKey::FromBytes(bytes);
     };
-    const auto descriptor = oxygen::content::test::MaterialDescriptor("Wood");
+    const auto descriptor = oxygen::cooker::testing::MaterialDescriptor("Wood");
 
     auto first_request = MakeRequest("first.fbx");
     first_request.asset_virtual_path = "/Content/First.omat";

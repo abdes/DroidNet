@@ -24,7 +24,6 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
@@ -68,7 +67,6 @@ class IAsyncFileWriter;
  ```cpp
  TextureEmitter::Config config;
  config.cooked_root = cooked_root;
- config.layout = layout;
  config.packing_policy_id = "d3d12";
 
  TextureEmitter emitter(file_writer, table_aggregator, config);
@@ -96,9 +94,6 @@ public:
   struct Config final {
     //! Root directory for cooked output files.
     std::filesystem::path cooked_root;
-
-    //! Loose cooked layout describing output relative paths.
-    LooseCookedLayout layout = {};
 
     //! Packing policy for fallback textures ("d3d12" or "tight").
     std::string packing_policy_id;
@@ -128,7 +123,7 @@ public:
     size_t error_count = 0;
   };
 
-  //! Create a texture emitter for the given layout.
+  //! Create a texture emitter writing under `Config::cooked_root`.
   /*!
    @param file_writer Async file writer for output operations.
    @param table_aggregator Shared texture table aggregator.

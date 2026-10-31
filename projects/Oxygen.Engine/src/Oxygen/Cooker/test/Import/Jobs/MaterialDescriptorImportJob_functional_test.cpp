@@ -26,7 +26,10 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
-#include <Oxygen/Cooker/test/Support/TextureLibraryFixture.h>
+#include <Oxygen/Cooker/testing/CookedPak.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -42,6 +45,10 @@ namespace {
   using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
   using oxygen::cooker::test::WriteBytes;
+  using oxygen::cooker::testing::CookedPak;
+  using oxygen::cooker::testing::LooseCookedRoot;
+  using oxygen::cooker::testing::Materialize;
+  using oxygen::cooker::testing::SeedBytes;
 
 #pragma pack(push, 1)
   struct TextureSidecarFile final {
@@ -202,7 +209,7 @@ namespace {
       "domain": "opaque",
       "textures": {
         "base_color": {
-          "virtual_path": "/.cooked/Resources/Textures/woodfloor007_color.otex"
+          "virtual_path": "../Resources/Textures/woodfloor007_color.otex"
         }
       }
     })"));
@@ -248,7 +255,7 @@ namespace {
       "domain": "opaque",
       "textures": {
         "base_color": {
-          "virtual_path": "/.cooked/Resources/Textures/woodfloor007_color.otex"
+          "virtual_path": "../Resources/Textures/woodfloor007_color.otex"
         }
       }
     })"));
@@ -270,7 +277,7 @@ namespace {
       "domain": "opaque",
       "textures": {
         "base_color": {
-          "virtual_path": "/.cooked/Resources/Textures/woodfloor007_color.otex"
+          "virtual_path": "../Resources/Textures/woodfloor007_color.otex"
         }
       }
     })"));
@@ -299,19 +306,16 @@ namespace {
     MaterialDescriptorImportJobTest, ContextRootTextureBindsByKeyWithoutCopying)
   {
     // Arrange
-    constexpr auto kGrid = std::string_view { "/Library/Textures/Grid.otex" };
+    auto library_root = LooseCookedRoot { "Library" };
+    const auto grid_row = library_root.AddTexture(SeedBytes(1U));
+    const auto kGrid
+      = library_root.DescribeTexture("Textures/Grid.otex", grid_row);
+    // A pak holds at least one asset: a material that uses the texture.
+    library_root.Material("Materials/Grid.omat", grid_row);
     const auto library = TempDir() / "library";
-    oxygen::cooker::test::WriteTextureLibrary(library, kGrid,
-      {
-        .size_bytes = 4U,
-        .width = 1U,
-        .height = 1U,
-        .depth = 1U,
-        .array_layers = 1U,
-        .mip_levels = 1U,
-      });
-    const auto pak
-      = oxygen::cooker::test::PackLibrary(library, TempDir() / "library.pak");
+    Materialize(library_root.Files(), library);
+    const auto pak = TempDir() / "library.pak";
+    Materialize(CookedPak { library_root }.Encode(), pak);
     constexpr auto kDescriptor = R"({
       "name": "Tiles",
       "domain": "opaque",

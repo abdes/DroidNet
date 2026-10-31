@@ -23,6 +23,7 @@
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
@@ -35,7 +36,6 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -47,6 +47,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 namespace co = oxygen::co;
@@ -261,13 +262,15 @@ auto RunFailingJob(imp::detail::ImportJob* job) -> co::Co<>
 
 NOLINT_TEST(ImportJobLifetimeTest, ExceptionPreservesDrainedSessionTelemetry)
 {
-  const oxygen::cooker::test::ScopedTempDir temp;
+  const oxygen::testing::ScopedTempDir temp;
   imp::ImportEventLoop loop;
   auto reader = imp::CreateAsyncFileReader(loop);
   auto writer = imp::CreateAsyncFileWriter(loop);
   co::ThreadPool pool(loop, 1);
-  imp::ResourceTableRegistry tables(*writer);
-  imp::LooseCookedIndexRegistry indexes;
+  imp::ResourceTableRegistry tables(*writer,
+    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
+  imp::LooseCookedIndexRegistry indexes(
+    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
   const auto root = temp.Path() / "root";
   imp::ImportRequest request;
   request.source_path = root / "source.json";
@@ -311,13 +314,15 @@ NOLINT_TEST(ImportJobLifetimeTest, ExceptionPreservesDrainedSessionTelemetry)
 NOLINT_TEST(
   ImportJobLifetimeTest, CancellationDrainsCallbacksAndAllowsSameRootRetry)
 {
-  const oxygen::cooker::test::ScopedTempDir temp;
+  const oxygen::testing::ScopedTempDir temp;
   imp::ImportEventLoop loop;
   auto reader = imp::CreateAsyncFileReader(loop);
   HeldCompletionWriter writer(loop);
   co::ThreadPool pool(loop, 1);
-  imp::ResourceTableRegistry tables(writer);
-  imp::LooseCookedIndexRegistry indexes;
+  imp::ResourceTableRegistry tables(writer,
+    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
+  imp::LooseCookedIndexRegistry indexes(
+    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
   const auto root = temp.Path() / "oxygen_job_lifetime_retry";
   imp::ImportRequest request;
   request.source_path = root / "source.json";

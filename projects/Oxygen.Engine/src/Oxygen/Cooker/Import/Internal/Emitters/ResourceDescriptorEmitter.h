@@ -19,6 +19,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
@@ -42,6 +43,8 @@ public:
   struct Record final {
     std::string relpath;
     uint64_t size_bytes = 0;
+    //! SHA-256 of the descriptor bytes, computed before they are written.
+    base::Sha256Digest sha256 {};
     //! Virtual path of a texture descriptor; empty for buffer descriptors.
     std::string virtual_path;
   };
@@ -72,6 +75,14 @@ public:
   OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
 
 private:
+  //! Records the descriptor `bytes` at `relpath`; false when an equal
+  //! descriptor is already recorded there, so nothing is to be written.
+  /*!
+   @throw std::runtime_error When `relpath` already holds other bytes.
+  */
+  auto RecordOnce(const std::string& relpath,
+    const std::shared_ptr<std::vector<std::byte>>& bytes,
+    std::string virtual_path) -> bool;
   auto QueueWrite(std::string relpath,
     const std::shared_ptr<std::vector<std::byte>>& bytes) -> void;
   auto OnWriteComplete(std::string_view relpath, const FileErrorInfo& error)

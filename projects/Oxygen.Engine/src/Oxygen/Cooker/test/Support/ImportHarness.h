@@ -11,11 +11,11 @@
 #include <memory>
 #include <optional>
 
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace oxygen::cooker::test {
 
@@ -29,7 +29,7 @@ namespace oxygen::cooker::test {
   -> std::optional<content::import::ImportReport>;
 
 //! TempDir-backed fixture owning a lazily created AsyncImportService.
-class ImportServiceTest : public TempDirTest {
+class ImportServiceTest : public oxygen::testing::TempDirTest {
 protected:
   //! Override to change worker counts etc. Default: the values most job tests
   //! use today.
@@ -42,9 +42,9 @@ protected:
   //! SubmitAndWait(Service(), ...).
   [[nodiscard]] auto Import(content::import::ImportRequest request)
     -> std::optional<content::import::ImportReport>;
-  //! Loads the loose-cooked index at `cooked_root`.
+  //! Opens the loose cooked root at `cooked_root`.
   [[nodiscard]] static auto LoadInspection(
-    const std::filesystem::path& cooked_root) -> content::lc::Inspection;
+    const std::filesystem::path& cooked_root) -> content::cooked::CookedContent;
 
   void TearDown() override;
 

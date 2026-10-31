@@ -49,6 +49,8 @@ add_library(
   "RequestSnapshot.h"
   "ScriptSealing.cpp"
   "ScriptSealing.h"
+  "StagedSourceStorage.cpp"
+  "StagedSourceStorage.h"
 )
 set_target_properties(
   oxygen-cooker-paktool-core

@@ -19,7 +19,9 @@ oxygen_cooker_test(
   FUNCTIONAL
   DEPS
     oxygen-cooker-inspector-core
+    oxygen::content
     oxygen::data
+    oxygen::serio::testing
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
   SOURCES

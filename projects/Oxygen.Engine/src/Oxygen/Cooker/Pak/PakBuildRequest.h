@@ -12,6 +12,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/CookedSource.h>
@@ -36,7 +38,7 @@ struct PakBuildOptions {
 
 //! A pak this pak references without containing it.
 struct PakDependency {
-  //! Its catalog, which names its library.
+  //! Its catalog, which names its mount.
   data::PakCatalog catalog;
   //! Keys of the textures its browse index lists.
   std::unordered_set<data::AssetKey> texture_keys;
@@ -60,6 +62,10 @@ struct PakBuildRequest {
   //! full builds and patches alike.
   std::vector<PakDependency> dependencies;
   PakBuildOptions options {};
+  //! Where the sources are read and the pak, manifest and catalog published:
+  //! the real file system unless a caller (a test) holds them in memory.
+  observer_ptr<cooked::CookerStorage> storage
+    = make_observer(&cooked::RealCookerStorage());
 };
 
 } // namespace oxygen::content::pak

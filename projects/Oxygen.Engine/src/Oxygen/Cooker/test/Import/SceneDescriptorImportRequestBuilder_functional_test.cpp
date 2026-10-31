@@ -20,8 +20,8 @@
 #include <Oxygen/Cooker/Import/SceneDescriptorImportSettings.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/SceneDescriptorTestData.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -30,8 +30,8 @@ using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::SceneDescriptorImportSettings;
 using oxygen::content::import::internal::BuildSceneDescriptorRequest;
 using oxygen::content::import::test::MakeCurrentSceneDescriptor;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   -> SceneDescriptorImportSettings

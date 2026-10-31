@@ -11,10 +11,10 @@
 #include <cstdint>
 #include <string_view>
 
-#include "PakTestSupport.h"
-
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakCatalog.h>
@@ -24,11 +24,16 @@ namespace {
 
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
-namespace paktest = oxygen::content::pak::test;
 
-using paktest::MakeAssetKey;
-using paktest::MakeDigest;
-using paktest::MakeSourceKey;
+using oxygen::cooker::test::MakeAssetKey;
+using oxygen::cooker::testing::SourceKeyOf;
+
+auto MakeDigest(const uint8_t seed) -> oxygen::base::Sha256Digest
+{
+  auto digest = oxygen::base::Sha256Digest {};
+  digest.fill(seed);
+  return digest;
+}
 
 auto MakeEntry(const uint8_t asset_seed, const data::AssetType type,
   const uint8_t descriptor_seed, const uint8_t transitive_seed)
@@ -45,10 +50,10 @@ auto MakeEntry(const uint8_t asset_seed, const data::AssetType type,
 auto MakeCatalog() -> data::PakCatalog
 {
   auto catalog = data::PakCatalog {
-    .source_key = MakeSourceKey(0x41U),
+    .source_key = SourceKeyOf(0x41U),
     .content_version = 42U,
     .catalog_digest = MakeDigest(0x21U),
-    .library = "Content",
+    .mount = "Content",
     .entries = {
       MakeEntry(0xB0U, data::AssetType::kScene, 0x31U, 0x41U),
       MakeEntry(0xA0U, data::AssetType::kMaterial, 0x32U, 0x42U),
@@ -57,14 +62,14 @@ auto MakeCatalog() -> data::PakCatalog
   catalog.deleted = { MakeAssetKey(0xC0U) };
   catalog.bases = {
     {
-      .source_key = MakeSourceKey(0x51U),
+      .source_key = SourceKeyOf(0x51U),
       .content_version = 1U,
       .catalog_digest = MakeDigest(0x61U),
     },
   };
   catalog.dependencies = {
     {
-      .library = "Engine",
+      .mount = "Engine",
       .requirements = {
         {
           .kind = data::KeyReferenceKind::kTexture,
@@ -95,9 +100,9 @@ NOLINT_TEST(
   EXPECT_EQ(parsed.value().entries.size(), 2U);
   EXPECT_LT(parsed.value().entries.at(0).asset_key,
     parsed.value().entries.at(1).asset_key);
-  EXPECT_EQ(parsed.value().library, catalog.library);
+  EXPECT_EQ(parsed.value().mount, catalog.mount);
   ASSERT_EQ(parsed.value().dependencies.size(), 1U);
-  EXPECT_EQ(parsed.value().dependencies.front().library, "Engine");
+  EXPECT_EQ(parsed.value().dependencies.front().mount, "Engine");
   EXPECT_THAT(parsed.value().dependencies.front().requirements,
     ::testing::UnorderedElementsAreArray(
       catalog.dependencies.front().requirements));
@@ -120,8 +125,8 @@ NOLINT_TEST(PakCatalogIoTest, EquivalentCatalogsProduceIdenticalCanonicalOutput)
 NOLINT_TEST(PakCatalogIoTest, ParseRejectsDuplicateAssetKeys)
 {
   const auto text = std::string_view { R"({
-  "schema_version": 4,
-  "library": "Content",
+  "schema_version": 5,
+  "mount": "Content",
   "deleted": [],
   "bases": [],
   "dependencies": [],

@@ -40,10 +40,10 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
 #include <Oxygen/Cooker/test/Support/SourceLayoutTestSupport.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -318,7 +318,7 @@ namespace {
   //=== Basic Behavior Tests
   //===-----------------------------------------------------//
 
-  class GeometryPipelineTest : public testing::Test {
+  class GeometryPipelineTest : public ::testing::Test {
   protected:
     ImportEventLoop loop_;
     co::ThreadPool pool_ { loop_, 2 };
@@ -415,11 +415,11 @@ namespace {
       = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(bytes, 0);
     const auto mesh = ReadStructAt<data::pak::geometry::MeshDesc>(
       bytes, sizeof(data::pak::geometry::GeometryAssetDesc));
-    EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+    EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
                 bytes, asset.header.name_offset),
       item_mesh_name);
     EXPECT_EQ(
-      oxygen::content::test::ReadDescriptorString(bytes, mesh.name_offset),
+      oxygen::cooker::testing::ReadDescriptorString(bytes, mesh.name_offset),
       item_mesh_name);
   }
 
@@ -1319,7 +1319,7 @@ namespace {
       "import.lod_generation.stopped", &ImportDiagnostic::code);
     ASSERT_NE(stopped, result.diagnostics.end());
     EXPECT_THAT(stopped->message,
-      testing::HasSubstr("LOD 1 kept 1 triangles, more than the 0"));
+      ::testing::HasSubstr("LOD 1 kept 1 triangles, more than the 0"));
   }
 
   //! Quad counts around and along a sphere.

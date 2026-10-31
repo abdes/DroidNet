@@ -18,12 +18,13 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
@@ -88,17 +89,16 @@ auto LoadMountedCookedSources(ImportSession& session,
   const ImportRequest& request, const std::string_view diagnostic_prefix)
   -> std::vector<MountedCookedSource>
 {
+  const auto& files = cooked::RealCookerStorage();
   auto mounts = std::vector<MountedCookedSource> {};
   for (const auto& root : BuildUniqueMountedCookedRoots(request)) {
     auto mount = MountedCookedSource {
       .root = root,
-      .inspection = std::nullopt,
+      .content = std::nullopt,
     };
-    if (lc::Inspection::IsCookedSource(mount.root)) {
+    if (cooked::CookedContent::IsCookedSource(files, mount.root)) {
       try {
-        auto inspection = lc::Inspection {};
-        inspection.Load(mount.root);
-        mount.inspection = std::move(inspection);
+        mount.content = cooked::CookedContent::Open(files, mount.root);
       } catch (const std::exception& ex) {
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
@@ -126,12 +126,11 @@ auto LookupReference(const std::span<const MountedCookedSource> mounts,
   auto looked_up = std::vector<std::filesystem::path> {};
   auto found_descriptor = false;
   for (const auto& mount : std::views::reverse(mounts)) {
-    if (mount.inspection.has_value()) {
-      for (const auto& asset : mount.inspection->Assets()) {
-        if (asset.virtual_path == virtual_path) {
-          return CheckType(asset.key,
-            static_cast<data::AssetType>(asset.asset_type), expected_type);
-        }
+    if (mount.content.has_value()) {
+      if (const auto* const asset
+        = mount.content->FindAsset(std::string_view { virtual_path });
+        asset != nullptr) {
+        return CheckType(asset->key, asset->type, expected_type);
       }
     }
     if (is_mounted) {

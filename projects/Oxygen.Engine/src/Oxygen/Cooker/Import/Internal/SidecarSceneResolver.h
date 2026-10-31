@@ -14,19 +14,18 @@
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content {
 class VirtualPathResolver;
 } // namespace oxygen::content
 
 namespace oxygen::content::import {
-class IAsyncFileReader;
 struct ImportRequest;
 class ImportSession;
 } // namespace oxygen::content::import
@@ -57,29 +56,34 @@ struct ResolvedSceneState final {
     existing_scripting_components;
 };
 
-//! Mounted cooked-root inspection context used for resolution.
+//! A mounted cooked root used for resolution, with its content.
+/*!
+ The content keeps files of the root open (`cooked::CookedContent`): release
+ it before the import rewrites a file of that root.
+*/
 struct CookedInspectionContext final {
   std::filesystem::path cooked_root;
-  lc::Inspection inspection;
+  cooked::CookedContent content;
 };
 
-//! Load one inspection context from cooked root.
-OXGN_COOK_API auto LoadCookedInspectionContext(
+//! Opens the cooked root `cooked_root` as a context; nullopt, with
+//! `index_load_failed_code`, when it cannot be opened.
+OXGN_COOK_NDAPI auto LoadCookedInspectionContext(
   const std::filesystem::path& cooked_root, ImportSession& session,
   const ImportRequest& request,
-  const SidecarSceneResolverDiagnostics& diagnostics,
-  CookedInspectionContext& out_context) -> bool;
+  const SidecarSceneResolverDiagnostics& diagnostics)
+  -> std::optional<CookedInspectionContext>;
 
 //! Mount a loaded context, a pak or a loose root, into a resolver.
 OXGN_COOK_API auto MountCookedInspectionContext(
   content::VirtualPathResolver& resolver,
   const CookedInspectionContext& context) -> void;
 
-//! Read the descriptor of an asset a loaded context lists; nullopt when it
-//! cannot be read.
+//! Read the descriptor of the asset `key` a loaded context lists; nullopt
+//! when it cannot be read.
 OXGN_COOK_NDAPI auto ReadCookedDescriptor(
-  const CookedInspectionContext& context, const lc::AssetEntry& asset,
-  IAsyncFileReader& reader) -> co::Co<std::optional<std::vector<std::byte>>>;
+  const CookedInspectionContext& context, const data::AssetKey& key)
+  -> std::optional<std::vector<std::byte>>;
 
 //! Resolve the mounted context containing a given scene key (highest
 //! precedence).
@@ -88,11 +92,11 @@ OXGN_COOK_API auto ResolveSceneInspectionContextByKey(
   const data::AssetKey& scene_key) -> const CookedInspectionContext*;
 
 //! Resolve target scene state from inflight contexts and mounted cooked roots.
-OXGN_COOK_API auto ResolveTargetSceneState(ImportSession& session,
+OXGN_COOK_NDAPI auto ResolveTargetSceneState(ImportSession& session,
   const ImportRequest& request, content::VirtualPathResolver& resolver,
   std::span<const CookedInspectionContext> cooked_contexts,
-  IAsyncFileReader& reader, std::string_view target_scene_virtual_path,
+  std::string_view target_scene_virtual_path,
   const SidecarSceneResolverDiagnostics& diagnostics)
-  -> co::Co<std::optional<ResolvedSceneState>>;
+  -> std::optional<ResolvedSceneState>;
 
 } // namespace oxygen::content::import::detail

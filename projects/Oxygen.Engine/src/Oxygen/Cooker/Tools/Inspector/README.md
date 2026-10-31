@@ -244,7 +244,7 @@ reads only these versions.
 This tool intentionally depends only on exported module APIs:
 
 - `oxygen::content::AssetLoader` for validation
-- `oxygen::content::lc::Inspection` for inspection output
+- `oxygen::content::cooked::CookedContent` for inspection output
 
 ## License
 

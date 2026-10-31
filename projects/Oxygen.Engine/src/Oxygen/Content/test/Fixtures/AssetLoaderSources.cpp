@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -14,22 +15,33 @@
 
 #include "../Utils/PakUtils.h"
 #include "AssetLoaderSources.h"
-#include "LooseCookedTestWriter.h"
 
-#include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::testing {
 namespace {
+  using cooker::testing::LooseAsset;
+  using cooker::testing::LooseCookedRoot;
+
+  constexpr auto kMount = "test";
+  constexpr auto kLeaf = "Surface.omat";
+
+  //! A root of its own identity, as every source written to disk has one.
+  auto NewSourceRoot() -> LooseCookedRoot
+  {
+    constexpr auto kFirstSeed = uint8_t { 0x40U };
+    static std::atomic<uint8_t> next_seed { kFirstSeed };
+    return LooseCookedRoot { kMount, next_seed.fetch_add(1U) };
+  }
+
   auto MaterialDescriptor() -> data::pak::render::MaterialAssetDesc
   {
     data::pak::render::MaterialAssetDesc descriptor {};
@@ -46,14 +58,15 @@ auto WriteMaterialSource(const std::filesystem::path& root,
 {
   auto descriptor = MaterialDescriptor();
   std::ranges::copy(color, std::begin(descriptor.base_color));
-  const data::SourceKey source { Uuid::Generate() };
-  LooseCookedTestWriter writer(root);
-  writer.SetSourceKey(source);
-  writer.WriteAssetDescriptor(key, data::AssetType::kMaterial,
-    "/test/Surface.omat", "Surface.omat",
-    data::MakeDescriptorBytes(descriptor));
-  static_cast<void>(writer.Finish());
-  return source;
+  auto source = NewSourceRoot();
+  source.Add(LooseAsset {
+    .type = data::AssetType::kMaterial,
+    .leaf = kLeaf,
+    .descriptor = data::MakeDescriptorBytes(descriptor),
+    .key = key,
+  });
+  cooker::testing::Materialize(source.Files(), root);
+  return source.SourceKey();
 }
 
 auto WriteTexturedMaterialSource(const std::filesystem::path& root,
@@ -66,36 +79,23 @@ auto WriteTexturedMaterialSource(const std::filesystem::path& root,
   const auto payload
     = MakeV4TexturePayload(kTextureAlignment, std::byte { 0x55 },
       data::pak::render::TexturePackingPolicyId::kD3D12, kTextureAlignment);
-  data::pak::core::TextureResourceDesc texture {};
-  texture.size_bytes = static_cast<uint32_t>(payload.size());
-  texture.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
-  texture.width = 1U;
-  texture.height = 1U;
-  texture.depth = 1U;
-  texture.array_layers = 1U;
-  texture.mip_levels = 1U;
-  texture.format = static_cast<uint8_t>(Format::kRGBA8UNorm);
-  texture.alignment = kTextureAlignment;
-  const auto table
-    = std::array { data::pak::core::TextureResourceDesc {}, texture };
-  const auto references = data::AssetReferences::Create(
-    {
-      { .kind = data::ResourceKind::kTexture, .index = ResourceIndexT { 1U } },
-    },
-    {})
-                            .value();
-  const data::SourceKey source { Uuid::Generate() };
-  LooseCookedTestWriter writer(root);
-  writer.SetSourceKey(source);
-  writer.WriteFile(data::loose_cooked::FileKind::kTexturesTable,
-    "textures.table", std::as_bytes(std::span(table)));
-  writer.WriteFile(data::loose_cooked::FileKind::kTexturesData, "textures.data",
-    std::as_bytes(std::span(payload)));
-  writer.WriteAssetDescriptor(key, data::AssetType::kMaterial,
-    "/test/Surface.omat", "Surface.omat", data::MakeDescriptorBytes(material),
-    references);
-  static_cast<void>(writer.Finish());
-  return source;
+  auto source = NewSourceRoot();
+  const auto texture = source.AddTexture(
+    std::as_bytes(std::span(payload)), LooseCookedRoot::OnePixelTexture());
+  source.Add(LooseAsset {
+    .type = data::AssetType::kMaterial,
+    .leaf = kLeaf,
+    .descriptor = data::MakeDescriptorBytes(material),
+    .references = data::AssetReferences::Create(
+      {
+        { .kind = data::ResourceKind::kTexture, .index = texture },
+      },
+      {})
+      .value(),
+    .key = key,
+  });
+  cooker::testing::Materialize(source.Files(), root);
+  return source.SourceKey();
 }
 
 } // namespace oxygen::content::testing

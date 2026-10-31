@@ -7,9 +7,11 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
+#include <new>
+#include <span>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -18,9 +20,27 @@
 
 using oxygen::data::BufferResource;
 
+namespace {
+
+//! A buffer holding a copy of `bytes`.
+auto CopyOf(const std::span<const uint8_t> bytes) -> oxygen::serio::ByteBuffer
+{
+  auto buffer
+    = oxygen::serio::ByteBuffer::Allocate(oxygen::serio::CountOf(bytes.size()));
+  if (!buffer) {
+    throw std::bad_alloc();
+  }
+  if (!bytes.empty()) {
+    std::memcpy(buffer->Bytes().data(), bytes.data(), bytes.size());
+  }
+  return std::move(buffer).value();
+}
+
+} // namespace
+
 /*!
- Creates a BufferResource instance from a PAK descriptor and an owned
- byte vector containing the buffer payload.
+ Creates a BufferResource instance from a PAK descriptor and the buffer that
+ holds its payload, which it owns.
 
  The constructor validates several structural invariants (debug builds via
  DCHECK_* macros) so that malformed PAK content fails fast:
@@ -44,6 +64,7 @@ using oxygen::data::BufferResource;
               validated). Undefined behavior in release builds if the
               invariants above are violated (debug build will abort).
  @param data  Raw buffer bytes; ownership is transferred (moved in).
+              A loader reads the payload straight into it.
 
 ### Usage Example
 
@@ -55,14 +76,21 @@ using oxygen::data::BufferResource;
    .element_stride = sizeof(uint32_t),
    .element_format = 0, // structured / index buffer
    .reserved = {} };
- std::vector<uint8_t> bytes(desc.size_bytes);
- auto resource = BufferResource(desc, std::move(bytes));
+ auto bytes = serio::ByteBuffer::Allocate(serio::CountOf(desc.size_bytes));
+ // ... read the payload into bytes->Bytes() ...
+ auto resource = BufferResource(desc, std::move(bytes).value());
  ```
 
  @see pak::core::BufferResourceDesc, to_string(BufferResource::UsageFlags)
 */
 BufferResource::BufferResource(
-  pak::core::BufferResourceDesc desc, std::vector<uint8_t> data)
+  pak::core::BufferResourceDesc desc, const std::span<const uint8_t> data)
+  : BufferResource(std::move(desc), CopyOf(data))
+{
+}
+
+BufferResource::BufferResource(
+  pak::core::BufferResourceDesc desc, serio::ByteBuffer data)
   : desc_(std::move(desc))
   , data_(std::move(data))
 {

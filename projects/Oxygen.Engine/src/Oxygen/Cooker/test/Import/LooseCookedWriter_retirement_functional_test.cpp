@@ -19,14 +19,12 @@
 #include "LooseCookedWriterTestSupport.h"
 
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/Types.h>
-#include <Oxygen/Cooker/Loose/Validation.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
-#include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -38,19 +36,17 @@
 
 namespace oxygen::content::testing {
 
-namespace fixtures = oxygen::content::test;
-namespace cooktest = oxygen::cooker::test;
+namespace fixtures = oxygen::cooker::testing;
 
 namespace {
 
+  using oxygen::content::cooked::CookedContent;
   using oxygen::content::import::LooseCookedProducer;
   using oxygen::content::import::LooseCookedRecook;
   using oxygen::content::import::LooseCookedWriter;
-  using oxygen::content::lc::Inspection;
-  using oxygen::content::lc::IntegrityCheck;
-  using oxygen::content::lc::LooseCookedIndex;
-  using oxygen::cooker::test::ScopedTempDir;
+  using oxygen::cooker::testing::MemoryFileSystem;
   using oxygen::data::AssetType;
+  using oxygen::data::loose_cooked::FileKind;
 
   constexpr auto kShip = std::string_view { "/Content/Ship.glb" };
   constexpr auto kDock = std::string_view { "/Content/Dock.glb" };
@@ -115,17 +111,25 @@ namespace {
 
   //! Cooks the ship: two materials, a texture descriptor and a buffer
   //! sidecar. The dock's material shares the root.
-  auto CookShipAndDock(const std::filesystem::path& cooked_root) -> void
+  auto CookShipAndDock(
+    MemoryFileSystem& storage, const std::filesystem::path& cooked_root) -> void
   {
-    cooktest::WriteBytes(cooked_root / kShipModel.File("Hull.otex"),
+    storage.AddFile(cooked_root / kShipModel.File("Hull.otex"),
       data::EncodeTextureResourceDescriptor({
         .index = data::pak::core::ResourceIndexT { 1U },
         .descriptor = {},
       }));
-    cooktest::WriteBytes(
+    storage.AddFile(
       cooked_root / kShipModel.File("Hull.obuf"), std::vector<std::byte>(8U));
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
+    // The texture descriptor names row 1, so the root holds a texture table
+    // with that row, and its (empty) payloads.
+    writer.WriteFile(FileKind::kTexturesTable, "Resources/textures.table",
+      std::vector<std::byte>(
+        2U * sizeof(data::pak::core::TextureResourceDesc)));
+    writer.WriteFile(FileKind::kTexturesData, "Resources/textures.data",
+      std::vector<std::byte> {});
     WriteMaterial(
       writer, kShipModel, { .seed = 0x11, .name = "Hull", .source = kShip });
     WriteMaterial(
@@ -139,33 +143,34 @@ namespace {
     static_cast<void>(writer.Finish());
   }
 
-  auto AssetPaths(const Inspection& inspection) -> std::vector<std::string>
+  auto OpenCooked(const MemoryFileSystem& storage,
+    const std::filesystem::path& cooked_root) -> CookedContent
+  {
+    return CookedContent::Open(storage, cooked_root);
+  }
+
+  auto AssetPaths(const CookedContent& content) -> std::vector<std::string>
   {
     auto paths = std::vector<std::string> {};
-    std::ranges::transform(inspection.Assets(), std::back_inserter(paths),
+    std::ranges::transform(content.Assets(), std::back_inserter(paths),
       [](const auto& asset) -> std::string { return asset.virtual_path; });
     std::ranges::sort(paths);
     return paths;
   }
 
-  auto ListsFile(const Inspection& inspection, const std::string_view relpath)
-    -> bool
+  //! Whether `content` lists a texture descriptor at `virtual_path`.
+  auto ListsTexture(
+    const CookedContent& content, const std::string_view virtual_path) -> bool
   {
-    return std::ranges::any_of(inspection.Files(),
-      [relpath](const auto& file) -> bool { return file.relpath == relpath; });
+    return content.FindNamedTexture(virtual_path) != nullptr;
   }
 
-  auto PhysicsSidecarBytes(const data::AssetKey& scene_key,
-    const std::vector<std::byte>& scene) -> std::vector<std::byte>
+  //! Whether `content` lists the sidecar `name`.
+  auto ListsSidecar(const CookedContent& content, const std::string_view name)
+    -> bool
   {
-    auto descriptor = data::pak::physics::PhysicsSceneAssetDesc {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
-    descriptor.header.version = data::pak::physics::kPhysicsSceneAssetVersion;
-    descriptor.target_scene_key = scene_key;
-    const auto digest = base::ComputeSha256(scene);
-    std::ranges::copy(digest, std::begin(descriptor.target_scene_content_hash));
-    return data::MakeDescriptorBytes(descriptor);
+    return std::ranges::any_of(content.Sidecars(),
+      [name](const auto& sidecar) -> bool { return sidecar.name == name; });
   }
 
   /*!
@@ -177,11 +182,11 @@ namespace {
   NOLINT_TEST(LooseCookedWriterRetirementTest,
     RecookRetiresTheOutputsItsSourceNoLongerWrites)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "retire_recook";
-    CookShipAndDock(cooked_root);
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "retire_recook";
+    CookShipAndDock(storage, cooked_root);
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     WriteMaterial(
       writer, kShipModel, { .seed = 0x11, .name = "Hull", .source = kShip });
     writer.RetireUnwrittenOutputs(Recook(kShip, kShipModel));
@@ -193,19 +198,15 @@ namespace {
       (std::vector { kShipModel.File("Hull.obuf"), kShipModel.File("Hull.otex"),
         kShipModel.File("Sail.omat") }));
     for (const auto& relpath : removed) {
-      EXPECT_FALSE(std::filesystem::exists(cooked_root / relpath)) << relpath;
+      EXPECT_FALSE(Exists(storage, cooked_root / relpath)) << relpath;
     }
-    Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
-    EXPECT_EQ(AssetPaths(inspection),
+    const auto content = OpenCooked(storage, cooked_root);
+    EXPECT_EQ(AssetPaths(content),
       (std::vector {
         kDockModel.Product("Pier.omat"), kShipModel.Product("Hull.omat") }));
-    EXPECT_FALSE(ListsFile(inspection, kShipModel.File("Hull.otex")));
-    EXPECT_FALSE(ListsFile(inspection, kShipModel.File("Hull.obuf")));
-    EXPECT_TRUE(LooseCookedIndex::LoadFromRoot(cooked_root)
-        .CheckContent(cooked_root, IntegrityCheck::kFull)
-        .empty());
-    EXPECT_NO_THROW(lc::ValidateRoot(cooked_root));
+    EXPECT_FALSE(ListsTexture(content, kShipModel.Product("Hull.otex")));
+    EXPECT_FALSE(ListsSidecar(content, kShipModel.File("Hull.obuf")));
+    EXPECT_NO_THROW(cooked::Validate(content));
   }
 
   /*!
@@ -215,23 +216,22 @@ namespace {
   NOLINT_TEST(
     LooseCookedWriterRetirementTest, RecookOfAnotherSourceRetiresNothingElse)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "retire_other";
-    CookShipAndDock(cooked_root);
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "retire_other";
+    CookShipAndDock(storage, cooked_root);
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     WriteMaterial(
       writer, kDockModel, { .seed = 0x13, .name = "Pier", .source = kDock });
     writer.RetireUnwrittenOutputs(Recook(kDock, kDockModel));
     const auto result = writer.Finish();
 
     EXPECT_TRUE(result.removed_files.empty());
-    Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
-    EXPECT_EQ(inspection.Assets().size(), 3U);
-    const auto buffer = std::ranges::find(inspection.Files(),
-      kShipModel.File("Hull.obuf"), &lc::FileEntry::relpath);
-    ASSERT_NE(buffer, inspection.Files().end());
+    const auto content = OpenCooked(storage, cooked_root);
+    EXPECT_EQ(content.Assets().size(), 3U);
+    const auto buffer = std::ranges::find(content.Sidecars(),
+      kShipModel.File("Hull.obuf"), &cooked::CookedSidecar::name);
+    ASSERT_NE(buffer, content.Sidecars().end());
     EXPECT_EQ(buffer->source_path, kShip);
   }
 
@@ -243,11 +243,11 @@ namespace {
   NOLINT_TEST(LooseCookedWriterRetirementTest,
     RecookKeepsTheOutputsOfAnotherIdentityOfItsSource)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "retire_identity";
-    CookShipAndDock(cooked_root);
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "retire_identity";
+    CookShipAndDock(storage, cooked_root);
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       WriteMaterial(
         writer, kShipCopy, { .seed = 0x21, .name = "Hull", .source = kShip });
       WriteMaterial(
@@ -255,7 +255,7 @@ namespace {
       static_cast<void>(writer.Finish());
     }
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     WriteMaterial(
       writer, kShipCopy, { .seed = 0x21, .name = "Hull", .source = kShip });
     writer.RetireUnwrittenOutputs(Recook(kShip, kShipCopy));
@@ -263,14 +263,13 @@ namespace {
 
     EXPECT_EQ(
       result.removed_files, std::vector { kShipCopy.File("Sail.omat") });
-    Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
-    EXPECT_EQ(AssetPaths(inspection),
+    const auto content = OpenCooked(storage, cooked_root);
+    EXPECT_EQ(AssetPaths(content),
       (std::vector { kShipCopy.Product("Hull.omat"),
         kDockModel.Product("Pier.omat"), kShipModel.Product("Hull.omat"),
         kShipModel.Product("Sail.omat") }));
-    EXPECT_TRUE(ListsFile(inspection, kShipModel.File("Hull.otex")));
-    EXPECT_TRUE(ListsFile(inspection, kShipModel.File("Hull.obuf")));
+    EXPECT_TRUE(ListsTexture(content, kShipModel.Product("Hull.otex")));
+    EXPECT_TRUE(ListsSidecar(content, kShipModel.File("Hull.obuf")));
   }
 
   /*!
@@ -281,8 +280,8 @@ namespace {
   NOLINT_TEST(
     LooseCookedWriterRetirementTest, RecookKeepsTheSidecarOfItsSceneProducer)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "retire_sidecar";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "retire_sidecar";
     const auto scene_key = MakeFirstByteAssetKey(0x31);
     const auto scene = fixtures::MakeEmptySceneDescriptor();
     const auto write_scene = [&](LooseCookedWriter& writer) -> void {
@@ -291,15 +290,16 @@ namespace {
         scene, {}, FromSource(std::string(kShip)));
     };
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       write_scene(writer);
       static_cast<void>(writer.Finish());
     }
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x32),
         AssetType::kPhysicsScene, kShipModel.Product("Ship.opscene"),
-        kShipModel.File("Ship.opscene"), PhysicsSidecarBytes(scene_key, scene),
+        kShipModel.File("Ship.opscene"),
+        fixtures::PhysicsSidecarDescriptor(scene_key, scene).bytes,
         data::AssetReferences::Create({},
           {
             data::KeyReference {
@@ -316,18 +316,17 @@ namespace {
       static_cast<void>(writer.Finish());
     }
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     write_scene(writer);
     writer.RetireUnwrittenOutputs(Recook(kShip, kShipModel));
     const auto result = writer.Finish();
 
     EXPECT_TRUE(result.removed_files.empty());
-    Inspection inspection;
-    inspection.LoadFromRoot(cooked_root);
-    EXPECT_EQ(AssetPaths(inspection),
+    const auto content = OpenCooked(storage, cooked_root);
+    EXPECT_EQ(AssetPaths(content),
       (std::vector { kShipModel.Product("Ship.opscene"),
         kShipModel.Product("Ship.oscene") }));
-    for (const auto& asset : inspection.Assets()) {
+    for (const auto& asset : content.Assets()) {
       EXPECT_EQ(asset.source_path, kShip);
     }
   }
@@ -336,8 +335,8 @@ namespace {
   NOLINT_TEST(
     LooseCookedWriterRetirementTest, RetireUnwrittenOutputsRequiresAMountPath)
   {
-    const ScopedTempDir temp;
-    LooseCookedWriter writer(temp.Path() / "retire_invalid");
+    auto storage = MemoryFileSystem {};
+    LooseCookedWriter writer(MemoryRoot() / "retire_invalid", storage);
 
     EXPECT_THROW(writer.RetireUnwrittenOutputs(Recook("Ship.glb", kShipModel)),
       std::runtime_error);

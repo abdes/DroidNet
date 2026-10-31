@@ -6,6 +6,10 @@
 
 // Covers: Tools/PakTool/BuildReportJson.cpp
 
+#include <algorithm>
+#include <cstddef>
+#include <filesystem>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -13,15 +17,15 @@
 #include "RequestSnapshot.h"
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
 #include <Oxygen/Cooker/Tools/PakTool/BuildReportJson.h>
-#include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
@@ -33,6 +37,7 @@
 namespace {
 
 using nlohmann::json;
+using oxygen::content::cooked::PathKind;
 using oxygen::content::pak::BuildMode;
 using oxygen::content::pak::PakBuildPhase;
 using oxygen::content::pak::PakBuildRequest;
@@ -46,12 +51,18 @@ using oxygen::content::pak::tool::MakeArtifactPublicationPlan;
 using oxygen::content::pak::tool::PakToolBuildReportInput;
 using oxygen::content::pak::tool::PakToolRequestSnapshot;
 using oxygen::content::pak::tool::PublishArtifacts;
-using oxygen::content::pak::tool::RealArtifactFileSystem;
 using oxygen::content::pak::tool::ToCanonicalJsonString;
-using oxygen::cooker::test::WriteText;
+using oxygen::content::pak::tool::WriteReportFile;
+using oxygen::cooker::testing::MemoryFileSystem;
 
-class PakToolBuildReportJsonTest : public oxygen::cooker::test::TempDirTest {
+class PakToolBuildReportJsonTest : public ::testing::Test {
 protected:
+  //! A root no test creates: the files live in `storage_`.
+  [[nodiscard]] static auto Root() -> std::filesystem::path
+  {
+    return "C:/PakToolReports";
+  }
+
   [[nodiscard]] static auto Schema() -> const json&
   {
     static const auto schema = oxygen::cooker::test::LoadSchema(
@@ -80,46 +91,44 @@ protected:
     return parsed.value();
   }
 
-  [[nodiscard]] auto MakeSuccessfulInput() const -> PakToolBuildReportInput
+  [[nodiscard]] auto MakeSuccessfulInput() -> PakToolBuildReportInput
   {
     auto request = PakBuildRequest {};
     request.mode = BuildMode::kPatch;
     request.sources = {
       oxygen::data::CookedSource {
         .kind = oxygen::data::CookedSourceKind::kLooseCooked,
-        .path = TempDir() / "cook" / "base",
+        .path = Root() / "cook" / "base",
       },
       oxygen::data::CookedSource {
         .kind = oxygen::data::CookedSourceKind::kPak,
-        .path = TempDir() / "cook" / "base.pak",
+        .path = Root() / "cook" / "base.pak",
       },
     };
     request.content_version = 42;
     request.source_key = MakeSourceKey();
-    request.output_pak_path = TempDir() / "release" / "game.pak";
-    request.output_manifest_path = TempDir() / "release" / "game.manifest.json";
+    request.output_pak_path = Root() / "release" / "game.pak";
+    request.output_manifest_path = Root() / "release" / "game.manifest.json";
 
     const auto plan = MakeArtifactPublicationPlan(request.output_pak_path,
-      TempDir() / "release" / "game.catalog.json", request.output_manifest_path,
-      TempDir() / "release" / "game.report.json");
+      Root() / "release" / "game.catalog.json", request.output_manifest_path,
+      Root() / "release" / "game.report.json");
     if (!plan.manifest.has_value() || !plan.report.has_value()) {
       throw std::runtime_error("publication plan is missing sidecars");
     }
 
-    WriteText(plan.pak.staged_path, "pak-data");
-    WriteText(plan.catalog.staged_path, "catalog-data");
-    WriteText(plan.manifest->staged_path, "manifest-data");
-    WriteText(plan.report->staged_path, "report-staged");
+    storage_.AddFile(plan.pak.staged_path, "pak-data");
+    storage_.AddFile(plan.catalog.staged_path, "catalog-data");
+    storage_.AddFile(plan.manifest->staged_path, "manifest-data");
+    storage_.AddFile(plan.report->staged_path, "report-staged");
 
     auto intent = ArtifactPublicationIntent {
-      .create_parent_directories = true,
       .publish_pak = true,
       .publish_catalog = true,
       .publish_manifest = true,
       .publish_report = true,
     };
-    auto fs = RealArtifactFileSystem {};
-    auto publication_result = PublishArtifacts(plan, intent, fs);
+    auto publication_result = PublishArtifacts(plan, intent, storage_);
     EXPECT_TRUE(publication_result.success);
 
     auto build_result = PakBuildResult {};
@@ -132,7 +141,7 @@ protected:
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
       },
-      .library = "Content",
+      .mount = "Content",
       .entries = {
         oxygen::data::PakCatalogEntry {
           .asset_key = MakeAssetKey("11111111-2222-3333-4444-555555555555"),
@@ -163,7 +172,7 @@ protected:
       .asset_key = "11111111-2222-3333-4444-555555555555",
       .resource_kind = "Descriptor",
       .table_name = "assets",
-      .path = TempDir() / "cook" / "base" / ".cooked" / "Scene.bin",
+      .path = Root() / "cook" / "base" / ".cooked" / "Scene.bin",
       .offset = 128,
     });
     build_result.summary = PakBuildSummary {
@@ -192,7 +201,7 @@ protected:
       = "Oxygen.Cooker.PakTool patch --out game.pak --catalog-out game.catalog.json --manifest-out game.manifest.json --diagnostics-file game.report.json",
       .request_snapshot = PakToolRequestSnapshot {
         .request = request,
-        .base_pak_paths = { TempDir() / "cook" / "base.catalog.json" },
+        .base_pak_paths = { Root() / "cook" / "base.catalog.json" },
       },
       .publication_plan = plan,
       .publication_result = publication_result,
@@ -201,6 +210,9 @@ protected:
       .success = true,
     };
   }
+
+  //! Holds the staged artifacts and the reports the tests publish.
+  MemoryFileSystem storage_;
 };
 
 NOLINT_TEST_F(PakToolBuildReportJsonTest,
@@ -216,6 +228,67 @@ NOLINT_TEST_F(PakToolBuildReportJsonTest,
   auto parsed = json::parse(first);
   EXPECT_THAT(
     oxygen::cooker::test::ValidateJson(Schema(), parsed), ::testing::IsEmpty());
+}
+
+//! The report is published through the storage, as the schema describes it.
+NOLINT_TEST_F(PakToolBuildReportJsonTest,
+  WriteReportFilePublishesFailureReportThatMatchesSchema)
+{
+  auto input = MakeSuccessfulInput();
+  input.success = false;
+  input.exit_code = 3;
+  input.request_snapshot.request.options.compute_crc32 = false;
+  input.build_result.summary.diagnostics_warning = 1;
+  input.build_result.summary.diagnostics_error = 1;
+  input.build_result.telemetry.writing_duration.reset();
+  input.build_result.telemetry.manifest_duration.reset();
+  input.build_result.pak_crc32 = 0;
+  input.build_result.file_size = 0;
+  input.build_result.patch_manifest.reset();
+  ASSERT_HAS_VALUE(input.publication_result.manifest);
+  ASSERT_HAS_VALUE(input.publication_result.report);
+  input.publication_result.pak.published = false;
+  input.publication_result.catalog.published = false;
+  input.publication_result.manifest->published = false;
+  input.publication_result.manifest->publish_requested = false;
+  input.publication_result.report->published = false;
+  input.build_result.diagnostics.push_back(PakDiagnostic {
+    .severity = PakDiagnosticSeverity::kError,
+    .phase = PakBuildPhase::kFinalize,
+    .code = "pak.request.fail_on_warnings",
+    .message = "fail_on_warnings=true and at least one warning was emitted.",
+  });
+
+  const auto output_path = Root() / "reports" / "failure.report.json";
+  const auto write_result = WriteReportFile(storage_, output_path, input);
+
+  ASSERT_TRUE(write_result.success)
+    << write_result.error_code << ": " << write_result.error_message;
+  ASSERT_EQ(storage_.KindOf(output_path), PathKind::kFile);
+  auto text = std::string {};
+  std::ranges::transform(storage_.Bytes(output_path), std::back_inserter(text),
+    [](const std::byte b) -> char { return static_cast<char>(b); });
+  EXPECT_EQ(text, ToCanonicalJsonString(input));
+  auto parsed = json::parse(text);
+  EXPECT_THAT(
+    oxygen::cooker::test::ValidateJson(Schema(), parsed), ::testing::IsEmpty());
+  EXPECT_EQ(parsed.at("exit_code"), 3);
+  EXPECT_FALSE(parsed.at("success"));
+}
+
+//! A report that cannot be published says so with its own code.
+NOLINT_TEST_F(
+  PakToolBuildReportJsonTest, WriteReportFileReportsUnpublishableDestination)
+{
+  const auto input = MakeSuccessfulInput();
+  const auto output_path = Root() / "reports" / "locked.report.json";
+  storage_.FailPublishing(output_path);
+
+  const auto write_result = WriteReportFile(storage_, output_path, input);
+
+  EXPECT_FALSE(write_result.success);
+  EXPECT_EQ(write_result.error_code, "paktool.report.write_open_failed");
+  EXPECT_EQ(storage_.KindOf(output_path), PathKind::kNone);
 }
 
 } // namespace

@@ -17,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Content/LooseCookedIndex.h>
@@ -25,6 +26,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/MappedFile.h>
 
 namespace oxygen::content::internal {
 
@@ -43,10 +45,14 @@ public:
 
   //! Load and validate an index file under its shared file lock.
   /*!
+   The file is mapped and parsed in place: the index keeps the mapping, and
+   its strings and references are views of it.
+
    @param index_path Path to `container.index.bin`.
    @return Parsed index.
 
-   @throw std::runtime_error if the file cannot be read or fails validation.
+   @throw std::runtime_error if the file cannot be mapped; the errors of
+     LoadFromBytes() if it fails validation.
   */
   OXGN_CNTT_NDAPI static auto LoadFromFile(
     const std::filesystem::path& index_path) -> LooseCookedIndexImpl;
@@ -55,13 +61,17 @@ public:
   OXGN_CNTT_NDAPI static auto LoadFromLockedFile(
     const std::filesystem::path& index_path) -> LooseCookedIndexImpl;
 
-  //! Load and validate the bytes of an index file.
+  //! Load and validate the bytes of an index file, which the index copies.
   /*!
    @throw data::CookedOpenError `kWrongFormat` for bytes that are not an
      index, `kUnsupportedVersion` for another index version, `kCorrupt` for
      a malformed index.
   */
   OXGN_CNTT_NDAPI static auto LoadFromBytes(std::span<const std::byte> bytes)
+    -> LooseCookedIndexImpl;
+
+  //! Load and validate the bytes of an index file, which the index takes.
+  OXGN_CNTT_NDAPI static auto LoadFromBytes(std::vector<std::byte>&& bytes)
     -> LooseCookedIndexImpl;
 
   //! Hold off in-process index publication while reading `index_path`.
@@ -83,6 +93,12 @@ public:
     -> std::unique_lock<std::shared_mutex>;
 
   OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;
+
+  //! The cook-defined content version of the index header.
+  [[nodiscard]] auto ContentVersion() const noexcept -> uint16_t
+  {
+    return content_version_;
+  }
 
   OXGN_CNTT_NDAPI auto FindDescriptorRelPath(
     const data::AssetKey& key) const noexcept
@@ -151,6 +167,10 @@ public:
 private:
   struct IndexLoadContext;
 
+  //! The bytes the index was parsed from: its mapped file, or a copy of the
+  //! bytes it was loaded from.
+  using IndexBytes = std::variant<std::vector<std::byte>, serio::MappedFile>;
+
   struct FileInfo {
     uint32_t relpath_offset = 0;
     uint32_t virtual_path_offset = 0;
@@ -166,9 +186,13 @@ private:
     }
   };
 
-  std::string string_storage_;
-  uint64_t reference_storage_offset_ = 0;
-  std::vector<std::byte> reference_storage_;
+  //! The string table and the reference tail are views of these bytes, which
+  //! move with the index and are never copied.
+  IndexBytes bytes_;
+  std::string_view string_table_;
+  uint64_t reference_tail_offset_ = 0;
+  std::span<const std::byte> reference_tail_;
+  uint16_t content_version_ = 0;
   std::vector<data::AssetKey> asset_keys_;
   std::unordered_map<data::AssetKey, AssetInfo> key_to_asset_info_;
   std::unordered_map<uint32_t, data::AssetKey> virtual_path_offset_to_key_;
@@ -179,7 +203,8 @@ private:
   std::vector<FileInfo> texture_descriptors_;
   data::SourceKey guid_;
 
-  static auto Parse(std::span<const std::byte> bytes) -> LooseCookedIndexImpl;
+  static auto Load(IndexBytes bytes) -> LooseCookedIndexImpl;
+  auto Parse() -> void;
   static auto LoadAndValidateHeader(IndexLoadContext& context) -> void;
   static auto ReadStringTable(IndexLoadContext& context) -> void;
   static auto ReadAssetEntries(IndexLoadContext& context) -> void;

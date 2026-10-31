@@ -10,9 +10,9 @@
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <system_error>
+#include <vector>
 
-#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -30,7 +30,6 @@ struct ArtifactPublicationPlan {
 };
 
 struct ArtifactPublicationIntent {
-  bool create_parent_directories = true;
   bool publish_pak = true;
   bool publish_catalog = true;
   bool publish_manifest = false;
@@ -49,45 +48,26 @@ struct ArtifactPublicationState {
   bool restored_backup = false;
 };
 
+//! A cleanup or a rollback step of a publication that failed: a backup that
+//! could not be removed or restored, a final file that could not be removed.
+//! The publication's own outcome stays in `error_code`.
+struct ArtifactPublicationIssue {
+  std::string code;
+  std::string message;
+};
+
 struct ArtifactPublicationResult {
   bool success = false;
   std::string error_code;
   std::string error_message;
+  //! Every cleanup or rollback step that failed, in order.
+  std::vector<ArtifactPublicationIssue> issues;
   std::optional<std::chrono::microseconds> publish_duration;
 
   ArtifactPublicationState pak {};
   ArtifactPublicationState catalog {};
   std::optional<ArtifactPublicationState> manifest;
   std::optional<ArtifactPublicationState> report;
-};
-
-class IArtifactFileSystem {
-public:
-  IArtifactFileSystem() = default;
-  virtual ~IArtifactFileSystem() = default;
-  OXYGEN_MAKE_NON_COPYABLE(IArtifactFileSystem)
-  OXYGEN_MAKE_NON_MOVABLE(IArtifactFileSystem)
-
-  [[nodiscard]] virtual auto Exists(const std::filesystem::path& path) const
-    -> bool = 0;
-  virtual auto CreateDirectories(const std::filesystem::path& path)
-    -> std::error_code = 0;
-  virtual auto RemoveFile(const std::filesystem::path& path) -> std::error_code
-    = 0;
-  virtual auto Rename(const std::filesystem::path& from,
-    const std::filesystem::path& to) -> std::error_code = 0;
-};
-
-class RealArtifactFileSystem final : public IArtifactFileSystem {
-public:
-  [[nodiscard]] auto Exists(const std::filesystem::path& path) const
-    -> bool override;
-  auto CreateDirectories(const std::filesystem::path& path)
-    -> std::error_code override;
-  auto RemoveFile(const std::filesystem::path& path)
-    -> std::error_code override;
-  auto Rename(const std::filesystem::path& from,
-    const std::filesystem::path& to) -> std::error_code override;
 };
 
 [[nodiscard]] auto MakeArtifactPublicationPlan(
@@ -97,8 +77,16 @@ public:
   const std::optional<std::filesystem::path>& report_path)
   -> ArtifactPublicationPlan;
 
+//! Publishes the staged artifacts of `plan` that `intent` requests, through
+//! `storage`, as one step: all of them, or none.
+/*!
+ Each staged artifact replaces its final file; a final file it replaces is
+ kept as a backup until every requested artifact is published, and restored
+ when a later one fails. Skipped artifacts lose their staged file, and their
+ stale final file when `intent` suppresses it.
+*/
 [[nodiscard]] auto PublishArtifacts(const ArtifactPublicationPlan& plan,
-  const ArtifactPublicationIntent& intent, IArtifactFileSystem& fs)
+  const ArtifactPublicationIntent& intent, cooked::CookerStorage& storage)
   -> ArtifactPublicationResult;
 
 } // namespace oxygen::content::pak::tool

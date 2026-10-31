@@ -31,6 +31,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Data/PakFormat_core.h>
 
 namespace {
 namespace pak = oxygen::content::pak;
@@ -258,6 +259,16 @@ auto CollectRegionBoundsAndRanges(ValidationState& state) -> void
         region.offset);
     }
 
+    if (region.size_bytes != 0U
+      && (region.offset % data::pak::core::kPakPayloadAlignment != 0U
+        || region.size_bytes % data::pak::core::kPakPayloadAlignment != 0U)) {
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.region_payload_alignment_mismatch",
+        "A region holding payloads must start on and end at a payload "
+        "boundary.",
+        region.region_name, region.offset);
+    }
+
     const auto [it, inserted] = state.region_bounds.emplace(
       region.region_name, std::make_pair(region.offset, end));
     if (!inserted) {
@@ -421,6 +432,13 @@ auto CollectResourceRangesAndValidateResources(ValidationState& state) -> void
       AddDiagnostic(state.output.diagnostics, Severity::kError,
         Phase::kPlanning, "pak.plan.resource_alignment_mismatch",
         "Resource offset does not satisfy alignment.", std::nullopt,
+        resource.resource_kind, resource.region_name, resource.offset);
+    }
+
+    if (resource.offset % data::pak::core::kPakPayloadAlignment != 0U) {
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.resource_payload_alignment_mismatch",
+        "Resource payload does not start on a payload boundary.", std::nullopt,
         resource.resource_kind, resource.region_name, resource.offset);
     }
 

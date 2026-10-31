@@ -17,12 +17,11 @@
 #include <string_view>
 
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
@@ -30,13 +29,14 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace oxygen::content::import::test {
 
-using content::lc::Inspection;
+using content::cooked::CookedAsset;
+using content::cooked::CookedContent;
 using data::AssetType;
 using data::ComponentType;
-using data::loose_cooked::FileKind;
 using data::pak::core::TextureResourceDesc;
 using data::pak::world::DirectionalLightRecord;
 using data::pak::world::NodeRecord;
@@ -54,7 +54,7 @@ using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 
-class ModelImportTestBase : public oxygen::cooker::test::TempDirTest {
+class ModelImportTestBase : public oxygen::testing::TempDirTest {
 protected:
   struct ImportRunResult {
     ImportReport report;
@@ -178,13 +178,13 @@ protected:
   }
 
   [[nodiscard]] static auto LoadInspection(const std::filesystem::path& root)
-    -> Inspection;
+    -> CookedContent;
 
-  [[nodiscard]] static auto FindAssetOfType(const Inspection& inspection,
-    AssetType type) -> std::optional<Inspection::AssetEntry>;
+  [[nodiscard]] static auto FindAssetOfType(
+    const CookedContent& content, AssetType type) -> std::optional<CookedAsset>;
 
   [[nodiscard]] static auto CountAssetsOfType(
-    const Inspection& inspection, AssetType type) -> size_t;
+    const CookedContent& content, AssetType type) -> size_t;
 
   [[nodiscard]] static auto LoadSceneReadback(const ImportReport& report)
     -> SceneReadback;

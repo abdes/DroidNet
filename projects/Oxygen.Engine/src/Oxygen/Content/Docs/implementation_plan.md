@@ -147,11 +147,13 @@ Constraints:
 
 ### Testing Content contracts
 
-Content tests do not invoke external tools or depend on Cooker. Decoder tests
-use minimal in-memory descriptors. Source, identity, ownership and reload tests
-exercise their owning APIs; loose-storage integration tests use
-`Fixtures/LooseCookedTestWriter.h`. Async tests control suspension with events
-and gates, then assert publication, cancellation and retained lifetimes.
+Content tests depend on the Cooker's cooked content builders
+(`Oxygen.Cooker.Testing`) and on no Cooker tool. Tests that mount loose roots
+or paks build them with those builders and write them out with their
+`Materialize`. Decoder tests use minimal in-memory descriptors. Source,
+identity, ownership and reload tests exercise their owning APIs. Async tests
+control suspension with events and gates, then assert publication,
+cancellation and retained lifetimes.
 
 PAK construction and package/load integration belong to `Cooker/test/Pak` and
 use the native `PakBuilder` API. To inspect a failing archive, build

@@ -10,10 +10,10 @@ root. Geometry descriptors may reference existing `.obuf` sidecars in that root;
 foreign-root sidecars are rejected with `geometry.buffer.foreign_root`. Copying
 their numeric indices would address unrelated buffers in the destination.
 
-Reuse a library's geometry asset when sharing a complete mesh. To create new
-geometry from external source data, import its raw buffers into the destination
-root. Ordinary glTF/FBX import and library geometry references retain these
-workflows. Cross-root raw-buffer borrowing is not an authoring capability.
+Reuse another mount's geometry asset when sharing a complete mesh. To create
+new geometry from external source data, import its raw buffers into the
+destination root. Ordinary glTF/FBX import and references to another mount's
+geometry retain these workflows. Cross-root raw-buffer borrowing is not an authoring capability.
 
 ## Surface provenance
 

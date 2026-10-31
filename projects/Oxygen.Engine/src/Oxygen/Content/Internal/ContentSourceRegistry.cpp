@@ -60,15 +60,15 @@ auto ContentSourceRegistry::FindSourceKeyConflict(
 }
 
 namespace {
-  //! The library a virtual path lies under, such as `Engine`.
-  auto LibraryOf(const std::string_view virtual_path) -> std::string
+  //! The mount a virtual path lies under, such as `Engine`.
+  auto MountNameOf(const std::string_view virtual_path) -> std::string
   {
     const auto root = MountRootOf(virtual_path);
     return std::string(root.empty() ? root : root.substr(1));
   }
 
   //! How the newest layer of `lower` that holds `requirement` meets it.
-  auto CheckRequirement(const std::string& library,
+  auto CheckRequirement(const std::string& mount,
     const data::PakRequirement& requirement,
     const std::span<const IContentSource* const> lower,
     const std::span<const data::SourceInstanceId> ids)
@@ -76,11 +76,11 @@ namespace {
   {
     const auto failed = [&](const RequirementFailure failure) -> auto {
       return FailedRequirement {
-        .library = library,
+        .mount = mount,
         .requirement = requirement,
         .failure = failure,
         .found_type = std::nullopt,
-        .found_library = {},
+        .found_mount = {},
       };
     };
     const auto source_of
@@ -130,9 +130,9 @@ namespace {
     if (!provider.has_value()) {
       return failed(RequirementFailure::kMissing);
     }
-    if (auto found = LibraryOf(*provider); found != library) {
-      auto mismatch = failed(RequirementFailure::kLibraryMismatch);
-      mismatch.found_library = std::move(found);
+    if (auto found = MountNameOf(*provider); found != mount) {
+      auto mismatch = failed(RequirementFailure::kMountMismatch);
+      mismatch.found_mount = std::move(found);
       return mismatch;
     }
     return std::nullopt;
@@ -149,7 +149,7 @@ namespace {
     for (const auto& dependency : catalog.dependencies) {
       for (const auto& requirement : dependency.requirements) {
         if (auto failed
-          = CheckRequirement(dependency.library, requirement, lower, ids)) {
+          = CheckRequirement(dependency.mount, requirement, lower, ids)) {
           failures.push_back(std::move(*failed));
         }
       }

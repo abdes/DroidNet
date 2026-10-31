@@ -8,13 +8,13 @@
 
 #include <cstdint>
 #include <span>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/api_export.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::data {
 
@@ -54,9 +54,18 @@ public:
     kImmutable = 0x200, //!< Never updated after creation
   };
 
-  //! Constructs a BufferResource with descriptor + exclusive data ownership.
+  //! Constructs a BufferResource that owns `data`, the buffer its loader read
+  //! the payload into.
   OXGN_DATA_API BufferResource(
-    pak::core::BufferResourceDesc desc, std::vector<uint8_t> data);
+    pak::core::BufferResourceDesc desc, serio::ByteBuffer data);
+
+  //! Constructs a BufferResource from a copy of `data`: a buffer built in
+  //! memory, such as procedural geometry or a test's.
+  /*!
+   @throw std::bad_alloc When the buffer cannot be allocated.
+  */
+  OXGN_DATA_API BufferResource(
+    pak::core::BufferResourceDesc desc, std::span<const uint8_t> data);
 
   ~BufferResource() override = default;
 
@@ -68,7 +77,10 @@ public:
     return desc_.data_offset;
   }
 
-  [[nodiscard]] auto GetDataSize() const noexcept { return data_.size(); }
+  [[nodiscard]] auto GetDataSize() const noexcept
+  {
+    return data_.Bytes().size();
+  }
 
   //! Returns the buffer usage and access flags (bitfield).
   [[nodiscard]] auto GetUsageFlags() const noexcept
@@ -116,12 +128,14 @@ public:
   //! Returns an immutable span of the loaded buffer data.
   [[nodiscard]] auto GetData() const noexcept -> std::span<const uint8_t>
   {
-    return std::span<const uint8_t>(data_.data(), data_.size());
+    const auto bytes = data_.Bytes();
+    // NOLINTNEXTLINE(*-reinterpret-cast): bytes viewed as unsigned bytes.
+    return { reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size() };
   }
 
 private:
   pak::core::BufferResourceDesc desc_ {};
-  std::vector<uint8_t> data_;
+  serio::ByteBuffer data_;
 };
 
 // Define bitwise operators for UsageFlags enum.

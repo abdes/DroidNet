@@ -32,9 +32,9 @@
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -108,7 +108,7 @@ auto CountOccurrences(const std::string& text, const std::string_view token)
   return count;
 }
 
-class BatchCommandPhysicsDagTest : public oxygen::cooker::test::TempDirTest {
+class BatchCommandPhysicsDagTest : public oxygen::testing::TempDirTest {
 protected:
   //! Creates and returns `TempDir() / scenario`.
   [[nodiscard]] auto MakeScenarioDir(const std::string_view scenario) const
@@ -238,8 +238,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto root = MakeScenarioDir("invalid_texture_report");
   const auto manifest_path = root / "manifest.json";
   const auto report_path = root / "report.json";
-  WriteText(root / "texture.json",
-    R"({"source":"missing.png","virtual_path":"/Meter.otex"})");
+  WriteText(root / "texture.json", R"({"source":"missing.png"})");
   WriteText(manifest_path, R"({"version":1,"output":"cooked",
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[{"type":"texture-descriptor","source":"texture.json",
@@ -372,7 +371,7 @@ NOLINT_TEST_F(
     "actions":[{"name":"Jump","type":"bool"}]})");
   WriteText(root / "Input" / "Player.input.json", R"({
     "contexts":[{"name":"OnFoot","mappings":[
-      {"action":"/.cooked/Input/Common.input/Jump.oiact","slot":"Space"}]}]})");
+      {"action":"Common.input/Jump.oiact","slot":"Space"}]}]})");
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
@@ -395,7 +394,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, MappingToAMissingActionIsRefused)
   const auto manifest_path = root / "import-manifest.json";
   WriteText(root / "Input" / "Player.input.json", R"({
     "contexts":[{"name":"OnFoot","mappings":[
-      {"action":"/.cooked/Input/Common.input/Jump.oiact","slot":"Space"},
+      {"action":"Common.input/Jump.oiact","slot":"Space"},
       {"action":"Dash","slot":"LeftShift"}]}]})");
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
@@ -602,7 +601,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(mat_a,
     R"({
       "name": "shared_a",
-      "virtual_path": "/.cooked/Physics/Materials/shared.opmat",
       "static_friction": 0.8,
       "dynamic_friction": 0.8,
       "restitution": 0.1,
@@ -611,7 +609,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(mat_b,
     R"({
       "name": "shared_b",
-      "virtual_path": "/.cooked/Physics/Materials/shared.opmat",
       "static_friction": 0.7,
       "dynamic_friction": 0.7,
       "restitution": 0.2,
@@ -622,8 +619,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "name": "floor_shape",
       "shape_type": "box",
       "half_extents": [10.0, 1.0, 10.0],
-      "material_ref": "/.cooked/Physics/Materials/shared.opmat",
-      "virtual_path": "/.cooked/Physics/Shapes/floor.ocshape"
+      "material_ref": "../Materials/shared.opmat"
     })");
 
   WriteText(manifest_path,
@@ -676,7 +672,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(mat_a,
     R"({
       "name": "shared_a",
-      "virtual_path": "/.cooked/Physics/Materials/shared.opmat",
       "static_friction": 0.8,
       "dynamic_friction": 0.8,
       "restitution": 0.1,
@@ -685,7 +680,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(mat_b,
     R"({
       "name": "shared_b",
-      "virtual_path": "/.cooked/Physics/Materials/shared.opmat",
       "static_friction": 0.7,
       "dynamic_friction": 0.7,
       "restitution": 0.2,
@@ -694,7 +688,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(mat_base,
     R"({
       "name": "base",
-      "virtual_path": "/.cooked/Physics/Materials/base.opmat",
       "static_friction": 0.5,
       "dynamic_friction": 0.5,
       "restitution": 0.1,
@@ -705,16 +698,14 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "name": "floor_shape_a",
       "shape_type": "box",
       "half_extents": [10.0, 1.0, 10.0],
-      "material_ref": "/.cooked/Physics/Materials/base.opmat",
-      "virtual_path": "/.cooked/Physics/Shapes/floor.ocshape"
+      "material_ref": "../Materials/base.opmat"
     })");
   WriteText(shape_b,
     R"({
       "name": "floor_shape_b",
       "shape_type": "box",
       "half_extents": [10.0, 1.0, 10.0],
-      "material_ref": "/.cooked/Physics/Materials/base.opmat",
-      "virtual_path": "/.cooked/Physics/Shapes/floor.ocshape"
+      "material_ref": "../Materials/base.opmat"
     })");
 
   WriteText(manifest_path,
@@ -761,13 +752,13 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
             "rigid_bodies": [
               {
                 "node_index": 0,
-                "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/shared.opmat"
+                "shape_ref": "../Physics/Shapes/floor.ocshape",
+                "material_ref": "../Physics/Materials/shared.opmat"
               },
               {
                 "node_index": 1,
-                "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
-                "material_ref": "/.cooked/Physics/Materials/shared.opmat"
+                "shape_ref": "../Physics/Shapes/floor.ocshape",
+                "material_ref": "../Physics/Materials/shared.opmat"
               }
             ]
           }
@@ -795,7 +786,6 @@ NOLINT_TEST_F(
   WriteText(mat_a,
     R"({
       "name": "mat_a",
-      "virtual_path": "/.cooked/Physics/Materials/mat_a.opmat",
       "static_friction": 0.5,
       "dynamic_friction": 0.5,
       "restitution": 0.1,
@@ -804,7 +794,6 @@ NOLINT_TEST_F(
   WriteText(mat_b,
     R"({
       "name": "mat_b",
-      "virtual_path": "/.cooked/Physics/Materials/mat_b.opmat",
       "static_friction": 0.5,
       "dynamic_friction": 0.5,
       "restitution": 0.1,
@@ -1005,7 +994,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(material_source,
     R"({
       "name": "mat",
-      "virtual_path": "/.cooked/Physics/Materials/mat.opmat",
       "static_friction": 0.6,
       "dynamic_friction": 0.6,
       "restitution": 0.1,
@@ -1048,7 +1036,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(mat_a,
     R"({
       "name": "mat_a",
-      "virtual_path": "/.cooked/Physics/Materials/mat_a.opmat",
       "static_friction": 0.6,
       "dynamic_friction": 0.6,
       "restitution": 0.1,
@@ -1057,7 +1044,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(mat_b,
     R"({
       "name": "mat_b",
-      "virtual_path": "/.cooked/Physics/Materials/mat_b.opmat",
       "static_friction": 0.7,
       "dynamic_friction": 0.7,
       "restitution": 0.2,

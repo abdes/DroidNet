@@ -12,6 +12,7 @@
 
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
@@ -45,7 +46,10 @@ struct ReportWriteResult {
 [[nodiscard]] auto ToCanonicalJsonString(const PakToolBuildReportInput& input)
   -> std::string;
 
-[[nodiscard]] auto WriteReportFile(const std::filesystem::path& output_path,
+//! Publishes the canonical JSON report of `input` as the file `output_path`
+//! through `storage`; its parent folders are created.
+[[nodiscard]] auto WriteReportFile(cooked::CookerStorage& storage,
+  const std::filesystem::path& output_path,
   const PakToolBuildReportInput& input) -> ReportWriteResult;
 
 } // namespace oxygen::content::pak::tool

@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -24,11 +23,11 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -41,6 +40,7 @@
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
@@ -59,54 +59,53 @@ namespace oxygen::content::import {
 
 namespace {
 
+  namespace loose_layout = internal::loose_layout;
+
   //! Index entries refused because the job has no recorded source.
   class LooseCookedSourceOutsideMount final : public std::runtime_error {
   public:
     using std::runtime_error::runtime_error;
   };
 
-  auto EnsureExternalFileExists(const std::filesystem::path& path) -> void
+  //! Creates the file `path` empty when it names nothing.
+  auto EnsureExternalFileExists(
+    cooked::CookerStorage& storage, const std::filesystem::path& path) -> void
   {
-    std::error_code ec;
-    if (std::filesystem::exists(base::ToNativePath(path), ec)) {
+    if (storage.KindOf(path) != cooked::PathKind::kNone) {
       return;
     }
-
-    std::filesystem::create_directories(
-      base::ToNativePath(path.parent_path()), ec);
-    if (ec) {
-      throw std::runtime_error(
-        "Failed to create directory for external file: " + path.string());
-    }
-
-    // MSVC's openmode is a signed int, so its flags combine as signed bits.
-    std::ofstream out(base::ToNativePath(path),
-      std::ios::binary | std::ios::app); // NOLINT(bugprone-signed-bitwise)
-    if (!out) {
-      throw std::runtime_error(
-        "Failed to create external file: " + path.string());
+    if (const auto created = cooked::PublishWholeFile(storage, path, {});
+      !created) {
+      throw std::system_error(
+        created.error(), "Failed to create external file: " + path.string());
     }
   }
 
+  //! Registers a table, with its digest when this session wrote it.
   auto RegisterExternalTable(LooseCookedIndexRegistry& registry,
     const data::loose_cooked::FileKind kind,
-    const std::filesystem::path& cooked_root, std::string_view relpath) -> void
+    const std::filesystem::path& cooked_root, std::string_view relpath,
+    const ResourceTableRegistry::SessionEnd& tables) -> void
   {
     const auto path = cooked_root / std::filesystem::path(relpath);
-    EnsureExternalFileExists(path);
-    registry.RegisterExternalFile(cooked_root, kind, relpath);
+    EnsureExternalFileExists(*registry.Storage(), path);
+    const auto written = std::ranges::find(
+      tables.written, kind, &ResourceTableRegistry::WrittenTable::kind);
+    registry.RegisterExternalFile(cooked_root, kind, relpath,
+      written != tables.written.end()
+        ? std::optional<LooseCookedFileDigest>(written->digest)
+        : std::nullopt);
   }
 
-  auto AppendOutputRecord(std::vector<ImportOutputRecord>& outputs,
+  auto AppendOutputRecord(const cooked::CookerStorage& storage,
+    std::vector<ImportOutputRecord>& outputs,
     std::vector<ImportDiagnostic>& diagnostics,
     const std::filesystem::path& cooked_root, std::string_view relpath,
     std::string_view source_path) -> bool
   {
-    std::error_code ec;
-    const auto full_path = cooked_root / std::filesystem::path(relpath);
     const auto size
-      = std::filesystem::file_size(base::ToNativePath(full_path), ec);
-    if (ec) {
+      = storage.SizeOf(cooked_root / std::filesystem::path(relpath));
+    if (!size.has_value()) {
       diagnostics.push_back({
         .severity = ImportSeverity::kError,
         .code = "import.output_missing",
@@ -119,7 +118,7 @@ namespace {
 
     outputs.push_back({
       .path = std::string(relpath),
-      .size_bytes = size,
+      .size_bytes = size->get(),
     });
     return true;
   }
@@ -155,31 +154,12 @@ namespace {
     return summary;
   }
 
-  auto ReadBinaryFile(const std::filesystem::path& path)
-    -> std::vector<std::byte>
+  //! The bytes of the file `path`; empty when it cannot be read.
+  auto ReadBinaryFile(const cooked::CookerStorage& storage,
+    const std::filesystem::path& path) -> std::vector<std::byte>
   {
-    // MSVC's openmode is a signed int, so its flags combine as signed bits.
-    auto in = std::ifstream(base::ToNativePath(path),
-      std::ios::binary | std::ios::ate); // NOLINT(bugprone-signed-bitwise)
-    if (!in) {
-      return {};
-    }
-    const auto end = in.tellg();
-    if (end <= std::streampos { 0 }) {
-      return {};
-    }
-
-    const auto size = static_cast<size_t>(end);
-    auto bytes = std::vector<std::byte>(size);
-    in.seekg(0, std::ios::beg);
-    // Streams read chars; a char may alias the byte buffer.
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    in.read(reinterpret_cast<char*>(bytes.data()),
-      static_cast<std::streamsize>(size));
-    if (!in.good() && !in.eof()) {
-      return {};
-    }
-    return bytes;
+    auto bytes = cooked::ReadWholeFile(storage, path);
+    return bytes ? std::move(bytes).value() : std::vector<std::byte> {};
   }
 
   struct SceneScriptingCounts {
@@ -188,10 +168,11 @@ namespace {
     uint32_t parameters = 0;
   };
 
-  auto ReadSceneScriptingCounts(const std::filesystem::path& descriptor_path,
-    const data::AssetKey& key) -> SceneScriptingCounts
+  auto ReadSceneScriptingCounts(const cooked::CookerStorage& storage,
+    const std::filesystem::path& descriptor_path, const data::AssetKey& key)
+    -> SceneScriptingCounts
   {
-    const auto bytes = ReadBinaryFile(descriptor_path);
+    const auto bytes = ReadBinaryFile(storage, descriptor_path);
     if (bytes.empty()) {
       return {};
     }
@@ -213,6 +194,15 @@ namespace {
     } catch (...) {
       return {};
     }
+  }
+
+  //! The file system of `registry`, which every session of a service shares.
+  auto StorageOf(const observer_ptr<LooseCookedIndexRegistry> registry)
+    -> observer_ptr<cooked::CookerStorage>
+  {
+    CHECK_NOTNULL_F(
+      registry, "ImportSession requires a LooseCookedIndexRegistry");
+    return registry->Storage();
   }
 
   auto BuildDiagnosticKey(const ImportDiagnostic& diagnostic) -> std::string
@@ -248,9 +238,10 @@ ImportSession::ImportSession(const ImportRequest& request,
   , thread_pool_(thread_pool)
   , table_registry_(table_registry)
   , index_registry_(index_registry)
+  , storage_(StorageOf(index_registry))
   , cooked_root_(
       request.cooked_root.value_or(request.source_path.parent_path()))
-  , cooked_writer_(cooked_root_)
+  , cooked_writer_(cooked_root_, *storage_)
 {
   DLOG_F(INFO, "Session created for: {}", request_.source_path.string());
   DLOG_F(INFO,
@@ -373,11 +364,9 @@ auto ImportSession::TextureEmitter() -> import::TextureEmitter&
   if (!texture_emitter_.has_value()) {
     DCHECK_F(table_registry_ != nullptr,
       "ImportSession requires a ResourceTableRegistry for texture emission");
-    auto& aggregator = table_registry_->TextureAggregator(
-      cooked_root_, request_.loose_cooked_layout);
+    auto& aggregator = table_registry_->TextureAggregator(cooked_root_);
     TextureEmitter::Config config {};
     config.cooked_root = cooked_root_;
-    config.layout = request_.loose_cooked_layout;
     config.with_content_hashing
       = EffectiveContentHashingEnabled(request_.options.with_content_hashing);
     config.collision_policy = request_.options.dedup_collision_policy;
@@ -401,16 +390,14 @@ auto ImportSession::BufferEmitter() -> import::BufferEmitter&
   if (!buffer_emitter_.has_value()) {
     DCHECK_F(table_registry_ != nullptr,
       "ImportSession requires a ResourceTableRegistry for buffer emission");
-    auto& aggregator = table_registry_->BufferAggregator(
-      cooked_root_, request_.loose_cooked_layout);
+    auto& aggregator = table_registry_->BufferAggregator(cooked_root_);
     BufferEmitter::Config config {};
     config.collision_policy = request_.options.dedup_collision_policy;
     config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) -> void {
       AddDiagnostic(std::move(diagnostic));
     };
-    buffer_emitter_.emplace(
-      std::make_unique<import::BufferEmitter>(*file_writer_, aggregator,
-        request_.loose_cooked_layout, cooked_root_, std::move(config)));
+    buffer_emitter_.emplace(std::make_unique<import::BufferEmitter>(
+      *file_writer_, aggregator, cooked_root_, std::move(config)));
   }
   return **buffer_emitter_;
 }
@@ -427,17 +414,15 @@ auto ImportSession::PhysicsResourceEmitter() -> import::PhysicsResourceEmitter&
     DCHECK_F(table_registry_ != nullptr,
       "ImportSession requires a ResourceTableRegistry for physics resource "
       "emission");
-    auto& aggregator = table_registry_->PhysicsAggregator(
-      cooked_root_, request_.loose_cooked_layout);
+    auto& aggregator = table_registry_->PhysicsAggregator(cooked_root_);
     auto config = import::PhysicsResourceEmitter::Config {};
     config.collision_policy = request_.options.dedup_collision_policy;
     config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) -> void {
       AddDiagnostic(std::move(diagnostic));
     };
     physics_resource_emitter_.emplace(
-      std::make_unique<import::PhysicsResourceEmitter>(*file_writer_,
-        aggregator, request_.loose_cooked_layout, cooked_root_,
-        std::move(config)));
+      std::make_unique<import::PhysicsResourceEmitter>(
+        *file_writer_, aggregator, cooked_root_, std::move(config)));
   }
   return **physics_resource_emitter_;
 }
@@ -451,8 +436,8 @@ auto ImportSession::PhysicsResourceEmitter() -> import::PhysicsResourceEmitter&
 auto ImportSession::AssetEmitter() -> import::AssetEmitter&
 {
   if (!asset_emitter_.has_value()) {
-    asset_emitter_.emplace(std::make_unique<import::AssetEmitter>(
-      *file_writer_, request_.loose_cooked_layout, cooked_root_));
+    asset_emitter_.emplace(
+      std::make_unique<import::AssetEmitter>(*file_writer_, cooked_root_));
   }
   return **asset_emitter_;
 }
@@ -638,11 +623,16 @@ auto ImportSession::Producer() const -> LooseCookedProducer
   }
   const auto context_roots = internal::ContextCookedRoots(request_);
   for (const auto& root : std::views::reverse(context_roots)) {
-    const auto index_path = root / "container.index.bin";
-    if (!std::filesystem::exists(base::ToNativePath(index_path))) {
+    const auto index_path = root / loose_layout::kIndexFileName;
+    if (storage_->KindOf(index_path) != cooked::PathKind::kFile) {
       continue;
     }
-    const auto index = lc::LooseCookedIndex::LoadFromFile(index_path);
+    auto bytes = cooked::ReadWholeFile(*storage_, index_path);
+    if (!bytes) {
+      throw std::system_error(
+        bytes.error(), "Failed to read the index of '" + root.string() + "'");
+    }
+    const auto index = lc::LooseCookedIndex::LoadFromBytes(std::move(*bytes));
     if (const auto key = index.FindAssetKeyByVirtualPath(target)) {
       if (const auto source = index.FindSourcePath(*key)) {
         return { .source = std::string(*source), .completes = target };
@@ -719,8 +709,12 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     }
   }
 
+  // The digests the emitter recorded describe the files only once they are
+  // written.
+  auto resource_descriptors_written = true;
   if (resource_descriptor_emitter_.has_value()) {
     const auto ok = co_await (*resource_descriptor_emitter_)->Finalize();
+    resource_descriptors_written = ok.has_value();
     if (!ok) {
       AddDiagnostic({
         .severity = ImportSeverity::kError,
@@ -743,9 +737,9 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     = asset_emitter_.has_value() ? (*asset_emitter_)->Records().size() : 0U;
 #endif // NDEBUG
 
-  const auto ok = co_await co::NonCancellable(
+  const auto tables = co_await co::NonCancellable(
     table_registry_->EndSession(table_participation));
-  if (!ok) {
+  if (!tables.ok) {
     AddDiagnostic({
       .severity = ImportSeverity::kError,
       .code = "import.resource_table_finalize_failed",
@@ -778,10 +772,6 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   // invalidating previously cooked content.
   try {
     using data::loose_cooked::FileKind;
-    constexpr std::string_view kIndexFileName = "container.index.bin";
-
-    const auto& layout = request_.loose_cooked_layout;
-
     DLOG_F(INFO,
       "Registering index entries: textures={} buffers={} assets={} "
       "cooked_root='{}'",
@@ -791,55 +781,55 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
 
     if (texture_count > 0) {
       index_registry_->RegisterExternalFile(
-        cooked_root_, FileKind::kTexturesData, layout.TexturesDataRelPath());
+        cooked_root_, FileKind::kTexturesData, loose_layout::kTexturesData);
 
       RegisterExternalTable(*index_registry_, FileKind::kTexturesTable,
-        cooked_root_, layout.TexturesTableRelPath());
+        cooked_root_, loose_layout::kTexturesTable, tables);
 
-      output_missing
-        |= !AppendOutputRecord(report.outputs, report.diagnostics, cooked_root_,
-          layout.TexturesDataRelPath(), request_.source_path.string());
-      output_missing
-        |= !AppendOutputRecord(report.outputs, report.diagnostics, cooked_root_,
-          layout.TexturesTableRelPath(), request_.source_path.string());
+      output_missing |= !AppendOutputRecord(*storage_, report.outputs,
+        report.diagnostics, cooked_root_, loose_layout::kTexturesData,
+        request_.source_path.string());
+      output_missing |= !AppendOutputRecord(*storage_, report.outputs,
+        report.diagnostics, cooked_root_, loose_layout::kTexturesTable,
+        request_.source_path.string());
     }
 
     if (buffer_count > 0) {
       index_registry_->RegisterExternalFile(
-        cooked_root_, FileKind::kBuffersData, layout.BuffersDataRelPath());
+        cooked_root_, FileKind::kBuffersData, loose_layout::kBuffersData);
 
       RegisterExternalTable(*index_registry_, FileKind::kBuffersTable,
-        cooked_root_, layout.BuffersTableRelPath());
+        cooked_root_, loose_layout::kBuffersTable, tables);
 
-      output_missing
-        |= !AppendOutputRecord(report.outputs, report.diagnostics, cooked_root_,
-          layout.BuffersDataRelPath(), request_.source_path.string());
-      output_missing
-        |= !AppendOutputRecord(report.outputs, report.diagnostics, cooked_root_,
-          layout.BuffersTableRelPath(), request_.source_path.string());
+      output_missing |= !AppendOutputRecord(*storage_, report.outputs,
+        report.diagnostics, cooked_root_, loose_layout::kBuffersData,
+        request_.source_path.string());
+      output_missing |= !AppendOutputRecord(*storage_, report.outputs,
+        report.diagnostics, cooked_root_, loose_layout::kBuffersTable,
+        request_.source_path.string());
     }
 
-    const auto physics_table_rel = layout.PhysicsTableRelPath();
-    const auto physics_data_rel = layout.PhysicsDataRelPath();
-    const auto physics_table_path
-      = cooked_root_ / std::filesystem::path(physics_table_rel);
-    const auto physics_data_path
-      = cooked_root_ / std::filesystem::path(physics_data_rel);
+    const auto physics_table_rel = loose_layout::kPhysicsTable;
+    const auto physics_data_rel = loose_layout::kPhysicsData;
+    const auto physics_table_path = cooked_root_ / physics_table_rel;
+    const auto physics_data_path = cooked_root_ / physics_data_rel;
     const auto physics_table_exists
-      = std::filesystem::exists(base::ToNativePath(physics_table_path));
+      = storage_->KindOf(physics_table_path) == cooked::PathKind::kFile;
     const auto physics_data_exists
-      = std::filesystem::exists(base::ToNativePath(physics_data_path));
+      = storage_->KindOf(physics_data_path) == cooked::PathKind::kFile;
 
     if (physics_table_exists || physics_data_exists) {
       RegisterExternalTable(*index_registry_, FileKind::kPhysicsData,
-        cooked_root_, physics_data_rel);
+        cooked_root_, physics_data_rel, tables);
       RegisterExternalTable(*index_registry_, FileKind::kPhysicsTable,
-        cooked_root_, physics_table_rel);
+        cooked_root_, physics_table_rel, tables);
 
-      output_missing |= !AppendOutputRecord(report.outputs, report.diagnostics,
-        cooked_root_, physics_data_rel, request_.source_path.string());
-      output_missing |= !AppendOutputRecord(report.outputs, report.diagnostics,
-        cooked_root_, physics_table_rel, request_.source_path.string());
+      output_missing
+        |= !AppendOutputRecord(*storage_, report.outputs, report.diagnostics,
+          cooked_root_, physics_data_rel, request_.source_path.string());
+      output_missing
+        |= !AppendOutputRecord(*storage_, report.outputs, report.diagnostics,
+          cooked_root_, physics_table_rel, request_.source_path.string());
     }
 
     // Only the entries the index records a producer for need one.
@@ -855,10 +845,13 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       const auto& records = (*asset_emitter_)->Records();
       report.outputs.reserve(report.outputs.size() + records.size());
       for (const auto& rec : records) {
-        index_registry_->RegisterExternalAssetDescriptor(cooked_root_, rec.key,
+        index_registry_->RegisterProducedAssetDescriptor(cooked_root_, rec.key,
           rec.asset_type, rec.virtual_path, rec.descriptor_relpath,
-          rec.descriptor_size, rec.references, recorded_producer(),
-          rec.descriptor_sha256);
+          LooseCookedFileDigest {
+            .size = rec.descriptor_size,
+            .sha256 = rec.descriptor_sha256,
+          },
+          rec.references, recorded_producer());
         report.outputs.push_back({
           .path = rec.descriptor_relpath,
           .size_bytes = rec.descriptor_size,
@@ -876,19 +869,25 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       const auto records = (*resource_descriptor_emitter_)->Records();
       report.outputs.reserve(report.outputs.size() + records.size());
       for (const auto& rec : records) {
+        const auto produced = resource_descriptors_written
+          ? std::optional<LooseCookedFileDigest>(LooseCookedFileDigest {
+              .size = rec.size_bytes,
+              .sha256 = rec.sha256,
+            })
+          : std::nullopt;
         if (rec.virtual_path.empty()) {
           index_registry_->RegisterExternalAuxiliaryFile(
-            cooked_root_, rec.relpath, recorded_producer());
+            cooked_root_, rec.relpath, recorded_producer(), produced);
         } else {
-          index_registry_->RegisterExternalTextureDescriptor(
-            cooked_root_, rec.relpath, rec.virtual_path, recorded_producer());
+          index_registry_->RegisterExternalTextureDescriptor(cooked_root_,
+            rec.relpath, rec.virtual_path, recorded_producer(), produced);
           report.products.push_back({
             .virtual_path = rec.virtual_path,
             .descriptor_relpath = rec.relpath,
           });
         }
         output_missing
-          |= !AppendOutputRecord(report.outputs, report.diagnostics,
+          |= !AppendOutputRecord(*storage_, report.outputs, report.diagnostics,
             cooked_root_, rec.relpath, request_.source_path.string());
       }
     }
@@ -916,8 +915,9 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       LOG_F(INFO, "Index write completed: assets={} files={} cooked_root='{}'",
         write_result->assets.size(), write_result->files.size(),
         cooked_root_.string());
-      output_missing |= !AppendOutputRecord(report.outputs, report.diagnostics,
-        cooked_root_, kIndexFileName, request_.source_path.string());
+      output_missing |= !AppendOutputRecord(*storage_, report.outputs,
+        report.diagnostics, cooked_root_, loose_layout::kIndexFileName,
+        request_.source_path.string());
     } else {
       DLOG_F(INFO, "Index published by another session for cooked_root='{}'",
         cooked_root_.string());
@@ -952,7 +952,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
           if (rec.asset_type != data::AssetType::kScene) {
             continue;
           }
-          const auto counts = ReadSceneScriptingCounts(
+          const auto counts = ReadSceneScriptingCounts(*storage_,
             cooked_root_ / std::filesystem::path(rec.descriptor_relpath),
             rec.key);
           component_count += counts.components;

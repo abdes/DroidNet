@@ -38,6 +38,9 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -51,19 +54,17 @@
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/Integrity.h>
-#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::import {
 namespace {
@@ -80,7 +81,6 @@ namespace {
     "virtual_path",
     "depends_on",
     "output",
-    "layout",
     "cooked_context_roots",
     "source_key",
     "surface_provenance",
@@ -1310,7 +1310,8 @@ auto ModelImportRecord::SelectedGeneration(
     throw std::system_error(
       lease.error(), "Selected import generation is unavailable");
   }
-  const auto actual = FileDigest(selected / "container.index.bin");
+  const auto actual
+    = FileDigest(selected / oxygen::data::loose_cooked::kIndexFileName);
   if (base::ToHexString(actual) != head->index_sha256) {
     throw std::runtime_error(
       "Selected import generation index changed after publication");
@@ -1334,16 +1335,19 @@ auto ModelImportRecord::ValidateCandidate(const ImportReport& report) -> void
   }
   const auto provenance = SurfaceProvenance::Parse(
     report.surface_provenance_json, state_->content.source_identity);
-  lc::ValidateRoot(report.cooked_root);
-  lc::Inspection inspection;
-  inspection.LoadFromRoot(report.cooked_root);
-  if (inspection.Guid() != expected_source_key) {
+  const auto content = cooked::CookedContent::Open(cooked::RealCookerStorage(),
+    data::CookedSource {
+      .kind = data::CookedSourceKind::kLooseCooked,
+      .path = report.cooked_root,
+    });
+  cooked::Validate(content);
+  if (content.Summary().source_key != expected_source_key) {
     throw std::invalid_argument(
       "Native generation source key changed during import");
   }
   size_t geometry_count = 0U;
-  for (const auto& asset : inspection.Assets()) {
-    if (asset.asset_type != static_cast<uint8_t>(data::AssetType::kGeometry)) {
+  for (const auto& asset : content.Assets()) {
+    if (asset.type != data::AssetType::kGeometry) {
       continue;
     }
     ++geometry_count;
@@ -1355,18 +1359,9 @@ auto ModelImportRecord::ValidateCandidate(const ImportReport& report) -> void
       throw std::invalid_argument(
         "Cooked geometry has no matching recorded provenance");
     }
-    const auto descriptor_path = report.cooked_root / asset.descriptor_relpath;
-    auto descriptor_file = serio::NativeFile::Open(descriptor_path, {});
-    if (!descriptor_file) {
-      throw std::system_error(
-        descriptor_file.error(), "open '" + descriptor_path.string() + "'");
-    }
-    auto stream = serio::OpenReadStream(*descriptor_file);
-    if (!stream) {
-      throw std::system_error(
-        stream.error(), "read '" + descriptor_path.string() + "'");
-    }
-    serio::Reader reader(*stream);
+    const auto descriptor = content.Descriptor(asset.key);
+    serio::ReadOnlyMemoryStream stream(descriptor);
+    serio::Reader reader(stream);
     const auto geometry = loaders::LoadGeometryAsset(LoaderContext {
       .current_asset_key = asset.key,
       .desc_reader = &reader,
@@ -1383,8 +1378,8 @@ auto ModelImportRecord::ValidateCandidate(const ImportReport& report) -> void
     throw std::invalid_argument(
       "Recorded provenance contains geometry absent from its generation");
   }
-  state_->validated_index
-    = FileDigest(report.cooked_root / "container.index.bin");
+  state_->validated_index = FileDigest(
+    report.cooked_root / oxygen::data::loose_cooked::kIndexFileName);
   state_->validated_provenance = Digest(report.surface_provenance_json);
 }
 
@@ -1405,7 +1400,8 @@ auto ModelImportRecord::Publish(
     || *validated_provenance != Digest(report.surface_provenance_json)
     || Absolute(report.cooked_root) != Absolute(*cooked_root)
     || *validated_index
-      != FileDigest(report.cooked_root / "container.index.bin")) {
+      != FileDigest(
+        report.cooked_root / oxygen::data::loose_cooked::kIndexFileName)) {
     throw std::invalid_argument(
       "Import candidate was not validated or changed before publication");
   }

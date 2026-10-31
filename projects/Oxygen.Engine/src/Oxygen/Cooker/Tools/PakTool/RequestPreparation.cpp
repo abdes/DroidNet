@@ -52,7 +52,8 @@ namespace {
   }
 
   auto ValidateFileInput(const std::filesystem::path& path,
-    const std::string_view code_prefix, IRequestPreparationFileSystem& fs)
+    const std::string_view code_prefix,
+    const cooked::CookerStorageReader& storage)
     -> Result<void, RequestPreparationError>
   {
     if (path.empty()) {
@@ -63,7 +64,7 @@ namespace {
           .path = path,
         });
     }
-    if (!fs.Exists(path)) {
+    if (storage.KindOf(path) == cooked::PathKind::kNone) {
       return Result<void, RequestPreparationError>::Err(
         RequestPreparationError {
           .error_code = std::string(code_prefix) + ".missing",
@@ -71,7 +72,7 @@ namespace {
           .path = path,
         });
     }
-    if (!fs.IsRegularFile(path)) {
+    if (storage.KindOf(path) != cooked::PathKind::kFile) {
       return Result<void, RequestPreparationError>::Err(
         RequestPreparationError {
           .error_code = std::string(code_prefix) + ".not_regular_file",
@@ -85,7 +86,7 @@ namespace {
   //! Reads the catalog and the browse index textures of each base or
   //! dependency pak a request names.
   auto ReadLayerPaks(const std::span<const std::filesystem::path> paths,
-    const std::string_view role, IRequestPreparationFileSystem& fs)
+    const std::string_view role, const cooked::CookerStorageReader& storage)
     -> Result<std::vector<pak::PakDependency>, RequestPreparationError>
   {
     using ReadResult
@@ -94,7 +95,7 @@ namespace {
     auto paks = std::vector<pak::PakDependency> {};
     paks.reserve(paths.size());
     for (const auto& path : paths) {
-      if (const auto validated = ValidateFileInput(path, prefix, fs);
+      if (const auto validated = ValidateFileInput(path, prefix, storage);
         !validated) {
         return ReadResult::Err(validated.error());
       }
@@ -121,7 +122,8 @@ namespace {
   }
 
   auto ValidateSourceInput(const data::CookedSource& source,
-    IRequestPreparationFileSystem& fs) -> Result<void, RequestPreparationError>
+    const cooked::CookerStorageReader& storage)
+    -> Result<void, RequestPreparationError>
   {
     if (source.path.empty()) {
       return Result<void, RequestPreparationError>::Err(
@@ -131,7 +133,7 @@ namespace {
           .path = source.path,
         });
     }
-    if (!fs.Exists(source.path)) {
+    if (storage.KindOf(source.path) == cooked::PathKind::kNone) {
       return Result<void, RequestPreparationError>::Err(
         RequestPreparationError {
           .error_code = "paktool.prepare.source_missing",
@@ -141,7 +143,7 @@ namespace {
     }
 
     if (source.kind == data::CookedSourceKind::kLooseCooked) {
-      if (!fs.IsDirectory(source.path)) {
+      if (storage.KindOf(source.path) != cooked::PathKind::kFolder) {
         return Result<void, RequestPreparationError>::Err(
           RequestPreparationError {
             .error_code = "paktool.prepare.loose_source_not_directory",
@@ -152,7 +154,7 @@ namespace {
       return Result<void, RequestPreparationError>::Ok();
     }
 
-    if (!fs.IsRegularFile(source.path)) {
+    if (storage.KindOf(source.path) != cooked::PathKind::kFile) {
       return Result<void, RequestPreparationError>::Err(
         RequestPreparationError {
           .error_code = "paktool.prepare.pak_source_not_regular_file",
@@ -164,7 +166,8 @@ namespace {
   }
 
   auto ValidateOutputFilePath(const std::filesystem::path& path,
-    const std::string_view error_code, IRequestPreparationFileSystem& fs)
+    const std::string_view error_code,
+    const cooked::CookerStorageReader& storage)
     -> Result<void, RequestPreparationError>
   {
     if (path.empty()) {
@@ -175,7 +178,7 @@ namespace {
           .path = path,
         });
     }
-    if (fs.Exists(path) && fs.IsDirectory(path)) {
+    if (storage.KindOf(path) == cooked::PathKind::kFolder) {
       return Result<void, RequestPreparationError>::Err(
         RequestPreparationError {
           .error_code = std::string(error_code) + ".is_directory",
@@ -304,8 +307,9 @@ namespace {
     return Result<void, RequestPreparationError>::Ok();
   }
 
-  auto EnsureParentDirectory(const std::filesystem::path& file_path,
-    const std::string_view error_code, IRequestPreparationFileSystem& fs)
+  auto RequireParentFolder(const std::filesystem::path& file_path,
+    const std::string_view error_code,
+    const cooked::CookerStorageReader& storage)
     -> Result<void, RequestPreparationError>
   {
     const auto parent = file_path.parent_path();
@@ -313,24 +317,13 @@ namespace {
       return Result<void, RequestPreparationError>::Ok();
     }
 
-    if (fs.Exists(parent)) {
-      if (!fs.IsDirectory(parent)) {
-        return Result<void, RequestPreparationError>::Err(
-          RequestPreparationError {
-            .error_code = std::string(error_code) + ".parent_not_directory",
-            .error_message = "Output parent path must be a directory.",
-            .path = parent,
-          });
-      }
-      return Result<void, RequestPreparationError>::Ok();
-    }
-
-    const auto ec = fs.CreateDirectories(parent);
-    if (ec) {
+    // A missing parent is created when the artifact is published.
+    const auto kind = storage.KindOf(parent);
+    if (kind != cooked::PathKind::kNone && kind != cooked::PathKind::kFolder) {
       return Result<void, RequestPreparationError>::Err(
         RequestPreparationError {
-          .error_code = std::string(error_code) + ".create_parent_failed",
-          .error_message = "Failed to create output parent directory.",
+          .error_code = std::string(error_code) + ".parent_not_directory",
+          .error_message = "Output parent path must be a directory.",
           .path = parent,
         });
     }
@@ -339,56 +332,27 @@ namespace {
 
 } // namespace
 
-auto RealRequestPreparationFileSystem::Exists(
-  const std::filesystem::path& path) const -> bool
-{
-  return std::filesystem::exists(path);
-}
-
-auto RealRequestPreparationFileSystem::IsDirectory(
-  const std::filesystem::path& path) const -> bool
-{
-  auto ec = std::error_code {};
-  return std::filesystem::is_directory(path, ec) && !ec;
-}
-
-auto RealRequestPreparationFileSystem::IsRegularFile(
-  const std::filesystem::path& path) const -> bool
-{
-  auto ec = std::error_code {};
-  return std::filesystem::is_regular_file(path, ec) && !ec;
-}
-
-auto RealRequestPreparationFileSystem::CreateDirectories(
-  const std::filesystem::path& path) -> std::error_code
-{
-  auto ec = std::error_code {};
-  if (!path.empty()) {
-    std::filesystem::create_directories(path, ec);
-  }
-  return ec;
-}
-
 auto PreparePakToolRequest(const pak::BuildMode mode,
-  const PakToolCliOptions& options, IRequestPreparationFileSystem& fs)
+  const PakToolCliOptions& options, const cooked::CookerStorageReader& storage)
   -> Result<PreparedPakToolRequest, RequestPreparationError>
 {
   for (const auto& source : options.request.sources) {
-    if (const auto validated = ValidateSourceInput(source, fs); !validated) {
+    if (const auto validated = ValidateSourceInput(source, storage);
+      !validated) {
       return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
         validated.error());
     }
   }
 
   if (const auto validated = ValidateOutputFilePath(
-        options.request.output_pak, "paktool.prepare.output_pak_path", fs);
+        options.request.output_pak, "paktool.prepare.output_pak_path", storage);
     !validated) {
     return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
       validated.error());
   }
   if (const auto validated
     = ValidateOutputFilePath(options.request.catalog_output,
-      "paktool.prepare.catalog_output_path", fs);
+      "paktool.prepare.catalog_output_path", storage);
     !validated) {
     return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
       validated.error());
@@ -404,7 +368,7 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
   }
   if (manifest_requested) {
     if (const auto validated = ValidateOutputFilePath(
-          manifest_output, "paktool.prepare.manifest_output_path", fs);
+          manifest_output, "paktool.prepare.manifest_output_path", storage);
       !validated) {
       return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
         validated.error());
@@ -413,28 +377,28 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
   if (!options.output.diagnostics_file.empty()) {
     if (const auto validated
       = ValidateOutputFilePath(options.output.diagnostics_file,
-        "paktool.prepare.report_output_path", fs);
+        "paktool.prepare.report_output_path", storage);
       !validated) {
       return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
         validated.error());
     }
   }
 
-  if (const auto ensured = EnsureParentDirectory(
-        options.request.output_pak, "paktool.prepare.output_pak_parent", fs);
+  if (const auto ensured = RequireParentFolder(options.request.output_pak,
+        "paktool.prepare.output_pak_parent", storage);
     !ensured) {
     return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
       ensured.error());
   }
-  if (const auto ensured = EnsureParentDirectory(options.request.catalog_output,
-        "paktool.prepare.catalog_output_parent", fs);
+  if (const auto ensured = RequireParentFolder(options.request.catalog_output,
+        "paktool.prepare.catalog_output_parent", storage);
     !ensured) {
     return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
       ensured.error());
   }
   if (manifest_requested) {
-    if (const auto ensured = EnsureParentDirectory(
-          manifest_output, "paktool.prepare.manifest_output_parent", fs);
+    if (const auto ensured = RequireParentFolder(
+          manifest_output, "paktool.prepare.manifest_output_parent", storage);
       !ensured) {
       return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
         ensured.error());
@@ -442,8 +406,8 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
   }
   if (!options.output.diagnostics_file.empty()) {
     if (const auto ensured
-      = EnsureParentDirectory(options.output.diagnostics_file,
-        "paktool.prepare.report_output_parent", fs);
+      = RequireParentFolder(options.output.diagnostics_file,
+        "paktool.prepare.report_output_parent", storage);
       !ensured) {
       return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
         ensured.error());
@@ -464,14 +428,14 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
     return MakeError("paktool.prepare.base_pak_required",
       "Patch mode requires at least one --base-pak.");
   }
-  auto base_paks = ReadLayerPaks(base_pak_paths, "base_pak", fs);
+  auto base_paks = ReadLayerPaks(base_pak_paths, "base_pak", storage);
   if (!base_paks) {
     return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
       base_paks.error());
   }
   const auto& dependency_pak_paths = options.request.dependency_paks;
   auto dependency_paks
-    = ReadLayerPaks(dependency_pak_paths, "dependency_pak", fs);
+    = ReadLayerPaks(dependency_pak_paths, "dependency_pak", storage);
   if (!dependency_paks) {
     return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
       dependency_paks.error());

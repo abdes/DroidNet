@@ -30,6 +30,11 @@
 
 namespace oxygen::content::internal {
 
+class PayloadBudget;
+
+//! Loads resources: reads a resource's descriptor row, awaits its payload
+//! into a buffer within Content's payload budget, then decodes it on the
+//! thread pool.
 class ResourceLoadPipeline final {
 public:
   using ContentCache = AnyCache<uint64_t, RefCountedEviction<uint64_t>>;
@@ -58,7 +63,8 @@ public:
     const ResourceLoaderMap& resource_loaders, ContentCache& content_cache,
     InFlightOperationTable& in_flight_ops,
     const std::shared_ptr<ContentReleaseQueue>& releases,
-    observer_ptr<co::ThreadPool> thread_pool, bool work_offline,
+    observer_ptr<co::ThreadPool> thread_pool,
+    observer_ptr<PayloadBudget> payload_budget, bool work_offline,
     Callbacks callbacks);
 
   auto LoadErased(TypeId resource_type, ResourceKey key,
@@ -78,6 +84,7 @@ private:
   InFlightOperationTable& in_flight_ops_;
   const std::shared_ptr<ContentReleaseQueue>& releases_;
   observer_ptr<co::ThreadPool> thread_pool_;
+  observer_ptr<PayloadBudget> payload_budget_;
   bool work_offline_ { false };
   Callbacks callbacks_;
 };

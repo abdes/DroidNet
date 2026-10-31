@@ -9,18 +9,17 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -37,65 +36,11 @@ auto MakeAssetKey(const std::uint8_t seed) -> oxygen::data::AssetKey
  the provided `AssetKey`.
 */
 auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
-  const oxygen::data::AssetKey& key, const std::string_view descriptor_relpath,
-  const std::string_view virtual_path) -> void
+  const oxygen::data::AssetKey& key, const std::string_view leaf) -> void
 {
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
-  std::filesystem::create_directories(cooked_root);
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += descriptor_relpath;
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += virtual_path;
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-
-  // The runtime loader rejects indexes with an all-zero GUID.
-  // For these tests we only need a valid (non-zero) value.
-  for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
-    header.source_identity.at(i) = static_cast<uint8_t>(i + 1);
-  }
-  header.source_identity.at(6)
-    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
-  header.source_identity.at(8)
-    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
-
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  AssetEntry entry {};
-  entry.asset_key = key;
-  entry.descriptor_relpath_offset = off_desc;
-  entry.virtual_path_offset = off_vpath;
-  entry.source_path_offset = off_vpath;
-  entry.asset_type = 0;
-  entry.descriptor_size = 0;
-  std::ranges::copy(oxygen::base::ComputeSha256({}), entry.descriptor_sha256);
-
-  const auto index_path = cooked_root / "container.index.bin";
-  std::ofstream out(index_path, std::ios::binary);
-  out.write(reinterpret_cast<const char*>(&header), sizeof(header));
-  out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-  out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
+  auto loose = oxygen::cooker::testing::LooseCookedRoot { ".cooked" };
+  static_cast<void>(loose.Add({ .leaf = std::string(leaf), .key = key }));
+  oxygen::cooker::testing::Materialize(loose.Files(), cooked_root);
 }
 
 //! Test: Resolver returns the AssetKey for a matching virtual path
@@ -105,13 +50,13 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
 NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyFoundReturnsKey)
 {
   // Arrange
-  const auto root
-    = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto& root = temp_dir.Path();
   const auto cooked_root = root / "root0";
 
   const auto key = MakeAssetKey(0x11U);
 
-  WriteSingleAssetIndex(cooked_root, key, "A.bin", "/.cooked/A.bin");
+  WriteSingleAssetIndex(cooked_root, key, "A.bin");
 
   oxygen::content::VirtualPathResolver resolver;
   resolver.AddLooseCookedRoot(cooked_root);
@@ -135,16 +80,16 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyFoundReturnsKey)
 NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyDuplicatePathLastWins)
 {
   // Arrange
-  const auto root
-    = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto& root = temp_dir.Path();
   const auto cooked_root0 = root / "root0";
   const auto cooked_root1 = root / "root1";
 
   const auto key0 = MakeAssetKey(0x11U);
   const auto key1 = MakeAssetKey(0x22U);
 
-  WriteSingleAssetIndex(cooked_root0, key0, "A0.bin", "/.cooked/A.bin");
-  WriteSingleAssetIndex(cooked_root1, key1, "A1.bin", "/.cooked/A.bin");
+  WriteSingleAssetIndex(cooked_root0, key0, "A.bin");
+  WriteSingleAssetIndex(cooked_root1, key1, "A.bin");
 
   oxygen::content::VirtualPathResolver resolver;
   resolver.AddLooseCookedRoot(cooked_root0);
@@ -169,13 +114,13 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyDuplicatePathLastWins)
 NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyNotFoundReturnsNullopt)
 {
   // Arrange
-  const auto root
-    = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto& root = temp_dir.Path();
   const auto cooked_root = root / "root0";
 
   const auto key = MakeAssetKey(0x11U);
 
-  WriteSingleAssetIndex(cooked_root, key, "A.bin", "/.cooked/A.bin");
+  WriteSingleAssetIndex(cooked_root, key, "A.bin");
 
   oxygen::content::VirtualPathResolver resolver;
   resolver.AddLooseCookedRoot(cooked_root);

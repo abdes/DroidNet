@@ -18,7 +18,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -36,12 +35,15 @@
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -51,9 +53,8 @@
 #include <Oxygen/Data/Schema/Generated.SceneChanges.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
-#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::inspection {
 namespace {
@@ -65,33 +66,16 @@ namespace {
   using data::schema::SchemaValue;
 
   //! Reads and parses the scene descriptor `entry` names.
-  auto LoadScene(
-    const std::filesystem::path& root, const lc::Inspection::AssetEntry& entry)
-    -> std::shared_ptr<const data::SceneAsset>
+  auto LoadScene(const cooked::CookedContent& content,
+    const cooked::CookedAsset& entry) -> std::shared_ptr<const data::SceneAsset>
   {
-    const auto relative
-      = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
-    if (relative.empty() || relative.has_root_path()
-      || *relative.begin() == "..") {
-      throw std::runtime_error(
-        "Descriptor path must stay within its cooked root.");
-    }
-    const auto descriptor_path = root / relative;
-    auto file = serio::NativeFile::Open(descriptor_path, {});
-    if (!file) {
-      throw std::system_error(
-        file.error(), fmt::format("open '{}'", descriptor_path.string()));
-    }
-    auto stream = serio::OpenReadStream(*file);
-    if (!stream) {
-      throw std::system_error(
-        stream.error(), fmt::format("size '{}'", descriptor_path.string()));
-    }
-    if (stream->Size().get() != entry.descriptor_size) {
+    const auto bytes = content.Descriptor(entry.key);
+    if (bytes.size() != entry.descriptor_size.get()) {
       throw std::runtime_error(
         "Scene descriptor size does not match its index entry.");
     }
-    serio::Reader reader(*stream);
+    serio::ReadOnlyMemoryStream stream(bytes);
+    serio::Reader reader(stream);
     const LoaderContext context {
       .current_asset_key = entry.key,
       .desc_reader = &reader,
@@ -105,11 +89,11 @@ namespace {
   //! is not in the root or does not parse is missing.
   class RootScenes {
   public:
-    RootScenes(std::filesystem::path root, const lc::Inspection& inspection)
-      : root_(std::move(root))
+    explicit RootScenes(const cooked::CookedContent& content)
+      : content_(&content)
     {
-      for (const auto& entry : inspection.Assets()) {
-        if (entry.asset_type == static_cast<uint8_t>(data::AssetType::kScene)) {
+      for (const auto& entry : content.Assets()) {
+        if (entry.type == data::AssetType::kScene) {
           entries_.emplace(entry.key, make_observer(&entry));
         }
       }
@@ -127,7 +111,7 @@ namespace {
       if (entry == entries_.end()) {
         return nullptr;
       }
-      auto scene = LoadScene(root_, *entry->second);
+      auto scene = LoadScene(*content_, *entry->second);
       scenes_.emplace(key, scene);
       return scene;
     }
@@ -153,9 +137,8 @@ namespace {
     }
 
   private:
-    std::filesystem::path root_;
-    std::map<data::AssetKey, observer_ptr<const lc::Inspection::AssetEntry>>
-      entries_;
+    observer_ptr<const cooked::CookedContent> content_;
+    std::map<data::AssetKey, observer_ptr<const cooked::CookedAsset>> entries_;
     std::map<data::AssetKey, std::shared_ptr<const data::SceneAsset>> scenes_;
   };
 
@@ -617,24 +600,24 @@ auto RunSceneMetadataReport(const SceneMetadataOptions& options)
     = std::filesystem::absolute(options.cooked_root).lexically_normal();
   const auto output_path
     = std::filesystem::absolute(options.output).lexically_normal();
-  if (output_path == root / "container.index.bin") {
+  if (output_path == root / oxygen::data::loose_cooked::kIndexFileName) {
     throw std::runtime_error(
       "Scene metadata output must not replace its source index.");
   }
-  lc::Inspection inspection;
-  inspection.LoadFromRoot(root);
-  auto root_scenes = RootScenes(root, inspection);
+  const auto content
+    = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
+  auto root_scenes = RootScenes(content);
   auto scenes = json::array();
   // Each scene that could not be read, as `scene '<path>' (<key>): <why>`.
   auto failures = std::vector<std::string> {};
-  for (const auto& entry : inspection.Assets()) {
-    const auto relative
-      = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
-    if (output_path == root / relative) {
+  for (const auto& entry : content.Assets()) {
+    if (content.Source().kind == data::CookedSourceKind::kLooseCooked
+      && output_path
+        == content.DescriptorStored(entry.key).file.lexically_normal()) {
       throw std::runtime_error(
         "Scene metadata output must not replace a source descriptor.");
     }
-    if (entry.asset_type != static_cast<uint8_t>(data::AssetType::kScene)
+    if (entry.type != data::AssetType::kScene
       || (!options.virtual_path.empty()
         && entry.virtual_path != options.virtual_path)) {
       continue;
@@ -668,7 +651,7 @@ auto RunSceneMetadataReport(const SceneMetadataOptions& options)
   }
   const auto report = json {
     { "schema", "oxygen.cooked-scenes.v2" },
-    { "source_key", nostd::to_string(inspection.Guid()) },
+    { "source_key", nostd::to_string(content.Summary().source_key) },
     { "complete", failures.empty() },
     { "scenes", std::move(scenes) },
   };

@@ -42,19 +42,19 @@ namespace {
     };
   }
 
-  //! A pak of library `library` that requires `requirement` of `Engine`, or
+  //! A pak of mount `mount` that requires `requirement` of `Engine`, or
   //! nothing.
-  auto Pak(const std::string& library,
+  auto Pak(const std::string& mount,
     std::vector<PakRequirement> requirements = {},
     std::vector<AssetKey> deleted = {}) -> std::shared_ptr<FakeContentSource>
   {
     const auto key = data::SourceKey { Uuid::Generate() };
-    auto pak = std::make_shared<FakeContentSource>(library + ".pak", key);
+    auto pak = std::make_shared<FakeContentSource>(mount + ".pak", key);
     auto catalog = data::PakCatalog {
       .source_key = key,
       .content_version = 0U,
       .catalog_digest = {},
-      .library = library,
+      .mount = mount,
       .entries = {},
       .deleted = std::move(deleted),
       .bases = {},
@@ -62,7 +62,7 @@ namespace {
     };
     if (!requirements.empty()) {
       catalog.dependencies.push_back({
-        .library = "Engine",
+        .mount = "Engine",
         .requirements = std::move(requirements),
       });
     }
@@ -115,7 +115,7 @@ namespace {
 
     ASSERT_EQ(failures.size(), 1U);
     EXPECT_EQ(failures.front().failure, RequirementFailure::kMissing);
-    EXPECT_EQ(failures.front().library, "Engine");
+    EXPECT_EQ(failures.front().mount, "Engine");
     EXPECT_EQ(failures.front().requirement, MaterialRequirement());
     EXPECT_TRUE(registry.Sources().empty());
   }
@@ -134,10 +134,9 @@ namespace {
     EXPECT_EQ(failures.front().found_type, AssetType::kGeometry);
   }
 
-  //! The providing entry's virtual path names its library, whatever key it
+  //! The providing entry's virtual path names its mount, whatever key it
   //! has.
-  NOLINT_TEST(
-    ContentSourceRegistryRequirementTest, AnotherLibraryRefusesTheMount)
+  NOLINT_TEST(ContentSourceRegistryRequirementTest, ForeignEntryRefusesTheMount)
   {
     auto registry = ContentSourceRegistry {};
     const auto other = std::make_shared<FakeContentSource>(
@@ -151,8 +150,8 @@ namespace {
     const auto failures = Refusal(registry, Pak("Content", { requirement }));
 
     ASSERT_EQ(failures.size(), 1U);
-    EXPECT_EQ(failures.front().failure, RequirementFailure::kLibraryMismatch);
-    EXPECT_EQ(failures.front().found_library, "Other");
+    EXPECT_EQ(failures.front().failure, RequirementFailure::kMountMismatch);
+    EXPECT_EQ(failures.front().found_mount, "Other");
   }
 
   //! A deletion between the pak and the providing layer is terminal.

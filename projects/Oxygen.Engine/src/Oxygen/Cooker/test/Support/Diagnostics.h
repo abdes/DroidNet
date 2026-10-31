@@ -13,6 +13,8 @@
 #include <string>
 #include <string_view>
 
+#include <Oxygen/Testing/GTest.h>
+
 namespace oxygen::cooker::test {
 
 //! Any diagnostic record with `code` and `message` members, such as
@@ -42,6 +44,49 @@ template <std::ranges::input_range R>
     out << d.code << ": " << d.message << "\n";
   }
   return out.str();
+}
+
+//! A diagnostic record with an error severity, such as `PakDiagnostic` and
+//! `ImportDiagnostic`.
+template <typename T>
+concept SeverityDiagnostic = DiagnosticRecord<T> && requires(const T& d) {
+  { d.severity == decltype(d.severity)::kError } -> std::convertible_to<bool>;
+};
+
+template <std::ranges::input_range R>
+  requires SeverityDiagnostic<std::ranges::range_value_t<R>>
+[[nodiscard]] auto HasErrorDiagnostic(const R& diagnostics) -> bool
+{
+  return std::ranges::any_of(diagnostics, [](const auto& d) -> bool {
+    return d.severity == decltype(d.severity)::kError;
+  });
+}
+
+//! Matches diagnostics without an error; a failure prints all of them.
+/*!
+ ```cpp
+ ASSERT_THAT(result.diagnostics, HasNoErrors());
+ ```
+*/
+MATCHER(HasNoErrors, "has no error diagnostic")
+{
+  if (!HasErrorDiagnostic(arg)) {
+    return true;
+  }
+  *result_listener << "whose diagnostics are\n" << DiagnosticSummary(arg);
+  return false;
+}
+
+//! Matches diagnostics holding one with `code`; a failure prints all of them.
+MATCHER_P(HasDiagnostic, code,
+  std::string(negation ? "has no" : "has a") + " diagnostic "
+    + std::string(code))
+{
+  if (HasDiagnosticCode(arg, code)) {
+    return true;
+  }
+  *result_listener << "whose diagnostics are\n" << DiagnosticSummary(arg);
+  return false;
 }
 
 } // namespace oxygen::cooker::test

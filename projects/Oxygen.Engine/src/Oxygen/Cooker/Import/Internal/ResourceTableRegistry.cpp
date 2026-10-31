@@ -20,7 +20,6 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Semaphore.h>
@@ -37,9 +36,12 @@ struct ResourceTableRegistry::SharedTableLockState final {
   co::Semaphore semaphore { 1 };
 };
 
-ResourceTableRegistry::ResourceTableRegistry(IAsyncFileWriter& file_writer)
+ResourceTableRegistry::ResourceTableRegistry(
+  IAsyncFileWriter& file_writer, observer_ptr<cooked::CookerStorage> storage)
   : file_writer_(file_writer)
+  , storage_(storage)
 {
+  CHECK_NOTNULL_F(storage_, "ResourceTableRegistry requires a file system");
 }
 
 auto ResourceTableRegistry::NormalizeKey(
@@ -49,15 +51,14 @@ auto ResourceTableRegistry::NormalizeKey(
 }
 
 auto ResourceTableRegistry::TextureAggregator(
-  const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
-  -> TextureTableAggregator&
+  const std::filesystem::path& cooked_root) -> TextureTableAggregator&
 {
   const auto key = NormalizeKey(cooked_root);
   std::scoped_lock lock(mutex_);
   auto it = texture_tables_.find(key);
   if (it == texture_tables_.end()) {
     auto created = std::make_unique<TextureTableAggregator>(
-      file_writer_, layout, cooked_root);
+      file_writer_, *storage_, cooked_root);
     it = texture_tables_.emplace(key, std::move(created)).first;
     DLOG_F(INFO, "Created texture table for '{}'", key);
   }
@@ -65,15 +66,14 @@ auto ResourceTableRegistry::TextureAggregator(
 }
 
 auto ResourceTableRegistry::BufferAggregator(
-  const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
-  -> BufferTableAggregator&
+  const std::filesystem::path& cooked_root) -> BufferTableAggregator&
 {
   const auto key = NormalizeKey(cooked_root);
   std::scoped_lock lock(mutex_);
   auto it = buffer_tables_.find(key);
   if (it == buffer_tables_.end()) {
     auto created = std::make_unique<BufferTableAggregator>(
-      file_writer_, layout, cooked_root);
+      file_writer_, *storage_, cooked_root);
     it = buffer_tables_.emplace(key, std::move(created)).first;
     DLOG_F(INFO, "Created buffer table for '{}'", key);
   }
@@ -81,15 +81,14 @@ auto ResourceTableRegistry::BufferAggregator(
 }
 
 auto ResourceTableRegistry::PhysicsAggregator(
-  const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
-  -> PhysicsTableAggregator&
+  const std::filesystem::path& cooked_root) -> PhysicsTableAggregator&
 {
   const auto key = NormalizeKey(cooked_root);
   std::scoped_lock lock(mutex_);
   auto it = physics_tables_.find(key);
   if (it == physics_tables_.end()) {
     auto created = std::make_unique<PhysicsTableAggregator>(
-      file_writer_, layout, cooked_root);
+      file_writer_, *storage_, cooked_root);
     it = physics_tables_.emplace(key, std::move(created)).first;
     DLOG_F(INFO, "Created physics table for '{}'", key);
   }
@@ -176,7 +175,7 @@ auto ResourceTableRegistry::AbortSession(ImportSessionToken& participation)
 }
 
 auto ResourceTableRegistry::EndSession(ImportSessionToken& participation)
-  -> co::Co<bool>
+  -> co::Co<SessionEnd>
 {
   participation.Validate(this);
   const auto& key = participation.key_;
@@ -195,7 +194,7 @@ auto ResourceTableRegistry::EndSession(ImportSessionToken& participation)
     if (found->second.active > 1) {
       --found->second.active;
       participation.active_ = false;
-      co_return !found->second.aborted;
+      co_return SessionEnd { .ok = !found->second.aborted, .written = {} };
     }
     // Allocate the admission gate before consuming the final participation.
     completion = std::make_shared<co::Event>();
@@ -221,19 +220,29 @@ auto ResourceTableRegistry::EndSession(ImportSessionToken& participation)
     completion->Trigger();
   });
   if (aborted) {
-    co_return false;
+    co_return SessionEnd { .ok = false, .written = {} };
   }
-  bool ok = true;
-  if (textures && !co_await textures->Finalize()) {
-    ok = false;
+  using data::loose_cooked::FileKind;
+  auto end = SessionEnd {};
+  // A table written is one its writer hashed as it wrote it.
+  const auto record = [&end](const auto& aggregator, const FileKind kind,
+                        const bool finalized) -> void {
+    if (!finalized) {
+      end.ok = false;
+    } else if (const auto& written = aggregator.Written()) {
+      end.written.push_back({ .kind = kind, .digest = *written });
+    }
+  };
+  if (textures) {
+    record(*textures, FileKind::kTexturesTable, co_await textures->Finalize());
   }
-  if (buffers && !co_await buffers->Finalize()) {
-    ok = false;
+  if (buffers) {
+    record(*buffers, FileKind::kBuffersTable, co_await buffers->Finalize());
   }
-  if (physics && !co_await physics->Finalize()) {
-    ok = false;
+  if (physics) {
+    record(*physics, FileKind::kPhysicsTable, co_await physics->Finalize());
   }
-  co_return ok;
+  co_return end;
 }
 
 auto ResourceTableRegistry::FinalizeAll() -> co::Co<bool>

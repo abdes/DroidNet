@@ -548,10 +548,10 @@ class OxygenConan(ConanFile):
 
     def validate(self):
         if self.options.ui_tests and (
-            not self._full_engine or not self.options.examples
+            not self._full_engine or not self.options.examples or not self.options.tests
         ):
             raise ConanInvalidConfiguration(
-                "UI tests require the full engine and demo applications"
+                "UI tests require the full engine, demo applications and tests"
             )
         if self._full_engine and (
             self.settings.os != "Windows" or self.settings.arch != "x86_64"

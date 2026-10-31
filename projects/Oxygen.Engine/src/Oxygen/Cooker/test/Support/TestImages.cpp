@@ -21,9 +21,9 @@
 #include <webp/types.h>
 
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestImages.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace oxygen::cooker::test {
 
@@ -209,7 +209,7 @@ auto MakeKtx2(const Ktx2Image& image) -> std::vector<std::byte>
   }
 
   // libktx writes to memory with malloc; a file keeps ownership with libktx.
-  const auto directory = ScopedTempDir {};
+  const auto directory = oxygen::testing::ScopedTempDir {};
   const auto path = directory.Path() / "texture.ktx2";
   if (ktxTexture2_WriteToNamedFile(texture.get(), path.string().c_str())
     != KTX_SUCCESS) {

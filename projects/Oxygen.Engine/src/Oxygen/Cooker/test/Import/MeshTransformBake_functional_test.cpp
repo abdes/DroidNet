@@ -45,7 +45,6 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
@@ -65,7 +64,6 @@ using oxygen::content::import::CookedBufferPayload;
 using oxygen::content::import::ImportDiagnostic;
 using oxygen::content::import::ImportRequest;
 using oxygen::content::import::ImportSeverity;
-using oxygen::content::import::LooseCookedLayout;
 using oxygen::content::import::MeshBuildPipeline;
 using oxygen::content::import::SceneBuild;
 using oxygen::content::import::SurfaceProvenance;
@@ -202,33 +200,22 @@ protected:
       const auto bytes = std::as_bytes(std::span(raw));
       return { bytes.begin(), bytes.end() };
     };
-    const auto table = read_bytes(
-      report->cooked_root / LooseCookedLayout {}.BuffersTableRelPath());
-    const auto buffers = read_bytes(
-      report->cooked_root / LooseCookedLayout {}.BuffersDataRelPath());
+    const auto& buffer_table
+      = inspection.ResourceTable(data::ResourceKind::kBuffer);
     const auto read_buffer =
       [&](const data::pak::core::ResourceIndexT index) -> CookedBufferPayload {
-      data::pak::core::BufferResourceDesc descriptor;
-      const auto entry = std::span<const std::byte>(table).subspan(
-        static_cast<size_t>(index.get()) * sizeof(descriptor),
-        sizeof(descriptor));
-      std::memcpy(&descriptor, entry.data(), sizeof(descriptor));
       CookedBufferPayload payload;
-      const auto content = std::span<const std::byte>(buffers).subspan(
-        static_cast<size_t>(descriptor.data_offset),
-        static_cast<size_t>(descriptor.size_bytes));
-      payload.data.assign(content.begin(), content.end());
+      payload.data = buffer_table.Payload(index);
       return payload;
     };
     for (const auto& asset : inspection.Assets()) {
-      if (asset.asset_type
-        != static_cast<uint8_t>(data::AssetType::kGeometry)) {
+      if (asset.type != data::AssetType::kGeometry) {
         continue;
       }
       MeshBuildPipeline::CookedGeometryPayload geometry;
       geometry.geometry_key = asset.key;
       geometry.descriptor_bytes
-        = read_bytes(report->cooked_root / asset.descriptor_relpath);
+        = read_bytes(inspection.DescriptorStored(asset.key).file);
       data::pak::geometry::MeshDesc descriptor;
       std::memcpy(&descriptor,
         std::span<const std::byte>(geometry.descriptor_bytes)

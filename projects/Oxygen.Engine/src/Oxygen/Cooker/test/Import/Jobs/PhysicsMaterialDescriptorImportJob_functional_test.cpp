@@ -72,8 +72,7 @@ namespace {
             "restitution": 0.05,
             "density": 1700.0,
             "combine_mode_friction": "max",
-            "combine_mode_restitution": "average",
-            "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
+            "combine_mode_restitution": "average"
           })",
         };
 
@@ -192,9 +191,10 @@ namespace {
   }
 
   NOLINT_TEST_F(PhysicsMaterialDescriptorImportJobTest,
-    DocumentVirtualPathDifferingFromTheRequestIsRefused)
+    DocumentStatingAVirtualPathIsRefusedBySchema)
   {
-    const auto cooked_root = TempDir() / "identity_conflict";
+    // The identity comes from the job; the descriptor has no `virtual_path`.
+    const auto cooked_root = TempDir() / "document_virtual_path";
     std::filesystem::create_directories(cooked_root);
 
     const auto report = Import(MakeIdentityRequest(cooked_root,
@@ -206,7 +206,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "physics.material.identity_conflict"));
+      report->diagnostics, "physics.material.schema_validation_failed"));
   }
 
 } // namespace

@@ -9,11 +9,8 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <optional>
 #include <span>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -27,6 +24,7 @@
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/Internal/PakCatalogJson.h>
 #include <Oxygen/Cooker/Pak/Internal/PakCatalog_schema.h>
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
@@ -187,7 +185,7 @@ namespace {
     auto dependencies = std::vector<data::PakCatalogDependency> {};
     for (const auto& item : items) {
       auto dependency = data::PakCatalogDependency {
-        .library = item.at("library").get<std::string>(),
+        .mount = item.at("mount").get<std::string>(),
         .requirements = {},
       };
       for (const auto& entry : item.at("requirements")) {
@@ -232,7 +230,7 @@ namespace {
     root["source_key"] = data::to_string(catalog.source_key);
     root["content_version"] = catalog.content_version;
     root["catalog_digest"] = base::ToHexString(catalog.catalog_digest);
-    root["library"] = catalog.library;
+    root["mount"] = catalog.mount;
 
     auto json_entries = ordered_json::array();
     for (const auto& entry : entries) {
@@ -328,7 +326,7 @@ namespace {
       .source_key = source_key.value(),
       .content_version = document.at("content_version").get<uint16_t>(),
       .catalog_digest = catalog_digest.value(),
-      .library = document.at("library").get<std::string>(),
+      .mount = document.at("mount").get<std::string>(),
       .entries = std::move(entries),
       .deleted = {},
       .bases = {},
@@ -365,7 +363,7 @@ namespace internal {
   {
     auto sorted = std::vector<data::PakCatalogDependency>(
       dependencies.begin(), dependencies.end());
-    std::ranges::sort(sorted, {}, &data::PakCatalogDependency::library);
+    std::ranges::sort(sorted, {}, &data::PakCatalogDependency::mount);
     auto items = ordered_json::array();
     for (auto& dependency : sorted) {
       std::ranges::sort(dependency.requirements, {},
@@ -386,7 +384,7 @@ namespace internal {
         requirements.push_back(std::move(item));
       }
       items.push_back(ordered_json {
-        { "library", dependency.library },
+        { "mount", dependency.mount },
         { "requirements", std::move(requirements) },
       });
     }
@@ -415,40 +413,29 @@ auto PakCatalogIo::Parse(const std::string_view text)
   }
 }
 
-auto PakCatalogIo::Read(const std::filesystem::path& path)
-  -> Result<data::PakCatalog>
+auto PakCatalogIo::Read(const std::filesystem::path& path,
+  const cooked::CookerStorageReader& storage) -> Result<data::PakCatalog>
 {
-  auto input = std::ifstream(path);
-  if (!input) {
-    return Result<data::PakCatalog>::Err(std::errc::no_such_file_or_directory);
+  const auto bytes = cooked::ReadWholeFile(storage, path);
+  if (!bytes) {
+    return Result<data::PakCatalog>::Err(bytes.error());
   }
-
-  auto buffer = std::ostringstream {};
-  buffer << input.rdbuf();
-  if (!input.good() && !input.eof()) {
-    return Result<data::PakCatalog>::Err(std::errc::io_error);
-  }
-
-  return Parse(buffer.str());
+  auto text = std::string(bytes->size(), '\0');
+  std::ranges::transform(*bytes, text.begin(),
+    [](const std::byte b) -> char { return static_cast<char>(b); });
+  return Parse(text);
 }
 
 auto PakCatalogIo::Write(const std::filesystem::path& path,
-  const data::PakCatalog& catalog) -> Result<void>
+  const data::PakCatalog& catalog, cooked::CookerStorage& storage)
+  -> Result<void>
 {
   if (!catalog.Validate()) {
     return Result<void>::Err(std::errc::invalid_argument);
   }
-  auto output = std::ofstream(path);
-  if (!output) {
-    return Result<void>::Err(std::errc::io_error);
-  }
-
-  output << ToCanonicalJsonString(catalog);
-  if (!output) {
-    return Result<void>::Err(std::errc::io_error);
-  }
-
-  return Result<void>::Ok();
+  const auto text = ToCanonicalJsonString(catalog);
+  return cooked::PublishWholeFile(
+    storage, path, std::as_bytes(std::span(text)));
 }
 
 } // namespace oxygen::content::pak

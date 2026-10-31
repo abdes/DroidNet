@@ -38,7 +38,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
-#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -54,8 +54,6 @@
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -76,7 +74,6 @@ namespace {
 
   namespace script = data::pak::scripting;
   namespace world = data::pak::world;
-  namespace lc = oxygen::content::lc;
   using SidecarCookedInspectionContext = detail::CookedInspectionContext;
   using SidecarResolvedSceneState = detail::ResolvedSceneState;
 
@@ -1115,8 +1112,8 @@ namespace {
   };
 
   struct MountedAsset final {
-    const SidecarCookedInspectionContext* context = nullptr;
-    const lc::AssetEntry* entry = nullptr;
+    observer_ptr<const SidecarCookedInspectionContext> context;
+    observer_ptr<const cooked::CookedAsset> entry;
   };
 
   //! Finds an asset in the cooked contexts, the last mounted one first.
@@ -1126,10 +1123,12 @@ namespace {
   {
     for (size_t i = cooked_contexts.size(); i > 0; --i) {
       const auto& context = oxygen::base::CheckedAt(cooked_contexts, i - 1U);
-      for (const auto& asset : context.inspection.Assets()) {
-        if (asset.key == key) {
-          return MountedAsset { .context = &context, .entry = &asset };
-        }
+      if (const auto* asset = context.content.FindAsset(key);
+        asset != nullptr) {
+        return MountedAsset {
+          .context = observer_ptr { &context },
+          .entry = observer_ptr { asset },
+        };
       }
     }
     return std::nullopt;
@@ -1143,7 +1142,7 @@ namespace {
     if (!mounted) {
       return std::nullopt;
     }
-    return static_cast<data::AssetType>(mounted->entry->asset_type);
+    return mounted->entry->type;
   }
 
   //! Reads the parameter declarations of a cooked script descriptor.
@@ -1202,8 +1201,7 @@ namespace {
   auto LoadScriptDeclarations(ImportSession& session,
     const ImportRequest& request, content::VirtualPathResolver& resolver,
     std::span<const SidecarCookedInspectionContext> cooked_contexts,
-    IAsyncFileReader& reader, const SidecarDocument& parsed)
-    -> co::Co<std::optional<ScriptDeclarationMap>>
+    const SidecarDocument& parsed) -> std::optional<ScriptDeclarationMap>
   {
     auto declarations = ScriptDeclarationMap {};
     for (const auto& row : parsed.rows) {
@@ -1222,16 +1220,14 @@ namespace {
         continue;
       }
       const auto mounted = FindMountedAsset(cooked_contexts, *key);
-      if (!mounted
-        || static_cast<data::AssetType>(mounted->entry->asset_type)
-          != data::AssetType::kScript) {
+      if (!mounted || mounted->entry->type != data::AssetType::kScript) {
         continue;
       }
 
       const auto object_path = "bindings[" + std::to_string(row.source_index)
         + "].script_virtual_path";
-      const auto read = co_await detail::ReadCookedDescriptor(
-        *mounted->context, *mounted->entry, reader);
+      const auto read
+        = detail::ReadCookedDescriptor(*mounted->context, mounted->entry->key);
       if (!read.has_value()) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.script_declarations_unreadable",
@@ -1250,9 +1246,9 @@ namespace {
       declarations.emplace(*key, std::move(*decoded));
     }
     if (session.HasErrors()) {
-      co_return std::nullopt;
+      return std::nullopt;
     }
-    co_return declarations;
+    return declarations;
   }
 
   //! The cooked scenes reachable through `scene`'s instances. A scene that is
@@ -1260,7 +1256,7 @@ namespace {
   //! checked: its own cook reports it.
   auto ReadInstancedScenes(
     std::span<const SidecarCookedInspectionContext> cooked_contexts,
-    IAsyncFileReader& reader, const data::SceneAsset& scene) -> co::Co<SceneMap>
+    const data::SceneAsset& scene) -> SceneMap
   {
     auto scenes = SceneMap {};
     auto pending = std::vector<data::AssetKey> {};
@@ -1279,8 +1275,7 @@ namespace {
       if (!mounted) {
         continue;
       }
-      auto read = co_await detail::ReadCookedDescriptor(
-        *mounted->context, *mounted->entry, reader);
+      auto read = detail::ReadCookedDescriptor(*mounted->context, key);
       if (!read.has_value()) {
         continue;
       }
@@ -1296,7 +1291,7 @@ namespace {
         continue;
       }
     }
-    co_return scenes;
+    return scenes;
   }
 
   auto BuildBindingsByNodeFromComponents(const data::SceneAsset& scene)
@@ -1957,7 +1952,6 @@ namespace {
   }
 
   struct ScriptingSidecarIoHandles final {
-    IAsyncFileReader* reader = nullptr;
     IAsyncFileWriter* writer = nullptr;
     LooseCookedIndexRegistry* index_registry = nullptr;
   };
@@ -1990,15 +1984,13 @@ namespace {
     -> std::optional<ScriptingSidecarIoHandles>
   {
     auto handles = ScriptingSidecarIoHandles {
-      .reader = session.CookedReader().get(),
       .writer = session.FileWriter().get(),
       .index_registry = index_registry.get(),
     };
-    if (handles.reader == nullptr || handles.writer == nullptr
-      || handles.index_registry == nullptr) {
+    if (handles.writer == nullptr || handles.index_registry == nullptr) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "script.sidecar.io_unavailable",
-        "Scripting sidecar emission requires file reader/writer/index "
+        "Scripting sidecar emission requires a file writer and an index "
         "registry");
       return std::nullopt;
     }
@@ -2014,20 +2006,21 @@ namespace {
     const auto context_roots = internal::ContextCookedRoots(request);
     cooked_contexts.reserve(1U + context_roots.size());
 
-    auto primary_context = SidecarCookedInspectionContext {};
-    if (!detail::LoadCookedInspectionContext(session.CookedRoot(), session,
-          request, kScriptSidecarResolverDiagnostics, primary_context)) {
+    auto primary_context
+      = detail::LoadCookedInspectionContext(session.CookedRoot(), session,
+        request, kScriptSidecarResolverDiagnostics);
+    if (!primary_context) {
       return false;
     }
-    cooked_contexts.push_back(std::move(primary_context));
+    cooked_contexts.push_back(std::move(*primary_context));
 
     for (const auto& context_root : context_roots) {
-      auto context = SidecarCookedInspectionContext {};
-      if (!detail::LoadCookedInspectionContext(context_root, session, request,
-            kScriptSidecarResolverDiagnostics, context)) {
+      auto context = detail::LoadCookedInspectionContext(
+        context_root, session, request, kScriptSidecarResolverDiagnostics);
+      if (!context) {
         return false;
       }
-      cooked_contexts.push_back(std::move(context));
+      cooked_contexts.push_back(std::move(*context));
     }
 
     for (const auto& context : cooked_contexts) {
@@ -2045,26 +2038,28 @@ namespace {
     return true;
   }
 
+  //! Patches the target scene with the sidecar's scripts and emits it. The
+  //! cooked contexts are released before the emission: they keep files of
+  //! the cooked root open, the target scene's descriptor among them.
   auto ApplyScriptingSidecar(ImportSession& session,
     const ImportRequest& request, content::VirtualPathResolver& resolver,
-    std::span<const SidecarCookedInspectionContext> cooked_contexts,
-    IAsyncFileReader& reader, const SidecarDocument& parsed,
+    std::vector<SidecarCookedInspectionContext>& cooked_contexts,
+    const SidecarDocument& parsed,
     const SidecarResolvedSceneState& resolved_scene_state) -> co::Co<bool>
   {
-    const auto declarations = co_await LoadScriptDeclarations(
-      session, request, resolver, cooked_contexts, reader, parsed);
+    const auto declarations = LoadScriptDeclarations(
+      session, request, resolver, cooked_contexts, parsed);
     if (!declarations) {
       co_return false;
     }
 
     const data::SceneAsset scene(resolved_scene_state.scene_key,
       std::span<const std::byte>(resolved_scene_state.source_scene_descriptor));
-    const auto instanced
-      = co_await ReadInstancedScenes(cooked_contexts, reader, scene);
-    auto builder = SceneScriptBuilder(session, request, resolver, parsed,
+    const auto instanced = ReadInstancedScenes(cooked_contexts, scene);
+    const auto scripts = SceneScriptBuilder(session, request, resolver, parsed,
       resolved_scene_state.node_count, cooked_contexts, scene, *declarations,
-      instanced);
-    const auto scripts = builder.Build();
+      instanced)
+                           .Build();
     if (!scripts) {
       co_return false;
     }
@@ -2073,6 +2068,7 @@ namespace {
     if (!patched) {
       co_return false;
     }
+    cooked_contexts.clear();
     if (!co_await EmitPatchedScene(
           session, request, resolved_scene_state, scene, *patched, *scripts)) {
       co_return false;
@@ -2278,16 +2274,16 @@ auto ScriptingSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   auto descriptor_edit = co_await item.index_registry->LockDescriptor(
     session->CookedRoot(), req.options.scripting.target_scene_virtual_path);
 
-  const auto resolved_scene_state = co_await detail::ResolveTargetSceneState(
-    *session, req, resolver, cooked_contexts, *io_handles->reader,
-    req.options.scripting.target_scene_virtual_path,
-    kScriptSidecarResolverDiagnostics);
+  const auto resolved_scene_state
+    = detail::ResolveTargetSceneState(*session, req, resolver, cooked_contexts,
+      req.options.scripting.target_scene_virtual_path,
+      kScriptSidecarResolverDiagnostics);
   if (!resolved_scene_state.has_value()) {
     co_return false;
   }
 
-  co_return co_await ApplyScriptingSidecar(*session, req, resolver,
-    cooked_contexts, *io_handles->reader, *parsed, *resolved_scene_state);
+  co_return co_await ApplyScriptingSidecar(
+    *session, req, resolver, cooked_contexts, *parsed, *resolved_scene_state);
 }
 
 auto ScriptingSidecarImportPipeline::ReportCancelled(WorkItem item) -> co::Co<>

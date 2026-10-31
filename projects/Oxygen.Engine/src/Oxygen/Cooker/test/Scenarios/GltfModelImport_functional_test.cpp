@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 // Covers: Import/AsyncImportService.cpp, Import/Internal/gltf/GltfAdapter.cpp,
-//   Loose/Inspection.cpp
+//   Cooked/CookedContent.cpp
 
 #include <algorithm>
 #include <array>
@@ -42,6 +42,7 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
@@ -50,15 +51,12 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
@@ -76,6 +74,7 @@
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 using oxygen::base::CheckedAt;
 
@@ -83,7 +82,6 @@ namespace {
 
 using oxygen::content::import::ImportContentFlags;
 using oxygen::content::import::ImportRequest;
-using oxygen::content::import::LooseCookedLayout;
 using oxygen::content::import::test::ModelImportTestBase;
 namespace world = oxygen::data::pak::world;
 
@@ -167,7 +165,7 @@ protected:
       return {};
     }
     auto file = oxygen::serio::NativeFile::Open(
-      report.cooked_root / entry->descriptor_relpath, {});
+      inspection.DescriptorStored(entry->key).file, {});
     EXPECT_TRUE(file) << file.error().message();
     if (!file) {
       return {};
@@ -293,7 +291,7 @@ class CameraAttachmentSceneTest : public AsyncGltfImporterFullTest {
 protected:
   static auto SetUpTestSuite() -> void
   {
-    temp_ = std::make_unique<oxygen::cooker::test::ScopedTempDir>();
+    temp_ = std::make_unique<oxygen::testing::ScopedTempDir>();
     try {
       ImportCases();
     } catch (const std::exception& error) {
@@ -390,7 +388,7 @@ protected:
     }
   }
 
-  static inline std::unique_ptr<oxygen::cooker::test::ScopedTempDir> temp_;
+  static inline std::unique_ptr<oxygen::testing::ScopedTempDir> temp_;
   static inline std::string error_;
   static inline std::vector<CameraAttachmentCase> cases_;
 };
@@ -1036,23 +1034,27 @@ struct SurfaceBinding {
   std::string name;
 };
 
+//! A cooked material and where the writer laid its descriptor out.
+struct CookedMaterial {
+  oxygen::content::cooked::CookedAsset asset;
+  std::string descriptor_relpath;
+};
+
 struct ImportedMaterials {
   std::filesystem::path cooked_root;
   oxygen::content::import::ImportJobId finished_id
     = oxygen::content::import::kInvalidJobId;
   oxygen::content::import::ImportJobId job_id
     = oxygen::content::import::kInvalidJobId;
-  std::vector<oxygen::content::lc::Inspection::AssetEntry> materials;
+  std::vector<CookedMaterial> materials;
   std::array<SurfaceBinding, 2> surfaces {};
 };
 
 class CaseOnlyMaterialsTest : public AsyncGltfImporterFullTest {
 protected:
-  using Inspection = oxygen::content::lc::Inspection;
-
   static auto SetUpTestSuite() -> void
   {
-    temp_ = std::make_unique<oxygen::cooker::test::ScopedTempDir>();
+    temp_ = std::make_unique<oxygen::testing::ScopedTempDir>();
     try {
       ImportCaseOnlyMaterials(imported_);
     } catch (const std::exception& error) {
@@ -1125,7 +1127,6 @@ protected:
       .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
       .additional_sources = {},
       .cooked_root = temp_dir / "Cooked",
-      .loose_cooked_layout = LooseCookedLayout {},
       .source_key = std::nullopt,
       .job_name = std::nullopt,
       .orchestration = std::nullopt,
@@ -1147,8 +1148,13 @@ protected:
 
     const auto inspection = LoadInspection(imported.cooked_root);
     for (const auto& entry : inspection.Assets()) {
-      if (entry.asset_type == static_cast<uint8_t>(AssetType::kMaterial)) {
-        imported.materials.push_back(entry);
+      if (entry.type == AssetType::kMaterial) {
+        imported.materials.push_back({
+          .asset = entry,
+          .descriptor_relpath = inspection.DescriptorStored(entry.key)
+            .file.lexically_relative(imported.cooked_root)
+            .generic_string(),
+        });
       }
     }
     if (imported.materials.size() != 2U) {
@@ -1165,9 +1171,9 @@ protected:
       error_ = "Expected geometry_entry to contain a value";
       return;
     }
-    auto geometry_file = NativeFile::Open(imported.cooked_root
-        / std::filesystem::path(geometry_entry->descriptor_relpath),
-      {});
+    const auto geometry_path
+      = inspection.DescriptorStored(geometry_entry->key).file;
+    auto geometry_file = NativeFile::Open(geometry_path, {});
     if (!geometry_file) {
       error_ = geometry_file.error().message();
       return;
@@ -1206,13 +1212,12 @@ protected:
           + std::to_string(surface);
         return;
       }
-      binding.name = oxygen::content::test::ReadDescriptorString(
-        oxygen::cooker::test::ReadBytes(imported.cooked_root
-          / std::filesystem::path(geometry_entry->descriptor_relpath)),
+      binding.name = oxygen::cooker::testing::ReadDescriptorString(
+        oxygen::cooker::test::ReadBytes(geometry_path),
         binding.submesh.name_offset);
     }
   }
-  static inline std::unique_ptr<oxygen::cooker::test::ScopedTempDir> temp_;
+  static inline std::unique_ptr<oxygen::testing::ScopedTempDir> temp_;
   static inline std::string error_;
   static inline ImportedMaterials imported_;
 };
@@ -1224,7 +1229,7 @@ NOLINT_TEST_F(CaseOnlyMaterialsTest,
   const auto& imported = imported_;
   EXPECT_EQ(imported.finished_id, imported.job_id);
   const auto& materials = imported.materials;
-  EXPECT_NE(materials.at(0).key, materials.at(1).key);
+  EXPECT_NE(materials.at(0).asset.key, materials.at(1).asset.key);
 
   // Check the storage contract even on a case-sensitive test filesystem.
   const auto fold_ascii_case = [](std::string path) -> std::string {
@@ -1237,8 +1242,8 @@ NOLINT_TEST_F(CaseOnlyMaterialsTest,
   };
   EXPECT_NE(fold_ascii_case(materials.at(0).descriptor_relpath),
     fold_ascii_case(materials.at(1).descriptor_relpath));
-  EXPECT_NE(fold_ascii_case(materials.at(0).virtual_path),
-    fold_ascii_case(materials.at(1).virtual_path));
+  EXPECT_NE(fold_ascii_case(materials.at(0).asset.virtual_path),
+    fold_ascii_case(materials.at(1).asset.virtual_path));
 }
 
 NOLINT_TEST_F(CaseOnlyMaterialsTest,
@@ -1283,8 +1288,11 @@ NOLINT_TEST_F(
   for (size_t surface = 0; surface < imported.surfaces.size(); ++surface) {
     SCOPED_TRACE(surface);
     const auto& submesh = imported.surfaces.at(surface).submesh;
-    const auto material_entry = std::ranges::find(imported.materials,
-      submesh.material_asset_key, &Inspection::AssetEntry::key);
+    const auto material_entry
+      = std::ranges::find(imported.materials, submesh.material_asset_key,
+        [](const CookedMaterial& material) -> const oxygen::data::AssetKey& {
+          return material.asset.key;
+        });
     ASSERT_NE(material_entry, imported.materials.end());
     auto material_file = NativeFile::Open(imported.cooked_root
         / std::filesystem::path(material_entry->descriptor_relpath),
@@ -1325,7 +1333,6 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackendImportsFullTabuleiroScene)
     .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
     .additional_sources = {},
     .cooked_root = temp_dir,
-    .loose_cooked_layout = LooseCookedLayout {},
     .source_key = std::nullopt,
     .job_name = std::nullopt,
     .orchestration = std::nullopt,
@@ -1374,7 +1381,6 @@ NOLINT_TEST_F(
     .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
     .additional_sources = {},
     .cooked_root = temp_dir,
-    .loose_cooked_layout = LooseCookedLayout {},
     .source_key = std::nullopt,
     .job_name = std::nullopt,
     .orchestration = std::nullopt,
@@ -1425,10 +1431,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, ModelsShareACookedRootByIdentity)
     paths.push_back(asset.virtual_path);
   }
   // A texture descriptor is a resource file with a virtual path.
-  for (const auto& file : inspection.Files()) {
-    if (!file.virtual_path.empty()) {
-      paths.push_back(file.virtual_path);
-    }
+  for (const auto& texture : inspection.NamedTextures()) {
+    paths.push_back(texture.virtual_path);
   }
   for (const auto* model :
     { "/.cooked/A/Triangle.gltf", "/.cooked/B/Triangle.gltf" }) {

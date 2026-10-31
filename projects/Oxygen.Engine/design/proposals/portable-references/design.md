@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-10-30
+Last updated: 2026-10-31
 
 This is the component design of the [portable references proposal](README.md).
 The proposal states the rules (R1 to R11) and the scenarios they serve; this
@@ -171,13 +171,13 @@ table resolves, from a **library facts** record read without loading assets:
 | External script | Any script entry with `external_source_path` | Never (PakTool seals scripts)    |
 | Requirements    | None                                         | The catalog's requirements (R10) |
 
-| Finding                            | When                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------ |
-| `mount.library_root_mismatch`      | The one root differs from the mount's name                               |
-| `mount.library_root_multiple`      | More than one root                                                       |
-| `mount.library_external_script`    | A loose root holds a script with an external source                      |
-| `mount.library_dependency_missing` | A requirement is not provided below the mount, with its type and library |
-| `mount.library_format_unsupported` | A version this build cannot read, or a file that is not that format      |
+| Finding                           | When                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `mount.cooked_root_mismatch`      | The one root differs from the mount's name                               |
+| `mount.cooked_root_multiple`      | More than one root                                                       |
+| `mount.cooked_external_script`    | A loose root holds a script with an external source                      |
+| `mount.cooked_dependency_missing` | A requirement is not provided below the mount, with its type and library |
+| `mount.cooked_format_unsupported` | A version this build cannot read, or a file that is not that format      |
 
 `mount.library_unindexed` from the proposal is not needed: every pak has a
 browse index (see [paks](#paks)).
@@ -491,7 +491,7 @@ the project model.
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `MountKind`                                        | `Pak` deleted                                                                                                                                                                                           |
 | `MountState`                                       | `Invalid`                                                                                                                                                                                               |
-| `MountCodes`                                       | The five `mount.library_*` codes, `mount.kind_unknown`; `IsWarning` covers them                                                                                                                         |
+| `MountCodes`                                       | The five `mount.cooked_*` codes, `mount.kind_unknown`; `IsWarning` covers them                                                                                                                          |
 | `ResolvedMount`                                    | `Role`, `Findings`, `Library` (facts), `Container` (`LooseRoot`, `Generation`, `Pak`)                                                                                                                   |
 | `MountTableBuilder`                                | Binding target decides the container; library facts and checks; overlap of cooked folders; one mount-name rule                                                                                          |
 | `ProjectMounts.Resolve`                            | Resolves `.cooked` bindings to the generation `head.json` selects for the mount's root                                                                                                                  |
@@ -610,7 +610,7 @@ rewrites the written text with `ToReference`, committed as an Undo step.
 binding next to `.mounts.json`; on a change it mounts the new generation with
 `MountLooseCookedGeneration(new, replaces: old)`. If the engine refuses the
 swap with a requirement error, the old generation stays and the mount reports
-`mount.library_dependency_missing`; otherwise the reference check runs again.
+`mount.cooked_dependency_missing`; otherwise the reference check runs again.
 
 ## User experience
 

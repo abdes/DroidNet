@@ -12,15 +12,15 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
 using oxygen::content::import::TextureDescriptorImportSettings;
 using oxygen::cooker::test::ContentMountTable;
-using oxygen::cooker::test::ScopedTempDir;
+using oxygen::testing::ScopedTempDir;
 
 NOLINT_TEST(TextureDescriptorPreparationTest, KeepsNativeSchemaDiagnostics)
 {

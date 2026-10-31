@@ -1,7 +1,7 @@
 # The engine content pak: the default material and the procedural shapes,
 # ordinary assets under /Engine that every runtime mounts beneath its content.
 # The cooker generates their descriptors from Oxygen.Data, cooks them into a
-# loose root and packs that root as library Engine.
+# loose root and packs that root as the Engine mount.
 
 include(RuntimeEnvironment)
 oxygen_get_runtime_launcher(

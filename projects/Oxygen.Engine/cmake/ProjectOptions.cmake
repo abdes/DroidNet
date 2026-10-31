@@ -198,10 +198,21 @@ if(
   )
 endif()
 if(OXYGEN_BUILD_UI_TESTS)
-  if(NOT OXYGEN_BUILD_FULL_ENGINE OR NOT OXYGEN_BUILD_EXAMPLES)
+  # UI tests build their content with the test kits, which exist only in a
+  # build with tests.
+  if(
+    NOT
+      OXYGEN_BUILD_FULL_ENGINE
+    OR
+      NOT
+        OXYGEN_BUILD_EXAMPLES
+    OR
+      NOT
+        OXYGEN_BUILD_TESTS
+  )
     message(
       FATAL_ERROR
-      "OXYGEN_BUILD_UI_TESTS requires the full engine and OXYGEN_BUILD_EXAMPLES"
+      "OXYGEN_BUILD_UI_TESTS requires the full engine, OXYGEN_BUILD_EXAMPLES and OXYGEN_BUILD_TESTS"
     )
   endif()
 endif()

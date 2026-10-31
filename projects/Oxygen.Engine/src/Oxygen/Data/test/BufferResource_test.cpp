@@ -5,7 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 // Standard library
+#include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <utility>
 #include <vector>
 
@@ -13,6 +17,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project
@@ -306,6 +311,29 @@ NOLINT_TEST_F(BufferResourceFlagsTest, BitwiseCombination_PreservesBits)
   EXPECT_TRUE((with_removed & F::kCPUWritable) == F::kCPUWritable);
   EXPECT_TRUE((with_removed & F::kCPUReadable) == F::kNone);
   EXPECT_TRUE((with_removed & F::kDynamic) == F::kNone);
+}
+
+//! A buffer keeps the buffer its loader read the payload into: no copy.
+NOLINT_TEST_F(BufferResourceBasicTest, OwnsTheBufferItIsGiven)
+{
+  constexpr auto kBytes = std::array<uint8_t, 8> { 1, 2, 3, 4, 5, 6, 7, 8 };
+  const auto desc = oxygen::data::pak::core::BufferResourceDesc {
+    .size_bytes = static_cast<uint32_t>(kBytes.size()),
+    .element_stride = 1,
+  };
+  auto buffer
+    = oxygen::serio::ByteBuffer::Allocate(oxygen::serio::CountOf(kBytes.size()))
+        .value();
+  std::memcpy(buffer.Bytes().data(), kBytes.data(), kBytes.size());
+  const auto* const storage = buffer.Bytes().data();
+
+  const auto resource = BufferResource(desc, std::move(buffer));
+
+  // NOLINTNEXTLINE(*-reinterpret-cast)
+  EXPECT_EQ(
+    reinterpret_cast<const std::byte*>(resource.GetData().data()), storage);
+  EXPECT_EQ(resource.GetDataSize(), kBytes.size());
+  EXPECT_TRUE(std::ranges::equal(resource.GetData(), kBytes));
 }
 
 } // namespace

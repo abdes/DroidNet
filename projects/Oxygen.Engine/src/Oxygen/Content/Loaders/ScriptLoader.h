@@ -176,19 +176,12 @@ inline auto LoadScriptResource(LoaderContext context)
   data::pak::scripting::ScriptResourceDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
 
+  const auto payload = TakePayload(context, desc.size_bytes, "script resource");
+  const auto payload_bytes = payload.Bytes();
+  // ScriptResource owns a vector: the payload is copied into it.
   std::vector<uint8_t> data_buffer(desc.size_bytes);
-  if (desc.size_bytes > 0) {
-    constexpr std::size_t script_index
-      = IndexOf<data::ScriptResource, ResourceTypeList>::value;
-    DCHECK_NOTNULL_F(std::get<script_index>(context.data_readers),
-      "expecting data reader for ScriptResource to be valid");
-    auto& data_reader = *std::get<script_index>(context.data_readers);
-
-    CheckLoaderResult(
-      data_reader.Seek(desc.data_offset), "script resource", "data seek");
-    const auto byte_view = std::as_writable_bytes(std::span(data_buffer));
-    CheckLoaderResult(
-      data_reader.ReadBlobInto(byte_view), "script resource", "data read");
+  if (!payload_bytes.empty()) {
+    std::memcpy(data_buffer.data(), payload_bytes.data(), payload_bytes.size());
   }
 
   if (desc.content_hash != 0) {

@@ -21,11 +21,11 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -37,8 +37,8 @@ using oxygen::content::import::MountTableOwner;
 using oxygen::content::import::WriteEngineContentSources;
 using oxygen::cooker::test::LoadJson;
 using oxygen::cooker::test::LoadSchema;
-using oxygen::cooker::test::TempDirTest;
 using oxygen::cooker::test::ValidateJson;
+using oxygen::testing::TempDirTest;
 
 class EngineContentTest : public TempDirTest { };
 

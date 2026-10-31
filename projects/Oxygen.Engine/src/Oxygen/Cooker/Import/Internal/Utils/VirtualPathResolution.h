@@ -272,7 +272,7 @@ inline auto PlaceModelProduct(const ImportRequest& request,
 
 //! The cooked roots a job reads besides its output root, lowest precedence
 //! first: the bound `Cooked` mounts of its source's mount table in table
-//! order (an `Invalid` library is never mounted), then its cooked context
+//! order (an `Invalid` mount is never mounted), then its cooked context
 //! roots.
 inline auto ContextCookedRoots(const ImportRequest& request)
   -> std::vector<std::filesystem::path>

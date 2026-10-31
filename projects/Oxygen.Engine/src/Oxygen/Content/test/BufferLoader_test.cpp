@@ -32,7 +32,7 @@ protected:
   using Writer = oxygen::content::testing::BinaryAssetLoaderFixtureBase::Writer;
   auto CreateLoaderContext() -> oxygen::content::LoaderContext
   {
-    return MakeLoaderContext(false, false);
+    return MakeResourceContext<oxygen::data::pak::core::BufferResourceDesc>();
   }
 };
 

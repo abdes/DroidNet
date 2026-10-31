@@ -25,11 +25,14 @@
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -98,7 +101,7 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options)
     = std::filesystem::absolute(options.cooked_root).lexically_normal();
   const auto output_path
     = std::filesystem::absolute(options.output).lexically_normal();
-  if (output_path == root / "container.index.bin") {
+  if (output_path == root / oxygen::data::loose_cooked::kIndexFileName) {
     throw std::runtime_error(
       "Geometry metadata output must not replace its source index.");
   }
@@ -106,17 +109,18 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options)
     throw std::runtime_error(
       "Geometry metadata output must not replace its source pak.");
   }
-  lc::Inspection inspection;
-  inspection.Load(root);
+  const auto content
+    = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
   auto geometries = json::array();
-  for (const auto& entry : inspection.Assets()) {
-    const auto relative
-      = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
-    if (!inspection.IsPak() && output_path == root / relative) {
-      throw std::runtime_error(
-        "Geometry metadata output must not replace a source descriptor.");
+  for (const auto& entry : content.Assets()) {
+    if (content.Source().kind == data::CookedSourceKind::kLooseCooked) {
+      const auto stored = content.DescriptorStored(entry.key);
+      if (output_path == stored.file.lexically_normal()) {
+        throw std::runtime_error(
+          "Geometry metadata output must not replace a source descriptor.");
+      }
     }
-    if (entry.asset_type != static_cast<uint8_t>(data::AssetType::kGeometry)) {
+    if (entry.type != data::AssetType::kGeometry) {
       continue;
     }
     if (!options.virtual_path.empty()
@@ -124,14 +128,8 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options)
       continue;
     }
     try {
-      if (!inspection.IsPak()
-        && (relative.empty() || relative.has_root_path()
-          || *relative.begin() == "..")) {
-        throw std::runtime_error(
-          "Descriptor path must stay within its cooked root.");
-      }
-      const auto bytes = inspection.ReadAssetDescriptor(entry.key);
-      if (bytes.size() != entry.descriptor_size) {
+      const auto bytes = content.Descriptor(entry.key);
+      if (bytes.size() != entry.descriptor_size.get()) {
         throw std::runtime_error(
           "Geometry descriptor size does not match its index entry.");
       }

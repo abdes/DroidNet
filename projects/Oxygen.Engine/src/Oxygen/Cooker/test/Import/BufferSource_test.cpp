@@ -19,9 +19,9 @@
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace oxygen::content::import::test {
 namespace {
@@ -33,7 +33,7 @@ namespace {
   using oxygen::cooker::test::ContentMountTable;
   using oxygen::cooker::test::DiagnosticSummary;
   using oxygen::cooker::test::HasDiagnosticCode;
-  using oxygen::cooker::test::TempDirTest;
+  using oxygen::testing::TempDirTest;
 
   constexpr auto kContainer
     = std::string_view { "/Content/Geometry/geometry.buffers" };
@@ -150,7 +150,7 @@ namespace {
     ASSERT_FALSE(diagnostics.empty());
     EXPECT_EQ(diagnostics.front().code, "import.reference_invalid");
     EXPECT_THAT(diagnostics.front().message,
-      testing::HasSubstr("vpath.reference_self_absolute"));
+      ::testing::HasSubstr("vpath.reference_self_absolute"));
     EXPECT_EQ(diagnostics.front().object_path, "buffers[0].virtual_path");
   }
 
@@ -167,7 +167,7 @@ namespace {
     ASSERT_FALSE(diagnostics.empty());
     EXPECT_EQ(diagnostics.front().code, "import.reference_invalid");
     EXPECT_THAT(diagnostics.front().message,
-      testing::HasSubstr("vpath.reference_outside_mount"));
+      ::testing::HasSubstr("vpath.reference_outside_mount"));
   }
 
   NOLINT_TEST_F(BufferSourceTest, RejectsInvalidDeclarationWithSourceLocation)

@@ -244,22 +244,19 @@ oxygen_cooker_test(
     "Import/Emitters/TextureEmitter_functional_test.cpp"
 )
 
-# -- Loose Cooked --------------------------------------------------------------
+# -- Cooked content ------------------------------------------------------------
 
 oxygen_cooker_test(
-  Loose
+  Cooked
   UNIT
+  DEPS
+    oxygen::content
+    oxygen::serio::testing
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
   SOURCES
-    "Loose/LibraryFacts_test.cpp"
-    "Loose/LooseCookedLayout_test.cpp"
-)
-
-oxygen_cooker_test(
-  Loose
-  FUNCTIONAL
-  SOURCES
-    "Loose/Inspection_functional_test.cpp"
-    "Loose/Validation_functional_test.cpp"
+    "Cooked/CookedContent_test.cpp"
+    "Cooked/Validate_test.cpp"
 )
 
 # -- Pak -----------------------------------------------------------------------
@@ -268,13 +265,14 @@ oxygen_cooker_test(
   Pak
   UNIT
   DEPS
+    oxygen::content
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
   SOURCES
     "Pak/PakBuilder_test.cpp"
     "Pak/PakCatalogIo_test.cpp"
-    "Pak/PakTestSupport.h"
     "Pak/PakValidation_test.cpp"
+    "Pak/PakWriterTestSupport.h"
     "Pak/Schemas/PakCatalogSchema_test.cpp"
 )
 
@@ -283,6 +281,7 @@ oxygen_cooker_test(
   FUNCTIONAL
   DEPS
     oxygen::content
+    oxygen::serio::testing
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
   SOURCES
@@ -295,7 +294,6 @@ oxygen_cooker_test(
     "Pak/PakPlanBuilder_patch_functional_test.cpp"
     "Pak/PakRepack_functional_test.cpp"
     "Pak/PakSceneTestSupport.h"
-    "Pak/PakTestSupport.h"
     "Pak/PakWriterTestSupport.h"
     "Pak/PakWriter_functional_test.cpp"
     "Pak/PakWriter_payload_layout_functional_test.cpp"

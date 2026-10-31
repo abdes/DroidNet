@@ -14,6 +14,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -22,6 +23,7 @@
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
@@ -49,6 +51,18 @@ struct Box final {
   glm::vec3 center { 0.0F };
   glm::vec3 half { 0.0F };
 };
+
+//! The identity of the scene the sidecar and the renderables belong to; every
+//! reference they hold is relative to its folder.
+constexpr auto kSceneIdentity
+  = std::string_view { "/Content/Scenes/PhysicsDomains/PhysicsDomains.oscene" };
+
+//! The identity a reference written in the scene or its sidecar names.
+[[nodiscard]] auto ResolveSceneReference(const std::string& text) -> std::string
+{
+  const auto resolved = oxygen::content::ResolveReference(kSceneIdentity, text);
+  return resolved.has_value() ? *resolved : std::string {};
+}
 
 [[nodiscard]] auto ProjectDir() -> std::filesystem::path
 {
@@ -189,7 +203,7 @@ struct Box final {
   for (const auto* group : { "rigid_bodies", "colliders", "characters" }) {
     for (const auto& binding : sidecar.at("bindings").value(group, json {})) {
       bindings.emplace_back(binding.at("node_index").get<size_t>(),
-        binding.at("shape_ref").get<std::string>());
+        ResolveSceneReference(binding.at("shape_ref").get<std::string>()));
     }
   }
   return bindings;
@@ -228,8 +242,8 @@ NOLINT_TEST(PhysicsDomainsParityTest, EveryDrawnBodyMatchesItsCollider)
       if (!on_node && !on_child) {
         continue;
       }
-      const auto source
-        = sources.find(renderable.at("geometry_ref").get<std::string>());
+      const auto source = sources.find(ResolveSceneReference(
+        renderable.at("geometry_ref").get<std::string>()));
       ASSERT_NE(source, sources.end());
       const auto mesh = GeneratedBounds(source->second);
       ASSERT_HAS_VALUE(mesh);

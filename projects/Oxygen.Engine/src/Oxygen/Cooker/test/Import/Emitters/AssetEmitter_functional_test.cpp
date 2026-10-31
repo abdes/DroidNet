@@ -22,23 +22,22 @@
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 namespace co = oxygen::co;
-namespace fixtures = oxygen::content::test;
+namespace fixtures = oxygen::cooker::testing;
 
 namespace {
 
@@ -62,7 +61,7 @@ auto MakeSequentialAssetKey(uint32_t id) -> AssetKey
 //=== Test Fixture ===--------------------------------------------------------//
 
 //! Test fixture for AssetEmitter tests.
-class AssetEmitterTest : public oxygen::cooker::test::TempDirTest {
+class AssetEmitterTest : public oxygen::testing::TempDirTest {
 protected:
   auto SetUp() -> void override
   {
@@ -76,14 +75,8 @@ protected:
     loop_.reset();
   }
 
-  [[nodiscard]] auto Layout() const -> const LooseCookedLayout&
-  {
-    return layout_;
-  }
-
   std::unique_ptr<ImportEventLoop> loop_;
   std::unique_ptr<WindowsFileWriter> writer_;
-  LooseCookedLayout layout_ {}; // Uses default paths
 };
 
 //=== Basic Emission Tests
@@ -91,7 +84,7 @@ protected:
 
 NOLINT_TEST_F(AssetEmitterTest, EmitSingleMaterialCreatesFile)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   const auto key = MakeSequentialAssetKey(1);
   const auto bytes
     = fixtures::MaterialDescriptor("material-descriptor-content").bytes;
@@ -111,7 +104,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitSingleMaterialCreatesFile)
 
 NOLINT_TEST_F(AssetEmitterTest, EmitMultipleAssetsCreatesAllFiles)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
 
   co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
@@ -140,7 +133,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitMultipleAssetsCreatesAllFiles)
 
 NOLINT_TEST_F(AssetEmitterTest, CountTracksEmittedAssets)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
 
   // Assert initial state
   EXPECT_EQ(emitter.Count(), 0);
@@ -166,7 +159,7 @@ NOLINT_TEST_F(AssetEmitterTest, CountTracksEmittedAssets)
 
 NOLINT_TEST_F(AssetEmitterTest, RecordsContainsCorrectMetadata)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   const auto key = MakeSequentialAssetKey(42);
   const auto bytes = fixtures::GeometryDescriptor("test-content").bytes;
 
@@ -188,7 +181,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsCorrectMetadata)
 
 NOLINT_TEST_F(AssetEmitterTest, EmitSameKeyTwiceUpdatesRecordAndOverwrites)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   const auto key = MakeSequentialAssetKey(7);
 
   const auto first = fixtures::TexturedMaterialDescriptor(
@@ -219,7 +212,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitSameKeyTwiceUpdatesRecordAndOverwrites)
 
 NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathConflictBetweenKeysThrows)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   const auto bytes = fixtures::MaterialDescriptor("content").bytes;
 
   emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
@@ -238,7 +231,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathConflictBetweenKeysThrows)
 
 NOLINT_TEST_F(AssetEmitterTest, EmitDescriptorPathConflictBetweenKeysThrows)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   const auto bytes_a = fixtures::MaterialDescriptor("a").bytes;
   const auto bytes_b = fixtures::MaterialDescriptor("b").bytes;
 
@@ -261,7 +254,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitDescriptorPathConflictBetweenKeysThrows)
 NOLINT_TEST_F(
   AssetEmitterTest, EmitSameKeyRetargetDescriptorPathAllowsPathReuse)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   const auto shared_key = MakeSequentialAssetKey(7);
 
   co::Run(*loop_, [&] -> Co<> {
@@ -288,7 +281,7 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(AssetEmitterTest, RecordsPreservesEmissionOrder)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
 
   co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
@@ -316,7 +309,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsPreservesEmissionOrder)
 
 NOLINT_TEST_F(AssetEmitterTest, FinalizeWaitsForPendingIO)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
 
   co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
@@ -336,7 +329,7 @@ NOLINT_TEST_F(AssetEmitterTest, FinalizeWaitsForPendingIO)
 
 NOLINT_TEST_F(AssetEmitterTest, FinalizeNoAssetsSucceeds)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
 
   bool success = false;
   co::Run(*loop_,
@@ -348,7 +341,7 @@ NOLINT_TEST_F(AssetEmitterTest, FinalizeNoAssetsSucceeds)
 
 NOLINT_TEST_F(AssetEmitterTest, EmitAfterFinalizeThrows)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
 
   co::Run(*loop_, [&] -> Co<> {
     const auto success = co_await emitter.Finalize();
@@ -366,7 +359,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitAfterFinalizeThrows)
 
 NOLINT_TEST_F(AssetEmitterTest, FinalizeFileContentMatchesEmittedBytes)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
 
   const auto expected_bytes = fixtures::MaterialDescriptor(
     "Binary", fixtures::MaterialVariant::kWithShader)
@@ -391,7 +384,7 @@ NOLINT_TEST_F(AssetEmitterTest, FinalizeFileContentMatchesEmittedBytes)
 
 NOLINT_TEST_F(AssetEmitterTest, EmitCreatesNestedDirectories)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
 
   co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kGeometry,
@@ -412,7 +405,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitCreatesNestedDirectories)
 
 NOLINT_TEST_F(AssetEmitterTest, PendingCountReflectsQueuedWrites)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
 
   bool had_pending = false;
   bool success = false;
@@ -431,7 +424,7 @@ NOLINT_TEST_F(AssetEmitterTest, PendingCountReflectsQueuedWrites)
 
 NOLINT_TEST_F(AssetEmitterTest, ErrorCountZeroAfterSuccessfulWrites)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
 
   co::Run(*loop_, [&] -> Co<> {
     for (uint32_t i = 1; i <= 10; ++i) {
@@ -450,7 +443,7 @@ NOLINT_TEST_F(AssetEmitterTest, ErrorCountZeroAfterSuccessfulWrites)
 
 NOLINT_TEST_F(AssetEmitterTest, EmptyDescriptorIsRejectedBeforePublication)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   EXPECT_THROW(
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
       "/.cooked/Materials/Empty.omat", "Materials/Empty.omat", {}, {}),
@@ -466,7 +459,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmptyDescriptorIsRejectedBeforePublication)
 NOLINT_TEST_F(
   AssetEmitterTest, EmitSyncRejectsMalformedDescriptorBeforePublication)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   co::Run(*loop_, [&] -> Co<> {
     bool rejected = false;
     try {
@@ -484,7 +477,7 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(AssetEmitterTest, EmitLargeDescriptorWrittenCorrectly)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
 
   constexpr uint32_t kStringTableBytes = 100U * 1024U;
   const auto large_bytes
@@ -523,7 +516,7 @@ class AssetEmitterPathRejectionTest
 
 NOLINT_TEST_P(AssetEmitterPathRejectionTest, EmitThrows)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   const auto bytes = fixtures::MaterialDescriptor("test").bytes;
 
   EXPECT_THROW(emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
@@ -559,7 +552,7 @@ INSTANTIATE_TEST_SUITE_P(InvalidPaths, AssetEmitterPathRejectionTest,
 
 NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathWithCustomMountRootAccepted)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   const auto bytes = fixtures::MaterialDescriptor("test").bytes;
 
   EXPECT_NO_THROW(emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
@@ -579,7 +572,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathWithCustomMountRootAccepted)
 
 NOLINT_TEST_F(AssetEmitterTest, RecordsContainsSha256Hash)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   const auto bytes
     = fixtures::MaterialDescriptor("test-content-for-hashing").bytes;
   const auto expected_hash = oxygen::base::ComputeSha256(
@@ -593,32 +586,12 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsSha256Hash)
 
   const auto& records = emitter.Records();
   ASSERT_EQ(records.size(), 1);
-  const auto& hash = records.at(0).descriptor_sha256;
-  if (!hash) {
-    FAIL() << "Expected descriptor hash";
-  }
-  EXPECT_EQ(*hash, expected_hash);
-}
-
-NOLINT_TEST_F(AssetEmitterTest, RecordsSha256DisabledLeavesHashEmpty)
-{
-  AssetEmitter emitter(*writer_, Layout(), TempDir(), false);
-  const auto bytes = fixtures::MaterialDescriptor("test-content").bytes;
-
-  co::Run(*loop_, [&] -> Co<> {
-    emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/NoHash.omat", "Materials/NoHash.omat", bytes, {});
-    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
-  });
-
-  const auto& records = emitter.Records();
-  ASSERT_EQ(records.size(), 1);
-  EXPECT_FALSE(records.at(0).descriptor_sha256.has_value());
+  EXPECT_EQ(records.at(0).descriptor_sha256, expected_hash);
 }
 
 NOLINT_TEST_F(AssetEmitterTest, RecordsDifferentContentHasDifferentHash)
 {
-  AssetEmitter emitter(*writer_, Layout(), TempDir());
+  AssetEmitter emitter(*writer_, TempDir());
   const auto bytes1 = fixtures::MaterialDescriptor("content-one").bytes;
   const auto bytes2 = fixtures::MaterialDescriptor("content-two").bytes;
 
@@ -632,12 +605,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsDifferentContentHasDifferentHash)
 
   const auto& records = emitter.Records();
   ASSERT_EQ(records.size(), 2);
-  const auto& first_hash = records.at(0).descriptor_sha256;
-  const auto& second_hash = records.at(1).descriptor_sha256;
-  if (!first_hash || !second_hash) {
-    FAIL() << "Expected both descriptor hashes";
-  }
-  EXPECT_NE(*first_hash, *second_hash);
+  EXPECT_NE(records.at(0).descriptor_sha256, records.at(1).descriptor_sha256);
 }
 
 } // namespace

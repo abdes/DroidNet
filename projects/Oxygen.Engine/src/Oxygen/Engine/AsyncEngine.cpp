@@ -1582,6 +1582,8 @@ auto AsyncEngine::InitializeDetachedServices() -> void
   if (config_.enable_asset_loader) {
     content::AssetLoaderConfig asset_loader_cfg {
       .thread_pool = observer_ptr<co::ThreadPool> { &platform_->Threads() },
+      .io_context
+      = observer_ptr<asio::io_context> { &platform_->Async().IoContext() },
       .verify_content_hashes = config_.asset_loader.verify_content_hashes,
       .path_finder = path_finder_,
     };

@@ -19,6 +19,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Finally.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
@@ -50,16 +51,15 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
   const auto descriptor_doc = MakeStandardDescriptorDoc("CubeMissingMaterial",
-    "/.cooked/Materials/missing.omat",
-    "/.cooked/Resources/Buffers/cube_vertices.obuf",
-    "/.cooked/Resources/Buffers/cube_indices.obuf", "lod0",
+    "../Materials/missing.omat", "../Resources/Buffers/cube_vertices.obuf",
+    "../Resources/Buffers/cube_indices.obuf", "lod0",
     json::array({
       json {
         {
           "uri",
-          oxygen::cooker::test::MountPathIn(vb_source.parent_path(), vb_source),
+          vb_source.filename().generic_string(),
         },
-        { "virtual_path", "/.cooked/Resources/Buffers/cube_vertices.obuf" },
+        { "virtual_path", "../Resources/Buffers/cube_vertices.obuf" },
         { "usage_flags", 1U },
         { "element_stride", 32U },
         {
@@ -76,9 +76,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
       json {
         {
           "uri",
-          oxygen::cooker::test::MountPathIn(ib_source.parent_path(), ib_source),
+          ib_source.filename().generic_string(),
         },
-        { "virtual_path", "/.cooked/Resources/Buffers/cube_indices.obuf" },
+        { "virtual_path", "../Resources/Buffers/cube_indices.obuf" },
         { "usage_flags", 2U },
         { "element_stride", 4U },
         {
@@ -127,16 +127,15 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
   const auto descriptor_doc = MakeStandardDescriptorDoc("NewMaterialPriority",
-    "/.cooked/Materials/new.omat",
-    "/.cooked/Resources/Buffers/cube_vertices.obuf",
-    "/.cooked/Resources/Buffers/cube_indices.obuf", "lod0",
+    "../Materials/new.omat", "../Resources/Buffers/cube_vertices.obuf",
+    "../Resources/Buffers/cube_indices.obuf", "lod0",
     json::array({
       json {
         {
           "uri",
-          oxygen::cooker::test::MountPathIn(vb_source.parent_path(), vb_source),
+          vb_source.filename().generic_string(),
         },
-        { "virtual_path", "/.cooked/Resources/Buffers/cube_vertices.obuf" },
+        { "virtual_path", "../Resources/Buffers/cube_vertices.obuf" },
         { "usage_flags", 1U },
         { "element_stride", 32U },
         {
@@ -153,9 +152,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
       json {
         {
           "uri",
-          oxygen::cooker::test::MountPathIn(ib_source.parent_path(), ib_source),
+          ib_source.filename().generic_string(),
         },
-        { "virtual_path", "/.cooked/Resources/Buffers/cube_indices.obuf" },
+        { "virtual_path", "../Resources/Buffers/cube_indices.obuf" },
         { "usage_flags", 2U },
         { "element_stride", 4U },
         {
@@ -180,7 +179,8 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 
   const auto library = root / "Library";
   const auto library_key = data::AssetKey::FromVirtualPath("/Library/New.omat");
-  auto writer = LooseCookedWriter(library);
+  auto writer
+    = LooseCookedWriter(library, oxygen::content::cooked::RealCookerStorage());
   auto material_desc = data::pak::render::MaterialAssetDesc {};
   material_desc.header.asset_type
     = static_cast<uint8_t>(data::AssetType::kMaterial);
@@ -280,10 +280,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
         json {
           {
             "uri",
-            oxygen::cooker::test::MountPathIn(
-              vb_source.parent_path(), vb_source),
+            vb_source.filename().generic_string(),
           },
-          { "virtual_path", "/.cooked/Resources/Buffers/skinned_vb.obuf" },
+          { "virtual_path", "../Resources/Buffers/skinned_vb.obuf" },
           { "usage_flags", 1U },
           { "element_stride", 32U },
           {
@@ -300,10 +299,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
         json {
           {
             "uri",
-            oxygen::cooker::test::MountPathIn(
-              ib_source.parent_path(), ib_source),
+            ib_source.filename().generic_string(),
           },
-          { "virtual_path", "/.cooked/Resources/Buffers/skinned_ib.obuf" },
+          { "virtual_path", "../Resources/Buffers/skinned_ib.obuf" },
           { "usage_flags", 2U },
           { "element_stride", 4U },
           {
@@ -320,12 +318,11 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
         json {
           {
             "uri",
-            oxygen::cooker::test::MountPathIn(
-              joint_index_source.parent_path(), joint_index_source),
+            joint_index_source.filename().generic_string(),
           },
           {
             "virtual_path",
-            "/.cooked/Resources/Buffers/skinned_joint_index.obuf",
+            "../Resources/Buffers/skinned_joint_index.obuf",
           },
           { "usage_flags", 8U },
           { "element_stride", 16U },
@@ -333,12 +330,11 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
         json {
           {
             "uri",
-            oxygen::cooker::test::MountPathIn(
-              joint_weight_source.parent_path(), joint_weight_source),
+            joint_weight_source.filename().generic_string(),
           },
           {
             "virtual_path",
-            "/.cooked/Resources/Buffers/skinned_joint_weight.obuf",
+            "../Resources/Buffers/skinned_joint_weight.obuf",
           },
           { "usage_flags", 8U },
           { "element_stride", 16U },
@@ -346,12 +342,11 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
         json {
           {
             "uri",
-            oxygen::cooker::test::MountPathIn(
-              inverse_bind_source.parent_path(), inverse_bind_source),
+            inverse_bind_source.filename().generic_string(),
           },
           {
             "virtual_path",
-            "/.cooked/Resources/Buffers/skinned_inverse_bind.obuf",
+            "../Resources/Buffers/skinned_inverse_bind.obuf",
           },
           { "usage_flags", 8U },
           { "element_stride", 64U },
@@ -359,12 +354,11 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
         json {
           {
             "uri",
-            oxygen::cooker::test::MountPathIn(
-              joint_remap_source.parent_path(), joint_remap_source),
+            joint_remap_source.filename().generic_string(),
           },
           {
             "virtual_path",
-            "/.cooked/Resources/Buffers/skinned_joint_remap.obuf",
+            "../Resources/Buffers/skinned_joint_remap.obuf",
           },
           { "usage_flags", 8U },
           { "element_stride", 4U },
@@ -381,8 +375,8 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
           {
             "buffers",
             {
-              { "vb_ref", "/.cooked/Resources/Buffers/skinned_vb.obuf" },
-              { "ib_ref", "/.cooked/Resources/Buffers/skinned_ib.obuf" },
+              { "vb_ref", "../Resources/Buffers/skinned_vb.obuf" },
+              { "ib_ref", "../Resources/Buffers/skinned_ib.obuf" },
             },
           },
           {
@@ -390,19 +384,19 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
             {
               {
                 "joint_index_ref",
-                "/.cooked/Resources/Buffers/skinned_joint_index.obuf",
+                "../Resources/Buffers/skinned_joint_index.obuf",
               },
               {
                 "joint_weight_ref",
-                "/.cooked/Resources/Buffers/skinned_joint_weight.obuf",
+                "../Resources/Buffers/skinned_joint_weight.obuf",
               },
               {
                 "inverse_bind_ref",
-                "/.cooked/Resources/Buffers/skinned_inverse_bind.obuf",
+                "../Resources/Buffers/skinned_inverse_bind.obuf",
               },
               {
                 "joint_remap_ref",
-                "/.cooked/Resources/Buffers/skinned_joint_remap.obuf",
+                "../Resources/Buffers/skinned_joint_remap.obuf",
               },
               { "joint_count", 3U },
               { "influences_per_vertex", 4U },
@@ -413,7 +407,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
             json::array({
               json {
                 { "surface_id", kAuthoredSurfaceId },
-                { "material_ref", "/.cooked/Materials/default.omat" },
+                { "material_ref", "../Materials/default.omat" },
                 { "views", json::array({ json { { "view_ref", "lod0" } } }) },
               },
             }),

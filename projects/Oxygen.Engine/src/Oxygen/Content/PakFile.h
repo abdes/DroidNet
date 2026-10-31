@@ -6,10 +6,10 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -29,51 +29,41 @@
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Serio/NativeFile.h>
-#include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Serio/RegionStream.h>
+#include <Oxygen/Serio/AnyDevice.h>
+
+namespace oxygen::serio {
+class IoDriver;
+} // namespace oxygen::serio
 
 namespace oxygen::content {
 
 //! Reader and accessor for Oxygen .pak asset containers
 /*!
- PakFile provides read-only, thread-safe access to the asset directory, resource
- tables, and data regions of an Oxygen Engine .pak file. It supports type-safe
- resource table queries, asset directory lookups, and region-based data
- streaming for buffer and texture resources.
+ PakFile reads a pak from one contiguous device, a mapped file or bytes in
+ memory, and parses its metadata in place: the header, the footer, the asset
+ directory, the embedded catalog and the browse index.
+ Everything it holds is immutable once it is constructed, so concurrent reads
+ need no lock. Descriptors and reference inventories are views or decodes of
+ the mapped bytes.
 
- ### Key Features
-
- - **Thread-Safe Reads**: Uses internal mutex for safe concurrent access.
- - **Type-Safe Resource Table Access**: Template-based queries for buffer and
-   texture resource tables.
- - **Asset Directory Lookup**: Fast key-to-index mapping for asset queries.
- - **Region-Based Data Streaming**: Provides readers for buffer and texture data
-   regions, aligned for efficient I/O.
- - **Format Versioning**: Exposes header and content version info.
-
- ### Usage Patterns
+ Payloads are not read through the mapping: `Payloads()` is the device a
+ loader awaits them from. A pak opened with an IO driver opens its file a
+ second time through the driver, so payload reads complete on the driver's
+ loop without blocking it; any other pak serves its payloads from its one
+ device, with awaited reads that complete at once (memory is ready at once; a
+ mapped pak without a driver blocks the awaiting thread for each read).
 
  ```cpp
  PakFile pak{"assets.pak"};
- auto entry = pak.FindEntry(key);
- auto& buffers = pak.BuffersTable();
- auto reader = pak.CreateReader(entry.value());
+ const auto entry = pak.FindEntry(key);
+ const auto descriptor = pak.DescriptorBytes(*entry);
  ```
-
- ### Architecture Notes
-
- - Designed for bindless resource management and modular asset loading.
- - Integrates with ResourceTable and asset registry systems.
- - Only supports reading; writing is not implemented.
 
   @see oxygen::content::ResourceTable, data::pak::core::AssetDirectoryEntry,
       data::pak::core::PakHeader, data::pak::core::PakFooter
 */
 class PakFile {
 public:
-  using Reader = serio::Reader<serio::RegionReadStream<serio::NativeFile>>;
-
   //! Type alias for the buffer resource table.
   using BuffersTableT = ResourceTable<data::BufferResource>;
 
@@ -84,13 +74,40 @@ public:
   //! Type alias for the physics resource table.
   using PhysicsTableT = ResourceTable<data::PhysicsResource>;
 
-  //! Open a .pak file for reading.
+  //! Whether opening a pak checks its integrity.
+  enum class Verification : uint8_t {
+    //! Trust the bytes; `ValidateCrc32Integrity()` checks them later.
+    kNone,
+    //! Check the footer's CRC32 of the whole pak, in one sequential pass,
+    //! before parsing anything past the header and footer, so the parse
+    //! reads pages the pass already brought in. A pak with no CRC32 is
+    //! refused (`CookedOpenFailure::kUnverifiable`).
+    kCrc32,
+  };
+
+  //! Opens the pak at `path`, mapping it for its metadata; with `driver`, it
+  //! also opens it through `driver` for its payloads.
   /*!
+   The pak holds `driver`, which outlives the payload file it opened.
+
    @throw data::CookedOpenError When the file is not a pak, has a format
-     version this build cannot read, or is malformed.
+     version this build cannot read, is malformed, or fails `verification`.
    @throw std::system_error When the file cannot be opened.
   */
-  OXGN_CNTT_API explicit PakFile(const std::filesystem::path& path);
+  OXGN_CNTT_API explicit PakFile(const std::filesystem::path& path,
+    Verification verification = Verification::kNone,
+    std::shared_ptr<serio::IoDriver> driver = {});
+
+  //! Reads the pak `device` holds; `name` stands for its path in logs.
+  /*!
+   @throw std::invalid_argument When `device` is not contiguous.
+   @throw data::CookedOpenError When the bytes are not a pak, have a format
+     version this build cannot read, or are malformed.
+   @throw data::CookedOpenError `kCorrupt` too when `verification` checks the
+     CRC32 and it does not match.
+  */
+  OXGN_CNTT_API PakFile(serio::AnyDevice device, std::filesystem::path name,
+    Verification verification = Verification::kNone);
 
   //! Checks a pak header: its magic, format version and source identity.
   /*!
@@ -117,7 +134,26 @@ public:
   //=== File Information ===--------------------------------------------------//
 
   //! Get the path to the PAK file.
-  auto FilePath() const noexcept -> const auto& { return file_path_; }
+  auto FilePath() const noexcept -> const std::filesystem::path&
+  {
+    return path_;
+  }
+
+  //! The contiguous device that holds the pak's metadata: its mapping, or
+  //! the bytes it was opened from.
+  auto Device() const noexcept -> const serio::AnyDevice& { return device_; }
+
+  //! The device payloads are awaited from, with the offsets of `Device()`.
+  auto Payloads() const noexcept -> const serio::AnyAsyncDevice&
+  {
+    return payloads_;
+  }
+
+  //! The validated footer.
+  auto Footer() const noexcept -> const data::pak::core::PakFooter&
+  {
+    return footer_;
+  }
 
   //! Validated physical layer metadata, including patch deletions and bases.
   auto Catalog() const noexcept -> const data::PakCatalog& { return catalog_; }
@@ -132,9 +168,16 @@ public:
   OXGN_CNTT_NDAPI auto Directory() const noexcept
     -> std::span<const data::pak::core::AssetDirectoryEntry>;
 
-  //! Create a Reader positioned at the asset's data.
-  OXGN_CNTT_NDAPI auto CreateReader(
-    const data::pak::core::AssetDirectoryEntry& entry) const -> Reader;
+  //! The descriptor bytes of `entry`, a view of the mapped pak that is valid
+  //! while this PakFile lives.
+  /*!
+   @throw std::out_of_range When `entry` lies outside the file.
+  */
+  OXGN_CNTT_NDAPI auto DescriptorBytes(
+    const data::pak::core::AssetDirectoryEntry& entry) const
+    -> std::span<const std::byte>;
+
+  //! Decodes the reference inventory of the asset `key`.
   OXGN_CNTT_NDAPI auto ReadAssetReferences(const data::AssetKey& key) const
     -> data::AssetReferences;
 
@@ -197,8 +240,9 @@ public:
   /*!
    If the footer's `pak_crc32` is zero, validation is skipped.
 
-   @throw std::runtime_error if CRC32 validation is requested by the caller and
-     the computed CRC32 does not match the footer.
+   @throw data::CookedOpenError `kCorrupt` when the computed CRC32 does not
+     match the footer.
+   @throw std::system_error When the file cannot be read.
   */
   OXGN_CNTT_API auto ValidateCrc32Integrity() const -> void;
 
@@ -215,6 +259,12 @@ public:
   OXGN_CNTT_NDAPI auto PhysicsTable() const -> PhysicsTableT&;
 
   //! Check if a resource table of the given type exists in the PAK file.
+  //! The pak's bytes: the view of the contiguous device it was opened from.
+  [[nodiscard]] auto Bytes() const noexcept -> std::span<const std::byte>
+  {
+    return bytes_;
+  }
+
   template <PakResource T> auto HasTableOf() const -> bool
   {
     if constexpr (std::is_same_v<T, data::BufferResource>) {
@@ -255,83 +305,31 @@ public:
     }
   }
 
-  //=== Data Regions Access ===-----------------------------------------------//
-
-  //! Create a Reader for the buffer data region.
-  auto CreateBufferDataReader() const -> Reader;
-
-  //! Create a Reader for the texture data region.
-  auto CreateTextureDataReader() const -> Reader;
-  //! Create a Reader for the script data region.
-  auto CreateScriptDataReader() const -> Reader;
-  //! Create a Reader for the physics data region.
-  auto CreatePhysicsDataReader() const -> Reader;
-
-  //! Read one script resource entry and payload by table index.
-  OXGN_CNTT_NDAPI auto ReadScriptResource(
-    data::pak::core::ResourceIndexT index) const
-    -> std::shared_ptr<const data::ScriptResource>;
-
-  //! Create a Reader for the data region of the specified resource type.
-  /*!
-    Returns a Reader positioned at the start of the data region for the
-    specified resource type.
-
-    @tparam T Resource type (must satisfy PakResource concept)
-    @return Reader for the resource data region.
-    @throw std::invalid_argument if resource type is unsupported.
-
-    @see CreateBufferDataReader, CreateTextureDataReader
-  */
-  template <PakResource T> auto CreateDataReader() const -> Reader
-  {
-    if constexpr (std::is_same_v<T, data::BufferResource>) {
-      return CreateBufferDataReader();
-    } else if constexpr (std::is_same_v<T, data::TextureResource>) {
-      return CreateTextureDataReader();
-    } else if constexpr (std::is_same_v<T, data::ScriptResource>) {
-      return CreateScriptDataReader();
-    } else if constexpr (std::is_same_v<T, data::PhysicsResource>) {
-      return CreatePhysicsDataReader();
-    } else {
-      throw std::invalid_argument(
-        "Unsupported resource type for CreateBufferDataReader");
-    }
-  }
-
 private:
-  auto InitializeResourceTablesFromFooter() const -> void;
-  auto CreateReaderAtOffset(serio::RegionReadStream<serio::NativeFile>* stream,
-    uint64_t offset, std::string_view operation) const -> Reader;
+  PakFile(serio::AnyDevice device, std::filesystem::path name,
+    Verification verification, std::shared_ptr<serio::IoDriver> driver,
+    std::optional<serio::AnyAsyncDevice> payloads);
 
-  std::filesystem::path file_path_; // Path to the PAK file
+  auto InitializeResourceTablesFromFooter() const -> void;
+
+  std::filesystem::path path_;
+
+  //! Declared before the devices: the driver outlives the file it opened.
+  std::shared_ptr<serio::IoDriver> driver_;
+
+  //! The device and its bytes, which the descriptor views handed out alias.
+  //! Keep `bytes_` and `payloads_` after `device_`: they may view it.
+  serio::AnyDevice device_;
+  std::span<const std::byte> bytes_;
+  serio::AnyAsyncDevice payloads_;
 
   data::pak::core::PakHeader header_ {};
   data::SourceKey source_key_ {};
   data::pak::core::PakFooter footer_ {};
   data::PakCatalog catalog_ {};
 
-  //! The PAK file, opened once. It outlives every stream below, which read it
-  //! through their own cursors.
-  serio::NativeFile file_;
-
-  //! Stream for reading the PAK file metadata (header, footer, directory,
-  //! descriptor tables)
-  std::unique_ptr<serio::RegionReadStream<serio::NativeFile>> meta_stream_;
-
-  //! Streams for reading the data from data regions (aligned)
-  std::unique_ptr<serio::RegionReadStream<serio::NativeFile>>
-    buffer_data_stream_;
-  std::unique_ptr<serio::RegionReadStream<serio::NativeFile>>
-    texture_data_stream_;
-  std::unique_ptr<serio::RegionReadStream<serio::NativeFile>>
-    script_data_stream_;
-  std::unique_ptr<serio::RegionReadStream<serio::NativeFile>>
-    physics_data_stream_;
-
   std::vector<data::pak::core::AssetDirectoryEntry> directory_;
-  mutable std::mutex mutex_;
-  mutable std::unordered_map<data::AssetKey, size_t> key_to_index_;
+  std::unordered_map<data::AssetKey, size_t> key_to_index_;
 
   std::vector<BrowseEntry> browse_index_;
   std::unordered_map<std::string_view, data::AssetKey> browse_vpath_to_key_;

@@ -5,16 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <memory>
-#include <optional>
 #include <ostream>
 #include <span>
 #include <stdexcept>
@@ -49,6 +45,7 @@
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 using PrintUtils::Field;
 using PrintUtils::Separator;
@@ -112,31 +109,6 @@ auto PrintResourceTable(std::ostream& out, const std::string& name,
 }
 
 namespace {
-
-auto ReadPakFooter(const std::filesystem::path& pak_path)
-  -> std::optional<PakFooter>
-{
-  std::ifstream file(pak_path, std::ios::binary);
-  if (!file) {
-    return std::nullopt;
-  }
-
-  file.seekg(0, std::ios::end);
-  const std::streamoff file_size = file.tellg();
-  if (std::cmp_less(file_size, sizeof(PakFooter))) {
-    return std::nullopt;
-  }
-
-  file.seekg(file_size - static_cast<std::streamoff>(sizeof(PakFooter)));
-  std::array<char, sizeof(PakFooter)> raw {};
-  file.read(raw.data(), static_cast<std::streamsize>(raw.size()));
-  if (!file) {
-    return std::nullopt;
-  }
-  PakFooter footer {};
-  std::memcpy(&footer, raw.data(), sizeof(footer));
-  return footer;
-}
 
 auto FooterMagicOk(const PakFooter& footer) -> bool
 {
@@ -624,8 +596,8 @@ auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
         throw std::runtime_error("Unsupported or truncated asset descriptor: "
           + to_string(entry.asset_key));
       }
-      auto reader = pak.CreateReader(entry);
-      const auto header = reader.Read<oxygen::data::pak::core::AssetHeader>();
+      const auto header = oxygen::serio::ByteReader(pak.DescriptorBytes(entry))
+                            .Read<oxygen::data::pak::core::AssetHeader>();
       if (!header
         || header->asset_type != static_cast<uint8_t>(entry.asset_type)
         || header->version != *expected) {
@@ -638,8 +610,10 @@ auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
     Separator(
       ctx_.Out(), "PAK FILE ANALYSIS: " + ctx_.pak_path.filename().string());
     Field(ctx_.Out(), "File Path", ctx_.pak_path.string());
+    const auto size = pak.Device().Size();
     Field(ctx_.Out(), "File Size",
-      std::to_string(std::filesystem::file_size(ctx_.pak_path)) + " bytes");
+      size ? std::to_string(size->get()) + " bytes"
+           : "unknown: " + size.error().message());
     ctx_.Out() << "\n";
     PrintPakHeader(pak);
     PrintPakFooter(pak);
@@ -682,14 +656,7 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   }
   Separator(ctx_.Out(), "PAK FOOTER");
 
-  const auto footer = ReadPakFooter(ctx_.pak_path);
-  if (!footer) {
-    Field(ctx_.Out(), "Footer", "Failed to read from file");
-    ctx_.Out() << "\n";
-    return;
-  }
-
-  const auto& f = *footer;
+  const auto& f = pak.Footer();
   Field(
     ctx_.Out(), "Footer Size", std::to_string(sizeof(PakFooter)) + " bytes");
   Field(ctx_.Out(), "Footer Magic", FooterMagicOk(f) ? "OK" : "MISMATCH");
@@ -736,7 +703,7 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   Field(ctx_.Out(), "Catalog Offset", ToHexString(f.catalog_offset));
   Field(ctx_.Out(), "Catalog Size", std::to_string(f.catalog_size));
   const auto& catalog = pak.Catalog();
-  Field(ctx_.Out(), "Library", catalog.library);
+  Field(ctx_.Out(), "Mount", catalog.mount);
   Field(ctx_.Out(), "Catalog Assets", std::to_string(catalog.entries.size()));
   Field(ctx_.Out(), "Deleted Assets", std::to_string(catalog.deleted.size()));
   Field(
@@ -750,7 +717,7 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   Field(
     ctx_.Out(), "Dependencies", std::to_string(catalog.dependencies.size()));
   for (const auto& dependency : catalog.dependencies) {
-    Field(ctx_.Out(), "Dependency Library", dependency.library, 4);
+    Field(ctx_.Out(), "Dependency Mount", dependency.mount, 4);
     Field(ctx_.Out(), "Requirements",
       std::to_string(dependency.requirements.size()), 4);
     for (const auto& requirement : dependency.requirements) {

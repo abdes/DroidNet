@@ -91,23 +91,26 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
   // runtime resolves it in whichever mount holds that path.
   auto output_error = std::error_code {};
   for (const auto& mount : std::views::reverse(mounts)) {
-    if (!mount.inspection
+    if (!mount.content
       || std::filesystem::equivalent(mount.root, output_root, output_error)) {
       continue;
     }
-    auto descriptor = std::optional<data::pak::core::TextureResourceDesc> {};
+    const auto* const named = mount.content->FindNamedTexture(virtual_path);
+    if (named == nullptr) {
+      continue;
+    }
+    auto descriptor = data::pak::core::TextureResourceDesc {};
     try {
-      descriptor = mount.inspection->FindTexture(virtual_path);
+      descriptor = mount.content->ResourceTable(data::ResourceKind::kTexture)
+                     .Row<data::pak::core::TextureResourceDesc>(named->row);
     } catch (const std::exception& error) {
       report_error("texture_descriptor_invalid", error.what());
       co_return std::nullopt;
     }
-    if (descriptor) {
-      co_return ResolvedTextureReference {
-        .target = data::TextureKeyFromVirtualPath(virtual_path),
-        .descriptor = *descriptor,
-      };
-    }
+    co_return ResolvedTextureReference {
+      .target = data::TextureKeyFromVirtualPath(virtual_path),
+      .descriptor = descriptor,
+    };
   }
 
   if (!in_output) {

@@ -179,7 +179,7 @@ Both provide:
 
 - Asset discovery by `data::AssetKey`.
 - Readers for descriptors (`desc_reader`).
-- Readers/tables for resource access (`data_readers`, resource tables).
+- Resource tables (descriptor rows) and payload regions, opened at mount.
 
 ### Mounting and resolution order
 

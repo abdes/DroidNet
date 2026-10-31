@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakCatalog.h>
 
@@ -24,11 +25,16 @@ public:
   OXGN_COOK_NDAPI static auto Parse(std::string_view text)
     -> Result<data::PakCatalog>;
 
-  OXGN_COOK_NDAPI static auto Read(const std::filesystem::path& path)
+  //! Reads and parses the catalog file `path` through `files`.
+  OXGN_COOK_NDAPI static auto Read(const std::filesystem::path& path,
+    const cooked::CookerStorageReader& storage = cooked::RealCookerStorage())
     -> Result<data::PakCatalog>;
 
+  //! Publishes `catalog` as the canonical JSON file `path` through `files`.
   OXGN_COOK_NDAPI static auto Write(const std::filesystem::path& path,
-    const data::PakCatalog& catalog) -> Result<void>;
+    const data::PakCatalog& catalog,
+    cooked::CookerStorage& storage = cooked::RealCookerStorage())
+    -> Result<void>;
 };
 
 } // namespace oxygen::content::pak

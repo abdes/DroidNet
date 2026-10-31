@@ -22,6 +22,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
@@ -33,6 +34,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
@@ -234,8 +236,8 @@ namespace {
       co_return false;
     }
 
-    const auto table_relpath = script_import::BuildScriptsTableRelPath(request);
-    const auto data_relpath = script_import::BuildScriptsDataRelPath(request);
+    const auto table_relpath = internal::loose_layout::kScriptsTable;
+    const auto data_relpath = internal::loose_layout::kScriptsData;
     const auto table_path = session.CookedRoot() / table_relpath;
     const auto data_path = session.CookedRoot() / data_relpath;
 
@@ -369,11 +371,23 @@ namespace {
       co_return false;
     }
 
+    // Both files were written whole from these bytes: their digests are the
+    // producer's, and the index never reads them back.
+    const auto table_bytes = std::as_bytes(std::span(table_entries));
+    const auto data_bytes = std::span<const std::byte>(data_blob);
     try {
-      registry->RegisterExternalFile(
-        session.CookedRoot(), FileKind::kScriptsTable, table_relpath);
-      registry->RegisterExternalFile(
-        session.CookedRoot(), FileKind::kScriptsData, data_relpath);
+      registry->RegisterExternalFile(session.CookedRoot(),
+        FileKind::kScriptsTable, table_relpath,
+        LooseCookedFileDigest {
+          .size = table_bytes.size(),
+          .sha256 = base::ComputeSha256(table_bytes),
+        });
+      registry->RegisterExternalFile(session.CookedRoot(),
+        FileKind::kScriptsData, data_relpath,
+        LooseCookedFileDigest {
+          .size = data_bytes.size(),
+          .sha256 = base::ComputeSha256(data_bytes),
+        });
     } catch (const std::exception& ex) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.index_registration_failed", ex.what());

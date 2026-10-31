@@ -4,27 +4,38 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 
 #include "AssetLoader_test.h"
-#include "Fixtures/LooseCookedTestWriter.h"
 
-#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
-#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::testing {
 namespace {
 
+  constexpr auto kSecondRootSeed = uint8_t { 2U };
+
+  //! Puts an empty loose cooked root of identity `seed` at `root`.
+  auto WriteEmptyRoot(
+    const std::filesystem::path& root, const uint8_t seed = 1U) -> void
+  {
+    cooker::testing::Materialize(
+      cooker::testing::LooseCookedRoot { "Game", seed }.Files(), root);
+  }
+
   NOLINT_TEST_F(AssetLoaderBasicTest, IndexOnlySourceAllowsUnpublishedCookFiles)
   {
-    const auto root = temp_dir_ / "source";
-    static_cast<void>(LooseCookedTestWriter(root).Finish());
+    const auto root = TempDir() / "source";
+    WriteEmptyRoot(root);
     {
       std::ofstream extra(root / "unpublished.data");
       extra << "New output, not yet present in the published index";
@@ -40,8 +51,8 @@ namespace {
   NOLINT_TEST_F(
     AssetLoaderBasicTest, SourceRegistryDoesNotRecycleIdsAcrossClear)
   {
-    const auto root = temp_dir_ / "source";
-    static_cast<void>(LooseCookedTestWriter(root).Finish());
+    const auto root = TempDir() / "source";
+    WriteEmptyRoot(root);
     auto source = std::make_shared<internal::LooseCookedSource>(
       root, internal::LooseCookedSource::OpenMode::kVerifyContent);
     internal::ContentSourceRegistry registry;
@@ -57,8 +68,8 @@ namespace {
   NOLINT_TEST_F(
     AssetLoaderBasicTest, SourceRegistryRetainsNoUnownedRetiredBytes)
   {
-    const auto root = temp_dir_ / "source";
-    static_cast<void>(LooseCookedTestWriter(root).Finish());
+    const auto root = TempDir() / "source";
+    WriteEmptyRoot(root);
     auto source = std::make_shared<internal::LooseCookedSource>(
       root, internal::LooseCookedSource::OpenMode::kVerifyContent);
     internal::ContentSourceRegistry registry;
@@ -77,8 +88,8 @@ namespace {
 
   NOLINT_TEST_F(AssetLoaderBasicTest, SourceInstancesDoNotAliasAcrossLoaders)
   {
-    const auto root = temp_dir_ / "source";
-    static_cast<void>(LooseCookedTestWriter(root).Finish());
+    const auto root = TempDir() / "source";
+    WriteEmptyRoot(root);
     const auto source = std::make_shared<internal::LooseCookedSource>(
       root, internal::LooseCookedSource::OpenMode::kVerifyContent);
     internal::ContentSourceRegistry first_registry;
@@ -92,8 +103,8 @@ namespace {
 
   NOLINT_TEST_F(AssetLoaderBasicTest, RetiredGenerationRemountIsIdempotent)
   {
-    const auto root = temp_dir_ / "generation";
-    static_cast<void>(LooseCookedTestWriter(root).Finish());
+    const auto root = TempDir() / "generation";
+    WriteEmptyRoot(root);
     auto first_source = std::make_shared<internal::LooseCookedSource>(
       root, internal::LooseCookedSource::OpenMode::kVerifyContent);
     internal::ContentSourceRegistry registry;
@@ -122,12 +133,10 @@ namespace {
 
   NOLINT_TEST_F(AssetLoaderBasicTest, RemountReplacementUsesOneActiveOpening)
   {
-    const auto first_root = temp_dir_ / "first";
-    const auto second_root = temp_dir_ / "second";
-    static_cast<void>(LooseCookedTestWriter(first_root).Finish());
-    LooseCookedTestWriter writer(second_root);
-    writer.SetSourceKey(data::SourceKey { Uuid::Generate() });
-    static_cast<void>(writer.Finish());
+    const auto first_root = TempDir() / "first";
+    const auto second_root = TempDir() / "second";
+    WriteEmptyRoot(first_root);
+    WriteEmptyRoot(second_root, kSecondRootSeed);
     const auto first = std::make_shared<internal::LooseCookedSource>(
       first_root, internal::LooseCookedSource::OpenMode::kVerifyContent);
     const auto second = std::make_shared<internal::LooseCookedSource>(
@@ -152,8 +161,8 @@ namespace {
 
   NOLINT_TEST_F(AssetLoaderBasicTest, RefreshRevokesOldMutableReadCapability)
   {
-    const auto root = temp_dir_ / "source";
-    static_cast<void>(LooseCookedTestWriter(root).Finish());
+    const auto root = TempDir() / "source";
+    WriteEmptyRoot(root);
     const auto source = std::make_shared<internal::LooseCookedSource>(
       root, internal::LooseCookedSource::OpenMode::kVerifyContent);
     internal::ContentSourceRegistry registry;

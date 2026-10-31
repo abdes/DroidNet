@@ -6,16 +6,14 @@
 
 // Covers: Pak/PakCatalogIo.cpp
 
-#include <array>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 
-#include "PakTestSupport.h"
-
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
+#include <Oxygen/Cooker/testing/MemoryFileSystem.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Testing/GTest.h>
@@ -24,81 +22,63 @@ namespace {
 
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
-namespace paktest = oxygen::content::pak::test;
 
-using paktest::MakeAssetKey;
-using paktest::MakeDigest;
-using paktest::MakeSourceKey;
+using oxygen::cooker::test::MakeAssetKey;
+using oxygen::cooker::testing::SeedBytes;
+using oxygen::cooker::testing::SourceKeyOf;
 
-auto MakeEntry(const uint8_t asset_seed, const data::AssetType type,
-  const uint8_t descriptor_seed, const uint8_t transitive_seed)
-  -> data::PakCatalogEntry
+//! A patch catalog with entries, a deletion and a base layer, so that the
+//! file carries every kind of record.
+auto MakePatchCatalog() -> data::PakCatalog
 {
-  return data::PakCatalogEntry {
-    .asset_key = MakeAssetKey(asset_seed),
-    .asset_type = type,
-    .descriptor_digest = MakeDigest(descriptor_seed),
-    .transitive_resource_digest = MakeDigest(transitive_seed),
+  const auto digest = [](const uint8_t seed) -> oxygen::base::Sha256Digest {
+    return oxygen::base::ComputeSha256(SeedBytes(seed));
   };
-}
-
-auto MakeCatalog() -> data::PakCatalog
-{
   auto catalog = data::PakCatalog {
-    .source_key = MakeSourceKey(0x41U),
-    .content_version = 42U,
-    .catalog_digest = MakeDigest(0x21U),
-    .library = "Content",
+    .source_key = SourceKeyOf(1U),
+    .content_version = 2U,
+    .catalog_digest = {},
+    .mount = "Game",
     .entries = {
-      MakeEntry(0xB0U, data::AssetType::kScene, 0x31U, 0x41U),
-      MakeEntry(0xA0U, data::AssetType::kMaterial, 0x32U, 0x42U),
+      {
+        .asset_key = MakeAssetKey(1U),
+        .asset_type = data::AssetType::kScene,
+        .descriptor_digest = digest(1U),
+        .transitive_resource_digest = digest(2U),
+      },
+      {
+        .asset_key = MakeAssetKey(2U),
+        .asset_type = data::AssetType::kMaterial,
+        .descriptor_digest = digest(3U),
+        .transitive_resource_digest = digest(4U),
+      },
     },
   };
-  catalog.deleted = { MakeAssetKey(0xC0U) };
+  catalog.deleted = { MakeAssetKey(3U) };
   catalog.bases = {
     {
-      .source_key = MakeSourceKey(0x51U),
+      .source_key = SourceKeyOf(2U),
       .content_version = 1U,
-      .catalog_digest = MakeDigest(0x61U),
+      .catalog_digest = digest(5U),
     },
   };
   catalog.catalog_digest = catalog.ComputeDigest().value();
   return catalog;
 }
 
-auto ExpectCatalogEqual(
-  const data::PakCatalog& lhs, const data::PakCatalog& rhs) -> void
-{
-  EXPECT_EQ(lhs.source_key, rhs.source_key);
-  EXPECT_EQ(lhs.content_version, rhs.content_version);
-  EXPECT_EQ(lhs.catalog_digest, rhs.catalog_digest);
-  EXPECT_EQ(lhs.deleted, rhs.deleted);
-  EXPECT_EQ(lhs.bases, rhs.bases);
-  ASSERT_EQ(lhs.entries.size(), rhs.entries.size());
-  for (size_t i = 0; i < lhs.entries.size(); ++i) {
-    EXPECT_EQ(lhs.entries.at(i).asset_key, rhs.entries.at(i).asset_key);
-    EXPECT_EQ(lhs.entries.at(i).asset_type, rhs.entries.at(i).asset_type);
-    EXPECT_EQ(
-      lhs.entries.at(i).descriptor_digest, rhs.entries.at(i).descriptor_digest);
-    EXPECT_EQ(lhs.entries.at(i).transitive_resource_digest,
-      rhs.entries.at(i).transitive_resource_digest);
-  }
-}
-
 NOLINT_TEST(PakCatalogIoTest, ReadAndWriteRoundTripCatalogFile)
 {
-  const oxygen::cooker::test::ScopedTempDir temp;
-  const auto path = temp.Path() / "catalog.json";
+  auto files = oxygen::cooker::testing::MemoryFileSystem {};
+  const auto path = std::filesystem::path("/paks/patch.catalog.json");
+  const auto catalog = MakePatchCatalog();
 
-  const auto catalog = MakeCatalog();
-  const auto write_result = pak::PakCatalogIo::Write(path, catalog);
-  ASSERT_HAS_VALUE(write_result);
+  ASSERT_HAS_VALUE(pak::PakCatalogIo::Write(path, catalog, files));
+  const auto read = pak::PakCatalogIo::Read(path, files);
 
-  const auto read_result = pak::PakCatalogIo::Read(path);
-  ASSERT_HAS_VALUE(read_result);
-  ExpectCatalogEqual(read_result.value(),
-    pak::PakCatalogIo::Parse(pak::PakCatalogIo::ToCanonicalJsonString(catalog))
-      .value());
+  ASSERT_HAS_VALUE(read);
+  EXPECT_EQ(pak::PakCatalogIo::ToCanonicalJsonString(read.value()),
+    pak::PakCatalogIo::ToCanonicalJsonString(catalog));
+  EXPECT_EQ(read.value().catalog_digest, catalog.catalog_digest);
 }
 
 } // namespace

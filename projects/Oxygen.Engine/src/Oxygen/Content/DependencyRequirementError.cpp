@@ -29,13 +29,13 @@ namespace {
     auto text = requirement.kind == data::KeyReferenceKind::kTexture
       ? std::string("texture")
       : std::string(data::to_string(requirement.type));
-    text += " " + data::to_string(requirement.key) + " of '" + failed.library
+    text += " " + data::to_string(requirement.key) + " of '" + failed.mount
       + "' (" + std::string(to_string(failed.failure));
     if (failed.found_type.has_value()) {
       text += ": " + std::string(data::to_string(*failed.found_type));
     }
-    if (!failed.found_library.empty()) {
-      text += ": '" + failed.found_library + "'";
+    if (!failed.found_mount.empty()) {
+      text += ": '" + failed.found_mount + "'";
     }
     return text + ")";
   }
@@ -62,8 +62,8 @@ auto to_string(const RequirementFailure value) noexcept -> std::string_view
     return "tombstoned";
   case RequirementFailure::kTypeMismatch:
     return "type_mismatch";
-  case RequirementFailure::kLibraryMismatch:
-    return "library_mismatch";
+  case RequirementFailure::kMountMismatch:
+    return "mount_mismatch";
   }
   return "unknown";
 }

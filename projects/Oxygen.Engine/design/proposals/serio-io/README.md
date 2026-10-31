@@ -253,7 +253,7 @@ coarse boundary ([type erasure](api.md#type-erasure)).
 | Device       | Backing                                                                                              | Contiguous | Writes |
 | ------------ | ---------------------------------------------------------------------------------------------------- | ---------- | ------ |
 | `NativeFile` | A Win32 handle (`ReadFile`/`WriteFile` with an `OVERLAPPED` offset) or a POSIX fd (`pread`/`pwrite`) | No         | Yes    |
-| `AsyncFile`  | A `NativeFile` bound to an `IoQueue`, with awaitable operations                                      | No         | Yes    |
+| `AsyncFile`  | A `NativeFile` bound to an `IoDriver`, with awaitable operations                                     | No         | Yes    |
 | `MemoryFile` | A growable buffer it owns; a test's or a builder's file                                              | Yes        | Yes    |
 | `MappedFile` | A read-only view of a whole file (`CreateFileMapping`/`MapViewOfFile`, `mmap`)                       | Yes        | No     |
 | `ByteView`   | Bytes the caller owns: an embedded pak, a decoded section                                            | Yes        | No     |
@@ -282,39 +282,39 @@ code that need not be asynchronous. Devices that can complete without
 blocking also have awaitable forms, for coroutines:
 
 ```cpp
-auto file = queue.Open(path, {.access = Access::kRead});  // Result<AsyncFile>
+auto file = driver.Open(path, {.access = Access::kRead});  // Result<AsyncFile>
 auto bytes = co_await file->AsyncReadAt(offset, buffer);  // Result<ByteCount>
 co_await file->AsyncWriteAt(offset, payload);             // Result<void>
 ```
 
-- **On an `AsyncFile`** the operation is overlapped IO bound to the awaiting
-  loop's `asio::io_context`, through OxCo's asio bridge
-  ([OxCo async IO](../../../src/Oxygen/OxCo/Docs/AsyncIO.md)), on
-  `asio::random_access_file`: IOCP on Windows, io_uring on Linux
-  (`ASIO_HAS_IO_URING`, with liburing). The coroutine suspends; no thread
+- **On an `AsyncFile`** the operation is asynchronous IO completed by the
+  awaiting loop's `asio::io_context`
+  ([OxCo async IO](../../../src/Oxygen/OxCo/Docs/AsyncIO.md)): IOCP on
+  Windows, io_uring on Linux (`ASIO_HAS_IO_URING`, with liburing). The coroutine suspends; no thread
   blocks; the completion resumes it on the loop thread.
-- **One IO queue per loop; backends live behind it.** `IoQueue::Open`
+- **One IO driver per loop; backends live behind it.** `IoDriver::Open`
   returns an `AsyncFile`, and its awaitable operations are submitted to the
-  queue, never to the OS directly. A `NativeFile` opened without a queue has
+  driver, never to the OS directly. A `NativeFile` opened without a driver has
   no awaitable form, and `MappedFile` has none either: a consumer that awaits
-  payload reads of a mapped file opens it as an `AsyncFile` too. The queue holds
+  payload reads of a mapped file opens it as an `AsyncFile` too. The driver holds
   everything a backend can differ in:
   - **handles:** registered when a file opens, released when it closes;
-  - **submission:** operations collected during a loop turn are submitted
-    together, so batching needs no caller change;
+  - **submission:** a backend that can submit several operations in one OS
+    call submits those started in one loop turn together, so batching needs
+    no caller change;
   - **completion:** drained on the loop thread, resuming each awaiter;
-  - **cancellation:** the backend's own (`CancelIoEx`, an IoRing cancel);
-  - **buffers:** `queue.AllocateBuffer(size)` returns a `ByteBuffer`, from
+  - **cancellation:** the backend's own (`CancelIoEx`, an io_uring cancel);
+  - **buffers:** `driver.AllocateBuffer(size)` returns a `ByteBuffer`, from
     the backend's registered pool when it has one, a plain allocation
     otherwise.
 
-  The IOCP backend is asio's `random_access_file` (above); the IoRing backend
-  (Windows 11: registered handles and buffers, its completion event awaited
-  through asio's `windows::object_handle`) is the second. The queue picks one
-  when it is created, from `GetIoRingInfo` and `QueryIoRingCapabilities`,
-  falling back to IOCP. No public type or signature names a backend, so
-  adding, dropping or choosing one never changes a caller
-  ([IO queue and backends](api.md#io-queue-and-backends)).
+  The IOCP backend submits overlapped requests to the port of the loop's
+  `io_context` (`asio::windows::overlapped_ptr`), and the io_uring backend
+  uses asio's `random_access_file` on the loop's ring. Each platform has one
+  backend: a Windows I/O ring backend was built and measured against IOCP
+  and deleted (see [Decisions](#decisions)). No public type or signature
+  names a backend, so adding, dropping or choosing one never changes a
+  caller ([IO driver and backends](api.md#io-driver-and-backends)).
 
 - **On a `MemoryFile` or `ByteView`** the awaitable is ready at once
   (`co::Just`): nothing suspends, so tests and embedded content pay nothing
@@ -325,7 +325,7 @@ co_await file->AsyncWriteAt(offset, payload);             // Result<void>
   `AnyOf` or a timeout cancels its in-flight operation (`CancelIoEx`), and
   resumes only after the OS is done with the buffer. There is no cancel API.
 - **Concurrency is OxCo's:** `co::AllOf` over several reads of one file, a
-  `Nursery` for open-ended loads. The `IoQueue` only submits and completes
+  `Nursery` for open-ended loads. The `IoDriver` only submits and completes
   operations; it has no scheduling policy of its own.
 - **Memory is the caller's.** An operation reads into or writes from memory
   its caller owns; Serio allocates nothing per operation and imposes no budget.
@@ -375,8 +375,10 @@ region of a contiguous device is a subspan.
 
 ### Streams
 
-Streams keep Serio's `InputStream`/`OutputStream` concepts, so every encoder
-and decoder written against them still works. They are reimplemented over
+Serio's `InputStream`/`OutputStream` concepts are redefined as the
+[API design](api.md#streams) states (`ReadSome`, `Position()` and `Size()`
+that cannot fail, a positional `PatchAt` instead of seeking an output), and
+every encoder and decoder moves to them. The streams are reimplemented over
 regions:
 
 | Stream                 | Over                    | Behaviour                                                                                                  |
@@ -405,17 +407,19 @@ A read fills memory its caller owns. When the caller needs memory to own,
   or a `MemoryFile` can hand its storage on without a copy.
 
 A buffer to fill is one allocation and one read: allocate a `ByteBuffer` of
-the size to read, from the file's `IoQueue` when it will be read
+the size to read, from the file's `IoDriver` when it will be read
 asynchronously, and `AsyncReadAt` fills it.
 
 ### Serialization
 
-- **Bulk records.** `ReadRecord<T>` and `WriteRecord<T>` move a packed,
-  trivially copyable record as one copy, with a compile-time check of its
-  layout (`std::has_unique_object_representations_v<T>` and
-  `std::endian::native == std::endian::little`). Every packed pak and loose
-  format struct uses them; the per-field `Load` overloads of packed records in
-  `PakFormatSerioLoaders.h` are deleted.
+- **Bulk records.** A struct declared a record moves as one copy through the
+  same `Read<T>()` and `Write(value)` as any value, with a compile-time check
+  that its bytes are its encoding: trivially copyable, no padding (packed to
+  one byte, or a unique object representation) and a little-endian target.
+  Every packed pak and loose format struct whose bytes are read as they are
+  is a record, and its per-field `Load` in `PakFormatSerioLoaders.h` is
+  deleted; a struct whose values are checked after reading keeps its own
+  `Load`, which copies it whole and then checks.
 - **Bulk sequences.** A `vector`, `array` or `span` of trivially copyable
   elements is written and read as its count and one copy. `bool`, `array` and
   `optional` get the overloads they lack, symmetric on both sides.
@@ -425,8 +429,9 @@ asynchronously, and `AsyncReadAt` fills it.
   remain before anything is allocated; `ReadBlob` takes a cap and the
   default is the remaining size.
 - **`ByteReader`** parses bytes already in memory: a bounds-checked cursor
-  over a span with `ReadRecord<T>`, `ReadSpan(n)` (a view, no copy) and
-  `ReadStringView(n)`, all inline and without virtual calls. Catalogs, browse
+  over a span with `Read<T>` (a copy of a record or a value), `ReadBytes(n)`
+  (a view, no copy) and `ReadStringView(n)`, all inline and without virtual
+  calls. Catalogs, browse
   indexes, the loose index and directories parse through it when their region
   is contiguous, and through a stream otherwise.
 - **Type erasure at the boundary.** `AnyReader`/`AnyWriter` stay as the
@@ -445,9 +450,9 @@ asynchronously, and `AsyncReadAt` fills it.
   faster than any storage, so what an integrity check costs is the bytes it
   reads, which is why each byte is read once.
 - **Hashing a region:** `ComputeSha256(Region)` and `ComputeCrc32(Region)`
-  read a region once with a 1 MiB buffer. They replace
-  `base::ComputeFileSha256`, which leaves Base with its nine callers moving
-  here.
+  read a region once with a 1 MiB buffer, and `ComputeFileSha256(path)` hashes
+  a file. They replace `base::ComputeFileSha256`, which leaves Base with its
+  nine callers moving here.
 - **Hashing as bytes pass:** `HashingWriteStream` and `HashingReadStream`
   decorate a stream; every byte that passes updates the hashes, except the
   skip ranges the caller names (a field that holds the checksum itself).
@@ -462,18 +467,19 @@ asynchronously, and `AsyncReadAt` fills it.
 `AtomicFile` gains a writer:
 
 ```cpp
-auto writer = AtomicFileWriter::Create(path);   // temp sibling, share delete
+auto writer = AtomicFileWriter::Create(path);   // temp sibling
 Writer(writer->Stream()).Write(...);            // stream the artifact
-auto commit = writer->Commit();                 // flush, replace, sync parent
+auto commit = std::move(*writer).Commit();      // flush, replace, sync parent
 ```
 
 `Commit()` flushes the temp file to stable storage, replaces the destination
 while readers hold it (the rename `WriteFileAtomically` performs), and
 reports a parent-directory sync failure as today's `durability_error`. A
 writer destroyed without `Commit()` removes its temp file.
-`WriteFileAtomically(path, bytes)` becomes a call to it. `ReadPublishedFile`
+`WriteFileAtomically(path, bytes)` becomes a call to it. `OpenPublishedFile`
 returns a `NativeFile` opened with share delete, so a caller reads what it
-needs instead of the whole file.
+needs instead of the whole file; `ReadPublishedFile` reads all of it through
+one.
 
 ### Errors
 
@@ -514,32 +520,35 @@ measured in Release only) keeps the efficiency claims honest: `ReadAt` and
 region stream throughput per device, against the same reads through
 `std::fstream`; descriptor decode per record, field by field against
 `ReadRecord`; a hashing stream's overhead over a plain stream; and small-read
-operations per second (many concurrent descriptor-sized reads on one file),
-the case that decides whether the IoRing backend stays. Every suite and
-benchmark that touches a `NativeFile` runs once per backend.
+operations per second in wall-clock time, reads scattered over one file and
+awaited by 1 to 1024 concurrent readers against the same reads made blocking:
+descriptor-sized reads from the OS cache, which measure the per-operation
+cost, and unbuffered 4 KiB reads, which wait on the device and measure how
+reads in flight overlap.
 
 ## Consumers
 
-| Consumer                                                                 | Change                                                                                                                                                                                                                                                                                                                                                     |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PakFile`                                                                | A `MappedFile` for its metadata, parsed in place, and an `AsyncFile` for payloads (or one memory device for both); its parsers take regions; the five streams, the per-lookup mutex and the copies of its directory go                                                                                                                                     |
-| `PakFileSource`, `LooseCookedSource`, `ContentFileReader`                | One device per pak or data file, opened at mount; readers are region streams over it; a load opens nothing                                                                                                                                                                                                                                                 |
-| Loaders (`LoaderContext`)                                                | Descriptors read as records; a payload is read with one awaitable read into the loader's destination. Content's payload budget, internal to its loaders and built on `co::Event` waiters, bounds payload buffers in flight: arrival order, no barging, a payload larger than the budget served alone when it is free, a cancelled waiter leaving the queue |
-| `data::TextureResource`, `data::BufferResource`, their loaders           | Own a `ByteBuffer` instead of a `std::vector<uint8_t>`; the loaders read the payload straight into it, bounded by Content's payload budget. The zero-fill and the stream-buffer copy go; the one copy into upload staging remains                                                                                                                          |
-| Loose index (`LooseCookedIndexImpl`)                                     | Maps `container.index.bin` and parses it through `ByteReader`, aliasing its string table and reference tail instead of reading the file whole and copying them                                                                                                                                                                                             |
-| PakDump, Inspector                                                       | Read paks and loose roots through `MappedFile` copies                                                                                                                                                                                                                                                                                                      |
-| `LooseCookedWriter`                                                      | Streams the index into `AtomicFileWriter`; takes payload digests from the producers instead of re-hashing data files                                                                                                                                                                                                                                       |
-| `IAsyncFileReader`, `IAsyncFileWriter` and their Windows implementations | Deleted: import jobs await device IO on files the session keeps open, keyed by `base::PathIdentityKey`, instead of a handle per write; reads fill a caller span; buffers live in the awaiting frame instead of a `shared_ptr`                                                                                                                              |
-| `PakPlanBuilder`, `PakWriter`, `PakManifestWriter`                       | Payload slices copied region to stream in 1 MiB chunks over source devices opened once; the pak CRC (skipping its own footer field) and the pak's SHA-256 come out of the write pass through the hashing stream, which replaces `PakStreamingCrc32`; no re-read for the manifest                                                                           |
-| Content verified mounts                                                  | Check the pak CRC through the hashing stream on the regions a mount reads; a full check is one sequential pass                                                                                                                                                                                                                                             |
-| Import service, `LooseCookedWriter`                                      | Pass on each resource's digest, which the import service already records, instead of re-hashing data files it wrote                                                                                                                                                                                                                                        |
-| Pak format (`PakPlanBuilder`, `PakFormatVersions.inc`)                   | Every payload starts on a 4 KiB boundary and its region is padded to one, so a payload can be read unbuffered or handed to DirectStorage as is; the pak format version goes up                                                                                                                                                                             |
-| Cooker file helpers and ports                                            | The whole-file read and write helpers become one Serio pair over devices; `ILibraryFiles` and `IMountFileSystem` open devices                                                                                                                                                                                                                              |
-| `base::ComputeFileSha256` callers (nine)                                 | Hash a region through `serio::ComputeSha256(Region)`                                                                                                                                                                                                                                                                                                       |
+| Consumer                                                                 | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PakFile`                                                                | A `MappedFile` for its metadata, parsed in place, and an `AsyncFile` for payloads (or one memory device for both); its parsers take regions; the five streams, the per-lookup mutex and the copies of its directory go                                                                                                                                                                                                                                                                                                                                            |
+| `PakFileSource`, `LooseCookedSource`, `ContentFileReader`                | One device per pak or data file, opened at mount; readers are region streams over it; a load opens nothing                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Loaders (`LoaderContext`)                                                | Descriptors read as records; a payload is read with one awaitable read into the loader's destination. Content's payload budget, internal to its loaders and built on `co::Event` waiters, bounds payload buffers in flight: arrival order, no barging, a payload larger than the budget served alone when it is free, a cancelled waiter leaving the queue. A load starts the loads of its independent dependencies together, a nursery over each dependency list, instead of awaiting them one after another, so their reads are in flight on the device at once |
+| `data::TextureResource`, `data::BufferResource`, their loaders           | Own a `ByteBuffer` instead of a `std::vector<uint8_t>`; the loaders read the payload straight into it, bounded by Content's payload budget. The zero-fill and the stream-buffer copy go; the one copy into upload staging remains                                                                                                                                                                                                                                                                                                                                 |
+| Loose index (`LooseCookedIndexImpl`)                                     | Maps `container.index.bin` and parses it through `ByteReader`, aliasing its string table and reference tail instead of reading the file whole and copying them; bytes from memory are copied once, or taken whole                                                                                                                                                                                                                                                                                                                                                 |
+| PakDump, Inspector                                                       | Read paks through `PakFile` (header, footer and size from its device) and loose roots through `CookedContent`                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `LooseCookedWriter`                                                      | Streams the index through `data::loose_cooked::EncodeLooseCookedIndex`, the one encoder of the format, into a publication of the `CookerStorage` port; never re-hashes the files it lists                                                                                                                                                                                                                                                                                                                                                                         |
+| `IAsyncFileReader`, `IAsyncFileWriter` and their Windows implementations | Deleted: import jobs await device IO on files the session keeps open, keyed by `base::PathIdentityKey`, instead of a handle per write; reads fill a caller span; buffers live in the awaiting frame instead of a `shared_ptr`                                                                                                                                                                                                                                                                                                                                     |
+| `PakPlanBuilder`, `PakWriter`, `PakManifestWriter`                       | Payload slices copied region to stream in 1 MiB chunks over source devices opened once; the pak CRC (skipping its own footer field) and the pak's SHA-256 come out of the write pass through the hashing stream, which replaces `PakStreamingCrc32`; no re-read for the manifest                                                                                                                                                                                                                                                                                  |
+| Content verified mounts                                                  | Check the pak CRC through the hashing stream on the regions a mount reads; a full check is one sequential pass                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Import service, `LooseCookedWriter`                                      | Each texture, buffer, script and physics resource carries the full SHA-256 of its bytes in its table entry, computed by its producer as it writes them; a loose data file has no whole-file digest, and a full check verifies each resource against its entry. Descriptors, auxiliary files and tables take their producers' digests                                                                                                                                                                                                                              |
+| Pak format (`PakPlanBuilder`, `PakFormatVersions.inc`)                   | Every payload starts on a 4 KiB boundary and its region is padded to one, so a payload can be read unbuffered or handed to DirectStorage as is; the pak format version goes up                                                                                                                                                                                                                                                                                                                                                                                    |
+| Cooker file helpers and ports                                            | The whole-file read and write helpers become one Serio pair over devices; `ILibraryFiles` and `IMountFileSystem` open devices                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `base::ComputeFileSha256` callers (nine)                                 | Hash a region through `serio::ComputeSha256(Region)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
-Each consumer change is its own step after Serio lands. Only the pak format
-row changes a cooked format, and that change is the pak format's, made for the
-unbuffered reads Serio offers.
+Each consumer change is its own step after Serio lands. Two rows change a
+cooked format: the pak format's 4 KiB alignment, made for the unbuffered
+reads Serio offers, and the full resource digests of the table entries, made
+so that no producer re-reads a data file to hash it.
 
 ## Debt removed
 
@@ -585,14 +594,13 @@ Three features use Serio and live elsewhere:
 1. Devices, regions, the new streams, the shared error category and the
    conformance suite. `FileStream` is deleted and its users move to region
    streams over `NativeFile`.
-2. `IoQueue` with the IOCP backend, awaitable IO and `CopyRegion`, after
+2. `IoDriver` with the IOCP backend, awaitable IO and `CopyRegion`, after
    [OxCo's](../../../src/Oxygen/OxCo/Docs/AsyncIO.md) asio file IO tests;
    Serio gains its OxCo and asio dependency, and `ARCHITECTURE.md`'s module
    table states it.
-3. The IoRing backend and the small-read benchmark, before any consumer moves.
-   If IoRing loses it is deleted and the queue keeps one backend; either way no
-   caller changes, and the seam is proven by a second backend while Serio
-   still has no clients to migrate.
+3. The small-read benchmark, and an I/O ring backend measured against IOCP
+   before any consumer moves: it lost and was deleted, and the driver keeps
+   one backend per platform.
 4. Bulk records and sequences, bounded lengths, `ByteReader`, `CountingSink`;
    the packed-record loaders move to `ReadRecord`.
 5. Integrity streams (deleting `PakStreamingCrc32`), region hashing
@@ -602,8 +610,11 @@ Three features use Serio and live elsewhere:
 ## Decisions
 
 - **IO is awaited, not queued.** The engine is coroutine-based: an operation
-  is an awaitable, and scheduling, batching and cancellation are OxCo's
-  structured concurrency, not a request queue of Serio's own.
+  is an awaitable, handed to the OS when it is awaited. Which operations run,
+  how many are in flight and when they are cancelled is OxCo's structured
+  concurrency; Serio keeps no request queue and no scheduling policy. The
+  `IoDriver` only binds files to the loop's completion mechanism, and a
+  backend that submits in batches packs the operations already started.
 - **Both blocking and awaitable forms.** Not every read needs to be
   asynchronous; tools and synchronous code read directly.
 - **Positional devices are the base primitive.** A cursor shared between
@@ -612,6 +623,12 @@ Three features use Serio and live elsewhere:
 - **Memory is a device, not a special case.** Tests, builders and embedded
   content read through the same code as files, and the conformance suite
   keeps the two from drifting.
+- **Paks lay payloads out for unbuffered reads.** Every payload of a pak
+  starts on a 4 KiB boundary (`data::pak::core::kPakPayloadAlignment`, equal to
+  `serio::kIoAlignment`) and every region holding payloads is padded to one,
+  so a payload is read unbuffered or handed to DirectStorage as it lies; the
+  planner lays it out, plan validation refuses anything else, and the pak
+  format version is 11.
 - **Uninitialized, aligned buffers.** Memory about to be filled by a read is
   never cleared first, and is aligned for unbuffered reads.
 - **Mapping for metadata, overlapped IO for payloads.** Mapped bytes are
@@ -639,6 +656,52 @@ Three features use Serio and live elsewhere:
   asset; nothing erased sits between fields.
 - **Integrity is computed in passing.** No producer or reader reads bytes
   twice to hash them.
-- **Backends sit behind the queue, decided before clients.** The public API
-  names no backend; IoRing is built and benchmarked right after the IOCP
-  backend, before any consumer moves, and kept only if it beats IOCP.
+- **Loose data files are verified per resource.** Resource data files are
+  appended to by every import, out of order, so no producer can know the
+  digest of a whole file without reading it again. Each resource's table
+  entry holds the full SHA-256 of its bytes, which its producer computes
+  while it holds them; a full check hashes each resource region against it.
+- **Backends sit behind the driver, decided before clients.** The public API
+  names no backend. A Windows I/O ring backend was built right after the IOCP
+  backend, ran every async suite, and was deleted: it beat IOCP only with
+  16 or more small reads in flight and lost with one to four, while
+  Content's loads read one dependency at a time and the cooker's reads are
+  large. Its completion event reaches the loop through a thread-pool wait,
+  a cost every completion pays.
+- **Loads overlap their reads.** An awaited read that waits on the device
+  is no faster than a blocking one by itself; the device serves reads in
+  flight in parallel, so unbuffered reads complete several times faster with
+  16 in flight than one at a time. A read from the OS cache always goes
+  through the completion port, so it costs more awaited than blocking. Today
+  a load awaits each dependency before starting the next and reads it inside
+  a thread-pool job, which overlaps nothing; the loaders' migration starts a
+  load's independent dependencies together and awaits their reads, bounded
+  by the payload budget.
+- **One IO driver for Content, on the engine loop.** The asset loader owns
+  one `IoDriver` on the `io_context` its loop polls (`AssetLoaderConfig::
+io_context`) and shares it with every mounted source, which holds it
+  before its files so it outlives them. A loader with no `io_context` (a
+  unit test's loop, a tool) reads payloads with awaited reads that complete
+  at once by blocking: the same code, never the engine's path.
+- **Sources open everything at mount.** A pak source maps its pak for the
+  metadata and opens it through the driver for its payloads; a loose source
+  maps its resource tables and opens its data files. A resource descriptor is
+  a view of its table row, read as a record; a payload is a region of the
+  payload device, which a descriptor's `data_offset` names. Loose asset
+  descriptors stay one file each, as the loose layout keeps them, and are
+  opened when read; an index-only loose source opens nothing but the index.
+- **The pipeline reads payloads; loaders decode bytes.** A resource load
+  reads its descriptor row on the loop thread, leases the payload's size from
+  the payload budget, allocates a `ByteBuffer` and awaits one read into it,
+  then runs its loader on the thread pool with the buffer, which the loader
+  moves into the resource. Loaders stay synchronous decoders of bytes in
+  memory; the lease returns when the loader has taken the buffer.
+- **The payload budget is FIFO.** Content's budget (256 MiB by default,
+  `AssetLoaderConfig::payload_budget_bytes`) serves waiters in arrival order
+  without barging, serves a payload larger than the budget when nothing else
+  is in flight, and drops a cancelled waiter from the queue.
+- **A verified pak mount is one pass.** A verified mount checks the footer's
+  CRC32 over the whole pak before it parses anything past the header and
+  footer, so a corrupt pak fails as a CRC mismatch and the parse reads pages
+  the pass brought in; nothing is read a second time to verify. Loose roots
+  verify their payloads per resource, from the digests their tables hold.

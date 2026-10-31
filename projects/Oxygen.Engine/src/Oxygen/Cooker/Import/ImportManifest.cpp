@@ -66,7 +66,6 @@
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SurfaceId.h>
@@ -454,7 +453,6 @@ namespace {
            "id",
            "depends_on",
            "output",
-           "layout",
            "cooked_context_roots",
            "source_key",
          }) {
@@ -651,7 +649,7 @@ namespace {
   {
     return key == "id" || key == "type" || key == "source"
       || key == "derived_from" || key == "virtual_path" || key == "depends_on"
-      || key == "output" || key == "layout" || key == "cooked_context_roots"
+      || key == "output" || key == "cooked_context_roots"
       || key == "source_key";
   }
 
@@ -683,11 +681,11 @@ namespace {
       if (job_type == "input") {
         for (auto it = job.begin(); it != job.end(); ++it) {
           if (!IsAllowedInputJobKey(it.key())) {
-            errors
-              << "ERROR [input.manifest.key_not_allowed]: key '" << it.key()
-              << "' is not allowed for input jobs; allowed keys are "
-                 "'id', 'type', 'source', 'virtual_path', 'depends_on', "
-                 "'output', 'layout', 'cooked_context_roots', 'source_key'\n";
+            errors << "ERROR [input.manifest.key_not_allowed]: key '"
+                   << it.key()
+                   << "' is not allowed for input jobs; allowed keys are "
+                      "'id', 'type', 'source', 'virtual_path', 'depends_on', "
+                      "'output', 'cooked_context_roots', 'source_key'\n";
             return true;
           }
         }
@@ -1146,12 +1144,6 @@ namespace {
     return true;
   }
 
-  auto ApplyLayoutOverrides(
-    const json& obj, LooseCookedLayout& layout, std::ostream& errors) -> bool
-  {
-    return ReadStringField(obj, "resources_dir", layout.resources_dir, errors);
-  }
-
   auto ApplyCommonOverrides(const json& obj, TextureImportSettings& settings,
     std::ostream& errors) -> bool
   {
@@ -1607,18 +1599,6 @@ namespace {
       return std::nullopt;
     }
 
-    if (json_data->contains("layout")) {
-      const auto& layout = (*json_data).at("layout");
-      if (!layout.is_object()) {
-        error_stream << "ERROR: layout must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyLayoutOverrides(
-            layout, manifest.defaults.loose_cooked_layout, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
     const auto manifest_dir = std::filesystem::absolute(manifest_directory);
 
     if (options.mount_table) {
@@ -1803,18 +1783,6 @@ namespace {
         }
       }
 
-      if (defaults.contains("layout")) {
-        const auto& layout_defaults = defaults.at("layout");
-        if (!layout_defaults.is_object()) {
-          error_stream << "ERROR: defaults.layout must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyLayoutOverrides(layout_defaults,
-              manifest.defaults.loose_cooked_layout, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
       if (defaults.contains("material_descriptor")) {
         const auto& material_defaults = defaults.at("material_descriptor");
         if (!material_defaults.is_object()) {
@@ -1948,19 +1916,7 @@ namespace {
       if (!ReadSourceKey(job, manifest_job.source_key, error_stream)) {
         return std::nullopt;
       }
-      manifest_job.loose_cooked_layout = manifest.defaults.loose_cooked_layout;
       manifest_job.mounts = manifest.mounts;
-      if (job.contains("layout")) {
-        const auto& layout = job.at("layout");
-        if (!layout.is_object()) {
-          error_stream << "ERROR: job.layout must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyLayoutOverrides(
-              layout, manifest_job.loose_cooked_layout, error_stream)) {
-          return std::nullopt;
-        }
-      }
       manifest_job.texture = manifest.defaults.texture;
       manifest_job.fbx = manifest.defaults.fbx;
       manifest_job.gltf = manifest.defaults.gltf;
@@ -2003,7 +1959,7 @@ namespace {
               << "ERROR [input.manifest.key_not_allowed]: key '" << it.key()
               << "' is not allowed for input jobs; allowed keys are "
                  "'id', 'type', 'source', 'virtual_path', 'depends_on', "
-                 "'output', 'layout', 'cooked_context_roots', 'source_key'\n";
+                 "'output', 'cooked_context_roots', 'source_key'\n";
             return std::nullopt;
           }
         }
@@ -2390,7 +2346,6 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
     if (!request.has_value()) {
       return std::nullopt;
     }
-    request->loose_cooked_layout = loose_cooked_layout;
     request->asset_virtual_path = virtual_path;
     request->captured_inputs = captured_inputs;
     request->source_key = source_key;

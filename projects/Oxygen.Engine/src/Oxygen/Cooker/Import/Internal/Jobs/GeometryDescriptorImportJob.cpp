@@ -228,8 +228,8 @@ namespace {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "geometry.buffer.foreign_root",
           "Raw geometry buffers must belong to the geometry's cooked root. "
-          "Reference the library geometry asset, or import the buffer source "
-          "into this root.",
+          "Reference the other root's geometry asset, or import the buffer "
+          "source into this root.",
           std::move(object_path));
         co_return std::nullopt;
       }

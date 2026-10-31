@@ -17,6 +17,7 @@
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_references.h>
 #include <Oxygen/Data/api_export.h>
+#include <Oxygen/Serio/Record.h>
 
 //! Oxygen loose cooked index binary format specification
 /**!
@@ -43,6 +44,9 @@ using SizeT = uint64_t;
 using CountT = uint32_t;
 
 //=== Constants ===-----------------------------------------------------------//
+
+//! The index file, at the cooked root.
+inline constexpr std::string_view kIndexFileName = "container.index.bin";
 
 //! Cooperative reader/publisher lease marker for an immutable cooked
 //! generation.
@@ -169,3 +173,11 @@ struct FileRecord {
 static_assert(sizeof(FileRecord) == 54);
 
 } // namespace oxygen::data::loose_cooked
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::loose_cooked::IndexHeader> = true;
+template <> inline constexpr bool kIsRecord<data::loose_cooked::AssetEntry> = true;
+template <> inline constexpr bool kIsRecord<data::loose_cooked::FileRecord> = true;
+} // namespace oxygen::serio
+// clang-format on

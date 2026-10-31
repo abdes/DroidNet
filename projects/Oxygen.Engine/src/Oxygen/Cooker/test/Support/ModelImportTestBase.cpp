@@ -13,6 +13,7 @@
 #include <span>
 #include <type_traits>
 
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/RegionStream.h>
@@ -21,21 +22,16 @@
 namespace oxygen::content::import::test {
 
 auto ModelImportTestBase::LoadInspection(const std::filesystem::path& root)
-  -> Inspection
+  -> CookedContent
 {
-  Inspection inspection;
-  inspection.LoadFromRoot(root);
-  return inspection;
+  return CookedContent::Open(content::cooked::RealCookerStorage(), root);
 }
 
-auto ModelImportTestBase::FindAssetOfType(const Inspection& inspection,
-  const AssetType type) -> std::optional<Inspection::AssetEntry>
+auto ModelImportTestBase::FindAssetOfType(const CookedContent& content,
+  const AssetType type) -> std::optional<CookedAsset>
 {
-  const auto assets = inspection.Assets();
-  const auto it = std::ranges::find_if(
-    assets, [type](const Inspection::AssetEntry& entry) -> bool {
-      return entry.asset_type == static_cast<uint8_t>(type);
-    });
+  const auto assets = content.Assets();
+  const auto it = std::ranges::find(assets, type, &CookedAsset::type);
   if (it == assets.end()) {
     return std::nullopt;
   }
@@ -43,29 +39,25 @@ auto ModelImportTestBase::FindAssetOfType(const Inspection& inspection,
 }
 
 auto ModelImportTestBase::CountAssetsOfType(
-  const Inspection& inspection, const AssetType type) -> size_t
+  const CookedContent& content, const AssetType type) -> size_t
 {
-  const auto assets = inspection.Assets();
-  return static_cast<size_t>(std::count_if(assets.begin(), assets.end(),
-    [type](const Inspection::AssetEntry& entry) -> bool {
-      return entry.asset_type == static_cast<uint8_t>(type);
-    }));
+  const auto assets = content.Assets();
+  return static_cast<size_t>(
+    std::ranges::count(assets, type, &CookedAsset::type));
 }
 
 auto ModelImportTestBase::LoadSceneReadback(const ImportReport& report)
   -> SceneReadback
 {
-  Inspection inspection;
-  inspection.LoadFromRoot(report.cooked_root);
+  const auto content = LoadInspection(report.cooked_root);
 
-  const auto scene_entry = FindAssetOfType(inspection, AssetType::kScene);
+  const auto scene_entry = FindAssetOfType(content, AssetType::kScene);
   EXPECT_TRUE(scene_entry.has_value());
   if (!scene_entry.has_value()) {
     return {};
   }
 
-  const auto scene_path = report.cooked_root
-    / std::filesystem::path(scene_entry->descriptor_relpath);
+  const auto scene_path = content.DescriptorStored(scene_entry->key).file;
 
   auto scene_file = serio::NativeFile::Open(scene_path, {});
   EXPECT_TRUE(scene_file) << scene_file.error().message();
@@ -180,27 +172,25 @@ auto ModelImportTestBase::ValidateSceneOutputs(
 {
   EXPECT_TRUE(report.success);
 
-  Inspection inspection;
-  inspection.LoadFromRoot(report.cooked_root);
+  const auto content = LoadInspection(report.cooked_root);
 
   if (expected.materials.has_value()) {
-    EXPECT_EQ(CountAssetsOfType(inspection, AssetType::kMaterial),
+    EXPECT_EQ(CountAssetsOfType(content, AssetType::kMaterial),
       expected.materials.value());
   }
   if (expected.geometry.has_value()) {
-    EXPECT_EQ(CountAssetsOfType(inspection, AssetType::kGeometry),
+    EXPECT_EQ(CountAssetsOfType(content, AssetType::kGeometry),
       expected.geometry.value());
   }
   if (expected.scenes.has_value()) {
-    EXPECT_EQ(CountAssetsOfType(inspection, AssetType::kScene),
-      expected.scenes.value());
+    EXPECT_EQ(
+      CountAssetsOfType(content, AssetType::kScene), expected.scenes.value());
   }
 
-  const auto scene_entry = FindAssetOfType(inspection, AssetType::kScene);
+  const auto scene_entry = FindAssetOfType(content, AssetType::kScene);
   ASSERT_HAS_VALUE(scene_entry);
 
-  const auto scene_path = report.cooked_root
-    / std::filesystem::path(scene_entry->descriptor_relpath);
+  const auto scene_path = content.DescriptorStored(scene_entry->key).file;
 
   auto scene_file = serio::NativeFile::Open(scene_path, {});
   ASSERT_TRUE(scene_file) << scene_file.error().message();
@@ -273,48 +263,13 @@ auto ModelImportTestBase::ValidateSceneOutputs(
   EXPECT_FALSE(has_point);
   EXPECT_FALSE(has_spot);
 
-  const auto textures_table_path = report.cooked_root
-    / std::filesystem::path(LooseCookedLayout {}.TexturesTableRelPath());
-  const auto textures_data_path = report.cooked_root
-    / std::filesystem::path(LooseCookedLayout {}.TexturesDataRelPath());
-
-  const auto table_exists = std::filesystem::exists(textures_table_path);
-  const auto data_exists = std::filesystem::exists(textures_data_path);
-
-  size_t texture_count = 0U;
-  if (table_exists) {
-    const auto table_size = std::filesystem::file_size(textures_table_path);
-    ASSERT_EQ(table_size % sizeof(TextureResourceDesc), 0U);
-    texture_count
-      = static_cast<size_t>(table_size / sizeof(TextureResourceDesc));
-  }
+  const auto& textures = content.ResourceTable(data::ResourceKind::kTexture);
+  const auto texture_count = static_cast<size_t>(textures.RowCount());
+  const auto has_textures_table = !textures.RowsStored().file.empty();
+  const auto has_textures_data = !textures.DataStored().file.empty();
 
   if (expected.texture_files.has_value()) {
     EXPECT_EQ(texture_count, expected.texture_files.value());
-    if (expected.texture_files.value() > 0U) {
-      EXPECT_TRUE(table_exists);
-      EXPECT_TRUE(data_exists);
-    } else {
-      EXPECT_FALSE(table_exists);
-      EXPECT_FALSE(data_exists);
-    }
-  } else {
-    EXPECT_GT(texture_count, 0U);
-    EXPECT_TRUE(table_exists);
-    EXPECT_TRUE(data_exists);
-  }
-
-  const auto files = inspection.Files();
-  const auto has_textures_table = std::ranges::any_of(
-    files, [](const Inspection::FileEntry& entry) -> bool {
-      return entry.kind == FileKind::kTexturesTable;
-    });
-  const auto has_textures_data = std::ranges::any_of(
-    files, [](const Inspection::FileEntry& entry) -> bool {
-      return entry.kind == FileKind::kTexturesData;
-    });
-
-  if (expected.texture_files.has_value()) {
     if (expected.texture_files.value() > 0U) {
       EXPECT_TRUE(has_textures_table);
       EXPECT_TRUE(has_textures_data);
@@ -323,6 +278,7 @@ auto ModelImportTestBase::ValidateSceneOutputs(
       EXPECT_FALSE(has_textures_data);
     }
   } else {
+    EXPECT_GT(texture_count, 0U);
     EXPECT_TRUE(has_textures_table);
     EXPECT_TRUE(has_textures_data);
   }

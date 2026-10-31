@@ -7,42 +7,62 @@
 // Covers: Tools/PakTool/CommandExecution.cpp
 
 #include <filesystem>
+#include <string_view>
 
-#include "ArtifactPublication.h"
 #include "PakToolOptions.h"
+#include "PakToolTestSupport.h"
 #include "RequestPreparation.h"
 
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
 #include <Oxygen/Cooker/Tools/PakTool/CommandExecution.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
+using oxygen::content::cooked::RealCookerStorage;
 using oxygen::content::pak::BuildMode;
 using oxygen::content::pak::PakCatalogIo;
 using oxygen::content::pak::tool::ExecutePakToolCommand;
 using oxygen::content::pak::tool::PakToolCliOptions;
 using oxygen::content::pak::tool::PakToolExitCode;
-using oxygen::content::pak::tool::RealArtifactFileSystem;
-using oxygen::content::pak::tool::RealRequestPreparationFileSystem;
+using oxygen::content::pak::tool::test::WriteGamePak;
+using oxygen::content::pak::tool::test::WriteLooseGameRoot;
 using oxygen::cooker::test::ReadText;
 using oxygen::cooker::test::WriteText;
 
 constexpr auto kSourceKey = "01234567-89ab-7def-8123-456789abcdef";
 constexpr auto kToolVersion = "0.1";
 
-class PakToolCommandExecutionTest : public oxygen::cooker::test::TempDirTest {
+class PakToolCommandExecutionTest : public oxygen::testing::TempDirTest {
 protected:
-  [[nodiscard]] static auto MakeOptions() -> PakToolCliOptions
+  //! Options for a build of a loose cooked root of the mount `Game`.
+  [[nodiscard]] auto MakeOptions() const -> PakToolCliOptions
+  {
+    auto options = MakeSourcelessOptions();
+    options.request.sources = { LooseSource("Loose") };
+    return options;
+  }
+
+  [[nodiscard]] static auto MakeSourcelessOptions() -> PakToolCliOptions
   {
     auto options = PakToolCliOptions {};
     options.request.content_version = 42;
     options.request.source_key = kSourceKey;
     return options;
+  }
+
+  [[nodiscard]] auto LooseSource(const std::string_view material) const
+    -> oxygen::data::CookedSource
+  {
+    return {
+      .kind = oxygen::data::CookedSourceKind::kLooseCooked,
+      .path = WriteLooseGameRoot(TempDir() / "loose" / material, material),
+    };
   }
 };
 
@@ -56,10 +76,9 @@ NOLINT_TEST_F(
   options.output.diagnostics_file
     = TempDir() / "release" / "game_full.report.json";
 
-  auto prep_fs = RealRequestPreparationFileSystem {};
-  auto artifact_fs = RealArtifactFileSystem {};
+  auto& storage = RealCookerStorage();
   const auto result = ExecutePakToolCommand(BuildMode::kFull, "build",
-    "Oxygen.Cooker.PakTool build", kToolVersion, options, prep_fs, artifact_fs);
+    "Oxygen.Cooker.PakTool build", kToolVersion, options, storage);
 
   EXPECT_EQ(result.exit_code, PakToolExitCode::kSuccess)
     << result.error_code << ": " << result.error_message;
@@ -85,11 +104,10 @@ NOLINT_TEST_F(
   options.build.manifest_output
     = TempDir() / "release" / "game_full_manifest.json";
 
-  auto prep_fs = RealRequestPreparationFileSystem {};
-  auto artifact_fs = RealArtifactFileSystem {};
+  auto& storage = RealCookerStorage();
   const auto result = ExecutePakToolCommand(BuildMode::kFull, "build",
     "Oxygen.Cooker.PakTool build --manifest-out", kToolVersion, options,
-    prep_fs, artifact_fs);
+    storage);
 
   EXPECT_EQ(result.exit_code, PakToolExitCode::kSuccess)
     << result.error_code << ": " << result.error_message;
@@ -101,32 +119,20 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   PakToolCommandExecutionTest, PatchBuildPublishesPakCatalogAndManifest)
 {
-  auto base_options = MakeOptions();
-  base_options.request.output_pak = TempDir() / "base" / "base.pak";
-  base_options.request.catalog_output
-    = TempDir() / "base" / "base.pakcatalog.json";
-
-  auto prep_fs = RealRequestPreparationFileSystem {};
-  auto artifact_fs = RealArtifactFileSystem {};
-  const auto base_result = ExecutePakToolCommand(BuildMode::kFull, "build",
-    "Oxygen.Cooker.PakTool build", kToolVersion, base_options, prep_fs,
-    artifact_fs);
-  ASSERT_EQ(base_result.exit_code, PakToolExitCode::kSuccess)
-    << base_result.error_code << ": " << base_result.error_message;
-  ASSERT_TRUE(std::filesystem::remove(base_options.request.catalog_output));
+  const auto base_pak = WriteGamePak(TempDir() / "base" / "base.pak", "Base");
 
   auto patch_options = MakeOptions();
   patch_options.request.source_key = "01234567-89ab-7def-8123-456789abcdee";
   patch_options.request.output_pak = TempDir() / "patch" / "patch.pak";
   patch_options.request.catalog_output
     = TempDir() / "patch" / "patch.pakcatalog.json";
-  patch_options.patch.base_paks = { base_options.request.output_pak };
+  patch_options.patch.base_paks = { base_pak };
   patch_options.patch.manifest_output
     = TempDir() / "patch" / "patch.manifest.json";
 
+  auto& storage = RealCookerStorage();
   const auto patch_result = ExecutePakToolCommand(BuildMode::kPatch, "patch",
-    "Oxygen.Cooker.PakTool patch", kToolVersion, patch_options, prep_fs,
-    artifact_fs);
+    "Oxygen.Cooker.PakTool patch", kToolVersion, patch_options, storage);
 
   EXPECT_EQ(patch_result.exit_code, PakToolExitCode::kSuccess)
     << patch_result.error_code << ": " << patch_result.error_message;
@@ -138,24 +144,13 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(PakToolCommandExecutionTest,
   BuildFailureSuppressesFinalCatalogAndManifestSidecars)
 {
-  auto seed_options = MakeOptions();
-  seed_options.request.output_pak = TempDir() / "seed" / "seed.pak";
-  seed_options.request.catalog_output
-    = TempDir() / "seed" / "seed.pakcatalog.json";
-
-  auto prep_fs = RealRequestPreparationFileSystem {};
-  auto artifact_fs = RealArtifactFileSystem {};
-  const auto seed_result = ExecutePakToolCommand(BuildMode::kFull, "build",
-    "Oxygen.Cooker.PakTool build", kToolVersion, seed_options, prep_fs,
-    artifact_fs);
-  ASSERT_EQ(seed_result.exit_code, PakToolExitCode::kSuccess)
-    << seed_result.error_code << ": " << seed_result.error_message;
-
-  auto options = MakeOptions();
+  // A pak source that cannot be read fails the build.
+  const auto seed_pak = TempDir() / "seed" / "corrupt.pak";
+  auto options = MakeSourcelessOptions();
   options.request.sources = {
     oxygen::data::CookedSource {
       .kind = oxygen::data::CookedSourceKind::kPak,
-      .path = seed_options.request.output_pak,
+      .path = seed_pak,
     },
   };
   options.request.output_pak = TempDir() / "release" / "game_failure.pak";
@@ -165,14 +160,14 @@ NOLINT_TEST_F(PakToolCommandExecutionTest,
     = TempDir() / "release" / "game_failure.manifest.json";
   options.output.diagnostics_file
     = TempDir() / "release" / "game_failure.report.json";
-  WriteText(seed_options.request.output_pak, "corrupt-pak-source");
-
+  WriteText(seed_pak, "corrupt-pak-source");
   WriteText(options.request.output_pak, "pak-old");
   WriteText(options.request.catalog_output, "catalog-old");
   WriteText(options.build.manifest_output, "manifest-old");
 
+  auto& storage = RealCookerStorage();
   const auto result = ExecutePakToolCommand(BuildMode::kFull, "build",
-    "Oxygen.Cooker.PakTool build", kToolVersion, options, prep_fs, artifact_fs);
+    "Oxygen.Cooker.PakTool build", kToolVersion, options, storage);
 
   EXPECT_EQ(result.exit_code, PakToolExitCode::kBuildFailure)
     << result.error_code << ": " << result.error_message;

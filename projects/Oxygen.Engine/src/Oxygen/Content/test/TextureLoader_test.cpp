@@ -34,7 +34,7 @@ class TextureLoaderBasicTestTest
 protected:
   auto CreateLoaderContext() -> oxygen::content::LoaderContext
   {
-    return MakeLoaderContext(false, false);
+    return MakeResourceContext<oxygen::data::pak::core::TextureResourceDesc>();
   }
 
   auto WriteDescriptorAndPayload(

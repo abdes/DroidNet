@@ -20,18 +20,18 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -39,10 +39,12 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 using PakTextureResourceDesc = oxygen::data::pak::core::TextureResourceDesc;
 namespace import = oxygen::content::import;
 namespace co = oxygen::co;
+namespace loose_layout = import::internal::loose_layout;
 
 namespace {
 
@@ -80,10 +82,9 @@ auto ParseTextureTable(const std::vector<std::byte>& data)
 //=== Test Fixture ===--------------------------------------------------------//
 
 //! Test fixture for TextureEmitter tests.
-class TextureEmitterTest : public oxygen::cooker::test::TempDirTest {
+class TextureEmitterTest : public oxygen::testing::TempDirTest {
 protected:
   // Local type aliases so member signatures can use unqualified names.
-  using LooseCookedLayout = import::LooseCookedLayout;
   using TextureEmitter = import::TextureEmitter;
   using TextureTableAggregator = import::TextureTableAggregator;
   using ImportEventLoop = import::ImportEventLoop;
@@ -101,7 +102,8 @@ protected:
   {
     loop_ = std::make_unique<ImportEventLoop>();
     writer_ = std::make_unique<FileWriter>(*loop_);
-    table_registry_ = std::make_unique<ResourceTableRegistry>(*writer_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*writer_,
+      oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
   }
 
   auto TearDown() -> void override
@@ -111,16 +113,10 @@ protected:
     loop_.reset();
   }
 
-  [[nodiscard]] auto Layout() const -> const LooseCookedLayout&
-  {
-    return layout_;
-  }
-
   [[nodiscard]] auto MakeEmitterConfig() const -> TextureEmitter::Config
   {
     return TextureEmitter::Config {
       .cooked_root = TempDir(),
-      .layout = layout_,
       .packing_policy_id = "d3d12",
       .data_alignment = kTextureAlignment,
     };
@@ -173,7 +169,7 @@ protected:
 
   [[nodiscard]] auto TextureAggregator() const -> TextureTableAggregator&
   {
-    return table_registry_->TextureAggregator(TempDir(), layout_);
+    return table_registry_->TextureAggregator(TempDir());
   }
 
   // NOLINTBEGIN(*-non-private-member-variables-in-classes)
@@ -185,7 +181,6 @@ protected:
   std::unique_ptr<ImportEventLoop> loop_;
   std::unique_ptr<FileWriter> writer_;
   std::unique_ptr<ResourceTableRegistry> table_registry_;
-  LooseCookedLayout layout_ {}; // Uses default paths
   // NOLINTEND(*-non-private-member-variables-in-classes)
 };
 
@@ -322,7 +317,7 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureTableFile)
     const bool tables_ok = co_await table_registry_->FinalizeAll();
     EXPECT_TRUE(tables_ok);
 
-    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table_path = TempDir() / loose_layout::kTexturesTable;
     EXPECT_TRUE(std::filesystem::exists(table_path));
 
     const auto table_data = ReadBytes(table_path);
@@ -361,10 +356,10 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureDataFileWithAlignment)
     const bool tables_ok = co_await table_registry_->FinalizeAll();
     EXPECT_TRUE(tables_ok);
 
-    const auto data_path = TempDir() / Layout().TexturesDataRelPath();
+    const auto data_path = TempDir() / loose_layout::kTexturesData;
     EXPECT_TRUE(std::filesystem::exists(data_path));
 
-    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table_path = TempDir() / loose_layout::kTexturesTable;
     const auto table = ParseTextureTable(ReadBytes(table_path));
 
     EXPECT_EQ(table.size(), 3);
@@ -410,7 +405,7 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeSerializesTextureMetadataToTable)
     const bool tables_ok = co_await table_registry_->FinalizeAll();
     EXPECT_TRUE(tables_ok);
 
-    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table_path = TempDir() / loose_layout::kTexturesTable;
     const auto table = ParseTextureTable(ReadBytes(table_path));
 
     EXPECT_EQ(table.size(), 2);
@@ -433,10 +428,10 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWithoutUserTexturesWritesFallback)
 
     EXPECT_TRUE(success);
 
-    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table_path = TempDir() / loose_layout::kTexturesTable;
     EXPECT_TRUE(std::filesystem::exists(table_path));
 
-    const auto data_path = TempDir() / Layout().TexturesDataRelPath();
+    const auto data_path = TempDir() / loose_layout::kTexturesData;
     EXPECT_TRUE(std::filesystem::exists(data_path));
 
     const auto table = ParseTextureTable(ReadBytes(table_path));
@@ -507,8 +502,8 @@ NOLINT_TEST_F(TextureEmitterTest, StatsDataFileSizeTracksAccumulatedSize)
     EXPECT_TRUE(finalized);
     EXPECT_TRUE(tables_ok);
 
-    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
-    const auto data_path = TempDir() / Layout().TexturesDataRelPath();
+    const auto table_path = TempDir() / loose_layout::kTexturesTable;
+    const auto data_path = TempDir() / loose_layout::kTexturesData;
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_EQ(table.size(), 3);
 
@@ -578,11 +573,11 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesPayloadBytes)
     const bool tables_ok = co_await table_registry_->FinalizeAll();
     EXPECT_TRUE(tables_ok);
 
-    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table_path = TempDir() / loose_layout::kTexturesTable;
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_GE(table.size(), 2);
 
-    const auto data_path = TempDir() / Layout().TexturesDataRelPath();
+    const auto data_path = TempDir() / loose_layout::kTexturesData;
     const auto actual_data = ReadBytes(data_path);
 
     const auto offset = static_cast<size_t>(table.at(1).data_offset);
@@ -635,11 +630,11 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
     const bool tables_ok = co_await table_registry_->FinalizeAll();
     EXPECT_TRUE(tables_ok);
 
-    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table_path = TempDir() / loose_layout::kTexturesTable;
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_EQ(table.size(), 1 + expected_payloads.size());
 
-    const auto data_path = TempDir() / Layout().TexturesDataRelPath();
+    const auto data_path = TempDir() / loose_layout::kTexturesData;
     const auto actual_data = ReadBytes(data_path);
 
     for (size_t i = 0; i < expected_payloads.size(); ++i) {
@@ -685,7 +680,7 @@ NOLINT_TEST_F(TextureEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
     EXPECT_EQ(idx1, 1);
     EXPECT_EQ(idx2, 1);
 
-    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table_path = TempDir() / loose_layout::kTexturesTable;
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_EQ(table.size(), 2);
   });
@@ -722,7 +717,7 @@ NOLINT_TEST_F(
       EXPECT_EQ(diagnostics.front().severity, import::ImportSeverity::kWarning);
     }
 
-    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table_path = TempDir() / loose_layout::kTexturesTable;
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_EQ(table.size(), 2);
     co_return;
@@ -810,7 +805,7 @@ NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSaltIgnoredIdenticalContent)
     EXPECT_EQ(idx1, 1);
     EXPECT_EQ(idx2, 1);
 
-    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table_path = TempDir() / loose_layout::kTexturesTable;
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_EQ(table.size(), 2);
   });
@@ -847,7 +842,7 @@ NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSameSaltDifferentContent)
     EXPECT_EQ(idx1, 1);
     EXPECT_EQ(idx2, 2);
 
-    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table_path = TempDir() / loose_layout::kTexturesTable;
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_EQ(table.size(), 3);
   });

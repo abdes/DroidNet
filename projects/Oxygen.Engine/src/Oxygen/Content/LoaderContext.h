@@ -18,8 +18,8 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Serio/Stream.h>
 
 namespace oxygen::content {
 
@@ -98,27 +98,14 @@ struct LoaderContext {
   //! Borrowed only during synchronous decode; the result takes ownership.
   observer_ptr<const data::AssetReferences> asset_references {};
 
-  //=== Data Readers ===------------------------------------------------------//
-
-  template <typename /*ResourceT*/> using DataReaderPtr = serio::AnyReader*;
-
-  //! Helper alias for a data reader reference for a given resource type.
-  template <typename ResourceT> using DataReaderRef = serio::AnyReader*;
-
-  //! Tuple of data region readers, one for each type in ResourceTypeList.
+  //! The payload of the resource being loaded, already read in full.
   /*!
-   For each type in `ResourceTypeList`, this will be a Reader positioned at the
-   start of the data region for that type. These readers may or may not use the
-   same stream or stream type as the descriptor reader. Therefore, it is not
-   correct and not legal to use the desc_reader to read data from the data
-   regions.
-
-   @note The tuple order matches ResourceTypeList.
-   @see ResourceTypeList
+   A resource loader takes the buffer (`std::move(*context.payload)`) into the
+   resource it builds; the pipeline read the `size_bytes` its descriptor names
+   into it, within Content's payload budget. Null for assets, whose
+   descriptors hold everything they decode.
   */
-  using DataReadersTuple
-    = TypeListTransform<ResourceTypeList, DataReaderRef>::Type;
-  DataReadersTuple data_readers {};
+  observer_ptr<serio::ByteBuffer> payload {};
 
   //! Whether offline mode must not perform GPU side effects.
   /*!

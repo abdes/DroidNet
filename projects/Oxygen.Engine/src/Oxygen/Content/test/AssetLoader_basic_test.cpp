@@ -25,7 +25,7 @@ namespace {
 
 NOLINT_TEST_F(AssetLoaderBasicTest, TruncatedPakLeavesMountsUnchanged)
 {
-  const auto path = temp_dir_ / "truncated.pak";
+  const auto path = TempDir() / "truncated.pak";
   {
     std::ofstream file(path, std::ios::binary);
     file << "NOT_A_PAK";
@@ -42,7 +42,7 @@ NOLINT_TEST_F(AssetLoaderBasicTest, TruncatedPakLeavesMountsUnchanged)
 NOLINT_TEST_F(AssetLoaderBasicTest, MissingPakLeavesMountsUnchanged)
 {
   try {
-    asset_loader_->AddPakFile(temp_dir_ / "missing.pak");
+    asset_loader_->AddPakFile(TempDir() / "missing.pak");
     FAIL() << "Missing source was mounted";
   } catch (const std::system_error& error) {
     EXPECT_EQ(error.code(), std::errc::no_such_file_or_directory);

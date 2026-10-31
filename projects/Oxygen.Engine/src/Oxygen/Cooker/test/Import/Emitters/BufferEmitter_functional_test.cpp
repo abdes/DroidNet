@@ -17,27 +17,29 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
 using PakBufferResourceDesc = oxygen::data::pak::core::BufferResourceDesc;
 namespace co = oxygen::co;
+namespace loose_layout = oxygen::content::import::internal::loose_layout;
 
 namespace {
 
@@ -123,13 +125,14 @@ auto VerifyBufferContent(const std::vector<std::byte>& data_file,
 //=== Test Fixture ===--------------------------------------------------------//
 
 //! Test fixture for BufferEmitter tests.
-class BufferEmitterTest : public oxygen::cooker::test::TempDirTest {
+class BufferEmitterTest : public oxygen::testing::TempDirTest {
 protected:
   auto SetUp() -> void override
   {
     loop_ = std::make_unique<ImportEventLoop>();
     writer_ = std::make_unique<WindowsFileWriter>(*loop_);
-    table_registry_ = std::make_unique<ResourceTableRegistry>(*writer_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*writer_,
+      oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
   }
 
   auto TearDown() -> void override
@@ -139,14 +142,9 @@ protected:
     loop_.reset();
   }
 
-  [[nodiscard]] auto Layout() const -> const LooseCookedLayout&
-  {
-    return layout_;
-  }
-
   auto BufferAggregator() -> BufferTableAggregator&
   {
-    return table_registry_->BufferAggregator(TempDir(), layout_);
+    return table_registry_->BufferAggregator(TempDir());
   }
 
   auto FinalizeTables() -> bool
@@ -162,7 +160,6 @@ protected:
   std::unique_ptr<ImportEventLoop> loop_;
   std::unique_ptr<WindowsFileWriter> writer_;
   std::unique_ptr<ResourceTableRegistry> table_registry_;
-  LooseCookedLayout layout_ {}; // Uses default paths
 };
 
 //=== Basic Emission Tests
@@ -170,7 +167,7 @@ protected:
 
 NOLINT_TEST_F(BufferEmitterTest, EmitSingleBufferReturnsIndexOne)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
   auto payload = MakeTestBuffer(1024, 0x01, 16, 32);
 
   uint32_t index = 0;
@@ -188,7 +185,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitSingleBufferReturnsIndexOne)
 
 NOLINT_TEST_F(BufferEmitterTest, EmitMultipleBuffersReturnsSequentialIndices)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   std::vector<uint32_t> indices;
   bool success = false;
@@ -212,7 +209,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitMultipleBuffersReturnsSequentialIndices)
 
 NOLINT_TEST_F(BufferEmitterTest, EmitDuplicateBufferReturnsSameIndex)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
@@ -238,7 +235,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitDuplicateBufferReturnsSameIndex)
   EXPECT_EQ(idx1, 1);
   EXPECT_EQ(emitter.Count(), 1);
 
-  const auto table_path = TempDir() / Layout().BuffersTableRelPath();
+  const auto table_path = TempDir() / loose_layout::kBuffersTable;
   const auto table = ParseBufferTable(ReadBytes(table_path));
   ASSERT_EQ(table.size(), 2);
 }
@@ -246,7 +243,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitDuplicateBufferReturnsSameIndex)
 //! With no content hash, payload fingerprint still dedups identical buffers.
 NOLINT_TEST_F(BufferEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
@@ -270,7 +267,7 @@ NOLINT_TEST_F(BufferEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
   EXPECT_EQ(idx1, 1U);
   EXPECT_EQ(emitter.Count(), 1U);
 
-  const auto table_path = TempDir() / Layout().BuffersTableRelPath();
+  const auto table_path = TempDir() / loose_layout::kBuffersTable;
   const auto table = ParseBufferTable(ReadBytes(table_path));
   EXPECT_EQ(table.size(), 2U); // includes sentinel
 }
@@ -286,7 +283,7 @@ NOLINT_TEST_F(
     diagnostics.push_back(std::move(diagnostic));
   };
   BufferEmitter emitter(
-    *writer_, BufferAggregator(), Layout(), TempDir(), std::move(config));
+    *writer_, BufferAggregator(), TempDir(), std::move(config));
 
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
@@ -313,7 +310,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(diagnostics.front().code, "import.dedup_collision.buffer");
   EXPECT_EQ(diagnostics.front().severity, ImportSeverity::kWarning);
 
-  const auto table_path = TempDir() / Layout().BuffersTableRelPath();
+  const auto table_path = TempDir() / loose_layout::kBuffersTable;
   const auto table = ParseBufferTable(ReadBytes(table_path));
   EXPECT_EQ(table.size(), 2U); // sentinel + one emitted entry
 }
@@ -328,7 +325,7 @@ NOLINT_TEST_F(BufferEmitterTest, CollisionPolicyWarnReplaceExpectedToEmitNew)
     diagnostics.push_back(std::move(diagnostic));
   };
   BufferEmitter emitter(
-    *writer_, BufferAggregator(), Layout(), TempDir(), std::move(config));
+    *writer_, BufferAggregator(), TempDir(), std::move(config));
 
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
@@ -360,7 +357,7 @@ NOLINT_TEST_F(BufferEmitterTest, CollisionPolicyErrorExpectedToThrow)
   BufferEmitter::Config config {};
   config.collision_policy = DedupCollisionPolicy::kError;
   BufferEmitter emitter(
-    *writer_, BufferAggregator(), Layout(), TempDir(), std::move(config));
+    *writer_, BufferAggregator(), TempDir(), std::move(config));
 
   co::Run(*loop_, [&] -> Co<> {
     auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x44 });
@@ -386,7 +383,7 @@ NOLINT_TEST_F(
     diagnostics.push_back(std::move(diagnostic));
   };
   BufferEmitter emitter(
-    *writer_, BufferAggregator(), Layout(), TempDir(), std::move(config));
+    *writer_, BufferAggregator(), TempDir(), std::move(config));
 
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
@@ -422,7 +419,7 @@ NOLINT_TEST_F(BufferEmitterTest, HashedSameSaltIdenticalContentExpectedToDedup)
     diagnostics.push_back(std::move(diagnostic));
   };
   BufferEmitter emitter(
-    *writer_, BufferAggregator(), Layout(), TempDir(), std::move(config));
+    *writer_, BufferAggregator(), TempDir(), std::move(config));
 
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
@@ -451,7 +448,7 @@ NOLINT_TEST_F(BufferEmitterTest, HashedSameSaltIdenticalContentExpectedToDedup)
 //! Emitter count exposes unique entries, not request total.
 NOLINT_TEST_F(BufferEmitterTest, CountReflectsUniqueEntriesNotEmitRequests)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
   constexpr int kEmitRequests = 5;
 
   bool tables_ok = false;
@@ -470,14 +467,14 @@ NOLINT_TEST_F(BufferEmitterTest, CountReflectsUniqueEntriesNotEmitRequests)
   EXPECT_TRUE(tables_ok);
   EXPECT_EQ(emitter.Count(), 1U);
 
-  const auto table_path = TempDir() / Layout().BuffersTableRelPath();
+  const auto table_path = TempDir() / loose_layout::kBuffersTable;
   const auto table = ParseBufferTable(ReadBytes(table_path));
   EXPECT_EQ(table.size(), 2U);
 }
 
 NOLINT_TEST_F(BufferEmitterTest, EmitReturnsImmediatelyBeforeIOCompletes)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
   auto payload = MakeTestBuffer(4 * 1024, 0x01, 16, 32);
 
   uint32_t index = 0;
@@ -497,7 +494,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitReturnsImmediatelyBeforeIOCompletes)
 
 NOLINT_TEST_F(BufferEmitterTest, EmitAfterFinalizeThrows)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   co::Run(*loop_, [&] -> Co<> {
     const auto success = co_await emitter.Finalize();
@@ -512,7 +509,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitAfterFinalizeThrows)
 
 NOLINT_TEST_F(BufferEmitterTest, FinalizeTableFileHasCorrectPackedSize)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
   constexpr int kBufferCount = 3;
 
   bool tables_ok = false;
@@ -531,7 +528,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableFileHasCorrectPackedSize)
   EXPECT_TRUE(tables_ok);
 
   // Table file size = count * sizeof(BufferResourceDesc)
-  const auto table_path = TempDir() / Layout().BuffersTableRelPath();
+  const auto table_path = TempDir() / loose_layout::kBuffersTable;
   EXPECT_TRUE(std::filesystem::exists(table_path));
 
   const auto table_size = std::filesystem::file_size(table_path);
@@ -542,7 +539,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableFileHasCorrectPackedSize)
 NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesHaveCorrectAlignedOffsets)
 {
   // Create buffers with different alignments
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   // Buffer 0: 100 bytes with 16-byte alignment -> offset 0
   // Buffer 1: 200 bytes with 16-byte alignment -> offset = AlignUp(100, 16) =
@@ -571,7 +568,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesHaveCorrectAlignedOffsets)
   EXPECT_TRUE(tables_ok);
 
   // Parse table and verify offsets
-  const auto table_path = TempDir() / Layout().BuffersTableRelPath();
+  const auto table_path = TempDir() / loose_layout::kBuffersTable;
   const auto table = ParseBufferTable(ReadBytes(table_path));
 
   ASSERT_EQ(table.size(), 4);
@@ -598,7 +595,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesHaveCorrectAlignedOffsets)
 
 NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesPreserveMetadata)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   CookedBufferPayload vertex_payload;
   vertex_payload.data.resize(512);
@@ -630,7 +627,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesPreserveMetadata)
   EXPECT_TRUE(tables_ok);
 
   // Parse table and verify metadata
-  const auto table_path = TempDir() / Layout().BuffersTableRelPath();
+  const auto table_path = TempDir() / loose_layout::kBuffersTable;
   const auto table = ParseBufferTable(ReadBytes(table_path));
 
   ASSERT_EQ(table.size(), 3);
@@ -652,7 +649,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesPreserveMetadata)
 
 NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileContainsCorrectContent)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   // Create two buffers with distinct content
   CookedBufferPayload buf0;
@@ -676,7 +673,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileContainsCorrectContent)
   });
 
   // Read data file and verify content
-  const auto data_path = TempDir() / Layout().BuffersDataRelPath();
+  const auto data_path = TempDir() / loose_layout::kBuffersData;
   const auto data_file = ReadBytes(data_path);
 
   // Buffer 0 at offset 0
@@ -703,7 +700,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileContainsCorrectContent)
 
 NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileSizeIncludesPadding)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   constexpr size_t kSize0 = 100;
   constexpr size_t kSize1 = 200;
@@ -718,7 +715,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileSizeIncludesPadding)
   });
 
   // Data file size = padding + data
-  const auto data_path = TempDir() / Layout().BuffersDataRelPath();
+  const auto data_path = TempDir() / loose_layout::kBuffersData;
   const auto data_size = std::filesystem::file_size(data_path);
 
   // Expected: offset0=0, size0=100, offset1=AlignUp(100,16)=112, size1=200
@@ -732,7 +729,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileSizeIncludesPadding)
 
 NOLINT_TEST_F(BufferEmitterTest, FinalizeWaitsForPendingIO)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
   auto idx0 = emitter.Emit(MakeTestBuffer(2048, 0x01, 16, 32), "buf0");
   auto idx1 = emitter.Emit(MakeTestBuffer(1024, 0x02, 4, 0), "buf1");
   EXPECT_EQ(idx0, 1);
@@ -749,7 +746,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeWaitsForPendingIO)
 
 NOLINT_TEST_F(BufferEmitterTest, FinalizeNoBuffersSucceedsWithoutWritingFiles)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   bool success = false;
   co::Run(*loop_,
@@ -757,7 +754,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeNoBuffersSucceedsWithoutWritingFiles)
 
   EXPECT_TRUE(success);
 
-  const auto table_path = TempDir() / Layout().BuffersTableRelPath();
+  const auto table_path = TempDir() / loose_layout::kBuffersTable;
   EXPECT_FALSE(std::filesystem::exists(table_path));
 }
 
@@ -766,7 +763,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeNoBuffersSucceedsWithoutWritingFiles)
 
 NOLINT_TEST_F(BufferEmitterTest, DataFileSizeTracksAccumulatedSize)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
   constexpr size_t kSize0 = 100;
   constexpr size_t kSize1 = 200;
   constexpr uint64_t kAlign = 16;
@@ -794,7 +791,7 @@ NOLINT_TEST_F(BufferEmitterTest, DataFileSizeTracksAccumulatedSize)
 
 NOLINT_TEST_F(BufferEmitterTest, CountTracksEmittedBuffers)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   // Assert initial state
   EXPECT_EQ(emitter.Count(), 0);
@@ -820,7 +817,7 @@ NOLINT_TEST_F(BufferEmitterTest, CountTracksEmittedBuffers)
 
 NOLINT_TEST_F(BufferEmitterTest, EmitZeroAlignmentUsesDefaultAlignment)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   // Buffer with zero alignment should use default (16)
   auto payload = MakeTestBuffer(100, 0x01, 0, 32);
@@ -837,7 +834,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitZeroAlignmentUsesDefaultAlignment)
   EXPECT_TRUE(tables_ok);
 
   // Table entry exists
-  const auto table_path = TempDir() / Layout().BuffersTableRelPath();
+  const auto table_path = TempDir() / loose_layout::kBuffersTable;
   const auto table = ParseBufferTable(ReadBytes(table_path));
 
   ASSERT_EQ(table.size(), 2);
@@ -846,7 +843,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitZeroAlignmentUsesDefaultAlignment)
 
 NOLINT_TEST_F(BufferEmitterTest, EmitLargeBufferSucceedsWithCorrectSize)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   // 1MB buffer
   constexpr size_t kLargeSize = 1024 * 1024;
@@ -864,11 +861,11 @@ NOLINT_TEST_F(BufferEmitterTest, EmitLargeBufferSucceedsWithCorrectSize)
   EXPECT_TRUE(tables_ok);
 
   // Data file has correct size
-  const auto data_path = TempDir() / Layout().BuffersDataRelPath();
+  const auto data_path = TempDir() / loose_layout::kBuffersData;
   EXPECT_EQ(std::filesystem::file_size(data_path), kLargeSize);
 
   // Table entry has correct size
-  const auto table_path = TempDir() / Layout().BuffersTableRelPath();
+  const auto table_path = TempDir() / loose_layout::kBuffersTable;
   const auto table = ParseBufferTable(ReadBytes(table_path));
 
   ASSERT_EQ(table.size(), 2);
@@ -877,7 +874,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitLargeBufferSucceedsWithCorrectSize)
 
 NOLINT_TEST_F(BufferEmitterTest, EmitManySmallBuffersAllAlignedCorrectly)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), TempDir());
+  BufferEmitter emitter(*writer_, BufferAggregator(), TempDir());
 
   constexpr int kBufferCount = 50;
   constexpr size_t kBufferSize = 17; // Intentionally not aligned
@@ -899,7 +896,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitManySmallBuffersAllAlignedCorrectly)
   EXPECT_TRUE(tables_ok);
 
   // All table entries have aligned offsets
-  const auto table_path = TempDir() / Layout().BuffersTableRelPath();
+  const auto table_path = TempDir() / loose_layout::kBuffersTable;
   const auto table = ParseBufferTable(ReadBytes(table_path));
 
   ASSERT_EQ(table.size(), kBufferCount + 1);

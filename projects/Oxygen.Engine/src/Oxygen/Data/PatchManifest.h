@@ -20,7 +20,7 @@ namespace oxygen::data {
 
 struct PatchCompatibilityEnvelope final {
   std::vector<PakCatalogBase> required_base_layers;
-  //! The libraries the pak references without containing them, with what it
+  //! The mounts the pak references without containing them, with what it
   //! requires of each; full builds and patches alike.
   std::vector<PakCatalogDependency> required_dependencies;
   uint16_t patch_content_version = 0;

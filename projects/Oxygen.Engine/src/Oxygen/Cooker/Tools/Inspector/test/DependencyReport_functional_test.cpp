@@ -14,18 +14,18 @@
 
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Content/test/Fixtures/LooseCookedTestWriter.h>
-#include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/DependencyReport.h>
-#include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -41,37 +41,46 @@ auto RunDependencyReport(const DependencyReportOptions& options) -> int
     [&] { return oxygen::content::inspection::RunDependencyReport(options); });
 }
 
-class InspectorDependencyReportTest : public pak::test::TempDirFixture {
+class InspectorDependencyReportTest : public oxygen::testing::TempDirTest {
 protected:
-  //! Writes a loose root whose owner material references a shared material.
-  auto WriteRoot(const std::filesystem::path& root) -> void
+  //! A library whose owner material references a shared material.
+  [[nodiscard]] auto MakeLibrary() const
+    -> oxygen::cooker::testing::LooseCookedRoot
   {
     auto descriptor = data::pak::render::MaterialAssetDesc {};
     descriptor.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kMaterial);
     descriptor.header.version = data::pak::render::kMaterialAssetVersion;
     const auto bytes = data::MakeDescriptorBytes(descriptor);
+    auto library = oxygen::cooker::testing::LooseCookedRoot { "Content" };
     const auto none = data::AssetReferences::Create({}, {});
     const auto owner = data::AssetReferences::Create({},
       {
         {
-          .key = shared_,
+          .key = library.KeyOf("Shared.omat"),
           .kind = data::KeyReferenceKind::kAsset,
           .expected_type = data::AssetType::kMaterial,
         },
       });
-    ASSERT_TRUE(none.has_value() && owner.has_value());
-    auto writer = oxygen::content::testing::LooseCookedTestWriter(root);
-    writer.WriteAssetDescriptor(shared_, data::AssetType::kMaterial,
-      "/Content/Shared.omat", "Shared.omat", bytes, *none);
-    writer.WriteAssetDescriptor(owner_, data::AssetType::kMaterial,
-      "/Content/Owner.omat", "Owner.omat", bytes, *owner);
-    static_cast<void>(writer.Finish());
+    EXPECT_TRUE(none.has_value() && owner.has_value());
+    library.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = "Shared.omat",
+      .descriptor = bytes,
+      .references = *none,
+    });
+    library.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = "Owner.omat",
+      .descriptor = bytes,
+      .references = *owner,
+    });
+    return library;
   }
 
   auto Report(const std::filesystem::path& source) -> nlohmann::json
   {
-    const auto output = Path("dependencies.json");
+    const auto output = TempPath("dependencies.json");
     EXPECT_EQ(RunDependencyReport({
                 .cooked_root = source.string(),
                 .output = output.string(),
@@ -80,27 +89,22 @@ protected:
     auto stream = std::ifstream(output);
     return nlohmann::json::parse(stream);
   }
-
-  data::AssetKey shared_ = pak::test::MakeAssetKey(1U);
-  data::AssetKey owner_ = pak::test::MakeAssetKey(2U);
 };
 
 //! A pak reports the same direct dependencies as the loose root it packs.
 NOLINT_TEST_F(InspectorDependencyReportTest, ReportsDependenciesFromAPak)
 {
   // Arrange
-  const auto loose = Path("loose");
-  WriteRoot(loose);
-  const auto pak_path = Path("content.pak");
-  const auto built
-    = pak::PakBuilder {}.Build(pak::test::MakeFullRequest(pak_path,
-      {
-        .sources = { data::CookedSource {
-          .kind = data::CookedSourceKind::kLooseCooked,
-          .path = loose,
-        }, },
-      }));
-  ASSERT_TRUE(built.has_value() && built->summary.diagnostics_error == 0U);
+  const auto library = MakeLibrary();
+  const auto loose = TempPath("loose");
+  oxygen::cooker::testing::Materialize(library.Files(), loose);
+  auto workspace = oxygen::cooker::testing::PakWorkspace {};
+  workspace.PackOrThrow(workspace.FullRequest({ workspace.Add(library) }));
+  const auto pak_path = TempPath("content.pak");
+  oxygen::cooker::testing::Materialize(
+    workspace.Storage().Bytes(
+      oxygen::cooker::testing::PakWorkspace::PakPath("out.pak")),
+    pak_path);
   const auto expected = Report(loose);
 
   // Act

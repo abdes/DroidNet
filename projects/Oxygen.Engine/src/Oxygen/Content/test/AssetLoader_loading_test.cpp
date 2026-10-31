@@ -23,14 +23,14 @@
 
 #include "./AssetLoader_test.h"
 #include "Fixtures/AssetLoaderSources.h"
-#include "Fixtures/LooseCookedTestLayout.h"
-#include "Fixtures/LooseCookedTestWriter.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -68,19 +68,17 @@ using oxygen::content::testing::AssetLoaderBasicTest;
 
 namespace {
 
-using oxygen::content::testing::LooseCookedLayout;
+using oxygen::cooker::testing::LooseCookedRoot;
 
 auto WriteLooseCookedIndexWithInvalidTexturesTable(
   const std::filesystem::path& cooked_root) -> void
 {
   using oxygen::data::loose_cooked::FileKind;
-  const LooseCookedLayout layout {};
-  oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
-  const auto malformed_table = std::array { std::byte { 0x7f } };
-  writer.WriteFile(
-    FileKind::kTexturesTable, layout.TexturesTableRelPath(), malformed_table);
-  writer.WriteFile(FileKind::kTexturesData, layout.TexturesDataRelPath(), {});
-  static_cast<void>(writer.Finish());
+  auto root = LooseCookedRoot { "test" };
+  root.AddFile(FileKind::kTexturesTable, "Resources/textures.table",
+    { std::byte { 0x7f } });
+  root.AddFile(FileKind::kTexturesData, "Resources/textures.data", {});
+  oxygen::cooker::testing::Materialize(root.Files(), cooked_root);
 }
 
 auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
@@ -89,23 +87,20 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
   using oxygen::data::AssetType;
   using oxygen::data::pak::world::SceneAssetDesc;
 
-  const LooseCookedLayout layout {};
-
   SceneAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
   auto strings = oxygen::data::DescriptorStringsBuilder {};
   desc.header.name_offset = strings.Add("LooseScene");
   desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
 
-  const auto rel_desc
-    = std::filesystem::path(layout.scenes_subdir) / "LooseScene.scene";
-
-  oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
-  writer.WriteAssetDescriptor(key, AssetType::kScene,
-    std::string(layout.virtual_mount_root) + "/" + rel_desc.generic_string(),
-    rel_desc.generic_string(),
-    oxygen::data::MakeDescriptorBytes(desc, strings));
-  static_cast<void>(writer.Finish());
+  auto root = LooseCookedRoot { "test" };
+  root.Add({
+    .type = AssetType::kScene,
+    .leaf = "Scenes/LooseScene.scene",
+    .descriptor = oxygen::data::MakeDescriptorBytes(desc, strings),
+    .key = key,
+  });
+  oxygen::cooker::testing::Materialize(root.Files(), cooked_root);
 }
 
 auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
@@ -121,7 +116,6 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
   using oxygen::data::pak::input::InputTriggerRecord;
   using oxygen::data::pak::input::InputTriggerType;
 
-  const auto action_rel_desc = std::filesystem::path("Input") / "Move.oiact";
   InputActionAssetDesc action_desc {};
   action_desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
   auto action_strings = oxygen::data::DescriptorStringsBuilder {};
@@ -131,8 +125,6 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
   action_desc.value_type = 0;
   action_desc.flags = InputActionAssetFlags::kConsumesInput;
 
-  const auto context_rel_desc
-    = std::filesystem::path("Input") / "Hydrated.oimap";
   InputMappingContextAssetDesc context_desc {};
   context_desc.header.asset_type
     = static_cast<uint8_t>(AssetType::kInputMappingContext);
@@ -182,15 +174,19 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
     &trigger, sizeof(trigger));
   oxygen::data::AppendDescriptorStrings(context_blob, context_strings);
 
-  oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
-  writer.WriteAssetDescriptor(action_key, AssetType::kInputAction,
-    "/Game/" + action_rel_desc.generic_string(),
-    action_rel_desc.generic_string(),
-    oxygen::data::MakeDescriptorBytes(action_desc, action_strings));
-  writer.WriteAssetDescriptor(context_key, AssetType::kInputMappingContext,
-    "/Game/" + context_rel_desc.generic_string(),
-    context_rel_desc.generic_string(), context_blob,
-    oxygen::data::AssetReferences::Create({},
+  auto root = LooseCookedRoot { "Game" };
+  root.Add({
+    .type = AssetType::kInputAction,
+    .leaf = "Input/Move.oiact",
+    .descriptor
+    = oxygen::data::MakeDescriptorBytes(action_desc, action_strings),
+    .key = action_key,
+  });
+  root.Add({
+    .type = AssetType::kInputMappingContext,
+    .leaf = "Input/Hydrated.oimap",
+    .descriptor = std::move(context_blob),
+    .references = oxygen::data::AssetReferences::Create({},
       {
         {
           .key = action_key,
@@ -198,8 +194,10 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
           .expected_type = AssetType::kInputAction,
         },
       })
-      .value());
-  static_cast<void>(writer.Finish());
+      .value(),
+    .key = context_key,
+  });
+  oxygen::cooker::testing::Materialize(root.Files(), cooked_root);
 }
 
 //=== AssetLoader Basic Functionality Tests ===-----------------------------//
@@ -225,7 +223,7 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
     "/test/loose_input_action_catalog.asset");
   const auto context_key = oxygen::data::AssetKey::FromVirtualPath(
     "/test/loose_input_context_catalog.asset");
-  const auto cooked_root = temp_dir_ / "mounted_input_contexts_loose";
+  const auto cooked_root = TempDir() / "mounted_input_contexts_loose";
   WriteLooseCookedInputAssets(cooked_root, action_key, context_key);
 
   asset_loader_->AddLooseCookedRoot(cooked_root);
@@ -249,7 +247,7 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
     "/test/loose_input_action_hydrate.asset");
   const auto context_key = oxygen::data::AssetKey::FromVirtualPath(
     "/test/loose_input_context_hydrate.asset");
-  const auto cooked_root = temp_dir_ / "hydrate_input_context_loose";
+  const auto cooked_root = TempDir() / "hydrate_input_context_loose";
   WriteLooseCookedInputAssets(cooked_root, action_key, context_key);
 
   struct InputKeys {
@@ -318,7 +316,7 @@ NOLINT_TEST_F(
     "/test/loose_input_action_start_load.asset");
   const auto context_key = oxygen::data::AssetKey::FromVirtualPath(
     "/test/loose_input_context_start_load.asset");
-  const auto cooked_root = temp_dir_ / "start_load_input_context_loose";
+  const auto cooked_root = TempDir() / "start_load_input_context_loose";
   WriteLooseCookedInputAssets(cooked_root, action_key, context_key);
 
   struct InputKeys {
@@ -371,7 +369,7 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
 {
   const auto loose_scene_key = oxygen::data::AssetKey::FromVirtualPath(
     "/test/loose_scene_catalog_2.asset");
-  const auto cooked_root = temp_dir_ / "mounted_scenes_loose_2";
+  const auto cooked_root = TempDir() / "mounted_scenes_loose_2";
   WriteLooseCookedSceneForCatalog(cooked_root, loose_scene_key);
 
   asset_loader_->AddLooseCookedRoot(cooked_root);
@@ -397,7 +395,7 @@ NOLINT_TEST_F(
   AssetLoaderBasicTest, LoadAssetLooseCookedMaterialLoadsWithTexture)
 {
   // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked";
+  const auto cooked_root = TempDir() / "loose_cooked";
   const auto material_key
     = oxygen::data::AssetKey::FromVirtualPath("/test/loose_material.asset");
   oxygen::content::testing::WriteTexturedMaterialSource(
@@ -433,8 +431,11 @@ NOLINT_TEST_F(
         EXPECT_THAT(material, NotNull());
 
         if (material) {
+          // Both slots name one texture, bound concurrently: each slot sees
+          // the bound texture.
           const auto base_color_key = material->GetBaseColorTextureKey();
           EXPECT_NE(base_color_key.get(), 0U);
+          EXPECT_EQ(material->GetNormalTextureKey(), base_color_key);
           EXPECT_THAT(
             loader.GetResource<TextureResource>(base_color_key), NotNull());
         }
@@ -449,8 +450,8 @@ NOLINT_TEST_F(
   AssetLoaderBasicTest, LoadAssetLooseCookedMultipleRootsAssignsStableIds)
 {
   // Arrange
-  const auto cooked_root_a = temp_dir_ / "loose_cooked_a";
-  const auto cooked_root_b = temp_dir_ / "loose_cooked_b";
+  const auto cooked_root_a = TempDir() / "loose_cooked_a";
+  const auto cooked_root_b = TempDir() / "loose_cooked_b";
 
   const auto material_key_a
     = oxygen::data::AssetKey::FromVirtualPath("/test/loose_material_a.asset");
@@ -520,7 +521,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(AssetLoaderBasicTest, AddLooseCookedRootInvalidTexturesTable)
 {
   // Arrange
-  const auto cooked_root = temp_dir_ / "loose_cooked_invalid_tex_table";
+  const auto cooked_root = TempDir() / "loose_cooked_invalid_tex_table";
   WriteLooseCookedIndexWithInvalidTexturesTable(cooked_root);
 
   // Act & Assert

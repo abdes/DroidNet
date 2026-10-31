@@ -17,9 +17,9 @@
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -27,8 +27,8 @@ using nlohmann::json;
 using oxygen::content::import::MaterialDescriptorImportSettings;
 using oxygen::content::import::internal::BuildMaterialDescriptorRequest;
 using oxygen::cooker::test::kContentHashingDefault;
-using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
+using oxygen::testing::ScopedTempDir;
 
 auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   -> MaterialDescriptorImportSettings

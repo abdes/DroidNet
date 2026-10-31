@@ -85,8 +85,9 @@ The ImportTool CLI is also tested by two Python tests,
    `TempDirTest`/`ScopedTempDir`, `ModelPath`, `SchemaPath`, `LoadSchema`,
    `ValidateJson`, `ReadBytes`/`WriteText`, `HasDiagnosticCode`,
    `DiagnosticSummary`.
-4. A Cooker test checks Cooker output. Read it back through `lc::Inspection`,
-   `lc::ValidateRoot`, Data format types, `content::PakFile` or parse-only
+4. A Cooker test checks Cooker output. Read it back through
+   `cooked::CookedContent`, `cooked::Validate`, Data format types,
+   `content::PakFile` or parse-only
    loaders. Never use `content::internal` or construct an `AssetLoader`;
    Content runtime behaviour is tested in Content.
 5. One behaviour per test. Use `ASSERT_*` before dereferencing anything. No

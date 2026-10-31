@@ -11,6 +11,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "LoaderTestFixtures.h"
+
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
@@ -76,11 +78,12 @@ protected:
     if (!data_stream_.Seek(oxygen::serio::ByteOffset { 0 })) {
       throw std::runtime_error("Failed to seek data_stream");
     }
+    payload_ = StagePayload<oxygen::data::pak::physics::PhysicsResourceDesc>(
+      desc_stream_.Data(), data_stream_.Data());
     return oxygen::content::LoaderContext {
       .current_asset_key = oxygen::data::AssetKey {},
       .desc_reader = &desc_reader_,
-      .data_readers = std::make_tuple(
-        &data_reader_, &data_reader_, &data_reader_, &data_reader_),
+      .payload = observer_ptr { &payload_ },
       .work_offline = false,
     };
   }
@@ -132,6 +135,7 @@ protected:
   Writer data_writer_;
   Reader desc_reader_;
   Reader data_reader_;
+  oxygen::serio::ByteBuffer payload_;
 };
 
 class PhysicsSceneFixtureBase : public PhysicsLoaderFixtureBase {

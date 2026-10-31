@@ -25,6 +25,7 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/RemoveCookedCommand.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -107,7 +108,10 @@ auto RemoveCookedCommand::Execute() -> std::expected<void, std::error_code>
     throw std::runtime_error("The removal request lists nothing to remove");
   }
 
-  LooseCookedWriter writer { std::filesystem::path(cooked_root_) };
+  LooseCookedWriter writer {
+    std::filesystem::path(cooked_root_),
+    cooked::RealCookerStorage(),
+  };
   writer.SetSourceKey(ReadSourceKey(request));
   for (const auto& virtual_path : virtual_paths) {
     writer.RemoveAssetDescriptor(virtual_path);

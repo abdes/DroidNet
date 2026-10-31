@@ -19,7 +19,7 @@ around it.
 - [Devices](#devices)
 - [Type erasure](#type-erasure)
 - [Regions](#regions)
-- [IO queue and backends](#io-queue-and-backends)
+- [IO driver and backends](#io-driver-and-backends)
 - [Streams](#streams)
 - [Algorithms](#algorithms)
 - [Serialization](#serialization)
@@ -39,36 +39,36 @@ around it.
   and readers are open (tests, tools and other modules add their own), so each
   concept has one value-semantic erased wrapper used at coarse boundaries: once
   per file, region or asset. IO backends are a closed, platform-known set, so
-  the queue holds them in a `std::variant` and dispatches with `std::visit`.
+  the driver holds them in a `std::variant` and dispatches with `std::visit`.
   Nothing has a public virtual interface.
 - **Capabilities are types, not runtime failures.** A device that cannot write
   does not satisfy `WritableDevice`; a device that cannot be awaited does not
   satisfy `AsyncReadableDevice`. Asking for what a type cannot do fails to
   compile, never with a run-time "unsupported" error.
-- **Owners and views are distinct.** Devices, buffers, queues and streams own
+- **Owners and views are distinct.** Devices, buffers, drivers and streams own
   their resources and are move-only. Regions and `ByteReader` are views, cheap
   to copy, with `std::span`'s lifetime rule: the owner outlives them.
 - **No exceptions cross the API.** Every fallible operation is `noexcept` and
   returns `oxygen::Result<T>` (Base) carrying a `std::error_code`.
 - **Each layer includes only the layers below it.** Public headers are
   platform-neutral; implementation lives in `Detail/` and `Platform/<os>/`.
-- **No global state.** No singleton queue, no backend registry, no default
+- **No global state.** No singleton driver, no backend registry, no default
   device. Whatever an operation needs is passed to it.
 
 ## Layers and headers
 
-| Layer         | Headers (under `Oxygen/Serio/`)                                                                    | May include                     |
-| ------------- | -------------------------------------------------------------------------------------------------- | ------------------------------- |
-| Vocabulary    | `Types.h`, `Error.h`                                                                               | Base                            |
-| Buffers       | `ByteBuffer.h`                                                                                     | Vocabulary                      |
-| Devices       | `Device.h` (concepts), `NativeFile.h`, `MemoryFile.h`, `MappedFile.h`, `ByteView.h`, `AnyDevice.h` | Buffers, Vocabulary             |
-| Regions       | `Region.h`                                                                                         | Devices                         |
-| Async IO      | `IoQueue.h`, `AsyncFile.h`, `AsyncDevice.h` (concept and erasure)                                  | Regions, Devices, OxCo          |
-| Streams       | `Stream.h` (concepts), `RegionStream.h`, `MemoryStream.h`, `AnyStream.h`, `CopyRegion.h`           | Regions, Async IO               |
-| Algorithms    | `Hashing.h` (concept, hashing streams, region hashing), `VerifiedRead.h`                           | Streams, Regions, Base hashes   |
-| Serialization | `Reader.h`, `Writer.h`, `Record.h`, `ByteReader.h`, `CountingSink.h`                               | Streams, Regions                |
-| Publication   | `AtomicFileWriter.h`, `AtomicFile.h`, `FileLock.h`                                                 | Streams, Devices                |
-| Test support  | `Testing/FaultInjectingDevice.h`, `Testing/DeviceConformance.h`, `Testing/IoBackends.h`            | Any layer; linked by tests only |
+| Layer         | Headers (under `Oxygen/Serio/`)                                                                        | May include                     |
+| ------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| Vocabulary    | `Types.h`, `Error.h`                                                                                   | Base                            |
+| Buffers       | `ByteBuffer.h`                                                                                         | Vocabulary                      |
+| Devices       | `Device.h` (concepts), `NativeFile.h`, `MemoryFile.h`, `MappedFile.h`, `ByteView.h`, `AnyDevice.h`     | Buffers, Vocabulary             |
+| Regions       | `Region.h`                                                                                             | Devices                         |
+| Async IO      | `IoDriver.h`, `AsyncFile.h`, `AsyncDevice.h` (`AsyncReadExactlyAt`)                                    | Regions, Devices, OxCo          |
+| Streams       | `Stream.h` (concepts), `RegionStream.h`, `MemoryStream.h`, `AnyStream.h`, `CopyRegion.h`               | Regions, Async IO               |
+| Algorithms    | `Integrity.h` (concept, hashing streams, region and file hashing, `VerifiedRead`)                      | Streams, Regions, Base hashes   |
+| Serialization | `Reader.h`, `Writer.h`, `Record.h`, `ByteReader.h`, `CountingSink.h`                                   | Streams, Regions                |
+| Publication   | `AtomicFile.h` (`AtomicFileWriter`), `FileLock.h`                                                      | Streams, Devices                |
+| Test kit      | `Testing/FaultInjectingDevice.h`, `Testing/TestBytes.h` (the conformance suites are Serio's own tests) | Any layer; linked by tests only |
 
 `Detail/` holds the erasure tables, the backend variant and buffer internals;
 no header outside Serio includes it. A layer's tests include only that layer's
@@ -155,8 +155,9 @@ concept ContiguousDevice = ReadableDevice<D> && requires(const D& d) {
   operation succeeds and does nothing; errors compare equal to the same
   `serio::Error` conditions on every device.
 - **Free algorithms, not members,** build on the concepts once:
-  `ReadExactlyAt(device, at, out)` (fails with `kEndOfData`) and
-  `WriteAllAt(device, at, in)` work for every device.
+  `ReadExactlyAt(device, at, out)` (fails with `kEndOfData`) works for every
+  device. `WriteAt` already writes all of its bytes or fails, so it needs no
+  `WriteAllAt` counterpart.
 - **Opening is a static factory** returning `Result<Device>`:
   `NativeFile::Open(path, OpenSpec)`, `MappedFile::Open(path)`. A constructor
   never fails.
@@ -182,7 +183,12 @@ operation and no virtual base:
 
 `AnyDevice` itself satisfies `ReadableDevice` (and `ContiguousDevice` is a
 run-time query on it, because the erased type is no longer known), so every
-generic algorithm works on it unchanged. Shared ownership, when a consumer
+generic algorithm works on it unchanged. It satisfies `WritableDevice` too:
+`Writable()` reports whether the erased device writes, and a write to one that
+does not fails with `operation_not_supported`. This is the one run-time
+capability check, and it exists only where the type has been erased. The
+erased stream wrappers require their stream's `Position()` and `Size()` to be
+`const`. Shared ownership, when a consumer
 needs it (a mounted pak shared by its sources), is that consumer's
 `std::shared_ptr<const AnyDevice>`; Serio does not impose it.
 
@@ -193,8 +199,9 @@ needs it (a mounted pak shared by its sources), is that consumer's
 //! region, not the device.
 template <ReadableDevice D> class Region {
 public:
-  [[nodiscard]] static constexpr auto Make(const D& device, ByteRange range)
-    noexcept -> Result<Region>;
+  [[nodiscard]] static auto Make(const D& device, ByteRange range) noexcept
+    -> Result<Region>;
+  [[nodiscard]] static auto Whole(const D& device) noexcept -> Result<Region>;
   [[nodiscard]] auto Device() const noexcept -> const D&;
   [[nodiscard]] auto Range() const noexcept -> ByteRange;
   [[nodiscard]] auto Sub(ByteRange relative) const noexcept -> Result<Region>;
@@ -202,73 +209,101 @@ public:
     const noexcept -> Result<ByteCount>;
   [[nodiscard]] auto Bytes() const noexcept -> std::span<const std::byte>
     requires ContiguousDevice<D>;
+  //! The view of a contiguous device, known from the type or, for an
+  //! `AnyDevice`, at run time; empty otherwise.
+  [[nodiscard]] auto Contiguous() const noexcept
+    -> std::optional<std::span<const std::byte>>;
 };
 using AnyRegion = Region<AnyDevice>;
 ```
 
 A region satisfies `ReadableDevice` itself, so a region of a region, a stream
 over a region and a hash of a region are the same code as over a device.
-`WritableRegion<D>` is the same over a `WritableDevice`.
+`Make` checks the range against the device's size when the region is made,
+which suits read regions. A writable device grows as it is written, so a
+fixed bound means nothing for it: there is no writable region, and a
+`RegionWriteStream` takes a device and a start offset instead.
 
-## IO queue and backends
+## IO driver and backends
 
 ```cpp
 //! One per event loop. Owns the backend and every file registered with it.
-class IoQueue {
+class IoDriver {
 public:
   [[nodiscard]] static auto Create(asio::io_context& loop) noexcept
-    -> Result<IoQueue>;
+    -> Result<IoDriver>;
   [[nodiscard]] auto Open(const std::filesystem::path& path, OpenSpec spec)
     noexcept -> Result<AsyncFile>;
   [[nodiscard]] auto AllocateBuffer(ByteCount size) noexcept
     -> Result<ByteBuffer>;
 };
 
+// Device.h, beside the blocking concepts; Operation.h defines the two
+// operation types every device returns.
 template <class D>
 concept AsyncReadableDevice = ReadableDevice<D>
   && requires(const D& d, ByteOffset at, std::span<std::byte> out) {
-       { d.AsyncReadAt(at, out) } -> co::Awaitable<Result<ByteCount>>;
+       { d.AsyncReadAt(at, out) } noexcept -> std::same_as<ReadOperation>;
      };
 template <class D>
 concept AsyncWritableDevice = AsyncReadableDevice<D> && WritableDevice<D>
   && requires(D& d, ByteOffset at, std::span<const std::byte> in) {
-       { d.AsyncWriteAt(at, in) } -> co::Awaitable<Result<void>>;
+       { d.AsyncWriteAt(at, in) } noexcept -> std::same_as<WriteOperation>;
      };
 ```
 
-- **An `AsyncFile` is a file bound to a queue.** It has the blocking
+- **An `AsyncFile` is a file bound to a driver.** It has the blocking
   operations of a `NativeFile` and the awaitable ones, which submit to its
-  queue. A file opened without a queue is a `NativeFile` and has no awaitable
+  driver. A file opened without a driver is a `NativeFile` and has no awaitable
   form, so nothing awaits a file that cannot complete asynchronously.
-- **Memory devices are async for free:** their awaitables are `co::Just`
-  results, so code generic over `AsyncReadableDevice` reads memory and files
-  alike (R4, P4).
+- **One operation type per direction.** Every device returns a
+  `ReadOperation` or a `WriteOperation`: a memory device's is ready at once
+  (`ReadOperation::Ready`, nothing suspends), a file's is bound to its driver.
+  Code generic over `AsyncReadableDevice` reads memory and files alike (R4,
+  P4), and `AnyAsyncDevice` erases the device without a coroutine frame,
+  because its table returns the same type for every device.
 - **Operations are plain awaiters,** objects holding the operation's
-  arguments and its backend slot, implementing OxCo's protocol:
-  `await_suspend` submits, `await_cancel` asks the backend to cancel,
-  `await_must_resume` holds the coroutine until the OS has released the
-  buffer. No coroutine frame is allocated per operation.
+  arguments and its target (driver, handle, backend slot), implementing
+  OxCo's protocol: `await_suspend` submits, `await_cancel` asks the backend to
+  cancel that operation alone, `await_must_resume` holds the coroutine until
+  the OS has released the buffer. No coroutine frame is allocated per
+  operation; `AsyncReadExactlyAt` and `CopyRegion` are coroutines over them.
 - **The backend set is closed.** An internal concept states what a backend
-  provides, and the queue holds one alternative of a variant:
+  provides, and the driver holds one alternative of a variant:
 
   ```cpp
   namespace oxygen::serio::detail {
   template <class B>
-  concept IoBackend = requires(B& b, NativeHandle h, IoOperation& op) {
+  concept IoBackend = requires(B& b, NativeHandle h, BackendFileSlot slot,
+    IoRequest& request) {
     { b.Register(h) } noexcept -> std::same_as<Result<BackendFileSlot>>;
-    { b.Unregister(BackendFileSlot{}) } noexcept -> std::same_as<void>;
-    { b.Submit(op) } noexcept -> std::same_as<void>;   // batched per turn
-    { b.Cancel(op) } noexcept -> std::same_as<void>;
+    { b.Unregister(slot) } noexcept -> std::same_as<void>;
+    // false: completed at once, the waiter is not resumed
+    { b.Submit(request) } noexcept -> std::same_as<bool>;
+    { b.Cancel(request) } noexcept -> std::same_as<void>;
     { b.AllocateBuffer(ByteCount{}) } noexcept -> std::same_as<Result<ByteBuffer>>;
   };
-  using Backend = std::variant<IocpBackend, IoRingBackend>; // per platform
+  // Windows: IocpBackend; Linux: UringBackend.
+  using Backend = std::variant<IocpBackend>;
   } // namespace oxygen::serio::detail
   ```
 
   `Create` selects the alternative from the OS's capabilities. Adding or
   deleting a backend changes the variant and its platform file, nothing else.
-  Tests and benchmarks force one through `Testing/IoBackends.h`; product code
-  cannot name one.
+  A backend is trivially copyable: its state is the loop it serves. Each
+  platform has one backend; a second one also adds a way for tests to run
+  every async suite once per backend.
+
+- **IOCP** (`Platform/Windows/IocpBackend`): a registered file is associated
+  with the loop's completion port through an asio handle owning a duplicate
+  of the file's handle; each chunk is a `ReadFile`/`WriteFile` on an
+  `asio::windows::overlapped_ptr`, and a cancellation is `CancelIoEx` of that
+  request. Blocking operations on the same file wait on a per-thread event
+  whose low bit keeps their completion off the port.
+- **io_uring** (`Platform/Posix/UringBackend`): OxCo builds asio with
+  `ASIO_HAS_IO_URING` and liburing, so the loop's context owns a ring; a
+  registered file is an `asio::random_access_file` over a duplicate
+  descriptor, and each request carries its own cancellation signal.
 
 ## Streams
 
@@ -291,6 +326,15 @@ concept OutputStream = requires(S& s, std::span<const std::byte> in) {
 - Streams are templates over their source: `RegionReadStream<D>`,
   `RegionWriteStream<D>`, `MemoryStream`, `ReadOnlyMemoryStream`.
   `Position()` and `Size()` cannot fail: a stream knows both.
+  `OpenReadStream(device)` is a read stream over a whole device, in one call.
+- **Patching is positional, not a seek.** An output stream has no `Seek`. A
+  writer that completes a header once its content is known overwrites bytes
+  it already wrote with `PatchAt(ByteOffset, bytes)`: buffered bytes in the
+  buffer, flushed ones with `WriteAt`. The cursor never moves, so the patch
+  cannot leave it in the wrong place, and a patch past `Position()` fails
+  with `kOutOfBounds`. `RegionWriteStream` and `MemoryStream` provide it, and
+  callers that patch are constrained on `PatchableOutputStream`, which
+  refines `OutputStream` with `PatchAt`.
 - `ReadExactly(stream, out)` and the rest of the stream algorithms are free
   functions over the concepts, written once.
 - **Decorators are streams over streams,** templates over their inner stream,
@@ -314,10 +358,15 @@ concept IncrementalHash = std::default_initializable<H>
 ```
 
 - `HashingReadStream<S, H...>` and `HashingWriteStream<S, H...>` take any
-  number of hashes and the caller's skip ranges.
-- `Hash<H...>(region)` reads a region once with one 1 MiB buffer and returns a
-  tuple of digests; `ComputeSha256(region)` and `ComputeCrc32(region)` are its
-  one-hash spellings.
+  number of hashes and the caller's skip ranges, and hand back `Digests()` in
+  the order of `H...`. A hashing read stream only moves forward: a seek
+  forward hashes the bytes it passes, a seek back fails. A hashing write
+  stream patches only inside a skip range, since hashed bytes cannot change.
+- `Hash<H...>(region)` reads a device or a region once through a buffer of at
+  most 1 MiB and returns a tuple of digests; `ComputeSha256(region)` and
+  `ComputeCrc32(region)` are its one-hash spellings, and
+  `ComputeFileSha256(path)` opens a file and hashes it. All return errors,
+  never throw.
 - `VerifiedRead(region, expected, out)` is `Hash<base::Sha256>` fused with the
   read into `out`, failing with `kDigestMismatch`.
 
@@ -332,26 +381,39 @@ modules ([scope and layering](README.md#scope-and-layering)).
 - **One customization point per direction:** the `serio::Load(reader, value)`
   and `serio::Store(writer, value)` function objects dispatch, in order:
   1. **Records:** a type declared a record by
-     `template <> inline constexpr bool kIsRecord<T> = true;`, checked at
-     compile time for `trivially_copyable`,
-     `has_unique_object_representations` and a little-endian target, moves as
-     one copy (`ReadRecord<T>`, `WriteRecord<T>`).
-  2. **Sequences:** a contiguous range of records or arithmetic elements moves
-     as its count and one copy; other ranges element by element.
+     `template <> inline constexpr bool kIsRecord<T> = true;` moves as one
+     copy, aligned like any value. Its layout is checked at compile time
+     (`RecordLayout`): trivially copyable, without padding (packed to one
+     byte, or with a unique object representation, which a struct with
+     floating-point members never has) and a little-endian target.
+     `LoadRecord` and `StoreRecord` are the copy itself: a type that checks
+     its values after reading them is not declared a record, so a sequence of
+     it never skips the check, and its own hook calls `LoadRecord`, then
+     checks.
+  2. **Sequences:** a `vector`, `array` or `span` of records or arithmetic
+     elements (`BulkElement`) moves as its count, one alignment and one copy;
+     other elements one by one. The count is checked against the bytes that
+     remain before anything is allocated.
   3. **Built-ins:** arithmetic types, enums (as their underlying type),
-     `bool`, `std::string`, `std::optional`, `std::array`.
-  4. **A type's own hook,** found by ADL: `Load(AnyReader&, T&)` and
-     `Store(AnyWriter&, const T&)`, compiled once in the type's own source
-     file.
+     `bool` (one byte, 0 or 1), `std::string`, `std::optional` (a `bool`,
+     then the value), `std::array` (stored like a vector).
+
+  A caller reads and writes every kind the same way: `reader.Read<T>()` and
+  `writer.Write(value)`. 4. **A type's own hook,** found by ADL: `Load(AnyReader&, T&)` and
+  `Store(AnyWriter&, const T&)`, compiled once in the type's own source
+  file.
 
   Records are opt-in because a trivially copyable type can still hold a
   pointer or padding that must never reach a file.
 
 - **`ByteReader`** is concrete, not erased: a cursor over a span with
-  `ReadRecord<T>` (returns a copy, so no object is aliased from raw bytes),
-  `ReadBytes(n)` and `ReadStringView(n)` (views of bytes and characters only).
-- **`CountingSink`** satisfies `OutputStream` and counts, so measuring a record
-  is writing it to a sink.
+  `Read<T>` for records and arithmetic values (returns a copy, so no object
+  is aliased from raw bytes), `ReadBytes(n)` and `ReadStringView(n)` (views
+  of bytes and characters only), `Seek`, `Skip` and `AlignTo`.
+- **`CountingSink`** satisfies `PatchableOutputStream` and counts, so
+  measuring a value is writing it to a sink through a `Writer`.
+- **Bounded reads:** `AnyReader::Remaining()` is the bytes a reader may still
+  read; length prefixes and `ReadBlob` fail with `kTooLarge` past it.
 - **Alignment** is the reader's or writer's state, set by an RAII
   `ScopedAlignment`, and free when it is 1.
 
@@ -359,10 +421,15 @@ modules ([scope and layering](README.md#scope-and-layering)).
 
 - `Result<T>` is Base's; Serio adds no result type.
 - `enum class serio::Error` with `make_error_code`, `make_error_condition`, its
-  category and the `std::is_error_code_enum` and `std::is_error_condition_enum`
-  specializations: Serio's own codes (`kEndOfData`, `kOutOfBounds`,
-  `kTooLarge`, `kDigestMismatch`) and the conditions OS codes map to
-  (`kNotFound`, `kAccessDenied`, `kSharingViolation`, `kNoSpace`, `kIo`).
+  category and the `std::is_error_condition_enum` specialization: Serio's own
+  codes (`kEndOfData`, `kOutOfBounds`, `kTooLarge`, `kDigestMismatch`) and the
+  conditions OS codes map to (`kNotFound`, `kAccessDenied`,
+  `kSharingViolation`, `kNoSpace`, `kIo`).
+- `Error` is a condition enumeration only. With `std::is_error_code_enum` as
+  well, `code == Error::kNotFound` would be ambiguous between the code and the
+  condition comparison. Serio makes its own codes explicitly with
+  `make_error_code(Error::kEndOfData)`, and every comparison goes through the
+  condition.
 - OS failures stay `std::system_category()` codes from
   `base::LastSystemError()`, and compare equal to the conditions.
 
@@ -370,22 +437,24 @@ modules ([scope and layering](README.md#scope-and-layering)).
 
 - `NativeHandle` is an opaque value type (`void*` on Windows, `int` on POSIX)
   declared in a public header; nothing public includes `<windows.h>`.
-- `Platform/Win32/` holds `NativeFile`, `MappedFile`, `IocpBackend` and
-  `IoRingBackend`; `Platform/Posix/` holds their POSIX counterparts and the
+- `Platform/Windows/` holds `NativeFile`, `MappedFile` and `IocpBackend`;
+  `Platform/Posix/` holds their POSIX counterparts and the
   io_uring backend. CMake selects the directory; a public header carries no
   `#if` on the platform, and `detail::Backend` is the one alias that differs.
 
 ## Test seams
 
 - `FaultInjectingDevice<D>` is a device over a device: it satisfies the same
-  concepts as `D` and fails the operations a test schedules (short reads,
-  failed writes, a full disk). Every stream, region and serializer suite runs
-  through it.
+  concepts as `D`, except `ContiguousDevice` (it never exposes a view, so
+  every read takes the copying path where the faults are). It fails the
+  operations a test schedules (short reads, failed writes, a full disk) and
+  counts the calls it receives, so a test can check how a buffered stream
+  batches its IO. Every stream, region and serializer suite runs through it.
 - `DeviceConformance.h` is a typed GoogleTest suite over a list of device
   factories; a new device joins it with one line, and so does any device
-  another module defines.
-- `IoBackends.h` lets tests and benchmarks create a queue on a named backend,
-  so every suite that touches an `AsyncFile` runs once per backend.
+  another module defines. `StreamConformance.h` does the same for input and
+  output streams, and `TestBytes.h` holds deterministic test bytes and a
+  byte-range matcher for large buffers.
 
 ## Extension points
 

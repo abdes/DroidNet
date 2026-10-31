@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -27,11 +28,12 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/Types.h>
-#include <Oxygen/Cooker/Loose/Validation.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/AtomicFile.h>
@@ -134,14 +136,19 @@ auto RunInventoryReport(const InventoryReportOptions& options)
     throw std::runtime_error(
       "Inventory report output must be outside the cooked root");
   }
-  const auto index_path = root / "container.index.bin";
+  const auto index_path = root / oxygen::data::loose_cooked::kIndexFileName;
   const auto index_digest = FileDigest(index_path);
   const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
   const auto failures = index.CheckContent(root, lc::IntegrityCheck::kFull);
   const auto stale = failures.empty() ? FindStaleDescriptors(root, index)
                                       : std::vector<std::string> {};
-  if (failures.empty() && stale.empty()) {
-    lc::ValidateRoot(root, lc::IntegrityCheck::kMetadata);
+  auto content = std::optional<cooked::CookedContent> {};
+  if (failures.empty()) {
+    content.emplace(
+      cooked::CookedContent::Open(cooked::RealCookerStorage(), root));
+    if (stale.empty()) {
+      cooked::Validate(*content, lc::IntegrityCheck::kMetadata);
+    }
   }
   auto issues = json::array();
   for (const auto& relpath : stale) {
@@ -185,31 +192,36 @@ auto RunInventoryReport(const InventoryReportOptions& options)
       },
     });
   }
-  lc::Inspection inspection;
-  inspection.LoadFromRoot(root);
   auto assets = json::array();
-  for (const auto& asset : inspection.Assets()) {
+  for (const auto& key : index.GetAllAssetKeys()) {
     assets.push_back({
-      { "asset_key", nostd::to_string(asset.key) },
-      { "asset_type", asset.asset_type },
-      { "virtual_path", asset.virtual_path },
-      { "descriptor_relative_path", asset.descriptor_relpath },
+      { "asset_key", nostd::to_string(key) },
+      { "asset_type", index.FindAssetType(key).value_or(0U) },
+      { "virtual_path", std::string(index.FindVirtualPath(key).value_or("")) },
+      {
+        "descriptor_relative_path",
+        std::string(index.FindDescriptorRelPath(key).value_or("")),
+      },
     });
   }
   auto resources = json::array();
-  for (const auto& file : inspection.Files()) {
-    if (file.kind != lc::FileKind::kTextureDescriptor) {
+  for (const auto& file : index.GetFileInventory()) {
+    if (file.kind != lc::LooseCookedIndex::FileKind::kTextureDescriptor) {
       continue;
     }
     auto resource_index = json(nullptr);
-    if (failures.empty()) {
-      resource_index = static_cast<uint32_t>(
-        inspection.ReadTextureDescriptor(file.relpath).index);
+    if (content.has_value()) {
+      const auto* const texture = content->FindNamedTexture(file.virtual_path);
+      if (texture == nullptr) {
+        throw std::runtime_error(
+          "Texture descriptor is not a named texture: " + file.virtual_path);
+      }
+      resource_index = texture->row.get();
     }
     resources.push_back({
       { "kind", "texture" },
       { "virtual_path", file.virtual_path },
-      { "descriptor_relative_path", file.relpath },
+      { "descriptor_relative_path", file.relative_path },
       { "resource_index", std::move(resource_index) },
     });
   }

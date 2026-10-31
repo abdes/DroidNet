@@ -36,6 +36,7 @@
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestImages.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -145,7 +146,7 @@ namespace {
   });
 
   //! The index records the cook, not what the importer made of its source.
-  constexpr auto kIndexFileName = std::string_view { "container.index.bin" };
+  using oxygen::data::loose_cooked::kIndexFileName;
 
   //! The identity a model's products are named under in these scenarios.
   constexpr auto kModelSurfaceIdentity
@@ -193,8 +194,7 @@ namespace {
             "static_friction": 0.95,
             "dynamic_friction": 0.70,
             "restitution": 0.05,
-            "density": 1800.0,
-            "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
+            "density": 1800.0
           })",
         };
     return request;
@@ -433,8 +433,7 @@ namespace {
             "restitution": 0.05,
             "density": 1700.0,
             "combine_mode_friction": "max",
-            "combine_mode_restitution": "average",
-            "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
+            "combine_mode_restitution": "average"
           })",
         };
 
@@ -487,11 +486,11 @@ namespace {
           json {
             {
               "source",
-              oxygen::cooker::test::MountPathIn(source, buffer_source),
+              buffer_source.filename().generic_string(),
             },
             {
               "virtual_path",
-              "/.cooked/Resources/Buffers/character_vertices.obuf",
+              "Buffers/character_vertices.obuf",
             },
             { "usage_flags", 3U },
             { "element_stride", 16U },
@@ -502,6 +501,7 @@ namespace {
     };
     auto request = ImportRequest {};
     request.source_path = source / "inline.buffers.json";
+    request.asset_virtual_path = "/.cooked/Resources/inline.buffers";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked;
@@ -521,9 +521,8 @@ namespace {
     const auto descriptor = json {
       { "name", "floor_box" },
       { "shape_type", "box" },
-      { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
+      { "material_ref", "../Materials/ground.opmat" },
       { "half_extents", json::array({ 25.0F, 0.5F, 25.0F }) },
-      { "virtual_path", "/.cooked/Physics/Shapes/floor_box.ocshape" },
     };
     auto request = ImportRequest {};
     request.source_path = source / "shape.shape.json";
@@ -565,7 +564,7 @@ namespace {
               json::array({
                 json {
                   { "surface_id", GeneratedSurfaceId("Cube") },
-                  { "material_ref", "/.cooked/Materials/default.omat" },
+                  { "material_ref", "../Materials/default.omat" },
                   {
                     "views",
                     json::array({ json { { "view_ref", "__all__" } } }),
@@ -641,7 +640,7 @@ namespace {
             { "slot_id", "00000000-0000-4000-8000-00000000000a" },
             {
               "script_virtual_path",
-              std::string(kCookedMount) + "/logic.oscript",
+              "logic.oscript",
             },
           },
         }),

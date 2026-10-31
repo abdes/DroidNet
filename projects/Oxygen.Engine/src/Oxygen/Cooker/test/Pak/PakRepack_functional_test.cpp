@@ -4,80 +4,92 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Pak/PakBuilder.cpp, Pak/PakPlanBuilder.cpp, Pak/PakWriter.cpp
+// Covers: Pak/PakPlanBuilder.cpp, Pak/PakWriter.cpp
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
-#include <filesystem>
-#include <ios>
 #include <span>
 #include <string>
+#include <string_view>
+#include <tuple>
 #include <vector>
 
 #include "PakSceneTestSupport.h"
-#include "PakTestSupport.h"
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
-#include <Oxygen/Content/PakFile.h>
-#include <Oxygen/Cooker/Pak/PakBuildReport.h>
-#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
-#include <Oxygen/Cooker/Pak/PakPlan.h>
-#include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
-#include <Oxygen/Cooker/Pak/PakWriter.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/test/Support/TestValues.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/PackedPak.h>
+#include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MeshType.h>
-#include <Oxygen/Data/PakCatalog.h>
-#include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Serio/NativeFile.h>
-#include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Serio/RegionStream.h>
-#include <Oxygen/Serio/Writer.h>
+#include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
-namespace cooktest = oxygen::cooker::test;
 namespace data = oxygen::data;
-namespace lc = oxygen::data::loose_cooked;
 namespace pak = oxygen::content::pak;
-namespace paktest = oxygen::content::pak::test;
 namespace core = oxygen::data::pak::core;
+namespace geometry = oxygen::data::pak::geometry;
 namespace render = oxygen::data::pak::render;
 namespace script = oxygen::data::pak::scripting;
 
-using paktest::AssetSpec;
-using paktest::BuildSceneDescriptorWithScriptingSlots;
-using paktest::FileSpec;
-using paktest::HasDiagnosticCode;
-using paktest::HasError;
-using paktest::MakeAssetKey;
-using paktest::MakeBaseCatalog;
-using paktest::MakeSceneScriptAssets;
-using paktest::MakeSourceKey;
+using oxygen::ResourceIndexT;
+using oxygen::cooker::test::HasDiagnostic;
+using oxygen::cooker::test::HasNoErrors;
+using oxygen::cooker::testing::LooseCookedRoot;
+using oxygen::cooker::testing::PackedPak;
+using oxygen::cooker::testing::PakWorkspace;
+using oxygen::cooker::testing::SeedBytes;
+using oxygen::serio::testing::BytesEqual;
+using pak::BuildMode;
 
+//! Every fixture packs two libraries, seeded 1 and 2. A pak reserves resource
+//! row zero once, so each library's one resource lands at its own seed.
+constexpr auto kSeeds = std::array { uint8_t { 1U }, uint8_t { 2U } };
+constexpr auto kModes = std::array { BuildMode::kFull, BuildMode::kPatch };
+
+auto ModeName(const BuildMode mode) -> std::string_view
+{
+  return mode == BuildMode::kFull ? "Full" : "Patch";
+}
+
+//! Packs `sources` into `merged.pak`, then repacks that pak in `mode`: in
+//! full, or as a patch over an empty base of the same library.
+auto Repack(PakWorkspace& workspace, std::vector<data::CookedSource> sources,
+  const BuildMode mode) -> PackedPak
+{
+  const auto merged = workspace.FullRequest(std::move(sources), "merged.pak");
+  static_cast<void>(workspace.PackOrThrow(merged));
+  auto from_pak
+    = std::vector { PakWorkspace::PakSource(merged.output_pak_path) };
+  return workspace.PackOrThrow(mode == BuildMode::kFull
+      ? workspace.FullRequest(std::move(from_pak), "repacked.pak")
+      : workspace.PatchRequest(std::move(from_pak),
+          { LooseCookedRoot {}.BaseCatalog() }, "repacked.pak"));
+}
+
+//! Checks the content hash a descriptor's header holds against its bytes.
 auto ExpectDescriptorHash(const std::span<const std::byte> bytes) -> void
 {
-  auto header = core::AssetHeader {};
-  ASSERT_GE(bytes.size(), sizeof(header));
-  std::memcpy(&header, bytes.data(), sizeof(header));
+  const auto header = PackedPak::RecordAt<core::AssetHeader>(bytes, 0);
   auto unhashed = std::vector<std::byte>(bytes.begin(), bytes.end());
   std::ranges::fill(
     std::span(unhashed).subspan(
@@ -86,446 +98,303 @@ auto ExpectDescriptorHash(const std::span<const std::byte> bytes) -> void
   EXPECT_EQ(header.content_hash, oxygen::base::ComputeSha256(unhashed));
 }
 
-//! Packing from existing paks must keep every binding, resource and
-//! descriptor intact or refuse the input.
-class PakRepackTest : public paktest::TempDirFixture { };
+//=== A pak whose bytes disagree with its catalog ===-------------------------//
 
-NOLINT_TEST_F(
-  PakRepackTest, RepackingRejectsDescriptorBytesThatDisagreeWithCatalog)
+NOLINT_TEST(PakRepackTest, RejectsDescriptorBytesThatDisagreeWithTheCatalog)
 {
-  const auto root = Root() / "source";
-  const auto bytes = oxygen::content::test::MakeEmptySceneDescriptor();
-  const auto asset = AssetSpec {
-    .key = MakeAssetKey(1U),
-    .asset_type = data::AssetType::kScene,
-    .descriptor_relpath = "Scene.oscene",
-    .virtual_path = "/Game/Scene.oscene",
-    .descriptor_size = bytes.size(),
-    .descriptor_sha = oxygen::base::ComputeSha256(bytes),
-    .descriptor_payload = bytes,
-    .references = {},
-  };
-  ASSERT_TRUE(paktest::WriteLooseIndex(root, std::span { &asset, 1U }, {}, 1U));
-  auto request = pak::PakBuildRequest {
-    .mode = pak::BuildMode::kFull,
-    .sources
-    = { { .kind = data::CookedSourceKind::kLooseCooked, .path = root } },
-    .output_pak_path = Root() / "source.pak",
-    .content_version = 1U,
-    .source_key = MakeSourceKey(1U),
-  };
-  const auto original = pak::PakPlanBuilder {}.Build(request);
-  ASSERT_HAS_VALUE(original.plan);
-  ASSERT_FALSE(
-    HasError(pak::PakWriter {}.Write(request, *original.plan).diagnostics));
+  auto workspace = PakWorkspace {};
+  auto game = LooseCookedRoot {};
+  game.Add({
+    .type = data::AssetType::kScene,
+    .leaf = "Scene.oscene",
+    .descriptor = oxygen::cooker::testing::MakeEmptySceneDescriptor(),
+  });
+  const auto request = workspace.FullRequest({ workspace.Add(game) });
+  const auto packed = workspace.Pack(request);
+  ASSERT_THAT(packed.Diagnostics(), HasNoErrors());
+  // Corrupt the descriptor's variant flags after the pak was published.
+  const auto published = workspace.Storage().Bytes(request.output_pak_path);
+  auto bytes = std::vector<std::byte>(published.begin(), published.end());
+  bytes.at(oxygen::base::CheckedAt(packed.planned.plan->Assets(), 0U).offset
+    + offsetof(core::AssetHeader, variant_flags)) = std::byte { 'X' };
+  workspace.Storage().AddFile(request.output_pak_path, bytes);
+
+  const auto rejected = workspace.Pack(workspace.FullRequest(
+    { PakWorkspace::PakSource(request.output_pak_path) }, "repacked.pak"));
+
+  EXPECT_FALSE(rejected.planned.plan.has_value());
+  EXPECT_THAT(
+    rejected.Diagnostics(), HasDiagnostic("pak.plan.catalog_content_mismatch"));
+}
+
+//=== Scenes binding a texture through a mask ===-----------------------------//
+
+class PakRepackSceneTest : public ::testing::TestWithParam<BuildMode> {
+protected:
+  //! The two scene mask libraries, merged then repacked.
+  auto Repacked() -> PackedPak
   {
-    auto file = oxygen::serio::NativeFile::Open(request.output_pak_path,
-      { .access = oxygen::serio::Access::kReadWrite,
-        .creation = oxygen::serio::Creation::kOpenExisting });
-    ASSERT_TRUE(file) << file.error().message();
-    const auto offset
-      = oxygen::base::CheckedAt(original.plan->Assets(), 0U).offset
-      + offsetof(core::AssetHeader, variant_flags);
-    oxygen::serio::RegionWriteStream<oxygen::serio::NativeFile> archive(
-      *file, oxygen::serio::ByteOffset { offset });
-    oxygen::serio::Writer writer(archive);
-    const auto corrupted = std::byte { 'X' };
-    ASSERT_TRUE(writer.WriteBlob(std::span { &corrupted, 1U }));
-    ASSERT_TRUE(writer.Flush());
-    const auto flushed = archive.Flush();
-    ASSERT_TRUE(flushed) << flushed.error().message();
+    auto sources = std::vector<data::CookedSource> {};
+    for (const auto seed : kSeeds) {
+      sources.push_back(workspace_.Add(pak::test::MakeSceneMask(seed).root));
+    }
+    return Repack(workspace_, std::move(sources), GetParam());
   }
-  request.sources = {
-    {
-      .kind = data::CookedSourceKind::kPak,
-      .path = request.output_pak_path,
-    },
-  };
-  request.output_pak_path = Root() / "repacked.pak";
-  request.source_key = MakeSourceKey(2U);
-  const auto rejected = pak::PakPlanBuilder {}.Build(request);
-  EXPECT_FALSE(rejected.plan.has_value());
-  EXPECT_TRUE(HasDiagnosticCode(
-    rejected.diagnostics, "pak.plan.catalog_content_mismatch"));
+
+private:
+  PakWorkspace workspace_;
+};
+
+NOLINT_TEST_P(PakRepackSceneTest, KeepsDescriptorHashes)
+{
+  const auto pak = Repacked();
+
+  for (const auto seed : kSeeds) {
+    SCOPED_TRACE(int { seed });
+    const auto mask = pak::test::MakeSceneMask(seed);
+    ExpectDescriptorHash(pak.Descriptor(mask.scene));
+    ExpectDescriptorHash(pak.Descriptor(mask.sidecar));
+    ExpectDescriptorHash(pak.Descriptor(mask.material));
+  }
 }
 
-NOLINT_TEST_F(PakRepackTest, RepackPreservesSceneBindings)
+NOLINT_TEST_P(PakRepackSceneTest, KeepsPhysicsSidecarTargets)
 {
-  namespace serio = oxygen::serio;
-  const auto source_pak = paktest::BuildSceneMaskPak(Root());
+  const auto pak = Repacked();
 
-  for (const auto mode : { pak::BuildMode::kFull, pak::BuildMode::kPatch }) {
-    auto repack = source_pak.request;
-    repack.mode = mode;
-    repack.sources = {
-      {
-        .kind = data::CookedSourceKind::kPak,
-        .path = source_pak.request.output_pak_path,
-      },
-    };
-    repack.output_pak_path
-      = Root() / (mode == pak::BuildMode::kFull ? "repacked.pak" : "patch.pak");
-    repack.source_key = MakeSourceKey(4U);
-    if (mode == pak::BuildMode::kPatch) {
-      repack.output_manifest_path = Root() / "patch.manifest.json";
-      repack.base_catalogs.push_back(data::PakCatalog {
-        .source_key = MakeSourceKey(5U),
-        .content_version = 1U,
-        .catalog_digest = paktest::MakeDigest(5U),
-        .library = "Content",
-        .entries = {},
-      });
-      auto& base = repack.base_catalogs.at(0);
-      base.catalog_digest = base.ComputeDigest().value();
+  for (const auto seed : kSeeds) {
+    SCOPED_TRACE(int { seed });
+    const auto mask = pak::test::MakeSceneMask(seed);
+    const auto sidecar
+      = data::PhysicsSceneAsset(mask.sidecar, pak.Descriptor(mask.sidecar));
+    EXPECT_EQ(sidecar.GetTargetSceneKey(), mask.scene);
+    EXPECT_TRUE(std::ranges::equal(sidecar.GetTargetSceneContentHash(),
+      oxygen::base::ComputeSha256(pak.Descriptor(mask.scene))));
+  }
+}
+
+NOLINT_TEST_P(PakRepackSceneTest, RebindsSceneMeteringMasks)
+{
+  const auto pak = Repacked();
+
+  for (const auto seed : kSeeds) {
+    SCOPED_TRACE(int { seed });
+    const auto mask = pak::test::MakeSceneMask(seed);
+    const auto scene = data::SceneAsset(mask.scene, pak.Descriptor(mask.scene));
+    const auto post_process = scene.TryGetPostProcessVolumeEnvironment();
+    ASSERT_HAS_VALUE(post_process);
+    const auto texture = pak.Resolve(mask.scene,
+      post_process->auto_exposure_metering_mask, data::ResourceKind::kTexture);
+    ASSERT_HAS_VALUE(texture);
+    EXPECT_EQ(texture->get(), seed);
+    EXPECT_THAT(pak.Payload<data::TextureResource>(*texture),
+      BytesEqual(mask.texture_payload));
+  }
+}
+
+NOLINT_TEST_P(PakRepackSceneTest, RebindsMaterialTextures)
+{
+  const auto pak = Repacked();
+
+  for (const auto seed : kSeeds) {
+    SCOPED_TRACE(int { seed });
+    const auto mask = pak::test::MakeSceneMask(seed);
+    const auto material
+      = pak.DescriptorRecord<render::MaterialAssetDesc>(mask.material);
+    const auto texture = pak.Resolve(
+      mask.material, material.base_color_texture, data::ResourceKind::kTexture);
+    ASSERT_HAS_VALUE(texture);
+    EXPECT_EQ(texture->get(), seed);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(Modes, PakRepackSceneTest, ::testing::ValuesIn(kModes),
+  [](const auto& info) { return std::string(ModeName(info.param)); });
+
+//=== Geometry and scripts binding resources ===------------------------------//
+
+//! The library of `seed`: a geometry whose mesh binds a buffer, and a script
+//! that binds its bytecode; both payloads are `SeedBytes(seed)`.
+struct ResourceLibrary final {
+  LooseCookedRoot library;
+  data::AssetKey geometry;
+  data::AssetKey script;
+};
+
+auto MakeResourceRoot(const uint8_t seed) -> ResourceLibrary
+{
+  auto library = LooseCookedRoot { "Game", seed };
+  const auto binding
+    = [](const data::ResourceKind kind, const ResourceIndexT index) {
+        return data::AssetReferences::Create(
+          { { .kind = kind, .index = index } }, {})
+          .value();
+      };
+
+  auto desc = geometry::GeometryAssetDesc {};
+  desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kGeometry);
+  desc.header.version = geometry::kGeometryAssetVersion;
+  desc.lod_count = 1U;
+  auto mesh = geometry::MeshDesc {};
+  mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
+  mesh.info.standard.vertex_buffer = data::ResourceReferenceIndex { 0U };
+  mesh.info.standard.index_buffer = data::ResourceReferenceIndex { 0U };
+  auto geometry_bytes = std::vector<std::byte> {};
+  oxygen::cooker::testing::AppendRecord(geometry_bytes, desc);
+  oxygen::cooker::testing::AppendRecord(geometry_bytes, mesh);
+  data::AppendDescriptorStrings(
+    geometry_bytes, data::DescriptorStringsBuilder {});
+  const auto buffer = library.AddBuffer(SeedBytes(seed));
+  const auto geometry = library.Add({
+    .type = data::AssetType::kGeometry,
+    .leaf = "Mesh" + std::to_string(seed) + ".ogeo",
+    .descriptor = std::move(geometry_bytes),
+    .references = binding(data::ResourceKind::kBuffer, buffer),
+  });
+
+  auto script_desc = script::ScriptAssetDesc {};
+  script_desc.header.asset_type
+    = static_cast<uint8_t>(data::AssetType::kScript);
+  script_desc.header.version = script::kScriptAssetVersion;
+  script_desc.bytecode_resource_index = data::ResourceReferenceIndex { 0U };
+  const auto bytecode = library.AddScript(SeedBytes(seed));
+  const auto logic = library.Add({
+    .type = data::AssetType::kScript,
+    .leaf = "Logic" + std::to_string(seed) + ".oscript",
+    .descriptor = data::MakeDescriptorBytes(script_desc),
+    .references = binding(data::ResourceKind::kScript, bytecode),
+  });
+  return {
+    .library = std::move(library),
+    .geometry = geometry,
+    .script = logic,
+  };
+}
+
+class PakRepackResourceTest : public ::testing::TestWithParam<BuildMode> {
+protected:
+  auto Repacked() -> PackedPak
+  {
+    auto sources = std::vector<data::CookedSource> {};
+    for (const auto seed : kSeeds) {
+      sources.push_back(workspace_.Add(MakeResourceRoot(seed).library));
     }
-    const auto planned = pak::PakPlanBuilder {}.Build(repack);
-    for (const auto& diagnostic : planned.diagnostics) {
-      EXPECT_NE(diagnostic.severity, pak::PakDiagnosticSeverity::kError)
-        << diagnostic.message;
+    return Repack(workspace_, std::move(sources), GetParam());
+  }
+
+private:
+  PakWorkspace workspace_;
+};
+
+NOLINT_TEST_P(PakRepackResourceTest, RebindsGeometryBuffers)
+{
+  const auto pak = Repacked();
+
+  for (const auto seed : kSeeds) {
+    SCOPED_TRACE(int { seed });
+    const auto key = MakeResourceRoot(seed).geometry;
+    const auto mesh = pak.DescriptorRecord<geometry::MeshDesc>(
+      key, sizeof(geometry::GeometryAssetDesc));
+    const auto buffer = pak.Resolve(
+      key, mesh.info.standard.vertex_buffer, data::ResourceKind::kBuffer);
+    ASSERT_HAS_VALUE(buffer);
+    EXPECT_EQ(buffer->get(), seed);
+    EXPECT_THAT(
+      pak.Payload<data::BufferResource>(*buffer), BytesEqual(SeedBytes(seed)));
+  }
+}
+
+NOLINT_TEST_P(PakRepackResourceTest, RebindsScriptBytecode)
+{
+  const auto pak = Repacked();
+
+  for (const auto seed : kSeeds) {
+    SCOPED_TRACE(int { seed });
+    const auto key = MakeResourceRoot(seed).script;
+    const auto desc = pak.DescriptorRecord<script::ScriptAssetDesc>(key);
+    const auto bytecode = pak.Resolve(
+      key, desc.bytecode_resource_index, data::ResourceKind::kScript);
+    ASSERT_HAS_VALUE(bytecode);
+    EXPECT_EQ(bytecode->get(), seed);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(Modes, PakRepackResourceTest,
+  ::testing::ValuesIn(kModes),
+  [](const auto& info) { return std::string(ModeName(info.param)); });
+
+//=== Scenes binding scripts ===----------------------------------------------//
+
+//! Packs the scene script libraries, merged from their loose roots or
+//! repacked from a pak of them, in full or as a patch.
+class PakRepackScriptTest
+  : public ::testing::TestWithParam<std::tuple<bool, BuildMode>> {
+protected:
+  auto Packed() -> PackedPak
+  {
+    const auto from_pak = std::get<0>(GetParam());
+    const auto mode = std::get<1>(GetParam());
+    auto sources = std::vector<data::CookedSource> {};
+    for (const auto seed : kSeeds) {
+      sources.push_back(workspace_.Add(pak::test::MakeSceneScripts(seed).root));
     }
-    ASSERT_HAS_VALUE(planned.plan);
-    ASSERT_FALSE(
-      HasError(pak::PakWriter {}.Write(repack, *planned.plan).diagnostics));
-    auto archive = oxygen::content::PakFile(repack.output_pak_path);
-    archive.ValidateCrc32Integrity();
-    for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
-      const auto entry
-        = archive.FindEntry(MakeAssetKey(static_cast<uint8_t>(seed * 10U)));
-      ASSERT_HAS_VALUE(entry);
-      auto descriptor_reader = archive.CreateReader(*entry);
-      const auto bytes = descriptor_reader.ReadBlob(entry->desc_size);
-      ASSERT_HAS_VALUE(bytes);
-      const auto scene = data::SceneAsset(entry->asset_key, *bytes);
-      ExpectDescriptorHash(*bytes);
-      const auto sidecar_entry = archive.FindEntry(MakeAssetKey(seed));
-      ASSERT_HAS_VALUE(sidecar_entry);
-      auto sidecar_reader = archive.CreateReader(*sidecar_entry);
-      const auto sidecar_bytes
-        = sidecar_reader.ReadBlob(sidecar_entry->desc_size);
-      ASSERT_HAS_VALUE(sidecar_bytes);
-      const auto sidecar = data::PhysicsSceneAsset(
-        sidecar_entry->asset_key, std::span<const std::byte>(*sidecar_bytes));
-      EXPECT_EQ(sidecar.GetTargetSceneKey(), entry->asset_key);
-      EXPECT_TRUE(std::ranges::equal(sidecar.GetTargetSceneContentHash(),
-        oxygen::base::ComputeSha256(*bytes)));
-      ExpectDescriptorHash(*sidecar_bytes);
-      const auto post_process = scene.TryGetPostProcessVolumeEnvironment();
-      ASSERT_HAS_VALUE(post_process);
-      // A pak reserves index zero once, so the second source's
-      // texture follows the first's.
-      const auto expected_index = seed == 1U ? 1U : 2U;
-      EXPECT_EQ(post_process->auto_exposure_metering_mask.get(), 0U);
-      const auto scene_references
-        = archive.ReadAssetReferences(entry->asset_key);
-      const auto texture_binding = scene_references.ResolveResource(
-        post_process->auto_exposure_metering_mask,
-        data::ResourceKind::kTexture);
-      ASSERT_HAS_VALUE(texture_binding);
-      ASSERT_HAS_VALUE(*texture_binding);
-      EXPECT_EQ((**texture_binding).get(), expected_index);
-      const auto texture_offset
-        = archive.TexturesTable().GetResourceOffset(**texture_binding);
-      ASSERT_HAS_VALUE(texture_offset);
-      auto file = serio::NativeFile::Open(repack.output_pak_path, {});
-      ASSERT_TRUE(file) << file.error().message();
-      auto stream = serio::OpenReadStream(*file);
-      ASSERT_TRUE(stream) << stream.error().message();
-      serio::Reader reader(*stream);
-      ASSERT_TRUE(reader.Seek(*texture_offset));
-      auto texture = core::TextureResourceDesc {};
-      ASSERT_TRUE(serio::Load(reader, texture));
-      ASSERT_TRUE(reader.Seek(texture.data_offset));
-      const auto payload = reader.ReadBlob(texture.size_bytes);
-      ASSERT_HAS_VALUE(payload);
+    if (from_pak) {
+      return Repack(workspace_, std::move(sources), mode);
+    }
+    return workspace_.PackOrThrow(mode == BuildMode::kFull
+        ? workspace_.FullRequest(std::move(sources))
+        : workspace_.PatchRequest(
+            std::move(sources), { LooseCookedRoot {}.BaseCatalog() }));
+  }
+
+private:
+  PakWorkspace workspace_;
+};
+
+NOLINT_TEST_P(PakRepackScriptTest, KeepsSceneDescriptorsVerbatim)
+{
+  const auto pak = Packed();
+
+  for (const auto seed : kSeeds) {
+    SCOPED_TRACE(int { seed });
+    EXPECT_THAT(pak.Descriptor(pak::test::MakeSceneScripts(seed).scene),
+      BytesEqual(pak::test::BuildSceneDescriptorWithScriptingSlots(seed)));
+  }
+}
+
+NOLINT_TEST_P(PakRepackScriptTest, KeepsScriptSlotsAndParameters)
+{
+  const auto pak = Packed();
+
+  for (const auto seed : kSeeds) {
+    const auto key = pak::test::MakeSceneScripts(seed).scene;
+    const auto scene = data::SceneAsset(key, pak.Descriptor(key));
+    const auto bindings
+      = scene.GetComponents<script::ScriptingComponentRecord>();
+    ASSERT_EQ(bindings.size(), 2U);
+    for (uint8_t index = 0U; index < bindings.size(); ++index) {
+      SCOPED_TRACE(::testing::Message()
+        << "seed " << int { seed } << " binding " << int { index });
+      const auto& binding = oxygen::base::CheckedAt(bindings, index);
+      EXPECT_EQ(binding.slot_start_index, index);
+      const auto slots = scene.ReadScriptSlots(binding.slot_start_index, 1U);
+      ASSERT_EQ(slots.size(), 1U);
       EXPECT_EQ(
-        *payload, std::vector<std::byte>(4U, static_cast<std::byte>(seed)));
-      const auto material_entry
-        = archive.FindEntry(MakeAssetKey(static_cast<uint8_t>(seed + 10U)));
-      ASSERT_HAS_VALUE(material_entry);
-      auto material_reader = archive.CreateReader(*material_entry);
-      auto material = render::MaterialAssetDesc {};
-      const auto material_payload
-        = material_reader.ReadBlob(material_entry->desc_size);
-      ASSERT_HAS_VALUE(material_payload);
-      ExpectDescriptorHash(*material_payload);
-      std::memcpy(&material, material_payload->data(), sizeof(material));
-      EXPECT_EQ(material.base_color_texture.get(), 0U);
-      const auto material_references
-        = archive.ReadAssetReferences(material_entry->asset_key);
-      const auto material_binding = material_references.ResolveResource(
-        material.base_color_texture, data::ResourceKind::kTexture);
-      ASSERT_HAS_VALUE(material_binding);
-      ASSERT_HAS_VALUE(*material_binding);
-      EXPECT_EQ((**material_binding).get(), expected_index);
+        slots.front().script_asset_key, pak::test::ScriptKey(seed, index));
+      const auto params = scene.ReadScriptParameters(slots.front());
+      ASSERT_EQ(params.size(), 1U);
+      EXPECT_EQ(
+        params.front().value.as_int32, pak::test::ScriptParameter(seed, index));
     }
   }
 }
 
-NOLINT_TEST_F(PakRepackTest, ScriptBindingsSurviveSourceMergeAndPakRepacking)
-{
-  constexpr uint32_t kScriptKeyStride = 10U;
-  constexpr int32_t kParameterValueStride = 100;
-  auto sources = std::vector<data::CookedSource> {};
-  for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
-    const auto root = Root() / std::to_string(seed);
-    const auto assets = MakeSceneScriptAssets(seed);
-    ASSERT_TRUE(paktest::WriteLooseIndex(root, assets, {}, seed));
-    sources.push_back(
-      { .kind = data::CookedSourceKind::kLooseCooked, .path = root });
-  }
-  auto request = paktest::MakeFullRequest(Root() / "scripts.pak",
-    { .sources = sources, .source_key = MakeSourceKey(3U) });
-  const auto verify = [](const std::filesystem::path& path) -> void {
-    SCOPED_TRACE(path.string());
-    auto archive = oxygen::content::PakFile(path);
-    archive.ValidateCrc32Integrity();
-    for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
-      const auto entry = archive.FindEntry(MakeAssetKey(seed));
-      ASSERT_HAS_VALUE(entry);
-      auto reader = archive.CreateReader(*entry);
-      const auto bytes = reader.ReadBlob(entry->desc_size);
-      ASSERT_HAS_VALUE(bytes);
-      EXPECT_EQ(*bytes, BuildSceneDescriptorWithScriptingSlots(seed));
-      const auto scene = data::SceneAsset(entry->asset_key, *bytes);
-      const auto bindings
-        = scene.GetComponents<script::ScriptingComponentRecord>();
-      ASSERT_EQ(bindings.size(), 2U);
-      for (uint32_t index = 0U; index < bindings.size(); ++index) {
-        EXPECT_EQ(
-          oxygen::base::CheckedAt(bindings, index).slot_start_index, index);
-        const auto slots = scene.ReadScriptSlots(
-          oxygen::base::CheckedAt(bindings, index).slot_start_index, 1U);
-        ASSERT_EQ(slots.size(), 1U);
-        EXPECT_EQ(slots.at(0).script_asset_key,
-          MakeAssetKey(static_cast<uint8_t>(
-            (static_cast<uint32_t>(seed) * kScriptKeyStride)
-            + static_cast<uint32_t>(index))));
-        const auto params = scene.ReadScriptParameters(slots.front());
-        ASSERT_EQ(params.size(), 1U);
-        EXPECT_EQ(params.at(0).value.as_int32,
-          (seed * kParameterValueStride) + static_cast<int32_t>(index));
-      }
-    }
-  };
-  const auto build_and_verify
-    = [&verify](const pak::PakBuildRequest& build_request) -> void {
-    const auto planned = pak::PakPlanBuilder {}.Build(build_request);
-    ASSERT_FALSE(HasError(planned.diagnostics))
-      << cooktest::DiagnosticSummary(planned.diagnostics);
-    ASSERT_HAS_VALUE(planned.plan);
-    const auto written = pak::PakWriter {}.Write(build_request, *planned.plan);
-    ASSERT_FALSE(HasError(written.diagnostics))
-      << cooktest::DiagnosticSummary(written.diagnostics);
-    verify(build_request.output_pak_path);
-  };
-  build_and_verify(request);
-  const auto original_pak = request.output_pak_path;
-  for (const auto kind :
-    { data::CookedSourceKind::kLooseCooked, data::CookedSourceKind::kPak }) {
-    request.sources = kind == data::CookedSourceKind::kLooseCooked
-      ? sources
-      : std::vector<data::CookedSource> {
-          {
-            .kind = kind,
-            .path = original_pak,
-          },
-        };
-    for (const auto mode : { pak::BuildMode::kFull, pak::BuildMode::kPatch }) {
-      request.mode = mode;
-      request.output_pak_path = Root()
-        / (std::to_string(static_cast<int>(kind)) + "-"
-          + std::to_string(static_cast<int>(mode)) + ".pak");
-      request.output_manifest_path
-        = request.output_pak_path.string() + ".manifest.json";
-      request.base_catalogs = { MakeBaseCatalog({}) };
-      build_and_verify(request);
-    }
-  }
-}
-
-NOLINT_TEST_F(PakRepackTest, BufferAndScriptReferencesSurvivePakRepacking)
-{
-  namespace geometry = oxygen::data::pak::geometry;
-  auto sources = std::vector<data::CookedSource> {};
-  for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
-    const auto root = Root() / std::to_string(seed);
-    auto geometry_desc = geometry::GeometryAssetDesc {};
-    geometry_desc.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kGeometry);
-    geometry_desc.header.version = geometry::kGeometryAssetVersion;
-    geometry_desc.lod_count = 1U;
-    auto mesh = geometry::MeshDesc {};
-    mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
-    mesh.info.standard.vertex_buffer = data::ResourceReferenceIndex { 0U };
-    mesh.info.standard.index_buffer = data::ResourceReferenceIndex { 0U };
-    const auto descriptor_bytes
-      = std::as_bytes(std::span { &geometry_desc, 1U });
-    const auto mesh_bytes = std::as_bytes(std::span { &mesh, 1U });
-    auto geometry_bytes = std::vector<std::byte>(
-      descriptor_bytes.begin(), descriptor_bytes.end());
-    geometry_bytes.insert(
-      geometry_bytes.end(), mesh_bytes.begin(), mesh_bytes.end());
-    data::AppendDescriptorStrings(
-      geometry_bytes, data::DescriptorStringsBuilder {});
-    auto script_desc = script::ScriptAssetDesc {};
-    script_desc.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kScript);
-    script_desc.header.version = script::kScriptAssetVersion;
-    script_desc.bytecode_resource_index = data::ResourceReferenceIndex { 0U };
-    const auto script_bytes = data::MakeDescriptorBytes(script_desc);
-    constexpr uint8_t kScriptKeyOffset = 10U;
-    const auto assets = std::array {
-      AssetSpec {
-        .key = MakeAssetKey(seed),
-        .asset_type = data::AssetType::kGeometry,
-        .descriptor_relpath = "Mesh.ogeo",
-        .virtual_path = "/Game/Mesh" + std::to_string(seed) + ".ogeo",
-        .descriptor_size = geometry_bytes.size(),
-        .descriptor_sha = oxygen::base::ComputeSha256(geometry_bytes),
-        .descriptor_payload = geometry_bytes,
-        .references = data::AssetReferences::Create(
-          {
-            {
-              .kind = data::ResourceKind::kBuffer,
-              .index = oxygen::ResourceIndexT { 1U },
-            },
-          },
-          {})
-          .value(),
-      },
-      AssetSpec {
-        .key = MakeAssetKey(static_cast<uint8_t>(seed + kScriptKeyOffset)),
-        .asset_type = data::AssetType::kScript,
-        .descriptor_relpath = "Logic.oscript",
-        .virtual_path = "/Game/Logic" + std::to_string(seed) + ".oscript",
-        .descriptor_size = script_bytes.size(),
-        .descriptor_sha = oxygen::base::ComputeSha256(script_bytes),
-        .descriptor_payload = { script_bytes.begin(), script_bytes.end() },
-        .references = data::AssetReferences::Create(
-          {
-            {
-              .kind = data::ResourceKind::kScript,
-              .index = oxygen::ResourceIndexT { 1U },
-            },
-          },
-          {})
-          .value(),
-      },
-    };
-    auto buffers = std::array<core::BufferResourceDesc, 2> {};
-    buffers.back().size_bytes = sizeof(uint32_t);
-    auto scripts = std::array<script::ScriptResourceDesc, 2> {};
-    scripts.back().size_bytes = sizeof(uint32_t);
-    const auto buffer_table = std::as_bytes(std::span(buffers));
-    const auto script_table = std::as_bytes(std::span(scripts));
-    const auto payload
-      = std::vector<std::byte>(sizeof(uint32_t), static_cast<std::byte>(seed));
-    const auto files = std::array {
-      FileSpec {
-        .kind = lc::FileKind::kBuffersTable,
-        .relpath = "buffers.table",
-        .payload = { buffer_table.begin(), buffer_table.end() },
-      },
-      FileSpec {
-        .kind = lc::FileKind::kBuffersData,
-        .relpath = "buffers.data",
-        .payload = payload,
-      },
-      FileSpec {
-        .kind = lc::FileKind::kScriptsTable,
-        .relpath = "scripts.table",
-        .payload = { script_table.begin(), script_table.end() },
-      },
-      FileSpec {
-        .kind = lc::FileKind::kScriptsData,
-        .relpath = "scripts.data",
-        .payload = payload,
-      },
-    };
-    ASSERT_TRUE(paktest::WriteLooseIndex(root, assets, files, seed));
-    sources.push_back(
-      { .kind = data::CookedSourceKind::kLooseCooked, .path = root });
-  }
-  auto request = paktest::MakeFullRequest(Root() / "resources.pak",
-    { .sources = sources, .source_key = MakeSourceKey(3U) });
-  const auto initial = pak::PakPlanBuilder {}.Build(request);
-  ASSERT_HAS_VALUE(initial.plan)
-    << cooktest::DiagnosticSummary(initial.diagnostics);
-  ASSERT_FALSE(
-    HasError(pak::PakWriter {}.Write(request, *initial.plan).diagnostics));
-  const auto source_pak = request.output_pak_path;
-  for (const auto mode : { pak::BuildMode::kFull, pak::BuildMode::kPatch }) {
-    request.mode = mode;
-    request.sources
-      = { { .kind = data::CookedSourceKind::kPak, .path = source_pak } };
-    request.output_pak_path
-      = Root() / (mode == pak::BuildMode::kFull ? "full.pak" : "patch.pak");
-    request.output_manifest_path = Root() / "patch.manifest.json";
-    request.base_catalogs = { MakeBaseCatalog({}) };
-    const auto planned = pak::PakPlanBuilder {}.Build(request);
-    ASSERT_HAS_VALUE(planned.plan)
-      << cooktest::DiagnosticSummary(planned.diagnostics);
-    ASSERT_FALSE(
-      HasError(pak::PakWriter {}.Write(request, *planned.plan).diagnostics));
-    auto archive = oxygen::content::PakFile(request.output_pak_path);
-    archive.ValidateCrc32Integrity();
-    for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
-      // A pak reserves index zero once, so the second source's
-      // resources follow the first's.
-      const auto expected = seed == 1U ? 1U : 2U;
-      const auto entry = archive.FindEntry(MakeAssetKey(seed));
-      ASSERT_HAS_VALUE(entry);
-      auto reader = archive.CreateReader(*entry);
-      ASSERT_TRUE(reader.ReadBlob(sizeof(geometry::GeometryAssetDesc)));
-      const auto mesh_bytes = reader.ReadBlob(sizeof(geometry::MeshDesc));
-      ASSERT_HAS_VALUE(mesh_bytes);
-      auto mesh = geometry::MeshDesc {};
-      std::memcpy(&mesh, mesh_bytes->data(), sizeof(mesh));
-      EXPECT_EQ(mesh.info.standard.vertex_buffer.get(), 0U);
-      EXPECT_EQ(mesh.info.standard.index_buffer.get(), 0U);
-      const auto geometry_references
-        = archive.ReadAssetReferences(entry->asset_key);
-      const auto buffer_binding = geometry_references.ResolveResource(
-        mesh.info.standard.vertex_buffer, data::ResourceKind::kBuffer);
-      ASSERT_HAS_VALUE(buffer_binding);
-      ASSERT_HAS_VALUE(*buffer_binding);
-      EXPECT_EQ((**buffer_binding).get(), expected);
-      constexpr uint8_t kScriptKeyOffset = 10U;
-      const auto script_entry = archive.FindEntry(
-        MakeAssetKey(static_cast<uint8_t>(seed + kScriptKeyOffset)));
-      ASSERT_HAS_VALUE(script_entry);
-      auto script_reader = archive.CreateReader(*script_entry);
-      const auto script_bytes
-        = script_reader.ReadBlob(sizeof(script::ScriptAssetDesc));
-      ASSERT_HAS_VALUE(script_bytes);
-      auto script_desc = script::ScriptAssetDesc {};
-      std::memcpy(&script_desc, script_bytes->data(), sizeof(script_desc));
-      EXPECT_EQ(script_desc.bytecode_resource_index.get(), 0U);
-      const auto script_references
-        = archive.ReadAssetReferences(script_entry->asset_key);
-      const auto script_binding = script_references.ResolveResource(
-        script_desc.bytecode_resource_index, data::ResourceKind::kScript);
-      ASSERT_HAS_VALUE(script_binding);
-      ASSERT_HAS_VALUE(*script_binding);
-      EXPECT_EQ((**script_binding).get(), expected);
-      auto file = oxygen::serio::NativeFile::Open(request.output_pak_path, {});
-      ASSERT_TRUE(file) << file.error().message();
-      auto stream = oxygen::serio::OpenReadStream(*file);
-      ASSERT_TRUE(stream) << stream.error().message();
-      oxygen::serio::Reader payload_reader(*stream);
-      const auto buffer_offset
-        = archive.BuffersTable().GetResourceOffset(**buffer_binding);
-      ASSERT_HAS_VALUE(buffer_offset);
-      ASSERT_TRUE(payload_reader.Seek(*buffer_offset));
-      auto buffer = core::BufferResourceDesc {};
-      ASSERT_TRUE(oxygen::serio::Load(payload_reader, buffer));
-      ASSERT_TRUE(payload_reader.Seek(buffer.data_offset));
-      const auto bytes = payload_reader.ReadBlob(buffer.size_bytes);
-      ASSERT_TRUE(bytes);
-      EXPECT_EQ(*bytes,
-        std::vector<std::byte>(sizeof(uint32_t), static_cast<std::byte>(seed)));
-    }
-  }
-}
+INSTANTIATE_TEST_SUITE_P(SourcesAndModes, PakRepackScriptTest,
+  ::testing::Combine(::testing::Bool(), ::testing::ValuesIn(kModes)),
+  [](const auto& info) {
+    // No structured binding: its comma would split the macro's arguments.
+    return std::string(std::get<0>(info.param) ? "Pak" : "Loose")
+      .append(ModeName(std::get<1>(info.param)));
+  });
 
 } // namespace

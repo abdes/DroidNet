@@ -8,92 +8,33 @@
 
 #include <filesystem>
 #include <sstream>
-#include <system_error>
-#include <utility>
 #include <vector>
 
-#include "ArtifactPublication.h"
 #include "PakToolOptions.h"
+#include "PakToolTestSupport.h"
 #include "RequestPreparation.h"
 
-#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Tools/PakTool/CommandExecution.h>
 #include <Oxygen/Cooker/Tools/PakTool/PakToolCommands.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
-using oxygen::content::pak::BuildMode;
-using oxygen::content::pak::tool::ExecutePakToolCommand;
-using oxygen::content::pak::tool::IArtifactFileSystem;
-using oxygen::content::pak::tool::PakToolCliOptions;
+using oxygen::content::cooked::RealCookerStorage;
 using oxygen::content::pak::tool::PakToolExitCode;
-using oxygen::content::pak::tool::RealArtifactFileSystem;
-using oxygen::content::pak::tool::RealRequestPreparationFileSystem;
 using oxygen::content::pak::tool::RunPakToolApp;
+using oxygen::content::pak::tool::test::WriteGamePak;
+using oxygen::content::pak::tool::test::WriteLooseGameRoot;
+using oxygen::cooker::test::ReadText;
+using oxygen::cooker::test::WriteText;
 
 constexpr auto kSourceKey = "01234567-89ab-7def-8123-456789abcdef";
-constexpr auto kToolVersion = "0.1";
 
-class FailingPublishFileSystem final : public IArtifactFileSystem {
-public:
-  explicit FailingPublishFileSystem(std::filesystem::path fail_target)
-    : fail_target_(std::move(fail_target))
-  {
-  }
-
-  [[nodiscard]] auto Exists(const std::filesystem::path& path) const
-    -> bool override
-  {
-    return std::filesystem::exists(path);
-  }
-
-  auto CreateDirectories(const std::filesystem::path& path)
-    -> std::error_code override
-  {
-    auto ec = std::error_code {};
-    if (!path.empty()) {
-      std::filesystem::create_directories(path, ec);
-    }
-    return ec;
-  }
-
-  auto RemoveFile(const std::filesystem::path& path) -> std::error_code override
-  {
-    auto ec = std::error_code {};
-    if (!path.empty()) {
-      std::filesystem::remove(path, ec);
-    }
-    return ec;
-  }
-
-  auto Rename(const std::filesystem::path& from,
-    const std::filesystem::path& to) -> std::error_code override
-  {
-    if (to == fail_target_ && from.filename().string().ends_with(".staged")) {
-      return std::make_error_code(std::errc::permission_denied);
-    }
-
-    auto ec = std::error_code {};
-    std::filesystem::rename(from, to, ec);
-    return ec;
-  }
-
-private:
-  std::filesystem::path fail_target_;
-};
-
-class PakToolAppTest : public oxygen::cooker::test::TempDirTest {
+class PakToolAppTest : public oxygen::testing::TempDirTest {
 protected:
-  [[nodiscard]] auto MakeBaseOptions() const -> PakToolCliOptions
-  {
-    auto options = PakToolCliOptions {};
-    options.request.content_version = 42;
-    options.request.source_key = kSourceKey;
-    return options;
-  }
-
   [[nodiscard]] auto MakeArgv(const std::vector<std::string>& args)
     -> std::vector<char*>
   {
@@ -106,21 +47,17 @@ protected:
     return argv;
   }
 
+  //! A pak of the mount `Game`, for the tests that build from a pak source.
   auto SeedPak() -> std::filesystem::path
   {
-    auto options = MakeBaseOptions();
-    options.request.output_pak = TempDir() / "seed" / "seed.pak";
-    options.request.catalog_output
-      = TempDir() / "seed" / "seed.pakcatalog.json";
+    return WriteGamePak(TempDir() / "seed" / "seed.pak", "Seed");
+  }
 
-    auto prep_fs = RealRequestPreparationFileSystem {};
-    auto artifact_fs = RealArtifactFileSystem {};
-    const auto result = ExecutePakToolCommand(BuildMode::kFull, "build",
-      "Oxygen.Cooker.PakTool build", kToolVersion, options, prep_fs,
-      artifact_fs);
-    EXPECT_EQ(result.exit_code, PakToolExitCode::kSuccess)
-      << result.error_code << ": " << result.error_message;
-    return options.request.output_pak;
+  //! A loose cooked root of the mount `Game`, for the tests that build from
+  //! loose content.
+  auto LooseSource() -> std::filesystem::path
+  {
+    return WriteLooseGameRoot(TempDir() / "loose", "Loose");
   }
 
 private:
@@ -137,12 +74,11 @@ NOLINT_TEST_F(
     (TempDir() / "release" / "game.pak").string(),
   });
 
-  auto prep_fs = RealRequestPreparationFileSystem {};
-  auto artifact_fs = RealArtifactFileSystem {};
+  auto& storage = RealCookerStorage();
   auto out = std::ostringstream {};
   auto err = std::ostringstream {};
 
-  const auto exit_code = RunPakToolApp(argv, out, err, prep_fs, artifact_fs);
+  const auto exit_code = RunPakToolApp(argv, out, err, storage);
 
   EXPECT_EQ(exit_code, static_cast<int>(PakToolExitCode::kUsageError));
   EXPECT_TRUE(out.str().empty());
@@ -166,12 +102,11 @@ NOLINT_TEST_F(PakToolAppTest,
     "not-a-uuid",
   });
 
-  auto prep_fs = RealRequestPreparationFileSystem {};
-  auto artifact_fs = RealArtifactFileSystem {};
+  auto& storage = RealCookerStorage();
   auto out = std::ostringstream {};
   auto err = std::ostringstream {};
 
-  const auto exit_code = RunPakToolApp(argv, out, err, prep_fs, artifact_fs);
+  const auto exit_code = RunPakToolApp(argv, out, err, storage);
 
   EXPECT_EQ(exit_code, static_cast<int>(PakToolExitCode::kPreparationFailure));
   EXPECT_THAT(
@@ -197,12 +132,11 @@ NOLINT_TEST_F(PakToolAppTest, CurrentPakInputPublishesWithoutWarnings)
     kSourceKey,
   });
 
-  auto prep_fs = RealRequestPreparationFileSystem {};
-  auto artifact_fs = RealArtifactFileSystem {};
+  auto& storage = RealCookerStorage();
   auto out = std::ostringstream {};
   auto err = std::ostringstream {};
 
-  const auto exit_code = RunPakToolApp(argv, out, err, prep_fs, artifact_fs);
+  const auto exit_code = RunPakToolApp(argv, out, err, storage);
 
   EXPECT_EQ(exit_code, static_cast<int>(PakToolExitCode::kSuccess));
   EXPECT_TRUE(err.str().empty());
@@ -229,12 +163,11 @@ NOLINT_TEST_F(PakToolAppTest, CurrentPakInputSucceedsWithFailOnWarnings)
     "--fail-on-warnings",
   });
 
-  auto prep_fs = RealRequestPreparationFileSystem {};
-  auto artifact_fs = RealArtifactFileSystem {};
+  auto& storage = RealCookerStorage();
   auto out = std::ostringstream {};
   auto err = std::ostringstream {};
 
-  const auto exit_code = RunPakToolApp(argv, out, err, prep_fs, artifact_fs);
+  const auto exit_code = RunPakToolApp(argv, out, err, storage);
 
   EXPECT_EQ(exit_code, static_cast<int>(PakToolExitCode::kSuccess));
   EXPECT_TRUE(err.str().empty());
@@ -254,15 +187,16 @@ NOLINT_TEST_F(PakToolAppTest, QuietSuppressesNonErrorOutput)
     "42",
     "--source-key",
     kSourceKey,
+    "--loose-source",
+    LooseSource().string(),
     "--quiet",
   });
 
-  auto prep_fs = RealRequestPreparationFileSystem {};
-  auto artifact_fs = RealArtifactFileSystem {};
+  auto& storage = RealCookerStorage();
   auto out = std::ostringstream {};
   auto err = std::ostringstream {};
 
-  const auto exit_code = RunPakToolApp(argv, out, err, prep_fs, artifact_fs);
+  const auto exit_code = RunPakToolApp(argv, out, err, storage);
 
   EXPECT_EQ(exit_code, static_cast<int>(PakToolExitCode::kSuccess));
   EXPECT_TRUE(out.str().empty());
@@ -282,15 +216,16 @@ NOLINT_TEST_F(PakToolAppTest, NoColorRemovesAnsiSequencesFromConsoleOutput)
     "42",
     "--source-key",
     kSourceKey,
+    "--loose-source",
+    LooseSource().string(),
     "--no-color",
   });
 
-  auto prep_fs = RealRequestPreparationFileSystem {};
-  auto artifact_fs = RealArtifactFileSystem {};
+  auto& storage = RealCookerStorage();
   auto out = std::ostringstream {};
   auto err = std::ostringstream {};
 
-  const auto exit_code = RunPakToolApp(argv, out, err, prep_fs, artifact_fs);
+  const auto exit_code = RunPakToolApp(argv, out, err, storage);
 
   EXPECT_EQ(exit_code, static_cast<int>(PakToolExitCode::kSuccess));
   EXPECT_THAT(out.str(), ::testing::Not(::testing::HasSubstr("\x1b[")));
@@ -315,18 +250,27 @@ NOLINT_TEST_F(
     "42",
     "--source-key",
     kSourceKey,
+    "--loose-source",
+    LooseSource().string(),
   });
 
-  auto prep_fs = RealRequestPreparationFileSystem {};
-  auto artifact_fs = FailingPublishFileSystem(catalog_path);
+  // The earlier catalog cannot be moved aside: a folder holds its backup.
+  WriteText(catalog_path, "catalog-old");
+  std::filesystem::create_directories(
+    catalog_path.parent_path() / "publish_fail.pakcatalog.json.previous");
+
+  auto& storage = RealCookerStorage();
   auto out = std::ostringstream {};
   auto err = std::ostringstream {};
 
-  const auto exit_code = RunPakToolApp(argv, out, err, prep_fs, artifact_fs);
+  const auto exit_code = RunPakToolApp(argv, out, err, storage);
 
   EXPECT_EQ(exit_code, static_cast<int>(PakToolExitCode::kRuntimeFailure));
-  EXPECT_THAT(err.str(), ::testing::HasSubstr("paktool.publish.rename_failed"));
+  EXPECT_THAT(
+    err.str(), ::testing::HasSubstr("paktool.publish.backup_rename_failed"));
   EXPECT_THAT(err.str(), ::testing::HasSubstr("[Finalize]"));
+  EXPECT_FALSE(std::filesystem::exists(pak_path));
+  EXPECT_EQ(ReadText(catalog_path), "catalog-old");
 }
 
 } // namespace

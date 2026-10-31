@@ -20,14 +20,14 @@
 
 #include "ScriptImportTestSupport.h"
 
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -57,19 +57,8 @@ namespace {
     -> std::string
   {
     const auto bytes = ReadBytes(descriptor_path);
-    return oxygen::content::test::ReadDescriptorString(
+    return oxygen::cooker::testing::ReadDescriptorString(
       bytes, ReadScriptDescriptor(descriptor_path).external_source_path_offset);
-  }
-
-  auto FindFileRelPathByKind(const lc::Inspection& inspection,
-    const data::loose_cooked::FileKind kind) -> std::optional<std::string>
-  {
-    for (const auto& file : inspection.Files()) {
-      if (file.kind == kind) {
-        return file.relpath;
-      }
-    }
-    return std::nullopt;
   }
 
   template <typename T>
@@ -173,7 +162,6 @@ namespace {
     EmbeddedScriptImportWritesDescriptorAndScriptFiles)
   {
     using data::kNoResourceReference;
-    using data::loose_cooked::FileKind;
     using data::pak::scripting::ScriptAssetFlags;
 
     const ScopedTempDir temp;
@@ -194,18 +182,13 @@ namespace {
 
     const auto inspection = LoadInspection(cooked_root);
 
-    const auto files = inspection.Files();
-    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) -> auto {
-      return file.kind == FileKind::kScriptsTable;
-    }));
-    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) -> auto {
-      return file.kind == FileKind::kScriptsData;
-    }));
+    const auto& scripts = inspection.ResourceTable(data::ResourceKind::kScript);
+    EXPECT_FALSE(scripts.RowsStored().file.empty());
+    EXPECT_FALSE(scripts.DataStored().file.empty());
 
     const auto assets = inspection.Assets();
     ASSERT_EQ(assets.size(), 1U);
-    EXPECT_EQ(
-      static_cast<AssetType>(assets.front().asset_type), AssetType::kScript);
+    EXPECT_EQ(assets.front().type, AssetType::kScript);
 
     const auto desc = ReadScriptDescriptor(descriptor_path);
     EXPECT_NE(desc.source_resource_index, kNoResourceReference);
@@ -217,7 +200,6 @@ namespace {
     ExternalScriptImportStoresExternalPathAndNoScriptFiles)
   {
     using data::kNoResourceReference;
-    using data::loose_cooked::FileKind;
     using data::pak::scripting::ScriptAssetFlags;
 
     const ScopedTempDir temp;
@@ -239,13 +221,9 @@ namespace {
 
     const auto inspection = LoadInspection(cooked_root);
 
-    const auto files = inspection.Files();
-    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) -> auto {
-      return file.kind == FileKind::kScriptsTable;
-    }));
-    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) -> auto {
-      return file.kind == FileKind::kScriptsData;
-    }));
+    const auto& scripts = inspection.ResourceTable(data::ResourceKind::kScript);
+    EXPECT_TRUE(scripts.RowsStored().file.empty());
+    EXPECT_TRUE(scripts.DataStored().file.empty());
 
     const auto desc = ReadScriptDescriptor(descriptor_path);
     EXPECT_EQ(desc.source_resource_index, kNoResourceReference);
@@ -304,7 +282,6 @@ namespace {
     CompileEnabledEmbeddedWritesSourceAndBytecodeResources)
   {
     using data::kNoResourceReference;
-    using data::loose_cooked::FileKind;
     using data::pak::scripting::ScriptEncoding;
     using data::pak::scripting::ScriptResourceDesc;
     constexpr auto kCompileSentinel = std::byte { 0xAA };
@@ -347,11 +324,11 @@ namespace {
     ASSERT_NE(desc.bytecode_resource_index, kNoResourceReference);
 
     const auto inspection = LoadInspection(cooked_root);
-    const auto table_relpath
-      = FindFileRelPathByKind(inspection, FileKind::kScriptsTable);
-    ASSERT_HAS_VALUE(table_relpath) << "Expected table relpath to be present";
-    const auto resources
-      = ReadPackedRecords<ScriptResourceDesc>(cooked_root / *table_relpath);
+    const auto& table_file
+      = inspection.ResourceTable(data::ResourceKind::kScript).RowsStored().file;
+    ASSERT_FALSE(table_file.empty())
+      << "Expected the script table to be present";
+    const auto resources = ReadPackedRecords<ScriptResourceDesc>(table_file);
 
     const auto& references = inspection.Assets().front().references;
     const auto source_binding = references.ResolveResource(
@@ -512,18 +489,18 @@ return Orbit
       std::span(bytes).subspan(sizeof(ScriptAssetDesc)).data(),
       params.size() * sizeof(ScriptParamRecord));
 
-    EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+    EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
                 bytes, params.at(0).key_offset),
       "speed");
     EXPECT_EQ(params.at(0).type, ScriptParamType::kFloat);
     EXPECT_FLOAT_EQ(params.at(0).value.as_float, kSpeedDefault);
-    EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+    EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
                 bytes, params.at(1).key_offset),
       "orb");
     EXPECT_EQ(params.at(1).type, ScriptParamType::kAsset);
     EXPECT_EQ(params.at(1).value.as_asset.asset_type, AssetType::kMaterial);
     EXPECT_TRUE(params.at(1).value.as_asset.key.IsNil());
-    EXPECT_EQ(oxygen::content::test::ReadDescriptorString(
+    EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
                 bytes, params.at(2).key_offset),
       "target");
     EXPECT_EQ(params.at(2).type, ScriptParamType::kNode);
@@ -582,8 +559,7 @@ return Orbit
     const auto first_inspection = LoadInspection(cooked_root);
     const auto first_assets = first_inspection.Assets();
     ASSERT_EQ(first_assets.size(), 1U);
-    ASSERT_EQ(static_cast<AssetType>(first_assets.front().asset_type),
-      AssetType::kScript);
+    ASSERT_EQ(first_assets.front().type, AssetType::kScript);
     const auto first_key = first_assets.front().key;
 
     WriteText(source_path, "return 'second'");
@@ -598,8 +574,7 @@ return Orbit
     const auto second_inspection = LoadInspection(cooked_root);
     const auto second_assets = second_inspection.Assets();
     ASSERT_EQ(second_assets.size(), 1U);
-    ASSERT_EQ(static_cast<AssetType>(second_assets.front().asset_type),
-      AssetType::kScript);
+    ASSERT_EQ(second_assets.front().type, AssetType::kScript);
     EXPECT_EQ(second_assets.front().key, first_key);
   }
 
@@ -635,10 +610,8 @@ return Orbit
     const auto assets_b = inspection_b.Assets();
     ASSERT_EQ(assets_a.size(), 1U);
     ASSERT_EQ(assets_b.size(), 1U);
-    ASSERT_EQ(
-      static_cast<AssetType>(assets_a.front().asset_type), AssetType::kScript);
-    ASSERT_EQ(
-      static_cast<AssetType>(assets_b.front().asset_type), AssetType::kScript);
+    ASSERT_EQ(assets_a.front().type, AssetType::kScript);
+    ASSERT_EQ(assets_b.front().type, AssetType::kScript);
     EXPECT_EQ(assets_a.front().key, assets_b.front().key);
 
     const auto descriptor_a = ReadBytes(cooked_root_a / "stable.oscript");

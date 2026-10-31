@@ -11,7 +11,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
+#include <map>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -25,18 +25,21 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/test/Fixtures/LooseCookedTestWriter.h>
-#include <Oxygen/Content/test/Fixtures/PakTestWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/test/Support/MemoryFileSystem.h>
+#include <Oxygen/Cooker/testing/CookedBytes.h>
+#include <Oxygen/Cooker/testing/CookedPak.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MemoryFileSystem.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -63,11 +66,13 @@ using oxygen::content::import::MountTableOwner;
 using oxygen::content::import::MountTableRequest;
 using oxygen::content::import::ParseMountKind;
 using oxygen::content::import::ResolveMountTable;
-using oxygen::content::testing::LooseCookedTestWriter;
-using oxygen::content::testing::PakTestWriter;
 using oxygen::cooker::test::DiagnosticSummary;
 using oxygen::cooker::test::HasDiagnosticCode;
-using oxygen::cooker::test::MemoryFileSystem;
+using oxygen::cooker::testing::CookedBytes;
+using oxygen::cooker::testing::CookedPak;
+using oxygen::cooker::testing::LooseCookedFiles;
+using oxygen::cooker::testing::LooseCookedRoot;
+using oxygen::cooker::testing::MemoryFileSystem;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 
@@ -149,6 +154,22 @@ protected:
   static auto Canonical(const fs::path& path) -> fs::path
   {
     return path.lexically_normal();
+  }
+
+  //! The files of a loose cooked root of `mount` that holds no asset.
+  [[nodiscard]] static auto EmptyLooseFiles(std::string mount)
+    -> LooseCookedFiles
+  {
+    return LooseCookedRoot { std::move(mount) }.Files();
+  }
+
+  //! A valid pak of `mount`.
+  [[nodiscard]] static auto PakBytesOf(std::string mount)
+    -> std::vector<std::byte>
+  {
+    auto library = LooseCookedRoot { std::move(mount) };
+    library.Material("Content.omat");
+    return CookedPak { std::move(library) }.Encode();
   }
 
   MemoryFileSystem files_;
@@ -402,13 +423,9 @@ NOLINT_TEST_F(SourceMountsTest, DotFolderOutsideTheProjectIsAllowed)
 //! Loose cooked roots and paks live in output folders by design.
 NOLINT_TEST_F(SourceMountsTest, CookedMountsMayLiveInOutput)
 {
-  auto writer = LooseCookedTestWriter {};
-  static_cast<void>(writer.Finish());
-  files_.AddFiles(Project() / ".cooked" / "Content", writer.Files());
-  auto pak = PakTestWriter::Config {};
-  pak.library = "Pak";
-  files_.AddFile(
-    Project() / ".build" / "content.pak", PakTestWriter::Encode(pak));
+  files_.AddFiles(
+    Project() / ".cooked" / "Content", EmptyLooseFiles("Content"));
+  files_.AddFile(Project() / ".build" / "content.pak", PakBytesOf("Pak"));
 
   const auto table = ResolveMountTable(Request({
     MountDeclaration {
@@ -433,9 +450,8 @@ NOLINT_TEST_F(SourceMountsTest, CookedMountsMayLiveInOutput)
 NOLINT_TEST_F(SourceMountsTest, RoleFollowsTheProjectRoot)
 {
   MakeFolder(Workspace() / "Shared");
-  auto writer = LooseCookedTestWriter {};
-  static_cast<void>(writer.Finish());
-  files_.AddFiles(Project() / ".cooked" / "Content", writer.Files());
+  files_.AddFiles(
+    Project() / ".cooked" / "Content", EmptyLooseFiles("Content"));
 
   const auto table = ResolveMountTable(Request({
     Declared("Content", "Content"),
@@ -453,17 +469,17 @@ NOLINT_TEST_F(SourceMountsTest, RoleFollowsTheProjectRoot)
   EXPECT_EQ(table.Find("Cooked")->role, MountRole::kShared);
 }
 
-//! An `Invalid` library keeps its finding, also in the table's diagnostics,
-//! and stays in the table as a warning.
-NOLINT_TEST_F(SourceMountsTest, InvalidLibraryKeepsItsFinding)
+//! An `Invalid` cooked mount keeps its finding, also in the table's
+//! diagnostics, and stays in the table as a warning.
+NOLINT_TEST_F(SourceMountsTest, InvalidCookedMountKeepsItsFinding)
 {
-  MakeFolder(Workspace() / "NotALibrary");
+  MakeFolder(Workspace() / "NotCooked");
 
   const auto table = ResolveMountTable(Request({
     MountDeclaration {
       .name = "Props",
       .kind = MountKind::kCooked,
-      .path = "../NotALibrary",
+      .path = "../NotCooked",
     },
   }));
 
@@ -472,10 +488,10 @@ NOLINT_TEST_F(SourceMountsTest, InvalidLibraryKeepsItsFinding)
   ASSERT_TRUE(mount);
   EXPECT_EQ(mount->state, MountState::kInvalid);
   ASSERT_EQ(mount->findings.size(), 1U);
-  EXPECT_EQ(mount->findings.front().code, codes::kLibraryFormatUnsupported.id);
+  EXPECT_EQ(mount->findings.front().code, codes::kCookedFormatUnsupported.id);
   EXPECT_EQ(mount->findings.front().object_name, "Props");
   EXPECT_TRUE(
-    HasDiagnosticCode(table.diagnostics, codes::kLibraryFormatUnsupported.id));
+    HasDiagnosticCode(table.diagnostics, codes::kCookedFormatUnsupported.id));
 }
 
 // -- Path kind, missing and unbound ------------------------------------------
@@ -941,25 +957,72 @@ protected:
     return *parsed;
   }
 
-  //! Adds a material under `root`, and a script with an external source when
-  //! `external_script`.
-  static auto AddRoot(LooseCookedTestWriter& writer, const std::string& root,
-    const bool external_script) -> void
+  //! An asset of a loose cooked source, by virtual path.
+  struct LooseEntry final {
+    std::string path;
+    AssetType type = AssetType::kUnknown;
+    std::vector<std::byte> descriptor;
+  };
+
+  //! The descriptor of an asset of `type` that a case names.
+  static auto DescriptorOf(const AssetType type) -> std::vector<std::byte>
   {
-    const auto material = "/" + root + "/Materials/Red.omat";
-    writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(material),
-      AssetType::kMaterial, material, material.substr(1),
-      std::vector<std::byte>(8));
-    if (!external_script) {
-      return;
+    switch (type) {
+    case AssetType::kMaterial:
+      return oxygen::cooker::testing::MaterialDescriptor("Case").bytes;
+    case AssetType::kGeometry:
+      return oxygen::cooker::testing::GeometryDescriptor("Case").bytes;
+    default:
+      throw std::invalid_argument("a case holds only materials and geometries");
     }
-    auto desc = oxygen::data::pak::scripting::ScriptAssetDesc {};
-    desc.external_source_path_offset = 1U;
-    auto bytes = std::vector<std::byte>(sizeof(desc));
-    std::memcpy(bytes.data(), &desc, sizeof(desc));
-    const auto script = "/" + root + "/Scripts/Spin.oscript";
-    writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(script),
-      AssetType::kScript, script, script.substr(1), bytes);
+  }
+
+  //! The entries of a loose source of `roots`: a material under each, and a
+  //! script with an external source under the first when `external_script`.
+  static auto RootEntries(const json& roots, bool external_script)
+    -> std::vector<LooseEntry>
+  {
+    auto entries = std::vector<LooseEntry> {};
+    for (const auto& root : roots) {
+      const auto mount = root.get<std::string>();
+      entries.push_back({
+        .path = "/" + mount + "/Materials/Red.omat",
+        .type = AssetType::kMaterial,
+        .descriptor = DescriptorOf(AssetType::kMaterial),
+      });
+      if (external_script) {
+        auto desc = oxygen::data::pak::scripting::ScriptAssetDesc {};
+        desc.external_source_path_offset = 1U;
+        auto bytes = std::vector<std::byte>(sizeof(desc));
+        std::memcpy(bytes.data(), &desc, sizeof(desc));
+        entries.push_back({
+          .path = "/" + mount + "/Scripts/Spin.oscript",
+          .type = AssetType::kScript,
+          .descriptor = std::move(bytes),
+        });
+        external_script = false;
+      }
+    }
+    return entries;
+  }
+
+  //! The files of a loose cooked root that holds `entries`, which may lie in
+  //! several mounts.
+  static auto LooseFilesOf(const std::vector<LooseEntry>& entries)
+    -> LooseCookedFiles
+  {
+    auto root = oxygen::cooker::testing::LooseCookedRoot {};
+    for (const auto& entry : entries) {
+      // `/Mount/leaf`: every entry names its own mount.
+      const auto separator = entry.path.find('/', 1);
+      static_cast<void>(root.Add({
+        .type = entry.type,
+        .leaf = entry.path.substr(separator + 1),
+        .mount = entry.path.substr(1, separator - 1),
+        .descriptor = entry.descriptor,
+      }));
+    }
+    return root.Files();
   }
 
   //! The asset type a case names, such as `Material`.
@@ -974,45 +1037,87 @@ protected:
     throw std::invalid_argument("unknown asset type in a case");
   }
 
-  //! Builds the pak a recipe names: its library, its assets and what it
-  //! requires of other libraries.
+  //! The leaf of the virtual path `path` below its mount `mount`.
+  static auto LeafOf(const std::string& path, const std::string& mount)
+    -> std::string
+  {
+    return path.substr(mount.size() + 2U);
+  }
+
+  //! The pak of a dependency mount that holds each asset a recipe requires of
+  //! it, so the pak under test derives its requirements from the product.
+  static auto DependencyOf(const std::string& mount, const json& requirements)
+    -> CookedPak
+  {
+    auto library = LooseCookedRoot { mount };
+    for (const auto& required : requirements) {
+      if (required.at("mount").get<std::string>() != mount) {
+        continue;
+      }
+      const auto type = ParseAssetType(required.at("type").get<std::string>());
+      library.Add({
+        .type = type,
+        .leaf = LeafOf(required.at("path").get<std::string>(), mount),
+        .descriptor = DescriptorOf(type),
+      });
+    }
+    return CookedPak { std::move(library) };
+  }
+
+  //! Builds the pak a recipe names: its mount, its assets and what it
+  //! requires of other mounts.
+  /*!
+   The pak also holds `Content.omat`, which carries the references that
+   become its requirements; a pak holds at least one asset.
+  */
   static auto EncodePak(const json& recipe, const bool unsupported)
     -> std::vector<std::byte>
   {
-    auto config = PakTestWriter::Config {};
-    if (unsupported) {
-      ++config.header.version;
-    }
-    config.library = recipe.at("roots").at(0).get<std::string>();
+    const auto mount = recipe.at("roots").at(0).get<std::string>();
+    auto library = LooseCookedRoot { mount };
     for (const auto& asset : recipe.value("assets", json::array())) {
-      const auto path = asset.at("path").get<std::string>();
-      config.assets.push_back({
-        .key = AssetKey::FromVirtualPath(path),
-        .type = ParseAssetType(asset.at("type").get<std::string>()),
-        .virtual_path = path,
+      const auto type = ParseAssetType(asset.at("type").get<std::string>());
+      library.Add({
+        .type = type,
+        .leaf = LeafOf(asset.at("path").get<std::string>(), mount),
+        .descriptor = DescriptorOf(type),
       });
     }
-    for (const auto& required : recipe.value("requirements", json::array())) {
-      const auto library = required.at("library").get<std::string>();
-      auto dependency = std::ranges::find(config.dependencies, library,
-        &oxygen::data::PakCatalogDependency::library);
-      if (dependency == config.dependencies.end()) {
-        config.dependencies.push_back(
-          { .library = library, .requirements = {} });
-        dependency = std::prev(config.dependencies.end());
-      }
-      dependency->requirements.push_back({
-        .kind = oxygen::data::KeyReferenceKind::kAsset,
+    const auto requirements = recipe.value("requirements", json::array());
+    auto required_mounts = std::set<std::string> {};
+    auto required_keys = std::vector<oxygen::data::KeyReference> {};
+    for (const auto& required : requirements) {
+      required_mounts.insert(required.at("mount").get<std::string>());
+      required_keys.push_back({
         .key
         = AssetKey::FromVirtualPath(required.at("path").get<std::string>()),
-        .type = ParseAssetType(required.at("type").get<std::string>()),
+        .kind = oxygen::data::KeyReferenceKind::kAsset,
+        .expected_type = ParseAssetType(required.at("type").get<std::string>()),
       });
     }
-    return PakTestWriter::Encode(config);
+    library.Add({
+      .type = AssetType::kMaterial,
+      .leaf = "Content.omat",
+      .descriptor = DescriptorOf(AssetType::kMaterial),
+      .references
+      = oxygen::data::AssetReferences::Create({}, std::move(required_keys))
+        .value(),
+    });
+    auto pak = CookedPak { std::move(library) };
+    for (const auto& required_mount : required_mounts) {
+      pak.DependsOn(DependencyOf(required_mount, requirements));
+    }
+    auto bytes = pak.Encode();
+    if (unsupported) {
+      CookedBytes::SetPakVersion(bytes,
+        static_cast<uint16_t>(
+          oxygen::data::pak::core::kCurrentPakFormatVersion + 1U));
+    }
+    return bytes;
   }
 
-  //! Builds the library a recipe names with the fixture writers.
-  static auto AddLibrary(
+  //! Builds the cooked source a recipe names with the kit.
+  static auto AddCookedSource(
     MemoryFileSystem& files, const fs::path& temp, const json& recipe) -> void
   {
     const auto path = temp / recipe.at("path").get<std::string>();
@@ -1021,23 +1126,22 @@ protected:
       files.AddFile(path, EncodePak(recipe, unsupported));
       return;
     }
-    auto writer = LooseCookedTestWriter {};
-    if (unsupported) {
-      writer.SetIndexVersion(oxygen::data::loose_cooked::kIndexVersion + 1);
-    }
-    auto external_script = recipe.value("external_script", false);
-    for (const auto& root : recipe.value("roots", json::array())) {
-      AddRoot(writer, root.get<std::string>(), external_script);
-      external_script = false;
-    }
+    auto entries = RootEntries(recipe.value("roots", json::array()),
+      recipe.value("external_script", false));
     for (const auto& asset : recipe.value("assets", json::array())) {
-      const auto asset_path = asset.at("path").get<std::string>();
-      writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(asset_path),
-        ParseAssetType(asset.at("type").get<std::string>()), asset_path,
-        asset_path.substr(1), std::vector<std::byte>(8));
+      const auto type = ParseAssetType(asset.at("type").get<std::string>());
+      entries.push_back({
+        .path = asset.at("path").get<std::string>(),
+        .type = type,
+        .descriptor = DescriptorOf(type),
+      });
     }
-    static_cast<void>(writer.Finish());
-    files.AddFiles(path, writer.Files());
+    auto loose = LooseFilesOf(entries);
+    if (unsupported) {
+      CookedBytes::SetIndexVersion(loose,
+        static_cast<uint16_t>(oxygen::data::loose_cooked::kIndexVersion + 1U));
+    }
+    files.AddFiles(path, loose);
   }
 };
 
@@ -1057,8 +1161,9 @@ NOLINT_TEST_F(MountTableCasesTest, TablesFollowTheCaseTable)
     for (const auto& file : test_case.value("files", json::array())) {
       files.AddFile(temp / file.get<std::string>(), "x");
     }
-    for (const auto& recipe : test_case.value("libraries", json::array())) {
-      AddLibrary(files, temp, recipe);
+    for (const auto& recipe :
+      test_case.value("cooked_sources", json::array())) {
+      AddCookedSource(files, temp, recipe);
     }
     for (const auto& [dir, doc] :
       test_case.value("mounts_files", json::object()).items()) {

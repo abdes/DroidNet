@@ -33,6 +33,8 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
@@ -42,7 +44,6 @@
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -197,19 +198,17 @@ auto ContentVm::Update() -> void
 
     if (report->success) {
       // Logic to extract scenes from the newly imported content
-      const auto layout = settings_->GetDefaultLayout();
-      const auto index_path
-        = report->cooked_root / std::filesystem::path(layout.index_file_name);
+      const auto index_path = report->cooked_root / "container.index.bin";
 
       try {
         LOG_F(INFO, "ContentVm: Inspecting imported index: '{}'",
           index_path.string());
-        content::lc::Inspection inspection;
-        inspection.LoadFromFile(index_path);
+        const auto inspection = content::cooked::CookedContent::Open(
+          content::cooked::RealCookerStorage(), report->cooked_root);
 
         int scene_count = 0;
         std::vector<SceneEntry> imported_scenes;
-        std::unordered_map<std::string, SceneEntry> scene_by_descriptor;
+        std::unordered_map<std::string, SceneEntry> scene_by_virtual_path;
         const SceneSource source {
           .kind = SceneSourceKind::kLooseIndex,
           .path = index_path,
@@ -234,8 +233,7 @@ auto ContentVm::Update() -> void
             std::erase(loaded_indices_, previous_index);
           }
           for (const auto& asset : inspection.Assets()) {
-            if (asset.asset_type
-              == static_cast<uint8_t>(data::AssetType::kScene)) {
+            if (asset.type == data::AssetType::kScene) {
               const SceneEntry entry {
                 .name = asset.virtual_path,
                 .key = asset.key,
@@ -243,7 +241,7 @@ auto ContentVm::Update() -> void
               };
               scenes_map_[MakeSceneEntryKey(entry)] = entry;
               scene_count++;
-              scene_by_descriptor.emplace(asset.descriptor_relpath, entry);
+              scene_by_virtual_path.emplace(asset.virtual_path, entry);
             }
           }
 
@@ -271,9 +269,9 @@ auto ContentVm::Update() -> void
 
         if (settings_->GetExplorerSettings().auto_load_on_import
           && scene_count > 0) {
-          for (const auto& output : report->outputs) {
-            const auto it = scene_by_descriptor.find(output.path);
-            if (it != scene_by_descriptor.end()) {
+          for (const auto& product : report->products) {
+            const auto it = scene_by_virtual_path.find(product.virtual_path);
+            if (it != scene_by_virtual_path.end()) {
               imported_scenes.push_back(it->second);
             }
           }
@@ -1294,16 +1292,6 @@ auto ContentVm::RestartImportService() -> void
   }
   import_service_
     = std::make_unique<content::import::AsyncImportService>(service_config_);
-}
-
-auto ContentVm::GetLayout() const -> content::import::LooseCookedLayout
-{
-  return settings_->GetDefaultLayout();
-}
-auto ContentVm::SetLayout(const content::import::LooseCookedLayout& layout)
-  -> void
-{
-  settings_->SetDefaultLayout(layout);
 }
 
 auto ContentVm::AddDiagnosticMarker(const std::string& label, bool is_start)

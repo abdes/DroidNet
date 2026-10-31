@@ -43,7 +43,7 @@ auto LooseCookedIndexImpl::GetFileInventory() const
     + auxiliary_files_.size() + texture_descriptors_.size());
   // A string in the storage runs from its offset to its NUL terminator.
   const auto string_at = [this](const uint32_t offset) -> std::string {
-    const auto rest = std::string_view(string_storage_).substr(offset);
+    const auto rest = string_table_.substr(offset);
     return std::string(rest.substr(0, rest.find('\0')));
   };
   for (const auto& [key, asset] : key_to_asset_info_) {
@@ -124,7 +124,7 @@ auto LooseCookedIndexImpl::CheckContent(
       remaining.erase(relative);
       continue;
     }
-    if (relative == "container.index.bin"
+    if (relative == oxygen::data::loose_cooked::kIndexFileName
       || relative == data::loose_cooked::kGenerationLeaseFileName) {
       continue;
     }

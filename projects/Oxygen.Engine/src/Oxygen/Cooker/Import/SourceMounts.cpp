@@ -8,9 +8,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <functional>
-#include <ios>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -28,17 +27,21 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
-#include <Oxygen/Cooker/Loose/LibraryFacts.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Serio/AnyDevice.h>
 
 namespace oxygen::content::import {
 
@@ -221,43 +224,19 @@ namespace {
     return out;
   }
 
+  //! The real file system, with the canonical spelling of its paths.
   class RealFileSystem final : public IMountFileSystem {
   public:
     [[nodiscard]] auto KindOf(const fs::path& path) const
-      -> lc::PathKind override
+      -> cooked::PathKind override
     {
-      auto ec = std::error_code {};
-      const auto status = fs::status(path, ec);
-      if (fs::is_directory(status)) {
-        return lc::PathKind::kFolder;
-      }
-      return fs::exists(status) ? lc::PathKind::kFile : lc::PathKind::kNone;
+      return cooked::RealCookerStorage().KindOf(path);
     }
 
-    [[nodiscard]] auto SizeOf(const fs::path& path) const
-      -> std::optional<uint64_t> override
+    [[nodiscard]] auto Open(const fs::path& path) const
+      -> Result<serio::AnyDevice> override
     {
-      auto ec = std::error_code {};
-      const auto size = fs::file_size(path, ec);
-      return ec ? std::nullopt : std::optional { uint64_t { size } };
-    }
-
-    [[nodiscard]] auto Read(
-      const fs::path& path, const lc::ByteRange range) const
-      -> std::optional<std::vector<std::byte>> override
-    {
-      auto stream = std::ifstream { path, std::ios::binary };
-      if (!stream.seekg(static_cast<std::streamoff>(range.offset))) {
-        return std::nullopt;
-      }
-      auto bytes = std::vector<std::byte>(static_cast<size_t>(range.size));
-      // NOLINTNEXTLINE(*-reinterpret-cast): istream reads into chars.
-      stream.read(reinterpret_cast<char*>(bytes.data()),
-        static_cast<std::streamsize>(range.size));
-      if (stream.gcount() != static_cast<std::streamsize>(range.size)) {
-        return std::nullopt;
-      }
-      return bytes;
+      return cooked::RealCookerStorage().Open(path);
     }
 
     [[nodiscard]] auto Canonical(const fs::path& path) const
@@ -273,11 +252,8 @@ namespace {
   auto ReadText(const IMountFileSystem& files, const fs::path& path)
     -> std::optional<std::string>
   {
-    const auto size = files.SizeOf(path);
-    const auto bytes = size.has_value()
-      ? files.Read(path, { .offset = 0, .size = *size })
-      : std::optional<std::vector<std::byte>> {};
-    if (!bytes.has_value()) {
+    const auto bytes = cooked::ReadWholeFile(files, path);
+    if (!bytes) {
       return std::nullopt;
     }
     auto text = std::string(bytes->size(), '\0');
@@ -502,7 +478,7 @@ namespace {
       const auto option = request.mounts_option->is_absolute()
         ? *request.mounts_option
         : request.working_directory / *request.mounts_option;
-      if (file_system.KindOf(option) != lc::PathKind::kFile) {
+      if (file_system.KindOf(option) != cooked::PathKind::kFile) {
         reporter.Report(mount_codes::kFileInvalid,
           Subject { .file = option, .field = {}, .mount = {} },
           "the file named by --mounts does not exist");
@@ -530,7 +506,7 @@ namespace {
     auto level = MountsFileLevel::kProject;
     while (true) {
       const auto candidate = dir / kMountsFileName;
-      if (file_system.KindOf(candidate) != lc::PathKind::kFile) {
+      if (file_system.KindOf(candidate) != cooked::PathKind::kFile) {
         DLOG_F(1, "no {} file in '{}'", level, dir.string());
       } else if (read(MountsFile {
                    .file = candidate,
@@ -785,49 +761,52 @@ namespace {
       };
 
       const auto kind = Files().KindOf(mount.folder);
-      if (kind == lc::PathKind::kNone) {
+      if (kind == cooked::PathKind::kNone) {
         mount.state = MountState::kMissing;
         reporter_.Report(mount_codes::kFolderMissing, subject, mount.name,
           mount.folder.string());
         return;
       }
       mount.state = MountState::kBound;
-      if (mount.kind == MountKind::kSource && kind == lc::PathKind::kFile) {
+      if (mount.kind == MountKind::kSource && kind == cooked::PathKind::kFile) {
         reporter_.Report(
           mount_codes::kPathKind, subject, mount.name, mount.folder.string());
       }
       if (mount.kind == MountKind::kCooked) {
-        CheckLibrary(mount, subject);
+        CheckCookedSource(mount, subject);
       }
     }
 
-    //! Reads a bound `Cooked` mount as a library; a library rule it breaks
-    //! makes it `Invalid`.
-    auto CheckLibrary(Mount& mount, const Subject& subject) -> void
+    //! Reads the summary of a bound `Cooked` mount's cooked source; a mount
+    //! rule it breaks makes it `Invalid`.
+    auto CheckCookedSource(Mount& mount, const Subject& subject) -> void
     {
-      auto facts = lc::ReadLibraryFacts(Files(), mount.folder);
       const auto folder = mount.folder.string();
       const auto findings = Reporter { mount.findings };
-      if (facts.unreadable.has_value()) {
-        findings.Report(mount_codes::kLibraryFormatUnsupported, subject,
-          mount.name, folder, facts.unreadable->what());
+      auto summary = cooked::CookedSummary {};
+      try {
+        summary = cooked::ReadCookedSummary(Files(), mount.folder);
+      } catch (const data::CookedOpenError& error) {
+        findings.Report(mount_codes::kCookedFormatUnsupported, subject,
+          mount.name, folder, error.what());
       }
-      if (facts.roots.size() > 1) {
-        findings.Report(mount_codes::kLibraryRootMultiple, subject, mount.name,
-          folder, fmt::format("'{}'", fmt::join(facts.roots, "', '")));
-      } else if (facts.roots.size() == 1 && facts.roots.front() != mount.name) {
-        findings.Report(mount_codes::kLibraryRootMismatch, subject, mount.name,
-          folder, facts.roots.front());
+      if (summary.mounts.size() > 1) {
+        findings.Report(mount_codes::kCookedRootMultiple, subject, mount.name,
+          folder, fmt::format("'{}'", fmt::join(summary.mounts, "', '")));
+      } else if (summary.mounts.size() == 1
+        && summary.mounts.front() != mount.name) {
+        findings.Report(mount_codes::kCookedRootMismatch, subject, mount.name,
+          folder, summary.mounts.front());
       }
-      for (const auto& script : facts.external_scripts) {
-        findings.Report(mount_codes::kLibraryExternalScript, subject,
-          mount.name, folder, script);
+      for (const auto& script : summary.external_scripts) {
+        findings.Report(mount_codes::kCookedExternalScript, subject, mount.name,
+          folder, script);
       }
-      for (const auto& dependency : facts.requirements) {
+      for (const auto& dependency : summary.requirements) {
         for (const auto& requirement : dependency.requirements) {
-          if (!IsProvidedBelow(dependency.library, requirement)) {
-            findings.Report(mount_codes::kLibraryDependencyMissing, subject,
-              mount.name, folder, Describe(requirement), dependency.library);
+          if (!IsProvidedBelow(dependency.mount, requirement)) {
+            findings.Report(mount_codes::kCookedDependencyMissing, subject,
+              mount.name, folder, Describe(requirement), dependency.mount);
           }
         }
       }
@@ -837,29 +816,29 @@ namespace {
           mount.findings.begin(), mount.findings.end());
         return;
       }
-      libraries_.emplace_back(mount.name, std::move(facts));
+      cooked_sources_.emplace_back(mount.name, std::move(summary));
     }
 
-    //! True when the newest valid library bound before this one that holds
-    //! `requirement` is `library` and holds it with the required type, as the
-    //! runtime checks the stack it mounts.
-    [[nodiscard]] auto IsProvidedBelow(const std::string_view library,
+    //! True when the newest valid cooked source bound before this one that
+    //! holds `requirement` is the mount `required_mount` and holds it with the
+    //! required type, as the runtime checks the stack it mounts.
+    [[nodiscard]] auto IsProvidedBelow(const std::string_view required_mount,
       const data::PakRequirement& requirement) const -> bool
     {
       const auto texture = requirement.kind == data::KeyReferenceKind::kTexture;
-      for (const auto& [name, facts] : std::views::reverse(libraries_)) {
+      for (const auto& [name, summary] : std::views::reverse(cooked_sources_)) {
         if (texture) {
-          if (facts.textures.contains(requirement.key)) {
-            return name == library;
+          if (summary.textures.contains(requirement.key)) {
+            return name == required_mount;
           }
           continue;
         }
-        if (facts.deleted.contains(requirement.key)) {
+        if (summary.deleted.contains(requirement.key)) {
           return false;
         }
-        if (const auto found = facts.assets.find(requirement.key);
-          found != facts.assets.end()) {
-          return name == library && found->second == requirement.type;
+        if (const auto found = summary.assets.find(requirement.key);
+          found != summary.assets.end()) {
+          return name == required_mount && found->second == requirement.type;
         }
       }
       return false;
@@ -884,7 +863,7 @@ namespace {
         return false;
       }
       return mount.kind == MountKind::kSource
-        || Files().KindOf(mount.folder) == lc::PathKind::kFolder;
+        || Files().KindOf(mount.folder) == cooked::PathKind::kFolder;
     }
 
     auto CheckFolders() -> void
@@ -934,8 +913,9 @@ namespace {
     Reporter reporter_;
     std::vector<Entry> entries_;
     std::unordered_map<std::string, size_t> by_name_;
-    //! The valid libraries bound so far, lowest first, with their facts.
-    std::vector<std::pair<std::string, lc::LibraryFacts>> libraries_;
+    //! The valid cooked sources bound so far, lowest first, with their
+    //! summaries.
+    std::vector<std::pair<std::string, cooked::CookedSummary>> cooked_sources_;
   };
 
   //! What a mounts file did to a declared mount: replaced its committed path

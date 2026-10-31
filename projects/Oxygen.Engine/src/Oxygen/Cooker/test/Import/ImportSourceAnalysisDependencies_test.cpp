@@ -95,8 +95,10 @@ NOLINT_TEST(ImportSourceAnalysisDependenciesTest, InputActionRule)
 NOLINT_TEST(ImportSourceAnalysisDependenciesTest, LocalBuffersMatchResolved)
 {
   const auto anchor = std::string("/Content/Geometry/Ship.ogeo");
-  const auto local
-    = std::vector<std::string> { "Ship.vb.obuf", "Ship.ib.obuf" };
+  const auto local = std::vector<std::string> {
+    "/Content/Geometry/Ship.vb.obuf",
+    "/Content/Geometry/Ship.ib.obuf",
+  };
   const auto references = std::vector<ImportDependencyText> {
     Text("./Ship.vb.obuf", ImportDependencyKind::kBuffer, "vb"),
     Text("../Geometry/Ship.ib.obuf", ImportDependencyKind::kBuffer, "ib"),
@@ -116,7 +118,8 @@ NOLINT_TEST(ImportSourceAnalysisDependenciesTest, LocalBuffersMatchResolved)
 //! local buffer's.
 NOLINT_TEST(ImportSourceAnalysisDependenciesTest, SameNameElsewhereIsExternal)
 {
-  const auto local = std::vector<std::string> { "Ship.vb.obuf" };
+  const auto local
+    = std::vector<std::string> { "/Content/Geometry/Ship.vb.obuf" };
   const auto references = std::vector<ImportDependencyText> {
     Text("../Other/Ship.vb.obuf", ImportDependencyKind::kBuffer),
   };

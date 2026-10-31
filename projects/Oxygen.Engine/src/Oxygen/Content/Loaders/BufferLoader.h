@@ -57,21 +57,7 @@ inline auto LoadBufferResource(LoaderContext context)
   LOG_F(2, "usage flags    : {}", nostd::to_string(flags).c_str());
   LOG_F(2, "element stride : {}", desc.element_stride);
 
-  std::vector<uint8_t> data_buffer(desc.size_bytes);
-  if (desc.size_bytes > 0) {
-    constexpr std::size_t buf_index
-      = IndexOf<data::BufferResource, ResourceTypeList>::value;
-    DCHECK_NOTNULL_F(std::get<buf_index>(context.data_readers),
-      "expecting data reader for BufferResource to be valid");
-    auto& data_reader = *std::get<buf_index>(context.data_readers);
-
-    check_result(data_reader.Seek(desc.data_offset), "Buffer Data");
-    // Create a span of std::byte over the same memory
-    std::span<std::byte> byte_view(
-      reinterpret_cast<std::byte*>(data_buffer.data()), data_buffer.size());
-    auto data_result = data_reader.ReadBlobInto(byte_view);
-    check_result(data_result, "Buffer Data");
-  }
+  auto data_buffer = TakePayload(context, desc.size_bytes, "buffer resource");
 
   return std::make_unique<data::BufferResource>(desc, std::move(data_buffer));
 }

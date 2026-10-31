@@ -764,7 +764,7 @@ in resource closure/digests through the resource table's existing key inventory.
 External texture bindings name a texture key: a texture a source of the build
 holds joins the asset's closure and digest; otherwise a base or dependency pak
 must hold it (PakTool collects their texture keys from their browse indexes), a
-dependency's texture becomes a requirement of its library, or planning reports
+dependency's texture becomes a requirement of its mount, or planning reports
 `pak.plan.texture_reference_missing`. Logical references appear
 in inspection but do not force inclusion or ownership. The source's typed
 validation establishes descriptor/inventory agreement before publication;
@@ -786,9 +786,9 @@ field position remain unchanged. The catalog follows directory/browse metadata
 and precedes the footer. Missing catalogs require recooking, with no legacy
 path.
 
-`Data::PakCatalog` owns the pak's library, physical entries, deletions,
+`Data::PakCatalog` owns the pak's mount, physical entries, deletions,
 ordered base records `{SourceKey, content_version, catalog_digest}` and
-dependency records `{library, requirements}`. Its native codec and external
+dependency records `{mount, requirements}`. Its native codec and external
 JSON represent the same object. Readers validate the catalog digest, PAK
 identity, entry/directory agreement and non-overlapping bounded storage before
 mounting; this metadata check does not hash every resource payload. Packaging
@@ -818,21 +818,21 @@ assets and textures the output references without containing them: game content
 references the engine content pak's basic shapes and default material. The
 planner resolves references into dependencies, the newest first (the referenced
 asset's type is checked, nothing is copied), and records each one as a
-requirement of the dependency's library: `{kind, key, type}`, an asset with its
+requirement of the dependency's mount: `{kind, key, type}`, an asset with its
 type or a texture with none. Logical and keyed physics references never leave
-the pak. The catalog and manifest record the requirements by library, never the
-dependency pak's identity, so a rebuilt library that still provides them
-satisfies the pak. At mount time each requirement must resolve over the layers
-below the pak, loose roots included, to an entry of the required type under
-the required library, with deletions terminal; unlike bases, other layers may
-sit between, so Engine → Mod → Game accepts Game built against Engine. A full
-build takes dependencies and no bases; a patch may take both.
+the pak. The catalog and manifest record the requirements by mount, never the
+dependency pak's identity, so a rebuilt pak of that mount that still provides
+them satisfies the pak. At mount time each requirement must resolve over the
+layers below the pak, loose roots included, to an entry of the required type
+under the required mount, with deletions terminal; unlike bases, other layers
+may sit between, so Engine → Mod → Game accepts Game built against Engine. A
+full build takes dependencies and no bases; a patch may take both.
 
-Every pak is one library: the planner names it from the root of every virtual
+Every pak holds one mount: the planner names it from the root of every virtual
 path the pak lists (`pak.plan.root_multiple` for several,
-`pak.plan.root_missing` for none), a patch from its base's library too, and
-refuses a dependency of the same library (`pak.plan.dependency_library_conflict`)
-or two dependencies of one library (`pak.plan.dependency_library_repeated`).
+`pak.plan.root_missing` for none), a patch from its base's mount too, and
+refuses a dependency of the same mount (`pak.plan.dependency_mount_conflict`)
+or two dependencies of one mount (`pak.plan.dependency_mount_repeated`).
 Every pak embeds its browse index.
 
 This policy follows

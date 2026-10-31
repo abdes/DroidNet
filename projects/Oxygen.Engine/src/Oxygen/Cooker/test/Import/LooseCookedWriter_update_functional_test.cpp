@@ -12,34 +12,41 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include "LooseCookedWriterTestSupport.h"
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::testing {
-namespace fixtures = oxygen::content::test;
+namespace fixtures = oxygen::cooker::testing;
 
 namespace {
 
+  using oxygen::content::cooked::CookedAsset;
+  using oxygen::content::cooked::CookedContent;
   using oxygen::content::import::LooseCookedIdentityCollision;
   using oxygen::content::import::LooseCookedProducer;
   using oxygen::content::import::LooseCookedWriter;
-  using oxygen::content::lc::Inspection;
-  using oxygen::cooker::test::ScopedTempDir;
+  using oxygen::cooker::testing::MemoryFileSystem;
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::FileKind;
 
+  using oxygen::data::loose_cooked::kIndexFileName;
   constexpr std::string_view kRed = "/.cooked/Materials/Red.omat";
   constexpr std::string_view kRedSource = "/.cooked/Materials/Red.omat.json";
   constexpr std::string_view kOtherSource = "/.cooked/Other/Red.omat.json";
@@ -52,40 +59,46 @@ namespace {
   }
 
   //! The only asset of an index, copied out of its inspection.
-  auto Asset(const Inspection& inspection) -> Inspection::AssetEntry
+  auto Asset(const CookedContent& content) -> CookedAsset
   {
-    EXPECT_EQ(inspection.Assets().size(), 1U);
-    return inspection.Assets().front();
+    EXPECT_EQ(content.Assets().size(), 1U);
+    return content.Assets().front();
   }
 
-  auto Inspect(const std::filesystem::path& cooked_root) -> Inspection
+  auto Inspect(const MemoryFileSystem& storage,
+    const std::filesystem::path& cooked_root) -> CookedContent
   {
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-    return inspection;
+    return CookedContent::Open(storage, cooked_root);
+  }
+
+  //! A buffer table of `rows` rows, the size `Open` accepts.
+  auto BufferTable(const size_t rows) -> std::vector<std::byte>
+  {
+    return std::vector<std::byte>(
+      rows * cooked::CookedResourceTable::RowSize(cooked::TableKind::kBuffer));
   }
 
   //! Each entry records the source that produced it.
   NOLINT_TEST(LooseCookedWriterUpdateTest, IndexRecordsTheProducingSource)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "records_source";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "records_source";
     const auto bytes = Material();
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x11),
       AssetType::kMaterial, kRed, "Materials/Red.omat", bytes, {},
       FromSource(std::string(kRedSource)));
     (void)writer.Finish();
 
-    EXPECT_EQ(Asset(Inspect(cooked_root)).source_path, kRedSource);
+    EXPECT_EQ(Asset(Inspect(storage, cooked_root)).source_path, kRedSource);
   }
 
   //! A source cooking its asset again replaces its entry.
   NOLINT_TEST(LooseCookedWriterUpdateTest, ASourceRecookingItsAssetReplacesIt)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "recook";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "recook";
     const auto key = MakeFirstByteAssetKey(0x11);
     const auto first = fixtures::TexturedMaterialDescriptor("white",
       data::pak::core::kFallbackResourceIndex,
@@ -94,22 +107,26 @@ namespace {
       "error", data::pak::core::kErrorTextureResourceIndex);
 
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
         "Materials/Red.omat", first.bytes, first.references,
         FromSource(std::string(kRedSource)));
       (void)writer.Finish();
     }
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
         "Materials/Red2.omat", second.bytes, second.references,
         FromSource(std::string(kRedSource)));
       (void)writer.Finish();
     }
 
-    const auto asset = Asset(Inspect(cooked_root));
-    EXPECT_EQ(asset.descriptor_relpath, "Materials/Red2.omat");
+    const auto content = Inspect(storage, cooked_root);
+    const auto asset = Asset(content);
+    EXPECT_EQ(content.DescriptorStored(asset.key)
+                .file.lexically_relative(cooked_root)
+                .generic_string(),
+      "Materials/Red2.omat");
     EXPECT_EQ(asset.references, second.references);
     EXPECT_EQ(asset.descriptor_sha256, base::ComputeSha256(second.bytes));
   }
@@ -118,38 +135,38 @@ namespace {
   NOLINT_TEST(
     LooseCookedWriterUpdateTest, ASourceRecookingUnderAnotherKeyReplacesIt)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "recook_key";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "recook_key";
     const auto native_key = MakeFirstByteAssetKey(0x72);
     const auto bytes = Material();
 
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x71),
         AssetType::kMaterial, kRed, "Materials/Red.omat", bytes, {},
         FromSource(std::string(kRedSource)));
       (void)writer.Finish();
     }
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(native_key, AssetType::kMaterial, kRed,
         "Materials/Red.omat", bytes, {}, FromSource(std::string(kRedSource)));
       (void)writer.Finish();
     }
 
-    EXPECT_EQ(Asset(Inspect(cooked_root)).key, native_key);
+    EXPECT_EQ(Asset(Inspect(storage, cooked_root)).key, native_key);
   }
 
   //! Another source producing an identity is refused, in one cook or later.
   NOLINT_TEST(LooseCookedWriterUpdateTest, AnotherSourceOfAnIdentityIsRefused)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "other_source";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "other_source";
     const auto key = MakeFirstByteAssetKey(0x11);
     const auto bytes = Material();
 
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
         "Materials/Red.omat", bytes, {}, FromSource(std::string(kRedSource)));
       EXPECT_THROW(writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
@@ -159,12 +176,12 @@ namespace {
       (void)writer.Finish();
     }
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     EXPECT_THROW(
       writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
         "Materials/Red.omat", bytes, {}, FromSource(std::string(kOtherSource))),
       LooseCookedIdentityCollision);
-    EXPECT_EQ(Asset(Inspect(cooked_root)).source_path, kRedSource);
+    EXPECT_EQ(Asset(Inspect(storage, cooked_root)).source_path, kRedSource);
   }
 
   //! Identities differing only in case are one file on a case-insensitive file
@@ -172,19 +189,19 @@ namespace {
   NOLINT_TEST(
     LooseCookedWriterUpdateTest, AnIdentityDifferingOnlyInCaseIsRefused)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "case_only";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "case_only";
     const auto bytes = Material();
 
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x11),
         AssetType::kMaterial, kRed, "Materials/Red.omat", bytes, {},
         FromSource(std::string(kRedSource)));
       (void)writer.Finish();
     }
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     EXPECT_THROW(writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x12),
                    AssetType::kMaterial, "/.cooked/Materials/red.omat",
                    "Materials/red2.omat", bytes, {},
@@ -196,56 +213,56 @@ namespace {
   NOLINT_TEST(
     LooseCookedWriterUpdateTest, ARemovedSourcesIdentityIsFreeForAnother)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "removed_source";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "removed_source";
     const auto key = MakeFirstByteAssetKey(0x11);
     const auto bytes = Material();
 
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
         "Materials/Red.omat", bytes, {}, FromSource(std::string(kRedSource)));
       (void)writer.Finish();
     }
     {
-      LooseCookedWriter remover(cooked_root);
+      LooseCookedWriter remover(cooked_root, storage);
       remover.RemoveAssetDescriptor(kRed);
       (void)remover.Finish();
     }
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
         "Materials/Red.omat", bytes, {}, FromSource(std::string(kOtherSource)));
       (void)writer.Finish();
     }
 
-    EXPECT_EQ(Asset(Inspect(cooked_root)).source_path, kOtherSource);
+    EXPECT_EQ(Asset(Inspect(storage, cooked_root)).source_path, kOtherSource);
   }
 
   //! A sidecar completes an asset, which keeps its producer.
   NOLINT_TEST(LooseCookedWriterUpdateTest, ASidecarKeepsTheProducerOfItsTarget)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "sidecar";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "sidecar";
     const auto key = MakeFirstByteAssetKey(0x11);
     const auto bytes = Material();
 
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
         "Materials/Red.omat", bytes, {}, FromSource(std::string(kRedSource)));
       (void)writer.Finish();
     }
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
         "Materials/Red.omat", bytes, {},
         LooseCookedProducer { .source = {}, .completes = std::string(kRed) });
       (void)writer.Finish();
     }
 
-    EXPECT_EQ(Asset(Inspect(cooked_root)).source_path, kRedSource);
-    LooseCookedWriter writer(cooked_root);
+    EXPECT_EQ(Asset(Inspect(storage, cooked_root)).source_path, kRedSource);
+    LooseCookedWriter writer(cooked_root, storage);
     EXPECT_THROW(writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x12),
                    AssetType::kMaterial, "/.cooked/Materials/Blue.omat",
                    "Materials/Blue.omat", bytes, {},
@@ -258,78 +275,139 @@ namespace {
   //! kind is refused.
   NOLINT_TEST(LooseCookedWriterUpdateTest, AFileKindHasOnePath)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "file_kind";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "file_kind";
     const std::vector<std::byte> bytes0 = { std::byte { 0x01 } };
+    const auto table = BufferTable(1U);
     const std::vector<std::byte> bytes1
       = { std::byte { 0xAA }, std::byte { 0xBB } };
 
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteFile(
-        FileKind::kBuffersTable, "Resources/buffers.table", bytes0);
+        FileKind::kBuffersTable, "Resources/buffers.table", table);
       writer.WriteFile(
         FileKind::kBuffersData, "Resources/buffers.data", bytes0);
       (void)writer.Finish();
     }
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     writer.WriteFile(FileKind::kBuffersData, "Resources/buffers.data", bytes1);
     EXPECT_THROW(writer.WriteFile(
                    FileKind::kBuffersData, "Resources/buffers_v2.data", bytes1),
       std::runtime_error);
     (void)writer.Finish();
 
-    const auto inspection = Inspect(cooked_root);
-    const auto files = inspection.Files();
-    const auto data = std::ranges::find(
-      files, FileKind::kBuffersData, &Inspection::FileEntry::kind);
-    ASSERT_NE(data, files.end());
-    EXPECT_EQ(data->relpath, "Resources/buffers.data");
-    EXPECT_EQ(data->size, 2U);
+    const auto content = Inspect(storage, cooked_root);
+    const auto& data
+      = content.ResourceTable(data::ResourceKind::kBuffer).DataStored();
+    ASSERT_FALSE(data.file.empty());
+    EXPECT_EQ(data.file.lexically_relative(cooked_root).generic_string(),
+      "Resources/buffers.data");
+    EXPECT_EQ(data.range.count.get(), 2U);
   }
 
   NOLINT_TEST(
     LooseCookedWriterUpdateTest, FinishMergesNewAssetWithExistingAssets)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "merge_assets";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "merge_assets";
     const auto bytes = Material();
 
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x10),
         AssetType::kMaterial, "/.cooked/Materials/A.omat", "Materials/A.omat",
         bytes, {}, FromSource("/.cooked/Materials/A.omat.json"));
       (void)writer.Finish();
     }
     {
-      LooseCookedWriter writer(cooked_root);
+      LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x20),
         AssetType::kMaterial, "/.cooked/Materials/B.omat", "Materials/B.omat",
         bytes, {}, FromSource("/.cooked/Materials/B.omat.json"));
       (void)writer.Finish();
     }
 
-    EXPECT_EQ(Inspect(cooked_root).Assets().size(), 2U);
+    EXPECT_EQ(Inspect(storage, cooked_root).Assets().size(), 2U);
   }
 
   //! Every finalized descriptor has its exact content digest.
   NOLINT_TEST(LooseCookedWriterUpdateTest, FinishAlwaysEmitsDescriptorDigest)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "digest";
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "digest";
     const auto bytes = Material();
 
-    LooseCookedWriter writer(cooked_root);
+    LooseCookedWriter writer(cooked_root, storage);
     writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x33),
       AssetType::kMaterial, kRed, "Materials/Red.omat", bytes, {},
       FromSource(std::string(kRedSource)));
     (void)writer.Finish();
 
-    const auto asset = Asset(Inspect(cooked_root));
-    ASSERT_HAS_VALUE(asset.descriptor_sha256);
-    EXPECT_EQ(*asset.descriptor_sha256, oxygen::base::ComputeSha256(bytes));
+    const auto asset = Asset(Inspect(storage, cooked_root));
+    EXPECT_EQ(asset.descriptor_sha256, oxygen::base::ComputeSha256(bytes));
+  }
+
+  //! The published index is the encoding of what `Finish` reports, streamed
+  //! into a publication of the storage.
+  NOLINT_TEST(LooseCookedWriterUpdateTest, FinishPublishesTheEncodedIndex)
+  {
+    // Arrange
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "encoded";
+    const auto bytes = Material();
+    LooseCookedWriter writer(cooked_root, storage);
+    writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x44),
+      AssetType::kMaterial, kRed, "Materials/Red.omat", bytes, {},
+      FromSource(std::string(kRedSource)));
+
+    // Act
+    const auto result = writer.Finish();
+
+    // Assert
+    auto expected = serio::MemoryStream {};
+    auto encoder = serio::Writer(expected);
+    const auto encoded = data::loose_cooked::EncodeLooseCookedIndex(
+      {
+        .source_key = result.source_key,
+        .content_version = result.content_version,
+        .assets = result.assets,
+        .files = result.files,
+      },
+      encoder);
+    ASSERT_TRUE(encoded.has_value());
+    const auto published
+      = storage.Bytes(cooked_root / std::string(kIndexFileName));
+    EXPECT_TRUE(std::ranges::equal(published, expected.Data()));
+  }
+
+  //! An index that cannot be published fails `Finish` and leaves the
+  //! published index as it was.
+  NOLINT_TEST(LooseCookedWriterUpdateTest, FailedPublicationKeepsTheIndex)
+  {
+    // Arrange
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "unpublishable";
+    const auto index_path = cooked_root / std::string(kIndexFileName);
+    const auto bytes = Material();
+    {
+      LooseCookedWriter writer(cooked_root, storage);
+      writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x55),
+        AssetType::kMaterial, kRed, "Materials/Red.omat", bytes, {},
+        FromSource(std::string(kRedSource)));
+      (void)writer.Finish();
+    }
+    const auto before = std::vector<std::byte>(
+      storage.Bytes(index_path).begin(), storage.Bytes(index_path).end());
+    storage.FailPublishing(index_path);
+    LooseCookedWriter writer(cooked_root, storage);
+    writer.RemoveAssetDescriptor(kRed);
+
+    // Act & Assert
+    EXPECT_THROW((void)writer.Finish(), std::system_error);
+    EXPECT_TRUE(std::ranges::equal(storage.Bytes(index_path), before));
+    EXPECT_TRUE(Exists(storage, cooked_root / "Materials/Red.omat"));
   }
 
 } // namespace

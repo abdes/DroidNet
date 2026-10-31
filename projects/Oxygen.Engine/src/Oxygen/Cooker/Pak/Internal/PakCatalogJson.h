@@ -15,7 +15,7 @@
 namespace oxygen::content::pak::internal {
 
 //! The JSON of a catalog's dependencies, as the catalog sidecar and the patch
-//! manifest write them: by library, each requirement by kind and key.
+//! manifest write them: by mount, each requirement by kind and key.
 [[nodiscard]] auto ToJsonDependencies(
   std::span<const data::PakCatalogDependency> dependencies)
   -> nlohmann::ordered_json;

@@ -121,7 +121,8 @@ mount time.
 Loader functions decode cooked bytes into typed CPU objects. `LoaderContext`
 provides:
 
-- `desc_reader` and `data_readers` (decode inputs).
+- `desc_reader` (the descriptor) and, for a resource, `payload` (its
+  payload, already read within the payload budget).
 - `work_offline` (policy signal: no GPU side effects).
 - `current_asset_key` (for identity-only dependency recording).
 - `source_instance` and optional `dependency_collector`.

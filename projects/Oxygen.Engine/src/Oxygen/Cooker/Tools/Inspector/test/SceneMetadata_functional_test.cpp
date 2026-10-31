@@ -26,11 +26,14 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Cooker/Loose/Validation.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/SceneMetadata.h>
-#include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
@@ -46,6 +49,7 @@
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/test/Fixtures/SceneAssetBuilder.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -61,32 +65,38 @@ auto RunSceneMetadataReport(const SceneMetadataOptions& options) -> int
   });
 }
 
-using oxygen::content::lc::ValidateRoot;
+//! Throws when the loose cooked root `root` is not one the runtime loads.
+auto ValidateRoot(const std::filesystem::path& root) -> void
+{
+  using namespace oxygen::content::cooked;
+  Validate(CookedContent::Open(RealCookerStorage(), root));
+}
+
+using oxygen::cooker::testing::LooseAsset;
+using oxygen::cooker::testing::LooseCookedRoot;
+using oxygen::cooker::testing::Materialize;
 using oxygen::data::ComponentType;
 using oxygen::data::schema::OverrideId;
 using oxygen::data::schema::SchemaValue;
 using oxygen::data::testing::SceneAssetBuilder;
 
+//! The library every inspected root is written from: the `Content` root.
+auto ContentRoot() -> LooseCookedRoot { return LooseCookedRoot { "Content" }; }
+
 //! Writes a one-descriptor root without the cooker's descriptor validation, so
 //! fixtures can also hold the retired or malformed descriptors the inspector
 //! must reject.
 auto WriteDescriptorRoot(const std::filesystem::path& root,
-  const std::string_view virtual_path, const oxygen::data::AssetType type,
-  const std::string_view relpath, std::vector<std::byte> bytes) -> void
+  const std::string_view leaf, const oxygen::data::AssetType type,
+  std::vector<std::byte> bytes) -> void
 {
-  const auto assets = std::array {
-    oxygen::content::pak::test::AssetSpec {
-      .key = oxygen::data::AssetKey::FromVirtualPath(virtual_path),
-      .asset_type = type,
-      .descriptor_relpath = std::string(relpath),
-      .virtual_path = std::string(virtual_path),
-      .descriptor_size = bytes.size(),
-      .descriptor_payload = std::move(bytes),
-    },
-  };
-  if (!oxygen::content::pak::test::WriteLooseIndex(root, assets, {}, 1U)) {
-    throw std::runtime_error("Could not write the inspection root");
-  }
+  auto library = ContentRoot();
+  library.Add({
+    .type = type,
+    .leaf = std::string(leaf),
+    .descriptor = std::move(bytes),
+  });
+  Materialize(library.Files(), root);
 }
 
 struct SceneFixture {
@@ -131,9 +141,8 @@ auto WriteSceneRoot(
                 .data(),
     &environment, sizeof(environment));
 
-  WriteDescriptorRoot(root, "/Content/Scenes/Inspection.oscene",
-    oxygen::data::AssetType::kScene, "Scenes/Inspection.oscene",
-    std::move(bytes));
+  WriteDescriptorRoot(root, "Scenes/Inspection.oscene",
+    oxygen::data::AssetType::kScene, std::move(bytes));
 }
 
 auto WriteMaterialRoot(const std::filesystem::path& root, const uint8_t version)
@@ -143,8 +152,8 @@ auto WriteMaterialRoot(const std::filesystem::path& root, const uint8_t version)
   descriptor.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
   descriptor.header.version = version;
-  WriteDescriptorRoot(root, "/Content/Materials/Inspection.omat",
-    oxygen::data::AssetType::kMaterial, "Materials/Inspection.omat",
+  WriteDescriptorRoot(root, "Materials/Inspection.omat",
+    oxygen::data::AssetType::kMaterial,
     oxygen::data::MakeDescriptorBytes(descriptor));
 }
 
@@ -317,18 +326,15 @@ auto DescriptorBytes(const SceneAssetBuilder& builder) -> std::vector<std::byte>
   return bytes;
 }
 
-auto SceneSpec(const std::string_view virtual_path,
-  const SceneAssetBuilder& builder) -> oxygen::content::pak::test::AssetSpec
+//! The scene at `virtual_path`, below the `Content` root.
+auto SceneAsset(const std::string_view virtual_path,
+  const SceneAssetBuilder& builder) -> LooseAsset
 {
-  auto bytes = DescriptorBytes(builder);
-  const auto size = bytes.size();
+  constexpr auto kRoot = std::string_view { "/Content/" };
   return {
-    .key = KeyOf(virtual_path),
-    .asset_type = oxygen::data::AssetType::kScene,
-    .descriptor_relpath = std::string(virtual_path.substr(1)),
-    .virtual_path = std::string(virtual_path),
-    .descriptor_size = size,
-    .descriptor_payload = std::move(bytes),
+    .type = oxygen::data::AssetType::kScene,
+    .leaf = std::string(virtual_path.substr(kRoot.size())),
+    .descriptor = DescriptorBytes(builder),
   };
 }
 
@@ -369,33 +375,29 @@ auto WriteNestedRoot(const std::filesystem::path& root) -> void
     .holder = "LonelyHolder",
     .source = KeyOf(kGonePath),
   });
-  const auto assets = std::array {
-    SceneSpec(kModelPath, model),
-    SceneSpec(kCarPath, car),
-    SceneSpec(kStreetPath, street),
-    SceneSpec(kLonelyPath, lonely),
-  };
-  if (!oxygen::content::pak::test::WriteLooseIndex(root, assets, {}, 1U)) {
-    throw std::runtime_error("Could not write the inspection root");
-  }
+  auto library = ContentRoot();
+  library.Add(SceneAsset(kModelPath, model));
+  library.Add(SceneAsset(kCarPath, car));
+  library.Add(SceneAsset(kStreetPath, street));
+  library.Add(SceneAsset(kLonelyPath, lonely));
+  Materialize(library.Files(), root);
 }
 
-class InspectorRootValidationTest
-  : public oxygen::content::pak::test::TempDirFixture {
+class InspectorRootValidationTest : public oxygen::testing::TempDirTest {
 protected:
   auto Report(const std::filesystem::path& root,
     const std::string_view virtual_path = {}) -> int
   {
     return RunSceneMetadataReport({
       .cooked_root = root.string(),
-      .output = Path("scenes.json").string(),
+      .output = TempPath("scenes.json").string(),
       .virtual_path = std::string(virtual_path),
     });
   }
 
   auto ReadReport() -> nlohmann::json
   {
-    std::ifstream input(Path("scenes.json"));
+    std::ifstream input(TempPath("scenes.json"));
     auto report = nlohmann::json::parse(input);
     static const auto schema = oxygen::cooker::test::LoadSchema(
       "Tools/Inspector/Schemas/oxygen.cooked-scenes.schema.json");
@@ -407,33 +409,34 @@ protected:
 
 NOLINT_TEST_F(InspectorRootValidationTest, AcceptsCurrentMaterialVersion)
 {
-  WriteMaterialRoot(Root(), oxygen::data::pak::render::kMaterialAssetVersion);
-  EXPECT_NO_THROW(ValidateRoot(Root()));
+  WriteMaterialRoot(
+    TempDir(), oxygen::data::pak::render::kMaterialAssetVersion);
+  EXPECT_NO_THROW(ValidateRoot(TempDir()));
 }
 
 NOLINT_TEST_F(InspectorRootValidationTest, RejectsRetiredMaterialVersion)
 {
-  WriteMaterialRoot(Root(), 2);
-  EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
+  WriteMaterialRoot(TempDir(), 2);
+  EXPECT_THROW(ValidateRoot(TempDir()), std::runtime_error);
 }
 
 NOLINT_TEST_F(InspectorRootValidationTest, AcceptsCurrentSceneWithSourceModes)
 {
-  WriteSceneRoot(Root(),
+  WriteSceneRoot(TempDir(),
     {
       .values = world::kSceneNodeFlag_Visible,
       .inherited = world::kSceneNodeFlag_CastsShadows
         | world::kSceneNodeFlag_ReceivesShadows,
     });
-  EXPECT_NO_THROW(ValidateRoot(Root()));
+  EXPECT_NO_THROW(ValidateRoot(TempDir()));
 }
 
 NOLINT_TEST_F(InspectorRootValidationTest, RejectsRetiredSceneVersion)
 {
   constexpr uint8_t kRetiredSceneVersion = 4U;
-  WriteSceneRoot(Root(), { .version = kRetiredSceneVersion });
-  EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
-  EXPECT_EQ(Report(Root()), 2);
+  WriteSceneRoot(TempDir(), { .version = kRetiredSceneVersion });
+  EXPECT_THROW(ValidateRoot(TempDir()), std::runtime_error);
+  EXPECT_EQ(Report(TempDir()), 2);
   const auto report = ReadReport();
   EXPECT_EQ(report.at("complete"), false);
   ASSERT_EQ(report.at("scenes").size(), 1U);
@@ -454,7 +457,7 @@ NOLINT_TEST_F(InspectorRootValidationTest, RejectsMalformedSceneFlagSources)
          std::pair {
            world::kSceneNodeFlag_Visible, world::kSceneNodeFlag_Visible },
        }) {
-    const auto root = Path(std::to_string(index++));
+    const auto root = TempPath(std::to_string(index++));
     WriteSceneRoot(root, { .values = values, .inherited = inherited });
     EXPECT_THROW(ValidateRoot(root), std::runtime_error);
     EXPECT_EQ(Report(root), 2);
@@ -501,7 +504,7 @@ NOLINT_TEST_F(
     const auto visible = static_cast<int>(std::to_underlying(test.visible));
     const auto shadows = static_cast<int>(std::to_underlying(test.shadows));
     SCOPED_TRACE(visible);
-    const auto root = Path(std::to_string(visible));
+    const auto root = TempPath(std::to_string(visible));
     WriteSceneRoot(
       root, { .values = test.values, .inherited = test.inherited });
     ASSERT_EQ(Report(root), 0);
@@ -535,12 +538,12 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   InspectorRootValidationTest, IncompleteSceneFailsWithScopedDiagnostic)
 {
-  WriteSceneRoot(Root(), {});
-  const auto descriptor = Path("Scenes/Inspection.oscene");
+  WriteSceneRoot(TempDir(), {});
+  const auto descriptor = TempPath("Descriptors/Scenes/Inspection.oscene");
   std::filesystem::resize_file(
     descriptor, std::filesystem::file_size(descriptor) - 1U);
-  EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
-  EXPECT_EQ(Report(Root()), 2);
+  EXPECT_THROW(ValidateRoot(TempDir()), std::runtime_error);
+  EXPECT_EQ(Report(TempDir()), 2);
   const auto report = ReadReport();
   const auto& scene = report.at("scenes").front();
   EXPECT_EQ(scene.at("complete"), false);
@@ -555,9 +558,9 @@ NOLINT_TEST_F(
 //! Car's (Car, CarHolder), then Model's (Body, Wheel).
 NOLINT_TEST_F(InspectorRootValidationTest, ComposesNestedInstances)
 {
-  WriteNestedRoot(Root());
+  WriteNestedRoot(TempDir());
 
-  ASSERT_EQ(Report(Root()), 0);
+  ASSERT_EQ(Report(TempDir()), 0);
 
   const auto report = ReadReport();
   EXPECT_EQ(report.at("complete"), true);
@@ -628,9 +631,9 @@ NOLINT_TEST_F(InspectorRootValidationTest, ComposesNestedInstances)
 //! and a scene without instances composes to itself.
 NOLINT_TEST_F(InspectorRootValidationTest, ComposesEveryScene)
 {
-  WriteNestedRoot(Root());
+  WriteNestedRoot(TempDir());
 
-  ASSERT_EQ(Report(Root()), 0);
+  ASSERT_EQ(Report(TempDir()), 0);
 
   const auto report = ReadReport();
   EXPECT_EQ(report.at("scenes").size(), 4U);
@@ -657,9 +660,9 @@ NOLINT_TEST_F(InspectorRootValidationTest, ComposesEveryScene)
 //! A change that names no node is reported, addressed as its scene made it.
 NOLINT_TEST_F(InspectorRootValidationTest, ReportsUnresolvedChanges)
 {
-  WriteNestedRoot(Root());
+  WriteNestedRoot(TempDir());
 
-  ASSERT_EQ(Report(Root(), kStreetPath), 0);
+  ASSERT_EQ(Report(TempDir(), kStreetPath), 0);
 
   const auto street = FindScene(ReadReport(), kStreetPath);
   ASSERT_FALSE(street.is_null());
@@ -676,9 +679,9 @@ NOLINT_TEST_F(InspectorRootValidationTest, ReportsUnresolvedChanges)
 //! root; the scene still composes.
 NOLINT_TEST_F(InspectorRootValidationTest, ReportsMissingInstancedScene)
 {
-  WriteNestedRoot(Root());
+  WriteNestedRoot(TempDir());
 
-  ASSERT_EQ(Report(Root(), kLonelyPath), 0);
+  ASSERT_EQ(Report(TempDir(), kLonelyPath), 0);
 
   const auto lonely = FindScene(ReadReport(), kLonelyPath);
   ASSERT_FALSE(lonely.is_null());
@@ -695,14 +698,14 @@ NOLINT_TEST_F(InspectorRootValidationTest, ReportsMissingInstancedScene)
 //! reports no scene.
 NOLINT_TEST_F(InspectorRootValidationTest, VirtualPathSelectsOneScene)
 {
-  WriteNestedRoot(Root());
+  WriteNestedRoot(TempDir());
 
-  ASSERT_EQ(Report(Root(), kCarPath), 0);
+  ASSERT_EQ(Report(TempDir(), kCarPath), 0);
   const auto report = ReadReport();
   ASSERT_EQ(report.at("scenes").size(), 1U);
   EXPECT_EQ(report.at("scenes").front().at("virtual_path"), kCarPath);
 
-  ASSERT_EQ(Report(Root(), "/Content/Scenes/Unknown.oscene"), 0);
+  ASSERT_EQ(Report(TempDir(), "/Content/Scenes/Unknown.oscene"), 0);
   EXPECT_THAT(ReadReport().at("scenes"), testing::IsEmpty());
 }
 

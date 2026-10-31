@@ -26,9 +26,9 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -81,20 +81,20 @@ namespace {
 } // namespace
 
 PhysicsResourceEmitter::PhysicsResourceEmitter(IAsyncFileWriter& file_writer,
-  PhysicsTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+  PhysicsTableAggregator& table_aggregator,
   const std::filesystem::path& cooked_root)
   : PhysicsResourceEmitter(
-      file_writer, table_aggregator, layout, cooked_root, Config {})
+      file_writer, table_aggregator, cooked_root, Config {})
 {
 }
 
 PhysicsResourceEmitter::PhysicsResourceEmitter(IAsyncFileWriter& file_writer,
-  PhysicsTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+  PhysicsTableAggregator& table_aggregator,
   const std::filesystem::path& cooked_root, Config config)
   : file_writer_(file_writer)
   , table_aggregator_(table_aggregator)
   , config_(std::move(config))
-  , data_path_(cooked_root / layout.PhysicsDataRelPath())
+  , data_path_(cooked_root / internal::loose_layout::kPhysicsData)
 {
   DLOG_F(
     INFO, "Created physics resource emitter: data='{}'", data_path_.string());

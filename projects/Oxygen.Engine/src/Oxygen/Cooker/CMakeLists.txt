@@ -113,6 +113,9 @@ oxygen_embed_json_schemas(
 set(
   OXYGEN_COOKER_HEADERS
   "api_export.h"
+  "Cooked/CookedContent.h"
+  "Cooked/CookerStorage.h"
+  "Cooked/Validate.h"
   "Import/AsyncImportService.h"
   "Import/BufferContainerImportRequestBuilder.h"
   "Import/BufferContainerImportSettings.h"
@@ -136,7 +139,6 @@ set(
   "Import/ImportManifest.h"
   "Import/ImportOptions.h"
   "Import/ImportProgress.h"
-  "Loose/Validation.h"
   "Import/ImportReport.h"
   "Import/SurfaceProvenance.h"
   "Import/ModelImportRecord.h"
@@ -171,12 +173,6 @@ set(
   "Import/TextureImportTypes.h"
   "Import/TexturePackingPolicy.h"
   "Import/TextureSourceAssembly.h"
-  "Loose/Errors.h"
-  "Loose/Inspection.h"
-  "Loose/LibraryFacts.h"
-  "Loose/Layout.h"
-  "Loose/LooseCookedLayout.h"
-  "Loose/Types.h"
   "Pak/PakBuilder.h"
   "Pak/PakBuildPhase.h"
   "Pak/PakBuildRequest.h"
@@ -184,6 +180,7 @@ set(
   "Pak/PakBuildReport.h"
   "Pak/PakCatalogIo.h"
   "Pak/Internal/PakCatalogJson.h"
+  "Pak/Internal/PakSourceDevices.h"
 )
 
 set(
@@ -249,6 +246,7 @@ set(
   "Import/Internal/Jobs/TextureImportJob.h"
   "Import/Internal/Jobs/TextureImportPolicy.h"
   "Import/Internal/LooseCookedIndexRegistry.h"
+  "Import/Internal/LooseCookedLayout.h"
   "Import/Internal/LooseCookedWriter.h"
   "Import/Internal/ModelNodeIdentity.h"
   "Import/Internal/ModelSettings.h"
@@ -304,6 +302,9 @@ set(
 
 set(
   OXYGEN_COOKER_PRIVATE_SOURCES
+  "Cooked/CookedContent.cpp"
+  "Cooked/CookerStorage.cpp"
+  "Cooked/Validate.cpp"
   "Import/AsyncImportService.cpp"
   "Import/EngineContent.cpp"
   "Import/SceneSourceInspection.cpp"
@@ -382,7 +383,6 @@ set(
   "Import/Internal/GeometrySource.cpp"
   "Import/Internal/SceneSource.cpp"
   "Import/Internal/MaterialSource.cpp"
-  "Loose/Validation.cpp"
   "Import/Internal/Pipelines/PhysicsMaterialImportPipeline.cpp"
   "Import/Internal/Pipelines/PhysicsResourceImportPipeline.cpp"
   "Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp"
@@ -415,9 +415,8 @@ set(
   "Import/TextureImportTypes.cpp"
   "Import/TexturePackingPolicy.cpp"
   "Import/TextureSourceAssembly.cpp"
-  "Loose/Inspection.cpp"
-  "Loose/LibraryFacts.cpp"
   "Pak/PakPlan.cpp"
+  "Pak/Internal/PakSourceDevices.cpp"
   "Pak/PakPlanBuilder.cpp"
   "Pak/PakMeasureStore.cpp"
   "Pak/PakPlanPolicy.cpp"
@@ -457,6 +456,7 @@ if(OXYGEN_BUILD_TESTS AND BUILD_SHARED_LIBS)
       oxygen::console
       oxygen::data
       oxygen::content
+      oxygen::serio
     PRIVATE
       glm::glm
       KTX::ktx
@@ -481,7 +481,8 @@ target_sources(
     FILES ${OXYGEN_COOKER_HEADERS}
 )
 
-arrange_target_files_for_ide(${META_MODULE_TARGET})
+# The cooked content builders belong to Oxygen.Cooker.Testing.
+arrange_target_files_for_ide(${META_MODULE_TARGET} EXCLUDE_PATTERNS "^testing/")
 
 # Enable OpenMP for bc7enc source only: /openmp for MSVC, -fopenmp otherwise
 set_source_files_properties(
@@ -523,6 +524,7 @@ target_link_libraries(
     oxygen::data
     oxygen::content
     oxygen::scripting-analysis
+    oxygen::serio
   PRIVATE
     oxygen::scene
     oxygen::physics
@@ -540,10 +542,15 @@ target_link_libraries(
 # Tools
 # ------------------------------------------------------------------------------
 
-# The test-support library defines oxygen_cooker_test(), which the tool tests
-# use, so it must be added before Tools.
+# The cooked content builders, which the test-support library links; then the
+# test-support library, which defines oxygen_cooker_test() for the tool tests,
+# so both come before Tools.
+if(OXYGEN_BUILD_TESTS)
+  add_subdirectory("testing")
+endif()
 if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/Support")
   add_subdirectory("test/Support")
+  add_subdirectory("testing/test")
 endif()
 
 # All four native cooker tools are part of the engine SDK.

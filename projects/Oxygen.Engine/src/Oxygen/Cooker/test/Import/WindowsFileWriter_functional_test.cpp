@@ -36,7 +36,6 @@
 #include <Oxygen/Cooker/Import/Internal/WindowsFileReader.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Serio/AtomicFile.h>
@@ -44,6 +43,7 @@
 #include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 using oxygen::co::Co;
 using oxygen::content::import::FileError;
@@ -58,7 +58,7 @@ namespace co = oxygen::co;
 namespace {
 
 //! Test fixture with temporary directory management.
-class WindowsFileWriterTest : public oxygen::cooker::test::TempDirTest {
+class WindowsFileWriterTest : public oxygen::testing::TempDirTest {
 protected:
   auto SetUp() -> void override
   {

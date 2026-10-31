@@ -1,7 +1,6 @@
 """Exercise model import records through the actual CLI and native publisher."""
 
 import json
-from pathlib import Path
 import shutil
 import struct
 import subprocess
@@ -9,7 +8,7 @@ import sys
 import tempfile
 import unittest
 import uuid
-
+from pathlib import Path
 
 IMPORT_TOOL = Path(sys.argv.pop(1)).resolve()
 
@@ -80,7 +79,8 @@ class ModelImportRecordCliTests(unittest.TestCase):
         ]
 
     def records(self, content: Path) -> list[Path]:
-        return sorted((content / "Imports").rglob("*.import.json"))
+        # A record lives beside its model: at `<model identity>.import.json`.
+        return sorted(content.rglob("*.import.json"))
 
     def test_recipe_replay_reclamation_identity_and_conflicts(self):
         root = self.root
@@ -108,8 +108,8 @@ class ModelImportRecordCliTests(unittest.TestCase):
             encoding="utf-8",
         )
         content = root / ("deep-" + "a" * 100) / ("b" * 100) / "Content"
-        # The record lives at its model's virtual path.
-        record = content / "Imports" / "Content" / "source.gltf.import.json"
+        # The record lives at its model's identity, in the model's mount.
+        record = root / "source.gltf.import.json"
         # The models lie beside the content root, in the one source mount.
         mount = ["--mount", f"Content={root}"]
         # Generations go to a folder the tool owns, never one the content
@@ -185,7 +185,6 @@ class ModelImportRecordCliTests(unittest.TestCase):
 
         conflicts = [
             ["gltf", "--record", record, *published, "--normals", "generate"],
-            ["gltf", "--record", record, *published, "--root", content],
             [*apply_recipe, "--name", "override"],
             [*apply_recipe, "--content-hashing", "false"],
             ["fbx", *apply_recipe[1:]],
@@ -231,7 +230,7 @@ class ModelImportRecordCliTests(unittest.TestCase):
         identity = json.loads(record.read_text(encoding="utf-8"))["source_identity"]
         self.assertEqual(
             record,
-            content / "Imports" / "Content" / "Models" / "source.gltf.import.json",
+            content / "Models" / "source.gltf.import.json",
         )
 
         # Moved with its virtual path: the virtual path names the model.
@@ -249,20 +248,20 @@ class ModelImportRecordCliTests(unittest.TestCase):
         shutil.move(moved_dir, renamed_dir)
         import_model(renamed_dir / "source.gltf", "/Content/Renamed/source.gltf")
         self.assertIn("import.source_relocated", self.report_codes(report))
-        # The record moves with its model's virtual path.
-        old_record, record = (
-            record,
-            content / "Imports" / "Content" / "Renamed" / "source.gltf.import.json",
-        )
-        self.assertFalse(old_record.exists())
+        # The model keeps its identity, its record's location: the import
+        # rebinds the record's source; only moving the record renames it.
         self.assertEqual(self.records(content), [record])
         relocated = json.loads(record.read_text(encoding="utf-8"))
         self.assertEqual(relocated["source_identity"], identity)
-        self.assertEqual(relocated["virtual_path"], "/Content/Renamed/source.gltf")
+        self.assertTrue(relocated["source"].endswith("Renamed/source.gltf"))
+        # A record never names its model's identity: its location does.
+        self.assertNotIn("virtual_path", relocated)
 
         # A copy under a new virtual path is a new model, with a hint.
         copy_dir = content / "Copy"
-        shutil.copytree(renamed_dir, copy_dir)
+        shutil.copytree(
+            renamed_dir, copy_dir, ignore=shutil.ignore_patterns("*.import.json")
+        )
         import_model(copy_dir / "source.gltf", "/Content/Copy/source.gltf")
         self.assertIn("import.source_copy", self.report_codes(report))
         self.assertEqual(len(self.records(content)), 2)
@@ -302,7 +301,8 @@ class ModelImportRecordCliTests(unittest.TestCase):
         self.assertEqual(len(self.records(content)), 3)
 
         # A replay whose source is gone says so.
-        shutil.rmtree(renamed_dir)
+        (renamed_dir / "source.gltf").unlink()
+        (renamed_dir / "positions.bin").unlink()
         result = self.run_cli(
             [
                 "gltf",

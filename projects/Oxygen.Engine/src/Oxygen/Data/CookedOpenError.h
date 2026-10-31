@@ -21,6 +21,9 @@ enum class CookedOpenFailure : uint8_t {
   kUnsupportedVersion,
   //! Of that format and version, but malformed.
   kCorrupt,
+  //! Verification was asked for, but the container holds no integrity data
+  //! to verify it against.
+  kUnverifiable,
 };
 
 //! A cooked container that cannot be opened, and why.

@@ -28,6 +28,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
@@ -43,10 +45,10 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -65,9 +67,11 @@ namespace {
 
   using AssetTypeMap = std::unordered_map<data::AssetKey, data::AssetType>;
 
+  //! A mounted loose cooked root and the types of the assets it holds. Its
+  //! content is not kept open: the job writes into the primary root.
   struct MountedInspectionContext final {
     std::filesystem::path cooked_root;
-    lc::Inspection inspection;
+    AssetTypeMap assets;
     bool is_primary = false;
   };
 
@@ -228,17 +232,11 @@ namespace {
     return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
   }
 
-  auto BuildProjectedAssetTypeMap(const lc::Inspection& inspection,
+  auto BuildProjectedAssetTypeMap(const AssetTypeMap& assets,
     const std::optional<std::pair<data::AssetKey, data::AssetType>>& pending)
     -> AssetTypeMap
   {
-    auto out = AssetTypeMap {};
-    const auto assets = inspection.Assets();
-    out.reserve(assets.size() + (pending.has_value() ? 1U : 0U));
-    for (const auto& asset : assets) {
-      out.insert_or_assign(
-        asset.key, static_cast<data::AssetType>(asset.asset_type));
-    }
+    auto out = assets;
     if (pending.has_value()) {
       out.insert_or_assign(pending->first, pending->second);
     }
@@ -260,7 +258,7 @@ namespace {
     for (auto& root : roots) {
       auto context = MountedInspectionContext {
         .cooked_root = root.lexically_normal(),
-        .inspection = {},
+        .assets = {},
         .is_primary = false,
       };
       context.is_primary
@@ -268,7 +266,16 @@ namespace {
 
       auto load_error = std::optional<std::string> {};
       try {
-        context.inspection.LoadFromRoot(context.cooked_root);
+        const auto content
+          = cooked::CookedContent::Open(cooked::RealCookerStorage(),
+            data::CookedSource {
+              .kind = data::CookedSourceKind::kLooseCooked,
+              .path = context.cooked_root,
+            });
+        context.assets.reserve(content.Assets().size());
+        for (const auto& asset : content.Assets()) {
+          context.assets.insert_or_assign(asset.key, asset.type);
+        }
       } catch (const std::exception& ex) {
         load_error = ex.what();
       }
@@ -309,13 +316,13 @@ namespace {
     return true;
   }
 
-  [[nodiscard]] auto FindPrimaryInspection(
+  [[nodiscard]] auto FindPrimaryAssets(
     const std::vector<MountedInspectionContext>& contexts)
-    -> const lc::Inspection*
+    -> const AssetTypeMap*
   {
     for (const auto& context : contexts) {
       if (context.is_primary) {
-        return &context.inspection;
+        return &context.assets;
       }
     }
     return nullptr;
@@ -325,17 +332,10 @@ namespace {
     const std::vector<MountedInspectionContext>& contexts,
     const data::AssetKey& key) -> bool
   {
-    for (const auto& context : contexts) {
-      if (context.is_primary) {
-        continue;
-      }
-      for (const auto& asset : context.inspection.Assets()) {
-        if (asset.key == key) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return std::ranges::any_of(
+      contexts, [&key](const MountedInspectionContext& context) -> bool {
+        return !context.is_primary && context.assets.contains(key);
+      });
   }
 
   auto ResolvePhysicsMaterialKey(ImportSession& session,
@@ -794,8 +794,8 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  const auto* const primary_inspection = FindPrimaryInspection(contexts);
-  if (primary_inspection == nullptr) {
+  const auto* const primary_source_assets = FindPrimaryAssets(contexts);
+  if (primary_source_assets == nullptr) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "physics.shape.primary_source_missing",
       "Primary source asset index is not available");
@@ -805,7 +805,7 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   const auto shape_key = ResolveAssetKey(Request(), target->virtual_path);
-  const auto primary_assets = BuildProjectedAssetTypeMap(*primary_inspection,
+  const auto primary_assets = BuildProjectedAssetTypeMap(*primary_source_assets,
     std::pair<data::AssetKey, data::AssetType> {
       shape_key,
       data::AssetType::kCollisionShape,

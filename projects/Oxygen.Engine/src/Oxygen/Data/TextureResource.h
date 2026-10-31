@@ -9,8 +9,10 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <new>
 #include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -19,6 +21,8 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/api_export.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::data {
 
@@ -40,17 +44,29 @@ public:
   //! Type alias for the descriptor type used by this resource.
   using DescT = pak::core::TextureResourceDesc;
 
-  /*! Constructs a TextureResource with descriptor and exclusive payload
-      ownership.
+  /*! Constructs a TextureResource that owns `payload`, the buffer its loader
+      read the cooked payload into.
       @param desc Texture resource descriptor from PAK file.
-      @param data Cooked texture payload buffer (ownership transferred).
+      @param payload Cooked texture payload (header + layouts + data).
+      @throw std::invalid_argument When the payload is malformed.
   */
   TextureResource(
-    pak::core::TextureResourceDesc desc, std::vector<uint8_t> data)
+    pak::core::TextureResourceDesc desc, serio::ByteBuffer payload)
     : desc_(std::move(desc))
-    , payload_(std::move(data))
+    , payload_(std::move(payload))
   {
     Validate();
+  }
+
+  /*! Constructs a TextureResource from a copy of `payload`: a texture built
+      in memory, such as a procedural or test texture.
+      @throw std::bad_alloc When the payload buffer cannot be allocated.
+      @throw std::invalid_argument When the payload is malformed.
+  */
+  TextureResource(
+    pak::core::TextureResourceDesc desc, const std::span<const uint8_t> payload)
+    : TextureResource(std::move(desc), CopyOf(payload))
+  {
   }
 
   ~TextureResource() override = default;
@@ -145,13 +161,13 @@ public:
   [[nodiscard]] auto GetData() const noexcept -> std::span<const uint8_t>
   {
     return std::span<const uint8_t>(
-      payload_.data() + payload_data_offset_bytes_, payload_data_size_bytes_);
+      Payload().subspan(payload_data_offset_bytes_, payload_data_size_bytes_));
   }
 
   //! Returns the full cooked payload bytes (header + layouts + data).
   [[nodiscard]] auto GetPayload() const noexcept -> std::span<const uint8_t>
   {
-    return std::span<const uint8_t>(payload_.data(), payload_.size());
+    return Payload();
   }
 
   //! Returns the parsed payload header.
@@ -172,16 +188,37 @@ private:
   pak::core::TextureResourceDesc desc_ {};
   pak::render::TexturePayloadHeader payload_header_ {};
   std::vector<pak::render::SubresourceLayout> subresource_layouts_ {};
-  std::vector<uint8_t> payload_;
+  serio::ByteBuffer payload_;
   std::size_t payload_data_offset_bytes_ = 0;
   std::size_t payload_data_size_bytes_ = 0;
+
+  //! The payload bytes, as the byte type texture consumers read.
+  [[nodiscard]] auto Payload() const noexcept -> std::span<const uint8_t>
+  {
+    const auto bytes = payload_.Bytes();
+    // NOLINTNEXTLINE(*-reinterpret-cast): bytes viewed as unsigned bytes.
+    return { reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size() };
+  }
+
+  //! A buffer holding a copy of `bytes`.
+  static auto CopyOf(const std::span<const uint8_t> bytes) -> serio::ByteBuffer
+  {
+    auto buffer = serio::ByteBuffer::Allocate(serio::CountOf(bytes.size()));
+    if (!buffer) {
+      throw std::bad_alloc();
+    }
+    if (!bytes.empty()) {
+      std::memcpy(buffer->Bytes().data(), bytes.data(), bytes.size());
+    }
+    return std::move(buffer).value();
+  }
 
   void ResetMovedFromState() noexcept
   {
     desc_ = {};
     payload_header_ = {};
     subresource_layouts_.clear();
-    payload_.clear();
+    payload_ = {};
     payload_data_offset_bytes_ = 0;
     payload_data_size_bytes_ = 0;
   }
@@ -189,8 +226,8 @@ private:
   //! Parses a v4 format payload (with TexturePayloadHeader).
   void ParseV4Payload()
   {
-    const auto payload_size = payload_.size();
-    std::memcpy(&payload_header_, payload_.data(),
+    const auto payload_size = payload_.Bytes().size();
+    std::memcpy(&payload_header_, Payload().data(),
       sizeof(pak::render::TexturePayloadHeader));
 
     const auto expected_subresources = static_cast<std::uint32_t>(
@@ -232,7 +269,7 @@ private:
     }
 
     subresource_layouts_.resize(layout_count);
-    std::memcpy(subresource_layouts_.data(), payload_.data() + layouts_offset,
+    std::memcpy(subresource_layouts_.data(), Payload().data() + layouts_offset,
       layouts_bytes);
 
     payload_data_offset_bytes_ = data_offset;
@@ -261,12 +298,12 @@ private:
 
   void ParsePayload()
   {
-    if (payload_.size() < sizeof(pak::render::TexturePayloadHeader)) {
+    if (payload_.Bytes().size() < sizeof(pak::render::TexturePayloadHeader)) {
       throw std::invalid_argument("TextureResource: payload too small");
     }
 
     uint32_t magic = 0;
-    std::memcpy(&magic, payload_.data(), sizeof(magic));
+    std::memcpy(&magic, Payload().data(), sizeof(magic));
     if (magic != pak::render::kTexturePayloadMagic) {
       throw std::invalid_argument("TextureResource: invalid payload magic");
     }
@@ -364,7 +401,7 @@ private:
       throw std::invalid_argument("TextureResource: mip_levels exceed limit");
     }
 
-    if (desc_.size_bytes != payload_.size()) {
+    if (desc_.size_bytes != payload_.Bytes().size()) {
       throw std::invalid_argument(
         "TextureResource: descriptor size_bytes mismatch with payload size");
     }

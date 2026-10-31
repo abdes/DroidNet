@@ -44,14 +44,14 @@
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Naming.h>
-#include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
-#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace oxygen::content::import::test {
 namespace {
@@ -94,12 +94,12 @@ namespace {
     co::Event pending_;
   };
 
-  class ImportSourceAnalysisTest : public pak::test::TempDirFixture {
+  class ImportSourceAnalysisTest : public oxygen::testing::TempDirTest {
   protected:
     auto Write(const std::filesystem::path& name, const std::string_view text)
       -> std::filesystem::path
     {
-      const auto path = Root() / name;
+      const auto path = TempDir() / name;
       auto file = std::ofstream(path, std::ios::binary);
       file << text;
       file.close();
@@ -114,7 +114,7 @@ namespace {
   protected:
     static auto SetUpTestSuite() -> void
     {
-      temp_ = std::make_unique<oxygen::cooker::test::ScopedTempDir>();
+      temp_ = std::make_unique<oxygen::testing::ScopedTempDir>();
       try {
         Analyze();
       } catch (const std::exception& error) {
@@ -146,21 +146,21 @@ namespace {
     {
       const auto material
         = WriteFile("material.json", R"({"name":"Stone","textures":{
-      "base_color":{"virtual_path":"/.cooked/Textures/color.otex"},
-      "thickness":{"virtual_path":"/.cooked/Textures/thickness.otex"}}})");
+      "base_color":{"virtual_path":"../Textures/color.otex"},
+      "thickness":{"virtual_path":"../Textures/thickness.otex"}}})");
       const auto scene = WriteFile("scene.json",
         R"({"version":)" + std::to_string(internal::kSceneDescriptorVersion)
           + R"(,"name":"Scene.v2","nodes":[{"id":"00000000-0000-4000-8000-000000000001"},
       {"id":"00000000-0000-4000-8000-000000000002","parent":0,"instance":{
-        "scene_ref":"/.cooked/Props/Crate.glb/Crate.oscene",
+        "scene_ref":"../Props/Crate.glb/Crate.oscene",
         "overrides":[{"path":["00000000-0000-4000-8000-000000000003"],"components":{"geometry":{"parts":[{
           "kind":"surface","id":"00000000-0000-4000-8000-000000000004",
           "layout_revision":"0000000000000000000000000000000000000000000000000000000000000000",
-          "values":{"/material":"/.cooked/Materials/Red.omat"}}]}}}]}}],
-      "renderables":[{"node":0,"geometry_ref":"/.cooked/Geometry/body.ogeo"}],
-      "starting_input_contexts":[{"context_ref":"/.cooked/Input/Gameplay.oimap","priority":2}],
-      "references":{"scripts":["/.cooked/Scripts/move.oscript"]},
-      "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/.cooked/Textures/mask.otex"}}})");
+          "values":{"/material":"../Materials/Red.omat"}}]}}}]}}],
+      "renderables":[{"node":0,"geometry_ref":"../Geometry/body.ogeo"}],
+      "starting_input_contexts":[{"context_ref":"../Input/Gameplay.oimap","priority":2}],
+      "references":{"scripts":["../Scripts/move.oscript"]},
+      "environment":{"post_process_volume":{"auto_exposure_metering_mask":"../Textures/mask.otex"}}})");
       auto manifest = ImportManifest {};
       auto material_job = ImportManifestJob {};
       material_job.id = "material";
@@ -177,7 +177,7 @@ namespace {
       report_ = manifest.AnalyzeSources();
     }
 
-    static inline std::unique_ptr<oxygen::cooker::test::ScopedTempDir> temp_;
+    static inline std::unique_ptr<oxygen::testing::ScopedTempDir> temp_;
     static inline std::string error_;
     static inline std::optional<ImportSourceAnalysis> report_;
   };
@@ -315,16 +315,17 @@ namespace {
     static_cast<void>(Write("vertices.bin", "not decoded during analysis"));
     const auto geometry = Write("geometry.json", R"({
       "name":"Body","bounds":{"min":[-1,-1,-1],"max":[1,1,1]},
-      "buffers":[{"uri":"vertices.bin","virtual_path":"/.cooked/Buffers/local.obuf"}],
+      "buffers":[{"uri":"vertices.bin","virtual_path":"Buffers/local.obuf"}],
       "lods":[{"name":"LOD0","mesh_type":"standard",
         "bounds":{"min":[-1,-1,-1],"max":[1,1,1]},
-        "buffers":{"vb_ref":"/.cooked/Buffers/local.obuf","ib_ref":"/.cooked/Buffers/external.obuf"},
+        "buffers":{"vb_ref":"Buffers/local.obuf","ib_ref":"Buffers/external.obuf"},
         "submeshes":[{"surface_id":"018f8f8f-1111-7111-8111-111111111111",
-          "material_ref":"/.cooked/Materials/stone.omat","views":[{"view_ref":"__all__"}]}]}]})");
+          "material_ref":"Materials/stone.omat","views":[{"view_ref":"__all__"}]}]}]})");
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.job_type = "geometry-descriptor";
-    job.mounts = oxygen::cooker::test::ContentMountTable(Root());
+    job.virtual_path = "/Content/Body.ogeo";
+    job.mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     job.geometry_descriptor.descriptor_path = geometry.string();
     manifest.jobs.push_back(job);
     const auto report = manifest.AnalyzeSources();
@@ -334,10 +335,10 @@ namespace {
     EXPECT_EQ(result.references.size(), 2U);
     EXPECT_FALSE(
       std::ranges::any_of(result.references, [](const auto& reference) -> auto {
-        return reference.virtual_path == "/.cooked/Buffers/local.obuf";
+        return reference.virtual_path == "/Content/Buffers/local.obuf";
       }));
     const auto buffer = std::ranges::find(result.observations,
-      Path("vertices.bin"), &ImportSourceObservation::path);
+      TempPath("vertices.bin"), &ImportSourceObservation::path);
     ASSERT_NE(buffer, result.observations.end());
     EXPECT_TRUE(buffer->reads.empty());
   }
@@ -352,7 +353,7 @@ namespace {
       "actions":[{"name":"Jump","type":"bool"},{"name":"Dash","type":"bool"}],
       "contexts":[{"name":"Gameplay","mappings":[
         {"action":"Jump","slot":"Space","trigger":"pressed"},
-        {"action":"/Content/Common.input/Fire.oiact","slot":"F"}]}]})");
+        {"action":"../Common.input/Fire.oiact","slot":"F"}]}]})");
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.id = "input:Gameplay/Player.input.json";
@@ -417,7 +418,7 @@ namespace {
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.job_type = "texture-descriptor";
-    job.mounts = oxygen::cooker::test::ContentMountTable(Root());
+    job.mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     job.texture.source_path = path.string();
     job.virtual_path = "/.cooked/Pixels.otex";
     job.texture.virtual_path = job.virtual_path;
@@ -676,7 +677,7 @@ namespace {
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.job_type = "texture";
-    job.texture.source_path = Path("missing.png").string();
+    job.texture.source_path = TempPath("missing.png").string();
     job.virtual_path = "/.cooked/missing.otex";
     job.texture.virtual_path = job.virtual_path;
     manifest.jobs.push_back(job);
@@ -694,7 +695,7 @@ namespace {
 
   NOLINT_TEST_F(ImportSourceAnalysisTest, RequiredDirectoryIsNotAFile)
   {
-    const auto directory = Path("image.png");
+    const auto directory = TempPath("image.png");
     ASSERT_TRUE(std::filesystem::create_directory(directory));
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
@@ -718,7 +719,7 @@ namespace {
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.job_type = "material-descriptor";
-    job.material_descriptor.descriptor_path = Path("unread.json").string();
+    job.material_descriptor.descriptor_path = TempPath("unread.json").string();
     manifest.jobs.push_back(job);
     auto stop = std::stop_source {};
     stop.request_stop();
@@ -735,7 +736,7 @@ namespace {
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.job_type = "material-descriptor";
-    job.material_descriptor.descriptor_path = Path("source.json").string();
+    job.material_descriptor.descriptor_path = TempPath("source.json").string();
     manifest.jobs.push_back(job);
     auto loop = ImportEventLoop {};
     auto pool = co::ThreadPool(loop, 1U);
@@ -757,7 +758,7 @@ namespace {
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.job_type = "texture";
-    job.texture.source_path = Path("sky.png").string();
+    job.texture.source_path = TempPath("sky.png").string();
     job.virtual_path = "/.cooked/sky.otex";
     job.texture.virtual_path = job.virtual_path;
     job.texture.cubemap = true;
@@ -766,8 +767,8 @@ namespace {
     ASSERT_TRUE(report.complete) << report.ToJson();
     const auto& result = report.jobs.front();
     EXPECT_EQ(result.files.size(), 6U);
-    const auto rejected = std::ranges::find(
-      result.observations, Path("sky_px.png"), &ImportSourceObservation::path);
+    const auto rejected = std::ranges::find(result.observations,
+      TempPath("sky_px.png"), &ImportSourceObservation::path);
     ASSERT_NE(rejected, result.observations.end());
     EXPECT_FALSE(rejected->exists);
     for (const auto& observation : result.observations) {

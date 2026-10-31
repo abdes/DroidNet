@@ -20,7 +20,8 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -55,13 +56,13 @@ auto RunDependencyReport(const DependencyReportOptions& options)
 {
   const auto root
     = std::filesystem::absolute(options.cooked_root).lexically_normal();
-  lc::Inspection inspection;
-  inspection.Load(root);
+  const auto content
+    = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
   nlohmann::json assets = nlohmann::json::array();
-  for (const auto& entry : inspection.Assets()) {
+  for (const auto& entry : content.Assets()) {
     nlohmann::json row = {
       { "asset_key", nostd::to_string(entry.key) },
-      { "asset_type", entry.asset_type },
+      { "asset_type", nostd::to_underlying(entry.type) },
       { "virtual_path", entry.virtual_path },
       { "dependencies", nlohmann::json::array() },
       { "complete", true },
@@ -102,7 +103,7 @@ auto RunDependencyReport(const DependencyReportOptions& options)
   }
   const nlohmann::json report = {
     { "schema", "oxygen.cooked-dependencies.v3" },
-    { "source_key", nostd::to_string(inspection.Guid()) },
+    { "source_key", nostd::to_string(content.Summary().source_key) },
     { "assets", std::move(assets) },
   };
   std::ofstream output(options.output, std::ios::binary);
