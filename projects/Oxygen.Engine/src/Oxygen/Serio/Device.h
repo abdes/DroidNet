@@ -12,6 +12,7 @@
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/Operation.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::serio {
@@ -57,6 +58,27 @@ template <class D>
 concept ContiguousDevice = ReadableDevice<D> && requires(const D& d) {
   { d.Bytes() } noexcept -> std::same_as<std::span<const std::byte>>;
 };
+
+//! A device whose reads can also be awaited in a coroutine.
+/*!
+ `AsyncReadAt` has `ReadAt`'s contract and returns a `ReadOperation`: a memory
+ device's is ready at once, a file opened through an `IoDriver` suspends the
+ awaiting coroutine until the OS completes it. One operation type for every
+ device lets an erased device await without a coroutine frame.
+*/
+template <class D>
+concept AsyncReadableDevice = ReadableDevice<D>
+  && requires(const D& d, ByteOffset at, std::span<std::byte> out) {
+       { d.AsyncReadAt(at, out) } noexcept -> std::same_as<ReadOperation>;
+     };
+
+//! A writable device whose reads and writes can be awaited; `AsyncWriteAt`
+//! has `WriteAt`'s contract.
+template <class D>
+concept AsyncWritableDevice = AsyncReadableDevice<D> && WritableDevice<D>
+  && requires(D& d, ByteOffset at, std::span<const std::byte> in) {
+       { d.AsyncWriteAt(at, in) } noexcept -> std::same_as<WriteOperation>;
+     };
 
 //! Fills `out` from `device` at `at`, or fails with `kEndOfData` when the
 //! device ends first. Device errors propagate unchanged.

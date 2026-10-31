@@ -292,6 +292,7 @@ the common infrastructure minimum.
 | Module   | Also selects                                 | External dependencies            |
 | -------- | -------------------------------------------- | -------------------------------- |
 | OxCo     |                                              | Asio                             |
+| Serio    | OxCo                                         | Asio                             |
 | Clap     | TextWrap                                     | magic_enum                       |
 | Console  | Config                                       | nlohmann_json                    |
 | Core     | Composition, OxCo                            | Asio, glm, xxHash                |

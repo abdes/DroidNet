@@ -76,26 +76,50 @@ namespace {
 #endif
   }
 
+  auto OpenDescriptor(const std::filesystem::path& path,
+    const OpenSpec& spec) noexcept -> Result<NativeHandle>
+  {
+    try {
+      const auto native = base::ToNativePath(path);
+      const auto descriptor
+        = ::open(native.c_str(), OpenFlags(spec), S_IRUSR | S_IWUSR | S_IRGRP);
+      if (descriptor < 0) {
+        return ::oxygen::Err(base::LastSystemError());
+      }
+      ApplyHint(descriptor, spec);
+      return ::oxygen::Ok(static_cast<NativeHandle>(descriptor));
+    } catch (const std::bad_alloc&) {
+      return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
+    } catch (const std::filesystem::filesystem_error& error) {
+      return ::oxygen::Err(error.code());
+    }
+  }
+
 } // namespace
 
 auto NativeFile::Open(const std::filesystem::path& path,
   const OpenSpec& spec) noexcept -> Result<NativeFile>
 {
+  return Adopt(path, OpenDescriptor(path, spec));
+}
+
+// io_uring takes any descriptor: a driver opens files as any other.
+auto NativeFile::OpenForDriver(const std::filesystem::path& path,
+  const OpenSpec& spec) noexcept -> Result<NativeFile>
+{
+  return Open(path, spec);
+}
+
+auto NativeFile::Adopt(const std::filesystem::path& path,
+  const Result<NativeHandle>& handle) noexcept -> Result<NativeFile>
+{
   try {
-    auto logical = path;
-    const auto native = base::ToNativePath(path);
-    const auto descriptor
-      = ::open(native.c_str(), OpenFlags(spec), S_IRUSR | S_IWUSR | S_IRGRP);
-    if (descriptor < 0) {
-      return ::oxygen::Err(base::LastSystemError());
+    if (!handle) {
+      return ::oxygen::Err(handle.error());
     }
-    ApplyHint(descriptor, spec);
-    return ::oxygen::Ok(
-      NativeFile(static_cast<NativeHandle>(descriptor), std::move(logical)));
+    return ::oxygen::Ok(NativeFile(*handle, path));
   } catch (const std::bad_alloc&) {
     return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
-  } catch (const std::filesystem::filesystem_error& error) {
-    return ::oxygen::Err(error.code());
   }
 }
 

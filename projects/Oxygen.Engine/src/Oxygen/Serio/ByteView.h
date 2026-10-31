@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/Operation.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::serio {
@@ -48,6 +49,13 @@ public:
     return ::oxygen::Ok(CountOf(count));
   }
 
+  //! `ReadAt` as an operation that completes without suspending.
+  [[nodiscard]] auto AsyncReadAt(const ByteOffset at,
+    const std::span<std::byte> out) const noexcept -> ReadOperation
+  {
+    return ReadOperation::Ready(ReadAt(at, out));
+  }
+
   [[nodiscard]] auto Bytes() const noexcept -> std::span<const std::byte>
   {
     return bytes_;
@@ -58,6 +66,7 @@ private:
 };
 
 static_assert(ContiguousDevice<ByteView>);
+static_assert(AsyncReadableDevice<ByteView>);
 static_assert(!WritableDevice<ByteView>);
 
 } // namespace oxygen::serio

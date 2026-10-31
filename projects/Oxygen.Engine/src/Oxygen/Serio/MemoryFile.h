@@ -14,6 +14,7 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/Operation.h>
 #include <Oxygen/Serio/Types.h>
 #include <Oxygen/Serio/api_export.h>
 
@@ -73,6 +74,20 @@ public:
   OXGN_SERIO_NDAPI auto WriteAt(
     ByteOffset at, std::span<const std::byte> in) noexcept -> Result<void>;
 
+  //! `ReadAt` as an operation that completes without suspending.
+  [[nodiscard]] auto AsyncReadAt(const ByteOffset at,
+    const std::span<std::byte> out) const noexcept -> ReadOperation
+  {
+    return ReadOperation::Ready(ReadAt(at, out));
+  }
+
+  //! `WriteAt` as an operation that completes without suspending.
+  [[nodiscard]] auto AsyncWriteAt(const ByteOffset at,
+    const std::span<const std::byte> in) noexcept -> WriteOperation
+  {
+    return WriteOperation::Ready(WriteAt(at, in));
+  }
+
   //! Grows the storage to hold `size` bytes without changing `Size()`.
   OXGN_SERIO_NDAPI auto Reserve(ByteCount size) noexcept -> Result<void>;
 
@@ -103,5 +118,6 @@ private:
 
 static_assert(WritableDevice<MemoryFile>);
 static_assert(ContiguousDevice<MemoryFile>);
+static_assert(AsyncWritableDevice<MemoryFile>);
 
 } // namespace oxygen::serio

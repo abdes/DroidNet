@@ -13,11 +13,17 @@
 #include <utility>
 #include <vector>
 
+#include <asio/io_context.hpp>
+
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/asio.h> // IWYU pragma: keep (EventLoopTraits)
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/ByteView.h>
 #include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/MemoryFile.h>
+#include <Oxygen/Serio/Operation.h>
 #include <Oxygen/Serio/Testing/FaultInjectingDevice.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Serio/Types.h>
@@ -26,6 +32,7 @@
 namespace {
 
 using oxygen::Result;
+using oxygen::serio::AnyAsyncDevice;
 using oxygen::serio::AnyDevice;
 using oxygen::serio::ByteCount;
 using oxygen::serio::ByteOffset;
@@ -33,6 +40,7 @@ using oxygen::serio::ByteView;
 using oxygen::serio::Durability;
 using oxygen::serio::MemoryFile;
 using oxygen::serio::ReadExactlyAt;
+using oxygen::serio::WriteOperation;
 using oxygen::serio::testing::BytesEqual;
 using oxygen::serio::testing::FaultInjectingDevice;
 using oxygen::serio::testing::PatternBytes;
@@ -159,6 +167,33 @@ NOLINT_TEST(AnyDeviceTest, ReportsCapabilitiesOfTheErasedType)
   EXPECT_EQ(reserved.error(), std::errc::operation_not_supported);
   ASSERT_FALSE(flushed);
   EXPECT_EQ(flushed.error(), std::errc::operation_not_supported);
+}
+
+//! An erased asynchronous device refuses awaited writes when its device
+//! does not write, and forwards them when it does.
+NOLINT_TEST(AnyAsyncDeviceTest, AwaitedWritesFollowTheErasedType)
+{
+  const auto bytes = PatternBytes(32);
+  auto view = AnyAsyncDevice(ByteView(bytes));
+  auto file = AnyAsyncDevice(MemoryFile {});
+  auto loop = asio::io_context {};
+  const auto await = [&loop](WriteOperation operation) -> Result<void> {
+    return oxygen::co::Run(
+      loop, [](WriteOperation awaited) -> oxygen::co::Co<Result<void>> {
+        co_return co_await awaited;
+      }(operation));
+  };
+
+  const auto refused = await(view.AsyncWriteAt(ByteOffset { 0 }, bytes));
+  const auto written = await(file.AsyncWriteAt(ByteOffset { 0 }, bytes));
+
+  EXPECT_FALSE(view.Writable());
+  ASSERT_FALSE(refused);
+  EXPECT_EQ(refused.error(), std::errc::operation_not_supported);
+  ASSERT_TRUE(written);
+  auto out = std::vector<std::byte>(bytes.size());
+  ASSERT_TRUE(ReadExactlyAt(file, ByteOffset { 0 }, out));
+  EXPECT_THAT(out, BytesEqual(bytes));
 }
 
 } // namespace

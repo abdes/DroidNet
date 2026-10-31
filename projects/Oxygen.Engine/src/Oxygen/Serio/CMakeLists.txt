@@ -50,16 +50,21 @@ set(
   "AlignmentGuard.h"
   "AnyDevice.h"
   "AnyStream.h"
+  "AsyncDevice.h"
+  "AsyncFile.h"
   "AtomicFile.h"
   "ByteBuffer.h"
   "ByteView.h"
+  "CopyRegion.h"
   "Device.h"
   "Error.h"
   "FileLock.h"
+  "IoDriver.h"
   "MappedFile.h"
   "MemoryFile.h"
   "MemoryStream.h"
   "NativeFile.h"
+  "Operation.h"
   "Reader.h"
   "Region.h"
   "RegionStream.h"
@@ -69,12 +74,17 @@ set(
   "Detail/ErasedObject.h"
   "Detail/GuardedCopy.h"
 )
-set(OXYGEN_SERIO_PRIVATE_HEADERS "Detail/SystemErrors.h")
+set(
+  OXYGEN_SERIO_PRIVATE_HEADERS
+  "Detail/IoBackend.h"
+  "Detail/SystemErrors.h"
+)
 set(
   OXYGEN_SERIO_PRIVATE_SOURCES
   "AtomicFile.cpp"
   "Error.cpp"
   "FileLock.cpp"
+  "IoDriver.cpp"
   "MappedFile.cpp"
   "MemoryFile.cpp"
 )
@@ -83,19 +93,27 @@ set(
 # headers carry no platform conditionals.
 if(WIN32)
   set(OXYGEN_SERIO_OTHER_PLATFORM "Platform/Posix/")
-  list(APPEND OXYGEN_SERIO_PRIVATE_HEADERS "Platform/Windows/Handles.h")
+  list(
+    APPEND
+    OXYGEN_SERIO_PRIVATE_HEADERS
+    "Platform/Windows/Handles.h"
+    "Platform/Windows/IocpBackend.h"
+  )
   list(
     APPEND
     OXYGEN_SERIO_PRIVATE_SOURCES
+    "Platform/Windows/IocpBackend.cpp"
     "Platform/Windows/MappedFile.cpp"
     "Platform/Windows/NativeFile.cpp"
     "Platform/Windows/SystemErrors.cpp"
   )
 else()
   set(OXYGEN_SERIO_OTHER_PLATFORM "Platform/Windows/")
+  list(APPEND OXYGEN_SERIO_PRIVATE_HEADERS "Platform/Posix/UringBackend.h")
   list(
     APPEND
     OXYGEN_SERIO_PRIVATE_SOURCES
+    "Platform/Posix/UringBackend.cpp"
     "Platform/Posix/MappedFile.cpp"
     "Platform/Posix/NativeFile.cpp"
     "Platform/Posix/SystemErrors.cpp"
@@ -130,7 +148,12 @@ target_compile_definitions(
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_SERIO_STATIC>
 )
 
-target_link_libraries(${META_MODULE_TARGET} PUBLIC oxygen::base)
+target_link_libraries(
+  ${META_MODULE_TARGET}
+  PUBLIC
+    oxygen::base
+    oxygen::oxco
+)
 
 # ------------------------------------------------------------------------------
 # Tests
@@ -147,6 +170,7 @@ if(OXYGEN_BUILD_TESTS)
       FILE_SET HEADERS
       BASE_DIRS "${OXYGEN_SOURCE_DIR}"
       FILES
+        "Testing/AsyncDeviceConformance.h"
         "Testing/DeviceConformance.h"
         "Testing/FaultInjectingDevice.h"
         "Testing/StreamConformance.h"

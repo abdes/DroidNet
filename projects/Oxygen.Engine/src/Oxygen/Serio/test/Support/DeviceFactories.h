@@ -16,11 +16,14 @@
 #include <utility>
 #include <vector>
 
+#include <asio/io_context.hpp>
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/AsyncFile.h>
 #include <Oxygen/Serio/ByteView.h>
+#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/MappedFile.h>
 #include <Oxygen/Serio/MemoryFile.h>
 #include <Oxygen/Serio/NativeFile.h>
@@ -31,9 +34,11 @@
 //! Conformance factories for Serio's own devices.
 /*!
  Each factory makes a device holding given bytes and owns whatever the device
- needs (a temporary directory, backing memory). Composite factories
- (`AnyDeviceFactory`, `FaultInjectingFactory`, `RegionFactory`) wrap another
- factory, so every composition of devices runs the same suites.
+ needs (a temporary directory, backing memory, a loop and its driver).
+ Composite factories (`AnyDeviceFactory`, `AnyAsyncDeviceFactory`,
+ `FaultInjectingFactory`, `RegionFactory`) wrap another factory, so every
+ composition of devices runs the same suites; they expose the loop of the
+ factory they wrap.
 */
 namespace oxygen::serio::test {
 
@@ -120,6 +125,24 @@ struct NativeFileFactory {
   TempFiles files;
 };
 
+//! Files opened through a driver of the factory's own loop.
+struct AsyncFileFactory {
+  using Device = AsyncFile;
+
+  auto Make(const std::span<const std::byte> bytes) -> Device
+  {
+    return Required(
+      driver.Open(files.Write(bytes), { .access = Access::kReadWrite }),
+      "IoDriver::Open");
+  }
+
+  auto Loop() -> asio::io_context& { return loop; }
+
+  asio::io_context loop;
+  IoDriver driver = Required(IoDriver::Create(loop), "IoDriver::Create");
+  TempFiles files;
+};
+
 struct MappedFileFactory {
   using Device = MappedFile;
 
@@ -143,6 +166,24 @@ template <class Inner> struct AnyDeviceFactory {
   Inner inner;
 };
 
+//! Erases the asynchronous devices another factory makes.
+template <class Inner> struct AnyAsyncDeviceFactory {
+  using Device = AnyAsyncDevice;
+
+  auto Make(const std::span<const std::byte> bytes) -> Device
+  {
+    return AnyAsyncDevice(inner.Make(bytes));
+  }
+
+  auto Loop() -> asio::io_context&
+    requires requires(Inner& factory) { factory.Loop(); }
+  {
+    return inner.Loop();
+  }
+
+  Inner inner;
+};
+
 //! Wraps the devices another factory makes in a fault-injecting device with
 //! nothing scheduled, which must behave exactly as its inner device.
 template <class Inner> struct FaultInjectingFactory {
@@ -151,6 +192,12 @@ template <class Inner> struct FaultInjectingFactory {
   auto Make(const std::span<const std::byte> bytes) -> Device
   {
     return Device(inner.Make(bytes));
+  }
+
+  auto Loop() -> asio::io_context&
+    requires requires(Inner& factory) { factory.Loop(); }
+  {
+    return inner.Loop();
   }
 
   Inner inner;
@@ -176,6 +223,12 @@ template <class Inner> struct RegionFactory {
                         .count = CountOf(bytes.size()),
                       }),
       "Region::Make");
+  }
+
+  auto Loop() -> asio::io_context&
+    requires requires(Inner& factory) { factory.Loop(); }
+  {
+    return inner.Loop();
   }
 
   Inner inner;

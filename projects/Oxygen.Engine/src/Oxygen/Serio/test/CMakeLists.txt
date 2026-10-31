@@ -62,6 +62,7 @@ oxygen_serio_test(
     "Support/StreamFactories.h"
     "AnyDevice_test.cpp"
     "ByteBuffer_test.cpp"
+    "CopyRegion_test.cpp"
     "Error_test.cpp"
     "FaultInjectingDevice_test.cpp"
     "Integration_test.cpp"
@@ -80,6 +81,8 @@ oxygen_serio_test(
   SOURCES
     "Support/DeviceFactories.h"
     "Support/StreamFactories.h"
+    "AsyncDeviceConformance_functional_test.cpp"
+    "AsyncFile_functional_test.cpp"
     "AtomicFile_functional_test.cpp"
     "DeviceConformance_functional_test.cpp"
     "FileLock_functional_test.cpp"

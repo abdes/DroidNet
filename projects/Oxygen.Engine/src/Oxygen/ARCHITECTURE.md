@@ -151,8 +151,11 @@ Key types:
 
 ## Serialization & Streams (Serio)
 
-`src/Oxygen/Serio/` provides stream abstractions, readers, and writers for
-binary serialization and file I/O (`Stream.h`, `Reader.h`, `Writer.h`).
+`src/Oxygen/Serio/` provides positional devices (files, mappings, memory),
+regions and streams over them, readers and writers for binary serialization,
+and awaitable file IO: an `IoDriver` binds files to an event loop's
+`asio::io_context` (IOCP on Windows, io_uring on Linux), so coroutines await
+reads and writes without blocking a thread. Serio depends on Base and OxCo.
 
 ## UI & Editor Integration
 
@@ -180,7 +183,7 @@ binary serialization and file I/O (`Stream.h`, `Reader.h`, `Writer.h`).
 | `Config`          | Engine/graphics/renderer config structs               | `src/Oxygen/Config/`                          |
 | `OxCo`            | Structured concurrency                                | `src/Oxygen/OxCo/README.md`                   |
 | `Nexus`           | Bindless index reuse utilities                        | `src/Oxygen/Nexus/`                           |
-| `Serio`           | Serialization streams                                 | `src/Oxygen/Serio/`                           |
+| `Serio`           | Devices, streams, serialization, awaitable file IO    | `src/Oxygen/Serio/`                           |
 | `ImGui`           | ImGui integration and passes                          | `src/Oxygen/ImGui/`                           |
 | `EditorInterface` | Editor-facing API and engine runner                   | `src/Oxygen/EditorInterface/Api.h`            |
 | `Clap`            | CLI utilities                                         | `src/Oxygen/Clap/README.md`                   |

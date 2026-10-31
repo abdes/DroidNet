@@ -107,18 +107,39 @@ public:
     return device_.ReadAt(at, out.first(count));
   }
 
+  //! `ReadAt` as an operation of the inner device, failed or shortened as
+  //! scheduled; the faults count as reads.
+  [[nodiscard]] auto AsyncReadAt(const ByteOffset at,
+    const std::span<std::byte> out) const noexcept -> ReadOperation
+    requires AsyncReadableDevice<D>
+  {
+    if (const auto error = Fault(FaultOperation::kRead)) {
+      return ReadOperation::Ready(::oxygen::Err(error));
+    }
+    const auto count = static_cast<size_t>(
+      (std::min)(uint64_t { out.size() }, schedule_->max_read));
+    return device_.AsyncReadAt(at, out.first(count));
+  }
+
   [[nodiscard]] auto WriteAt(const ByteOffset at,
     const std::span<const std::byte> in) noexcept -> Result<void>
     requires WritableDevice<D>
   {
-    if (const auto error = Fault(FaultOperation::kWrite)) {
+    if (const auto error = WriteFault(at, in)) {
       return ::oxygen::Err(error);
     }
-    if (in.size() > schedule_->capacity
-      || at.get() > schedule_->capacity - in.size()) {
-      return ::oxygen::Err(std::make_error_code(std::errc::no_space_on_device));
-    }
     return device_.WriteAt(at, in);
+  }
+
+  //! `WriteAt` as an operation of the inner device, failed as scheduled.
+  [[nodiscard]] auto AsyncWriteAt(const ByteOffset at,
+    const std::span<const std::byte> in) noexcept -> WriteOperation
+    requires AsyncWritableDevice<D>
+  {
+    if (const auto error = WriteFault(at, in)) {
+      return WriteOperation::Ready(::oxygen::Err(error));
+    }
+    return device_.AsyncWriteAt(at, in);
   }
 
   [[nodiscard]] auto Reserve(const ByteCount size) noexcept -> Result<void>
@@ -170,6 +191,21 @@ private:
       = schedule_->calls.at(index).fetch_add(1, std::memory_order_relaxed);
     if (call == schedule_->fail_at.at(index)) {
       return schedule_->errors.at(index);
+    }
+    return {};
+  }
+
+  //! Counts a write; the scheduled error, or `no_space_on_device` for a
+  //! write ending past the capacity.
+  [[nodiscard]] auto WriteFault(const ByteOffset at,
+    const std::span<const std::byte> in) const noexcept -> std::error_code
+  {
+    if (const auto error = Fault(FaultOperation::kWrite)) {
+      return error;
+    }
+    if (in.size() > schedule_->capacity
+      || at.get() > schedule_->capacity - in.size()) {
+      return std::make_error_code(std::errc::no_space_on_device);
     }
     return {};
   }

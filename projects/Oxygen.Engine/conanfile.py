@@ -143,6 +143,7 @@ class OxygenConan(ConanFile):
             ("Input", ("Console", "Platform", "Core")),
             ("Platform", ("Config", "Core", "Composition", "OxCo")),
             ("Core", ("Composition", "OxCo")),
+            ("Serio", ("OxCo",)),
             ("Console", ("Config",)),
             ("Clap", ("TextWrap",)),
         )

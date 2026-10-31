@@ -105,6 +105,21 @@ public:
       range_.offset + ByteCount { relative.get() }, out.first(count));
   }
 
+  //! `ReadAt` as an awaitable operation of the device.
+  [[nodiscard]] auto AsyncReadAt(const ByteOffset relative,
+    const std::span<std::byte> out) const noexcept -> ReadOperation
+    requires AsyncReadableDevice<D>
+  {
+    if (relative.get() >= range_.count.get()) {
+      return ReadOperation::Ready(::oxygen::Ok(ByteCount { 0 }));
+    }
+    const auto remaining = range_.count.get() - relative.get();
+    const auto count
+      = static_cast<size_t>((std::min)(uint64_t { out.size() }, remaining));
+    return device_->AsyncReadAt(
+      range_.offset + ByteCount { relative.get() }, out.first(count));
+  }
+
   //! The region's bytes, a subspan of a contiguous device's view.
   [[nodiscard]] auto Bytes() const noexcept -> std::span<const std::byte>
     requires ContiguousDevice<D>
@@ -114,13 +129,13 @@ public:
   }
 
   //! The region's bytes when its device is contiguous, whether known from the
-  //! type or, for an `AnyDevice`, at run time; empty otherwise.
+  //! type or, for an erased device, at run time; empty otherwise.
   [[nodiscard]] auto Contiguous() const noexcept
     -> std::optional<std::span<const std::byte>>
   {
     if constexpr (ContiguousDevice<D>) {
       return Bytes();
-    } else if constexpr (std::is_same_v<D, AnyDevice>) {
+    } else if constexpr (requires { device_->Contiguous(); }) {
       const auto bytes = device_->Contiguous();
       if (!bytes) {
         return std::nullopt;
@@ -147,5 +162,6 @@ private:
 using AnyRegion = Region<AnyDevice>;
 
 static_assert(ReadableDevice<Region<AnyDevice>>);
+static_assert(AsyncReadableDevice<Region<AnyAsyncDevice>>);
 
 } // namespace oxygen::serio

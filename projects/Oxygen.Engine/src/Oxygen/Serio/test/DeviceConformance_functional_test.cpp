@@ -25,22 +25,24 @@ namespace {
 
   using Factories = ::testing::Types<test::MemoryFileFactory,
     test::ByteViewFactory, test::NativeFileFactory, test::MappedFileFactory,
-    test::AnyDeviceFactory<test::MemoryFileFactory>,
+    test::AsyncFileFactory, test::AnyDeviceFactory<test::MemoryFileFactory>,
     test::AnyDeviceFactory<test::NativeFileFactory>,
     test::AnyDeviceFactory<test::MappedFileFactory>,
     test::FaultInjectingFactory<test::MemoryFileFactory>,
     test::FaultInjectingFactory<test::NativeFileFactory>,
     test::RegionFactory<test::MemoryFileFactory>,
     test::RegionFactory<test::NativeFileFactory>,
-    test::RegionFactory<test::MappedFileFactory>>;
+    test::RegionFactory<test::MappedFileFactory>,
+    test::RegionFactory<test::AsyncFileFactory>>;
 
   INSTANTIATE_TYPED_TEST_SUITE_P(Serio, DeviceConformance, Factories);
 
-  using WritableFactories = ::testing::Types<test::MemoryFileFactory,
-    test::NativeFileFactory, test::AnyDeviceFactory<test::MemoryFileFactory>,
-    test::AnyDeviceFactory<test::NativeFileFactory>,
-    test::FaultInjectingFactory<test::MemoryFileFactory>,
-    test::FaultInjectingFactory<test::NativeFileFactory>>;
+  using WritableFactories
+    = ::testing::Types<test::MemoryFileFactory, test::NativeFileFactory,
+      test::AsyncFileFactory, test::AnyDeviceFactory<test::MemoryFileFactory>,
+      test::AnyDeviceFactory<test::NativeFileFactory>,
+      test::FaultInjectingFactory<test::MemoryFileFactory>,
+      test::FaultInjectingFactory<test::NativeFileFactory>>;
 
   INSTANTIATE_TYPED_TEST_SUITE_P(
     Serio, WritableDeviceConformance, WritableFactories);

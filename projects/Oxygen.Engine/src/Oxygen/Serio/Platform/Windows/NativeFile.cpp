@@ -7,11 +7,13 @@
 #include <Windows.h> // IWYU pragma: keep
 
 #include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <limits>
 #include <new>
+#include <optional>
 #include <span>
 #include <system_error>
 #include <utility>
@@ -81,9 +83,13 @@ namespace {
     return FILE_SHARE_READ | FILE_SHARE_DELETE;
   }
 
-  auto FlagsAndAttributes(const OpenSpec& spec) noexcept -> DWORD
+  auto FlagsAndAttributes(const OpenSpec& spec, const bool overlapped) noexcept
+    -> DWORD
   {
     auto flags = static_cast<DWORD>(FILE_ATTRIBUTE_NORMAL);
+    if (overlapped) {
+      flags |= static_cast<DWORD>(FILE_FLAG_OVERLAPPED);
+    }
     flags |= spec.hint == AccessHint::kSequential
       ? static_cast<DWORD>(FILE_FLAG_SEQUENTIAL_SCAN)
       : static_cast<DWORD>(FILE_FLAG_RANDOM_ACCESS);
@@ -93,12 +99,91 @@ namespace {
     return flags;
   }
 
-  auto OffsetOverlapped(const ByteOffset at) noexcept -> OVERLAPPED
+  //! An event each thread waits on for its blocking operations.
+  class ThreadEvent {
+  public:
+    ThreadEvent() noexcept
+      : event_(CreateEventW(nullptr, FALSE, FALSE, nullptr))
+    {
+    }
+
+    ~ThreadEvent() noexcept
+    {
+      if (event_ != nullptr) {
+        CloseHandle(event_);
+      }
+    }
+
+    ThreadEvent(const ThreadEvent&) = delete;
+    ThreadEvent(ThreadEvent&&) = delete;
+    auto operator=(const ThreadEvent&) -> ThreadEvent& = delete;
+    auto operator=(ThreadEvent&&) -> ThreadEvent& = delete;
+
+    [[nodiscard]] auto Get() const noexcept -> HANDLE { return event_; }
+
+  private:
+    HANDLE event_;
+  };
+
+  //! The OVERLAPPED of a blocking operation at `at`.
+  /*!
+   A file an `IoDriver` opened is overlapped and bound to a completion port.
+   A blocking operation on it waits on the thread's event, whose low bit set
+   keeps the completion off the port, where the driver's backend expects only
+   its own requests. On any other file the operation completes synchronously
+   and the event is merely signalled.
+  */
+  auto BlockingOverlapped(const ByteOffset at) noexcept -> Result<OVERLAPPED>
   {
+    thread_local const auto event = ThreadEvent {};
+    if (event.Get() == nullptr) {
+      return ::oxygen::Err(base::LastSystemError());
+    }
     auto overlapped = OVERLAPPED {};
     overlapped.Offset = static_cast<DWORD>(at.get() & 0xFFFF'FFFFU);
     overlapped.OffsetHigh = static_cast<DWORD>(at.get() >> 32U);
-    return overlapped;
+    overlapped.hEvent = std::bit_cast<HANDLE>(
+      std::bit_cast<uintptr_t>(event.Get()) | uintptr_t { 1 });
+    return ::oxygen::Ok(overlapped);
+  }
+
+  //! The bytes a blocking `ReadFile` or `WriteFile` transferred, waiting for
+  //! it when it is pending. `completed` is the count the call returned when
+  //! it succeeded at once, empty when it returned FALSE.
+  auto Finish(HANDLE handle, OVERLAPPED& overlapped,
+    const std::optional<DWORD> completed) noexcept -> Result<DWORD>
+  {
+    if (completed) {
+      return ::oxygen::Ok(*completed);
+    }
+    if (GetLastError() != ERROR_IO_PENDING) {
+      return ::oxygen::Err(base::LastSystemError());
+    }
+    DWORD transferred = 0;
+    if (GetOverlappedResult(handle, &overlapped, &transferred, TRUE) == FALSE) {
+      return ::oxygen::Err(base::LastSystemError());
+    }
+    return ::oxygen::Ok(transferred);
+  }
+
+  auto OpenFile(const std::filesystem::path& path, const OpenSpec& spec,
+    const bool overlapped) noexcept -> Result<NativeHandle>
+  {
+    try {
+      const auto native = base::ToNativePath(path);
+      auto* const handle
+        = CreateFileW(native.c_str(), DesiredAccess(spec.access),
+          ShareMode(spec.sharing), nullptr, CreationDisposition(spec.creation),
+          FlagsAndAttributes(spec, overlapped), nullptr);
+      if (handle == INVALID_HANDLE_VALUE) {
+        return ::oxygen::Err(base::LastSystemError());
+      }
+      return ::oxygen::Ok(windows::ToNativeHandle(handle));
+    } catch (const std::bad_alloc&) {
+      return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
+    } catch (const std::filesystem::filesystem_error& error) {
+      return ::oxygen::Err(error.code());
+    }
   }
 
 } // namespace
@@ -106,21 +191,25 @@ namespace {
 auto NativeFile::Open(const std::filesystem::path& path,
   const OpenSpec& spec) noexcept -> Result<NativeFile>
 {
+  return Adopt(path, OpenFile(path, spec, false));
+}
+
+auto NativeFile::OpenForDriver(const std::filesystem::path& path,
+  const OpenSpec& spec) noexcept -> Result<NativeFile>
+{
+  return Adopt(path, OpenFile(path, spec, true));
+}
+
+auto NativeFile::Adopt(const std::filesystem::path& path,
+  const Result<NativeHandle>& handle) noexcept -> Result<NativeFile>
+{
   try {
-    auto logical = path;
-    const auto native = base::ToNativePath(path);
-    auto* const handle = CreateFileW(native.c_str(), DesiredAccess(spec.access),
-      ShareMode(spec.sharing), nullptr, CreationDisposition(spec.creation),
-      FlagsAndAttributes(spec), nullptr);
-    if (handle == INVALID_HANDLE_VALUE) {
-      return ::oxygen::Err(base::LastSystemError());
+    if (!handle) {
+      return ::oxygen::Err(handle.error());
     }
-    return ::oxygen::Ok(
-      NativeFile(windows::ToNativeHandle(handle), std::move(logical)));
+    return ::oxygen::Ok(NativeFile(*handle, path));
   } catch (const std::bad_alloc&) {
     return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
-  } catch (const std::filesystem::filesystem_error& error) {
-    return ::oxygen::Err(error.code());
   }
 }
 
@@ -173,17 +262,23 @@ auto NativeFile::ReadAt(ByteOffset at, std::span<std::byte> out) const noexcept
   while (!out.empty()) {
     const auto request
       = static_cast<DWORD>((std::min)(out.size(), kMaxTransfer));
-    auto overlapped = OffsetOverlapped(at);
-    DWORD read = 0;
-    if (ReadFile(
-          windows::ToHandle(handle_), out.data(), request, &read, &overlapped)
-      == FALSE) {
-      const auto error = base::LastSystemError();
-      if (error.value() == ERROR_HANDLE_EOF) {
+    auto overlapped = BlockingOverlapped(at);
+    if (!overlapped) {
+      return ::oxygen::Err(overlapped.error());
+    }
+    auto* const handle = windows::ToHandle(handle_);
+    DWORD immediate = 0;
+    const auto finished = Finish(handle, *overlapped,
+      ReadFile(handle, out.data(), request, &immediate, &*overlapped) != FALSE
+        ? std::optional { immediate }
+        : std::nullopt);
+    if (!finished) {
+      if (finished.error().value() == ERROR_HANDLE_EOF) {
         break;
       }
-      return ::oxygen::Err(error);
+      return ::oxygen::Err(finished.error());
     }
+    const auto read = *finished;
     if (read == 0) {
       break;
     }
@@ -200,13 +295,20 @@ auto NativeFile::WriteAt(ByteOffset at, std::span<const std::byte> in) noexcept
   while (!in.empty()) {
     const auto request
       = static_cast<DWORD>((std::min)(in.size(), kMaxTransfer));
-    auto overlapped = OffsetOverlapped(at);
-    DWORD written = 0;
-    if (WriteFile(
-          windows::ToHandle(handle_), in.data(), request, &written, &overlapped)
-      == FALSE) {
-      return ::oxygen::Err(base::LastSystemError());
+    auto overlapped = BlockingOverlapped(at);
+    if (!overlapped) {
+      return ::oxygen::Err(overlapped.error());
     }
+    auto* const handle = windows::ToHandle(handle_);
+    DWORD immediate = 0;
+    const auto finished = Finish(handle, *overlapped,
+      WriteFile(handle, in.data(), request, &immediate, &*overlapped) != FALSE
+        ? std::optional { immediate }
+        : std::nullopt);
+    if (!finished) {
+      return ::oxygen::Err(finished.error());
+    }
+    const auto written = *finished;
     if (written == 0) {
       return ::oxygen::Err(std::make_error_code(std::errc::io_error));
     }

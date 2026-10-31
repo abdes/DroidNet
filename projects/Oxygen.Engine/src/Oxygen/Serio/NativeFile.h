@@ -19,12 +19,6 @@
 
 namespace oxygen::serio {
 
-//! An OS file handle: a Win32 `HANDLE` or a POSIX file descriptor. Both
-//! platforms spell an invalid handle as -1.
-enum class NativeHandle : std::intptr_t {
-  kInvalid = -1,
-};
-
 //! A file opened from a path, with positional, blocking IO.
 /*!
  Every operation names its offset (`ReadFile`/`WriteFile` with an offset,
@@ -39,7 +33,7 @@ enum class NativeHandle : std::intptr_t {
  `serio::Error` conditions. Nothing throws.
 
  A `NativeFile` has no awaitable operations; a file opened through an
- `IoQueue` does.
+ `IoDriver` does.
 
  @see OpenSpec, ReadExactlyAt
 */
@@ -96,7 +90,19 @@ public:
   [[nodiscard]] auto Handle() const noexcept -> NativeHandle { return handle_; }
 
 private:
+  friend class IoDriver;
+
   NativeFile(NativeHandle handle, std::filesystem::path path) noexcept;
+
+  //! Opens the file for an `IoDriver`: overlapped on Windows, so its
+  //! operations complete through the driver's backend.
+  static auto OpenForDriver(const std::filesystem::path& path,
+    const OpenSpec& spec) noexcept -> Result<NativeFile>;
+
+  //! The file owning `handle`, opened from `path`; the open's error passes
+  //! through.
+  static auto Adopt(const std::filesystem::path& path,
+    const Result<NativeHandle>& handle) noexcept -> Result<NativeFile>;
 
   auto Close() noexcept -> void;
 

@@ -131,6 +131,12 @@ struct OpenSpec {
   bool unbuffered = false;
 };
 
+//! An OS file handle: a Win32 `HANDLE` or a POSIX file descriptor. Both
+//! platforms spell an invalid handle as -1.
+enum class NativeHandle : std::intptr_t {
+  kInvalid = -1,
+};
+
 //! The alignment that serves unbuffered IO on every common volume.
 inline constexpr size_t kIoAlignment = 4096;
 
