@@ -456,6 +456,11 @@ class OxygenConan(ConanFile):
         self.requires("fmt/12.1.0", transitive_headers=True)
         if self._full_engine or "OxCo" in self._modules:
             self.requires("asio/1.38.2", transitive_headers=True)
+            # asio's file IO on Linux (ASIO_HAS_IO_URING, set by OxCo).
+            if self.settings.os == "Linux":
+                self.requires(
+                    "liburing/2.15", transitive_headers=True, transitive_libs=True
+                )
         if self._full_engine or "Clap" in self._modules:
             self.requires("magic_enum/0.9.7", transitive_headers=True)
         if not self._full_engine:

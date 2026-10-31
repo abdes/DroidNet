@@ -19,6 +19,11 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(asio CONFIG REQUIRED)
+# asio's file IO on Linux is io_uring. The define changes the io_context
+# asio builds, so every user of asio gets it from here.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_package(liburing CONFIG REQUIRED)
+endif()
 
 # ==============================================================================
 # Build instructions
@@ -148,12 +153,18 @@ target_compile_definitions(
     $<$<PLATFORM_ID:Windows>:_WIN32_WINNT=0x0A00>
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
+    $<$<PLATFORM_ID:Linux>:ASIO_HAS_IO_URING>
+    # Oxygen builds without RTTI. Standalone asio learns that only from
+    # Boost.Config; GCC and Clang reject its typeid even in uninstantiated
+    # templates (MSVC accepts typeid of a static type under /GR-).
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:ASIO_NO_TYPEID>
 )
 target_link_libraries(
   ${META_MODULE_TARGET}
   INTERFACE
     oxygen::base
     asio::asio
+    $<$<PLATFORM_ID:Linux>:liburing::liburing>
 )
 
 # The native interface target lists its headers directly, so Visual Studio

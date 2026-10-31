@@ -291,17 +291,19 @@ the common infrastructure minimum.
 
 | Module   | Also selects                                 | External dependencies            |
 | -------- | -------------------------------------------- | -------------------------------- |
+| OxCo     |                                              | Asio                             |
 | Clap     | TextWrap                                     | magic_enum                       |
 | Console  | Config                                       | nlohmann_json                    |
 | Core     | Composition, OxCo                            | Asio, glm, xxHash                |
 | Platform | Config, Core, Composition, OxCo              | Asio, glm, xxHash                |
 | Input    | Console, Platform, Core (and their closures) | Asio, glm, xxHash, nlohmann_json |
 
-Every module also selects Base (fmt). In a reusable selection, Platform builds
-only `oxygen::platform-input`: keys, mouse buttons, input slots and input
-events, with no SDL or ImGui dependency. The SDL backend (`oxygen::platform`)
-and Core's bindless code generation are full-engine only; reusable builds
-consume Core's committed generated headers.
+Every module also selects Base (fmt). On Linux, Asio comes with liburing: OxCo
+builds asio's file IO on io_uring (`ASIO_HAS_IO_URING`). In a reusable
+selection, Platform builds only `oxygen::platform-input`: keys, mouse buttons,
+input slots and input events, with no SDL or ImGui dependency. The SDL backend
+(`oxygen::platform`) and Core's bindless code generation are full-engine only;
+reusable builds consume Core's committed generated headers.
 
 Linux validation: the `Input` selection, with tests, builds without warnings and
 passes its tests with GCC 14 (`profiles/Linux-gcc.ini`, static) and Clang 18

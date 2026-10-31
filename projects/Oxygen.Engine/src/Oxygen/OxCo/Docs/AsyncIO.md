@@ -50,8 +50,10 @@ auto ReadHeader(asio::io_context& io, const std::string& utf8_path)
 A positional read crossing the end of the file returns the bytes up to the end;
 a read at the end transfers nothing and reports `asio::error::eof`. An
 operation on a closed file completes with `asio::error::bad_descriptor`; OS
-failures arrive as system errors, for example `ERROR_ACCESS_DENIED` for a write
-to a file opened read-only.
+failures arrive as system errors, for example a write to a file opened
+read-only fails with `ERROR_ACCESS_DENIED` on Windows and `EBADF` on POSIX.
+On Linux, asio's file IO is io_uring: OxCo builds asio with
+`ASIO_HAS_IO_URING` and links liburing, so every user of asio agrees on it.
 
 A result that is available at once, such as a read from a memory device, is
 returned through `co::Just(value)`, which completes without suspending.

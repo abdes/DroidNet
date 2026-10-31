@@ -411,7 +411,7 @@ NOLINT_TEST_F(
   });
 }
 
-NOLINT_TEST_F(AsioFileTest, WriteToAReadOnlyFileReportsAccessDenied)
+NOLINT_TEST_F(AsioFileTest, WriteToAReadOnlyFileReportsTheOsError)
 {
   ::Run(*io_, [&] -> Co<> {
     OpenNewFile().close();
@@ -424,7 +424,8 @@ NOLINT_TEST_F(AsioFileTest, WriteToAReadOnlyFileReportsAccessDenied)
       asio::error_code(
         ERROR_ACCESS_DENIED, asio::error::get_system_category()));
 #  else
-    EXPECT_EQ(ec, asio::error::access_denied);
+    // POSIX refuses a write through a read-only descriptor with EBADF.
+    EXPECT_EQ(ec, asio::error::bad_descriptor);
 #  endif
     EXPECT_EQ(n, 0U);
   });
