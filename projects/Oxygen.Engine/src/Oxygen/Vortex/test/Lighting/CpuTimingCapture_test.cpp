@@ -6,13 +6,11 @@
 
 #include <Windows.h> // IWYU pragma: keep
 
-#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <system_error>
 #include <thread>
 
 #include <nlohmann/json.hpp>
@@ -24,30 +22,14 @@
 #include <Oxygen/Profiling/CpuScopeObserver.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 #include <Oxygen/Vortex/test/Support/CpuTimingCapture.h>
 
 namespace oxygen::vortex::testing {
 namespace {
-  class CpuTimingCaptureTest : public ::testing::Test {
+  class CpuTimingCaptureTest : public oxygen::testing::TempDirTest {
   protected:
-    auto SetUp() -> void override
-    {
-      const auto suffix
-        = std::chrono::steady_clock::now().time_since_epoch().count();
-      directory_ = std::filesystem::temp_directory_path()
-        / ("oxygen-cpu-timing-" + std::to_string(suffix));
-      owned_ = std::filesystem::create_directory(directory_);
-      ASSERT_TRUE(owned_);
-      path_ = directory_ / "timing.csv";
-    }
-    auto TearDown() -> void override
-    {
-      if (owned_) {
-        auto error = std::error_code {};
-        std::filesystem::remove(path_, error);
-        std::filesystem::remove(directory_, error);
-      }
-    }
+    auto SetUp() -> void override { path_ = TempPath("timing.csv"); }
     [[nodiscard]] auto ReadCsv() const -> std::string
     {
       auto input = std::ifstream(path_);
@@ -56,10 +38,6 @@ namespace {
       return contents.str();
     }
     std::filesystem::path path_;
-
-  private:
-    std::filesystem::path directory_;
-    bool owned_ { false };
   };
 
   NOLINT_TEST_F(

@@ -11,7 +11,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -26,6 +25,7 @@
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Console/StartupPlan.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -42,44 +42,21 @@ using oxygen::console::CVarValueOrigin;
 using oxygen::console::StampedCVarValue;
 
 struct TestEnvironment {
-  std::filesystem::path root;
+  oxygen::testing::ScopedTempDir dir;
   std::shared_ptr<const oxygen::PathFinderConfig> config;
   PathFinder path_finder;
 
-  TestEnvironment(std::filesystem::path root_in,
-    std::shared_ptr<const oxygen::PathFinderConfig> config_in,
-    PathFinder path_finder_in)
-    : root(std::move(root_in))
-    , config(std::move(config_in))
-    , path_finder(std::move(path_finder_in))
+  TestEnvironment()
+    : config(oxygen::PathFinderConfig::Create()
+          .WithWorkspaceRoot(dir.Path())
+          .WithCVarsArchivePath("console/cvars.json")
+          .BuildShared())
+    , path_finder(config, dir.Path())
   {
   }
-
-  ~TestEnvironment() { std::filesystem::remove_all(root); }
-
-  TestEnvironment(const TestEnvironment&) = delete;
-  auto operator=(const TestEnvironment&) -> TestEnvironment& = delete;
-  TestEnvironment(TestEnvironment&&) = default;
-  auto operator=(TestEnvironment&&) -> TestEnvironment& = default;
 };
 
-auto MakeTestEnvironment(const std::string_view name) -> TestEnvironment
-{
-  const auto root = std::filesystem::temp_directory_path()
-    / "oxygen_console_persistence" / std::string(name);
-  std::filesystem::remove_all(root);
-  std::filesystem::create_directories(root);
-
-  auto config = oxygen::PathFinderConfig::Create()
-                  .WithWorkspaceRoot(root)
-                  .WithCVarsArchivePath("console/cvars.json")
-                  .BuildShared();
-  return TestEnvironment {
-    root,
-    config,
-    PathFinder { config, root },
-  };
-}
+auto MakeTestEnvironment() -> TestEnvironment { return TestEnvironment {}; }
 
 auto WriteArchivedInt(const PathFinder& path_finder,
   const std::string_view name, const int64_t value) -> void
@@ -146,7 +123,7 @@ auto RegisterArchivedInt(Console& console, const std::string_view name,
 
 NOLINT_TEST(ConsolePersistence, PersistedPreferenceBeatsAppDefault)
 {
-  auto env = MakeTestEnvironment("persisted_preference_beats_app_default");
+  auto env = MakeTestEnvironment();
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
   oxygen::commands::CommandRegistry command_registry;
@@ -169,7 +146,7 @@ NOLINT_TEST(ConsolePersistence, PersistedPreferenceBeatsAppDefault)
 NOLINT_TEST(
   ConsolePersistence, StartupExplicitBeatsPersistedPreferenceForSession)
 {
-  auto env = MakeTestEnvironment("startup_explicit_beats_persisted");
+  auto env = MakeTestEnvironment();
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
   oxygen::commands::CommandRegistry command_registry;
@@ -189,7 +166,7 @@ NOLINT_TEST(
 
 NOLINT_TEST(ConsolePersistence, AutomaticSaveDoesNotPromoteStartupOnlyOverride)
 {
-  auto env = MakeTestEnvironment("automatic_save_does_not_promote_startup");
+  auto env = MakeTestEnvironment();
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
   oxygen::commands::CommandRegistry command_registry;
@@ -210,7 +187,7 @@ NOLINT_TEST(ConsolePersistence, AutomaticSaveDoesNotPromoteStartupOnlyOverride)
 
 NOLINT_TEST(ConsolePersistence, RuntimeExplicitOverwritesArchiveOnAutomaticSave)
 {
-  auto env = MakeTestEnvironment("runtime_explicit_overwrites_archive");
+  auto env = MakeTestEnvironment();
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
   oxygen::commands::CommandRegistry command_registry;
@@ -233,7 +210,7 @@ NOLINT_TEST(ConsolePersistence, RuntimeExplicitOverwritesArchiveOnAutomaticSave)
 
 NOLINT_TEST(ConsolePersistence, ExplicitSavePromotesCurrentLiveValue)
 {
-  auto env = MakeTestEnvironment("explicit_save_promotes_live_value");
+  auto env = MakeTestEnvironment();
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
   oxygen::commands::CommandRegistry command_registry;
@@ -255,7 +232,7 @@ NOLINT_TEST(ConsolePersistence, ExplicitSavePromotesCurrentLiveValue)
 NOLINT_TEST(
   ConsolePersistence, LateRegistrationAppliesCachedPersistedPreference)
 {
-  auto env = MakeTestEnvironment("late_registration_persisted_preference");
+  auto env = MakeTestEnvironment();
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
   oxygen::commands::CommandRegistry command_registry;
@@ -273,7 +250,7 @@ NOLINT_TEST(
 NOLINT_TEST(
   ConsolePersistence, LateRegistrationPreservesHigherPrecedenceStartupExplicit)
 {
-  auto env = MakeTestEnvironment("late_registration_startup_explicit");
+  auto env = MakeTestEnvironment();
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
   oxygen::commands::CommandRegistry command_registry;
@@ -309,7 +286,7 @@ NOLINT_TEST(ConsolePersistence, CommandLineOverridesUseStartupExplicitOrigin)
 
 NOLINT_TEST(ConsolePersistence, ExplicitSaveDoesNotPromoteAppForcedValue)
 {
-  auto env = MakeTestEnvironment("explicit_save_does_not_promote_app_forced");
+  auto env = MakeTestEnvironment();
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
   oxygen::commands::CommandRegistry command_registry;

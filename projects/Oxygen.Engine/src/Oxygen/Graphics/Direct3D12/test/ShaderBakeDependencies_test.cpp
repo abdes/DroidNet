@@ -5,18 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
-#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <system_error>
 
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/TrackingIncludeHandler.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -25,24 +24,8 @@ using oxygen::graphics::d3d12::tools::shader_bake::DependencyFingerprint;
 using oxygen::graphics::d3d12::tools::shader_bake::ResolveTrackedInclude;
 using oxygen::graphics::d3d12::tools::shader_bake::TrackingDependencyRecorder;
 
-class ShaderBakeDependenciesTest : public testing::Test {
+class ShaderBakeDependenciesTest : public oxygen::testing::TempDirTest {
 protected:
-  void SetUp() override
-  {
-    static auto next_id = std::atomic_uint64_t { 0 };
-    root_ = std::filesystem::temp_directory_path()
-      / ("oxygen_shaderbake_dependencies_test_"
-        + std::to_string(next_id.fetch_add(1, std::memory_order_relaxed)));
-    std::filesystem::remove_all(root_);
-    std::filesystem::create_directories(root_);
-  }
-
-  void TearDown() override
-  {
-    std::error_code ec;
-    std::filesystem::remove_all(root_, ec);
-  }
-
   auto WriteTextFile(const std::filesystem::path& path, std::string_view text)
     -> void
   {
@@ -50,8 +33,6 @@ protected:
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     out << text;
   }
-
-  std::filesystem::path root_;
 };
 
 } // namespace
@@ -59,7 +40,7 @@ protected:
 NOLINT_TEST_F(
   ShaderBakeDependenciesTest, ResolveTrackedIncludeUsesOrderedSearchRoots)
 {
-  const auto workspace_root = root_ / "workspace";
+  const auto workspace_root = TempDir() / "workspace";
   const auto first_root = workspace_root / "includes-first";
   const auto second_root = workspace_root / "includes-second";
   const auto candidate_rel = std::filesystem::path("Vortex/Shared/Math.hlsli");
@@ -80,7 +61,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(ShaderBakeDependenciesTest,
   ComputeFileFingerprintCanonicalizesWorkspaceRelativePath)
 {
-  const auto workspace_root = root_ / "workspace";
+  const auto workspace_root = TempDir() / "workspace";
   const auto file_path = workspace_root / "src" / "Shaders" / "Vortex"
     / "Shared" / "Lighting.hlsli";
   WriteTextFile(file_path, "float4 main() : SV_Target { return 1; }\n");
@@ -124,7 +105,7 @@ NOLINT_TEST(
 
 NOLINT_TEST_F(ShaderBakeDependenciesTest, ResolveTrackedIncludeFailsWhenMissing)
 {
-  const auto workspace_root = root_ / "workspace";
+  const auto workspace_root = TempDir() / "workspace";
   std::filesystem::create_directories(workspace_root / "includes");
 
   const auto resolved = ResolveTrackedInclude(L"Missing/Nope.hlsli",

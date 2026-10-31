@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <iostream>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/OxCo/EventLoop.h>
 #include <Oxygen/OxCo/Executor.h>
@@ -28,14 +26,6 @@ protected:
   Executor executor_ = Executor(main_loop_id_);
   Executor another_executor_ = Executor(other_loop_id_);
   // NOLINTEND(*-non-private-member-variables-in-classes)
-
-  void SetUp() override { testing::internal::CaptureStderr(); }
-
-  void TearDown() override
-  {
-    const auto captured_stderr = testing::internal::GetCapturedStderr();
-    std::cout << "Captured stderr:\n" << captured_stderr << '\n';
-  }
 };
 
 void TestFunction(int* value) noexcept

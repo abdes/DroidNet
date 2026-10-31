@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -15,7 +14,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -25,6 +23,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -77,32 +76,13 @@ auto MakeArtifact(const ShaderType stage, std::string_view source_path,
   };
 }
 
-class ShaderBakeBuildStateTest : public testing::Test {
-protected:
-  void SetUp() override
-  {
-    static auto next_id = std::atomic_uint64_t { 0 };
-    root_ = std::filesystem::temp_directory_path()
-      / ("oxygen_shaderbake_buildstate_test_"
-        + std::to_string(next_id.fetch_add(1, std::memory_order_relaxed)));
-    std::filesystem::remove_all(root_);
-    std::filesystem::create_directories(root_);
-  }
-
-  void TearDown() override
-  {
-    std::error_code ec;
-    std::filesystem::remove_all(root_, ec);
-  }
-
-  std::filesystem::path root_;
-};
+class ShaderBakeBuildStateTest : public oxygen::testing::TempDirTest { };
 
 } // namespace
 
 NOLINT_TEST_F(ShaderBakeBuildStateTest, RoundTripsBuildStateSnapshot)
 {
-  const auto layout = GetBuildRootLayout(root_ / "build");
+  const auto layout = GetBuildRootLayout(TempDir() / "build");
   EnsureBuildRootLayout(layout);
 
   const std::array artifacts {
@@ -114,7 +94,7 @@ NOLINT_TEST_F(ShaderBakeBuildStateTest, RoundTripsBuildStateSnapshot)
       0x2222222222222222ULL),
   };
 
-  const auto snapshot = BuildBuildStateSnapshot(root_, layout, artifacts);
+  const auto snapshot = BuildBuildStateSnapshot(TempDir(), layout, artifacts);
   WriteBuildStateFile(layout.build_state_file, snapshot);
 
   const auto reloaded = ReadBuildStateFile(layout.build_state_file);
@@ -126,7 +106,7 @@ NOLINT_TEST_F(ShaderBakeBuildStateTest, RoundTripsBuildStateSnapshot)
 NOLINT_TEST_F(
   ShaderBakeBuildStateTest, RecoversFromMissingBuildStateByScanningModules)
 {
-  const auto layout = GetBuildRootLayout(root_ / "build");
+  const auto layout = GetBuildRootLayout(TempDir() / "build");
   EnsureBuildRootLayout(layout);
 
   const std::array artifacts {
@@ -143,8 +123,8 @@ NOLINT_TEST_F(
       GetModuleArtifactPath(layout, artifact.request_key), artifact);
   }
 
-  const auto recovered = LoadOrRecoverBuildStateFile(root_, layout);
-  const auto expected = BuildBuildStateSnapshot(root_, layout, artifacts);
+  const auto recovered = LoadOrRecoverBuildStateFile(TempDir(), layout);
+  const auto expected = BuildBuildStateSnapshot(TempDir(), layout, artifacts);
 
   EXPECT_EQ(recovered, expected);
 }
@@ -152,7 +132,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   ShaderBakeBuildStateTest, RecoversFromCorruptBuildStateByScanningModules)
 {
-  const auto layout = GetBuildRootLayout(root_ / "build");
+  const auto layout = GetBuildRootLayout(TempDir() / "build");
   EnsureBuildRootLayout(layout);
 
   const auto artifact = MakeArtifact(ShaderType::kVertex, "Renderer/Grid.hlsl",
@@ -167,9 +147,9 @@ NOLINT_TEST_F(
     out << "{ not-json";
   }
 
-  const auto recovered = LoadOrRecoverBuildStateFile(root_, layout);
+  const auto recovered = LoadOrRecoverBuildStateFile(TempDir(), layout);
   const auto expected
-    = BuildBuildStateSnapshot(root_, layout, std::span(&artifact, 1));
+    = BuildBuildStateSnapshot(TempDir(), layout, std::span(&artifact, 1));
 
   EXPECT_EQ(recovered, expected);
 }

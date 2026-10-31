@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdint>
-#include <filesystem>
 #include <fstream>
 #include <optional>
 
@@ -16,6 +15,7 @@
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -80,8 +80,8 @@ NOLINT_TEST(ConsoleExecution, SupportsScriptExecution)
       })
       .IsValid());
 
-  const auto script_path
-    = std::filesystem::temp_directory_path() / "oxygen_console_script.cfg";
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto script_path = temp_dir.File("oxygen_console_script.cfg");
   {
     std::ofstream script { script_path };
     script << "# comment\n";
@@ -96,8 +96,6 @@ NOLINT_TEST(ConsoleExecution, SupportsScriptExecution)
   const auto snapshot = console.FindCVar("r.exposure");
   ASSERT_NE(snapshot, nullptr);
   EXPECT_DOUBLE_EQ(std::get<double>(snapshot->current_value), 2.5);
-
-  std::filesystem::remove(script_path);
 }
 
 NOLINT_TEST(ConsoleExecution, HandlesExecutionErrorsInChains)

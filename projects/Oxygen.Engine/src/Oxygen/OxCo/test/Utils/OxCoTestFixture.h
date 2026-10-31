@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <iostream>
 #include <memory>
 
 #include "./TestEventLoop.h"
@@ -18,18 +17,9 @@ class OxCoTestFixture : public ::testing::Test {
 protected:
   std::unique_ptr<TestEventLoop> el_ {};
 
-  void SetUp() override
-  {
-    ::testing::internal::CaptureStderr();
-    el_ = std::make_unique<TestEventLoop>();
-  }
+  void SetUp() override { el_ = std::make_unique<TestEventLoop>(); }
 
-  void TearDown() override
-  {
-    el_.reset();
-    const auto captured_stderr = ::testing::internal::GetCapturedStderr();
-    std::cout << "Captured stderr:\n" << captured_stderr << '\n';
-  }
+  void TearDown() override { el_.reset(); }
 };
 
 } // namespace oxygen::co::testing

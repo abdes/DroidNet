@@ -7,10 +7,13 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <ostream>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h> // IWYU pragma: keep
@@ -18,7 +21,9 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Testing/GTest.h>
 
+using oxygen::make_observer;
 using oxygen::clap::CliBuilder;
+using oxygen::clap::CliStreams;
 using oxygen::clap::Command;
 using oxygen::clap::CommandBuilder;
 
@@ -263,11 +268,12 @@ NOLINT_TEST(CliBuilder, OutputWidthIsUsedForHelpFormatting)
 
   constexpr int argc = 2;
   const auto argv = std::array<const char*, argc> { "clap-test", "--help" };
-  testing::internal::CaptureStdout();
+  auto out = std::ostringstream {};
 
   // Act
-  (void)cli->Parse(argv);
-  const auto output = testing::internal::GetCapturedStdout();
+  (void)cli->Parse(
+    argv, CliStreams { .out = make_observer<std::ostream>(&out) });
+  const auto output = out.str();
 
   // Assert
   const auto lines = SplitLines(output);

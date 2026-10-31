@@ -16,8 +16,11 @@
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 
 using oxygen::TypeId;
+using oxygen::testing::ScopedLogCapture;
+using testing::HasSubstr;
 
 namespace {
 // Forward declare pooled type
@@ -88,7 +91,6 @@ NOLINT_TEST_F(PrintAndDebugTest, PrintHybridComponents)
   const std::string output = os.str();
 
   // Assert
-  using testing::HasSubstr;
   EXPECT_THAT(output, HasSubstr("PooledComponent"))
     << "Should print pooled component type name";
   EXPECT_THAT(output, HasSubstr("NonPooledComponent"))
@@ -97,7 +99,7 @@ NOLINT_TEST_F(PrintAndDebugTest, PrintHybridComponents)
   EXPECT_THAT(output, HasSubstr("Direct")) << "Should indicate direct storage";
 }
 
-NOLINT_TEST_F(PrintAndDebugTest, LogComponents_OutputsToStdoutAndStderr)
+NOLINT_TEST_F(PrintAndDebugTest, LogComponents_LogsEveryComponent)
 {
   loguru::g_global_verbosity = loguru::Verbosity_INFO;
   // Arrange
@@ -106,16 +108,13 @@ NOLINT_TEST_F(PrintAndDebugTest, LogComponents_OutputsToStdoutAndStderr)
   composition_.AddComponent<PooledComponent>(1);
   composition_.AddComponent<NonPooledComponent>(2);
 
-  // Act: Capture both stdout and stderr
-  testing::internal::CaptureStdout();
-  testing::internal::CaptureStderr();
-  composition_.LogComponents();
-  std::string out = testing::internal::GetCapturedStdout();
-  std::string err = testing::internal::GetCapturedStderr();
+  const ScopedLogCapture capture;
 
-  // Assert: Check for expected substrings in either output
-  using testing::HasSubstr;
-  std::string combined = out + err;
+  // Act
+  composition_.LogComponents();
+
+  // Assert
+  const auto combined = capture.Text();
   EXPECT_THAT(combined, HasSubstr("Local Components"))
     << "Should log local components section";
   EXPECT_THAT(combined, HasSubstr("Pooled Components"))

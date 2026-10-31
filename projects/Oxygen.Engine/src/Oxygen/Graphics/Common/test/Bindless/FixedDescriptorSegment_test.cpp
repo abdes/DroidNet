@@ -19,12 +19,14 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 
 using oxygen::kInvalidBindlessHeapIndex;
 using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::detail::FixedDescriptorSegment;
+using oxygen::testing::ScopedLogCapture;
 
 namespace b = oxygen::bindless;
 
@@ -120,29 +122,21 @@ NOLINT_TEST(FixedDescriptorSegmentTest, ConstructionWithInvalidTypeOrVisibility)
 //! Destruction warning if not empty.
 NOLINT_TEST(FixedDescriptorSegmentTest, DestructionWhenNotEmpty)
 {
-  // Setup log capture for destruction warnings.
+  // The warning must pass the global cutoff to reach the capture.
   const auto old_verbosity = loguru::g_global_verbosity;
   loguru::g_global_verbosity = loguru::Verbosity_WARNING;
-  const bool old_color = loguru::g_colorlogtostderr;
-  loguru::g_colorlogtostderr = false;
-  testing::internal::CaptureStderr();
+  const ScopedLogCapture capture;
 
   {
     // Allocate a descriptor to ensure the segment is not empty at destruction.
     FixedDescriptorSegment seg(b::Capacity { 4 }, b::HeapIndex { 0 },
       ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
-    if (seg.GetCapacity().get() == 0) {
-      return;
-    }
     [[maybe_unused]] auto idx = seg.Allocate();
     ExpectSize(seg, 1U);
   }
 
-  std::string output = testing::internal::GetCapturedStderr();
   loguru::g_global_verbosity = old_verbosity;
-  loguru::g_colorlogtostderr = old_color;
-  // Check that the warning message appears in the output.
-  EXPECT_NE(output.find("descriptors still allocated"), std::string::npos);
+  EXPECT_TRUE(capture.Contains("descriptors still allocated"));
 }
 
 //===----------------------------------------------------------------------===//

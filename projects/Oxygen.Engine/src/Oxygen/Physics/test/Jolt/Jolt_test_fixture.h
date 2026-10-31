@@ -13,7 +13,7 @@
 
 namespace oxygen::physics::test::jolt {
 
-class JoltTestFixture : public testing::Test {
+class JoltTestFixture : public ::testing::Test {
 protected:
   auto SetUp() -> void override
   {

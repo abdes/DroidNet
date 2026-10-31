@@ -31,6 +31,7 @@
 #include <Oxygen/Scripting/Module/ScriptSourceReload.h>
 #include <Oxygen/Scripting/test/Fakes/FakeScriptCompilationService.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace oxygen::scripting::test {
 
@@ -71,16 +72,10 @@ return script
         ScriptBlobCanonicalName { "original" })));
   }
 
-  class ScriptSourceReloadTest : public ::testing::Test {
+  class ScriptSourceReloadTest : public oxygen::testing::TempDirTest {
   protected:
     void SetUp() override
     {
-      root_ = std::filesystem::temp_directory_path()
-        / "oxygen_script_source_reload_test";
-      std::error_code error;
-      std::filesystem::remove_all(root_, error);
-      std::filesystem::create_directories(root_);
-
       auto node = scene_->CreateNode("Spinner");
       ASSERT_TRUE(node.AttachScripting());
       auto scripting = node.GetScripting();
@@ -90,19 +85,13 @@ return script
       node_ = std::move(node);
     }
 
-    void TearDown() override
-    {
-      std::error_code error;
-      std::filesystem::remove_all(root_, error);
-    }
-
     [[nodiscard]] auto MakeReload() -> ScriptSourceReload
     {
       return { PathFinder(PathFinderConfig::Create()
-                            .WithWorkspaceRoot(root_)
-                            .WithSourceMount("Content", root_)
+                            .WithWorkspaceRoot(TempDir())
+                            .WithSourceMount("Content", TempDir())
                             .BuildShared(),
-                 root_),
+                 TempDir()),
         observer_ptr<IScriptCompilationService> { &compiler_ },
         [this](const ScriptDiagnostic& diagnostic) -> void {
           diagnostics_.push_back(diagnostic);
@@ -112,7 +101,7 @@ return script
     [[nodiscard]] auto WriteSource(const std::string_view text) const
       -> std::filesystem::path
     {
-      const auto path = root_ / kScriptFile;
+      const auto path = TempDir() / kScriptFile;
       auto file = std::ofstream(path, std::ios::binary);
       file << text;
       return path;
@@ -141,7 +130,6 @@ return script
     }
 
   private:
-    std::filesystem::path root_;
     std::shared_ptr<scene::Scene> scene_
       = std::make_shared<scene::Scene>("reload", kSceneCapacity);
     scene::SceneNode node_;

@@ -50,6 +50,7 @@
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 using namespace std::chrono_literals;
 
@@ -296,13 +297,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, CompletionSubscribersArePublishedOnce)
   EXPECT_EQ(subscriber_calls.load(), 1);
 }
 
-auto MakeTempCachePath() -> std::filesystem::path
-{
-  const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
-  return std::filesystem::temp_directory_path()
-    / ("oxygen_script_cache_" + std::to_string(now) + ".bin");
-}
-
 auto WriteCacheVersion(
   const std::filesystem::path& path, const uint32_t version) -> void
 {
@@ -388,7 +382,8 @@ NOLINT_TEST(ScriptCompilationServiceTest,
   PersistentCacheFailedPublicationCanRetryWithoutDroppingPendingResults)
 {
   for (const auto deferred : { false, true }) {
-    const auto path = MakeTempCachePath();
+    const oxygen::testing::ScopedTempDir temp_dir;
+    const auto path = temp_dir.File("script_cache.bin");
     std::atomic<int> calls = 0;
     ASSERT_TRUE(CompileIntoPersistentCache(path, 100U, { 1 }, calls).success);
     const auto read_file = [&path] -> std::vector<char> {
@@ -454,8 +449,6 @@ NOLINT_TEST(ScriptCompilationServiceTest,
       EXPECT_EQ(reader.GetCounters().l2_hits, 1U);
       EXPECT_EQ(reader.GetCounters().compile_started, 0U);
     }
-    std::error_code ignored;
-    std::filesystem::remove(path, ignored);
   }
 }
 #endif
@@ -464,7 +457,8 @@ NOLINT_TEST(ScriptCompilationServiceTest,
   PersistentCacheRejectsPayloadAndChecksumCorruption)
 {
   for (const auto corrupt_payload : { true, false }) {
-    const auto path = MakeTempCachePath();
+    const oxygen::testing::ScopedTempDir temp_dir;
+    const auto path = temp_dir.File("script_cache.bin");
     std::atomic<int> calls = 0;
     ASSERT_TRUE(
       CompileIntoPersistentCache(path, 100U, { 1, 2, 3 }, calls).success);
@@ -480,15 +474,14 @@ NOLINT_TEST(ScriptCompilationServiceTest,
     EXPECT_TRUE(std::ranges::equal(
       result.bytecode->BytesView(), std::array<uint8_t, 4> { 1, 2, 3, 0xEE }));
     EXPECT_EQ(calls.load(), 2);
-    std::error_code ignored;
-    std::filesystem::remove(path, ignored);
   }
 }
 
 NOLINT_TEST(ScriptCompilationServiceTest, PersistentCacheRejectsMalformedIndex)
 {
   for (const auto malformed : { 0, 1, 2, 3, 4, 5, 6, 7 }) {
-    const auto path = MakeTempCachePath();
+    const oxygen::testing::ScopedTempDir temp_dir;
+    const auto path = temp_dir.File("script_cache.bin");
     std::atomic<int> calls = 0;
     ASSERT_TRUE(
       CompileIntoPersistentCache(path, 100U, { 1, 2, 3 }, calls).success);
@@ -526,15 +519,14 @@ NOLINT_TEST(ScriptCompilationServiceTest, PersistentCacheRejectsMalformedIndex)
       = CompileIntoPersistentCache(path, 100U, { 1, 2, 3 }, calls);
     ASSERT_TRUE(result.success);
     EXPECT_EQ(calls.load(), 2);
-    std::error_code ignored;
-    std::filesystem::remove(path, ignored);
   }
 }
 
 NOLINT_TEST(ScriptCompilationServiceTest,
   PersistentCacheReplacementInvalidatesStaleOffsetsBeforeVmDelivery)
 {
-  const auto path = MakeTempCachePath();
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto path = temp_dir.File("script_cache.bin");
   std::atomic<int> writer_calls = 0;
   ASSERT_TRUE(
     CompileIntoPersistentCache(path, 30U, { 3, 4 }, writer_calls).success);
@@ -556,14 +548,13 @@ NOLINT_TEST(ScriptCompilationServiceTest,
     result.bytecode->BytesView(), std::array<uint8_t, 3> { 3, 4, 0xEE }));
   EXPECT_EQ(reader_calls.load(), 1);
   EXPECT_EQ(stale_reader.GetCounters().l2_hits, 0U);
-  std::error_code ignored;
-  std::filesystem::remove(path, ignored);
 }
 
 NOLINT_TEST(ScriptCompilationServiceTest,
   PersistentCacheReplacementCannotCopyStalePayloadIntoNextSnapshot)
 {
-  const auto path = MakeTempCachePath();
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto path = temp_dir.File("script_cache.bin");
   std::atomic<int> writer_calls = 0;
   ASSERT_TRUE(
     CompileIntoPersistentCache(path, 30U, { 3, 4 }, writer_calls).success);
@@ -586,8 +577,6 @@ NOLINT_TEST(ScriptCompilationServiceTest,
   EXPECT_TRUE(std::ranges::equal(
     result.bytecode->BytesView(), std::array<uint8_t, 3> { 3, 4, 0xEE }));
   EXPECT_EQ(recovery_calls.load(), 1);
-  std::error_code ignored;
-  std::filesystem::remove(path, ignored);
 }
 
 NOLINT_TEST(ScriptCompilationServiceTest, SequentialSameKeyHitsL1Cache)
@@ -726,7 +715,8 @@ NOLINT_TEST(ScriptCompilationServiceTest, L1CacheKeepsRecentEntries)
 
 NOLINT_TEST(ScriptCompilationServiceTest, PersistentCacheRoundtripAcrossRestart)
 {
-  const auto cache_path = MakeTempCachePath();
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto cache_path = temp_dir.File("script_cache.bin");
   std::atomic<int> compile_calls = 0;
 
   {
@@ -787,14 +777,13 @@ NOLINT_TEST(ScriptCompilationServiceTest, PersistentCacheRoundtripAcrossRestart)
   }
 
   EXPECT_EQ(compile_calls.load(), 1);
-  std::error_code ec {};
-  std::filesystem::remove(cache_path, ec);
 }
 
 NOLINT_TEST(
   ScriptCompilationServiceTest, PersistentCacheVersionMismatchInvalidates)
 {
-  const auto cache_path = MakeTempCachePath();
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto cache_path = temp_dir.File("script_cache.bin");
   std::atomic<int> compile_calls = 0;
 
   {
@@ -850,14 +839,13 @@ NOLINT_TEST(
   }
 
   EXPECT_EQ(compile_calls.load(), 1);
-  std::error_code ec {};
-  std::filesystem::remove(cache_path, ec);
 }
 
 NOLINT_TEST(
   ScriptCompilationServiceTest, PersistentCacheCorruptionFallsBackToCompile)
 {
-  const auto cache_path = MakeTempCachePath();
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto cache_path = temp_dir.File("script_cache.bin");
   std::atomic<int> compile_calls = 0;
 
   {
@@ -915,8 +903,6 @@ NOLINT_TEST(
   }
 
   EXPECT_EQ(compile_calls.load(), 2);
-  std::error_code ec {};
-  std::filesystem::remove(cache_path, ec);
 }
 
 NOLINT_TEST(ScriptCompilationServiceTest, UnsubscribePreventsCompletionCallback)
@@ -1008,7 +994,8 @@ NOLINT_TEST(ScriptCompilationServiceTest, CountersTrackCompileAndL1Hit)
 
 NOLINT_TEST(ScriptCompilationServiceTest, CountersTrackL2Hit)
 {
-  const auto cache_path = MakeTempCachePath();
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto cache_path = temp_dir.File("script_cache.bin");
   std::atomic<int> compile_calls = 0;
 
   {
@@ -1062,9 +1049,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, CountersTrackL2Hit)
     EXPECT_EQ(counters.compile_succeeded, 0U);
     EXPECT_EQ(counters.compile_failed, 0U);
   }
-
-  std::error_code ec {};
-  std::filesystem::remove(cache_path, ec);
 }
 
 NOLINT_TEST(ScriptCompilationServiceTest,

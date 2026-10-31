@@ -10,12 +10,14 @@
 #include <stdexcept>
 #include <string>
 
-#include "gtest/gtest.h"
-
 #include <Oxygen/Core/SafeCall.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedStreamCapture.h>
 
 namespace {
+
+using oxygen::testing::ScopedStreamCapture;
+using ::testing::HasSubstr;
 
 // -----------------------------------------------------------------------------
 // Base test class (common properties and methods for SUTs)
@@ -210,10 +212,9 @@ struct MemberValidatorWithLogging : MemberValidator<MemberValidatorWithLogging>,
 template <typename Callable>
 void ExpectLogMessage(const std::string& expected, Callable&& action)
 {
-  testing::internal::CaptureStderr();
+  const ScopedStreamCapture captured_stderr { std::cerr };
   std::forward<Callable>(action)();
-  std::string output = testing::internal::GetCapturedStderr();
-  EXPECT_NE(output.find(expected), std::string::npos);
+  EXPECT_THAT(captured_stderr.Text(), HasSubstr(expected));
 }
 
 // -----------------------------------------------------------------------------

@@ -6,7 +6,6 @@
 
 #include <coroutine>
 #include <exception>
-#include <iostream>
 #include <stdexcept>
 #include <utility>
 
@@ -41,16 +40,7 @@ public:
   }
 };
 
-class BaseFixture : public ::testing::Test {
-public:
-  void SetUp() override { ::testing::internal::CaptureStderr(); }
-
-  void TearDown() override
-  {
-    const auto captured_stderr = ::testing::internal::GetCapturedStderr();
-    std::cout << "Captured stderr:\n" << captured_stderr << '\n';
-  }
-};
+class BaseFixture : public ::testing::Test { };
 class StartWithoutCancellation : public BaseFixture { };
 class CancellationBeforeStart : public BaseFixture { };
 class CancellationPending : public BaseFixture { };

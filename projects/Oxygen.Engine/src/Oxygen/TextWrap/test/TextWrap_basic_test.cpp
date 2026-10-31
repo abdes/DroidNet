@@ -71,7 +71,7 @@ namespace {
   // NOLINTNEXTLINE
   INSTANTIATE_TEST_SUITE_P(TrimLines, LongStringTest,
     // clang-format off
-    testing::Values(
+    ::testing::Values(
       LongStringTestParamType{7, true, "", "",
         "The\n"
         "quick\n"
@@ -130,7 +130,7 @@ namespace {
 // NOLINTNEXTLINE
 INSTANTIATE_TEST_SUITE_P(NoTrimLines, LongStringTest,
     // clang-format off
-    testing::Values(
+    ::testing::Values(
       LongStringTestParamType{7, false, "", "",
         "The \n"
         "quick\n"

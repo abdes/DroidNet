@@ -59,7 +59,7 @@ using oxygen::vortex::upload::UploadCoordinator;
 
 // -- Base Fixture -------------------------------------------------------------
 
-class TransformUploaderTest : public testing::Test {
+class TransformUploaderTest : public ::testing::Test {
 protected:
   auto SetUp() -> void override
   {

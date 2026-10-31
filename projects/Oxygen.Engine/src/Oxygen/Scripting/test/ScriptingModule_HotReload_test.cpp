@@ -39,6 +39,7 @@
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 using oxygen::EngineConfig;
 using oxygen::GraphicsConfig;
@@ -99,24 +100,20 @@ template <> struct oxygen::co::EventLoopTraits<TestContext> {
   }
 };
 
-class ScriptingAdvancedTest : public ::testing::Test {
+class ScriptingAdvancedTest : public oxygen::testing::TempDirTest {
 protected:
   void SetUp() override
   {
-    temp_dir_ = std::filesystem::temp_directory_path()
-      / "oxygen_scripting_advanced_test";
-    std::error_code ec;
-    std::filesystem::remove_all(temp_dir_, ec);
-    std::filesystem::create_directories(temp_dir_ / "root1");
-    std::filesystem::create_directories(temp_dir_ / "root2");
+    std::filesystem::create_directories(TempDir() / "root1");
+    std::filesystem::create_directories(TempDir() / "root2");
 
     ctx_.platform
       = std::make_shared<oxygen::Platform>(PlatformConfig { .headless = true });
 
     pfc_ = PathFinderConfig::Create()
-             .WithWorkspaceRoot(temp_dir_)
-             .WithSourceMount("Root1", temp_dir_ / "root1")
-             .WithSourceMount("Root2", temp_dir_ / "root2")
+             .WithWorkspaceRoot(TempDir())
+             .WithSourceMount("Root1", TempDir() / "root1")
+             .WithSourceMount("Root2", TempDir() / "root2")
              .BuildShared();
 
     auto& loader = oxygen::GraphicsBackendLoader::GetInstanceRelaxed();
@@ -128,7 +125,6 @@ protected:
       ctx_.platform, gfx, EngineConfig {});
   }
 
-  [[nodiscard]] auto TempDir() const -> auto& { return temp_dir_; }
   [[nodiscard]] auto PFC() const -> auto& { return pfc_; }
   [[nodiscard]] auto Ctx() -> auto& { return ctx_; }
 
@@ -137,10 +133,6 @@ protected:
     Ctx().engine.reset();
     oxygen::GraphicsBackendLoader::GetInstanceRelaxed().UnloadBackend();
     Ctx().platform.reset();
-    if (std::filesystem::exists(temp_dir_)) {
-      std::error_code ec;
-      std::filesystem::remove_all(temp_dir_, ec);
-    }
   }
 
   static void WriteFile(
@@ -152,7 +144,6 @@ protected:
   }
 
 private:
-  std::filesystem::path temp_dir_;
   std::shared_ptr<const PathFinderConfig> pfc_;
   TestContext ctx_;
 };

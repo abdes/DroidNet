@@ -39,14 +39,10 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
-
-//! Discovery files of the tests stay out of the per-user folder.
-auto TestDiscoveryFolder() -> std::filesystem::path
-{
-  return std::filesystem::temp_directory_path() / "oxygen-control-tests";
-}
 
 using namespace std::chrono_literals;
 using asio::ip::tcp;
@@ -125,7 +121,7 @@ private:
 
 //! A dispatcher and a server over a real loopback socket; a ticker plays
 //! the engine's frame starts.
-class ControlServerTest : public testing::Test {
+class ControlServerTest : public oxygen::testing::TempDirTest {
 protected:
   ControlServerTest() { dispatcher_.RegisterCommands(engine_.GetCommands()); }
 
@@ -170,7 +166,7 @@ protected:
   };
   ControlServerConfig config_ {
     .application = "ControlServerTest",
-    .discovery_folder = TestDiscoveryFolder(),
+    .discovery_folder = TempDir(),
   };
   std::unique_ptr<ControlServer> server_;
 };
@@ -370,6 +366,7 @@ NOLINT_TEST_F(ControlServerTest, OwnerLeavingPostsQuit)
 //! The discovery file exists while the server runs and goes with it.
 NOLINT_TEST(ControlServerDiscovery, FileLivesWithTheServer)
 {
+  const oxygen::testing::ScopedTempDir temp_dir;
   auto path = std::filesystem::path {};
   {
     asio::io_context io;
@@ -380,7 +377,7 @@ NOLINT_TEST(ControlServerDiscovery, FileLivesWithTheServer)
     };
     ControlServer server { observer_ptr<oxygen::IAsyncEngine> { &engine },
       observer_ptr { &dispatcher }, observer_ptr { &events }, io,
-      ControlServerConfig { .discovery_folder = TestDiscoveryFolder() } };
+      ControlServerConfig { .discovery_folder = temp_dir.Path() } };
     oxygen::co::Run(io, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
@@ -400,8 +397,8 @@ NOLINT_TEST(ControlServerDiscovery, FileLivesWithTheServer)
 //! and its own file names the instance.
 NOLINT_TEST(ControlServerDiscovery, RemovesStaleFilesAndNamesTheInstance)
 {
-  const auto folder = TestDiscoveryFolder();
-  std::filesystem::create_directories(folder);
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto& folder = temp_dir.Path();
   // No process has this id; the file is what a killed application leaves.
   const auto stale = folder / "999999990.json";
   std::ofstream(stale) << "{}";

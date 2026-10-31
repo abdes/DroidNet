@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -14,6 +13,7 @@
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsCaptureManifest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
@@ -115,10 +115,8 @@ NOLINT_TEST(
 
 NOLINT_TEST(DiagnosticsCaptureManifestTest, WritesManifestFile)
 {
-  const auto unique_suffix = std::to_string(
-    std::chrono::steady_clock::now().time_since_epoch().count());
-  const auto output_dir = std::filesystem::temp_directory_path()
-    / ("oxygen_vortex_capture_manifest_test_" + unique_suffix);
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto output_dir = temp_dir.Path() / "capture";
   const auto output_path = output_dir / "manifest.json";
 
   WriteDiagnosticsCaptureManifest(output_path, MakeSnapshot());

@@ -90,7 +90,7 @@ NOLINT_TEST_F(JoltShapeAxisTest, CapsuleMatchesRenderMeshBoundsAndSurface)
          Vec2 { 3.5F, 0.375F },
          Vec2 { 1.0F, 0.5F },
        }) {
-    SCOPED_TRACE(testing::Message()
+    SCOPED_TRACE(::testing::Message()
       << "height=" << dimensions.x << " radius=" << dimensions.y);
     const auto height = dimensions.x;
     const auto radius = dimensions.y;

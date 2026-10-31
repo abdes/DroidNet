@@ -6,12 +6,6 @@
 
 #include <system_error>
 
-#include "gtest/gtest.h"
-#include <combaseapi.h>
-#include <oaidl.h>
-#include <objbase.h>
-#include <oleauto.h>
-
 #include <Oxygen/Base/Platforms.h>
 
 #ifdef OXYGEN_WINDOWS
@@ -19,26 +13,26 @@
 #  include <windows.h> // IWYU pragma: keep
 
 #  include <atlcomcli.h>
+#  include <combaseapi.h>
+#  include <oaidl.h>
+#  include <objbase.h>
+#  include <oleauto.h>
 
 #  include <Oxygen/Base/Windows/ComError.h>
 #  include <Oxygen/Testing/GTest.h>
+#  include <Oxygen/Testing/ScopedLogCapture.h>
 
+namespace {
+
+using oxygen::testing::ScopedLogCapture;
+using oxygen::windows::ComCategory;
 using oxygen::windows::ComError;
+using oxygen::windows::ComErrorEnum;
+using oxygen::windows::ThrowOnFailed;
+using ::testing::HasSubstr;
+using ::testing::StartsWith;
 
-namespace oxygen::windows {
-
-class ComErrorTest : public testing::Test {
-protected:
-  auto SetUp() -> void override
-  {
-    // Setup code if needed
-  }
-
-  auto TearDown() -> void override
-  {
-    // Cleanup code if needed
-  }
-};
+class ComErrorTest : public ::testing::Test { };
 
 NOLINT_TEST_F(ComErrorTest, ComErrorThrowsWithMessage)
 {
@@ -49,7 +43,7 @@ NOLINT_TEST_F(ComErrorTest, ComErrorThrowsWithMessage)
   } catch (const ComError& e) {
     thrown = true;
     EXPECT_EQ(e.code().value(), E_FAIL);
-    EXPECT_THAT(e.what(), ::testing::StartsWith(msg));
+    EXPECT_THAT(e.what(), StartsWith(msg));
   }
 
   EXPECT_TRUE(thrown) << "expected ComError::Throw to throw";
@@ -63,7 +57,7 @@ NOLINT_TEST_F(ComErrorTest, ComErrorThrowsWithoutMessage)
   } catch (const ComError& e) {
     thrown = true;
     EXPECT_EQ(e.code().value(), E_FAIL);
-    EXPECT_THAT(e.what(), testing::HasSubstr("Unspecified error"));
+    EXPECT_THAT(e.what(), HasSubstr("Unspecified error"));
   }
 
   EXPECT_TRUE(thrown) << "expected ComError::Throw to throw";
@@ -79,7 +73,7 @@ NOLINT_TEST_F(ComErrorTest, ThrowOnFailedThrowsComError)
     EXPECT_EQ(e.code().value(), hr);
     // No description is available for the error, falls back to message from
     // category
-    EXPECT_THAT(e.what(), testing::HasSubstr("Unspecified error"));
+    EXPECT_THAT(e.what(), HasSubstr("Unspecified error"));
   }
 }
 
@@ -125,7 +119,7 @@ NOLINT_TEST_F(ComErrorTest, ComErrorWithIErrorInfo)
     FAIL() << "expected ThrowOnFailed to throw";
   } catch (const ComError& e) {
     EXPECT_EQ(e.code().value(), hr);
-    EXPECT_THAT(e.what(), testing::HasSubstr("Custom COM error description"));
+    EXPECT_THAT(e.what(), HasSubstr("Custom COM error description"));
   }
 
   // Un-initialize COM library
@@ -133,14 +127,14 @@ NOLINT_TEST_F(ComErrorTest, ComErrorWithIErrorInfo)
 }
 
 template <typename /*T*/>
-class ThrowOnFailedStringTypeTest : public testing::Test { };
+class ThrowOnFailedStringTypeTest : public ::testing::Test { };
 
-using StringTypes = testing::Types<const char*, const char8_t*, const wchar_t*>;
+using StringTypes
+  = ::testing::Types<const char*, const char8_t*, const wchar_t*>;
 
 TYPED_TEST_SUITE(ThrowOnFailedStringTypeTest, StringTypes);
 
-// NOLINTNEXTLINE
-TYPED_TEST(ThrowOnFailedStringTypeTest, HandlesDifferentStringTypes)
+NOLINT_TYPED_TEST(ThrowOnFailedStringTypeTest, HandlesDifferentStringTypes)
 {
   HRESULT hr = E_FAIL;
   // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
@@ -157,35 +151,22 @@ TYPED_TEST(ThrowOnFailedStringTypeTest, HandlesDifferentStringTypes)
 //! by the nullable-detection branch.
 NOLINT_TEST_F(ComErrorTest, ThrowOnFailedLogsNarrowMessage)
 {
-  testing::internal::CaptureStderr();
-  bool thrown = false;
-  try {
-    ThrowOnFailed(E_FAIL, "narrow context message");
-  } catch (const ComError& e) {
-    thrown = true;
-    EXPECT_EQ(e.code().value(), static_cast<int>(E_FAIL));
-  }
-  const auto captured = testing::internal::GetCapturedStderr();
+  const ScopedLogCapture capture { "ComErrorTest" };
 
-  EXPECT_TRUE(thrown) << "expected ThrowOnFailed to throw";
-  EXPECT_THAT(captured, testing::HasSubstr("narrow context message"));
+  NOLINT_EXPECT_THROW(
+    ThrowOnFailed(E_FAIL, "narrow context message"), ComError);
+
+  EXPECT_TRUE(capture.Contains("narrow context message"));
 }
 
 //! Regression: a wide message is converted and reaches the log.
 NOLINT_TEST_F(ComErrorTest, ThrowOnFailedLogsWideMessage)
 {
-  testing::internal::CaptureStderr();
-  bool thrown = false;
-  try {
-    ThrowOnFailed(E_FAIL, L"wide context message");
-  } catch (const ComError& e) {
-    thrown = true;
-    EXPECT_EQ(e.code().value(), static_cast<int>(E_FAIL));
-  }
-  const auto captured = testing::internal::GetCapturedStderr();
+  const ScopedLogCapture capture { "ComErrorTest" };
 
-  EXPECT_TRUE(thrown) << "expected ThrowOnFailed to throw";
-  EXPECT_THAT(captured, testing::HasSubstr("wide context message"));
+  NOLINT_EXPECT_THROW(ThrowOnFailed(E_FAIL, L"wide context message"), ComError);
+
+  EXPECT_TRUE(capture.Contains("wide context message"));
 }
 
 //! HRESULTs from non-Win32 facilities must not masquerade as system errors.
@@ -225,6 +206,6 @@ NOLINT_TEST_F(ComErrorTest, ComErrorEnumIsErrorCodeEnum)
   EXPECT_EQ(&ec.category(), &ComCategory());
 }
 
-} // namespace oxygen::windows
+} // namespace
 
 #endif // OXYGEN_WINDOWS

@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <filesystem>
-
 #include <Oxygen/Graphics/Common/ShaderManager.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -15,9 +14,8 @@ using oxygen::graphics::ShaderManager;
 
 NOLINT_TEST(ShaderManagerTest, MissingArchiveLeavesCacheEmpty)
 {
-  const auto archive_dir = std::filesystem::temp_directory_path()
-    / "oxygen-shader-manager-missing-archive";
-  std::filesystem::remove_all(archive_dir);
+  const auto archive_dir
+    = oxygen::testing::ScopedTempDir().Path() / "missing-archive";
 
   ShaderManager manager({
     .backend_name = "test",
@@ -26,8 +24,6 @@ NOLINT_TEST(ShaderManagerTest, MissingArchiveLeavesCacheEmpty)
   });
 
   EXPECT_EQ(manager.GetShaderCount(), 0U);
-
-  std::filesystem::remove_all(archive_dir);
 }
 
 } // namespace

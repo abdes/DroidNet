@@ -57,7 +57,7 @@ using TestValueType = std::tuple<
   // state check data
   ExpectedStateData>;
 
-class StateTest : public testing::Test {
+class StateTest : public ::testing::Test {
 public:
   static auto EmptyGlobalOptions() -> const std::vector<OptionPtr>&
   {

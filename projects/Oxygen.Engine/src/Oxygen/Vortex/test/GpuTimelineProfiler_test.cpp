@@ -30,6 +30,7 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Vortex/test/Fakes/Graphics.h>
 
@@ -651,10 +652,8 @@ TEST(GpuTimelineProfilerTest, FailedResolvePublishesInvalidTiming)
 TEST(GpuTimelineProfilerTest, RecordingRetainsInvalidFramesInExactWindow)
 {
   auto graphics = MakeGraphics();
-  const auto directory = std::filesystem::temp_directory_path()
-    / ("oxygen_timeline_recording_"
-      + std::to_string(
-        std::chrono::steady_clock::now().time_since_epoch().count()));
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto directory = temp_dir.Path() / "timeline";
   const auto path = directory / "frames.json";
   auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> {
     graphics.get(),
@@ -709,10 +708,8 @@ TEST(GpuTimelineProfilerTest, RecordingRetainsInvalidFramesInExactWindow)
 TEST(GpuTimelineProfilerTest, EmptyAndDisabledFramesTerminateRecordingWindow)
 {
   auto graphics = MakeGraphics();
-  const auto directory = std::filesystem::temp_directory_path()
-    / ("oxygen_timeline_gaps_"
-      + std::to_string(
-        std::chrono::steady_clock::now().time_since_epoch().count()));
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto directory = temp_dir.Path() / "timeline";
   const auto path = directory / "frames.json";
   {
     auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> {
@@ -766,10 +763,8 @@ TEST(GpuTimelineProfilerTest, RecordingKeepsDelayedFramesAfterBacklogDiagnostic)
   auto& queue = static_cast<oxygen::vortex::testing::FakeCommandQueue&>(
     *graphics->GetCommandQueue(QueueRole::kGraphics));
   queue.SetAutoComplete(false);
-  const auto directory = std::filesystem::temp_directory_path()
-    / ("oxygen_timeline_delayed_recording_"
-      + std::to_string(
-        std::chrono::steady_clock::now().time_since_epoch().count()));
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto directory = temp_dir.Path() / "timeline";
   const auto path = directory / "frames.json";
   auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> {
     graphics.get(),
@@ -822,10 +817,8 @@ TEST(GpuTimelineProfilerTest, RecordingKeepsDelayedFramesAfterBacklogDiagnostic)
 TEST(GpuTimelineProfilerTest, RecordingShutdownMarksMissingFramesIncomplete)
 {
   auto graphics = MakeGraphics();
-  const auto directory = std::filesystem::temp_directory_path()
-    / ("oxygen_timeline_partial_"
-      + std::to_string(
-        std::chrono::steady_clock::now().time_since_epoch().count()));
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto directory = temp_dir.Path() / "timeline";
   const auto path = directory / "frames.json";
   {
     auto profiler = GpuTimelineProfiler(observer_ptr<Graphics> {
@@ -867,10 +860,8 @@ TEST(GpuTimelineProfilerTest, RecordingShutdownMarksMissingFramesIncomplete)
 TEST(GpuTimelineProfilerTest, OneShotExportWritesJsonFrame)
 {
   auto graphics = MakeGraphics();
-  const auto unique_suffix = std::to_string(
-    std::chrono::steady_clock::now().time_since_epoch().count());
-  const auto export_dir = std::filesystem::temp_directory_path()
-    / ("oxygen_vortex_gpu_timeline_test_" + unique_suffix);
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto export_dir = temp_dir.Path() / "timeline";
   const auto export_path = export_dir / "frame.json";
 
   {

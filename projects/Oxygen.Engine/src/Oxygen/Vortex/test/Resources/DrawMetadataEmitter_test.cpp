@@ -307,7 +307,7 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
   return material;
 }
 
-class DrawMetadataEmitterTest : public testing::Test {
+class DrawMetadataEmitterTest : public ::testing::Test {
 protected:
   auto SetUp() -> void override
   {

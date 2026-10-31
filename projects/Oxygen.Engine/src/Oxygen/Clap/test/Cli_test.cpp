@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <iostream>
 #include <memory>
 #include <ostream>
 #include <sstream>
@@ -22,13 +23,29 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedStreamCapture.h>
 
-using testing::Eq;
-using testing::IsTrue;
+using oxygen::testing::ScopedStreamCapture;
+using ::testing::Eq;
+using ::testing::IsTrue;
 
 namespace oxygen::clap {
 
 namespace {
+
+  //! In-memory output and error streams a test hands to the parser.
+  struct TestStreams {
+    std::ostringstream out;
+    std::ostringstream err;
+
+    [[nodiscard]] auto Streams() -> CliStreams
+    {
+      return CliStreams {
+        .out = make_observer<std::ostream>(&out),
+        .err = make_observer<std::ostream>(&err),
+      };
+    }
+  };
 
   // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
   class BaseCli {
@@ -405,11 +422,11 @@ namespace {
 
     constexpr int argc = 3;
     const auto argv = std::array<const char*, argc> { "tool", "run", "--help" };
-    testing::internal::CaptureStdout();
+    TestStreams streams;
 
     // Act
-    (void)cli->Parse(argv);
-    const auto output = testing::internal::GetCapturedStdout();
+    (void)cli->Parse(argv, streams.Streams());
+    const auto output = streams.out.str();
 
     // Assert
     const auto global_header_pos = output.find("GLOBAL OPTIONS");
@@ -537,11 +554,11 @@ namespace {
 
     constexpr int argc = 3;
     const auto argv = std::array<const char*, argc> { "tool", "run", "--help" };
-    testing::internal::CaptureStdout();
+    TestStreams streams;
 
     // Act
-    (void)cli->Parse(argv);
-    const auto output = testing::internal::GetCapturedStdout();
+    (void)cli->Parse(argv, streams.Streams());
+    const auto output = streams.out.str();
 
     // Assert
     EXPECT_EQ(output.find("GLOBAL OPTIONS"), std::string::npos);
@@ -563,14 +580,13 @@ namespace {
     Command::Ptr active_command = CommandBuilder(Command::DEFAULT)
                                     .WithOptions(visible_group)
                                     .WithOptions(hidden_group, true);
-    CommandLineContext context("tool", active_command, 80U);
+    TestStreams streams;
+    CommandLineContext context("tool", active_command, 80U, streams.Streams());
     context.theme = &CliTheme::Plain();
-
-    testing::internal::CaptureStdout();
 
     // Act
     active_command->PrintHiddenOptions(context, context.output_width);
-    const auto output = testing::internal::GetCapturedStdout();
+    const auto output = streams.out.str();
 
     // Assert
     EXPECT_TRUE(active_command->HasHiddenOptionGroups());
@@ -599,11 +615,11 @@ namespace {
       "run",
       "--help",
     };
-    testing::internal::CaptureStdout();
+    TestStreams streams;
 
     // Act
-    (void)cli->Parse(argv);
-    const auto output = testing::internal::GetCapturedStdout();
+    (void)cli->Parse(argv, streams.Streams());
+    const auto output = streams.out.str();
 
     // Assert
     EXPECT_EQ(output.find("\x1b["), std::string::npos);
@@ -682,11 +698,11 @@ namespace {
 
     constexpr int argc = 2;
     const auto argv = std::array<const char*, argc> { "tool", "--help" };
-    testing::internal::CaptureStdout();
+    TestStreams streams;
 
     // Act
-    (void)cli->Parse(argv);
-    const auto output = testing::internal::GetCapturedStdout();
+    (void)cli->Parse(argv, streams.Streams());
+    const auto output = streams.out.str();
 
     // Assert
     EXPECT_NE(output.find("FOOTER"), std::string::npos);
@@ -708,7 +724,7 @@ namespace {
     const auto argv = std::array<const char*, argc> { "tool", "--help" };
     auto out = std::ostringstream {};
     auto err = std::ostringstream {};
-    testing::internal::CaptureStdout();
+    const ScopedStreamCapture process_stdout { std::cout };
 
     // Act
     (void)cli->Parse(argv,
@@ -716,7 +732,7 @@ namespace {
         .out = make_observer<std::ostream>(&out),
         .err = make_observer<std::ostream>(&err),
       });
-    const auto process_output = testing::internal::GetCapturedStdout();
+    const auto process_output = process_stdout.Text();
 
     // Assert
     EXPECT_NE(out.str().find("SUB-COMMANDS"), std::string::npos);
@@ -790,11 +806,12 @@ namespace {
     constexpr int argc = 3;
     const auto argv
       = std::array<const char*, argc> { "tool", "--count", "nope" };
-    testing::internal::CaptureStderr();
+    TestStreams streams;
 
     // Act
-    NOLINT_EXPECT_THROW(cli->Parse(argv), CmdLineArgumentsError);
-    const auto err = testing::internal::GetCapturedStderr();
+    NOLINT_EXPECT_THROW(
+      cli->Parse(argv, streams.Streams()), CmdLineArgumentsError);
+    const auto err = streams.err.str();
 
     // Assert
     EXPECT_NE(err.find("expected type 'integer'"), std::string::npos);
@@ -810,11 +827,12 @@ namespace {
 
     constexpr int argc = 2;
     const auto argv = std::array<const char*, argc> { "tool", "rnu" };
-    testing::internal::CaptureStderr();
+    TestStreams streams;
 
     // Act
-    NOLINT_EXPECT_THROW(cli->Parse(argv), CmdLineArgumentsError);
-    const auto err = testing::internal::GetCapturedStderr();
+    NOLINT_EXPECT_THROW(
+      cli->Parse(argv, streams.Streams()), CmdLineArgumentsError);
+    const auto err = streams.err.str();
 
     // Assert
     EXPECT_NE(err.find("Did you mean 'run'"), std::string::npos);
@@ -836,11 +854,12 @@ namespace {
 
     constexpr int argc = 2;
     const auto argv = std::array<const char*, argc> { "tool", "--verobse" };
-    testing::internal::CaptureStderr();
+    TestStreams streams;
 
     // Act
-    NOLINT_EXPECT_THROW(cli->Parse(argv), CmdLineArgumentsError);
-    const auto err = testing::internal::GetCapturedStderr();
+    NOLINT_EXPECT_THROW(
+      cli->Parse(argv, streams.Streams()), CmdLineArgumentsError);
+    const auto err = streams.err.str();
 
     // Assert
     EXPECT_NE(err.find("Did you mean '--verbose'"), std::string::npos);
@@ -859,11 +878,12 @@ namespace {
 
     constexpr int argc = 2;
     const auto argv = std::array<const char*, argc> { "tool", "vex" };
-    testing::internal::CaptureStderr();
+    TestStreams streams;
 
     // Act
-    NOLINT_EXPECT_THROW(cli->Parse(argv), CmdLineArgumentsError);
-    const auto err = testing::internal::GetCapturedStderr();
+    NOLINT_EXPECT_THROW(
+      cli->Parse(argv, streams.Streams()), CmdLineArgumentsError);
+    const auto err = streams.err.str();
 
     // Assert
     EXPECT_NE(err.find("Did you mean 'version'"), std::string::npos);

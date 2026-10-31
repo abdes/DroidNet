@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -52,6 +51,7 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 #if defined(OXYGEN_WINDOWS)
 #  include <windows.h> // IWYU pragma: keep
@@ -82,18 +82,9 @@ class AsioTestFixture : public testing::Test {
 protected:
   std::unique_ptr<asio::io_context> io_;
 
-  auto SetUp() -> void override
-  {
-    testing::internal::CaptureStderr();
-    io_ = std::make_unique<asio::io_context>();
-  }
+  auto SetUp() -> void override { io_ = std::make_unique<asio::io_context>(); }
 
-  auto TearDown() -> void override
-  {
-    io_.reset();
-    const auto captured_stderr = testing::internal::GetCapturedStderr();
-    std::cout << "Captured stderr:\n" << captured_stderr << '\n';
-  }
+  auto TearDown() -> void override { io_.reset(); }
 };
 
 class AsioTest : public AsioTestFixture { };
@@ -289,16 +280,7 @@ protected:
   auto SetUp() -> void override
   {
     AsioTestFixture::SetUp();
-    const auto* info = testing::UnitTest::GetInstance()->current_test_info();
-    path_ = std::filesystem::temp_directory_path()
-      / (std::string("oxygen-oxco-asio-") + info->name() + ".bin");
-  }
-
-  auto TearDown() -> void override
-  {
-    std::error_code error;
-    std::filesystem::remove(path_, error);
-    AsioTestFixture::TearDown();
+    path_ = dir_.File("asio-file.bin");
   }
 
   [[nodiscard]] auto OpenFile(const asio::file_base::flags flags) const
@@ -326,6 +308,7 @@ protected:
   }
 
 private:
+  oxygen::testing::ScopedTempDir dir_;
   std::filesystem::path path_;
 };
 

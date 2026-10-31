@@ -30,7 +30,7 @@ struct EngineTagFactory {
 
 namespace oxygen::physics::test {
 
-class PhysicsModuleSyncTest : public testing::Test {
+class PhysicsModuleSyncTest : public ::testing::Test {
 protected:
   void SetUp() override
   {

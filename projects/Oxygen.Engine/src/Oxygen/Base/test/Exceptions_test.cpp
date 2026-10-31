@@ -19,7 +19,7 @@
 #  include <Oxygen/Testing/GTest.h>
 
 using oxygen::windows::WindowsException;
-using testing::StartsWith;
+using ::testing::StartsWith;
 
 namespace oxygen::windows {
 

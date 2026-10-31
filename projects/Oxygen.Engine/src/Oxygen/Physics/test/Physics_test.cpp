@@ -34,7 +34,7 @@
 namespace oxygen::physics::test {
 namespace {
 
-  class PhysicsApiContractTest : public testing::Test {
+  class PhysicsApiContractTest : public ::testing::Test {
   protected:
     auto SetUp() -> void override
     {

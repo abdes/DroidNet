@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <filesystem>
 #include <system_error>
 
 #include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Base/SystemError.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 #ifdef OXYGEN_WINDOWS
 #  include <Windows.h> // IWYU pragma: keep
@@ -29,7 +29,7 @@ using oxygen::base::LastSystemError;
 //! Opening a missing file reports the OS error in the system category.
 NOLINT_TEST(SystemErrorTest, FailedOpenReportsTheOsErrorInSystemCategory)
 {
-  const auto missing = std::filesystem::temp_directory_path()
+  const auto missing = oxygen::testing::ScopedTempDir().Path()
     / "oxygen-absent-dir" / "oxygen-absent-file.bin";
 #ifdef OXYGEN_WINDOWS
   auto* const handle = CreateFileW(missing.c_str(), GENERIC_READ, 0, nullptr,

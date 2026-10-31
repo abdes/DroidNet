@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -18,7 +17,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -41,6 +39,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/RequestCompilation.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -208,32 +207,20 @@ private:
   std::unordered_map<uint64_t, size_t> compile_counts_;
 };
 
-class ShaderBakeExecutionTest : public testing::Test {
+class ShaderBakeExecutionTest : public oxygen::testing::TempDirTest {
 protected:
   void SetUp() override
   {
-    static auto next_id = std::atomic_uint64_t { 0 };
-    root_ = std::filesystem::temp_directory_path()
-      / ("oxygen_shaderbake_execution_test_"
-        + std::to_string(next_id.fetch_add(1, std::memory_order_relaxed)));
-    std::filesystem::remove_all(root_);
-
-    workspace_root_ = root_ / "workspace";
+    workspace_root_ = TempDir() / "workspace";
     shader_root_ = workspace_root_ / "src" / "Oxygen" / "Graphics"
       / "Direct3D12" / "Shaders";
-    build_root_ = root_ / "build";
-    out_file_ = root_ / "bin" / "shaders.bin";
+    build_root_ = TempDir() / "build";
+    out_file_ = TempDir() / "bin" / "shaders.bin";
     include_dirs_ = { shader_root_ };
     layout_ = GetBuildRootLayout(build_root_);
 
     std::filesystem::create_directories(shader_root_);
     EnsureBuildRootLayout(layout_);
-  }
-
-  void TearDown() override
-  {
-    std::error_code ec;
-    std::filesystem::remove_all(root_, ec);
   }
 
   auto WriteTextFile(const std::filesystem::path& path, std::string_view text)
@@ -302,7 +289,6 @@ protected:
   }
 
   const uint64_t toolchain_hash_ = 0x1234567890ABCDEFULL;
-  std::filesystem::path root_;
   std::filesystem::path workspace_root_;
   std::filesystem::path shader_root_;
   std::filesystem::path build_root_;
@@ -591,8 +577,8 @@ NOLINT_TEST_F(
     ExecuteUpdate(MakeOptions(requests, update_compiler)).has_value());
   const auto update_bytes = ReadFileBytes(out_file_);
 
-  const auto rebuild_layout = GetBuildRootLayout(root_ / "rebuild");
-  const auto rebuild_out = root_ / "bin" / "rebuild-shaders.bin";
+  const auto rebuild_layout = GetBuildRootLayout(TempDir() / "rebuild");
+  const auto rebuild_out = TempDir() / "bin" / "rebuild-shaders.bin";
   EnsureBuildRootLayout(rebuild_layout);
   FakeCompiler rebuild_compiler(
     workspace_root_, shader_root_, include_dirs_, toolchain_hash_);

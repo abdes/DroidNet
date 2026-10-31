@@ -32,7 +32,8 @@ struct StringConversionTestParam {
   std::wstring expected_output;
 };
 
-class ToWideTest : public testing::TestWithParam<StringConversionTestParam> { };
+class ToWideTest : public ::testing::TestWithParam<StringConversionTestParam> {
+};
 
 NOLINT_TEST_P(ToWideTest, ConvertsValidUtf8SequenceToWideString)
 {
@@ -87,10 +88,10 @@ NOLINT_TEST_F(ToWideTest, RejectsInvalidUtf8Sequence)
     EXPECT_EQ(ex.GetErrorCode(),
       static_cast<DWORD>(
         ERROR_NO_UNICODE_TRANSLATION)); // Replace with the expected error code
-    EXPECT_THAT(ex.what(), testing::StartsWith("1113"));
+    EXPECT_THAT(ex.what(), ::testing::StartsWith("1113"));
 #else
   } catch (const std::runtime_error& ex) {
-    EXPECT_THAT(ex.what(), testing::HasSubstr("Invalid"));
+    EXPECT_THAT(ex.what(), ::testing::HasSubstr("Invalid"));
 #endif
   } catch (...) {
     FAIL() << "Expected an invalid-sequence exception";
@@ -122,7 +123,7 @@ struct WideStringConversionTestParam {
 };
 
 class ToUtf8Test
-  : public testing::TestWithParam<WideStringConversionTestParam> { };
+  : public ::testing::TestWithParam<WideStringConversionTestParam> { };
 
 NOLINT_TEST_P(ToUtf8Test, ConvertsValidWideStringToUtf8String)
 {
@@ -174,10 +175,10 @@ NOLINT_TEST_F(ToUtf8Test, RejectsInvalidWideSequence)
     static_assert(ERROR_NO_UNICODE_TRANSLATION >= 0);
     EXPECT_EQ(
       ex.GetErrorCode(), static_cast<DWORD>(ERROR_NO_UNICODE_TRANSLATION));
-    EXPECT_THAT(ex.what(), testing::StartsWith("1113"));
+    EXPECT_THAT(ex.what(), ::testing::StartsWith("1113"));
 #else
   } catch (const std::runtime_error& ex) {
-    EXPECT_THAT(ex.what(), testing::HasSubstr("Invalid"));
+    EXPECT_THAT(ex.what(), ::testing::HasSubstr("Invalid"));
 #endif
   } catch (...) {
     FAIL() << "Expected an invalid-sequence exception";

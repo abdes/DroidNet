@@ -52,7 +52,12 @@ target_sources(
     FILE_SET HEADERS
     TYPE HEADERS
     BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
-    FILES "GTest.h" "ScopedLogCapture.h" "ScopedTempDir.h"
+    FILES
+      "GTest.h"
+      "ScopedLogCapture.h"
+      "ScopedStreamCapture.h"
+      "ScopedTempDir.h"
+      "TempDirTest.h"
 )
 
 # Set include directories

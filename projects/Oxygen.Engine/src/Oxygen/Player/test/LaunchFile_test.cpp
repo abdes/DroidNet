@@ -11,6 +11,7 @@
 
 #include <Oxygen/Player/LaunchFile.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -20,25 +21,18 @@ using oxygen::player::LaunchWindowMode;
 using oxygen::player::ParseLaunchFile;
 using oxygen::player::ReadLaunchFile;
 
-class LaunchFileTest : public testing::Test {
+class LaunchFileTest : public oxygen::testing::TempDirTest {
 protected:
   void SetUp() override
   {
-    root_ = std::filesystem::temp_directory_path()
-      / ("oxygen-player-launch-"
-        + std::string(
-          ::testing::UnitTest::GetInstance()->current_test_info()->name()));
-    std::filesystem::remove_all(root_);
-    std::filesystem::create_directories(root_ / "cooked");
-    std::filesystem::create_directories(root_ / "scripts");
-    std::ofstream(root_ / "base.pak") << "pak";
+    std::filesystem::create_directories(TempDir() / "cooked");
+    std::filesystem::create_directories(TempDir() / "scripts");
+    std::ofstream(TempDir() / "base.pak") << "pak";
   }
-
-  void TearDown() override { std::filesystem::remove_all(root_); }
 
   [[nodiscard]] auto Parse(const std::string_view text) const
   {
-    return ParseLaunchFile(text, root_, "launch.json");
+    return ParseLaunchFile(text, TempDir(), "launch.json");
   }
 
   //! The message of the error parsing `text` throws; empty when none.
@@ -51,8 +45,6 @@ protected:
     }
     return {};
   }
-
-  std::filesystem::path root_;
 };
 
 NOLINT_TEST_F(LaunchFileTest, ReadsEveryFieldAndResolvesRelativePaths)
@@ -69,14 +61,14 @@ NOLINT_TEST_F(LaunchFileTest, ReadsEveryFieldAndResolvesRelativePaths)
 
   ASSERT_EQ(launch.mounts.size(), 2U);
   EXPECT_EQ(launch.mounts[0].kind, LaunchMount::Kind::kPakFile);
-  EXPECT_EQ(launch.mounts[0].path, (root_ / "base.pak").lexically_normal());
+  EXPECT_EQ(launch.mounts[0].path, (TempDir() / "base.pak").lexically_normal());
   EXPECT_EQ(launch.mounts[1].kind, LaunchMount::Kind::kLooseCookedRoot);
-  EXPECT_EQ(launch.mounts[1].path, (root_ / "cooked").lexically_normal());
+  EXPECT_EQ(launch.mounts[1].path, (TempDir() / "cooked").lexically_normal());
   EXPECT_EQ(launch.scene, "/.cooked/Scenes/Level.oscene");
   ASSERT_EQ(launch.source_mounts.size(), 1U);
   ASSERT_TRUE(launch.source_mounts.contains("Content"));
-  EXPECT_EQ(
-    launch.source_mounts.at("Content"), (root_ / "scripts").lexically_normal());
+  EXPECT_EQ(launch.source_mounts.at("Content"),
+    (TempDir() / "scripts").lexically_normal());
   EXPECT_EQ(launch.window.title, "Level");
   EXPECT_EQ(launch.window.mode, LaunchWindowMode::kBorderless);
   EXPECT_EQ(launch.window.width, 1600U);
@@ -109,14 +101,14 @@ NOLINT_TEST_F(LaunchFileTest, OptionalFieldsTakeTheirDefaults)
 
 NOLINT_TEST_F(LaunchFileTest, ReadLaunchFileResolvesAgainstItsFolder)
 {
-  std::ofstream(root_ / "launch.json") << R"({
+  std::ofstream(TempDir() / "launch.json") << R"({
     "version": 3, "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
   })";
 
-  const auto launch = ReadLaunchFile(root_ / "launch.json");
+  const auto launch = ReadLaunchFile(TempDir() / "launch.json");
 
   ASSERT_EQ(launch.mounts.size(), 1U);
-  EXPECT_EQ(launch.mounts[0].path, (root_ / "cooked").lexically_normal());
+  EXPECT_EQ(launch.mounts[0].path, (TempDir() / "cooked").lexically_normal());
 }
 
 NOLINT_TEST_F(LaunchFileTest, SchemaViolationsNameTheSchemaAndTheValue)
@@ -176,8 +168,8 @@ NOLINT_TEST_F(LaunchFileTest, MissingContentIsReported)
 
 NOLINT_TEST_F(LaunchFileTest, UnreadableFileIsReported)
 {
-  EXPECT_THROW(
-    static_cast<void>(ReadLaunchFile(root_ / "missing.json")), LaunchFileError);
+  EXPECT_THROW(static_cast<void>(ReadLaunchFile(TempDir() / "missing.json")),
+    LaunchFileError);
 }
 
 } // namespace

@@ -42,6 +42,7 @@
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace oxygen::scripting::test {
 
@@ -92,35 +93,18 @@ namespace {
 
 } // namespace
 
-class ScriptSourceResolverTest : public ::testing::Test {
+class ScriptSourceResolverTest : public oxygen::testing::TempDirTest {
 protected:
   void SetUp() override
   {
-    const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::system_clock::now().time_since_epoch())
-                             .count();
-    temp_root_ = std::filesystem::temp_directory_path()
-      / std::string("oxygen_scripting_resolver_test_")
-          .append(std::to_string(timestamp));
-    std::filesystem::create_directories(temp_root_ / "scripts");
+    std::filesystem::create_directories(TempDir() / "scripts");
 
     auto config = PathFinderConfig::Create()
-                    .WithWorkspaceRoot(temp_root_)
+                    .WithWorkspaceRoot(TempDir())
                     .WithSourceMount("Content", "scripts")
                     .BuildShared();
-    auto path_finder = PathFinder(config, temp_root_);
+    auto path_finder = PathFinder(config, TempDir());
     resolver_ = std::make_unique<ScriptSourceResolver>(std::move(path_finder));
-  }
-
-  void TearDown() override
-  {
-    std::error_code ec;
-    std::filesystem::remove_all(temp_root_, ec);
-  }
-
-  [[nodiscard]] auto TempRoot() const noexcept -> const std::filesystem::path&
-  {
-    return temp_root_;
   }
 
   [[nodiscard]] auto Resolver() const noexcept -> ScriptSourceResolver&
@@ -137,7 +121,6 @@ protected:
   }
 
 private:
-  std::filesystem::path temp_root_;
   std::unique_ptr<ScriptSourceResolver> resolver_;
 };
 
@@ -184,7 +167,7 @@ NOLINT_TEST_F(
     ScriptAssetResourceIndices {},
     data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
-  const auto script_path = TempRoot() / "scripts/runtime/fallback.luau";
+  const auto script_path = TempDir() / "scripts/runtime/fallback.luau";
   WriteFile(script_path, "fallback content");
 
   const auto result = Resolver().Resolve({
@@ -209,7 +192,7 @@ NOLINT_TEST_F(
     ScriptAssetResourceIndices {},
     data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
-  const auto script_path = TempRoot() / "scripts/runtime/hash_test.luau";
+  const auto script_path = TempDir() / "scripts/runtime/hash_test.luau";
 
   WriteFile(script_path, "v1");
   const auto first = Resolver().Resolve({
@@ -268,7 +251,7 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsPathThatIsNotMountPath)
   const auto relative
     = MakeScriptAsset("runtime/fallback.luau", ScriptAssetResourceIndices {},
       data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
-  WriteFile(TempRoot() / "scripts/runtime/fallback.luau", "relative");
+  WriteFile(TempDir() / "scripts/runtime/fallback.luau", "relative");
   const auto relative_result = Resolver().Resolve({
     .asset = *relative,
     .load_script_resource =
@@ -285,7 +268,7 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsPathThatIsNotMountPath)
 //! bytecode, like a missing file, even when another mount holds the path.
 NOLINT_TEST_F(ScriptSourceResolverTest, ResolveFallsThroughForUnboundMount)
 {
-  WriteFile(TempRoot() / "scripts/runtime/unbound.luau", "unbound");
+  WriteFile(TempDir() / "scripts/runtime/unbound.luau", "unbound");
   const auto asset = MakeScriptAsset("/Other/runtime/unbound.luau",
     ScriptAssetResourceIndices {
       .bytecode_index = data::ResourceReferenceIndex { 1U },
@@ -372,7 +355,7 @@ NOLINT_TEST_F(
     ScriptAssetResourceIndices {},
     data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
-  const auto script_path = TempRoot() / "scripts/runtime/module_test.luau";
+  const auto script_path = TempDir() / "scripts/runtime/module_test.luau";
   constexpr auto kScript = "return 42";
   WriteFile(script_path, kScript);
 
@@ -392,7 +375,7 @@ NOLINT_TEST_F(
   auto platform
     = std::make_shared<Platform>(PlatformConfig { .headless = true });
   const auto pfc
-    = PathFinderConfig::Create().WithWorkspaceRoot(TempRoot()).BuildShared();
+    = PathFinderConfig::Create().WithWorkspaceRoot(TempDir()).BuildShared();
   auto& loader = GraphicsBackendLoader::GetInstanceRelaxed();
   auto gfx = loader.LoadBackend(graphics::BackendType::kHeadless,
     GraphicsConfig { .headless = true }, *pfc);

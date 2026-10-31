@@ -19,9 +19,9 @@
 #include <Oxygen/Testing/GTest.h>
 
 // Aliases for gtest/gmock matchers to reduce clutter
-using testing::Contains;
-using testing::Not;
-using testing::UnorderedElementsAreArray;
+using ::testing::Contains;
+using ::testing::Not;
+using ::testing::UnorderedElementsAreArray;
 
 namespace oxygen::scene::testing {
 

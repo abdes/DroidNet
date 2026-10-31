@@ -17,7 +17,8 @@ namespace oxygen::testing {
 
 //! Scoped log capture utility for tests using Loguru.
 /*! Installs a Loguru callback on construction and removes it on destruction.
-    Captures the message text for assertions.
+    Captures each record's prefix (scope markers, check failures) and message
+    text for assertions, without the preamble.
 
     Usage example:
       ScopedLogCapture capture{"MyTestCapture", loguru::Verbosity_9};
@@ -64,6 +65,17 @@ public:
     return n;
   }
 
+  //! Captured messages, one per line.
+  [[nodiscard]] auto Text() const -> std::string
+  {
+    std::string text;
+    for (const auto& msg : messages_) {
+      text += msg;
+      text += '\n';
+    }
+    return text;
+  }
+
   //! Access captured messages.
   [[nodiscard]] const std::vector<std::string>& Messages() const
   {
@@ -83,7 +95,9 @@ private:
     if (self->filter_ && !self->filter_(message)) {
       return;
     }
-    self->messages_.emplace_back(message.message);
+    auto& text = self->messages_.emplace_back(
+      message.prefix != nullptr ? message.prefix : "");
+    text += message.message;
   }
 
   std::string id_;

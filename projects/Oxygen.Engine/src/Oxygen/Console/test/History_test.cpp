@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
-#include <filesystem>
 #include <string>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -15,6 +14,7 @@
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
 
@@ -102,9 +102,8 @@ NOLINT_TEST(ConsoleHistory, RespectsCapacity)
 
 NOLINT_TEST(ConsoleHistory, PersistsAcrossSessions)
 {
-  const auto temp_root
-    = std::filesystem::temp_directory_path() / "oxygen_history_test";
-  std::filesystem::create_directories(temp_root);
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto& temp_root = temp_dir.Path();
 
   auto config = oxygen::PathFinderConfig::Create()
                   .WithWorkspaceRoot(temp_root)
@@ -152,8 +151,6 @@ NOLINT_TEST(ConsoleHistory, PersistsAcrossSessions)
     EXPECT_EQ(entries[0], "cmd1");
     EXPECT_EQ(entries[1], "cmd2");
   }
-
-  std::filesystem::remove_all(temp_root);
 }
 
 } // namespace

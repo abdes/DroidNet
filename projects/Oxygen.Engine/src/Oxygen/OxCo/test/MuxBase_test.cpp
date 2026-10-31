@@ -7,7 +7,6 @@
 #include <coroutine>
 #include <cstddef>
 #include <exception>
-#include <iostream>
 #include <stdexcept>
 #include <type_traits>
 
@@ -93,16 +92,7 @@ private:
   bool internal_cancel_result_;
 };
 
-class MuxBaseTest : public testing::Test {
-public:
-  void SetUp() override { testing::internal::CaptureStderr(); }
-
-  void TearDown() override
-  {
-    const auto captured_stderr = testing::internal::GetCapturedStderr();
-    std::cout << "Captured stderr:\n" << captured_stderr << '\n';
-  }
-};
+class MuxBaseTest : public testing::Test { };
 
 // Scenario 1: Zero Awaitables.
 // Verify that the multiplexer correctly handles the case with no awaitables.

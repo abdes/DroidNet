@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -14,7 +13,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
 
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/ShaderCatalogBuilder.h>
@@ -22,6 +20,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -58,26 +57,7 @@ auto MakeEntry(const ShaderType type, std::string_view path,
   return entry;
 }
 
-class ShaderBakeManifestTest : public testing::Test {
-protected:
-  void SetUp() override
-  {
-    static auto next_id = std::atomic_uint64_t { 0 };
-    root_ = std::filesystem::temp_directory_path()
-      / ("oxygen_shaderbake_manifest_test_"
-        + std::to_string(next_id.fetch_add(1, std::memory_order_relaxed)));
-    std::filesystem::remove_all(root_);
-    std::filesystem::create_directories(root_);
-  }
-
-  void TearDown() override
-  {
-    std::error_code ec;
-    std::filesystem::remove_all(root_, ec);
-  }
-
-  std::filesystem::path root_;
-};
+class ShaderBakeManifestTest : public oxygen::testing::TempDirTest { };
 
 } // namespace
 
@@ -91,7 +71,7 @@ NOLINT_TEST_F(ShaderBakeManifestTest, RoundTripsExpandedRequests)
 
   const auto expanded = ExpandShaderCatalog(entries);
   const auto snapshot = BuildManifestSnapshot(expanded);
-  const auto layout = GetBuildRootLayout(root_ / "build");
+  const auto layout = GetBuildRootLayout(TempDir() / "build");
   EnsureBuildRootLayout(layout);
 
   WriteManifestFile(layout.manifest_file, snapshot);
@@ -102,7 +82,7 @@ NOLINT_TEST_F(ShaderBakeManifestTest, RoundTripsExpandedRequests)
 
 NOLINT_TEST_F(ShaderBakeManifestTest, RewritePublishesNewSnapshot)
 {
-  const auto layout = GetBuildRootLayout(root_ / "build");
+  const auto layout = GetBuildRootLayout(TempDir() / "build");
   EnsureBuildRootLayout(layout);
 
   const auto first = BuildManifestSnapshot(std::array {
@@ -136,7 +116,7 @@ NOLINT_TEST_F(ShaderBakeManifestTest, RewritePublishesNewSnapshot)
 
 NOLINT_TEST_F(ShaderBakeManifestTest, RejectsCorruptManifestJson)
 {
-  const auto layout = GetBuildRootLayout(root_ / "build");
+  const auto layout = GetBuildRootLayout(TempDir() / "build");
   EnsureBuildRootLayout(layout);
 
   {

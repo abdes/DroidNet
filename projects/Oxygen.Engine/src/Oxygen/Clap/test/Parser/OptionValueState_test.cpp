@@ -10,9 +10,9 @@
 #include <Oxygen/Clap/OptionValue.h>
 #include <Oxygen/Testing/GTest.h>
 
-using testing::Eq;
-using testing::IsFalse;
-using testing::IsTrue;
+using ::testing::Eq;
+using ::testing::IsFalse;
+using ::testing::IsTrue;
 
 namespace oxygen::clap::parser {
 

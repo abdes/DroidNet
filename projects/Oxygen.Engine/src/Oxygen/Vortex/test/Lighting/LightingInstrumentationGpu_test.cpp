@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -24,6 +23,7 @@
 #include <Oxygen/Profiling/CpuScopeObserver.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
@@ -47,12 +47,6 @@ namespace {
     auto SetUp() -> void override
     {
       ExposureLightingGpuTest::SetUp();
-      const auto suffix
-        = std::chrono::steady_clock::now().time_since_epoch().count();
-      directory_ = std::filesystem::temp_directory_path()
-        / ("oxygen-lighting-instruments-" + std::to_string(suffix));
-      owns_directory_ = std::filesystem::create_directory(directory_);
-      ASSERT_TRUE(owns_directory_);
       auto light = std::make_unique<scene::PointLight>();
       light->Common().casts_shadows = false;
       light->SetLuminousFluxLm(1.0F);
@@ -62,20 +56,7 @@ namespace {
       SetSurface(data::MaterialDomain::kOpaque);
     }
 
-    auto TearDown() -> void override
-    {
-      auto ignored = std::error_code {};
-      if (owns_directory_) {
-        for (const auto* name : { "forward.csv", "deferred.csv" }) {
-          std::filesystem::remove(directory_ / name, ignored);
-        }
-        std::filesystem::remove(directory_, ignored);
-      }
-      ExposureLightingGpuTest::TearDown();
-    }
-
-    std::filesystem::path directory_;
-    bool owns_directory_ { false };
+    oxygen::testing::ScopedTempDir directory_;
   };
 
   NOLINT_TEST_F(
@@ -116,7 +97,8 @@ namespace {
         const auto observer = profiling::ScopedCpuScopeObserver(cpu);
         ASSERT_NO_FATAL_FAILURE(render());
       }
-      const auto path = directory_ / (forward ? "forward.csv" : "deferred.csv");
+      const auto path
+        = directory_.Path() / (forward ? "forward.csv" : "deferred.csv");
       const auto cpu_report = cpu.Save(path);
       EXPECT_EQ(cpu_report.at("complete"), true);
       EXPECT_LE(cpu_report.at("records").get<unsigned>(), 256U);

@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -14,7 +13,6 @@
 #include <ios>
 #include <optional>
 #include <string>
-#include <system_error>
 #include <vector>
 
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -26,6 +24,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -73,24 +72,8 @@ auto MakeCanonicalRequest() -> ShaderRequest
   });
 }
 
-class ShaderBakeModuleArtifactTest : public testing::Test {
+class ShaderBakeModuleArtifactTest : public oxygen::testing::TempDirTest {
 protected:
-  void SetUp() override
-  {
-    static auto next_id = std::atomic_uint64_t { 0 };
-    root_ = std::filesystem::temp_directory_path()
-      / ("oxygen_shaderbake_module_artifact_test_"
-        + std::to_string(next_id.fetch_add(1, std::memory_order_relaxed)));
-    std::filesystem::remove_all(root_);
-    std::filesystem::create_directories(root_);
-  }
-
-  void TearDown() override
-  {
-    std::error_code ec;
-    std::filesystem::remove_all(root_, ec);
-  }
-
   [[nodiscard]] auto BuildSampleArtifact() const -> ModuleArtifact
   {
     const auto request = MakeCanonicalRequest();
@@ -124,15 +107,13 @@ protected:
       .reflection = MakeBytes({ 0x10, 0x20, 0x30, 0x40, 0x50 }),
     };
   }
-
-  std::filesystem::path root_;
 };
 
 } // namespace
 
 NOLINT_TEST_F(ShaderBakeModuleArtifactTest, ComputesShardedModuleArtifactPath)
 {
-  const auto layout = GetBuildRootLayout(root_ / "build");
+  const auto layout = GetBuildRootLayout(TempDir() / "build");
   const auto artifact_path
     = GetModuleArtifactPath(layout, 0x1234567890ABCDEFULL);
 
@@ -142,7 +123,7 @@ NOLINT_TEST_F(ShaderBakeModuleArtifactTest, ComputesShardedModuleArtifactPath)
 
 NOLINT_TEST_F(ShaderBakeModuleArtifactTest, RoundTripsModuleArtifact)
 {
-  const auto layout = GetBuildRootLayout(root_ / "build");
+  const auto layout = GetBuildRootLayout(TempDir() / "build");
   EnsureBuildRootLayout(layout);
 
   const auto artifact = BuildSampleArtifact();
@@ -158,7 +139,7 @@ NOLINT_TEST_F(ShaderBakeModuleArtifactTest, RoundTripsModuleArtifact)
 
 NOLINT_TEST_F(ShaderBakeModuleArtifactTest, CorruptArtifactBecomesCacheMiss)
 {
-  const auto layout = GetBuildRootLayout(root_ / "build");
+  const auto layout = GetBuildRootLayout(TempDir() / "build");
   EnsureBuildRootLayout(layout);
 
   const auto artifact_path

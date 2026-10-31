@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -15,7 +14,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -31,6 +29,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -60,33 +59,21 @@ using oxygen::graphics::d3d12::tools::shader_bake::WriteBuildStateFile;
 using oxygen::graphics::d3d12::tools::shader_bake::WriteManifestFile;
 using oxygen::graphics::d3d12::tools::shader_bake::WriteModuleArtifactFile;
 
-class ShaderBakeDirtyAnalysisTest : public testing::Test {
+class ShaderBakeDirtyAnalysisTest : public oxygen::testing::TempDirTest {
 protected:
   void SetUp() override
   {
-    static auto next_id = std::atomic_uint64_t { 0 };
-    root_ = std::filesystem::temp_directory_path()
-      / ("oxygen_shaderbake_dirty_analysis_test_"
-        + std::to_string(next_id.fetch_add(1, std::memory_order_relaxed)));
-    std::filesystem::remove_all(root_);
-
-    workspace_root_ = root_ / "workspace";
+    workspace_root_ = TempDir() / "workspace";
     shader_root_ = workspace_root_ / "src" / "Oxygen" / "Graphics"
       / "Direct3D12" / "Shaders";
-    build_root_ = root_ / "build";
-    out_file_ = root_ / "bin" / "shaders.bin";
+    build_root_ = TempDir() / "build";
+    out_file_ = TempDir() / "bin" / "shaders.bin";
 
     std::filesystem::create_directories(shader_root_);
     std::filesystem::create_directories(build_root_);
     layout_ = GetBuildRootLayout(build_root_);
     std::filesystem::create_directories(layout_.state_dir);
     std::filesystem::create_directories(layout_.modules_dir);
-  }
-
-  void TearDown() override
-  {
-    std::error_code ec;
-    std::filesystem::remove_all(root_, ec);
   }
 
   auto WriteTextFile(const std::filesystem::path& path, std::string_view text)
@@ -173,7 +160,6 @@ protected:
       != request.dirty_reasons.end();
   }
 
-  std::filesystem::path root_;
   std::filesystem::path workspace_root_;
   std::filesystem::path shader_root_;
   std::filesystem::path build_root_;
