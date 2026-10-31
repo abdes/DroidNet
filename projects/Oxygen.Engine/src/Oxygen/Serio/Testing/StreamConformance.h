@@ -221,8 +221,8 @@ REGISTER_TYPED_TEST_SUITE_P(InputStreamConformance, StartsAtZeroWithContentSize,
  ```
 
  `Make` returns an empty stream; `Contents` returns what has reached the
- stream's destination, after the case flushed it. Cases for `PatchAt` run on
- streams that satisfy `PatchableOutputStream` and skip the others.
+ stream's destination, after the case flushed it. A stream that satisfies
+ `PatchableOutputStream` also joins `PatchableOutputStreamConformance`.
 
  @tparam Factory The stream factory.
 */
@@ -283,60 +283,64 @@ TYPED_TEST_P(OutputStreamConformance, EmptyWriteAndRepeatedFlush) // NOLINT
   EXPECT_THAT(this->Contents(stream), BytesEqual(bytes));
 }
 
+REGISTER_TYPED_TEST_SUITE_P(
+  OutputStreamConformance, WritesArriveInOrder, EmptyWriteAndRepeatedFlush);
+
+//! The cases of output streams that patch written bytes:
+//! `OutputStreamConformance`'s fixture, for factories whose streams satisfy
+//! `PatchableOutputStream`.
+template <class Factory>
+class PatchableOutputStreamConformance
+  : public OutputStreamConformance<Factory> {
+  static_assert(PatchableOutputStream<typename Factory::Stream>);
+};
+
+TYPED_TEST_SUITE_P(PatchableOutputStreamConformance);
+
 //! PatchAt overwrites bytes already at the destination and bytes still
 //! buffered, and leaves the cursor where it was.
-TYPED_TEST_P(OutputStreamConformance, PatchAtOverwritesWrittenBytes) // NOLINT
+TYPED_TEST_P(
+  PatchableOutputStreamConformance, PatchAtOverwritesWrittenBytes) // NOLINT
 {
-  using Stream = TestFixture::Stream;
-  if constexpr (!PatchableOutputStream<Stream>) {
-    GTEST_SKIP() << "not patchable";
-  } else {
-    const auto bytes = PatternBytes(TestFixture::kLargeSize);
-    const auto head = PatternBytes(16, PatternSeed::kSecond);
-    const auto tail = PatternBytes(8, PatternSeed::kSecond);
-    auto stream = this->MakeStream();
-    ASSERT_TRUE(stream.Write(bytes));
+  const auto bytes = PatternBytes(TestFixture::kLargeSize);
+  const auto head = PatternBytes(16, PatternSeed::kSecond);
+  const auto tail = PatternBytes(8, PatternSeed::kSecond);
+  auto stream = this->MakeStream();
+  ASSERT_TRUE(stream.Write(bytes));
 
-    ASSERT_TRUE(stream.PatchAt(ByteOffset { 10 }, head));
-    ASSERT_TRUE(
-      stream.PatchAt(ByteOffset { bytes.size() - tail.size() }, tail));
-    ASSERT_TRUE(stream.Flush());
+  ASSERT_TRUE(stream.PatchAt(ByteOffset { 10 }, head));
+  ASSERT_TRUE(stream.PatchAt(ByteOffset { bytes.size() - tail.size() }, tail));
+  ASSERT_TRUE(stream.Flush());
 
-    auto expected = bytes;
-    std::ranges::copy(head, expected.begin() + 10);
-    std::ranges::copy(
-      tail, expected.end() - static_cast<std::ptrdiff_t>(tail.size()));
-    EXPECT_EQ(stream.Position().get(), bytes.size());
-    EXPECT_THAT(this->Contents(stream), BytesEqual(expected));
-  }
+  auto expected = bytes;
+  std::ranges::copy(head, expected.begin() + 10);
+  std::ranges::copy(
+    tail, expected.end() - static_cast<std::ptrdiff_t>(tail.size()));
+  EXPECT_EQ(stream.Position().get(), bytes.size());
+  EXPECT_THAT(this->Contents(stream), BytesEqual(expected));
 }
 
 //! PatchAt past the cursor fails with kOutOfBounds and changes nothing.
-TYPED_TEST_P(OutputStreamConformance, PatchAtPastCursorIsOutOfBounds) // NOLINT
+TYPED_TEST_P(
+  PatchableOutputStreamConformance, PatchAtPastCursorIsOutOfBounds) // NOLINT
 {
-  using Stream = TestFixture::Stream;
-  if constexpr (!PatchableOutputStream<Stream>) {
-    GTEST_SKIP() << "not patchable";
-  } else {
-    const auto bytes = PatternBytes(32);
-    const auto patch = PatternBytes(8, PatternSeed::kSecond);
-    auto stream = this->MakeStream();
-    ASSERT_TRUE(stream.Write(bytes));
+  const auto bytes = PatternBytes(32);
+  const auto patch = PatternBytes(8, PatternSeed::kSecond);
+  auto stream = this->MakeStream();
+  ASSERT_TRUE(stream.Write(bytes));
 
-    const auto across = stream.PatchAt(ByteOffset { 28 }, patch);
-    const auto beyond = stream.PatchAt(ByteOffset { 40 }, patch);
-    ASSERT_TRUE(stream.Flush());
+  const auto across = stream.PatchAt(ByteOffset { 28 }, patch);
+  const auto beyond = stream.PatchAt(ByteOffset { 40 }, patch);
+  ASSERT_TRUE(stream.Flush());
 
-    ASSERT_FALSE(across);
-    EXPECT_EQ(across.error(), Error::kOutOfBounds);
-    ASSERT_FALSE(beyond);
-    EXPECT_EQ(beyond.error(), Error::kOutOfBounds);
-    EXPECT_THAT(this->Contents(stream), BytesEqual(bytes));
-  }
+  ASSERT_FALSE(across);
+  EXPECT_EQ(across.error(), Error::kOutOfBounds);
+  ASSERT_FALSE(beyond);
+  EXPECT_EQ(beyond.error(), Error::kOutOfBounds);
+  EXPECT_THAT(this->Contents(stream), BytesEqual(bytes));
 }
 
-REGISTER_TYPED_TEST_SUITE_P(OutputStreamConformance, WritesArriveInOrder,
-  EmptyWriteAndRepeatedFlush, PatchAtOverwritesWrittenBytes,
-  PatchAtPastCursorIsOutOfBounds);
+REGISTER_TYPED_TEST_SUITE_P(PatchableOutputStreamConformance,
+  PatchAtOverwritesWrittenBytes, PatchAtPastCursorIsOutOfBounds);
 
 } // namespace oxygen::serio::testing

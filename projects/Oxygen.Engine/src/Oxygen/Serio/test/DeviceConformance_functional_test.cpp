@@ -20,7 +20,8 @@ namespace {
 
   // Every Serio device, and every composition of them: erased, wrapped in a
   // fault-injecting device with nothing scheduled, and viewed as a region.
-  // The suite reads concurrently, so it runs in the functional tier.
+  // Each capability suite takes the devices that have the capability. The
+  // suites read concurrently, so they run in the functional tier.
 
   using Factories = ::testing::Types<test::MemoryFileFactory,
     test::ByteViewFactory, test::NativeFileFactory, test::MappedFileFactory,
@@ -34,6 +35,23 @@ namespace {
     test::RegionFactory<test::MappedFileFactory>>;
 
   INSTANTIATE_TYPED_TEST_SUITE_P(Serio, DeviceConformance, Factories);
+
+  using WritableFactories = ::testing::Types<test::MemoryFileFactory,
+    test::NativeFileFactory, test::AnyDeviceFactory<test::MemoryFileFactory>,
+    test::AnyDeviceFactory<test::NativeFileFactory>,
+    test::FaultInjectingFactory<test::MemoryFileFactory>,
+    test::FaultInjectingFactory<test::NativeFileFactory>>;
+
+  INSTANTIATE_TYPED_TEST_SUITE_P(
+    Serio, WritableDeviceConformance, WritableFactories);
+
+  using ContiguousFactories
+    = ::testing::Types<test::MemoryFileFactory, test::ByteViewFactory,
+      test::MappedFileFactory, test::RegionFactory<test::MemoryFileFactory>,
+      test::RegionFactory<test::MappedFileFactory>>;
+
+  INSTANTIATE_TYPED_TEST_SUITE_P(
+    Serio, ContiguousDeviceConformance, ContiguousFactories);
 
 } // namespace
 } // namespace oxygen::serio::testing

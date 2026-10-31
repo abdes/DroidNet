@@ -44,5 +44,13 @@ namespace {
   INSTANTIATE_TYPED_TEST_SUITE_P(
     Memory, OutputStreamConformance, OutputFactories);
 
+  using PatchableFactories = ::testing::Types<test::MemoryStreamOutputFactory,
+    test::RegionWriteStreamFactory<test::MemoryFileFactory>,
+    test::RegionWriteStreamFactory<
+      test::FaultInjectingFactory<test::MemoryFileFactory>>>;
+
+  INSTANTIATE_TYPED_TEST_SUITE_P(
+    Memory, PatchableOutputStreamConformance, PatchableFactories);
+
 } // namespace
 } // namespace oxygen::serio::testing

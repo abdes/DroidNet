@@ -98,9 +98,7 @@ NOLINT_TEST_F(RegionTest, ContiguousRegionViewsSlice)
 
   const auto view = region->Contiguous();
 
-  if (!view.has_value()) {
-    FAIL() << "the region should be contiguous";
-  }
+  ASSERT_HAS_VALUE(view) << "the region should be contiguous";
   EXPECT_EQ(view->data(), std::span(bytes_).subspan(10).data());
   EXPECT_EQ(view->size(), 30U);
 }
@@ -120,9 +118,7 @@ NOLINT_TEST_F(RegionTest, ContiguityIsKnownThroughErasure)
 
   const auto erased_view = erased_region->Contiguous();
 
-  if (!erased_view.has_value()) {
-    FAIL() << "the erased region should be contiguous";
-  }
+  ASSERT_HAS_VALUE(erased_view) << "the erased region should be contiguous";
   EXPECT_EQ(erased_view->data(), std::span(bytes_).subspan(10).data());
   EXPECT_FALSE(opaque_region->Contiguous().has_value());
 }

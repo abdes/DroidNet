@@ -37,5 +37,11 @@ namespace {
   INSTANTIATE_TYPED_TEST_SUITE_P(
     Files, OutputStreamConformance, OutputFactories);
 
+  using PatchableFactories
+    = ::testing::Types<test::RegionWriteStreamFactory<test::NativeFileFactory>>;
+
+  INSTANTIATE_TYPED_TEST_SUITE_P(
+    Files, PatchableOutputStreamConformance, PatchableFactories);
+
 } // namespace
 } // namespace oxygen::serio::testing

@@ -9,13 +9,16 @@
 #include <array>
 #include <cstddef>
 #include <span>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/ByteView.h>
 #include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/MemoryFile.h>
+#include <Oxygen/Serio/Testing/FaultInjectingDevice.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Serio/Types.h>
 #include <Oxygen/Testing/GTest.h>
@@ -26,10 +29,12 @@ using oxygen::Result;
 using oxygen::serio::AnyDevice;
 using oxygen::serio::ByteCount;
 using oxygen::serio::ByteOffset;
+using oxygen::serio::ByteView;
 using oxygen::serio::Durability;
 using oxygen::serio::MemoryFile;
 using oxygen::serio::ReadExactlyAt;
 using oxygen::serio::testing::BytesEqual;
+using oxygen::serio::testing::FaultInjectingDevice;
 using oxygen::serio::testing::PatternBytes;
 
 //! A readable device that counts how many live instances it ends with, and
@@ -129,6 +134,31 @@ NOLINT_TEST(AnyDeviceTest, WritesReachErasedDevice)
   auto out = std::vector<std::byte>(bytes.size());
   ASSERT_TRUE(ReadExactlyAt(device, ByteOffset { 0 }, out));
   EXPECT_THAT(out, BytesEqual(bytes));
+}
+
+//! The erasure reports the capabilities of the device's type: a contiguous
+//! device keeps its view, a device that does not write refuses writes.
+NOLINT_TEST(AnyDeviceTest, ReportsCapabilitiesOfTheErasedType)
+{
+  const auto bytes = PatternBytes(32);
+  auto view = AnyDevice(ByteView(bytes));
+  auto opaque = AnyDevice(FaultInjectingDevice<ByteView>(ByteView(bytes)));
+
+  const auto written = view.WriteAt(ByteOffset { 0 }, bytes);
+  const auto reserved = view.Reserve(ByteCount { 64 });
+  const auto flushed = view.Flush(Durability::kBuffered);
+  const auto contiguous = view.Contiguous();
+
+  EXPECT_FALSE(view.Writable());
+  ASSERT_HAS_VALUE(contiguous);
+  EXPECT_THAT(*contiguous, BytesEqual(bytes));
+  EXPECT_FALSE(opaque.Contiguous().has_value());
+  ASSERT_FALSE(written);
+  EXPECT_EQ(written.error(), std::errc::operation_not_supported);
+  ASSERT_FALSE(reserved);
+  EXPECT_EQ(reserved.error(), std::errc::operation_not_supported);
+  ASSERT_FALSE(flushed);
+  EXPECT_EQ(flushed.error(), std::errc::operation_not_supported);
 }
 
 } // namespace
