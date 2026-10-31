@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <functional>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #include "Utils/OxCoTestFixture.h"
@@ -49,9 +50,21 @@ namespace {
 
 class NurseryTest : public oxygen::co::testing::OxCoTestFixture { };
 
+//! A member function a nursery starts on an object it keeps by value.
+struct RvalueQualified {
+  static constexpr int kValue = 42;
+  int x = kValue;
+
+  auto Func(TestEventLoop& el) const&& -> Co<>
+  {
+    co_await el.Sleep(1ms);
+    EXPECT_EQ(x, kValue);
+  }
+};
+
 NOLINT_TEST_F(NurseryTest, ScopeForStartedTasks)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     size_t count = 0;
     auto increment_after = [&](const milliseconds delay) -> Co<> {
       co_await el_->Sleep(delay);
@@ -75,7 +88,7 @@ NOLINT_TEST_F(NurseryTest, ScopeForStartedTasks)
 
 NOLINT_TEST_F(NurseryTest, StartEnsuresArgsImplicitlyConstructed)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     auto func = [&](const std::string& s) -> Co<> {
       co_await el_->Sleep(1ms);
       EXPECT_EQ(s, "hello world! I am a long(ish) string.");
@@ -91,7 +104,7 @@ NOLINT_TEST_F(NurseryTest, StartEnsuresArgsImplicitlyConstructed)
 
 NOLINT_TEST_F(NurseryTest, StartEnsuresArgsExistingObjects)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     auto func = [&](const std::string& s) -> Co<> {
       co_await el_->Sleep(1ms);
       EXPECT_EQ(s, "hello world! I am a long(ish) string.");
@@ -108,7 +121,7 @@ NOLINT_TEST_F(NurseryTest, StartEnsuresArgsExistingObjects)
 
 NOLINT_TEST_F(NurseryTest, StartEnsuresArgsPassedByCref)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     auto func = [&](const std::string& s) -> Co<> {
       co_await el_->Sleep(1ms);
       EXPECT_EQ(s, "hello world! I am a long(ish) string.");
@@ -138,7 +151,7 @@ NOLINT_TEST_F(NurseryTest, StartWithMemberFunction_Pointer)
   };
 
   Test obj;
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       n.Start(&Test::Func, &obj, std::ref(*el_), kModifiedValue);
@@ -163,7 +176,7 @@ NOLINT_TEST_F(NurseryTest, StartWithMemberFunction_Ref)
   };
 
   Test obj;
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       n.Start(&Test::Func, std::ref(obj), std::ref(*el_), kModifiedValue);
@@ -188,7 +201,7 @@ NOLINT_TEST_F(NurseryTest, StartWithMemberFunction_ByValue)
   };
 
   Test obj;
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       n.Start(&Test::Func, obj, std::ref(*el_), kInitialValue);
@@ -199,9 +212,45 @@ NOLINT_TEST_F(NurseryTest, StartWithMemberFunction_ByValue)
   });
 }
 
+//! An argument converted to a reference parameter (here a `std::string` made
+//! from a `const char*`) lives as long as the started member function runs.
+NOLINT_TEST_F(NurseryTest, StartWithMemberFunction_ConvertedArgumentLives)
+{
+  struct Test {
+    auto Func(TestEventLoop& el, const std::string& text) const -> Co<>
+    {
+      co_await el.Sleep(1ms);
+      EXPECT_EQ(text, "converted");
+    }
+  };
+
+  const Test obj;
+  ::Run(*el_, [&] -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      n.Start(&Test::Func, &obj, std::ref(*el_), "converted");
+      co_return kJoin;
+    };
+  });
+}
+
+//! A member function qualified for rvalues runs on the object the nursery
+//! keeps.
+NOLINT_TEST_F(NurseryTest, StartWithMemberFunction_RvalueQualified)
+{
+  ::Run(*el_, [&] -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      n.Start(&RvalueQualified::Func, RvalueQualified {}, std::ref(*el_));
+      co_return kJoin;
+    };
+    EXPECT_EQ(el_->Now(), 1ms);
+  });
+}
+
 NOLINT_TEST_F(NurseryTest, CompletionPolicies_Join)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     auto sleep
       = [&](const milliseconds delay) -> Co<> { co_await el_->Sleep(delay); };
     OXCO_WITH_NURSERY(n)
@@ -215,7 +264,7 @@ NOLINT_TEST_F(NurseryTest, CompletionPolicies_Join)
 
 NOLINT_TEST_F(NurseryTest, CompletionPolicies_Cancel)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     auto sleep
       = [&](const milliseconds delay) -> Co<> { co_await el_->Sleep(delay); };
     OXCO_WITH_NURSERY(n)
@@ -229,10 +278,10 @@ NOLINT_TEST_F(NurseryTest, CompletionPolicies_Cancel)
 
 NOLINT_TEST_F(NurseryTest, CompletionPolicies_CancelledFromOutside)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     auto sleep
       = [&](const milliseconds delay) -> Co<> { co_await el_->Sleep(delay); };
-    co_await AnyOf(sleep(5ms), [&]() -> Co<> {
+    co_await AnyOf(sleep(5ms), [&] -> Co<> {
       OXCO_WITH_NURSERY(/*unused*/)
       {
         co_await kSuspendForever;
@@ -245,12 +294,12 @@ NOLINT_TEST_F(NurseryTest, CompletionPolicies_CancelledFromOutside)
 
 NOLINT_TEST_F(NurseryTest, EarlyCancelsTasks)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     bool started = false;
     OXCO_WITH_NURSERY(nursery)
     {
-      ScopeGuard guard([&]() noexcept -> void {
-        nursery.Start([&]() -> Co<> {
+      ScopeGuard guard([&] noexcept -> void {
+        nursery.Start([&] -> Co<> {
           started = true;
           co_await kYield;
           ADD_FAILURE() << "should never reach here";
@@ -265,12 +314,12 @@ NOLINT_TEST_F(NurseryTest, EarlyCancelsTasks)
 
 NOLINT_TEST_F(NurseryTest, SynchronousCancellation)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     bool cancelled = false;
     OXCO_WITH_NURSERY(n)
     {
-      n.Start([&]() -> Co<> {
-        ScopeGuard guard([&]() noexcept -> void { cancelled = true; });
+      n.Start([&] -> Co<> {
+        ScopeGuard guard([&] noexcept -> void { cancelled = true; });
         co_await el_->Sleep(5ms);
       });
       co_await el_->Sleep(1ms);
@@ -287,7 +336,7 @@ NOLINT_TEST_F(NurseryTest, SynchronousCancellation)
 
 NOLINT_TEST_F(NurseryTest, MultipleCancelledTasks)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     auto task = [&](Nursery& n) -> Co<> {
       co_await el_->Sleep(1ms, kNonCancellable);
       n.Cancel();
@@ -304,7 +353,7 @@ NOLINT_TEST_F(NurseryTest, MultipleCancelledTasks)
 
 NOLINT_TEST_F(NurseryTest, MultipleExceptions)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     auto task = [&]([[maybe_unused]] Nursery& n) -> Co<> {
       co_await el_->Sleep(1ms, kNonCancellable);
       throw std::runtime_error("boo!");
@@ -317,7 +366,7 @@ NOLINT_TEST_F(NurseryTest, MultipleExceptions)
         n.Start(task, std::ref(n));
         co_return kJoin;
       };
-    } catch (std::runtime_error& /*ex*/) {
+    } catch (std::runtime_error& /*ex*/) { // NOLINT(bugprone-empty-catch)
       // expected
     }
   });
@@ -325,15 +374,15 @@ NOLINT_TEST_F(NurseryTest, MultipleExceptions)
 
 NOLINT_TEST_F(NurseryTest, CancelAndException)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     try {
       OXCO_WITH_NURSERY(n)
       {
-        n.Start([&]() -> Co<> {
+        n.Start([&] -> Co<> {
           co_await el_->Sleep(2ms, kNonCancellable);
           throw std::runtime_error("boo!");
         });
-        n.Start([&]() -> Co<> { co_await el_->Sleep(3ms, kNonCancellable); });
+        n.Start([&] -> Co<> { co_await el_->Sleep(3ms, kNonCancellable); });
         co_await el_->Sleep(1ms);
         co_return kCancel;
       };
@@ -348,10 +397,10 @@ NOLINT_TEST_F(NurseryTest, CancelAndException)
 
 NOLINT_TEST_F(NurseryTest, CancelFromOutside)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
-      n.Start([&]() -> Co<> { co_await el_->Sleep(10ms); });
+      n.Start([&] -> Co<> { co_await el_->Sleep(10ms); });
       el_->Schedule(1ms, [&] -> void { n.Cancel(); });
       co_return kJoin;
     };
@@ -362,9 +411,9 @@ NOLINT_TEST_F(NurseryTest, CancelFromOutside)
 
 NOLINT_TEST_F(NurseryTest, PropagatesExceptions)
 {
-  ::Run(*el_, [&]() -> Co<> {
-    auto t1 = [&]() -> Co<> { co_await el_->Sleep(2ms); };
-    auto t2 = [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
+    auto t1 = [&] -> Co<> { co_await el_->Sleep(2ms); };
+    auto t2 = [&] -> Co<> {
       co_await std::suspend_never();
       throw std::runtime_error("boo!");
     };
@@ -387,7 +436,7 @@ NOLINT_TEST_F(NurseryTest, PropagatesExceptions)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CoawaitInit)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(
@@ -406,7 +455,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CoawaitInit)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_NoCoawaitInit)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       n.Start(
@@ -423,7 +472,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_NoCoawaitInit)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_OptionalArg_CoawaitInit)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(
@@ -440,7 +489,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_OptionalArg_CoawaitInit)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_OptionalArg_NoCoawaitInit)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       n.Start(
@@ -457,7 +506,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_OptionalArg_NoCoawaitInit)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_WithCombiners)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     auto task = [&](const milliseconds delay, TaskStarted<> started) -> Co<> {
       co_await el_->Sleep(delay);
       started();
@@ -475,7 +524,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_WithCombiners)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_ReturnValue)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       const int ret = co_await n.Start([](TaskStarted<int> started) -> Co<> {
@@ -490,7 +539,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_ReturnValue)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_PassesArguments)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       const int ret = co_await n.Start<int>(
@@ -507,7 +556,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_PassesArguments)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_HandleInitException)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       try {
@@ -526,7 +575,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_HandleInitException)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CancelBeforeInit)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       auto [done, timedOut] = co_await AnyOf(
@@ -544,7 +593,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CancelBeforeInit)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_RejectedCancellation)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       auto [done, timedOut]
@@ -564,7 +613,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_RejectedCancellation)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_InnerNurseryCancelled)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     Nursery* inner = nullptr;
     Event cancelInner;
     OXCO_WITH_NURSERY(outer)
@@ -579,7 +628,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_InnerNurseryCancelled)
         co_return kJoin;
       }
 
-      outer.Start([&]() -> Co<> {
+      outer.Start([&] -> Co<> {
         co_await inner->Start([&](TaskStarted<> started) -> Co<> {
           co_await el_->Sleep(5ms);
           started();
@@ -601,7 +650,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_InnerNurseryCancelled)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_ImmediatelyReady)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start([](TaskStarted<> started) -> Co<> {
@@ -616,8 +665,8 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_ImmediatelyReady)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CancelBeforeHandoff)
 {
-  ::Run(*el_, [&]() -> Co<> {
-    co_await AnyOf(el_->Sleep(1ms), [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
+    co_await AnyOf(el_->Sleep(1ms), [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start([&](TaskStarted<> started) -> Co<> {
@@ -640,7 +689,7 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CancelBeforeHandoff)
 
 NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CancelBeforeHandoff2)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await AnyOf(
@@ -656,12 +705,12 @@ NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CancelBeforeHandoff2)
 
 NOLINT_TEST_F(NurseryTest, OpenInnerNursery)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     Nursery* inner = nullptr;
     OXCO_WITH_NURSERY(outer)
     {
       co_await outer.Start(OpenNursery, std::ref(inner));
-      inner->Start([&]() -> Co<> { co_return; });
+      inner->Start([&] -> Co<> { co_return; });
       co_return kCancel;
     };
   });
@@ -669,14 +718,14 @@ NOLINT_TEST_F(NurseryTest, OpenInnerNursery)
 
 NOLINT_TEST_F(NurseryTest, OpenInnerNurseryAndCancel)
 {
-  ::Run(*el_, [&]() -> Co<> {
+  ::Run(*el_, [&] -> Co<> {
     Nursery* n = nullptr;
     OXCO_WITH_NURSERY(n2)
     {
       co_await n2.Start(OpenNursery, std::ref(n));
-      n->Start([&]() -> Co<> {
+      n->Start([&] -> Co<> {
         co_await el_->Sleep(1ms, kNonCancellable);
-        n->Start([&]() -> Co<> { co_return; });
+        n->Start([&] -> Co<> { co_return; });
       });
       co_return kCancel;
     };

@@ -49,6 +49,38 @@ template <class R, class S, class... Args>
 struct CallableSignature<R (S::*)(Args...) const noexcept>
   : CallableSignature<R (S::*)(Args...)> { };
 
+template <class R, class S, class... Args>
+struct CallableSignature<R (S::*)(Args...) &>
+  : CallableSignature<R (S::*)(Args...)> { };
+
+template <class R, class S, class... Args>
+struct CallableSignature<R (S::*)(Args...) & noexcept>
+  : CallableSignature<R (S::*)(Args...)> { };
+
+template <class R, class S, class... Args>
+struct CallableSignature<R (S::*)(Args...) const&>
+  : CallableSignature<R (S::*)(Args...)> { };
+
+template <class R, class S, class... Args>
+struct CallableSignature<R (S::*)(Args...) const & noexcept>
+  : CallableSignature<R (S::*)(Args...)> { };
+
+template <class R, class S, class... Args>
+struct CallableSignature<R (S::*)(Args...) &&>
+  : CallableSignature<R (S::*)(Args...)> { };
+
+template <class R, class S, class... Args>
+struct CallableSignature<R (S::*)(Args...) && noexcept>
+  : CallableSignature<R (S::*)(Args...)> { };
+
+template <class R, class S, class... Args>
+struct CallableSignature<R (S::*)(Args...) const&&>
+  : CallableSignature<R (S::*)(Args...)> { };
+
+template <class R, class S, class... Args>
+struct CallableSignature<R (S::*)(Args...) const && noexcept>
+  : CallableSignature<R (S::*)(Args...)> { };
+
 template <class R, class... Args> struct CallableSignature<R (*)(Args...)> {
   static constexpr bool IsMemFunPtr = false;
   static constexpr size_t Arity = sizeof...(Args);

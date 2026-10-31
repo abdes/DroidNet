@@ -69,11 +69,11 @@ namespace detail {
 
 //! Returning this value from a nursery body, causes it to wait until all of its
 //! other tasks have completed normally.
-static constexpr detail::JoinTag kJoin { detail::TagCtor {} };
+inline constexpr detail::JoinTag kJoin { detail::TagCtor {} };
 
 //! Returning this value from a nursery body, will make it request them to
 //! cancel their operations.
-static constexpr detail::CancelTag kCancel { detail::TagCtor {} };
+inline constexpr detail::CancelTag kCancel { detail::TagCtor {} };
 
 template <class Ret = void> class TaskStarted;
 
@@ -674,6 +674,36 @@ namespace detail {
   template <typename T>
   constexpr bool IsReferenceWrapper_v
     = IsSpecializationOf_v<std::reference_wrapper, T>;
+
+  //! Calls member function `Callable` of the object `Object` designates (a
+  //! pointer, a `std::reference_wrapper` or the object itself).
+  /*!
+   `Call` takes exactly the member function's parameters (`Params`), so a
+   caller's argument conversions happen at the call site, inside the caller's
+   full-expression, as if the member function were called there.
+
+   GCC 15 crashes (`gimple_add_tmp_var`) on a pointer-to-member call whose
+   result a coroutine awaits directly; awaiting `Call` instead keeps the
+   member call out of the coroutine without moving any temporary.
+  */
+  template <class Callable, class Object> struct MemberCallOf {
+    template <class... Params> struct Call {
+      Callable callable;
+      Object* object;
+
+      auto operator()(Params... params) const -> decltype(auto)
+      {
+        if constexpr (std::is_pointer_v<Object>) {
+          return ((*object)->*callable)(std::forward<Params>(params)...);
+        } else if constexpr (IsReferenceWrapper_v<Object>) {
+          return (object->get().*callable)(std::forward<Params>(params)...);
+        } else {
+          return (std::move(*object).*callable)(
+            std::forward<Params>(params)...);
+        }
+      }
+    };
+  };
 } // namespace detail
 
 template <class Callable, class... Args>
@@ -701,13 +731,9 @@ auto Nursery::MakePromise(Callable callable, Args... args)
     // `std::invoke()` logic here.
     if constexpr (std::is_member_pointer_v<Callable>) {
       ret = []<typename Object>(Callable c, Object obj, auto... a) -> Co<> {
-        if constexpr (std::is_pointer_v<Object>) {
-          co_await (obj->*c)(std::move(a)...);
-        } else if constexpr (detail::IsReferenceWrapper_v<Object>) {
-          co_await (obj.get().*c)(std::move(a)...);
-        } else {
-          co_await (std::move(obj).*c)(std::move(a)...);
-        }
+        using Call = detail::CallableSignature<Callable>::template BindArgs<
+          detail::MemberCallOf<Callable, Object>::template Call>;
+        co_await Call { .callable = c, .object = &obj }(std::move(a)...);
       }(std::move(callable), std::move(args)...);
     } else {
       ret = [](Callable c, Args... a) -> Co<> {
