@@ -5,13 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 // Covers: Serio/IoDriver.h, Serio/AsyncFile.h, Serio/IoDriver.cpp,
-// Serio/Platform/*/IocpBackend.cpp, Serio/Platform/*/InlineBackend.cpp,
+// Serio/Platform/*/IocpBackend.cpp, Serio/Platform/*/UringBackend.cpp,
 // Serio/CopyRegion.h
 
 #include <bit>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -27,6 +28,7 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/asio.h> // IWYU pragma: keep (EventLoopTraits)
 #include <Oxygen/Serio/AsyncFile.h>
@@ -94,6 +96,37 @@ private:
   TempFiles files_;
 };
 
+//! Reads `into.size()` bytes at `at` of `file`, expecting them all.
+auto ReadChunk(AsyncFile& file, const size_t at, std::span<std::byte> into)
+  -> co::Co<>
+{
+  const auto read = co_await file.AsyncReadAt(ByteOffset { at }, into);
+  EXPECT_TRUE(read);
+}
+
+//! Concurrent reads: `count` reads of `size` bytes, the n-th at
+//! `n * stride` in the file.
+struct ReadSpread {
+  size_t count;
+  size_t size;
+  size_t stride;
+};
+
+//! Starts the reads `spread` describes at once, the n-th into the n-th
+//! `size` bytes of `out`, and waits for all of them.
+auto ReadConcurrently(AsyncFile& file, std::span<std::byte> out,
+  const ReadSpread spread) -> co::Co<>
+{
+  OXCO_WITH_NURSERY(nursery)
+  {
+    for (size_t index = 0; index < spread.count; ++index) {
+      nursery.Start(&ReadChunk, std::ref(file), index * spread.stride,
+        out.subspan(index * spread.size, spread.size));
+    }
+    co_return co::kJoin;
+  };
+}
+
 //! Opening a missing file through the driver fails with kNotFound.
 NOLINT_TEST_F(AsyncFileTest, OpenMissingIsNotFound)
 {
@@ -154,6 +187,22 @@ NOLINT_TEST_F(AsyncFileTest, LargeTransfersCompleteOnTheLoopThread)
   EXPECT_EQ(read->get(), kSize);
   EXPECT_THAT(out, BytesEqual(bytes));
   EXPECT_THAT(resumed_on, ::testing::Each(loop_thread));
+}
+
+//! Many concurrent reads of one file all complete, each with its own bytes.
+NOLINT_TEST_F(AsyncFileTest, ManyConcurrentReadsComplete)
+{
+  constexpr size_t kReads = 1500;
+  constexpr size_t kReadSize = 64;
+  const auto bytes = PatternBytes(kReads * kReadSize);
+  auto file = OpenWritten(bytes);
+  auto out = std::vector<std::byte>(bytes.size());
+
+  co::Run(Loop(),
+    ReadConcurrently(
+      file, out, { .count = kReads, .size = kReadSize, .stride = kReadSize }));
+
+  EXPECT_THAT(out, BytesEqual(bytes));
 }
 
 //! A copy between files overlaps chunks and writes every byte at its offset.
@@ -234,6 +283,28 @@ NOLINT_TEST_F(AsyncPipeTest, CancelledReadEndsAfterTheOsReleasesItsBuffer)
     auto buffer = std::vector<std::byte>(4);
     const auto [read, slept] = co_await co::AnyOf(
       file.AsyncReadAt(ByteOffset { 0 }, buffer), co::SleepFor(Loop(), 20ms));
+    EXPECT_FALSE(read);
+    EXPECT_TRUE(slept);
+  }());
+
+  EXPECT_EQ(Loop().poll(), 0U);
+  Loop().restart();
+}
+
+//! Many pending reads cancelled together all end, and none leaves a
+//! completion behind.
+NOLINT_TEST_F(AsyncPipeTest, ManyCancelledReadsAllEnd)
+{
+  auto& client = Client();
+  ASSERT_HAS_VALUE(client);
+  auto& file = *client;
+  constexpr size_t kReads = 600;
+  auto out = std::vector<std::byte>(kReads * 4);
+
+  co::Run(Loop(), [&] -> co::Co<> {
+    const auto [read, slept] = co_await co::AnyOf(
+      ReadConcurrently(file, out, { .count = kReads, .size = 4, .stride = 0 }),
+      co::SleepFor(Loop(), 50ms));
     EXPECT_FALSE(read);
     EXPECT_TRUE(slept);
   }());
