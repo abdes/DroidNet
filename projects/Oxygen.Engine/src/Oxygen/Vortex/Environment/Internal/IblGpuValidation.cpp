@@ -46,7 +46,7 @@ namespace {
     // Same readiness predicate as
     // Contracts/Environment/IblProductMetadata.hlsli.
     return revision != 0U && data.product_revision == revision
-      && data.processing_flags == (kIblProductFinite | kIblProductComplete)
+      && data.processing_flags == kIblProductReady
       && std::isfinite(data.source_radiance_scale)
       && data.source_radiance_scale >= 1.0F
       && std::isfinite(data.average_brightness)

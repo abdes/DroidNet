@@ -12,6 +12,8 @@
 
 static const uint kIblProductFinite = 1u;
 static const uint kIblProductComplete = 2u;
+// Processing flags of a generation that every sampler may read.
+static const uint kIblProductReady = kIblProductFinite | kIblProductComplete;
 static const uint kIblHalfCertificateComplete = 1u;
 
 // Mirrors environment::IblProductMetadata; structured-buffer stride is 32.
@@ -30,7 +32,7 @@ struct IblProductMetadata
 static bool IsIblProductReady(IblProductMetadata metadata, uint revision)
 {
     return revision != 0u && metadata.product_revision == revision
-        && metadata.processing_flags == (kIblProductFinite | kIblProductComplete)
+        && metadata.processing_flags == kIblProductReady
         && isfinite(metadata.source_radiance_scale)
         && metadata.source_radiance_scale >= 1.0
         && isfinite(metadata.average_brightness)

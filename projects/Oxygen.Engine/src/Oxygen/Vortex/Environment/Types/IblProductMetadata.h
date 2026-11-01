@@ -16,6 +16,9 @@ namespace oxygen::vortex::environment {
 
 inline constexpr std::uint32_t kIblProductFinite = 1U << 0U;
 inline constexpr std::uint32_t kIblProductComplete = 1U << 1U;
+//! Processing flags of a generation that every sampler may read.
+inline constexpr std::uint32_t kIblProductReady
+  = kIblProductFinite | kIblProductComplete;
 inline constexpr std::uint32_t kIblHalfCertificateComplete = 1U << 0U;
 
 //! GPU-produced range and readiness for one immutable product generation.

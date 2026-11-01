@@ -1154,7 +1154,7 @@ NOLINT_TEST_F(
   const auto read_sh = [&](const auto& product) -> auto {
     const auto metadata = Read<environment::IblProductMetadata>(
       *product->metadata, ResourceStates::kShaderResource);
-    EXPECT_EQ(metadata.processing_flags, 3U);
+    EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
     EXPECT_GT(metadata.average_brightness, 0.0F);
     EXPECT_FLOAT_EQ(metadata.source_radiance_scale, 1.0F);
     return Read<std::array<glm::vec4, 8>>(
@@ -1665,7 +1665,7 @@ NOLINT_TEST_F(
       environment::IblProductMetadata metadata;
       std::memcpy(&metadata, mapped->Bytes().data(), sizeof(metadata));
       EXPECT_EQ(metadata.product_revision, expected.at(flight));
-      EXPECT_EQ(metadata.processing_flags, 3U);
+      EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
     }
     readbacks = {};
     WaitForQueueIdle();

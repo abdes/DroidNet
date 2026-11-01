@@ -480,8 +480,7 @@ namespace {
         auto metadata = environment::IblProductMetadata {};
         std::memcpy(&metadata, mapped->Bytes().data(), sizeof(metadata));
         ASSERT_EQ(metadata.product_revision, published->revision);
-        ASSERT_EQ(metadata.processing_flags,
-          environment::kIblProductFinite | environment::kIblProductComplete);
+        ASSERT_EQ(metadata.processing_flags, environment::kIblProductReady);
         ASSERT_GT(metadata.average_brightness, 0.0F);
       }
       auto scope = std::string_view {
