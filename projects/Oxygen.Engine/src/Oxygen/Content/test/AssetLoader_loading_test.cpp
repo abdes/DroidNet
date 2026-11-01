@@ -7,15 +7,12 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <memory>
-#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include "./AssetLoader_test.h"
 #include "Fixtures/AssetLoaderSources.h"
@@ -25,13 +22,12 @@
 #include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/AssetDescriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -80,113 +76,59 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
 {
   using oxygen::data::AssetType;
 
-  auto scene = oxygen::cooker::testing::SceneDescriptor("LooseScene");
+  auto scene = oxygen::cooker::testing::SceneBuilder { "LooseScene" };
   auto root = LooseCookedRoot { "test" };
   root.Add({
     .type = AssetType::kScene,
     .leaf = "Scenes/LooseScene.scene",
-    .descriptor = std::move(scene.bytes),
-    .references = std::move(scene.references),
+    .descriptor = scene.Bytes(),
+    .references = scene.References(),
     .key = key,
   });
   oxygen::cooker::testing::Materialize(root.Files(), cooked_root);
 }
 
-auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
-  const oxygen::data::AssetKey& action_key,
-  const oxygen::data::AssetKey& context_key) -> void
+//! The keys of the input action and mapping context of a loose root.
+struct LooseInputKeys final {
+  oxygen::data::AssetKey action;
+  oxygen::data::AssetKey context;
+};
+
+//! Writes into `cooked_root` an input action `Move` and a mapping context that
+//! maps it to `Space`; returns their keys.
+auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root)
+  -> LooseInputKeys
 {
-  using oxygen::data::AssetType;
   using oxygen::data::pak::input::InputActionAssetDesc;
   using oxygen::data::pak::input::InputActionAssetFlags;
-  using oxygen::data::pak::input::InputActionMappingRecord;
   using oxygen::data::pak::input::InputMappingContextAssetDesc;
   using oxygen::data::pak::input::InputMappingContextFlags;
   using oxygen::data::pak::input::InputTriggerRecord;
   using oxygen::data::pak::input::InputTriggerType;
 
-  InputActionAssetDesc action_desc {};
-  action_desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
-  auto action_strings = oxygen::data::DescriptorStringsBuilder {};
-  action_desc.header.name_offset = action_strings.Add("Move");
-  action_desc.header.version
-    = oxygen::data::pak::input::kInputActionAssetVersion;
-  action_desc.value_type = 0;
-  action_desc.flags = InputActionAssetFlags::kConsumesInput;
+  auto root = LooseCookedRoot { "Game" };
+  InputActionAssetDesc action_record {};
+  action_record.value_type = 0;
+  action_record.flags = InputActionAssetFlags::kConsumesInput;
+  const auto action_key = root.InputAction("Input/Move.oiact", action_record);
 
-  InputMappingContextAssetDesc context_desc {};
-  context_desc.header.asset_type
-    = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  auto context_strings = oxygen::data::DescriptorStringsBuilder {};
-  context_desc.header.name_offset = context_strings.Add("HydratedContext");
-  context_desc.header.version
-    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-  context_desc.flags = InputMappingContextFlags::kNone;
+  InputMappingContextAssetDesc context_record {};
+  context_record.flags = InputMappingContextFlags::kNone;
   constexpr int32_t kInputPriority = 77;
-  context_desc.default_priority = kInputPriority;
-
-  context_desc.mappings.offset = sizeof(InputMappingContextAssetDesc);
-  context_desc.mappings.count = 1;
-  context_desc.mappings.entry_size = sizeof(InputActionMappingRecord);
-  context_desc.triggers.offset
-    = context_desc.mappings.offset + sizeof(InputActionMappingRecord);
-  context_desc.triggers.count = 1;
-  context_desc.triggers.entry_size = sizeof(InputTriggerRecord);
-  context_desc.trigger_aux.offset
-    = context_desc.triggers.offset + sizeof(InputTriggerRecord);
-  context_desc.trigger_aux.count = 0;
-  context_desc.trigger_aux.entry_size
-    = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-
-  InputActionMappingRecord mapping {};
-  mapping.action_asset_key = action_key;
-  mapping.slot_name_offset = context_strings.Add("Space");
-  mapping.trigger_start_index = 0;
-  mapping.trigger_count = 1;
-  mapping.scale[0] = 1.0F;
-  mapping.scale[1] = 1.0F;
-  mapping.bias[0] = 0.0F;
-  mapping.bias[1] = 0.0F;
+  context_record.default_priority = kInputPriority;
 
   InputTriggerRecord trigger {};
   trigger.type = InputTriggerType::kPressed;
   trigger.actuation_threshold = 0.5F;
 
-  std::vector<std::byte> context_blob(
-    context_desc.trigger_aux.offset, std::byte { 0 });
-  std::memcpy(context_blob.data(), &context_desc, sizeof(context_desc));
-  std::memcpy(
-    std::span(context_blob).subspan(context_desc.mappings.offset).data(),
-    &mapping, sizeof(mapping));
-  std::memcpy(
-    std::span(context_blob).subspan(context_desc.triggers.offset).data(),
-    &trigger, sizeof(trigger));
-  oxygen::data::AppendDescriptorStrings(context_blob, context_strings);
+  auto context
+    = oxygen::cooker::testing::InputContextBuilder { "HydratedContext",
+        context_record };
+  context.Mapping(action_key, "Space", { trigger });
 
-  auto root = LooseCookedRoot { "Game" };
-  root.Add({
-    .type = AssetType::kInputAction,
-    .leaf = "Input/Move.oiact",
-    .descriptor
-    = oxygen::data::MakeDescriptorBytes(action_desc, action_strings),
-    .key = action_key,
-  });
-  root.Add({
-    .type = AssetType::kInputMappingContext,
-    .leaf = "Input/Hydrated.oimap",
-    .descriptor = std::move(context_blob),
-    .references = oxygen::data::AssetReferences::Create({},
-      {
-        {
-          .key = action_key,
-          .kind = oxygen::data::KeyReferenceKind::kAsset,
-          .expected_type = AssetType::kInputAction,
-        },
-      })
-      .value(),
-    .key = context_key,
-  });
+  const auto context_key = root.InputContext("Input/Hydrated.oimap", context);
   oxygen::cooker::testing::Materialize(root.Files(), cooked_root);
+  return { .action = action_key, .context = context_key };
 }
 
 //=== AssetLoader Basic Functionality Tests ===-----------------------------//
@@ -208,12 +150,9 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
 NOLINT_TEST_F(AssetLoaderBasicTest,
   EnumerateMountedInputContextsLooseCookedExpectedToExposeEntries)
 {
-  const auto action_key = oxygen::data::AssetKey::FromVirtualPath(
-    "/test/loose_input_action_catalog.asset");
-  const auto context_key = oxygen::data::AssetKey::FromVirtualPath(
-    "/test/loose_input_context_catalog.asset");
   const auto cooked_root = TempDir() / "mounted_input_contexts_loose";
-  WriteLooseCookedInputAssets(cooked_root, action_key, context_key);
+  const auto [action_key, context_key]
+    = WriteLooseCookedInputAssets(cooked_root);
 
   asset_loader_->AddLooseCookedRoot(cooked_root);
 
@@ -232,12 +171,9 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
 NOLINT_TEST_F(AssetLoaderBasicTest,
   HydrateInputContextExpectedToRegisterActionsAndBuildMappingContext)
 {
-  const auto action_key = oxygen::data::AssetKey::FromVirtualPath(
-    "/test/loose_input_action_hydrate.asset");
-  const auto context_key = oxygen::data::AssetKey::FromVirtualPath(
-    "/test/loose_input_context_hydrate.asset");
   const auto cooked_root = TempDir() / "hydrate_input_context_loose";
-  WriteLooseCookedInputAssets(cooked_root, action_key, context_key);
+  const auto [action_key, context_key]
+    = WriteLooseCookedInputAssets(cooked_root);
 
   struct InputKeys {
     oxygen::data::AssetKey action;
@@ -301,12 +237,9 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
 NOLINT_TEST_F(
   AssetLoaderBasicTest, StartLoadInputMappingContextAssetLoadsContextAndActions)
 {
-  const auto action_key = oxygen::data::AssetKey::FromVirtualPath(
-    "/test/loose_input_action_start_load.asset");
-  const auto context_key = oxygen::data::AssetKey::FromVirtualPath(
-    "/test/loose_input_context_start_load.asset");
   const auto cooked_root = TempDir() / "start_load_input_context_loose";
-  WriteLooseCookedInputAssets(cooked_root, action_key, context_key);
+  const auto [action_key, context_key]
+    = WriteLooseCookedInputAssets(cooked_root);
 
   struct InputKeys {
     oxygen::data::AssetKey action;

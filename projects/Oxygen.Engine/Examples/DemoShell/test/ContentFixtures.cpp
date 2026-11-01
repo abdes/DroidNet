@@ -10,11 +10,10 @@
 #include "DemoShell/test/ContentFixtures.h"
 
 #include <Oxygen/Cooker/testing/CookedPak.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
-#include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 namespace oxygen::examples::testing {
 
@@ -41,20 +40,10 @@ auto WriteDependentPak(const std::filesystem::path& folder) -> DependentPak
   const auto base_pak = cooker::testing::CookedPak { std::move(base) };
 
   auto props = cooker::testing::LooseCookedRoot { "Props", 2U };
-  props.Add({
-    .type = data::AssetType::kMaterial,
-    .leaf = "Wood.omat",
-    .descriptor = cooker::testing::MaterialDescriptor("Wood").bytes,
-    .references = data::AssetReferences::Create({},
-      {
-        {
-          .key = required,
-          .kind = data::KeyReferenceKind::kAsset,
-          .expected_type = data::AssetType::kMaterial,
-        },
-      })
-      .value(),
-  });
+  auto crate = cooker::testing::GeometryBuilder { "Crate" };
+  crate.Submesh(crate.ProceduralLod(),
+    data::SurfaceId::FromStableIdentity("crate"), required);
+  props.Geometry("Crate.ogeo", crate);
   auto props_pak = cooker::testing::CookedPak { std::move(props) };
   props_pak.DependsOn(base_pak);
 

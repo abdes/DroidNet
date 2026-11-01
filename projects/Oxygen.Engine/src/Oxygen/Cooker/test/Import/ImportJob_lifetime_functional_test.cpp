@@ -7,7 +7,6 @@
 // Covers: Import/Internal/ImportJob.cpp
 
 #include <chrono>
-#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -33,10 +32,9 @@
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/test/Support/HoldingStorage.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -107,15 +105,11 @@ private:
     EnsureCookedRoot();
     auto& session = Session();
     static_cast<void>(CreatePipeline<LifetimeProducer>(state_));
-    oxygen::data::pak::render::MaterialAssetDesc descriptor {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
-    descriptor.header.version
-      = oxygen::data::pak::render::kMaterialAssetVersion;
+    const auto descriptor = oxygen::cooker::testing::MaterialBuilder {};
     session.AssetEmitter().Emit(
       oxygen::data::AssetKey::FromVirtualPath("/Content/test.omat"),
       oxygen::data::AssetType::kMaterial, "/Content/test.omat", "test.omat",
-      oxygen::data::MakeDescriptorBytes(descriptor), {});
+      descriptor.Bytes(), descriptor.References());
     co_return co_await session.Finalize();
   }
   ProducerState& state_;

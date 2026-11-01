@@ -22,12 +22,14 @@
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
@@ -80,7 +82,10 @@ auto TexturePak(const std::span<const std::byte> payload)
   auto root = LooseCookedRoot { kMount };
   const auto texture = root.AddTexture(payload);
   EXPECT_EQ(texture.get(), kTextureRow.get());
-  static_cast<void>(root.Material("A.omat", texture));
+  auto a_material = oxygen::cooker::testing::MaterialBuilder { "A" };
+  a_material.Texture(
+    &oxygen::data::pak::render::MaterialAssetDesc::base_color_texture, texture);
+  static_cast<void>(root.Material("A.omat", a_material));
   return CookedPak { root }.Encode();
 }
 

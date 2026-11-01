@@ -38,10 +38,10 @@
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
-#include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/OxCo/Co.h>
@@ -140,23 +140,89 @@ namespace {
 
     static auto Analyze() -> void
     {
-      const auto material
-        = WriteFile("material.json", R"({"name":"Stone","textures":{
-      "base_color":{"virtual_path":"../Textures/color.otex"},
-      "thickness":{"virtual_path":"../Textures/thickness.otex"}}})");
-      const auto scene = WriteFile("scene.json",
-        R"({"version":)" + std::to_string(internal::kSceneDescriptorVersion)
-          + R"(,"name":"Scene.v2","nodes":[{"id":"00000000-0000-4000-8000-000000000001"},
-      {"id":"00000000-0000-4000-8000-000000000002","parent":0,"instance":{
-        "scene_ref":"../Props/Crate.glb/Crate.oscene",
-        "overrides":[{"path":["00000000-0000-4000-8000-000000000003"],"components":{"geometry":{"parts":[{
-          "kind":"surface","id":"00000000-0000-4000-8000-000000000004",
-          "layout_revision":"0000000000000000000000000000000000000000000000000000000000000000",
-          "values":{"/material":"../Materials/Red.omat"}}]}}}]}}],
-      "renderables":[{"node":0,"geometry_ref":"../Geometry/body.ogeo"}],
-      "starting_input_contexts":[{"context_ref":"../Input/Gameplay.oimap","priority":2}],
-      "references":{"scripts":["../Scripts/move.oscript"]},
-      "environment":{"post_process_volume":{"auto_exposure_metering_mask":"../Textures/mask.otex"}}})");
+      namespace authored = oxygen::cooker::test;
+      constexpr auto kMaterial = "/.cooked/Materials/Stone.omat";
+      constexpr auto kScene = "/.cooked/Scenes/Scene.oscene";
+      const auto material = WriteFile("material.json",
+        authored::MaterialDescriptor { kMaterial }
+          .Texture("base_color", "/.cooked/Textures/color.otex")
+          .Texture("thickness", "/.cooked/Textures/thickness.otex")
+          .Text());
+      auto scene_document = authored::SceneDescriptor { kScene };
+      scene_document.Set("/name", "Scene.v2")
+        .Remove("/nodes/0/name")
+        .Append("/nodes",
+          {
+            { "id", "00000000-0000-4000-8000-000000000002" },
+            { "parent", 0 },
+            {
+              "instance",
+              {
+                {
+                  "scene_ref",
+                  scene_document.Spell("/.cooked/Props/Crate.glb/Crate.oscene"),
+                },
+                {
+                  "overrides",
+                  nlohmann::json::array({
+                    {
+                      { "path", { "00000000-0000-4000-8000-000000000003" } },
+                      {
+                        "components",
+                        {
+                          {
+                            "geometry",
+                            {
+                              {
+                                "parts",
+                                nlohmann::json::array({
+                                  {
+                                    { "kind", "surface" },
+                                    {
+                                      "id",
+                                      "00000000-0000-4000-8000-000000000004",
+                                    },
+                                    { "layout_revision", std::string(64, '0') },
+                                    {
+                                      "values",
+                                      {
+                                        {
+                                          "/material",
+                                          scene_document.Spell(
+                                            "/.cooked/Materials/Red.omat"),
+                                        },
+                                      },
+                                    },
+                                  },
+                                }),
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  }),
+                },
+              },
+            },
+          })
+        .Renderable(0, "/.cooked/Geometry/body.ogeo")
+        .Set("/starting_input_contexts",
+          nlohmann::json::array({
+            {
+              {
+                "context_ref",
+                scene_document.Spell("/.cooked/Input/Gameplay.oimap"),
+              },
+              { "priority", 2 },
+            },
+          }))
+        .Set("/references/scripts",
+          nlohmann::json::array(
+            { scene_document.Spell("/.cooked/Scripts/move.oscript") }))
+        .Set("/environment/post_process_volume/auto_exposure_metering_mask",
+          scene_document.Spell("/.cooked/Textures/mask.otex"));
+      const auto scene = WriteFile("scene.json", scene_document.Text());
       auto manifest = ImportManifest {};
       auto material_job = ImportManifestJob {};
       material_job.id = "material";
@@ -309,14 +375,22 @@ namespace {
     GeometrySeparatesLocalOutputsFromExternalReferences)
   {
     static_cast<void>(Write("vertices.bin", "not decoded during analysis"));
-    const auto geometry = Write("geometry.json", R"({
-      "name":"Body","bounds":{"min":[-1,-1,-1],"max":[1,1,1]},
-      "buffers":[{"uri":"vertices.bin","virtual_path":"Buffers/local.obuf"}],
-      "lods":[{"name":"LOD0","mesh_type":"standard",
-        "bounds":{"min":[-1,-1,-1],"max":[1,1,1]},
-        "buffers":{"vb_ref":"Buffers/local.obuf","ib_ref":"Buffers/external.obuf"},
-        "submeshes":[{"surface_id":"018f8f8f-1111-7111-8111-111111111111",
-          "material_ref":"Materials/stone.omat","views":[{"view_ref":"__all__"}]}]}]})");
+    constexpr auto kBody = "/Content/Body.ogeo";
+    auto body = cooker::test::GeometryDescriptor { kBody };
+    const auto bounds = nlohmann::json {
+      { "min", { -1, -1, -1 } },
+      { "max", { 1, 1, 1 } },
+    };
+    body.Set("/bounds", bounds)
+      .AppendBuffer(
+        { { "uri", "vertices.bin" } }, "/Content/Buffers/local.obuf")
+      .Set("/lods/0/mesh_type", "standard")
+      .Remove("/lods/0/procedural")
+      .Set("/lods/0/bounds", bounds)
+      .Reference("/lods/0/buffers/vb_ref", "/Content/Buffers/local.obuf")
+      .Reference("/lods/0/buffers/ib_ref", "/Content/Buffers/external.obuf")
+      .SubmeshMaterial(0, 0, "/Content/Materials/stone.omat");
+    const auto geometry = Write("geometry.json", body.Text());
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.job_type = "geometry-descriptor";
@@ -345,11 +419,22 @@ namespace {
   NOLINT_TEST_F(
     ImportSourceAnalysisTest, InputFileDeclaresItsActionsAndContextsAsOutputs)
   {
-    const auto input = Write("Player.input.json", R"({
-      "actions":[{"name":"Jump","type":"bool"},{"name":"Dash","type":"bool"}],
-      "contexts":[{"name":"Gameplay","mappings":[
-        {"action":"Jump","slot":"Space","trigger":"pressed"},
-        {"action":"../Common.input/Fire.oiact","slot":"F"}]}]})");
+    constexpr auto kPlayer = "/Content/Gameplay/Player.input";
+    auto player = cooker::test::InputSource { kPlayer };
+    player.Action("Jump", "bool")
+      .Action("Dash", "bool")
+      .Context("Gameplay")
+      .Append("/contexts/0/mappings",
+        { { "action", "Jump" }, { "slot", "Space" }, { "trigger", "pressed" } })
+      .Append("/contexts/0/mappings",
+        {
+          {
+            "action",
+            player.ActionReference("/Content/Common.input/Fire.oiact"),
+          },
+          { "slot", "F" },
+        });
+    const auto input = Write("Player.input.json", player.Text());
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.id = "input:Gameplay/Player.input.json";
@@ -409,8 +494,10 @@ namespace {
   {
     static_cast<void>(
       Write("pixels.png", "metadata analysis must not decode this"));
-    const auto path
-      = Write("texture.json", R"({"source":"pixels.png","name":"Pixels"})");
+    const auto path = Write("texture.json",
+      cooker::test::TextureDescriptor { "/.cooked/Pixels.otex", "pixels.png" }
+        .Set("/name", "Pixels")
+        .Text());
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.job_type = "texture-descriptor";
@@ -819,6 +906,273 @@ namespace {
       result.diagnostics, [](const auto& diagnostic) -> bool {
         return diagnostic.object_path == "material_remap/Paint";
       }));
+  }
+
+  //! The canonical virtual paths `result` references, in order.
+  auto Referenced(const ImportSourceJobAnalysis& result)
+    -> std::vector<std::string>
+  {
+    auto paths = std::vector<std::string> {};
+    for (const auto& reference : result.references) {
+      paths.push_back(reference.virtual_path);
+    }
+    return paths;
+  }
+
+  //! A buffer container reads its buffers' files and produces each buffer,
+  //! named relative to the container's identity.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, BufferContainerProducesItsBuffers)
+  {
+    std::filesystem::create_directories(TempDir() / "Geometry");
+    const auto data = Write("Geometry/crate.bin", "vertices");
+    auto container = cooker::test::BufferContainer {
+      "/Content/Geometry/crate.buffers",
+    };
+    container.AppendBuffer({ { "source", "crate.bin" } },
+      "/Content/Geometry/crate.buffers/crate_vb.obuf");
+    const auto path = Write("Geometry/crate.buffers.json", container.Text());
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "buffer-container";
+    job.mounts = oxygen::cooker::test::ContentMountTable(TempDir());
+    job.buffer_container.descriptor_path = path.string();
+    job.source_mount_path = "/Content/Geometry/crate.buffers.json";
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    ASSERT_TRUE(report.complete) << report.ToJson();
+    const auto& result = report.jobs.front();
+    ASSERT_EQ(result.outputs.size(), 1U);
+    EXPECT_EQ(result.outputs.front().virtual_path,
+      "/Content/Geometry/crate.buffers/crate_vb.obuf");
+    EXPECT_EQ(result.outputs.front().kind, ImportDependencyKind::kBuffer);
+    EXPECT_TRUE(std::ranges::any_of(result.files,
+      [&data](const auto& file) -> bool {
+        return file.path == std::filesystem::absolute(data).lexically_normal();
+      }))
+      << report.ToJson();
+  }
+
+  //! A physics material descriptor is the only input of its asset and
+  //! references nothing.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, PhysicsMaterialReferencesNothing)
+  {
+    const auto material = cooker::test::PhysicsMaterialDescriptor {
+      "/Content/Physics/Wood.opmat",
+    };
+    const auto path = Write("Wood.physics-material.json", material.Text());
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "physics-material-descriptor";
+    job.physics_material_descriptor.descriptor_path = path.string();
+    job.virtual_path = material.Identity();
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    ASSERT_TRUE(report.complete) << report.ToJson();
+    const auto& result = report.jobs.front();
+    ASSERT_EQ(result.outputs.size(), 1U);
+    EXPECT_EQ(result.outputs.front().virtual_path, material.Identity());
+    EXPECT_TRUE(result.references.empty());
+    ASSERT_EQ(result.files.size(), 1U);
+  }
+
+  //! A collision shape references its physics material, resolved against the
+  //! shape's identity.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, CollisionShapeReferencesItsMaterial)
+  {
+    const auto shape = cooker::test::CollisionShapeDescriptor {
+      "/Content/Physics/Crate.ocshape",
+      "/Content/Physics/Wood.opmat",
+    };
+    const auto path = Write("Crate.shape.json", shape.Text());
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "collision-shape-descriptor";
+    job.collision_shape_descriptor.descriptor_path = path.string();
+    job.virtual_path = shape.Identity();
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    ASSERT_TRUE(report.complete) << report.ToJson();
+    const auto& result = report.jobs.front();
+    ASSERT_EQ(result.outputs.size(), 1U);
+    EXPECT_EQ(result.outputs.front().virtual_path, shape.Identity());
+    EXPECT_EQ(Referenced(result),
+      std::vector<std::string> { "/Content/Physics/Wood.opmat" });
+    EXPECT_EQ(result.references.front().object_path, "material_ref");
+  }
+
+  //! Whether the only job of `report` refuses its source.
+  auto RefusesItsSource(const ImportSourceAnalysis& report) -> bool
+  {
+    return !report.complete
+      && std::ranges::any_of(
+        report.jobs.front().diagnostics, [](const auto& diagnostic) -> bool {
+          return diagnostic.code == "analysis.source_invalid";
+        });
+  }
+
+  //! A source that is not JSON is refused, as its cook refuses it.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, SourceThatIsNotJsonIsRefused)
+  {
+    const auto path = Write("Park.physics-sidecar.json", "{ not json");
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "physics-sidecar";
+    job.physics_sidecar.source_path = path.string();
+    job.physics_sidecar.target_scene_virtual_path
+      = "/Content/Scenes/Park.oscene";
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    EXPECT_TRUE(RefusesItsSource(report)) << report.ToJson();
+  }
+
+  //! A source without what its job reads is refused: a collision shape names
+  //! its physics material.
+  NOLINT_TEST_F(
+    ImportSourceAnalysisTest, CollisionShapeWithoutMaterialIsRefused)
+  {
+    auto shape = cooker::test::CollisionShapeDescriptor {
+      "/Content/Physics/Crate.ocshape",
+      "/Content/Physics/Wood.opmat",
+    };
+    shape.Remove("/material_ref");
+    const auto path = Write("Crate.shape.json", shape.Text());
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "collision-shape-descriptor";
+    job.collision_shape_descriptor.descriptor_path = path.string();
+    job.virtual_path = shape.Identity();
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    EXPECT_TRUE(RefusesItsSource(report)) << report.ToJson();
+  }
+
+  //! A physics sidecar references its target scene and what its bindings
+  //! name, relative to the scene's folder, and produces the scene's physics
+  //! companion.
+  NOLINT_TEST_F(
+    ImportSourceAnalysisTest, PhysicsSidecarReferencesItsSceneAndBindings)
+  {
+    auto sidecar = cooker::test::PhysicsSidecar {
+      "/Content/Scenes/Park.physics-sidecar",
+    };
+    sidecar.AppendBinding("rigid_bodies",
+      {
+        { "node_index", 0 },
+        { "shape_ref", sidecar.Spell("/Content/Physics/Crate.ocshape") },
+        { "material_ref", sidecar.Spell("/Content/Physics/Wood.opmat") },
+      });
+    const auto path = Write("Park.physics-sidecar.json", sidecar.Text());
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "physics-sidecar";
+    job.physics_sidecar.source_path = path.string();
+    job.physics_sidecar.target_scene_virtual_path
+      = "/Content/Scenes/Park.oscene";
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    ASSERT_TRUE(report.complete) << report.ToJson();
+    const auto& result = report.jobs.front();
+    ASSERT_EQ(result.outputs.size(), 1U);
+    EXPECT_EQ(
+      result.outputs.front().virtual_path, "/Content/Scenes/Park.opscene");
+    EXPECT_EQ(result.outputs.front().kind, ImportDependencyKind::kPhysicsScene);
+    EXPECT_EQ(Referenced(result),
+      (std::vector<std::string> {
+        "/Content/Scenes/Park.oscene",
+        "/Content/Physics/Crate.ocshape",
+        "/Content/Physics/Wood.opmat",
+      }));
+    EXPECT_EQ(result.references.at(1).object_path,
+      "bindings.rigid_bodies[0].shape_ref");
+  }
+
+  //! A reference the grammar refuses in a sidecar is reported with its code,
+  //! as the cook would refuse it.
+  NOLINT_TEST_F(
+    ImportSourceAnalysisTest, PhysicsSidecarSelfAbsoluteReferenceIsRefused)
+  {
+    auto sidecar = cooker::test::PhysicsSidecar {
+      "/Content/Scenes/Park.physics-sidecar",
+    };
+    sidecar.AppendBinding("colliders",
+      {
+        { "node_index", 0 },
+        { "shape_ref", "/Content/Physics/Crate.ocshape" },
+        { "material_ref", sidecar.Spell("/Content/Physics/Wood.opmat") },
+      });
+    const auto path = Write("Park.physics-sidecar.json", sidecar.Text());
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "physics-sidecar";
+    job.physics_sidecar.source_path = path.string();
+    job.physics_sidecar.target_scene_virtual_path
+      = "/Content/Scenes/Park.oscene";
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    EXPECT_FALSE(report.complete);
+    const auto& diagnostics = report.jobs.front().diagnostics;
+    EXPECT_TRUE(std::ranges::any_of(diagnostics,
+      [](const auto& diagnostic) -> bool {
+        return diagnostic.code == "import.reference_invalid"
+          && diagnostic.object_path == "bindings.colliders[0].shape_ref"
+          && diagnostic.message.contains("vpath.reference_self_absolute");
+      }))
+      << report.ToJson();
+  }
+
+  //! A script sidecar references its target scene, the scripts it attaches
+  //! and the assets their parameters name, from a file or inline bindings.
+  NOLINT_TEST_F(
+    ImportSourceAnalysisTest, ScriptSidecarReferencesItsSceneScriptsAndAssets)
+  {
+    auto sidecar = cooker::test::ScriptSidecar {
+      "/Content/Scenes/Park.script-sidecar",
+    };
+    sidecar.Bind(0U, "/Content/Scripts/Spin.oscript",
+      { { .key = "target", .asset = "/Content/Materials/Red.omat" } });
+    const auto path = Write("Park.script-sidecar.json", sidecar.Text());
+    const auto expected = std::vector<std::string> {
+      "/Content/Scenes/Park.oscene",
+      "/Content/Scripts/Spin.oscript",
+      "/Content/Materials/Red.omat",
+    };
+    for (const auto inline_bindings : { false, true }) {
+      auto manifest = ImportManifest {};
+      auto job = ImportManifestJob {};
+      job.job_type = "script-sidecar";
+      if (inline_bindings) {
+        job.scripting_sidecar.inline_bindings_json
+          = sidecar.Json().at("bindings").dump();
+      } else {
+        job.scripting_sidecar.source_path = path.string();
+      }
+      job.scripting_sidecar.target_scene_virtual_path
+        = "/Content/Scenes/Park.oscene";
+      manifest.jobs.push_back(job);
+
+      const auto report = manifest.AnalyzeSources();
+
+      ASSERT_TRUE(report.complete) << report.ToJson();
+      const auto& result = report.jobs.front();
+      EXPECT_TRUE(result.outputs.empty());
+      EXPECT_EQ(Referenced(result), expected) << inline_bindings;
+      EXPECT_EQ(
+        result.references.at(2).object_path, "bindings[0].params[0].value");
+    }
   }
 } // namespace
 } // namespace oxygen::content::import::test

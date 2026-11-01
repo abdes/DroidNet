@@ -19,10 +19,11 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/AssetDescriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
+#include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -34,6 +35,7 @@
 #include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
@@ -191,19 +193,7 @@ auto LooseCookedRoot::Material(const std::string_view leaf) -> data::AssetKey
   return Add({
     .type = data::AssetType::kMaterial,
     .leaf = std::string(leaf),
-    .descriptor = MaterialDescriptor(NameOf(leaf)).bytes,
-  });
-}
-
-auto LooseCookedRoot::Material(
-  const std::string_view leaf, const ResourceIndexT texture) -> data::AssetKey
-{
-  auto descriptor = TexturedMaterialDescriptor(NameOf(leaf), texture);
-  return Add({
-    .type = data::AssetType::kMaterial,
-    .leaf = std::string(leaf),
-    .descriptor = std::move(descriptor.bytes),
-    .references = std::move(descriptor.references),
+    .descriptor = MaterialBuilder { NameOf(leaf) }.Bytes(),
   });
 }
 
@@ -212,7 +202,29 @@ auto LooseCookedRoot::Geometry(const std::string_view leaf) -> data::AssetKey
   return Add({
     .type = data::AssetType::kGeometry,
     .leaf = std::string(leaf),
-    .descriptor = GeometryDescriptor(NameOf(leaf)).bytes,
+    .descriptor = GeometryBuilder { NameOf(leaf) }.Bytes(),
+  });
+}
+
+auto LooseCookedRoot::Geometry(const std::string_view leaf,
+  const GeometryBuilder& geometry) -> data::AssetKey
+{
+  return Add({
+    .type = data::AssetType::kGeometry,
+    .leaf = std::string(leaf),
+    .descriptor = geometry.Bytes(),
+    .references = geometry.References(),
+  });
+}
+
+auto LooseCookedRoot::Material(const std::string_view leaf,
+  const MaterialBuilder& material) -> data::AssetKey
+{
+  return Add({
+    .type = data::AssetType::kMaterial,
+    .leaf = std::string(leaf),
+    .descriptor = material.Bytes(),
+    .references = material.References(),
   });
 }
 
@@ -221,7 +233,7 @@ auto LooseCookedRoot::Scene(const std::string_view leaf) -> data::AssetKey
   return Add({
     .type = data::AssetType::kScene,
     .leaf = std::string(leaf),
-    .descriptor = SceneDescriptor(NameOf(leaf)).bytes,
+    .descriptor = SceneBuilder { NameOf(leaf) }.Bytes(),
   });
 }
 
@@ -257,13 +269,70 @@ auto LooseCookedRoot::PhysicsSidecar(const std::string_view leaf,
     throw std::invalid_argument("the bindings of the physics sidecar '"
       + std::string(leaf) + "' name the nodes of another scene");
   }
-  auto descriptor
-    = PhysicsSidecarDescriptor(scene, held->descriptor, bindings, NameOf(leaf));
   return Add({
     .type = data::AssetType::kPhysicsScene,
     .leaf = std::string(leaf),
+    .descriptor = bindings.Bytes(scene, held->descriptor, NameOf(leaf)),
+    .references = bindings.References(scene),
+  });
+}
+
+auto LooseCookedRoot::Script(
+  const std::string_view leaf, const ScriptBuilder& script) -> data::AssetKey
+{
+  return Add({
+    .type = data::AssetType::kScript,
+    .leaf = std::string(leaf),
+    .descriptor = script.Bytes(),
+    .references = script.References(),
+  });
+}
+
+auto LooseCookedRoot::Script(const std::string_view leaf) -> data::AssetKey
+{
+  return Script(leaf, ScriptBuilder { NameOf(leaf) });
+}
+
+auto LooseCookedRoot::PhysicsMaterial(const std::string_view leaf,
+  const data::pak::physics::PhysicsMaterialAssetDesc record) -> data::AssetKey
+{
+  return Add({
+    .type = data::AssetType::kPhysicsMaterial,
+    .leaf = std::string(leaf),
+    .descriptor = PhysicsMaterialDescriptor(NameOf(leaf), record).bytes,
+  });
+}
+
+auto LooseCookedRoot::CollisionShape(const std::string_view leaf,
+  const data::pak::physics::CollisionShapeAssetDesc& record) -> data::AssetKey
+{
+  auto descriptor = CollisionShapeDescriptor(NameOf(leaf), record);
+  return Add({
+    .type = data::AssetType::kCollisionShape,
+    .leaf = std::string(leaf),
     .descriptor = std::move(descriptor.bytes),
     .references = std::move(descriptor.references),
+  });
+}
+
+auto LooseCookedRoot::InputAction(const std::string_view leaf,
+  const data::pak::input::InputActionAssetDesc record) -> data::AssetKey
+{
+  return Add({
+    .type = data::AssetType::kInputAction,
+    .leaf = std::string(leaf),
+    .descriptor = InputActionDescriptor(NameOf(leaf), record).bytes,
+  });
+}
+
+auto LooseCookedRoot::InputContext(const std::string_view leaf,
+  const InputContextBuilder& context) -> data::AssetKey
+{
+  return Add({
+    .type = data::AssetType::kInputMappingContext,
+    .leaf = std::string(leaf),
+    .descriptor = context.Bytes(),
+    .references = context.References(),
   });
 }
 

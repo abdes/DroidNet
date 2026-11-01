@@ -86,15 +86,20 @@ class SourceAnalysisCliTests(unittest.TestCase):
         self.assertEqual(len(data["jobs"]), 2)
         self.assertFalse((self.root / ".cooked").exists())
 
-    def test_unsupported_job_cannot_overwrite_its_primary_source(self):
-        source = self.root / "rubber.physics-material.json"
-        source.write_text('{"name":"Rubber"}', encoding="utf-8")
+    def test_refused_job_cannot_overwrite_its_primary_source(self):
+        # A shape naming its own mount by an absolute path is refused.
+        text = (
+            '{"shape_type":"box","material_ref":"/.cooked/Physics/wood.opmat",'
+            '"half_extents":[0.5,0.5,0.5]}'
+        )
+        source = self.root / "crate.shape.json"
+        source.write_text(text, encoding="utf-8")
         manifest = self.manifest(
             [
                 {
-                    "type": "physics-material-descriptor",
+                    "type": "collision-shape-descriptor",
                     "source": source.name,
-                    "virtual_path": "/.cooked/Physics/rubber.opmat",
+                    "virtual_path": "/.cooked/Physics/crate.ocshape",
                 }
             ]
         )
@@ -105,7 +110,7 @@ class SourceAnalysisCliTests(unittest.TestCase):
         self.assertFalse(json.loads(report.read_text(encoding="utf-8"))["complete"])
         result = self.analyze(manifest, source)
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(source.read_text(encoding="utf-8"), '{"name":"Rubber"}')
+        self.assertEqual(source.read_text(encoding="utf-8"), text)
 
     @unittest.skipUnless(os.name == "nt", "Windows case-insensitive path identity")
     def test_report_cannot_create_a_missing_source_through_case_alias(self):

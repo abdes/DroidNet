@@ -21,8 +21,10 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
+#include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -96,9 +98,7 @@ namespace {
   auto WriteMaterial(LooseCookedWriter& writer, const Identity& identity,
     const Material& material) -> void
   {
-    const auto bytes = fixtures::MaterialDescriptor(
-      material.name, fixtures::MaterialVariant::kPlain)
-                         .bytes;
+    const auto bytes = fixtures::MaterialBuilder { material.name }.Bytes();
     const auto leaf = std::string(material.name) + ".omat";
     writer.WriteAssetDescriptor(MakeFirstByteAssetKey(material.seed),
       AssetType::kMaterial, identity.Product(leaf), identity.File(leaf), bytes,
@@ -280,7 +280,7 @@ namespace {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "retire_sidecar";
     const auto scene_key = MakeFirstByteAssetKey(0x31);
-    const auto scene = fixtures::MakeEmptySceneDescriptor();
+    const auto scene = fixtures::SceneBuilder { "Empty" }.Bytes();
     const auto write_scene = [&](LooseCookedWriter& writer) -> void {
       writer.WriteAssetDescriptor(scene_key, AssetType::kScene,
         kShipModel.Product("Ship.oscene"), kShipModel.File("Ship.oscene"),
@@ -296,7 +296,8 @@ namespace {
       writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x32),
         AssetType::kPhysicsScene, kShipModel.Product("Ship.opscene"),
         kShipModel.File("Ship.opscene"),
-        fixtures::PhysicsSidecarDescriptor(scene_key, scene).bytes,
+        fixtures::PhysicsSidecarBuilder {}.Bytes(
+          scene_key, scene, "PhysicsScene"),
         data::AssetReferences::Create({},
           {
             data::KeyReference {

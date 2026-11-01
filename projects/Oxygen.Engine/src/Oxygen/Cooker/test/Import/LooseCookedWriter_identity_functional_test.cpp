@@ -13,11 +13,11 @@
 #include "LooseCookedWriterTestSupport.h"
 
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
-#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -50,9 +50,12 @@ namespace {
     EXPECT_TRUE(content.Assets().empty());
     EXPECT_TRUE(content.NamedTextures().empty());
     EXPECT_TRUE(content.Sidecars().empty());
-    for (const auto kind :
-      { data::ResourceKind::kBuffer, data::ResourceKind::kTexture,
-        data::ResourceKind::kScript, data::ResourceKind::kPhysics }) {
+    for (const auto kind : {
+           data::ResourceKind::kBuffer,
+           data::ResourceKind::kTexture,
+           data::ResourceKind::kScript,
+           data::ResourceKind::kPhysics,
+         }) {
       EXPECT_TRUE(content.ResourceTable(kind).RowsStored().file.empty());
       EXPECT_TRUE(content.ResourceTable(kind).DataStored().file.empty());
     }
@@ -89,9 +92,7 @@ namespace {
     const auto old_key = SourceKeyOf(31);
     const auto new_key = SourceKeyOf(32);
     const auto asset_key = MakeFirstByteAssetKey(7);
-    const auto bytes
-      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
-          .bytes;
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
     {
       LooseCookedWriter writer(old_root, storage);
       writer.SetSourceKey(old_key);

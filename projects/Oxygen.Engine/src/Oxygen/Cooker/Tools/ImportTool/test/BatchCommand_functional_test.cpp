@@ -11,6 +11,7 @@
 #include <expected>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -31,6 +32,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Testing/GTest.h>
@@ -106,6 +108,50 @@ auto CountOccurrences(const std::string& text, const std::string_view token)
     position += token.size();
   }
   return count;
+}
+
+namespace authored = oxygen::cooker::test;
+
+//! The text of a physics material descriptor named `name`, whose static and
+//! dynamic friction are `friction`.
+auto PhysicsMaterialText(const std::string& identity,
+  const std::string_view name, const double friction, const double restitution)
+  -> std::string
+{
+  return authored::PhysicsMaterialDescriptor { identity }
+    .Set("/name", name)
+    .Set("/static_friction", friction)
+    .Set("/dynamic_friction", friction)
+    .Set("/restitution", restitution)
+    .Set("/density", 1.0)
+    .Text();
+}
+
+//! The text of a 10 x 1 x 10 box shape named `name` of the material `material`.
+auto FloorShapeText(const std::string& identity, const std::string_view name,
+  const std::string_view material) -> std::string
+{
+  return authored::CollisionShapeDescriptor { identity, material }
+    .Set("/name", name)
+    .Set("/half_extents", nlohmann::json::array({ 10.0, 1.0, 10.0 }))
+    .Text();
+}
+
+//! The text of the `bindings` of a sidecar of the scene `level` that binds each
+//! of `nodes` to the floor shape and the physics material `material`.
+auto FloorBindingsText(const std::initializer_list<uint32_t> nodes,
+  const std::string_view material) -> std::string
+{
+  auto sidecar = authored::PhysicsSidecar { "/.cooked/Scenes/level.opscene" };
+  for (const auto node : nodes) {
+    sidecar.AppendBinding("rigid_bodies",
+      nlohmann::json {
+        { "node_index", node },
+        { "shape_ref", sidecar.Spell("/.cooked/Physics/Shapes/floor.ocshape") },
+        { "material_ref", sidecar.Spell(material) },
+      });
+  }
+  return sidecar.Json().at("bindings").dump();
 }
 
 class BatchCommandPhysicsDagTest : public oxygen::testing::TempDirTest {
@@ -211,8 +257,13 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   ContinueAfterValidationErrors();
   const auto root = MakeScenarioDir("rejected_descriptor_with_valid_material");
   const auto manifest_path = root / "import-manifest.json";
-  WriteText(root / "Valid.material.json", R"({"name":"Valid"})");
-  WriteText(root / "Invalid.geometry.json", R"({"name":"Invalid"})");
+  WriteText(root / "Valid.material.json",
+    authored::MaterialDescriptor { "/.cooked/Materials/Valid.omat" }.Text());
+  // A geometry without LODs: the descriptor the batch must refuse.
+  WriteText(root / "Invalid.geometry.json",
+    authored::GeometryDescriptor { "/.cooked/Geometry/Invalid.ogeo" }
+      .Remove("/lods")
+      .Text());
   WriteText(manifest_path, R"({
     "version": 1,
     "output": ".cooked",
@@ -238,7 +289,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto root = MakeScenarioDir("invalid_texture_report");
   const auto manifest_path = root / "manifest.json";
   const auto report_path = root / "report.json";
-  WriteText(root / "texture.json", R"({"source":"missing.png"})");
+  WriteText(root / "texture.json",
+    authored::TextureDescriptor { "/Meter.otex", "missing.png" }.Text());
   WriteText(manifest_path, R"({"version":1,"output":"cooked",
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[{"type":"texture-descriptor","source":"texture.json",
@@ -263,11 +315,15 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
   const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   const auto report_path = root / "report.json";
-  WriteText(root / "Wood.material.json", R"({"name":"Wood"})");
-  WriteText(root / "Input" / "Player.input.json", R"({
-    "actions":[{"name":"Jump","type":"bool"}],
-    "contexts":[{"name":"OnFoot","mappings":[
-      {"action":"Jump","slot":"Space","trigger":"pressed"}]}]})");
+  WriteText(root / "Wood.material.json",
+    authored::MaterialDescriptor { "/.cooked/Wood.omat" }.Text());
+  WriteText(root / "Input" / "Player.input.json",
+    authored::InputSource { "/.cooked/Input/Player.input" }
+      .Action("Jump", "bool")
+      .Context("OnFoot")
+      .Append("/contexts/0/mappings",
+        { { "action", "Jump" }, { "slot", "Space" }, { "trigger", "pressed" } })
+      .Text());
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
@@ -327,8 +383,10 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, InputSourcesInOneFolderKeepTheirKeys)
   const auto manifest_path = root / "import-manifest.json";
   const auto report_path = root / "report.json";
   for (const auto* name : { "Player", "Vehicle" }) {
-    WriteText(root / "Input" / (std::string(name) + ".input.json"), R"({
-      "actions":[{"name":"Jump","type":"bool"}]})");
+    WriteText(root / "Input" / (std::string(name) + ".input.json"),
+      authored::InputSource { "/.cooked/Input/" + std::string(name) + ".input" }
+        .Action("Jump", "bool")
+        .Text());
   }
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
@@ -367,11 +425,20 @@ NOLINT_TEST_F(
   const auto root = MakeScenarioDir("input_cross_source");
   const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
-  WriteText(root / "Input" / "Common.input.json", R"({
-    "actions":[{"name":"Jump","type":"bool"}]})");
-  WriteText(root / "Input" / "Player.input.json", R"({
-    "contexts":[{"name":"OnFoot","mappings":[
-      {"action":"Common.input/Jump.oiact","slot":"Space"}]}]})");
+  WriteText(root / "Input" / "Common.input.json",
+    authored::InputSource { "/.cooked/Input/Common.input" }
+      .Action("Jump", "bool")
+      .Text());
+  auto player = authored::InputSource { "/.cooked/Input/Player.input" };
+  player.Context("OnFoot").Append("/contexts/0/mappings",
+    {
+      {
+        "action",
+        player.ActionReference("/.cooked/Input/Common.input/Jump.oiact"),
+      },
+      { "slot", "Space" },
+    });
+  WriteText(root / "Input" / "Player.input.json", player.Text());
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
@@ -392,10 +459,19 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, MappingToAMissingActionIsRefused)
 {
   const auto root = MakeScenarioDir("input_missing_action");
   const auto manifest_path = root / "import-manifest.json";
-  WriteText(root / "Input" / "Player.input.json", R"({
-    "contexts":[{"name":"OnFoot","mappings":[
-      {"action":"Common.input/Jump.oiact","slot":"Space"},
-      {"action":"Dash","slot":"LeftShift"}]}]})");
+  auto player = authored::InputSource { "/.cooked/Input/Player.input" };
+  player.Context("OnFoot")
+    .Append("/contexts/0/mappings",
+      {
+        {
+          "action",
+          player.ActionReference("/.cooked/Input/Common.input/Jump.oiact"),
+        },
+        { "slot", "Space" },
+      })
+    .Append("/contexts/0/mappings",
+      { { "action", "Dash" }, { "slot", "LeftShift" } });
+  WriteText(root / "Input" / "Player.input.json", player.Text());
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
@@ -416,7 +492,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto root = MakeScenarioDir("missing_virtual_path");
   const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
-  WriteText(root / "Wood.material.json", R"({"name":"Wood"})");
+  WriteText(root / "Wood.material.json",
+    authored::MaterialDescriptor { "/.cooked/Wood.omat" }.Text());
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
@@ -484,7 +561,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   for (size_t index = 0; index < kMaterialCount; ++index) {
     const auto name = std::string("M") + std::to_string(index);
     const auto source = std::string("Materials/") + name + ".material.json";
-    WriteText(root / source, std::string(R"({"name":")") + name + R"("})");
+    WriteText(root / source,
+      authored::MaterialDescriptor { "/.cooked/Materials/" + name + ".omat" }
+        .Text());
     if (index != 0U) {
       manifest << ',';
     }
@@ -525,15 +604,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "id": "physics.sidecar.main",
           "type": "physics-sidecar",
           "target_scene_virtual_path": "/.cooked/Scenes/level.oscene",
-          "bindings": {
-            "rigid_bodies": [
-              {
-                "node_index": 0,
-                "shape_ref": "../Physics/Shapes/floor.ocshape",
-                "material_ref": "../Physics/Materials/floor.opmat"
-              }
-            ]
-          }
+          "bindings": )"
+      + FloorBindingsText({ 0U }, "/.cooked/Physics/Materials/floor.opmat")
+      + R"(
         }
       ]
     })");
@@ -562,20 +635,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "id": "physics.sidecar.main",
           "type": "physics-sidecar",
           "target_scene_virtual_path": "/.cooked/Scenes/level.oscene",
-          "bindings": {
-            "rigid_bodies": [
-              {
-                "node_index": 0,
-                "shape_ref": "../Physics/Shapes/floor.ocshape",
-                "material_ref": "../Physics/Materials/floor.opmat"
-              },
-              {
-                "node_index": 1,
-                "shape_ref": "../Physics/Shapes/floor.ocshape",
-                "material_ref": "../Physics/Materials/floor.opmat"
-              }
-            ]
-          }
+          "bindings": )"
+      + FloorBindingsText({ 0U, 1U }, "/.cooked/Physics/Materials/floor.opmat")
+      + R"(
         }
       ]
     })");
@@ -599,28 +661,14 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto shape = descriptors_dir / "floor.physics-shape.json";
 
   WriteText(mat_a,
-    R"({
-      "name": "shared_a",
-      "static_friction": 0.8,
-      "dynamic_friction": 0.8,
-      "restitution": 0.1,
-      "density": 1.0
-    })");
+    PhysicsMaterialText(
+      "/.cooked/Physics/Materials/shared.opmat", "shared_a", 0.8, 0.1));
   WriteText(mat_b,
-    R"({
-      "name": "shared_b",
-      "static_friction": 0.7,
-      "dynamic_friction": 0.7,
-      "restitution": 0.2,
-      "density": 1.0
-    })");
+    PhysicsMaterialText(
+      "/.cooked/Physics/Materials/shared.opmat", "shared_b", 0.7, 0.2));
   WriteText(shape,
-    R"({
-      "name": "floor_shape",
-      "shape_type": "box",
-      "half_extents": [10.0, 1.0, 10.0],
-      "material_ref": "../Materials/shared.opmat"
-    })");
+    FloorShapeText("/.cooked/Physics/Shapes/floor.ocshape", "floor_shape",
+      "/.cooked/Physics/Materials/shared.opmat"));
 
   WriteText(manifest_path,
     R"({
@@ -670,43 +718,20 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto shape_b = descriptors_dir / "floor_b.physics-shape.json";
 
   WriteText(mat_a,
-    R"({
-      "name": "shared_a",
-      "static_friction": 0.8,
-      "dynamic_friction": 0.8,
-      "restitution": 0.1,
-      "density": 1.0
-    })");
+    PhysicsMaterialText(
+      "/.cooked/Physics/Materials/shared.opmat", "shared_a", 0.8, 0.1));
   WriteText(mat_b,
-    R"({
-      "name": "shared_b",
-      "static_friction": 0.7,
-      "dynamic_friction": 0.7,
-      "restitution": 0.2,
-      "density": 1.0
-    })");
+    PhysicsMaterialText(
+      "/.cooked/Physics/Materials/shared.opmat", "shared_b", 0.7, 0.2));
   WriteText(mat_base,
-    R"({
-      "name": "base",
-      "static_friction": 0.5,
-      "dynamic_friction": 0.5,
-      "restitution": 0.1,
-      "density": 1.0
-    })");
+    PhysicsMaterialText(
+      "/.cooked/Physics/Materials/base.opmat", "base", 0.5, 0.1));
   WriteText(shape_a,
-    R"({
-      "name": "floor_shape_a",
-      "shape_type": "box",
-      "half_extents": [10.0, 1.0, 10.0],
-      "material_ref": "../Materials/base.opmat"
-    })");
+    FloorShapeText("/.cooked/Physics/Shapes/floor.ocshape", "floor_shape_a",
+      "/.cooked/Physics/Materials/base.opmat"));
   WriteText(shape_b,
-    R"({
-      "name": "floor_shape_b",
-      "shape_type": "box",
-      "half_extents": [10.0, 1.0, 10.0],
-      "material_ref": "../Materials/base.opmat"
-    })");
+    FloorShapeText("/.cooked/Physics/Shapes/floor.ocshape", "floor_shape_b",
+      "/.cooked/Physics/Materials/base.opmat"));
 
   WriteText(manifest_path,
     R"({
@@ -748,20 +773,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "id": "physics.sidecar.main",
           "type": "physics-sidecar",
           "target_scene_virtual_path": "/.cooked/Scenes/level.oscene",
-          "bindings": {
-            "rigid_bodies": [
-              {
-                "node_index": 0,
-                "shape_ref": "../Physics/Shapes/floor.ocshape",
-                "material_ref": "../Physics/Materials/shared.opmat"
-              },
-              {
-                "node_index": 1,
-                "shape_ref": "../Physics/Shapes/floor.ocshape",
-                "material_ref": "../Physics/Materials/shared.opmat"
-              }
-            ]
-          }
+          "bindings": )"
+      + FloorBindingsText({ 0U, 1U }, "/.cooked/Physics/Materials/shared.opmat")
+      + R"(
         }
       ]
     })");
@@ -784,21 +798,11 @@ NOLINT_TEST_F(
   const auto mat_b = descriptors_dir / "mat_b.physics-material.json";
 
   WriteText(mat_a,
-    R"({
-      "name": "mat_a",
-      "static_friction": 0.5,
-      "dynamic_friction": 0.5,
-      "restitution": 0.1,
-      "density": 1.0
-    })");
+    PhysicsMaterialText(
+      "/.cooked/Physics/Materials/mat_a.opmat", "mat_a", 0.5, 0.1));
   WriteText(mat_b,
-    R"({
-      "name": "mat_b",
-      "static_friction": 0.5,
-      "dynamic_friction": 0.5,
-      "restitution": 0.1,
-      "density": 1.0
-    })");
+    PhysicsMaterialText(
+      "/.cooked/Physics/Materials/mat_b.opmat", "mat_b", 0.5, 0.1));
 
   WriteText(manifest_path,
     R"({
@@ -841,8 +845,12 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto sidecar_source = root / "Scenes" / "showcase_scene.physics.json";
 
   WriteText(scene_source, "{}");
-  WriteText(input_source, "{}");
-  WriteText(sidecar_source, R"({"bindings": {}})");
+  WriteText(input_source,
+    authored::InputSource { "/.cooked/Input/rotate.input" }.Text());
+  const auto sidecar = authored::PhysicsSidecar {
+    "/.cooked/Scenes/showcase_scene.opscene",
+  };
+  WriteText(sidecar_source, sidecar.Text());
 
   WriteText(manifest_path,
     R"({
@@ -867,7 +875,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "type": "physics-sidecar",
           "source": "Scenes/showcase_scene.physics.json",
           "target_scene_virtual_path": "/.cooked/Scenes/showcase_scene.oscene",
-          "bindings": {}
+          "bindings": )"
+      + sidecar.Json().at("bindings").dump() + R"(
         }
       ]
     })");
@@ -888,7 +897,12 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto sidecar_source
     = root / "Scenes" / "missing_bindings.physics-sidecar.json";
 
-  WriteText(sidecar_source, R"({"rigid_bodies": []})");
+  // A sidecar with its bindings at the top level instead of under `bindings`.
+  WriteText(sidecar_source,
+    authored::PhysicsSidecar { "/.cooked/Scenes/missing_bindings.opscene" }
+      .Remove("/bindings")
+      .Set("/rigid_bodies", nlohmann::json::array())
+      .Text());
 
   WriteText(manifest_path,
     R"({
@@ -992,13 +1006,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto material_source = root / "Physics" / "mat.physics-material.json";
 
   WriteText(material_source,
-    R"({
-      "name": "mat",
-      "static_friction": 0.6,
-      "dynamic_friction": 0.6,
-      "restitution": 0.1,
-      "density": 1.0
-    })");
+    PhysicsMaterialText(
+      "/.cooked/Physics/Materials/mat.opmat", "mat", 0.6, 0.1));
 
   WriteText(manifest_path,
     R"({
@@ -1034,21 +1043,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto mat_b = root / "Physics" / "mat_b.physics-material.json";
 
   WriteText(mat_a,
-    R"({
-      "name": "mat_a",
-      "static_friction": 0.6,
-      "dynamic_friction": 0.6,
-      "restitution": 0.1,
-      "density": 1.0
-    })");
+    PhysicsMaterialText(
+      "/.cooked/Physics/Materials/mat_a.opmat", "mat_a", 0.6, 0.1));
   WriteText(mat_b,
-    R"({
-      "name": "mat_b",
-      "static_friction": 0.7,
-      "dynamic_friction": 0.7,
-      "restitution": 0.2,
-      "density": 1.0
-    })");
+    PhysicsMaterialText(
+      "/.cooked/Physics/Materials/mat_b.opmat", "mat_b", 0.7, 0.2));
 
   WriteText(manifest_path,
     R"({
@@ -1089,8 +1088,10 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, TwoManifestsRunAsOneBatch)
   const auto first_path = root / "first.import-manifest.json";
   const auto second_path = root / "second.import-manifest.json";
   const auto report_path = root / "report.json";
-  WriteText(root / "Wood.material.json", R"({"name":"Wood"})");
-  WriteText(root / "Stone.material.json", R"({"name":"Stone"})");
+  WriteText(root / "Wood.material.json",
+    authored::MaterialDescriptor { "/.cooked/Wood.omat" }.Text());
+  WriteText(root / "Stone.material.json",
+    authored::MaterialDescriptor { "/.cooked/Stone.omat" }.Text());
   const auto manifest
     = [](const std::string_view id, const std::string_view source,
         const std::string_view virtual_path) {
@@ -1125,8 +1126,10 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ManifestsMappingOneMountToTwoFolders)
   const auto root = MakeScenarioDir("mount_name_conflict");
   const auto first_path = root / "first.import-manifest.json";
   const auto second_path = root / "second.import-manifest.json";
-  WriteText(root / "A" / "Wood.material.json", R"({"name":"Wood"})");
-  WriteText(root / "B" / "Stone.material.json", R"({"name":"Stone"})");
+  WriteText(root / "A" / "Wood.material.json",
+    authored::MaterialDescriptor { "/.cooked/Wood.omat" }.Text());
+  WriteText(root / "B" / "Stone.material.json",
+    authored::MaterialDescriptor { "/.cooked/Stone.omat" }.Text());
   const auto manifest
     = [](const std::string_view folder, const std::string_view source,
         const std::string_view virtual_path) {

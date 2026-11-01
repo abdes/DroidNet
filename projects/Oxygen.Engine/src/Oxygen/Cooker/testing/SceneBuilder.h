@@ -153,7 +153,7 @@ struct ScriptParam final {
 */
 class SceneBuilder final {
 public:
-  explicit SceneBuilder(std::string name);
+  explicit SceneBuilder(std::string_view name);
 
   [[nodiscard]] auto Name() const noexcept -> const std::string&
   {

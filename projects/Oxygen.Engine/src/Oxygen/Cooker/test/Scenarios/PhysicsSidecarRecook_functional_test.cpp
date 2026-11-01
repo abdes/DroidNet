@@ -19,10 +19,10 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
+#include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -33,22 +33,17 @@
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
-#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -62,6 +57,9 @@ namespace {
   using nlohmann::json;
   namespace phys = oxygen::data::pak::physics;
   using oxygen::cooker::test::SubmitAndWait;
+  using oxygen::cooker::testing::GeometryBuilder;
+  using oxygen::cooker::testing::LooseCookedRoot;
+  using oxygen::cooker::testing::Materialize;
 
   constexpr auto kSceneName = std::string_view { "ComplexScene" };
   constexpr auto kSceneVirtualPath
@@ -189,6 +187,15 @@ namespace {
       cooked::RealCookerStorage(), cooked_root);
   }
 
+  //! The digest of the stub geometry's descriptor, wherever the index of
+  //! `cooked_root` places it.
+  auto StubGeometryDigest(const std::filesystem::path& cooked_root)
+    -> base::Sha256Digest
+  {
+    return base::ComputeSha256(OpenCooked(cooked_root)
+        .Descriptor(data::AssetKey::FromVirtualPath(kGeometryVirtualPath)));
+  }
+
   auto FindInspectionAsset(const cooked::CookedContent& inspection,
     const data::AssetKey& key) -> std::optional<cooked::CookedAsset>
   {
@@ -228,20 +235,18 @@ namespace {
       return "00000000-0000-4000-8000-" + std::string(12U - digits.size(), '0')
         + digits;
     };
-    auto nodes = json::array();
-    nodes.push_back(json { { "id", node_id(0U) }, { "name", "Root" } });
-    for (uint32_t i = 1; i < node_count; ++i) {
-      nodes.push_back(json {
-        { "id", node_id(i) },
-        { "name", "Node" + std::to_string(i) },
-        { "parent", 0U },
-      });
-    }
-    const auto descriptor = json {
-      { "version", internal::kSceneDescriptorVersion },
-      { "name", scene_name },
-      { "nodes", std::move(nodes) },
+    auto descriptor = oxygen::cooker::test::SceneDescriptor {
+      std::string { kSceneVirtualPath },
     };
+    descriptor.Set("/name", scene_name);
+    for (uint32_t i = 1; i < node_count; ++i) {
+      descriptor.Append("/nodes",
+        json {
+          { "id", node_id(i) },
+          { "name", "Node" + std::to_string(i) },
+          { "parent", 0U },
+        });
+    }
 
     auto request = ImportRequest {};
     request.source_path = "inline://scene.oscene.json";
@@ -251,7 +256,7 @@ namespace {
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-      .normalized_descriptor_json = descriptor.dump(),
+      .normalized_descriptor_json = descriptor.Text(),
     };
     return request;
   }
@@ -259,13 +264,13 @@ namespace {
   auto MakePhysicsMaterialRequest(const std::filesystem::path& cooked_root)
     -> ImportRequest
   {
-    const auto descriptor = json {
-      { "name", "ground" },
-      { "static_friction", 0.95F },
-      { "dynamic_friction", 0.70F },
-      { "restitution", 0.05F },
-      { "density", 1800.0F },
+    auto descriptor = oxygen::cooker::test::PhysicsMaterialDescriptor {
+      std::string { kMaterialVirtualPath },
     };
+    descriptor.Set("/static_friction", 0.95F)
+      .Set("/dynamic_friction", 0.70F)
+      .Set("/restitution", 0.05F)
+      .Set("/density", 1800.0F);
 
     auto request = ImportRequest {};
     request.source_path = "inline://material.opmat.json";
@@ -276,7 +281,7 @@ namespace {
     request.cooked_root = cooked_root;
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
-          .normalized_descriptor_json = descriptor.dump(),
+          .normalized_descriptor_json = descriptor.Text(),
         };
     return request;
   }
@@ -284,16 +289,14 @@ namespace {
   auto MakeCompoundShapeRequest(const std::filesystem::path& cooked_root)
     -> ImportRequest
   {
-    const auto descriptor = json {
-      { "name", "chassis_compound" },
-      { "shape_type", "compound" },
-      {
-        "material_ref",
-        oxygen::cooker::test::SpellReference(
-          kShapeVirtualPath, kMaterialVirtualPath),
-      },
-      {
-        "children",
+    auto descriptor = oxygen::cooker::test::CollisionShapeDescriptor {
+      std::string { kShapeVirtualPath },
+      kMaterialVirtualPath,
+    };
+    descriptor.Set("/name", "chassis_compound")
+      .Set("/shape_type", "compound")
+      .Remove("/half_extents")
+      .Set("/children",
         json::array({
           json {
             { "shape_type", "box" },
@@ -309,9 +312,7 @@ namespace {
             { "local_rotation", json::array({ 0.0F, 0.0F, 0.0F, 1.0F }) },
             { "local_scale", json::array({ 1.0F, 1.0F, 1.0F }) },
           },
-        }),
-      },
-    };
+        }));
 
     auto request = ImportRequest {};
     request.source_path = "inline://shape.ocshape.json";
@@ -322,14 +323,14 @@ namespace {
     request.cooked_root = cooked_root;
     request.collision_shape_descriptor
       = ImportRequest::CollisionShapeDescriptorPayload {
-          .normalized_descriptor_json = descriptor.dump(),
+          .normalized_descriptor_json = descriptor.Text(),
         };
     return request;
   }
 
   auto MakePhysicsSidecarRequest(const std::filesystem::path& cooked_root,
-    const std::string_view target_scene_virtual_path, const json& bindings_doc)
-    -> ImportRequest
+    const std::string_view target_scene_virtual_path,
+    const oxygen::cooker::test::PhysicsSidecar& bindings_doc) -> ImportRequest
   {
     auto request = ImportRequest {};
     request.source_path = "inline://physics-sidecar";
@@ -337,237 +338,214 @@ namespace {
     request.cooked_root = cooked_root;
     request.physics = PhysicsImportSettings {
       .target_scene_virtual_path = std::string(target_scene_virtual_path),
-      .inline_bindings_json = bindings_doc.dump(),
+      .inline_bindings_json = bindings_doc.Text(),
     };
     return request;
   }
 
   auto BuildComplexSidecarBindings(const std::vector<uint32_t>& pinned_vertices,
-    const std::vector<uint32_t>& kinematic_vertices) -> json
+    const std::vector<uint32_t>& kinematic_vertices)
+    -> oxygen::cooker::test::PhysicsSidecar
   {
-    return json {
-      {
-        "bindings",
+    auto sidecar = oxygen::cooker::test::PhysicsSidecar {
+      std::string { kSidecarVirtualPath },
+    };
+    sidecar.AppendBinding("rigid_bodies",
+      json {
+        { "node_index", 1U },
         {
+          "shape_ref",
+          sidecar.Spell(kShapeVirtualPath),
+        },
+        {
+          "material_ref",
+          sidecar.Spell(kMaterialVirtualPath),
+        },
+        { "body_type", "dynamic" },
+        { "motion_quality", "linear_cast" },
+        { "mass", 1350.0F },
+        {
+          "backend",
           {
-            "rigid_bodies",
-            json::array({
-              json {
-                { "node_index", 1U },
-                {
-                  "shape_ref",
-                  oxygen::cooker::test::SpellReference(
-                    kSceneVirtualPath, kShapeVirtualPath),
-                },
-                {
-                  "material_ref",
-                  oxygen::cooker::test::SpellReference(
-                    kSceneVirtualPath, kMaterialVirtualPath),
-                },
-                { "body_type", "dynamic" },
-                { "motion_quality", "linear_cast" },
-                { "mass", 1350.0F },
-                {
-                  "backend",
-                  {
-                    { "target", "jolt" },
-                    { "num_velocity_steps_override", 2U },
-                    { "num_position_steps_override", 3U },
-                  },
-                },
-              },
-            }),
-          },
-          {
-            "soft_bodies",
-            json::array({
-              json {
-                { "node_index", 2U },
-                {
-                  "source_mesh_ref",
-                  oxygen::cooker::test::SpellReference(
-                    kSceneVirtualPath, kGeometryVirtualPath),
-                },
-                { "collision_layer", 2U },
-                { "collision_mask", 0xFFFFFFFFU },
-                { "edge_compliance", 0.0002F },
-                { "shear_compliance", 0.0003F },
-                { "bend_compliance", 0.0004F },
-                { "volume_compliance", 0.0005F },
-                { "pressure_coefficient", 0.05F },
-                { "tether_mode", "euclidean" },
-                { "tether_max_distance_multiplier", 1.2F },
-                { "global_damping", 0.02F },
-                { "restitution", 0.12F },
-                { "friction", 0.34F },
-                { "vertex_radius", 0.01F },
-                { "solver_iteration_count", 6U },
-                { "self_collision", true },
-                { "pinned_vertices", pinned_vertices },
-                { "kinematic_vertices", kinematic_vertices },
-                {
-                  "backend",
-                  {
-                    { "target", "jolt" },
-                    { "velocity_iteration_count", 8U },
-                    { "lra_stiffness_fraction", 0.9F },
-                    { "skinned_constraint_enable", true },
-                  },
-                },
-              },
-            }),
-          },
-          {
-            "joints",
-            json::array({
-              json {
-                { "node_index_a", 1U },
-                { "node_index_b", "world" },
-                { "constraint_type", "hinge" },
-                { "constraint_space", "local" },
-                { "local_frame_a_position", json::array({ 0.0F, 0.0F, 0.0F }) },
-                {
-                  "local_frame_a_rotation",
-                  json::array({ 0.0F, 0.0F, 0.0F, 1.0F }),
-                },
-                { "local_frame_b_position", json::array({ 0.0F, 0.0F, 0.0F }) },
-                {
-                  "local_frame_b_rotation",
-                  json::array({ 0.0F, 0.0F, 0.0F, 1.0F }),
-                },
-                {
-                  "limits_lower",
-                  json::array({ -0.1F, -0.1F, -0.1F, -0.1F, -0.1F, -0.1F }),
-                },
-                {
-                  "limits_upper",
-                  json::array({ 0.1F, 0.1F, 0.1F, 0.1F, 0.1F, 0.1F }),
-                },
-                {
-                  "spring_stiffnesses",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
-                },
-                {
-                  "spring_damping_ratios",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
-                },
-                {
-                  "motor_modes",
-                  json::array({ "off", "off", "off", "off", "off", "off" }),
-                },
-                {
-                  "motor_target_velocities",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
-                },
-                {
-                  "motor_target_positions",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
-                },
-                {
-                  "motor_max_forces",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
-                },
-                {
-                  "motor_max_torques",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
-                },
-                {
-                  "motor_drive_frequencies",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
-                },
-                {
-                  "motor_damping_ratios",
-                  json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
-                },
-                { "break_force", 1250.0F },
-                { "break_torque", 2500.0F },
-                { "collide_connected", false },
-                { "priority", 7U },
-                {
-                  "backend",
-                  {
-                    { "target", "jolt" },
-                    { "num_velocity_steps_override", 1U },
-                    { "num_position_steps_override", 2U },
-                  },
-                },
-              },
-            }),
-          },
-          {
-            "vehicles",
-            json::array({
-              json {
-                { "node_index", 3U },
-                { "controller_type", "wheeled" },
-                {
-                  "wheels",
-                  json::array({
-                    json {
-                      { "node_index", 8U },
-                      { "axle_index", 1U },
-                      { "side", "right" },
-                      {
-                        "backend",
-                        {
-                          { "target", "jolt" },
-                          { "wheel_castor", 0.80F },
-                        },
-                      },
-                    },
-                    json {
-                      { "node_index", 6U },
-                      { "axle_index", 0U },
-                      { "side", "right" },
-                      {
-                        "backend",
-                        {
-                          { "target", "jolt" },
-                          { "wheel_castor", 0.60F },
-                        },
-                      },
-                    },
-                    json {
-                      { "node_index", 7U },
-                      { "axle_index", 1U },
-                      { "side", "left" },
-                      {
-                        "backend",
-                        {
-                          { "target", "jolt" },
-                          { "wheel_castor", 0.70F },
-                        },
-                      },
-                    },
-                    json {
-                      { "node_index", 5U },
-                      { "axle_index", 0U },
-                      { "side", "left" },
-                      {
-                        "backend",
-                        {
-                          { "target", "jolt" },
-                          { "wheel_castor", 0.50F },
-                        },
-                      },
-                    },
-                  }),
-                },
-              },
-            }),
+            { "target", "jolt" },
+            { "num_velocity_steps_override", 2U },
+            { "num_position_steps_override", 3U },
           },
         },
-      },
-    };
+      });
+    sidecar.AppendBinding("soft_bodies",
+      json {
+        { "node_index", 2U },
+        {
+          "source_mesh_ref",
+          sidecar.Spell(kGeometryVirtualPath),
+        },
+        { "collision_layer", 2U },
+        { "collision_mask", 0xFFFFFFFFU },
+        { "edge_compliance", 0.0002F },
+        { "shear_compliance", 0.0003F },
+        { "bend_compliance", 0.0004F },
+        { "volume_compliance", 0.0005F },
+        { "pressure_coefficient", 0.05F },
+        { "tether_mode", "euclidean" },
+        { "tether_max_distance_multiplier", 1.2F },
+        { "global_damping", 0.02F },
+        { "restitution", 0.12F },
+        { "friction", 0.34F },
+        { "vertex_radius", 0.01F },
+        { "solver_iteration_count", 6U },
+        { "self_collision", true },
+        { "pinned_vertices", pinned_vertices },
+        { "kinematic_vertices", kinematic_vertices },
+        {
+          "backend",
+          {
+            { "target", "jolt" },
+            { "velocity_iteration_count", 8U },
+            { "lra_stiffness_fraction", 0.9F },
+            { "skinned_constraint_enable", true },
+          },
+        },
+      });
+    sidecar.AppendBinding("joints",
+      json {
+        { "node_index_a", 1U },
+        { "node_index_b", "world" },
+        { "constraint_type", "hinge" },
+        { "constraint_space", "local" },
+        { "local_frame_a_position", json::array({ 0.0F, 0.0F, 0.0F }) },
+        {
+          "local_frame_a_rotation",
+          json::array({ 0.0F, 0.0F, 0.0F, 1.0F }),
+        },
+        { "local_frame_b_position", json::array({ 0.0F, 0.0F, 0.0F }) },
+        {
+          "local_frame_b_rotation",
+          json::array({ 0.0F, 0.0F, 0.0F, 1.0F }),
+        },
+        {
+          "limits_lower",
+          json::array({ -0.1F, -0.1F, -0.1F, -0.1F, -0.1F, -0.1F }),
+        },
+        {
+          "limits_upper",
+          json::array({ 0.1F, 0.1F, 0.1F, 0.1F, 0.1F, 0.1F }),
+        },
+        {
+          "spring_stiffnesses",
+          json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+        },
+        {
+          "spring_damping_ratios",
+          json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+        },
+        {
+          "motor_modes",
+          json::array({ "off", "off", "off", "off", "off", "off" }),
+        },
+        {
+          "motor_target_velocities",
+          json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+        },
+        {
+          "motor_target_positions",
+          json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+        },
+        {
+          "motor_max_forces",
+          json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+        },
+        {
+          "motor_max_torques",
+          json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+        },
+        {
+          "motor_drive_frequencies",
+          json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+        },
+        {
+          "motor_damping_ratios",
+          json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
+        },
+        { "break_force", 1250.0F },
+        { "break_torque", 2500.0F },
+        { "collide_connected", false },
+        { "priority", 7U },
+        {
+          "backend",
+          {
+            { "target", "jolt" },
+            { "num_velocity_steps_override", 1U },
+            { "num_position_steps_override", 2U },
+          },
+        },
+      });
+    sidecar.AppendBinding("vehicles",
+      json {
+        { "node_index", 3U },
+        { "controller_type", "wheeled" },
+        {
+          "wheels",
+          json::array({
+            json {
+              { "node_index", 8U },
+              { "axle_index", 1U },
+              { "side", "right" },
+              {
+                "backend",
+                {
+                  { "target", "jolt" },
+                  { "wheel_castor", 0.80F },
+                },
+              },
+            },
+            json {
+              { "node_index", 6U },
+              { "axle_index", 0U },
+              { "side", "right" },
+              {
+                "backend",
+                {
+                  { "target", "jolt" },
+                  { "wheel_castor", 0.60F },
+                },
+              },
+            },
+            json {
+              { "node_index", 7U },
+              { "axle_index", 1U },
+              { "side", "left" },
+              {
+                "backend",
+                {
+                  { "target", "jolt" },
+                  { "wheel_castor", 0.70F },
+                },
+              },
+            },
+            json {
+              { "node_index", 5U },
+              { "axle_index", 0U },
+              { "side", "left" },
+              {
+                "backend",
+                {
+                  { "target", "jolt" },
+                  { "wheel_castor", 0.50F },
+                },
+              },
+            },
+          }),
+        },
+      });
+    return sidecar;
   }
 
-  auto RegisterStubGeometryAsset(const std::filesystem::path& cooked_root,
-    const std::string_view virtual_path, const std::string_view relpath) -> void
+  //! Writes the cloth geometry `Geometry/cloth.ogeo` and its buffers into
+  //! `cooked_root`.
+  auto RegisterStubGeometryAsset(const std::filesystem::path& cooked_root)
+    -> void
   {
-    const auto key = data::AssetKey::FromVirtualPath(virtual_path);
-    namespace core = data::pak::core;
-    namespace geometry = data::pak::geometry;
-
     struct VertexPosition final {
       float x;
       float y;
@@ -604,137 +582,36 @@ namespace {
       3U, // base
     };
 
-    auto descriptor = geometry::GeometryAssetDesc {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kGeometry);
-    descriptor.header.version = geometry::kGeometryAssetVersion;
-    auto strings = data::DescriptorStringsBuilder {};
-    descriptor.header.name_offset = strings.Add("cloth");
-    descriptor.lod_count = 1U;
-    descriptor.bounding_box_min[0] = -0.12F;
-    descriptor.bounding_box_min[1] = -0.10F;
-    descriptor.bounding_box_min[2] = -0.12F;
-    descriptor.bounding_box_max[0] = 0.12F;
-    descriptor.bounding_box_max[1] = 0.15F;
-    descriptor.bounding_box_max[2] = 0.14F;
+    auto root = LooseCookedRoot { ".cooked" };
+    auto vertex_row = data::pak::core::BufferResourceDesc {};
+    vertex_row.usage_flags = 0x01U;
+    vertex_row.element_stride = sizeof(VertexPosition);
+    vertex_row.element_format = static_cast<uint8_t>(Format::kUnknown);
+    auto index_row = data::pak::core::BufferResourceDesc {};
+    index_row.usage_flags = 0x02U;
+    index_row.element_stride = 0U;
+    index_row.element_format = static_cast<uint8_t>(Format::kR32UInt);
+    const auto vertex_buffer
+      = root.AddBuffer(std::as_bytes(std::span(vertices)), vertex_row);
+    const auto index_buffer
+      = root.AddBuffer(std::as_bytes(std::span(indices)), index_row);
 
-    auto mesh = geometry::MeshDesc {};
-    mesh.name_offset = strings.Add("cloth_lod0");
-    mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
-    mesh.submesh_count = 1U;
-    mesh.mesh_view_count = 1U;
-    mesh.info.standard.vertex_buffer = data::ResourceReferenceIndex { 0U };
-    mesh.info.standard.index_buffer = data::ResourceReferenceIndex { 1U };
-    mesh.info.standard.bounding_box_min[0] = descriptor.bounding_box_min[0];
-    mesh.info.standard.bounding_box_min[1] = descriptor.bounding_box_min[1];
-    mesh.info.standard.bounding_box_min[2] = descriptor.bounding_box_min[2];
-    mesh.info.standard.bounding_box_max[0] = descriptor.bounding_box_max[0];
-    mesh.info.standard.bounding_box_max[1] = descriptor.bounding_box_max[1];
-    mesh.info.standard.bounding_box_max[2] = descriptor.bounding_box_max[2];
-
-    auto submesh = geometry::SubMeshDesc {};
-    submesh.surface_id
-      = data::SurfaceId::FromStableIdentity("PhysicsPhase3/cloth");
-    submesh.name_offset = strings.Add("cloth_submesh");
-    submesh.mesh_view_count = 1U;
-    submesh.bounding_box_min[0] = descriptor.bounding_box_min[0];
-    submesh.bounding_box_min[1] = descriptor.bounding_box_min[1];
-    submesh.bounding_box_min[2] = descriptor.bounding_box_min[2];
-    submesh.bounding_box_max[0] = descriptor.bounding_box_max[0];
-    submesh.bounding_box_max[1] = descriptor.bounding_box_max[1];
-    submesh.bounding_box_max[2] = descriptor.bounding_box_max[2];
-
-    auto view = geometry::MeshViewDesc {};
-    view.first_index = 0U;
-    view.index_count = static_cast<uint32_t>(indices.size());
-    view.first_vertex = 0U;
-    view.vertex_count = static_cast<uint32_t>(vertices.size());
-
-    descriptor.surface_count = 1U;
-    const auto surface = geometry::SurfaceDesc {
-      .surface_id = submesh.surface_id,
-      .flags
-      = geometry::kSurfaceFlag_Visible | geometry::kSurfaceFlag_CastsShadows,
-    };
-
-    auto descriptor_bytes = std::vector<std::byte> {};
-    descriptor_bytes.reserve(sizeof(descriptor) + sizeof(mesh) + sizeof(submesh)
-      + sizeof(view) + sizeof(surface));
-    const auto append_pod
-      = [&descriptor_bytes]<typename T>(const T& pod) -> auto {
-      static_assert(std::is_trivially_copyable_v<T>);
-      const auto bytes = std::as_bytes(std::span<const T, 1>(&pod, 1));
-      descriptor_bytes.insert(
-        descriptor_bytes.end(), bytes.begin(), bytes.end());
-    };
-    append_pod(descriptor);
-    append_pod(mesh);
-    append_pod(submesh);
-    append_pod(view);
-    append_pod(surface);
-    data::AppendDescriptorStrings(descriptor_bytes, strings);
-
-    auto table_entries = std::array<core::BufferResourceDesc, 3> {};
-    table_entries.at(1).data_offset = 0U;
-    table_entries.at(1).size_bytes
-      = static_cast<uint32_t>(vertices.size() * sizeof(VertexPosition));
-    table_entries.at(1).usage_flags = 0x01U;
-    table_entries.at(1).element_stride = sizeof(VertexPosition);
-    table_entries.at(1).element_format = static_cast<uint8_t>(Format::kUnknown);
-
-    table_entries.at(2).data_offset = table_entries.at(1).size_bytes;
-    table_entries.at(2).size_bytes
-      = static_cast<uint32_t>(indices.size() * sizeof(uint32_t));
-    table_entries.at(2).usage_flags = 0x02U;
-    table_entries.at(2).element_stride = 0U;
-    table_entries.at(2).element_format = static_cast<uint8_t>(Format::kR32UInt);
-
-    auto buffer_data = std::vector<std::byte> {};
-    buffer_data.reserve(static_cast<size_t>(table_entries.at(1).size_bytes)
-      + static_cast<size_t>(table_entries.at(2).size_bytes));
-    const auto vertex_bytes = std::as_bytes(std::span(vertices))
-                                .first(table_entries.at(1).size_bytes);
-    buffer_data.insert(
-      buffer_data.end(), vertex_bytes.begin(), vertex_bytes.end());
-    const auto index_bytes
-      = std::as_bytes(std::span(indices)).first(table_entries.at(2).size_bytes);
-    buffer_data.insert(
-      buffer_data.end(), index_bytes.begin(), index_bytes.end());
-    table_entries.at(1).content_hash = base::ComputeSha256(vertex_bytes);
-    table_entries.at(2).content_hash = base::ComputeSha256(index_bytes);
-
-    auto table_bytes = std::vector<std::byte> {};
-    table_bytes.reserve(sizeof(table_entries));
-    const auto table_raw = std::as_bytes(std::span(table_entries));
-    table_bytes.insert(table_bytes.end(), table_raw.begin(), table_raw.end());
-
-    auto writer = LooseCookedWriter(
-      cooked_root, oxygen::content::cooked::RealCookerStorage());
-    writer.WriteAssetDescriptor(key, data::AssetType::kGeometry, virtual_path,
-      relpath, std::span<const std::byte>(descriptor_bytes),
-      data::AssetReferences::Create(
+    auto geometry = GeometryBuilder { "cloth" };
+    // The bounds of the tetrahedron's vertices.
+    const auto lod = geometry.StandardLod(vertex_buffer, index_buffer,
+      glm::vec3 { -0.12F, -0.10F, -0.12F }, glm::vec3 { 0.12F, 0.15F, 0.14F });
+    geometry.Submesh(lod,
+      data::SurfaceId::FromStableIdentity("PhysicsPhase3/cloth"), {},
+      {
         {
-          {
-            .kind = data::ResourceKind::kBuffer,
-            .index = oxygen::ResourceIndexT { 1U },
-          },
-          {
-            .kind = data::ResourceKind::kBuffer,
-            .index = oxygen::ResourceIndexT { 2U },
-          },
+          .first_index = 0U,
+          .index_count = static_cast<uint32_t>(indices.size()),
+          .first_vertex = 0U,
+          .vertex_count = static_cast<uint32_t>(vertices.size()),
         },
-        {})
-        .value(),
-      content::import::LooseCookedProducer {
-        .source = std::string(virtual_path) + ".json",
-        .completes = {},
       });
-    // The index must record the tables, or the cooked content has no buffers.
-    writer.WriteFile(data::loose_cooked::FileKind::kBuffersTable,
-      internal::loose_layout::kBuffersTable, table_bytes);
-    writer.WriteFile(data::loose_cooked::FileKind::kBuffersData,
-      internal::loose_layout::kBuffersData, buffer_data);
-    (void)writer.Finish();
+    root.Geometry("Geometry/cloth.ogeo", geometry);
+    Materialize(root.Files(), cooked_root);
   }
 
   struct CookedSnapshot {
@@ -759,8 +636,7 @@ namespace {
     const std::filesystem::path& cooked_root) -> std::string_view
   {
     std::filesystem::create_directories(cooked_root);
-    RegisterStubGeometryAsset(
-      cooked_root, kGeometryVirtualPath, "Geometry/cloth.ogeo");
+    RegisterStubGeometryAsset(cooked_root);
 
     const auto scene_report = SubmitAndWait(
       service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U));
@@ -815,7 +691,7 @@ namespace {
       = ComputeFileDigest(path("Physics/Materials/ground.opmat"));
     snapshot.shape_digest
       = ComputeFileDigest(path("Physics/Shapes/chassis_compound.ocshape"));
-    snapshot.geometry_digest = ComputeFileDigest(path("Geometry/cloth.ogeo"));
+    snapshot.geometry_digest = StubGeometryDigest(cooked_root);
     snapshot.physics_table_digest
       = ComputeFileDigest(path("Physics/Resources/physics.table"));
     snapshot.physics_data_digest
@@ -1272,8 +1148,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   const auto cooked_root = temp.Path() / "incremental_recook_stability";
   std::filesystem::create_directories(cooked_root);
 
-  RegisterStubGeometryAsset(
-    cooked_root, kGeometryVirtualPath, "Geometry/cloth.ogeo");
+  RegisterStubGeometryAsset(cooked_root);
 
   const auto scene_report = SubmitAndWait(
     service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U));
@@ -1303,14 +1178,12 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     = cooked_root / std::filesystem::path("Physics/Materials/ground.opmat");
   const auto shape_path = cooked_root
     / std::filesystem::path("Physics/Shapes/chassis_compound.ocshape");
-  const auto geometry_path
-    = cooked_root / std::filesystem::path("Geometry/cloth.ogeo");
 
   const auto scene_digest_before = ComputeFileDigest(scene_path);
   const auto sidecar_digest_before = ComputeFileDigest(sidecar_path);
   const auto material_digest_before = ComputeFileDigest(material_path);
   const auto shape_digest_before = ComputeFileDigest(shape_path);
-  const auto geometry_digest_before = ComputeFileDigest(geometry_path);
+  const auto geometry_digest_before = StubGeometryDigest(cooked_root);
 
   const auto before_inspection = OpenCooked(cooked_root);
   const auto scene_asset_before = FindInspectionAsset(
@@ -1341,7 +1214,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   const auto sidecar_digest_after = ComputeFileDigest(sidecar_path);
   const auto material_digest_after = ComputeFileDigest(material_path);
   const auto shape_digest_after = ComputeFileDigest(shape_path);
-  const auto geometry_digest_after = ComputeFileDigest(geometry_path);
+  const auto geometry_digest_after = StubGeometryDigest(cooked_root);
 
   EXPECT_EQ(scene_digest_before, scene_digest_after);
   EXPECT_EQ(material_digest_before, material_digest_after);
@@ -1463,8 +1336,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   const auto cooked_root = temp.Path() / "backend_mismatch_hard_fail";
   std::filesystem::create_directories(cooked_root);
 
-  RegisterStubGeometryAsset(
-    cooked_root, kGeometryVirtualPath, "Geometry/cloth.ogeo");
+  RegisterStubGeometryAsset(cooked_root);
 
   const auto scene_report = SubmitAndWait(
     service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U));
@@ -1511,8 +1383,7 @@ namespace {
     const auto cooked_root = temp.Path() / temp_name;
     std::filesystem::create_directories(cooked_root);
 
-    RegisterStubGeometryAsset(
-      cooked_root, kGeometryVirtualPath, "Geometry/cloth.ogeo");
+    RegisterStubGeometryAsset(cooked_root);
     const auto scene_report = SubmitAndWait(
       service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U));
     const auto material_report

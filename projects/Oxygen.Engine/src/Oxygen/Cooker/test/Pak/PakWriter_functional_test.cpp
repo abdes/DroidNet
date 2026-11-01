@@ -12,10 +12,10 @@
 #include <vector>
 
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/PackedPak.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
@@ -33,6 +33,7 @@ using oxygen::cooker::test::HasNoErrors;
 using oxygen::cooker::testing::LooseCookedRoot;
 using oxygen::cooker::testing::PackedPak;
 using oxygen::cooker::testing::PakWorkspace;
+using oxygen::cooker::testing::PhysicsSidecarBuilder;
 using oxygen::cooker::testing::SceneBuilder;
 using oxygen::cooker::testing::SeedBytes;
 using oxygen::serio::testing::BytesEqual;
@@ -58,11 +59,7 @@ protected:
   auto MinimalSource() -> data::CookedSource
   {
     auto game = LooseCookedRoot {};
-    game.Add({
-      .type = data::AssetType::kScene,
-      .leaf = "Scenes/Main.oscene",
-      .descriptor = oxygen::cooker::testing::MakeEmptySceneDescriptor(),
-    });
+    game.Scene("Scenes/Main.oscene", SceneBuilder { "Empty" });
     return workspace_.Add(game);
   }
 
@@ -96,7 +93,7 @@ NOLINT_TEST_F(
   auto game = LooseCookedRoot {};
   const auto action_bytes = PatternBytes(kActionSize);
   const auto context_bytes = PatternBytes(kContextSize, PatternSeed::kSecond);
-  const auto scene_bytes = oxygen::cooker::testing::MakeEmptySceneDescriptor();
+  const auto scene_bytes = SceneBuilder { "Empty" }.Bytes();
   const auto action = game.Add({
     .type = data::AssetType::kInputAction,
     .leaf = "Input/Move.oiact",
@@ -131,9 +128,8 @@ NOLINT_TEST_F(
   const auto scene = game.Scene("Main.oscene", main);
   const auto sidecar = game.PhysicsSidecar("Scenes/Main.opscene", scene);
   // The sidecar's descriptor name is its file name.
-  const auto sidecar_bytes = oxygen::cooker::testing::PhysicsSidecarDescriptor(
-    scene, main.Bytes(), {}, "Main")
-                               .bytes;
+  const auto sidecar_bytes
+    = PhysicsSidecarBuilder {}.Bytes(scene, main.Bytes(), "Main");
 
   const auto pak = Workspace().PackOrThrow(
     Workspace().FullRequest({ Workspace().Add(game) }));

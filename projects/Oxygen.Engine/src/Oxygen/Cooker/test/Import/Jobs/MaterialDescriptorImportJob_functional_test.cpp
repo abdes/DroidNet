@@ -25,12 +25,14 @@
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -285,7 +287,11 @@ namespace {
     const auto kGrid
       = library_root.DescribeTexture("Textures/Grid.otex", grid_row);
     // A pak holds at least one asset: a material that uses the texture.
-    library_root.Material("Materials/Grid.omat", grid_row);
+    auto grid_material = oxygen::cooker::testing::MaterialBuilder { "Grid" };
+    grid_material.Texture(
+      &oxygen::data::pak::render::MaterialAssetDesc::base_color_texture,
+      grid_row);
+    library_root.Material("Materials/Grid.omat", grid_material);
     const auto library = TempDir() / "library";
     Materialize(library_root.Files(), library);
     const auto pak = TempDir() / "library.pak";

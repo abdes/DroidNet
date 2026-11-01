@@ -13,21 +13,24 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
+
+#include <glm/vec3.hpp>
 
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -73,27 +76,29 @@ auto ContentRoot(const uint8_t seed = 1U) -> LooseCookedRoot
 auto AddWood(LooseCookedRoot& library, const ResourceIndexT texture)
   -> data::AssetKey
 {
-  auto wood = fixtures::TexturedMaterialDescriptor("Wood", texture);
-  return library.Add({
-    .type = data::AssetType::kMaterial,
-    .leaf = "Materials/Wood.omat",
-    .descriptor = std::move(wood.bytes),
-    .references = std::move(wood.references),
-  });
+  auto wood = fixtures::MaterialBuilder { "Wood" };
+  wood.Texture(
+    &data::pak::render::MaterialAssetDesc::base_color_texture, texture);
+  return library.Material("Materials/Wood.omat", wood);
 }
 
-//! Adds the geometry `Crate`, which binds buffer `buffer`.
+//! Adds the geometry `Crate`, a triangle drawn from buffer `buffer`.
 auto AddCrate(LooseCookedRoot& library, const ResourceIndexT buffer)
   -> data::AssetKey
 {
-  return library.Add({
-    .type = data::AssetType::kGeometry,
-    .leaf = "Geometry/Crate.ogeo",
-    .descriptor = fixtures::GeometryDescriptor("Crate").bytes,
-    .references = data::AssetReferences::Create(
-      { { .kind = data::ResourceKind::kBuffer, .index = buffer } }, {})
-      .value(),
-  });
+  auto crate = fixtures::GeometryBuilder { "Crate" };
+  const auto lod
+    = crate.StandardLod(buffer, buffer, glm::vec3 { 0.0F }, glm::vec3 { 1.0F });
+  crate.Submesh(lod, data::SurfaceId::FromStableIdentity("crate"), {},
+    {
+      {
+        .first_index = 0U,
+        .index_count = 3U,
+        .first_vertex = 0U,
+        .vertex_count = 3U,
+      },
+    });
+  return library.Geometry("Geometry/Crate.ogeo", crate);
 }
 
 auto TableCount(const pak::PakPlan& plan, const std::string_view name)

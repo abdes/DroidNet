@@ -113,7 +113,10 @@ class BuildSelectionTests(unittest.TestCase):
   (Resolve-OxygenBuildSelection -Preset conan-vs-debug).BuildPreset
   (Resolve-OxygenBuildSelection -Sanitized -Config Debug).BuildPreset
 ) | ConvertTo-Json -Compress
-try { Resolve-OxygenBuildSelection -Sanitized -Config Release; throw 'Accepted conflict' }
+try {
+    Resolve-OxygenBuildSelection -Sanitized -Config Release
+    throw 'Accepted conflict'
+}
 catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
 try { Resolve-OxygenBuildSelection -BuildTree absent; throw 'Switched explicit tree' }
 catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
@@ -132,12 +135,17 @@ catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
     @unittest.skipUnless(os.name == "nt", "Windows build host policy")
     def test_windows_compiler_host_policy(self):
         self.command(r"""
-Assert-OxygenWindowsBuildTools -Compiler 'C:\VS\VC\Tools\MSVC\14.51\bin\Hostx64\x64\cl.exe'
+Assert-OxygenWindowsBuildTools -Compiler (
+    'C:\VS\VC\Tools\MSVC\14.51\bin\Hostx64\x64\cl.exe'
+)
 foreach ($compiler in @(
     'C:\VS\VC\Tools\MSVC\14.51\bin\Hostx86\x64\cl.exe',
     'C:\VS\VC\Tools\MSVC\14.51\bin\Hostx64\x86\cl.exe'
 )) {
-    try { Assert-OxygenWindowsBuildTools -Compiler $compiler; throw 'Accepted forbidden compiler' }
+    try {
+        Assert-OxygenWindowsBuildTools -Compiler $compiler
+        throw 'Accepted forbidden compiler'
+    }
     catch { if ($_.Exception.Message -notlike 'Oxygen requires Hostx64*') { throw } }
 }
 """)
@@ -148,7 +156,8 @@ foreach ($compiler in @(
         fake.mkdir(parents=True)
         (fake / "cl.exe").write_bytes(b"")
         output = self.command("""
-$env:PATH = (Join-Path $PSScriptRoot 'fake-cl/bin/Hostx64/x64') + [IO.Path]::PathSeparator + $env:PATH
+$env:PATH = (Join-Path $PSScriptRoot 'fake-cl/bin/Hostx64/x64') +
+    [IO.Path]::PathSeparator + $env:PATH
 Assert-OxygenWindowsBuildTools -Compiler 'cl'
 Assert-OxygenWindowsBuildTools -Compiler 'cl.exe'
 'RESOLVED'
@@ -161,8 +170,12 @@ Assert-OxygenWindowsBuildTools -Compiler 'cl.exe'
         fake.mkdir(parents=True)
         (fake / "cl.exe").write_bytes(b"")
         self.command("""
-$env:PATH = (Join-Path $PSScriptRoot 'fake-cl/bin/Hostx86/x64') + [IO.Path]::PathSeparator + $env:PATH
-try { Assert-OxygenWindowsBuildTools -Compiler 'cl'; throw 'Accepted forbidden compiler' }
+$env:PATH = (Join-Path $PSScriptRoot 'fake-cl/bin/Hostx86/x64') +
+    [IO.Path]::PathSeparator + $env:PATH
+try {
+    Assert-OxygenWindowsBuildTools -Compiler 'cl'
+    throw 'Accepted forbidden compiler'
+}
 catch { if ($_.Exception.Message -notlike 'Oxygen requires Hostx64*') { throw } }
 """)
 
@@ -171,13 +184,17 @@ catch { if ($_.Exception.Message -notlike 'Oxygen requires Hostx64*') { throw } 
         build = self.tree("ninja")
         (build / "CMakeCache.txt").write_text(
             "CMAKE_GENERATOR:INTERNAL=Ninja Multi-Config\n"
-            "CMAKE_CXX_COMPILER:FILEPATH=C:/VS/VC/Tools/MSVC/14.51/bin/Hostx86/x64/cl.exe\n",
+            "CMAKE_CXX_COMPILER:FILEPATH="
+            "C:/VS/VC/Tools/MSVC/14.51/bin/Hostx86/x64/cl.exe\n",
             encoding="utf-8",
         )
         self.command("""
 $selection = Resolve-OxygenBuildSelection
 function global:cmake { throw 'Must reject compiler before building' }
-try { Invoke-OxygenBuild -Targets oxygen-cooker-importtool -Selection $selection; throw 'Accepted forbidden compiler' }
+try {
+    Invoke-OxygenBuild -Targets oxygen-cooker-importtool -Selection $selection
+    throw 'Accepted forbidden compiler'
+}
 catch { if ($_.Exception.Message -notlike 'Oxygen requires Hostx64*') { throw } }
 """)
 
@@ -216,7 +233,8 @@ catch { if ($_.Exception.Message -notlike 'Oxygen requires Hostx64*') { throw } 
 $selection = Resolve-OxygenBuildSelection -BuildTree build-ninja -Config Release
 function global:cmake {
     if ($args[0] -ne '--build') { throw 'Unexpected standalone configure' }
-    ConvertTo-Json -InputObject @($args) -Compress | Add-Content (Join-Path $PSScriptRoot 'calls.jsonl')
+    ConvertTo-Json -InputObject @($args) -Compress |
+        Add-Content (Join-Path $PSScriptRoot 'calls.jsonl')
     $global:LASTEXITCODE = 0
 }
 $null = Invoke-BuildForTarget probe $selection
@@ -281,7 +299,10 @@ if ($script:prompts -ne 1) { throw 'Did not exercise ambiguous selection' }
 . (Join-Path $PSScriptRoot 'tools/cli/oxy-targets.ps1')
 $selection = Resolve-OxygenBuildSelection -BuildTree build-ninja -Config Release
 function global:cmake { throw 'Unconfigured tree must not invoke CMake' }
-try { $null = Invoke-BuildForTarget probe $selection; throw 'Accepted unconfigured tree' }
+try {
+    $null = Invoke-BuildForTarget probe $selection
+    throw 'Accepted unconfigured tree'
+}
 catch {
     if ($_.Exception.Message -notlike 'Build tree is not configured:*') { throw }
     $_.Exception.Message
@@ -312,7 +333,8 @@ catch {
         os.utime(build / "build.ninja", (1, 1))
         self.command("""
 . (Join-Path $PSScriptRoot 'tools/cli/oxy-targets.ps1')
-$nativeCmake = (Get-Command cmake -CommandType Application | Select-Object -First 1).Source
+$nativeCmake = (Get-Command cmake -CommandType Application |
+    Select-Object -First 1).Source
 function global:cmake {
     if ($args[0] -ne '--build') { throw 'Wrapper must not configure' }
     & $nativeCmake @args
@@ -340,11 +362,16 @@ $null = Invoke-BuildForTarget probe $selection
             for name in files:
                 (folder / name).touch()
         output = self.command("""
+$requiredExes = 'Importer.exe','Inspector.exe'
 @(
   (Resolve-OxygenBuildSelection).BuildPreset
-  (Resolve-OxygenBuildSelection -RequiredExecutables Importer.exe,Inspector.exe).BuildPreset
+  (Resolve-OxygenBuildSelection -RequiredExecutables $requiredExes).BuildPreset
 ) | ConvertTo-Json -Compress
-try { Resolve-OxygenBuildSelection -Preset conan-tracy-ninja-release -RequiredExecutables Importer.exe,Inspector.exe; throw 'Mixed tool families' }
+$mixedArgs = @{
+    Preset = 'conan-tracy-ninja-release'
+    RequiredExecutables = $requiredExes
+}
+try { Resolve-OxygenBuildSelection @mixedArgs; throw 'Mixed tool families' }
 catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
 """)
         self.assertEqual(
@@ -375,7 +402,10 @@ catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
             if config in available:
                 artifact.parent.mkdir(parents=True)
                 artifact.write_bytes(
-                    b"@echo off\r\necho RUNTIME=%OXYGEN_SELECTED_RUNTIME%\r\necho ARG=%~1\r\nexit /b 23\r\n"
+                    b"@echo off\r\n"
+                    b"echo RUNTIME=%OXYGEN_SELECTED_RUNTIME%\r\n"
+                    b"echo ARG=%~1\r\n"
+                    b"exit /b 23\r\n"
                 )
             (reply / target_file).write_text(
                 json.dumps(
@@ -416,9 +446,12 @@ catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
         output = self.command("""
 $env:OXYGEN_SELECTED_RUNTIME = 'parent'
 $beforeLocation = $PWD.Path
-& (Join-Path $PSScriptRoot 'tools/cli/oxyrun.ps1') App -NoBuild -- 'argument with spaces'
+$oxyrun = Join-Path $PSScriptRoot 'tools/cli/oxyrun.ps1'
+& $oxyrun App -NoBuild -- 'argument with spaces'
 if ($LASTEXITCODE -ne 23) { throw "Lost exit code: $LASTEXITCODE" }
-if ($env:OXYGEN_SELECTED_RUNTIME -ne 'parent') { throw 'Leaked child runtime environment' }
+if ($env:OXYGEN_SELECTED_RUNTIME -ne 'parent') {
+    throw 'Leaked child runtime environment'
+}
 if ($PWD.Path -ne $beforeLocation) { throw 'Leaked working directory' }
 exit 0
 """)
@@ -480,7 +513,8 @@ Get-OxygenExecutableArtifact $choice.BuildRoot oxygen-examples-scene $choice.Con
         (root / "bin/Release/Oxygen-Examples-Scene.exe").touch()
         output = self.command("""
 $choice = Resolve-OxygenBuildSelection -Preset conan-vs-release
-if ($null -ne (Get-OxygenExecutableArtifact $choice.BuildRoot oxygen-examples-scene Release)) { throw 'Ambiguous output selected' }
+$artifact = Get-OxygenExecutableArtifact $choice.BuildRoot oxygen-examples-scene Release
+if ($null -ne $artifact) { throw 'Ambiguous output selected' }
 """)
         self.assertEqual(output, "")
 
@@ -489,10 +523,13 @@ if ($null -ne (Get-OxygenExecutableArtifact $choice.BuildRoot oxygen-examples-sc
         self.artifact(root, ("Debug", "Release"), ("Release",))
         output = self.command(
             """
-$global:NativeCMake = (Get-Command cmake -CommandType Application | Select-Object -First 1).Source
+$global:NativeCMake = (Get-Command cmake -CommandType Application |
+    Select-Object -First 1).Source
 function global:cmake {
     if ($args -contains '--list-presets=build') { & $global:NativeCMake @args; return }
-    if ($args -contains '--build') { Write-Host 'SIMULATED BUILD FAILURE'; $global:LASTEXITCODE = 19 }
+    if ($args -contains '--build') {
+        Write-Host 'SIMULATED BUILD FAILURE'; $global:LASTEXITCODE = 19
+    }
     else { Write-Output 'SIMULATED CONFIGURE OUTPUT'; $global:LASTEXITCODE = 0 }
 }
 & (Join-Path $PSScriptRoot 'tools/cli/oxyrun.ps1') App
@@ -519,7 +556,8 @@ exit $LASTEXITCODE
             "$env{OXYGEN_TEST_PREFIX}/bin"
         )
         output = self.command(
-            "(Resolve-OxygenBuildSelection).RuntimeEnvironment | ConvertTo-Json -Compress"
+            "(Resolve-OxygenBuildSelection).RuntimeEnvironment | "
+            "ConvertTo-Json -Compress"
         )
         self.assertEqual(
             json.loads(output)["OXYGEN_TEST_EXPANDED"].replace("\\", "/"),
@@ -531,7 +569,9 @@ exit $LASTEXITCODE
         custom = self.root / "out/custom"
         custom.mkdir()
         (custom / "CMakeCache.txt").write_text(
-            f"CMAKE_HOME_DIRECTORY:INTERNAL={self.root}\nCMAKE_CONFIGURATION_TYPES:STRING=Debug;Release\nCMAKE_GENERATOR:INTERNAL=Ninja Multi-Config\n",
+            f"CMAKE_HOME_DIRECTORY:INTERNAL={self.root}\n"
+            "CMAKE_CONFIGURATION_TYPES:STRING=Debug;Release\n"
+            "CMAKE_GENERATOR:INTERNAL=Ninja Multi-Config\n",
             encoding="utf-8",
         )
         output = self.command(
@@ -588,7 +628,7 @@ exit $LASTEXITCODE
                     "Name": "Fixture",
                     "SchemaVersion": 2,
                     "Mounts": [
-                        {"Name": "Content", "Kind": "Source", "Path": "Content"}
+                        {"Name": "Showcase", "Kind": "Source", "Path": "Content"}
                     ],
                 }
             ),
@@ -627,13 +667,14 @@ exit $LASTEXITCODE
 
     def cooked(self, folder):
         """Marks RenderScene's cooked root as holding a cook."""
-        content = self.rs / ".cooked/Content"
+        content = self.rs / ".cooked/Showcase"
         content.mkdir(parents=True, exist_ok=True)
         (content / "container.index.bin").write_bytes(b"")
         return content
 
     RECORDING_CMAKE = """
-$global:realCmake = (Get-Command cmake -CommandType Application | Select-Object -First 1).Source
+$global:realCmake = (Get-Command cmake -CommandType Application |
+    Select-Object -First 1).Source
 function global:cmake {
     if ($args[0] -ne '--build') { return & $global:realCmake @args }
     Write-Host "BUILD $($args -join ' ')"
@@ -658,7 +699,8 @@ exit $LASTEXITCODE
         # The selected tree builds the importer first, so a stale one is
         # rebuilt before it cooks anything.
         self.assertIn(
-            "BUILD --build --preset conan-ninja-release --target oxygen-cooker-importtool oxygen-engine-content",
+            "BUILD --build --preset conan-ninja-release "
+            "--target oxygen-cooker-importtool oxygen-engine-content",
             output,
         )
         self.assertIn("conan-ninja-release", output)
@@ -666,7 +708,7 @@ exit $LASTEXITCODE
         # The cooked root is a global option, so it precedes the subcommand.
         self.assertIn("ARG1=--no-tui", output)
         self.assertIn("ARG2=--cooked-root", output)
-        self.assertIn(f"ARG3={self.rs / '.cooked/Content'}", output)
+        self.assertIn(f"ARG3={self.rs / '.cooked/Showcase'}", output)
         self.assertIn("ARG4=batch", output)
         self.assertIn("ARG5=--manifest", output)
         self.assertIn(f"ARG6={manifest}", output)
@@ -710,7 +752,10 @@ exit $LASTEXITCODE
         )
         self.assertIn("FAILED", output)
 
-    def test_cook_check_refuses_a_manifest_that_names_an_output(self):
+    def check_fixture(self, exit_code=0):
+        """A project whose one example has its scene and manifest, and an
+        importer that answers `exit_code`. Returns the -Check script and the
+        manifest."""
         folder = self.project("cook.ps1")
         scene = folder / "Content/Scenes/Fixture/Main.scene.json"
         scene.parent.mkdir(parents=True)
@@ -718,15 +763,44 @@ exit $LASTEXITCODE
         manifest = folder / "Manifests/Fixture.import-manifest.json"
         manifest.parent.mkdir()
         manifest.write_text(json.dumps({"jobs": []}), encoding="utf-8")
+        tool = self.fake_tool(self.root / "importer", "ImportTool", exit_code)
         script = (
-            "& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/cook.ps1') -Check\n"
+            "& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/cook.ps1') "
+            f"-Check -ToolPath '{tool}'\nexit $LASTEXITCODE\n"
         )
-        self.assertIn("consistent", self.command(script))
-        manifest.write_text(
-            json.dumps({"output": "../.cooked", "jobs": []}), encoding="utf-8"
+        return script, manifest
+
+    def test_cook_check_analyzes_every_manifest_with_the_importer(self):
+        script, manifest = self.check_fixture()
+        output = self.command(script)
+        # The importer's source analysis is the check: the script has no rule
+        # of its own about what a manifest holds.
+        self.assertIn("ARG1=--no-tui", output)
+        self.assertIn("ARG2=analyze-sources", output)
+        self.assertIn("ARG3=--manifest", output)
+        self.assertIn(f"ARG4={manifest}", output)
+        self.assertIn("ARG5=--report", output)
+        self.assertIn("consistent", output)
+
+    def test_cook_check_fails_when_the_analysis_refuses_an_example(self):
+        script, _ = self.check_fixture(exit_code=1)
+        output = self.command(script, expect=1)
+        self.assertIn("the source analysis failed for Fixture", output)
+
+    def test_cook_check_refuses_a_missing_scene_before_analyzing(self):
+        script, _ = self.check_fixture()
+        (self.root / SHOWCASE / "Content/Scenes/Fixture/Main.scene.json").unlink()
+        output = self.command(script, expect=1)
+        self.assertIn("Fixture: no scene", output)
+        self.assertNotIn("analyze-sources", output)
+
+    def test_cook_check_refuses_a_manifest_without_an_example(self):
+        script, manifest = self.check_fixture()
+        manifest.with_name("Stray.import-manifest.json").write_text(
+            json.dumps({"jobs": []}), encoding="utf-8"
         )
-        output = self.command(script + "exit $LASTEXITCODE\n", expect=1)
-        self.assertIn("names an output folder", output)
+        output = self.command(script, expect=1)
+        self.assertIn("Stray.import-manifest.json has no example", output)
 
     def test_cook_rejects_unknown_example_before_building(self):
         self.tree("ninja")
@@ -734,7 +808,10 @@ exit $LASTEXITCODE
         output = self.command(
             """
 function global:cmake { throw 'Unknown example must not build' }
-try { & (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/cook.ps1') Absent; throw 'Accepted unknown example' }
+try {
+    & (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/cook.ps1') Absent
+    throw 'Accepted unknown example'
+}
 catch { if ($_.Exception.Message -notlike "No example named 'Absent'*") { throw } }
 & (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/cook.ps1') -List
 """
@@ -746,11 +823,15 @@ catch { if ($_.Exception.Message -notlike "No example named 'Absent'*") { throw 
         inspector = self.fake_tool(tool.parent, "Oxygen.Cooker.Inspector")
         output = self.command("""
 function global:cmake { throw 'Explicit tool must not query presets' }
-$tools = Resolve-OxygenExecutables -Targets oxygen-cooker-importtool,oxygen-cooker-inspector -Overrides @{
-  'oxygen-cooker-importtool' = (Join-Path $PSScriptRoot 'explicit tools/CustomImporter.cmd')
+$toolTargets = 'oxygen-cooker-importtool','oxygen-cooker-inspector'
+$tools = Resolve-OxygenExecutables -Targets $toolTargets -Overrides @{
+  'oxygen-cooker-importtool' = (
+    Join-Path $PSScriptRoot 'explicit tools/CustomImporter.cmd'
+  )
 }
 $tools.Paths['oxygen-cooker-inspector']
-Invoke-OxygenTool -Context $tools -Target oxygen-cooker-importtool -Arguments @('batch','argument with spaces')
+$toolArgs = @('batch','argument with spaces')
+Invoke-OxygenTool -Context $tools -Target oxygen-cooker-importtool -Arguments $toolArgs
 if ($LASTEXITCODE -ne 17) { throw 'Lost explicit-tool exit code' }
 exit 0
 """)
@@ -763,7 +844,8 @@ exit 0
         for name in ("Oxygen.Cooker.ImportTool", "Oxygen.Cooker.Inspector"):
             self.fake_tool(tree / "bin/Debug", name)
         output = self.command("""
-$tools = Resolve-OxygenExecutables -Targets oxygen-cooker-importtool,oxygen-cooker-inspector
+$toolTargets = 'oxygen-cooker-importtool','oxygen-cooker-inspector'
+$tools = Resolve-OxygenExecutables -Targets $toolTargets
 $tools.Selection.BuildPreset
 $tools.Paths.Values | Sort-Object
 """)
@@ -776,14 +858,20 @@ $tools.Paths.Values | Sort-Object
         self.fake_tool(tree / "bin/Debug", "Oxygen.Cooker.ImportTool")
         self.fake_tool(tree / "bin/Debug", "Oxygen.Cooker.Inspector")
         output = self.command("""
-$global:realCmake = (Get-Command cmake -CommandType Application | Select-Object -First 1).Source
+$global:realCmake = (Get-Command cmake -CommandType Application |
+    Select-Object -First 1).Source
 function global:cmake {
     if ($args[0] -eq '--build') {
-        if (($args -join ' ') -ne '--build --preset conan-ninja-release --target oxygen-cooker-importtool oxygen-cooker-inspector') { throw 'Wrong build/configuration' }
+        $expectedArgs = '--build --preset conan-ninja-release ' +
+            '--target oxygen-cooker-importtool oxygen-cooker-inspector'
+        if (($args -join ' ') -ne $expectedArgs) {
+            throw 'Wrong build/configuration'
+        }
         $directory = Join-Path $PSScriptRoot 'out/build-ninja/bin/Release'
         [IO.Directory]::CreateDirectory($directory) | Out-Null
         foreach ($name in @('ImportTool','Inspector')) {
-            [IO.File]::WriteAllText((Join-Path $directory "Oxygen.Cooker.$name.cmd"), "@echo off`r`necho FRESH_RELEASE`r`n")
+            $cmdPath = Join-Path $directory "Oxygen.Cooker.$name.cmd"
+            [IO.File]::WriteAllText($cmdPath, "@echo off`r`necho FRESH_RELEASE`r`n")
         }
         $env:OXYGEN_TEST_BUILD_ENV = 'temporary'
         $global:LASTEXITCODE = 0
@@ -791,7 +879,8 @@ function global:cmake {
     }
     & $global:realCmake @args
 }
-$tools = Build-OxygenExecutables -Targets oxygen-cooker-importtool,oxygen-cooker-inspector
+$toolTargets = 'oxygen-cooker-importtool','oxygen-cooker-inspector'
+$tools = Build-OxygenExecutables -Targets $toolTargets
 if ($tools.Selection.Config -ne 'Release') { throw 'Fell back to Debug' }
 if (Test-Path Env:OXYGEN_TEST_BUILD_ENV) { throw 'Leaked build environment' }
 Invoke-OxygenTool -Context $tools -Target oxygen-cooker-importtool
@@ -814,7 +903,8 @@ exit $LASTEXITCODE
             expect=29,
         )
         self.assertIn(
-            "BUILD --build --preset conan-ninja-release --target oxygen-cooker-paktool oxygen-engine-content",
+            "BUILD --build --preset conan-ninja-release "
+            "--target oxygen-cooker-paktool oxygen-engine-content",
             output,
         )
         self.assertIn("RUNTIME=ninja-Release", output)
@@ -840,7 +930,7 @@ exit $LASTEXITCODE
 """
         )
         self.assertIn(f'--root "{folder}"', output)
-        self.assertIn(f'--mount "Content={folder / "Content"}"', output)
+        self.assertIn(f'--mount "Showcase={folder / "Content"}"', output)
         self.assertIn(f"--source-key {self.PROJECT_ID}", output)
         self.assertIn(str(self.rs / ".build/pak/examples.pak"), output)
 
@@ -871,12 +961,14 @@ function global:cmake { throw 'Nothing cooked must not build' }
         output = self.command(
             """
 function global:cmake { throw 'Explicit player must not query presets' }
-& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/play.ps1') Fixture -PlayerPath (Join-Path $PSScriptRoot 'player/Oxygen.Player.cmd') -w 1280x720
+$play = Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/play.ps1'
+$player = Join-Path $PSScriptRoot 'player/Oxygen.Player.cmd'
+& $play Fixture -PlayerPath $player -w 1280x720
 exit $LASTEXITCODE
 """,
             expect=7,
         )
-        self.assertIn("Scene: /Content/Scenes/Fixture/Main.oscene", output)
+        self.assertIn("Scene: /Showcase/Scenes/Fixture/Main.oscene", output)
         self.assertIn("ARG1=--launch", output)
         self.assertIn("ARG3=-w", output)
         self.assertIn("ARG4=1280x720", output)
@@ -885,15 +977,17 @@ exit $LASTEXITCODE
         launch_file = Path(found.group(1).strip()) if found else Path()
         self.addCleanup(launch_file.unlink, missing_ok=True)
         launch = json.loads(launch_file.read_text(encoding="utf-8"))
-        self.assertEqual(Path(launch["mounts"][0]), self.rs / ".cooked/Content")
-        self.assertEqual(Path(launch["source_mounts"]["Content"]), folder / "Content")
-        self.assertEqual(launch["scene"], "/Content/Scenes/Fixture/Main.oscene")
+        self.assertEqual(Path(launch["mounts"][0]), self.rs / ".cooked/Showcase")
+        self.assertEqual(Path(launch["source_mounts"]["Showcase"]), folder / "Content")
+        self.assertEqual(launch["scene"], "/Showcase/Scenes/Fixture/Main.oscene")
 
     def test_play_refuses_uncooked_scene_without_launching(self):
         self.play_fixture(cooked=False)
         output = self.command(
             """
-& (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/play.ps1') Fixture -PlayerPath (Join-Path $PSScriptRoot 'player/Oxygen.Player.cmd')
+$play = Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/play.ps1'
+$player = Join-Path $PSScriptRoot 'player/Oxygen.Player.cmd'
+& $play Fixture -PlayerPath $player
 exit $LASTEXITCODE
 """,
             expect=1,
@@ -956,7 +1050,8 @@ function global:cmake { throw 'List must not query presets' }
                         wrapper = self.root / "help-example.ps1"
                         wrapper.write_text(
                             "$ErrorActionPreference = 'Stop'\n"
-                            "function global:cmake { throw 'Help must not query build trees' }\n"
+                            "function global:cmake "
+                            "{ throw 'Help must not query build trees' }\n"
                             f"& '{target}' {flag}\n",
                             encoding="utf-8",
                         )
@@ -1012,9 +1107,14 @@ Push-Location (Join-Path $PSScriptRoot 'caller')
 try {
     $context = Resolve-OxygenExecutables -Targets Pak -Overrides @{ Pak = './Pak.cmd' }
     Invoke-OxygenTool -Context $context -Target Pak -LogPath './tool.log' -CheckExitCode
-    if (-not (Test-Path -LiteralPath './tool.log')) { throw 'Log did not use caller directory' }
-    if ((Get-Content -LiteralPath './tool.log') -ne 'TOOL-RAN') { throw 'Tool did not run' }
-    & (Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/pak.ps1') -ToolPath './Pak.cmd' -EnginePak './engine.pak' -WhatIf
+    if (-not (Test-Path -LiteralPath './tool.log')) {
+        throw 'Log did not use caller directory'
+    }
+    if ((Get-Content -LiteralPath './tool.log') -ne 'TOOL-RAN') {
+        throw 'Tool did not run'
+    }
+    $pak = Join-Path $PSScriptRoot 'Examples/RenderScene/Tools/pak.ps1'
+    & $pak -ToolPath './Pak.cmd' -EnginePak './engine.pak' -WhatIf
 } finally { Pop-Location }
 """)
         self.assertIn(str(caller / "tool.log"), output)

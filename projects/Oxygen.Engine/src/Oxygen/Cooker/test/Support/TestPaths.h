@@ -47,6 +47,12 @@ namespace oxygen::cooker::test {
 [[nodiscard]] auto ContentMountTable(const std::filesystem::path& root)
   -> std::shared_ptr<const content::import::MountTable>;
 
+//! The mounts of a project with one source mount, `name`, on `root`, which
+//! also is the project root.
+[[nodiscard]] auto SourceMountTable(
+  std::string_view name, const std::filesystem::path& root)
+  -> std::shared_ptr<const content::import::MountTable>;
+
 //! The mounts of a test project with source mounts `Content` and `Other` on
 //! the `Content` and `Other` folders of `root`: two mounts a reference can
 //! leave one for the other.

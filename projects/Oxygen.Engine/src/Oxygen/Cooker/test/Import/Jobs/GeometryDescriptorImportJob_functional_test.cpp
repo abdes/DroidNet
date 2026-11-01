@@ -9,9 +9,10 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <span>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -22,12 +23,12 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -50,50 +51,17 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
-  const auto descriptor_doc = MakeStandardDescriptorDoc("CubeMissingMaterial",
-    "../Materials/missing.omat", "../Resources/Buffers/cube_vertices.obuf",
-    "../Resources/Buffers/cube_indices.obuf", "lod0",
-    json::array({
-      json {
-        {
-          "uri",
-          vb_source.filename().generic_string(),
-        },
-        { "virtual_path", "../Resources/Buffers/cube_vertices.obuf" },
-        { "usage_flags", 1U },
-        { "element_stride", 32U },
-        {
-          "views",
-          json::array({
-            json {
-              { "name", "lod0" },
-              { "element_offset", 0U },
-              { "element_count", 3U },
-            },
-          }),
-        },
-      },
-      json {
-        {
-          "uri",
-          ib_source.filename().generic_string(),
-        },
-        { "virtual_path", "../Resources/Buffers/cube_indices.obuf" },
-        { "usage_flags", 2U },
-        { "element_stride", 4U },
-        {
-          "views",
-          json::array({
-            json {
-              { "name", "lod0" },
-              { "element_offset", 0U },
-              { "element_count", 3U },
-            },
-          }),
-        },
-      },
-    }));
-  WriteText(descriptor_path, descriptor_doc.dump(2));
+  constexpr auto kVb = "/.cooked/Resources/Buffers/cube_vertices.obuf";
+  constexpr auto kIb = "/.cooked/Resources/Buffers/cube_indices.obuf";
+  auto geometry
+    = MakeStandardGeometry("/.cooked/Geometry/CubeMissingMaterial.ogeo",
+      "/.cooked/Materials/missing.omat", kVb, kIb);
+  geometry
+    .AppendBuffer(
+      MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true), kVb)
+    .AppendBuffer(
+      MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true), kIb);
+  WriteText(descriptor_path, geometry.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
@@ -105,7 +73,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     MakeGeometryRequest({
       .source_path = descriptor_path,
       .cooked_root = cooked_root,
-      .descriptor_doc = descriptor_doc,
+      .descriptor_doc = geometry.Json(),
     }));
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
@@ -130,50 +98,17 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
-  const auto descriptor_doc = MakeStandardDescriptorDoc("NewMaterialPriority",
-    "../Materials/new.omat", "../Resources/Buffers/cube_vertices.obuf",
-    "../Resources/Buffers/cube_indices.obuf", "lod0",
-    json::array({
-      json {
-        {
-          "uri",
-          vb_source.filename().generic_string(),
-        },
-        { "virtual_path", "../Resources/Buffers/cube_vertices.obuf" },
-        { "usage_flags", 1U },
-        { "element_stride", 32U },
-        {
-          "views",
-          json::array({
-            json {
-              { "name", "lod0" },
-              { "element_offset", 0U },
-              { "element_count", 3U },
-            },
-          }),
-        },
-      },
-      json {
-        {
-          "uri",
-          ib_source.filename().generic_string(),
-        },
-        { "virtual_path", "../Resources/Buffers/cube_indices.obuf" },
-        { "usage_flags", 2U },
-        { "element_stride", 4U },
-        {
-          "views",
-          json::array({
-            json {
-              { "name", "lod0" },
-              { "element_offset", 0U },
-              { "element_count", 3U },
-            },
-          }),
-        },
-      },
-    }));
-  WriteText(descriptor_path, descriptor_doc.dump(2));
+  constexpr auto kVb = "/.cooked/Resources/Buffers/cube_vertices.obuf";
+  constexpr auto kIb = "/.cooked/Resources/Buffers/cube_indices.obuf";
+  auto geometry
+    = MakeStandardGeometry("/.cooked/Geometry/NewMaterialPriority.ogeo",
+      "/.cooked/Materials/new.omat", kVb, kIb);
+  geometry
+    .AppendBuffer(
+      MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true), kVb)
+    .AppendBuffer(
+      MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true), kIb);
+  WriteText(descriptor_path, geometry.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
@@ -185,13 +120,10 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto library_key = data::AssetKey::FromVirtualPath("/Library/New.omat");
   auto writer
     = LooseCookedWriter(library, oxygen::content::cooked::RealCookerStorage());
-  auto material_desc = data::pak::render::MaterialAssetDesc {};
-  material_desc.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kMaterial);
-  material_desc.header.version = data::pak::render::kMaterialAssetVersion;
+  const auto material = oxygen::cooker::testing::MaterialBuilder {};
   writer.WriteAssetDescriptor(library_key, data::AssetType::kMaterial,
-    "/.cooked/Materials/new.omat", "Materials/new.omat",
-    data::MakeDescriptorBytes(material_desc), {},
+    "/.cooked/Materials/new.omat", "Materials/new.omat", material.Bytes(),
+    material.References(),
     content::import::LooseCookedProducer {
       .source = "/.cooked/Materials/new.omat.json",
       .completes = {},
@@ -202,7 +134,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     auto request = MakeGeometryRequest({
       .source_path = descriptor_path,
       .cooked_root = cooked_root,
-      .descriptor_doc = descriptor_doc,
+      .descriptor_doc = geometry.Json(),
     });
     request.cooked_context_roots = own_wins
       ? std::vector<std::filesystem::path> { library, cooked_root }
@@ -280,152 +212,38 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     inverse_bind_source, std::span<const std::byte>(inverse_bind_bytes));
   WriteBytes(joint_remap_source, std::span<const std::byte>(joint_remap_bytes));
 
-  const auto descriptor_doc = json {
-    { "name", "SkinnedCube" },
-    { "bounds", MakeBounds() },
-    {
-      "buffers",
-      json::array({
-        json {
-          {
-            "uri",
-            vb_source.filename().generic_string(),
-          },
-          { "virtual_path", "../Resources/Buffers/skinned_vb.obuf" },
-          { "usage_flags", 1U },
-          { "element_stride", 32U },
-          {
-            "views",
-            json::array({
-              json {
-                { "name", "lod0" },
-                { "element_offset", 0U },
-                { "element_count", 3U },
-              },
-            }),
-          },
-        },
-        json {
-          {
-            "uri",
-            ib_source.filename().generic_string(),
-          },
-          { "virtual_path", "../Resources/Buffers/skinned_ib.obuf" },
-          { "usage_flags", 2U },
-          { "element_stride", 4U },
-          {
-            "views",
-            json::array({
-              json {
-                { "name", "lod0" },
-                { "element_offset", 0U },
-                { "element_count", 3U },
-              },
-            }),
-          },
-        },
-        json {
-          {
-            "uri",
-            joint_index_source.filename().generic_string(),
-          },
-          {
-            "virtual_path",
-            "../Resources/Buffers/skinned_joint_index.obuf",
-          },
-          { "usage_flags", 8U },
-          { "element_stride", 16U },
-        },
-        json {
-          {
-            "uri",
-            joint_weight_source.filename().generic_string(),
-          },
-          {
-            "virtual_path",
-            "../Resources/Buffers/skinned_joint_weight.obuf",
-          },
-          { "usage_flags", 8U },
-          { "element_stride", 16U },
-        },
-        json {
-          {
-            "uri",
-            inverse_bind_source.filename().generic_string(),
-          },
-          {
-            "virtual_path",
-            "../Resources/Buffers/skinned_inverse_bind.obuf",
-          },
-          { "usage_flags", 8U },
-          { "element_stride", 64U },
-        },
-        json {
-          {
-            "uri",
-            joint_remap_source.filename().generic_string(),
-          },
-          {
-            "virtual_path",
-            "../Resources/Buffers/skinned_joint_remap.obuf",
-          },
-          { "usage_flags", 8U },
-          { "element_stride", 4U },
-        },
-      }),
-    },
-    {
-      "lods",
-      json::array({
-        json {
-          { "name", "LOD0" },
-          { "mesh_type", "skinned" },
-          { "bounds", MakeBounds() },
-          {
-            "buffers",
-            {
-              { "vb_ref", "../Resources/Buffers/skinned_vb.obuf" },
-              { "ib_ref", "../Resources/Buffers/skinned_ib.obuf" },
-            },
-          },
-          {
-            "skinning",
-            {
-              {
-                "joint_index_ref",
-                "../Resources/Buffers/skinned_joint_index.obuf",
-              },
-              {
-                "joint_weight_ref",
-                "../Resources/Buffers/skinned_joint_weight.obuf",
-              },
-              {
-                "inverse_bind_ref",
-                "../Resources/Buffers/skinned_inverse_bind.obuf",
-              },
-              {
-                "joint_remap_ref",
-                "../Resources/Buffers/skinned_joint_remap.obuf",
-              },
-              { "joint_count", 3U },
-              { "influences_per_vertex", 4U },
-            },
-          },
-          {
-            "submeshes",
-            json::array({
-              json {
-                { "surface_id", kAuthoredSurfaceId },
-                { "material_ref", "../Materials/default.omat" },
-                { "views", json::array({ json { { "view_ref", "lod0" } } }) },
-              },
-            }),
-          },
-        },
-      }),
-    },
+  constexpr auto kPrefix = "/.cooked/Resources/Buffers/skinned_";
+  const auto buffer = [](const std::string_view leaf) -> std::string {
+    return std::string { kPrefix } + std::string { leaf } + ".obuf";
   };
-  WriteText(descriptor_path, descriptor_doc.dump(2));
+  auto geometry = MakeStandardGeometry("/.cooked/Geometry/SkinnedCube.ogeo",
+    "/.cooked/Materials/default.omat", buffer("vb"), buffer("ib"));
+  geometry.Set("/lods/0/mesh_type", "skinned")
+    .Reference("/lods/0/skinning/joint_index_ref", buffer("joint_index"))
+    .Reference("/lods/0/skinning/joint_weight_ref", buffer("joint_weight"))
+    .Reference("/lods/0/skinning/inverse_bind_ref", buffer("inverse_bind"))
+    .Reference("/lods/0/skinning/joint_remap_ref", buffer("joint_remap"))
+    .Set("/lods/0/skinning/joint_count", 3U)
+    .Set("/lods/0/skinning/influences_per_vertex", 4U)
+    .AppendBuffer(
+      MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true),
+      buffer("vb"))
+    .AppendBuffer(
+      MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true),
+      buffer("ib"))
+    .AppendBuffer(MakeBuffer(joint_index_source.filename().generic_string(), 8U,
+                    16U, false),
+      buffer("joint_index"))
+    .AppendBuffer(MakeBuffer(joint_weight_source.filename().generic_string(),
+                    8U, 16U, false),
+      buffer("joint_weight"))
+    .AppendBuffer(MakeBuffer(inverse_bind_source.filename().generic_string(),
+                    8U, 64U, false),
+      buffer("inverse_bind"))
+    .AppendBuffer(
+      MakeBuffer(joint_remap_source.filename().generic_string(), 8U, 4U, false),
+      buffer("joint_remap"));
+  WriteText(descriptor_path, geometry.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
@@ -437,7 +255,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     MakeGeometryRequest({
       .source_path = descriptor_path,
       .cooked_root = cooked_root,
-      .descriptor_doc = descriptor_doc,
+      .descriptor_doc = geometry.Json(),
     }));
   ASSERT_HAS_VALUE(report);
   ASSERT_TRUE(report->success)

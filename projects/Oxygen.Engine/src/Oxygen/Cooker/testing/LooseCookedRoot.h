@@ -16,8 +16,12 @@
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/testing/AssetDescriptors.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
+#include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -25,6 +29,7 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -73,7 +78,9 @@ enum class ResourceTable : uint8_t {
  ```cpp
  auto game = LooseCookedRoot { "Game" };
  const auto wood = game.AddTexture(SeedBytes(1));
- const auto material = game.Material("Materials/Wood.omat", wood);
+ auto material = MaterialBuilder { "Wood" };
+ material.Texture(&MaterialAssetDesc::base_color_texture, wood);
+ game.Material("Materials/Wood.omat", material);
  ```
 */
 class LooseCookedRoot final {
@@ -107,12 +114,18 @@ public:
   //! Adds a material named after its file; returns its key.
   auto Material(std::string_view leaf) -> data::AssetKey;
 
-  //! Adds a material whose base color is texture `texture`; returns its key.
-  auto Material(std::string_view leaf, ResourceIndexT texture)
+  //! Adds the material `material` describes, with its references; returns its
+  //! key.
+  auto Material(std::string_view leaf, const MaterialBuilder& material)
     -> data::AssetKey;
 
   //! Adds a procedural cube geometry; returns its key.
   auto Geometry(std::string_view leaf) -> data::AssetKey;
+
+  //! Adds the geometry `geometry` describes, with its references; returns its
+  //! key.
+  auto Geometry(std::string_view leaf, const GeometryBuilder& geometry)
+    -> data::AssetKey;
 
   //! Adds a scene with no nodes; returns its key.
   auto Scene(std::string_view leaf) -> data::AssetKey;
@@ -130,6 +143,31 @@ public:
   */
   auto PhysicsSidecar(std::string_view leaf, const data::AssetKey& scene,
     const PhysicsSidecarBuilder& bindings = {}) -> data::AssetKey;
+
+  //! Adds the script `script` describes, with its references; returns its
+  //! key. By default, a script with no payload, named after its file.
+  auto Script(std::string_view leaf, const ScriptBuilder& script)
+    -> data::AssetKey;
+  auto Script(std::string_view leaf) -> data::AssetKey;
+
+  //! Adds a physics material named after its file; returns its key.
+  auto PhysicsMaterial(std::string_view leaf,
+    data::pak::physics::PhysicsMaterialAssetDesc record = {}) -> data::AssetKey;
+
+  //! Adds a collision shape named after its file, with the references to
+  //! its material and payload; returns its key.
+  auto CollisionShape(std::string_view leaf,
+    const data::pak::physics::CollisionShapeAssetDesc& record)
+    -> data::AssetKey;
+
+  //! Adds an input action named after its file; returns its key.
+  auto InputAction(std::string_view leaf,
+    data::pak::input::InputActionAssetDesc record = {}) -> data::AssetKey;
+
+  //! Adds the input mapping context `context` describes, with its
+  //! references; returns its key.
+  auto InputContext(std::string_view leaf, const InputContextBuilder& context)
+    -> data::AssetKey;
 
   //! Adds a texture row with `payload`; returns its row. Every `Add*` row
   //! records the offset, size and SHA-256 of its payload, whatever `desc`

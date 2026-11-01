@@ -8,10 +8,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <map>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -31,16 +29,17 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
-#include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -70,6 +69,7 @@ using oxygen::cooker::test::DiagnosticSummary;
 using oxygen::cooker::test::HasDiagnosticCode;
 using oxygen::cooker::testing::CookedBytes;
 using oxygen::cooker::testing::CookedPak;
+using oxygen::cooker::testing::GeometryBuilder;
 using oxygen::cooker::testing::LooseCookedFiles;
 using oxygen::cooker::testing::LooseCookedRoot;
 using oxygen::cooker::testing::MemoryFileSystem;
@@ -969,9 +969,9 @@ protected:
   {
     switch (type) {
     case AssetType::kMaterial:
-      return oxygen::cooker::testing::MaterialDescriptor("Case").bytes;
+      return oxygen::cooker::testing::MaterialBuilder { "Case" }.Bytes();
     case AssetType::kGeometry:
-      return oxygen::cooker::testing::GeometryDescriptor("Case").bytes;
+      return GeometryBuilder { "Case" }.Bytes();
     default:
       throw std::invalid_argument("a case holds only materials and geometries");
     }
@@ -991,14 +991,15 @@ protected:
         .descriptor = DescriptorOf(AssetType::kMaterial),
       });
       if (external_script) {
-        auto desc = oxygen::data::pak::scripting::ScriptAssetDesc {};
-        desc.external_source_path_offset = 1U;
-        auto bytes = std::vector<std::byte>(sizeof(desc));
-        std::memcpy(bytes.data(), &desc, sizeof(desc));
+        auto script = oxygen::cooker::testing::ScriptBuilder { "Spin" };
+        script
+          .Flags(oxygen::data::pak::scripting::ScriptAssetFlags::
+              kAllowExternalSource)
+          .ExternalSource("/" + mount + "/Scripts/Spin.lua");
         entries.push_back({
           .path = "/" + mount + "/Scripts/Spin.oscript",
           .type = AssetType::kScript,
-          .descriptor = std::move(bytes),
+          .descriptor = script.Bytes(),
         });
         external_script = false;
       }
@@ -1067,8 +1068,12 @@ protected:
   //! Builds the pak a recipe names: its mount, its assets and what it
   //! requires of other mounts.
   /*!
-   The pak also holds `Content.omat`, which carries the references that
-   become its requirements; a pak holds at least one asset.
+   The pak also holds `Content.ogeo`, a geometry painted with every
+   material the recipe requires, whose references become the pak's
+   requirements; a pak holds at least one asset.
+
+   @throw std::invalid_argument When a requirement is not a material: a
+     geometry requires nothing else.
   */
   static auto EncodePak(const json& recipe, const bool unsupported)
     -> std::vector<std::byte>
@@ -1085,24 +1090,21 @@ protected:
     }
     const auto requirements = recipe.value("requirements", json::array());
     auto required_mounts = std::set<std::string> {};
-    auto required_keys = std::vector<oxygen::data::KeyReference> {};
+    // Without requirements, the geometry is the unit cube.
+    auto content = GeometryBuilder { "Content" };
+    const auto lod = requirements.empty() ? 0U : content.ProceduralLod();
     for (const auto& required : requirements) {
       required_mounts.insert(required.at("mount").get<std::string>());
-      required_keys.push_back({
-        .key
-        = AssetKey::FromVirtualPath(required.at("path").get<std::string>()),
-        .kind = oxygen::data::KeyReferenceKind::kAsset,
-        .expected_type = ParseAssetType(required.at("type").get<std::string>()),
-      });
+      const auto path = required.at("path").get<std::string>();
+      if (ParseAssetType(required.at("type").get<std::string>())
+        != AssetType::kMaterial) {
+        throw std::invalid_argument(
+          "the recipe requires " + path + ", which is not a material");
+      }
+      content.Submesh(lod, oxygen::data::SurfaceId::FromStableIdentity(path),
+        AssetKey::FromVirtualPath(path));
     }
-    library.Add({
-      .type = AssetType::kMaterial,
-      .leaf = "Content.omat",
-      .descriptor = DescriptorOf(AssetType::kMaterial),
-      .references
-      = oxygen::data::AssetReferences::Create({}, std::move(required_keys))
-        .value(),
-    });
+    static_cast<void>(library.Geometry("Content.ogeo", content));
     auto pak = CookedPak { std::move(library) };
     for (const auto& required_mount : required_mounts) {
       pak.DependsOn(DependencyOf(required_mount, requirements));

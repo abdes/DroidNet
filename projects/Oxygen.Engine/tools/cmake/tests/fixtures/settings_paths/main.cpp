@@ -20,7 +20,7 @@ int main(int argc, char** argv)
     const auto moved = root / "moved SDK";
     fs::create_directories(original);
     fs::create_directories(moved);
-    const auto relative = fs::path("share/oxygen/RenderScene/.cooked/Content/container.index.bin");
+    const auto relative = fs::path("share/oxygen/RenderScene/.cooked/Showcase/container.index.bin");
     const auto external = root / "external content/model.glb";
     const auto sibling = root / "original SDK sibling/model.glb";
     {

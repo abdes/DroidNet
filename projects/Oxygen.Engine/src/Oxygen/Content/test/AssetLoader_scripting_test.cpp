@@ -5,15 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <memory>
-#include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -26,10 +22,9 @@
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
+#include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -61,40 +56,7 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   const oxygen::data::ScriptParameters& parameters = {}) -> void
 {
   using oxygen::data::AssetType;
-  using oxygen::data::pak::scripting::ScriptAssetDesc;
-  using oxygen::data::pak::scripting::ScriptParamRecord;
   using oxygen::data::pak::scripting::ScriptResourceDesc;
-
-  ScriptAssetDesc script_desc {};
-  script_desc.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
-  script_desc.header.version
-    = oxygen::data::pak::scripting::kScriptAssetVersion;
-  auto strings = oxygen::data::DescriptorStringsBuilder {};
-  script_desc.header.name_offset = strings.Add("Reload");
-  auto declarations = std::vector<ScriptParamRecord> {};
-  for (const auto& [key, value] : parameters) {
-    const auto record
-      = oxygen::data::MakeScriptParamRecord(key, value, strings);
-    if (!record.has_value()) {
-      FAIL() << "Failed to make script param record for key: " << key;
-    }
-    declarations.push_back(*record);
-  }
-  script_desc.bytecode_resource_index
-    = oxygen::data::ResourceReferenceIndex { 0U };
-  script_desc.source_resource_index = oxygen::data::kNoResourceReference;
-  if (!declarations.empty()) {
-    script_desc.params = {
-      .offset = sizeof(ScriptAssetDesc),
-      .count = static_cast<uint32_t>(declarations.size()),
-      .entry_size = sizeof(ScriptParamRecord),
-    };
-  }
-  const auto records = std::as_bytes(std::span(declarations));
-  auto desc_bytes = std::vector<std::byte>(sizeof(ScriptAssetDesc));
-  std::memcpy(desc_bytes.data(), &script_desc, sizeof(script_desc));
-  desc_bytes.insert(desc_bytes.end(), records.begin(), records.end());
-  oxygen::data::AppendDescriptorStrings(desc_bytes, strings);
 
   constexpr std::array<uint8_t, 8> kBytecode
     = { 0x4D, 0x4F, 0x56, 0x45, 0x42, 0x43, 0xA1, 0xA2 };
@@ -103,19 +65,13 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   auto root = LooseCookedRoot { "test" };
   const auto bytecode = root.AddScript(
     std::as_bytes(std::span { kBytecode }), ScriptResourceDesc {});
+  auto script = oxygen::cooker::testing::ScriptBuilder { "Reload" };
+  script.Bytecode(bytecode).Parameters(parameters);
   root.Add({
     .type = AssetType::kScript,
     .leaf = "Scripts/Reload.oscript",
-    .descriptor = std::move(desc_bytes),
-    .references = oxygen::data::AssetReferences::Create(
-      {
-        {
-          .kind = oxygen::data::ResourceKind::kScript,
-          .index = bytecode,
-        },
-      },
-      {})
-      .value(),
+    .descriptor = script.Bytes(),
+    .references = script.References(),
     .key = script_key,
   });
   oxygen::cooker::testing::Materialize(root.Files(), cooked_root);
@@ -163,20 +119,20 @@ auto WriteLooseCookedSceneWithScripting(
     .references = scene.References(),
     .key = scene_key,
   });
-  oxygen::data::pak::scripting::ScriptAssetDesc script {};
-  script.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
-  script.header.version = oxygen::data::pak::scripting::kScriptAssetVersion;
+  const auto bare = oxygen::cooker::testing::ScriptBuilder { "script" };
   root.Add({
     .type = AssetType::kScript,
     .leaf = "scene-script.oscript",
-    .descriptor = oxygen::data::MakeDescriptorBytes(script),
+    .descriptor = bare.Bytes(),
+    .references = bare.References(),
     .key = script_key,
   });
   if (with_asset_param) {
     root.Add({
       .type = AssetType::kScript,
       .leaf = "param-script.oscript",
-      .descriptor = oxygen::data::MakeDescriptorBytes(script),
+      .descriptor = bare.Bytes(),
+      .references = bare.References(),
       .key = ParamScriptKey(),
     });
   }

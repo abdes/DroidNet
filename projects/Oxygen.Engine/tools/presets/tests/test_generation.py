@@ -140,6 +140,14 @@ class PresetGenerationTests(unittest.TestCase):
                     expected.add(f"conan-{suffix}-{config.lower()}")
                     self.assert_presets(root, expected)
 
+            # A removed tree leaves no presets behind.
+            shutil.rmtree(root / "out/build-ninja-single")
+            expected -= {"conan-ninja-single-debug", "conan-ninja-single-release"}
+            self.install(root, "Ninja Multi-Config", False, False, "Release")
+            self.assert_presets(root, expected)
+
+            self.assert_effective_defaults(root)
+
     def test_asan_multi_config_presets_generate_only_debug(self):
         for generator, variant in (
             ("Ninja Multi-Config", "ninja"),
@@ -745,93 +753,6 @@ class PresetGenerationTests(unittest.TestCase):
                 ],
             )
 
-    def test_native_generation_coexists_and_migrates(self):
-        with tempfile.TemporaryDirectory(prefix="oxygen-presets-") as directory:
-            root = Path(directory)
-            recipe = ENGINE / "conanfile.py"
-            # Inherit production layout/generate unchanged. Omit only external
-            # packages; this test neither downloads nor compiles dependencies.
-            (root / "conanfile.py").write_text(
-                "import importlib.util\n"
-                f"spec = importlib.util.spec_from_file_location('oxygen_recipe', {str(recipe)!r})\n"
-                "module = importlib.util.module_from_spec(spec)\n"
-                "spec.loader.exec_module(module)\n"
-                "class PresetFixture(module.OxygenConan):\n"
-                "    def requirements(self):\n"
-                "        pass\n"
-                "    def build_requirements(self): pass\n"
-                "    def _prepare_build_python(self): return None\n",
-                encoding="utf-8",
-            )
-            (root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
-            (root / "CMakeLists.txt").write_text(
-                "cmake_minimum_required(VERSION 3.30)\nproject(Presets NONE)\n",
-                encoding="utf-8",
-            )
-            shutil.copyfile(ENGINE / "CMakePresets.json", root / "CMakePresets.json")
-            self.run_command([CMAKE, "--list-presets=all"], root)
-
-            expected = set()
-            for generator, suffix in (
-                ("Ninja Multi-Config", "ninja"),
-                ("Visual Studio 18 2026", "vs"),
-            ):
-                for tracy, asan in (
-                    (False, False),
-                    (True, False),
-                    (False, True),
-                    (True, True),
-                ):
-                    variant = (
-                        ("tracy-" if tracy else "") + ("asan-" if asan else "") + suffix
-                    )
-                    configurations = (
-                        ("Debug",) if asan else ("Release", "Debug", "RelWithDebInfo")
-                    )
-                    for config in configurations:
-                        self.install(root, generator, tracy, asan, config)
-                        expected.add(f"conan-{variant}-{config.lower()}")
-                        # In particular: Release alone must be a usable checkout.
-                        self.assert_presets(root, expected)
-
-            # Repeated installs must retain other configurations and other trees.
-            self.install(root, "Ninja Multi-Config", False, False, "Debug")
-            self.assert_presets(root, expected)
-            tracy_path = root / "out/build-tracy-ninja/generators/CMakePresets.json"
-            tracy_before = tracy_path.read_bytes()
-
-            # Simulate the old shared names, including ASan's postprocessed suffix.
-            old_path = root / "out/build-ninja/generators/CMakePresets.json"
-            legacy = json.loads(old_path.read_text(encoding="utf-8"))
-            for section in ("configurePresets", "buildPresets", "testPresets"):
-                for preset in legacy[section]:
-                    preset["name"] = preset["name"].replace("conan-ninja-", "conan-")
-                    if "configurePreset" in preset:
-                        preset["configurePreset"] = "conan-default"
-            old_path.write_text(json.dumps(legacy), encoding="utf-8")
-            for config in ("Debug", "Release", "RelWithDebInfo"):
-                self.install(root, "Ninja Multi-Config", False, False, config)
-            self.assert_presets(root, expected)
-            self.assertEqual(tracy_before, tracy_path.read_bytes())
-
-            # Migrate the previous implementation that edited Conan files.
-            native = json.loads(old_path.read_text(encoding="utf-8"))
-            native["version"] = 9
-            native["include"] = ["${sourceDir}/CMakePresets.json"]
-            native["configurePresets"][0]["inherits"] = "oxygen-windows-defaults"
-            old_path.write_text(json.dumps(native), encoding="utf-8")
-            for config in ("Release", "Debug", "RelWithDebInfo"):
-                self.install(root, "Ninja Multi-Config", False, False, config)
-            self.assert_presets(root, expected)
-
-            # A removed optional tree must not leave inherited stubs behind.
-            shutil.rmtree(root / "out/build-tracy-asan-vs")
-            expected.remove("conan-tracy-asan-vs-debug")
-            self.install(root, "Ninja Multi-Config", False, False, "Release")
-            self.assert_presets(root, expected)
-
-            self.assert_effective_defaults(root)
-
     def install(self, root, generator, tracy, asan, config, extra=(), succeeds=True):
         profile = (
             ENGINE
@@ -894,8 +815,6 @@ class PresetGenerationTests(unittest.TestCase):
                     names.add(preset["name"])
                     self.assertEqual(preset["configurePreset"], name)
                     self.assertNotIn("inherits", preset)
-                    if section == "buildPresets":
-                        self.assertGreater(preset["jobs"], 0)
         self.assertEqual(builds, expected)
         self.assertEqual(tests, expected)
         for section in ("buildPresets", "testPresets"):

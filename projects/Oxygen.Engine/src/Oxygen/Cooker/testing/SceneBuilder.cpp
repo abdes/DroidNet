@@ -127,8 +127,8 @@ namespace {
 
 } // namespace
 
-SceneBuilder::SceneBuilder(std::string name)
-  : name_(std::move(name))
+SceneBuilder::SceneBuilder(const std::string_view name)
+  : name_(name)
   , owner_(NextOwner())
 {
 }

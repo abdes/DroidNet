@@ -16,11 +16,11 @@
 
 #include "LooseCookedWriterTestSupport.h"
 
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
-#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -58,9 +58,7 @@ namespace {
     MemoryFileSystem& storage, const std::filesystem::path& cooked_root) -> void
   {
     LooseCookedWriter writer(cooked_root, storage);
-    const auto bytes
-      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
-          .bytes;
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
     writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x11),
       AssetType::kMaterial, VirtualPath("A"), DescriptorPath("A"), bytes, {},
       FromSource(VirtualPath("A") + ".json"));
@@ -176,9 +174,8 @@ namespace {
     LooseCookedWriter writer(cooked_root, storage);
     writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x11),
       AssetType::kMaterial, VirtualPath("A"), DescriptorPath("A"),
-      fixtures::MaterialDescriptor("again", fixtures::MaterialVariant::kPlain)
-        .bytes,
-      {}, FromSource(VirtualPath("A") + ".json"));
+      fixtures::MaterialBuilder { "again" }.Bytes(), {},
+      FromSource(VirtualPath("A") + ".json"));
     writer.RemoveAssetDescriptor(VirtualPath("A"));
 
     EXPECT_THROW(static_cast<void>(writer.Finish()), std::runtime_error);

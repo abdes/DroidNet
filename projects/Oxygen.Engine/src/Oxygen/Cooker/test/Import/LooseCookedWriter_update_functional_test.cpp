@@ -24,13 +24,14 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
@@ -54,13 +55,6 @@ namespace {
   constexpr std::string_view kRed = "/.cooked/Materials/Red.omat";
   constexpr std::string_view kRedSource = "/.cooked/Materials/Red.omat.json";
   constexpr std::string_view kOtherSource = "/.cooked/Other/Red.omat.json";
-
-  auto Material() -> std::vector<std::byte>
-  {
-    return fixtures::MaterialDescriptor(
-      "bytes", fixtures::MaterialVariant::kPlain)
-      .bytes;
-  }
 
   //! The only asset of an index, copied out of its inspection.
   auto Asset(const CookedContent& content) -> CookedAsset
@@ -87,7 +81,7 @@ namespace {
   {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "records_source";
-    const auto bytes = Material();
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
 
     LooseCookedWriter writer(cooked_root, storage);
     writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x11),
@@ -106,7 +100,7 @@ namespace {
     const auto temp = oxygen::testing::ScopedTempDir {};
     auto& storage = cooked::RealCookerStorage();
     const auto cooked_root = temp.Path() / "concurrent";
-    const auto bytes = Material();
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
     // Both writers read the root before either publishes: without the lock,
     // the second publication would drop the first one's record.
     LooseCookedWriter red(cooked_root, storage);
@@ -138,23 +132,25 @@ namespace {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "recook";
     const auto key = MakeFirstByteAssetKey(0x11);
-    const auto first = fixtures::TexturedMaterialDescriptor("white",
-      data::pak::core::kFallbackResourceIndex,
-      fixtures::MaterialVariant::kWithShader);
-    const auto second = fixtures::TexturedMaterialDescriptor(
-      "error", data::pak::core::kErrorTextureResourceIndex);
+    auto first = fixtures::MaterialBuilder { "white" };
+    first.Texture(&data::pak::render::MaterialAssetDesc::base_color_texture,
+      data::pak::core::kFallbackResourceIndex);
+    first.PixelShader();
+    auto second = fixtures::MaterialBuilder { "error" };
+    second.Texture(&data::pak::render::MaterialAssetDesc::base_color_texture,
+      data::pak::core::kErrorTextureResourceIndex);
 
     {
       LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
-        "Materials/Red.omat", first.bytes, first.references,
+        "Materials/Red.omat", first.Bytes(), first.References(),
         FromSource(std::string(kRedSource)));
       (void)writer.Finish();
     }
     {
       LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
-        "Materials/Red2.omat", second.bytes, second.references,
+        "Materials/Red2.omat", second.Bytes(), second.References(),
         FromSource(std::string(kRedSource)));
       (void)writer.Finish();
     }
@@ -165,8 +161,8 @@ namespace {
                 .file.lexically_relative(cooked_root)
                 .generic_string(),
       "Materials/Red2.omat");
-    EXPECT_EQ(asset.references, second.references);
-    EXPECT_EQ(asset.descriptor_sha256, base::ComputeSha256(second.bytes));
+    EXPECT_EQ(asset.references, second.References());
+    EXPECT_EQ(asset.descriptor_sha256, base::ComputeSha256(second.Bytes()));
   }
 
   //! A source's recook under another key replaces its entry at the identity.
@@ -176,7 +172,7 @@ namespace {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "recook_key";
     const auto native_key = MakeFirstByteAssetKey(0x72);
-    const auto bytes = Material();
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
 
     {
       LooseCookedWriter writer(cooked_root, storage);
@@ -201,7 +197,7 @@ namespace {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "other_source";
     const auto key = MakeFirstByteAssetKey(0x11);
-    const auto bytes = Material();
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
 
     {
       LooseCookedWriter writer(cooked_root, storage);
@@ -229,7 +225,7 @@ namespace {
   {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "case_only";
-    const auto bytes = Material();
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
 
     {
       LooseCookedWriter writer(cooked_root, storage);
@@ -254,7 +250,7 @@ namespace {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "removed_source";
     const auto key = MakeFirstByteAssetKey(0x11);
-    const auto bytes = Material();
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
 
     {
       LooseCookedWriter writer(cooked_root, storage);
@@ -283,7 +279,7 @@ namespace {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "sidecar";
     const auto key = MakeFirstByteAssetKey(0x11);
-    const auto bytes = Material();
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
 
     {
       LooseCookedWriter writer(cooked_root, storage);
@@ -374,7 +370,7 @@ namespace {
   {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "merge_assets";
-    const auto bytes = Material();
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
 
     {
       LooseCookedWriter writer(cooked_root, storage);
@@ -399,7 +395,7 @@ namespace {
   {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "digest";
-    const auto bytes = Material();
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
 
     LooseCookedWriter writer(cooked_root, storage);
     writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x33),
@@ -418,7 +414,7 @@ namespace {
     // Arrange
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "encoded";
-    const auto bytes = Material();
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
     LooseCookedWriter writer(cooked_root, storage);
     writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x44),
       AssetType::kMaterial, kRed, "Materials/Red.omat", bytes, {},
@@ -452,7 +448,7 @@ namespace {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "unpublishable";
     const auto index_path = cooked_root / std::string(kIndexFileName);
-    const auto bytes = Material();
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
     {
       LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x55),

@@ -6,7 +6,6 @@
 
 // Covers: Pak/PakBuilder.cpp
 
-#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -19,21 +18,23 @@
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
+#include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
-#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
@@ -50,7 +51,6 @@ namespace data = oxygen::data;
 namespace fixtures = oxygen::cooker::testing;
 namespace pak = oxygen::content::pak;
 namespace render = oxygen::data::pak::render;
-namespace script = oxygen::data::pak::scripting;
 
 using oxygen::cooker::test::HasDiagnostic;
 using oxygen::cooker::test::HasNoErrors;
@@ -62,54 +62,14 @@ using oxygen::serio::testing::BytesEqual;
 
 //=== Helpers ===-------------------------------------------------------------//
 
-//! The bytes of a plain material named `name`.
-auto MaterialBytes(const std::string_view name) -> std::vector<std::byte>
-{
-  return fixtures::MaterialDescriptor(name).bytes;
-}
-
-//! The bytes of a script with no bytecode.
-auto ScriptBytes() -> std::vector<std::byte>
-{
-  auto desc = script::ScriptAssetDesc {};
-  desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScript);
-  desc.header.version = script::kScriptAssetVersion;
-  return data::MakeDescriptorBytes(desc);
-}
-
-//! The references of an asset that names the asset `target` of type `type`.
-auto ReferencesTo(const data::AssetKey& target, const data::AssetType type)
-  -> data::AssetReferences
-{
-  return data::AssetReferences::Create({},
-    {
-      {
-        .key = target,
-        .kind = data::KeyReferenceKind::kAsset,
-        .expected_type = type,
-      },
-    })
-    .value();
-}
-
-//! Adds a plain material at `leaf`; returns its key.
-auto AddMaterial(LooseCookedRoot& library, const std::string_view leaf)
-  -> data::AssetKey
-{
-  return library.Add({
-    .type = data::AssetType::kMaterial,
-    .leaf = std::string(leaf),
-    .descriptor = MaterialBytes(leaf),
-  });
-}
-
 //=== Reference graphs ===----------------------------------------------------//
 
-//! What the owner material's reference to `Target.omat` finds.
+//! What the owner geometry's material, `Target.omat`, finds; or two scenes
+//! that instance each other.
 enum class Target : uint8_t {
   kAbsent,
   kScript,
-  kMaterialReferencingOwner,
+  kSceneCycle,
 };
 
 //! One invalid reference graph and the diagnostic the planner must report.
@@ -124,31 +84,32 @@ class PakBuilderReferenceGraphTest
 
 NOLINT_TEST_P(PakBuilderReferenceGraphTest, RejectsInvalidAssetReferenceGraph)
 {
-  // Arrange: forged metadata; production writers reject these graphs.
+  // Arrange: the graphs a cook never writes, built from the forms it does.
   auto workspace = PakWorkspace {};
   auto game = LooseCookedRoot {};
-  const auto owner = game.KeyOf("Owner.omat");
-  const auto target = game.KeyOf("Target.omat");
-  game.Add({
-    .type = data::AssetType::kMaterial,
-    .leaf = "Owner.omat",
-    .descriptor = MaterialBytes("Owner"),
-    .references = ReferencesTo(target, data::AssetType::kMaterial),
-  });
-  if (GetParam().target == Target::kScript) {
-    game.Add({
-      .type = data::AssetType::kScript,
-      .leaf = "Target.oscript",
-      .descriptor = ScriptBytes(),
-      .key = target,
-    });
-  } else if (GetParam().target == Target::kMaterialReferencingOwner) {
-    game.Add({
-      .type = data::AssetType::kMaterial,
-      .leaf = "Target.omat",
-      .descriptor = MaterialBytes("Target"),
-      .references = ReferencesTo(owner, data::AssetType::kMaterial),
-    });
+  if (GetParam().target == Target::kSceneCycle) {
+    auto owner = fixtures::SceneBuilder { "Owner" };
+    owner.Instance(owner.Node("root"), game.KeyOf("Target.oscene"));
+    auto target = fixtures::SceneBuilder { "Target" };
+    target.Instance(target.Node("root"), game.KeyOf("Owner.oscene"));
+    game.Scene("Owner.oscene", owner);
+    game.Scene("Target.oscene", target);
+  } else {
+    const auto target = game.KeyOf("Target.omat");
+    auto owner = fixtures::GeometryBuilder { "Owner" };
+    owner.Submesh(owner.ProceduralLod(),
+      data::SurfaceId::FromStableIdentity("owner"), target);
+    game.Geometry("Owner.ogeo", owner);
+    if (GetParam().target == Target::kScript) {
+      const auto logic = fixtures::ScriptBuilder { "Target" };
+      game.Add({
+        .type = data::AssetType::kScript,
+        .leaf = "Target.oscript",
+        .descriptor = logic.Bytes(),
+        .references = logic.References(),
+        .key = target,
+      });
+    }
   }
   const auto request = workspace.FullRequest({ workspace.Add(game) });
 
@@ -165,44 +126,25 @@ INSTANTIATE_TEST_SUITE_P(InvalidGraphs, PakBuilderReferenceGraphTest,
                       "pak.plan.asset_reference_missing" },
     ReferenceGraphCase { "TypeMismatch", Target::kScript,
       "pak.plan.asset_reference_type_mismatch" },
-    ReferenceGraphCase { "Cycle", Target::kMaterialReferencingOwner,
-      "pak.plan.asset_reference_cycle" }),
+    ReferenceGraphCase {
+      "Cycle", Target::kSceneCycle, "pak.plan.asset_reference_cycle" }),
   [](const auto& info) { return std::string(info.param.name); });
 
 //=== Sentinel texture references ===-----------------------------------------//
 
-//! The error-texture and no-texture sentinels a material references survive a
-//! pack from loose content and a repack from that pak.
+//! The error-texture sentinel a material binds survives a pack from loose
+//! content and a repack from that pak, and its unbound slots stay unbound.
 NOLINT_TEST(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
 {
   // Arrange
   auto workspace = PakWorkspace {};
   auto game = LooseCookedRoot {};
-  const auto references = data::AssetReferences::Create(
-    {
-      {
-        .kind = data::ResourceKind::kTexture,
-        .index = data::pak::core::kErrorTextureResourceIndex,
-      },
-      {
-        .kind = data::ResourceKind::kTexture,
-        .index = data::pak::core::kNoResourceIndex,
-      },
-    },
-    {});
-  ASSERT_HAS_VALUE(references);
-  auto desc = render::MaterialAssetDesc {};
-  desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
-  desc.header.version = render::kMaterialAssetVersion;
-  desc.base_color_texture = data::ResourceReferenceIndex { 0U };
-  desc.emissive_texture = data::ResourceReferenceIndex { 1U };
-  const auto descriptor = data::MakeDescriptorBytes(desc);
-  const auto material = game.Add({
-    .type = data::AssetType::kMaterial,
-    .leaf = "Missing.omat",
-    .descriptor = descriptor,
-    .references = *references,
-  });
+  auto builder = fixtures::MaterialBuilder { "Missing" };
+  builder.Texture(&render::MaterialAssetDesc::base_color_texture,
+    data::pak::core::kErrorTextureResourceIndex);
+  const auto references = builder.References();
+  const auto descriptor = builder.Bytes();
+  const auto material = game.Material("Missing.omat", builder);
   const auto packed
     = workspace.FullRequest({ workspace.Add(game) }, "packed.pak");
   const auto repacked = workspace.FullRequest(
@@ -217,7 +159,7 @@ NOLINT_TEST(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
     // Assert
     ASSERT_THAT(result.diagnostics, HasNoErrors());
     const auto archive = workspace.Open(request.output_pak_path);
-    EXPECT_EQ(archive.Pak().ReadAssetReferences(material), *references);
+    EXPECT_EQ(archive.Pak().ReadAssetReferences(material), references);
     EXPECT_THAT(archive.Descriptor(material), BytesEqual(descriptor));
   }
 }
@@ -225,26 +167,37 @@ NOLINT_TEST(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
 //=== Dependencies ===--------------------------------------------------------//
 
 //! A full build of the `Game` layer above the `Engine` library: the layer's
-//! owner material references the library's target material with an expected
-//! type. Derives from `TempDirTest` for the `AssetLoader`, which mounts real
-//! files only.
+//! owner geometry is painted with the library's target material with an
+//! expected type. Derives from `TempDirTest` for the `AssetLoader`, which
+//! mounts real files only.
 class PakBuilderDependencyTest : public oxygen::testing::TempDirTest {
 protected:
-  //! Packs `engine.pak`, then builds `layer.pak` and its manifest above it.
-  auto BuildLayer(const data::AssetType expected_type) -> pak::PakBuildResult
+  //! Packs `engine.pak`, whose `Target.omat` key is held by an asset of type
+  //! `target_type`, then builds `layer.pak` and its manifest above it.
+  auto BuildLayer(const data::AssetType target_type) -> pak::PakBuildResult
   {
     auto engine = LooseCookedRoot { "Engine" };
-    target_ = AddMaterial(engine, "Target.omat");
+    target_ = engine.KeyOf("Target.omat");
+    if (target_type == data::AssetType::kScript) {
+      const auto logic = fixtures::ScriptBuilder { "Target" };
+      engine.Add({
+        .type = data::AssetType::kScript,
+        .leaf = "Target.oscript",
+        .descriptor = logic.Bytes(),
+        .references = logic.References(),
+        .key = target_,
+      });
+    } else {
+      engine.Material("Target.omat");
+    }
     const auto engine_pak = workspace_.PackOrThrow(
       workspace_.FullRequest({ workspace_.Add(engine) }, "engine.pak"));
 
     auto game = LooseCookedRoot { "Game" };
-    owner_ = game.Add({
-      .type = data::AssetType::kMaterial,
-      .leaf = "Owner.omat",
-      .descriptor = MaterialBytes("Owner"),
-      .references = ReferencesTo(target_, expected_type),
-    });
+    auto owner = fixtures::GeometryBuilder { "Owner" };
+    owner.Submesh(owner.ProceduralLod(),
+      data::SurfaceId::FromStableIdentity("owner"), target_);
+    owner_ = game.Geometry("Owner.ogeo", owner);
     auto request
       = workspace_.FullRequest({ workspace_.Add(game) }, "layer.pak");
     request.output_manifest_path = PakWorkspace::PakPath("layer.manifest.json");
@@ -264,7 +217,7 @@ protected:
         .kind = data::KeyReferenceKind::kAsset,
         .key = target_,
         .type = data::AssetType::kMaterial,
-      } },
+      }, },
     };
   }
 
@@ -347,30 +300,11 @@ protected:
     std::vector<data::CookedSource> sources,
     std::vector<pak::PakDependency> dependencies = {}) -> pak::PakBuildResult
   {
-    auto desc = render::MaterialAssetDesc {};
-    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
-    desc.header.version = render::kMaterialAssetVersion;
-    desc.base_color_texture = data::ResourceReferenceIndex { 0U };
+    auto owner = fixtures::MaterialBuilder { "Owner" };
+    owner.ExternalTexture(&render::MaterialAssetDesc::base_color_texture,
+      data::TextureKeyFromVirtualPath(texture));
     auto game = LooseCookedRoot {};
-    owner_ = game.Add({
-      .type = data::AssetType::kMaterial,
-      .leaf = "Owner.omat",
-      .descriptor = data::MakeDescriptorBytes(desc),
-      .references = data::AssetReferences::Create(
-        {
-          {
-            .kind = data::ResourceKind::kExternalTexture,
-            .index = data::pak::core::ResourceIndexT { 0U },
-          },
-        },
-        {
-          {
-            .key = data::TextureKeyFromVirtualPath(texture),
-            .kind = data::KeyReferenceKind::kTexture,
-          },
-        })
-        .value(),
-    });
+    owner_ = game.Material("Owner.omat", owner);
     sources.push_back(workspace_.Add(game));
     auto request = workspace_.FullRequest(std::move(sources), "layer.pak");
     request.dependencies = std::move(dependencies);
@@ -522,16 +456,22 @@ protected:
   }
 
   //! Its descriptor's digest.
+  //! The material the source holds at `kMaterialLeaf`.
+  [[nodiscard]] static auto MainMaterial() -> fixtures::MaterialBuilder
+  {
+    return fixtures::MaterialBuilder { "Main" };
+  }
+
   [[nodiscard]] static auto MaterialDigest() -> oxygen::base::Sha256Digest
   {
-    return oxygen::base::ComputeSha256(MaterialBytes(kMaterialLeaf));
+    return oxygen::base::ComputeSha256(MainMaterial().Bytes());
   }
 
   //! The library as a source of the workspace.
   auto Source() -> data::CookedSource
   {
     auto game = LooseCookedRoot {};
-    static_cast<void>(AddMaterial(game, kMaterialLeaf));
+    static_cast<void>(game.Material(kMaterialLeaf, MainMaterial()));
     return workspace_.Add(game);
   }
 
@@ -613,16 +553,19 @@ NOLINT_TEST_F(PakBuilderBuildTest,
 {
   // Arrange
   constexpr auto kContentVersion = uint16_t { 5U };
-  const auto stale = oxygen::base::ComputeSha256(MaterialBytes("Stale"));
+  const auto stale = oxygen::base::ComputeSha256(
+    fixtures::MaterialBuilder { "Stale" }.Bytes());
   auto request = workspace_.PatchRequest({ Source() },
-    { LooseCookedRoot {}.BaseCatalog({
-      {
-        .asset_key = Material(),
-        .asset_type = data::AssetType::kMaterial,
-        .descriptor_digest = stale,
-        .transitive_resource_digest = stale,
-      },
-    }) });
+    {
+      LooseCookedRoot {}.BaseCatalog({
+        {
+          .asset_key = Material(),
+          .asset_type = data::AssetType::kMaterial,
+          .descriptor_digest = stale,
+          .transitive_resource_digest = stale,
+        },
+      }),
+    });
   request.content_version = kContentVersion;
 
   // Act
@@ -703,10 +646,14 @@ NOLINT_TEST(PakBuilderTest, PatchModeClassifiesMissingSourceAsDelete)
   auto workspace = PakWorkspace {};
   const auto game = LooseCookedRoot {};
   const auto base = game.BaseCatalog({
-    { .asset_key = game.KeyOf("Mesh.ogeo"),
-      .asset_type = data::AssetType::kGeometry },
-    { .asset_key = game.KeyOf("Wood.omat"),
-      .asset_type = data::AssetType::kMaterial },
+    {
+      .asset_key = game.KeyOf("Mesh.ogeo"),
+      .asset_type = data::AssetType::kGeometry,
+    },
+    {
+      .asset_key = game.KeyOf("Wood.omat"),
+      .asset_type = data::AssetType::kMaterial,
+    },
   });
   const auto request = workspace.PatchRequest({}, { base });
 

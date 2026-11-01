@@ -22,6 +22,8 @@
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/StableId.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::cooker::testing {
@@ -129,6 +131,27 @@ auto DescriptorDefects::SetVersion(
 {
   EditRecord<core::AssetHeader>(descriptor, 0U,
     [version](auto& header) -> void { header.version = version; });
+}
+
+auto DescriptorDefects::ClearSurface(
+  std::vector<std::byte>& geometry, const data::SurfaceId& surface) -> void
+{
+  // A surface identity is a 16-byte value every record that names the
+  // surface holds as is, so it is cleared wherever it occurs, whatever the
+  // layout around it.
+  const auto identity = surface.Bytes();
+  const auto pattern = std::as_bytes(std::span(identity));
+  auto cleared = false;
+  auto at = geometry.begin();
+  while ((at = std::search(at, geometry.end(), pattern.begin(), pattern.end()))
+    != geometry.end()) {
+    at = std::fill_n(at, pattern.size(), std::byte { 0 });
+    cleared = true;
+  }
+  if (!cleared) {
+    throw std::invalid_argument(
+      "the geometry names no surface " + data::to_string(surface));
+  }
 }
 
 auto DescriptorDefects::PointNodeTablePastTheEnd(std::vector<std::byte>& scene)

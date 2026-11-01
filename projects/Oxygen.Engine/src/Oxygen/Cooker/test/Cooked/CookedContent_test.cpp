@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <functional>
@@ -27,10 +26,12 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -41,8 +42,10 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -63,6 +66,7 @@ using oxygen::cooker::testing::CookedPak;
 using oxygen::cooker::testing::LooseCookedRoot;
 using oxygen::cooker::testing::MemoryFileSystem;
 using oxygen::cooker::testing::PakWorkspace;
+using oxygen::cooker::testing::ScriptBuilder;
 using oxygen::cooker::testing::SeedBytes;
 
 constexpr auto kWoodPath = std::string_view { "/Game/Materials/Wood.omat" };
@@ -93,16 +97,18 @@ auto MakeSample() -> Sample
   sample.buffer_row = library.AddBuffer(sample.buffer_payload);
   sample.sky = library.DescribeTexture("Textures/Sky.otex", sample.texture_row);
 
-  auto wood = fixtures::TexturedMaterialDescriptor("Wood", sample.texture_row);
-  sample.material_descriptor = wood.bytes;
+  auto wood = fixtures::MaterialBuilder { "Wood" };
+  wood.Texture(&data::pak::render::MaterialAssetDesc::base_color_texture,
+    sample.texture_row);
+  sample.material_descriptor = wood.Bytes();
   sample.material = library.Add({
     .type = data::AssetType::kMaterial,
     .leaf = "Materials/Wood.omat",
-    .descriptor = std::move(wood.bytes),
-    .references = std::move(wood.references),
+    .descriptor = sample.material_descriptor,
+    .references = wood.References(),
   });
 
-  sample.geometry_descriptor = fixtures::GeometryDescriptor("Crate").bytes;
+  sample.geometry_descriptor = fixtures::GeometryBuilder { "Crate" }.Bytes();
   sample.geometry = library.Add({
     .type = data::AssetType::kGeometry,
     .leaf = "Geometry/Crate.ogeo",
@@ -397,6 +403,9 @@ NOLINT_TEST_P(CookedContentFlavorTest, AssetReferencesBindTheirResources)
 {
   // Arrange
   const auto content = OpenAs(GetParam());
+  auto wood = fixtures::MaterialBuilder { "Wood" };
+  wood.Texture(&data::pak::render::MaterialAssetDesc::base_color_texture,
+    sample_.texture_row);
 
   // Act
   const auto* material = content.FindAsset(sample_.material);
@@ -405,9 +414,7 @@ NOLINT_TEST_P(CookedContentFlavorTest, AssetReferencesBindTheirResources)
   // Assert
   ASSERT_NE(material, nullptr);
   ASSERT_NE(geometry, nullptr);
-  EXPECT_EQ(material->references,
-    fixtures::TexturedMaterialDescriptor("Wood", sample_.texture_row)
-      .references);
+  EXPECT_EQ(material->references, wood.References());
   EXPECT_EQ(geometry->references,
     data::AssetReferences::Create(
       { { .kind = data::ResourceKind::kBuffer, .index = sample_.buffer_row } },
@@ -750,16 +757,13 @@ NOLINT_TEST_F(CookedContentTest, LooseSummaryListsExternalScripts)
 {
   // Arrange
   const auto add_script = [](LooseCookedRoot& library, const std::string& leaf,
-                            const bool external) {
-    auto desc = data::pak::scripting::ScriptAssetDesc {};
-    desc.external_source_path_offset = external ? 1U : 0U;
-    auto bytes = std::vector<std::byte>(sizeof(desc));
-    std::memcpy(bytes.data(), &desc, sizeof(desc));
-    static_cast<void>(library.Add({
-      .type = data::AssetType::kScript,
-      .leaf = leaf,
-      .descriptor = std::move(bytes),
-    }));
+                            const bool external) -> void {
+    auto script = ScriptBuilder { "Script" };
+    if (external) {
+      script.Flags(data::pak::scripting::ScriptAssetFlags::kAllowExternalSource)
+        .ExternalSource(library.VirtualPath("Script.lua"));
+    }
+    static_cast<void>(library.Script(leaf, script));
   };
   auto library = LooseCookedRoot { "Props" };
   add_script(library, "Scripts/Spin.oscript", true);
@@ -833,20 +837,10 @@ NOLINT_TEST_F(CookedContentTest, PakSummaryStatesItsCatalog)
   auto base = LooseCookedRoot { "Props" };
   const auto removed = base.Geometry("Old.ogeo");
   auto props = LooseCookedRoot { "Props" };
-  const auto chair = props.Add({
-    .type = data::AssetType::kGeometry,
-    .leaf = "Chair.ogeo",
-    .descriptor = fixtures::GeometryDescriptor("Chair").bytes,
-    .references = data::AssetReferences::Create({},
-      {
-        {
-          .key = default_material,
-          .kind = data::KeyReferenceKind::kAsset,
-          .expected_type = data::AssetType::kMaterial,
-        },
-      })
-      .value(),
-  });
+  auto chair_geometry = fixtures::GeometryBuilder { "Chair" };
+  chair_geometry.Submesh(chair_geometry.ProceduralLod(),
+    data::SurfaceId::FromStableIdentity("chair"), default_material);
+  const auto chair = props.Geometry("Chair.ogeo", chair_geometry);
   const auto requirement = data::PakRequirement {
     .kind = data::KeyReferenceKind::kAsset,
     .key = default_material,

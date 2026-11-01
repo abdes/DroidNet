@@ -18,9 +18,11 @@
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/asio.h> // IWYU pragma: keep (EventLoopTraits)
@@ -50,7 +52,10 @@ auto TexturePak() -> std::vector<std::byte>
 {
   auto root = LooseCookedRoot { kMount };
   const auto texture = root.AddTexture(SeedBytes(kTextureSeed));
-  static_cast<void>(root.Material("A.omat", texture));
+  auto a_material = oxygen::cooker::testing::MaterialBuilder { "A" };
+  a_material.Texture(
+    &oxygen::data::pak::render::MaterialAssetDesc::base_color_texture, texture);
+  static_cast<void>(root.Material("A.omat", a_material));
   return CookedPak { root }.Encode();
 }
 

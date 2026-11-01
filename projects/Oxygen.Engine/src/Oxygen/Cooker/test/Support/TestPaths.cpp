@@ -100,10 +100,17 @@ auto MountPathIn(const std::filesystem::path& root,
 auto ContentMountTable(const std::filesystem::path& root)
   -> std::shared_ptr<const content::import::MountTable>
 {
+  return SourceMountTable("Content", root);
+}
+
+auto SourceMountTable(
+  const std::string_view name, const std::filesystem::path& root)
+  -> std::shared_ptr<const content::import::MountTable>
+{
   return MountTableOf(root,
     {
       content::import::MountDeclaration {
-        .name = "Content",
+        .name = std::string { name },
         .kind = content::import::MountKind::kSource,
         .path = ".",
       },

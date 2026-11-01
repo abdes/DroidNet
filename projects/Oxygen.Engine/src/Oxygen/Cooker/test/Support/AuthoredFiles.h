@@ -7,7 +7,9 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -274,6 +276,44 @@ public:
   }
 };
 
+//! A script sidecar (`*.script-sidecar.json`) with no bindings yet. Its
+//! references are relative to its target scene's folder, where it lives.
+class ScriptSidecar final : public AuthoredDocument<ScriptSidecar> {
+public:
+  explicit ScriptSidecar(std::string identity)
+    : AuthoredDocument(
+        std::move(identity), { { "bindings", nlohmann::json::array() } })
+  {
+  }
+
+  //! An asset parameter of a binding: its key and the asset it names.
+  struct AssetParam final {
+    std::string_view key;
+    std::string_view asset;
+  };
+
+  //! Attaches the script `script` to the scene node `node`, with the asset
+  //! parameter `param` when given.
+  auto Bind(const uint32_t node, const std::string_view script,
+    const std::optional<AssetParam>& param = std::nullopt) -> ScriptSidecar&
+  {
+    auto binding = nlohmann::json {
+      { "node_index", node },
+      { "script_virtual_path", Spell(script) },
+    };
+    if (param.has_value()) {
+      binding["params"] = nlohmann::json::array({
+        {
+          { "key", param->key },
+          { "type", "asset" },
+          { "value", Spell(param->asset) },
+        },
+      });
+    }
+    return Append("/bindings", std::move(binding));
+  }
+};
+
 //! An input source (`*.input.json`) with no actions and no contexts.
 class InputSource final : public AuthoredDocument<InputSource> {
 public:
@@ -334,6 +374,28 @@ public:
           },
         })
   {
+  }
+
+  //! Adds the node `name`, a root or the child of node `parent`; returns its
+  //! index. A node's ID follows its position, as the first node's does.
+  auto Node(const std::string_view name,
+    const std::optional<std::size_t> parent = std::nullopt) -> std::size_t
+  {
+    const auto index = Json().at("nodes").size();
+    const auto digits = std::to_string(index + 1U);
+    auto node = nlohmann::json {
+      {
+        "id",
+        "00000000-0000-4000-8000-" + std::string(12U - digits.size(), '0')
+          + digits,
+      },
+      { "name", name },
+    };
+    if (parent.has_value()) {
+      node["parent"] = *parent;
+    }
+    Append("/nodes", std::move(node));
+    return index;
   }
 
   //! Makes node `node` render the geometry `target`.

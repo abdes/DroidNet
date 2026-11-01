@@ -9,7 +9,6 @@
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <system_error>
 #include <utility>
 
 #include "PakToolOptions.h"
@@ -21,10 +20,12 @@
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
@@ -325,7 +326,11 @@ NOLINT_TEST_F(
   const auto grid_row = engine.AddTexture(SeedBytes(1U));
   const auto grid = engine.DescribeTexture("Textures/Grid.otex", grid_row);
   // A pak holds at least one asset: a material that uses the texture.
-  engine.Material("Materials/Grid.omat", grid_row);
+  auto grid_material = oxygen::cooker::testing::MaterialBuilder { "Grid" };
+  grid_material.Texture(
+    &oxygen::data::pak::render::MaterialAssetDesc::base_color_texture,
+    grid_row);
+  engine.Material("Materials/Grid.omat", grid_material);
   const auto engine_pak = TempDir() / "engine.pak";
   Materialize(CookedPak { std::move(engine) }.Encode(), engine_pak);
   options.request.dependency_paks = { engine_pak };

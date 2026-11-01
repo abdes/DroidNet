@@ -7,7 +7,6 @@
 // Covers: Tools/Inspector/DependencyReport.cpp
 
 #include <algorithm>
-#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -16,21 +15,18 @@
 
 #include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/DependencyReport.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
-#include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
 namespace data = oxygen::data;
-namespace pak = oxygen::content::pak;
 using oxygen::content::inspection::DependencyReportOptions;
 
 //! `RunDependencyReport` as the tool runs it: the error, if any, goes to
@@ -43,38 +39,17 @@ auto RunDependencyReport(const DependencyReportOptions& options) -> int
 
 class InspectorDependencyReportTest : public oxygen::testing::TempDirTest {
 protected:
-  //! A library whose owner material references a shared material.
-  [[nodiscard]] auto MakeLibrary() const
+  //! A library whose geometry is painted with its shared material.
+  [[nodiscard]] static auto MakeLibrary()
     -> oxygen::cooker::testing::LooseCookedRoot
   {
-    auto descriptor = data::pak::render::MaterialAssetDesc {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kMaterial);
-    descriptor.header.version = data::pak::render::kMaterialAssetVersion;
-    const auto bytes = data::MakeDescriptorBytes(descriptor);
     auto library = oxygen::cooker::testing::LooseCookedRoot { "Content" };
-    const auto none = data::AssetReferences::Create({}, {});
-    const auto owner = data::AssetReferences::Create({},
-      {
-        {
-          .key = library.KeyOf("Shared.omat"),
-          .kind = data::KeyReferenceKind::kAsset,
-          .expected_type = data::AssetType::kMaterial,
-        },
-      });
-    EXPECT_TRUE(none.has_value() && owner.has_value());
-    library.Add({
-      .type = data::AssetType::kMaterial,
-      .leaf = "Shared.omat",
-      .descriptor = bytes,
-      .references = *none,
-    });
-    library.Add({
-      .type = data::AssetType::kMaterial,
-      .leaf = "Owner.omat",
-      .descriptor = bytes,
-      .references = *owner,
-    });
+    const auto shared = library.Material(
+      "Shared.omat", oxygen::cooker::testing::MaterialBuilder { "Shared" });
+    auto crate = oxygen::cooker::testing::GeometryBuilder { "Crate" };
+    crate.Submesh(crate.ProceduralLod(),
+      data::SurfaceId::FromStableIdentity("crate"), shared);
+    library.Geometry("Crate.ogeo", crate);
     return library;
   }
 

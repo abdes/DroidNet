@@ -5,13 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Cooker/testing/CookedPak.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
@@ -19,9 +22,9 @@
 namespace {
 
 using oxygen::cooker::testing::CookedPak;
+using oxygen::cooker::testing::GeometryBuilder;
 using oxygen::cooker::testing::HasPakError;
 using oxygen::cooker::testing::LooseCookedRoot;
-using oxygen::cooker::testing::MaterialDescriptor;
 using oxygen::cooker::testing::PakDiagnosticSummary;
 using oxygen::cooker::testing::PakWorkspace;
 using oxygen::cooker::testing::SeedBytes;
@@ -54,7 +57,10 @@ NOLINT_TEST(CookedPakTest, KeepsTexturePayloadsAndNames)
   const auto payload = SeedBytes(5U, 64U);
   const auto grid = game.AddTexture(payload);
   const auto path = game.DescribeTexture("Textures/Grid.otex", grid);
-  static_cast<void>(game.Material("Materials/Grid.omat", grid));
+  auto grid_material = oxygen::cooker::testing::MaterialBuilder { "Grid" };
+  grid_material.Texture(
+    &oxygen::data::pak::render::MaterialAssetDesc::base_color_texture, grid);
+  static_cast<void>(game.Material("Materials/Grid.omat", grid_material));
 
   const auto pak = CookedPak { game }.Open();
 
@@ -71,18 +77,10 @@ NOLINT_TEST(CookedPakTest, DependencyReferencesBecomeRequirements)
   auto engine = LooseCookedRoot { "Engine" };
   const auto fallback = engine.Material("Materials/Default.omat");
   auto game = LooseCookedRoot { "Game" };
-  static_cast<void>(game.Add({
-    .type = data::AssetType::kMaterial,
-    .leaf = "Materials/Wood.omat",
-    .descriptor = MaterialDescriptor("Wood").bytes,
-    .references = data::AssetReferences::Create({},
-      { {
-        .key = fallback,
-        .kind = data::KeyReferenceKind::kAsset,
-        .expected_type = data::AssetType::kMaterial,
-      } })
-      .value(),
-  }));
+  auto crate = GeometryBuilder { "Crate" };
+  crate.Submesh(crate.ProceduralLod(),
+    data::SurfaceId::FromStableIdentity("crate"), fallback);
+  static_cast<void>(game.Geometry("Props/Crate.ogeo", crate));
 
   const auto catalog
     = CookedPak { game }.DependsOn(CookedPak { engine }).Catalog();
@@ -119,7 +117,10 @@ NOLINT_TEST(CookedPakTest, MatchesThePakBuilder)
 {
   auto game = LooseCookedRoot { "Game" };
   const auto wood = game.AddTexture(SeedBytes(4U, 32U));
-  static_cast<void>(game.Material("Materials/Wood.omat", wood));
+  auto wood_material = oxygen::cooker::testing::MaterialBuilder { "Wood" };
+  wood_material.Texture(
+    &oxygen::data::pak::render::MaterialAssetDesc::base_color_texture, wood);
+  static_cast<void>(game.Material("Materials/Wood.omat", wood_material));
   static_cast<void>(game.Scene("Scenes/Main.oscene"));
   const auto identity = SourceKeyOf(0x42U);
   auto workspace = PakWorkspace {};

@@ -28,16 +28,16 @@
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
@@ -151,18 +151,18 @@ auto MakeClassification(PakWorkspace& workspace) -> Classification
   auto created = LooseCookedRoot { "Game", 1U };
   auto replaced = LooseCookedRoot { "Game", 2U };
   auto unchanged = LooseCookedRoot { "Game", 3U };
-  const auto scene = fixtures::MakeEmptySceneDescriptor();
+  const auto scene = fixtures::SceneBuilder { "Empty" }.Bytes();
 
   auto out = Classification {};
   out.created = created.Add({
     .type = data::AssetType::kMaterial,
     .leaf = "Patch/Create.omat",
-    .descriptor = fixtures::MaterialDescriptor("Create").bytes,
+    .descriptor = fixtures::MaterialBuilder { "Create" }.Bytes(),
   });
   out.replaced = replaced.Add({
     .type = data::AssetType::kMaterial,
     .leaf = "Patch/Replace.omat",
-    .descriptor = fixtures::MaterialDescriptor("Replace").bytes,
+    .descriptor = fixtures::MaterialBuilder { "Replace" }.Bytes(),
   });
   out.unchanged = unchanged.Add({
     .type = data::AssetType::kScene,
@@ -177,7 +177,7 @@ auto MakeClassification(PakWorkspace& workspace) -> Classification
   };
   out.base = created.BaseCatalog({
     BaseEntry(out.replaced, data::AssetType::kMaterial,
-      fixtures::MaterialDescriptor("Replace (base)").bytes),
+      fixtures::MaterialBuilder { "Replace (base)" }.Bytes()),
     BaseEntry(out.unchanged, data::AssetType::kScene, scene),
     BaseEntry(out.deleted, data::AssetType::kScript,
       oxygen::serio::testing::PatternBytes(sizeof(uint64_t))),
@@ -243,16 +243,13 @@ NOLINT_TEST(PakPlanBuilderPatchTest, PatchModeUsesPatchLocalResourcesAndClosure)
   auto workspace = PakWorkspace {};
   auto replaced = LooseCookedRoot { "Game", 1U };
   const auto texture = replaced.AddTexture(SeedBytes(1U));
-  auto textured = fixtures::TexturedMaterialDescriptor("Replace", texture);
-  const auto replace_key = replaced.Add({
-    .type = data::AssetType::kMaterial,
-    .leaf = "Patch/Replace.omat",
-    .descriptor = std::move(textured.bytes),
-    .references = std::move(textured.references),
-  });
+  auto textured = fixtures::MaterialBuilder { "Replace" };
+  textured.Texture(&render::MaterialAssetDesc::base_color_texture, texture);
+  const auto replace_key = replaced.Material("Patch/Replace.omat", textured);
   auto unchanged = LooseCookedRoot { "Game", 2U };
   unchanged.AddBuffer(SeedBytes(2U)); // No asset binds it.
-  const auto unchanged_bytes = fixtures::MaterialDescriptor("Unchanged").bytes;
+  const auto unchanged_bytes
+    = fixtures::MaterialBuilder { "Unchanged" }.Bytes();
   const auto unchanged_key = unchanged.Add({
     .type = data::AssetType::kMaterial,
     .leaf = "Patch/Unchanged.omat",
@@ -260,7 +257,7 @@ NOLINT_TEST(PakPlanBuilderPatchTest, PatchModeUsesPatchLocalResourcesAndClosure)
   });
   const auto base = unchanged.BaseCatalog({
     BaseEntry(replace_key, data::AssetType::kMaterial,
-      fixtures::MaterialDescriptor("Replace (base)").bytes),
+      fixtures::MaterialBuilder { "Replace (base)" }.Bytes()),
     BaseEntry(unchanged_key, data::AssetType::kMaterial, unchanged_bytes),
   });
 
@@ -299,12 +296,12 @@ NOLINT_TEST(PakPlanBuilderPatchTest, ReplaceAssetTypeMismatchIsRejected)
   const auto scene = game.Add({
     .type = data::AssetType::kScene,
     .leaf = "Patch/TypeMismatch.oscene",
-    .descriptor = fixtures::MakeEmptySceneDescriptor(),
+    .descriptor = fixtures::SceneBuilder { "Empty" }.Bytes(),
   });
   // The base held a material under the scene's key.
   const auto base = game.BaseCatalog({
     BaseEntry(scene, data::AssetType::kMaterial,
-      fixtures::MaterialDescriptor("Base").bytes),
+      fixtures::MaterialBuilder { "Base" }.Bytes()),
   });
 
   const auto result = pak::PakPlanBuilder {}.Build(
@@ -333,13 +330,9 @@ auto MakeTwoMaterials(const uint8_t seed,
   const auto texture_b = library.AddTexture(b_payload);
   const auto add = [&library](const std::string_view name,
                      const ResourceIndexT texture) -> data::AssetKey {
-    auto fixture = fixtures::TexturedMaterialDescriptor(name, texture);
-    return library.Add({
-      .type = data::AssetType::kMaterial,
-      .leaf = std::string(name) + ".omat",
-      .descriptor = std::move(fixture.bytes),
-      .references = std::move(fixture.references),
-    });
+    auto material = fixtures::MaterialBuilder { name };
+    material.Texture(&render::MaterialAssetDesc::base_color_texture, texture);
+    return library.Material(std::string(name) + ".omat", material);
   };
   const auto a = add("MatA", texture_a);
   const auto b = add("MatB", texture_b);
@@ -495,11 +488,9 @@ private:
 //! A material with base color red `red`.
 auto TintedMaterial(const float red) -> std::vector<std::byte>
 {
-  auto material = render::MaterialAssetDesc {};
-  material.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
-  material.header.version = render::kMaterialAssetVersion;
-  material.base_color[0] = red;
-  return data::MakeDescriptorBytes(material);
+  auto record = render::MaterialAssetDesc {};
+  record.base_color[0] = red;
+  return fixtures::MaterialBuilder { "Tinted", record }.Bytes();
 }
 
 //! A base holds M and D; patch 1 tints M and drops D; patch 2, over both,

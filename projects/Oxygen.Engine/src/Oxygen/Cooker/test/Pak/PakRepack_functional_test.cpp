@@ -18,29 +18,29 @@
 #include <vector>
 
 #include "PakSceneTestSupport.h"
+#include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/PackedPak.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
+#include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
-#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/CookedSource.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
@@ -54,12 +54,12 @@ namespace geometry = oxygen::data::pak::geometry;
 namespace render = oxygen::data::pak::render;
 namespace script = oxygen::data::pak::scripting;
 
-using oxygen::ResourceIndexT;
 using oxygen::cooker::test::HasDiagnostic;
 using oxygen::cooker::test::HasNoErrors;
 using oxygen::cooker::testing::LooseCookedRoot;
 using oxygen::cooker::testing::PackedPak;
 using oxygen::cooker::testing::PakWorkspace;
+using oxygen::cooker::testing::SceneBuilder;
 using oxygen::cooker::testing::SeedBytes;
 using oxygen::serio::testing::BytesEqual;
 using pak::BuildMode;
@@ -109,11 +109,7 @@ NOLINT_TEST(PakRepackTest, RejectsDescriptorBytesThatDisagreeWithTheCatalog)
 {
   auto workspace = PakWorkspace {};
   auto game = LooseCookedRoot {};
-  game.Add({
-    .type = data::AssetType::kScene,
-    .leaf = "Scene.oscene",
-    .descriptor = oxygen::cooker::testing::MakeEmptySceneDescriptor(),
-  });
+  game.Scene("Scene.oscene", SceneBuilder { "Empty" });
   const auto request = workspace.FullRequest({ workspace.Add(game) });
   const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);
   ASSERT_THAT(packed.Diagnostics(), HasNoErrors());
@@ -231,46 +227,28 @@ struct ResourceLibrary final {
 auto MakeResourceRoot(const uint8_t seed) -> ResourceLibrary
 {
   auto library = LooseCookedRoot { "Game", seed };
-  const auto binding
-    = [](const data::ResourceKind kind, const ResourceIndexT index) {
-        return data::AssetReferences::Create(
-          { { .kind = kind, .index = index } }, {})
-          .value();
-      };
-
-  auto desc = geometry::GeometryAssetDesc {};
-  desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kGeometry);
-  desc.header.version = geometry::kGeometryAssetVersion;
-  desc.lod_count = 1U;
-  auto mesh = geometry::MeshDesc {};
-  mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
-  mesh.info.standard.vertex_buffer = data::ResourceReferenceIndex { 0U };
-  mesh.info.standard.index_buffer = data::ResourceReferenceIndex { 0U };
-  auto geometry_bytes = std::vector<std::byte> {};
-  oxygen::cooker::testing::AppendRecord(geometry_bytes, desc);
-  oxygen::cooker::testing::AppendRecord(geometry_bytes, mesh);
-  data::AppendDescriptorStrings(
-    geometry_bytes, data::DescriptorStringsBuilder {});
   const auto buffer = library.AddBuffer(SeedBytes(seed));
-  const auto geometry = library.Add({
-    .type = data::AssetType::kGeometry,
-    .leaf = "Mesh" + std::to_string(seed) + ".ogeo",
-    .descriptor = std::move(geometry_bytes),
-    .references = binding(data::ResourceKind::kBuffer, buffer),
-  });
+  auto mesh = oxygen::cooker::testing::GeometryBuilder { "Mesh" };
+  const auto lod
+    = mesh.StandardLod(buffer, buffer, glm::vec3 { -0.5F }, glm::vec3 { 0.5F });
+  mesh.Submesh(lod, data::ProceduralSurfaceId(), {},
+    {
+      {
+        .first_index = 0U,
+        .index_count = 3U,
+        .first_vertex = 0U,
+        .vertex_count = 3U,
+      },
+    });
+  const auto geometry
+    = library.Geometry("Mesh" + std::to_string(seed) + ".ogeo", mesh);
 
-  auto script_desc = script::ScriptAssetDesc {};
-  script_desc.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kScript);
-  script_desc.header.version = script::kScriptAssetVersion;
-  script_desc.bytecode_resource_index = data::ResourceReferenceIndex { 0U };
   const auto bytecode = library.AddScript(SeedBytes(seed));
-  const auto logic = library.Add({
-    .type = data::AssetType::kScript,
-    .leaf = "Logic" + std::to_string(seed) + ".oscript",
-    .descriptor = data::MakeDescriptorBytes(script_desc),
-    .references = binding(data::ResourceKind::kScript, bytecode),
-  });
+  auto logic_script
+    = oxygen::cooker::testing::ScriptBuilder { "Logic" + std::to_string(seed) };
+  logic_script.Bytecode(bytecode);
+  const auto logic
+    = library.Script("Logic" + std::to_string(seed) + ".oscript", logic_script);
   return {
     .library = std::move(library),
     .geometry = geometry,

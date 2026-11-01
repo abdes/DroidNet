@@ -9,7 +9,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -18,10 +17,9 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <type_traits>
-#include <utility>
 #include <vector>
 
+#include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -32,18 +30,17 @@
 #include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/GeometryMetadata.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/MeshType.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
@@ -83,7 +80,6 @@ using oxygen::cooker::testing::Materialize;
 using oxygen::cooker::testing::PakWorkspace;
 using oxygen::cooker::testing::SceneBuilder;
 using oxygen::data::AssetKey;
-using oxygen::data::AssetReferences;
 using oxygen::data::SurfaceId;
 
 constexpr auto kGeometryPath = "/Content/Geometry/Inspection.ogeo";
@@ -101,23 +97,6 @@ struct GeometryFixture {
   uint8_t version = geometry::kGeometryAssetVersion;
   SurfaceId first_surface = MakeSurfaceId(1);
 };
-
-template <typename T>
-  requires std::is_trivially_copyable_v<T>
-auto AppendRecord(std::vector<std::byte>& bytes, const T& value) -> void
-{
-  const auto record = std::as_bytes(std::span(&value, 1));
-  bytes.insert(bytes.end(), record.begin(), record.end());
-}
-
-template <typename T, std::size_t N>
-  requires std::is_trivially_copyable_v<T>
-auto AppendRecords(
-  std::vector<std::byte>& bytes, const std::array<T, N>& values) -> void
-{
-  const auto records = std::as_bytes(std::span(values));
-  bytes.insert(bytes.end(), records.begin(), records.end());
-}
 
 //! Adds the buffers shared by every LOD: one triangle's vertices and indices,
 //! at table entries 1 and 2 (entry 0 is the reserved fallback).
@@ -145,103 +124,62 @@ auto ContentRoot() -> LooseCookedRoot
   return library;
 }
 
-//! The descriptor at `virtual_path`, below the `Content` root.
-auto DescriptorAsset(const std::string_view virtual_path,
-  const oxygen::data::AssetType type, std::vector<std::byte> bytes,
-  AssetReferences references) -> LooseAsset
+//! The geometry of the inspection fixture: two LODs of the standard triangle
+//! mesh, each drawing `first_surface` and the second surface, which casts no
+//! shadows; the first surface has no material in the second LOD.
+auto FixtureGeometry(const SurfaceId& first_surface)
+  -> oxygen::cooker::testing::GeometryBuilder
 {
-  constexpr auto kRoot = std::string_view { "/Content/" };
-  return LooseAsset {
-    .type = type,
-    .leaf = std::string(virtual_path.substr(kRoot.size())),
-    .descriptor = std::move(bytes),
-    .references = std::move(references),
+  using oxygen::cooker::testing::GeometryBuilder;
+  const auto material = AssetKey::FromVirtualPath(kSharedMaterialPath);
+  const auto view = geometry::MeshViewDesc {
+    .first_index = 0,
+    .index_count = kTriangleSize,
+    .first_vertex = 0,
+    .vertex_count = kTriangleSize,
   };
-}
-
-auto GeometryAsset(const GeometryFixture& fixture) -> LooseAsset
-{
-  auto descriptor = geometry::GeometryAssetDesc {};
-  descriptor.header.asset_type
-    = static_cast<uint8_t>(oxygen::data::AssetType::kGeometry);
-  descriptor.header.version = fixture.version;
-  descriptor.lod_count = 2;
-  // Every surface is drawn by default; the second casts no shadows.
-  auto surfaces = std::vector<geometry::SurfaceDesc> {
-    {
-      .surface_id = fixture.first_surface,
-      .flags
-      = geometry::kSurfaceFlag_Visible | geometry::kSurfaceFlag_CastsShadows,
-    },
-  };
-  if (fixture.first_surface != MakeSurfaceId(2)) {
-    surfaces.push_back({
-      .surface_id = MakeSurfaceId(2),
-      .flags = geometry::kSurfaceFlag_Visible,
-    });
+  auto builder = GeometryBuilder { "Inspection" };
+  for (uint32_t lod = 0; lod < 2U; ++lod) {
+    // The triangle's vertices all lie at the origin.
+    const auto index = builder.StandardLod(oxygen::ResourceIndexT { 1U },
+      oxygen::ResourceIndexT { 2U }, glm::vec3 { 0.0F }, glm::vec3 { 0.0F });
+    builder.Submesh(
+      index, first_surface, lod == 1U ? AssetKey {} : material, { view });
+    builder.Submesh(index, MakeSurfaceId(2), material, { view });
   }
-  descriptor.surface_count = static_cast<uint32_t>(surfaces.size());
-  descriptor.default_lod_policy = {
+  builder.SurfaceFlags(MakeSurfaceId(2), geometry::kSurfaceFlag_Visible);
+  builder.DefaultLodPolicy({
     .type = geometry::LodPolicyType::kFixed,
     .lod_index = 1,
+  });
+  return builder;
+}
+
+//! The geometry asset. The retired version and the nil surface are defects
+//! applied to the valid descriptor: the product loader would not let the
+//! builder write them.
+auto GeometryAsset(const GeometryFixture& fixture) -> LooseAsset
+{
+  using oxygen::cooker::testing::DescriptorDefects;
+  // A nil surface is built as a valid one, then cleared.
+  const auto nil_surface = fixture.first_surface.IsNil();
+  const auto first_surface = nil_surface
+    ? SurfaceId::FromStableIdentity("cleared-surface")
+    : fixture.first_surface;
+  const auto builder = FixtureGeometry(first_surface);
+  auto asset = LooseAsset {
+    .type = oxygen::data::AssetType::kGeometry,
+    .leaf = "Geometry/Inspection.ogeo",
+    .descriptor = builder.Bytes(),
+    .references = builder.References(),
   };
-  auto bytes = std::vector<std::byte> {};
-  AppendRecord(bytes, descriptor);
-  auto strings = oxygen::data::DescriptorStringsBuilder {};
-  const auto material = AssetKey::FromVirtualPath(kSharedMaterialPath);
-  for (uint32_t lod = 0; lod < descriptor.lod_count; ++lod) {
-    auto mesh = geometry::MeshDesc {};
-    mesh.mesh_type = static_cast<uint8_t>(oxygen::data::MeshType::kStandard);
-    mesh.submesh_count = 2;
-    mesh.mesh_view_count = 2;
-    mesh.info.standard.vertex_buffer
-      = oxygen::data::ResourceReferenceIndex { 0U };
-    mesh.info.standard.index_buffer
-      = oxygen::data::ResourceReferenceIndex { 1U };
-    AppendRecord(bytes, mesh);
-    for (uint32_t submesh_index = 0; submesh_index < mesh.submesh_count;
-      ++submesh_index) {
-      auto submesh = geometry::SubMeshDesc {};
-      submesh.name_offset = strings.Add("Surface");
-      submesh.surface_id
-        = submesh_index == 0 ? fixture.first_surface : MakeSurfaceId(2);
-      submesh.material_asset_key
-        = lod == 1 && submesh_index == 0 ? AssetKey {} : material;
-      submesh.mesh_view_count = 1;
-      AppendRecord(bytes, submesh);
-      const auto view = geometry::MeshViewDesc {
-        .first_index = 0,
-        .index_count = kTriangleSize,
-        .first_vertex = 0,
-        .vertex_count = kTriangleSize,
-      };
-      AppendRecord(bytes, view);
-    }
+  if (nil_surface) {
+    DescriptorDefects::ClearSurface(asset.descriptor, first_surface);
   }
-  for (const auto& surface : surfaces) {
-    AppendRecord(bytes, surface);
+  if (fixture.version != geometry::kGeometryAssetVersion) {
+    DescriptorDefects::SetVersion(asset.descriptor, fixture.version);
   }
-  oxygen::data::AppendDescriptorStrings(bytes, strings);
-  auto references = AssetReferences::Create(
-    {
-      {
-        .kind = oxygen::data::ResourceKind::kBuffer,
-        .index = oxygen::ResourceIndexT { 1U },
-      },
-      {
-        .kind = oxygen::data::ResourceKind::kBuffer,
-        .index = oxygen::ResourceIndexT { 2U },
-      },
-    },
-    {
-      {
-        .key = material,
-        .kind = oxygen::data::KeyReferenceKind::kAsset,
-        .expected_type = oxygen::data::AssetType::kMaterial,
-      },
-    });
-  return DescriptorAsset(kGeometryPath, oxygen::data::AssetType::kGeometry,
-    std::move(bytes), std::move(references).value());
+  return asset;
 }
 
 auto WriteGeometryRoot(const std::filesystem::path& root,
@@ -435,11 +373,10 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSurfacesFromAPak)
 {
   // Arrange
   const auto loose = TempPath("loose");
-  const auto material = oxygen::cooker::testing::MaterialDescriptor("Shared");
   auto library = ContentRoot();
   library.Add(GeometryAsset({}));
-  library.Add(DescriptorAsset(kSharedMaterialPath,
-    oxygen::data::AssetType::kMaterial, material.bytes, material.references));
+  library.Material("Materials/Shared.omat",
+    oxygen::cooker::testing::MaterialBuilder { "Shared" });
   Materialize(library.Files(), loose);
   auto workspace = PakWorkspace {};
   workspace.PackOrThrow(workspace.FullRequest({ workspace.Add(library) }));

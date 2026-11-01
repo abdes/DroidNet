@@ -54,8 +54,9 @@ struct Box final {
 
 //! The identity of the scene the sidecar and the renderables belong to; every
 //! reference they hold is relative to its folder.
-constexpr auto kSceneIdentity
-  = std::string_view { "/Content/Scenes/PhysicsDomains/PhysicsDomains.oscene" };
+constexpr auto kSceneIdentity = std::string_view {
+  "/Showcase/Scenes/PhysicsDomains/PhysicsDomains.oscene"
+};
 
 //! The identity a reference written in the scene or its sidecar names.
 [[nodiscard]] auto ResolveSceneReference(const std::string& text) -> std::string
@@ -69,16 +70,23 @@ constexpr auto kSceneIdentity
   return { OXYGEN_EXAMPLES_PROJECT_DIR };
 }
 
-[[nodiscard]] auto SceneDir() -> std::filesystem::path
+//! The folder of the project's `Showcase` mount.
+[[nodiscard]] auto MountDir() -> std::filesystem::path
 {
-  return ProjectDir() / "Content/Scenes/PhysicsDomains";
+  return ProjectDir() / "Content";
 }
 
-//! The file of a mount path in the project's `Content` mount.
+[[nodiscard]] auto SceneDir() -> std::filesystem::path
+{
+  return MountDir() / "Scenes/PhysicsDomains";
+}
+
+//! The file of a mount path in the project's `Showcase` mount.
 [[nodiscard]] auto FileOf(const std::string& mount_path)
   -> std::filesystem::path
 {
-  return ProjectDir() / mount_path.substr(1);
+  constexpr auto kMount = std::string_view { "/Showcase/" };
+  return MountDir() / mount_path.substr(kMount.size());
 }
 
 [[nodiscard]] auto ReadText(const std::filesystem::path& path) -> std::string
@@ -137,9 +145,9 @@ constexpr auto kSceneIdentity
 {
   auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto mounts
-    = oxygen::cooker::test::ContentMountTable(ProjectDir() / "Content");
+    = oxygen::cooker::test::SourceMountTable("Showcase", MountDir());
   const auto source = GeometrySource::FromDescriptor(ReadText(descriptor),
-    descriptor, "/Content/Geometry/Generated.ogeo", *mounts, diagnostics);
+    descriptor, "/Showcase/Geometry/Generated.ogeo", *mounts, diagnostics);
   if (!source.has_value() || source->lods.empty()) {
     return std::nullopt;
   }

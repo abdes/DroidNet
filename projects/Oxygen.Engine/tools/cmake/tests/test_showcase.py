@@ -3,12 +3,24 @@
 
 import hashlib
 import unittest
+from pathlib import Path
 from typing import Any
 
 from cmake_testing import ENGINE, CommandTestCase, load_module, mtimes, read_json
 
 PROJECT = ENGINE / "Examples/Showcase"
 PREPARE = ENGINE / "Examples/RenderScene/Tools/internal/prepare_showcase.py"
+# The examples' identities and mount paths are in the project's Showcase
+# mount, on its Content folder.
+MOUNT = "/Showcase/"
+
+
+def mount_file(project: Path, mount_path: str) -> Path:
+    """The file of a mount path of the Showcase mount in `project`."""
+    folders = [m["Path"] for m in read_json(project / "Project.oxy")["Mounts"] if m["Name"] == "Showcase"]
+    if len(folders) != 1 or not mount_path.startswith(MOUNT):
+        raise ValueError(f"{mount_path} is not in the Showcase mount of {project}")
+    return project / folders[0] / mount_path.removeprefix(MOUNT)
 
 
 class ShowcaseTests(CommandTestCase):
@@ -20,7 +32,7 @@ class ShowcaseTests(CommandTestCase):
             if "path" not in asset:
                 continue  # A download archive is read, never kept.
             with self.subTest(asset=asset["name"]):
-                data = (PROJECT / asset["path"].removeprefix("/")).read_bytes()
+                data = mount_file(PROJECT, asset["path"]).read_bytes()
                 self.assertEqual(len(data), asset["bytes"])
                 self.assertEqual(hashlib.sha256(data).hexdigest(), asset["sha256"])
 
@@ -47,9 +59,11 @@ class ShowcaseTests(CommandTestCase):
         for manifest in (project / "Manifests").iterdir():
             for job in read_json(manifest)["jobs"]:
                 if "source" in job:
-                    self.assertTrue((project / job["source"].removeprefix("/")).is_file())
-                if "record" in job:
-                    self.assertTrue((project / job["record"]).is_file())
+                    self.assertTrue(mount_file(project, job["source"]).is_file())
+                if job["type"] == "model":
+                    # A model's record lives at its identity.
+                    record = job["virtual_path"] + ".import.json"
+                    self.assertTrue(mount_file(project, record).is_file(), record)
         self.assertTrue(
             all(path.is_relative_to(PROJECT.resolve()) or path.is_relative_to(PREPARE.parents[1]) for path in inputs)
         )
@@ -71,7 +85,7 @@ class ShowcaseTests(CommandTestCase):
         old_tool = self.root / "RenderScene/Tools/import.ps1"
         old_tool.parent.mkdir(parents=True)
         old_tool.write_text("", encoding="utf-8")
-        cooked = self.root / "RenderScene/.cooked/Content/container.index.bin"
+        cooked = self.root / "RenderScene/.cooked/Showcase/container.index.bin"
         cooked.parent.mkdir(parents=True)
         cooked.write_bytes(b"")
         showcase.prepare(PROJECT.resolve(), self.root, "showcase")

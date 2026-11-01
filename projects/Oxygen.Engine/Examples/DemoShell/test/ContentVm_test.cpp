@@ -496,7 +496,7 @@ namespace {
       auto settings = ui::MakeModelImportSettings(DefaultImportProfile());
       settings.source_path = model_.string();
       settings.virtual_path
-        = ui::ScratchModelVirtualPath("/Content/SourceMedia/source.gltf");
+        = ui::ScratchModelVirtualPath("/Showcase/SourceMedia/source.gltf");
       auto findings = std::vector<content::import::ImportDiagnostic> {};
       const auto record = ModelImportRecord::RecordPathOf(
         mounts, settings.virtual_path, findings);
@@ -528,7 +528,7 @@ namespace {
       const auto report = future.get();
       ASSERT_TRUE(report.success);
       generation_ = report.cooked_root;
-      settings_.tab.source_mount = "Content";
+      settings_.tab.source_mount = "Showcase";
     }
 
     //! Imports the model with `vm`, whose host takes the new generation to
@@ -679,7 +679,7 @@ namespace {
 
     // Assert
     ASSERT_EQ(folders.size(), 1U);
-    EXPECT_EQ(folders.front().name, "Content");
+    EXPECT_EQ(folders.front().name, "Showcase");
     EXPECT_FALSE(folders.front().removable);
   }
 
@@ -793,10 +793,10 @@ namespace {
   NOLINT_TEST(ScratchModelVirtualPathTest, NamesTheSourceByItsMountPath)
   {
     EXPECT_EQ(
-      ui::ScratchModelVirtualPath("/Content/SourceMedia/DCC/a/Watch.gltf"),
+      ui::ScratchModelVirtualPath("/Showcase/SourceMedia/DCC/a/Watch.gltf"),
       "/Scratch/DCC/a/Watch.gltf");
     EXPECT_EQ(
-      ui::ScratchModelVirtualPath("/Content/SourceMedia/DCC/b/Watch.gltf"),
+      ui::ScratchModelVirtualPath("/Showcase/SourceMedia/DCC/b/Watch.gltf"),
       "/Scratch/DCC/b/Watch.gltf");
   }
 

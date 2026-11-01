@@ -10,7 +10,6 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
@@ -27,7 +26,6 @@ namespace {
 using oxygen::cooker::testing::LooseCookedRoot;
 using oxygen::cooker::testing::MemoryFileSystem;
 using oxygen::cooker::testing::PhysicsSidecarBuilder;
-using oxygen::cooker::testing::PhysicsSidecarDescriptor;
 using oxygen::cooker::testing::SceneBuilder;
 namespace base = oxygen::base;
 namespace cooked = oxygen::content::cooked;
@@ -113,7 +111,7 @@ NOLINT_TEST(PhysicsSidecarBuilderTest, RefusesNodesOfAnotherScene)
                  game.PhysicsSidecar("Scenes/Main.opscene", scene, bindings)),
     std::invalid_argument);
   EXPECT_THROW(
-    static_cast<void>(PhysicsSidecarDescriptor(scene, main.Bytes(), bindings)),
+    static_cast<void>(bindings.Bytes(scene, main.Bytes(), "PhysicsScene")),
     std::invalid_argument);
   EXPECT_THROW(bindings.Aggregate(main.Node("late")), std::invalid_argument);
 }

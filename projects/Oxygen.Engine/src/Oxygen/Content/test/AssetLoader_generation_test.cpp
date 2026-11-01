@@ -43,20 +43,21 @@
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
+#include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedOpenError.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -178,55 +179,14 @@ namespace {
   auto AddBoundCube(LooseCookedRoot& source, const data::AssetKey& material)
     -> void
   {
-    data::pak::geometry::GeometryAssetDesc geometry {};
-    geometry.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kGeometry);
-    geometry.header.version = data::pak::geometry::kGeometryAssetVersion;
-    geometry.lod_count = 1U;
-    geometry.surface_count = 1U;
-    auto strings = data::DescriptorStringsBuilder {};
-    data::pak::geometry::MeshDesc mesh {};
-    mesh.name_offset = strings.Add("Cube/Mesh");
-    mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kProcedural);
-    mesh.info.procedural = {};
-    mesh.submesh_count = 1U;
-    mesh.mesh_view_count = 1U;
-    data::pak::geometry::SubMeshDesc submesh {};
-    submesh.name_offset = strings.Add("fixture");
-    submesh.surface_id
-      = data::SurfaceId::FromStableIdentity("generation-test-slot");
-    submesh.material_asset_key = material;
-    submesh.mesh_view_count = 1U;
-    constexpr data::pak::geometry::MeshViewDesc view {
-      .first_index = 0U,
-      .index_count = 36U,
-      .first_vertex = 0U,
-      .vertex_count = 24U,
-    };
-    const data::pak::geometry::SurfaceDesc surface {
-      .surface_id = submesh.surface_id,
-      .flags = data::pak::geometry::kSurfaceFlag_Visible,
-    };
-    std::vector<std::byte> geometry_bytes;
-    cooker::testing::AppendRecord(geometry_bytes, geometry);
-    cooker::testing::AppendRecord(geometry_bytes, mesh);
-    cooker::testing::AppendRecord(geometry_bytes, submesh);
-    cooker::testing::AppendRecord(geometry_bytes, view);
-    cooker::testing::AppendRecord(geometry_bytes, surface);
-    data::AppendDescriptorStrings(geometry_bytes, strings);
+    auto geometry = cooker::testing::GeometryBuilder { "bound-cube" };
+    geometry.Submesh(geometry.ProceduralLod(),
+      data::SurfaceId::FromStableIdentity("generation-test-slot"), material);
     source.Add({
       .type = data::AssetType::kGeometry,
       .leaf = "bound-cube.ogeo",
-      .descriptor = std::move(geometry_bytes),
-      .references = data::AssetReferences::Create({},
-        {
-          {
-            .key = material,
-            .kind = data::KeyReferenceKind::kAsset,
-            .expected_type = data::AssetType::kMaterial,
-          },
-        })
-        .value(),
+      .descriptor = geometry.Bytes(),
+      .references = geometry.References(),
       .key = BoundCubeKey(),
     });
   }
@@ -237,24 +197,13 @@ namespace {
   {
     const auto payload = std::array { recipe.payload };
     const auto row = source.AddScript(std::as_bytes(std::span { payload }));
-    data::pak::scripting::ScriptAssetDesc descriptor {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kScript);
-    descriptor.header.version = data::pak::scripting::kScriptAssetVersion;
-    descriptor.bytecode_resource_index = data::ResourceReferenceIndex { 0U };
+    auto script = cooker::testing::ScriptBuilder { "reload" };
+    script.Bytecode(row);
     source.Add({
       .type = data::AssetType::kScript,
       .leaf = "reload.oscript",
-      .descriptor = data::MakeDescriptorBytes(descriptor),
-      .references = data::AssetReferences::Create(
-        {
-          {
-            .kind = data::ResourceKind::kScript,
-            .index = row,
-          },
-        },
-        {})
-        .value(),
+      .descriptor = script.Bytes(),
+      .references = script.References(),
       .key = recipe.script.IsNil()
         ? data::AssetKey::FromVirtualPath("/test/generation.oscript")
         : recipe.script,
@@ -284,15 +233,15 @@ namespace {
       .key = SceneKey(),
     });
     if (!recipe.material.IsNil()) {
-      data::pak::render::MaterialAssetDesc material {};
-      material.header.asset_type
-        = static_cast<std::uint8_t>(data::AssetType::kMaterial);
-      material.header.version = data::pak::render::kMaterialAssetVersion;
-      material.emissive_factor[0] = recipe.emission;
+      auto record = data::pak::render::MaterialAssetDesc {};
+      record.emissive_factor[0] = recipe.emission;
+      const auto material
+        = cooker::testing::MaterialBuilder { "material", record };
       source.Add({
         .type = data::AssetType::kMaterial,
         .leaf = "material.omat",
-        .descriptor = data::MakeDescriptorBytes(material),
+        .descriptor = material.Bytes(),
+        .references = material.References(),
         .key = recipe.material,
       });
     }
@@ -703,11 +652,15 @@ namespace {
     geometry_desc.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kGeometry);
     geometry_desc.header.version = data::pak::geometry::kGeometryAssetVersion;
+    auto geometry_file = cooker::testing::GeometryBuilder { "geometry" };
+    geometry_file.Submesh(geometry_file.ProceduralLod(),
+      data::SurfaceId::FromStableIdentity("fixture-surface"));
     auto geometry_source = LooseCookedRoot { "test", kThirdSeed };
     geometry_source.Add({
       .type = data::AssetType::kGeometry,
       .leaf = "geometry.ogeo",
-      .descriptor = data::MakeDescriptorBytes(geometry_desc),
+      .descriptor = geometry_file.Bytes(),
+      .references = geometry_file.References(),
       .key = geometry_key,
     });
     cooker::testing::Materialize(geometry_source.Files(), geometry_root);
@@ -1057,25 +1010,15 @@ namespace {
     return pak;
   }
 
-  //! The pak of the `Content` mount whose material references the engine's
-  //! default material, so it requires it of the `Engine` mount.
+  //! The pak of the `Content` mount whose crate is painted with the
+  //! engine's default material, so it requires it of the `Engine` mount.
   auto ContentPak(const CookedPak& engine) -> CookedPak
   {
     auto content = LooseCookedRoot { "Content" };
-    content.Add({
-      .type = data::AssetType::kMaterial,
-      .leaf = "Wood.omat",
-      .descriptor = cooker::testing::MaterialDescriptor("Wood").bytes,
-      .references = data::AssetReferences::Create({},
-        {
-          {
-            .key = EngineMaterialKey(),
-            .kind = data::KeyReferenceKind::kAsset,
-            .expected_type = data::AssetType::kMaterial,
-          },
-        })
-        .value(),
-    });
+    auto crate = cooker::testing::GeometryBuilder { "Crate" };
+    crate.Submesh(crate.ProceduralLod(),
+      data::SurfaceId::FromStableIdentity("crate"), EngineMaterialKey());
+    static_cast<void>(content.Geometry("Crate.ogeo", crate));
     auto pak = CookedPak { std::move(content) };
     pak.DependsOn(engine).Identity(SourceKeyOf(kContentSeed));
     return pak;
@@ -1253,9 +1196,8 @@ namespace {
     root.Add({
       .type = data::AssetType::kPhysicsScene,
       .leaf = "scene.opscene",
-      .descriptor
-      = cooker::testing::PhysicsSidecarDescriptor(target, PlainSceneBytes())
-        .bytes,
+      .descriptor = cooker::testing::PhysicsSidecarBuilder {}.Bytes(
+        target, PlainSceneBytes(), "PhysicsScene"),
     });
     return root;
   }

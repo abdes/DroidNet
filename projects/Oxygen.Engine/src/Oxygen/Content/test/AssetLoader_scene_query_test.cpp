@@ -135,7 +135,7 @@ struct InstancingFixture {
 
 auto Instancing(const InstancingSpec& spec) -> InstancingFixture
 {
-  auto scene = SceneBuilder { std::string(spec.name) };
+  auto scene = SceneBuilder { spec.name };
   const auto root = scene.Node(std::string(spec.name) + "Root");
   const auto holder = scene.Node(std::string(spec.name) + "Holder", root);
   scene.Instance(holder, spec.source);

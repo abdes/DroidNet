@@ -39,13 +39,12 @@
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -572,18 +571,14 @@ NOLINT_TEST_F(ImportSessionTest, CohortPublicationPreservesParticipantFailures)
       make_session(),
     };
     const std::array names { "first", "failed", "last" };
-    oxygen::data::pak::render::MaterialAssetDesc descriptor {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
-    descriptor.header.version
-      = oxygen::data::pak::render::kMaterialAssetVersion;
+    const auto descriptor = oxygen::cooker::testing::MaterialBuilder {};
     for (size_t index = 0; index < sessions.size(); ++index) {
       const auto relative = std::string(names.at(index)) + ".omat";
       const auto virtual_path = std::string("/Content/") + relative;
       sessions.at(index)->AssetEmitter().Emit(
         oxygen::data::AssetKey::FromVirtualPath(virtual_path),
         oxygen::data::AssetType::kMaterial, virtual_path, relative,
-        oxygen::data::MakeDescriptorBytes(descriptor), {});
+        descriptor.Bytes(), descriptor.References());
     }
     sessions.at(1)->AddDiagnostic({
       .severity = ImportSeverity::kError,
@@ -632,18 +627,14 @@ NOLINT_TEST_F(ImportSessionTest, FinalizePendingWritesWaitsForCompletion)
       observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
       observer_ptr(index_registry_.get()));
 
-    oxygen::data::pak::render::MaterialAssetDesc descriptor {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
-    descriptor.header.version
-      = oxygen::data::pak::render::kMaterialAssetVersion;
+    const auto descriptor = oxygen::cooker::testing::MaterialBuilder {};
     for (const auto* name : { "test1", "test2" }) {
       const auto relative = std::string(name) + ".omat";
       const auto virtual_path = std::string("/Content/") + relative;
       session.AssetEmitter().Emit(
         oxygen::data::AssetKey::FromVirtualPath(virtual_path),
         oxygen::data::AssetType::kMaterial, virtual_path, relative,
-        oxygen::data::MakeDescriptorBytes(descriptor), {});
+        descriptor.Bytes(), descriptor.References());
     }
 
     (void)co_await session.Finalize();
@@ -727,14 +718,14 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
       });
     const auto descriptor_relpath = std::string("Wood.omat");
     const auto virtual_path = "/.cooked/" + descriptor_relpath;
-    const auto descriptor = oxygen::cooker::testing::MaterialDescriptor("Wood");
+    const auto descriptor = oxygen::cooker::testing::MaterialBuilder { "Wood" };
 
     const auto tex_idx
       = session.TextureEmitter().Emit(MakeTestTexturePayload());
     const auto buf_idx = session.BufferEmitter().Emit(MakeTestBufferPayload());
     session.AssetEmitter().Emit(kKey, oxygen::data::AssetType::kMaterial,
-      virtual_path, descriptor_relpath, descriptor.bytes,
-      descriptor.references);
+      virtual_path, descriptor_relpath, descriptor.Bytes(),
+      descriptor.References());
 
     const auto& report = co_await session.Finalize();
 
@@ -799,7 +790,7 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeRefusesAnIdentityOfAnotherMount)
       bytes.front() = seed;
       return oxygen::data::AssetKey::FromBytes(bytes);
     };
-    const auto descriptor = oxygen::cooker::testing::MaterialDescriptor("Wood");
+    const auto descriptor = oxygen::cooker::testing::MaterialBuilder { "Wood" };
 
     auto first_request = MakeRequest("first.fbx");
     first_request.asset_virtual_path = "/Content/First.omat";
@@ -810,8 +801,8 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeRefusesAnIdentityOfAnotherMount)
         observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
         observer_ptr(index_registry_.get()));
       session.AssetEmitter().Emit(key_of(1), oxygen::data::AssetType::kMaterial,
-        "/Content/First.omat", "First.omat", descriptor.bytes,
-        descriptor.references);
+        "/Content/First.omat", "First.omat", descriptor.Bytes(),
+        descriptor.References());
       const auto& report = co_await session.Finalize();
       EXPECT_TRUE(report.success);
     }
@@ -823,8 +814,8 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeRefusesAnIdentityOfAnotherMount)
       observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
       observer_ptr(index_registry_.get()));
     session.AssetEmitter().Emit(key_of(2), oxygen::data::AssetType::kMaterial,
-      "/Other/Second.omat", "Second.omat", descriptor.bytes,
-      descriptor.references);
+      "/Other/Second.omat", "Second.omat", descriptor.Bytes(),
+      descriptor.References());
 
     const auto& report = co_await session.Finalize();
 

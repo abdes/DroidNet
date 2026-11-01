@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -121,23 +122,40 @@ namespace {
     request.asset_virtual_path = "/.cooked/Physics/Materials/ground.opmat";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
+    auto material = oxygen::cooker::test::PhysicsMaterialDescriptor {
+      request.asset_virtual_path,
+    };
+    material.Set("/static_friction", 0.95)
+      .Set("/dynamic_friction", 0.70)
+      .Set("/restitution", 0.05)
+      .Set("/density", 1800.0);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
-          .normalized_descriptor_json = R"({
-            "name": "ground",
-            "static_friction": 0.95,
-            "dynamic_friction": 0.70,
-            "restitution": 0.05,
-            "density": 1800.0
-          })",
+          .normalized_descriptor_json = material.Text(),
         };
     return request;
   }
 
+  constexpr auto kGroundMaterial = "/.cooked/Physics/Materials/ground.opmat";
+
+  //! A box shape document named `name`, at `identity`, of the ground material.
+  auto MakeShape(const std::string& identity, const std::string_view name)
+    -> oxygen::cooker::test::CollisionShapeDescriptor
+  {
+    auto shape = oxygen::cooker::test::CollisionShapeDescriptor {
+      identity,
+      kGroundMaterial,
+    };
+    shape.Set("/name", name);
+    return shape;
+  }
+
   auto MakeCollisionShapeRequest(const ScenarioRoots& roots,
-    const json& descriptor_doc, const std::string& asset_virtual_path)
+    const oxygen::cooker::test::CollisionShapeDescriptor& shape)
     -> ImportRequest
   {
+    const auto& descriptor_doc = shape.Json();
+    const auto& asset_virtual_path = shape.Identity();
     auto request = ImportRequest {};
     request.source_path = roots.source / "shape.shape.json";
     request.cooked_root = roots.cooked;
@@ -165,16 +183,12 @@ namespace {
     ASSERT_HAS_VALUE(material_report);
     ASSERT_TRUE(material_report->success);
 
-    const auto shape_descriptor = json {
-      { "name", "floor_box" },
-      { "shape_type", "box" },
-      { "material_ref", "../Materials/ground.opmat" },
-      { "half_extents", json::array({ 25.0F, 0.5F, 25.0F }) },
-    };
+    auto shape
+      = MakeShape("/.cooked/Physics/Shapes/floor_box.ocshape", "floor_box");
+    shape.Set("/half_extents", { 25.0F, 0.5F, 25.0F });
 
     const auto report = Import(MakeCollisionShapeRequest(
-      { .source = source_root, .cooked = cooked_root }, shape_descriptor,
-      "/.cooked/Physics/Shapes/floor_box.ocshape"));
+      { .source = source_root, .cooked = cooked_root }, shape));
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
 
@@ -218,16 +232,15 @@ namespace {
     ASSERT_HAS_VALUE(material_report);
     ASSERT_TRUE(material_report->success);
 
-    const auto shape_descriptor = json {
-      { "name", "convex_hull_shape" },
-      { "shape_type", "convex_hull" },
-      { "material_ref", "../Materials/ground.opmat" },
-      { "unexpected_field", "/.cooked/Physics/Resources/shape_payload.opres" },
-    };
+    auto shape
+      = MakeShape("/.cooked/Physics/Shapes/hull.ocshape", "convex_hull_shape");
+    shape.Set("/shape_type", "convex_hull")
+      .Remove("/half_extents")
+      .Set(
+        "/unexpected_field", "/.cooked/Physics/Resources/shape_payload.opres");
 
     const auto report = Import(MakeCollisionShapeRequest(
-      { .source = source_root, .cooked = cooked_root }, shape_descriptor,
-      "/.cooked/Physics/Shapes/hull.ocshape"));
+      { .source = source_root, .cooked = cooked_root }, shape));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
@@ -246,15 +259,12 @@ namespace {
     ASSERT_HAS_VALUE(material_report);
     ASSERT_TRUE(material_report->success);
 
-    const auto shape_descriptor = json {
-      { "name", "convex_hull_inline_payload" },
-      { "shape_type", "convex_hull" },
-      { "material_ref", "../Materials/ground.opmat" },
-    };
+    auto shape = MakeShape("/.cooked/Physics/Shapes/hull_inline.ocshape",
+      "convex_hull_inline_payload");
+    shape.Set("/shape_type", "convex_hull").Remove("/half_extents");
 
     const auto report = Import(MakeCollisionShapeRequest(
-      { .source = source_root, .cooked = cooked_root }, shape_descriptor,
-      "/.cooked/Physics/Shapes/hull_inline.ocshape"));
+      { .source = source_root, .cooked = cooked_root }, shape));
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
 
@@ -288,12 +298,11 @@ namespace {
     ASSERT_HAS_VALUE(material_report);
     ASSERT_TRUE(material_report->success);
 
-    const auto shape_descriptor = json {
-      { "name", "compound_shape" },
-      { "shape_type", "compound" },
-      { "material_ref", "../Materials/ground.opmat" },
-      {
-        "children",
+    auto shape = MakeShape(
+      "/.cooked/Physics/Shapes/compound_shape.ocshape", "compound_shape");
+    shape.Set("/shape_type", "compound")
+      .Remove("/half_extents")
+      .Set("/children",
         json::array({
           json {
             { "shape_type", "sphere" },
@@ -309,13 +318,10 @@ namespace {
             { "local_rotation", json::array({ 0.0F, 0.0F, 0.0F, 1.0F }) },
             { "local_scale", json::array({ 0.9F, 0.9F, 0.9F }) },
           },
-        }),
-      },
-    };
+        }));
 
     const auto report = Import(MakeCollisionShapeRequest(
-      { .source = source_root, .cooked = cooked_root }, shape_descriptor,
-      "/.cooked/Physics/Shapes/compound_shape.ocshape"));
+      { .source = source_root, .cooked = cooked_root }, shape));
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
 
@@ -361,12 +367,11 @@ namespace {
     ASSERT_HAS_VALUE(material_report);
     ASSERT_TRUE(material_report->success);
 
-    const auto shape_descriptor = json {
-      { "name", "bad_compound_child_payload" },
-      { "shape_type", "compound" },
-      { "material_ref", "../Materials/ground.opmat" },
-      {
-        "children",
+    auto shape = MakeShape("/.cooked/Physics/Shapes/bad_compound.ocshape",
+      "bad_compound_child_payload");
+    shape.Set("/shape_type", "compound")
+      .Remove("/half_extents")
+      .Set("/children",
         json::array({
           json {
             { "shape_type", "convex_hull" },
@@ -374,13 +379,10 @@ namespace {
             { "local_rotation", json::array({ 0.0F, 0.0F, 0.0F, 1.0F }) },
             { "local_scale", json::array({ 1.0F, 1.0F, 1.0F }) },
           },
-        }),
-      },
-    };
+        }));
 
     const auto report = Import(MakeCollisionShapeRequest(
-      { .source = source_root, .cooked = cooked_root }, shape_descriptor,
-      "/.cooked/Physics/Shapes/bad_compound.ocshape"));
+      { .source = source_root, .cooked = cooked_root }, shape));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
@@ -390,7 +392,7 @@ namespace {
   NOLINT_TEST_F(CollisionShapeDescriptorImportJobTest,
     DocumentStatingAVirtualPathIsRefusedBySchema)
   {
-    const auto cooked_root = TempDir() / "identity_conflict";
+    const auto cooked_root = TempDir() / "stated_virtual_path";
     std::filesystem::create_directories(cooked_root);
     const auto source_root = cooked_root.parent_path() / "source_data";
 
@@ -399,17 +401,13 @@ namespace {
     ASSERT_HAS_VALUE(material_report);
     ASSERT_TRUE(material_report->success);
 
-    const auto shape_descriptor = json {
-      { "name", "floor_box" },
-      { "shape_type", "box" },
-      { "material_ref", "../Materials/ground.opmat" },
-      { "half_extents", json::array({ 25.0F, 0.5F, 25.0F }) },
-      { "virtual_path", "/.cooked/Physics/Shapes/other.ocshape" },
-    };
+    auto shape
+      = MakeShape("/.cooked/Physics/Shapes/floor_box.ocshape", "floor_box");
+    shape.Set("/half_extents", { 25.0F, 0.5F, 25.0F })
+      .Set("/virtual_path", "/.cooked/Physics/Shapes/other.ocshape");
 
     const auto report = Import(MakeCollisionShapeRequest(
-      { .source = source_root, .cooked = cooked_root }, shape_descriptor,
-      "/.cooked/Physics/Shapes/floor_box.ocshape"));
+      { .source = source_root, .cooked = cooked_root }, shape));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(

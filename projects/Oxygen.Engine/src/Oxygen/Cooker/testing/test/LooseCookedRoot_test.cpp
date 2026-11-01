@@ -16,6 +16,7 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Data/AssetType.h>
@@ -23,6 +24,7 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
@@ -161,7 +163,10 @@ NOLINT_TEST_F(LooseCookedRootTest, TexturedMaterialReferencesItsRow)
   auto game = LooseCookedRoot { "Game" };
   const auto payload = SeedBytes(9U, 16U);
   const auto wood = game.AddTexture(payload);
-  const auto material = game.Material("Materials/Wood.omat", wood);
+  auto wood_material = oxygen::cooker::testing::MaterialBuilder { "Wood" };
+  wood_material.Texture(
+    &oxygen::data::pak::render::MaterialAssetDesc::base_color_texture, wood);
+  const auto material = game.Material("Materials/Wood.omat", wood_material);
 
   const auto content = Open(game);
 

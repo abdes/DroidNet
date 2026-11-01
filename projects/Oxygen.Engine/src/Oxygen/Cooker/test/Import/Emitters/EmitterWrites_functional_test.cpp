@@ -38,7 +38,7 @@
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/HoldingStorage.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -302,10 +302,10 @@ NOLINT_TEST_F(EmitterWritesTest, AssetEmitterFinalizeReturnsTheFirstWriteError)
       AssetEmitter emitter(storage, loop_->Driver(), writes, root);
       emitter.Emit(AssetKey::FromVirtualPath("/.cooked/Materials/A.omat"),
         AssetType::kMaterial, "/.cooked/Materials/A.omat", "Materials/A.omat",
-        fixtures::MaterialDescriptor("a").bytes, {});
+        fixtures::MaterialBuilder { "a" }.Bytes(), {});
       emitter.Emit(AssetKey::FromVirtualPath("/.cooked/Materials/B.omat"),
         AssetType::kMaterial, "/.cooked/Materials/B.omat", "Materials/B.omat",
-        fixtures::MaterialDescriptor("b").bytes, {});
+        fixtures::MaterialBuilder { "b" }.Bytes(), {});
       result = co_await emitter.Finalize();
       errors = emitter.ErrorCount();
       co_return co::kJoin;
@@ -336,7 +336,8 @@ NOLINT_TEST_F(
       AssetEmitter emitter(storage, loop_->Driver(), writes, root);
       for (const std::string_view name : { "v1", "v2", "v3" }) {
         emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
-          "Materials/Wood.omat", fixtures::MaterialDescriptor(name).bytes, {});
+          "Materials/Wood.omat", fixtures::MaterialBuilder { name }.Bytes(),
+          {});
         if (name[1] == '1') {
           // The first write stops in flight; the others queue behind it.
           co_await storage.publication_held;
@@ -351,7 +352,7 @@ NOLINT_TEST_F(
 
   ASSERT_TRUE(result);
   const auto stored = memory.Bytes(root / "Materials/Wood.omat");
-  const auto latest = fixtures::MaterialDescriptor("v3").bytes;
+  const auto latest = fixtures::MaterialBuilder { "v3" }.Bytes();
   EXPECT_EQ(std::vector<std::byte>(stored.begin(), stored.end()), latest);
 }
 

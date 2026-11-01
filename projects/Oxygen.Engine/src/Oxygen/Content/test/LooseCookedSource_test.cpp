@@ -20,15 +20,15 @@
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -43,7 +43,7 @@ using oxygen::content::internal::LooseCookedSource;
 using oxygen::content::lc::LooseCookedIndex;
 using oxygen::cooker::testing::CookedBytes;
 using oxygen::cooker::testing::LooseCookedRoot;
-using oxygen::cooker::testing::MaterialDescriptor;
+using oxygen::cooker::testing::MaterialBuilder;
 using oxygen::cooker::testing::Materialize;
 using oxygen::cooker::testing::SeedBytes;
 using oxygen::data::AssetKey;
@@ -374,7 +374,7 @@ TEST_F(LooseCookedSourceTest, IndexKeepsForgedDescriptorSizeAndDigest)
   const auto key = root.Add({
     .type = AssetType::kMaterial,
     .leaf = "a.omat",
-    .descriptor = MaterialDescriptor("a").bytes,
+    .descriptor = MaterialBuilder { "a" }.Bytes(),
     .recorded_size = kForgedDescriptorSize,
     .recorded_sha256 = forged_sha,
   });

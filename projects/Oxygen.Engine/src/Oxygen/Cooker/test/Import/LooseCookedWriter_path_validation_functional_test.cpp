@@ -10,12 +10,11 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include "LooseCookedWriterTestSupport.h"
 
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -62,9 +61,7 @@ namespace {
 
     const auto key = MakeFirstByteAssetKey(0x44);
 
-    const auto bytes
-      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
-          .bytes;
+    const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
     const auto valid_virtual_path
       = std::string("/.cooked/Materials/") + MaterialFile("A");
     const auto valid_relpath = "Materials/" + MaterialFile("A");

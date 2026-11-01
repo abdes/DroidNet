@@ -17,12 +17,11 @@
 #include <Oxygen/Cooker/Pak/PakManifestWriter.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -35,7 +34,6 @@ using oxygen::cooker::test::HasDiagnostic;
 using oxygen::cooker::test::HasNoErrors;
 using oxygen::cooker::testing::LooseCookedRoot;
 using oxygen::cooker::testing::PakWorkspace;
-using pak::BuildMode;
 
 constexpr auto kContentVersion = uint16_t { 7U };
 constexpr auto kPatchDiffBasisIdentifier
@@ -46,10 +44,14 @@ auto TwoAssetBase() -> data::PakCatalog
 {
   const auto game = LooseCookedRoot {};
   return game.BaseCatalog({
-    { .asset_key = game.KeyOf("Wood.omat"),
-      .asset_type = data::AssetType::kMaterial },
-    { .asset_key = game.KeyOf("Mesh.ogeo"),
-      .asset_type = data::AssetType::kGeometry },
+    {
+      .asset_key = game.KeyOf("Wood.omat"),
+      .asset_type = data::AssetType::kMaterial,
+    },
+    {
+      .asset_key = game.KeyOf("Mesh.ogeo"),
+      .asset_type = data::AssetType::kGeometry,
+    },
   });
 }
 
@@ -72,7 +74,7 @@ protected:
     static_cast<void>(game.Add({
       .type = data::AssetType::kMaterial,
       .leaf = std::string(kMaterialLeaf),
-      .descriptor = fixtures::MaterialDescriptor("Wood").bytes,
+      .descriptor = fixtures::MaterialBuilder { "Wood" }.Bytes(),
     }));
     auto request = workspace_.FullRequest({ workspace_.Add(game) }, "full.pak");
     request.output_manifest_path = PakWorkspace::PakPath("full.manifest.json");
@@ -227,7 +229,7 @@ protected:
     static_cast<void>(game.Add({
       .type = data::AssetType::kMaterial,
       .leaf = "Wood.omat",
-      .descriptor = fixtures::MaterialDescriptor("Wood").bytes,
+      .descriptor = fixtures::MaterialBuilder { "Wood" }.Bytes(),
     }));
     const auto request
       = workspace_.FullRequest({ workspace_.Add(game) }, "game.pak");

@@ -32,7 +32,7 @@
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
@@ -845,9 +845,8 @@ namespace {
   {
     using cooker::testing::DescriptorDefects;
     auto scene = MinimalScene(1U).Build(SceneKey());
-    auto sidecar = cooker::testing::PhysicsSidecarDescriptor(
-      SceneKey(), scene->GetRawData())
-                     .bytes;
+    auto sidecar = cooker::testing::PhysicsSidecarBuilder {}.Bytes(
+      SceneKey(), scene->GetRawData(), "PhysicsScene");
     if (!target.matches_content) {
       DescriptorDefects::CorruptSidecarSceneHash(sidecar);
     }

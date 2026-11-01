@@ -31,16 +31,17 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
@@ -51,8 +52,6 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/CookedSource.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -62,10 +61,6 @@
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
-#include <Oxygen/Serio/NativeFile.h>
-#include <Oxygen/Serio/RegionStream.h>
-#include <Oxygen/Serio/Types.h>
-#include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::base::CheckedAt;
@@ -74,69 +69,25 @@ namespace oxygen::content::import::test {
 
 namespace {
 
+  using nlohmann::json;
   using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
+  using oxygen::cooker::test::SceneDescriptor;
+  using oxygen::cooker::test::WriteBytes;
   using oxygen::cooker::test::WriteText;
+  using oxygen::cooker::testing::GeometryBuilder;
   using oxygen::cooker::testing::LooseCookedRoot;
+  using oxygen::cooker::testing::MaterialBuilder;
   using oxygen::cooker::testing::Materialize;
   using oxygen::cooker::testing::SeedBytes;
 
   auto WriteSurfaceGeometry(const std::filesystem::path& path) -> void
   {
-    namespace geometry = data::pak::geometry;
-    std::filesystem::create_directories(path.parent_path());
-    auto file = serio::NativeFile::Open(path,
-      {
-        .access = serio::Access::kWrite,
-        .creation = serio::Creation::kCreateAlways,
-      });
-    ASSERT_TRUE(file) << file.error().message();
-    serio::RegionWriteStream<serio::NativeFile> stream(*file);
-    serio::Writer writer(stream);
-    const auto packed = writer.ScopedAlignment(1);
-    auto descriptor = geometry::GeometryAssetDesc {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kGeometry);
-    descriptor.header.version = geometry::kGeometryAssetVersion;
-    descriptor.lod_count = 1;
-    descriptor.surface_count = 1;
-    auto mesh = geometry::MeshDesc {};
-    mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
-    mesh.submesh_count = 1;
-    mesh.mesh_view_count = 1;
-    auto submesh = geometry::SubMeshDesc {};
-    submesh.surface_id
-      = data::SurfaceId::FromString("00000000-0000-0000-0000-000000000001")
-          .value();
-    submesh.mesh_view_count = 1;
-    const auto view = geometry::MeshViewDesc {
-      .first_index = 0,
-      .index_count = 3,
-      .first_vertex = 0,
-      .vertex_count = 3,
-    };
-    const auto surface = geometry::SurfaceDesc {
-      .surface_id = submesh.surface_id,
-      .flags = geometry::kSurfaceFlag_Visible,
-    };
-    const auto strings = data::DescriptorStringsBuilder {};
-    descriptor.header.strings = {
-      .offset = sizeof(descriptor) + sizeof(mesh) + sizeof(submesh)
-        + sizeof(view) + sizeof(surface),
-      .size = strings.Size(),
-    };
-    const auto write = [&writer](const auto& record) -> auto {
-      ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span(&record, 1))));
-    };
-    write(descriptor);
-    write(mesh);
-    write(submesh);
-    write(view);
-    write(surface);
-    ASSERT_TRUE(writer.WriteBlob(strings.Bytes()));
-    ASSERT_TRUE(writer.Flush());
-    const auto flushed = stream.Flush();
-    ASSERT_TRUE(flushed) << flushed.error().message();
+    auto geometry = GeometryBuilder { "Cube" };
+    geometry.Submesh(geometry.ProceduralLod(),
+      data::SurfaceId::FromString("00000000-0000-0000-0000-000000000001")
+        .value());
+    WriteBytes(path, geometry.Bytes());
   }
 
   using oxygen::cooker::test::HasDiagnosticCode;
@@ -148,27 +99,14 @@ namespace {
 
   class SceneDescriptorImportJobTest : public ImportServiceTest {
   protected:
-    //! A request that cooks the scene at the identity its own name spells.
+    //! A request that cooks `scene` at its own identity.
     auto MakeRequest(const std::filesystem::path& cooked_root,
-      const std::string& descriptor_json) -> ImportRequest
+      const SceneDescriptor& scene) -> ImportRequest
     {
-      auto document = nlohmann::json::parse(descriptor_json);
-      document.emplace("version", internal::kSceneDescriptorVersion);
-      // Every node needs an identity; a test that does not care gets a
-      // readable one from its position.
-      if (document.contains("nodes") && document.at("nodes").is_array()) {
-        auto& nodes = document.at("nodes");
-        for (std::size_t index = 0; index < nodes.size(); ++index) {
-          auto digits = std::to_string(index + 1U);
-          nodes.at(index).emplace("id",
-            "00000000-0000-4000-8000-" + std::string(12U - digits.size(), '0')
-              + digits);
-        }
-      }
+      const auto& document = scene.Json();
       auto request = ImportRequest {};
       request.source_path = "inline://scene.oscene.json";
-      request.asset_virtual_path = "/.cooked/Scenes/"
-        + document.at("name").get<std::string>() + ".oscene";
+      request.asset_virtual_path = scene.Identity();
       request.source_mount_path
         = oxygen::cooker::test::SourceMountPath(request.source_path);
       request.cooked_root = cooked_root;
@@ -184,13 +122,11 @@ namespace {
 
     const auto root = TempDir() / "empty_scene_environment";
     std::filesystem::create_directories(root);
-    const auto report = Import(MakeRequest(root, R"({
-      "name":"EmptyScene", "nodes":[],
-      "environment": {
-        "background": {"color_rgb":[0.1,0.2,0.3]},
-        "post_process_volume": {"manual_exposure_ev":9.5}
-      }
-    })"));
+    auto document = SceneDescriptor { "/.cooked/Scenes/EmptyScene.oscene" };
+    document.Set("/nodes", json::array())
+      .Set("/environment/background/color_rgb", json::array({ 0.1, 0.2, 0.3 }))
+      .Set("/environment/post_process_volume/manual_exposure_ev", 9.5);
+    const auto report = Import(MakeRequest(root, document));
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
     ASSERT_EQ(report->scenes_written, 1U);
@@ -221,10 +157,11 @@ namespace {
 
     const auto root = TempDir() / "empty_scene_invalid_camera";
     std::filesystem::create_directories(root);
-    const auto report = Import(MakeRequest(root, R"({
-      "name":"EmptyScene", "nodes":[],
-      "cameras":{"perspective":[{"node":0,"aspect_mode":"auto"}]}
-    })"));
+    auto document = SceneDescriptor { "/.cooked/Scenes/EmptyScene.oscene" };
+    document.Set("/nodes", json::array())
+      .Set("/cameras/perspective",
+        json::array({ json { { "node", 0 }, { "aspect_mode", "auto" } } }));
+    const auto report = Import(MakeRequest(root, document));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_EQ(report->scenes_written, 0U);
@@ -240,23 +177,27 @@ namespace {
     namespace world = data::pak::world;
     const auto root = TempDir() / "composed_scene";
     std::filesystem::create_directories(root);
-    const auto model = Import(
-      MakeRequest(root, R"({"name":"Model","nodes":[{"name":"part"}]})"));
+    auto model_document = SceneDescriptor { "/.cooked/Scenes/Model.oscene" };
+    model_document.Set("/nodes/0/name", "part");
+    const auto model = Import(MakeRequest(root, model_document));
     ASSERT_HAS_VALUE(model);
     ASSERT_TRUE(model->success);
     WriteText(root / "Input/gameplay.oimap", "context");
 
-    const auto report = Import(MakeRequest(root, R"({
-      "name":"Level",
-      "nodes":[{"name":"root"},
-        {"name":"model","parent":0,
-         "instance":{"scene_ref":"Model.oscene"}},
-        {"name":"camera","parent":0}],
-      "cameras":{"perspective":[{"node":2,"aspect_mode":"auto"}]},
-      "starting_camera":{"node":2},
-      "starting_input_contexts":[
-        {"context_ref":"../Input/gameplay.oimap","priority":3}]
-    })"));
+    auto level = SceneDescriptor { "/.cooked/Scenes/Level.oscene" };
+    const auto instance = level.Node("model", 0U);
+    level.Node("camera", 0U);
+    level.Set("/nodes/" + std::to_string(instance) + "/instance",
+      json { { "scene_ref", level.Spell("/.cooked/Scenes/Model.oscene") } });
+    level.Set("/cameras/perspective",
+      json::array({ json { { "node", 2 }, { "aspect_mode", "auto" } } }));
+    level.Set("/starting_camera/node", 2);
+    level.Append("/starting_input_contexts",
+      json {
+        { "context_ref", level.Spell("/.cooked/Input/gameplay.oimap") },
+        { "priority", 3 },
+      });
+    const auto report = Import(MakeRequest(root, level));
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
 
@@ -305,8 +246,9 @@ namespace {
   {
     const auto root = TempDir() / "starting_camera_without_camera";
     std::filesystem::create_directories(root);
-    const auto report = Import(MakeRequest(root,
-      R"({"name":"Scene","nodes":[{"name":"root"}],"starting_camera":{"node":0}})"));
+    auto document = SceneDescriptor { "/.cooked/Scenes/Scene.oscene" };
+    document.Set("/starting_camera/node", 0);
+    const auto report = Import(MakeRequest(root, document));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
@@ -320,20 +262,21 @@ namespace {
     std::filesystem::create_directories(root);
     // A one-node scene, optionally instancing another scene on its node.
     const auto scene = [](const std::string_view name,
-                         const std::string_view instanced) -> std::string {
-      auto node = nlohmann::json { { "name", "root" } };
+                         const std::string_view instanced) -> SceneDescriptor {
+      auto document = SceneDescriptor {
+        "/.cooked/Scenes/" + std::string { name } + ".oscene",
+      };
       if (!instanced.empty()) {
-        const auto path = std::string(instanced) + ".oscene";
-        node.emplace("instance",
-          nlohmann::json {
-            { "scene_ref", path },
+        document.Set("/nodes/0/instance",
+          json {
+            {
+              "scene_ref",
+              document.Spell(
+                "/.cooked/Scenes/" + std::string(instanced) + ".oscene"),
+            },
           });
       }
-      return nlohmann::json {
-        { "name", name },
-        { "nodes", nlohmann::json::array({ node }) },
-      }
-        .dump();
+      return document;
     };
     const auto cook = [&](const std::string_view name,
                         const std::string_view instanced) -> bool {
@@ -362,41 +305,36 @@ namespace {
     namespace world = data::pak::world;
     const auto root = TempDir() / "unresolved_changes";
     std::filesystem::create_directories(root);
-    // MakeRequest gives node i the ID ending in i + 1.
+    // The writer gives node i the ID ending in i + 1.
     constexpr auto kEye
       = std::string_view { "00000000-0000-4000-8000-000000000002" };
     constexpr auto kStranger
       = std::string_view { "00000000-0000-4000-8000-000000000009" };
-    const auto rig = Import(MakeRequest(root, R"({
-      "name":"Rig",
-      "nodes":[{"name":"rig"},{"name":"eye","parent":0}]
-    })"));
+    auto rig_document = SceneDescriptor { "/.cooked/Scenes/Rig.oscene" };
+    rig_document.Set("/nodes/0/name", "rig");
+    rig_document.Node("eye", 0U);
+    const auto rig = Import(MakeRequest(root, rig_document));
     ASSERT_HAS_VALUE(rig);
     ASSERT_TRUE(rig->success);
     const auto change = [](const std::string_view node) -> nlohmann::json {
+      auto components = nlohmann::json::object();
+      components["transform"]["values"]["/local_position/0"] = 2.5;
       return {
         { "path", nlohmann::json::array({ node }) },
-        {
-          "components",
-          nlohmann::json::parse(
-            R"({"transform":{"values":{"/local_position/0":2.5}}})"),
-        },
+        { "components", std::move(components) },
       };
     };
-    auto level = nlohmann::json::parse(R"({
-      "name":"Level",
-      "nodes":[{"name":"root"},
-        {"name":"rig","parent":0,
-         "instance":{"scene_ref":"Rig.oscene"}}]
-    })");
-    level.at("nodes").at(1).at("instance")["overrides"]
-      = nlohmann::json::array({ change(kEye), change(kStranger) });
-    level["starting_camera"] = {
-      { "node", 1 },
-      { "path", nlohmann::json::array({ kEye }) },
-    };
+    auto level = SceneDescriptor { "/.cooked/Scenes/Level.oscene" };
+    const auto rig_node = level.Node("rig", 0U);
+    level
+      .Set("/nodes/" + std::to_string(rig_node) + "/instance",
+        json { { "scene_ref", level.Spell("/.cooked/Scenes/Rig.oscene") } })
+      .Set("/nodes/1/instance/overrides",
+        nlohmann::json::array({ change(kEye), change(kStranger) }))
+      .Set("/starting_camera",
+        json { { "node", 1 }, { "path", nlohmann::json::array({ kEye }) } });
 
-    const auto report = Import(MakeRequest(root, level.dump()));
+    const auto report = Import(MakeRequest(root, level));
 
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
@@ -450,10 +388,12 @@ namespace {
 
     const auto root = TempDir() / "mask_reference";
     std::filesystem::create_directories(root);
-    constexpr auto kDescriptor = R"({"name":"MaskScene","nodes":[{}],
-      "environment":{"post_process_volume":{"auto_exposure_metering_mask":"../Textures/Meter.otex"}}})";
+    auto mask_scene = SceneDescriptor { "/.cooked/Scenes/MaskScene.oscene" };
+    mask_scene.Reference(
+      "/environment/post_process_volume/auto_exposure_metering_mask",
+      "/.cooked/Textures/Meter.otex");
     const auto mask_row = MaterializeMeteringMask(root, Format::kRGBA8UNorm);
-    const auto success = Import(MakeRequest(root, kDescriptor));
+    const auto success = Import(MakeRequest(root, mask_scene));
     ASSERT_HAS_VALUE(success);
     ASSERT_TRUE(success->success);
     const auto bytes = ReadBytes(root / "Scenes/MaskScene.oscene");
@@ -474,13 +414,13 @@ namespace {
       }));
 
     MaterializeMeteringMask(root, Format::kRGBA8UNormSRGB);
-    const auto srgb = Import(MakeRequest(root, kDescriptor));
+    const auto srgb = Import(MakeRequest(root, mask_scene));
     ASSERT_HAS_VALUE(srgb);
     EXPECT_FALSE(srgb->success);
     EXPECT_TRUE(HasDiagnosticCode(
       srgb->diagnostics, "scene.descriptor.mask_format_invalid"));
     MaterializeMeteringMask(root, Format::kRGBA8UNorm, true);
-    const auto absent = Import(MakeRequest(root, kDescriptor));
+    const auto absent = Import(MakeRequest(root, mask_scene));
     ASSERT_HAS_VALUE(absent);
     EXPECT_FALSE(absent->success);
     EXPECT_TRUE(HasDiagnosticCode(
@@ -492,7 +432,7 @@ namespace {
     static_cast<void>(undescribed.AddTexture(SeedBytes(1U)));
     Materialize(undescribed.Files(), root);
     std::filesystem::remove(root / "Textures/Meter.otex");
-    const auto deleted = Import(MakeRequest(root, kDescriptor));
+    const auto deleted = Import(MakeRequest(root, mask_scene));
     ASSERT_HAS_VALUE(deleted);
     EXPECT_TRUE(deleted->success);
     EXPECT_TRUE(HasDiagnosticCode(
@@ -519,8 +459,11 @@ namespace {
     const auto kMask
       = library_root.DescribeTexture("Textures/Meter.otex", mask_row);
     Materialize(library_root.Files(), library);
-    auto request = MakeRequest(root, R"({"name":"MaskScene","nodes":[{}],
-      "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/Library/Textures/Meter.otex"}}})");
+    auto mask_scene = SceneDescriptor { "/.cooked/Scenes/MaskScene.oscene" };
+    mask_scene.Reference(
+      "/environment/post_process_volume/auto_exposure_metering_mask",
+      "/Library/Textures/Meter.otex");
+    auto request = MakeRequest(root, mask_scene);
     request.cooked_context_roots = { library };
 
     // Act
@@ -553,17 +496,37 @@ namespace {
 
     const auto root = TempDir() / "physical_cameras";
     std::filesystem::create_directories(root);
-    const auto report = Import(MakeRequest(root, R"({
-      "name": "Physical", "nodes": [{}, {}, {}, {}],
-      "cameras": {
-        "perspective": [
-          {"node":0,"aspect_mode":"fixed","aspect_ratio":1.5,"aperture_f":2.8,"shutter_rate":250,"iso":400},
-          {"node":1,"aspect_mode":"auto"}],
-        "orthographic": [
-          {"node":2,"aspect_mode":"fixed","orthographic_size":2,"aspect_ratio":1.5,"aperture_f":8,"shutter_rate":60,"iso":200},
-          {"node":3,"aspect_mode":"auto"}]
-      }
-    })"));
+    auto physical = SceneDescriptor { "/.cooked/Scenes/Physical.oscene" };
+    for (const auto* const name : { "Camera1", "Camera2", "Camera3" }) {
+      physical.Node(name);
+    }
+    physical
+      .Set("/cameras/perspective",
+        json::array({
+          json {
+            { "node", 0 },
+            { "aspect_mode", "fixed" },
+            { "aspect_ratio", 1.5 },
+            { "aperture_f", 2.8 },
+            { "shutter_rate", 250 },
+            { "iso", 400 },
+          },
+          json { { "node", 1 }, { "aspect_mode", "auto" } },
+        }))
+      .Set("/cameras/orthographic",
+        json::array({
+          json {
+            { "node", 2 },
+            { "aspect_mode", "fixed" },
+            { "orthographic_size", 2 },
+            { "aspect_ratio", 1.5 },
+            { "aperture_f", 8 },
+            { "shutter_rate", 60 },
+            { "iso", 200 },
+          },
+          json { { "node", 3 }, { "aspect_mode", "auto" } },
+        }));
+    const auto report = Import(MakeRequest(root, physical));
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
     const auto bytes = ReadBytes(root / "Scenes/Physical.oscene");
@@ -624,12 +587,10 @@ namespace {
            },
            { { "exposure_compensation_ev", 10000 } },
          }) {
-      auto document
-        = nlohmann::json::parse(R"({"name":"Invalid","nodes":[{}]})");
-      document.update(
-        { { "environment", { { "post_process_volume", invalid } } } });
-      SCOPED_TRACE(document.dump());
-      const auto report = Import(MakeRequest(root, document.dump()));
+      auto document = SceneDescriptor { "/.cooked/Scenes/Invalid.oscene" };
+      document.Set("/environment/post_process_volume", invalid);
+      SCOPED_TRACE(document.Text());
+      const auto report = Import(MakeRequest(root, document));
       ASSERT_HAS_VALUE(report);
       EXPECT_FALSE(report->success);
       EXPECT_EQ(report->scenes_written, 0U);
@@ -645,19 +606,32 @@ namespace {
 
     const auto root = TempDir() / "node_flag_source_modes";
     std::filesystem::create_directories(root);
-    const auto report = Import(MakeRequest(root, R"({
-      "name": "Flags",
-      "nodes": [
-        {"name":"HiddenRoot", "flags":{
-          "visible":"hidden", "casts_shadows":"off", "receives_shadows":"on"}},
-        {"name":"InheritedChild", "parent":0},
-        {"name":"LocalChild", "parent":0, "flags":{
-          "visible":"shown", "casts_shadows":"on", "receives_shadows":"off", "static":true}},
-        {"name":"DefaultRoot"},
-        {"name":"InheritedRoot", "flags":{
-          "visible":"inherit", "casts_shadows":"inherit", "receives_shadows":"inherit"}}
-      ]
-    })"));
+    auto flags = SceneDescriptor { "/.cooked/Scenes/Flags.oscene" };
+    flags.Set("/nodes/0/name", "HiddenRoot")
+      .Set("/nodes/0/flags",
+        json {
+          { "visible", "hidden" },
+          { "casts_shadows", "off" },
+          { "receives_shadows", "on" },
+        });
+    flags.Node("InheritedChild", 0U);
+    const auto local_child = flags.Node("LocalChild", 0U);
+    flags.Set("/nodes/" + std::to_string(local_child) + "/flags",
+      json {
+        { "visible", "shown" },
+        { "casts_shadows", "on" },
+        { "receives_shadows", "off" },
+        { "static", true },
+      });
+    flags.Node("DefaultRoot");
+    const auto inherited_root = flags.Node("InheritedRoot");
+    flags.Set("/nodes/" + std::to_string(inherited_root) + "/flags",
+      json {
+        { "visible", "inherit" },
+        { "casts_shadows", "inherit" },
+        { "receives_shadows", "inherit" },
+      });
+    const auto report = Import(MakeRequest(root, flags));
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
     ASSERT_EQ(report->scenes_written, 1U);
@@ -690,13 +664,15 @@ namespace {
   {
     auto writer
       = LooseCookedWriter(root, oxygen::content::cooked::RealCookerStorage());
-    const auto fixture = type == data::AssetType::kGeometry
-      ? oxygen::cooker::testing::GeometryDescriptor("Mesh")
-      : oxygen::cooker::testing::MaterialDescriptor("Wrong");
+    auto geometry = GeometryBuilder { "Mesh" };
+    geometry.Submesh(geometry.ProceduralLod(),
+      data::SurfaceId::FromStableIdentity("fixture-surface"));
+    const auto material = MaterialBuilder { "Wrong" };
+    const auto is_geometry = type == data::AssetType::kGeometry;
     writer.WriteAssetDescriptor(key, type, "/Art/Geometry/Mesh.ogeo",
-      type == data::AssetType::kGeometry ? "Geometry/Mesh.ogeo"
-                                         : "Materials/Wrong.omat",
-      fixture.bytes, fixture.references,
+      is_geometry ? "Geometry/Mesh.ogeo" : "Materials/Wrong.omat",
+      is_geometry ? geometry.Bytes() : material.Bytes(),
+      is_geometry ? geometry.References() : material.References(),
       content::import::LooseCookedProducer {
         .source = "/Art/Geometry/Mesh.ogeo.json",
         .completes = {},
@@ -717,11 +693,11 @@ namespace {
       = data::AssetKey::FromVirtualPath("/Library/Mesh.ogeo");
     WriteIndexedReference(output, own_key, data::AssetType::kGeometry);
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
-    const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
-      "renderables":[{"node":0,"geometry_ref":"../Geometry/Mesh.ogeo"}]})";
+    auto descriptor = SceneDescriptor { "/Art/Scenes/Scene.oscene" };
+    descriptor.Set("/nodes/0/name", "Mesh")
+      .Renderable(0, "/Art/Geometry/Mesh.ogeo");
     for (const auto own_wins : { false, true }) {
       auto request = MakeRequest(output, descriptor);
-      request.asset_virtual_path = "/Art/Scenes/Scene.oscene";
       request.cooked_context_roots = own_wins
         ? std::vector<std::filesystem::path> { library, output }
         : std::vector<std::filesystem::path> { output, library };
@@ -753,11 +729,11 @@ namespace {
       = data::AssetKey::FromVirtualPath("/Library/Mesh.ogeo");
     WriteText(output / "Geometry/Mesh.ogeo", "new descriptor");
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
-    const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
-      "renderables":[{"node":0,"geometry_ref":"../Geometry/Mesh.ogeo"}]})";
+    auto descriptor = SceneDescriptor { "/Art/Scenes/Scene.oscene" };
+    descriptor.Set("/nodes/0/name", "Mesh")
+      .Renderable(0, "/Art/Geometry/Mesh.ogeo");
     for (const auto own_wins : { true, false }) {
       auto request = MakeRequest(output, descriptor);
-      request.asset_virtual_path = "/Art/Scenes/Scene.oscene";
       request.cooked_context_roots = own_wins
         ? std::vector<std::filesystem::path> { library, output }
         : std::vector<std::filesystem::path> { output, library };
@@ -789,9 +765,10 @@ namespace {
     WriteIndexedReference(library,
       data::AssetKey::FromVirtualPath("/Library/Wrong.omat"),
       data::AssetType::kMaterial);
-    auto request
-      = MakeRequest(output, R"({"name":"Scene","nodes":[{"name":"Mesh"}],
-      "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})");
+    auto scene_document = SceneDescriptor { "/.cooked/Scenes/Scene.oscene" };
+    scene_document.Set("/nodes/0/name", "Mesh")
+      .Renderable(0, "/Art/Geometry/Mesh.ogeo");
+    auto request = MakeRequest(output, scene_document);
     request.cooked_context_roots = { library };
     const auto report = Import(std::move(request));
     ASSERT_HAS_VALUE(report);
@@ -806,48 +783,46 @@ namespace {
 
     const auto cooked_root = TempDir() / "resolves_and_emits";
     std::filesystem::create_directories(cooked_root);
-    ASSERT_NO_FATAL_FAILURE(
-      WriteSurfaceGeometry(cooked_root / "Geometry" / "cube.ogeo"));
+    WriteSurfaceGeometry(cooked_root / "Geometry" / "cube.ogeo");
     WriteText(cooked_root / "Materials" / "cube.omat", "omat");
     WriteText(cooked_root / "Scripts" / "spin.oscript", "oscript");
     WriteText(cooked_root / "Input" / "jump.oiact", "oiact");
     WriteText(cooked_root / "Input" / "gameplay.oimap", "oimap");
     WriteText(cooked_root / "Scenes" / "DemoScene.opscene", "physics");
 
-    const auto report = Import(MakeRequest(cooked_root, R"({
-      "name": "DemoScene",
-      "nodes": [
-        { "name": "Root" },
-        { "name": "MeshNode", "parent": 0 }
-      ],
-      "renderables": [
-        {
-          "node": 1,
-          "geometry_ref": "../Geometry/cube.ogeo",
-          "overrides": {
-            "values": {
-              "/lod_policy": { "type": "distance", "thresholds": [8], "hysteresis_ratio": 0.1 }
-            },
-            "parts": [{
-              "kind": "surface",
-              "id": "00000000-0000-0000-0000-000000000001",
-              "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001",
-              "values": {
-                "/material": "../Materials/cube.omat",
-                "/visible": false,
-                "/casts_shadows": true
-              }
-            }]
-          }
-        }
-      ],
-      "references": {
-        "scripts": ["../Scripts/spin.oscript"],
-        "input_actions": ["../Input/jump.oiact"],
-        "input_mapping_contexts": ["../Input/gameplay.oimap"],
-        "physics_sidecars": ["DemoScene.opscene"]
-      }
-    })"));
+    auto demo = SceneDescriptor { "/.cooked/Scenes/DemoScene.oscene" };
+    auto surface_values = json::object();
+    surface_values["/material"] = demo.Spell("/.cooked/Materials/cube.omat");
+    surface_values["/visible"] = false;
+    surface_values["/casts_shadows"] = true;
+    auto lod_policy = json {
+      { "type", "distance" },
+      { "thresholds", json::array({ 8 }) },
+      { "hysteresis_ratio", 0.1 },
+    };
+    auto override_document = json::object();
+    override_document["values"]["/lod_policy"] = std::move(lod_policy);
+    override_document["parts"] = json::array({
+      json {
+        { "kind", "surface" },
+        { "id", "00000000-0000-0000-0000-000000000001" },
+        { "layout_revision", std::string(63U, '0') + "1" },
+        { "values", std::move(surface_values) },
+      },
+    });
+    demo.Node("MeshNode", 0U);
+    demo.Renderable(1, "/.cooked/Geometry/cube.ogeo")
+      .Set("/renderables/0/overrides", std::move(override_document))
+      .Append(
+        "/references/scripts", demo.Spell("/.cooked/Scripts/spin.oscript"))
+      .Append(
+        "/references/input_actions", demo.Spell("/.cooked/Input/jump.oiact"))
+      .Append("/references/input_mapping_contexts",
+        demo.Spell("/.cooked/Input/gameplay.oimap"))
+      .Append("/references/physics_sidecars",
+        demo.Spell("/.cooked/Scenes/DemoScene.opscene"));
+
+    const auto report = Import(MakeRequest(cooked_root, demo));
 
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
@@ -897,19 +872,11 @@ namespace {
     const auto cooked_root = TempDir() / "missing_geometry_reference";
     std::filesystem::create_directories(cooked_root);
 
-    const auto report = Import(MakeRequest(cooked_root, R"({
-      "name": "DemoScene",
-      "nodes": [
-        { "name": "Root" },
-        { "name": "MeshNode", "parent": 0 }
-      ],
-      "renderables": [
-        {
-          "node": 1,
-          "geometry_ref": "../Geometry/missing.ogeo"
-        }
-      ]
-    })"));
+    auto demo = SceneDescriptor { "/.cooked/Scenes/DemoScene.oscene" };
+    demo.Node("MeshNode", 0U);
+    demo.Renderable(1, "/.cooked/Geometry/missing.ogeo");
+
+    const auto report = Import(MakeRequest(cooked_root, demo));
 
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
@@ -924,34 +891,37 @@ namespace {
     const auto cooked_root = TempDir() / "directional_light_tuning";
     std::filesystem::create_directories(cooked_root);
 
-    const auto report = Import(MakeRequest(cooked_root, R"({
-      "name": "DirectionalTuning",
-      "nodes": [
-        { "name": "Root" },
-        { "name": "Sun", "parent": 0 }
-      ],
-      "lights": {
-        "directional": [
-          {
-            "node": 1,
-            "common": {
-              "affects_world": false, "color_rgb": [0.25, 0.5, 0.75],
-              "casts_shadows": true, "exposure_compensation_ev": -2,
-              "shadow": { "bias": 0.125, "normal_bias": 0.25,
-                "contact_shadows": true, "resolution_hint": 3 }
-            },
-            "atmosphere_light_slot": 2,
-            "use_per_pixel_atmosphere_transmittance": true,
-            "atmosphere_disk_luminance_scale_rgb": [0.5, 1.0, 2.0],
-            "angular_size_radians": 0.02,
-            "cascade_count": 4,
-            "cascade_distances": [10.0, 30.0, 80.0, 200.0],
-            "distribution_exponent": 1.0,
-            "intensity_lux": 10000.0
-          }
-        ]
-      }
-    })"));
+    auto tuning
+      = SceneDescriptor { "/.cooked/Scenes/DirectionalTuning.oscene" };
+    auto sun = json::object();
+    sun["node"] = 1;
+    sun["common"] = json {
+      { "affects_world", false },
+      { "color_rgb", json::array({ 0.25, 0.5, 0.75 }) },
+      { "casts_shadows", true },
+      { "exposure_compensation_ev", -2 },
+      {
+        "shadow",
+        json {
+          { "bias", 0.125 },
+          { "normal_bias", 0.25 },
+          { "contact_shadows", true },
+          { "resolution_hint", 3 },
+        },
+      },
+    };
+    sun["atmosphere_light_slot"] = 2;
+    sun["use_per_pixel_atmosphere_transmittance"] = true;
+    sun["atmosphere_disk_luminance_scale_rgb"] = json::array({ 0.5, 1.0, 2.0 });
+    sun["angular_size_radians"] = 0.02;
+    sun["cascade_count"] = 4;
+    sun["cascade_distances"] = json::array({ 10.0, 30.0, 80.0, 200.0 });
+    sun["distribution_exponent"] = 1.0;
+    sun["intensity_lux"] = 10000.0;
+    tuning.Node("Sun", 0U);
+    tuning.Set("/lights/directional", json::array({ std::move(sun) }));
+
+    const auto report = Import(MakeRequest(cooked_root, tuning));
 
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
@@ -1046,11 +1016,10 @@ namespace {
     const auto cooked_root = TempDir() / "legacy_version";
     std::filesystem::create_directories(cooked_root);
 
-    const auto report = Import(MakeRequest(cooked_root, R"({
-      "version": 2,
-      "name": "LegacyScene",
-      "nodes": [ { "name": "Root" } ]
-    })"));
+    auto legacy = SceneDescriptor { "/.cooked/Scenes/LegacyScene.oscene" };
+    legacy.Set("/version", 2);
+
+    const auto report = Import(MakeRequest(cooked_root, legacy));
 
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
@@ -1070,94 +1039,101 @@ namespace {
     const auto backdrop = AddCubemap(textures, "Textures/backdrop.otex");
     Materialize(textures.Files(), cooked_root);
 
-    const auto report = Import(MakeRequest(cooked_root, R"({
-      "name": "EnvironmentScene",
-      "nodes": [
-        { "name": "Root" },
-        { "name": "FogVolumeNode", "parent": 0 }
-      ],
-      "environment": {
-        "fog": {
-          "enabled": true,
-          "model": 1,
-          "extinction_sigma_t_per_m": 0.01,
-          "height_falloff_per_m": 0.2,
-          "height_offset_m": 0.0,
-          "start_distance_m": 1.0,
-          "max_opacity": 0.8,
-          "single_scattering_albedo_rgb": [0.9, 0.8, 0.7],
-          "anisotropy_g": 0.25,
-          "enable_height_fog": true,
-          "enable_volumetric_fog": true,
-          "second_fog_density": 0.03,
-          "second_fog_height_falloff": 0.15,
-          "second_fog_height_offset": 10.0,
-          "fog_inscattering_luminance": [1.0, 0.9, 0.8],
-          "sky_atmosphere_ambient_contribution_color_scale": [0.2, 0.3, 0.4],
-          "inscattering_color_cubemap_ref": "../Textures/fog_probe.otex",
-          "inscattering_color_cubemap_angle": 0.5,
-          "inscattering_texture_tint": [0.7, 0.6, 0.5],
-          "fully_directional_inscattering_color_distance": 100.0,
-          "non_directional_inscattering_color_distance": 50.0,
-          "directional_inscattering_luminance": [0.1, 0.2, 0.3],
-          "directional_inscattering_exponent": 4.0,
-          "directional_inscattering_start_distance": 15.0,
-          "end_distance_m": 2500.0,
-          "fog_cutoff_distance_m": 3000.0,
-          "volumetric_fog_scattering_distribution": 0.6,
-          "volumetric_fog_albedo": [0.5, 0.6, 0.7],
-          "volumetric_fog_emissive": [0.0, 0.1, 0.2],
-          "volumetric_fog_extinction_scale": 1.5,
-          "volumetric_fog_distance": 500.0,
-          "volumetric_fog_start_distance": 3.0,
-          "volumetric_fog_near_fade_in_distance": 4.0,
-          "volumetric_fog_static_lighting_scattering_intensity": 2.0,
-          "override_light_colors_with_fog_inscattering_colors": true,
-          "holdout": false,
-          "render_in_main_pass": true,
-          "visible_in_reflection_captures": true,
-          "visible_in_real_time_sky_captures": false
-        },
-        "sky_light": {
-          "enabled": true,
-          "source": 1,
-          "cubemap_ref": "../Textures/sky_probe.otex",
-          "intensity": 1.5,
-          "tint_rgb": [0.8, 0.9, 1.0],
-          "diffuse_intensity": 1.1,
-          "specular_intensity": 1.2,
-          "source_cubemap_angle_radians": 0.75,
-          "lower_hemisphere_color": [0.1, 0.2, 0.3],
-          "lower_hemisphere_is_solid_color": false,
-          "lower_hemisphere_blend_alpha": 0.35,
-          "volumetric_scattering_intensity": 0.4,
-          "affect_reflections": true
-        },
-        "sky_sphere": {
-          "enabled": true,
-          "source": 0,
-          "cubemap_ref": "../Textures/backdrop.otex",
-          "solid_color_rgb": [0.1, 0.2, 0.3],
-          "intensity": 2.0,
-          "rotation_radians": 1.25,
-          "tint_rgb": [0.9, 0.8, 0.7]
-        }
+    auto environment_scene
+      = SceneDescriptor { "/.cooked/Scenes/EnvironmentScene.oscene" };
+    const auto texture
+      = [&environment_scene](const std::string_view leaf) -> std::string {
+      return environment_scene.Spell("/.cooked/Textures/" + std::string(leaf));
+    };
+    auto fog_document = json {
+      { "enabled", true },
+      { "model", 1 },
+      { "extinction_sigma_t_per_m", 0.01 },
+      { "height_falloff_per_m", 0.2 },
+      { "height_offset_m", 0.0 },
+      { "start_distance_m", 1.0 },
+      { "max_opacity", 0.8 },
+      { "single_scattering_albedo_rgb", json::array({ 0.9, 0.8, 0.7 }) },
+      { "anisotropy_g", 0.25 },
+      { "enable_height_fog", true },
+      { "enable_volumetric_fog", true },
+      { "second_fog_density", 0.03 },
+      { "second_fog_height_falloff", 0.15 },
+      { "second_fog_height_offset", 10.0 },
+      { "fog_inscattering_luminance", json::array({ 1.0, 0.9, 0.8 }) },
+      {
+        "sky_atmosphere_ambient_contribution_color_scale",
+        json::array({ 0.2, 0.3, 0.4 }),
       },
-      "local_fog_volumes": [
-        {
-          "node": 1,
-          "enabled": true,
-          "radial_fog_extinction": 0.3,
-          "height_fog_extinction": 0.2,
-          "height_fog_falloff": 0.15,
-          "height_fog_offset": 1.25,
-          "fog_phase_g": 0.4,
-          "fog_albedo": [0.7, 0.8, 0.9],
-          "fog_emissive": [0.1, 0.2, 0.3],
-          "sort_priority": 2
-        }
-      ]
-    })"));
+      { "inscattering_color_cubemap_ref", texture("fog_probe.otex") },
+      { "inscattering_color_cubemap_angle", 0.5 },
+      { "inscattering_texture_tint", json::array({ 0.7, 0.6, 0.5 }) },
+      { "fully_directional_inscattering_color_distance", 100.0 },
+      { "non_directional_inscattering_color_distance", 50.0 },
+      { "directional_inscattering_luminance", json::array({ 0.1, 0.2, 0.3 }) },
+      { "directional_inscattering_exponent", 4.0 },
+      { "directional_inscattering_start_distance", 15.0 },
+      { "end_distance_m", 2500.0 },
+      { "fog_cutoff_distance_m", 3000.0 },
+      { "volumetric_fog_scattering_distribution", 0.6 },
+      { "volumetric_fog_albedo", json::array({ 0.5, 0.6, 0.7 }) },
+      { "volumetric_fog_emissive", json::array({ 0.0, 0.1, 0.2 }) },
+      { "volumetric_fog_extinction_scale", 1.5 },
+      { "volumetric_fog_distance", 500.0 },
+      { "volumetric_fog_start_distance", 3.0 },
+      { "volumetric_fog_near_fade_in_distance", 4.0 },
+      { "volumetric_fog_static_lighting_scattering_intensity", 2.0 },
+      { "override_light_colors_with_fog_inscattering_colors", true },
+      { "holdout", false },
+      { "render_in_main_pass", true },
+      { "visible_in_reflection_captures", true },
+      { "visible_in_real_time_sky_captures", false },
+    };
+    auto sky_light_document = json {
+      { "enabled", true },
+      { "source", 1 },
+      { "cubemap_ref", texture("sky_probe.otex") },
+      { "intensity", 1.5 },
+      { "tint_rgb", json::array({ 0.8, 0.9, 1.0 }) },
+      { "diffuse_intensity", 1.1 },
+      { "specular_intensity", 1.2 },
+      { "source_cubemap_angle_radians", 0.75 },
+      { "lower_hemisphere_color", json::array({ 0.1, 0.2, 0.3 }) },
+      { "lower_hemisphere_is_solid_color", false },
+      { "lower_hemisphere_blend_alpha", 0.35 },
+      { "volumetric_scattering_intensity", 0.4 },
+      { "affect_reflections", true },
+    };
+    auto sky_sphere_document = json {
+      { "enabled", true },
+      { "source", 0 },
+      { "cubemap_ref", texture("backdrop.otex") },
+      { "solid_color_rgb", json::array({ 0.1, 0.2, 0.3 }) },
+      { "intensity", 2.0 },
+      { "rotation_radians", 1.25 },
+      { "tint_rgb", json::array({ 0.9, 0.8, 0.7 }) },
+    };
+    environment_scene.Node("FogVolumeNode", 0U);
+    environment_scene.Set("/environment/fog", std::move(fog_document))
+      .Set("/environment/sky_light", std::move(sky_light_document))
+      .Set("/environment/sky_sphere", std::move(sky_sphere_document))
+      .Set("/local_fog_volumes",
+        json::array({
+          json {
+            { "node", 1 },
+            { "enabled", true },
+            { "radial_fog_extinction", 0.3 },
+            { "height_fog_extinction", 0.2 },
+            { "height_fog_falloff", 0.15 },
+            { "height_fog_offset", 1.25 },
+            { "fog_phase_g", 0.4 },
+            { "fog_albedo", json::array({ 0.7, 0.8, 0.9 }) },
+            { "fog_emissive", json::array({ 0.1, 0.2, 0.3 }) },
+            { "sort_priority", 2 },
+          },
+        }));
+
+    const auto report = Import(MakeRequest(cooked_root, environment_scene));
 
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
@@ -1230,72 +1206,60 @@ namespace {
 
     const auto root = TempDir() / "complete_environment";
     std::filesystem::create_directories(root);
-    auto document = nlohmann::json::parse(
-      R"JSON(
-{
-  "name": "Environment",
-  "nodes": [
-    {
-      "name": "Root"
-    }
-  ],
-  "environment": {
-    "post_process_volume": {
-      "tone_mapper": 1,
-      "exposure_mode": 2,
-      "exposure_enabled": false,
-      "exposure_compensation_ev": 1.25,
-      "exposure_key": 8.75,
-      "manual_exposure_ev": 11.5,
-      "auto_exposure_min_ev": -3.25,
-      "auto_exposure_max_ev": 12.75,
-      "auto_exposure_speed_up": 5.5,
-      "auto_exposure_speed_down": 1.75,
-      "auto_exposure_metering_mode": 0,
-      "auto_exposure_low_percentile": 0.2,
-      "auto_exposure_high_percentile": 0.85,
-      "auto_exposure_min_log_luminance": -10.5,
-      "auto_exposure_log_luminance_range": 21.25,
-      "auto_exposure_target_luminance": 0.27,
-      "auto_exposure_spot_meter_radius": 0.35,
-      "auto_exposure_black_influence": 0.4,
-      "auto_exposure_transition_distance_ev": 2.5,
-      "auto_exposure_compensation_curve": [
-        {"metered_ev": -4, "compensation_ev": 1.25},
-        {"metered_ev": 12, "compensation_ev": -0.5}
-      ],
-      "bloom_intensity": 0.6,
-      "bloom_threshold": 2.25,
-      "saturation": 0.8,
-      "contrast": 1.4,
-      "vignette_intensity": 0.3,
-      "display_gamma": 2.4,
-      "enabled": true
-    },
-    "background": {
-      "enabled": true,
-      "color_rgb": [
-        0.05,
-        0.25,
-        0.75
-      ]
-    }
-  }
-}
-)JSON");
+    auto document = SceneDescriptor { "/.cooked/Scenes/Environment.oscene" };
+    document
+      .Set("/environment/post_process_volume",
+        json {
+          { "tone_mapper", 1 },
+          { "exposure_mode", 2 },
+          { "exposure_enabled", false },
+          { "exposure_compensation_ev", 1.25 },
+          { "exposure_key", 8.75 },
+          { "manual_exposure_ev", 11.5 },
+          { "auto_exposure_min_ev", -3.25 },
+          { "auto_exposure_max_ev", 12.75 },
+          { "auto_exposure_speed_up", 5.5 },
+          { "auto_exposure_speed_down", 1.75 },
+          { "auto_exposure_metering_mode", 0 },
+          { "auto_exposure_low_percentile", 0.2 },
+          { "auto_exposure_high_percentile", 0.85 },
+          { "auto_exposure_min_log_luminance", -10.5 },
+          { "auto_exposure_log_luminance_range", 21.25 },
+          { "auto_exposure_target_luminance", 0.27 },
+          { "auto_exposure_spot_meter_radius", 0.35 },
+          { "auto_exposure_black_influence", 0.4 },
+          { "auto_exposure_transition_distance_ev", 2.5 },
+          {
+            "auto_exposure_compensation_curve",
+            json::array({
+              json { { "metered_ev", -4 }, { "compensation_ev", 1.25 } },
+              json { { "metered_ev", 12 }, { "compensation_ev", -0.5 } },
+            }),
+          },
+          { "bloom_intensity", 0.6 },
+          { "bloom_threshold", 2.25 },
+          { "saturation", 0.8 },
+          { "contrast", 1.4 },
+          { "vignette_intensity", 0.3 },
+          { "display_gamma", 2.4 },
+          { "enabled", true },
+        })
+      .Set("/environment/background",
+        json {
+          { "enabled", true },
+          { "color_rgb", json::array({ 0.05, 0.25, 0.75 }) },
+        });
     for (uint32_t tone = 0; tone != 4; ++tone) {
       for (uint32_t exposure = 0; exposure != 3; ++exposure) {
         for (uint32_t metering = 0; metering != 3; ++metering) {
-          auto& input = document.at("environment").at("post_process_volume");
-          input.update({
-            { "tone_mapper", tone },
-            { "exposure_mode", exposure },
-            { "auto_exposure_metering_mode", metering },
-            { "exposure_enabled", exposure == 1 },
-          });
-          SCOPED_TRACE(document.dump());
-          auto request = MakeRequest(root, document.dump());
-          request.asset_virtual_path = "/.cooked/Scenes/Environment.oscene";
+          document.Set("/environment/post_process_volume/tone_mapper", tone)
+            .Set("/environment/post_process_volume/exposure_mode", exposure)
+            .Set("/environment/post_process_volume/auto_exposure_metering_mode",
+              metering)
+            .Set("/environment/post_process_volume/exposure_enabled",
+              exposure == 1);
+          SCOPED_TRACE(document.Text());
+          auto request = MakeRequest(root, document);
           const auto report = Import(std::move(request));
           ASSERT_HAS_VALUE(report);
           ASSERT_TRUE(report->success);
@@ -1362,8 +1326,9 @@ namespace {
 
     const auto root = TempDir() / "previous_scene_version";
     std::filesystem::create_directories(root);
-    const auto report = Import(MakeRequest(
-      root, R"({"version":5,"name":"Old","nodes":[{"name":"Root"}]})"));
+    auto old_scene = SceneDescriptor { "/.cooked/Scenes/Old.oscene" };
+    old_scene.Set("/version", 5);
+    const auto report = Import(MakeRequest(root, old_scene));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_EQ(report->scenes_written, 0U);
@@ -1377,15 +1342,17 @@ namespace {
     -> std::filesystem::path
   {
     const auto loose = work / "engine_loose";
-    const auto geometry = oxygen::cooker::testing::GeometryDescriptor("Cube");
-    const auto material
-      = oxygen::cooker::testing::MaterialDescriptor("Default");
+    auto geometry = GeometryBuilder { "Cube" };
+    geometry.Submesh(geometry.ProceduralLod(),
+      data::SurfaceId::FromStableIdentity("fixture-surface"));
+    const auto material = MaterialBuilder { "Default" };
     {
       auto writer = LooseCookedWriter(
         loose, oxygen::content::cooked::RealCookerStorage());
       writer.WriteAssetDescriptor(data::AssetKey::FromVirtualPath(kEngineCube),
         data::AssetType::kGeometry, kEngineCube,
-        "Generated/BasicShapes/Cube.ogeo", geometry.bytes, geometry.references,
+        "Generated/BasicShapes/Cube.ogeo", geometry.Bytes(),
+        geometry.References(),
         content::import::LooseCookedProducer {
           .source = std::string(kEngineCube) + ".json",
           .completes = {},
@@ -1393,7 +1360,8 @@ namespace {
       writer.WriteAssetDescriptor(
         data::AssetKey::FromVirtualPath(kEngineDefault),
         data::AssetType::kMaterial, kEngineDefault,
-        "Generated/Materials/Default.omat", material.bytes, material.references,
+        "Generated/Materials/Default.omat", material.Bytes(),
+        material.References(),
         content::import::LooseCookedProducer {
           .source = std::string(kEngineDefault) + ".json",
           .completes = {},
@@ -1427,16 +1395,21 @@ namespace {
     std::filesystem::create_directories(output);
     const auto surface
       = data::to_string(data::SurfaceId::FromStableIdentity("fixture-surface"));
-    auto request = MakeRequest(output,
-      R"({"name":"Scene",
-      "nodes":[{"name":"Mesh"}],
-      "renderables":[{"node":0,
-        "geometry_ref":"/Engine/Generated/BasicShapes/Cube.ogeo",
-        "overrides":{"parts":[{"kind":"surface","id":")"
-        + surface + R"(",
-          "layout_revision":"0000000000000000000000000000000000000000000000000000000000000001",
-          "values":{"/material":"/Engine/Generated/Materials/Default.omat"}
-        }]}}]})");
+    auto scene_document = SceneDescriptor { "/.cooked/Scenes/Scene.oscene" };
+    auto surface_values = json::object();
+    surface_values["/material"] = scene_document.Spell(kEngineDefault);
+    scene_document.Set("/nodes/0/name", "Mesh")
+      .Renderable(0, kEngineCube)
+      .Set("/renderables/0/overrides/parts",
+        json::array({
+          json {
+            { "kind", "surface" },
+            { "id", surface },
+            { "layout_revision", std::string(63U, '0') + "1" },
+            { "values", std::move(surface_values) },
+          },
+        }));
+    auto request = MakeRequest(output, scene_document);
     request.cooked_context_roots = { WriteEnginePak(TempDir()) };
 
     // Act
@@ -1467,16 +1440,21 @@ namespace {
     std::filesystem::create_directories(output);
     const auto surface = data::to_string(
       data::SurfaceId::FromStableIdentity("surface-the-cube-does-not-declare"));
-    auto request = MakeRequest(output,
-      R"({"name":"Scene",
-      "nodes":[{"name":"Mesh"}],
-      "renderables":[{"node":0,
-        "geometry_ref":"/Engine/Generated/BasicShapes/Cube.ogeo",
-        "overrides":{"parts":[{"kind":"surface","id":")"
-        + surface + R"(",
-          "layout_revision":"0000000000000000000000000000000000000000000000000000000000000001",
-          "values":{"/visible":false}
-        }]}}]})");
+    auto scene_document = SceneDescriptor { "/.cooked/Scenes/Scene.oscene" };
+    auto surface_values = json::object();
+    surface_values["/visible"] = false;
+    scene_document.Set("/nodes/0/name", "Mesh")
+      .Renderable(0, kEngineCube)
+      .Set("/renderables/0/overrides/parts",
+        json::array({
+          json {
+            { "kind", "surface" },
+            { "id", surface },
+            { "layout_revision", std::string(63U, '0') + "1" },
+            { "values", std::move(surface_values) },
+          },
+        }));
+    auto request = MakeRequest(output, scene_document);
     request.cooked_context_roots = { WriteEnginePak(TempDir()) };
 
     // Act

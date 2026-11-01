@@ -31,12 +31,11 @@
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneChangeValues.h>
@@ -133,16 +132,18 @@ auto WriteSceneBytesRoot(
     root, kInspectionLeaf, oxygen::data::AssetType::kScene, std::move(bytes));
 }
 
+//! Writes the root holding a material of format `version`; a version other than
+//! the current one is a defect applied to the valid descriptor.
 auto WriteMaterialRoot(const std::filesystem::path& root, const uint8_t version)
   -> void
 {
-  auto descriptor = oxygen::data::pak::render::MaterialAssetDesc {};
-  descriptor.header.asset_type
-    = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
-  descriptor.header.version = version;
+  auto bytes
+    = oxygen::cooker::testing::MaterialBuilder { "Inspection" }.Bytes();
+  if (version != oxygen::data::pak::render::kMaterialAssetVersion) {
+    DescriptorDefects::SetVersion(bytes, version);
+  }
   WriteDescriptorRoot(root, "Materials/Inspection.omat",
-    oxygen::data::AssetType::kMaterial,
-    oxygen::data::MakeDescriptorBytes(descriptor));
+    oxygen::data::AssetType::kMaterial, std::move(bytes));
 }
 
 //! The property `key` of the component `kind` of a report node, or null.
@@ -248,7 +249,7 @@ struct InstancingSpec {
 
 auto Instancing(const InstancingSpec& spec) -> InstancingScene
 {
-  auto builder = SceneBuilder { std::string(spec.root) };
+  auto builder = SceneBuilder { spec.root };
   const auto top = builder.Node(spec.root);
   const auto child = builder.Node(spec.holder, top);
   builder.Instance(child, spec.source);

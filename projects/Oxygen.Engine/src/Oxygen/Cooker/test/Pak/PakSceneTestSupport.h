@@ -13,14 +13,15 @@
 #include <vector>
 
 #include <Oxygen/Cooker/test/Support/TestValues.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
+#include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h>
-#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 
 //! Scene roots shared by the plan-builder, patch and repack tests.
@@ -69,14 +70,13 @@ struct SceneScripts final {
 {
   auto root = LooseCookedRoot { "Game", seed };
   for (uint8_t i = 0U; i < 2U; ++i) {
-    auto script = data::pak::scripting::ScriptAssetDesc {};
-    script.header.asset_type = static_cast<uint8_t>(data::AssetType::kScript);
-    script.header.version = data::pak::scripting::kScriptAssetVersion;
+    const auto name = "Logic" + std::to_string(seed) + "-" + std::to_string(i);
+    const auto script = oxygen::cooker::testing::ScriptBuilder { name };
     root.Add({
       .type = data::AssetType::kScript,
-      .leaf
-      = "Logic" + std::to_string(seed) + "-" + std::to_string(i) + ".oscript",
-      .descriptor = data::MakeDescriptorBytes(script),
+      .leaf = name + ".oscript",
+      .descriptor = script.Bytes(),
+      .references = script.References(),
       .key = ScriptKey(seed, i),
     });
   }
@@ -120,8 +120,12 @@ struct SceneMask final {
   post.auto_exposure_metering_mask = out.mask;
   scene.Environment(post);
   out.scene = out.root.Scene("Scene" + std::to_string(seed) + ".oscene", scene);
+  auto material = oxygen::cooker::testing::MaterialBuilder { "Material"
+    + std::to_string(seed) };
+  material.Texture(
+    &data::pak::render::MaterialAssetDesc::base_color_texture, texture);
   out.material
-    = out.root.Material("Material" + std::to_string(seed) + ".omat", texture);
+    = out.root.Material("Material" + std::to_string(seed) + ".omat", material);
   out.sidecar = out.root.PhysicsSidecar(
     "Physics" + std::to_string(seed) + ".opscene", out.scene);
   return out;

@@ -18,7 +18,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -123,7 +123,7 @@ namespace {
     // Arrange
     auto storage = MemoryFileSystem {};
     const auto root = MemoryRoot() / "produced_descriptor";
-    const auto bytes = fixtures::MaterialDescriptor("Wood").bytes;
+    const auto bytes = fixtures::MaterialBuilder { "Wood" }.Bytes();
     storage.AddFile(root / "Materials/Wood.omat", bytes);
     // Not the digest of `bytes`, so the index shows which one it recorded.
     const auto produced = import::LooseCookedFileDigest {
@@ -152,7 +152,7 @@ namespace {
   {
     auto storage = MemoryFileSystem {};
     const auto root = MemoryRoot() / "produced_size_mismatch";
-    const auto bytes = fixtures::MaterialDescriptor("Wood").bytes;
+    const auto bytes = fixtures::MaterialBuilder { "Wood" }.Bytes();
     storage.AddFile(root / "Materials/Wood.omat", bytes);
     auto writer = LooseCookedWriter(root, storage);
 

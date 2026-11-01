@@ -12,15 +12,21 @@
 add_library(
   Oxygen.Cooker.Testing
   STATIC
+  "AssetDescriptors.cpp"
+  "AssetDescriptors.h"
   "CookedBytes.cpp"
   "CookedBytes.h"
   "CookedPak.cpp"
   "CookedPak.h"
   "DescriptorDefects.cpp"
   "DescriptorDefects.h"
+  "GeometryBuilder.cpp"
+  "GeometryBuilder.h"
   "Descriptors.h"
   "LooseCookedRoot.cpp"
   "LooseCookedRoot.h"
+  "MaterialBuilder.cpp"
+  "MaterialBuilder.h"
   "Materialize.cpp"
   "Materialize.h"
   "MemoryFileSystem.h"
@@ -32,8 +38,11 @@ add_library(
   "PakWorkspace.h"
   "PhysicsSidecarBuilder.cpp"
   "PhysicsSidecarBuilder.h"
+  "ProductLoad.h"
   "SceneBuilder.cpp"
   "SceneBuilder.h"
+  "ScriptBuilder.cpp"
+  "ScriptBuilder.h"
   "Seeds.h"
 )
 add_library(oxygen::cooker::testing ALIAS Oxygen.Cooker.Testing)

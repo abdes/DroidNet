@@ -12,8 +12,8 @@
 #include <string_view>
 
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
@@ -35,7 +35,7 @@ namespace oxygen::content::pak::tool::test {
   root.Add({
     .type = data::AssetType::kMaterial,
     .leaf = std::string(name) + ".omat",
-    .descriptor = oxygen::cooker::testing::MaterialDescriptor(name).bytes,
+    .descriptor = oxygen::cooker::testing::MaterialBuilder { name }.Bytes(),
   });
   return root;
 }

@@ -12,9 +12,11 @@
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
+#include <Oxygen/Cooker/testing/ProductLoad.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -30,8 +32,8 @@
 namespace {
 
 using oxygen::cooker::testing::DescriptorDefects;
+using oxygen::cooker::testing::GeometryBuilder;
 using oxygen::cooker::testing::PhysicsSidecarBuilder;
-using oxygen::cooker::testing::PhysicsSidecarDescriptor;
 using oxygen::cooker::testing::SceneBuilder;
 namespace data = oxygen::data;
 namespace world = oxygen::data::pak::world;
@@ -154,7 +156,7 @@ NOLINT_TEST(DescriptorDefectsTest, SidecarDefectsBreakOneRule)
   auto bindings = PhysicsSidecarBuilder {};
   bindings.RigidBody(root, Key("/Game/Crate.oshape"), Key("/Game/Wood.opmat"));
   const auto valid
-    = PhysicsSidecarDescriptor(Key("/Game/Main.oscene"), scene, bindings).bytes;
+    = bindings.Bytes(Key("/Game/Main.oscene"), scene, "PhysicsScene");
   const auto read
     = [](const std::vector<std::byte>& bytes) -> data::PhysicsSceneAsset {
     return { Key("/Game/Main.opscene"), std::span<const std::byte>(bytes) };
@@ -179,6 +181,26 @@ NOLINT_TEST(DescriptorDefectsTest, SidecarDefectsBreakOneRule)
     read(valid).GetTargetSceneContentHash()));
   EXPECT_THROW(static_cast<void>(read(typed)), std::runtime_error);
   EXPECT_THROW(static_cast<void>(read(sized)), std::runtime_error);
+}
+
+//! A cleared surface leaves a geometry the product loader refuses, and only
+//! a surface the geometry names can be cleared.
+NOLINT_TEST(DescriptorDefectsTest, ClearedSurfaceIsRefused)
+{
+  const auto surface = data::SurfaceId::FromStableIdentity("crate");
+  auto crate = GeometryBuilder { "Crate" };
+  crate.Submesh(crate.ProceduralLod(), surface);
+  auto bytes = crate.Bytes();
+  const auto references = crate.References();
+
+  DescriptorDefects::ClearSurface(bytes, surface);
+
+  EXPECT_THROW(
+    oxygen::cooker::testing::detail::CheckWithLoader("geometry", bytes,
+      references, oxygen::content::loaders::LoadGeometryAsset),
+    std::logic_error);
+  EXPECT_THROW(
+    DescriptorDefects::ClearSurface(bytes, surface), std::invalid_argument);
 }
 
 } // namespace

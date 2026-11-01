@@ -9,6 +9,7 @@ oxygen_cooker_test(
   Testing
   UNIT
   SOURCES
+    "AssetDescriptors_test.cpp"
     "CookedBytes_test.cpp"
     "CookedPak_test.cpp"
     "DescriptorDefects_test.cpp"
@@ -17,4 +18,5 @@ oxygen_cooker_test(
     "PakWorkspace_test.cpp"
     "PhysicsSidecarBuilder_test.cpp"
     "SceneBuilder_test.cpp"
+    "ScriptBuilder_test.cpp"
 )

@@ -22,8 +22,8 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
@@ -31,6 +31,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -59,12 +60,14 @@ auto ValidLibrary() -> LooseCookedRoot
 {
   auto library = LooseCookedRoot { "Game" };
   const auto texture = library.AddTexture(SeedBytes(1U));
-  auto wood = fixtures::TexturedMaterialDescriptor("Wood", texture);
+  auto wood = fixtures::MaterialBuilder { "Wood" };
+  wood.Texture(
+    &data::pak::render::MaterialAssetDesc::base_color_texture, texture);
   static_cast<void>(library.Add({
     .type = data::AssetType::kMaterial,
     .leaf = "Materials/Wood.omat",
-    .descriptor = std::move(wood.bytes),
-    .references = std::move(wood.references),
+    .descriptor = wood.Bytes(),
+    .references = wood.References(),
   }));
   return library;
 }
@@ -88,7 +91,7 @@ auto LibraryOf(std::vector<std::byte> descriptor,
 //! The material descriptor `Wood` with its header version changed by `delta`.
 auto WoodWithVersionShifted(const int delta) -> std::vector<std::byte>
 {
-  auto bytes = fixtures::MaterialDescriptor("Wood").bytes;
+  auto bytes = fixtures::MaterialBuilder { "Wood" }.Bytes();
   const auto read = serio::CopyAt<core::AssetHeader>(std::span { bytes });
   EXPECT_TRUE(read.has_value());
   auto header = read.value_or(core::AssetHeader {});
@@ -190,7 +193,7 @@ NOLINT_TEST_F(ValidateTest, DescriptorOfAnotherTypeThanTheIndexIsRefused)
 {
   // Arrange
   const auto content = OpenLoose(LibraryOf(
-    fixtures::MaterialDescriptor("Wood").bytes, data::AssetType::kGeometry));
+    fixtures::MaterialBuilder { "Wood" }.Bytes(), data::AssetType::kGeometry));
 
   // Act / Assert
   EXPECT_THROW(Validate(content), std::runtime_error);
@@ -210,7 +213,7 @@ NOLINT_TEST_F(ValidateTest, DescriptorSmallerThanItsHeaderIsRefused)
 NOLINT_TEST_F(ValidateTest, DescriptorWithTrailingBytesIsRefused)
 {
   // Arrange
-  auto bytes = fixtures::MaterialDescriptor("Wood").bytes;
+  auto bytes = fixtures::MaterialBuilder { "Wood" }.Bytes();
   bytes.push_back(std::byte { 0U });
   const auto content = OpenLoose(LibraryOf(std::move(bytes)));
 
@@ -222,10 +225,11 @@ NOLINT_TEST_F(ValidateTest, DescriptorWithTrailingBytesIsRefused)
 NOLINT_TEST_F(ValidateTest, ReferenceBeyondTheTablesIsRefused)
 {
   // Arrange
-  auto wood
-    = fixtures::TexturedMaterialDescriptor("Wood", ResourceIndexT { 5U });
-  const auto content = OpenLoose(LibraryOf(std::move(wood.bytes),
-    data::AssetType::kMaterial, std::move(wood.references)));
+  auto wood = fixtures::MaterialBuilder { "Wood" };
+  wood.Texture(&data::pak::render::MaterialAssetDesc::base_color_texture,
+    ResourceIndexT { 5U });
+  const auto content = OpenLoose(
+    LibraryOf(wood.Bytes(), data::AssetType::kMaterial, wood.References()));
 
   // Act / Assert
   EXPECT_THROW(Validate(content), std::runtime_error);
@@ -239,7 +243,7 @@ NOLINT_TEST_F(ValidateTest, ForgedDescriptorDigestFailsTheFullCheckOnly)
   static_cast<void>(library.Add({
     .type = data::AssetType::kMaterial,
     .leaf = "Materials/Wood.omat",
-    .descriptor = fixtures::MaterialDescriptor("Wood").bytes,
+    .descriptor = fixtures::MaterialBuilder { "Wood" }.Bytes(),
     .recorded_sha256 = std::array<uint8_t, 32> { 0x01U },
   }));
   const auto content = OpenLoose(library);

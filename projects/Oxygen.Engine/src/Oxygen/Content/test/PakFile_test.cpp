@@ -19,11 +19,13 @@
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -269,7 +271,10 @@ NOLINT_TEST(PakFileTest, ExposesOnlyTheTablesItHolds)
   constexpr auto kTexturePayloadSeed = uint8_t { 7U };
   auto root = LooseCookedRoot { kMount };
   const auto wood = root.AddTexture(SeedBytes(kTexturePayloadSeed));
-  static_cast<void>(root.Material(kMaterialLeaf, wood));
+  auto material = oxygen::cooker::testing::MaterialBuilder { "A" };
+  material.Texture(
+    &oxygen::data::pak::render::MaterialAssetDesc::base_color_texture, wood);
+  static_cast<void>(root.Material(kMaterialLeaf, material));
   const auto bytes = CookedPak { root }.Encode();
 
   const auto pak = Open(bytes);

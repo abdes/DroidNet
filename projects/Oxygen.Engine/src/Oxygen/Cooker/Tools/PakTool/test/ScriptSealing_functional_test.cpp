@@ -31,13 +31,12 @@
 #include <Oxygen/Cooker/Tools/PakTool/StagedSourceStorage.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
+#include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -53,6 +52,7 @@ using oxygen::content::pak::tool::CleanupStagedFiles;
 using oxygen::content::pak::tool::SealLooseCookedSourcesForPakBuild;
 using oxygen::content::pak::tool::SourceMountFolders;
 using oxygen::content::pak::tool::StagedSourceStorage;
+using oxygen::cooker::testing::ScriptBuilder;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 using oxygen::data::CookedSource;
@@ -133,19 +133,14 @@ protected:
     const std::string_view code) const -> void
   {
     const auto cooked = Root() / cooked_name;
-    ScriptAssetDesc descriptor {};
-    descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
-    descriptor.header.version
-      = oxygen::data::pak::scripting::kScriptAssetVersion;
-    descriptor.flags = ScriptAssetFlags::kAllowExternalSource;
-    auto strings = oxygen::data::DescriptorStringsBuilder {};
-    descriptor.external_source_path_offset = strings.Add(stored);
+    auto script = ScriptBuilder { "rooted" };
+    script.Flags(ScriptAssetFlags::kAllowExternalSource).ExternalSource(stored);
     LooseCookedWriter writer(
       cooked, oxygen::content::cooked::RealCookerStorage());
     const auto virtual_path = std::string("/.cooked/rooted.oscript");
     writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
-      AssetType::kScript, virtual_path, "rooted.oscript",
-      oxygen::data::MakeDescriptorBytes(descriptor, strings), {},
+      AssetType::kScript, virtual_path, "rooted.oscript", script.Bytes(),
+      script.References(),
       oxygen::content::import::LooseCookedProducer {
         .source = "/Content/rooted.lua",
         .completes = {},
@@ -187,14 +182,11 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   const auto script_relpath = std::string("proc_cubes.oscript");
   const auto script_key = AssetKey::FromVirtualPath(script_virtual_path);
 
-  auto descriptor = ScriptAssetDesc {};
-  descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
-  descriptor.header.version = oxygen::data::pak::scripting::kScriptAssetVersion;
-  descriptor.flags = ScriptAssetFlags::kAllowExternalSource;
   const auto stored_external_path
     = std::string("/Content/scenes/proc-cubes/proc_cubes.lua");
-  auto strings = oxygen::data::DescriptorStringsBuilder {};
-  descriptor.external_source_path_offset = strings.Add(stored_external_path);
+  auto script = ScriptBuilder { "proc_cubes" };
+  script.Flags(ScriptAssetFlags::kAllowExternalSource)
+    .ExternalSource(stored_external_path);
 
   auto writer = LooseCookedWriter(
     cooked_root, oxygen::content::cooked::RealCookerStorage());
@@ -203,8 +195,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   writer.SetSourceKey(source_key.value());
   writer.SetContentVersion(7);
   writer.WriteAssetDescriptor(script_key, AssetType::kScript,
-    script_virtual_path, script_relpath,
-    oxygen::data::MakeDescriptorBytes(descriptor, strings), {},
+    script_virtual_path, script_relpath, script.Bytes(), script.References(),
     oxygen::content::import::LooseCookedProducer {
       .source = "/Content/script.lua",
       .completes = {},
@@ -294,8 +285,10 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
       = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(staged_root);
     const auto descriptor_size = staged_index.FindDescriptorSize(script_key);
     ASSERT_HAS_VALUE(descriptor_size);
-    // The descriptor and its string table, which holds only the empty string.
-    EXPECT_EQ(descriptor_size.value_or(0U), sizeof(ScriptAssetDesc) + 1U);
+    // The descriptor and its string table, which holds the empty string and
+    // the script's name, and no longer the external source path.
+    EXPECT_EQ(descriptor_size.value_or(0U),
+      sizeof(ScriptAssetDesc) + 1U + script.Name().size() + 1U);
     const auto file_relpath = staged_index.FindFileRelPath(
       oxygen::data::loose_cooked::FileKind::kScriptsTable);
     ASSERT_HAS_VALUE(file_relpath);
@@ -394,18 +387,15 @@ NOLINT_TEST(
   memory.AddFile(content / "spin.lua", "return 1");
   constexpr auto kHull = std::string_view { "hull" };
   memory.AddFile(cooked / "Ship/Hull.obuf", kHull);
-  auto descriptor = ScriptAssetDesc {};
-  descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
-  descriptor.header.version = oxygen::data::pak::scripting::kScriptAssetVersion;
-  descriptor.flags = ScriptAssetFlags::kAllowExternalSource;
-  auto strings = oxygen::data::DescriptorStringsBuilder {};
-  descriptor.external_source_path_offset = strings.Add("/Content/spin.lua");
+  auto script = ScriptBuilder { "spin" };
+  script.Flags(ScriptAssetFlags::kAllowExternalSource)
+    .ExternalSource("/Content/spin.lua");
   {
     auto writer = LooseCookedWriter(cooked, memory);
     writer.WriteAssetDescriptor(
       AssetKey::FromVirtualPath("/.cooked/spin.oscript"), AssetType::kScript,
-      "/.cooked/spin.oscript", "spin.oscript",
-      oxygen::data::MakeDescriptorBytes(descriptor, strings), {},
+      "/.cooked/spin.oscript", "spin.oscript", script.Bytes(),
+      script.References(),
       oxygen::content::import::LooseCookedProducer {
         .source = "/Content/spin.lua",
         .completes = {},

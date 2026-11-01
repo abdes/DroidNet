@@ -8,11 +8,11 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <latch>
 #include <optional>
 #include <span>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -40,34 +41,13 @@
 namespace oxygen::content::import::test {
 
 using nlohmann::json;
+using oxygen::cooker::test::DiagnosticSummary;
 using oxygen::cooker::test::HasDiagnosticCode;
 using oxygen::cooker::test::ReadBytes;
 using oxygen::cooker::test::SubmitAndWait;
 using oxygen::cooker::test::WriteBytes;
 using oxygen::cooker::test::WriteText;
 using oxygen::testing::ScopedTempDir;
-
-inline auto DiagnosticSummary(const std::vector<ImportDiagnostic>& diagnostics)
-  -> std::string
-{
-  auto out = std::ostringstream {};
-  for (const auto& diagnostic : diagnostics) {
-    out << "[" << diagnostic.code << "] " << diagnostic.message;
-    if (!diagnostic.object_path.empty()) {
-      out << " (" << diagnostic.object_path << ")";
-    }
-    out << '\n';
-  }
-  return out.str();
-}
-
-inline auto MakeBounds() -> json
-{
-  return json {
-    { "min", json::array({ -0.5F, -0.5F, -0.5F }) },
-    { "max", json::array({ 0.5F, 0.5F, 0.5F }) },
-  };
-}
 
 inline constexpr std::string_view kAuthoredSurfaceId
   = "018f8f8f-1111-7111-8111-111111111111";
@@ -105,50 +85,71 @@ inline auto MakeGeometryRequest(GeometryRequestInput input) -> ImportRequest
   return request;
 }
 
-inline auto MakeStandardDescriptorDoc(std::string_view name,
-  std::string_view material_ref, std::string_view vb_ref,
-  std::string_view ib_ref, std::string_view view_ref,
-  std::optional<json> local_buffers) -> json
+//! A buffer entry reading `uri`; `with_view` adds the one view of three
+//! elements the standard LOD draws.
+inline auto MakeBuffer(const std::string& uri, const uint32_t usage_flags,
+  const uint32_t element_stride, const bool with_view) -> json
 {
-  auto descriptor_doc = json {
-    { "name", name },
-    { "bounds", MakeBounds() },
+  auto buffer = json {
+    { "uri", uri },
+    { "usage_flags", usage_flags },
+    { "element_stride", element_stride },
+  };
+  if (with_view) {
+    buffer["views"] = json::array({
+      json {
+        { "name", "lod0" },
+        { "element_offset", 0U },
+        { "element_count", 3U },
+      },
+    });
+  }
+  return buffer;
+}
+
+//! A buffer of a buffer container read from the file `source`, with the
+//! view `lod0` of its first three elements.
+inline auto MakeContainerBuffer(const std::string& source,
+  const uint32_t usage_flags, const uint32_t element_stride) -> json
+{
+  return json {
+    { "source", source },
+    { "usage_flags", usage_flags },
+    { "element_stride", element_stride },
     {
-      "lods",
+      "views",
       json::array({
         json {
-          { "name", "LOD0" },
-          { "mesh_type", "standard" },
-          { "bounds", MakeBounds() },
-          {
-            "buffers",
-            {
-              { "vb_ref", vb_ref },
-              { "ib_ref", ib_ref },
-            },
-          },
-          {
-            "submeshes",
-            json::array({
-              json {
-                { "surface_id", kAuthoredSurfaceId },
-                { "material_ref", material_ref },
-                {
-                  "views",
-                  json::array({ json { { "view_ref", view_ref } } }),
-                },
-              },
-            }),
-          },
+          { "name", "lod0" },
+          { "element_offset", 0U },
+          { "element_count", 3U },
         },
       }),
     },
   };
+}
 
-  if (local_buffers.has_value()) {
-    descriptor_doc.update({ { "buffers", std::move(*local_buffers) } });
-  }
-  return descriptor_doc;
+//! A standard-mesh geometry whose one LOD draws the view `view` of the buffers
+//! `vb` and `ib` with the material `material`.
+inline auto MakeStandardGeometry(const std::string& identity,
+  const std::string_view material, const std::string_view vb,
+  const std::string_view ib, const std::string_view view = "lod0")
+  -> oxygen::cooker::test::GeometryDescriptor
+{
+  const auto bounds = json {
+    { "min", json::array({ -0.5F, -0.5F, -0.5F }) },
+    { "max", json::array({ 0.5F, 0.5F, 0.5F }) },
+  };
+  auto geometry = oxygen::cooker::test::GeometryDescriptor { identity };
+  geometry.Set("/bounds", bounds)
+    .Set("/lods/0/mesh_type", "standard")
+    .Remove("/lods/0/procedural")
+    .Set("/lods/0/bounds", bounds)
+    .Reference("/lods/0/buffers/vb_ref", vb)
+    .Reference("/lods/0/buffers/ib_ref", ib)
+    .SubmeshMaterial(0, 0, material)
+    .Set("/lods/0/submeshes/0/views/0/view_ref", view);
+  return geometry;
 }
 
 inline auto FindOutputByExtension(const ImportReport& report,

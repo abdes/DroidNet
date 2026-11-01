@@ -27,10 +27,12 @@
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/testing/AssetDescriptors.h>
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
@@ -38,12 +40,9 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/PakFormat_physics.h>
-#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
@@ -53,9 +52,7 @@ namespace data = oxygen::data;
 namespace fixtures = oxygen::cooker::testing;
 namespace pak = oxygen::content::pak;
 namespace core = oxygen::data::pak::core;
-namespace input = oxygen::data::pak::input;
 namespace physics = oxygen::data::pak::physics;
-namespace script = oxygen::data::pak::scripting;
 
 using oxygen::ResourceIndexT;
 using oxygen::cooker::test::HasDiagnostic;
@@ -204,7 +201,7 @@ auto MaterialRoot(const uint8_t seed, const std::string_view name)
   library.Add({
     .type = data::AssetType::kMaterial,
     .leaf = std::string(kSharedLeaf),
-    .descriptor = fixtures::MaterialDescriptor(name).bytes,
+    .descriptor = fixtures::MaterialBuilder { name }.Bytes(),
   });
   return library;
 }
@@ -212,7 +209,8 @@ auto MaterialRoot(const uint8_t seed, const std::string_view name)
 //! The catalog digest of the material `name`.
 auto MaterialDigest(const std::string_view name) -> oxygen::base::Sha256Digest
 {
-  return oxygen::base::ComputeSha256(fixtures::MaterialDescriptor(name).bytes);
+  return oxygen::base::ComputeSha256(
+    fixtures::MaterialBuilder { name }.Bytes());
 }
 
 NOLINT_TEST(PakPlanBuilderTest, PlanningTheSameRequestTwiceGivesTheSamePlan)
@@ -279,7 +277,7 @@ NOLINT_TEST(PakPlanBuilderTest, RejectsAnOverrideThatChangesTheAssetType)
   scenes.Add({
     .type = data::AssetType::kScene,
     .leaf = std::string(kSharedLeaf),
-    .descriptor = fixtures::MakeEmptySceneDescriptor(),
+    .descriptor = SceneBuilder { "Empty" }.Bytes(),
   });
   const auto request = workspace.FullRequest(
     { workspace.Add(MaterialRoot(1U, "A")), workspace.Add(scenes) });
@@ -300,28 +298,13 @@ NOLINT_TEST(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
   // Arrange
   auto workspace = PakWorkspace {};
   auto game = LooseCookedRoot {};
-  auto action = input::InputActionAssetDesc {};
-  action.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kInputAction);
-  action.header.version = input::kInputActionAssetVersion;
-  game.Add({
-    .type = data::AssetType::kInputAction,
-    .leaf = "Input/Move.oiact",
-    .descriptor = data::MakeDescriptorBytes(action),
-  });
-  auto context = input::InputMappingContextAssetDesc {};
-  context.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kInputMappingContext);
-  context.header.version = input::kInputMappingContextAssetVersion;
-  game.Add({
-    .type = data::AssetType::kInputMappingContext,
-    .leaf = "Input/Gameplay.oimap",
-    .descriptor = data::MakeDescriptorBytes(context),
-  });
+  game.InputAction("Input/Move.oiact");
+  game.InputContext(
+    "Input/Gameplay.oimap", fixtures::InputContextBuilder { "Gameplay" });
   game.Add({
     .type = data::AssetType::kScene,
     .leaf = "Scenes/Main.oscene",
-    .descriptor = fixtures::MakeEmptySceneDescriptor(),
+    .descriptor = SceneBuilder { "Empty" }.Bytes(),
   });
   const auto request = workspace.FullRequest({ workspace.Add(game) });
 
@@ -347,14 +330,7 @@ NOLINT_TEST(PakPlanBuilderTest, IndexZeroPolicyAppliedForResourceTables)
   // Arrange
   auto workspace = PakWorkspace {};
   auto game = LooseCookedRoot {};
-  auto logic = script::ScriptAssetDesc {};
-  logic.header.asset_type = static_cast<uint8_t>(data::AssetType::kScript);
-  logic.header.version = script::kScriptAssetVersion;
-  game.Add({
-    .type = data::AssetType::kScript,
-    .leaf = "Logic.oscript",
-    .descriptor = data::MakeDescriptorBytes(logic),
-  });
+  game.Script("Logic.oscript");
   // Texture and script tables that hold only their reserved row zero.
   game.AddEmptyTable(ResourceTable::kTextures)
     .AddEmptyTable(ResourceTable::kScripts);
@@ -400,16 +376,9 @@ NOLINT_TEST(
   game.Add({
     .type = data::AssetType::kMaterial,
     .leaf = "Browse/B.omat",
-    .descriptor = fixtures::MaterialDescriptor("B").bytes,
+    .descriptor = fixtures::MaterialBuilder { "B" }.Bytes(),
   });
-  auto logic = script::ScriptAssetDesc {};
-  logic.header.asset_type = static_cast<uint8_t>(data::AssetType::kScript);
-  logic.header.version = script::kScriptAssetVersion;
-  game.Add({
-    .type = data::AssetType::kScript,
-    .leaf = "Browse/A.oscript",
-    .descriptor = data::MakeDescriptorBytes(logic),
-  });
+  game.Script("Browse/A.oscript");
   const auto request = workspace.FullRequest({ workspace.Add(game) });
 
   // Act
@@ -485,20 +454,9 @@ auto MakeLayeredPhysics(const ShapeKind kind = ShapeKind::kSolid)
   auto& owner = layers.owner;
   const auto payload_key = owner.KeyOf("Shape.convex");
 
-  auto material = physics::PhysicsMaterialAssetDesc {};
-  material.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kPhysicsMaterial);
-  material.header.version = physics::kPhysicsMaterialAssetVersion;
-  const auto material_key = owner.Add({
-    .type = data::AssetType::kPhysicsMaterial,
-    .leaf = "Material.opmat",
-    .descriptor = data::MakeDescriptorBytes(material),
-  });
+  const auto material_key = owner.PhysicsMaterial("Material.opmat");
 
   auto shape = physics::CollisionShapeAssetDesc {};
-  shape.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kCollisionShape);
-  shape.header.version = physics::kCollisionShapeAssetVersion;
   shape.shape_type = physics::ShapeType::kConvexHull;
   shape.material_asset_key = material_key;
   shape.cooked_shape_ref.payload_asset_key = payload_key;
@@ -506,25 +464,7 @@ auto MakeLayeredPhysics(const ShapeKind kind = ShapeKind::kSolid)
   if (kind == ShapeKind::kSensor) {
     shape.is_sensor = physics::kShapeIsSensorTrue;
   }
-  layers.shape = owner.Add({
-    .type = data::AssetType::kCollisionShape,
-    .leaf = "Shape.ocshape",
-    .descriptor = data::MakeDescriptorBytes(shape),
-    .references = data::AssetReferences::Create({},
-      {
-        {
-          .key = material_key,
-          .kind = data::KeyReferenceKind::kAsset,
-          .expected_type = data::AssetType::kPhysicsMaterial,
-        },
-        {
-          .key = payload_key,
-          .kind = data::KeyReferenceKind::kPhysicsResource,
-          .expected_type = data::AssetType::kUnknown,
-        },
-      })
-      .value(),
-  });
+  layers.shape = owner.CollisionShape("Shape.ocshape", shape);
 
   auto payload = physics::PhysicsResourceDesc {};
   payload.resource_asset_key = payload_key;
@@ -674,13 +614,13 @@ NOLINT_TEST(PakPlanBuilderTest, RejectsSidecarOfAnotherSceneDescriptor)
   auto workspace = PakWorkspace {};
   auto game = LooseCookedRoot {};
   const auto scene = AddScene(game);
-  auto sidecar = fixtures::PhysicsSidecarDescriptor(
-    scene, fixtures::SceneDescriptor("Other").bytes);
+  const auto bindings = fixtures::PhysicsSidecarBuilder {};
   game.Add({
     .type = data::AssetType::kPhysicsScene,
     .leaf = "Scene.opscene",
-    .descriptor = std::move(sidecar.bytes),
-    .references = std::move(sidecar.references),
+    .descriptor
+    = bindings.Bytes(scene, SceneBuilder { "Other" }.Bytes(), "PhysicsScene"),
+    .references = bindings.References(scene),
   });
   const auto request = workspace.FullRequest({ workspace.Add(game) });
 
@@ -720,13 +660,14 @@ NOLINT_TEST(PakPlanBuilderTest, RejectsSidecarOfAnotherNodeCount)
   auto game = LooseCookedRoot {};
   const auto empty = SceneBuilder { "Scene" };
   const auto scene = game.Scene("Scene.oscene", empty);
-  auto sidecar = fixtures::PhysicsSidecarDescriptor(scene, empty.Bytes());
-  DescriptorDefects::SetSidecarNodeCount(sidecar.bytes, 1U);
+  const auto bindings = fixtures::PhysicsSidecarBuilder {};
+  auto sidecar = bindings.Bytes(scene, empty.Bytes(), "PhysicsScene");
+  DescriptorDefects::SetSidecarNodeCount(sidecar, 1U);
   game.Add({
     .type = data::AssetType::kPhysicsScene,
     .leaf = "Scene.opscene",
-    .descriptor = std::move(sidecar.bytes),
-    .references = std::move(sidecar.references),
+    .descriptor = std::move(sidecar),
+    .references = bindings.References(scene),
   });
   const auto request = workspace.FullRequest({ workspace.Add(game) });
 

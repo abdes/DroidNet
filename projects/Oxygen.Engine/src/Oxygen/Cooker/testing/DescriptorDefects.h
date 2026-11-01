@@ -18,6 +18,7 @@
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 namespace oxygen::cooker::testing {
 
@@ -48,6 +49,16 @@ struct DescriptorDefects final {
   //! Sets the format version of the descriptor's header.
   static auto SetVersion(std::vector<std::byte>& descriptor, uint8_t version)
     -> void;
+
+  //=== Geometries ===------------------------------------------------------//
+
+  //! Makes the surface `surface` nil wherever the geometry names it: in its
+  //! submeshes and its surface defaults.
+  /*!
+   @throw std::invalid_argument When the geometry does not name `surface`.
+  */
+  static auto ClearSurface(
+    std::vector<std::byte>& geometry, const data::SurfaceId& surface) -> void;
 
   //=== Scenes ===----------------------------------------------------------//
 

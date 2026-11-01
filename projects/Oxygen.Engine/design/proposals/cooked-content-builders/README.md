@@ -154,11 +154,25 @@ game.PhysicsSidecar("Scenes/Main.opscene", scene, bindings);
 bindings)` takes the scene the root already holds, refuses bindings of
   another scene's nodes, and records what a cook records of it: its key, its
   node count and the SHA-256 of its bytes, so the planner's pairing check
-  always holds. `PhysicsSidecarDescriptor(scene_key, scene_bytes, bindings)`
-  builds the same descriptor for a scene stored in another source.
-- **Materials and geometry** keep their builders (`MaterialDescriptor`,
-  `TexturedMaterialDescriptor`, `GeometryDescriptor`), extended the same way
-  when a test needs more than they take: texture slots by name, more meshes.
+  always holds. Its `Bytes(scene_key, scene_bytes, name)` and
+  `References(scene_key)` build the same descriptor for a scene stored in
+  another source.
+- **`MaterialBuilder`** keeps the record a test passes and binds texture
+  slots to rows of the root's texture table or to another source's texture
+  by key, slots of one texture sharing one binding; `PixelShader()` adds a
+  shader stage.
+- **`GeometryBuilder`** adds LODs of procedural or standard meshes (whose
+  buffer rows it binds), submeshes with their surface, material and views,
+  surface defaults and the default LOD policy, laid out as the geometry cook
+  does; without a LOD it is the procedural unit cube.
+- **`ScriptBuilder`, `InputContextBuilder`** and the physics material,
+  collision shape and input action descriptors cover the other formats.
+- **One way per format.** Each format has one builder, used at the call site
+  and by `LooseCookedRoot`'s `Material`, `Geometry`, `Scene`, `Script`,
+  `PhysicsMaterial`, `CollisionShape`, `InputAction` and `InputContext`; no
+  helper wraps a builder. Each validates its output with the product loader
+  and the references a mount checks, so a field a test never names cannot
+  break it.
 - **Texture and buffer descriptor files** come only from
   `DescribeTexture(leaf, row)` and `DescribeBuffer(relpath, row)`, which
   encode them with the product's `EncodeTextureResourceDescriptor` and
@@ -265,15 +279,17 @@ the same bytes.
 
 ## What it replaces
 
-| Hand-written today                                                                                                                                                                                                                                                                                                                                              | Replaced by                                       |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| Scene descriptors: `AssetLoader_{loading,scene,scripting,generation}_test` (`WriteLooseCookedScene*`, `SceneBytes`), `PakSceneTestSupport.h` (`BuildSceneDescriptorWithScriptingSlots` and its second builder), `ModelImportTestBase.h`, `ScenePipeline_functional_test`, `ScriptingSidecarImportJob_reimport`, the Inspector scene and geometry metadata tests | `SceneBuilder`, `LooseCookedRoot::Scene`          |
-| Valid scenes in the scene decoder's tests (`SceneLoader_test`, `SceneLoader_composition_test`)                                                                                                                                                                                                                                                                  | `SceneBuilder`; their defects `DescriptorDefects` |
-| A physics sidecar with bindings (`AssetLoader_physics_test`, `PhysicsLoaderTestFixtures.h`)                                                                                                                                                                                                                                                                     | `PhysicsSidecarBuilder`                           |
-| Texture descriptor files forged in `MaterialDescriptorImportJob_functional_test` and `SceneDescriptorImportJob_functional_test`                                                                                                                                                                                                                                 | `AddTexture`, `DescribeTexture`                   |
-| Hand-written records in model record tests                                                                                                                                                                                                                                                                                                                      | `ModelRecord`                                     |
-| The Data tests' scene builder (`SceneAssetBuilder`) and its users: the scene composition, override and node reference tests, `AssetLoader_scene_query_test`, the Inspector scene metadata test, `SceneInstantiation_test`, `SceneScriptAttachment_test`                                                                                                         | `SceneBuilder`; their defects `DescriptorDefects` |
-| Hand-laid scenes and sidecars of the DemoShell scene loader and environment settings tests                                                                                                                                                                                                                                                                      | `SceneBuilder`, `PhysicsSidecarDescriptor`        |
+| Hand-written today                                                                                                                                                                                                                                                                                                                                              | Replaced by                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Scene descriptors: `AssetLoader_{loading,scene,scripting,generation}_test` (`WriteLooseCookedScene*`, `SceneBytes`), `PakSceneTestSupport.h` (`BuildSceneDescriptorWithScriptingSlots` and its second builder), `ModelImportTestBase.h`, `ScenePipeline_functional_test`, `ScriptingSidecarImportJob_reimport`, the Inspector scene and geometry metadata tests | `SceneBuilder`, `LooseCookedRoot::Scene`                                         |
+| Valid scenes in the scene decoder's tests (`SceneLoader_test`, `SceneLoader_composition_test`)                                                                                                                                                                                                                                                                  | `SceneBuilder`; their defects `DescriptorDefects`                                |
+| A physics sidecar with bindings (`AssetLoader_physics_test`, `PhysicsLoaderTestFixtures.h`)                                                                                                                                                                                                                                                                     | `PhysicsSidecarBuilder`                                                          |
+| Texture descriptor files forged in `MaterialDescriptorImportJob_functional_test` and `SceneDescriptorImportJob_functional_test`                                                                                                                                                                                                                                 | `AddTexture`, `DescribeTexture`                                                  |
+| Hand-written records in model record tests                                                                                                                                                                                                                                                                                                                      | `ModelRecord`                                                                    |
+| The Data tests' scene builder (`SceneAssetBuilder`) and its users: the scene composition, override and node reference tests, `AssetLoader_scene_query_test`, the Inspector scene metadata test, `SceneInstantiation_test`, `SceneScriptAttachment_test`                                                                                                         | `SceneBuilder`; their defects `DescriptorDefects`                                |
+| Hand-laid scenes and sidecars of the DemoShell scene loader and environment settings tests                                                                                                                                                                                                                                                                      | `SceneBuilder`, `PhysicsSidecarBuilder`                                          |
+| Hand-laid material and geometry descriptors of the AssetLoader, Pak, Import, Inspector and scenario tests                                                                                                                                                                                                                                                       | `MaterialBuilder`, `GeometryBuilder`                                             |
+| Hand-laid script, collision shape, physics material and input descriptors of the AssetLoader, Pak, PakTool, Inspector and cooked content tests                                                                                                                                                                                                                  | `ScriptBuilder`, `InputContextBuilder`, the physics and input action descriptors |
 
 Replaced in steps 1-4: the tests' loose index writer and layout, the
 second pak encoder, the interim pak kit, the texture root fixture, file-local

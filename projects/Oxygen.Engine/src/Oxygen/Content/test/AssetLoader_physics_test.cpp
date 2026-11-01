@@ -22,17 +22,16 @@
 #include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
+#include <Oxygen/Cooker/testing/AssetDescriptors.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -71,14 +70,12 @@ namespace {
     const auto body = scene.Node("body");
     auto bindings = cooker::testing::PhysicsSidecarBuilder {};
     bindings.RigidBody(body, kShape, kMaterial);
-    auto sidecar = cooker::testing::PhysicsSidecarDescriptor(
-      kScene, scene.Bytes(), bindings);
     auto owner = LooseCookedRoot { "test", kOwnerSeed };
     owner.Add({
       .type = data::AssetType::kPhysicsScene,
       .leaf = "scene.opscene",
-      .descriptor = std::move(sidecar.bytes),
-      .references = std::move(sidecar.references),
+      .descriptor = bindings.Bytes(kScene, scene.Bytes(), "PhysicsScene"),
+      .references = bindings.References(kScene),
       .key = kSidecar,
     });
     cooker::testing::Materialize(owner.Files(), root);
@@ -101,47 +98,34 @@ namespace {
   {
     auto dependencies = LooseCookedRoot { "test", payload };
     physics::CollisionShapeAssetDesc shape {};
-    shape.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kCollisionShape);
-    shape.header.version = scenario == DependencyCase::kWrongShapeVersion
-      ? 0U
-      : physics::kCollisionShapeAssetVersion;
     shape.shape_type = physics::ShapeType::kConvexHull;
     shape.material_asset_key = kMaterial;
     shape.cooked_shape_ref = {
       .payload_asset_key = kPayload,
       .payload_type = physics::ShapePayloadType::kConvex,
     };
+    auto shape_fixture
+      = cooker::testing::CollisionShapeDescriptor("shape", shape);
+    if (scenario == DependencyCase::kWrongShapeVersion) {
+      cooker::testing::DescriptorDefects::SetVersion(shape_fixture.bytes, 0U);
+    }
     dependencies.Add({
       .type = data::AssetType::kCollisionShape,
       .leaf = "shape.oshape",
-      .descriptor = data::MakeDescriptorBytes(shape),
-      .references = data::AssetReferences::Create({},
-        {
-          {
-            .key = kMaterial,
-            .kind = data::KeyReferenceKind::kAsset,
-            .expected_type = data::AssetType::kPhysicsMaterial,
-          },
-          {
-            .key = kPayload,
-            .kind = data::KeyReferenceKind::kPhysicsResource,
-            .expected_type = data::AssetType::kUnknown,
-          },
-        })
-        .value(),
+      .descriptor = std::move(shape_fixture.bytes),
+      .references = std::move(shape_fixture.references),
       .key = kShape,
     });
     if (scenario != DependencyCase::kMissingMaterial) {
       physics::PhysicsMaterialAssetDesc material {};
-      material.header.asset_type
-        = static_cast<uint8_t>(data::AssetType::kPhysicsMaterial);
-      material.header.version = physics::kPhysicsMaterialAssetVersion;
       material.restitution = static_cast<float>(payload) / 10.0F;
+      auto material_fixture
+        = cooker::testing::PhysicsMaterialDescriptor("material", material);
       dependencies.Add({
         .type = data::AssetType::kPhysicsMaterial,
         .leaf = "material.opmat",
-        .descriptor = data::MakeDescriptorBytes(material),
+        .descriptor = std::move(material_fixture.bytes),
+        .references = std::move(material_fixture.references),
         .key = kMaterial,
       });
     }
