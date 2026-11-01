@@ -115,16 +115,18 @@ public:
   //! Adds an empty scene; returns its key.
   auto Scene(std::string_view leaf) -> data::AssetKey;
 
-  //! Adds the physics sidecar of the scene at `scene_leaf`, which the root
-  //! already holds, matching it as a cook does: its key, node count and
-  //! content hash. Returns the sidecar's key.
+  //! Adds the physics sidecar of the scene `scene`, which the root already
+  //! holds, matching it as a cook does: its key, node count and content hash.
+  //! Returns the sidecar's key.
   /*!
-   @throw std::invalid_argument When the root holds no scene at `scene_leaf`.
+   @throw std::invalid_argument When the root holds no scene `scene`.
   */
-  auto PhysicsSidecar(std::string_view leaf, std::string_view scene_leaf)
+  auto PhysicsSidecar(std::string_view leaf, const data::AssetKey& scene)
     -> data::AssetKey;
 
-  //! Adds a texture row with `payload`; returns its row.
+  //! Adds a texture row with `payload`; returns its row. Every `Add*` row
+  //! records the offset, size and SHA-256 of its payload, whatever `desc`
+  //! holds.
   auto AddTexture(std::span<const std::byte> payload,
     data::pak::core::TextureResourceDesc desc = OnePixelTexture())
     -> ResourceIndexT;

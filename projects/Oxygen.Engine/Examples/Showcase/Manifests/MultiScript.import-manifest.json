@@ -16,16 +16,14 @@
       "type": "material-descriptor",
       "source": "/Content/Scenes/MultiScript/ScriptedCubeMat.omat.json",
       "virtual_path": "/Content/Scenes/MultiScript/ScriptedCubeMat.omat",
-      "name": "ScriptedCubeMat",
-      "content_hashing": true
+      "name": "ScriptedCubeMat"
     },
     {
       "id": "/Content/Scenes/MultiScript/CompanionOrbMat.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/MultiScript/CompanionOrbMat.omat.json",
       "virtual_path": "/Content/Scenes/MultiScript/CompanionOrbMat.omat",
-      "name": "CompanionOrbMat",
-      "content_hashing": true
+      "name": "CompanionOrbMat"
     },
     {
       "id": "/Content/Scenes/MultiScript/orbit-shapes.oscript",
@@ -34,8 +32,7 @@
       "virtual_path": "/Content/Scenes/MultiScript/orbit-shapes.oscript",
       "name": "OrbitShapesScript",
       "compile": false,
-      "script_storage": "external",
-      "content_hashing": true
+      "script_storage": "external"
     },
     {
       "id": "/Content/Scenes/MultiScript/day-night.oscript",
@@ -44,8 +41,7 @@
       "virtual_path": "/Content/Scenes/MultiScript/day-night.oscript",
       "name": "TimeOfDayScript",
       "compile": false,
-      "script_storage": "external",
-      "content_hashing": true
+      "script_storage": "external"
     },
     {
       "id": "/Content/Scenes/MultiScript/multi_script_scene.input",
@@ -59,7 +55,6 @@
       "source": "/Content/Scenes/MultiScript/MultiScript.scene.json",
       "virtual_path": "/Content/Scenes/MultiScript/MultiScript.oscene",
       "name": "multi_script_scene",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Scenes/MultiScript/ScriptedCubeMat.omat",
         "/Content/Scenes/MultiScript/CompanionOrbMat.omat",
@@ -73,7 +68,6 @@
       "type": "script-sidecar",
       "name": "multi_script_scene_script_sidecar",
       "target_scene_virtual_path": "/Content/Scenes/MultiScript/MultiScript.oscene",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Scenes/MultiScript/MultiScript.oscene",
         "/Content/Scenes/MultiScript/orbit-shapes.oscript",

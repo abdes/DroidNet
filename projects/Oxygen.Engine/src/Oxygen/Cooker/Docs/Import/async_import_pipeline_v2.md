@@ -275,10 +275,10 @@ remain valid through generation replacement.
     registers plan items and dependencies via `ImportPlanner`.
 
 14. **ThreadPool-Only content_hash**: `content_hash` is computed only on the
-    ThreadPool **when enabled**. The invariant is that all dependencies are
-    ready and the full descriptor payload is known before hashing. Hashing is
-    controlled by `ImportOptions::with_content_hashing` and cascades into all
-    pipeline configs. When disabled, pipelines MUST NOT compute any hashes.
+    ThreadPool, and always. The invariant is that all dependencies are ready
+    and the full descriptor payload is known before hashing. Resource hashes
+    are full SHA-256 digests (`ContentHashDigest`) computed from the bytes the
+    producer holds; no import reads a data file again to hash it.
 
 15. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
     emitters (TextureEmitter, BufferEmitter, AssetEmitter). Created lazily on
@@ -349,7 +349,8 @@ public:
   virtual auto AddDiagnostic(ImportDiagnostic diag) -> void = 0;
   virtual auto WriteAssetDescriptor(key, type, path, relpath, bytes) -> void = 0;
   virtual auto WriteFile(kind, relpath, bytes) -> void = 0;
-  virtual auto RegisterExternalFile(kind, relpath) -> void = 0;
+  virtual auto RegisterExternalFile(kind, relpath, digest) -> void = 0;
+  virtual auto RegisterExternalDataFile(kind, relpath) -> void = 0;
   virtual auto OnMaterialsWritten(count) -> void = 0;
   virtual auto OnGeometryWritten(count) -> void = 0;
   virtual auto OnScenesWritten(count) -> void = 0;
@@ -1224,8 +1225,8 @@ simple:
 
 1. **Stable index returned immediately**: `Emit()` assigns and returns an index
    synchronously, before any I/O completes.
-2. **Dedup by signature** (when applicable): if the resource signature already
-   exists, `Emit()` returns the existing index and starts no additional write.
+2. **Dedup by descriptor and SHA-256** (when applicable): a payload without a
+   SHA-256 is refused; if the resource signature already exists, `Emit()` returns the existing index and starts no additional write.
 3. **Append semantics via allocation**: the table aggregator maintains an atomic
    data file size and reserves a unique range with `ReserveDataRange()`.
 4. **Alignment-aware layout**: the reservation computes `aligned_offset` and
@@ -1553,6 +1554,8 @@ The index file is a **binary manifest** containing:
 2. **String table** - all paths as null-terminated UTF-8
 3. **AssetEntry[]** - each asset with its key, descriptor path, virtual path
 4. **FileRecord[]** - metadata about resource files including **their sizes**
+   and SHA-256 digests (resource data files record an all-zero digest; each
+   resource in them is verified against its table row's SHA-256)
 
 ```cpp
 // From LooseCookedIndexFormat.h
@@ -1625,6 +1628,7 @@ auto LooseCookedWriter::Finalize() -> void {
       .kind = kind,
       .relpath_offset = strings.Offset(relpath),
       .size = std::filesystem::file_size(root_ / relpath),  // Now we know!
+      .sha256 = digest,  // Registered by the producer; never re-read here
     });
   }
 
@@ -1936,8 +1940,7 @@ auto TexturePipeline::ProcessItem(WorkItem& item) -> co::Co<WorkResult> {
   // Single ThreadPool task for entire cooking
   const auto& policy = ResolvePackingPolicy(item.packing_policy_id);
   auto result = co_await thread_pool_->Run([&] {
-    return CookTexture(item.source.bytes, item.desc, policy,
-      /*with_content_hashing=*/true);
+    return CookTexture(item.source.bytes, item.desc, policy);
   });
 
   if (!result) {
@@ -2646,8 +2649,7 @@ The following concise set of items remain to complete or extend the architecture
 - **Low priority / Future**
   - Enhance per-item telemetry and progress reporting (input/output queue
     samples, rolling throughput) surfaced via `ProgressEvent`.
-  - Add content-hash coverage across pipelines (configurable and testable) and
-    ensure correct behavior when hashing is disabled.
+  - Add content-hash coverage across pipelines (testable).
   - Expand packing policies and presets across platforms and add more
     performance benchmarks and regressions tests.
 

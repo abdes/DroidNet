@@ -14,7 +14,6 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
@@ -83,8 +82,6 @@ auto BuildSceneDescriptorRequest(const SceneDescriptorImportSettings& settings,
 
   request.job_name
     = settings.job_name.empty() ? source->name : settings.job_name;
-  request.options.with_content_hashing = EffectiveContentHashingEnabled(
-    source->content_hashing.value_or(settings.with_content_hashing));
 
   request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
     .normalized_descriptor_json = std::move(document->text),

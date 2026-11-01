@@ -27,53 +27,53 @@ namespace oxygen::content::import {
 //! Timing telemetry captured for a single work item.
 struct ImportWorkItemTelemetry final {
   //! Time spent reading bytes from storage for this item.
-  std::optional<std::chrono::microseconds> io_duration {};
+  std::optional<std::chrono::microseconds> io_duration;
 
   //! Time spent decoding or transforming bytes in-memory for this item.
-  std::optional<std::chrono::microseconds> decode_duration {};
+  std::optional<std::chrono::microseconds> decode_duration;
 
   //! Time spent loading or preparing data for this item.
-  std::optional<std::chrono::microseconds> load_duration {};
+  std::optional<std::chrono::microseconds> load_duration;
 
   //! Time spent executing pipeline work for this item.
-  std::optional<std::chrono::microseconds> cook_duration {};
+  std::optional<std::chrono::microseconds> cook_duration;
 
   //! Time spent emitting outputs for this item.
-  std::optional<std::chrono::microseconds> emit_duration {};
+  std::optional<std::chrono::microseconds> emit_duration;
 };
 
 //! Timing telemetry captured during an import job.
 struct ImportTelemetry final {
   //! Time spent reading source bytes from storage.
   //! Includes source files and external dependencies.
-  std::optional<std::chrono::microseconds> io_duration {};
+  std::optional<std::chrono::microseconds> io_duration;
 
   //! Time spent loading the primary source file (IO + parse).
-  std::optional<std::chrono::microseconds> source_load_duration {};
+  std::optional<std::chrono::microseconds> source_load_duration;
 
   //! Total time spent decoding or transforming bytes in-memory.
   //! Aggregates all assets/resources (embedded or external) and excludes
   //! I/O, emission, and LOD building.
-  std::optional<std::chrono::microseconds> decode_duration {};
+  std::optional<std::chrono::microseconds> decode_duration;
 
   //! Total time spent loading or preparing data.
   //! Includes source load and all asset/resource load steps.
-  std::optional<std::chrono::microseconds> load_duration {};
+  std::optional<std::chrono::microseconds> load_duration;
 
   //! Time spent executing pipeline work that cooks content.
   //! Excludes I/O, decode, and emission. Includes LOD building.
-  std::optional<std::chrono::microseconds> cook_duration {};
+  std::optional<std::chrono::microseconds> cook_duration;
 
   //! Total time spent emitting cooked outputs.
   //! Aggregates all assets/resources emitted during the job.
-  std::optional<std::chrono::microseconds> emit_duration {};
+  std::optional<std::chrono::microseconds> emit_duration;
 
   //! Time spent in the finalization stage (index/report updates,
   //! session teardown). Not a per-asset/resource aggregate.
-  std::optional<std::chrono::microseconds> finalize_duration {};
+  std::optional<std::chrono::microseconds> finalize_duration;
 
   //! Total wall-clock duration for the job.
-  std::optional<std::chrono::microseconds> total_duration {};
+  std::optional<std::chrono::microseconds> total_duration;
 };
 
 //! Summary of a cooked output produced by an import job.
@@ -99,7 +99,7 @@ struct ImportProductRecord final {
   std::string descriptor_relpath;
 
   //! Key of an asset; empty for a texture descriptor, which is a resource.
-  std::optional<data::AssetKey> key {};
+  std::optional<data::AssetKey> key;
 
   //! Type of an asset; `kUnknown` for a texture descriptor.
   data::AssetType asset_type = data::AssetType::kUnknown;
@@ -117,10 +117,6 @@ struct ImportPackagingSummary final {
   uint32_t diagnostics_info = 0;
   uint32_t diagnostics_warning = 0;
   uint32_t diagnostics_error = 0;
-
-  //! Dedup collision diagnostics emitted by resource emitters.
-  uint32_t texture_dedup_collisions = 0;
-  uint32_t buffer_dedup_collisions = 0;
 };
 
 //! Summary of an import to a cooked container.
@@ -142,8 +138,8 @@ struct ImportReport final {
   std::optional<ModelSourceFingerprint> source_fingerprint;
   //! Set only after model import record publication; staging reports leave
   //! it unset.
-  std::optional<std::filesystem::path> model_record_path {};
-  std::optional<std::filesystem::path> previous_cooked_root {};
+  std::optional<std::filesystem::path> model_record_path;
+  std::optional<std::filesystem::path> previous_cooked_root;
 
   //! Diagnostics (warnings/errors) emitted during import.
   std::vector<ImportDiagnostic> diagnostics;

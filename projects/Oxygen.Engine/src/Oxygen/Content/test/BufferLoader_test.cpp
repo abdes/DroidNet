@@ -15,6 +15,7 @@
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 
 using testing::NotNull;
@@ -29,7 +30,7 @@ namespace {
 class BufferLoaderBasicTest
   : public oxygen::content::testing::BinaryAssetLoaderFixtureBase {
 protected:
-  using Writer = oxygen::content::testing::BinaryAssetLoaderFixtureBase::Writer;
+  using oxygen::content::testing::BinaryAssetLoaderFixtureBase::Writer;
   auto CreateLoaderContext() -> oxygen::content::LoaderContext
   {
     return MakeResourceContext<oxygen::data::pak::core::BufferResourceDesc>();
@@ -44,20 +45,21 @@ NOLINT_TEST_F(
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
 
-  // Arrange: Hexdump for a valid BufferResourceDesc header (32 bytes), padded
-  // to 256 (to place the buffer data after)
-  // Field layout:
+  // Arrange: Hexdump for a valid BufferResourceDesc header (53 bytes, padded to
+  // 56), padded to 256 (to place the buffer data after) Field layout:
   // clang-format off
   //   0x00: data_offset      = 256    (00 01 00 00 00 00 00 00)
   //   0x08: size_bytes       = 192    (C0 00 00 00)
   //   0x0C: usage_flags      = 1      (01 00 00 00) // kVertexBuffer
   //   0x10: element_stride   = 0      (0C 00 00 00)
   //   0x14: element_format   = 27     (1B) // kRGB32Float
-  //   0x15: reserved[11]     = {0}    (00 00 00 00 00 00 00 00 00 00 00)
+  //   0x15: content_hash     = {0}    (32 zero bytes, not verified)
   // clang-format on
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
     16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
   constexpr uint32_t size_bytes = 192;
@@ -95,20 +97,21 @@ NOLINT_TEST_F(
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
 
-  // Arrange: Hexdump for a valid BufferResourceDesc header (32 bytes), with
-  // index buffer usage and R16UInt format.
-  // Field layout:
+  // Arrange: Hexdump for a valid BufferResourceDesc header (53 bytes, padded to
+  // 56), with index buffer usage and R16UInt format. Field layout:
   // clang-format off
   //   0x00: data_offset      = 256   (00 01 00 00 00 00 00 00)
   //   0x08: size_bytes       = 96    (60 00 00 00)
   //   0x0C: usage_flags      = 2     (02 00 00 00) // kIndexBuffer
   //   0x10: element_stride   = 0     (00 00 00 00) // Ignored for formatted
   //   0x14: element_format   = 11    (0B) // kR32SInt
-  //   0x15: reserved[11]     = {0}   (00 00 00 00 00 00 00 00 00 00 00)
+  //   0x15: content_hash     = {0}    (32 zero bytes, not verified)
   // clang-format on
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 60 00 00 00 02 00 00 00
     16: 00 00 00 00 0B 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
   constexpr uint32_t size_bytes = 96;
@@ -153,11 +156,13 @@ NOLINT_TEST_F(
   //   0x0C: usage_flags      = 8     (08 00 00 00) // kStorageBuffer
   //   0x10: element_stride   = 64    (40 00 00 00)
   //   0x14: element_format   = 0     (00) // kUnknown (structured)
-  //   0x15: reserved[11]     = {0}   (00 00 00 00 00 00 00 00 00 00 00)
+  //   0x15: content_hash     = {0}    (32 zero bytes, not verified)
   // clang-format on
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 40 01 00 00 08 00 00 00
     16: 40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
   constexpr uint32_t size_bytes = 320;
@@ -201,11 +206,13 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBufferRawBufferReturnsBufferAsset)
   //   0x0C: usage_flags      = 4     (04 00 00 00) // kConstantBuffer
   //   0x10: element_stride   = 1     (01 00 00 00)
   //   0x14: element_format   = 0     (00) // kUnknown (raw)
-  //   0x15: reserved[11]     = {0}   (00 00 00 00 00 00 00 00 00 00 00)
+  //   0x15: content_hash     = {0}    (32 zero bytes, not verified)
   // clang-format on
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 80 00 00 00 04 00 00 00
     16: 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
   constexpr uint32_t size_bytes = 128;
@@ -243,19 +250,21 @@ NOLINT_TEST_F(
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
 
-  // Arrange: Hexdump for a BufferResourceDesc header (32 bytes), with
-  // element_format = 255 (invalid). Field layout:
+  // Arrange: Hexdump for a BufferResourceDesc header (53 bytes, padded to 56),
+  // with element_format = 255 (invalid). Field layout:
   // clang-format off
   //   0x00: data_offset      = 256   (00 01 00 00 00 00 00 00)
   //   0x08: size_bytes       = 64    (40 00 00 00)
   //   0x0C: usage_flags      = 1     (01 00 00 00) // kVertexBuffer
   //   0x10: element_stride   = 0     (00 00 00 00)
   //   0x14: element_format   = 255   (FF) <- invalid
-  //   0x15: reserved[11]     = {0}   (00 00 00 00 00 00 00 00 00 00 00)
+  //   0x15: content_hash     = {0}    (32 zero bytes, not verified)
   // clang-format on
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 40 00 00 00 01 00 00 00
     16: 00 00 00 00 FF 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
   constexpr uint32_t size_bytes = 64;
@@ -289,11 +298,13 @@ NOLINT_TEST_F(
   //   0x0C: usage_flags      = 9     (09 00 00 00) // kVertexBuffer | kStorageBuffer
   //   0x10: element_stride   = 0     (00 00 00 00)
   //   0x14: element_format   = 42    (2A) // kRGBA32Float
-  //   0x15: reserved[11]     = {0}   (00 00 00 00 00 00 00 00 00 00 00)
+  //   0x15: content_hash     = {0}    (32 zero bytes, not verified)
   // clang-format on
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 00 01 00 00 09 00 00 00
     16: 00 00 00 00 2A 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
   constexpr uint32_t size_bytes = 256;
@@ -326,19 +337,21 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBufferAlignedDataOffsetWorks)
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
 
-  // Arrange: Hexdump for a BufferResourceDesc header (32 bytes), with
-  // data_offset = 256 and size_bytes = 32. Field layout:
+  // Arrange: Hexdump for a BufferResourceDesc header (53 bytes, padded to 56),
+  // with data_offset = 256 and size_bytes = 32. Field layout:
   // clang-format off
   //   0x00: data_offset      = 256   (00 01 00 00 00 00 00 00)
   //   0x08: size_bytes       = 32    (20 00 00 00)
   //   0x0C: usage_flags      = 16    (10 00 00 00) // kIndirectBuffer
   //   0x10: element_stride   = 0     (00 00 00 00)
   //   0x14: element_format   = 22    (16) // kRG32UInt
-  //   0x15: reserved[11]     = {0}   (00 00 00 00 00 00 00 00 00 00 00)
+  //   0x15: content_hash     = {0}    (32 zero bytes, not verified)
   // clang-format on
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 20 00 00 00 10 00 00 00
     16: 00 00 00 00 16 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
   constexpr uint32_t size_bytes = 32;
@@ -372,20 +385,21 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBufferZeroDataSizeWorks)
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
 
-  // Arrange: Hexdump for a BufferResourceDesc header (32 bytes), size_bytes =
-  // 0.
-  // Field layout:
+  // Arrange: Hexdump for a BufferResourceDesc header (53 bytes, padded to 56),
+  // size_bytes = 0. Field layout:
   // clang-format off
   //   0x00: data_offset      = 256   (00 01 00 00 00 00 00 00)
   //   0x08: size_bytes       = 0     (00 00 00 00)
   //   0x0C: usage_flags      = 4     (04 00 00 00) // kConstantBuffer
   //   0x10: element_stride   = 0     (00 00 00 00)
   //   0x14: element_format   = 13    (0D) // kRG8UInt
-  //   0x15: reserved[11]     = {0}   (00 00 00 00 00 00 00 00 00 00 00)
+  //   0x15: content_hash     = {0}    (32 zero bytes, not verified)
   // clang-format on
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 00 00 00 00 04 00 00 00
     16: 00 00 00 00 0D 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
   constexpr uint32_t size_bytes = 0;
@@ -423,11 +437,13 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBufferCPUAccessFlagsWorks)
   //   0x0C: usage_flags      = 96    (60 00 00 00) // kCPUWritable | kCPUReadable
   //   0x10: element_stride   = 4     (04 00 00 00)
   //   0x14: element_format   = 0     (00) // kUnknown (structured)
-  //   0x15: reserved[11]     = {0}   (00 00 00 00 00 00 00 00 00 00 00)
+  //   0x15: content_hash     = {0}    (32 zero bytes, not verified)
   // clang-format on
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 40 00 00 00 60 00 00 00
     16: 04 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00
   )";
   constexpr uint64_t data_offset = 256;
   constexpr uint32_t size_bytes = 64;
@@ -488,6 +504,8 @@ NOLINT_TEST_F(BufferLoaderErrorTest, LoadBufferDataReadFailureThrows)
   const std::string hexdump = R"(
      0: 00 01 00 00 00 00 00 00 80 00 00 00 01 00 00 00
     16: 00 00 00 00 0D 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00
   )";
 
   // Write header but less data than specified in size_bytes

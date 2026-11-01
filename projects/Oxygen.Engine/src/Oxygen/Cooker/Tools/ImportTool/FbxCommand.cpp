@@ -61,14 +61,6 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .StoreTo(&options_.virtual_path)
         .Build();
 
-  auto with_content_hashing
-    = Option::WithKey("content-hashing")
-        .About("Enable or disable content hashing for outputs")
-        .Long("content-hashing")
-        .WithValue<bool>()
-        .StoreTo(&options_.with_content_hashing)
-        .Build();
-
   auto job_name = Option::WithKey("name")
                     .About("Optional job name")
                     .Long("name")
@@ -274,8 +266,7 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(no_import_cameras))
     .WithOption(std::move(light_intensity_scale))
     .WithOption(std::move(max_texture_size))
-    .WithOption(std::move(up_axis))
-    .WithOption(std::move(with_content_hashing));
+    .WithOption(std::move(up_axis));
 }
 
 auto FbxCommand::Execute() -> std::expected<void, std::error_code>

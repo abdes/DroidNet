@@ -70,24 +70,26 @@ public:
   /*! @see LooseCookedWriter::RegisterExternalFile */
   OXGN_COOK_API auto RegisterExternalFile(
     const std::filesystem::path& cooked_root, data::loose_cooked::FileKind kind,
-    std::string_view relpath,
-    const std::optional<LooseCookedFileDigest>& produced = std::nullopt)
-    -> void;
+    std::string_view relpath, const LooseCookedFileDigest& produced) -> void;
+
+  //! Register a resource data file record in the shared index writer.
+  /*! @see LooseCookedWriter::RegisterExternalDataFile */
+  OXGN_COOK_API auto RegisterExternalDataFile(
+    const std::filesystem::path& cooked_root, data::loose_cooked::FileKind kind,
+    std::string_view relpath) -> void;
 
   //! Register a texture descriptor record under its virtual path.
   /*! @see LooseCookedWriter::RegisterExternalTextureDescriptor */
   OXGN_COOK_API auto RegisterExternalTextureDescriptor(
     const std::filesystem::path& cooked_root, std::string_view relpath,
     std::string_view virtual_path, const LooseCookedProducer& producer,
-    const std::optional<LooseCookedFileDigest>& produced = std::nullopt)
-    -> void;
+    const LooseCookedFileDigest& produced) -> void;
 
   //! Register an auxiliary file record its producer produces.
   /*! @see LooseCookedWriter::RegisterExternalAuxiliaryFile */
   OXGN_COOK_API auto RegisterExternalAuxiliaryFile(
     const std::filesystem::path& cooked_root, std::string_view relpath,
-    const LooseCookedProducer& producer,
-    const std::optional<LooseCookedFileDigest>& produced = std::nullopt)
+    const LooseCookedProducer& producer, const LooseCookedFileDigest& produced)
     -> void;
 
   //! Retire the outputs a complete re-cook no longer writes.

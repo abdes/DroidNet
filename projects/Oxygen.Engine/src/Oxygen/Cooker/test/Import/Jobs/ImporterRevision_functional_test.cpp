@@ -67,27 +67,27 @@ namespace {
   constexpr auto kGolden = std::to_array<GoldenOutput>({
     {
       .importer = Importer::kGltf,
-      .revision = 6,
+      .revision = 7,
       .digest
-      = "e14ee29097e2c2bdf66734216ee2426ba721f186f0ec69f354225af638a35b9d",
+      = "87870b5895fe1a25d03a418257d36ebe70d2ed31f22a311f4a41e7028200bd4e",
     },
     {
       .importer = Importer::kFbx,
-      .revision = 6,
+      .revision = 7,
       .digest
-      = "5678785ffcca919f74d48658d8ff84ccabb2ac47299fbb65ac5abe03cdc138bb",
+      = "818a4a952de06ae3b1ac0f5f47e01b63cb953891a3218cb82c9d3a74370a3076",
     },
     {
       .importer = Importer::kTexture,
-      .revision = 2,
+      .revision = 3,
       .digest
-      = "2dce4eb519fb4564e9f0a4760aeb81c22fa4a77d86a378622344b5401391b9c0",
+      = "8af24f6f56aeb7bbe808d210df3b0718710008ab1d4c5b5ba4085382aba5a162",
     },
     {
       .importer = Importer::kBufferContainer,
-      .revision = 1,
+      .revision = 2,
       .digest
-      = "93714f6e4706dedffd3c395ad9b50e3410b06faaa7cc305a3dc4c32339df10f5",
+      = "85aaaec3051af47a26f8ef900da894d35175b9c4d9ec3b6b8ecd7792443882ad",
     },
     {
       .importer = Importer::kMaterialDescriptor,

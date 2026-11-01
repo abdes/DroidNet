@@ -9,18 +9,12 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
-#include <functional>
-#include <memory>
 #include <optional>
-#include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
-#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -52,14 +46,9 @@ namespace oxygen::content::import {
    shutdown.
 
  4. **Signature-Based Deduplication**: Buffers are deduplicated using a
- stable
- payload identity signature. When `CookedBufferPayload::content_hash`
-   is
- present (non-zero), it is used directly. Otherwise the emitter computes a
- fast
- deterministic payload fingerprint for identity. Duplicate buffers reuse
-   an
- existing index without any additional I/O.
+    signature of their descriptor and `CookedBufferPayload::content_hash`,
+    the SHA-256 their producer computed. Duplicate buffers reuse an existing
+    index without any additional I/O.
 
  5. **Per-Buffer Alignment**: Each buffer specifies its own alignment
     requirement (vertex buffers = 16 bytes, index buffers = 4 bytes, etc.).
@@ -95,12 +84,6 @@ namespace oxygen::content::import {
 */
 class BufferEmitter final {
 public:
-  struct Config final {
-    DedupCollisionPolicy collision_policy
-      = DedupCollisionPolicy::kWarnKeepFirst;
-    std::function<void(ImportDiagnostic)> on_dedup_diagnostic;
-  };
-
   //! Create a buffer emitter writing under a cooked root.
   /*!
    @param writes The nursery the writes run in; it outlives them (the
@@ -112,10 +95,6 @@ public:
   OXGN_COOK_API BufferEmitter(co::Nursery& writes,
     BufferTableAggregator& table_aggregator,
     const std::filesystem::path& cooked_root);
-
-  OXGN_COOK_API BufferEmitter(co::Nursery& writes,
-    BufferTableAggregator& table_aggregator,
-    const std::filesystem::path& cooked_root, Config config);
 
   OXGN_COOK_API ~BufferEmitter();
 
@@ -129,13 +108,14 @@ public:
    Assigns a table index immediately and starts an async write for the
    buffer data. The index is valid the moment this method returns.
 
-   @param cooked The cooked buffer payload containing data and metadata.
+   @param cooked The cooked buffer payload containing data and metadata;
+     its producer computed `content_hash`, the SHA-256 of the data.
      @return Table index for this buffer (0-based). When deduplicated, this may
        be an existing index.
 
    ### What Happens
 
-  1. Builds a dedupe signature from the payload metadata (and optional hash).
+  1. Builds a dedupe signature from the payload metadata and its SHA-256.
   2. If the signature was seen before, returns the existing index.
   3. Otherwise assigns the next index.
   4. Calculates an aligned data offset based on the buffer's alignment.
@@ -150,8 +130,7 @@ public:
 
    @note The returned index is stable even if the I/O fails later.
   */
-  OXGN_COOK_NDAPI auto Emit(
-    CookedBufferPayload cooked, std::string_view signature_salt) -> uint32_t;
+  OXGN_COOK_NDAPI auto Emit(CookedBufferPayload cooked) -> uint32_t;
 
   //=== State Query ===-------------------------------------------------------//
 
@@ -209,12 +188,9 @@ private:
 
   WriteGroup writes_;
   BufferTableAggregator& table_aggregator_;
-  Config config_ {};
   std::filesystem::path data_path_;
   std::atomic<bool> finalize_started_ { false };
   std::atomic<uint32_t> emitted_count_ { 0 };
-  std::unordered_map<std::string, std::string> identity_by_key_;
-  std::unordered_map<std::string, uint32_t> index_by_key_;
 };
 
 } // namespace oxygen::content::import

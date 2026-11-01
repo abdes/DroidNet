@@ -16,7 +16,6 @@
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
@@ -85,8 +84,6 @@ auto BuildGeometryDescriptorRequest(
 
   request.job_name
     = settings.job_name.empty() ? source->name : settings.job_name;
-  request.options.with_content_hashing = EffectiveContentHashingEnabled(
-    source->content_hashing.value_or(settings.with_content_hashing));
 
   request.geometry_descriptor = ImportRequest::GeometryDescriptorPayload {
     .normalized_descriptor_json = std::move(document->text),

@@ -7,11 +7,14 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <span>
 #include <string>
 #include <utility>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -46,6 +49,16 @@ namespace oxygen::content::testing {
   -> oxygen::content::import::LooseCookedProducer
 {
   return { .source = std::move(source), .completes = {} };
+}
+
+//! The digest a producer records for the file it wrote with `bytes`.
+[[nodiscard]] inline auto ProducedDigest(const std::span<const std::byte> bytes)
+  -> oxygen::content::import::LooseCookedFileDigest
+{
+  return {
+    .size = bytes.size(),
+    .sha256 = oxygen::base::ComputeSha256(bytes),
+  };
 }
 
 } // namespace oxygen::content::testing

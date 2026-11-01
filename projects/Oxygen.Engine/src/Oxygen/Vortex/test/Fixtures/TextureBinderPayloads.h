@@ -20,6 +20,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -63,8 +64,9 @@ namespace detail {
     CopyBytes(destination.subspan(offset, storage.size()), storage);
   }
 
+  //! Builds the payload of `desc` and records its size and SHA-256 in it.
   [[nodiscard]] inline auto BuildV4TexturePayload(
-    const data::pak::core::TextureResourceDesc& desc,
+    data::pak::core::TextureResourceDesc& desc,
     const std::span<const data::pak::render::SubresourceLayout> layouts,
     const std::span<const std::uint8_t> data_region) -> std::vector<uint8_t>
   {
@@ -90,7 +92,6 @@ namespace detail {
     header.total_payload_size = static_cast<std::uint32_t>(total_payload_size);
     header.layouts_offset_bytes = static_cast<std::uint32_t>(layouts_offset);
     header.data_offset_bytes = static_cast<std::uint32_t>(data_offset);
-    header.content_hash = desc.content_hash;
 
     std::vector<std::uint8_t> payload(total_payload_size);
     const auto payload_bytes = std::as_writable_bytes(std::span {
@@ -109,6 +110,9 @@ namespace detail {
         std::as_bytes(data_region));
     }
 
+    desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+    desc.content_hash
+      = base::ComputeSha256(std::as_bytes(std::span { payload }));
     return payload;
   }
 
@@ -197,7 +201,6 @@ namespace detail {
   };
 
   auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
-  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
@@ -253,7 +256,6 @@ namespace detail {
   };
 
   auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
-  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
@@ -308,7 +310,6 @@ namespace detail {
   }
 
   auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
-  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
@@ -361,7 +362,6 @@ namespace detail {
   };
 
   auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
-  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
@@ -439,7 +439,6 @@ namespace detail {
   }
 
   auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
-  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
@@ -487,7 +486,6 @@ namespace detail {
   };
 
   auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
-  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
@@ -513,8 +511,6 @@ struct SyntheticTextureShape {
   std::uint32_t height { 1U };
   std::uint16_t layers { 1U };
   Format format { Format::kRGBA32Float };
-  //! Identity of the texel data; the loader key when the texture is registered.
-  std::uint64_t content_hash { 0U };
 };
 
 //! The shape of a cube with square faces of `size` texels.
@@ -527,7 +523,6 @@ struct SyntheticTextureShape {
     .height = size,
     .layers = 6U,
     .format = format,
-    .content_hash = 0U,
   };
 }
 
@@ -553,7 +548,6 @@ struct SyntheticTextureShape {
   desc.array_layers = shape.layers;
   desc.format = static_cast<std::uint8_t>(shape.format);
   desc.alignment = 256U;
-  desc.content_hash = shape.content_hash;
   std::vector<data::pak::render::SubresourceLayout> layouts;
   layouts.reserve(shape.layers);
   for (std::uint16_t layer = 0U; layer < shape.layers; ++layer) {
@@ -564,7 +558,6 @@ struct SyntheticTextureShape {
     });
   }
   auto payload = detail::BuildV4TexturePayload(desc, layouts, texels);
-  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
   return std::make_shared<data::TextureResource>(desc,
     serio::ByteBuffer::CopyOf(std::as_bytes(std::span { payload })).value());
 }

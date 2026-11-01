@@ -46,7 +46,6 @@ auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
     = (descriptor_path.parent_path() / ".cooked").string();
   settings.texture.job_name = "base-job";
   settings.texture.color_space = "linear";
-  settings.texture.with_content_hashing = false;
   return settings;
 }
 

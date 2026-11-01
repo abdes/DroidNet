@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Engine/Scripting/IScriptCompiler.h>
@@ -55,11 +56,13 @@ auto LuauScriptCompiler::Compile(ScriptSourceBlob source,
       return std::to_integer<uint8_t>(value);
     });
   DLOG_F(3, "luau compile succeeded ({} bytes)", bytecode.size());
+  const auto content_hash
+    = base::ComputeSha256(std::as_bytes(std::span(bytecode)));
   return ScriptCompileResult {
     .success = true,
     .bytecode = std::make_shared<const ScriptBytecodeBlob>(
       ScriptBytecodeBlob::FromOwned(std::move(bytecode), Language(),
-        data::pak::scripting::ScriptCompression::kNone, 0,
+        data::pak::scripting::ScriptCompression::kNone, content_hash,
         ScriptBlobOrigin::kEmbeddedResource,
         ScriptBlobCanonicalName { "compiled:luau" })),
     .diagnostics = {},

@@ -719,17 +719,14 @@ auto MaterialPipeline::Worker() -> co::Co<>
 
     auto bytes = build_outcome.bytes;
 
-    if (config_.with_content_hashing) {
-      auto hash = co_await ComputeContentHashOnThreadPool(thread_pool_,
-        std::span<const std::byte>(bytes.data(), bytes.size()),
-        item.stop_token);
-      if (!hash.has_value()) {
-        co_await ReportCancelled(std::move(item));
-        continue;
-      }
-
-      PatchContentHash(bytes, *hash);
+    auto hash = co_await ComputeContentHashOnThreadPool(thread_pool_,
+      std::span<const std::byte>(bytes.data(), bytes.size()), item.stop_token);
+    if (!hash.has_value()) {
+      co_await ReportCancelled(std::move(item));
+      continue;
     }
+
+    PatchContentHash(bytes, *hash);
 
     output.cooked = CookedMaterialPayload {
       .material_key = material_key,

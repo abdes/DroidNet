@@ -144,7 +144,8 @@ For each `WorkItem`, the worker performs the following tasks:
 4. **Data Embedding** (When StorageMode = `kEmbedded`):
    - Opens the global `scripts.table` and `scripts.data` files for appending.
    - Pushes a `ScriptResourceDesc` representing the `kSource` layout boundary
-     into the table, and appends the raw text stream into the blob.
+     into the table with the SHA-256 of the payload bytes as its
+     `content_hash`, and appends the raw text stream into the blob.
    - Repeats the embedding path to associate `kBytecode` outputs on successful
      compilation.
    - Dynamically records the generated `ResourceIndexT` identifiers into the
@@ -201,10 +202,12 @@ The sidecar execution is complex as it performs "patch operations".
 The pipeline encapsulates definitions into single global resources:
 
 - `scripts.table`: Divisible precisely by `sizeof(ScriptResourceDesc)`.
-  Accommodates `encoding`, limits, byte properties, and 64-bit content
-  signatures. Modifiable dynamically via appending indices.
+  Accommodates `encoding`, limits, byte properties, and the full SHA-256
+  `content_hash` of each payload (47-byte rows). Modifiable dynamically via
+  appending indices.
 - `scripts.data`: Contiguous payload mappings. Bounds scale up to
-  `DataBlobSizeT::max()`.
+  `DataBlobSizeT::max()`. The loose cooked index records no whole-file digest
+  for it; each payload is verified against its table row's SHA-256.
 - `script-bindings.table`: Maintains collections of `ScriptSlotRecord`. Resolves
   virtual hierarchies matching `ScriptAssetKey` IDs seamlessly across multiple
   bound instances.

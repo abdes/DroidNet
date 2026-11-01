@@ -31,7 +31,6 @@
   "defaults": {
     "texture": {
       "output": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/Tools/ImportTool/Testing/Cooked",
-      "content_hashing": false,
       "mip_policy": "none",
       "mip_filter": "box",
       "bc7_quality": "none",
@@ -47,7 +46,6 @@
     },
     "scene": {
       "output": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/Tools/ImportTool/Testing/Cooked",
-      "content_hashing": false,
       "content_flags": {
         "textures": true,
         "materials": true,
@@ -66,7 +64,6 @@
       "type": "fbx",
       "source": "F:/projects/main_sponza/NewSponza_Main_Zup_003.fbx",
       "name": "sponza-scene-fbx",
-      "content_hashing": false,
       "content_flags": {
         "textures": true,
         "materials": true,

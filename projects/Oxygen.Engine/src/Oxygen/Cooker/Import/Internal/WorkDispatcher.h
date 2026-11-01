@@ -69,9 +69,9 @@ public:
 
   //! Context required to execute a plan.
   struct PlanContext final {
-    ImportPlanner& planner;
-    WorkPayloadStore& payloads;
-    std::vector<PlanStep>& steps;
+    observer_ptr<ImportPlanner> planner;
+    observer_ptr<WorkPayloadStore> payloads;
+    std::span<const PlanStep> steps;
     std::span<const PlanSurface> surfaces;
     std::span<const PlanItemId> geometry_items;
   };
@@ -84,6 +84,8 @@ public:
 
   OXYGEN_MAKE_NON_COPYABLE(WorkDispatcher)
   OXYGEN_MAKE_NON_MOVABLE(WorkDispatcher)
+
+  ~WorkDispatcher() = default;
 
   //! Run the dispatcher inside the job nursery.
   [[nodiscard]] auto Run(PlanContext context, co::Nursery& nursery)
@@ -110,8 +112,7 @@ private:
   [[nodiscard]] auto EmitTexturePayload(TexturePipeline::WorkResult& result)
     -> std::optional<uint32_t>;
 
-  [[nodiscard]] auto EmitBufferPayload(
-    CookedBufferPayload payload, std::string_view source_id) -> uint32_t;
+  [[nodiscard]] auto EmitBufferPayload(CookedBufferPayload payload) -> uint32_t;
 
   [[nodiscard]] auto EmitBufferPayload(BufferPipeline::WorkResult result)
     -> std::optional<uint32_t>;

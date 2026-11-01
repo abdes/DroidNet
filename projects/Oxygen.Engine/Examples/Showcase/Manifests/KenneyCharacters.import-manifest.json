@@ -63,7 +63,6 @@
       "source": "/Content/Scenes/KenneyCharacters/KenneyCharacters.scene.json",
       "virtual_path": "/Content/Scenes/KenneyCharacters/KenneyCharacters.oscene",
       "name": "KenneyCharacters",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Models/KenneyAnimatedCharacters/Model/characterMedium.fbx",
         "/Content/Scenes/KenneyCharacters/SkinSurvivor.omat",

@@ -37,6 +37,7 @@
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/PakFormat_audio.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -113,6 +114,52 @@ namespace {
       throw Unreadable(path);
     }
     return std::move(device).value();
+  }
+
+  //! Verifies each resource of a loose root's data files against the SHA-256
+  //! of its table row; the tables themselves were verified as files.
+  auto VerifyResources(const CookerStorageReader& storage, const fs::path& root,
+    const std::span<const lc::FileIntegrity> inventory) -> void
+  {
+    for (const auto& table : inventory) {
+      const auto data_kind = table.kind.has_value()
+        ? data::loose_cooked::DataFileKindOf(*table.kind)
+        : std::nullopt;
+      if (!data_kind.has_value()) {
+        continue;
+      }
+      const auto data_file = std::ranges::find(
+        inventory, std::optional { *data_kind }, &lc::FileIntegrity::kind);
+      if (data_file == inventory.end()) {
+        continue;
+      }
+      const auto table_path = root / table.relative_path;
+      const auto rows = serio::ReadAll(OpenFile(storage, table_path));
+      if (!rows) {
+        throw Unreadable(table_path);
+      }
+      const auto payloads
+        = [&] -> std::vector<data::loose_cooked::ResourcePayload> {
+        try {
+          return data::loose_cooked::ReadResourcePayloads(
+            *table.kind, rows->Bytes());
+        } catch (const std::invalid_argument& error) {
+          throw Corrupt(table_path, error.what());
+        }
+      }();
+      const auto data_path = root / data_file->relative_path;
+      const auto failures = data::loose_cooked::VerifyResourcePayloads(
+        payloads, OpenFile(storage, data_path));
+      if (!failures.empty()) {
+        const auto& first = failures.front();
+        throw std::runtime_error("'" + data_path.generic_string()
+          + "': the resource of row " + std::to_string(first.row)
+          + (first.reason
+                == data::loose_cooked::ResourcePayloadFailure::kOutOfBounds
+              ? " lies outside the file"
+              : " does not have the SHA-256 of its table row"));
+      }
+    }
   }
 
   //! Fills `out` with the bytes at `offset` of `path`: from `device` when it
@@ -829,13 +876,18 @@ auto CookedContent::VerifyStorage(const lc::IntegrityCheck check) const -> void
       throw std::runtime_error(
         "'" + path.generic_string() + "' does not have its indexed size");
     }
-    if (check == lc::IntegrityCheck::kFull) {
+    if (check == lc::IntegrityCheck::kFull
+      && !(file.kind.has_value()
+        && data::loose_cooked::IsResourceDataFile(*file.kind))) {
       const auto digest = serio::ComputeSha256(device);
       if (!digest || *digest != file.sha256) {
         throw std::runtime_error(
           "'" + path.generic_string() + "' does not have its indexed digest");
       }
     }
+  }
+  if (check == lc::IntegrityCheck::kFull) {
+    VerifyResources(*impl_->storage, root, impl_->inventory);
   }
   for (size_t i = 0; i < impl_->assets.size(); ++i) {
     const auto& stored = impl_->descriptors.at(i);

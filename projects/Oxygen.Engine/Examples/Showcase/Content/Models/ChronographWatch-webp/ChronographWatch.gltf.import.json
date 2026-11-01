@@ -12,7 +12,6 @@
       "scene": true,
       "textures": true
     },
-    "content_hashing": true,
     "cubemap": false,
     "data_format": "bc7",
     "equirect_to_cube": false,

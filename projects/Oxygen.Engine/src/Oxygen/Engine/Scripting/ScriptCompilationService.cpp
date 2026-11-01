@@ -28,6 +28,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Commands/Params.h>
@@ -82,9 +83,9 @@ namespace {
     'T',
     '\0',
   };
-  constexpr uint32_t kPersistentCacheVersion = 2;
+  constexpr uint32_t kPersistentCacheVersion = 3;
   constexpr size_t kPersistentCacheHeaderSize = 32U;
-  constexpr size_t kPersistentCacheEntrySize = 52U;
+  constexpr size_t kPersistentCacheEntrySize = 76U;
 
 #pragma pack(push, 1)
   struct PersistentCacheHeader final {
@@ -104,7 +105,7 @@ namespace {
     uint32_t compression { 0 };
     uint32_t origin { 0 };
     uint32_t reserved { 0 };
-    uint64_t content_hash { 0 };
+    base::Sha256Digest content_hash {};
     uint64_t payload_checksum { 0 };
   };
 #pragma pack(pop)
@@ -125,7 +126,7 @@ namespace {
 
   auto MakePersistentBytecodeBlob(std::vector<uint8_t> payload,
     const uint32_t language, const uint32_t compression,
-    const uint64_t content_hash, const uint32_t origin)
+    const base::Sha256Digest& content_hash, const uint32_t origin)
     -> std::shared_ptr<const ScriptBytecodeBlob>
   {
     return std::make_shared<const ScriptBytecodeBlob>(

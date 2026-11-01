@@ -1,6 +1,5 @@
 {
   "name": "floor_box",
-  "content_hashing": true,
   "shape_type": "box",
   "material_ref": "ground.opmat",
   "half_extents": [50.0, 50.0, 0.5],

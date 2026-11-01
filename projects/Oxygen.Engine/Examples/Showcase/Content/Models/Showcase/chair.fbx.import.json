@@ -2,7 +2,6 @@
   "schema_version": 1,
   "source": "../../SourceMedia/DCC/Showcase/chair.fbx",
   "settings": {
-    "content_hashing": true,
     "name": "chair"
   },
   "source_identity": "01a0e7c7-f432-7586-8f04-212fc6337efe",

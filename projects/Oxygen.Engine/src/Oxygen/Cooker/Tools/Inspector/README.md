@@ -67,7 +67,8 @@ Oxygen.Cooker.Inspector.exe inventory <cooked_root> --output <report.json>
 ```
 
 The report includes the index identity, complete member sizes/digests and native
-file roles, keyed asset identities, resource descriptors and integrity issues.
+file roles (resource data files list an all-zero `sha256`: the index records no
+whole-file digest for them), keyed asset identities, resource descriptors and integrity issues.
 Texture resource rows carry a validated table index when the root is healthy;
 they remain separate from keyed assets. Native validation checks OTEX encoding,
 index bounds and agreement with the texture table. Place reports outside the
@@ -75,6 +76,11 @@ root. An empty `issues` array means full file verification succeeded. Exit code
 zero means the report was produced; automation must also check `issues` before
 accepting the content. The installed `oxygen.cooked-inventory.schema.json`
 defines the report.
+
+Full verification checks each resource of a data file against the SHA-256 of its
+table row. An issue about a resource carries the reason `malformed_table`,
+`resource_out_of_bounds` or `resource_digest_mismatch`, and the optional
+`resource_row` it concerns in the data file its `relative_path` names.
 
 Use this command for publication and explicit validation. Normal runtime
 mounting checks metadata without scanning every payload; it can opt into full
@@ -89,7 +95,8 @@ Oxygen.Cooker.Inspector.exe index <cooked_root> [--assets true] [--files true] [
 Notes:
 
 - If neither `--assets` nor `--files` is specified, both sections are printed.
-- `--digests` includes the mandatory SHA-256 values recorded in the index.
+- `--digests` includes the SHA-256 values recorded in the index (all zero for
+  resource data files).
 - Asset entries include the cooked `type` (e.g. `material`, `geometry`,
   `scene`).
 

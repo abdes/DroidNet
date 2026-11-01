@@ -62,14 +62,6 @@ auto ScriptCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .StoreTo(&options_.virtual_path)
         .Build();
 
-  auto with_content_hashing
-    = Option::WithKey("content-hashing")
-        .About("Enable or disable content hashing for outputs")
-        .Long("content-hashing")
-        .WithValue<bool>()
-        .StoreTo(&options_.with_content_hashing)
-        .Build();
-
   auto job_name = Option::WithKey("name")
                     .About("Optional job name")
                     .Long("name")
@@ -116,8 +108,7 @@ auto ScriptCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(report))
     .WithOption(std::move(compile_scripts))
     .WithOption(std::move(compile_mode))
-    .WithOption(std::move(script_storage))
-    .WithOption(std::move(with_content_hashing));
+    .WithOption(std::move(script_storage));
 }
 
 auto ScriptCommand::Execute() -> std::expected<void, std::error_code>

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -18,6 +19,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Error.h>
@@ -65,13 +67,16 @@ auto Material(const std::string_view virtual_path) -> IndexedAsset
   };
 }
 
+//! A resource data file carries no digest: each row of its table does.
 auto File(const FileKind kind, const std::string_view relpath) -> IndexedFile
 {
   return {
     .kind = kind,
     .relpath = std::string(relpath),
     .size = relpath.size(),
-    .sha256 = DigestOf(relpath),
+    .sha256 = oxygen::data::loose_cooked::IsResourceDataFile(kind)
+      ? oxygen::base::Sha256Digest {}
+      : DigestOf(relpath),
     .virtual_path = {},
     .source_path = {},
   };
@@ -146,6 +151,10 @@ NOLINT_TEST(LooseCookedIndexEncoderTest, ContentTheFormatCannotHoldIsRefused)
   const auto table = File(FileKind::kBuffersTable, "buffers.table");
   auto second_table = File(FileKind::kBuffersTable, "more.table");
   auto unknown = File(FileKind::kUnknown, "unknown.bin");
+  auto digested_data = File(FileKind::kBuffersData, "buffers.data");
+  digested_data.sha256 = DigestOf(digested_data.relpath);
+  auto undigested_aux = File(FileKind::kAuxiliary, "Ship/Hull.obuf");
+  undigested_aux.sha256 = {};
 
   struct Case {
     std::string_view name;
@@ -168,36 +177,72 @@ NOLINT_TEST(LooseCookedIndexEncoderTest, ContentTheFormatCannotHoldIsRefused)
   const auto escaping = File(FileKind::kAuxiliary, "../Hull.obuf");
   const auto cases = std::array {
     Case { .name = "key", .assets = { a, a }, .files = { aux, aux2 } },
-    Case { .name = "virtual path",
+    Case {
+      .name = "virtual path",
       .assets = { a, same_path },
-      .files = { aux, aux2 } },
-    Case { .name = "content path",
+      .files = { aux, aux2 },
+    },
+    Case {
+      .name = "content path",
       .assets = { a, same_file },
-      .files = { aux, aux2 } },
+      .files = { aux, aux2 },
+    },
     Case {
-      .name = "digest", .assets = { a, no_digest }, .files = { aux, aux2 } },
+      .name = "digest",
+      .assets = { a, no_digest },
+      .files = { aux, aux2 },
+    },
     Case {
-      .name = "kind", .assets = { a, b }, .files = { table, second_table } },
+      .name = "data file digest",
+      .assets = { a, b },
+      .files = { table, digested_data },
+    },
     Case {
-      .name = "unknown kind", .assets = { a, b }, .files = { aux, unknown } },
+      .name = "file digest",
+      .assets = { a, b },
+      .files = { undigested_aux, aux2 },
+    },
+    Case {
+      .name = "kind",
+      .assets = { a, b },
+      .files = { table, second_table },
+    },
+    Case {
+      .name = "unknown kind",
+      .assets = { a, b },
+      .files = { aux, unknown },
+    },
     Case { .name = "file path", .assets = { a, b }, .files = { aux, aux } },
-    Case { .name = "asset source",
-      .assets = { a, no_source },
-      .files = { aux, aux2 } },
-    Case { .name = "texture source",
-      .assets = { a, b },
-      .files = { aux, sourceless_texture } },
-    Case { .name = "texture virtual path",
-      .assets = { a, b },
-      .files = { aux, unnamed_texture } },
-    Case { .name = "table virtual path",
-      .assets = { a, b },
-      .files = { aux, named_table } },
-    Case { .name = "table source",
-      .assets = { a, b },
-      .files = { aux, sourced_table } },
     Case {
-      .name = "escaping path", .assets = { a, b }, .files = { aux, escaping } },
+      .name = "asset source",
+      .assets = { a, no_source },
+      .files = { aux, aux2 },
+    },
+    Case {
+      .name = "texture source",
+      .assets = { a, b },
+      .files = { aux, sourceless_texture },
+    },
+    Case {
+      .name = "texture virtual path",
+      .assets = { a, b },
+      .files = { aux, unnamed_texture },
+    },
+    Case {
+      .name = "table virtual path",
+      .assets = { a, b },
+      .files = { aux, named_table },
+    },
+    Case {
+      .name = "table source",
+      .assets = { a, b },
+      .files = { aux, sourced_table },
+    },
+    Case {
+      .name = "escaping path",
+      .assets = { a, b },
+      .files = { aux, escaping },
+    },
   };
 
   for (const auto& test_case : cases) {
@@ -228,7 +273,7 @@ NOLINT_TEST(LooseCookedIndexEncoderTest, EqualContentInAnyOrderEncodesEqually)
     content.source_key = source_key;
     EXPECT_TRUE(EncodeLooseCookedIndex(content, writer).has_value());
     const auto bytes = stream.Data();
-    return std::vector<std::byte>(bytes.begin(), bytes.end());
+    return { bytes.begin(), bytes.end() };
   };
   const auto a = Material("/Content/A.omat");
   const auto b = Material("/Content/B.omat");

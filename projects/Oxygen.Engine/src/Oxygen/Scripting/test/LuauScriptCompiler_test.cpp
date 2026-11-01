@@ -38,7 +38,7 @@ NOLINT_TEST(LuauScriptCompilerTest, CompileValidSourceProducesBytecode)
   const auto result = compiler.Compile(
     ScriptSourceBlob::FromOwned(std::move(source),
       oxygen::data::pak::scripting::ScriptLanguage::kLuau,
-      oxygen::data::pak::scripting::ScriptCompression::kNone, 0,
+      oxygen::data::pak::scripting::ScriptCompression::kNone, {},
       ScriptBlobOrigin::kEmbeddedResource, ScriptBlobCanonicalName { "test" }),
     ScriptCompileMode::kDebug);
 
@@ -55,7 +55,7 @@ NOLINT_TEST(LuauScriptCompilerTest, CompileInvalidSourceReturnsDiagnostics)
   const auto result = compiler.Compile(
     ScriptSourceBlob::FromOwned(std::move(source),
       oxygen::data::pak::scripting::ScriptLanguage::kLuau,
-      oxygen::data::pak::scripting::ScriptCompression::kNone, 0,
+      oxygen::data::pak::scripting::ScriptCompression::kNone, {},
       ScriptBlobOrigin::kEmbeddedResource, ScriptBlobCanonicalName { "test" }),
     ScriptCompileMode::kDebug);
 

@@ -239,7 +239,6 @@ auto MakeTestTextureResource(const TextureType texture_type,
     .height = 1U,
     .layers = array_layers,
     .format = format,
-    .content_hash = 0x12345678U,
   };
   if (format != Format::kRGBA32Float) {
     const auto texel_bytes

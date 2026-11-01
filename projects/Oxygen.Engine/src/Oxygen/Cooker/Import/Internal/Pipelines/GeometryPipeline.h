@@ -43,14 +43,12 @@ public:
 
     //! Number of worker coroutines to start.
     uint32_t worker_count = 1;
-
-    bool with_content_hashing = true;
   };
 
   //! Material patch to apply at a descriptor offset.
   struct MaterialKeyPatch {
     data::pak::core::DataBlobSizeT material_key_offset = 0;
-    data::AssetKey key {};
+    data::AssetKey key;
   };
 
   struct FinalizedDescriptor {
@@ -73,10 +71,10 @@ public:
     std::vector<MaterialKeyPatch> material_patches;
 
     //! Callback fired when a worker starts processing this item.
-    std::function<void()> on_started {};
+    std::function<void()> on_started;
 
     //! Callback fired when a worker finishes processing this item.
-    std::function<void()> on_finished {};
+    std::function<void()> on_finished;
 
     //! Cancellation token.
     std::stop_token stop_token;
@@ -106,7 +104,7 @@ public:
   OXGN_COOK_API explicit GeometryPipeline(
     co::ThreadPool& thread_pool, std::optional<Config> config = {});
 
-  OXGN_COOK_API ~GeometryPipeline();
+  OXGN_COOK_API ~GeometryPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(GeometryPipeline)
   OXYGEN_MAKE_NON_MOVABLE(GeometryPipeline)

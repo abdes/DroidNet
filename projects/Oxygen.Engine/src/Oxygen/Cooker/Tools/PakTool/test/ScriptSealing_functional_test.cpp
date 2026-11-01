@@ -22,6 +22,7 @@
 #include "RequestSnapshot.h"
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
@@ -391,7 +392,8 @@ NOLINT_TEST(
   const auto content = base / "Content";
   const auto cooked = base / "cooked";
   memory.AddFile(content / "spin.lua", "return 1");
-  memory.AddFile(cooked / "Ship/Hull.obuf", "hull");
+  constexpr auto kHull = std::string_view { "hull" };
+  memory.AddFile(cooked / "Ship/Hull.obuf", kHull);
   auto descriptor = ScriptAssetDesc {};
   descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
   descriptor.header.version = oxygen::data::pak::scripting::kScriptAssetVersion;
@@ -412,6 +414,10 @@ NOLINT_TEST(
       oxygen::content::import::LooseCookedProducer {
         .source = "/Content/Ship.glb",
         .completes = {},
+      },
+      oxygen::content::import::LooseCookedFileDigest {
+        .size = kHull.size(),
+        .sha256 = oxygen::base::ComputeSha256(std::as_bytes(std::span(kHull))),
       });
     static_cast<void>(writer.Finish());
   }

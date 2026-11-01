@@ -18,7 +18,6 @@
 
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
@@ -125,13 +124,6 @@ auto BuildCollisionShapeDescriptorRequest(
       request.job_name = stem;
     }
   }
-
-  auto with_content_hashing = settings.with_content_hashing;
-  if (descriptor_doc->contains("content_hashing")) {
-    with_content_hashing = descriptor_doc->at("content_hashing").get<bool>();
-  }
-  request.options.with_content_hashing
-    = EffectiveContentHashingEnabled(with_content_hashing);
 
   request.collision_shape_descriptor
     = ImportRequest::CollisionShapeDescriptorPayload {

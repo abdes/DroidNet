@@ -2,7 +2,6 @@
   "schema_version": 1,
   "source": "../SourceMedia/DCC/Lantern.glb",
   "settings": {
-    "content_hashing": true,
     "name": "Lantern"
   },
   "source_identity": "01a0e7c7-f432-7586-8f04-21328dd4fe6f",

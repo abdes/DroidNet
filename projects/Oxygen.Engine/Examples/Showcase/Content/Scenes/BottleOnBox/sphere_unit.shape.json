@@ -1,6 +1,5 @@
 {
   "name": "sphere_unit",
-  "content_hashing": true,
   "shape_type": "sphere",
   "material_ref": "bouncy_ball.opmat",
   "radius": 0.5

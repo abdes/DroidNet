@@ -7,11 +7,13 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -19,9 +21,90 @@
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedResources.h>
+#include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/Integrity.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::internal {
+
+namespace {
+  //! Verifies each resource of each data file against its table row. A table
+  //! or data file that already failed its own check is not read.
+  auto CheckResources(const std::filesystem::path& root,
+    const std::span<const lc::FileIntegrity> inventory,
+    std::vector<lc::FileIntegrityIssue>& issues) -> void
+  {
+    const auto failed = [&](const std::string& relative) -> bool {
+      return std::ranges::any_of(issues,
+        [&](const auto& issue) { return issue.relative_path == relative; });
+    };
+    const auto find =
+      [&](const data::loose_cooked::FileKind kind) -> const lc::FileIntegrity* {
+      const auto it = std::ranges::find(
+        inventory, std::optional { kind }, &lc::FileIntegrity::kind);
+      return it == inventory.end() ? nullptr : std::addressof(*it);
+    };
+    for (const auto& table : inventory) {
+      if (!table.kind.has_value()) {
+        continue;
+      }
+      const auto data_kind = data::loose_cooked::DataFileKindOf(*table.kind);
+      if (!data_kind.has_value()) {
+        continue;
+      }
+      const auto* const data_file = find(*data_kind);
+      if (data_file == nullptr || failed(table.relative_path)
+        || failed(data_file->relative_path)) {
+        continue;
+      }
+      const auto table_path = base::ToNativePath(root / table.relative_path);
+      const auto table_file = serio::NativeFile::Open(
+        table_path, serio::OpenSpec { .hint = serio::AccessHint::kSequential });
+      if (!table_file) {
+        throw std::runtime_error("cannot open '" + table_path.string()
+          + "': " + table_file.error().message());
+      }
+      const auto rows = serio::ReadAll(*table_file);
+      if (!rows) {
+        throw std::runtime_error("cannot read '" + table_path.string()
+          + "': " + rows.error().message());
+      }
+      auto payloads = std::vector<data::loose_cooked::ResourcePayload> {};
+      try {
+        payloads = data::loose_cooked::ReadResourcePayloads(
+          *table.kind, rows->Bytes());
+      } catch (const std::invalid_argument&) {
+        issues.push_back({
+          .relative_path = table.relative_path,
+          .reason = lc::IntegrityFailure::kMalformedTable,
+          .resource_row = std::nullopt,
+        });
+        continue;
+      }
+      const auto data_path
+        = base::ToNativePath(root / data_file->relative_path);
+      const auto device = serio::NativeFile::Open(
+        data_path, serio::OpenSpec { .hint = serio::AccessHint::kSequential });
+      if (!device) {
+        throw std::runtime_error("cannot open '" + data_path.string()
+          + "': " + device.error().message());
+      }
+      for (const auto& failure :
+        data::loose_cooked::VerifyResourcePayloads(payloads, *device)) {
+        issues.push_back({
+          .relative_path = data_file->relative_path,
+          .reason = failure.reason
+              == data::loose_cooked::ResourcePayloadFailure::kOutOfBounds
+            ? lc::IntegrityFailure::kResourceOutOfBounds
+            : lc::IntegrityFailure::kResourceDigestMismatch,
+          .resource_row = failure.row,
+        });
+      }
+    }
+  }
+} // namespace
 
 auto LooseCookedIndexImpl::FindFileSha256(
   const data::loose_cooked::FileKind kind) const noexcept
@@ -143,7 +226,9 @@ auto LooseCookedIndexImpl::CheckContent(
         .relative_path = relative,
         .reason = lc::IntegrityFailure::kSizeMismatch,
       });
-    } else if (check == lc::IntegrityCheck::kFull) {
+    } else if (check == lc::IntegrityCheck::kFull
+      && !(expected.kind.has_value()
+        && data::loose_cooked::IsResourceDataFile(*expected.kind))) {
       const auto digest = serio::ComputeFileSha256(entry.path());
       if (!digest) {
         throw std::runtime_error("cannot hash '" + entry.path().string()
@@ -163,9 +248,16 @@ auto LooseCookedIndexImpl::CheckContent(
     issues.push_back({
       .relative_path = relative,
       .reason = lc::IntegrityFailure::kMissing,
+      .resource_row = std::nullopt,
     });
   }
-  std::ranges::sort(issues, {}, &lc::FileIntegrityIssue::relative_path);
+  if (check == lc::IntegrityCheck::kFull) {
+    CheckResources(root, inventory, issues);
+  }
+  std::ranges::sort(issues, [](const auto& a, const auto& b) -> bool {
+    return std::tie(a.relative_path, a.resource_row)
+      < std::tie(b.relative_path, b.resource_row);
+  });
   return issues;
 }
 
@@ -192,10 +284,20 @@ auto LooseCookedIndexImpl::ValidateContent(
       return "Linked path in loose cooked content: ";
     case lc::IntegrityFailure::kNotRegular:
       return "Non-regular loose cooked content: ";
+    case lc::IntegrityFailure::kMalformedTable:
+      return "Malformed loose cooked resource table: ";
+    case lc::IntegrityFailure::kResourceOutOfBounds:
+      return "Loose cooked resource outside its data file: ";
+    case lc::IntegrityFailure::kResourceDigestMismatch:
+      return "Loose cooked resource SHA-256 mismatch: ";
     }
     return "Invalid loose cooked content: ";
   }();
-  throw std::runtime_error(reason + first.relative_path);
+  auto message = reason + first.relative_path;
+  if (first.resource_row.has_value()) {
+    message += " (row " + std::to_string(*first.resource_row) + ")";
+  }
+  throw std::runtime_error(message);
 }
 
 } // namespace oxygen::content::internal

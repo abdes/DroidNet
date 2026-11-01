@@ -13,7 +13,6 @@
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -22,7 +21,7 @@
 namespace oxygen::data {
 
 namespace {
-  constexpr uint16_t kVersion = 1U;
+  constexpr uint16_t kVersion = 2U;
   constexpr std::array kMagic { 'O', 'T', 'E', 'X' };
 } // namespace
 

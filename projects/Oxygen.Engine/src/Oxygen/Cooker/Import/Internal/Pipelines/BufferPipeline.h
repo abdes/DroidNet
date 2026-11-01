@@ -7,7 +7,6 @@
 #pragma once
 
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -65,15 +64,6 @@ public:
 
     //! Number of worker coroutines to start.
     uint32_t worker_count = 2;
-
-    //! Whether to compute the SHA-256 based content hash.
-    /*!
-     When enabled, the pipeline computes the SHA-256 digest of the buffer bytes
-     and stores the first 8 bytes in `CookedBufferPayload::content_hash`.
-
-     When disabled, the pipeline does not touch `content_hash`.
-    */
-    bool with_content_hashing = true;
   };
 
   //! Work submission item.
@@ -81,18 +71,15 @@ public:
     //! Correlation ID for diagnostics and lookup (e.g., mesh/buffer name).
     std::string source_id;
 
-    //! Cooked buffer payload.
-    /*!
-     When `Config::with_content_hashing` is enabled and `content_hash` is zero,
-     the pipeline computes and populates it.
-    */
+    //! Cooked buffer payload; the pipeline computes its `content_hash`, the
+    //! SHA-256 of the buffer bytes.
     CookedBufferPayload cooked;
 
     //! Callback fired when a worker starts processing this item.
-    std::function<void()> on_started {};
+    std::function<void()> on_started;
 
     //! Callback fired when a worker finishes processing this item.
-    std::function<void()> on_finished {};
+    std::function<void()> on_finished;
 
     //! Cancellation token.
     std::stop_token stop_token;
@@ -103,10 +90,7 @@ public:
     //! Echoed from WorkItem for correlation.
     std::string source_id;
 
-    //! Cooked payload.
-    /*!
-     If hashing is enabled, `content_hash` may be computed and filled.
-    */
+    //! Cooked payload, with its `content_hash` computed.
     CookedBufferPayload cooked;
 
     //! Any diagnostics produced during processing.
@@ -126,7 +110,7 @@ public:
   OXGN_COOK_API explicit BufferPipeline(
     co::ThreadPool& thread_pool, Config config);
 
-  OXGN_COOK_API ~BufferPipeline();
+  OXGN_COOK_API ~BufferPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(BufferPipeline)
   OXYGEN_MAKE_NON_MOVABLE(BufferPipeline)

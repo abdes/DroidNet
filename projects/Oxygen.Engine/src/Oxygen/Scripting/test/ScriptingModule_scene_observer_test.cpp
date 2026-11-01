@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -15,6 +16,7 @@
 #include <lua.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -46,20 +48,22 @@ namespace {
 
   class HashExecutable final : public ScriptExecutable {
   public:
-    explicit HashExecutable(const uint64_t hash) noexcept
-      : hash_(hash)
+    //! An executable whose content hash is the SHA-256 of `id`.
+    explicit HashExecutable(const uint64_t id) noexcept
+      : hash_(oxygen::base::ComputeSha256(std::as_bytes(std::span(&id, 1U))))
     {
     }
 
     auto Run() const noexcept -> void override { }
 
-    [[nodiscard]] auto ContentHash() const noexcept -> uint64_t override
+    [[nodiscard]] auto ContentHash() const noexcept
+      -> oxygen::base::Sha256Digest override
     {
       return hash_;
     }
 
   private:
-    uint64_t hash_ { 0 };
+    oxygen::base::Sha256Digest hash_ {};
   };
 
   auto MakeSceneWithReadySlot(const char* scene_name,
@@ -180,7 +184,7 @@ end
 return script
 )lua";
 
-  constexpr uint64_t kSlotScriptHash = 0x33445566ULL;
+  const auto kSlotScriptHash = SlotTestHash(0x33445566ULL);
   auto slot_executable = CompileSlotExecutable(kSlotScript, kSlotScriptHash);
   ASSERT_NE(slot_executable, nullptr);
 
@@ -215,8 +219,8 @@ NOLINT_TEST_F(
   using data::pak::scripting::ScriptCompression;
   using data::pak::scripting::ScriptLanguage;
   constexpr auto kFrameCount = 3;
-  constexpr uint64_t kBadScriptHash = 41;
-  constexpr uint64_t kHealthyScriptHash = 42;
+  const auto kBadScriptHash = SlotTestHash(41);
+  const auto kHealthyScriptHash = SlotTestHash(42);
 
   enum class Fault : uint8_t { kLoad, kGameplay, kSceneMutation };
   for (const auto fault :
@@ -309,7 +313,7 @@ assert((_G.__failing_ticks or 0) <= 1, "faulted slot ran again")
 NOLINT_TEST_F(ScriptingModuleTest,
   SlotInitializationAndHookFaultsReleaseOwnedEventListeners)
 {
-  constexpr uint64_t kFaultHash = 51;
+  const auto kFaultHash = SlotTestHash(51);
   enum class Fault : uint8_t { kInitialization, kGameplay, kMutation };
   for (const auto fault :
     { Fault::kInitialization, Fault::kGameplay, Fault::kMutation }) {
@@ -373,9 +377,9 @@ assert(_G.__global_alive == 2, "global listener lost its independent lifetime")
 NOLINT_TEST_F(ScriptingModuleTest,
   OwnedCallbackFaultStopsOnlyOwnerAndReplacementAndSceneCleanupWork)
 {
-  constexpr uint64_t kFaultHash = 61;
-  constexpr uint64_t kHealthyHash = 62;
-  constexpr uint64_t kReplacementHash = 63;
+  const auto kFaultHash = SlotTestHash(61);
+  const auto kHealthyHash = SlotTestHash(62);
+  const auto kReplacementHash = SlotTestHash(63);
   auto module = MakeModule();
   ASSERT_TRUE(AttachModule(module));
   const auto faulty = CompileSlotExecutable(R"lua(
@@ -486,8 +490,8 @@ assert(_G.__healthy_events == 3, "old healthy scene listener survived teardown")
 NOLINT_TEST_F(ScriptingModuleTest,
   SlotRebuildAndDetachReleaseListenersWithoutRemovingGlobalSubscriptions)
 {
-  constexpr uint64_t kOriginalHash = 71;
-  constexpr uint64_t kReplacementHash = 72;
+  const auto kOriginalHash = SlotTestHash(71);
+  const auto kReplacementHash = SlotTestHash(72);
   auto module = MakeModule();
   ASSERT_TRUE(AttachModule(module));
   const auto original = CompileSlotExecutable(R"lua(
@@ -498,7 +502,6 @@ return script
 )lua",
     kOriginalHash);
   ASSERT_NE(original, nullptr);
-  ASSERT_EQ(original->ContentHash(), kOriginalHash);
   auto scene = MakeSceneWithExecutableSlot("listener-lifetime", original);
   ASSERT_NE(scene, nullptr);
   engine::FrameContext frame;
@@ -527,7 +530,6 @@ return script
 )lua",
     kReplacementHash);
   ASSERT_NE(replacement, nullptr);
-  ASSERT_EQ(replacement->ContentHash(), kReplacementHash);
   ASSERT_TRUE(scripting.MarkSlotReady(scripting.Slots().front(), replacement));
   scene->SyncObservers();
   result = module.ExecuteScript(ScriptExecutionRequest {
@@ -559,7 +561,7 @@ assert(oxygen.events.listener_count("frame.start") == 1, "detached listener refs
 NOLINT_TEST_F(ScriptingModuleTest,
   SelfDetachOrDestroyRejectsListenerRegistrationBeforeObserverSync)
 {
-  constexpr uint64_t kSelfRemovalHash = 81;
+  const auto kSelfRemovalHash = SlotTestHash(81);
   for (const auto destroy_node : { false, true }) {
     SCOPED_TRACE(destroy_node);
     auto module = MakeModule();
@@ -627,7 +629,7 @@ assert(_G.__global_after_self_remove == 1)
 NOLINT_TEST_F(ScriptingModuleTest,
   SelfReattachWithSameExecutableCannotReviveRetiredInstance)
 {
-  constexpr uint64_t kExecutableHash = 91;
+  const auto kExecutableHash = SlotTestHash(91);
   auto module = MakeModule();
   ASSERT_TRUE(AttachModule(module));
   const auto executable = CompileSlotExecutable(R"lua(
@@ -718,7 +720,7 @@ assert(oxygen.events.listener_count("demo.revived_owner") == 0)
 NOLINT_TEST_F(
   ScriptingModuleTest, SameExecutableNewSlotInSameComponentStartsFreshInstance)
 {
-  constexpr uint64_t kExecutableHash = 101;
+  const auto kExecutableHash = SlotTestHash(101);
   auto module = MakeModule();
   ASSERT_TRUE(AttachModule(module));
   const auto executable = CompileSlotExecutable(R"lua(
@@ -762,144 +764,138 @@ assert(oxygen.events.listener_count("frame.start") == 1, "old slot listener reta
 NOLINT_TEST_F(ScriptingModuleTest,
   InPlaceBytecodeReloadRebuildsHealthyAndFaultedSlotsWithoutObserverSync)
 {
-  constexpr uint64_t kOriginalHash = 111;
-  constexpr uint64_t kReplacementHash = 112;
+  const auto kOriginalHash = SlotTestHash(111);
+  const auto kReplacementHash = SlotTestHash(112);
   enum class Fault : uint8_t { kNone, kInitialization, kGameplay, kMutation };
-  for (const auto declared_hash : { uint64_t { 0 }, kOriginalHash }) {
-    SCOPED_TRACE(declared_hash);
-    for (const auto first_phase :
-      { PhaseId::kGameplay, PhaseId::kSceneMutation }) {
-      SCOPED_TRACE(static_cast<int>(first_phase));
-      for (const auto fault : {
-             Fault::kNone,
-             Fault::kInitialization,
-             Fault::kGameplay,
-             Fault::kMutation,
-           }) {
-        SCOPED_TRACE(static_cast<int>(fault));
-        auto module = MakeModule();
-        ASSERT_TRUE(AttachModule(module));
-        auto source = std::string(R"lua(
+  for (const auto first_phase :
+    { PhaseId::kGameplay, PhaseId::kSceneMutation }) {
+    SCOPED_TRACE(static_cast<int>(first_phase));
+    for (const auto fault : {
+           Fault::kNone,
+           Fault::kInitialization,
+           Fault::kGameplay,
+           Fault::kMutation,
+         }) {
+      SCOPED_TRACE(static_cast<int>(fault));
+      auto module = MakeModule();
+      ASSERT_TRUE(AttachModule(module));
+      auto source = std::string(R"lua(
 _G.__original_initializations = (_G.__original_initializations or 0) + 1
 oxygen.events.on("frame.start", function() _G.__old_reload_listener = true end,
-  { phase = "frame_start" })
+{ phase = "frame_start" })
 local script = oxygen.script {}
 function script.on_gameplay(_self, _dt)
-  _G.__original_gameplay = (_G.__original_gameplay or 0) + 1
+_G.__original_gameplay = (_G.__original_gameplay or 0) + 1
 end
 function script.on_scene_mutation(_self, _dt)
-  _G.__original_mutation = (_G.__original_mutation or 0) + 1
+_G.__original_mutation = (_G.__original_mutation or 0) + 1
 end
 )lua");
-        if (fault == Fault::kInitialization) {
-          source += "error('original initialization fault')\n";
-        } else if (fault != Fault::kNone) {
-          source += std::string("function script.")
-            + (fault == Fault::kGameplay ? "on_gameplay" : "on_scene_mutation")
-            + R"lua((_self, _dt)
-  _G.__original_faults = (_G.__original_faults or 0) + 1
-  error("original hook fault")
+      if (fault == Fault::kInitialization) {
+        source += "error('original initialization fault')\n";
+      } else if (fault != Fault::kNone) {
+        source += std::string("function script.")
+          + (fault == Fault::kGameplay ? "on_gameplay" : "on_scene_mutation")
+          + R"lua((_self, _dt)
+_G.__original_faults = (_G.__original_faults or 0) + 1
+error("original hook fault")
 end
 )lua";
-        }
-        source += "return script\n";
-        const auto original = CompileSlotBytecode(source, declared_hash);
-        ASSERT_NE(original, nullptr);
-        ASSERT_EQ(original->ContentHash(), declared_hash);
-        auto executable = std::make_shared<CompiledScriptExecutable>(original);
-        auto scene = MakeSceneWithExecutableSlot("in-place-reload", executable);
-        ASSERT_NE(scene, nullptr);
-        engine::FrameContext original_frame;
-        original_frame.SetScene(observer_ptr<Scene> { scene.get() });
-        RunSlotHooks(module, original_frame);
-        RunSlotHooks(module, original_frame);
-        const auto errors = original_frame.GetErrors();
-        ASSERT_EQ(errors.size(), fault == Fault::kNone ? 0U : 1U);
-        if (!errors.empty()) {
-          EXPECT_EQ(
-            errors.front().kind, engine::FrameErrorKind::kContentFailure);
-        }
-        auto result = module.ExecuteScript(ScriptExecutionRequest {
-          .source_text = ScriptSourceText { R"lua(
+      }
+      source += "return script\n";
+      const auto original = CompileSlotBytecode(source, kOriginalHash);
+      ASSERT_NE(original, nullptr);
+      ASSERT_EQ(original->ContentHash(), kOriginalHash);
+      auto executable = std::make_shared<CompiledScriptExecutable>(original);
+      auto scene = MakeSceneWithExecutableSlot("in-place-reload", executable);
+      ASSERT_NE(scene, nullptr);
+      engine::FrameContext original_frame;
+      original_frame.SetScene(observer_ptr<Scene> { scene.get() });
+      RunSlotHooks(module, original_frame);
+      RunSlotHooks(module, original_frame);
+      const auto errors = original_frame.GetErrors();
+      ASSERT_EQ(errors.size(), fault == Fault::kNone ? 0U : 1U);
+      if (!errors.empty()) {
+        EXPECT_EQ(errors.front().kind, engine::FrameErrorKind::kContentFailure);
+      }
+      auto result = module.ExecuteScript(ScriptExecutionRequest {
+        .source_text = ScriptSourceText { R"lua(
 assert(_G.__original_initializations == 1, "unchanged slot was reinitialized")
 assert((_G.__original_faults or 0) <= 1, "unchanged faulted slot was retried")
 )lua" },
-          .chunk_name = ScriptChunkName { "verify_unchanged_reload_source" },
-        });
-        ASSERT_TRUE(result.ok) << result.message;
+        .chunk_name = ScriptChunkName { "verify_unchanged_reload_source" },
+      });
+      ASSERT_TRUE(result.ok) << result.message;
 
-        const auto replacement = CompileSlotBytecode(R"lua(
+      const auto replacement = CompileSlotBytecode(R"lua(
 _G.__reload_initializations = (_G.__reload_initializations or 0) + 1
 oxygen.events.on("frame.start", function()
-  _G.__reload_events = (_G.__reload_events or 0) + 1
+_G.__reload_events = (_G.__reload_events or 0) + 1
 end, { phase = "frame_start" })
 local script = oxygen.script {}
 function script.on_gameplay(_self, _dt)
-  _G.__reload_gameplay = (_G.__reload_gameplay or 0) + 1
+_G.__reload_gameplay = (_G.__reload_gameplay or 0) + 1
 end
 function script.on_scene_mutation(_self, _dt)
-  _G.__reload_mutation = (_G.__reload_mutation or 0) + 1
+_G.__reload_mutation = (_G.__reload_mutation or 0) + 1
 end
 return script
 )lua",
-          declared_hash == 0 ? 0 : kReplacementHash);
-        ASSERT_NE(replacement, nullptr);
-        ASSERT_EQ(replacement->ContentHash(),
-          declared_hash == 0 ? 0 : kReplacementHash);
-        // A source reload installs a new executable in the slot.
-        auto script_node = scene->GetRootNodes().front();
-        auto scripting = script_node.GetScripting();
-        ASSERT_TRUE(scripting.MarkSlotReady(scripting.Slots().front(),
-          std::make_shared<CompiledScriptExecutable>(replacement)));
-        engine::FrameContext reloaded_frame;
-        reloaded_frame.SetScene(observer_ptr<Scene> { scene.get() });
-        module.OnFrameStart(observer_ptr { &reloaded_frame });
-        result = module.ExecuteScript(ScriptExecutionRequest {
-          .source_text = ScriptSourceText { R"lua(
+        kReplacementHash);
+      ASSERT_NE(replacement, nullptr);
+      ASSERT_EQ(replacement->ContentHash(), kReplacementHash);
+      // A source reload installs a new executable in the slot.
+      auto script_node = scene->GetRootNodes().front();
+      auto scripting = script_node.GetScripting();
+      ASSERT_TRUE(scripting.MarkSlotReady(scripting.Slots().front(),
+        std::make_shared<CompiledScriptExecutable>(replacement)));
+      engine::FrameContext reloaded_frame;
+      reloaded_frame.SetScene(observer_ptr<Scene> { scene.get() });
+      module.OnFrameStart(observer_ptr { &reloaded_frame });
+      result = module.ExecuteScript(ScriptExecutionRequest {
+        .source_text = ScriptSourceText { R"lua(
 assert(_G.__old_reload_listener == nil, "old bytecode listener survived reload")
 assert(oxygen.events.listener_count("frame.start") == 0, "old listener refs retained")
 )lua" },
-          .chunk_name = ScriptChunkName { "verify_reload_before_next_hook" },
-        });
-        ASSERT_TRUE(result.ok) << result.message;
-        TestEventLoop loop;
-        if (first_phase == PhaseId::kGameplay) {
-          co::Run(loop, module.OnGameplay(observer_ptr { &reloaded_frame }));
-        } else {
-          co::Run(
-            loop, module.OnSceneMutation(observer_ptr { &reloaded_frame }));
-        }
-        // The first phase after a reload loads the new instance; it starts,
-        // and so runs hooks, from the next Gameplay phase.
-        const auto first_hooks = std::string("local expected_hooks = ")
-          + (first_phase == PhaseId::kGameplay ? "1" : "0") + R"lua(
+        .chunk_name = ScriptChunkName { "verify_reload_before_next_hook" },
+      });
+      ASSERT_TRUE(result.ok) << result.message;
+      TestEventLoop loop;
+      if (first_phase == PhaseId::kGameplay) {
+        co::Run(loop, module.OnGameplay(observer_ptr { &reloaded_frame }));
+      } else {
+        co::Run(loop, module.OnSceneMutation(observer_ptr { &reloaded_frame }));
+      }
+      // The first phase after a reload loads the new instance; it starts,
+      // and so runs hooks, from the next Gameplay phase.
+      const auto first_hooks = std::string("local expected_hooks = ")
+        + (first_phase == PhaseId::kGameplay ? "1" : "0") + R"lua(
 assert(_G.__reload_initializations == 1, "first hook did not rebuild reloaded slot")
 assert((_G.__reload_gameplay or 0) + (_G.__reload_mutation or 0) == expected_hooks,
-  "unexpected hooks in the first reloaded phase")
+"unexpected hooks in the first reloaded phase")
 _G.__reload_gameplay = 0
 _G.__reload_mutation = 0
 )lua";
-        result = module.ExecuteScript(ScriptExecutionRequest {
-          .source_text = ScriptSourceText { first_hooks },
-          .chunk_name = ScriptChunkName { "verify_first_reloaded_hook" },
-        });
-        ASSERT_TRUE(result.ok) << result.message;
-        RunSlotHooks(module, reloaded_frame);
-        RunSlotHooks(module, reloaded_frame);
-        module.OnFrameStart(observer_ptr { &reloaded_frame });
-        EXPECT_FALSE(reloaded_frame.HasErrors());
-        result = module.ExecuteScript(ScriptExecutionRequest {
-          .source_text = ScriptSourceText { R"lua(
+      result = module.ExecuteScript(ScriptExecutionRequest {
+        .source_text = ScriptSourceText { first_hooks },
+        .chunk_name = ScriptChunkName { "verify_first_reloaded_hook" },
+      });
+      ASSERT_TRUE(result.ok) << result.message;
+      RunSlotHooks(module, reloaded_frame);
+      RunSlotHooks(module, reloaded_frame);
+      module.OnFrameStart(observer_ptr { &reloaded_frame });
+      EXPECT_FALSE(reloaded_frame.HasErrors());
+      result = module.ExecuteScript(ScriptExecutionRequest {
+        .source_text = ScriptSourceText { R"lua(
 assert(_G.__original_initializations == 1, "old slot was reinitialized")
 assert(_G.__reload_initializations == 1, "reloaded slot initialized more than once")
 assert(_G.__reload_gameplay == 2 and _G.__reload_mutation == 2, "reloaded hooks stayed stopped")
 assert(_G.__reload_events == 1, "reloaded listener did not execute")
 assert(oxygen.events.listener_count("frame.start") == 1, "reload leaked listener references")
 )lua" },
-          .chunk_name = ScriptChunkName { "verify_in_place_reload_recovery" },
-        });
-        EXPECT_TRUE(result.ok) << result.message;
-      }
+        .chunk_name = ScriptChunkName { "verify_in_place_reload_recovery" },
+      });
+      EXPECT_TRUE(result.ok) << result.message;
     }
   }
 }
@@ -907,7 +903,7 @@ assert(oxygen.events.listener_count("frame.start") == 1, "reload leaked listener
 NOLINT_TEST_F(ScriptingModuleTest,
   SameHashExecutableReplacementRebuildsWithoutObserverNotification)
 {
-  constexpr uint64_t kExecutableHash = 121;
+  const auto kExecutableHash = SlotTestHash(121);
   auto module = MakeModule();
   ASSERT_TRUE(AttachModule(module));
   const auto bytecode = CompileSlotBytecode(R"lua(

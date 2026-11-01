@@ -186,7 +186,7 @@ class ModelImportRecordCliTests(unittest.TestCase):
         conflicts = [
             ["gltf", "--record", record, *published, "--normals", "generate"],
             [*apply_recipe, "--name", "override"],
-            [*apply_recipe, "--content-hashing", "false"],
+            [*apply_recipe, "--unit-scale", "2"],
             ["fbx", *apply_recipe[1:]],
             ["gltf", source, *apply_recipe[1:]],
         ]

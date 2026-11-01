@@ -19,7 +19,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -255,8 +254,6 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     PhysicsMaterialImportPipeline::Config {
       .queue_capacity = Concurrency().material.queue_capacity,
       .worker_count = Concurrency().material.workers,
-      .with_content_hashing
-      = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
 
   auto item = PhysicsMaterialImportPipeline::WorkItem {

@@ -22,6 +22,7 @@
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/EngineModule.h>
@@ -338,7 +339,7 @@ private:
     //! Slot context of the instance's diagnostics.
     std::string node_name;
     uint32_t slot_index { 0 };
-    uint64_t last_known_fingerprint { 0 };
+    base::Sha256Digest last_known_fingerprint {};
     int instance_env_ref { -1 };
     int script_ref { -1 };
     int self_ref { -1 };

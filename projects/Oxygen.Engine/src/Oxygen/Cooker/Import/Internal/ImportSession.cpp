@@ -82,20 +82,22 @@ namespace {
     }
   }
 
-  //! Registers a table, with its digest when this session wrote it.
+  //! Registers a table this session wrote, with the digest its aggregator
+  //! computed as it wrote it. A table this session did not write keeps the
+  //! record its writer published.
   auto RegisterExternalTable(LooseCookedIndexRegistry& registry,
     const data::loose_cooked::FileKind kind,
     const std::filesystem::path& cooked_root, std::string_view relpath,
     const ResourceTableRegistry::SessionEnd& tables) -> void
   {
-    const auto path = cooked_root / std::filesystem::path(relpath);
-    EnsureExternalFileExists(*registry.Storage(), path);
     const auto written = std::ranges::find(
       tables.written, kind, &ResourceTableRegistry::WrittenTable::kind);
-    registry.RegisterExternalFile(cooked_root, kind, relpath,
-      written != tables.written.end()
-        ? std::optional<LooseCookedFileDigest>(written->digest)
-        : std::nullopt);
+    if (written == tables.written.end()) {
+      return;
+    }
+    const auto path = cooked_root / std::filesystem::path(relpath);
+    EnsureExternalFileExists(*registry.Storage(), path);
+    registry.RegisterExternalFile(cooked_root, kind, relpath, written->digest);
   }
 
   auto AppendOutputRecord(const cooked::CookerStorage& storage,
@@ -143,12 +145,6 @@ namespace {
       case ImportSeverity::kError:
         ++summary.diagnostics_error;
         break;
-      }
-
-      if (diagnostic.code == "import.dedup_collision.texture") {
-        ++summary.texture_dedup_collisions;
-      } else if (diagnostic.code == "import.dedup_collision.buffer") {
-        ++summary.buffer_dedup_collisions;
       }
     }
 
@@ -246,12 +242,6 @@ ImportSession::ImportSession(const ImportRequest& request,
   , cooked_writer_(cooked_root_, *storage_)
 {
   DLOG_F(INFO, "Session created for: {}", request_.source_path.string());
-  DLOG_F(INFO,
-    "Session options: requested_hashing={} effective_hashing={} "
-    "dedup_collision_policy={}",
-    request_.options.with_content_hashing,
-    EffectiveContentHashingEnabled(request_.options.with_content_hashing),
-    to_string(request_.options.dedup_collision_policy));
 
   DCHECK_F(driver_ != nullptr, "ImportSession requires an IO driver");
   DCHECK_F(index_registry_ != nullptr,
@@ -366,12 +356,6 @@ auto ImportSession::TextureEmitter() -> import::TextureEmitter&
     auto& aggregator = table_registry_->TextureAggregator(cooked_root_);
     TextureEmitter::Config config {};
     config.cooked_root = cooked_root_;
-    config.with_content_hashing
-      = EffectiveContentHashingEnabled(request_.options.with_content_hashing);
-    config.collision_policy = request_.options.dedup_collision_policy;
-    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) -> void {
-      AddDiagnostic(std::move(diagnostic));
-    };
     texture_emitter_.emplace(std::make_unique<import::TextureEmitter>(
       *writes_, aggregator, std::move(config)));
   }
@@ -391,13 +375,8 @@ auto ImportSession::BufferEmitter() -> import::BufferEmitter&
     DCHECK_F(table_registry_ != nullptr,
       "ImportSession requires a ResourceTableRegistry for buffer emission");
     auto& aggregator = table_registry_->BufferAggregator(cooked_root_);
-    BufferEmitter::Config config {};
-    config.collision_policy = request_.options.dedup_collision_policy;
-    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) -> void {
-      AddDiagnostic(std::move(diagnostic));
-    };
     buffer_emitter_.emplace(std::make_unique<import::BufferEmitter>(
-      *writes_, aggregator, cooked_root_, std::move(config)));
+      *writes_, aggregator, cooked_root_));
   }
   return **buffer_emitter_;
 }
@@ -416,14 +395,9 @@ auto ImportSession::PhysicsResourceEmitter() -> import::PhysicsResourceEmitter&
       "ImportSession requires a ResourceTableRegistry for physics resource "
       "emission");
     auto& aggregator = table_registry_->PhysicsAggregator(cooked_root_);
-    auto config = import::PhysicsResourceEmitter::Config {};
-    config.collision_policy = request_.options.dedup_collision_policy;
-    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) -> void {
-      AddDiagnostic(std::move(diagnostic));
-    };
     physics_resource_emitter_.emplace(
       std::make_unique<import::PhysicsResourceEmitter>(
-        *writes_, aggregator, cooked_root_, std::move(config)));
+        *writes_, aggregator, cooked_root_));
   }
   return **physics_resource_emitter_;
 }
@@ -771,7 +745,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     bool output_missing = false;
 
     if (texture_count > 0) {
-      index_registry_->RegisterExternalFile(
+      index_registry_->RegisterExternalDataFile(
         cooked_root_, FileKind::kTexturesData, loose_layout::kTexturesData);
 
       RegisterExternalTable(*index_registry_, FileKind::kTexturesTable,
@@ -786,7 +760,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     }
 
     if (buffer_count > 0) {
-      index_registry_->RegisterExternalFile(
+      index_registry_->RegisterExternalDataFile(
         cooked_root_, FileKind::kBuffersData, loose_layout::kBuffersData);
 
       RegisterExternalTable(*index_registry_, FileKind::kBuffersTable,
@@ -810,8 +784,10 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       = storage_->KindOf(physics_data_path) == cooked::PathKind::kFile;
 
     if (physics_table_exists || physics_data_exists) {
-      RegisterExternalTable(*index_registry_, FileKind::kPhysicsData,
-        cooked_root_, physics_data_rel, tables);
+      if (physics_data_exists) {
+        index_registry_->RegisterExternalDataFile(
+          cooked_root_, FileKind::kPhysicsData, physics_data_rel);
+      }
       RegisterExternalTable(*index_registry_, FileKind::kPhysicsTable,
         cooked_root_, physics_table_rel, tables);
 
@@ -856,16 +832,17 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       }
     }
 
-    if (resource_descriptor_emitter_.has_value()) {
+    // Descriptors the emitter failed to write are not indexed; the failure
+    // is already diagnosed.
+    if (resource_descriptor_emitter_.has_value()
+      && resource_descriptors_written) {
       const auto records = (*resource_descriptor_emitter_)->Records();
       report.outputs.reserve(report.outputs.size() + records.size());
       for (const auto& rec : records) {
-        const auto produced = resource_descriptors_written
-          ? std::optional<LooseCookedFileDigest>(LooseCookedFileDigest {
-              .size = rec.size_bytes,
-              .sha256 = rec.sha256,
-            })
-          : std::nullopt;
+        const auto produced = LooseCookedFileDigest {
+          .size = rec.size_bytes,
+          .sha256 = rec.sha256,
+        };
         if (rec.virtual_path.empty()) {
           index_registry_->RegisterExternalAuxiliaryFile(
             cooked_root_, rec.relpath, recorded_producer(), produced);
@@ -1005,13 +982,10 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
 
     LOG_F(INFO,
       "Packaging summary: success={} outputs={} index_written={} "
-      "diagnostics(info/warn/error)={}/{}/{} "
-      "dedup(texture/buffer)={}/{}",
+      "diagnostics(info/warn/error)={}/{}/{}",
       report.success, report.packaging.outputs_written,
       report.packaging.index_written, report.packaging.diagnostics_info,
-      report.packaging.diagnostics_warning, report.packaging.diagnostics_error,
-      report.packaging.texture_dedup_collisions,
-      report.packaging.buffer_dedup_collisions);
+      report.packaging.diagnostics_warning, report.packaging.diagnostics_error);
 
     DLOG_F(INFO,
       "Finalize complete: {} materials, {} geometry, {} scenes, {} scripts, "

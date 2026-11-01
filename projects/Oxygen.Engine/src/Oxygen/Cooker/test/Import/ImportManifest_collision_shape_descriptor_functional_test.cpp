@@ -15,9 +15,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -25,7 +23,6 @@ namespace {
 
 using nlohmann::json;
 using oxygen::content::import::ImportManifest;
-using oxygen::cooker::test::kContentHashingDefault;
 using oxygen::cooker::test::WriteText;
 using oxygen::testing::ScopedTempDir;
 
@@ -40,7 +37,6 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   WriteText(descriptor_path,
     R"({
       "name": "floor_box",
-      "content_hashing": false,
       "shape_type": "box",
       "material_ref": "../Materials/ground.opmat",
       "half_extents": [25.0, 0.5, 25.0]
@@ -52,7 +48,6 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
       "output": ".cooked",
       "defaults": {
         "collision_shape_descriptor": {
-          "content_hashing": true,
           "name": "default-shape-name"
         }
       },
@@ -61,8 +56,7 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
           "type": "collision-shape-descriptor",
           "source": "Physics/floor_box.shape.json",
           "virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape",
-          "name": "floor_box_job",
-          "content_hashing": true
+          "name": "floor_box_job"
         }
       ]
     })";
@@ -82,10 +76,6 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   EXPECT_EQ(
     request->asset_virtual_path, "/.cooked/Physics/Shapes/floor_box.ocshape");
   ASSERT_HAS_VALUE(request->collision_shape_descriptor);
-
-  // Descriptor-level content_hashing overrides defaults/job settings.
-  // Release must hash authored content even when the descriptor opts out.
-  EXPECT_EQ(request->options.with_content_hashing, kContentHashingDefault);
 
   const auto normalized = json::parse(
     request->collision_shape_descriptor->normalized_descriptor_json);

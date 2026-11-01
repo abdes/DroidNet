@@ -21,8 +21,7 @@
       "type": "texture-descriptor",
       "source": "/Content/Scenes/Lantern/Sky.otex.json",
       "virtual_path": "/Content/Scenes/Lantern/Sky.otex",
-      "name": "Sky",
-      "content_hashing": true
+      "name": "Sky"
     },
     {
       "id": "/Content/Scenes/Lantern/Lantern.oscene",
@@ -30,7 +29,6 @@
       "source": "/Content/Scenes/Lantern/Lantern.scene.json",
       "virtual_path": "/Content/Scenes/Lantern/Lantern.oscene",
       "name": "Lantern",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Models/Lantern.glb",
         "/Content/Scenes/Lantern/Sky.otex"

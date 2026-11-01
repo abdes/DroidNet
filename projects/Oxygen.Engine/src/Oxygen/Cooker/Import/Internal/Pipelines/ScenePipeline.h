@@ -72,12 +72,6 @@ public:
   struct Config {
     size_t queue_capacity = 8;
     uint32_t worker_count = 1;
-
-    //! Enable or disable scene content hashing.
-    /*!
-     When false, the pipeline MUST NOT compute `content_hash`.
-    */
-    bool with_content_hashing = true;
   };
 
   //! Cooked scene payload returned by the pipeline.
@@ -114,7 +108,7 @@ public:
 
     //! A scene descriptor job's placement at its identity.
     /*! A model's scene has none: the layout places it by name. */
-    std::optional<internal::AssetPlacement> placement {};
+    std::optional<internal::AssetPlacement> placement;
 
     template <SceneStageAdapter Adapter>
     [[nodiscard]] static auto MakeWorkItem(std::shared_ptr<Adapter> adapter,
@@ -139,7 +133,7 @@ public:
       item.environment_systems = std::move(environment_systems);
       item.request = std::move(request);
       item.naming_service = naming_service;
-      item.stop_token = stop_token;
+      item.stop_token = std::move(stop_token);
       return item;
     }
   };

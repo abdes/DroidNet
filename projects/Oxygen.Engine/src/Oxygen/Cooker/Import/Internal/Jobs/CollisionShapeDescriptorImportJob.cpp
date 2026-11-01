@@ -31,7 +31,6 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -437,9 +436,8 @@ namespace {
   }
 
   auto EmitAuthoredShapePayload(ImportSession& session,
-    const ImportRequest& request, const std::string_view source_id,
-    const json& descriptor_doc, const phys::ShapeType shape_type,
-    const phys::ShapePayloadType payload_type)
+    const ImportRequest& request, const json& descriptor_doc,
+    const phys::ShapeType shape_type, const phys::ShapePayloadType payload_type)
     -> std::optional<PayloadResolution>
   {
     auto blob_bytes = std::vector<std::byte> {};
@@ -455,13 +453,11 @@ namespace {
     cooked.data.assign(blob_bytes.begin(), blob_bytes.end());
     cooked.format = phys::PhysicsResourceFormat::kJoltShapeBinary;
     cooked.alignment = 16;
-    if (EffectiveContentHashingEnabled(request.options.with_content_hashing)) {
-      cooked.content_hash = util::ComputeContentSha256(cooked.data);
-    }
+    cooked.content_hash = util::ComputeContentSha256(cooked.data);
 
     try {
       const auto emitted
-        = session.PhysicsResourceEmitter().Emit(std::move(cooked), source_id);
+        = session.PhysicsResourceEmitter().Emit(std::move(cooked));
       return PayloadResolution {
         .payload_asset_key = emitted.resource_asset_key,
         .payload_type = payload_type,
@@ -881,8 +877,8 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   if (const auto payload_type = PayloadTypeForShapeType(shape_type);
     payload_type.has_value()) {
-    const auto payload = EmitAuthoredShapePayload(session, Request(),
-      target->virtual_path, descriptor_doc, shape_type, *payload_type);
+    const auto payload = EmitAuthoredShapePayload(
+      session, Request(), descriptor_doc, shape_type, *payload_type);
     if (!payload.has_value()) {
       ReportPhaseProgress(
         ImportPhase::kFailed, 1.0F, "Collision shape payload emission failed");
@@ -897,8 +893,6 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     CollisionShapeImportPipeline::Config {
       .queue_capacity = Concurrency().material.queue_capacity,
       .worker_count = Concurrency().material.workers,
-      .with_content_hashing
-      = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
 
   AssetReferenceBuilder references;

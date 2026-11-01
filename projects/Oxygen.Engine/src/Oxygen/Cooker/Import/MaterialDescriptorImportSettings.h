@@ -22,9 +22,6 @@ struct MaterialDescriptorImportSettings final {
   //! Optional explicit job name override.
   std::string job_name;
 
-  //! Requested content-hashing policy.
-  bool with_content_hashing = true;
-
   //! Cooked roots (loose roots or paks) whose textures the material may
   //! reference by key without copying them, lowest precedence first.
   std::vector<std::string> cooked_context_roots;

@@ -28,7 +28,6 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
@@ -932,8 +931,6 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       BufferPipeline::Config {
         .queue_capacity = Concurrency().buffer.queue_capacity,
         .worker_count = Concurrency().buffer.workers,
-        .with_content_hashing = EffectiveContentHashingEnabled(
-          Request().options.with_content_hashing),
       });
 
     auto submitter
@@ -966,11 +963,7 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   const auto& prepared = *prepared_opt;
-  auto finalizer = GeometryPipeline(*ThreadPool(),
-    GeometryPipeline::Config {
-      .with_content_hashing
-      = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
-    });
+  auto finalizer = GeometryPipeline(*ThreadPool(), GeometryPipeline::Config {});
   auto finalize_diagnostics = std::vector<ImportDiagnostic> {};
   auto finalized = co_await finalizer.FinalizeDescriptor(prepared.lod_bindings,
     prepared.descriptor_bytes,

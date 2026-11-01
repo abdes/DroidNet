@@ -56,124 +56,123 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::content::import;
-using namespace oxygen::co;
-namespace co = oxygen::co;
-namespace data = oxygen::data;
+using oxygen::co::Co;
+using oxygen::co::kJoin;
+using oxygen::co::ThreadPool;
 using oxygen::cooker::test::FakeSceneAdapter;
 using oxygen::cooker::test::MakeMinimalSceneBuild;
 using oxygen::cooker::test::RunPipelineOnce;
 
+namespace oxygen::content::import {
 namespace {
 
-//=== Helpers
-//===--------------------------------------------------------------//
+  //=== Helpers
+  //===--------------------------------------------------------------//
 
-auto MakeBufferPayload() -> CookedBufferPayload
-{
-  CookedBufferPayload cooked;
-  cooked.data = { std::byte { 0x01 }, std::byte { 0x02 } };
-  cooked.alignment = 16;
-  cooked.usage_flags = 1;
-  cooked.element_stride = 4;
-  cooked.element_format = 0;
-  cooked.content_hash = 0;
-  return cooked;
-}
+  auto MakeBufferPayload() -> CookedBufferPayload
+  {
+    CookedBufferPayload cooked;
+    cooked.data = { std::byte { 0x01 }, std::byte { 0x02 } };
+    cooked.alignment = 16;
+    cooked.usage_flags = 1;
+    cooked.element_stride = 4;
+    cooked.element_format = 0;
+    return cooked;
+  }
 
-auto MakeTextureWorkItem() -> TexturePipeline::WorkItem
-{
-  ScratchImage image = ScratchImage::Create(ScratchImageMeta {
-    .texture_type = oxygen::TextureType::kTexture2D,
-    .width = 1,
-    .height = 1,
-    .depth = 1,
-    .array_layers = 1,
-    .mip_levels = 1,
-    .format = oxygen::Format::kRGBA8UNorm,
-  });
+  auto MakeTextureWorkItem() -> TexturePipeline::WorkItem
+  {
+    ScratchImage image = ScratchImage::Create(ScratchImageMeta {
+      .texture_type = oxygen::TextureType::kTexture2D,
+      .width = 1,
+      .height = 1,
+      .depth = 1,
+      .array_layers = 1,
+      .mip_levels = 1,
+      .format = oxygen::Format::kRGBA8UNorm,
+    });
 
-  TextureImportDesc desc {};
-  desc.texture_type = oxygen::TextureType::kTexture2D;
-  desc.width = 1;
-  desc.height = 1;
-  desc.depth = 1;
-  desc.array_layers = 1;
-  desc.mip_policy = MipPolicy::kMaxCount;
-  desc.max_mip_levels = 1;
-  desc.intent = TextureIntent::kAlbedo;
-  desc.output_format = oxygen::Format::kRGBA8UNorm;
-  desc.bc7_quality = Bc7Quality::kNone;
+    TextureImportDesc desc {};
+    desc.texture_type = oxygen::TextureType::kTexture2D;
+    desc.width = 1;
+    desc.height = 1;
+    desc.depth = 1;
+    desc.array_layers = 1;
+    desc.mip_policy = MipPolicy::kMaxCount;
+    desc.max_mip_levels = 1;
+    desc.intent = TextureIntent::kAlbedo;
+    desc.output_format = oxygen::Format::kRGBA8UNorm;
+    desc.bc7_quality = Bc7Quality::kNone;
 
-  return TexturePipeline::WorkItem {
-    .source_id = "tex0",
-    .texture_id = "tex0",
-    .source_key = nullptr,
-    .desc = desc,
-    .packing_policy_id = "d3d12",
-    .output_format_policy = TexturePipeline::OutputFormatPolicy::kExplicit,
-    .failure_policy = TexturePipeline::FailurePolicy::kStrict,
-    .equirect_to_cubemap = false,
-    .cubemap_face_size = 0,
-    .cubemap_layout = CubeMapImageLayout::kUnknown,
-    .source = std::move(image),
-    .stop_token = {},
-  };
-}
+    return TexturePipeline::WorkItem {
+      .source_id = "tex0",
+      .texture_id = "tex0",
+      .source_key = nullptr,
+      .desc = desc,
+      .packing_policy_id = "d3d12",
+      .output_format_policy = TexturePipeline::OutputFormatPolicy::kExplicit,
+      .failure_policy = TexturePipeline::FailurePolicy::kStrict,
+      .equirect_to_cubemap = false,
+      .cubemap_face_size = 0,
+      .cubemap_layout = CubeMapImageLayout::kUnknown,
+      .source = std::move(image),
+      .stop_token = {},
+    };
+  }
 
-auto MakeMaterialWorkItem() -> MaterialPipeline::WorkItem
-{
-  MaterialPipeline::WorkItem item;
-  item.source_id = "mat0";
-  item.material.name = "Material_0";
-  item.material.storage_name = "Material_0";
-  item.material.shader_requests = {
-    ShaderRequest {
-      .shader_type = 1,
-      .source_path = "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl",
-      .entry_point = "VS",
-      .defines = {},
-      .shader_hash = 0,
-    },
-    ShaderRequest {
-      .shader_type = 2,
-      .source_path = "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
-      .entry_point = "PS",
-      .defines = {},
-      .shader_hash = 0,
-    },
-  };
-  item.request.source_path = "Material.gltf";
-  return item;
-}
+  auto MakeMaterialWorkItem() -> MaterialPipeline::WorkItem
+  {
+    MaterialPipeline::WorkItem item;
+    item.source_id = "mat0";
+    item.material.name = "Material_0";
+    item.material.storage_name = "Material_0";
+    item.material.shader_requests = {
+      ShaderRequest {
+        .shader_type = 1,
+        .source_path = "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl",
+        .entry_point = "VS",
+        .defines = {},
+        .shader_hash = 0,
+      },
+      ShaderRequest {
+        .shader_type = 2,
+        .source_path = "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
+        .entry_point = "PS",
+        .defines = {},
+        .shader_hash = 0,
+      },
+    };
+    item.request.source_path = "Material.gltf";
+    return item;
+  }
 
-auto MakeGeometryWorkItem() -> MeshBuildPipeline::WorkItem
-{
-  const auto default_material = data::MaterialAsset::CreateDefault();
-  const auto default_key = default_material->GetAssetKey();
+  auto MakeGeometryWorkItem() -> MeshBuildPipeline::WorkItem
+  {
+    const auto default_material = data::MaterialAsset::CreateDefault();
+    const auto default_key = default_material->GetAssetKey();
 
-  struct MeshBuffers final {
-    std::vector<glm::vec3> positions;
-    std::vector<uint32_t> indices;
-    std::vector<TriangleRange> ranges;
-  };
+    struct MeshBuffers final {
+      std::vector<glm::vec3> positions;
+      std::vector<uint32_t> indices;
+      std::vector<TriangleRange> ranges;
+    };
 
-  auto owner = std::make_shared<MeshBuffers>();
-  owner->positions = {
-    glm::vec3 { 0.0F, 0.0F, 0.0F },
-    glm::vec3 { 1.0F, 0.0F, 0.0F },
-    glm::vec3 { 0.0F, 1.0F, 0.0F },
-  };
-  owner->indices = { 0U, 1U, 2U };
-  owner->ranges = {
-    TriangleRange {
-      .surface = 0,
-      .first_index = 0,
-      .index_count = 3,
-    },
-  };
+    auto owner = std::make_shared<MeshBuffers>();
+    owner->positions = {
+      glm::vec3 { 0.0F, 0.0F, 0.0F },
+      glm::vec3 { 1.0F, 0.0F, 0.0F },
+      glm::vec3 { 0.0F, 1.0F, 0.0F },
+    };
+    owner->indices = { 0U, 1U, 2U };
+    owner->ranges = {
+      TriangleRange {
+        .surface = 0,
+        .first_index = 0,
+        .index_count = 3,
+      },
+    };
 
-  TriangleMesh triangle_mesh {
+    TriangleMesh triangle_mesh {
     .mesh_type = data::MeshType::kStandard,
     .streams = MeshStreamView {
       .positions
@@ -196,153 +195,155 @@ auto MakeGeometryWorkItem() -> MeshBuildPipeline::WorkItem
     .bounds = std::nullopt,
   };
 
-  MeshBuildPipeline::WorkItem item;
-  item.source_id = "mesh0";
-  item.mesh_name = "Mesh_0";
-  item.storage_mesh_name = "Mesh_0";
-  item.source_key = nullptr;
-  item.lods = {
-    MeshLod {
-      .lod_name = "LOD0",
-      .source = triangle_mesh,
-      .source_owner = std::move(owner),
-    },
+    MeshBuildPipeline::WorkItem item;
+    item.source_id = "mesh0";
+    item.mesh_name = "Mesh_0";
+    item.storage_mesh_name = "Mesh_0";
+    item.source_key = nullptr;
+    item.lods = {
+      MeshLod {
+        .lod_name = "LOD0",
+        .source = triangle_mesh,
+        .source_owner = std::move(owner),
+      },
+    };
+    item.material_keys = { default_key };
+    item.default_material_key = default_key;
+    item.request.source_path = "Geometry.fbx";
+    static const auto provenance
+      = std::make_shared<const SurfaceProvenance>(oxygen::Uuid::Generate());
+    item.request.surface_provenance = provenance;
+    item.stop_token = {};
+    item.source_layout_witness
+      = oxygen::content::import::test::FixtureSourceLayoutWitness(item.lods);
+    return item;
+  }
+
+  auto MakeSceneWorkItem(std::shared_ptr<FakeSceneAdapter> adapter)
+    -> ScenePipeline::WorkItem
+  {
+    ImportRequest request;
+    request.source_path = "Scene.scene";
+    static NamingService naming_service;
+    return ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter), "Scene",
+      {}, {}, std::move(request), oxygen::observer_ptr { &naming_service }, {});
+  }
+
+  class PipelineConformanceTest : public ::testing::Test {
+  protected:
+    ImportEventLoop loop_;
+    ThreadPool pool_ { loop_, 1 };
   };
-  item.material_keys = { default_key };
-  item.default_material_key = default_key;
-  item.request.source_path = "Geometry.fbx";
-  static const auto provenance
-    = std::make_shared<const SurfaceProvenance>(oxygen::Uuid::Generate());
-  item.request.surface_provenance = provenance;
-  item.stop_token = {};
-  item.source_layout_witness
-    = oxygen::content::import::test::FixtureSourceLayoutWitness(item.lods);
-  return item;
-}
 
-auto MakeSceneWorkItem(std::shared_ptr<FakeSceneAdapter> adapter)
-  -> ScenePipeline::WorkItem
-{
-  ImportRequest request;
-  request.source_path = "Scene.scene";
-  static NamingService naming_service;
-  return ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter), "Scene", {},
-    {}, std::move(request), oxygen::observer_ptr { &naming_service }, {});
-}
+  NOLINT_TEST_F(PipelineConformanceTest, BufferPipelineProgressCountersUpdate)
+  {
+    BufferPipeline::WorkResult result;
+    PipelineProgress progress;
 
-class PipelineConformanceTest : public testing::Test {
-protected:
-  ImportEventLoop loop_;
-  ThreadPool pool_ { loop_, 1 };
-};
+    co::Run(loop_, [&] -> Co<> {
+      BufferPipeline pipeline(pool_);
 
-NOLINT_TEST_F(PipelineConformanceTest, BufferPipelineProgressCountersUpdate)
-{
-  BufferPipeline::WorkResult result;
-  PipelineProgress progress;
+      OXCO_WITH_NURSERY(n)
+      {
+        pipeline.Start(n);
+        co_await pipeline.Submit(BufferPipeline::WorkItem {
+          .source_id = "buf0",
+          .cooked = MakeBufferPayload(),
+          .stop_token = {},
+        });
+        result = co_await pipeline.Collect();
+        progress = pipeline.GetProgress();
+        pipeline.Close();
+        co_return kJoin;
+      };
+    });
 
-  co::Run(loop_, [&] -> Co<> {
-    BufferPipeline pipeline(pool_);
+    EXPECT_TRUE(result.success);
+    EXPECT_EQ(progress.submitted, 1U);
+    EXPECT_EQ(progress.completed + progress.failed, 1U);
+    EXPECT_EQ(progress.in_flight, 0U);
+  }
 
-    OXCO_WITH_NURSERY(n)
-    {
-      pipeline.Start(n);
-      co_await pipeline.Submit(BufferPipeline::WorkItem {
+  NOLINT_TEST_F(PipelineConformanceTest, TexturePipelineProgressCountersUpdate)
+  {
+    const auto result
+      = RunPipelineOnce<TexturePipeline>(loop_, MakeTextureWorkItem(), pool_);
+
+    EXPECT_TRUE(result.success);
+  }
+
+  NOLINT_TEST_F(PipelineConformanceTest, MaterialPipelineProgressCountersUpdate)
+  {
+    const auto result
+      = RunPipelineOnce<MaterialPipeline>(loop_, MakeMaterialWorkItem(), pool_);
+
+    EXPECT_TRUE(result.success);
+  }
+
+  NOLINT_TEST_F(PipelineConformanceTest, GeometryPipelineProgressCountersUpdate)
+  {
+    const auto result = RunPipelineOnce<MeshBuildPipeline>(
+      loop_, MakeGeometryWorkItem(), pool_);
+
+    EXPECT_TRUE(result.success);
+  }
+
+  NOLINT_TEST_F(PipelineConformanceTest, ScenePipelineProgressCountersUpdate)
+  {
+    auto adapter = std::make_shared<FakeSceneAdapter>();
+    adapter->build = MakeMinimalSceneBuild("Root");
+
+    const auto result = RunPipelineOnce<ScenePipeline>(
+      loop_, MakeSceneWorkItem(std::move(adapter)), pool_);
+
+    EXPECT_TRUE(result.success);
+  }
+
+  NOLINT_TEST_F(PipelineConformanceTest, BufferPipelineStopTokenCancels)
+  {
+    std::stop_source source;
+    source.request_stop();
+
+    const auto result = RunPipelineOnce<BufferPipeline>(loop_,
+      BufferPipeline::WorkItem {
         .source_id = "buf0",
         .cooked = MakeBufferPayload(),
-        .stop_token = {},
-      });
-      result = co_await pipeline.Collect();
-      progress = pipeline.GetProgress();
-      pipeline.Close();
-      co_return kJoin;
-    };
-  });
+        .stop_token = source.get_token(),
+      },
+      pool_);
 
-  EXPECT_TRUE(result.success);
-  EXPECT_EQ(progress.submitted, 1U);
-  EXPECT_EQ(progress.completed + progress.failed, 1U);
-  EXPECT_EQ(progress.in_flight, 0U);
-}
+    EXPECT_FALSE(result.success);
+  }
 
-NOLINT_TEST_F(PipelineConformanceTest, TexturePipelineProgressCountersUpdate)
-{
-  const auto result
-    = RunPipelineOnce<TexturePipeline>(loop_, MakeTextureWorkItem(), pool_);
+  NOLINT_TEST_F(PipelineConformanceTest, TexturePipelineStopTokenCancels)
+  {
+    std::stop_source source;
+    source.request_stop();
+    auto item = MakeTextureWorkItem();
+    item.stop_token = source.get_token();
 
-  EXPECT_TRUE(result.success);
-}
+    const auto result
+      = RunPipelineOnce<TexturePipeline>(loop_, std::move(item), pool_);
 
-NOLINT_TEST_F(PipelineConformanceTest, MaterialPipelineProgressCountersUpdate)
-{
-  const auto result
-    = RunPipelineOnce<MaterialPipeline>(loop_, MakeMaterialWorkItem(), pool_);
+    EXPECT_FALSE(result.success);
+  }
 
-  EXPECT_TRUE(result.success);
-}
+  NOLINT_TEST_F(PipelineConformanceTest, ScenePipelineStopTokenCancels)
+  {
+    auto adapter = std::make_shared<FakeSceneAdapter>();
+    adapter->build = MakeMinimalSceneBuild("Root");
 
-NOLINT_TEST_F(PipelineConformanceTest, GeometryPipelineProgressCountersUpdate)
-{
-  const auto result
-    = RunPipelineOnce<MeshBuildPipeline>(loop_, MakeGeometryWorkItem(), pool_);
+    std::stop_source source;
+    source.request_stop();
+    auto item = MakeSceneWorkItem(std::move(adapter));
+    item.stop_token = source.get_token();
 
-  EXPECT_TRUE(result.success);
-}
+    const auto result
+      = RunPipelineOnce<ScenePipeline>(loop_, std::move(item), pool_);
 
-NOLINT_TEST_F(PipelineConformanceTest, ScenePipelineProgressCountersUpdate)
-{
-  auto adapter = std::make_shared<FakeSceneAdapter>();
-  adapter->build = MakeMinimalSceneBuild("Root");
-
-  const auto result = RunPipelineOnce<ScenePipeline>(
-    loop_, MakeSceneWorkItem(std::move(adapter)), pool_);
-
-  EXPECT_TRUE(result.success);
-}
-
-NOLINT_TEST_F(PipelineConformanceTest, BufferPipelineStopTokenCancels)
-{
-  std::stop_source source;
-  source.request_stop();
-
-  const auto result = RunPipelineOnce<BufferPipeline>(loop_,
-    BufferPipeline::WorkItem {
-      .source_id = "buf0",
-      .cooked = MakeBufferPayload(),
-      .stop_token = source.get_token(),
-    },
-    pool_);
-
-  EXPECT_FALSE(result.success);
-}
-
-NOLINT_TEST_F(PipelineConformanceTest, TexturePipelineStopTokenCancels)
-{
-  std::stop_source source;
-  source.request_stop();
-  auto item = MakeTextureWorkItem();
-  item.stop_token = source.get_token();
-
-  const auto result
-    = RunPipelineOnce<TexturePipeline>(loop_, std::move(item), pool_);
-
-  EXPECT_FALSE(result.success);
-}
-
-NOLINT_TEST_F(PipelineConformanceTest, ScenePipelineStopTokenCancels)
-{
-  auto adapter = std::make_shared<FakeSceneAdapter>();
-  adapter->build = MakeMinimalSceneBuild("Root");
-
-  std::stop_source source;
-  source.request_stop();
-  auto item = MakeSceneWorkItem(std::move(adapter));
-  item.stop_token = source.get_token();
-
-  const auto result
-    = RunPipelineOnce<ScenePipeline>(loop_, std::move(item), pool_);
-
-  EXPECT_FALSE(result.success);
-}
+    EXPECT_FALSE(result.success);
+  }
 
 } // namespace
+
+} // namespace oxygen::content::import

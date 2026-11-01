@@ -42,8 +42,8 @@
 #include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
+#include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::import {
@@ -73,8 +73,8 @@ namespace {
     bool externally_written = false;
     std::string virtual_path;
     std::string source_path;
-    //! The digest its producer computed as it wrote the file; without one,
-    //! `Finish` hashes the file.
+    //! The digest its producer computed as it wrote the file; none for a
+    //! resource data file, whose resources are verified one by one.
     std::optional<LooseCookedFileDigest> produced;
   };
 
@@ -309,7 +309,11 @@ struct LooseCookedWriter::Impl final {
       .kind = kind,
       .relpath = std::string(relpath),
       .size = bytes.size(),
-      .sha256 = base::ComputeSha256(bytes),
+      // A resource data file has no digest; its table rows hold the digests
+      // of its resources.
+      .sha256 = data::loose_cooked::IsResourceDataFile(kind)
+        ? base::Sha256Digest {}
+        : base::ComputeSha256(bytes),
       .updated = true,
       .externally_written = false,
     };
@@ -323,6 +327,11 @@ struct LooseCookedWriter::Impl final {
     std::string_view virtual_path = {}, std::string source_path = {}) -> void
   {
     data::loose_cooked::RequireIndexRelPath(relpath);
+    if (data::loose_cooked::IsResourceDataFile(kind) == produced.has_value()) {
+      throw std::runtime_error(produced.has_value()
+          ? "RegisterExternalFile: a resource data file has no digest"
+          : "RegisterExternalFile: the file has no digest");
+    }
     if (kind == FileKind::kTextureDescriptor) {
       RequireCanonicalVirtualPath(virtual_path);
       RequireCanonicalVirtualPath(source_path);
@@ -359,15 +368,15 @@ struct LooseCookedWriter::Impl final {
 
   auto RegisterExternalTextureDescriptor(std::string_view relpath,
     std::string_view virtual_path, const LooseCookedProducer& producer,
-    const std::optional<LooseCookedFileDigest>& produced) -> void
+    const LooseCookedFileDigest& produced) -> void
   {
     RegisterExternalFile(FileKind::kTextureDescriptor, relpath, produced,
       virtual_path, ResolveSource_(producer));
   }
 
   auto RegisterExternalAuxiliaryFile(std::string_view relpath,
-    const LooseCookedProducer& producer,
-    const std::optional<LooseCookedFileDigest>& produced) -> void
+    const LooseCookedProducer& producer, const LooseCookedFileDigest& produced)
+    -> void
   {
     RegisterExternalFile(
       FileKind::kAuxiliary, relpath, produced, {}, ResolveSource_(producer));
@@ -498,33 +507,14 @@ struct LooseCookedWriter::Impl final {
       if (!file.updated) {
         continue; // Preserve other writers' published metadata.
       }
-      if (file.externally_written && file.produced.has_value()) {
-        // Its producer hashed the bytes as it wrote them.
+      if (file.externally_written) {
+        // Its producer hashed the bytes as it wrote them; a resource data
+        // file has no digest of its own, only its resources do.
         const auto physical_path = cooked_root_ / file.relpath;
         file.size = SizeOfExistingFile(*storage_, physical_path, "Finish");
         RequireProducedSize(file.produced, file.size, physical_path);
-        file.sha256 = file.produced->sha256;
-      } else if (file.externally_written) {
-        // A resource data file: every import appends to it, so none of them
-        // knows the digest of the whole file.
-        const auto physical_path = cooked_root_ / file.relpath;
-        const auto device = storage_->Open(physical_path);
-        if (!device) {
-          throw std::system_error(
-            device.error(), "cannot open '" + physical_path.string() + "'");
-        }
-        const auto size = device->Size();
-        if (!size) {
-          throw std::system_error(
-            size.error(), "cannot measure '" + physical_path.string() + "'");
-        }
-        file.size = size->get();
-        const auto digest = serio::ComputeSha256(*device);
-        if (!digest) {
-          throw std::runtime_error("cannot hash '" + physical_path.string()
-            + "': " + digest.error().message());
-        }
-        file.sha256 = *digest;
+        file.sha256 = file.produced.has_value() ? file.produced->sha256
+                                                : base::Sha256Digest {};
       }
       StoreFile_(std::move(file), "Finish.merge_files");
     }
@@ -1007,16 +997,21 @@ auto LooseCookedWriter::WriteFile(const FileKind kind, std::string_view relpath,
 }
 
 auto LooseCookedWriter::RegisterExternalFile(const FileKind kind,
-  std::string_view relpath,
-  const std::optional<LooseCookedFileDigest>& produced) -> void
+  std::string_view relpath, const LooseCookedFileDigest& produced) -> void
 {
   impl_->RegisterExternalFile(kind, relpath, produced);
 }
 
+auto LooseCookedWriter::RegisterExternalDataFile(
+  const FileKind kind, std::string_view relpath) -> void
+{
+  impl_->RegisterExternalFile(kind, relpath, std::nullopt);
+}
+
 auto LooseCookedWriter::RegisterExternalTextureDescriptor(
   std::string_view relpath, std::string_view virtual_path,
-  const LooseCookedProducer& producer,
-  const std::optional<LooseCookedFileDigest>& produced) -> void
+  const LooseCookedProducer& producer, const LooseCookedFileDigest& produced)
+  -> void
 {
   impl_->RegisterExternalTextureDescriptor(
     relpath, virtual_path, producer, produced);
@@ -1044,8 +1039,8 @@ auto LooseCookedWriter::RegisterExternalAssetDescriptor(
 }
 
 auto LooseCookedWriter::RegisterExternalAuxiliaryFile(std::string_view relpath,
-  const LooseCookedProducer& producer,
-  const std::optional<LooseCookedFileDigest>& produced) -> void
+  const LooseCookedProducer& producer, const LooseCookedFileDigest& produced)
+  -> void
 {
   impl_->RegisterExternalAuxiliaryFile(relpath, producer, produced);
 }

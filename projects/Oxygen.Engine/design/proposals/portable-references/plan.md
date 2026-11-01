@@ -33,7 +33,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S6a   | Done                                                           |
 | S6b   | Done                                                           |
 | S6c   | Done                                                           |
-| S6d   | Not started                                                    |
+| S6d   | Done                                                           |
 | S6e   | Not started (last engine slice)                                |
 | S7    | Not started                                                    |
 | S8    | Not started                                                    |
@@ -386,8 +386,8 @@ mounts); the producers' digests (texture and buffer emitters and pipelines,
 mesh build, script pipeline, `BufferSource` JSON input, the table aggregators'
 dedup signatures). The inventory, about 70 production and 40 test files, is
 `resource-digest-inventory.md` of the loose index session. Editor: the
-editor's ImportTool and manifest options lose `content_hashing` in S9's
-import slice.
+managed loose index reader, `.otex` reader and inventory fixture follow the
+format in S7.
 
 Unit and functional tests: the encoder and readers of the widened entries,
 per-resource verification and its refusals, each producer's digest; the
@@ -418,7 +418,11 @@ Requires the S3 SDK install. Deletes: `IdentityField`, `TextureSource.VirtualPat
 `InputActionReference.IsPath`. Adds: identity parameters on every reader and
 writer, `IFileReferenceLocator`, the record suffix in `AssetFileTypes`
 (`ToIdentity`, `SourcesOf`, `CompanionsOf`), the schema conformance test of
-`AssetReferenceField`.
+`AssetReferenceField`. Follows the S6d formats: the managed `LooseCookedIndex`
+reads version 8 and accepts only a zero digest for resource data files,
+`TextureDescriptorFile` reads version 2 with the 63-byte row, and
+`NativeInventoryFixture` lists data files without a digest and reports the
+`resource_*` reasons.
 
 The 10 production reader call sites and `AuthoredReferenceFormat`'s identity
 field use are changed in this slice so it compiles; their behaviour change is
@@ -611,7 +615,6 @@ done only when its rows are gone from the code.
 | A blocking CRC pass on a pool worker                                               | Verified pak mount (`PrepareMountSetAsync`)                                                                                                                           | S6a     |
 | A loose source named by its index file; "library" in the content UI                | DemoShell `ContentVm`, `ContentLoaderPanel`, `ContentSettingsService`, `FileBrowserService`, `DemoShell.cpp`, `ContentVm_test`, RenderScene `MainModule.cpp`          | S6c     |
 | Mount refusals logged by the host, never shown; unsaved import settings            | RenderScene `MainModule.cpp`, `ContentSettingsService`, `ContentVm`                                                                                                   | S6c     |
-| Truncated resource hashes, whole-file data hashes, `content_hashing`               | Texture and buffer descriptors, `.otex`, `LooseCookedWriter::Finish`, `ImportOptions`, manifest schema, ImportTool, emitters and pipelines                            | S6d     |
 | Hand-built scene and sidecar descriptors, forged `.otex` files in tests            | The tests the builders proposal's "What it replaces" table lists                                                                                                      | S6e     |
 
 ### Editor
@@ -620,6 +623,7 @@ done only when its rows are gone from the code.
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
 | Absolute-only references, no anchor                                           | Material, texture, input readers and writers; 10 reader call sites                                                                                                 | S7           |
 | `AssetFileType.IdentityField`                                                 | `AssetFileTypes.cs:144`, `AuthoredReferenceFormat`                                                                                                                 | S7           |
+| Loose index version 7, whole-file data digests, `.otex` version 1             | `Oxygen.Managed.Assets` `LooseCookedIndex`, `TextureDescriptorFile`; `NativeInventoryFixture`                                                                      | S7           |
 | `TextureSource.VirtualPath`, `VirtualPathInvalid`                             | Texture model, reader, writer, `TextureImport.cs:105`                                                                                                              | S7, S13      |
 | Rooted-disk image resolution                                                  | `TextureSource.ResolveImages`                                                                                                                                      | S7           |
 | `InputActionReference.IsPath`                                                 | Input reader, `InputSourceReader.cs:125`                                                                                                                           | S7           |

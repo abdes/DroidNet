@@ -26,80 +26,70 @@
       "type": "material-descriptor",
       "source": "/Content/Scenes/SurfaceOverrides/SoFloor.omat.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoFloor.omat",
-      "name": "SoFloor",
-      "content_hashing": true
+      "name": "SoFloor"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoShadeRed.omat",
-      "name": "SoShadeRed",
-      "content_hashing": true
+      "name": "SoShadeRed"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat",
-      "name": "SoShadeBlue",
-      "content_hashing": true
+      "name": "SoShadeBlue"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoPotTeal.omat",
-      "name": "SoPotTeal",
-      "content_hashing": true
+      "name": "SoPotTeal"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/SoPotGold.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/SurfaceOverrides/SoPotGold.omat.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoPotGold.omat",
-      "name": "SoPotGold",
-      "content_hashing": true
+      "name": "SoPotGold"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat",
-      "name": "SoLod0Green",
-      "content_hashing": true
+      "name": "SoLod0Green"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat",
-      "name": "SoLod1Yellow",
-      "content_hashing": true
+      "name": "SoLod1Yellow"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/SoLod2Red.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/SurfaceOverrides/SoLod2Red.omat.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoLod2Red.omat",
-      "name": "SoLod2Red",
-      "content_hashing": true
+      "name": "SoLod2Red"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/SoLodPurple.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/SurfaceOverrides/SoLodPurple.omat.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoLodPurple.omat",
-      "name": "SoLodPurple",
-      "content_hashing": true
+      "name": "SoLodPurple"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/SoPillar.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/SurfaceOverrides/SoPillar.omat.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoPillar.omat",
-      "name": "SoPillar",
-      "content_hashing": true
+      "name": "SoPillar"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/SoPillar.ogeo",
@@ -107,7 +97,6 @@
       "source": "/Content/Scenes/SurfaceOverrides/SoPillar.ogeo.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoPillar.ogeo",
       "name": "SoPillar",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/SurfaceOverrides/SoPillar.omat"]
     },
     {
@@ -116,7 +105,6 @@
       "source": "/Content/Scenes/SurfaceOverrides/SoGhost.ogeo.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoGhost.ogeo",
       "name": "SoGhost",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/SurfaceOverrides/SoShadeBlue.omat"]
     },
     {
@@ -125,7 +113,6 @@
       "source": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SoLodChain.ogeo",
       "name": "SoLodChain",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Scenes/SurfaceOverrides/SoLod0Green.omat",
         "/Content/Scenes/SurfaceOverrides/SoLod1Yellow.omat",
@@ -139,8 +126,7 @@
       "virtual_path": "/Content/Scenes/SurfaceOverrides/surface_overrides.oscript",
       "name": "SurfaceOverridesScript",
       "compile": false,
-      "script_storage": "external",
-      "content_hashing": true
+      "script_storage": "external"
     },
     {
       "id": "/Content/Scenes/SurfaceOverrides/surface_overrides.input",
@@ -154,7 +140,6 @@
       "source": "/Content/Scenes/SurfaceOverrides/SurfaceOverrides.scene.json",
       "virtual_path": "/Content/Scenes/SurfaceOverrides/SurfaceOverrides.oscene",
       "name": "SurfaceOverrides",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Models/Showcase/lampRoundTable.fbx",
         "/Content/Models/Showcase/pottedPlant.fbx",
@@ -180,7 +165,6 @@
       "type": "script-sidecar",
       "name": "surface_overrides_script_sidecar",
       "target_scene_virtual_path": "/Content/Scenes/SurfaceOverrides/SurfaceOverrides.oscene",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Scenes/SurfaceOverrides/SurfaceOverrides.oscene",
         "/Content/Scenes/SurfaceOverrides/surface_overrides.oscript",

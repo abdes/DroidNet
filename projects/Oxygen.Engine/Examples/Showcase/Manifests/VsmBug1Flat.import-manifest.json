@@ -16,16 +16,14 @@
       "type": "material-descriptor",
       "source": "/Content/Scenes/VsmBug1Flat/floor_default.omat.json",
       "virtual_path": "/Content/Scenes/VsmBug1Flat/floor_default.omat",
-      "name": "floor_default",
-      "content_hashing": true
+      "name": "floor_default"
     },
     {
       "id": "/Content/Scenes/VsmBug1Flat/cube_red.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/VsmBug1Flat/cube_red.omat.json",
       "virtual_path": "/Content/Scenes/VsmBug1Flat/cube_red.omat",
-      "name": "cube_red",
-      "content_hashing": true
+      "name": "cube_red"
     },
     {
       "id": "/Content/Scenes/VsmBug1Flat/floor.ogeo",
@@ -33,7 +31,6 @@
       "source": "/Content/Scenes/VsmBug1Flat/floor.ogeo.json",
       "virtual_path": "/Content/Scenes/VsmBug1Flat/floor.ogeo",
       "name": "floor",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/VsmBug1Flat/floor_default.omat"]
     },
     {
@@ -42,7 +39,6 @@
       "source": "/Content/Scenes/VsmBug1Flat/cube.ogeo.json",
       "virtual_path": "/Content/Scenes/VsmBug1Flat/cube.ogeo",
       "name": "cube",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/VsmBug1Flat/cube_red.omat"]
     },
     {
@@ -51,7 +47,6 @@
       "source": "/Content/Scenes/VsmBug1Flat/VsmBug1LargePlane.scene.json",
       "virtual_path": "/Content/Scenes/VsmBug1Flat/VsmBug1LargePlane.oscene",
       "name": "VsmBug1LargePlane",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/VsmBug1Flat/floor.ogeo"]
     },
     {
@@ -60,7 +55,6 @@
       "source": "/Content/Scenes/VsmBug1Flat/VsmBug1LargeThinCube.scene.json",
       "virtual_path": "/Content/Scenes/VsmBug1Flat/VsmBug1LargeThinCube.oscene",
       "name": "VsmBug1LargeThinCube",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/VsmBug1Flat/cube.ogeo"]
     }
   ]

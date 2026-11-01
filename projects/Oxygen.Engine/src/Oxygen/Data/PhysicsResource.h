@@ -52,19 +52,11 @@ public:
     return data_.Bytes().size();
   }
   [[nodiscard]] auto GetFormat() const noexcept { return desc_.format; }
-  [[nodiscard]] auto GetContentHash() const noexcept -> uint64_t
+  //! Returns the SHA-256 of the physics data, from the descriptor.
+  [[nodiscard]] auto GetContentHash() const noexcept
+    -> const pak::core::ContentHashDigest&
   {
-    const auto hash_prefix = serio::CopyAt<uint64_t>(
-      std::as_bytes(std::span<const uint8_t> { desc_.content_hash }));
-    if (!hash_prefix) {
-      return 0;
-    }
-    return *hash_prefix;
-  }
-  [[nodiscard]] auto GetContentHashBytes() const noexcept
-    -> std::span<const uint8_t, 32>
-  {
-    return std::span<const uint8_t, 32> { desc_.content_hash };
+    return desc_.content_hash;
   }
 
   [[nodiscard]] auto GetData() const noexcept -> std::span<const uint8_t>

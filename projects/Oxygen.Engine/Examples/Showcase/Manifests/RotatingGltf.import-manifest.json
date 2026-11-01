@@ -28,8 +28,7 @@
       "virtual_path": "/Content/Scenes/RotatingGltf/rotate.oscript",
       "name": "rotate",
       "compile": false,
-      "script_storage": "embedded",
-      "content_hashing": true
+      "script_storage": "embedded"
     },
     {
       "id": "/Content/Scenes/RotatingGltf/rotate.input",
@@ -43,7 +42,6 @@
       "source": "/Content/Scenes/RotatingGltf/RotatingGltf.scene.json",
       "virtual_path": "/Content/Scenes/RotatingGltf/RotatingGltf.oscene",
       "name": "rotating_gltf",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Models/backpack.glb",
         "/Content/Models/chest.glb",
@@ -55,7 +53,6 @@
       "type": "script-sidecar",
       "name": "rotating_gltf_sidecar",
       "target_scene_virtual_path": "/Content/Scenes/RotatingGltf/RotatingGltf.oscene",
-      "content_hashing": true,
       "bindings": [
         {
           "node_index": 1,

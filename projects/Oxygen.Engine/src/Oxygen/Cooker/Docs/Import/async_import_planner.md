@@ -447,8 +447,9 @@ planner.Tracker(geometry_item)
 ## 10. `content_hash` Gating Rule (PakFormat‑Aligned)
 
 - Resource hashes (`TextureResourceDesc::content_hash`,
-  `BufferResourceDesc::content_hash`) are computed **after** the resource bytes
-  are finalized, on the ThreadPool.
+  `BufferResourceDesc::content_hash`) are full SHA-256 digests computed
+  **after** the resource bytes are finalized, on the ThreadPool, from the bytes
+  the producer holds. No later step reads a data file again to hash it.
 - Asset hashes (`AssetHeader::content_hash`) are computed **after** all
   readiness dependencies are satisfied and the descriptor bytes are final.
 - Hashing always runs on the ThreadPool.

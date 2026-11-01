@@ -90,7 +90,6 @@ namespace {
     std::string_view source_path;
     std::string_view cooked_root;
     std::string_view job_name;
-    bool with_content_hashing { true };
   };
 
   auto BuildBaseImportRequest(const BaseRequestSettings& settings,
@@ -120,8 +119,6 @@ namespace {
       }
     }
 
-    request.options.with_content_hashing
-      = EffectiveContentHashingEnabled(settings.with_content_hashing);
     return request;
   }
 
@@ -152,7 +149,6 @@ auto BuildScriptAssetRequest(const ScriptAssetImportSettings& settings,
       .source_path = settings.source_path,
       .cooked_root = settings.cooked_root,
       .job_name = settings.job_name,
-      .with_content_hashing = settings.with_content_hashing,
     },
     error_stream);
   if (!request.has_value()) {
@@ -222,7 +218,6 @@ auto BuildScriptingSidecarRequest(
       .source_path = source_path_for_request,
       .cooked_root = settings.cooked_root,
       .job_name = settings.job_name,
-      .with_content_hashing = settings.with_content_hashing,
     },
     error_stream);
   if (!request.has_value()) {

@@ -7,7 +7,6 @@
 #pragma once
 
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -77,12 +76,6 @@ public:
 
     //! Enable ThreadPool offload for descriptor assembly.
     bool use_thread_pool = true;
-
-    //! Enable or disable material content hashing.
-    /*!
-     When false, the pipeline MUST NOT compute `content_hash`.
-    */
-    bool with_content_hashing = true;
   };
 
   //! Cooked material payload returned by the pipeline.
@@ -101,10 +94,10 @@ public:
     MaterialSource material;
 
     //! Callback fired when a worker starts processing this item.
-    std::function<void()> on_started {};
+    std::function<void()> on_started;
 
     //! Callback fired when a worker finishes processing this item.
-    std::function<void()> on_finished {};
+    std::function<void()> on_finished;
 
     ImportRequest request;
     observer_ptr<NamingService> naming_service;
@@ -112,7 +105,7 @@ public:
 
     //! A material descriptor job's placement at its identity.
     /*! A model's materials have none: the layout places them by name. */
-    std::optional<internal::AssetPlacement> placement {};
+    std::optional<internal::AssetPlacement> placement;
   };
 
   //! Work completion result.
@@ -128,7 +121,7 @@ public:
   OXGN_COOK_API explicit MaterialPipeline(
     co::ThreadPool& thread_pool, std::optional<Config> config = {});
 
-  OXGN_COOK_API ~MaterialPipeline();
+  OXGN_COOK_API ~MaterialPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(MaterialPipeline)
   OXYGEN_MAKE_NON_MOVABLE(MaterialPipeline)

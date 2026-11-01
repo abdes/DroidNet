@@ -700,6 +700,8 @@ namespace {
       = std::as_bytes(std::span(indices)).first(table_entries.at(2).size_bytes);
     buffer_data.insert(
       buffer_data.end(), index_bytes.begin(), index_bytes.end());
+    table_entries.at(1).content_hash = base::ComputeSha256(vertex_bytes);
+    table_entries.at(2).content_hash = base::ComputeSha256(index_bytes);
 
     auto table_bytes = std::vector<std::byte> {};
     table_bytes.reserve(sizeof(table_entries));

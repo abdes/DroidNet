@@ -15,9 +15,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -25,7 +23,6 @@ namespace {
 
 using nlohmann::json;
 using oxygen::content::import::ImportManifest;
-using oxygen::cooker::test::kContentHashingDefault;
 using oxygen::cooker::test::WriteText;
 using oxygen::testing::ScopedTempDir;
 
@@ -40,7 +37,6 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   WriteText(descriptor_path,
     R"({
       "name": "ground",
-      "content_hashing": false,
       "static_friction": 0.95,
       "dynamic_friction": 0.70,
       "restitution": 0.05,
@@ -55,7 +51,6 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
       "output": ".cooked",
       "defaults": {
         "physics_material_descriptor": {
-          "content_hashing": true,
           "name": "default-material-name"
         }
       },
@@ -64,8 +59,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
           "type": "physics-material-descriptor",
           "source": "Physics/ground.material.json",
           "virtual_path": "/.cooked/Physics/Materials/ground.opmat",
-          "name": "ground_material_job",
-          "content_hashing": true
+          "name": "ground_material_job"
         }
       ]
     })";
@@ -86,10 +80,6 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   EXPECT_EQ(
     request->asset_virtual_path, "/.cooked/Physics/Materials/ground.opmat");
   ASSERT_HAS_VALUE(request->physics_material_descriptor);
-
-  // Descriptor-level content_hashing overrides manifest defaults/job settings.
-  // Release must hash authored content even when the descriptor opts out.
-  EXPECT_EQ(request->options.with_content_hashing, kContentHashingDefault);
 
   const auto normalized = json::parse(
     request->physics_material_descriptor->normalized_descriptor_json);

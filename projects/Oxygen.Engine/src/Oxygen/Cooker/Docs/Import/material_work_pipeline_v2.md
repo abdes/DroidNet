@@ -203,7 +203,6 @@ public:
     size_t queue_capacity = 64;
     uint32_t worker_count = 2;
     bool use_thread_pool = true;
-    bool with_content_hashing = true;
   };
 
   explicit MaterialPipeline(co::ThreadPool& thread_pool, Config cfg = {});
@@ -299,7 +298,7 @@ For each work item:
 10. Serialize descriptor bytes with packed alignment = 1, followed by shader
     references.
 11. Compute `header.content_hash` on the ThreadPool after the full descriptor
-    bytes are known **only when hashing is enabled**.
+    bytes are known.
 12. Return `CookedMaterialPayload`.
 
 ---
@@ -323,7 +322,7 @@ The pipeline is defined as two stages with explicit parallelization boundaries:
 - Build `ShaderReferenceDesc` table and `shader_stages`
 - Serialize descriptor bytes + shader references
 - Compute `header.content_hash` on the ThreadPool after the full descriptor
-  bytes are finalized **only when hashing is enabled**
+  bytes are finalized
 
 ---
 
@@ -352,7 +351,7 @@ Key requirements:
   successful materials and must emit a diagnostic)
 - `header.version = kMaterialAssetVersion`
 - `header.content_hash` is computed on the ThreadPool after dependencies are
-  ready **only when hashing is enabled** and is non-zero when payload bytes are
+  ready and is non-zero when payload bytes are
   non-empty
 
 ### UV Transform Fields
@@ -427,7 +426,7 @@ the PAK format:
   thickness, IOR, and attenuation.
 - Asset header metadata: `version`, `streaming_priority`, `content_hash`,
   `variant_flags` (`content_hash` computed on the ThreadPool after dependencies
-  are ready **only when hashing is enabled**).
+  are ready).
 - UV transform and UV set handling via the extension above or baking.
 
 ---

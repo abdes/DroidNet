@@ -5,14 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <span>
 #include <string_view>
-#include <system_error>
 #include <utility>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -26,48 +25,6 @@
 namespace oxygen::scripting {
 
 namespace {
-
-  auto ComputeExternalSourceFingerprint(const std::filesystem::path& full_path,
-    const std::span<const uint8_t> bytes) -> uint64_t
-  {
-    constexpr uint64_t kFnvOffsetBasis = 1469598103934665603ULL;
-    constexpr uint64_t kFnvPrime = 1099511628211ULL;
-
-    auto hash = kFnvOffsetBasis;
-    constexpr uint64_t kByteMask = 0xFFU;
-    constexpr int kBytesPerWord = 8;
-    constexpr uint64_t kBitsPerByte = 8U;
-    auto mix_u64 = [&hash](const uint64_t value) -> void {
-      auto v = value;
-      for (int i = 0; i < kBytesPerWord; ++i) {
-        hash ^= (v & kByteMask);
-        hash *= kFnvPrime;
-        v >>= kBitsPerByte;
-      }
-    };
-
-    std::error_code ec;
-    const auto write_time = std::filesystem::last_write_time(full_path, ec);
-    if (!ec) {
-      const auto ticks
-        = static_cast<uint64_t>(write_time.time_since_epoch().count());
-      mix_u64(ticks);
-    }
-
-    ec.clear();
-    const auto size = std::filesystem::file_size(full_path, ec);
-    if (!ec) {
-      mix_u64(size);
-    }
-
-    mix_u64(static_cast<uint64_t>(bytes.size()));
-    for (const auto byte : bytes) {
-      hash ^= static_cast<uint64_t>(byte);
-      hash *= kFnvPrime;
-    }
-
-    return hash;
-  }
 
   auto NormalizeExternalPath(std::string_view path_text)
     -> std::filesystem::path
@@ -212,8 +169,7 @@ auto ExternalFileResolver::Resolve(
     };
   }
 
-  const auto content_hash
-    = ComputeExternalSourceFingerprint(full_path, bytes->Unsigned());
+  const auto content_hash = base::ComputeSha256(bytes->Bytes());
 
   auto blob = ScriptSourceBlob::FromOwned(std::move(bytes).value(),
     data::pak::scripting::ScriptLanguage::kLuau,

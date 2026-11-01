@@ -187,19 +187,6 @@ enum class NodePruningPolicy : uint8_t {
 //! String representation of enum values in `NodePruningPolicy`.
 OXGN_COOK_API auto to_string(NodePruningPolicy value) -> std::string;
 
-//! Collision handling policy for dedup identity-key conflicts.
-enum class DedupCollisionPolicy : uint8_t {
-  //! Treat conflicts as hard errors.
-  kError = 0,
-  //! Keep the first payload bound to the key and warn.
-  kWarnKeepFirst,
-  //! Replace the key binding with the most recent payload and warn.
-  kWarnReplace,
-};
-
-//! String representation of enum values in `DedupCollisionPolicy`.
-OXGN_COOK_API auto to_string(DedupCollisionPolicy value) -> std::string;
-
 //! Storage policy for script asset payloads.
 /*!
  This is a runtime semantic choice carried in `ImportRequest::options`.
@@ -227,23 +214,6 @@ enum class ScriptingImportKind : uint8_t {
 
 //! String representation of enum values in `ScriptingImportKind`.
 OXGN_COOK_API auto to_string(ScriptingImportKind value) -> std::string;
-
-//! Effective import hashing policy for the current build configuration.
-/*!
- Release builds always hash content, even if callers request disabling it.
-
- * Debug builds honor the caller-provided flag for faster iteration.
- */
-[[nodiscard]] constexpr auto EffectiveContentHashingEnabled(
-  const bool requested) noexcept -> bool
-{
-#ifdef NDEBUG
-  static_cast<void>(requested);
-  return true;
-#else
-  return requested;
-#endif
-}
 
 //! Coordinate conversion policy.
 //! The up axis an FBX import reads its source in.
@@ -502,21 +472,6 @@ struct ImportOptions final {
 
   //! Select which cooked content should be emitted.
   ImportContentFlags import_content = ImportContentFlags::kAll;
-
-  //! Enable or disable content hashing across import pipelines.
-  /*!
-   Debug builds honor this flag directly. Release builds force hashing ON
-   * via
-   `EffectiveContentHashingEnabled()` and ignore attempts to disable
-   * hashing.
-   This applies to textures, buffers, geometry, materials, and
-   * scenes.
-  */
-  bool with_content_hashing = true;
-
-  //! Collision policy for dedup identity-key conflicts in import emitters.
-  DedupCollisionPolicy dedup_collision_policy
-    = DedupCollisionPolicy::kWarnKeepFirst;
 
   //! Physics backend target for sidecar backend-cooked resources.
   struct PhysicsTuning final {

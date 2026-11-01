@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <vector>
 
+#include <Oxygen/Base/Sha256.h>
+
 namespace oxygen::content::import {
 
 //! Cooked buffer payload for async emission.
@@ -30,7 +32,7 @@ namespace oxygen::content::import {
    - `0x10`: Raw buffer
  - `element_stride`: Stride of each element (0 for raw/index buffers).
  - `element_format`: Format enum value (0 = raw or structured).
- - `content_hash`: First 8 bytes of SHA256 of buffer data (for deduplication).
+ - `content_hash`: SHA-256 of `data`, computed by the buffer's producer.
 
  @see BufferResourceDesc for on-disk format
 */
@@ -50,8 +52,8 @@ struct CookedBufferPayload {
   //! Element format enum (0 = raw or structured).
   uint8_t element_format = 0;
 
-  //! Content hash for deduplication (first 8 bytes of SHA256).
-  uint64_t content_hash = 0;
+  //! SHA-256 of `data`, computed by the buffer's producer.
+  base::Sha256Digest content_hash {};
 };
 
 } // namespace oxygen::content::import

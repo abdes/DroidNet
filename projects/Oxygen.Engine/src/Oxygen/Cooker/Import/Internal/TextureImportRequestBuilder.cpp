@@ -35,9 +35,6 @@ auto TextureImportSettings::Prepare(std::ostream& error_stream) const
     }
   }
 
-  request.options.with_content_hashing
-    = EffectiveContentHashingEnabled(settings.with_content_hashing);
-
   auto& tuning = request.options.texture_tuning;
 
   if (!internal::MapSettingsToTuning(settings, tuning, error_stream)) {

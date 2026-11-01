@@ -9,21 +9,19 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
-#include <cstdint>
 #include <span>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
-#include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
@@ -31,318 +29,287 @@
 #include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::content::import;
-using namespace oxygen::co;
-namespace co = oxygen::co;
-using oxygen::cooker::test::kContentHashingDefault;
+using oxygen::co::Co;
+using oxygen::co::kJoin;
+using oxygen::co::SleepFor;
+using oxygen::co::ThreadPool;
 using oxygen::cooker::test::RunPipeline;
 using oxygen::cooker::test::RunPipelineOnce;
 
+namespace oxygen::content::import {
 namespace {
 
-//=== Test Helpers
-//===---------------------------------------------------------//
+  //=== Test Helpers
+  //===---------------------------------------------------------//
 
-auto MakePayload(std::vector<std::byte> data, uint64_t content_hash = 0)
-  -> CookedBufferPayload
-{
-  CookedBufferPayload cooked;
-  cooked.data = std::move(data);
-  cooked.alignment = 16;
-  cooked.usage_flags = 0x01;
-  cooked.element_stride = 32;
-  cooked.element_format = 0;
-  cooked.content_hash = content_hash;
-  return cooked;
-}
+  auto MakePayload(std::vector<std::byte> data) -> CookedBufferPayload
+  {
+    CookedBufferPayload cooked;
+    cooked.data = std::move(data);
+    cooked.alignment = 16;
+    cooked.usage_flags = 0x01;
+    cooked.element_stride = 32;
+    cooked.element_format = 0;
+    return cooked;
+  }
 
-auto MakeWorkItem(std::string source_id, CookedBufferPayload cooked,
-  std::stop_token stop_token = {}) -> BufferPipeline::WorkItem
-{
-  return BufferPipeline::WorkItem {
-    .source_id = std::move(source_id),
-    .cooked = std::move(cooked),
-    .stop_token = std::move(stop_token),
-  };
-}
-
-//=== Basic Behavior Tests
-//===-----------------------------------------------------//
-
-class BufferPipelineTest : public testing::Test {
-protected:
-  ImportEventLoop loop_;
-  ThreadPool pool_ { loop_, 2 };
-};
-
-NOLINT_TEST_F(
-  BufferPipelineTest, EffectiveContentHashingPolicyRespectsBuildConfig)
-{
-  EXPECT_EQ(EffectiveContentHashingEnabled(false), kContentHashingDefault);
-  EXPECT_TRUE(EffectiveContentHashingEnabled(true));
-}
-
-NOLINT_TEST_F(BufferPipelineTest, CollectWithHashingEnabledComputesHash)
-{
-  std::vector<std::byte> bytes {
-    std::byte { 0x10 },
-    std::byte { 0x20 },
-    std::byte { 0x30 },
-    std::byte { 0x40 },
-  };
-  const std::span<const std::byte> span(bytes.data(), bytes.size());
-  const auto expected_hash = util::ComputeContentHash(span);
-
-  const auto result = RunPipelineOnce<BufferPipeline>(loop_,
-    MakeWorkItem("buffer0", MakePayload(std::move(bytes), 0 /*content_hash*/)),
-    pool_,
-    BufferPipeline::Config {
-      .queue_capacity = 4,
-      .worker_count = 1,
-      .with_content_hashing = true,
-    });
-
-  EXPECT_TRUE(result.success);
-  EXPECT_TRUE(result.diagnostics.empty());
-  EXPECT_EQ(result.source_id, "buffer0");
-  EXPECT_EQ(result.cooked.content_hash, expected_hash);
-}
-
-NOLINT_TEST_F(BufferPipelineTest, CollectWithHashingDisabledLeavesHashZero)
-{
-  std::vector<std::byte> bytes(64, std::byte { 0xAB });
-
-  const auto result = RunPipelineOnce<BufferPipeline>(loop_,
-    MakeWorkItem("buffer0", MakePayload(std::move(bytes), 0 /*content_hash*/)),
-    pool_,
-    BufferPipeline::Config {
-      .queue_capacity = 4,
-      .worker_count = 1,
-      .with_content_hashing = false,
-    });
-
-  EXPECT_TRUE(result.success);
-  EXPECT_TRUE(result.diagnostics.empty());
-  EXPECT_EQ(result.source_id, "buffer0");
-  EXPECT_EQ(result.cooked.content_hash, 0ULL);
-}
-
-NOLINT_TEST_F(BufferPipelineTest, CollectWithExistingHashDoesNotOverwrite)
-{
-  constexpr uint64_t kExistingHash = 0x12345678ABCDEF00ULL;
-  std::vector<std::byte> bytes(8, std::byte { 0x01 });
-
-  const auto result = RunPipelineOnce<BufferPipeline>(loop_,
-    MakeWorkItem("buffer0", MakePayload(std::move(bytes), kExistingHash)),
-    pool_,
-    BufferPipeline::Config {
-      .queue_capacity = 4,
-      .worker_count = 1,
-      .with_content_hashing = true,
-    });
-
-  EXPECT_TRUE(result.success);
-  EXPECT_TRUE(result.diagnostics.empty());
-  EXPECT_EQ(result.source_id, "buffer0");
-  EXPECT_EQ(result.cooked.content_hash, kExistingHash);
-}
-
-NOLINT_TEST_F(BufferPipelineTest, CollectWhenCancelledReturnsFailedResult)
-{
-  std::stop_source stop_source;
-  stop_source.request_stop();
-
-  std::vector<std::byte> bytes(16, std::byte { 0x42 });
-
-  const auto result = RunPipelineOnce<BufferPipeline>(loop_,
-    MakeWorkItem("buffer0", MakePayload(std::move(bytes), 0 /*content_hash*/),
-      stop_source.get_token()),
-    pool_,
-    BufferPipeline::Config {
-      .queue_capacity = 4,
-      .worker_count = 1,
-      .with_content_hashing = true,
-    });
-
-  EXPECT_FALSE(result.success);
-  EXPECT_TRUE(result.diagnostics.empty());
-  EXPECT_EQ(result.source_id, "buffer0");
-}
-
-NOLINT_TEST_F(BufferPipelineTest, CollectWhenCancelledAfterSubmitFails)
-{
-  std::stop_source stop_source;
-
-  std::vector<std::byte> bytes(2 * 1024 * 1024, std::byte { 0x77 });
-  BufferPipeline::WorkResult result;
-
-  co::Run(loop_, [&] -> Co<> {
-    BufferPipeline pipeline(pool_,
-      BufferPipeline::Config {
-        .queue_capacity = 4,
-        .worker_count = 1,
-        .with_content_hashing = true,
-      });
-
-    OXCO_WITH_NURSERY(n)
-    {
-      pipeline.Start(n);
-
-      co_await pipeline.Submit(MakeWorkItem("buffer0",
-        MakePayload(std::move(bytes), 0 /*content_hash*/),
-        stop_source.get_token()));
-
-      stop_source.request_stop();
-
-      result = co_await pipeline.Collect();
-      pipeline.Close();
-
-      co_return kJoin;
+  auto MakeWorkItem(std::string source_id, CookedBufferPayload cooked,
+    std::stop_token stop_token = {}) -> BufferPipeline::WorkItem
+  {
+    return BufferPipeline::WorkItem {
+      .source_id = std::move(source_id),
+      .cooked = std::move(cooked),
+      .stop_token = std::move(stop_token),
     };
-  });
+  }
 
-  EXPECT_FALSE(result.success);
-  EXPECT_TRUE(result.diagnostics.empty());
-  EXPECT_EQ(result.source_id, "buffer0");
-  EXPECT_EQ(result.cooked.content_hash, 0ULL);
-}
+  //=== Basic Behavior Tests
+  //===-----------------------------------------------------//
 
-NOLINT_TEST_F(BufferPipelineTest, CollectMixedCancellationReturnsMixedResults)
-{
-  std::stop_source stop_source;
-  BufferPipeline::WorkResult canceled_result;
-  BufferPipeline::WorkResult ok_result;
+  class BufferPipelineTest : public ::testing::Test {
+  protected:
+    ImportEventLoop loop_;
+    ThreadPool pool_ { loop_, 2 };
+  };
 
-  co::Run(loop_, [&] -> Co<> {
-    BufferPipeline pipeline(pool_,
-      BufferPipeline::Config {
-        .queue_capacity = 4,
-        .worker_count = 1,
-        .with_content_hashing = true,
-      });
-
-    OXCO_WITH_NURSERY(n)
-    {
-      pipeline.Start(n);
-
-      co_await pipeline.Submit(MakeWorkItem("canceled",
-        MakePayload(
-          std::vector<std::byte>(128, std::byte { 0x11 }), 0 /*content_hash*/),
-        stop_source.get_token()));
-
-      co_await pipeline.Submit(MakeWorkItem("ok",
-        MakePayload(std::vector<std::byte>(128, std::byte { 0x22 }),
-          0 /*content_hash*/)));
-
-      stop_source.request_stop();
-
-      auto first = co_await pipeline.Collect();
-      auto second = co_await pipeline.Collect();
-
-      if (first.source_id == "canceled") {
-        canceled_result = std::move(first);
-        ok_result = std::move(second);
-      } else {
-        ok_result = std::move(first);
-        canceled_result = std::move(second);
-      }
-
-      pipeline.Close();
-
-      co_return kJoin;
+  NOLINT_TEST_F(BufferPipelineTest, CollectComputesHash)
+  {
+    std::vector<std::byte> bytes {
+      std::byte { 0x10 },
+      std::byte { 0x20 },
+      std::byte { 0x30 },
+      std::byte { 0x40 },
     };
-  });
-
-  EXPECT_FALSE(canceled_result.success);
-  EXPECT_TRUE(canceled_result.diagnostics.empty());
-  EXPECT_EQ(canceled_result.source_id, "canceled");
-  EXPECT_EQ(canceled_result.cooked.content_hash, 0ULL);
-
-  EXPECT_TRUE(ok_result.success);
-  EXPECT_TRUE(ok_result.diagnostics.empty());
-  EXPECT_EQ(ok_result.source_id, "ok");
-  EXPECT_NE(ok_result.cooked.content_hash, 0ULL);
-}
-
-NOLINT_TEST_F(BufferPipelineTest, CollectMultipleSubmissionsCollectsAll)
-{
-  constexpr int kCount = 8;
-  std::unordered_map<std::string, uint64_t> expected_hash_by_id;
-  expected_hash_by_id.reserve(kCount);
-
-  for (int i = 0; i < kCount; ++i) {
-    const std::string id = "buffer" + std::to_string(i);
-    std::vector<std::byte> bytes(128 + i, static_cast<std::byte>(0x10 + i));
     const std::span<const std::byte> span(bytes.data(), bytes.size());
-    expected_hash_by_id.emplace(id, util::ComputeContentHash(span));
-  }
+    const auto expected_hash = oxygen::base::ComputeSha256(span);
 
-  std::vector<BufferPipeline::WorkItem> items;
-  items.reserve(kCount);
-  for (int i = 0; i < kCount; ++i) {
-    const std::string id = "buffer" + std::to_string(i);
-    std::vector<std::byte> bytes(128 + i, static_cast<std::byte>(0x10 + i));
-    items.push_back(
-      MakeWorkItem(id, MakePayload(std::move(bytes), 0 /*content_hash*/)));
-  }
-
-  const auto results
-    = RunPipeline<BufferPipeline>(loop_, std::move(items), pool_,
-      BufferPipeline::Config {
-        .queue_capacity = 16,
-        .worker_count = 2,
-        .with_content_hashing = true,
-      });
-
-  ASSERT_EQ(results.size(), static_cast<size_t>(kCount));
-  for (const auto& r : results) {
-    EXPECT_TRUE(r.success);
-    EXPECT_TRUE(r.diagnostics.empty());
-    ASSERT_TRUE(expected_hash_by_id.contains(r.source_id));
-    EXPECT_EQ(r.cooked.content_hash, expected_hash_by_id.at(r.source_id));
-  }
-}
-
-//! Proxy check that hashing is dispatched off-thread via ThreadPool.
-NOLINT_TEST_F(
-  BufferPipelineTest, SubmitWithHashingEnabledEventLoopStaysResponsive)
-{
-  std::atomic<bool> posted_ran { false };
-  BufferPipeline::WorkResult result;
-
-  co::Run(loop_, [&] -> Co<> {
-    BufferPipeline pipeline(pool_,
+    const auto result = RunPipelineOnce<BufferPipeline>(loop_,
+      MakeWorkItem("buffer0", MakePayload(std::move(bytes))), pool_,
       BufferPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
-        .with_content_hashing = true,
       });
 
-    OXCO_WITH_NURSERY(n)
-    {
-      pipeline.Start(n);
+    EXPECT_TRUE(result.success);
+    EXPECT_TRUE(result.diagnostics.empty());
+    EXPECT_EQ(result.source_id, "buffer0");
+    EXPECT_EQ(result.cooked.content_hash, expected_hash);
+  }
 
-      std::vector<std::byte> bytes(2 * 1024 * 1024, std::byte { 0xAB });
-      co_await pipeline.Submit(
-        MakeWorkItem("buffer0", MakePayload(std::move(bytes), 0)));
+  //! The pipeline always computes the SHA-256 of the data: a hash the payload
+  //! came with is not trusted.
+  NOLINT_TEST_F(BufferPipelineTest, CollectReplacesAHashThePayloadCameWith)
+  {
+    std::vector<std::byte> bytes(8, std::byte { 0x01 });
+    const auto expected_hash = oxygen::base::ComputeSha256(bytes);
+    auto payload = MakePayload(std::move(bytes));
+    payload.content_hash = oxygen::base::ComputeSha256(
+      std::as_bytes(std::span(std::string_view("stale"))));
 
-      loop_.Post([&posted_ran] -> void { posted_ran.store(true); });
+    const auto result = RunPipelineOnce<BufferPipeline>(loop_,
+      MakeWorkItem("buffer0", std::move(payload)), pool_,
+      BufferPipeline::Config {
+        .queue_capacity = 4,
+        .worker_count = 1,
+      });
 
-      EXPECT_TRUE(pipeline.HasPending());
-      co_await SleepFor(loop_.IoContext(), std::chrono::milliseconds(1));
+    EXPECT_TRUE(result.success);
+    EXPECT_TRUE(result.diagnostics.empty());
+    EXPECT_EQ(result.source_id, "buffer0");
+    EXPECT_EQ(result.cooked.content_hash, expected_hash);
+  }
 
-      result = co_await pipeline.Collect();
-      pipeline.Close();
+  NOLINT_TEST_F(BufferPipelineTest, CollectWhenCancelledReturnsFailedResult)
+  {
+    std::stop_source stop_source;
+    stop_source.request_stop();
 
-      co_return kJoin;
-    };
-  });
+    std::vector<std::byte> bytes(16, std::byte { 0x42 });
 
-  EXPECT_TRUE(posted_ran.load());
-  EXPECT_TRUE(result.success);
-  EXPECT_TRUE(result.diagnostics.empty());
-  EXPECT_EQ(result.source_id, "buffer0");
-  EXPECT_NE(result.cooked.content_hash, 0ULL);
-}
+    const auto result = RunPipelineOnce<BufferPipeline>(loop_,
+      MakeWorkItem(
+        "buffer0", MakePayload(std::move(bytes)), stop_source.get_token()),
+      pool_,
+      BufferPipeline::Config {
+        .queue_capacity = 4,
+        .worker_count = 1,
+      });
+
+    EXPECT_FALSE(result.success);
+    EXPECT_TRUE(result.diagnostics.empty());
+    EXPECT_EQ(result.source_id, "buffer0");
+  }
+
+  NOLINT_TEST_F(BufferPipelineTest, CollectWhenCancelledAfterSubmitFails)
+  {
+    std::stop_source stop_source;
+
+    std::vector<std::byte> bytes(
+      size_t { 2 } * 1024 * 1024, std::byte { 0x77 });
+    BufferPipeline::WorkResult result;
+
+    co::Run(loop_, [&] -> Co<> {
+      BufferPipeline pipeline(pool_,
+        BufferPipeline::Config {
+          .queue_capacity = 4,
+          .worker_count = 1,
+        });
+
+      OXCO_WITH_NURSERY(n)
+      {
+        pipeline.Start(n);
+
+        co_await pipeline.Submit(MakeWorkItem(
+          "buffer0", MakePayload(std::move(bytes)), stop_source.get_token()));
+
+        stop_source.request_stop();
+
+        result = co_await pipeline.Collect();
+        pipeline.Close();
+
+        co_return kJoin;
+      };
+    });
+
+    EXPECT_FALSE(result.success);
+    EXPECT_TRUE(result.diagnostics.empty());
+    EXPECT_EQ(result.source_id, "buffer0");
+    EXPECT_TRUE(oxygen::base::IsAllZero(result.cooked.content_hash));
+  }
+
+  NOLINT_TEST_F(BufferPipelineTest, CollectMixedCancellationReturnsMixedResults)
+  {
+    std::stop_source stop_source;
+    BufferPipeline::WorkResult canceled_result;
+    BufferPipeline::WorkResult ok_result;
+
+    co::Run(loop_, [&] -> Co<> {
+      BufferPipeline pipeline(pool_,
+        BufferPipeline::Config {
+          .queue_capacity = 4,
+          .worker_count = 1,
+        });
+
+      OXCO_WITH_NURSERY(n)
+      {
+        pipeline.Start(n);
+
+        co_await pipeline.Submit(MakeWorkItem("canceled",
+          MakePayload(std::vector<std::byte>(128, std::byte { 0x11 })),
+          stop_source.get_token()));
+
+        co_await pipeline.Submit(MakeWorkItem(
+          "ok", MakePayload(std::vector<std::byte>(128, std::byte { 0x22 }))));
+
+        stop_source.request_stop();
+
+        auto first = co_await pipeline.Collect();
+        auto second = co_await pipeline.Collect();
+
+        if (first.source_id == "canceled") {
+          canceled_result = std::move(first);
+          ok_result = std::move(second);
+        } else {
+          ok_result = std::move(first);
+          canceled_result = std::move(second);
+        }
+
+        pipeline.Close();
+
+        co_return kJoin;
+      };
+    });
+
+    EXPECT_FALSE(canceled_result.success);
+    EXPECT_TRUE(canceled_result.diagnostics.empty());
+    EXPECT_EQ(canceled_result.source_id, "canceled");
+    EXPECT_TRUE(oxygen::base::IsAllZero(canceled_result.cooked.content_hash));
+
+    EXPECT_TRUE(ok_result.success);
+    EXPECT_TRUE(ok_result.diagnostics.empty());
+    EXPECT_EQ(ok_result.source_id, "ok");
+    EXPECT_FALSE(oxygen::base::IsAllZero(ok_result.cooked.content_hash));
+  }
+
+  NOLINT_TEST_F(BufferPipelineTest, CollectMultipleSubmissionsCollectsAll)
+  {
+    constexpr int kCount = 8;
+    std::unordered_map<std::string, oxygen::base::Sha256Digest>
+      expected_hash_by_id;
+    expected_hash_by_id.reserve(kCount);
+
+    for (int i = 0; i < kCount; ++i) {
+      const std::string id = "buffer" + std::to_string(i);
+      std::vector<std::byte> bytes(128 + i, static_cast<std::byte>(0x10 + i));
+      const std::span<const std::byte> span(bytes.data(), bytes.size());
+      expected_hash_by_id.emplace(id, oxygen::base::ComputeSha256(span));
+    }
+
+    std::vector<BufferPipeline::WorkItem> items;
+    items.reserve(kCount);
+    for (int i = 0; i < kCount; ++i) {
+      const std::string id = "buffer" + std::to_string(i);
+      std::vector<std::byte> bytes(128 + i, static_cast<std::byte>(0x10 + i));
+      items.push_back(MakeWorkItem(id, MakePayload(std::move(bytes))));
+    }
+
+    const auto results
+      = RunPipeline<BufferPipeline>(loop_, std::move(items), pool_,
+        BufferPipeline::Config {
+          .queue_capacity = 16,
+          .worker_count = 2,
+        });
+
+    ASSERT_EQ(results.size(), static_cast<size_t>(kCount));
+    for (const auto& r : results) {
+      EXPECT_TRUE(r.success);
+      EXPECT_TRUE(r.diagnostics.empty());
+      ASSERT_TRUE(expected_hash_by_id.contains(r.source_id));
+      EXPECT_EQ(r.cooked.content_hash, expected_hash_by_id.at(r.source_id));
+    }
+  }
+
+  //! Proxy check that hashing is dispatched off-thread via ThreadPool.
+  NOLINT_TEST_F(BufferPipelineTest, SubmitEventLoopStaysResponsive)
+  {
+    std::atomic<bool> posted_ran { false };
+    BufferPipeline::WorkResult result;
+
+    co::Run(loop_, [&] -> Co<> {
+      BufferPipeline pipeline(pool_,
+        BufferPipeline::Config {
+          .queue_capacity = 4,
+          .worker_count = 1,
+        });
+
+      OXCO_WITH_NURSERY(n)
+      {
+        pipeline.Start(n);
+
+        std::vector<std::byte> bytes(
+          size_t { 2 } * 1024 * 1024, std::byte { 0xAB });
+        co_await pipeline.Submit(
+          MakeWorkItem("buffer0", MakePayload(std::move(bytes))));
+
+        loop_.Post([&posted_ran] -> void { posted_ran.store(true); });
+
+        EXPECT_TRUE(pipeline.HasPending());
+        co_await SleepFor(loop_.IoContext(), std::chrono::milliseconds(1));
+
+        result = co_await pipeline.Collect();
+        pipeline.Close();
+
+        co_return kJoin;
+      };
+    });
+
+    EXPECT_TRUE(posted_ran.load());
+    EXPECT_TRUE(result.success);
+    EXPECT_TRUE(result.diagnostics.empty());
+    EXPECT_EQ(result.source_id, "buffer0");
+    EXPECT_FALSE(oxygen::base::IsAllZero(result.cooked.content_hash));
+  }
 
 } // namespace
+
+} // namespace oxygen::content::import

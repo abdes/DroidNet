@@ -26,9 +26,8 @@ Core properties:
   the canonical behavior
 - **Planner‑gated**: the planner submits work only when dependencies are ready
   (textures typically have no upstream dependencies)
-- **Configurable hashing**: payload `content_hash` is optional and is
-  controlled by `ImportOptions::with_content_hashing`, cascading into the
-  pipeline config. When disabled, the pipeline MUST NOT compute hashes.
+- **Always hashed**: the pipeline always computes the payload `content_hash`,
+  the full SHA-256 of the payload bytes it holds.
 
 The concrete stage graph and data contracts are specified in
 **Pipeline Stages (Legacy Cooker Parity)** and **Cooked Output Contract**.
@@ -48,7 +47,7 @@ job orchestration acquires sources, submits, collects, and commits via emitters)
 - **TexturePipeline**: produces `CookedTexturePayload` (compute-only, with the
   exception of loading external texture sources), including deterministic
   placeholders when requested.
-- **TextureEmitter**: ensures fallback index `0`, deduplicates by signature,
+- **TextureEmitter**: ensures fallback index `0`, deduplicates by descriptor and SHA-256,
   assigns stable indices immediately, and performs all async I/O to
   `textures.data` and `textures.table`.
 - **ImportSession::Finalize()**: waits for emitter I/O, writes tables, then
@@ -187,7 +186,6 @@ public:
   struct Config {
     size_t queue_capacity = 64;
     uint32_t worker_count = 4;
-    bool with_content_hashing = true;
 
     // Optional async file reader for resolving WorkItem::source_path when
     // the submitted WorkItem does not already contain source bytes.
@@ -373,11 +371,10 @@ These stages follow the current synchronous implementation in
     - Use policy alignment for row pitch and subresource offsets
 
 13. **Build final payload**
-    - `TexturePayloadHeader` (28 bytes) + `SubresourceLayout[]` + aligned data
+    - `TexturePayloadHeader` (20 bytes) + `SubresourceLayout[]` + aligned data
     - `data_offset_bytes = AlignSubresourceOffset(layouts_offset + layouts_bytes)`
-    - `content_hash = detail::ComputeContentHash(payload)` computed on the
-      ThreadPool **only when hashing is enabled** (first 8 bytes of SHA-256
-      over the full payload)
+    - `content_hash` is the SHA-256 over the full payload as stored, computed
+      on the ThreadPool; the header carries no hash
 
 14. **Return cooked result**
     - `CookedTexturePayload.desc` includes shape, mip count, final format,
@@ -399,14 +396,14 @@ The pipeline must produce payload bytes identical to the sync cooker.
 ### `textures.data` Payload Layout
 
 ```text
-TexturePayloadHeader (28 bytes, magic "OTX1")
+TexturePayloadHeader (20 bytes, magic "OTX1")
 SubresourceLayout[subresource_count] (12 bytes each)
 [padding to data_offset_bytes]
 Subresource data (layer-major order)
 ```
 
 - `subresource_count = array_layers * mip_levels`
-- `layouts_offset_bytes` is typically `sizeof(TexturePayloadHeader)`
+- `layouts_offset_bytes` is typically `sizeof(TexturePayloadHeader)` (20)
 - `data_offset_bytes` is aligned via `policy.AlignSubresourceOffset(...)`
 
 ### `textures.table` Entry (Emitter Conversion)
@@ -417,8 +414,8 @@ Subresource data (layer-major order)
 - `compression_type = 7` for BC7, `0` otherwise
 - `alignment = policy.AlignRowPitchBytes(1)` (256 for D3D12, 1 for tight)
 - `size_bytes = payload.size()`
-- `content_hash` comes from the payload header and is computed on the
-  ThreadPool only when hashing is enabled
+- `content_hash` is the payload's SHA-256 computed by the pipeline on the
+  ThreadPool (`TextureResourceDesc::content_hash`, a `ContentHashDigest`)
 
 ### Data File Alignment
 
@@ -427,8 +424,9 @@ Emitter offsets in `textures.data` are reserved with
 
 ### Dedup Signature
 
-`TextureEmitter` deduplicates by a stable signature derived from the emitted
-`TextureResourceDesc` fields: `content_hash`, `width`, `height`, `mip_levels`,
+`TextureEmitter` refuses a payload without a SHA-256 and deduplicates by a
+stable signature derived from the emitted `TextureResourceDesc` fields:
+`content_hash` (full SHA-256), `width`, `height`, `mip_levels`,
 `format`, `alignment`, and `size_bytes`.
 
 ### Placeholder Contract
@@ -450,8 +448,7 @@ payload is created by `TextureEmitter` and reused across all failures.
 - Output formats: RGBA8 (linear/sRGB), RGBA16F, RGBA32F, BC7 (linear/sRGB)
 - sRGB reinterpretation for RGBA8/BC7 when the storage is bit-identical
 - Packing policy alignment and layer-major subresource ordering
-- Payload header/layout format and `content_hash` calculation (SHA-256 first 8
-  bytes) are performed on the ThreadPool **only when hashing is enabled**
+- Payload header/layout format and `content_hash` calculation (full SHA-256) are performed on the ThreadPool
 - Multi-source cooking: cubemaps and 2D arrays with pre-authored mips
 - Single-source cubemap transforms: equirect → cube and layout extraction
 - Placeholder generation (when enabled) matches sync path exactly
@@ -490,7 +487,7 @@ payload is created by `TextureEmitter` and reused across all failures.
   - never writes output files and never calls emitters
 - `TextureEmitter`:
   - ensures fallback index `0`
-  - deduplicates by signature
+  - deduplicates by descriptor and SHA-256
   - writes `textures.data` and `textures.table`
 
 ### Single-writer rule

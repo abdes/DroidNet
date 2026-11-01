@@ -491,14 +491,14 @@ Script command maps to `ScriptAssetImportSettings` and supports:
 1. `--compile`
 2. `--compile-mode`
 3. `--script-storage`
-4. `-i/--output`, `--name`, `--report`, `--content-hashing`
+4. `-i/--output`, `--name`, `--report`
 
 Scripting sidecar command maps to `ScriptingSidecarImportSettings` and
 supports:
 
 1. positional `source` OR `--bindings-inline` (exactly one)
 2. required `--target-scene-virtual-path`
-3. `-i/--output`, `--name`, `--report`, `--content-hashing`
+3. `-i/--output`, `--name`, `--report`
 
 `--bindings-inline` accepted forms:
 

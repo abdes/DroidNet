@@ -186,21 +186,11 @@ inline auto LoadScriptResource(const LoaderContext& context)
 
   auto data_buffer = TakePayload(context, desc.size_bytes, "script resource");
 
-  if (desc.content_hash != 0) {
-    constexpr size_t kScriptContentHashBytes = 8;
-    constexpr size_t kByteShiftBits = 8;
-    const auto digest = base::ComputeSha256(data_buffer.Bytes());
-    uint64_t computed_hash = 0;
-    for (size_t i = 0; i < kScriptContentHashBytes; ++i) {
-      computed_hash |= static_cast<uint64_t>(digest.at(i))
-        << (i * kByteShiftBits);
-    }
-    if (computed_hash != desc.content_hash) {
-      throw std::runtime_error(
-        fmt::format("script resource content hash mismatch "
-                    "(expected=0x{:016X}, got=0x{:016X})",
-          desc.content_hash, computed_hash));
-    }
+  if (const auto digest = base::ComputeSha256(data_buffer.Bytes());
+    digest != desc.content_hash) {
+    throw std::runtime_error(
+      fmt::format("script resource SHA-256 mismatch (expected={}, got={})",
+        base::ToHexString(desc.content_hash), base::ToHexString(digest)));
   }
 
   return std::make_unique<data::ScriptResource>(desc, std::move(data_buffer));

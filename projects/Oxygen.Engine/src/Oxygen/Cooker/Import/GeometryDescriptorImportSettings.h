@@ -24,9 +24,6 @@ struct GeometryDescriptorImportSettings final {
 
   //! Optional explicit job name override.
   std::string job_name;
-
-  //! Requested content-hashing policy.
-  bool with_content_hashing = true;
 };
 
 } // namespace oxygen::content::import

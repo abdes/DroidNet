@@ -18,6 +18,7 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinder.h>
@@ -246,12 +247,12 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptInstancesAreIsolated)
   const std::string source = "if counter == nil then counter = 0 end\ncounter "
                              "= counter + 1\nreturn counter";
   const auto bytes_vec = std::vector<uint8_t>(source.begin(), source.end());
-  constexpr uint64_t kTestId = 123;
   auto blob = ScriptSourceBlob::FromOwned(
     oxygen::serio::ByteBuffer::CopyOf(std::as_bytes(std::span(bytes_vec)))
       .value(),
     oxygen::data::pak::scripting::ScriptLanguage::kLuau,
-    oxygen::data::pak::scripting::ScriptCompression::kNone, kTestId,
+    oxygen::data::pak::scripting::ScriptCompression::kNone,
+    oxygen::base::ComputeSha256(std::as_bytes(std::span(bytes_vec))),
     oxygen::scripting::ScriptBlobOrigin::kExternalFile,
     oxygen::scripting::ScriptBlobCanonicalName { "isolation_test" });
 

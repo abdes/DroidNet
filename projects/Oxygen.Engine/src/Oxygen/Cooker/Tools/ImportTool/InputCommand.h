@@ -34,7 +34,6 @@ private:
     std::string source_path;
     std::string virtual_path;
     std::string cooked_root;
-    bool with_content_hashing = true;
     std::string job_name;
     std::string report_path;
   } options_ {};

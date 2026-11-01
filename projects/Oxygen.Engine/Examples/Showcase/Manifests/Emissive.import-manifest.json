@@ -16,40 +16,35 @@
       "type": "material-descriptor",
       "source": "/Content/Scenes/Emissive/MatEmissiveRed.omat.json",
       "virtual_path": "/Content/Scenes/Emissive/MatEmissiveRed.omat",
-      "name": "MatEmissiveRed",
-      "content_hashing": true
+      "name": "MatEmissiveRed"
     },
     {
       "id": "/Content/Scenes/Emissive/MatEmissiveGreen.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/Emissive/MatEmissiveGreen.omat.json",
       "virtual_path": "/Content/Scenes/Emissive/MatEmissiveGreen.omat",
-      "name": "MatEmissiveGreen",
-      "content_hashing": true
+      "name": "MatEmissiveGreen"
     },
     {
       "id": "/Content/Scenes/Emissive/MatEmissiveBlue.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/Emissive/MatEmissiveBlue.omat.json",
       "virtual_path": "/Content/Scenes/Emissive/MatEmissiveBlue.omat",
-      "name": "MatEmissiveBlue",
-      "content_hashing": true
+      "name": "MatEmissiveBlue"
     },
     {
       "id": "/Content/Scenes/Emissive/MatEmissiveTextured.omat",
       "type": "material-descriptor",
       "source": "/Content/Scenes/Emissive/MatEmissiveTextured.omat.json",
       "virtual_path": "/Content/Scenes/Emissive/MatEmissiveTextured.omat",
-      "name": "MatEmissiveTextured",
-      "content_hashing": true
+      "name": "MatEmissiveTextured"
     },
     {
       "id": "/Content/Scenes/Emissive/MatEmissiveMasked_mask.otex",
       "type": "texture-descriptor",
       "source": "/Content/Scenes/Emissive/MatEmissiveMasked_mask.otex.json",
       "virtual_path": "/Content/Scenes/Emissive/MatEmissiveMasked_mask.otex",
-      "name": "MatEmissiveMasked_mask",
-      "content_hashing": true
+      "name": "MatEmissiveMasked_mask"
     },
     {
       "id": "/Content/Scenes/Emissive/MatEmissiveMasked.omat",
@@ -57,7 +52,6 @@
       "source": "/Content/Scenes/Emissive/MatEmissiveMasked.omat.json",
       "virtual_path": "/Content/Scenes/Emissive/MatEmissiveMasked.omat",
       "name": "MatEmissiveMasked",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/Emissive/MatEmissiveMasked_mask.otex"]
     },
     {
@@ -65,8 +59,7 @@
       "type": "material-descriptor",
       "source": "/Content/Scenes/Emissive/MatReference.omat.json",
       "virtual_path": "/Content/Scenes/Emissive/MatReference.omat",
-      "name": "MatReference",
-      "content_hashing": true
+      "name": "MatReference"
     },
     {
       "id": "/Content/Scenes/Emissive/GeoEmissiveRed.ogeo",
@@ -74,7 +67,6 @@
       "source": "/Content/Scenes/Emissive/GeoEmissiveRed.ogeo.json",
       "virtual_path": "/Content/Scenes/Emissive/GeoEmissiveRed.ogeo",
       "name": "GeoEmissiveRed",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/Emissive/MatEmissiveRed.omat"]
     },
     {
@@ -83,7 +75,6 @@
       "source": "/Content/Scenes/Emissive/GeoEmissiveGreen.ogeo.json",
       "virtual_path": "/Content/Scenes/Emissive/GeoEmissiveGreen.ogeo",
       "name": "GeoEmissiveGreen",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/Emissive/MatEmissiveGreen.omat"]
     },
     {
@@ -92,7 +83,6 @@
       "source": "/Content/Scenes/Emissive/GeoEmissiveBlue.ogeo.json",
       "virtual_path": "/Content/Scenes/Emissive/GeoEmissiveBlue.ogeo",
       "name": "GeoEmissiveBlue",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/Emissive/MatEmissiveBlue.omat"]
     },
     {
@@ -101,7 +91,6 @@
       "source": "/Content/Scenes/Emissive/GeoEmissiveTextured.ogeo.json",
       "virtual_path": "/Content/Scenes/Emissive/GeoEmissiveTextured.ogeo",
       "name": "GeoEmissiveTextured",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/Emissive/MatEmissiveTextured.omat"]
     },
     {
@@ -110,7 +99,6 @@
       "source": "/Content/Scenes/Emissive/GeoEmissiveMasked.ogeo.json",
       "virtual_path": "/Content/Scenes/Emissive/GeoEmissiveMasked.ogeo",
       "name": "GeoEmissiveMasked",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/Emissive/MatEmissiveMasked.omat"]
     },
     {
@@ -119,7 +107,6 @@
       "source": "/Content/Scenes/Emissive/GeoReference.ogeo.json",
       "virtual_path": "/Content/Scenes/Emissive/GeoReference.ogeo",
       "name": "GeoReference",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/Emissive/MatReference.omat"]
     },
     {
@@ -128,7 +115,6 @@
       "source": "/Content/Scenes/Emissive/EmissiveScene.scene.json",
       "virtual_path": "/Content/Scenes/Emissive/EmissiveScene.oscene",
       "name": "EmissiveScene",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Scenes/Emissive/GeoEmissiveRed.ogeo",
         "/Content/Scenes/Emissive/GeoEmissiveGreen.ogeo",

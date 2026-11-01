@@ -13,7 +13,6 @@
   "defaults": {
     "texture": {
       "output": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/Tools/ImportTool/Testing/Cooked",
-      "content_hashing": false,
       "mip_policy": "none",
       "mip_filter": "box",
       "output_format": "rgba8_srgb",
@@ -30,7 +29,6 @@
     },
     "scene": {
       "output": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/Tools/ImportTool/Testing/Cooked",
-      "content_hashing": false,
       "content_flags": {
         "textures": true,
         "materials": true,

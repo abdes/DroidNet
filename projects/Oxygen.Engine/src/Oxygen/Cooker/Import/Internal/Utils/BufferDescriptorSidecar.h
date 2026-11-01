@@ -27,7 +27,7 @@ inline constexpr std::string_view kImplicitBufferViewName = "__all__";
 //! The `.obuf` sidecar: this header, `view_count` view entries, then a string
 //! table of `strings_size` bytes.
 inline constexpr std::array kBufferSidecarMagic { 'O', 'B', 'U', 'F' };
-inline constexpr uint16_t kBufferSidecarVersion = 3;
+inline constexpr uint16_t kBufferSidecarVersion = 4;
 
 #pragma pack(push, 1)
 struct BufferSidecarHeader final {

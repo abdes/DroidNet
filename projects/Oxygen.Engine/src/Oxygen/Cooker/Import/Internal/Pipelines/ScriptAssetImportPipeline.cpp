@@ -40,6 +40,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -349,10 +350,7 @@ namespace {
       ? ScriptEncoding::kBytecode
       : ScriptEncoding::kSource;
     resource_desc.compression = ScriptCompression::kNone;
-    resource_desc.content_hash
-      = EffectiveContentHashingEnabled(request.options.with_content_hashing)
-      ? script_import::ComputeContentHash64(source_bytes)
-      : 0;
+    resource_desc.content_hash = base::ComputeSha256(source_bytes);
     table_entries.push_back(resource_desc);
 
     data_blob.insert(data_blob.end(), source_bytes.begin(), source_bytes.end());
@@ -377,10 +375,9 @@ namespace {
       co_return false;
     }
 
-    // Both files were written whole from these bytes: their digests are the
-    // producer's, and the index never reads them back.
+    // The table was written whole from these bytes: its digest is the
+    // producer's. The data file carries no digest; its rows carry them.
     const auto table_bytes = std::as_bytes(std::span(table_entries));
-    const auto data_bytes = std::span<const std::byte>(data_blob);
     try {
       registry->RegisterExternalFile(session.CookedRoot(),
         FileKind::kScriptsTable, table_relpath,
@@ -388,12 +385,8 @@ namespace {
           .size = table_bytes.size(),
           .sha256 = base::ComputeSha256(table_bytes),
         });
-      registry->RegisterExternalFile(session.CookedRoot(),
-        FileKind::kScriptsData, data_relpath,
-        LooseCookedFileDigest {
-          .size = data_bytes.size(),
-          .sha256 = base::ComputeSha256(data_bytes),
-        });
+      registry->RegisterExternalDataFile(
+        session.CookedRoot(), FileKind::kScriptsData, data_relpath);
     } catch (const std::exception& ex) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.index_registration_failed", ex.what());

@@ -42,8 +42,6 @@ struct ScriptAssetImportSettings final {
   std::string compile_mode { "debug" };
   //! String storage mode parsed by the builder ("embedded" or "external").
   std::string script_storage { "embedded" };
-  //! Content hashing request (normalized by `EffectiveContentHashingEnabled`).
-  bool with_content_hashing { true };
 };
 
 //! Tooling-facing settings for one scene scripting sidecar import job.
@@ -85,8 +83,6 @@ struct ScriptingSidecarImportSettings final {
   //! Absolute published roots that resolve scripts and asset parameters the
   //! sidecar's own cooked root does not contain.
   std::vector<std::string> cooked_context_roots;
-  //! Content hashing request (normalized by `EffectiveContentHashingEnabled`).
-  bool with_content_hashing { true };
 };
 
 } // namespace oxygen::content::import

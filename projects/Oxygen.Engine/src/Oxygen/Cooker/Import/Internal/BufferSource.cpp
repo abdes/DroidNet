@@ -168,9 +168,6 @@ auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
     if (buffer_doc.contains("alignment")) {
       entry.alignment = buffer_doc.at("alignment").get<uint64_t>();
     }
-    if (buffer_doc.contains("content_hash")) {
-      entry.content_hash = buffer_doc.at("content_hash").get<uint64_t>();
-    }
 
     auto view_issues = std::vector<internal::BufferDescriptorViewIssue> {};
     entry.view_specs = internal::ParseBufferViewSpecs(

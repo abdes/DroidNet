@@ -17,7 +17,6 @@
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -26,7 +25,6 @@ namespace {
 using nlohmann::json;
 using oxygen::content::import::CollisionShapeDescriptorImportSettings;
 using oxygen::content::import::internal::BuildCollisionShapeDescriptorRequest;
-using oxygen::cooker::test::kContentHashingDefault;
 using oxygen::cooker::test::WriteText;
 using oxygen::testing::ScopedTempDir;
 
@@ -37,7 +35,6 @@ auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   settings.descriptor_path = descriptor_path.string();
   settings.cooked_root = (descriptor_path.parent_path() / ".cooked").string();
   settings.job_name = "manifest-collision-shape";
-  settings.with_content_hashing = true;
   return settings;
 }
 
@@ -52,7 +49,6 @@ NOLINT_TEST(CollisionShapeDescriptorImportRequestBuilderTest,
     R"({
       "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json",
       "name": "floor_box",
-      "content_hashing": false,
       "shape_type": "box",
       "material_ref": "/.cooked/Physics/Materials/ground.opmat",
       "half_extents": [25.0, 0.5, 25.0]
@@ -70,8 +66,6 @@ NOLINT_TEST(CollisionShapeDescriptorImportRequestBuilderTest,
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name,
     std::optional<std::string> { "manifest-collision-shape" });
-  // Release must hash authored content even when the descriptor opts out.
-  EXPECT_EQ(request->options.with_content_hashing, kContentHashingDefault);
   ASSERT_HAS_VALUE(request->collision_shape_descriptor);
 
   const auto normalized = json::parse(

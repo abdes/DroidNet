@@ -4,9 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -22,7 +20,6 @@
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
@@ -87,11 +84,11 @@ namespace {
   }
 
   // Distinct content hashes keep each test's executables apart.
-  constexpr uint64_t kShutdownHash = 5;
-  constexpr uint64_t kFailedStartHash = 6;
-  constexpr uint64_t kPlainTableHash = 7;
-  constexpr uint64_t kSessionEndHash = 8;
-  constexpr uint64_t kSessionDiagnosticHash = 9;
+  const auto kShutdownHash = SlotTestHash(5);
+  const auto kFailedStartHash = SlotTestHash(6);
+  const auto kPlainTableHash = SlotTestHash(7);
+  const auto kSessionEndHash = SlotTestHash(8);
+  const auto kSessionDiagnosticHash = SlotTestHash(9);
 
   //! A script that probes its lifecycle and listener ownership.
   constexpr std::string_view kLifecycleScript = R"lua(
@@ -178,7 +175,7 @@ function script.on_gameplay(self, _dt) log("gameplay", self) end
 function script.on_scene_mutation(self, _dt) log("mutation", self) end
 return script
 )lua",
-    1);
+    SlotTestHash(1));
   ASSERT_NE(executable, nullptr);
   auto scene = std::make_shared<scene::Scene>("order", kDefaultSceneCapacity);
   auto first = scene->CreateNode("first");
@@ -242,7 +239,7 @@ function script.on_gameplay(self, _dt)
 end
 return script
 )lua",
-    2);
+    SlotTestHash(2));
   ASSERT_NE(executable, nullptr);
   const auto declarations
     = data::ScriptParameters { FloatDeclaration("speed", 1.5F) };
@@ -289,7 +286,7 @@ function script.on_start(self)
 end
 return script
 )lua",
-    3);
+    SlotTestHash(3));
   ASSERT_NE(executable, nullptr);
   auto scene = std::make_shared<scene::Scene>("nodes", kDefaultSceneCapacity);
   auto node = scene->CreateNode("script-node");
@@ -334,7 +331,7 @@ NOLINT_TEST_F(ScriptInstanceTest, StartedInstanceEndsWithOnDestroy)
         auto module = MakeModule();
         AttachWithProbe(module);
         auto scene = MakeSceneWithExecutableSlot(
-          "destroy", CompileSlotExecutable(kLifecycleScript, 3));
+          "destroy", CompileSlotExecutable(kLifecycleScript, SlotTestHash(3)));
         ASSERT_NE(scene, nullptr);
         engine::FrameContext frame;
         frame.SetScene(observer_ptr { scene.get() });
@@ -362,7 +359,8 @@ NOLINT_TEST_F(ScriptInstanceTest, StartedInstanceEndsWithOnDestroy)
         case End::kExecutableChanged:
           ASSERT_TRUE(scripting.MarkSlotReady(scripting.Slots().front(),
             CompileSlotExecutable(
-              std::string(kLifecycleScript) + "-- changed\n", 4)));
+              std::string(kLifecycleScript) + "-- changed\n",
+              SlotTestHash(4))));
           scene->SyncObservers();
           break;
         }

@@ -47,8 +47,7 @@ namespace oxygen::content::import {
   @see TextureSourceSet for multi-source textures (cubemaps, arrays)
 */
 OXGN_COOK_NDAPI auto CookTexture(std::span<const std::byte> source_bytes,
-  const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
-  bool with_content_hashing = true)
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
   -> Result<CookedTexturePayload, TextureImportError>;
 
 //! Cook a texture from an already-decoded ScratchImage.
@@ -71,8 +70,7 @@ OXGN_COOK_NDAPI auto CookTexture(std::span<const std::byte> source_bytes,
   @see ConvertEquirectangularToCube for HDR panorama → cubemap workflow
 */
 OXGN_COOK_NDAPI auto CookTexture(ScratchImage&& image,
-  const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
-  bool with_content_hashing = true)
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
   -> Result<CookedTexturePayload, TextureImportError>;
 
 //! Cook a multi-source texture (cube maps and 2D arrays).
@@ -107,8 +105,7 @@ OXGN_COOK_NDAPI auto CookTexture(ScratchImage&& image,
   @see ApplyPreset for easy descriptor configuration
 */
 OXGN_COOK_NDAPI auto CookTexture(const TextureSourceSet& sources,
-  const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
-  bool with_content_hashing = true)
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
   -> Result<CookedTexturePayload, TextureImportError>;
 
 //===----------------------------------------------------------------------===//
@@ -176,17 +173,6 @@ namespace detail {
   */
   OXGN_COOK_NDAPI auto PackSubresources(const ScratchImage& image,
     const ITexturePackingPolicy& policy) -> std::vector<std::byte>;
-
-  //! Compute content hash for deduplication.
-  /*!
-    Uses the first 8 bytes of SHA-256 over the complete payload for
-    content-based deduplication.
-
-    @param payload Payload bytes to hash
-    @return 64-bit content hash
-  */
-  OXGN_COOK_NDAPI auto ComputeContentHash(
-    std::span<const std::byte> payload) noexcept -> uint64_t;
 
 } // namespace detail
 

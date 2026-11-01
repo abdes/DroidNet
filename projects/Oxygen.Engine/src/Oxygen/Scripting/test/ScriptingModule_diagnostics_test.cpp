@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -17,6 +15,7 @@
 #include "ScriptingModule_slot_helpers.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -36,10 +35,10 @@ namespace {
   constexpr std::string_view kScriptName = "Follow";
   constexpr std::string_view kNodeName = "Camera Rig";
 
-  constexpr uint64_t kNestedErrorHash = 0x4E45535445440001ULL;
-  constexpr uint64_t kUnsetTargetHash = 0x554E534554000001ULL;
-  constexpr uint64_t kNotAScriptHash = 0x4E4F545343520001ULL;
-  constexpr uint64_t kLoadErrorHash = 0x4C4F414445520001ULL;
+  const auto kNestedErrorHash = SlotTestHash(0x4E45535445440001ULL);
+  const auto kUnsetTargetHash = SlotTestHash(0x554E534554000001ULL);
+  const auto kNotAScriptHash = SlotTestHash(0x4E4F545343520001ULL);
+  const auto kLoadErrorHash = SlotTestHash(0x4C4F414445520001ULL);
 
   constexpr std::string_view kNestedErrorScript
     = "local script = oxygen.script {}\n"
@@ -84,7 +83,8 @@ namespace {
   class ScriptDiagnosticsTest : public ScriptingModuleTest {
   protected:
     //! Builds a scene whose node `kNodeName` runs `source` in slot 0.
-    auto MakeScene(const std::string_view source, const uint64_t hash,
+    auto MakeScene(const std::string_view source,
+      const base::Sha256Digest& hash,
       const data::ScriptParameters& declarations = {})
       -> std::shared_ptr<scene::Scene>
     {

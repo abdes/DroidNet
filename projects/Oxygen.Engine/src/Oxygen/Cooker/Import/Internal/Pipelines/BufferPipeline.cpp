@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
@@ -69,7 +70,7 @@ auto BufferPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    nursery.Start([this]() -> co::Co<> { co_await Worker(); });
+    nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }
 
@@ -184,6 +185,7 @@ auto BufferPipeline::Worker() -> co::Co<>
       continue;
     }
 
+    const auto success = diagnostics.empty();
     WorkResult result {
       .source_id = std::move(item.source_id),
       .cooked = std::move(item.cooked),
@@ -192,7 +194,7 @@ auto BufferPipeline::Worker() -> co::Co<>
         .cook_duration = MakeDuration(
           cook_start, std::chrono::steady_clock::now()),
       },
-      .success = diagnostics.empty(),
+      .success = success,
     };
     if (item.on_finished) {
       item.on_finished();
@@ -220,15 +222,6 @@ auto BufferPipeline::ReportCancelled(WorkItem item) -> co::Co<>
 auto BufferPipeline::ComputeContentHash(WorkItem& item)
   -> co::Co<std::optional<ImportDiagnostic>>
 {
-  if (!config_.with_content_hashing) {
-    co_return std::nullopt;
-  }
-
-  // Already computed - skip and no diagnostic
-  if (item.cooked.content_hash != 0) {
-    co_return std::nullopt;
-  }
-
   if (IsStopRequested(item.stop_token)) {
     co_return std::nullopt;
   }
@@ -239,17 +232,17 @@ auto BufferPipeline::ComputeContentHash(WorkItem& item)
   const std::string source_id = item.source_id;
   const auto content_hash = co_await thread_pool_.Run(
     [bytes, stop_token = item.stop_token, source_id](
-      co::ThreadPool::CancelToken canceled) noexcept -> uint64_t {
+      co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
       if (IsStopRequested(stop_token) || canceled) {
-        return uint64_t { 0 };
+        return {};
       }
 
-      const auto hash = util::ComputeContentHash(bytes);
-      DLOG_F(2, "hashed {} -> {:#x}", source_id, hash);
+      const auto hash = util::ComputeContentSha256(bytes);
+      DLOG_F(2, "hashed {} -> {}", source_id, base::ToHexString(hash));
       return hash;
     });
 
-  if (!IsStopRequested(item.stop_token) && content_hash != 0) {
+  if (!IsStopRequested(item.stop_token)) {
     item.cooked.content_hash = content_hash;
   }
   co_return std::nullopt;

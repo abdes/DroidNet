@@ -32,6 +32,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -160,7 +161,6 @@ auto PrintV4TexturePayloadSummary(
   Field(
     out, "Layouts Offset", ToHexString(header.layouts_offset_bytes), indent);
   Field(out, "Data Offset", ToHexString(header.data_offset_bytes), indent);
-  Field(out, "Payload Content Hash", ToHexString(header.content_hash), indent);
 
   if (header.total_payload_size != payload.size()) {
     Field(out, "Payload Size Check",

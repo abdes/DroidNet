@@ -16,16 +16,6 @@
 
 namespace oxygen::cooker::test {
 
-//! Whether import requests hash authored content by default when the
-//! descriptor opts out: Release builds always hash, Debug builds honor the
-//! opt-out. The single build-configuration branch lives here so tests share one
-//! assertion line.
-#ifdef NDEBUG
-inline constexpr bool kContentHashingDefault = true;
-#else
-inline constexpr bool kContentHashingDefault = false;
-#endif
-
 //! Asset key with every byte set to `seed`; equal seeds give equal keys.
 [[nodiscard]] inline auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
 {

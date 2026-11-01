@@ -7,7 +7,6 @@
 // Covers: Import/Internal/Emitters/TextureEmitter.cpp
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -15,21 +14,17 @@
 #include <memory>
 #include <span>
 #include <stdexcept>
-#include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
-#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
@@ -124,8 +119,8 @@ protected:
   }
 
   //! Create a test cooked texture payload with specified dimensions.
-  static auto MakeTestPayload(const PayloadProps& payload_props,
-    const bool with_content_hashing = false) -> import::CookedTexturePayload
+  static auto MakeTestPayload(const PayloadProps& payload_props)
+    -> import::CookedTexturePayload
   {
     import::CookedTexturePayload payload;
     payload.desc.width = payload_props.width;
@@ -136,9 +131,6 @@ protected:
     payload.desc.texture_type = oxygen::TextureType::kTexture2D;
     payload.desc.format = oxygen::Format::kBC7UNorm;
 
-    // Default to no hashing so tests cover the fast identity path.
-    payload.desc.content_hash = 0;
-
     // Fill payload with recognizable pattern
     payload.payload.resize(payload_props.data_size);
     for (size_t i = 0; i < payload_props.data_size; ++i) {
@@ -146,15 +138,15 @@ protected:
       payload.payload.at(i) = static_cast<std::byte>(i & kByteMask);
     }
 
-    if (with_content_hashing) {
-      payload.desc.content_hash
-        = import::util::ComputeContentHash(payload.payload);
-      if (payload.desc.content_hash == 0) {
-        payload.desc.content_hash = 1;
-      }
-    }
-
+    SealPayload(payload);
     return payload;
+  }
+
+  //! Records the SHA-256 of the payload bytes, as a producer does; a test
+  //! that changes the bytes seals the payload again.
+  static auto SealPayload(import::CookedTexturePayload& payload) -> void
+  {
+    payload.desc.content_hash = oxygen::base::ComputeSha256(payload.payload);
   }
 
   //! Create a test cooked texture payload with default properties.
@@ -293,7 +285,7 @@ NOLINT_TEST_F(TextureEmitterTest, EmitSingleTextureAssignsFirstIndex)
     TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
     auto payload = MakeTestPayload();
 
-    const auto index = emitter.Emit(std::move(payload), "test_texture");
+    const auto index = emitter.Emit(std::move(payload));
     const auto success = co_await emitter.Finalize();
 
     EXPECT_EQ(index, 1);
@@ -306,28 +298,22 @@ NOLINT_TEST_F(TextureEmitterTest, EmitUniqueTexturesAssignsSequentialIndices)
   RunInNursery([&](co::Nursery& writes) -> co::Co<> {
     TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
 
-    constexpr std::array<std::string_view, 5> kSalts {
-      "t0",
-      "t1",
-      "t2",
-      "t3",
-      "t4",
-    };
+    constexpr size_t kTextureCount = 5;
     std::vector<uint32_t> indices;
-    indices.reserve(kSalts.size());
-    for (size_t i = 0; i < kSalts.size(); ++i) {
-      const auto salt = kSalts.at(i);
+    indices.reserve(kTextureCount);
+    for (size_t i = 0; i < kTextureCount; ++i) {
       auto payload = MakeTestPayload();
       if (!payload.payload.empty()) {
         payload.payload.at(0) = static_cast<std::byte>(i + 1);
       }
-      indices.push_back(emitter.Emit(std::move(payload), salt));
+      SealPayload(payload);
+      indices.push_back(emitter.Emit(std::move(payload)));
     }
 
     const auto success = co_await emitter.Finalize();
 
-    EXPECT_EQ(indices.size(), kSalts.size());
-    for (size_t i = 0; i < kSalts.size(); ++i) {
+    EXPECT_EQ(indices.size(), kTextureCount);
+    for (size_t i = 0; i < kTextureCount; ++i) {
       EXPECT_EQ(indices.at(i), i + 1);
     }
     EXPECT_TRUE(success);
@@ -340,7 +326,7 @@ NOLINT_TEST_F(TextureEmitterTest, EmitStartsWriteAndReturnsBeforeFinalize)
     TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
     auto payload = MakeTestPayload();
 
-    const uint32_t index = emitter.Emit(std::move(payload), "test_texture");
+    const uint32_t index = emitter.Emit(std::move(payload));
     const auto success = co_await emitter.Finalize();
 
     EXPECT_EQ(index, 1);
@@ -356,8 +342,8 @@ NOLINT_TEST_F(TextureEmitterTest, EmitAfterFinalizeThrows)
     const auto success = co_await emitter.Finalize();
     EXPECT_TRUE(success);
 
-    NOLINT_EXPECT_THROW((void)emitter.Emit(MakeTestPayload(), "test_texture"),
-      std::runtime_error);
+    NOLINT_EXPECT_THROW(
+      (void)emitter.Emit(MakeTestPayload()), std::runtime_error);
   });
 }
 
@@ -368,8 +354,8 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeDrainsPendingWrites)
   RunInNursery([&](co::Nursery& writes) -> co::Co<> {
     TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
 
-    (void)emitter.Emit(MakeTestPayload(), "t0");
-    (void)emitter.Emit(MakeTestPayload(), "t1");
+    (void)emitter.Emit(MakeTestPayload());
+    (void)emitter.Emit(MakeTestPayload());
 
     const auto success = co_await emitter.Finalize();
 
@@ -387,8 +373,9 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureTableFile)
     if (!payload1.payload.empty()) {
       payload1.payload.at(0) ^= std::byte { 0xFF };
     }
-    const auto idx0 = emitter.Emit(std::move(payload0), "t0");
-    const auto idx1 = emitter.Emit(std::move(payload1), "t1");
+    SealPayload(payload1);
+    const auto idx0 = emitter.Emit(std::move(payload0));
+    const auto idx1 = emitter.Emit(std::move(payload1));
     EXPECT_EQ(idx0, 1);
     EXPECT_EQ(idx1, 2);
 
@@ -418,19 +405,17 @@ NOLINT_TEST_F(
     constexpr uint32_t kHeight = 8;
     constexpr uint16_t kMipLevels = 4;
     const auto idx0 = emitter.Emit(MakeTestPayload({
-                                     .width = kWidth,
-                                     .height = kHeight,
-                                     .mip_levels = kMipLevels,
-                                     .data_size = kPayloadSize1,
-                                   }),
-      "test_texture");
+      .width = kWidth,
+      .height = kHeight,
+      .mip_levels = kMipLevels,
+      .data_size = kPayloadSize1,
+    }));
     const auto idx1 = emitter.Emit(MakeTestPayload({
-                                     .width = kWidth,
-                                     .height = kHeight,
-                                     .mip_levels = kMipLevels,
-                                     .data_size = kPayloadSize2,
-                                   }),
-      "test_texture2");
+      .width = kWidth,
+      .height = kHeight,
+      .mip_levels = kMipLevels,
+      .data_size = kPayloadSize2,
+    }));
     EXPECT_EQ(idx0, 1);
     EXPECT_EQ(idx1, 2);
 
@@ -480,7 +465,7 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeSerializesTextureMetadataToTable)
     });
     payload.desc.array_layers = kNumLayers;
     payload.desc.depth = kDepth;
-    const auto idx = emitter.Emit(std::move(payload), "test_texture");
+    const auto idx = emitter.Emit(std::move(payload));
     EXPECT_EQ(idx, 1);
 
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
@@ -559,23 +544,21 @@ NOLINT_TEST_F(TextureEmitterTest, StatsDataFileSizeTracksAccumulatedSize)
     EXPECT_EQ(emitter.GetStats().data_file_size, 0);
 
     const auto idx1 = emitter.Emit(MakeTestPayload({
-                                     .width = kWidth,
-                                     .height = kHeight,
-                                     .mip_levels = kMipLevels,
-                                     .data_size = kSize1,
-                                   }),
-      "test_texture1");
+      .width = kWidth,
+      .height = kHeight,
+      .mip_levels = kMipLevels,
+      .data_size = kSize1,
+    }));
     EXPECT_EQ(idx1, 1);
     size_after_first = emitter.GetStats().data_file_size;
     EXPECT_GT(size_after_first, 0);
 
     const auto idx2 = emitter.Emit(MakeTestPayload({
-                                     .width = kWidth,
-                                     .height = kHeight,
-                                     .mip_levels = kMipLevels,
-                                     .data_size = kSize2,
-                                   }),
-      "test_texture2");
+      .width = kWidth,
+      .height = kHeight,
+      .mip_levels = kMipLevels,
+      .data_size = kSize2,
+    }));
     EXPECT_EQ(idx2, 2);
     size_after_second = emitter.GetStats().data_file_size;
     EXPECT_GT(size_after_second, size_after_first);
@@ -615,12 +598,14 @@ NOLINT_TEST_F(TextureEmitterTest, StatsEmittedTexturesCountsFallbackAndUsers)
     if (!payload2.payload.empty()) {
       payload2.payload.at(0) ^= std::byte { 0x22 };
     }
-    const auto idx0 = emitter.Emit(std::move(payload0), "test_texture1");
+    SealPayload(payload1);
+    SealPayload(payload2);
+    const auto idx0 = emitter.Emit(std::move(payload0));
     EXPECT_EQ(idx0, 1);
     EXPECT_EQ(emitter.GetStats().emitted_textures, 2);
 
-    const auto idx1 = emitter.Emit(std::move(payload1), "test_texture2");
-    const auto idx2 = emitter.Emit(std::move(payload2), "test_texture3");
+    const auto idx1 = emitter.Emit(std::move(payload1));
+    const auto idx2 = emitter.Emit(std::move(payload2));
     EXPECT_EQ(idx1, 2);
     EXPECT_EQ(idx2, 3);
     EXPECT_EQ(emitter.GetStats().emitted_textures, 4);
@@ -653,7 +638,7 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesPayloadBytes)
     // Copy before move
     const std::vector<std::byte> expected_data = payload.payload;
 
-    const auto idx = emitter.Emit(std::move(payload), "test_texture");
+    const auto idx = emitter.Emit(std::move(payload));
     EXPECT_EQ(idx, 1);
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     const bool tables_ok = co_await table_registry_->FinalizeAll();
@@ -701,6 +686,7 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
         constexpr auto kSalt = 10;
         b = static_cast<std::byte>((i + 1) * kSalt);
       }
+      SealPayload(payload);
 
       expected_payloads.push_back(payload.payload);
       payloads.push_back(std::move(payload));
@@ -708,8 +694,7 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
 
     // Emit all and finalize in a single Run
     for (size_t i = 0; i < payloads.size(); ++i) {
-      const auto key = "test_texture_" + std::to_string(i);
-      const auto idx = emitter.Emit(std::move(payloads.at(i)), key);
+      const auto idx = emitter.Emit(std::move(payloads.at(i)));
       EXPECT_EQ(idx, static_cast<uint32_t>(i + 1));
     }
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
@@ -750,15 +735,16 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
 
 //=== Deduplication Tests ===-------------------------------------------------//
 
-NOLINT_TEST_F(TextureEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
+//! Identical payloads share one table row: identity is the SHA-256.
+NOLINT_TEST_F(TextureEmitterTest, IdenticalPayloadsShareOneIndex)
 {
   RunInNursery([&](co::Nursery& writes) -> co::Co<> {
     TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
     auto payload1 = MakeTestPayload();
     auto payload2 = MakeTestPayload();
 
-    const uint32_t idx1 = emitter.Emit(std::move(payload1), "salt_a");
-    const uint32_t idx2 = emitter.Emit(std::move(payload2), "salt_b");
+    const uint32_t idx1 = emitter.Emit(std::move(payload1));
+    const uint32_t idx2 = emitter.Emit(std::move(payload2));
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     const bool tables_ok = co_await table_registry_->FinalizeAll();
 
@@ -772,155 +758,20 @@ NOLINT_TEST_F(TextureEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
   });
 }
 
-NOLINT_TEST_F(
-  TextureEmitterTest, CollisionPolicyWarnKeepFirstExpectedToKeepIndex)
-{
-  RunInNursery([&](co::Nursery& writes) -> co::Co<> {
-    std::vector<import::ImportDiagnostic> diagnostics;
-    auto config = MakeEmitterConfig();
-    config.collision_policy = import::DedupCollisionPolicy::kWarnKeepFirst;
-    config.on_dedup_diagnostic
-      = [&](import::ImportDiagnostic diagnostic) -> void {
-      diagnostics.push_back(std::move(diagnostic));
-    };
-    TextureEmitter emitter(writes, TextureAggregator(), std::move(config));
-    auto payload1 = MakeTestPayload();
-    auto payload2 = MakeTestPayload();
-    EXPECT_FALSE(payload2.payload.empty());
-    payload2.payload.at(0) ^= std::byte { 0xFF };
-
-    const uint32_t idx1 = emitter.Emit(std::move(payload1), "same_salt");
-    const uint32_t idx2 = emitter.Emit(std::move(payload2), "same_salt");
-    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
-    const bool tables_ok = co_await table_registry_->FinalizeAll();
-
-    EXPECT_TRUE(tables_ok);
-    EXPECT_EQ(idx1, 1);
-    EXPECT_EQ(idx2, 1);
-    EXPECT_EQ(diagnostics.size(), 1U);
-    if (diagnostics.size() == 1U) {
-      EXPECT_EQ(diagnostics.front().code, "import.dedup_collision.texture");
-      EXPECT_EQ(diagnostics.front().severity, import::ImportSeverity::kWarning);
-    }
-
-    const auto table_path = Root() / loose_layout::kTexturesTable;
-    const auto table = ParseTextureTable(ReadBytes(table_path));
-    EXPECT_EQ(table.size(), 2);
-    co_return;
-  });
-}
-
-NOLINT_TEST_F(TextureEmitterTest, CollisionPolicyWarnReplaceExpectedToEmitNew)
-{
-  RunInNursery([&](co::Nursery& writes) -> co::Co<> {
-    std::vector<import::ImportDiagnostic> diagnostics;
-    auto config = MakeEmitterConfig();
-    config.collision_policy = import::DedupCollisionPolicy::kWarnReplace;
-    config.on_dedup_diagnostic
-      = [&](import::ImportDiagnostic diagnostic) -> void {
-      diagnostics.push_back(std::move(diagnostic));
-    };
-    TextureEmitter emitter(writes, TextureAggregator(), std::move(config));
-    auto payload1 = MakeTestPayload();
-    auto payload2 = MakeTestPayload();
-    EXPECT_FALSE(payload2.payload.empty());
-    payload2.payload.at(0) ^= std::byte { 0x0F };
-
-    const uint32_t idx1 = emitter.Emit(std::move(payload1), "same_salt");
-    const uint32_t idx2 = emitter.Emit(std::move(payload2), "same_salt");
-    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
-    const bool tables_ok = co_await table_registry_->FinalizeAll();
-
-    EXPECT_TRUE(tables_ok);
-    EXPECT_EQ(idx1, 1);
-    EXPECT_EQ(idx2, 2);
-    EXPECT_EQ(diagnostics.size(), 1U);
-    if (diagnostics.size() == 1U) {
-      EXPECT_EQ(diagnostics.front().code, "import.dedup_collision.texture");
-      EXPECT_EQ(diagnostics.front().severity, import::ImportSeverity::kWarning);
-    }
-    co_return;
-  });
-}
-
-NOLINT_TEST_F(TextureEmitterTest, CollisionPolicyErrorExpectedToThrow)
-{
-  RunInNursery([&](co::Nursery& writes) -> co::Co<> {
-    auto config = MakeEmitterConfig();
-    config.collision_policy = import::DedupCollisionPolicy::kError;
-    TextureEmitter emitter(writes, TextureAggregator(), std::move(config));
-    auto payload1 = MakeTestPayload();
-    auto payload2 = MakeTestPayload();
-    EXPECT_FALSE(payload2.payload.empty());
-    payload2.payload.at(0) ^= std::byte { 0xF0 };
-
-    (void)emitter.Emit(std::move(payload1), "same_salt");
-    EXPECT_THROW(
-      (void)emitter.Emit(std::move(payload2), "same_salt"), std::runtime_error);
-    co_return;
-  });
-}
-
-NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSaltIgnoredIdenticalContent)
+//! Payloads of different content get different indices.
+NOLINT_TEST_F(TextureEmitterTest, DifferentContentEmitsNewIndex)
 {
   RunInNursery([&](co::Nursery& writes) -> co::Co<> {
     TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
-    auto payload1 = MakeTestPayload(
-      {
-        .width = kDefaultTextureWidth,
-        .height = kDefaultTextureHeight,
-        .mip_levels = kDefaultTextureMips,
-        .data_size = kDefaultTextureDataSize,
-      },
-      true);
-    auto payload2 = MakeTestPayload(
-      {
-        .width = kDefaultTextureWidth,
-        .height = kDefaultTextureHeight,
-        .mip_levels = kDefaultTextureMips,
-        .data_size = kDefaultTextureDataSize,
-      },
-      true);
-
-    const uint32_t idx1 = emitter.Emit(std::move(payload1), "salt_a");
-    const uint32_t idx2 = emitter.Emit(std::move(payload2), "salt_b");
-    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
-    const bool tables_ok = co_await table_registry_->FinalizeAll();
-
-    EXPECT_TRUE(tables_ok);
-    EXPECT_EQ(idx1, 1);
-    EXPECT_EQ(idx2, 1);
-
-    const auto table_path = Root() / loose_layout::kTexturesTable;
-    const auto table = ParseTextureTable(ReadBytes(table_path));
-    EXPECT_EQ(table.size(), 2);
-  });
-}
-
-NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSameSaltDifferentContent)
-{
-  RunInNursery([&](co::Nursery& writes) -> co::Co<> {
-    TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
-    auto payload1 = MakeTestPayload(
-      {
-        .width = kDefaultTextureWidth,
-        .height = kDefaultTextureHeight,
-        .mip_levels = kDefaultTextureMips,
-        .data_size = kDefaultTextureDataSize,
-      },
-      true);
+    auto payload1 = MakeTestPayload();
     auto payload2 = payload1;
     EXPECT_FALSE(payload2.payload.empty());
     constexpr auto kAllBitsSet = std::numeric_limits<uint8_t>::max();
     payload2.payload.at(0) ^= static_cast<std::byte>(kAllBitsSet);
-    payload2.desc.content_hash
-      = import::util::ComputeContentHash(payload2.payload);
-    if (payload2.desc.content_hash == 0) {
-      payload2.desc.content_hash = 1;
-    }
+    SealPayload(payload2);
 
-    const uint32_t idx1 = emitter.Emit(std::move(payload1), "same_salt");
-    const uint32_t idx2 = emitter.Emit(std::move(payload2), "same_salt");
+    const uint32_t idx1 = emitter.Emit(std::move(payload1));
+    const uint32_t idx2 = emitter.Emit(std::move(payload2));
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     const bool tables_ok = co_await table_registry_->FinalizeAll();
 
@@ -931,6 +782,19 @@ NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSameSaltDifferentContent)
     const auto table_path = Root() / loose_layout::kTexturesTable;
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_EQ(table.size(), 3);
+  });
+}
+
+//! A payload without its SHA-256 is refused: identity is the hash.
+NOLINT_TEST_F(TextureEmitterTest, EmitZeroHashPayloadThrows)
+{
+  RunInNursery([&](co::Nursery& writes) -> co::Co<> {
+    TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
+    auto payload = MakeTestPayload();
+    payload.desc.content_hash = {};
+
+    EXPECT_THROW((void)emitter.Emit(std::move(payload)), std::invalid_argument);
+    co_return;
   });
 }
 

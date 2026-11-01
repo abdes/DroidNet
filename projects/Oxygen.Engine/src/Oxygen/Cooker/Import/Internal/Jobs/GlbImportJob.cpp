@@ -555,8 +555,8 @@ auto GlbImportJob::ExecutePlan(PlannedGlbImport& plan, ImportSession& session)
   OXCO_WITH_NURSERY(n)
   {
     WorkDispatcher::PlanContext context {
-      .planner = plan.planner,
-      .payloads = plan.payloads,
+      .planner = observer_ptr { &plan.planner },
+      .payloads = observer_ptr { &plan.payloads },
       .steps = plan.plan,
       .surfaces = plan.surfaces,
       .geometry_items = plan.geometry_items,

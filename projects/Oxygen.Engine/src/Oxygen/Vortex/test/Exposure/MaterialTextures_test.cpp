@@ -41,7 +41,6 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -626,8 +625,7 @@ NOLINT_TEST_F(
         1.0F,
       };
     }
-    auto shape = vortex::testing::CubeShape(2U);
-    shape.content_hash = wide ? 2U : 1U;
+    const auto shape = vortex::testing::CubeShape(2U);
     auto source = vortex::testing::MakeSyntheticTexture(shape,
       [&colors](std::uint32_t face, std::uint32_t /*x*/,
         std::uint32_t /*y*/) -> Pixel { return colors.at(face); });
@@ -745,8 +743,7 @@ NOLINT_TEST_F(ExposureGpuTest,
   binder->OnFrameStart();
   binder->EnsureFrameResources();
 
-  auto shape = vortex::testing::CubeShape(1U);
-  shape.content_hash = 99U;
+  const auto shape = vortex::testing::CubeShape(1U);
   auto source = vortex::testing::MakeSyntheticTexture(shape,
     [](std::uint32_t /*layer*/, std::uint32_t /*x*/, std::uint32_t /*y*/)
       -> Pixel { return { 0x1p-50F, 0x1p-50F, 0x1p-50F, 1.0F }; });

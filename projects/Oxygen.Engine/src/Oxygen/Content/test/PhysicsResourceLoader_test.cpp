@@ -6,13 +6,14 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include "Fixtures/PhysicsLoaderTestFixtures.h"
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PhysicsResource.h>
@@ -38,10 +39,8 @@ NOLINT_TEST_F(
   desc.size_bytes = 96;
   desc.format
     = oxygen::data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary;
-  {
-    constexpr auto kHashPrefix = 0x1122334455667788ULL;
-    std::memcpy(desc.content_hash, &kHashPrefix, sizeof(kHashPrefix));
-  }
+  desc.content_hash = oxygen::base::ComputeSha256(
+    std::as_bytes(std::span(std::string_view("physics-payload"))));
   WriteDescriptorAndData(desc, 0x7A);
 
   const auto resource = LoadPhysicsResource(MakeContext());
@@ -51,7 +50,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(resource->GetDataSize(), 96U);
   EXPECT_EQ(resource->GetFormat(),
     oxygen::data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary);
-  EXPECT_EQ(resource->GetContentHash(), 0x1122334455667788ULL);
+  EXPECT_EQ(resource->GetContentHash(), desc.content_hash);
   EXPECT_THAT(resource->GetData(), ::testing::Each(static_cast<uint8_t>(0x7A)));
 }
 
@@ -80,8 +79,7 @@ NOLINT_TEST_F(
     = oxygen::data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary;
 
   auto packed_desc = desc_writer_.ScopedAlignment(1);
-  const auto desc_bytes = std::span<const std::byte>(
-    reinterpret_cast<const std::byte*>(&desc), sizeof(desc));
+  const auto desc_bytes = std::as_bytes(std::span(&desc, 1U));
   const auto desc_result = desc_writer_.WriteBlob(desc_bytes);
   ASSERT_TRUE(desc_result);
 

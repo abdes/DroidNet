@@ -329,8 +329,7 @@ namespace {
   [[nodiscard]] auto CookDecodedImage(ScratchImage&& image,
     TextureImportDesc desc, const ITexturePackingPolicy& policy,
     const TexturePipeline::OutputFormatPolicy output_format_policy,
-    std::optional<std::chrono::microseconds> decode_duration,
-    const bool with_content_hashing) -> CookOutcome
+    std::optional<std::chrono::microseconds> decode_duration) -> CookOutcome
   {
     const auto& meta = image.Meta();
     const bool preserve_source = output_format_policy
@@ -344,8 +343,7 @@ namespace {
     }
 
     return {
-      .cooked
-      = CookTexture(std::move(image), desc, policy, with_content_hashing),
+      .cooked = CookTexture(std::move(image), desc, policy),
       .decode_duration = decode_duration,
     };
   }
@@ -378,8 +376,7 @@ namespace {
     const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
     const TexturePipeline::OutputFormatPolicy output_format_policy,
     const bool equirect_to_cubemap, const uint32_t cubemap_face_size,
-    const CubeMapImageLayout cubemap_layout, const bool with_content_hashing)
-    -> CookOutcome
+    const CubeMapImageLayout cubemap_layout) -> CookOutcome
   {
     if (source.bytes.empty()) {
       return {
@@ -422,8 +419,8 @@ namespace {
         };
       }
 
-      return CookDecodedImage(std::move(*cube), desc, policy,
-        output_format_policy, decode_duration, with_content_hashing);
+      return CookDecodedImage(
+        std::move(*cube), desc, policy, output_format_policy, decode_duration);
     }
 
     if (cubemap_layout != CubeMapImageLayout::kUnknown) {
@@ -448,8 +445,8 @@ namespace {
         };
       }
 
-      return CookDecodedImage(std::move(*cube), desc, policy,
-        output_format_policy, decode_duration, with_content_hashing);
+      return CookDecodedImage(
+        std::move(*cube), desc, policy, output_format_policy, decode_duration);
     }
 
     const auto decode_start = std::chrono::steady_clock::now();
@@ -465,8 +462,8 @@ namespace {
       };
     }
 
-    return CookDecodedImage(std::move(*decoded), desc, policy,
-      output_format_policy, decode_duration, with_content_hashing);
+    return CookDecodedImage(
+      std::move(*decoded), desc, policy, output_format_policy, decode_duration);
   }
 
   //! Decode, validate, assemble, and cook a set of source slices.
@@ -491,8 +488,8 @@ namespace {
   */
   [[nodiscard]] auto CookFromSourceSet(const TextureSourceSet& source_set,
     const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
-    const TexturePipeline::OutputFormatPolicy output_format_policy,
-    const bool with_content_hashing) -> CookOutcome
+    const TexturePipeline::OutputFormatPolicy output_format_policy)
+    -> CookOutcome
   {
     if (source_set.IsEmpty()) {
       return {
@@ -598,8 +595,8 @@ namespace {
         return { .cooked = Err(cube.error()), .decode_duration = decode_accum };
       }
 
-      return CookDecodedImage(std::move(*cube), desc, policy,
-        output_format_policy, decode_accum, with_content_hashing);
+      return CookDecodedImage(
+        std::move(*cube), desc, policy, output_format_policy, decode_accum);
     }
 
     if (desc.texture_type == TextureType::kTextureCubeArray) {
@@ -617,8 +614,8 @@ namespace {
         };
       }
 
-      return CookDecodedImage(std::move(*volume), desc, policy,
-        output_format_policy, decode_accum, with_content_hashing);
+      return CookDecodedImage(
+        std::move(*volume), desc, policy, output_format_policy, decode_accum);
     }
     if (desc.texture_type != TextureType::kTexture2D
       && desc.texture_type != TextureType::kTexture2DArray) {
@@ -762,7 +759,7 @@ namespace {
     auto array_desc = desc;
     array_desc.texture_type = array_type;
     return CookDecodedImage(std::move(assembled), array_desc, policy,
-      output_format_policy, decode_accum, with_content_hashing);
+      output_format_policy, decode_accum);
   }
 
   [[nodiscard]] auto CookFromSourceContent(
@@ -770,8 +767,7 @@ namespace {
     const ITexturePackingPolicy& policy,
     const TexturePipeline::OutputFormatPolicy output_format_policy,
     const bool equirect_to_cubemap, const uint32_t cubemap_face_size,
-    const CubeMapImageLayout cubemap_layout, const bool with_content_hashing)
-    -> CookOutcome
+    const CubeMapImageLayout cubemap_layout) -> CookOutcome
   {
     DLOG_F(1, "Cook source content");
     return std::visit(
@@ -780,14 +776,12 @@ namespace {
 
         if constexpr (std::is_same_v<ValueT, TexturePipeline::SourceBytes>) {
           return CookFromBytes(value, desc, policy, output_format_policy,
-            equirect_to_cubemap, cubemap_face_size, cubemap_layout,
-            with_content_hashing);
+            equirect_to_cubemap, cubemap_face_size, cubemap_layout);
         } else if constexpr (std::is_same_v<ValueT, TextureSourceSet>) {
-          return CookFromSourceSet(
-            value, desc, policy, output_format_policy, with_content_hashing);
+          return CookFromSourceSet(value, desc, policy, output_format_policy);
         } else {
-          return CookDecodedImage(std::move(value), desc, policy,
-            output_format_policy, {}, with_content_hashing);
+          return CookDecodedImage(
+            std::move(value), desc, policy, output_format_policy, {});
         }
       },
       source);
@@ -865,8 +859,8 @@ namespace {
   }
 
   auto RunCookTaskForItem(TexturePipeline::WorkItem& item,
-    co::ThreadPool& thread_pool, const ITexturePackingPolicy& policy,
-    const bool with_content_hashing) -> co::Co<CookOutcome>
+    co::ThreadPool& thread_pool, const ITexturePackingPolicy& policy)
+    -> co::Co<CookOutcome>
   {
     auto desc = item.desc;
     desc.source_id = item.source_id;
@@ -879,8 +873,7 @@ namespace {
         output_format_policy = item.output_format_policy,
         equirect_to_cubemap = item.equirect_to_cubemap,
         cubemap_face_size = item.cubemap_face_size,
-        cubemap_layout = item.cubemap_layout, with_content_hashing,
-        stop_token = item.stop_token](
+        cubemap_layout = item.cubemap_layout, stop_token = item.stop_token](
         co::ThreadPool::CancelToken canceled) -> CookOutcome {
         DLOG_F(1, "Cook task begin");
         if (stop_token.stop_requested() || canceled) {
@@ -891,7 +884,7 @@ namespace {
         }
         return CookFromSourceContent(std::move(*source_ptr), desc, *policy,
           output_format_policy, equirect_to_cubemap, cubemap_face_size,
-          cubemap_layout, with_content_hashing);
+          cubemap_layout);
       });
   }
 
@@ -1136,8 +1129,7 @@ auto TexturePipeline::Worker() -> co::Co<>
     const auto& policy = ResolvePackingPolicy(item.packing_policy_id);
     const bool unknown_policy = item.packing_policy_id != policy.Id();
     const auto cook_start = std::chrono::steady_clock::now();
-    auto cooked = co_await RunCookTaskForItem(
-      item, thread_pool_, policy, config_.with_content_hashing);
+    auto cooked = co_await RunCookTaskForItem(item, thread_pool_, policy);
     const auto cook_end = std::chrono::steady_clock::now();
 
     auto finalized = FinalizeCookedTextureWork(item, policy, unknown_policy,

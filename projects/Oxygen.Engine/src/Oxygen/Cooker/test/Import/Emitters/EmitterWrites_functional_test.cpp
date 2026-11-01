@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -24,10 +25,12 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
@@ -53,7 +56,9 @@
 using oxygen::content::import::AssetEmitter;
 using oxygen::content::import::BufferEmitter;
 using oxygen::content::import::CookedBufferPayload;
+using oxygen::content::import::CookedPhysicsResourcePayload;
 using oxygen::content::import::ImportEventLoop;
+using oxygen::content::import::PhysicsResourceEmitter;
 using oxygen::content::import::ResourceDescriptorEmitter;
 using oxygen::content::import::ResourceTableRegistry;
 using oxygen::content::import::WriteFailure;
@@ -201,8 +206,8 @@ NOLINT_TEST_F(EmitterWritesTest, OpenDataCreatesTheFileAndItsFolders)
   EXPECT_EQ(storage.SizeOf(path), serio::ByteCount { 0 });
 }
 
-//! The loose writer hashes a data file while the import holds it open for
-//! its appends: the storage maps it although a writer holds it.
+//! A data file the import holds open for its appends can still be read: the
+//! storage maps it although a writer holds it.
 NOLINT_TEST_F(EmitterWritesTest, OpenMapsADataFileOpenForWrites)
 {
   auto& storage = cooked::RealCookerStorage();
@@ -371,7 +376,8 @@ NOLINT_TEST_F(EmitterWritesTest, BufferEmitterFinalizeReturnsTheDataWriteError)
       payload.usage_flags = 1;
       payload.element_stride = 16;
       payload.data.resize(64, std::byte { 7 });
-      index = emitter.Emit(std::move(payload), "buf");
+      payload.content_hash = oxygen::base::ComputeSha256(payload.data);
+      index = emitter.Emit(std::move(payload));
       result = co_await emitter.Finalize();
       co_return co::kJoin;
     };
@@ -381,6 +387,34 @@ NOLINT_TEST_F(EmitterWritesTest, BufferEmitterFinalizeReturnsTheDataWriteError)
   ASSERT_FALSE(result);
   EXPECT_EQ(result.error().error, serio::Error::kNoSpace);
   EXPECT_EQ(result.error().path.filename(), "buffers.data");
+}
+
+//! The physics resource emitter refuses a payload without its SHA-256.
+NOLINT_TEST_F(EmitterWritesTest, PhysicsResourceEmitterRefusesAZeroHash)
+{
+  auto storage = fixtures::MemoryFileSystem {};
+  const auto root = std::filesystem::path("/memory/physics_zero_hash");
+  ResourceTableRegistry tables(
+    loop_->Driver(), oxygen::make_observer<cooked::ImportStorage>(&storage));
+  auto refused = false;
+
+  co::Run(*loop_, [&] -> co::Co<> {
+    OXCO_WITH_NURSERY(writes)
+    {
+      PhysicsResourceEmitter emitter(
+        writes, tables.PhysicsAggregator(root), root);
+      CookedPhysicsResourcePayload payload;
+      payload.data.resize(64, std::byte { 7 });
+      try {
+        static_cast<void>(emitter.Emit(std::move(payload)));
+      } catch (const std::invalid_argument&) {
+        refused = true;
+      }
+      co_return co::kJoin;
+    };
+  });
+
+  EXPECT_TRUE(refused);
 }
 
 } // namespace

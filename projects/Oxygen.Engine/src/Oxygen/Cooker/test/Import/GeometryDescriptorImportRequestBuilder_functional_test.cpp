@@ -16,7 +16,6 @@
 
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
@@ -25,7 +24,6 @@
 namespace {
 
 using nlohmann::json;
-using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::GeometryDescriptorImportSettings;
 using oxygen::content::import::internal::BuildGeometryDescriptorRequest;
 using oxygen::cooker::test::ContentMountTable;
@@ -39,7 +37,6 @@ auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   settings.descriptor_path = descriptor_path.string();
   settings.cooked_root = (descriptor_path.parent_path() / ".cooked").string();
   settings.job_name = "manifest-geometry";
-  settings.with_content_hashing = true;
   return settings;
 }
 
@@ -53,7 +50,6 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
     R"({
       "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json",
       "name": "ProcCube",
-      "content_hashing": false,
       "lods": [
         {
           "name": "LOD0",
@@ -86,8 +82,6 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(
     request->job_name, std::optional<std::string> { "manifest-geometry" });
-  EXPECT_EQ(request->options.with_content_hashing,
-    EffectiveContentHashingEnabled(false));
   ASSERT_HAS_VALUE(request->geometry_descriptor)
     << "Expected request->geometry_descriptor to contain a value";
 

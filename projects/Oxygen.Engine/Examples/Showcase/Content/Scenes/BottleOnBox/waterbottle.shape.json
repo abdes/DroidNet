@@ -1,6 +1,5 @@
 {
   "name": "waterbottle",
-  "content_hashing": true,
   "shape_type": "cylinder",
   "material_ref": "plastic.opmat",
   "radius": 0.18,

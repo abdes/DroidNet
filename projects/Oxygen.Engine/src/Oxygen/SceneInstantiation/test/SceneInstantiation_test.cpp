@@ -259,7 +259,7 @@ namespace {
       return {
         .ok = true,
         .blob = scripting::ScriptBytecodeBlob::FromOwned({ 1, 2, 3 },
-          data::pak::scripting::ScriptLanguage::kLuau, {}, 0,
+          data::pak::scripting::ScriptLanguage::kLuau, {}, {},
           scripting::ScriptBlobOrigin::kEmbeddedResource,
           scripting::ScriptBlobCanonicalName { "bytecode" }),
         .error_message = {},
@@ -1420,14 +1420,15 @@ NOLINT_TEST_F(SceneInstantiationTest, HostLodPolicySetsAndClearsLive)
     { InstanceChange { .path = { prop }, .change = distance(kLodDistance) } });
   auto found = host.GetInstance().Find(std::vector { prop });
   ASSERT_HAS_VALUE(found);
-  const auto placed_threshold = threshold(*found);
+  auto& node = *found;
+  const auto placed_threshold = threshold(node);
   const auto set = SetChange(host,
     InstanceChange {
       .path = { prop },
       .change = distance(2.0F * kLodDistance),
     },
     Loader());
-  const auto set_threshold = threshold(*found);
+  const auto set_threshold = threshold(node);
   const auto held = host.GetImpl()
                       ->get()
                       .GetComponent<scene::SceneInstanceComponent>()

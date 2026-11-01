@@ -401,31 +401,29 @@ auto GeometryPipeline::FinalizeDescriptor(
     co_return std::nullopt;
   }
 
-  if (config_.with_content_hashing) {
-    const auto hash = co_await thread_pool_.Run(
-      [bytes
-        = std::span<const std::byte>(output_bytes.data(), output_bytes.size())](
-        co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
-        DLOG_F(1, "Compute content hash");
-        if (canceled) {
-          return data::pak::core::ContentHashDigest {};
-        }
-        return util::ComputeContentSha256(bytes);
-      });
-
-    if (!base::IsAllZero(hash)) {
-      asset_desc.header.content_hash = hash;
-      // The descriptor was written first, so it is patched in place.
-      const auto desc_bytes = std::as_bytes(
-        std::span<const data::pak::geometry::GeometryAssetDesc, 1>(
-          &asset_desc, 1));
-      if (output_bytes.size() < desc_bytes.size()) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Failed to write geometry asset descriptor hash", "", ""));
-        co_return std::nullopt;
+  const auto hash = co_await thread_pool_.Run(
+    [bytes
+      = std::span<const std::byte>(output_bytes.data(), output_bytes.size())](
+      co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
+      DLOG_F(1, "Compute content hash");
+      if (canceled) {
+        return data::pak::core::ContentHashDigest {};
       }
-      std::ranges::copy(desc_bytes, output_bytes.begin());
+      return util::ComputeContentSha256(bytes);
+    });
+
+  if (!base::IsAllZero(hash)) {
+    asset_desc.header.content_hash = hash;
+    // The descriptor was written first, so it is patched in place.
+    const auto desc_bytes = std::as_bytes(
+      std::span<const data::pak::geometry::GeometryAssetDesc, 1>(
+        &asset_desc, 1));
+    if (output_bytes.size() < desc_bytes.size()) {
+      diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
+        "Failed to write geometry asset descriptor hash", "", ""));
+      co_return std::nullopt;
     }
+    std::ranges::copy(desc_bytes, output_bytes.begin());
   }
 
   co_return FinalizedDescriptor {

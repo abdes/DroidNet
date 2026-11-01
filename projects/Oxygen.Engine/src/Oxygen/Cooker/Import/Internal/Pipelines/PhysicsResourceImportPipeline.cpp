@@ -181,6 +181,7 @@ auto PhysicsResourceImportPipeline::Worker() -> co::Co<>
       continue;
     }
 
+    const auto success = diagnostics.empty();
     auto result = WorkResult {
       .source_id = std::move(item.source_id),
       .cooked = std::move(item.cooked),
@@ -189,7 +190,7 @@ auto PhysicsResourceImportPipeline::Worker() -> co::Co<>
         .cook_duration = MakeDuration(
           cook_start, std::chrono::steady_clock::now()),
       },
-      .success = diagnostics.empty(),
+      .success = success,
     };
     if (item.on_finished) {
       item.on_finished();
@@ -203,8 +204,7 @@ auto PhysicsResourceImportPipeline::Worker() -> co::Co<>
 auto PhysicsResourceImportPipeline::ComputeContentHash(WorkItem& item)
   -> co::Co<std::optional<ImportDiagnostic>>
 {
-  if (!config_.with_content_hashing
-    || !util::IsZeroContentSha256(item.cooked.content_hash)) {
+  if (!util::IsZeroContentSha256(item.cooked.content_hash)) {
     co_return std::nullopt;
   }
   if (IsStopRequested(item.stop_token)) {

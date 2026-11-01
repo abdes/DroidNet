@@ -30,6 +30,7 @@
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/AtomicFile.h>
@@ -97,13 +98,16 @@ auto Material(const std::string_view virtual_path,
   };
 }
 
+//! A resource data file carries no digest: each row of its table does.
 auto File(const FileKind kind, const std::string_view relpath) -> IndexedFile
 {
   return {
     .kind = kind,
     .relpath = std::string(relpath),
     .size = relpath.size(),
-    .sha256 = DigestOf(relpath),
+    .sha256 = oxygen::data::loose_cooked::IsResourceDataFile(kind)
+      ? oxygen::base::Sha256Digest {}
+      : DigestOf(relpath),
     .virtual_path = {},
     .source_path = {},
   };
@@ -567,6 +571,59 @@ NOLINT_TEST(LooseCookedIndexFileTest, MalformedRecordsAreCorrupt)
   }
 }
 
+//! The encoder refuses a digest on a resource data file.
+NOLINT_TEST(LooseCookedIndexFileTest, EncoderRefusesDigestOnDataFile)
+{
+  // Arrange
+  auto data = File(FileKind::kBuffersData, "Resources/buffers.data");
+  data.sha256 = DigestOf(data.relpath);
+  const auto files = std::array {
+    File(FileKind::kBuffersTable, "Resources/buffers.table"),
+    data,
+  };
+  auto stream = oxygen::serio::MemoryStream {};
+  auto writer = oxygen::serio::Writer(stream);
+
+  // Act & Assert
+  EXPECT_THROW(
+    static_cast<void>(oxygen::data::loose_cooked::EncodeLooseCookedIndex(
+      IndexContent {
+        .source_key = TestSourceKey(),
+        .content_version = 7,
+        .assets = {},
+        .files = files,
+      },
+      writer)),
+    std::invalid_argument);
+}
+
+//! The loader refuses a digest on a resource data file.
+NOLINT_TEST(LooseCookedIndexFileTest, LoaderRefusesDigestOnDataFile)
+{
+  // Arrange
+  auto bytes = Encode({},
+    std::array {
+      File(FileKind::kBuffersTable, "Resources/buffers.table"),
+      File(FileKind::kBuffersData, "Resources/buffers.data"),
+    });
+  const auto count = HeaderOf(bytes).file_record_count;
+  auto patched = false;
+  for (size_t i = 0; i < count; ++i) {
+    const auto record = oxygen::serio::CopyAt<FileRecord>(
+      std::span { bytes }.subspan(FileRecordOffset(bytes, i)));
+    ASSERT_TRUE(record.has_value());
+    if (record->kind == FileKind::kBuffersData) {
+      Patch(bytes, FileRecordOffset(bytes, i) + offsetof(FileRecord, sha256),
+        DigestOf("forged"));
+      patched = true;
+    }
+  }
+  ASSERT_TRUE(patched);
+
+  // Act & Assert
+  ExpectCorrupt(bytes, "Resource data file SHA-256");
+}
+
 //! A texture descriptor record keeps the virtual path it is addressed by.
 NOLINT_TEST(LooseCookedIndexFileTest, TextureDescriptorKeepsItsVirtualPath)
 {
@@ -789,6 +846,165 @@ NOLINT_TEST_F(LooseCookedIndexFileSystemTest, DescriptorDigestsAreChecked)
   EXPECT_TRUE(metadata_issues.empty());
   EXPECT_THROW(mismatched.ValidateContent(TempDir(), IntegrityCheck::kFull),
     std::runtime_error);
+}
+
+//=== Resources of data files ===---------------------------------------------//
+
+//! A cooked root with a buffer table and its data file, indexed as an import
+//! writes them: the table with its digest, the data file with none.
+class LooseCookedIndexResourceTest : public LooseCookedIndexFileSystemTest {
+protected:
+  using BufferRow = oxygen::data::pak::core::BufferResourceDesc;
+
+  static constexpr auto kTable = std::string_view { "Resources/buffers.table" };
+  static constexpr auto kData = std::string_view { "Resources/buffers.data" };
+
+  //! Appends `payload` to the data and a row describing it, with its SHA-256.
+  auto AddBuffer(const std::span<const std::byte> payload) -> void
+  {
+    rows_.push_back({
+      .data_offset = data_.size(),
+      .size_bytes = static_cast<uint32_t>(payload.size()),
+      .usage_flags = 0U,
+      .element_stride = 1U,
+      .element_format = 0U,
+      .content_hash = oxygen::base::ComputeSha256(payload),
+    });
+    data_.insert(data_.end(), payload.begin(), payload.end());
+  }
+
+  //! Publishes the table bytes `table`, the data and their index.
+  auto PublishRoot(const std::span<const std::byte> table)
+    -> LooseCookedIndexImpl
+  {
+    Publish(kTable, table);
+    Publish(kData, data_);
+    const auto files = std::array {
+      IndexedFile {
+        .kind = FileKind::kBuffersTable,
+        .relpath = std::string(kTable),
+        .size = table.size(),
+        .sha256 = oxygen::base::ComputeSha256(table),
+        .virtual_path = {},
+        .source_path = {},
+      },
+      IndexedFile {
+        .kind = FileKind::kBuffersData,
+        .relpath = std::string(kData),
+        .size = data_.size(),
+        .sha256 = {},
+        .virtual_path = {},
+        .source_path = {},
+      },
+    };
+    Publish("container.index.bin", Encode({}, files));
+    return LooseCookedIndexImpl::LoadFromFile(IndexPath());
+  }
+
+  //! Publishes the rows as they stand.
+  auto PublishRoot() -> LooseCookedIndexImpl
+  {
+    return PublishRoot(std::as_bytes(std::span(rows_)));
+  }
+
+  [[nodiscard]] auto Rows() noexcept -> std::vector<BufferRow>&
+  {
+    return rows_;
+  }
+
+  [[nodiscard]] auto Data() noexcept -> Bytes& { return data_; }
+
+private:
+  std::vector<BufferRow> rows_ { BufferRow {} };
+  Bytes data_;
+};
+
+constexpr auto kFirstBuffer = std::array {
+  std::byte { 1 },
+  std::byte { 2 },
+  std::byte { 3 },
+};
+constexpr auto kSecondBuffer = std::array {
+  std::byte { 4 },
+  std::byte { 5 },
+};
+
+//! Resources whose bytes hash to their rows verify, though the data file has
+//! no digest of its own.
+NOLINT_TEST_F(LooseCookedIndexResourceTest, IntactResourcesVerify)
+{
+  // Arrange
+  AddBuffer(kFirstBuffer);
+  AddBuffer(kSecondBuffer);
+  const auto index = PublishRoot();
+
+  // Act
+  const auto issues = index.CheckContent(TempDir(), IntegrityCheck::kFull);
+
+  // Assert
+  EXPECT_TRUE(issues.empty());
+}
+
+//! A resource whose bytes changed is reported in its data file by its row;
+//! only the full check reads the bytes.
+NOLINT_TEST_F(LooseCookedIndexResourceTest, ChangedResourceIsReportedByItsRow)
+{
+  // Arrange
+  AddBuffer(kFirstBuffer);
+  AddBuffer(kSecondBuffer);
+  Data().back() ^= std::byte { 0xFF };
+  const auto index = PublishRoot();
+
+  // Act
+  const auto issues = index.CheckContent(TempDir(), IntegrityCheck::kFull);
+  const auto metadata_issues
+    = index.CheckContent(TempDir(), IntegrityCheck::kMetadata);
+
+  // Assert
+  ASSERT_EQ(issues.size(), 1U);
+  EXPECT_EQ(issues.front().relative_path, kData);
+  EXPECT_EQ(issues.front().reason, IntegrityFailure::kResourceDigestMismatch);
+  EXPECT_EQ(issues.front().resource_row, 2U);
+  EXPECT_TRUE(metadata_issues.empty());
+  EXPECT_THROW(index.ValidateContent(TempDir(), IntegrityCheck::kFull),
+    std::runtime_error);
+}
+
+//! A row that places its resource past the end of the data file is out of
+//! bounds.
+NOLINT_TEST_F(LooseCookedIndexResourceTest, RowPastTheDataFileIsOutOfBounds)
+{
+  // Arrange
+  AddBuffer(kFirstBuffer);
+  Rows().back().data_offset = Data().size();
+  const auto index = PublishRoot();
+
+  // Act
+  const auto issues = index.CheckContent(TempDir(), IntegrityCheck::kFull);
+
+  // Assert
+  ASSERT_EQ(issues.size(), 1U);
+  EXPECT_EQ(issues.front().reason, IntegrityFailure::kResourceOutOfBounds);
+  EXPECT_EQ(issues.front().resource_row, 1U);
+}
+
+//! A table that ends in a partial row is malformed, and its data file is not
+//! read.
+NOLINT_TEST_F(LooseCookedIndexResourceTest, PartialRowMakesTheTableMalformed)
+{
+  // Arrange
+  AddBuffer(kFirstBuffer);
+  const auto rows = std::as_bytes(std::span(Rows()));
+  const auto index = PublishRoot(rows.first(rows.size() - 1U));
+
+  // Act
+  const auto issues = index.CheckContent(TempDir(), IntegrityCheck::kFull);
+
+  // Assert
+  ASSERT_EQ(issues.size(), 1U);
+  EXPECT_EQ(issues.front().relative_path, kTable);
+  EXPECT_EQ(issues.front().reason, IntegrityFailure::kMalformedTable);
+  EXPECT_FALSE(issues.front().resource_row.has_value());
 }
 
 } // namespace

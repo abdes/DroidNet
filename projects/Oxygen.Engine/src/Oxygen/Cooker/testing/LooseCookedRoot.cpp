@@ -5,21 +5,36 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <map>
+#include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexEncoder.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedResources.h>
+#include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
@@ -50,7 +65,9 @@ namespace {
         .kind = kind,
         .relpath = relpath,
         .size = bytes.size(),
-        .sha256 = base::ComputeSha256(bytes),
+        // A data file has no digest; its rows hold their payloads' digests.
+        .sha256 = lc::IsResourceDataFile(kind) ? base::Sha256Digest {}
+                                               : base::ComputeSha256(bytes),
         .virtual_path = virtual_path,
         // A texture descriptor or a sidecar has a producing source beside it.
         .source_path
@@ -74,7 +91,8 @@ namespace {
 
     //! Adds the descriptor file of `asset`, padded to its recorded size when
     //! that is larger, and its index record.
-    auto AddAsset(const LooseAsset& asset, std::string virtual_path) -> void
+    auto AddAsset(const LooseAsset& asset, const std::string& virtual_path)
+      -> void
     {
       auto bytes = asset.descriptor;
       if (asset.recorded_size && *asset.recorded_size > bytes.size()) {
@@ -86,7 +104,8 @@ namespace {
         ? "Descriptors/" + asset.leaf
         : "Descriptors/" + asset.mount + "/" + asset.leaf;
       assets_.push_back({
-        .key = *asset.key,
+        .key
+        = asset.key.value_or(data::AssetKey::FromVirtualPath(virtual_path)),
         .asset_type = asset.type,
         .virtual_path = virtual_path,
         .descriptor_relpath = relpath,
@@ -204,22 +223,21 @@ auto LooseCookedRoot::Scene(const std::string_view leaf) -> data::AssetKey
   });
 }
 
-auto LooseCookedRoot::PhysicsSidecar(const std::string_view leaf,
-  const std::string_view scene_leaf) -> data::AssetKey
+auto LooseCookedRoot::PhysicsSidecar(
+  const std::string_view leaf, const data::AssetKey& scene) -> data::AssetKey
 {
-  const auto scene = std::ranges::find_if(
-    assets_, [scene_leaf](const LooseAsset& asset) -> bool {
-      return asset.type == data::AssetType::kScene && asset.leaf == scene_leaf;
-    });
-  if (scene == assets_.end()) {
-    throw std::invalid_argument(
-      "no scene '" + std::string(scene_leaf) + "' for a physics sidecar");
+  const auto held
+    = std::ranges::find_if(assets_, [&scene](const LooseAsset& asset) -> bool {
+        return asset.type == data::AssetType::kScene && asset.key == scene;
+      });
+  if (held == assets_.end()) {
+    throw std::invalid_argument("no scene '" + to_string(scene)
+      + "' for the physics sidecar '" + std::string(leaf) + "'");
   }
   return Add({
     .type = data::AssetType::kPhysicsScene,
     .leaf = std::string(leaf),
-    .descriptor
-    = PhysicsSidecarDescriptor(*scene->key, scene->descriptor).bytes,
+    .descriptor = PhysicsSidecarDescriptor(scene, held->descriptor).bytes,
   });
 }
 
@@ -357,6 +375,7 @@ auto LooseCookedRoot::AddRow(Table<Desc>& table,
 {
   desc.data_offset = table.data.size();
   desc.size_bytes = static_cast<decltype(desc.size_bytes)>(payload.size());
+  desc.content_hash = base::ComputeSha256(payload);
   table.data.insert(table.data.end(), payload.begin(), payload.end());
   table.rows.push_back(desc);
   return ResourceIndexT { static_cast<uint32_t>(table.rows.size() - 1U) };

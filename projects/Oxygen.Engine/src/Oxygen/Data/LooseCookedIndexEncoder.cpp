@@ -20,10 +20,12 @@
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
+#include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -98,6 +100,18 @@ namespace {
     if (base::IsAllZero(digest)) {
       throw std::invalid_argument(
         "Loose cooked index has no SHA-256 for '" + std::string(relpath) + "'");
+    }
+  }
+
+  //! Refuses a digest of a resource data file, whose resources are verified
+  //! one by one from their table rows.
+  auto RequireNoDigest(
+    const base::Sha256Digest& digest, const std::string_view relpath) -> void
+  {
+    if (!base::IsAllZero(digest)) {
+      throw std::invalid_argument("Loose cooked index has a SHA-256 for the "
+                                  "resource data file '"
+        + std::string(relpath) + "'");
     }
   }
 
@@ -191,7 +205,11 @@ namespace {
         RequireUnique(virtual_paths, file.virtual_path, "virtual path");
       }
       RequireUnique(content_paths, file.relpath, "content path");
-      RequireDigest(file.sha256, file.relpath);
+      if (IsResourceDataFile(file.kind)) {
+        RequireNoDigest(file.sha256, file.relpath);
+      } else {
+        RequireDigest(file.sha256, file.relpath);
+      }
     }
   }
 

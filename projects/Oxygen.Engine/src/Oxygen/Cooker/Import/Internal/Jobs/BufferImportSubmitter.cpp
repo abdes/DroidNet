@@ -227,7 +227,6 @@ auto BufferImportSubmitter::SubmitBuffers(
     descriptor.usage_flags = entry.usage_flags;
     descriptor.element_stride = entry.element_stride;
     descriptor.element_format = entry.element_format;
-    descriptor.content_hash = entry.content_hash;
 
     auto view_issues = std::vector<internal::BufferDescriptorViewIssue> {};
     auto normalized_views = internal::NormalizeBufferViews(
@@ -250,7 +249,7 @@ auto BufferImportSubmitter::SubmitBuffers(
       .usage_flags = entry.usage_flags,
       .element_stride = entry.element_stride,
       .element_format = entry.element_format,
-      .content_hash = entry.content_hash,
+      .content_hash = {},
     };
     item.stop_token = stop_token_;
     co_await pipeline.Submit(std::move(item));
@@ -301,8 +300,8 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
     }
 
     const auto emit_start = std::chrono::steady_clock::now();
-    const auto emitted_index = session_.BufferEmitter().Emit(
-      std::move(result.cooked), result.source_id);
+    const auto emitted_index
+      = session_.BufferEmitter().Emit(std::move(result.cooked));
     session_.AddEmitDuration(
       MakeDuration(emit_start, std::chrono::steady_clock::now()));
 

@@ -2,7 +2,6 @@
   "schema_version": 1,
   "source": "../SourceMedia/DCC/backpack.glb",
   "settings": {
-    "content_hashing": true,
     "name": "backpack_scene"
   },
   "source_identity": "01a0e7c7-f432-7586-8f04-2133688a61d0",

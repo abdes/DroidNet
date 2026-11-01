@@ -11,14 +11,13 @@
 #include <ios>
 #include <memory>
 #include <ostream>
-#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Base/Hex.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
@@ -43,7 +42,6 @@ namespace {
   constexpr int kLayersColumn = 6;
   constexpr int kTextureTypeColumn = 14;
   constexpr int kScriptEncodingColumn = 25;
-  constexpr int kScriptHashColumn = 66;
 
   //! Every row of the table of `kind`, row zero included.
   template <typename T>
@@ -110,7 +108,7 @@ namespace {
       out << std::right << std::setw(kStrideColumn) << e.element_stride << " ";
       out << std::left << std::setw(kFormatColumn) << format_name << " ";
       out << std::left << std::setw(32) << usage_name << " ";
-      out << std::left << std::setw(16) << ToHex64(e.content_hash) << "\n";
+      out << "0x" << base::ToHexString(e.content_hash) << "\n";
     }
 
     out << "\n  (* = sentinel/reserved index)\n";
@@ -162,7 +160,7 @@ namespace {
       out << std::right << std::setw(kLayersColumn) << e.array_layers << " ";
       out << std::left << std::setw(kTextureTypeColumn) << type_name << " ";
       out << std::left << std::setw(kFormatColumn) << format_name << " ";
-      out << std::left << std::setw(16) << ToHex64(e.content_hash) << "\n";
+      out << "0x" << base::ToHexString(e.content_hash) << "\n";
     }
 
     return {};
@@ -251,10 +249,7 @@ namespace {
       out << std::right << std::setw(kSizeColumn) << e.size_bytes << " ";
       out << std::left << std::setw(kScriptEncodingColumn) << format_name
           << " ";
-      out << std::left << std::setw(kScriptHashColumn)
-          << "0x"
-          + base::ToHexString(std::as_bytes(std::span { e.content_hash }))
-          << "\n";
+      out << "0x" << base::ToHexString(e.content_hash) << "\n";
     }
 
     out << "\n  (* = sentinel/reserved index)\n";

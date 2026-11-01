@@ -38,7 +38,8 @@ namespace {
 
 } // namespace
 
-auto AssetKey::FromVirtualPath(const std::string_view virtual_path) -> AssetKey
+auto AssetKey::FromVirtualPath(const std::string_view virtual_path) noexcept
+  -> AssetKey
 {
   const auto bytes
     = std::as_bytes(std::span(virtual_path.data(), virtual_path.size()));
@@ -48,7 +49,8 @@ auto AssetKey::FromVirtualPath(const std::string_view virtual_path) -> AssetKey
   XXH128_canonicalFromHash(&canonical, hash);
 
   auto key_bytes = std::array<std::uint8_t, AssetKey::kSizeBytes> {};
-  std::copy_n(canonical.digest, key_bytes.size(), key_bytes.begin());
+  static_assert(sizeof(canonical.digest) == AssetKey::kSizeBytes);
+  std::ranges::copy(std::span(canonical.digest), key_bytes.begin());
   return FromBytes(key_bytes);
 }
 

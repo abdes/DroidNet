@@ -323,7 +323,6 @@ namespace {
         MeshBuildPipeline::Config {
           .queue_capacity = 4,
           .worker_count = 1,
-          .with_content_hashing = true,
         });
 
     ASSERT_TRUE(result.success);
@@ -406,7 +405,6 @@ namespace {
         MeshBuildPipeline::Config {
           .queue_capacity = 4,
           .worker_count = 1,
-          .with_content_hashing = true,
         });
 
     ASSERT_TRUE(result.success);
@@ -441,7 +439,6 @@ namespace {
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
-        .with_content_hashing = true,
       });
 
     ASSERT_TRUE(result.success);
@@ -501,7 +498,6 @@ namespace {
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
-        .with_content_hashing = true,
       });
 
     EXPECT_TRUE(result.success);
@@ -519,7 +515,6 @@ namespace {
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
-        .with_content_hashing = true,
       });
 
     ASSERT_FALSE(result.success);
@@ -541,10 +536,8 @@ namespace {
         MeshBuildPipeline::Config {
           .queue_capacity = 4,
           .worker_count = 1,
-          .with_content_hashing = true,
         });
-      GeometryPipeline finalizer(
-        pool_, GeometryPipeline::Config { .with_content_hashing = true });
+      GeometryPipeline finalizer(pool_, GeometryPipeline::Config {});
 
       OXCO_WITH_NURSERY(n)
       {
@@ -616,7 +609,6 @@ namespace {
           MeshBuildPipeline::Config {
             .queue_capacity = 4,
             .worker_count = 1,
-            .with_content_hashing = true,
           });
 
       ASSERT_TRUE(result.success);
@@ -644,7 +636,6 @@ namespace {
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
-        .with_content_hashing = true,
       });
 
     EXPECT_FALSE(result.success);
@@ -663,7 +654,6 @@ namespace {
         MeshBuildPipeline::Config {
           .queue_capacity = 4,
           .worker_count = 1,
-          .with_content_hashing = true,
           .max_data_blob_bytes = sizeof(data::Vertex) * 2U,
         });
 
@@ -682,7 +672,6 @@ namespace {
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
-        .with_content_hashing = true,
         .max_data_blob_bytes = sizeof(glm::uvec4) * 2U,
       });
 
@@ -701,7 +690,6 @@ namespace {
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
-        .with_content_hashing = true,
       });
 
     EXPECT_FALSE(result.success);
@@ -818,7 +806,6 @@ namespace {
         MeshBuildPipeline::Config {
           .queue_capacity = 4,
           .worker_count = 1,
-          .with_content_hashing = false,
         });
     }
   };

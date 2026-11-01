@@ -103,14 +103,6 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .StoreTo(&options_.virtual_path)
         .Build();
 
-  auto with_content_hashing
-    = Option::WithKey("content-hashing")
-        .About("Enable or disable content hashing for outputs")
-        .Long("content-hashing")
-        .WithValue<bool>()
-        .StoreTo(&options_.with_content_hashing)
-        .Build();
-
   auto job_name = Option::WithKey("name")
                     .About("Optional job name")
                     .Long("name")
@@ -319,8 +311,7 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(renormalize_normals))
     .WithOption(std::move(bake_hdr_to_ldr))
     .WithOption(std::move(sources))
-    .WithOption(std::move(report))
-    .WithOption(std::move(with_content_hashing));
+    .WithOption(std::move(report));
 }
 
 auto TextureCommand::Execute() -> std::expected<void, std::error_code>

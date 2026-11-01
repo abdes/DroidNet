@@ -1,6 +1,5 @@
 {
   "name": "plastic",
-  "content_hashing": true,
   "static_friction": 0.65,
   "dynamic_friction": 0.65,
   "restitution": 0.1,

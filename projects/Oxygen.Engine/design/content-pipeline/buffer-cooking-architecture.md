@@ -72,11 +72,11 @@ Out of scope:
    Both `BufferContainerImportJob` and the geometry import pipeline MUST use
    this submitter.
 6. `BufferPipeline` MUST NOT perform I/O and MUST NOT assign resource indices.
-   Its only CPU work is optional content hashing.
-7. Content hashing uses the first 8 bytes of SHA-256 over the raw buffer bytes
-   and MUST NOT be computed when `with_content_hashing` is false.
+   Its only CPU work is content hashing.
+7. Content hashing is the full SHA-256 (`ContentHashDigest`) over the raw buffer
+   bytes and is always computed by the pipeline from the bytes it holds.
 8. `BufferResourceDesc` binary layout MUST NOT be modified without updating
-   `static_assert(sizeof(BufferResourceDesc) == 32)`.
+   `static_assert(sizeof(BufferResourceDesc) == 53)`.
 9. Virtual paths in the descriptor MUST end in `.obuf` and MUST be canonical (no
    `..`, no `//`, starts with `/`).
 10. `virtual_path` values MUST be globally unique within a container. Duplicate
@@ -132,10 +132,10 @@ import pipelines (geometry/FBX/glTF). Both paths deposit their buffer data
 through the same `BufferEmitter` → `buffers.table` / `buffers.data` output.
 
 The buffer pipeline (`BufferPipeline`) is intentionally minimal: it does nothing
-except optional SHA-256 content hashing. All format knowledge (element format,
+except SHA-256 content hashing. All format knowledge (element format,
 stride, usage flags) is carried as opaque metadata from the descriptor JSON into
 the `BufferResourceDesc` binary — the pipeline is purely a data-passthrough with
-an optional hash step.
+a hash step.
 
 ## 5. Target Architecture
 
@@ -164,7 +164,7 @@ flowchart LR
   subgraph Submitter
     I[BufferImportSubmitter\nSubmitBufferChunks]
     J["Per-entry file reads\n(IAsyncFileReader)"]
-    K[BufferPipeline\noptional SHA-256 hash]
+    K[BufferPipeline\nSHA-256 hash]
     L[BufferImportSubmitter\nCollectAndEmit]
   end
 
@@ -211,8 +211,7 @@ Architectural split:
    - file: `src/Oxygen/Cooker/Import/BufferContainerImportSettings.h`
    - role: tooling-facing DTO for one buffer-container import job request.
      Contains `descriptor_path` (path to the container JSON), `cooked_root`
-     (absolute output root), `job_name` (optional override), and
-     `with_content_hashing`.
+     (absolute output root), and `job_name` (optional override).
    - note: Never passed to the pipeline directly; consumed only by
      `BuildBufferContainerRequest`.
 
@@ -224,8 +223,7 @@ Architectural split:
      - `src/Oxygen/Cooker/Import/Internal/BufferContainerImportRequestBuilder.cpp`
    - role: validate + normalize `BufferContainerImportSettings` into an
      `ImportRequest`. Loads the container JSON file, schema-validates it against
-     `kBufferContainerSchema`, resolves `job_name`, resolves
-     `with_content_hashing`, and stores `descriptor_doc->dump()` in
+     `kBufferContainerSchema`, resolves `job_name`, and stores `descriptor_doc->dump()` in
      `request.buffer_container.normalized_descriptor_json`.
    - note: The presence of `request.buffer_container` is the route discriminant
      that bypasses all format detection in `AsyncImportService`. This field is a
@@ -284,12 +282,11 @@ Architectural split:
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h`
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.cpp`
    - role: bounded-channel producer/consumer async pipeline. Accepts `WorkItem`
-     objects, optionally offloads SHA-256 content hashing to a `co::ThreadPool`,
+     objects, offloads SHA-256 content hashing to a `co::ThreadPool`,
      and returns `WorkResult` objects.
    - processing per work item:
-     1. If `Config::with_content_hashing` and `cooked.content_hash == 0`:
-        offload `SHA-256(cooked.data)` to thread pool and store result as first
-        8 bytes in `cooked.content_hash`.
+     1. Offload `SHA-256(cooked.data)` to the thread pool and store the digest
+        in `cooked.content_hash`.
      2. No other processing; payload bytes are passed through unchanged.
    - config: default `queue_capacity=64`, `worker_count=2` (from
      `ImportConcurrency::buffer`).
@@ -321,8 +318,8 @@ Architectural split:
    - file: `src/Oxygen/Cooker/Import/BufferImportTypes.h`
    - role: in-flight payload between `BufferImportSubmitter` and
      `BufferPipeline`. Carries raw `data` bytes, `alignment`, `usage_flags`,
-     `element_stride`, `element_format`, and optionally pre-computed or
-     pipeline-computed `content_hash`.
+     `element_stride`, `element_format`, and the pipeline-computed SHA-256
+     `content_hash`.
 
 ### 6.2 Runtime Classes
 
@@ -374,7 +371,7 @@ Schema target files:
 ```
 
 Valid top-level keys for `type: "buffer-container"`: `id`, `type`, `source`,
-`name`, `content_hashing`, `depends_on`.
+`name`, `depends_on`.
 
 The `source` field must point to a file conforming to
 `oxygen.buffer-container.schema.json` (Section 7.2).
@@ -401,8 +398,7 @@ The `source` field must point to a file conforming to
   "defaults": {
     "buffer_container": {
       "output": "<absolute-cooked-root>",
-      "name":   "<optional-name-override>",
-      "content_hashing": true
+      "name":   "<optional-name-override>"
     }
   },
   "jobs": [...]
@@ -410,7 +406,7 @@ The `source` field must point to a file conforming to
 ```
 
 Manifest defaults for `buffer_container` support: `output` (cooked root), `name`
-(job name override), `content_hashing`.
+(job name override).
 
 #### 7.1.4 Concurrency Configuration
 
@@ -441,12 +437,11 @@ the segment rule of virtual paths, through the shared
 
 #### 7.2.1 Top-Level Field Contract
 
-| Field             | Required | Type       | Description                                          |
-| ----------------- | -------- | ---------- | ---------------------------------------------------- |
-| `$schema`         | No       | `string`   | Points to shipped JSON Schema for editor integration |
-| `name`            | No       | name       | Human-readable container name                        |
-| `content_hashing` | No       | `bool`     | Override global content hashing toggle               |
-| `buffers`         | **Yes**  | array (≥1) | Array of buffer descriptor entries (Section 7.2.2)   |
+| Field     | Required | Type       | Description                                          |
+| --------- | -------- | ---------- | ---------------------------------------------------- |
+| `$schema` | No       | `string`   | Points to shipped JSON Schema for editor integration |
+| `name`    | No       | name       | Human-readable container name                        |
+| `buffers` | **Yes**  | array (≥1) | Array of buffer descriptor entries (Section 7.2.2)   |
 
 Canonical example:
 
@@ -495,7 +490,6 @@ Canonical example:
 | `element_stride` | No       | `uint` ≥0              | Stride of each element in bytes; 0 when `element_format` is set                                |
 | `element_format` | No       | `uint8` [0,255]        | Format enum value (0 = raw/structured; nonzero = typed)                                        |
 | `alignment`      | No       | `uint` ≥1              | Required GPU upload alignment; default 16                                                      |
-| `content_hash`   | No       | `uint64`               | Pre-computed content hash; if 0 and hashing enabled, pipeline computes it                      |
 | `views`          | No       | array (≥1)             | Named sub-range views (Section 7.2.4)                                                          |
 
 Schema mutual-exclusion rules:
@@ -567,9 +561,9 @@ fall within `[0, descriptor.size_bytes)`.
 
 `BufferPipeline` has a single processing step per work item:
 
-| Step         | Action                                                                                                                                                                   |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Content hash | If `Config::with_content_hashing` is enabled and `cooked.content_hash == 0`: offload `SHA-256(cooked.data)` to thread pool; store first 8 bytes in `cooked.content_hash` |
+| Step         | Action                                                                                   |
+| ------------ | ---------------------------------------------------------------------------------------- |
+| Content hash | Offload `SHA-256(cooked.data)` to thread pool; store the digest in `cooked.content_hash` |
 
 Unlike texture and material pipelines, buffer processing has no format
 conversion, compression, mip generation, or field-level encoding steps. All
@@ -598,11 +592,10 @@ struct BufferResourceDesc {
   uint32_t      usage_flags    = 0;  // bitfield (see Section 7.2.3)
   uint32_t      element_stride = 0;  // bytes-per-element (1 = raw; 0 when element_format set)
   uint8_t       element_format = 0;  // Format enum (0 = raw or structured)
-  uint64_t      content_hash   = 0;  // first 8 bytes of SHA-256 of buffer data
-  uint8_t       reserved[3]    = {}; // must be zero
+  ContentHashDigest content_hash = {}; // SHA-256 of buffer data (32 bytes)
 };
 #pragma pack(pop)
-static_assert(sizeof(BufferResourceDesc) == 32);
+static_assert(sizeof(BufferResourceDesc) == 53);
 ```
 
 Buffer types:
@@ -646,7 +639,7 @@ recorded in `CookedBufferPayload::alignment`; actual placement is determined by
 <cooked_root>/
   Buffers/
     <buffer_name>.obuf   ← BufferResourceDesc + ResourceIndexT + named views
-  buffers.table          ← Sequential BufferResourceDesc[N] (32 bytes each)
+  buffers.table          ← Sequential BufferResourceDesc[N] (53 bytes each)
   buffers.data           ← Concatenated raw buffer byte payloads
 ```
 
@@ -719,8 +712,10 @@ Key contracts:
 
 1. `element_format > 0` and `element_stride > 0` MUST NOT both be set in the
    same descriptor; the runtime interprets them as mutually exclusive.
-2. `content_hash` is used for deduplication during incremental imports without
-   re-reading the data file.
+2. `content_hash` is the SHA-256 of the buffer payload. Importers deduplicate
+   buffers by descriptor and SHA-256 without re-reading the data file, and full
+   verification checks each payload in `buffers.data` against it. The loose
+   cooked index records no whole-file digest for `buffers.data`.
 3. `BufferResource` does not own a GPU handle. Buffer upload and GPU resource
    creation are the renderer's responsibility.
 4. Named views stored in the `.obuf` sidecar are available to tools and geometry

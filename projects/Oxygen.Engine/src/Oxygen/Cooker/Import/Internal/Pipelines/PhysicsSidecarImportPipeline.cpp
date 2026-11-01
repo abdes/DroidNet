@@ -3066,30 +3066,25 @@ namespace {
   }
 
   auto BuildCookedPhysicsPayload(const std::vector<std::byte>& blob_bytes,
-    const phys::PhysicsResourceFormat format, const bool with_hashing)
-    -> CookedPhysicsResourcePayload
+    const phys::PhysicsResourceFormat format) -> CookedPhysicsResourcePayload
   {
     auto payload = CookedPhysicsResourcePayload {};
     payload.data.assign(blob_bytes.begin(), blob_bytes.end());
     payload.format = format;
     payload.alignment = 16;
-    if (with_hashing) {
-      payload.content_hash = util::ComputeContentSha256(payload.data);
-    }
+    payload.content_hash = util::ComputeContentSha256(payload.data);
     return payload;
   }
 
   auto EmitBindingBlob(ImportSession& session, const ImportRequest& request,
     const std::string_view object_path,
     const std::vector<std::byte>& blob_bytes,
-    const phys::PhysicsResourceFormat format, const bool with_hashing,
-    data::AssetKey& out_asset_key) -> bool
+    const phys::PhysicsResourceFormat format, data::AssetKey& out_asset_key)
+    -> bool
   {
     try {
-      const auto source
-        = request.source_path.string() + "#" + std::string(object_path);
       const auto emitted = session.PhysicsResourceEmitter().Emit(
-        BuildCookedPhysicsPayload(blob_bytes, format, with_hashing), source);
+        BuildCookedPhysicsPayload(blob_bytes, format));
       out_asset_key = emitted.resource_asset_key;
       return true;
     } catch (const std::exception& ex) {
@@ -3107,8 +3102,6 @@ namespace {
     const ImportRequest& request, const cooked::CookedContent& target_content)
     -> bool
   {
-    const auto with_hashing
-      = EffectiveContentHashingEnabled(request.options.with_content_hashing);
     for (size_t i = 0; i < records.size(); ++i) {
       auto blob_bytes = std::vector<std::byte> {};
       auto cook_error = SoftBodyCookError {};
@@ -3126,7 +3119,7 @@ namespace {
       }
       if (!EmitBindingBlob(session, request,
             "bindings.soft_bodies[" + std::to_string(i) + "]", blob_bytes,
-            records.at(i).record.topology_format, with_hashing,
+            records.at(i).record.topology_format,
             records.at(i).record.topology_asset_key)) {
         continue;
       }
@@ -3137,8 +3130,6 @@ namespace {
   auto EmitJointConstraintResources(std::vector<JointBindingSource>& records,
     ImportSession& session, const ImportRequest& request) -> bool
   {
-    const auto with_hashing
-      = EffectiveContentHashingEnabled(request.options.with_content_hashing);
     for (size_t i = 0; i < records.size(); ++i) {
       auto blob_bytes = std::vector<std::byte> {};
       auto cook_error = std::string {};
@@ -3151,7 +3142,7 @@ namespace {
       }
       if (!EmitBindingBlob(session, request,
             "bindings.joints[" + std::to_string(i) + "]", blob_bytes,
-            records.at(i).constraint_format, with_hashing,
+            records.at(i).constraint_format,
             records.at(i).record.constraint_asset_key)) {
         continue;
       }
@@ -3163,8 +3154,6 @@ namespace {
     std::vector<VehicleBindingSource>& records, ImportSession& session,
     const ImportRequest& request) -> bool
   {
-    const auto with_hashing
-      = EffectiveContentHashingEnabled(request.options.with_content_hashing);
     for (size_t i = 0; i < records.size(); ++i) {
       auto blob_bytes = std::vector<std::byte> {};
       auto cook_error = std::string {};
@@ -3177,7 +3166,7 @@ namespace {
       }
       if (!EmitBindingBlob(session, request,
             "bindings.vehicles[" + std::to_string(i) + "]", blob_bytes,
-            records.at(i).constraint_format, with_hashing,
+            records.at(i).constraint_format,
             records.at(i).record.constraint_asset_key)) {
         continue;
       }
@@ -3320,8 +3309,7 @@ namespace {
 
   auto SerializePhysicsSceneAsset(const SidecarResolvedSceneState& scene_state,
     std::string_view sidecar_name, const std::vector<TableBlob>& input_tables,
-    const bool hashing_enabled, std::string& error)
-    -> std::optional<std::vector<std::byte>>
+    std::string& error) -> std::optional<std::vector<std::byte>>
   {
     auto tables = input_tables;
     std::ranges::sort(
@@ -3414,9 +3402,7 @@ namespace {
     const auto stream_data = stream.Data();
     auto bytes = std::vector<std::byte>(stream_data.begin(), stream_data.end());
     data::AppendDescriptorStrings(bytes, strings);
-    if (hashing_enabled) {
-      PatchContentHash(bytes, util::ComputeContentSha256(bytes));
-    }
+    PatchContentHash(bytes, util::ComputeContentSha256(bytes));
     return bytes;
   }
 
@@ -3681,10 +3667,8 @@ namespace {
     }
 
     auto serialize_error = std::string {};
-    const auto descriptor_bytes
-      = SerializePhysicsSceneAsset(scene_state, sidecar_name, tables,
-        EffectiveContentHashingEnabled(request.options.with_content_hashing),
-        serialize_error);
+    const auto descriptor_bytes = SerializePhysicsSceneAsset(
+      scene_state, sidecar_name, tables, serialize_error);
     if (!descriptor_bytes.has_value()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.sidecar.descriptor_serialize_failed",

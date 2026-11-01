@@ -345,6 +345,30 @@ namespace {
     EXPECT_EQ(data.range.count.get(), 2U);
   }
 
+  //! A data file written whole is indexed with no digest, and its table with
+  //! the digest of its bytes.
+  NOLINT_TEST(LooseCookedWriterUpdateTest, WrittenDataFileHasNoDigest)
+  {
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "data_digest";
+    const std::vector<std::byte> bytes = { std::byte { 0x01 } };
+    const auto table = BufferTable(1U);
+    LooseCookedWriter writer(cooked_root, storage);
+    writer.WriteFile(FileKind::kBuffersTable, "Resources/buffers.table", table);
+    writer.WriteFile(FileKind::kBuffersData, "Resources/buffers.data", bytes);
+
+    const auto result = writer.Finish();
+
+    ASSERT_EQ(result.files.size(), 2U);
+    for (const auto& file : result.files) {
+      if (file.kind == FileKind::kBuffersData) {
+        EXPECT_TRUE(base::IsAllZero(file.sha256));
+      } else {
+        EXPECT_EQ(file.sha256, base::ComputeSha256(table));
+      }
+    }
+  }
+
   NOLINT_TEST(
     LooseCookedWriterUpdateTest, FinishMergesNewAssetWithExistingAssets)
   {

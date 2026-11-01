@@ -7,7 +7,6 @@
 // Covers: Import/Internal/Jobs/SceneDescriptorImportJob.cpp
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -61,8 +60,8 @@
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Serio/ByteReader.h>
-#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Types.h>
@@ -422,28 +421,23 @@ namespace {
     const TextureType type) -> void
   {
     const bool cube = type == TextureType::kTextureCube;
-    serio::MemoryStream stream;
-    serio::Writer writer(stream);
-    const auto packed = writer.ScopedAlignment(1);
-    constexpr auto kMagic = std::array { 'O', 'T', 'E', 'X' };
-    ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { kMagic })));
-    ASSERT_TRUE(writer.Write(uint16_t { 1U }));
-    ASSERT_TRUE(writer.Write(uint16_t { 0U }));
-    ASSERT_TRUE(writer.Write(index));
-    ASSERT_TRUE(writer.Write(data::pak::core::TextureResourceDesc {
-      .data_offset = 0U,
-      .size_bytes = cube ? 24U : 4U,
-      .texture_type = static_cast<uint8_t>(type),
-      .compression_type = 0U,
-      .width = 1U,
-      .height = 1U,
-      .depth = 1U,
-      .array_layers = static_cast<uint16_t>(cube ? 6U : 1U),
-      .mip_levels = 1U,
-      .format = static_cast<uint8_t>(format),
-      .alignment = 256U,
-    }));
-    WriteBytes(root / "Textures" / name, stream.Data());
+    WriteBytes(root / "Textures" / name,
+      data::EncodeTextureResourceDescriptor({
+        .index = data::pak::core::ResourceIndexT { index },
+        .descriptor = data::pak::core::TextureResourceDesc {
+          .data_offset = 0U,
+          .size_bytes = cube ? 24U : 4U,
+          .texture_type = static_cast<uint8_t>(type),
+          .compression_type = 0U,
+          .width = 1U,
+          .height = 1U,
+          .depth = 1U,
+          .array_layers = static_cast<uint16_t>(cube ? 6U : 1U),
+          .mip_levels = 1U,
+          .format = static_cast<uint8_t>(format),
+          .alignment = 256U,
+        },
+      }));
   }
 
   auto WriteMeteringMaskSidecar(const std::filesystem::path& root,

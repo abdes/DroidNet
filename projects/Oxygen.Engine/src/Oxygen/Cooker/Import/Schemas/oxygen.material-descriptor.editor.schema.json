@@ -34,14 +34,6 @@
       "x-editor-advanced": true,
       "x-editor-tooltip": "Occlusion/Roughness/Metalness packing policy used by the cooker."
     },
-    "content_hashing": {
-      "x-editor-label": "Content Hashing",
-      "x-editor-group": "Identity",
-      "x-editor-order": 4,
-      "x-editor-renderer": "checkbox",
-      "x-editor-advanced": true,
-      "x-editor-tooltip": "Enable content-based hashing for shader and material assets."
-    },
     "parameters": {
       "x-editor-label": "Parameters",
       "x-editor-group": "Surface",

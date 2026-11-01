@@ -49,6 +49,7 @@
             "maximum": 12
           },
           "sha256": {
+            "description": "The file's SHA-256; all zero for a resource data file, whose resources are verified one by one against their table rows.",
             "$ref": "#/$defs/digest"
           }
         }
@@ -128,8 +129,16 @@
               "digest_mismatch",
               "linked_path",
               "not_regular",
+              "malformed_table",
+              "resource_out_of_bounds",
+              "resource_digest_mismatch",
               "format_version"
             ]
+          },
+          "resource_row": {
+            "description": "The table row of the resource a resource_* reason is about, in the data file relative_path names.",
+            "type": "integer",
+            "minimum": 0
           }
         }
       }

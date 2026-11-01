@@ -18,19 +18,15 @@
 
 #include "LooseCookedWriterTestSupport.h"
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
-#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
-#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -114,13 +110,13 @@ namespace {
   auto CookShipAndDock(
     MemoryFileSystem& storage, const std::filesystem::path& cooked_root) -> void
   {
-    storage.AddFile(cooked_root / kShipModel.File("Hull.otex"),
-      data::EncodeTextureResourceDescriptor({
-        .index = data::pak::core::ResourceIndexT { 1U },
-        .descriptor = {},
-      }));
-    storage.AddFile(
-      cooked_root / kShipModel.File("Hull.obuf"), std::vector<std::byte>(8U));
+    const auto otex = data::EncodeTextureResourceDescriptor({
+      .index = data::pak::core::ResourceIndexT { 1U },
+      .descriptor = {},
+    });
+    const auto obuf = std::vector<std::byte>(8U);
+    storage.AddFile(cooked_root / kShipModel.File("Hull.otex"), otex);
+    storage.AddFile(cooked_root / kShipModel.File("Hull.obuf"), obuf);
 
     LooseCookedWriter writer(cooked_root, storage);
     // The texture descriptor names row 1, so the root holds a texture table
@@ -137,9 +133,10 @@ namespace {
     WriteMaterial(
       writer, kDockModel, { .seed = 0x13, .name = "Pier", .source = kDock });
     writer.RegisterExternalTextureDescriptor(kShipModel.File("Hull.otex"),
-      kShipModel.Product("Hull.otex"), FromSource(std::string(kShip)));
-    writer.RegisterExternalAuxiliaryFile(
-      kShipModel.File("Hull.obuf"), FromSource(std::string(kShip)));
+      kShipModel.Product("Hull.otex"), FromSource(std::string(kShip)),
+      ProducedDigest(otex));
+    writer.RegisterExternalAuxiliaryFile(kShipModel.File("Hull.obuf"),
+      FromSource(std::string(kShip)), ProducedDigest(obuf));
     static_cast<void>(writer.Finish());
   }
 

@@ -75,8 +75,7 @@ Out of scope:
    `kMaterialFlag_GltfOrmPacked` — no hard-coded channel assumptions in cooking
    stages.
 7. Content hashing uses the full serialized byte span (both `MaterialAssetDesc`
-   and all `ShaderReferenceDesc` entries) and MUST NOT be computed when
-   `with_content_hashing` is false.
+   and all `ShaderReferenceDesc` entries) and is always computed.
 8. `MaterialAssetDesc` and `ShaderReferenceDesc` binary layout MUST NOT be
    modified without incrementing `kMaterialAssetVersion` and updating the
    `static_assert(sizeof(...))` guards.
@@ -201,8 +200,7 @@ Architectural split:
    - file: `src/Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h`
    - role: tooling-facing DTO for one material descriptor import job request.
      Contains `descriptor_path` (path to `.material.json`), `cooked_root`
-     (absolute output root), `job_name` (optional override), and
-     `with_content_hashing`.
+     (absolute output root) and `job_name` (optional override).
    - note: This DTO is never passed to the pipeline directly. It is only
      consumed by `BuildMaterialDescriptorRequest`.
 
@@ -214,8 +212,7 @@ Architectural split:
      - `src/Oxygen/Cooker/Import/Internal/MaterialDescriptorImportRequestBuilder.cpp`
    - role: validate + normalize `MaterialDescriptorImportSettings` into an
      `ImportRequest`. Loads the descriptor JSON file, schema-validates it
-     against `kMaterialDescriptorSchema`, resolves `job_name`, resolves
-     `with_content_hashing`, and stores `descriptor_doc->dump()` in
+     against `kMaterialDescriptorSchema`, resolves `job_name`, and stores `descriptor_doc->dump()` in
      `request.material_descriptor.normalized_descriptor_json`.
    - note: The presence of `request.material_descriptor` is the route
      discriminant that bypasses all format detection in `AsyncImportService`.
@@ -265,7 +262,7 @@ Architectural split:
         `ShaderReferenceDesc[N]`, computes `shader_stages` bitfield.
      10. `SerializeMaterialDescriptor` — packs `MaterialAssetDesc` (311 bytes),
          `ShaderReferenceDesc[]` and the string table to a `MemoryStream`.
-     11. `ComputeContentHashOnThreadPool` (optional) — hashes full serialized
+     11. `ComputeContentHashOnThreadPool` — hashes full serialized
          span on thread pool.
      12. `PatchContentHash` — patches `header.content_hash` at fixed offset.
    - note: `MaterialPipeline` does NOT emit cooked files; only `AssetEmitter` in
@@ -369,7 +366,7 @@ Schema target files:
 ```
 
 Valid top-level keys for `type: "material-descriptor"`: `id`, `type`, `source`,
-`name`, `content_hashing`, `depends_on`.
+`name`, `depends_on`.
 
 The `source` field must point to a file conforming to
 `oxygen.material-descriptor.schema.json` (Section 7.2).
@@ -398,8 +395,7 @@ Manifest-level defaults reduce per-job verbosity:
   "defaults": {
     "material_descriptor": {
       "output": "<absolute-cooked-root>",
-      "name":   "<optional-name-override>",
-      "content_hashing": true
+      "name":   "<optional-name-override>"
     }
   },
   "jobs": [...]
@@ -435,17 +431,16 @@ JSON Schema draft-07, `additionalProperties: false` at all levels.
 
 #### 7.2.1 Top-Level Field Contract
 
-| Field             | Required | Type                   | Description                                          |
-| ----------------- | -------- | ---------------------- | ---------------------------------------------------- |
-| `$schema`         | No       | `string`               | Points to shipped JSON Schema for editor integration |
-| `name`            | No       | `string` (minLength 1) | Human-readable asset name                            |
-| `content_hashing` | No       | `bool`                 | Override global content hashing toggle               |
-| `domain`          | No       | string enum            | Material domain (Section 7.2.2)                      |
-| `alpha_mode`      | No       | string enum            | Alpha blending mode (Section 7.2.3)                  |
-| `orm_policy`      | No       | string enum            | ORM packing policy (Section 7.2.4)                   |
-| `inputs`          | No       | object                 | PBR scalar inputs (Section 7.2.5)                    |
-| `textures`        | No       | object                 | Texture slot bindings (Section 7.2.6)                |
-| `shaders`         | No       | array                  | Explicit shader stage references (Section 7.2.7)     |
+| Field        | Required | Type                   | Description                                          |
+| ------------ | -------- | ---------------------- | ---------------------------------------------------- |
+| `$schema`    | No       | `string`               | Points to shipped JSON Schema for editor integration |
+| `name`       | No       | `string` (minLength 1) | Human-readable asset name                            |
+| `domain`     | No       | string enum            | Material domain (Section 7.2.2)                      |
+| `alpha_mode` | No       | string enum            | Alpha blending mode (Section 7.2.3)                  |
+| `orm_policy` | No       | string enum            | ORM packing policy (Section 7.2.4)                   |
+| `inputs`     | No       | object                 | PBR scalar inputs (Section 7.2.5)                    |
+| `textures`   | No       | object                 | Texture slot bindings (Section 7.2.6)                |
+| `shaders`    | No       | array                  | Explicit shader stage references (Section 7.2.7)     |
 
 Canonical example (`woodfloor007.material.json`):
 
@@ -656,7 +651,7 @@ All material cooking stages execute within `BuildMaterialPayload` in the
 | 8    | `BuildMaterialUvTransformDesc`   | Writes first assigned binding's UV scale/offset/rotation to descriptor                             |
 | 9    | `BuildShaderReferences`          | Validates, deduplicates, sorts, encodes `ShaderReferenceDesc[]`; computes `shader_stages` bitfield |
 | 10   | `SerializeMaterialDescriptor`    | Packed write: `MaterialAssetDesc` (311 B) + `ShaderReferenceDesc[N]` (21 B × N) + string table     |
-| 11   | `ComputeContentHashOnThreadPool` | Hashes full byte span on thread pool (when enabled)                                                |
+| 11   | `ComputeContentHashOnThreadPool` | Hashes full byte span on thread pool                                                               |
 | 12   | `PatchContentHash`               | Patches `header.content_hash` field at fixed byte offset in serialized output                      |
 
 All stages cooperatively support cancellation via `work_item.stop_token`.

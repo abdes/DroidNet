@@ -233,8 +233,6 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   auto& pipeline = CreatePipeline<TexturePipeline>(*ThreadPool(),
     TexturePipeline::Config {
-      .with_content_hashing
-      = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
       .file_reader = {},
       .on_io_duration = {},
     });
@@ -829,9 +827,8 @@ auto TextureImportJob::EmitTexture(
 {
   try {
     auto& emitter = session.TextureEmitter();
-    const auto signature_salt = Request().source_path.string();
     const auto emit_start = std::chrono::steady_clock::now();
-    const auto index = emitter.Emit(std::move(cooked), signature_salt);
+    const auto index = emitter.Emit(std::move(cooked));
     const auto descriptor = emitter.TryGetDescriptor(index);
     if (!descriptor.has_value()) {
       session.AddDiagnostic({

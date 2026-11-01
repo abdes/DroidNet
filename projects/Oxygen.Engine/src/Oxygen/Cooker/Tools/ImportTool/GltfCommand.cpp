@@ -162,14 +162,6 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                            .StoreTo(&bake_transforms_)
                            .Build();
 
-  auto with_content_hashing
-    = Option::WithKey("content-hashing")
-        .About("Enable or disable content hashing for outputs")
-        .Long("content-hashing")
-        .WithValue<bool>()
-        .StoreTo(&options_.with_content_hashing)
-        .Build();
-
   auto normals
     = Option::WithKey("normals")
         .About("Normals policy (none, preserve, generate, recalculate)")
@@ -285,8 +277,7 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(no_import_lights))
     .WithOption(std::move(no_import_cameras))
     .WithOption(std::move(light_intensity_scale))
-    .WithOption(std::move(max_texture_size))
-    .WithOption(std::move(with_content_hashing));
+    .WithOption(std::move(max_texture_size));
 }
 
 auto GltfCommand::Execute() -> std::expected<void, std::error_code>

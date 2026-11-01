@@ -63,7 +63,7 @@ namespace {
   auto MakeDescriptor() -> GeometryDescriptor
   {
     auto geometry = GeometryDescriptor { "/Content/Geometry/Geometry.v2.ogeo" };
-    geometry.Set("/content_hashing", false)
+    geometry
       .Set(
         "/bounds", nlohmann::json::parse(R"({"min":[-1,-1,-1],"max":[1,1,1]})"))
       .AppendBuffer(
@@ -89,9 +89,6 @@ namespace {
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     EXPECT_EQ(source->name, "Geometry.v2");
-    ASSERT_HAS_VALUE(source->content_hashing)
-      << "Expected source->content_hashing to contain a value";
-    EXPECT_FALSE(*source->content_hashing);
     ASSERT_EQ(source->buffers.size(), 1U);
     EXPECT_EQ(source->buffers.front().source_path,
       std::filesystem::weakly_canonical(

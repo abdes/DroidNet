@@ -67,8 +67,9 @@ public:
     return desc_.compression;
   }
 
-  //! Returns the payload content hash (first 8 bytes of SHA256).
-  [[nodiscard]] auto GetContentHash() const noexcept -> uint64_t
+  //! Returns the SHA-256 of the script payload, from the descriptor.
+  [[nodiscard]] auto GetContentHash() const noexcept
+    -> const pak::core::ContentHashDigest&
   {
     return desc_.content_hash;
   }

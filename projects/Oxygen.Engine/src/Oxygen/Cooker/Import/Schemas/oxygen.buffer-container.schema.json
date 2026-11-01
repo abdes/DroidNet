@@ -10,9 +10,6 @@
     "name": {
       "$ref": "oxygen.name.schema.json#/definitions/segment"
     },
-    "content_hashing": {
-      "type": "boolean"
-    },
     "buffers": {
       "type": "array",
       "minItems": 1,
@@ -121,10 +118,6 @@
         "alignment": {
           "type": "integer",
           "minimum": 1
-        },
-        "content_hash": {
-          "type": "integer",
-          "minimum": 0
         },
         "views": {
           "type": "array",

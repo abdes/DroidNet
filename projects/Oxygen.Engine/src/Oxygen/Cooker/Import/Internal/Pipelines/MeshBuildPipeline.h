@@ -126,7 +126,6 @@ public:
   struct Config {
     size_t queue_capacity = 32;
     uint32_t worker_count = 2;
-    bool with_content_hashing = true;
     uint64_t max_data_blob_bytes = data::pak::core::kDataBlobMaxSize;
   };
 
@@ -184,10 +183,10 @@ public:
     bool has_tangent_space_textures = false;
 
     //! Callback fired when a worker starts processing this item.
-    std::function<void()> on_started {};
+    std::function<void()> on_started;
 
     //! Callback fired when a worker finishes processing this item.
-    std::function<void()> on_finished {};
+    std::function<void()> on_finished;
 
     ImportRequest request;
     observer_ptr<NamingService> naming_service;

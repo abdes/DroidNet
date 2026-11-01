@@ -7,9 +7,9 @@
 // Authoritative current cooked-format versions. Native producers, readers and
 // tools consume this catalog; readers accept these versions only. A format's
 // spec name is how tools report it.
-OXDAT_FORMAT_VERSION(kPakVersion, pak, uint16_t, 11)
+OXDAT_FORMAT_VERSION(kPakVersion, pak, uint16_t, 12)
 OXDAT_FORMAT_VERSION(kPakCatalogVersion, pak_catalog, uint32_t, 5)
-OXDAT_FORMAT_VERSION(kLooseCookedIndexVersion, loose_cooked_index, uint16_t, 7)
+OXDAT_FORMAT_VERSION(kLooseCookedIndexVersion, loose_cooked_index, uint16_t, 8)
 OXDAT_ASSET_VERSION(kMaterialAssetVersion, kMaterial, material, 5)
 OXDAT_ASSET_VERSION(kGeometryAssetVersion, kGeometry, geometry, 6)
 OXDAT_ASSET_VERSION(kSceneAssetVersion, kScene, scene, 16)
@@ -30,10 +30,10 @@ OXDAT_FORMAT_VERSION(kExposureExtensionVersion, exposure_extension, uint32_t, 1)
 // stays the same, so that content an earlier revision cooked is cooked again.
 // The importer is the enumerator of `content::import::Importer`; its spec name
 // is how the ImportTool reports it.
-OXDAT_IMPORTER_REVISION(kGltf, gltf, 6)
-OXDAT_IMPORTER_REVISION(kFbx, fbx, 6)
-OXDAT_IMPORTER_REVISION(kTexture, texture, 2)
-OXDAT_IMPORTER_REVISION(kBufferContainer, buffer_container, 1)
+OXDAT_IMPORTER_REVISION(kGltf, gltf, 7)
+OXDAT_IMPORTER_REVISION(kFbx, fbx, 7)
+OXDAT_IMPORTER_REVISION(kTexture, texture, 3)
+OXDAT_IMPORTER_REVISION(kBufferContainer, buffer_container, 2)
 OXDAT_IMPORTER_REVISION(kMaterialDescriptor, material_descriptor, 1)
 OXDAT_IMPORTER_REVISION(
   kPhysicsMaterialDescriptor, physics_material_descriptor, 1)

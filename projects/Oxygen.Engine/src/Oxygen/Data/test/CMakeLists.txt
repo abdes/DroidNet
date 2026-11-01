@@ -44,6 +44,7 @@ m_gtest_program(
     "IndexBufferView_test.cpp"
     "LooseCookedIndexEncoder_test.cpp"
     "LooseCookedPaths_test.cpp"
+    "LooseCookedResources_test.cpp"
     "SurfaceInventory_test.cpp"
     "Mesh_test.cpp"
     "MeshBoundingSphere_test.cpp"

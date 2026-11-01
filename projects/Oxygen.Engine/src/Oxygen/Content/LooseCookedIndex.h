@@ -52,11 +52,19 @@ enum class IntegrityFailure : uint8_t {
   kDigestMismatch,
   kLinkedPath,
   kNotRegular,
+  //! A resource table whose rows cannot be read.
+  kMalformedTable,
+  //! A resource whose table row places it outside its data file.
+  kResourceOutOfBounds,
+  //! A resource whose bytes do not hash to its table row's SHA-256.
+  kResourceDigestMismatch,
 };
 
 struct FileIntegrityIssue final {
   std::string relative_path;
   IntegrityFailure reason = IntegrityFailure::kMissing;
+  //! The table row of the resource a `kResource*` failure is about.
+  std::optional<uint32_t> resource_row;
 };
 
 class LooseCookedIndex final {
@@ -129,7 +137,9 @@ public:
   OXGN_CNTT_NDAPI auto CheckContent(const std::filesystem::path& cooked_root,
     IntegrityCheck check) const -> std::vector<FileIntegrityIssue>;
 
-  //! Validate membership and sizes; kFull additionally verifies every digest.
+  //! Validate membership and sizes; kFull additionally verifies every digest:
+  //! the digest of each file, and of each resource in a resource data file
+  //! against its table row.
   //! The caller protects files for the duration and any subsequent result
   //! reuse.
   OXGN_CNTT_API auto ValidateContent(const std::filesystem::path& cooked_root,

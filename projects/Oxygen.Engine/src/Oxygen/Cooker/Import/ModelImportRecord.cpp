@@ -854,7 +854,6 @@ auto ModelImportRecord::MakeSettings(const SceneImportSettings& settings)
 {
   auto job = TextureSettings(settings.texture_defaults);
   job.update({
-    { "content_hashing", settings.with_content_hashing },
     {
       "content_flags",
       {

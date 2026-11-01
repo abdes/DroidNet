@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
@@ -383,7 +384,7 @@ NOLINT_TEST(TextureCookerBasicTest, CooksMinimalBmp)
   EXPECT_EQ(payload.desc.format, Format::kRGBA8UNorm);
   EXPECT_EQ(payload.desc.mip_levels, 1U);
   EXPECT_FALSE(payload.payload.empty());
-  EXPECT_NE(payload.desc.content_hash, 0U);
+  EXPECT_FALSE(oxygen::base::IsAllZero(payload.desc.content_hash));
 }
 
 NOLINT_TEST(TextureCookerBasicTest, SetsPackingPolicyId)
@@ -423,6 +424,24 @@ NOLINT_TEST(TextureCookerBasicTest, ContentHashIsDeterministic)
   ASSERT_HAS_VALUE(result1);
   ASSERT_HAS_VALUE(result2);
   EXPECT_EQ(result1->desc.content_hash, result2->desc.content_hash);
+}
+
+//! The content hash is the SHA-256 of the payload bytes, which hold no hash.
+NOLINT_TEST(TextureCookerBasicTest, ContentHashIsTheSha256OfThePayload)
+{
+  TextureImportDesc desc;
+  desc.source_id = "test.bmp";
+  desc.width = 2;
+  desc.height = 2;
+  desc.output_format = Format::kRGBA8UNorm;
+  desc.mip_policy = MipPolicy::kNone;
+
+  auto result
+    = CookTexture(GetTestImageBytes(), desc, TightPackedPolicy::Instance());
+
+  ASSERT_HAS_VALUE(result);
+  EXPECT_EQ(result->desc.content_hash,
+    oxygen::base::ComputeSha256(std::as_bytes(std::span(result->payload))));
 }
 
 //===----------------------------------------------------------------------===//
@@ -727,42 +746,6 @@ NOLINT_TEST(TextureCookerHdrTest, HalfOutputClampsOutOfRangeRadiance)
   EXPECT_EQ(decode(*data),
     (std::array { 65504.0F, 0.0F, 0.0F, -2.0F, -0.5F, 65504.0F, 0.0F, 0.25F }));
   EXPECT_EQ(data->half_narrowing.negative, 0U);
-}
-
-//===----------------------------------------------------------------------===//
-// Detail Function Tests
-//===----------------------------------------------------------------------===//
-
-NOLINT_TEST(TextureCookerDetailTest, ContentHashNonZero)
-{
-  std::vector<std::byte> data {
-    std::byte { 1 },
-    std::byte { 2 },
-    std::byte { 3 },
-  };
-
-  auto hash = oxygen::content::import::detail::ComputeContentHash(data);
-
-  EXPECT_NE(hash, 0U);
-}
-
-NOLINT_TEST(TextureCookerDetailTest, ContentHashVariesWithData)
-{
-  std::vector<std::byte> data1 {
-    std::byte { 1 },
-    std::byte { 2 },
-    std::byte { 3 },
-  };
-  std::vector<std::byte> data2 {
-    std::byte { 4 },
-    std::byte { 5 },
-    std::byte { 6 },
-  };
-
-  auto hash1 = oxygen::content::import::detail::ComputeContentHash(data1);
-  auto hash2 = oxygen::content::import::detail::ComputeContentHash(data2);
-
-  EXPECT_NE(hash1, hash2);
 }
 
 //===----------------------------------------------------------------------===//

@@ -56,8 +56,8 @@ public:
     -> Result<AssetKey>;
 
   //! Computes a deterministic AssetKey from a canonical virtual path.
-  OXGN_CORE_NDAPI static auto FromVirtualPath(std::string_view virtual_path)
-    -> AssetKey;
+  OXGN_CORE_NDAPI static auto FromVirtualPath(
+    std::string_view virtual_path) noexcept -> AssetKey;
 
   //! The mount reserved for objects created in code rather than cooked.
   static constexpr std::string_view kCodeMount = "/.code";
@@ -112,7 +112,7 @@ OXGN_CORE_NDAPI auto to_string(const AssetKey& value) -> std::string;
 {
   return std::as_bytes(
     std::span<const AssetKey::value_type, AssetKey::kSizeBytes>(
-      key.data(), key.size()));
+      key.data(), oxygen::data::AssetKey::size()));
 }
 
 } // namespace oxygen::data
@@ -122,15 +122,14 @@ template <> struct hash<oxygen::data::AssetKey> {
   [[nodiscard]] auto operator()(
     const oxygen::data::AssetKey& key) const noexcept -> size_t
   {
-    return static_cast<size_t>(oxygen::ComputeFNV1a64(key.data(), key.size()));
+    return static_cast<size_t>(
+      oxygen::ComputeFNV1a64(key.data(), oxygen::data::AssetKey::size()));
   }
 };
 } // namespace std
 
 template <>
 struct fmt::formatter<oxygen::data::AssetKey> : fmt::formatter<std::string> {
-  constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-
   auto format(const oxygen::data::AssetKey& key, fmt::format_context& ctx) const
   {
     return fmt::formatter<std::string>::format(

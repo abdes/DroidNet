@@ -9,7 +9,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -49,7 +48,8 @@ namespace {
     if (bytes.size() < kOffset + sizeof(content_hash)) {
       return;
     }
-    std::memcpy(bytes.data() + kOffset, &content_hash, sizeof(content_hash));
+    std::ranges::copy(std::as_bytes(std::span(content_hash)),
+      std::span(bytes).subspan(kOffset).begin());
   }
 
   [[nodiscard]] auto SerializeDescriptor(
@@ -197,15 +197,13 @@ auto PhysicsMaterialImportPipeline::Worker() -> co::Co<>
 
     const auto cook_start = std::chrono::steady_clock::now();
     auto descriptor_bytes = SerializeDescriptor(item.descriptor, item.name);
-    if (config_.with_content_hashing) {
-      const auto content_hash
-        = co_await ComputeContentHash(descriptor_bytes, item.stop_token);
-      if (!content_hash.has_value()) {
-        co_await ReportCancelled(std::move(item));
-        continue;
-      }
-      PatchContentHash(descriptor_bytes, *content_hash);
+    const auto content_hash
+      = co_await ComputeContentHash(descriptor_bytes, item.stop_token);
+    if (!content_hash.has_value()) {
+      co_await ReportCancelled(std::move(item));
+      continue;
     }
+    PatchContentHash(descriptor_bytes, *content_hash);
 
     auto result = WorkResult {
       .source_id = std::move(item.source_id),

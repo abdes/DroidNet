@@ -124,7 +124,6 @@ struct SceneSource final {
   };
 
   std::string name;
-  std::optional<bool> content_hashing;
   SceneBuild build;
   std::vector<Renderable> renderables;
   std::vector<Reference> references;

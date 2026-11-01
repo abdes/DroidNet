@@ -68,8 +68,8 @@ Out of scope:
    `oxygen::serio` (no raw byte arithmetic for new logic).
 6. Packing alignment MUST be expressed through `ITexturePackingPolicy`
    implementations — no hard-coded alignment values in cooking stages.
-7. Content hashing uses the first 8 bytes of SHA-256 over the payload bytes and
-   MUST NOT be computed when `with_content_hashing` is false.
+7. Content hashing is the full SHA-256 (`ContentHashDigest`) over the payload
+   bytes as stored and is always computed by the pipeline.
 8. Texture `format` stored in `TextureResourceDesc` MUST be a value from the
    core type `Format` enum (no internal representation).
 9. Runtime content code MUST NOT depend on demo/example code.
@@ -214,7 +214,7 @@ Architectural split:
      4. Mip generation (`detail::GenerateMips`)
      5. Output format conversion + BC7 (`detail::ConvertToOutputFormat`)
      6. Packing (`detail::PackSubresources`)
-     7. Content hashing (`detail::ComputeContentHash`, optional)
+     7. Content hashing (SHA-256 of the payload)
    - note: `TexturePipeline` does NOT assign resource indices; only
      `TextureEmitter` writes indices.
 
@@ -422,7 +422,6 @@ CLI-only optional flags (NOT valid in manifest job objects):
 | `--output`              | `string`              | Destination cooked root directory                  |
 | `--name`                | `string`              | Human-readable job name                            |
 | `--report`              | `string`              | Report destination path                            |
-| `--content-hashing`     | `bool`                | Enable/disable content hashing                     |
 | `--intent`              | `string`              | Texture intent (see Section 7.4.1)                 |
 | `--color-space`         | `string`              | Source color space (`srgb` / `linear`)             |
 | `--output-format`       | `string`              | Output pixel format                                |
@@ -491,7 +490,7 @@ Allowed top-level keys for `type: "texture"`:
 `hdr_handling`, `exposure_ev`, `bake_hdr_to_ldr`, `bake_hdr`,
 `flip_y`, `force_rgba`, `flip_normal_green`, `renormalize_normals`,
 `cubemap`, `equirect_to_cube`, `cube_face_size`, `cube_layout`,
-`content_hashing`, `depends_on`.
+`depends_on`.
 
 #### 7.3.2 Descriptor-Driven Texture Job (`type: "texture-descriptor"`)
 
@@ -576,20 +575,19 @@ asset pipelines.
 
 #### 7.4.1 Top-Level Field Contract
 
-| Field             | Required | Type        | Description                                          |
-| ----------------- | -------- | ----------- | ---------------------------------------------------- |
-| `$schema`         | No       | `string`    | Points to shipped JSON Schema for editor integration |
-| `source`          | **Yes**  | `string`    | Path to primary source image                         |
-| `name`            | No       | `string`    | Human-readable asset name                            |
-| `content_hashing` | No       | `bool`      | Override content hashing toggle                      |
-| `preset`          | No       | string enum | Named preset (see Section 7.4.2)                     |
-| `intent`          | No       | string enum | Texture intent (see Section 7.4.3)                   |
-| `sources`         | No       | array       | Additional source mappings for multi-source assembly |
-| `decode`          | No       | object      | Decode options (Section 7.4.4)                       |
-| `mips`            | No       | object      | Mip generation settings (Section 7.4.5)              |
-| `output`          | No       | object      | Output format settings (Section 7.4.6)               |
-| `hdr`             | No       | object      | HDR handling settings (Section 7.4.7)                |
-| `cube`            | No       | object      | Cubemap settings (Section 7.4.8)                     |
+| Field     | Required | Type        | Description                                          |
+| --------- | -------- | ----------- | ---------------------------------------------------- |
+| `$schema` | No       | `string`    | Points to shipped JSON Schema for editor integration |
+| `source`  | **Yes**  | `string`    | Path to primary source image                         |
+| `name`    | No       | `string`    | Human-readable asset name                            |
+| `preset`  | No       | string enum | Named preset (see Section 7.4.2)                     |
+| `intent`  | No       | string enum | Texture intent (see Section 7.4.3)                   |
+| `sources` | No       | array       | Additional source mappings for multi-source assembly |
+| `decode`  | No       | object      | Decode options (Section 7.4.4)                       |
+| `mips`    | No       | object      | Mip generation settings (Section 7.4.5)              |
+| `output`  | No       | object      | Output format settings (Section 7.4.6)               |
+| `hdr`     | No       | object      | HDR handling settings (Section 7.4.7)                |
+| `cube`    | No       | object      | Cubemap settings (Section 7.4.8)                     |
 
 Canonical example (`brick_albedo.texture.json`):
 
@@ -839,7 +837,7 @@ testing. Each stage takes a `ScratchImage` (by value, moved) and returns
 | 4. Mip generation     | `detail::GenerateMips(image, desc)`           | Single mip         | Full/limited mip chain |
 | 5. Output format      | `detail::ConvertToOutputFormat(image, desc)`  | Working format     | Final stored format    |
 | 6. Pack               | `detail::PackSubresources(image, policy)`     | Final format       | `vector<byte>` payload |
-| 7. Hash               | `detail::ComputeContentHash(payload)`         | Payload bytes      | `uint64_t` hash        |
+| 7. Hash               | SHA-256 of the payload                        | Payload bytes      | `ContentHashDigest`    |
 
 All stages cooperatively check `desc.stop_token` to support cancellation.
 
@@ -847,7 +845,7 @@ All stages cooperatively check `desc.stop_token` to support cancellation.
 
 ## 9. Binary Format
 
-### 9.1 `TextureResourceDesc` (40 bytes, `PakFormat_render.h`)
+### 9.1 `TextureResourceDesc` (63 bytes, `PakFormat_core.h`)
 
 All textures stored in the loose cooked container and in PAK files share this
 fixed-size descriptor. Placed sequentially in `textures.table`.
@@ -866,16 +864,18 @@ struct TextureResourceDesc {
   uint16_t  mip_levels;           // Number of mip levels
   uint8_t   format;               // Format enum value
   uint16_t  alignment;            // Always 256 for D3D12 packing
-  uint64_t  content_hash = 0;     // First 8 bytes of SHA-256 of payload
-  uint8_t   reserved[1] = {};
+  ContentHashDigest content_hash; // SHA-256 of the payload (32 bytes)
 };
 #pragma pack(pop)
-static_assert(sizeof(TextureResourceDesc) == 40);
+static_assert(sizeof(TextureResourceDesc) == 63);
 ```
 
 ### 9.2 Payload Layout (inside `textures.data`)
 
-Each texture's payload is a contiguous block of subresource data:
+Each texture's payload starts with a 20-byte `TexturePayloadHeader` (magic
+`OTX1`, packing policy, flags, subresource count, total size, layouts offset and
+data offset; `layouts_offset_bytes` is typically 20) followed by the
+`SubresourceLayout` array and a contiguous block of subresource data:
 
 ```text
 [Subresource 0 (layer 0, mip 0)] — padding to alignment
@@ -966,8 +966,11 @@ Key contracts:
 1. Texture resource index `0` is **reserved** for the fallback placeholder
    texture. A `TextureResourceDesc` with texture index `0` MUST NOT be
    interpreted as "no texture" for materials (see `kMaterialFlag_NoTextureSampling`).
-2. `content_hash` is used for deduplication during incremental imports without
-   re-reading the data file.
+2. `content_hash` is the SHA-256 of the whole payload as stored (header,
+   layouts and subresource data; the `TexturePayloadHeader` carries no hash).
+   Importers deduplicate by descriptor and SHA-256 without re-reading the data
+   file, and full verification checks each payload in `textures.data` against
+   it. The loose cooked index records no whole-file digest for `textures.data`.
 3. `TextureResource` does not own a GPU handle. Resource creation is the
    renderer's responsibility.
 

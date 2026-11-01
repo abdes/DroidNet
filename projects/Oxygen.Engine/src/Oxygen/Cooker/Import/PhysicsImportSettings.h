@@ -67,9 +67,6 @@ struct PhysicsSidecarImportSettings final {
   //! Canonical scene virtual path this sidecar targets.
   std::string target_scene_virtual_path;
 
-  //! Content hashing request (normalized by `EffectiveContentHashingEnabled`).
-  bool with_content_hashing { true };
-
   //! Target physics backend for sidecar resource cooking.
   core::meta::physics::PhysicsBackend physics_backend
     = core::meta::physics::PhysicsBackend::kJolt;

@@ -16,7 +16,6 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/SceneDescriptorTestData.h>
 #include <Oxygen/Testing/GTest.h>
@@ -25,7 +24,6 @@
 namespace {
 
 using nlohmann::json;
-using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::ImportManifest;
 using oxygen::content::import::test::MakeCurrentSceneDescriptor;
 using oxygen::cooker::test::WriteText;
@@ -152,7 +150,6 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   WriteText(descriptor_path,
     MakeCurrentSceneDescriptor(R"({
       "name": "DemoScene",
-      "content_hashing": false,
       "nodes": [
         { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" },
         { "id": "00000000-0000-4000-8000-000000000002", "name": "MeshNode", "parent": 0 }
@@ -169,7 +166,6 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
       "output": ".cooked",
       "defaults": {
         "scene_descriptor": {
-          "content_hashing": true,
           "name": "default-scene-name"
         }
       },
@@ -178,8 +174,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
           "type": "scene-descriptor",
           "source": "Scenes/demo.scene.json",
           "virtual_path": "/.cooked/Scenes/Demo.oscene",
-          "name": "demo-scene-job",
-          "content_hashing": true
+          "name": "demo-scene-job"
         }
       ]
     })";
@@ -202,9 +197,6 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   EXPECT_EQ(request->asset_virtual_path, "/.cooked/Scenes/Demo.oscene");
   ASSERT_HAS_VALUE(request->scene_descriptor)
     << "Expected request->scene_descriptor to contain a value";
-
-  EXPECT_EQ(request->options.with_content_hashing,
-    EffectiveContentHashingEnabled(false));
 
   const auto normalized
     = json::parse(request->scene_descriptor->normalized_descriptor_json);

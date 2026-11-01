@@ -1,7 +1,6 @@
 {
   "$schema": "oxygen.buffer-container.schema.json",
   "name": "waterbottle_buffers",
-  "content_hashing": true,
   "buffers": [
     {
       "source": "../../SourceMedia/DCC/BottleOnBox/waterbottle_waterbottle_p0_vb.bin",

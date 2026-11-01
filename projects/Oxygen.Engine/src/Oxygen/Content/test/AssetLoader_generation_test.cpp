@@ -26,6 +26,7 @@
 #include "AssetLoader_test.h"
 
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ContentMounts.h>
@@ -365,6 +366,8 @@ namespace {
     data::pak::scripting::ScriptResourceDesc descriptor {};
     descriptor.data_offset = sizeof(descriptor);
     descriptor.size_bytes = 1;
+    descriptor.content_hash
+      = base::ComputeSha256(std::as_bytes(std::span { &payload, 1U }));
     std::vector<uint8_t> bytes(sizeof(descriptor) + 1);
     std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
     bytes.back() = payload;
@@ -1355,9 +1358,8 @@ namespace {
     // only another asset, so the sidecar is deleted by the patch.
     const auto base = TempDir() / "base.pak";
     auto base_root = LooseCookedRoot { "test", kFirstSeed };
-    static_cast<void>(base_root.Scene("generation.oscene"));
-    static_cast<void>(
-      base_root.PhysicsSidecar("scene.opscene", "generation.oscene"));
+    const auto base_scene = base_root.Scene("generation.oscene");
+    static_cast<void>(base_root.PhysicsSidecar("scene.opscene", base_scene));
     const auto base_pak = CookedPak { std::move(base_root) };
     cooker::testing::Materialize(base_pak.Encode(), base);
     auto kept = LooseCookedRoot { "test", kSecondSeed };

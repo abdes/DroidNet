@@ -9,20 +9,15 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -39,6 +34,7 @@ struct CookedPhysicsResourcePayload final {
   data::pak::physics::PhysicsResourceFormat format
     = data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary;
   uint64_t alignment = 16;
+  //! The SHA-256 of `data`, computed by the payload's producer.
   base::Sha256Digest content_hash = {};
 };
 
@@ -55,28 +51,19 @@ struct EmittedPhysicsResourceRef final {
 */
 class PhysicsResourceEmitter final {
 public:
-  struct Config final {
-    DedupCollisionPolicy collision_policy
-      = DedupCollisionPolicy::kWarnKeepFirst;
-    std::function<void(ImportDiagnostic)> on_dedup_diagnostic;
-  };
-
   //! `writes` is the nursery the writes run in; it outlives them.
   OXGN_COOK_API PhysicsResourceEmitter(co::Nursery& writes,
     PhysicsTableAggregator& table_aggregator,
     const std::filesystem::path& cooked_root);
-
-  OXGN_COOK_API PhysicsResourceEmitter(co::Nursery& writes,
-    PhysicsTableAggregator& table_aggregator,
-    const std::filesystem::path& cooked_root, Config config);
 
   OXGN_COOK_API ~PhysicsResourceEmitter();
 
   OXYGEN_MAKE_NON_COPYABLE(PhysicsResourceEmitter)
   OXYGEN_MAKE_NON_MOVABLE(PhysicsResourceEmitter)
 
-  OXGN_COOK_NDAPI auto Emit(CookedPhysicsResourcePayload cooked,
-    std::string_view signature_salt) -> EmittedPhysicsResourceRef;
+  //! Emits `cooked`, refusing a payload without its SHA-256.
+  OXGN_COOK_NDAPI auto Emit(CookedPhysicsResourcePayload cooked)
+    -> EmittedPhysicsResourceRef;
 
   OXGN_COOK_NDAPI auto Count() const noexcept -> uint32_t;
   OXGN_COOK_NDAPI auto ErrorCount() const noexcept -> size_t;
@@ -104,12 +91,9 @@ private:
 
   WriteGroup writes_;
   PhysicsTableAggregator& table_aggregator_;
-  Config config_ {};
   std::filesystem::path data_path_;
   std::atomic<bool> finalize_started_ { false };
   std::atomic<uint32_t> emitted_count_ { 0 };
-  std::unordered_map<std::string, std::string> identity_by_key_;
-  std::unordered_map<std::string, uint32_t> index_by_key_;
 };
 
 } // namespace oxygen::content::import

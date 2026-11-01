@@ -45,7 +45,6 @@ namespace {
   header.layouts_offset_bytes = sizeof(TexturePayloadHeader);
   header.data_offset_bytes = sizeof(TexturePayloadHeader)
     + (static_cast<uint32_t>(subresource_count) * sizeof(SubresourceLayout));
-  header.content_hash = desc.content_hash;
   header.total_payload_size
     = header.data_offset_bytes + (subresource_count * bytes_per_subresource);
 

@@ -30,7 +30,6 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneIds.h>
@@ -101,7 +100,7 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   constexpr std::array<uint8_t, 8> kBytecode
     = { 0x4D, 0x4F, 0x56, 0x45, 0x42, 0x43, 0xA1, 0xA2 };
 
-  // A zero content hash disables hash verification in this fixture.
+  // The root records the payload's SHA-256 in its row.
   auto root = LooseCookedRoot { "test" };
   const auto bytecode = root.AddScript(
     std::as_bytes(std::span { kBytecode }), ScriptResourceDesc {});

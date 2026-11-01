@@ -18,16 +18,15 @@
 #include <string>
 #include <string_view>
 #include <thread>
-#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
@@ -136,7 +135,6 @@ protected:
     constexpr uint16_t kMipLevels = 1;
     constexpr uint16_t kDepth = 1;
     constexpr uint16_t kArrayLayers = 1;
-    constexpr uint64_t kContentHash = 0x12345678ABCDEF00ULL;
     constexpr size_t kPayloadBytes = 512;
     constexpr auto kFillByte = std::byte { 0x5A };
 
@@ -147,9 +145,8 @@ protected:
     payload.desc.array_layers = kArrayLayers;
     payload.desc.texture_type = oxygen::TextureType::kTexture2D;
     payload.desc.format = oxygen::Format::kBC7UNorm;
-    payload.desc.content_hash = kContentHash;
-
     payload.payload.resize(kPayloadBytes, kFillByte);
+    payload.desc.content_hash = oxygen::base::ComputeSha256(payload.payload);
     return payload;
   }
 
@@ -160,7 +157,6 @@ protected:
     constexpr uint32_t kUsageFlags = 0x01;
     constexpr uint32_t kElementStride = 16;
     constexpr uint32_t kElementFormat = 0;
-    constexpr uint32_t kContentHash = 0xDEADBEEF;
     constexpr size_t kBufferBytes = 256;
     constexpr auto kFillByte = std::byte { 0x3C };
 
@@ -168,8 +164,8 @@ protected:
     payload.usage_flags = kUsageFlags;
     payload.element_stride = kElementStride;
     payload.element_format = kElementFormat;
-    payload.content_hash = kContentHash;
     payload.data.resize(kBufferBytes, kFillByte);
+    payload.content_hash = oxygen::base::ComputeSha256(payload.data);
     return payload;
   }
 
@@ -368,47 +364,9 @@ NOLINT_TEST_F(ImportSessionTest, HasErrorsErrorAddedReturnsTrue)
   EXPECT_TRUE(session.HasErrors());
 }
 
-NOLINT_TEST_F(
-  ImportSessionTest, BufferEmitterCollisionDiagnosticFlowsIntoSessionReport)
+NOLINT_TEST_F(ImportSessionTest, FinalizePackagingSummaryReportsDiagnostics)
 {
   auto request = MakeRequest();
-  request.options.with_content_hashing = false;
-  request.options.dedup_collision_policy
-    = import::DedupCollisionPolicy::kWarnKeepFirst;
-
-  RunInNursery([&] -> co::Co<> {
-    ImportSession session(request, observer_ptr(reader_.get()),
-      observer_ptr(&loop_->Driver()), observer_ptr(writes_),
-      observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
-      observer_ptr(index_registry_.get()));
-    auto first = MakeTestBufferPayload();
-    auto second = MakeTestBufferPayload();
-    second.content_hash = 0;
-    if (!second.data.empty()) {
-      second.data.at(0) ^= std::byte { 0xFF };
-    }
-    first.content_hash = 0;
-
-    (void)session.BufferEmitter().Emit(std::move(first), "same_salt");
-    (void)session.BufferEmitter().Emit(std::move(second), "same_salt");
-    (void)co_await session.BufferEmitter().Finalize();
-
-    const auto diagnostics = session.Diagnostics();
-    const auto has_collision
-      = std::ranges::any_of(diagnostics, [](const ImportDiagnostic& d) -> bool {
-          return d.code == "import.dedup_collision.buffer";
-        });
-    EXPECT_TRUE(has_collision);
-  });
-}
-
-NOLINT_TEST_F(
-  ImportSessionTest, FinalizePackagingSummaryReportsDiagnosticsAndCollisions)
-{
-  auto request = MakeRequest();
-  request.options.with_content_hashing = false;
-  request.options.dedup_collision_policy
-    = import::DedupCollisionPolicy::kWarnKeepFirst;
   ASSERT_HAS_VALUE(request.cooked_root) << "The fixture requires a cooked root";
   std::filesystem::create_directories(request.cooked_root.value());
 
@@ -427,23 +385,11 @@ NOLINT_TEST_F(
       .code = "test.warn",
       .message = "warn",
     });
-    auto first = MakeTestBufferPayload();
-    auto second = MakeTestBufferPayload();
-    first.content_hash = 0;
-    second.content_hash = 0;
-    if (!second.data.empty()) {
-      second.data.at(0) ^= std::byte { 0xAA };
-    }
-    (void)session.BufferEmitter().Emit(std::move(first), "same_salt");
-    (void)session.BufferEmitter().Emit(std::move(second), "same_salt");
-
     const auto report = co_await session.Finalize();
 
     EXPECT_EQ(report.packaging.diagnostics_info, 1U);
     EXPECT_GE(report.packaging.diagnostics_warning, 1U);
     EXPECT_EQ(report.packaging.diagnostics_error, 0U);
-    EXPECT_EQ(report.packaging.buffer_dedup_collisions, 1U);
-    EXPECT_EQ(report.packaging.texture_dedup_collisions, 0U);
     EXPECT_TRUE(report.packaging.index_written);
     EXPECT_EQ(report.packaging.outputs_written,
       static_cast<uint32_t>(report.outputs.size()));
@@ -784,9 +730,8 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
     const auto descriptor = oxygen::cooker::testing::MaterialDescriptor("Wood");
 
     const auto tex_idx
-      = session.TextureEmitter().Emit(MakeTestTexturePayload(), "test_texture");
-    const auto buf_idx
-      = session.BufferEmitter().Emit(MakeTestBufferPayload(), "test_texture");
+      = session.TextureEmitter().Emit(MakeTestTexturePayload());
+    const auto buf_idx = session.BufferEmitter().Emit(MakeTestBufferPayload());
     session.AssetEmitter().Emit(kKey, oxygen::data::AssetType::kMaterial,
       virtual_path, descriptor_relpath, descriptor.bytes,
       descriptor.references);
@@ -907,7 +852,7 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeIncludesResourceSidecarOutputs)
       observer_ptr(index_registry_.get()));
 
     const auto texture_index
-      = session.TextureEmitter().Emit(MakeTestTexturePayload(), "wood_albedo");
+      = session.TextureEmitter().Emit(MakeTestTexturePayload());
     const auto texture_desc
       = session.TextureEmitter().TryGetDescriptor(texture_index);
     EXPECT_TRUE(texture_desc.has_value());
@@ -916,7 +861,7 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeIncludesResourceSidecarOutputs)
     }
 
     const auto buffer_index
-      = session.BufferEmitter().Emit(MakeTestBufferPayload(), "mesh_vb");
+      = session.BufferEmitter().Emit(MakeTestBufferPayload());
     const auto buffer_desc
       = session.BufferEmitter().TryGetDescriptor(buffer_index);
     EXPECT_TRUE(buffer_desc.has_value());

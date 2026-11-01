@@ -8,6 +8,7 @@
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Serio/Record.h>
 
 // packed structs intentionally embed unaligned strong-typed fields
 OXYGEN_DIAGNOSTIC_PUSH
@@ -97,7 +98,6 @@ enum class AggregateAuthority : uint8_t {
 #define OXPHYS_BINDING_TYPE(name, value) name = (value),
 enum class PhysicsBindingType : uint32_t {
 #include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
-#include <Oxygen/Serio/Record.h>
 };
 #undef OXPHYS_BINDING_TYPE
 // NOLINTEND(*-macro-usage)
@@ -125,7 +125,7 @@ struct PhysicsResourceDesc {
   core::DataBlobSizeT size_bytes = 0; //!< Size in bytes
   PhysicsResourceFormat format = PhysicsResourceFormat::kJoltShapeBinary;
   AssetKey resource_asset_key = kInvalidPhysicsResourceAssetKey;
-  uint8_t content_hash[32] = {}; //!< Full SHA-256 of payload bytes
+  core::ContentHashDigest content_hash = {}; //!< SHA-256 of the payload
 };
 #pragma pack(pop)
 static_assert(sizeof(PhysicsResourceDesc) == 61);
@@ -587,6 +587,9 @@ static_assert(offsetof(VehicleBindingRecord, wheel_slice_count) == 28);
 
 //! Vehicle wheel topology record.
 #pragma pack(push, 1)
+// `side` is not the tag of `backend_scalars`; the active physics backend
+// selects the arm.
+// NOLINTNEXTLINE(bugprone-tagged-union-member-count)
 struct VehicleWheelBindingRecord {
   world::SceneNodeIndexT vehicle_node_index = 0;
   world::SceneNodeIndexT wheel_node_index = 0;

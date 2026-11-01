@@ -1,6 +1,5 @@
 {
   "name": "bouncy_ball",
-  "content_hashing": true,
   "static_friction": 0.6,
   "dynamic_friction": 0.6,
   "restitution": 0.6,

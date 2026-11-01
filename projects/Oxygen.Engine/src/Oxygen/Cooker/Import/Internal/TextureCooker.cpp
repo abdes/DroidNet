@@ -951,12 +951,6 @@ namespace detail {
     return payload;
   }
 
-  auto ComputeContentHash(const std::span<const std::byte> payload) noexcept
-    -> uint64_t
-  {
-    return util::ComputeContentHash(payload);
-  }
-
 } // namespace detail
 
 //===----------------------------------------------------------------------===//
@@ -1085,8 +1079,7 @@ namespace {
    This handles stages 2-6 of the pipeline and builds the final payload.
   */
   [[nodiscard]] auto CookFromScratchImage(ScratchImage&& image,
-    const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
-    const bool with_content_hashing)
+    const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
     -> Result<CookedTexturePayload, TextureImportError>
   {
     auto resolved_desc = desc;
@@ -1296,11 +1289,6 @@ namespace {
     std::memcpy(final_bytes.subspan(data_offset_bytes).data(),
       payload_data.data(), payload_data.size());
 
-    if (with_content_hashing) {
-      header.content_hash = detail::ComputeContentHash(final_payload);
-      std::memcpy(final_payload.data(), &header, sizeof(header));
-    }
-
     // Build result
     CookedTexturePayload result;
     result.desc.texture_type = desc.texture_type;
@@ -1311,7 +1299,7 @@ namespace {
     result.desc.mip_levels = output->Meta().mip_levels;
     result.desc.format = final_format;
     result.desc.packing_policy_id = std::string(policy.Id());
-    result.desc.content_hash = header.content_hash;
+    result.desc.content_hash = util::ComputeContentSha256(final_payload);
     result.payload = std::move(final_payload);
     result.layouts = std::move(layouts);
     result.half_narrowing = half_narrowing;
@@ -1322,8 +1310,7 @@ namespace {
 } // namespace
 
 auto CookTexture(const std::span<const std::byte> source_bytes,
-  const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
-  const bool with_content_hashing)
+  const TextureImportDesc& desc, const ITexturePackingPolicy& policy)
   -> Result<CookedTexturePayload, TextureImportError>
 {
   // Pre-decode validation - dimensions come from the decoded image
@@ -1337,12 +1324,11 @@ auto CookTexture(const std::span<const std::byte> source_bytes,
     return Err(decoded.error());
   }
 
-  return CookFromScratchImage(
-    std::move(*decoded), desc, policy, with_content_hashing);
+  return CookFromScratchImage(std::move(*decoded), desc, policy);
 }
 
 auto CookTexture(ScratchImage&& image, const TextureImportDesc& desc,
-  const ITexturePackingPolicy& policy, const bool with_content_hashing)
+  const ITexturePackingPolicy& policy)
   -> Result<CookedTexturePayload, TextureImportError>
 {
   // Pre-decode validation - dimensions come from the ScratchImage
@@ -1354,12 +1340,11 @@ auto CookTexture(ScratchImage&& image, const TextureImportDesc& desc,
     return Err(TextureImportError::kDecodeFailed);
   }
 
-  return CookFromScratchImage(
-    std::move(image), desc, policy, with_content_hashing);
+  return CookFromScratchImage(std::move(image), desc, policy);
 }
 
 auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
-  const ITexturePackingPolicy& policy, const bool with_content_hashing)
+  const ITexturePackingPolicy& policy)
   -> Result<CookedTexturePayload, TextureImportError>
 {
   // Pre-decode validation - dimensions come from decoded images
@@ -1431,8 +1416,7 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
       return Err(cube.error());
     }
 
-    return CookFromScratchImage(
-      std::move(*cube), desc, policy, with_content_hashing);
+    return CookFromScratchImage(std::move(*cube), desc, policy);
   }
 
   // For array textures, assemble into a single ScratchImage
@@ -1440,8 +1424,7 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
   if (!assembled) {
     return Err(assembled.error());
   }
-  return CookFromScratchImage(
-    std::move(*assembled), desc, policy, with_content_hashing);
+  return CookFromScratchImage(std::move(*assembled), desc, policy);
 }
 
 } // namespace oxygen::content::import

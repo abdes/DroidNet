@@ -332,8 +332,9 @@ static_assert(sizeof(PakBrowseIndexTextureEntry) == 12);
     0x200: Immutable         (never updated after creation)
     ```
 
-  @note `content_hash` stores the first 8 bytes of the SHA256 of the buffer
-  data. Used for fast deduplication during incremental imports.
+  @note `content_hash` is the full SHA-256 of the buffer's `size_bytes` bytes
+  at `data_offset`. Its producer computes it from the bytes it writes; readers
+  verify the data against it and importers deduplicate buffers by it.
 */
 #pragma pack(push, 1)
 struct BufferResourceDesc {
@@ -342,18 +343,19 @@ struct BufferResourceDesc {
   uint32_t usage_flags = 0; //!< Usage hints (see above)
   uint32_t element_stride = 0; //!< 1 for raw buffers, 0 when unused
   uint8_t element_format = 0; //!< Format enum value (0 = raw or structured)
-  uint64_t content_hash = 0; //!< First 8 bytes of SHA256 of buffer data
+  ContentHashDigest content_hash = {}; //!< SHA-256 of the buffer data
 };
 #pragma pack(pop)
-static_assert(sizeof(BufferResourceDesc) == 29);
+static_assert(sizeof(BufferResourceDesc) == 53);
 
 //! Texture resource table entry
 /*!
   @note Texture `format` must be one of the core type `Format` enum values.
   @note Textures are always aligned to 256 bytes.
-  @note `content_hash` stores the first 8 bytes of the SHA256 of the texture
-  data. Used for fast deduplication during incremental imports without
-  re-reading the data file.
+  @note `content_hash` is the full SHA-256 of the texture's `size_bytes`
+  payload bytes at `data_offset`. Its producer computes it from the bytes it
+  writes; readers verify the data against it and importers deduplicate
+  textures by it without reading the data file again.
 */
 #pragma pack(push, 1)
 // NOLINTNEXTLINE(*-type-member-init) - MUST be initialized by users
@@ -370,10 +372,10 @@ struct TextureResourceDesc {
   uint16_t mip_levels; // Number of mip levels
   uint8_t format; // Texture format enum
   uint16_t alignment; // 256 for textures
-  uint64_t content_hash = 0; // First 8 bytes of SHA256 of texture data
+  ContentHashDigest content_hash = {}; // SHA-256 of the texture payload
 };
 #pragma pack(pop)
-static_assert(sizeof(TextureResourceDesc) == 39);
+static_assert(sizeof(TextureResourceDesc) == 63);
 
 //! A descriptor's string table.
 /*!

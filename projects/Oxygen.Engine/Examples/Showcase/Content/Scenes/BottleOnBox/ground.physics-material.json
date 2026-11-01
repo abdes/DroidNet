@@ -1,6 +1,5 @@
 {
   "name": "ground",
-  "content_hashing": true,
   "static_friction": 0.9,
   "dynamic_friction": 0.9,
   "restitution": 0.15,

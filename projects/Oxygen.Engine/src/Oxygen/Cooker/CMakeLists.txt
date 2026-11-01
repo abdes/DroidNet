@@ -190,7 +190,6 @@ set(
   "Import/Internal/Emitters/AssetEmitter.h"
   "Import/Internal/AssetReferenceBuilder.h"
   "Import/Internal/Emitters/BufferEmitter.h"
-  "Import/Internal/Emitters/DedupCollision.h"
   "Import/Internal/Emitters/PhysicsResourceEmitter.h"
   "Import/Internal/Emitters/ResourceDescriptorEmitter.h"
   "Import/Internal/Emitters/TextureEmitter.h"

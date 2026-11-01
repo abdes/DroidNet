@@ -1592,24 +1592,19 @@ namespace {
     return stop_token.stop_requested() || canceled;
   }
 
-  auto HashPayloadIfNeeded(CookedBufferPayload& payload,
-    const bool with_content_hashing, const std::stop_token& stop_token,
+  //! Computes the SHA-256 of `payload`, the bytes this build produced.
+  auto HashPayload(CookedBufferPayload& payload,
+    const std::stop_token& stop_token,
     const co::ThreadPool::CancelToken& canceled) -> void
   {
-    if (!with_content_hashing || payload.content_hash != 0
-      || IsCanceled(stop_token, canceled)) {
+    if (IsCanceled(stop_token, canceled)) {
       return;
     }
-    const std::span<const std::byte> bytes(
-      payload.data.data(), payload.data.size());
-    const auto hash = util::ComputeContentHash(bytes);
-    if (hash != 0) {
-      payload.content_hash = hash;
-    }
+    payload.content_hash = util::ComputeContentSha256(payload.data);
   }
 
   [[nodiscard]] auto BuildCookedMeshPayload(const LodBuildData& lod,
-    const bool with_content_hashing, const std::stop_token& stop_token,
+    const std::stop_token& stop_token,
     const co::ThreadPool::CancelToken& canceled)
     -> MeshBuildPipeline::CookedMeshPayload
   {
@@ -1680,14 +1675,10 @@ namespace {
       joint_remap_payload.element_format
         = static_cast<uint8_t>(Format::kR32UInt);
 
-      HashPayloadIfNeeded(
-        joint_indices_payload, with_content_hashing, stop_token, canceled);
-      HashPayloadIfNeeded(
-        joint_weights_payload, with_content_hashing, stop_token, canceled);
-      HashPayloadIfNeeded(
-        inverse_bind_payload, with_content_hashing, stop_token, canceled);
-      HashPayloadIfNeeded(
-        joint_remap_payload, with_content_hashing, stop_token, canceled);
+      HashPayload(joint_indices_payload, stop_token, canceled);
+      HashPayload(joint_weights_payload, stop_token, canceled);
+      HashPayload(inverse_bind_payload, stop_token, canceled);
+      HashPayload(joint_remap_payload, stop_token, canceled);
 
       cooked_mesh.auxiliary_buffers.push_back(std::move(joint_indices_payload));
       cooked_mesh.auxiliary_buffers.push_back(std::move(joint_weights_payload));
@@ -1695,10 +1686,8 @@ namespace {
       cooked_mesh.auxiliary_buffers.push_back(std::move(joint_remap_payload));
     }
 
-    HashPayloadIfNeeded(
-      cooked_mesh.vertex_buffer, with_content_hashing, stop_token, canceled);
-    HashPayloadIfNeeded(
-      cooked_mesh.index_buffer, with_content_hashing, stop_token, canceled);
+    HashPayload(cooked_mesh.vertex_buffer, stop_token, canceled);
+    HashPayload(cooked_mesh.index_buffer, stop_token, canceled);
 
     cooked_mesh.bounds = lod.bounds;
     return cooked_mesh;
@@ -1707,7 +1696,6 @@ namespace {
   [[nodiscard]] auto BuildCookedGeometryPayload(const WorkItem& item,
     const std::vector<LodBuildData>& lods,
     const std::span<const float> generated_errors, const uint32_t attr_mask,
-    const bool with_content_hashing,
     const co::ThreadPool::CancelToken& canceled,
     std::vector<ImportDiagnostic>& diagnostics)
     -> std::optional<MeshBuildPipeline::CookedGeometryPayload>
@@ -1751,8 +1739,8 @@ namespace {
     cooked_payload.material_patch_offsets = std::move(material_patch_offsets);
     cooked_payload.lods.reserve(lods.size());
     for (const auto& lod : lods) {
-      cooked_payload.lods.push_back(BuildCookedMeshPayload(
-        lod, with_content_hashing, item.stop_token, canceled));
+      cooked_payload.lods.push_back(
+        BuildCookedMeshPayload(lod, item.stop_token, canceled));
     }
 
     return cooked_payload;
@@ -1861,7 +1849,7 @@ namespace {
   }
 
   [[nodiscard]] auto BuildGeometryOutcome(const WorkItem& item,
-    const uint64_t max_data_blob_bytes, const bool with_content_hashing,
+    const uint64_t max_data_blob_bytes,
     const co::ThreadPool::CancelToken& canceled) -> GeometryBuildOutcome
   {
     DLOG_F(1, "Build geometry payload");
@@ -1968,9 +1956,8 @@ namespace {
       return out;
     }
 
-    auto cooked_payload
-      = BuildCookedGeometryPayload(item, lods, generated_errors, attr_mask,
-        with_content_hashing, canceled, out.diagnostics);
+    auto cooked_payload = BuildCookedGeometryPayload(
+      item, lods, generated_errors, attr_mask, canceled, out.diagnostics);
     if (!cooked_payload.has_value()) {
       return out;
     }
@@ -2117,11 +2104,9 @@ auto MeshBuildPipeline::Worker() -> co::Co<>
       // The build reports failures as diagnostics; only allocation can throw.
       // NOLINTNEXTLINE(bugprone-exception-escape)
       [item = std::move(item),
-        max_data_blob_bytes = config_.max_data_blob_bytes,
-        with_content_hashing = config_.with_content_hashing](
+        max_data_blob_bytes = config_.max_data_blob_bytes](
         co::ThreadPool::CancelToken canceled) mutable -> GeometryBuildOutcome {
-        return BuildGeometryOutcome(
-          item, max_data_blob_bytes, with_content_hashing, canceled);
+        return BuildGeometryOutcome(item, max_data_blob_bytes, canceled);
       });
 
     if (build_outcome.canceled) {

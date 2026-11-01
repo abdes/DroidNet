@@ -65,7 +65,6 @@
       "source": "/Content/Scenes/CompressedTextures/CompressedTextures.scene.json",
       "virtual_path": "/Content/Scenes/CompressedTextures/CompressedTextures.oscene",
       "name": "CompressedTextures",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Models/ChronographWatch-ktx2/ChronographWatch.gltf",
         "/Content/Models/ChronographWatch-webp/ChronographWatch.gltf",

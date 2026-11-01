@@ -16,24 +16,21 @@
       "type": "material-descriptor",
       "source": "/Content/Materials/floor_default.omat.json",
       "virtual_path": "/Content/Materials/floor_default.omat",
-      "name": "floor_default",
-      "content_hashing": true
+      "name": "floor_default"
     },
     {
       "id": "/Content/Materials/cube_red.omat",
       "type": "material-descriptor",
       "source": "/Content/Materials/cube_red.omat.json",
       "virtual_path": "/Content/Materials/cube_red.omat",
-      "name": "cube_red",
-      "content_hashing": true
+      "name": "cube_red"
     },
     {
       "id": "/Content/Materials/sphere_blue.omat",
       "type": "material-descriptor",
       "source": "/Content/Materials/sphere_blue.omat.json",
       "virtual_path": "/Content/Materials/sphere_blue.omat",
-      "name": "sphere_blue",
-      "content_hashing": true
+      "name": "sphere_blue"
     },
     {
       "id": "/Content/Scenes/PhysicsDomains/chassis_green.omat",
@@ -90,8 +87,7 @@
       "source": "/Content/Geometry/floor.ogeo.json",
       "virtual_path": "/Content/Geometry/floor.ogeo",
       "name": "floor",
-      "depends_on": ["/Content/Materials/floor_default.omat"],
-      "content_hashing": true
+      "depends_on": ["/Content/Materials/floor_default.omat"]
     },
     {
       "id": "/Content/Geometry/cube.ogeo",
@@ -99,8 +95,7 @@
       "source": "/Content/Geometry/cube.ogeo.json",
       "virtual_path": "/Content/Geometry/cube.ogeo",
       "name": "cube",
-      "depends_on": ["/Content/Materials/cube_red.omat"],
-      "content_hashing": true
+      "depends_on": ["/Content/Materials/cube_red.omat"]
     },
     {
       "id": "/Content/Geometry/sphere.ogeo",
@@ -108,8 +103,7 @@
       "source": "/Content/Geometry/sphere.ogeo.json",
       "virtual_path": "/Content/Geometry/sphere.ogeo",
       "name": "sphere",
-      "depends_on": ["/Content/Materials/sphere_blue.omat"],
-      "content_hashing": true
+      "depends_on": ["/Content/Materials/sphere_blue.omat"]
     },
     {
       "id": "/Content/Scenes/PhysicsDomains/chassis_box.ogeo",
@@ -194,8 +188,7 @@
       "virtual_path": "/Content/Scenes/PhysicsDomains/physics_domains_controller.oscript",
       "name": "physics_domains_controller",
       "compile": false,
-      "script_storage": "external",
-      "content_hashing": true
+      "script_storage": "external"
     },
     {
       "id": "/Content/Scenes/PhysicsDomainsVsmBenchmark/physics_domains_benchmark_camera.oscript",
@@ -204,8 +197,7 @@
       "virtual_path": "/Content/Scenes/PhysicsDomainsVsmBenchmark/physics_domains_benchmark_camera.oscript",
       "name": "physics_domains_benchmark_camera",
       "compile": false,
-      "script_storage": "external",
-      "content_hashing": true
+      "script_storage": "external"
     },
     {
       "id": "/Content/Scenes/PhysicsDomains/physics_domains.input",

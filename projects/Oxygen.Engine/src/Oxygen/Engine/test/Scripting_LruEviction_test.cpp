@@ -35,7 +35,7 @@ auto MakeBlob(const size_t size) -> std::shared_ptr<ScriptBytecodeBlob>
   std::vector<uint8_t> bytes(size, kFillPattern);
   return std::make_shared<ScriptBytecodeBlob>(ScriptBytecodeBlob::FromOwned(
     std::move(bytes), oxygen::data::pak::scripting::ScriptLanguage::kLuau,
-    oxygen::data::pak::scripting::ScriptCompression::kNone, 0,
+    oxygen::data::pak::scripting::ScriptCompression::kNone, {},
     ScriptBlobOrigin::kEmbeddedResource,
     ScriptBlobCanonicalName { "test-bytecode" }));
 }
@@ -72,7 +72,7 @@ TEST(ScriptingLruEviction, StoreAndCheckInEvictsAtRefcountZero)
   EXPECT_EQ(policy.Consumed(), 16U);
 
   const auto evicted = policy.CheckIn(it);
-  ASSERT_TRUE(evicted.has_value());
+  ASSERT_HAS_VALUE(evicted);
   EXPECT_EQ(policy.EntryKey(*evicted), 7U);
   EXPECT_EQ(policy.Consumed(), 0U);
 }

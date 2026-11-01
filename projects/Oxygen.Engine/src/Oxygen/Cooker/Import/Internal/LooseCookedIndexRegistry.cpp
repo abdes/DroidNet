@@ -117,7 +117,7 @@ auto LooseCookedIndexRegistry::BeginSession(
 auto LooseCookedIndexRegistry::RegisterExternalFile(
   const std::filesystem::path& cooked_root,
   const data::loose_cooked::FileKind kind, std::string_view relpath,
-  const std::optional<LooseCookedFileDigest>& produced) -> void
+  const LooseCookedFileDigest& produced) -> void
 {
   const auto key = NormalizeKey(cooked_root);
   const auto state = GetEntry(cooked_root);
@@ -133,10 +133,28 @@ auto LooseCookedIndexRegistry::RegisterExternalFile(
     static_cast<uint32_t>(kind), key);
 }
 
+auto LooseCookedIndexRegistry::RegisterExternalDataFile(
+  const std::filesystem::path& cooked_root,
+  const data::loose_cooked::FileKind kind, std::string_view relpath) -> void
+{
+  const auto key = NormalizeKey(cooked_root);
+  const auto state = GetEntry(cooked_root);
+  std::scoped_lock lock(state->mutex);
+  auto& entry = *state;
+  if (!entry.writer) {
+    entry.aborted = false;
+    entry.writer = std::make_unique<LooseCookedWriter>(cooked_root, *storage_);
+  }
+
+  entry.writer->RegisterExternalDataFile(kind, relpath);
+  DLOG_F(INFO, "Data file '{}' kind={} registered for '{}'",
+    std::string(relpath), static_cast<uint32_t>(kind), key);
+}
+
 auto LooseCookedIndexRegistry::RegisterExternalTextureDescriptor(
   const std::filesystem::path& cooked_root, std::string_view relpath,
   std::string_view virtual_path, const LooseCookedProducer& producer,
-  const std::optional<LooseCookedFileDigest>& produced) -> void
+  const LooseCookedFileDigest& produced) -> void
 {
   const auto key = NormalizeKey(cooked_root);
   const auto state = GetEntry(cooked_root);
@@ -155,8 +173,8 @@ auto LooseCookedIndexRegistry::RegisterExternalTextureDescriptor(
 
 auto LooseCookedIndexRegistry::RegisterExternalAuxiliaryFile(
   const std::filesystem::path& cooked_root, std::string_view relpath,
-  const LooseCookedProducer& producer,
-  const std::optional<LooseCookedFileDigest>& produced) -> void
+  const LooseCookedProducer& producer, const LooseCookedFileDigest& produced)
+  -> void
 {
   const auto key = NormalizeKey(cooked_root);
   const auto state = GetEntry(cooked_root);

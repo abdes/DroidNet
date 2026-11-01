@@ -262,7 +262,10 @@ The cooked index is required for loose cooked roots. It provides:
 - `AssetKey -> descriptor relative path`.
 - Optional virtual path mapping (`VirtualPath <-> AssetKey`) when enabled by
   index header flags.
-- Resource file metadata (names, sizes, mandatory SHA-256 digests).
+- Resource file metadata (names, sizes, SHA-256 digests). The resource data
+  files (`buffers.data`, `textures.data`, `scripts.data`, `physics.data`)
+  record an all-zero digest; see
+  [Complete integrity inventory](#complete-integrity-inventory).
 
 Mount-time expectations:
 
@@ -270,9 +273,10 @@ Mount-time expectations:
 - Index header flags must be self-consistent.
 - Section layout must be valid (no overlaps, no out-of-range spans).
 - Referenced descriptor and resource files must exist.
-- Normal mounts validate inventory membership, sizes and bounds. Full digest
+- Normal mounts validate inventory membership, sizes and bounds. Full
   verification is opt-in at runtime and required for cook/publication
   validation.
+- The encoder and the loader refuse a non-zero digest for a resource data file.
 - All paths recorded in the index must be canonical:
   - container-relative, `/` separators
   - no `..`, no `\\`, no `//`
@@ -355,7 +359,7 @@ as a runtime content source.
   - `AssetKey -> descriptor relative path`
   - virtual-path mapping as enabled by header flags
   - resource file names and metadata
-  - per-file size metadata and mandatory SHA-256 digests
+  - per-file size metadata and SHA-256 digests (none for resource data files)
 - Enforce index correctness at cook time (fail early):
   - header flags consistent with included sections
   - no overlapping/invalid section ranges
@@ -365,7 +369,8 @@ as a runtime content source.
 - Provide an editor-facing validation command that:
   - verifies referenced files exist
   - verifies recorded sizes
-  - verifies every indexed digest during full integrity validation
+  - verifies every indexed digest during full integrity validation, and each
+    resource of a data file against its table row's SHA-256
   - reports actionable diagnostics
 
 ### 6) Runtime provisioning for PIE
@@ -444,8 +449,9 @@ as a runtime content source.
   duplicates.
 - Path hygiene: recorded paths are canonical (container-relative, `/`
   separators, no dot segments).
-- Integrity: recorded sizes match; every member has a digest; full validation
-  compares it with the file bytes.
+- Integrity: recorded sizes match; every member other than a resource data file
+  has a digest; full validation compares it with the file bytes and verifies
+  each data-file resource against its table row.
 - Container closure: cooked container includes full dependency closure.
 - Registration order: sources register deterministically.
 - Resolution: virtual-path lookup uses cooked index; collisions are diagnosed
@@ -456,15 +462,28 @@ as a runtime content source.
 ## Complete integrity inventory
 
 The native loose index owns the complete output inventory. Published descriptors
-and resource table/data files have canonical relative paths, exact sizes and
-mandatory SHA-256 digests. Inventory membership is complete. The index's own
+and resource table/data files have canonical relative paths and exact sizes.
+Every member except a resource data file has a SHA-256 digest. A resource data
+file (`buffers.data`, `textures.data`, `scripts.data`, `physics.data`) records
+an all-zero digest: its resources are appended by many producers, so no one
+holds a whole-file digest, and each resource is instead verified against the
+SHA-256 in its table row. Inventory membership is complete. The index's own
 digest lives in the selecting publication record; `.generation.lock` and
 `container.index.lock` are the explicit non-content exceptions.
 
 LooseCookedWriter finalization owns inventory production after all writes and
-resource tables finish. Reuse emitter hashes only for the exact finalized bytes;
-otherwise hash after the final write barrier. Native validation checks bytes,
-membership and bounds. Neither timestamps nor zero digests establish integrity.
+resource tables finish. `Finish` never hashes a file: tables and descriptors are
+registered with the digest their producer computed as it wrote them
+(`RegisterExternalFile(kind, relpath, digest)`), and data files with
+`RegisterExternalDataFile(kind, relpath)`, which records only the measured size.
+Native validation checks bytes, membership and bounds. Neither timestamps nor
+zero digests on non-data files establish integrity.
+
+Full verification (`CheckContent`/`ValidateContent` with
+`IntegrityCheck::kFull`, `CookedContent::VerifyStorage(kFull)` and verified
+loose mounts) checks each resource of a data file against the SHA-256 of its
+table row. Its failure reasons are `kMalformedTable`, `kResourceOutOfBounds` and
+`kResourceDigestMismatch`, the latter two naming the row number.
 
 Concurrent imports into one root retire participation before awaiting the shared
 index publication. Successful completion guarantees that publication finished;
@@ -478,13 +497,13 @@ only within the same valid read lease. Managed publication/provenance references
 that inventory instead of duplicating descriptor/file proofs or rehashing merely
 to translate proof models. Keep consumed-input and reuse fingerprints distinct.
 
-The V2 format requires recooking earlier content. Qualification covers
+The loose index format (version 8) requires recooking earlier content. Qualification covers
 tampered/truncated data, absent/extra files, changed index, stale leases and
 measured removal of redundant file reads. This does not remove incremental
 staging copies; that is a different writer-granularity problem.
 
 Runtime admission checks the current index format, canonical paths, complete
-membership, exact sizes and bounds. Full SHA-256 verification is mandatory for
+membership, exact sizes and bounds. Full SHA-256 verification (files and data-file resources) is mandatory for
 cook/publication validation and explicit integrity checks; normal mounts retain
 opt-in `verify_content_hashes`. Metadata-only admission does not detect
 same-size payload corruption. This avoids scanning every resource blob before

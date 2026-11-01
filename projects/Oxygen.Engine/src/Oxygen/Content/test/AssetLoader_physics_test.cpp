@@ -4,12 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <iterator>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -20,7 +18,6 @@
 
 #include "AssetLoader_test.h"
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
@@ -185,8 +182,6 @@ namespace {
     const std::array data { static_cast<std::byte>(payload) };
     physics::PhysicsResourceDesc resource {};
     resource.resource_asset_key = kPayload;
-    std::ranges::copy(
-      base::ComputeSha256(data), std::begin(resource.content_hash));
     dependencies.AddPhysics(data, resource);
     cooker::testing::Materialize(dependencies.Files(), root);
     const auto lease = serio::FileLock::TryAcquire(
@@ -360,8 +355,6 @@ namespace {
     auto root = LooseCookedRoot { "test" };
     auto resource = physics::PhysicsResourceDesc {};
     resource.resource_asset_key = kPayload;
-    std::ranges::copy(
-      base::ComputeSha256(payload), std::begin(resource.content_hash));
     static_cast<void>(root.AddPhysics(payload, resource));
     static_cast<void>(root.Material("Anchor.omat"));
     const auto source_key = SourceKeyOf(kOwnerSeed);

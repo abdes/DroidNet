@@ -14,7 +14,6 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
@@ -82,8 +81,6 @@ auto BuildMaterialDescriptorRequest(
   }
 
   request.job_name = prepared->name;
-  request.options.with_content_hashing = EffectiveContentHashingEnabled(
-    prepared->content_hashing.value_or(settings.with_content_hashing));
 
   request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
     .normalized_descriptor_json = std::move(document->text),

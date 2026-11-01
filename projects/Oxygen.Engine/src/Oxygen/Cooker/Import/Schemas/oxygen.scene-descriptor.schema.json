@@ -14,9 +14,6 @@
     "name": {
       "$ref": "oxygen.name.schema.json#/definitions/segment"
     },
-    "content_hashing": {
-      "type": "boolean"
-    },
     "nodes": {
       "type": "array",
       "description": "An empty array represents a scene with only scene-level environment settings.",

@@ -87,8 +87,9 @@ public:
     return desc_.element_stride;
   }
 
-  //! Returns the per-resource content hash from the descriptor.
-  [[nodiscard]] auto GetContentHash() const noexcept -> uint64_t
+  //! Returns the SHA-256 of the resource data, from the descriptor.
+  [[nodiscard]] auto GetContentHash() const noexcept
+    -> const pak::core::ContentHashDigest&
   {
     return desc_.content_hash;
   }

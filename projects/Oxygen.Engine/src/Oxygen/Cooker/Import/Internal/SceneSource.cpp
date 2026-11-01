@@ -1092,10 +1092,6 @@ namespace {
   {
     auto prepared = SceneSource {};
     prepared.name = descriptor_doc.at("name").get<std::string>();
-    if (descriptor_doc.contains("content_hashing")) {
-      prepared.content_hashing
-        = descriptor_doc.at("content_hashing").get<bool>();
-    }
     const auto& nodes_doc = descriptor_doc.at("nodes");
     const auto node_count = static_cast<uint32_t>(nodes_doc.size());
 

@@ -191,10 +191,10 @@ struct ScriptResourceDesc {
   ScriptLanguage language = ScriptLanguage::kLuau;
   ScriptEncoding encoding = ScriptEncoding::kBytecode;
   ScriptCompression compression = ScriptCompression::kNone;
-  uint64_t content_hash = 0; // First 8 bytes of SHA256 of payload
+  core::ContentHashDigest content_hash = {}; // SHA-256 of the payload
 };
 #pragma pack(pop)
-static_assert(sizeof(ScriptResourceDesc) == 23);
+static_assert(sizeof(ScriptResourceDesc) == 47);
 
 //! Descriptor-local packed record array inside a script descriptor.
 using ScriptDataTable = world::SceneDataTable;

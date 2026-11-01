@@ -58,7 +58,6 @@ namespace content_commands {
   inline constexpr std::string_view kImportMaterials = "demo.content.import.materials";
   inline constexpr std::string_view kImportGeometry = "demo.content.import.geometry";
   inline constexpr std::string_view kImportScene = "demo.content.import.scene";
-  inline constexpr std::string_view kHashing = "demo.content.import.hashing";
   inline constexpr std::string_view kIgnoreNonMesh = "demo.content.import.ignore_non_mesh";
   inline constexpr std::string_view kNodePruning = "demo.content.import.node_pruning";
 

@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
@@ -31,7 +32,9 @@
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/CookedSource.h>
@@ -50,7 +53,6 @@ namespace data = oxygen::data;
 namespace fixtures = oxygen::cooker::testing;
 namespace fs = std::filesystem;
 namespace lc = oxygen::data::loose_cooked;
-namespace pak = oxygen::content::pak;
 
 using cooked::CookedContent;
 using cooked::ReadCookedSummary;
@@ -153,7 +155,7 @@ enum class Flavor : uint8_t {
 
 auto FlavorName(const ::testing::TestParamInfo<Flavor>& info) -> std::string
 {
-  return info.param == Flavor::kLoose ? "Loose" : "Pak";
+  return std::string { info.param == Flavor::kLoose ? "Loose" : "Pak" };
 }
 
 //! The failure `CookedContent::Open` of `path` reports, if it fails.
@@ -836,11 +838,13 @@ NOLINT_TEST_F(CookedContentTest, PakSummaryStatesItsCatalog)
     .leaf = "Chair.ogeo",
     .descriptor = fixtures::GeometryDescriptor("Chair").bytes,
     .references = data::AssetReferences::Create({},
-      { {
-        .key = default_material,
-        .kind = data::KeyReferenceKind::kAsset,
-        .expected_type = data::AssetType::kMaterial,
-      } })
+      {
+        {
+          .key = default_material,
+          .kind = data::KeyReferenceKind::kAsset,
+          .expected_type = data::AssetType::kMaterial,
+        },
+      })
       .value(),
   });
   const auto requirement = data::PakRequirement {
@@ -989,6 +993,31 @@ NOLINT_TEST_F(
   EXPECT_NO_THROW(content.VerifyStorage(IntegrityCheck::kMetadata));
   EXPECT_THROW(
     content.VerifyStorage(IntegrityCheck::kFull), std::runtime_error);
+}
+
+//! A changed resource payload fails the full check, which names the row whose
+//! SHA-256 the bytes no longer have.
+NOLINT_TEST_F(CookedContentTest, VerifyStorageNamesTheResourceRowThatChanged)
+{
+  // Arrange
+  const auto stored = OpenAs(Flavor::kLoose)
+                        .ResourceTable(data::ResourceKind::kBuffer)
+                        .PayloadStored(sample_.buffer_row);
+  FlipByte(Storage(), stored.file, stored.range.offset.get());
+  const auto content = OpenAs(Flavor::kLoose);
+
+  // Act
+  auto message = std::string {};
+  try {
+    content.VerifyStorage(IntegrityCheck::kFull);
+  } catch (const std::runtime_error& error) {
+    message = error.what();
+  }
+
+  // Assert
+  EXPECT_THAT(message,
+    ::testing::HasSubstr("row " + std::to_string(sample_.buffer_row.get())));
+  EXPECT_NO_THROW(content.VerifyStorage(IntegrityCheck::kMetadata));
 }
 
 //! A member file removed after the root was opened fails even the cheap

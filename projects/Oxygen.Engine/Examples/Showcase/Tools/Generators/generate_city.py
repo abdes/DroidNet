@@ -889,7 +889,6 @@ def manifest_document() -> dict:
                 "source": f"{FOLDER}/{name}.omat.json",
                 "virtual_path": f"{FOLDER}/{name}.omat",
                 "name": name,
-                "content_hashing": True,
             }
         )
     for name in GEOMETRIES:
@@ -900,7 +899,6 @@ def manifest_document() -> dict:
                 "source": f"{FOLDER}/{name}.ogeo.json",
                 "virtual_path": f"{FOLDER}/{name}.ogeo",
                 "name": name,
-                "content_hashing": True,
                 "depends_on": [f"{FOLDER}/{DEFAULT_MATERIAL}.omat"],
             }
         )
@@ -911,7 +909,6 @@ def manifest_document() -> dict:
             "source": f"{FOLDER}/{SCENE_NAME}.scene.json",
             "virtual_path": f"{FOLDER}/{SCENE_NAME}.oscene",
             "name": SCENE_NAME,
-            "content_hashing": True,
             "depends_on": [f"{FOLDER}/{g}.ogeo" for g in GEOMETRIES]
             + [f"{FOLDER}/{m}.omat" for m in MATERIALS],
         }

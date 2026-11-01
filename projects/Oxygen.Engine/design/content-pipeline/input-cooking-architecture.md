@@ -280,7 +280,6 @@ CLI-only optional flags (NOT valid in manifest job objects):
 1. `--output` (cooked root override)
 2. `--name` (human-readable job name)
 3. `--report` (report destination path)
-4. `--content-hashing` (content hashing toggle)
 
 These flags are consumed by the `InputCommand` CLI handler to build an
 `ImportRequest`. They do NOT appear in manifest `jobs[]` entries.
@@ -371,7 +370,7 @@ Validation invariants:
 3. manifest jobs must not include input asset semantic fields (Section 7.3 delta
    #5 list).
 4. manifest jobs must not include CLI-only keys: `name`, `verbose`,
-   `content_hashing`, `report`.
+   `report`.
 5. allowed `input` job keys are exactly: `id`, `type`, `source`, `virtual_path`,
    `depends_on`, `output`, `layout`, `source_key`. Any other key is rejected
    with diagnostic `input.manifest.key_not_allowed`.
@@ -1115,8 +1114,8 @@ Scene input binding records are not authored or emitted.
    - `trigger` shorthand expansion (string → full trigger record).
    - slot name validation against registered `InputSlots`.
 3. Manifest:
-   - key whitelist enforcement (reject `name`, `verbose`, `content_hashing`,
-     asset fields) and the required `virtual_path`.
+   - key whitelist enforcement (reject `name`, `verbose`, asset
+     fields) and the required `virtual_path`.
    - dependency DAG ordering, cycles, missing targets.
    - failure propagation (predecessor fail -> skip dependents).
 4. Runtime:

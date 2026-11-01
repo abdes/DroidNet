@@ -10,7 +10,6 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -67,7 +66,7 @@ return script
     return std::make_shared<const CompiledScriptExecutable>(
       std::make_shared<const ScriptBytecodeBlob>(ScriptBytecodeBlob::FromOwned(
         { 1 }, data::pak::scripting::ScriptLanguage::kLuau,
-        data::pak::scripting::ScriptCompression::kNone, 1,
+        data::pak::scripting::ScriptCompression::kNone, {},
         ScriptBlobOrigin::kEmbeddedResource,
         ScriptBlobCanonicalName { "original" })));
   }

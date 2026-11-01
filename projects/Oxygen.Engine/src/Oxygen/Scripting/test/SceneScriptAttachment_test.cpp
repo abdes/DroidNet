@@ -109,7 +109,7 @@ namespace {
         return {
           .ok = true,
           .blob = ScriptBytecodeBlob::FromOwned({ 1, 2, 3 },
-            ScriptLanguage::kLuau, {}, 0, ScriptBlobOrigin::kEmbeddedResource,
+            ScriptLanguage::kLuau, {}, {}, ScriptBlobOrigin::kEmbeddedResource,
             ScriptBlobCanonicalName { "bytecode" }),
           .error_message = {},
         };
@@ -120,7 +120,7 @@ namespace {
           .ok = true,
           .blob = ScriptSourceBlob::FromOwned(
             serio::ByteBuffer::CopyOf(std::as_bytes(std::span(text))).value(),
-            ScriptLanguage::kLuau, {}, 0, ScriptBlobOrigin::kExternalFile,
+            ScriptLanguage::kLuau, {}, {}, ScriptBlobOrigin::kExternalFile,
             ScriptBlobCanonicalName { "source.luau" }),
           .error_message = {},
         };

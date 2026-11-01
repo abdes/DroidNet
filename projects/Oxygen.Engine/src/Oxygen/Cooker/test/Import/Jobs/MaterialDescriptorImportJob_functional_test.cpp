@@ -8,13 +8,11 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -33,6 +31,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -40,7 +39,6 @@ namespace oxygen::content::import::test {
 
 namespace {
 
-  using data::pak::core::kNoResourceIndex;
   using data::pak::core::ResourceIndexT;
   using data::pak::core::TextureResourceDesc;
   using oxygen::cooker::test::ImportServiceTest;
@@ -51,26 +49,14 @@ namespace {
   using oxygen::cooker::testing::Materialize;
   using oxygen::cooker::testing::SeedBytes;
 
-#pragma pack(push, 1)
-  struct TextureSidecarFile final {
-    // NOLINTNEXTLINE(*-avoid-c-arrays) - fixed on-disk layout
-    char magic[4] = { 'O', 'T', 'E', 'X' };
-    uint16_t version = 1;
-    uint16_t reserved = 0;
-    ResourceIndexT resource_index = kNoResourceIndex;
-    TextureResourceDesc descriptor {};
-  };
-#pragma pack(pop)
-
-  static_assert(std::is_trivially_copyable_v<TextureSidecarFile>);
-
   auto WriteTextureSidecar(const std::filesystem::path& path,
     const ResourceIndexT resource_index) -> void
   {
-    auto file = TextureSidecarFile {};
-    file.resource_index = resource_index;
-    WriteBytes(
-      path, std::as_bytes(std::span<const TextureSidecarFile, 1>(&file, 1)));
+    WriteBytes(path,
+      data::EncodeTextureResourceDescriptor({
+        .index = resource_index,
+        .descriptor = TextureResourceDesc {},
+      }));
   }
 
   auto ReadMaterialDesc(const std::vector<std::byte>& bytes)

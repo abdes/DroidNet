@@ -60,20 +60,15 @@ namespace {
     }
   }
 
-  NOLINT_TEST(MaterialSourceTest, PreservesNameAndHashingRecipePrecedence)
+  NOLINT_TEST(MaterialSourceTest, PreservesNameRecipePrecedence)
   {
     std::vector<ImportDiagnostic> diagnostics;
     const auto named = MaterialSource::FromDescriptor(
-      MaterialDescriptor { "/Content/Materials/Authored.omat" }
-        .Set("/content_hashing", false)
-        .Text(),
+      MaterialDescriptor { "/Content/Materials/Authored.omat" }.Text(),
       "Fallback.omat.json", "Override", diagnostics);
     ASSERT_HAS_VALUE(named) << "Expected named to contain a value";
     EXPECT_EQ(named->name, "Override");
     EXPECT_EQ(named->storage_name, "Override");
-    ASSERT_HAS_VALUE(named->content_hashing)
-      << "Expected named->content_hashing to contain a value";
-    EXPECT_FALSE(named->content_hashing.value());
     const auto authored = MaterialSource::FromDescriptor(
       MaterialDescriptor { "/Content/Materials/Authored.omat" }.Text(),
       "Fallback.omat.json", "", diagnostics);
@@ -86,7 +81,6 @@ namespace {
       "Fallback.omat.json", "", diagnostics);
     ASSERT_HAS_VALUE(fallback) << "Expected fallback to contain a value";
     EXPECT_EQ(fallback->name, "Fallback.omat");
-    EXPECT_FALSE(fallback->content_hashing.has_value());
   }
 
   NOLINT_TEST(MaterialSourceTest, PreparationRejectsDuplicateShaderStages)

@@ -658,8 +658,7 @@ namespace {
     return key == "id" || key == "depends_on" || key == "type"
       || key == "source" || key == "derived_from" || key == "bindings"
       || key == "target_scene_virtual_path" || key == "output" || key == "name"
-      || key == "verbose" || key == "content_hashing"
-      || key == "physics_backend" || key == "source_key";
+      || key == "verbose" || key == "physics_backend" || key == "source_key";
   }
 
   auto ReportEarlyJobKeyWhitelistViolations(
@@ -994,8 +993,6 @@ namespace {
   auto ApplySceneOverrides(const json& obj, SceneImportSettings& settings,
     std::ostream& errors) -> bool
   {
-    ReadBoolField(
-      obj, "content_hashing", settings.with_content_hashing, errors);
     if (obj.contains("content_flags")) {
       const auto& flags = obj.at("content_flags");
       if (!flags.is_object()) {
@@ -1087,12 +1084,6 @@ namespace {
     }
 
     return true;
-  }
-
-  auto ApplyImportOptions(
-    const json& obj, bool& with_content_hashing, std::ostream& errors) -> bool
-  {
-    return ReadBoolField(obj, "content_hashing", with_content_hashing, errors);
   }
 
   auto ApplyScriptAssetOverrides(const json& obj,
@@ -1319,10 +1310,8 @@ namespace {
   auto ApplyMaterialDescriptorOverrides(const json& obj,
     MaterialDescriptorImportSettings& settings, std::ostream& errors) -> bool
   {
-    return ReadBoolField(
-             obj, "content_hashing", settings.with_content_hashing, errors)
-      && ReadStringArrayField(
-        obj, "cooked_context_roots", settings.cooked_context_roots, errors);
+    return ReadStringArrayField(
+      obj, "cooked_context_roots", settings.cooked_context_roots, errors);
   }
 
   auto ApplyCommonPhysicsMaterialDescriptorOverrides(const json& obj,
@@ -1338,14 +1327,6 @@ namespace {
     return true;
   }
 
-  auto ApplyPhysicsMaterialDescriptorOverrides(const json& obj,
-    PhysicsMaterialDescriptorImportSettings& settings, std::ostream& errors)
-    -> bool
-  {
-    return ReadBoolField(
-      obj, "content_hashing", settings.with_content_hashing, errors);
-  }
-
   auto ApplyCommonCollisionShapeDescriptorOverrides(const json& obj,
     CollisionShapeDescriptorImportSettings& settings, std::ostream& errors)
     -> bool
@@ -1359,14 +1340,6 @@ namespace {
     return true;
   }
 
-  auto ApplyCollisionShapeDescriptorOverrides(const json& obj,
-    CollisionShapeDescriptorImportSettings& settings, std::ostream& errors)
-    -> bool
-  {
-    return ReadBoolField(
-      obj, "content_hashing", settings.with_content_hashing, errors);
-  }
-
   auto ApplyCommonBufferContainerOverrides(const json& obj,
     BufferContainerImportSettings& settings, std::ostream& errors) -> bool
   {
@@ -1377,13 +1350,6 @@ namespace {
       return false;
     }
     return true;
-  }
-
-  auto ApplyBufferContainerOverrides(const json& obj,
-    BufferContainerImportSettings& settings, std::ostream& errors) -> bool
-  {
-    return ReadBoolField(
-      obj, "content_hashing", settings.with_content_hashing, errors);
   }
 
   auto ApplyCommonGeometryDescriptorOverrides(const json& obj,
@@ -1401,10 +1367,8 @@ namespace {
   auto ApplyGeometryDescriptorOverrides(const json& obj,
     GeometryDescriptorImportSettings& settings, std::ostream& errors) -> bool
   {
-    return ReadBoolField(
-             obj, "content_hashing", settings.with_content_hashing, errors)
-      && ReadStringArrayField(
-        obj, "cooked_context_roots", settings.cooked_context_roots, errors);
+    return ReadStringArrayField(
+      obj, "cooked_context_roots", settings.cooked_context_roots, errors);
   }
 
   auto ApplyCommonSceneDescriptorOverrides(const json& obj,
@@ -1422,10 +1386,8 @@ namespace {
   auto ApplySceneDescriptorOverrides(const json& obj,
     SceneDescriptorImportSettings& settings, std::ostream& errors) -> bool
   {
-    return ReadBoolField(
-             obj, "content_hashing", settings.with_content_hashing, errors)
-      && ReadStringArrayField(
-        obj, "cooked_context_roots", settings.cooked_context_roots, errors);
+    return ReadStringArrayField(
+      obj, "cooked_context_roots", settings.cooked_context_roots, errors);
   }
 
 } // namespace
@@ -1674,10 +1636,6 @@ namespace {
               texture_defaults, manifest.defaults.texture, error_stream)) {
           return std::nullopt;
         }
-        if (!ApplyImportOptions(texture_defaults,
-              manifest.defaults.texture.with_content_hashing, error_stream)) {
-          return std::nullopt;
-        }
         if (!ApplyTextureOverrides(
               texture_defaults, manifest.defaults.texture, error_stream)) {
           return std::nullopt;
@@ -1718,10 +1676,6 @@ namespace {
               script_defaults, manifest.defaults.script, error_stream)) {
           return std::nullopt;
         }
-        if (!ApplyImportOptions(script_defaults,
-              manifest.defaults.script.with_content_hashing, error_stream)) {
-          return std::nullopt;
-        }
         if (!ApplyScriptAssetOverrides(
               script_defaults, manifest.defaults.script, error_stream)) {
           return std::nullopt;
@@ -1739,11 +1693,6 @@ namespace {
               manifest.defaults.scripting_sidecar, error_stream)) {
           return std::nullopt;
         }
-        if (!ApplyImportOptions(sidecar_defaults,
-              manifest.defaults.scripting_sidecar.with_content_hashing,
-              error_stream)) {
-          return std::nullopt;
-        }
         if (!ApplyScriptingSidecarOverrides(sidecar_defaults,
               manifest.defaults.scripting_sidecar, error_stream)) {
           return std::nullopt;
@@ -1758,11 +1707,6 @@ namespace {
         }
         if (!ApplyCommonScriptOverrides(sidecar_defaults,
               manifest.defaults.physics_sidecar, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplyImportOptions(sidecar_defaults,
-              manifest.defaults.physics_sidecar.with_content_hashing,
-              error_stream)) {
           return std::nullopt;
         }
         if (!ApplyPhysicsSidecarOverrides(sidecar_defaults,
@@ -1812,10 +1756,6 @@ namespace {
               manifest.defaults.physics_material_descriptor, error_stream)) {
           return std::nullopt;
         }
-        if (!ApplyPhysicsMaterialDescriptorOverrides(material_defaults,
-              manifest.defaults.physics_material_descriptor, error_stream)) {
-          return std::nullopt;
-        }
       }
 
       if (defaults.contains("collision_shape_descriptor")) {
@@ -1826,10 +1766,6 @@ namespace {
           return std::nullopt;
         }
         if (!ApplyCommonCollisionShapeDescriptorOverrides(shape_defaults,
-              manifest.defaults.collision_shape_descriptor, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplyCollisionShapeDescriptorOverrides(shape_defaults,
               manifest.defaults.collision_shape_descriptor, error_stream)) {
           return std::nullopt;
         }
@@ -1877,10 +1813,6 @@ namespace {
           return std::nullopt;
         }
         if (!ApplyCommonBufferContainerOverrides(buffer_container_defaults,
-              manifest.defaults.buffer_container, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplyBufferContainerOverrides(buffer_container_defaults,
               manifest.defaults.buffer_container, error_stream)) {
           return std::nullopt;
         }
@@ -2188,10 +2120,6 @@ namespace {
         return std::nullopt;
       }
 
-      if (!ApplyImportOptions(
-            job, manifest_job.texture.with_content_hashing, error_stream)) {
-        return std::nullopt;
-      }
       if (!ApplySceneOverrides(job, manifest_job.fbx, error_stream)) {
         return std::nullopt;
       }
@@ -2200,33 +2128,8 @@ namespace {
       }
       manifest_job.fbx.model_record = model_record;
       manifest_job.gltf.model_record = model_record;
-      if (!ApplyImportOptions(
-            job, manifest_job.script.with_content_hashing, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyImportOptions(job,
-            manifest_job.scripting_sidecar.with_content_hashing,
-            error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyImportOptions(job,
-            manifest_job.physics_sidecar.with_content_hashing, error_stream)) {
-        return std::nullopt;
-      }
       if (!ApplyMaterialDescriptorOverrides(
             job, manifest_job.material_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyPhysicsMaterialDescriptorOverrides(
-            job, manifest_job.physics_material_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCollisionShapeDescriptorOverrides(
-            job, manifest_job.collision_shape_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyBufferContainerOverrides(
-            job, manifest_job.buffer_container, error_stream)) {
         return std::nullopt;
       }
       if (!ApplyGeometryDescriptorOverrides(

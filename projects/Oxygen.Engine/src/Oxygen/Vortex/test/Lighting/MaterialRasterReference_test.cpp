@@ -173,9 +173,7 @@ namespace {
       const std::span<const std::uint8_t> bytes) -> content::ResourceKey
     {
       const auto key = owned_asset_loader_->MintSyntheticTextureKey();
-      desc.content_hash = key.get();
       auto payload = detail::BuildV4TexturePayload(desc, layouts, bytes);
-      desc.size_bytes = static_cast<std::uint32_t>(payload.size());
       owned_asset_loader_->SetTexture(key,
         std::make_shared<data::TextureResource>(
           desc, oxygen::serio::testing::OwnedBytes(payload)));

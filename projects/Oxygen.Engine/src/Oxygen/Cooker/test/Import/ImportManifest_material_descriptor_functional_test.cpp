@@ -16,9 +16,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -26,7 +24,6 @@ namespace {
 
 using nlohmann::json;
 using oxygen::content::import::ImportManifest;
-using oxygen::cooker::test::kContentHashingDefault;
 using oxygen::cooker::test::WriteText;
 using oxygen::testing::ScopedTempDir;
 
@@ -41,7 +38,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   WriteText(descriptor_path,
     R"({
       "name": "WoodFloor",
-      "content_hashing": false,
       "domain": "opaque",
       "textures": {
         "base_color": {
@@ -56,7 +52,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       "output": ".cooked",
       "defaults": {
         "material_descriptor": {
-          "content_hashing": true,
           "name": "default-material-name"
         }
       },
@@ -65,8 +60,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
           "type": "material-descriptor",
           "source": "Materials/wood.material.json",
           "virtual_path": "/.cooked/Materials/WoodFloor.omat",
-          "name": "wood-job",
-          "content_hashing": true
+          "name": "wood-job"
         }
       ]
     })";
@@ -85,9 +79,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   EXPECT_EQ(request->job_name, std::optional<std::string> { "wood-job" });
   EXPECT_EQ(request->asset_virtual_path, "/.cooked/Materials/WoodFloor.omat");
   ASSERT_HAS_VALUE(request->material_descriptor);
-
-  // Descriptor intent overrides defaults; Release enforces content hashing.
-  EXPECT_EQ(request->options.with_content_hashing, kContentHashingDefault);
 
   const auto normalized
     = json::parse(request->material_descriptor->normalized_descriptor_json);

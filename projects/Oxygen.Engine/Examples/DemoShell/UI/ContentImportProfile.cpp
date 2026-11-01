@@ -34,8 +34,7 @@ namespace {
   //! of no other group.
   auto GroupOfSetting(const std::string_view key) -> ImportSettingsGroup
   {
-    static constexpr auto kContentKeys = std::array<std::string_view, 5> {
-      "content_hashing",
+    static constexpr auto kContentKeys = std::array<std::string_view, 4> {
       "content_flags",
       "node_pruning",
       "material_remap",
@@ -162,7 +161,6 @@ auto ResetGroup(ImportProfile profile, const ImportSettingsGroup group)
   switch (group) {
   case ImportSettingsGroup::kContent:
     options.import_content = initial.import_content;
-    options.with_content_hashing = initial.with_content_hashing;
     options.ignore_non_mesh_primitives = initial.ignore_non_mesh_primitives;
     options.node_pruning = initial.node_pruning;
     break;

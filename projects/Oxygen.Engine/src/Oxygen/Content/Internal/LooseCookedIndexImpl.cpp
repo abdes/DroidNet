@@ -31,6 +31,7 @@
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
+#include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MappedFile.h>
@@ -536,7 +537,12 @@ auto LooseCookedIndexImpl::ReadFileRecords(IndexLoadContext& context) -> void
     if (!context.unique_file_paths.insert(rel).second) {
       throw std::runtime_error("Duplicate content path in loose cooked index");
     }
-    if (base::IsAllZero(record.sha256)) {
+    if (data::loose_cooked::IsResourceDataFile(record.kind)) {
+      if (!base::IsAllZero(record.sha256)) {
+        throw std::runtime_error(
+          "Resource data file SHA-256 in loose cooked index");
+      }
+    } else if (base::IsAllZero(record.sha256)) {
       throw std::runtime_error("Missing file SHA-256 in loose cooked index");
     }
 

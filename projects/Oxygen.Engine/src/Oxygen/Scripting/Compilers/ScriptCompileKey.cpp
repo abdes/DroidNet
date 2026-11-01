@@ -46,7 +46,9 @@ auto ComputeScriptCompileKey(const data::AssetKey& asset_key,
   HashCombine(seed, source.Compression());
   HashCombine(seed, source.GetOrigin());
   HashCombine(seed, source.GetCanonicalName().get());
-  HashCombine(seed, source.ContentHash());
+  for (const auto byte : source.ContentHash()) {
+    HashCombine(seed, byte);
+  }
   HashCombine(
     seed, is_luau ? kLuauCompilerFingerprint : kUnknownCompilerFingerprint);
   HashCombine(

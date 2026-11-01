@@ -17,7 +17,6 @@
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -26,7 +25,6 @@ namespace {
 using nlohmann::json;
 using oxygen::content::import::MaterialDescriptorImportSettings;
 using oxygen::content::import::internal::BuildMaterialDescriptorRequest;
-using oxygen::cooker::test::kContentHashingDefault;
 using oxygen::cooker::test::WriteText;
 using oxygen::testing::ScopedTempDir;
 
@@ -37,7 +35,6 @@ auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   settings.descriptor_path = descriptor_path.string();
   settings.cooked_root = (descriptor_path.parent_path() / ".cooked").string();
   settings.job_name = "manifest-material";
-  settings.with_content_hashing = true;
   return settings;
 }
 
@@ -51,7 +48,6 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
     R"({
       "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json",
       "name": "WoodFloor",
-      "content_hashing": false,
       "domain": "opaque",
       "alpha_mode": "opaque",
       "orm_policy": "auto",
@@ -79,7 +75,6 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(
     request->job_name, std::optional<std::string> { "manifest-material" });
-  EXPECT_EQ(request->options.with_content_hashing, kContentHashingDefault);
   ASSERT_HAS_VALUE(request->material_descriptor);
 
   const auto normalized

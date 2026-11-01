@@ -16,24 +16,21 @@
       "type": "texture-descriptor",
       "source": "/Content/Scenes/SdkMaterials/SdkMarble_base_color.otex.json",
       "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_base_color.otex",
-      "name": "SdkMarble_base_color",
-      "content_hashing": true
+      "name": "SdkMarble_base_color"
     },
     {
       "id": "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex",
       "type": "texture-descriptor",
       "source": "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex.json",
       "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex",
-      "name": "SdkMarble_normal",
-      "content_hashing": true
+      "name": "SdkMarble_normal"
     },
     {
       "id": "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex",
       "type": "texture-descriptor",
       "source": "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex.json",
       "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex",
-      "name": "SdkMarble_roughness",
-      "content_hashing": true
+      "name": "SdkMarble_roughness"
     },
     {
       "id": "/Content/Scenes/SdkMaterials/SdkMarble.omat",
@@ -52,24 +49,21 @@
       "type": "texture-descriptor",
       "source": "/Content/Scenes/SdkMaterials/SdkWood_base_color.otex.json",
       "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_base_color.otex",
-      "name": "SdkWood_base_color",
-      "content_hashing": true
+      "name": "SdkWood_base_color"
     },
     {
       "id": "/Content/Scenes/SdkMaterials/SdkWood_normal.otex",
       "type": "texture-descriptor",
       "source": "/Content/Scenes/SdkMaterials/SdkWood_normal.otex.json",
       "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_normal.otex",
-      "name": "SdkWood_normal",
-      "content_hashing": true
+      "name": "SdkWood_normal"
     },
     {
       "id": "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex",
       "type": "texture-descriptor",
       "source": "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex.json",
       "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex",
-      "name": "SdkWood_roughness",
-      "content_hashing": true
+      "name": "SdkWood_roughness"
     },
     {
       "id": "/Content/Scenes/SdkMaterials/SdkWood.omat",

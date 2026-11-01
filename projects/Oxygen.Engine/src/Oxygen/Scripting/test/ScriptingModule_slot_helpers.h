@@ -16,6 +16,7 @@
 
 #include "ScriptingModule_test_fixture.h"
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -78,8 +79,15 @@ inline auto MakeSceneWithExecutableSlot(const char* scene_name,
   return scene;
 }
 
-inline auto CompileSlotBytecode(const std::string_view source,
-  const uint64_t content_hash) -> std::shared_ptr<const ScriptBytecodeBlob>
+//! Distinct, deterministic digest for test slot number `id`.
+inline auto SlotTestHash(const uint64_t id) noexcept -> base::Sha256Digest
+{
+  return base::ComputeSha256(std::as_bytes(std::span(&id, 1U)));
+}
+
+inline auto CompileSlotBytecode(
+  const std::string_view source, const base::Sha256Digest& content_hash)
+  -> std::shared_ptr<const ScriptBytecodeBlob>
 {
   LuauScriptCompiler compiler;
   const auto source_bytes = ToBytes(source);
@@ -94,10 +102,6 @@ inline auto CompileSlotBytecode(const std::string_view source,
   if (!compile_result.success || !compile_result.HasBytecode()) {
     return {};
   }
-  if (content_hash == 0) {
-    // Preserve the compiler's unstamped output for runtime reload coverage.
-    return compile_result.bytecode;
-  }
   const auto bytes = compile_result.bytecode->BytesView();
   return std::make_shared<const ScriptBytecodeBlob>(
     ScriptBytecodeBlob::FromOwned(
@@ -108,8 +112,9 @@ inline auto CompileSlotBytecode(const std::string_view source,
       ScriptBlobCanonicalName { "scene_slot_local_state" }));
 }
 
-inline auto CompileSlotExecutable(const std::string_view source,
-  const uint64_t content_hash) -> std::shared_ptr<const ScriptExecutable>
+inline auto CompileSlotExecutable(
+  const std::string_view source, const base::Sha256Digest& content_hash)
+  -> std::shared_ptr<const ScriptExecutable>
 {
   auto bytecode = CompileSlotBytecode(source, content_hash);
   if (!bytecode) {

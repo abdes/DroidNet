@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -23,8 +24,8 @@ namespace oxygen::content::import {
 
 //! UV transform for a material texture slot.
 struct MaterialUvTransform {
-  float scale[2] = { 1.0F, 1.0F };
-  float offset[2] = { 0.0F, 0.0F };
+  std::array<float, 2> scale = { 1.0F, 1.0F };
+  std::array<float, 2> offset = { 0.0F, 0.0F };
   float rotation_radians = 0.0F;
 };
 
@@ -74,22 +75,22 @@ struct MaterialTextureBindings {
 
 //! Scalar material inputs.
 struct MaterialInputs {
-  float base_color[4] = { 1.0F, 1.0F, 1.0F, 1.0F };
+  std::array<float, 4> base_color = { 1.0F, 1.0F, 1.0F, 1.0F };
   float normal_scale = 1.0F;
   float metalness = 0.0F;
   float roughness = 1.0F;
   float ambient_occlusion = 1.0F;
-  float emissive_factor[3] = { 0.0F, 0.0F, 0.0F };
+  std::array<float, 3> emissive_factor = { 0.0F, 0.0F, 0.0F };
   float alpha_cutoff = 0.5F;
   float ior = 1.5F;
   //! Specular level: F0 = 0.08 x level (see `MaterialAssetDesc`).
   float specular_factor = 0.5F;
-  float sheen_color_factor[3] = { 0.0F, 0.0F, 0.0F };
+  std::array<float, 3> sheen_color_factor = { 0.0F, 0.0F, 0.0F };
   float clearcoat_factor = 0.0F;
   float clearcoat_roughness = 0.0F;
   float transmission_factor = 0.0F;
   float thickness_factor = 0.0F;
-  float attenuation_color[3] = { 1.0F, 1.0F, 1.0F };
+  std::array<float, 3> attenuation_color = { 1.0F, 1.0F, 1.0F };
   float attenuation_distance = 0.0F;
   bool double_sided = false;
   bool unlit = false;
@@ -120,10 +121,9 @@ struct MaterialSource final {
   OrmPolicy orm_policy = OrmPolicy::kAuto;
   AmbientOcclusionMode occlusion_mode = AmbientOcclusionMode::kFactor;
   std::vector<ShaderRequest> shader_requests;
-  std::optional<bool> content_hashing {};
 
   struct TextureSlot final {
-    std::string_view name {};
+    std::string_view name;
     MaterialTextureBinding MaterialTextureBindings::* binding = nullptr;
   };
 

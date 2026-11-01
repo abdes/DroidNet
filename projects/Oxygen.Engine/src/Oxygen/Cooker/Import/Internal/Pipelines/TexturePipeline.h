@@ -76,12 +76,6 @@ public:
     //! Number of worker coroutines to start.
     uint32_t worker_count = 4;
 
-    //! Enable or disable payload content hashing.
-    /*!
-     When false, the pipeline MUST NOT compute `content_hash` for textures.
-    */
-    bool with_content_hashing = true;
-
     //! Optional async file reader for resolving source_path bytes.
     observer_ptr<IAsyncFileReader> file_reader;
 
@@ -161,10 +155,10 @@ public:
     SourceContent source;
 
     //! Callback fired when a worker starts processing this item.
-    std::function<void()> on_started {};
+    std::function<void()> on_started;
 
     //! Callback fired when a worker finishes processing this item.
-    std::function<void()> on_finished {};
+    std::function<void()> on_finished;
 
     //! Cancellation token.
     std::stop_token stop_token;
@@ -204,7 +198,7 @@ public:
   OXGN_COOK_API explicit TexturePipeline(
     co::ThreadPool& thread_pool, std::optional<Config> config = {});
 
-  OXGN_COOK_API ~TexturePipeline();
+  OXGN_COOK_API ~TexturePipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(TexturePipeline)
   OXYGEN_MAKE_NON_MOVABLE(TexturePipeline)

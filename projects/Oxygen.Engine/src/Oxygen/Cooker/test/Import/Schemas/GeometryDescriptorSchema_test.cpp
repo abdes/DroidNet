@@ -85,7 +85,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, GeometryDescriptorSchemaCaseTest,
         .Set("/$schema",
           "./src/Oxygen/Cooker/Import/Schemas/"
           "oxygen.geometry-descriptor.schema.json")
-        .Set("/content_hashing", true)
         .Set("/lods/0/procedural/generator", "Cube")
         .Set("/lods/0/procedural/mesh_name", "CubeMesh")
         .Text(),

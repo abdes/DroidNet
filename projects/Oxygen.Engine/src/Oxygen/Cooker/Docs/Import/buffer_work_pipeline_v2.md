@@ -10,7 +10,7 @@
 
 This document describes the **BufferPipeline** as implemented in
 `src/Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.*`.
-The pipeline is compute-only and is responsible for optional SHA‑256 based
+The pipeline is compute-only and is responsible for the SHA‑256
 `content_hash` computation for buffer payloads used by async imports.
 
 Core properties:
@@ -20,10 +20,10 @@ Core properties:
 - **Lifetime**: created and started by the importer; workers are started in a
   provided `co::Nursery` and must be started on the import thread via
   `Start(co::Nursery&)`.
-- **ThreadPool offload**: hashing (when enabled) is offloaded to a shared
-  `co::ThreadPool`.
-- **Configurable hashing**: controlled by `BufferPipeline::Config::with_content_hashing`;
-  when disabled the pipeline does not touch `content_hash`.
+- **ThreadPool offload**: hashing is offloaded to a shared `co::ThreadPool`.
+- **Always hashed**: the pipeline computes the full SHA‑256 `content_hash`
+  (`base::Sha256Digest`) of every payload from the bytes it holds; no import
+  reads a data file again to hash it.
 - **Bounded queues**: input/output queues have a bounded capacity (`Config::queue_capacity`);
   `Submit` may suspend when full, `TrySubmit` is provided for non-blocking submits.
 
@@ -38,7 +38,7 @@ import thread and offload CPU-bound hashing to the `co::ThreadPool`.
 
 ### Pipeline vs Emitter Responsibilities
 
-- **BufferPipeline**: compute-only post-processing (optional `content_hash`).
+- **BufferPipeline**: compute-only post-processing (`content_hash`).
 - **BufferEmitter**: deduplication, stable index assignment and writing
   `buffers.data` / `buffers.table`.
 
@@ -63,8 +63,7 @@ struct WorkItem {
 
 Notes:
 
-- `cooked.content_hash` may be zero on input and will be populated only when
-  hashing is enabled and the value is zero.
+- `cooked.content_hash` is ignored on input and populated by the pipeline.
 - The planner/orchestrator must submit only finalized payloads.
 
 ### WorkResult
@@ -72,7 +71,7 @@ Notes:
 ```cpp
 struct WorkResult {
   std::string source_id;               // Echoed from WorkItem
-  CookedBufferPayload cooked;          // May have `content_hash` filled
+  CookedBufferPayload cooked;          // `content_hash` filled on success
   std::vector<ImportDiagnostic> diagnostics;
   ImportWorkItemTelemetry telemetry;   // Per-item telemetry captured by pipeline
   bool success = false;
@@ -91,7 +90,7 @@ Notes:
 The implementation exposes the following API (high-level):
 
 ```cpp
-struct Config { size_t queue_capacity = 64; uint32_t worker_count = 2; bool with_content_hashing = true; };
+struct Config { size_t queue_capacity = 64; uint32_t worker_count = 2; };
 explicit BufferPipeline(co::ThreadPool& thread_pool, Config config = {});
 void Start(co::Nursery& nursery);                       // Must be called on import thread
 auto Submit(WorkItem item) -> co::Co<>;                 // Suspends when input queue is full
@@ -115,15 +114,11 @@ auto OutputQueueSize() const noexcept -> size_t;        // Current queued result
   1. Invoke `on_started()` (if provided) on the import thread.
   2. If the item was cancelled (`stop_token`), short-circuit and return a
      `WorkResult` with `success = false`.
-  3. If `Config::with_content_hashing` is disabled, forward the payload
-     unchanged (pipeline does not modify `content_hash`).
-  4. If `cooked.content_hash != 0`, skip hashing.
-  5. Otherwise, offload SHA-256 computation to the shared `co::ThreadPool`.
-     The pipeline stores the first 8 bytes of the digest into
-     `CookedBufferPayload::content_hash` on success. The ThreadPool task can
-     return an `ImportDiagnostic` on failure which is propagated in the
-     `WorkResult`.
-  6. Capture per-item telemetry and diagnostics, invoke `on_finished()` and
+  3. Offload SHA-256 computation over `cooked.data` to the shared
+     `co::ThreadPool`. The pipeline stores the full digest into
+     `CookedBufferPayload::content_hash` on success. A failure is reported as
+     an `ImportDiagnostic` propagated in the `WorkResult`.
+  4. Capture per-item telemetry and diagnostics, invoke `on_finished()` and
      enqueue a `WorkResult` for collection.
 
 - All errors are converted to `ImportDiagnostic`; exceptions are not allowed
@@ -133,9 +128,9 @@ auto OutputQueueSize() const noexcept -> size_t;        // Current queued result
 
 ## Cooked Output Contract
 
-- `content_hash` (first 8 bytes of SHA‑256) is computed on the `co::ThreadPool` when
-  `Config::with_content_hashing` is enabled and the incoming `content_hash` is zero.
-- The pipeline never modifies buffer bytes or metadata other than potentially
+- `content_hash` (the full SHA‑256 of the buffer bytes) is computed on the
+  `co::ThreadPool` for every payload.
+- The pipeline never modifies buffer bytes or metadata other than
   `content_hash` and it preserves other `CookedBufferPayload` fields.
 
 ---

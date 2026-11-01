@@ -14,7 +14,6 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportSettings.h>
@@ -26,7 +25,6 @@
 namespace {
 
 using nlohmann::json;
-using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::SceneDescriptorImportSettings;
 using oxygen::content::import::internal::BuildSceneDescriptorRequest;
 using oxygen::content::import::test::MakeCurrentSceneDescriptor;
@@ -40,7 +38,6 @@ auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   settings.descriptor_path = descriptor_path.string();
   settings.cooked_root = (descriptor_path.parent_path() / ".cooked").string();
   settings.job_name = "manifest-scene";
-  settings.with_content_hashing = true;
   return settings;
 }
 
@@ -54,7 +51,6 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
     MakeCurrentSceneDescriptor(R"({
       "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
       "name": "DemoScene",
-      "content_hashing": false,
       "nodes": [
         { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" },
         { "id": "00000000-0000-4000-8000-000000000002", "name": "MeshNode", "parent": 0 }
@@ -78,8 +74,6 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "manifest-scene" });
-  EXPECT_EQ(request->options.with_content_hashing,
-    EffectiveContentHashingEnabled(false));
   ASSERT_HAS_VALUE(request->scene_descriptor)
     << "Expected request->scene_descriptor to contain a value";
 

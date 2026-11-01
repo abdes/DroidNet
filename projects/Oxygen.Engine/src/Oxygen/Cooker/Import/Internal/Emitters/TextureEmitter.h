@@ -9,18 +9,14 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
@@ -60,7 +56,7 @@ namespace oxygen::content::import {
    shutdown.
 
  4. **Signature Dedupe**: Identical cooked textures are deduplicated using a
-    stable signature derived from the cooked descriptor (and its stored hash).
+    stable signature derived from the cooked descriptor and its SHA-256.
     `Emit()` may return an existing index.
 
  ### Usage Pattern
@@ -101,19 +97,6 @@ public:
 
     //! Alignment for texture data placement in the data file.
     uint64_t data_alignment = 256;
-
-    //! Enable or disable payload content hashing.
-    /*!
-     When false, fallback payloads MUST NOT compute `content_hash`.
-    */
-    bool with_content_hashing = true;
-
-    //! Collision policy for identity-key conflicts during dedup.
-    DedupCollisionPolicy collision_policy
-      = DedupCollisionPolicy::kWarnKeepFirst;
-
-    //! Optional sink used to publish collision diagnostics.
-    std::function<void(ImportDiagnostic)> on_dedup_diagnostic;
   };
 
   //! Runtime statistics for the emitter.
@@ -147,9 +130,8 @@ public:
    Assigns a table index immediately and starts an async write for the
    texture data. The index is valid the moment this method returns.
 
-   @param cooked The cooked texture payload containing descriptor and data.
-   @param signature_salt Salt appended to the dedupe signature when
-     `content_hash` is zero.
+   @param cooked The cooked texture payload containing descriptor and data;
+     its producer computed `desc.content_hash`, the SHA-256 of the payload.
    @return Table index for this texture. Index
         `data::pak::core::kFallbackResourceIndex` is reserved for the fallback
         texture; user-emitted textures start at
@@ -170,8 +152,7 @@ public:
 
    @note The returned index is stable even if the I/O fails later.
   */
-  OXGN_COOK_NDAPI auto Emit(
-    CookedTexturePayload cooked, std::string_view signature_salt) -> uint32_t;
+  OXGN_COOK_NDAPI auto Emit(CookedTexturePayload cooked) -> uint32_t;
 
   //! Ensure the reserved fallback payload and descriptor before publishing its
   //! index.
@@ -244,8 +225,6 @@ private:
   std::atomic<bool> fallback_emitted_ { false };
   std::atomic<uint32_t> emitted_count_ { 0 };
   std::unordered_set<std::string> emitted_signatures_;
-  std::unordered_map<std::string, std::string> identity_by_key_;
-  std::unordered_map<std::string, uint32_t> index_by_key_;
   std::atomic<uint64_t> data_file_size_ { 0 };
 };
 

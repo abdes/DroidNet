@@ -198,7 +198,6 @@ namespace {
     Read(s, ImportKey("content_flags"), flags, 0,
       static_cast<std::int64_t>(ImportContentFlags::kAll));
     o.import_content = static_cast<ImportContentFlags>(flags);
-    Read(s, ImportKey("hashing"), o.with_content_hashing);
     Read(s, ImportKey("ignore_non_mesh"), o.ignore_non_mesh_primitives);
     ReadEnum(s, ImportKey("node_pruning"), o.node_pruning,
       NodePruningPolicy::kKeepAll, NodePruningPolicy::kDropEmptyNodes);
@@ -232,7 +231,6 @@ namespace {
   {
     s.SetInt(
       ImportKey("content_flags"), static_cast<std::int64_t>(o.import_content));
-    s.SetBool(ImportKey("hashing"), o.with_content_hashing);
     s.SetBool(ImportKey("ignore_non_mesh"), o.ignore_non_mesh_primitives);
     WriteEnum(s, ImportKey("node_pruning"), o.node_pruning);
     WriteEnum(s, ImportKey("units"), o.coordinate.unit_normalization);

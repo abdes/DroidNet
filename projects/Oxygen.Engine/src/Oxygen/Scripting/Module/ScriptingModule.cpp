@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -27,11 +28,11 @@
 #include <lua.h>
 #include <lualib.h>
 
-#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Commands/Params.h>
@@ -227,16 +228,11 @@ namespace {
     return false;
   }
 
-  auto ExecutableFingerprint(const ScriptExecutable& executable) -> uint64_t
+  //! SHA-256 of the executable's bytecode; detects in-place bytecode reloads.
+  auto ExecutableFingerprint(const ScriptExecutable& executable)
+    -> base::Sha256Digest
   {
-    if (const auto hash = executable.ContentHash(); hash != 0) {
-      return hash;
-    }
-    // Compiler output and cooked resources may omit the authored hash. This
-    // runtime comparison fingerprint still detects in-place bytecode reloads;
-    // it does not change resource metadata or its validation contract.
-    const auto bytecode = executable.BytecodeView();
-    return ComputeFNV1a64(bytecode.data(), bytecode.size());
+    return base::ComputeSha256(std::as_bytes(executable.BytecodeView()));
   }
 
   auto TryGetHookFunction(lua_State* state, std::string_view hook_name) -> bool

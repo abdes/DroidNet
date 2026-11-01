@@ -28,7 +28,7 @@ namespace {
   auto NormalizeInlineSidecarPayload(const std::string_view payload_text,
     std::string& normalized_payload, std::ostream& error_stream) -> bool
   {
-    using json = nlohmann::json;
+    using nlohmann::json;
     json parsed;
     try {
       parsed = json::parse(payload_text);
@@ -58,16 +58,20 @@ namespace {
     return true;
   }
 
-  auto BuildBaseImportRequest(const std::string& source_path,
-    const std::string& cooked_root, const std::string& job_name,
-    const bool with_content_hashing, std::ostream& error_stream)
-    -> std::optional<ImportRequest>
+  struct BaseRequestSettings final {
+    std::string_view source_path;
+    std::string_view cooked_root;
+    std::string_view job_name;
+  };
+
+  auto BuildBaseImportRequest(const BaseRequestSettings& settings,
+    std::ostream& error_stream) -> std::optional<ImportRequest>
   {
     auto request = ImportRequest {};
-    request.source_path = source_path;
+    request.source_path = settings.source_path;
 
-    if (!cooked_root.empty()) {
-      auto root = std::filesystem::path(cooked_root);
+    if (!settings.cooked_root.empty()) {
+      auto root = std::filesystem::path(settings.cooked_root);
       if (!root.is_absolute()) {
         error_stream << "ERROR: cooked root must be an absolute path\n";
         return std::nullopt;
@@ -75,8 +79,8 @@ namespace {
       request.cooked_root = root;
     }
 
-    if (!job_name.empty()) {
-      request.job_name = job_name;
+    if (!settings.job_name.empty()) {
+      request.job_name = std::string(settings.job_name);
     } else {
       const auto stem = request.source_path.stem().string();
       if (!stem.empty()) {
@@ -84,8 +88,6 @@ namespace {
       }
     }
 
-    request.options.with_content_hashing
-      = EffectiveContentHashingEnabled(with_content_hashing);
     return request;
   }
 
@@ -113,9 +115,13 @@ auto BuildPhysicsSidecarRequest(const PhysicsSidecarImportSettings& settings,
     ? settings.source_path
     : std::string("inline://physics-sidecar");
 
-  auto request
-    = BuildBaseImportRequest(source_path_for_request, settings.cooked_root,
-      settings.job_name, settings.with_content_hashing, error_stream);
+  auto request = BuildBaseImportRequest(
+    {
+      .source_path = source_path_for_request,
+      .cooked_root = settings.cooked_root,
+      .job_name = settings.job_name,
+    },
+    error_stream);
   if (!request.has_value()) {
     return std::nullopt;
   }

@@ -92,7 +92,7 @@ Core properties:
   descriptor bytes; `BufferEmitter` / `AssetEmitter` still perform writes.
 - **Job-scoped**: created per job and started in the job’s child nursery.
 - **ThreadPool offload**: descriptor `content_hash` computation runs on
-  `co::ThreadPool` when hashing is enabled.
+  `co::ThreadPool`.
 - **Strict failure policy**: finalization failures surface as explicit
   diagnostics; no silent fallbacks are performed.
 - **Planner‑gated**: the planner submits finalization work only after buffer
@@ -114,8 +114,8 @@ document
   indices) plus a table of per-submesh material patch offsets.
 - **GeometryPipeline**: finalizes the geometry descriptor by patching buffer
   bindings (indices), applying resolved material keys at the recorded byte
-  offsets, and computing the descriptor-level `content_hash` (on the ThreadPool)
-  if enabled.
+  offsets, and computing the descriptor-level `content_hash` (SHA-256, on the
+  ThreadPool).
 - **BufferEmitter**: assigns stable buffer indices, writes `buffers.data` and
   `buffers.table`, and makes the binding indices available for finalization.
 - **AssetEmitter**: writes `.ogeo` geometry descriptor files using the finalized
@@ -224,8 +224,7 @@ A completed GeometryPipeline work item produces a `WorkResult` that contains:
 - `cooked` (optional): the `CookedGeometryPayload` when finalization succeeded
   (otherwise `std::nullopt`).
 - `finalized_descriptor_bytes`: the finalized `.ogeo` payload (buffer indices
-  and material keys patched, and `header.content_hash` written if hashing
-  succeeded and was enabled).
+  and material keys patched, and `header.content_hash` written).
 - `diagnostics`: any `ImportDiagnostic` entries produced during finalization.
 - `telemetry`: per-item timing/telemetry (e.g., `cook_duration`).
 - `success`: true on success; false if canceled or any errors occurred.
@@ -246,8 +245,8 @@ Notes:
 The implemented `GeometryPipeline` exposes the usual pipeline control functions
 and a public helper for descriptor finalization:
 
-- `Config` — configuration with `queue_capacity` (default 32), `worker_count`
-  (default 1 in the implementation), and `with_content_hashing` (default true).
+- `Config` — configuration with `queue_capacity` (default 32) and
+  `worker_count` (default 1 in the implementation).
 - `GeometryPipeline(co::ThreadPool&, Config)` — create the pipeline.
 - `Start(co::Nursery&)` — starts worker coroutines.
 - `Submit(WorkItem)` / `TrySubmit(WorkItem)` — submit work (blocking / non-
@@ -259,8 +258,8 @@ and a public helper for descriptor finalization:
 - `InputQueueSize()` / `OutputQueueSize()` — inspect channel sizes.
 - `FinalizeDescriptorBytes(bindings, descriptor_bytes, material_patches, diagnostics)`
   — public coroutine that patches buffer bindings/materials into the supplied
-  `descriptor_bytes`, computes `header.content_hash` on the ThreadPool when
-  `with_content_hashing` is enabled, and returns the finalized byte vector or
+  `descriptor_bytes`, computes `header.content_hash` on the ThreadPool, and
+  returns the finalized byte vector or
   `std::nullopt` on failure. Diagnostics are appended to the provided
   diagnostics vector.
 
@@ -270,7 +269,7 @@ and a public helper for descriptor finalization:
 
 Workers run as coroutines and process descriptor-finalization work items from
 the bounded input queue. GeometryPipeline workers are lightweight: they call
-`FinalizeDescriptorBytes()` to patch bindings/materials and optionally compute
+`FinalizeDescriptorBytes()` to patch bindings/materials and compute
 `header.content_hash`.
 
 For each work item the worker performs:
@@ -294,9 +293,8 @@ For each work item the worker performs:
    - Applies all material key patches by seeking to each recorded absolute
      offset and writing the `data::AssetKey` value. Offsets outside the
      descriptor bounds are treated as errors.
-   - If `with_content_hashing` is enabled, schedules `util::ComputeContentHash`
-     on the `co::ThreadPool` and, on success, writes `header.content_hash` into
-     the descriptor bytes.
+   - Schedules `util::ComputeContentSha256` on the `co::ThreadPool` and, on
+     success, writes `header.content_hash` into the descriptor bytes.
    - Returns the finalized bytes or `std::nullopt` on any failure, accumulating
      diagnostics.
 4. If cancellation is requested after finalization started, report cancelled.
@@ -390,7 +388,7 @@ boundaries.
 4. Emit submesh descriptors and mesh views verbatim.
 5. Apply all `material_patches` by writing `data::AssetKey` values at their
    recorded absolute offsets. Offsets outside the descriptor range are errors.
-6. Compute `header.content_hash` on `co::ThreadPool` (if enabled) over the
+6. Compute `header.content_hash` on `co::ThreadPool` over the
    complete finalized bytes and write it into the header.
 7. Return the finalized descriptor bytes or an error diagnostic.
 
@@ -473,8 +471,9 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
 - Vertex buffer alignment = `sizeof(Vertex)`
 - Index buffer alignment = `alignof(uint32_t)`
 - Skinned meshes emit joint index/weight buffers (alignment = 16 bytes)
-- `content_hash` must be populated for every buffer payload by `BufferPipeline`
-  on the ThreadPool
+- `content_hash` (full SHA-256) is populated for every buffer payload by
+  `BufferPipeline` on the ThreadPool; the descriptor JSON carries no
+  `content_hash` input
 
 ---
 
@@ -488,7 +487,7 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
   to `kStandard` per job policy.
 - **Header metadata**: `header.version` and `header.content_hash` are populated;
   `GeometryPipeline` computes `header.content_hash` on the `co::ThreadPool`
-  after buffer indices are patched (when `with_content_hashing` is enabled).
+  after buffer indices are patched.
 - **Attribute mask**: missing attributes are reflected via
   `header.variant_flags` (union-of-LOD attributes).
 - **Failure policy**: no geometry fallback is allowed. Any failure produces

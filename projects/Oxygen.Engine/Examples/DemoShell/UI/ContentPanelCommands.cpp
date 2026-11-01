@@ -273,10 +273,6 @@ namespace {
       cc::kImportMaterials, "Import Materials", ImportContentFlags::kMaterials);
     flag(cc::kImportGeometry, "Import Geometry", ImportContentFlags::kGeometry);
     flag(cc::kImportScene, "Import Scene", ImportContentFlags::kScene);
-    commands.AddBool(Name(cc::kHashing), "Content Hashing",
-      "Hash imported content", [vm](const bool v) -> void {
-        EditOptions(vm, [v](auto& o) -> void { o.with_content_hashing = v; });
-      });
     commands.AddBool(Name(cc::kIgnoreNonMesh), "Ignore Non-Mesh Primitives",
       "Skip points and lines when importing", [vm](const bool v) -> void {
         EditOptions(

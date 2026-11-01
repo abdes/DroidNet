@@ -74,7 +74,7 @@ struct TextureTableTraits {
     -> std::string
   {
     std::string signature;
-    signature.reserve(96);
+    signature.reserve(160);
 
     signature.append("tex:");
     signature.append(";w=");
@@ -89,10 +89,8 @@ struct TextureTableTraits {
     signature.append(std::to_string(desc.alignment));
     signature.append(";n=");
     signature.append(std::to_string(desc.size_bytes));
-    if (desc.content_hash != 0U) {
-      signature.append(";h=");
-      signature.append(std::to_string(desc.content_hash));
-    }
+    signature.append(";h=");
+    signature.append(base::ToHexString(desc.content_hash));
     return signature;
   }
 };
@@ -113,7 +111,7 @@ struct BufferTableTraits {
     -> std::string
   {
     std::string signature;
-    signature.reserve(96);
+    signature.reserve(160);
 
     signature.append("buf:");
     signature.append("u=");
@@ -124,10 +122,8 @@ struct BufferTableTraits {
     signature.append(std::to_string(desc.element_format));
     signature.append(";n=");
     signature.append(std::to_string(desc.size_bytes));
-    if (desc.content_hash != 0U) {
-      signature.append(";h=");
-      signature.append(std::to_string(desc.content_hash));
-    }
+    signature.append(";h=");
+    signature.append(base::ToHexString(desc.content_hash));
     return signature;
   }
 };
@@ -154,12 +150,8 @@ struct PhysicsTableTraits {
     signature.append(std::to_string(static_cast<uint32_t>(desc.format)));
     signature.append(";n=");
     signature.append(std::to_string(desc.size_bytes));
-    if (std::ranges::any_of(desc.content_hash,
-          [](const uint8_t byte) -> bool { return byte != 0U; })) {
-      signature.append(";h=");
-      signature.append(
-        base::ToHexString(std::as_bytes(std::span { desc.content_hash })));
-    }
+    signature.append(";h=");
+    signature.append(base::ToHexString(desc.content_hash));
     return signature;
   }
 };

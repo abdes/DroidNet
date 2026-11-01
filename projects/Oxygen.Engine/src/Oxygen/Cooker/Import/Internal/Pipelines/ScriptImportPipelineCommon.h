@@ -6,24 +6,16 @@
 
 #pragma once
 
-#include <array>
-#include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 
 namespace oxygen::content::import::detail::script_import {
-
-constexpr auto kScriptContentHashBytes = size_t { 8 };
-constexpr auto kByteShiftBits = size_t { 8 };
 
 inline auto DeriveScriptName(const std::filesystem::path& source_path)
   -> std::string
@@ -44,17 +36,6 @@ inline auto BuildExternalSourcePath(const ImportRequest& request)
     return std::nullopt;
   }
   return request.source_mount_path;
-}
-
-inline auto ComputeContentHash64(const std::span<const std::byte> bytes)
-  -> uint64_t
-{
-  const auto digest = base::ComputeSha256(bytes);
-  auto hash = uint64_t { 0 };
-  for (size_t i = 0; i < kScriptContentHashBytes; ++i) {
-    hash |= static_cast<uint64_t>(digest.at(i)) << (i * kByteShiftBits);
-  }
-  return hash;
 }
 
 inline auto AddDiagnostic(ImportSession& session, const ImportRequest& request,

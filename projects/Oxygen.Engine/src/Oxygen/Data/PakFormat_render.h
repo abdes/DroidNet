@@ -275,7 +275,7 @@ inline constexpr uint32_t kTexturePayloadMagic = 0x3158544F;
  Pixel/block data for all subresources
  ```
 
- @note `layouts_offset_bytes` is typically `sizeof(TexturePayloadHeader)` (28).
+ @note `layouts_offset_bytes` is typically `sizeof(TexturePayloadHeader)` (20).
  @note `data_offset_bytes` is `layouts_offset_bytes + 12 * subresource_count`,
        possibly padded for alignment.
 */
@@ -288,10 +288,9 @@ struct TexturePayloadHeader {
   uint32_t total_payload_size = 0; //!< Total size including header
   uint32_t layouts_offset_bytes = 0; //!< Offset to SubresourceLayout array
   uint32_t data_offset_bytes = 0; //!< Offset to pixel/block data
-  uint64_t content_hash = 0; //!< Content hash for validation
 };
 #pragma pack(pop)
-static_assert(sizeof(TexturePayloadHeader) == 28);
+static_assert(sizeof(TexturePayloadHeader) == 20);
 
 } // namespace oxygen::data::pak::render
 

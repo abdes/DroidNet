@@ -135,10 +135,6 @@ namespace {
     if (descriptor_doc.contains("name")) {
       settings.job_name = descriptor_doc.at("name").get<std::string>();
     }
-    if (descriptor_doc.contains("content_hashing")) {
-      settings.with_content_hashing
-        = descriptor_doc.at("content_hashing").get<bool>();
-    }
     if (descriptor_doc.contains("preset")) {
       settings.preset = descriptor_doc.at("preset").get<std::string>();
     }

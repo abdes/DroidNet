@@ -54,7 +54,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, MaterialDescriptorSchemaCaseTest,
         .Set("/$schema",
           "./src/Oxygen/Cooker/Import/Schemas/"
           "oxygen.material-descriptor.schema.json")
-        .Set("/content_hashing", true)
         .Set("/domain", "opaque")
         .Set("/alpha_mode", "opaque")
         .Set("/orm_policy", "auto")

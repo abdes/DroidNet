@@ -20,6 +20,7 @@
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -133,8 +134,7 @@ NOLINT_TEST_F(LooseCookedRootTest, PhysicsSidecarMatchesItsScene)
 {
   auto game = LooseCookedRoot { "Game" };
   const auto scene = game.Scene("Scenes/Main.oscene");
-  const auto sidecar
-    = game.PhysicsSidecar("Scenes/Main.opscene", "Scenes/Main.oscene");
+  const auto sidecar = game.PhysicsSidecar("Scenes/Main.opscene", scene);
 
   const auto content = Open(game);
 
@@ -149,7 +149,8 @@ NOLINT_TEST_F(LooseCookedRootTest, PhysicsSidecarMatchesItsScene)
     data::SceneAsset(scene, scene_bytes).GetNodes().size());
   const auto hash = base::ComputeSha256(scene_bytes);
   EXPECT_TRUE(std::ranges::equal(descriptor.target_scene_content_hash, hash));
-  EXPECT_THROW(static_cast<void>(game.PhysicsSidecar("Other.opscene", "None")),
+  EXPECT_THROW(
+    static_cast<void>(game.PhysicsSidecar("Other.opscene", game.KeyOf("None"))),
     std::invalid_argument);
 }
 
@@ -185,6 +186,28 @@ NOLINT_TEST_F(LooseCookedRootTest, DescribedTextureIsNamed)
   const auto* named = content.FindNamedTexture(path);
   ASSERT_NE(named, nullptr);
   EXPECT_EQ(named->row, grid);
+}
+
+//! A resource row records the SHA-256 of its payload, and the data file that
+//! holds the payload is listed with no digest of its own.
+NOLINT_TEST_F(LooseCookedRootTest, RowsRecordTheirPayloadHash)
+{
+  auto game = LooseCookedRoot { "Game" };
+  const auto payload = SeedBytes(5U, 32U);
+  const auto row = game.AddBuffer(payload);
+
+  auto files = game.Files();
+  const auto index = oxygen::content::lc::LooseCookedIndex::LoadFromBytes(
+    CookedBytes::Index(files));
+
+  EXPECT_EQ(game.BufferRow(row).content_hash, base::ComputeSha256(payload));
+  for (const auto& file : index.GetFileInventory()) {
+    if (file.kind == oxygen::data::loose_cooked::FileKind::kBuffersData) {
+      EXPECT_TRUE(base::IsAllZero(file.sha256));
+    } else {
+      EXPECT_FALSE(base::IsAllZero(file.sha256)) << file.relative_path;
+    }
+  }
 }
 
 //! A root with no resource of a kind writes no table of it, unless kept.

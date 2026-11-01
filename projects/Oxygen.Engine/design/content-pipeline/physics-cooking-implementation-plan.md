@@ -151,12 +151,12 @@ Tasks:
 4. Implement `.opres` sidecar emission and parser.
 5. Implement virtual-path resolution contract for `.opres`.
 6. Integrate manifest and ImportTool command.
-7. Align dedup/collision behavior with universal importer policy (`ImportOptions::dedup_collision_policy`) and enforce canonical `.opres` path uniqueness per deduped physics resource index.
+7. Deduplicate by descriptor and SHA-256 (`PhysicsResourceDesc::content_hash`) and enforce canonical `.opres` path uniqueness per deduped physics resource index.
 
 Acceptance:
 
 1. Canonical import emits table/data + `.opres`.
-2. Dedupe and collision policy behavior is deterministic and diagnosed.
+2. Dedupe behavior is deterministic and virtual-path collisions are diagnosed.
 
 ## P3: Physics Material Descriptor Domain
 
@@ -290,7 +290,7 @@ Acceptance:
 1. Cross-mount ref ambiguity:
    - Mitigation: deterministic precedence + ambiguity diagnostic hard fail.
 2. Resource dedupe collisions:
-   - Mitigation: content-hash + format identity, virtual-path collision checks.
+   - Mitigation: SHA-256 + format identity, virtual-path collision checks.
 3. Layout migration regressions:
    - Mitigation: focused layout tests and index path assertions.
 4. Sidecar dependency race conditions:

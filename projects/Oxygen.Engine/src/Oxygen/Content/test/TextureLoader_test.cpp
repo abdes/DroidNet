@@ -13,6 +13,7 @@
 #include "Fixtures/LoaderTestFixtures.h"
 #include "Utils/PakUtils.h"
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -38,9 +39,12 @@ protected:
   }
 
   auto WriteDescriptorAndPayload(
-    const oxygen::data::pak::core::TextureResourceDesc& desc,
+    oxygen::data::pak::core::TextureResourceDesc desc,
     const std::vector<uint8_t>& payload) -> void
   {
+    desc.content_hash
+      = oxygen::base::ComputeSha256(std::as_bytes(std::span(payload)));
+
     auto pack_desc = desc_writer_.ScopedAlignment(1);
     const auto desc_result = desc_writer_.Write(desc);
     if (!desc_result) {
@@ -70,8 +74,7 @@ protected:
     }
 
     const auto payload_result
-      = data_writer_.WriteBlob(std::span<const std::byte>(
-        reinterpret_cast<const std::byte*>(payload.data()), payload.size()));
+      = data_writer_.WriteBlob(std::as_bytes(std::span(payload)));
     if (!payload_result) {
       throw std::runtime_error(
         "failed to write payload: " + payload_result.error().message());
@@ -97,7 +100,6 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureV4PayloadSucceeds)
     .mip_levels = 1,
     .format = static_cast<uint8_t>(oxygen::Format::kR8SInt),
     .alignment = 256,
-    .content_hash = 0,
   };
 
   const auto payload_bytes = MakeV4TexturePayload(512U, std::byte { 0xAB });
@@ -141,7 +143,6 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidFormatIsUnknown)
     .mip_levels = 1,
     .format = 255,
     .alignment = 256,
-    .content_hash = 0,
   };
 
   const auto payload_bytes = MakeV4TexturePayload(64U, std::byte { 0x11 });
@@ -174,7 +175,6 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidMagicThrows)
     .mip_levels = 1,
     .format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 256,
-    .content_hash = 0,
   };
 
   auto payload_bytes = MakeV4TexturePayload(32U, std::byte { 0x33 });
@@ -205,7 +205,6 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidDimensionsThrow)
     .mip_levels = 1,
     .format = static_cast<uint8_t>(oxygen::Format::kR8SInt),
     .alignment = 256,
-    .content_hash = 0,
   };
 
   const auto payload_bytes = MakeV4TexturePayload(16U, std::byte { 0x44 });
@@ -234,7 +233,6 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureTruncatedPayloadThrows)
     .mip_levels = 1,
     .format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 256,
-    .content_hash = 0,
   };
 
   std::vector<uint8_t> payload(desc.size_bytes, 0);

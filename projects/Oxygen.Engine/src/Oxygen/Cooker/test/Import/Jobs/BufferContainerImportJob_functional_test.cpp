@@ -22,9 +22,11 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
@@ -45,12 +47,12 @@ namespace {
   using oxygen::cooker::test::ReadBytes;
   using oxygen::cooker::test::WriteBytes;
 
-  // The cooker-internal `.obuf` sidecar layout (version 3), mirrored to read
+  // The cooker-internal `.obuf` sidecar layout, mirrored to read
   // the cooked output.
 #pragma pack(push, 1)
   struct BufferSidecarHeader final {
     std::array<char, 4> magic = { 'O', 'B', 'U', 'F' };
-    uint16_t version = 3;
+    uint16_t version = import::internal::kBufferSidecarVersion;
     uint16_t reserved = 0;
     data::pak::core::ResourceIndexT resource_index
       = data::pak::core::kNoResourceIndex;
@@ -96,7 +98,7 @@ namespace {
     std::vector<SidecarView> views;
   };
 
-  //! Reads a cooked buffer sidecar; throws when it is not version 3.
+  //! Reads a cooked buffer sidecar; throws when it is not the current version.
   auto ParseSidecar(const std::vector<std::byte>& bytes) -> Sidecar
   {
     const auto read_header
@@ -106,7 +108,7 @@ namespace {
     }
     const auto& header = *read_header;
     if (std::string_view(std::data(header.magic), 4U) != "OBUF"
-      || header.version != 3U) {
+      || header.version != import::internal::kBufferSidecarVersion) {
       throw std::runtime_error("buffer sidecar magic or version is wrong");
     }
     const auto entries_size
@@ -266,6 +268,8 @@ namespace {
     EXPECT_EQ(sidecar.descriptor.usage_flags, 3U);
     EXPECT_EQ(sidecar.descriptor.element_stride, 16U);
     EXPECT_EQ(sidecar.descriptor.size_bytes, buffer_bytes.size());
+    EXPECT_EQ(sidecar.descriptor.content_hash,
+      oxygen::base::ComputeSha256(std::as_bytes(std::span(buffer_bytes))));
     ASSERT_EQ(sidecar.views.size(), 1U);
 
     const auto& view0 = sidecar.views.at(0);

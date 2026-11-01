@@ -35,7 +35,6 @@
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
@@ -326,10 +325,8 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
   AddDiagnostics(session_, std::move(result.diagnostics));
 
   auto& emitter = session_.TextureEmitter();
-  const auto signature_salt
-    = result.texture_id.empty() ? result.source_id : result.texture_id;
   const auto emit_start = std::chrono::steady_clock::now();
-  auto emitted = emitter.Emit(std::move(*result.cooked), signature_salt);
+  auto emitted = emitter.Emit(std::move(*result.cooked));
   const auto emit_end = std::chrono::steady_clock::now();
   session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
   if (!EmitTextureSidecarDescriptor({
@@ -342,12 +339,11 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
   return emitted;
 }
 
-auto WorkDispatcher::EmitBufferPayload(
-  CookedBufferPayload payload, const std::string_view source_id) -> uint32_t
+auto WorkDispatcher::EmitBufferPayload(CookedBufferPayload payload) -> uint32_t
 {
   auto& emitter = session_.BufferEmitter();
   const auto emit_start = std::chrono::steady_clock::now();
-  const auto emitted = emitter.Emit(std::move(payload), source_id);
+  const auto emitted = emitter.Emit(std::move(payload));
   const auto emit_end = std::chrono::steady_clock::now();
   session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
   return emitted;
@@ -362,7 +358,7 @@ auto WorkDispatcher::EmitBufferPayload(BufferPipeline::WorkResult result)
   }
 
   AddDiagnostics(session_, std::move(result.diagnostics));
-  return EmitBufferPayload(std::move(result.cooked), result.source_id);
+  return EmitBufferPayload(std::move(result.cooked));
 }
 
 auto WorkDispatcher::EmitTextureSidecarDescriptor(
@@ -522,13 +518,10 @@ auto WorkDispatcher::EnsureTexturePipeline(co::Nursery& nursery)
   -> TexturePipeline&
 {
   if (!texture_pipeline_) {
-    const bool with_content_hashing = EffectiveContentHashingEnabled(
-      session_.Request().options.with_content_hashing);
     texture_pipeline_ = std::make_unique<TexturePipeline>(*thread_pool_,
       TexturePipeline::Config {
         .queue_capacity = concurrency_.texture.queue_capacity,
         .worker_count = concurrency_.texture.workers,
-        .with_content_hashing = with_content_hashing,
         .file_reader = session_.FileReader(),
         .on_io_duration = [this](std::chrono::microseconds duration) -> void {
           session_.AddIoDuration(duration);
@@ -543,13 +536,10 @@ auto WorkDispatcher::EnsureBufferPipeline(co::Nursery& nursery)
   -> BufferPipeline&
 {
   if (!buffer_pipeline_) {
-    const bool with_content_hashing = EffectiveContentHashingEnabled(
-      session_.Request().options.with_content_hashing);
     buffer_pipeline_ = std::make_unique<BufferPipeline>(*thread_pool_,
       BufferPipeline::Config {
         .queue_capacity = concurrency_.buffer.queue_capacity,
         .worker_count = concurrency_.buffer.workers,
-        .with_content_hashing = with_content_hashing,
       });
     buffer_pipeline_->Start(nursery);
   }
@@ -560,13 +550,10 @@ auto WorkDispatcher::EnsureMaterialPipeline(co::Nursery& nursery)
   -> MaterialPipeline&
 {
   if (!material_pipeline_) {
-    const bool with_content_hashing = EffectiveContentHashingEnabled(
-      session_.Request().options.with_content_hashing);
     material_pipeline_ = std::make_unique<MaterialPipeline>(*thread_pool_,
       MaterialPipeline::Config {
         .queue_capacity = concurrency_.material.queue_capacity,
         .worker_count = concurrency_.material.workers,
-        .with_content_hashing = with_content_hashing,
       });
     material_pipeline_->Start(nursery);
   }
@@ -577,13 +564,10 @@ auto WorkDispatcher::EnsureMeshBuildPipeline(co::Nursery& nursery)
   -> MeshBuildPipeline&
 {
   if (!mesh_build_pipeline_) {
-    const bool with_content_hashing = EffectiveContentHashingEnabled(
-      session_.Request().options.with_content_hashing);
     mesh_build_pipeline_ = std::make_unique<MeshBuildPipeline>(*thread_pool_,
       MeshBuildPipeline::Config {
         .queue_capacity = concurrency_.mesh_build.queue_capacity,
         .worker_count = concurrency_.mesh_build.workers,
-        .with_content_hashing = with_content_hashing,
       });
     mesh_build_pipeline_->Start(nursery);
   }
@@ -594,13 +578,10 @@ auto WorkDispatcher::EnsureGeometryPipeline(co::Nursery& nursery)
   -> GeometryPipeline&
 {
   if (!geometry_pipeline_) {
-    const bool with_content_hashing = EffectiveContentHashingEnabled(
-      session_.Request().options.with_content_hashing);
     geometry_pipeline_ = std::make_unique<GeometryPipeline>(*thread_pool_,
       GeometryPipeline::Config {
         .queue_capacity = concurrency_.geometry.queue_capacity,
         .worker_count = concurrency_.geometry.workers,
-        .with_content_hashing = with_content_hashing,
       });
     geometry_pipeline_->Start(nursery);
   }
@@ -610,13 +591,10 @@ auto WorkDispatcher::EnsureGeometryPipeline(co::Nursery& nursery)
 auto WorkDispatcher::EnsureScenePipeline(co::Nursery& nursery) -> ScenePipeline&
 {
   if (!scene_pipeline_) {
-    const bool with_content_hashing = EffectiveContentHashingEnabled(
-      session_.Request().options.with_content_hashing);
     scene_pipeline_ = std::make_unique<ScenePipeline>(*thread_pool_,
       ScenePipeline::Config {
         .queue_capacity = concurrency_.scene.queue_capacity,
         .worker_count = concurrency_.scene.workers,
-        .with_content_hashing = with_content_hashing,
       });
     scene_pipeline_->Start(nursery);
   }
@@ -687,7 +665,7 @@ auto WorkDispatcher::EmitMeshBuffers(
       started();
     }
 
-    const auto emitted = EmitBufferPayload(std::move(payload), buffer_id);
+    const auto emitted = EmitBufferPayload(std::move(payload));
     if (!EmitBufferSidecarDescriptor({
           .resource_index = data::pak::core::ResourceIndexT { emitted },
           .source_id = buffer_id,
@@ -950,9 +928,9 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   }
 
   for (const auto& step : context.steps) {
-    auto& tracker = context.planner.Tracker(step.item_id);
+    auto& tracker = context.planner->Tracker(step.item_id);
     if (tracker.IsReady()) {
-      const auto& item = context.planner.Item(step.item_id);
+      const auto& item = context.planner->Item(step.item_id);
       scheduler->AddReady(step.item_id, item.kind);
     }
   }
@@ -962,7 +940,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     if (submitted.at(u_item) != 0U) {
       return;
     }
-    const auto& item = context.planner.Item(item_id);
+    const auto& item = context.planner->Item(item_id);
     scheduler->AddReady(item_id, item.kind);
   };
 
@@ -977,7 +955,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     completed.at(u_item) = 1U;
     progress_state->completed_count.fetch_add(1U, std::memory_order_relaxed);
     for (const auto dependent : dependents.at(u_item)) {
-      auto& tracker = context.planner.Tracker(dependent);
+      auto& tracker = context.planner->Tracker(dependent);
       if (tracker.MarkReady({ item_id })) {
         enqueue_ready(dependent);
       }
@@ -1184,7 +1162,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     auto index = EmitTexturePayload(result);
     if (!index.has_value()) {
       if (const auto item_id = resolve_texture_item(result)) {
-        const auto& item = context.planner.Item(*item_id);
+        const auto& item = context.planner->Item(*item_id);
         ReportItemCollected(
           item.kind, item.debug_name, input_queue_load, output_queue_load);
       }
@@ -1196,7 +1174,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     if (const auto item_id = resolve_texture_item(result)) {
-      const auto& item = context.planner.Item(*item_id);
+      const auto& item = context.planner->Item(*item_id);
       ReportItemCollected(
         item.kind, item.debug_name, input_queue_load, output_queue_load);
       mark_complete(*item_id, item.kind, item.debug_name);
@@ -1228,7 +1206,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     const auto emitted = EmitBufferPayload(result);
     if (!emitted.has_value()) {
       if (const auto item_id = resolve_buffer_item(result)) {
-        const auto& item = context.planner.Item(*item_id);
+        const auto& item = context.planner->Item(*item_id);
         ReportItemCollected(
           item.kind, item.debug_name, input_queue_load, output_queue_load);
       }
@@ -1236,7 +1214,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     if (const auto item_id = resolve_buffer_item(result)) {
-      const auto& item = context.planner.Item(*item_id);
+      const auto& item = context.planner->Item(*item_id);
       ReportItemCollected(
         item.kind, item.debug_name, input_queue_load, output_queue_load);
       mark_complete(*item_id, item.kind, item.debug_name);
@@ -1255,7 +1233,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     AccumulateTelemetry(session_, result.telemetry);
     if (!EmitMaterialPayload(result)) {
       if (const auto item_id = resolve_material_item(result)) {
-        const auto& item = context.planner.Item(*item_id);
+        const auto& item = context.planner->Item(*item_id);
         ReportItemCollected(
           item.kind, item.debug_name, input_queue_load, output_queue_load);
       } else if (!result.source_id.empty()) {
@@ -1269,7 +1247,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       if (result.cooked.has_value()) {
         material_keys.emplace(*item_id, result.cooked->material_key);
       }
-      const auto& item = context.planner.Item(*item_id);
+      const auto& item = context.planner->Item(*item_id);
       ReportItemCollected(
         item.kind, item.debug_name, input_queue_load, output_queue_load);
       mark_complete(*item_id, item.kind, item.debug_name);
@@ -1294,7 +1272,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
           result.source_id, ""));
       co_return false;
     }
-    const auto& resolved_item = context.planner.Item(*item_id);
+    const auto& resolved_item = context.planner->Item(*item_id);
     ReportItemCollected(resolved_item.kind, resolved_item.debug_name,
       input_queue_load, output_queue_load);
     if (!result.success || !result.cooked.has_value()) {
@@ -1319,7 +1297,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
         .bindings = std::move(*bindings),
       });
 
-    const auto& item = context.planner.Item(*item_id);
+    const auto& item = context.planner->Item(*item_id);
     mark_complete(*item_id, item.kind, item.debug_name);
     co_return true;
   };
@@ -1336,7 +1314,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
           result.source_id, ""));
       co_return false;
     }
-    const auto& resolved_item = context.planner.Item(*item_id);
+    const auto& resolved_item = context.planner->Item(*item_id);
     ReportItemCollected(resolved_item.kind, resolved_item.debug_name,
       input_queue_load, output_queue_load);
 
@@ -1356,7 +1334,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       session_.AddSurfaceProvenance(
         std::move(*result.cooked->surface_provenance));
     }
-    const auto& item = context.planner.Item(*item_id);
+    const auto& item = context.planner->Item(*item_id);
     mark_complete(*item_id, item.kind, item.debug_name);
     co_return true;
   };
@@ -1368,7 +1346,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     const auto item_id = resolve_scene_item(result);
     if (!EmitScenePayload(std::move(result))) {
       if (item_id.has_value()) {
-        const auto& item = context.planner.Item(*item_id);
+        const auto& item = context.planner->Item(*item_id);
         ReportItemCollected(
           item.kind, item.debug_name, input_queue_load, output_queue_load);
       }
@@ -1376,7 +1354,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     if (item_id.has_value()) {
-      const auto& item = context.planner.Item(*item_id);
+      const auto& item = context.planner->Item(*item_id);
       ReportItemCollected(
         item.kind, item.debug_name, input_queue_load, output_queue_load);
       mark_complete(*item_id, item.kind, item.debug_name);
@@ -1611,8 +1589,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
 
   auto submit_texture = [&](const PlanItemId item_id,
                           std::function<void()> on_started) -> co::Co<bool> {
-    auto& item = context.planner.Item(item_id);
-    auto& payload = context.payloads.Texture(item.work_handle);
+    auto& item = context.planner->Item(item_id);
+    auto& payload = context.payloads->Texture(item.work_handle);
     if (!payload.item.texture_id.empty()) {
       texture_item_ids.insert_or_assign(payload.item.texture_id, item_id);
     }
@@ -1640,8 +1618,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
 
   auto submit_buffer = [&](const PlanItemId item_id,
                          std::function<void()> on_started) -> co::Co<bool> {
-    auto& item = context.planner.Item(item_id);
-    auto& payload = context.payloads.Buffer(item.work_handle);
+    auto& item = context.planner->Item(item_id);
+    auto& payload = context.payloads->Buffer(item.work_handle);
     if (!payload.item.source_id.empty()) {
       buffer_item_ids_by_source.insert_or_assign(
         payload.item.source_id, item_id);
@@ -1662,8 +1640,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
 
   auto submit_material = [&](const PlanItemId item_id,
                            std::function<void()> on_started) -> co::Co<bool> {
-    auto& item = context.planner.Item(item_id);
-    auto& payload = context.payloads.Material(item.work_handle);
+    auto& item = context.planner->Item(item_id);
+    auto& payload = context.payloads->Material(item.work_handle);
     std::vector<ImportDiagnostic> resolve_diags;
     UpdateMaterialBindings(texture_indices, payload.item, resolve_diags);
     AddDiagnostics(session_, std::move(resolve_diags));
@@ -1688,8 +1666,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
 
   auto submit_mesh_build = [&](const PlanItemId item_id,
                              std::function<void()> on_started) -> co::Co<bool> {
-    auto& item = context.planner.Item(item_id);
-    auto& payload = context.payloads.MeshBuild(item.work_handle);
+    auto& item = context.planner->Item(item_id);
+    auto& payload = context.payloads->MeshBuild(item.work_handle);
     payload.item.material_keys.clear();
     payload.item.material_keys.reserve(context.surfaces.size());
     for (const auto& surface : context.surfaces) {
@@ -1722,8 +1700,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   auto submit_geometry_asset
     = [&](const PlanItemId item_id,
         std::function<void()> on_started) -> co::Co<bool> {
-    auto& item = context.planner.Item(item_id);
-    auto& payload = context.payloads.Geometry(item.work_handle);
+    auto& item = context.planner->Item(item_id);
+    auto& payload = context.payloads->Geometry(item.work_handle);
 
     const auto result_it
       = mesh_build_results.find(payload.item.mesh_build_item);
@@ -1813,8 +1791,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
 
   auto submit_scene = [&](const PlanItemId item_id,
                         std::function<void()> on_started) -> co::Co<bool> {
-    auto& item = context.planner.Item(item_id);
-    auto& payload = context.payloads.Scene(item.work_handle);
+    auto& item = context.planner->Item(item_id);
+    auto& payload = context.payloads->Scene(item.work_handle);
     payload.item.geometry_keys.clear();
     payload.item.geometry_keys.reserve(context.geometry_items.size());
     for (const auto geometry_item : context.geometry_items) {
@@ -1852,7 +1830,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
     submitted.at(u_item) = 1U;
 
-    const auto& item = context.planner.Item(item_id);
+    const auto& item = context.planner->Item(item_id);
     auto on_started = MakeItemStartedCallback(item.kind, item.debug_name);
     switch (item.kind) {
     case PlanItemKind::kTextureResource:

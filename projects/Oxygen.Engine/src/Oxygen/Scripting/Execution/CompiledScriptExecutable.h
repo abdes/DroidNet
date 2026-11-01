@@ -40,9 +40,9 @@ public:
     return bytecode_ ? bytecode_->BytesView() : std::span<const uint8_t> {};
   }
 
-  [[nodiscard]] auto ContentHash() const noexcept -> uint64_t override
+  [[nodiscard]] auto ContentHash() const noexcept -> base::Sha256Digest override
   {
-    return bytecode_ ? bytecode_->ContentHash() : 0;
+    return bytecode_ ? bytecode_->ContentHash() : base::Sha256Digest {};
   }
 
 private:

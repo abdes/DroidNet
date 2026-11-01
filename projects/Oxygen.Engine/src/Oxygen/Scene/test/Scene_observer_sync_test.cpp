@@ -7,10 +7,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -46,25 +48,27 @@ auto MakeScriptAsset() -> std::shared_ptr<const ScriptAsset>
 
 class HashExecutable final : public ScriptExecutable {
 public:
-  explicit HashExecutable(const uint64_t hash) noexcept
-    : hash_(hash)
+  //! An executable whose content hash is the SHA-256 of `id`.
+  explicit HashExecutable(const uint64_t id) noexcept
+    : hash_(oxygen::base::ComputeSha256(std::as_bytes(std::span(&id, 1U))))
   {
   }
 
   auto Run() const noexcept -> void override { }
 
-  [[nodiscard]] auto ContentHash() const noexcept -> uint64_t override
+  [[nodiscard]] auto ContentHash() const noexcept
+    -> oxygen::base::Sha256Digest override
   {
     return hash_;
   }
 
 private:
-  uint64_t hash_ { 0 };
+  oxygen::base::Sha256Digest hash_ {};
 };
 
 struct ScriptSlotEvent final {
   NodeHandle node_handle;
-  oxygen::scene::ScriptSlotIndex slot_index {};
+  oxygen::scene::ScriptSlotIndex slot_index;
 };
 
 class TestSceneObserver final : public ISceneObserver {
@@ -108,11 +112,11 @@ public:
     camera_changed.push_back(node_handle);
   }
 
-  std::vector<ScriptSlotEvent> activated {};
-  std::vector<ScriptSlotEvent> changed {};
-  std::vector<ScriptSlotEvent> deactivated {};
-  std::vector<NodeHandle> light_changed {};
-  std::vector<NodeHandle> camera_changed {};
+  std::vector<ScriptSlotEvent> activated;
+  std::vector<ScriptSlotEvent> changed;
+  std::vector<ScriptSlotEvent> deactivated;
+  std::vector<NodeHandle> light_changed;
+  std::vector<NodeHandle> camera_changed;
 };
 
 auto BuildSceneWithScriptSlot()

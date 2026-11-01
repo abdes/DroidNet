@@ -74,7 +74,7 @@ struct GeometrySource final {
 
   struct Submesh final {
     std::string name;
-    data::SurfaceId surface_id {};
+    data::SurfaceId surface_id;
     std::string material;
     //! The authored bounds, else the LOD bounds.
     std::optional<Bounds> bounds;
@@ -98,7 +98,6 @@ struct GeometrySource final {
   std::vector<AuthoredSurfaceDefaults> surfaces;
   //! The authored default LOD policy; absent takes the schema's default.
   std::optional<data::pak::geometry::LodPolicyRecord> lod_policy;
-  std::optional<bool> content_hashing;
 
   //! The surfaces the submeshes declare, in first-declaration order.
   OXGN_COOK_NDAPI auto DeclaredSurfaces() const -> std::vector<data::SurfaceId>;

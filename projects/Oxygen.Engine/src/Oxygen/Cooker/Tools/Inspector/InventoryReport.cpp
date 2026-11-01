@@ -174,11 +174,23 @@ auto RunInventoryReport(const InventoryReportOptions& options)
         return "linked_path";
       case lc::IntegrityFailure::kNotRegular:
         return "not_regular";
+      case lc::IntegrityFailure::kMalformedTable:
+        return "malformed_table";
+      case lc::IntegrityFailure::kResourceOutOfBounds:
+        return "resource_out_of_bounds";
+      case lc::IntegrityFailure::kResourceDigestMismatch:
+        return "resource_digest_mismatch";
       }
       throw std::logic_error("Unknown inventory failure");
     }();
-    issues.push_back(
-      { { "relative_path", failure.relative_path }, { "reason", reason } });
+    auto issue = json {
+      { "relative_path", failure.relative_path },
+      { "reason", reason },
+    };
+    if (failure.resource_row.has_value()) {
+      issue["resource_row"] = *failure.resource_row;
+    }
+    issues.push_back(std::move(issue));
   }
   const auto hex = [](const base::Sha256Digest& digest) -> std::string {
     return base::ToHexString(digest);

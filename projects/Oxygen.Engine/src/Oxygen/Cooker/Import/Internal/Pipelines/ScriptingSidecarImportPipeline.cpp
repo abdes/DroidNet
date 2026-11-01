@@ -1847,14 +1847,12 @@ namespace {
       return std::nullopt;
     }
 
-    if (EffectiveContentHashingEnabled(request.options.with_content_hashing)) {
-      const auto hash = util::ComputeContentSha256(patched_scene_bytes);
-      constexpr auto kContentHashOffset
-        = offsetof(data::pak::core::AssetHeader, content_hash);
-      std::memcpy(
-        std::span(patched_scene_bytes).subspan(kContentHashOffset).data(),
-        &hash, sizeof(hash));
-    }
+    const auto hash = util::ComputeContentSha256(patched_scene_bytes);
+    constexpr auto kContentHashOffset
+      = offsetof(data::pak::core::AssetHeader, content_hash);
+    std::memcpy(
+      std::span(patched_scene_bytes).subspan(kContentHashOffset).data(), &hash,
+      sizeof(hash));
 
     return patched_scene_bytes;
   }

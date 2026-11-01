@@ -116,7 +116,7 @@ private:
     uint32_t language { 0 };
     uint32_t compression { 0 };
     uint32_t origin { 0 };
-    uint64_t content_hash { 0 };
+    base::Sha256Digest content_hash {};
     uint64_t payload_checksum { 0 };
   };
 

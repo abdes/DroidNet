@@ -38,7 +38,6 @@ public:
   struct Config final {
     size_t queue_capacity = 16;
     uint32_t worker_count = 1;
-    bool with_content_hashing = true;
   };
 
   struct WorkItem final {

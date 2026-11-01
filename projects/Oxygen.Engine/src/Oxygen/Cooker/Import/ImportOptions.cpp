@@ -36,7 +36,7 @@ auto to_string(ImportContentFlags value) -> std::string
   auto add_flag = [&](ImportContentFlags flag, const char* name) -> void {
     if ((value & flag) != ImportContentFlags::kNone) {
       if (!result.empty()) {
-        result += "|";
+        result += '|';
       }
       result += name;
     }
@@ -72,19 +72,6 @@ auto to_string(NodePruningPolicy value) -> std::string
     return "KeepAll";
   case NodePruningPolicy::kDropEmptyNodes:
     return "DropEmptyNodes";
-  }
-  return "Unknown";
-}
-
-auto to_string(DedupCollisionPolicy value) -> std::string
-{
-  switch (value) {
-  case DedupCollisionPolicy::kError:
-    return "Error";
-  case DedupCollisionPolicy::kWarnKeepFirst:
-    return "WarnKeepFirst";
-  case DedupCollisionPolicy::kWarnReplace:
-    return "WarnReplace";
   }
   return "Unknown";
 }

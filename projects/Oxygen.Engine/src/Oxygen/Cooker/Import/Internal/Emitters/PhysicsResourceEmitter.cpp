@@ -7,7 +7,6 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <optional>
 #include <span>
@@ -20,14 +19,10 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
-#include <Oxygen/Cooker/Import/Internal/Emitters/DedupCollision.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -39,15 +34,6 @@
 namespace oxygen::content::import {
 
 namespace {
-
-  [[nodiscard]] auto ComputeEffectiveHash(
-    const CookedPhysicsResourcePayload& cooked) -> base::Sha256Digest
-  {
-    if (!util::IsZeroContentSha256(cooked.content_hash)) {
-      return cooked.content_hash;
-    }
-    return util::ComputeContentSha256(cooked.data);
-  }
 
   [[nodiscard]] auto ComputePhysicsIdentity(
     const CookedPhysicsResourcePayload& cooked, const base::Sha256Digest& hash)
@@ -65,14 +51,6 @@ namespace {
     return identity;
   }
 
-  [[nodiscard]] auto MakePhysicsSignature(
-    const CookedPhysicsResourcePayload& cooked, const base::Sha256Digest& hash,
-    std::string_view signature_salt) -> std::string
-  {
-    static_cast<void>(signature_salt);
-    return ComputePhysicsIdentity(cooked, hash);
-  }
-
   [[nodiscard]] auto MakePhysicsResourceAssetKey(std::string_view signature)
     -> data::AssetKey
   {
@@ -85,16 +63,8 @@ namespace {
 PhysicsResourceEmitter::PhysicsResourceEmitter(co::Nursery& writes,
   PhysicsTableAggregator& table_aggregator,
   const std::filesystem::path& cooked_root)
-  : PhysicsResourceEmitter(writes, table_aggregator, cooked_root, Config {})
-{
-}
-
-PhysicsResourceEmitter::PhysicsResourceEmitter(co::Nursery& writes,
-  PhysicsTableAggregator& table_aggregator,
-  const std::filesystem::path& cooked_root, Config config)
   : writes_(writes)
   , table_aggregator_(table_aggregator)
-  , config_(std::move(config))
   , data_path_(cooked_root / internal::loose_layout::kPhysicsData)
 {
   DLOG_F(
@@ -109,65 +79,17 @@ PhysicsResourceEmitter::~PhysicsResourceEmitter()
   }
 }
 
-auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
-  std::string_view signature_salt) -> EmittedPhysicsResourceRef
+auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked)
+  -> EmittedPhysicsResourceRef
 {
   if (finalize_started_.load(std::memory_order_acquire)) {
     throw std::runtime_error("PhysicsResourceEmitter is finalized");
   }
-
-  const auto hash_missing = util::IsZeroContentSha256(cooked.content_hash);
-  const auto effective_hash = ComputeEffectiveHash(cooked);
-  cooked.content_hash = effective_hash;
-
-  const auto identity = ComputePhysicsIdentity(cooked, effective_hash);
-  DCHECK_F(!identity.empty(), "physics identity must not be empty");
-
-  if (hash_missing && !signature_salt.empty()) {
-    const auto key = std::string(signature_salt);
-    if (const auto it = identity_by_key_.find(key);
-      it != identity_by_key_.end() && it->second != identity) {
-      const auto existing_index_it = index_by_key_.find(key);
-      const auto existing_index = (existing_index_it != index_by_key_.end())
-        ? existing_index_it->second
-        : 0U;
-
-      const auto action
-        = internal::DedupCollisionAction(config_.collision_policy);
-      const auto diagnostic = ImportDiagnostic {
-        .severity = (config_.collision_policy == DedupCollisionPolicy::kError)
-          ? ImportSeverity::kError
-          : ImportSeverity::kWarning,
-        .code = "import.dedup_collision.physics",
-        .message = "policy=" + to_string(config_.collision_policy)
-          + ";action=" + std::string(action)
-          + ";existing_index=" + std::to_string(existing_index),
-        .source_path = key,
-        .object_path = "physics",
-      };
-      if (config_.on_dedup_diagnostic) {
-        config_.on_dedup_diagnostic(diagnostic);
-      }
-
-      if (config_.collision_policy == DedupCollisionPolicy::kError) {
-        throw std::runtime_error("physics resource dedup collision");
-      }
-      if (config_.collision_policy == DedupCollisionPolicy::kWarnKeepFirst) {
-        const auto existing_desc
-          = table_aggregator_.TryGetDescriptor(existing_index);
-        return EmittedPhysicsResourceRef {
-          .resource_index = existing_index,
-          .resource_asset_key = existing_desc.has_value()
-            ? existing_desc->resource_asset_key
-            : data::pak::physics::kInvalidPhysicsResourceAssetKey,
-        };
-      }
-    }
+  if (base::IsAllZero(cooked.content_hash)) {
+    throw std::invalid_argument("the cooked physics resource has no SHA-256");
   }
 
-  const auto signature
-    = MakePhysicsSignature(cooked, effective_hash, signature_salt);
-  DCHECK_F(!signature.empty(), "physics signature must not be empty");
+  const auto signature = ComputePhysicsIdentity(cooked, cooked.content_hash);
   const auto resource_asset_key = MakePhysicsResourceAssetKey(signature);
 
   const auto resource_alignment = cooked.alignment > 0 ? cooked.alignment : 16;
@@ -184,11 +106,6 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
     });
 
   if (!acquire.is_new) {
-    if (hash_missing && !signature_salt.empty()) {
-      const auto key = std::string(signature_salt);
-      identity_by_key_[key] = identity;
-      index_by_key_[key] = acquire.index;
-    }
     return EmittedPhysicsResourceRef {
       .resource_index = acquire.index,
       .resource_asset_key = resource_asset_key,
@@ -205,12 +122,6 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
   }
   QueueDataWrite(WriteKind::kPayload, acquire.index, reserved.aligned_offset,
     std::move(cooked.data));
-
-  if (hash_missing && !signature_salt.empty()) {
-    const auto key = std::string(signature_salt);
-    identity_by_key_[key] = identity;
-    index_by_key_[key] = acquire.index;
-  }
 
   return EmittedPhysicsResourceRef {
     .resource_index = acquire.index,
@@ -257,9 +168,7 @@ auto PhysicsResourceEmitter::MakeTableEntry(
     = static_cast<data::pak::core::DataBlobSizeT>(cooked.data.size());
   entry.format = cooked.format;
   entry.resource_asset_key = resource_asset_key;
-  static_assert(sizeof(entry.content_hash) == sizeof(cooked.content_hash));
-  std::memcpy(std::span { entry.content_hash }.data(),
-    cooked.content_hash.data(), sizeof(entry.content_hash));
+  entry.content_hash = cooked.content_hash;
   return entry;
 }
 

@@ -23,12 +23,6 @@
       "x-editor-order": 2,
       "x-editor-renderer": "text"
     },
-    "content_hashing": {
-      "x-editor-label": "Content Hashing",
-      "x-editor-group": "Document",
-      "x-editor-order": 3,
-      "x-editor-renderer": "toggle"
-    },
     "nodes": {
       "x-editor-label": "Scene Nodes",
       "x-editor-group": "Scene",

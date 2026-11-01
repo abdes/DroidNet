@@ -285,7 +285,8 @@ public:
 
   //! Checks the stored bytes against what the source records of them: a
   //! loose root's member files against their indexed sizes and, with
-  //! `kFull`, their digests; a pak's CRC with `kFull`.
+  //! `kFull`, their digests, and each resource of its data files against the
+  //! SHA-256 of its table row; a pak's CRC with `kFull`.
   /*!
    @throw std::runtime_error Naming the first file that disagrees.
   */

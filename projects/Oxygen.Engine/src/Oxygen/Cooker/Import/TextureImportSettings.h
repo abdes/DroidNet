@@ -60,7 +60,6 @@ struct TextureImportSettings {
   bool bake_hdr_to_ldr = false;
   bool cubemap = false;
   bool equirect_to_cube = false;
-  bool with_content_hashing = true;
 };
 
 } // namespace oxygen::content::import

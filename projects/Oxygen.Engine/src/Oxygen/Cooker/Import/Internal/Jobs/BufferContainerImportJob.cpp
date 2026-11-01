@@ -15,7 +15,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
@@ -116,8 +115,6 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
     BufferPipeline::Config {
       .queue_capacity = Concurrency().buffer.queue_capacity,
       .worker_count = Concurrency().buffer.workers,
-      .with_content_hashing
-      = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
 
   auto submitter

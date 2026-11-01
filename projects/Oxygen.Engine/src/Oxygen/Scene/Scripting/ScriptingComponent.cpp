@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -228,8 +229,8 @@ auto ScriptingComponent::MarkSlotReady(const Slot& slot,
     static_cast<uint32_t>(std::distance(slots_.begin(), slot_it)));
   const bool was_active = slot_it->compile_state_ == Slot::CompileState::kReady
     && !slot_it->IsDisabled() && slot_it->Executable() != nullptr;
-  const uint64_t prev_hash
-    = was_active ? slot_it->Executable()->ContentHash() : 0;
+  const auto prev_hash
+    = was_active ? slot_it->Executable()->ContentHash() : base::Sha256Digest {};
 
   slot_it->compile_state_ = Slot::CompileState::kReady;
   slot_it->diagnostics_.clear();

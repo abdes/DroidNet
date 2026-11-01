@@ -63,14 +63,6 @@ auto InputCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .StoreTo(&options_.cooked_root)
                        .Build();
 
-  auto with_content_hashing
-    = Option::WithKey("content-hashing")
-        .About("Enable or disable content hashing for outputs")
-        .Long("content-hashing")
-        .WithValue<bool>()
-        .StoreTo(&options_.with_content_hashing)
-        .Build();
-
   auto job_name = Option::WithKey("name")
                     .About("Optional job name")
                     .Long("name")
@@ -93,8 +85,7 @@ auto InputCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(virtual_path))
     .WithOption(std::move(cooked_root))
     .WithOption(std::move(job_name))
-    .WithOption(std::move(report))
-    .WithOption(std::move(with_content_hashing));
+    .WithOption(std::move(report));
 }
 
 auto InputCommand::Execute() -> std::expected<void, std::error_code>
@@ -127,7 +118,6 @@ auto InputCommand::Execute() -> std::expected<void, std::error_code>
   if (!options_.job_name.empty()) {
     request->job_name = options_.job_name;
   }
-  request->options.with_content_hashing = options_.with_content_hashing;
   const auto mounts = ResolveSourceMounts(mount_options_, writer);
   if (!mounts.has_value() || !LocateRequestSource(*request, *mounts, writer)) {
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));

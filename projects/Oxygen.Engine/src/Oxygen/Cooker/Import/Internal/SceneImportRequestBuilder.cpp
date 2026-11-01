@@ -197,8 +197,6 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
     settings.geometry_defaults.begin(), settings.geometry_defaults.end());
   options.import_content = BuildContentFlags(settings);
   options.coordinate.bake_transforms_into_meshes = settings.bake_transforms;
-  options.with_content_hashing
-    = EffectiveContentHashingEnabled(settings.with_content_hashing);
 
   if (!settings.unit_policy.empty()) {
     const auto parsed = ParseUnitPolicy(settings.unit_policy);

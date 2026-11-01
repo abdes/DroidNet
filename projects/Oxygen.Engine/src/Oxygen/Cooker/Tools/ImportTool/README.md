@@ -106,7 +106,6 @@ Common options:
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
-- `--content-hashing <true|false>`
 
 Texture options include intent/format/mips/cubemap/decode controls. Run
 `texture --help` for the full list.
@@ -149,7 +148,6 @@ Common options:
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
-- `--content-hashing <true|false>`
 
 Scene controls:
 
@@ -336,7 +334,6 @@ Options:
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
-- `--content-hashing <true|false>`
 - `--compile <true|false>`
 - `--compile-mode <debug|optimized>`
 - `--script-storage <embedded|external>`
@@ -374,7 +371,6 @@ Optional:
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
-- `--content-hashing <true|false>`
 
 Shipped JSON schemas:
 
@@ -505,7 +501,6 @@ Optional:
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
-- `--content-hashing <true|false>`
 
 Reference requirements: the target scene is named by its virtual path, and
 every reference in the payload is an absolute virtual path in another mount or
@@ -561,7 +556,6 @@ Optional:
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
-- `--content-hashing <true|false>`
 
 Reference requirements: the target scene is named by its virtual path, and
 every reference in the payload is an absolute virtual path in another mount or
@@ -687,7 +681,7 @@ Top-level fields:
       "compile": true,
       "script_storage": "embedded"
     },
-    "material_descriptor": { "output": "...", "content_hashing": true },
+    "material_descriptor": { "output": "..." },
     "scripting_sidecar": {
       "output": "...",
       "target_scene_virtual_path": "/Scenes/MyScene.oscene"
@@ -770,15 +764,15 @@ Job rules:
   - reject non-texture keys (for example scene/script-specific keys)
 - `material-descriptor` jobs:
   - use `source` as descriptor JSON path
-  - accept `output`, `name`, and `content_hashing`
+  - accept `output` and `name`
   - descriptor `textures.*.virtual_path` is a reference to a `.otex` asset that
     resolves to a mounted cooked root
 - `geometry-descriptor` jobs:
   - use `source` as descriptor JSON path
-  - accept `output`, `name`, and `content_hashing`
+  - accept `output` and `name`
 - `scene-descriptor` jobs:
   - use `source` as descriptor JSON path
-  - accept `output`, `name`, and `content_hashing`
+  - accept `output` and `name`
   - resolve geometry/material/script/input/physics references, written as
     references to the job's identity, from mounted cooked roots
 - `input` jobs require:

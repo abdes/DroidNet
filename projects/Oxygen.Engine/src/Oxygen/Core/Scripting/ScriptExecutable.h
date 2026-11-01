@@ -10,6 +10,7 @@
 #include <span>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Sha256.h>
 
 namespace oxygen::scripting {
 
@@ -29,9 +30,10 @@ public:
     return {};
   }
 
-  [[nodiscard]] virtual auto ContentHash() const noexcept -> uint64_t
+  //! The SHA-256 of the script the executable runs; all zero when unknown.
+  [[nodiscard]] virtual auto ContentHash() const noexcept -> base::Sha256Digest
   {
-    return 0;
+    return {};
   }
 };
 

@@ -33,6 +33,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -79,10 +80,12 @@ using oxygen::scripting::ScriptSourceBlob;
 
 auto MakeSourceBlob(std::vector<uint8_t> bytes) -> ScriptSourceBlob
 {
+  const auto content_hash
+    = oxygen::base::ComputeSha256(std::as_bytes(std::span(bytes)));
   return ScriptSourceBlob::FromOwned(
     oxygen::serio::ByteBuffer::CopyOf(std::as_bytes(std::span(bytes))).value(),
     ScriptLanguage::kLuau,
-    oxygen::data::pak::scripting::ScriptCompression::kNone, 0,
+    oxygen::data::pak::scripting::ScriptCompression::kNone, content_hash,
     oxygen::scripting::ScriptBlobOrigin::kEmbeddedResource,
     oxygen::scripting::ScriptBlobCanonicalName { "test-script" });
 }
@@ -90,9 +93,11 @@ auto MakeSourceBlob(std::vector<uint8_t> bytes) -> ScriptSourceBlob
 auto MakeBytecodeBlob(std::vector<uint8_t> bytes)
   -> std::shared_ptr<const ScriptBytecodeBlob>
 {
+  const auto content_hash
+    = oxygen::base::ComputeSha256(std::as_bytes(std::span(bytes)));
   return std::make_shared<const ScriptBytecodeBlob>(
     ScriptBytecodeBlob::FromOwned(std::move(bytes), ScriptLanguage::kLuau,
-      oxygen::data::pak::scripting::ScriptCompression::kNone, 0,
+      oxygen::data::pak::scripting::ScriptCompression::kNone, content_hash,
       oxygen::scripting::ScriptBlobOrigin::kEmbeddedResource,
       oxygen::scripting::ScriptBlobCanonicalName { "test-bytecode" }));
 }
@@ -496,7 +501,7 @@ NOLINT_TEST(ScriptCompilationServiceTest,
     if (corrupt_payload) {
       OverwriteCacheField(path, 32U, uint8_t { 0x7F });
     } else {
-      OverwriteCacheField(path, CacheIndexOffset(path) + 44U, uint64_t { 0 });
+      OverwriteCacheField(path, CacheIndexOffset(path) + 68U, uint64_t { 0 });
     }
     const auto result
       = CompileIntoPersistentCache(path, 100U, { 1, 2, 3 }, calls);
@@ -742,6 +747,27 @@ NOLINT_TEST(ScriptCompilationServiceTest, L1CacheKeepsRecentEntries)
   });
 
   EXPECT_EQ(compile_calls.load(), 300);
+}
+
+NOLINT_TEST(
+  ScriptCompilationServiceTest, PersistentCacheRoundTripsTheSha256ContentHash)
+{
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto path = temp_dir.File("script_cache.bin");
+  std::atomic<int> calls = 0;
+  const auto written
+    = CompileIntoPersistentCache(path, 100U, { 1, 2, 3 }, calls);
+  ASSERT_TRUE(written.success);
+  ASSERT_NE(written.bytecode, nullptr);
+
+  const auto restored
+    = CompileIntoPersistentCache(path, 100U, { 1, 2, 3 }, calls);
+  ASSERT_TRUE(restored.success);
+  ASSERT_NE(restored.bytecode, nullptr);
+  EXPECT_EQ(calls.load(), 1);
+  EXPECT_EQ(restored.bytecode->ContentHash(),
+    oxygen::base::ComputeSha256(std::as_bytes(restored.bytecode->BytesView())));
+  EXPECT_EQ(restored.bytecode->ContentHash(), written.bytecode->ContentHash());
 }
 
 NOLINT_TEST(ScriptCompilationServiceTest, PersistentCacheRoundtripAcrossRestart)

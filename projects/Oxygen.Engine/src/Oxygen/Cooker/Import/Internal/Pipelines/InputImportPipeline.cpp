@@ -31,7 +31,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
@@ -491,8 +490,7 @@ namespace {
     std::memcpy(std::span(bytes).subspan(kOffset).data(), &hash, sizeof(hash));
   }
 
-  auto SerializeAction(const DeclaredAction& action, const bool hashing)
-    -> std::vector<std::byte>
+  auto SerializeAction(const DeclaredAction& action) -> std::vector<std::byte>
   {
     auto desc = InputActionAssetDesc {};
     desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
@@ -507,14 +505,12 @@ namespace {
     }
 
     auto bytes = data::MakeDescriptorBytes(desc, strings);
-    if (hashing) {
-      PatchContentHash(bytes, util::ComputeContentSha256(bytes));
-    }
+    PatchContentHash(bytes, util::ComputeContentSha256(bytes));
     return bytes;
   }
 
-  auto SerializeContext(const BuiltContextAsset& context, const bool hashing,
-    std::string& error) -> std::optional<std::vector<std::byte>>
+  auto SerializeContext(const BuiltContextAsset& context, std::string& error)
+    -> std::optional<std::vector<std::byte>>
   {
     if (context.mappings.size() > std::numeric_limits<uint32_t>::max()
       || context.triggers.size() > std::numeric_limits<uint32_t>::max()
@@ -564,9 +560,7 @@ namespace {
     const auto data = stream.Data();
     auto bytes = std::vector<std::byte>(data.begin(), data.end());
     data::AppendDescriptorStrings(bytes, strings);
-    if (hashing) {
-      PatchContentHash(bytes, util::ComputeContentSha256(bytes));
-    }
+    PatchContentHash(bytes, util::ComputeContentSha256(bytes));
     return bytes;
   }
 
@@ -1086,11 +1080,10 @@ namespace {
   }
 
   auto EmitInputActions(const std::vector<DeclaredAction>& actions,
-    const bool hashing, ImportSession& session, const ImportRequest& request)
-    -> bool
+    ImportSession& session, const ImportRequest& request) -> bool
   {
     for (const auto& action : actions) {
-      const auto bytes = SerializeAction(action, hashing);
+      const auto bytes = SerializeAction(action);
       try {
         session.AssetEmitter().Emit(action.key, AssetType::kInputAction,
           action.virtual_path, action.descriptor_relpath, bytes, {});
@@ -1105,12 +1098,11 @@ namespace {
   }
 
   auto EmitInputContexts(const std::vector<BuiltContextAsset>& contexts,
-    const bool hashing, ImportSession& session, const ImportRequest& request)
-    -> bool
+    ImportSession& session, const ImportRequest& request) -> bool
   {
     for (const auto& context : contexts) {
       auto error = std::string {};
-      const auto bytes = SerializeContext(context, hashing, error);
+      const auto bytes = SerializeContext(context, error);
       if (!bytes.has_value()) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "input.context.serialize_failed", error, "contexts." + context.name);
@@ -1346,13 +1338,10 @@ auto InputImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  const auto hashing
-    = EffectiveContentHashingEnabled(request.options.with_content_hashing);
-  if (!EmitInputActions(
-        parsed_source.declared_actions, hashing, *session, request)) {
+  if (!EmitInputActions(parsed_source.declared_actions, *session, request)) {
     co_return false;
   }
-  if (!EmitInputContexts(*built_contexts, hashing, *session, request)) {
+  if (!EmitInputContexts(*built_contexts, *session, request)) {
     co_return false;
   }
 

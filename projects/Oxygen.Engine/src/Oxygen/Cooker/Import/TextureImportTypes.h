@@ -12,6 +12,7 @@
 #include <type_traits>
 #include <vector>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -185,8 +186,8 @@ struct TextureResourceDesc {
   //! Packing policy identifier (e.g., "d3d12", "tight").
   std::string packing_policy_id;
 
-  //! Content hash for deduplication (first 8 bytes of SHA-256).
-  uint64_t content_hash = 0;
+  //! SHA-256 of the payload, computed by the texture's producer.
+  base::Sha256Digest content_hash {};
 };
 
 //! Values changed while narrowing float texels to RGBA16Float storage.

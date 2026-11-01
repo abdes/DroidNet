@@ -49,49 +49,52 @@ namespace {
 
   constexpr std::array kTextureSlots {
     MaterialSource::TextureSlot {
-      "base_color",
-      &MaterialTextureBindings::base_color,
-    },
-    MaterialSource::TextureSlot { "normal", &MaterialTextureBindings::normal },
-    MaterialSource::TextureSlot {
-      "metallic",
-      &MaterialTextureBindings::metallic,
+      .name = "base_color",
+      .binding = &MaterialTextureBindings::base_color,
     },
     MaterialSource::TextureSlot {
-      "roughness",
-      &MaterialTextureBindings::roughness,
+      .name = "normal",
+      .binding = &MaterialTextureBindings::normal,
     },
     MaterialSource::TextureSlot {
-      "ambient_occlusion",
-      &MaterialTextureBindings::ambient_occlusion,
+      .name = "metallic",
+      .binding = &MaterialTextureBindings::metallic,
     },
     MaterialSource::TextureSlot {
-      "emissive",
-      &MaterialTextureBindings::emissive,
+      .name = "roughness",
+      .binding = &MaterialTextureBindings::roughness,
     },
     MaterialSource::TextureSlot {
-      "specular",
-      &MaterialTextureBindings::specular,
+      .name = "ambient_occlusion",
+      .binding = &MaterialTextureBindings::ambient_occlusion,
     },
     MaterialSource::TextureSlot {
-      "sheen_color",
-      &MaterialTextureBindings::sheen_color,
+      .name = "emissive",
+      .binding = &MaterialTextureBindings::emissive,
     },
     MaterialSource::TextureSlot {
-      "clearcoat",
-      &MaterialTextureBindings::clearcoat,
+      .name = "specular",
+      .binding = &MaterialTextureBindings::specular,
     },
     MaterialSource::TextureSlot {
-      "clearcoat_normal",
-      &MaterialTextureBindings::clearcoat_normal,
+      .name = "sheen_color",
+      .binding = &MaterialTextureBindings::sheen_color,
     },
     MaterialSource::TextureSlot {
-      "transmission",
-      &MaterialTextureBindings::transmission,
+      .name = "clearcoat",
+      .binding = &MaterialTextureBindings::clearcoat,
     },
     MaterialSource::TextureSlot {
-      "thickness",
-      &MaterialTextureBindings::thickness,
+      .name = "clearcoat_normal",
+      .binding = &MaterialTextureBindings::clearcoat_normal,
+    },
+    MaterialSource::TextureSlot {
+      .name = "transmission",
+      .binding = &MaterialTextureBindings::transmission,
+    },
+    MaterialSource::TextureSlot {
+      .name = "thickness",
+      .binding = &MaterialTextureBindings::thickness,
     },
   };
 
@@ -228,7 +231,7 @@ namespace {
   }
 
   template <size_t N>
-  auto ParseFloatArray(const nlohmann::json& value, float (&out)[N]) noexcept
+  auto ParseFloatArray(const nlohmann::json& value, std::array<float, N>& out)
     -> bool
   {
     if (!value.is_array() || value.size() != N) {
@@ -266,7 +269,7 @@ namespace {
     if (doc.contains("ambient_occlusion")) {
       inputs.ambient_occlusion = doc.at("ambient_occlusion").get<float>();
     }
-    float emissive_color[3] { 1.0F, 1.0F, 1.0F };
+    std::array emissive_color { 1.0F, 1.0F, 1.0F };
     if (doc.contains("emissive_color")
       && !ParseFloatArray(doc.at("emissive_color"), emissive_color)) {
       return false;
@@ -450,9 +453,6 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
     material.name = "Material";
   }
   material.storage_name = material.name;
-  if (document.contains("content_hashing")) {
-    material.content_hashing = document.at("content_hashing").get<bool>();
-  }
   if (document.contains("domain")) {
     const auto value
       = ParseMaterialDomain(document.at("domain").get<std::string>());

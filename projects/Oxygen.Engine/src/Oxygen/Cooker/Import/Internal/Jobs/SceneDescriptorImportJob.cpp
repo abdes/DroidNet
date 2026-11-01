@@ -29,7 +29,6 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
@@ -1115,8 +1114,6 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     ScenePipeline::Config {
       .queue_capacity = Concurrency().scene.queue_capacity,
       .worker_count = Concurrency().scene.workers,
-      .with_content_hashing
-      = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
 
   auto adapter

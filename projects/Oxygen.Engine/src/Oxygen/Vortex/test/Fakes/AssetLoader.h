@@ -565,20 +565,19 @@ public:
   }
 
   auto SetTexture(content::ResourceKey key,
-    std::shared_ptr<data::TextureResource> texture) -> void
+    const std::shared_ptr<data::TextureResource>& texture) -> void
   {
-    textures_.insert_or_assign(key, std::move(texture));
+    textures_.insert_or_assign(key, texture);
   }
 
   //! Registers a synthetic texture of `shape` whose texels come from `texel`.
   /*!
-   @return The texture's key, which is also its content hash.
+   @return The texture's key.
   */
-  [[nodiscard]] auto AddSyntheticTexture(SyntheticTextureShape shape,
+  [[nodiscard]] auto AddSyntheticTexture(const SyntheticTextureShape& shape,
     const SyntheticTexel& texel) -> content::ResourceKey
   {
     const auto key = MintSyntheticTextureKey();
-    shape.content_hash = key.get();
     SetTexture(key, MakeSyntheticTexture(shape, texel));
     return key;
   }
@@ -608,7 +607,7 @@ public:
   //! Completes every held load of `key` with `texture` (null fails them);
   //! later loads of the key complete immediately with the same result.
   auto CompleteHeldTexture(content::ResourceKey key,
-    std::shared_ptr<data::TextureResource> texture) -> void
+    const std::shared_ptr<data::TextureResource>& texture) -> void
   {
     const auto held = held_textures_.find(key);
     if (held == held_textures_.end()) {

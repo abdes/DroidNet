@@ -15,7 +15,6 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
@@ -23,7 +22,6 @@
 namespace {
 
 using nlohmann::json;
-using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::ImportManifest;
 using oxygen::cooker::test::WriteText;
 using oxygen::testing::ScopedTempDir;
@@ -39,7 +37,6 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   WriteText(descriptor_path,
     R"({
       "name": "ProcCube",
-      "content_hashing": false,
       "lods": [
         {
           "name": "LOD0",
@@ -62,7 +59,6 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
       "output": ".cooked",
       "defaults": {
         "geometry_descriptor": {
-          "content_hashing": true,
           "cooked_context_roots": ["Libraries/Materials"],
           "name": "default-geometry-name"
         }
@@ -72,8 +68,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
           "type": "geometry-descriptor",
           "source": "Geometry/cube.geometry.json",
           "virtual_path": "/.cooked/Geometry/Cube.ogeo",
-          "name": "cube-job",
-          "content_hashing": true
+          "name": "cube-job"
         }
       ]
     })";
@@ -98,9 +93,6 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
     << "Expected request->geometry_descriptor to contain a value";
   ASSERT_EQ(request->cooked_context_roots.size(), 1U);
   EXPECT_EQ(request->cooked_context_roots.at(0), root / "Libraries/Materials");
-
-  EXPECT_EQ(request->options.with_content_hashing,
-    EffectiveContentHashingEnabled(false));
 
   const auto normalized
     = json::parse(request->geometry_descriptor->normalized_descriptor_json);

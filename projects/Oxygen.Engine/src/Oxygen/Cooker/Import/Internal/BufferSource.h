@@ -33,7 +33,6 @@ struct BufferSource final {
   uint32_t element_stride = 1;
   uint8_t element_format = 0;
   uint64_t alignment = 16;
-  uint64_t content_hash = 0;
 
   //! Prepare authored buffer declarations without reading or emitting files.
   /*!

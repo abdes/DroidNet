@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
@@ -80,15 +81,15 @@ namespace {
   }
 
   auto MakeScriptResource(const std::vector<uint8_t>& bytes,
-    const data::pak::scripting::ScriptEncoding encoding,
-    const uint64_t hash = 0) -> std::shared_ptr<const data::ScriptResource>
+    const data::pak::scripting::ScriptEncoding encoding)
+    -> std::shared_ptr<const data::ScriptResource>
   {
     data::pak::scripting::ScriptResourceDesc desc {};
     desc.size_bytes = static_cast<uint32_t>(bytes.size());
     desc.language = data::pak::scripting::ScriptLanguage::kLuau;
     desc.encoding = encoding;
     desc.compression = data::pak::scripting::ScriptCompression::kNone;
-    desc.content_hash = hash;
+    desc.content_hash = base::ComputeSha256(std::as_bytes(std::span { bytes }));
     auto buffer = serio::ByteBuffer::CopyOf(std::as_bytes(std::span { bytes }));
     if (!buffer) {
       throw std::bad_alloc();
@@ -266,6 +267,30 @@ NOLINT_TEST_F(
     = std::get<ScriptSourceBlob>(*second.blob).ContentHash();
 
   EXPECT_NE(first_hash, second_hash);
+}
+
+NOLINT_TEST_F(ScriptSourceResolverTest, ExternalSourceCarriesSha256OfFileBytes)
+{
+  const auto asset = MakeScriptAsset("/Content/runtime/sha_test",
+    ScriptAssetResourceIndices {},
+    data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
+  const std::string_view text = "return 'sha256 content'\n";
+  WriteFile(TempDir() / "scripts/runtime/sha_test.luau", text);
+
+  const auto result = Resolver().Resolve({
+    .asset = *asset,
+    .load_script_resource =
+      [](const data::ResourceReferenceIndex) {
+        return std::shared_ptr<const data::ScriptResource> {};
+      },
+    .map_resource_origin = {},
+  });
+
+  ASSERT_TRUE(result.ok) << result.error_message;
+  ASSERT_HAS_VALUE(result.blob);
+  ASSERT_TRUE(std::holds_alternative<ScriptSourceBlob>(*result.blob));
+  EXPECT_EQ(std::get<ScriptSourceBlob>(*result.blob).ContentHash(),
+    base::ComputeSha256(std::as_bytes(std::span { text })));
 }
 
 NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsPathThatIsNotMountPath)

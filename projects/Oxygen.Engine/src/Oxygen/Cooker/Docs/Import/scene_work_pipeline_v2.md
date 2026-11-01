@@ -203,11 +203,6 @@ public:
     size_t queue_capacity = 8;
     uint32_t worker_count = 1;
 
-    //! Enable or disable scene content hashing.
-    /*!
-     When false, the pipeline MUST NOT compute `content_hash`.
-    */
-    bool with_content_hashing = true;
   };
 
   explicit ScenePipeline(co::ThreadPool& thread_pool, Config cfg = {});
@@ -282,10 +277,9 @@ follows this behavior (implementation notes & diagnostics below):
      available record bytes); failures emit blocking diagnostics
      (`scene.environment.*`).
    - Writer failures produce `scene.serialize_failed` diagnostics.
-6. If serialization succeeded and `Config::with_content_hashing` is true the
-   pipeline computes the `content_hash` on the `ThreadPool` (cancellable) and
-   patches `SceneAssetDesc.header.content_hash` when the computed hash is
-   non-zero.
+6. If serialization succeeded, the pipeline computes the `content_hash` on the
+   `ThreadPool` (cancellable) and patches `SceneAssetDesc.header.content_hash`
+   when the computed hash is non-zero.
 7. The worker constructs a `WorkResult` with collected diagnostics and
    `ImportWorkItemTelemetry` (cook duration) and sends it to the output channel.
    If `WorkItem.on_finished` is provided it is invoked after work completes.
@@ -344,7 +338,7 @@ Pipeline responsibilities (performed by `ScenePipeline`):
   `SceneAssetDesc`, `NodeRecord[]`, string table, component tables, component
   directory, SceneEnvironmentBlock.
 - Validate environment system records (record header size, payload size).
-- Compute and patch `SceneAssetDesc.header.content_hash` when hashing is enabled
+- Compute and patch `SceneAssetDesc.header.content_hash`
   (computed on the `ThreadPool`).
 - Emit diagnostics for serialization and environment validation failures.
 
@@ -382,8 +376,7 @@ Notes:
 - Component tables use `ComponentType` FourCC values (e.g., `kRenderable`).
 - `SceneAssetDesc.header.version = data::pak::kSceneAssetVersion`.
 - `SceneAssetDesc.header.content_hash` must cover descriptor bytes + environment
-  block bytes and is computed on the ThreadPool after dependencies are ready
-  **when hashing is enabled**.
+  block bytes and is computed on the ThreadPool after dependencies are ready.
 
 ### Scene Environment Block
 
@@ -413,8 +406,7 @@ Notes:
   - Serialize `SceneAssetDesc` and trailing payload with packed alignment.
   - Validate and append the SceneEnvironment block; reject invalid system
     records.
-  - Populate `SceneAssetDesc.header.version` and compute `header.content_hash`
-    when hashing is enabled.
+  - Populate `SceneAssetDesc.header.version` and compute `header.content_hash`.
 
 ### Importer/Orchestrator Responsibilities
 
@@ -465,10 +457,9 @@ Pipeline tracks submitted/completed/failed counts and exposes
    maps to the empty string; the pipeline will serialize the bytes as provided.
 4. Environment block header is always appended (even empty) and system record
    headers must be validated by the pipeline.
-5. `header.content_hash` (when hashing is enabled) must cover the entire
-   descriptor payload including the environment block; the pipeline computes the
-   hash on the `ThreadPool` and patches the header only when the hash is
-   non-zero.
+5. `header.content_hash` must cover the entire descriptor payload including the
+   environment block; the pipeline computes the hash on the `ThreadPool` and
+   patches the header only when the hash is non-zero.
 
 Diagnostic codes emitted by the pipeline include (non-exhaustive):
 

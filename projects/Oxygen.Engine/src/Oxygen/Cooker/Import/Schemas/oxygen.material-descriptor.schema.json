@@ -10,9 +10,6 @@
     "name": {
       "$ref": "oxygen.name.schema.json#/definitions/segment"
     },
-    "content_hashing": {
-      "type": "boolean"
-    },
     "domain": {
       "enum": [
         "opaque",

@@ -16,8 +16,7 @@
       "type": "material-descriptor",
       "source": "/Content/Scenes/CameraSwitch/CameraSwitchMat.omat.json",
       "virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitchMat.omat",
-      "name": "CameraSwitchMat",
-      "content_hashing": true
+      "name": "CameraSwitchMat"
     },
     {
       "id": "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
@@ -25,7 +24,6 @@
       "source": "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo.json",
       "virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
       "name": "CameraSwitchCube",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/CameraSwitch/CameraSwitchMat.omat"]
     },
     {
@@ -35,8 +33,7 @@
       "virtual_path": "/Content/Scenes/CameraSwitch/camera_switch.oscript",
       "name": "camera_switch",
       "compile": false,
-      "script_storage": "external",
-      "content_hashing": true
+      "script_storage": "external"
     },
     {
       "id": "/Content/Scenes/CameraSwitch/camera_switch.input",
@@ -50,7 +47,6 @@
       "source": "/Content/Scenes/CameraSwitch/CameraSwitch.scene.json",
       "virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitch.oscene",
       "name": "camera_switch",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
         "/Content/Scenes/CameraSwitch/camera_switch.input"
@@ -61,7 +57,6 @@
       "type": "script-sidecar",
       "name": "camera_switch_sidecar",
       "target_scene_virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitch.oscene",
-      "content_hashing": true,
       "depends_on": [
         "/Content/Scenes/CameraSwitch/CameraSwitch.oscene",
         "/Content/Scenes/CameraSwitch/camera_switch.oscript",

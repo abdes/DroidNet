@@ -766,7 +766,7 @@ auto ScenePipeline::Worker() -> co::Co<>
       continue;
     }
 
-    if (outcome.success && config_.with_content_hashing) {
+    if (outcome.success) {
       auto hash = co_await thread_pool_.Run(
         [bytes = std::span<const std::byte>(outcome.bytes),
           stop_token = item.stop_token](co::ThreadPool::CancelToken canceled)

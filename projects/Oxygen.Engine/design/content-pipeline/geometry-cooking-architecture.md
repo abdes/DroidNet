@@ -20,7 +20,7 @@ Current implementation status snapshot:
    `BufferPipeline` before descriptor finalization begins.
 4. Implemented: `GeometryPipeline::FinalizeDescriptorBytes` — patches buffer
    `ResourceIndexT` fields and material `AssetKey` fields into the pre-built
-   descriptor byte stream, then optionally hashes the full payload.
+   descriptor byte stream, then hashes the full payload.
 5. Implemented: Loose-cooked emission (`.ogeo` descriptors) via
    `AssetEmitter::Emit` with `AssetType::kGeometry` routing.
 6. Implemented: Buffer sidecar dependency resolution via `.obuf` sidecar file
@@ -112,8 +112,8 @@ Out of scope:
 7. Material `AssetKey` fields in `SubMeshDesc` are embedded during
    `PrepareGeometryDescriptor` (resolved at cook time) and are NOT re-patched by
    `FinalizeDescriptorBytes` unless supplied as `MaterialKeyPatch` entries.
-8. Content hashing uses the full finalized byte span (all struct types) and MUST
-   NOT be computed when `with_content_hashing` is false.
+8. Content hashing uses the full finalized byte span (all struct types) and is
+   always computed.
 9. `GeometryAssetDesc`, `MeshDesc`, `SubMeshDesc`, and `MeshViewDesc` binary
    layouts MUST NOT be modified without incrementing `kGeometryAssetVersion` and
    updating the `static_assert(sizeof(...))` guards.
@@ -271,7 +271,7 @@ Architectural split:
    emission.
 2. `GeometryPipeline::FinalizeDescriptorBytes` is a self-contained utility that
    patches a pre-built descriptor byte stream with live resource indices and
-   optionally hashes it. It does not maintain queued pipeline state for the
+   hashes it. It does not maintain queued pipeline state for the
    descriptor-driven path (it is used inline, not via Submit/Collect).
 3. Runtime loading reads the descriptor field-by-field (packed alignment=1),
    creates buffer resource dependencies asynchronously, and registers submesh
@@ -291,7 +291,7 @@ Architectural split:
    - role: tooling-facing DTO for one geometry descriptor import job request.
      Contains `descriptor_path` (path to `.geometry.json`), `cooked_root`
      (absolute path under which `.ogeo` and cooked buffers are written),
-     `job_name` (optional override), and `with_content_hashing`.
+     and `job_name` (optional override).
    - note: This DTO is never passed to the pipeline directly. It is only
      consumed by `BuildGeometryDescriptorRequest`.
 
@@ -328,7 +328,7 @@ Architectural split:
    - role: finalization pipeline. Provides `FinalizeDescriptorBytes` as a
      stateless utility (reads back the pre-built bytes, patches buffer
      `ResourceIndexT` fields and optional material `AssetKey` fields, zeroes
-     `content_hash`, re-serializes, and optionally hashes on a thread pool).
+     `content_hash`, re-serializes, and hashes on a thread pool).
      Also implements bounded-channel Submit/Collect workers for future use with
      `MeshBuildPipeline::CookedGeometryPayload`.
    - config: default `queue_capacity=16`, `worker_count=1` (from
@@ -466,7 +466,7 @@ Schema target files:
 ```
 
 Valid top-level keys for `type: "geometry-descriptor"`: `id`, `type`, `source`,
-`name`, `content_hashing`, `depends_on`.
+`name`, `depends_on`.
 
 The `source` field must point to a file conforming to
 `oxygen.geometry-descriptor.schema.json` (Section 7.2).
@@ -534,16 +534,15 @@ JSON Schema draft-07, `additionalProperties: false` at all levels.
 
 #### 7.2.1 Top-Level Field Contract
 
-| Field             | Required | Type                | Description                                          |
-| ----------------- | -------- | ------------------- | ---------------------------------------------------- |
-| `name`            | Yes      | `string` (name)     | Asset name used for output file naming               |
-| `bounds`          | No       | `bounds3`           | AABB containing every LOD (default: their union)     |
-| `lods`            | Yes      | `array` (1–8 items) | `lod_descriptor` entries (Section 7.2.4)             |
-| `$schema`         | No       | `string`            | Points to shipped JSON Schema for editor integration |
-| `content_hashing` | No       | `bool`              | Override global content hashing toggle               |
-| `buffers`         | No       | `array` (≥1 items)  | Inline `buffer_descriptor` entries (Section 7.2.3)   |
-| `surfaces`        | No       | `array`             | Surface asset defaults (Section 7.2.7)               |
-| `lod_policy`      | No       | `lod_policy`        | Default LOD policy (Section 7.2.7)                   |
+| Field        | Required | Type                | Description                                          |
+| ------------ | -------- | ------------------- | ---------------------------------------------------- |
+| `name`       | Yes      | `string` (name)     | Asset name used for output file naming               |
+| `bounds`     | No       | `bounds3`           | AABB containing every LOD (default: their union)     |
+| `lods`       | Yes      | `array` (1–8 items) | `lod_descriptor` entries (Section 7.2.4)             |
+| `$schema`    | No       | `string`            | Points to shipped JSON Schema for editor integration |
+| `buffers`    | No       | `array` (≥1 items)  | Inline `buffer_descriptor` entries (Section 7.2.3)   |
+| `surfaces`   | No       | `array`             | Surface asset defaults (Section 7.2.7)               |
+| `lod_policy` | No       | `lod_policy`        | Default LOD policy (Section 7.2.7)                   |
 
 Example (`woodfloor_tile.geometry.json`):
 
@@ -636,7 +635,6 @@ Describes one buffer file to cook inline within the geometry job.
 | `element_stride` | No       | `integer ≥ 0`        | Fixed per-element byte stride (mutually exclusive with `element_format`)      |
 | `element_format` | No       | `integer` [0, 255]   | Typed element format code (mutually exclusive with non-zero `element_stride`) |
 | `alignment`      | No       | `integer ≥ 1`        | Upload alignment hint                                                         |
-| `content_hash`   | No       | `integer ≥ 0`        | Pre-computed content hash override                                            |
 | `views`          | No       | `array` (≥1 items)   | Named `buffer_view_descriptor` entries (Section 7.2.3.1)                      |
 
 Constraints:
@@ -825,10 +823,10 @@ Produces `PreparedGeometryDescriptor` (raw descriptor bytes +
 
 ### 8.3 Post-Descriptor Stages (in `ExecuteAsync`, after `PrepareGeometryDescriptor`)
 
-| Step | Function                  | Action                                                                                                                                                                                                                                                              |
-| ---- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 13   | `FinalizeDescriptorBytes` | `GeometryPipeline::FinalizeDescriptorBytes(bindings, descriptor_bytes, material_patches, diagnostics)` — re-reads `GeometryAssetDesc`, for each LOD reads `MeshDesc` and patches the corresponding `MeshBufferBindings`; re-serializes; optionally hashes full span |
-| 14   | `EmitAsset`               | `session.AssetEmitter().Emit(geometry_key, AssetType::kGeometry, virtual_path, descriptor_relpath, *finalized_bytes)`                                                                                                                                               |
+| Step | Function                  | Action                                                                                                                                                                                                                                                   |
+| ---- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 13   | `FinalizeDescriptorBytes` | `GeometryPipeline::FinalizeDescriptorBytes(bindings, descriptor_bytes, material_patches, diagnostics)` — re-reads `GeometryAssetDesc`, for each LOD reads `MeshDesc` and patches the corresponding `MeshBufferBindings`; re-serializes; hashes full span |
+| 14   | `EmitAsset`               | `session.AssetEmitter().Emit(geometry_key, AssetType::kGeometry, virtual_path, descriptor_relpath, *finalized_bytes)`                                                                                                                                    |
 
 ### 8.4 `GeometryPipeline::FinalizeDescriptorBytes` Internal Steps
 
@@ -843,9 +841,9 @@ Produces `PreparedGeometryDescriptor` (raw descriptor bytes +
    byte offset.
 6. Copy the `SurfaceDesc[surface_count]` table unchanged; the string table
    follows it at the same offset.
-7. If `config_.with_content_hashing`: compute `XXH3_64bits` (or engine hash)
-   over the finalized byte span on the thread pool; patch `content_hash` at its
-   fixed offset in the re-written `GeometryAssetDesc.header`.
+7. Compute the SHA-256 (`ContentHashDigest`) over the finalized byte span on the
+   thread pool; patch `content_hash` at its fixed offset in the re-written
+   `GeometryAssetDesc.header`.
 
 ---
 
@@ -1142,7 +1140,9 @@ Key contracts:
 1. `GeometryAsset` does not own GPU handles. Vertex/index buffer upload and GPU
    resource creation are the renderer's responsibility via the resolved
    `BufferResource` dependencies.
-2. `content_hash` is used for deduplication during incremental imports.
+2. `content_hash` is the SHA-256 of the descriptor; importers deduplicate by it
+   during incremental imports. The buffer descriptor input carries no
+   `content_hash`: `BufferPipeline` computes each buffer's SHA-256.
 3. Procedural mesh geometry is fully regenerated at load time; no GPU buffers
    are registered as resource dependencies for procedural LODs.
 4. `parse_only` mode reads all descriptor fields and builds the asset graph

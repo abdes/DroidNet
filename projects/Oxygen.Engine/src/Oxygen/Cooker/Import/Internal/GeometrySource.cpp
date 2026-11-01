@@ -264,9 +264,6 @@ namespace {
     if (document.contains("bounds")) {
       source.bounds = ReadBounds(document.at("bounds"));
     }
-    if (document.contains("content_hashing")) {
-      source.content_hashing = document.at("content_hashing").get<bool>();
-    }
     if (document.contains("buffers")) {
       auto buffers
         = BufferSource::FromDeclarations(BuildSubmitterBufferChunks(document),

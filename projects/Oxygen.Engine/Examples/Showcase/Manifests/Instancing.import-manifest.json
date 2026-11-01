@@ -16,8 +16,7 @@
       "type": "material-descriptor",
       "source": "/Content/Scenes/Instancing/MatInstanced.omat.json",
       "virtual_path": "/Content/Scenes/Instancing/MatInstanced.omat",
-      "name": "MatInstanced",
-      "content_hashing": true
+      "name": "MatInstanced"
     },
     {
       "id": "/Content/Scenes/Instancing/GeoInstancedCube.ogeo",
@@ -25,7 +24,6 @@
       "source": "/Content/Scenes/Instancing/GeoInstancedCube.ogeo.json",
       "virtual_path": "/Content/Scenes/Instancing/GeoInstancedCube.ogeo",
       "name": "GeoInstancedCube",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/Instancing/MatInstanced.omat"]
     },
     {
@@ -34,7 +32,6 @@
       "source": "/Content/Scenes/Instancing/InstancingTestScene.scene.json",
       "virtual_path": "/Content/Scenes/Instancing/InstancingTestScene.oscene",
       "name": "InstancingTestScene",
-      "content_hashing": true,
       "depends_on": ["/Content/Scenes/Instancing/GeoInstancedCube.ogeo"]
     }
   ]

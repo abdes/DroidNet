@@ -6,7 +6,6 @@
 
 // Covers: Import/Internal/LooseCookedWriter.cpp
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <filesystem>
@@ -18,10 +17,10 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
-#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Testing/GTest.h>
@@ -55,7 +54,7 @@ namespace {
     auto refreshed_writer = LooseCookedWriter(root, storage);
     const auto appended = std::array { std::byte { 1U }, std::byte { 2U } };
     storage.AddFile(root / "buffers.data", appended);
-    refreshed_writer.RegisterExternalFile(
+    refreshed_writer.RegisterExternalDataFile(
       FileKind::kBuffersData, "buffers.data");
     static_cast<void>(refreshed_writer.Finish());
     static_cast<void>(stale_writer.Finish());
@@ -212,26 +211,65 @@ namespace {
       std::runtime_error);
   }
 
-  //! A file registered without its producer's digest, such as a resource
-  //! data file every import appends to, is hashed by `Finish`.
+  //! A resource data file, which every import appends to, is indexed with no
+  //! digest: `Finish` does not hash it.
   NOLINT_TEST(LooseCookedWriterExternalRegistrationTest,
-    FileWithoutProducerDigestIsHashed)
+    ResourceDataFileIsIndexedWithoutDigest)
   {
     // Arrange
     auto storage = MemoryFileSystem {};
-    const auto root = MemoryRoot() / "hashed_data";
+    const auto root = MemoryRoot() / "data_without_digest";
     const auto bytes = std::array { std::byte { 7U } };
-    storage.AddFile(root / "Ship/Hull.obuf", bytes);
+    const auto table = std::vector<std::byte>(
+      cooked::CookedResourceTable::RowSize(cooked::TableKind::kBuffer));
+    storage.AddFile(root / "buffers.data", bytes);
+    storage.AddFile(root / "buffers.table", table);
     auto writer = LooseCookedWriter(root, storage);
-    writer.RegisterExternalAuxiliaryFile(
-      "Ship/Hull.obuf", FromSource("/Content/Ship.glb"));
+    writer.RegisterExternalDataFile(FileKind::kBuffersData, "buffers.data");
+    writer.RegisterExternalFile(FileKind::kBuffersTable, "buffers.table",
+      import::LooseCookedFileDigest {
+        .size = table.size(),
+        .sha256 = base::ComputeSha256(table),
+      });
 
     // Act
     const auto result = writer.Finish();
 
     // Assert
-    ASSERT_EQ(result.files.size(), 1U);
-    EXPECT_EQ(result.files.front().sha256, base::ComputeSha256(bytes));
+    ASSERT_EQ(result.files.size(), 2U);
+    for (const auto& file : result.files) {
+      if (file.relpath == "buffers.data") {
+        EXPECT_TRUE(base::IsAllZero(file.sha256));
+      } else {
+        EXPECT_FALSE(base::IsAllZero(file.sha256)) << file.relpath;
+      }
+    }
+  }
+
+  //! A resource data file has no digest to register, and a file with one is
+  //! not a resource data file.
+  NOLINT_TEST(
+    LooseCookedWriterExternalRegistrationTest, DataFileKindsAndDigestsDoNotMix)
+  {
+    // Arrange
+    auto storage = MemoryFileSystem {};
+    const auto root = MemoryRoot() / "data_kind_mismatch";
+    const auto bytes = std::array { std::byte { 7U } };
+    storage.AddFile(root / "buffers.data", bytes);
+    storage.AddFile(root / "buffers.table", bytes);
+    auto writer = LooseCookedWriter(root, storage);
+
+    // Act & Assert
+    EXPECT_THROW(
+      writer.RegisterExternalFile(FileKind::kBuffersData, "buffers.data",
+        import::LooseCookedFileDigest {
+          .size = bytes.size(),
+          .sha256 = base::ComputeSha256(bytes),
+        }),
+      std::runtime_error);
+    EXPECT_THROW(
+      writer.RegisterExternalDataFile(FileKind::kBuffersTable, "buffers.table"),
+      std::runtime_error);
   }
 
   //! A producer digest that does not describe the file's bytes is refused:

@@ -153,20 +153,6 @@ namespace {
       path, [](const auto& part) -> bool { return part == ".."; });
   }
 
-  [[nodiscard]] auto ComputeContentHash64(
-    const std::span<const std::byte> bytes) -> uint64_t
-  {
-    constexpr auto kScriptContentHashBytes = size_t { 8 };
-    constexpr auto kByteShiftBits = size_t { 8 };
-
-    const auto digest = base::ComputeSha256(bytes);
-    auto hash = uint64_t { 0 };
-    for (size_t i = 0; i < kScriptContentHashBytes; ++i) {
-      hash |= static_cast<uint64_t>(digest.at(i)) << (i * kByteShiftBits);
-    }
-    return hash;
-  }
-
   [[nodiscard]] auto TryGetExternalSourcePath(const ScriptAssetDesc& descriptor,
     const data::DescriptorStrings& strings) -> std::optional<std::string_view>
   {
@@ -418,10 +404,6 @@ namespace {
       return std::nullopt;
     }
 
-    const auto hashing_enabled = std::ranges::any_of(
-      tables.entries, [](const ScriptResourceDesc& entry) -> bool {
-        return entry.content_hash != 0;
-      });
     const auto resource_index
       = ResourceIndexT { static_cast<uint32_t>(tables.entries.size()) };
 
@@ -431,8 +413,7 @@ namespace {
     resource_desc.language = ScriptLanguage::kLuau;
     resource_desc.encoding = ScriptEncoding::kSource;
     resource_desc.compression = ScriptCompression::kNone;
-    resource_desc.content_hash
-      = hashing_enabled ? ComputeContentHash64(source_bytes) : 0;
+    resource_desc.content_hash = base::ComputeSha256(source_bytes);
 
     tables.entries.push_back(resource_desc);
     tables.data_blob.insert(
@@ -665,19 +646,14 @@ namespace {
           });
       }
       const auto table_bytes = std::as_bytes(std::span(tables.entries));
-      const auto data_bytes = std::span<const std::byte>(tables.data_blob);
       writer.RegisterExternalFile(data::loose_cooked::FileKind::kScriptsTable,
         loose_layout::kScriptsTable,
         import::LooseCookedFileDigest {
           .size = table_bytes.size(),
           .sha256 = base::ComputeSha256(table_bytes),
         });
-      writer.RegisterExternalFile(data::loose_cooked::FileKind::kScriptsData,
-        loose_layout::kScriptsData,
-        import::LooseCookedFileDigest {
-          .size = data_bytes.size(),
-          .sha256 = base::ComputeSha256(data_bytes),
-        });
+      writer.RegisterExternalDataFile(
+        data::loose_cooked::FileKind::kScriptsData, loose_layout::kScriptsData);
       static_cast<void>(writer.Finish());
     } catch (const std::exception& ex) {
       return Result<void, ScriptSealingError>::Err(ScriptSealingError {

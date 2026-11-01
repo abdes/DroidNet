@@ -208,8 +208,8 @@ auto RunImportJob(const ImportRequest& request,
       }
     };
 
-    LOG_F(INFO, "ImportTool submit job: source='{}' with_content_hashing={}",
-      request.source_path.string(), request.options.with_content_hashing);
+    LOG_F(
+      INFO, "ImportTool submit job: source='{}'", request.source_path.string());
     const auto job_id = publication
       ? service->SubmitModelImport(
           std::move(publication), on_complete, on_progress)
@@ -459,7 +459,6 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
         "normals",
         "tangents",
         "prune-nodes",
-        "content-hashing",
         "omitted-light-range",
         "gltf-scene",
         "up-axis",

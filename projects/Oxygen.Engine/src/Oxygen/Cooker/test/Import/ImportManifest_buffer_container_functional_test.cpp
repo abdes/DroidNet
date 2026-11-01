@@ -15,9 +15,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
-#include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -25,7 +23,6 @@ namespace {
 
 using nlohmann::json;
 using oxygen::content::import::ImportManifest;
-using oxygen::cooker::test::kContentHashingDefault;
 using oxygen::cooker::test::WriteText;
 using oxygen::testing::ScopedTempDir;
 
@@ -40,7 +37,6 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
   WriteText(descriptor_path,
     R"({
       "name": "CharacterBuffers",
-      "content_hashing": false,
       "buffers": [
         {
           "source": "mesh_vertices.buffer.bin",
@@ -56,7 +52,6 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
       "output": ".cooked",
       "defaults": {
         "buffer_container": {
-          "content_hashing": true,
           "name": "default-buffer-container-name"
         }
       },
@@ -64,8 +59,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
         {
           "type": "buffer-container",
           "source": "Buffers/character.buffers.json",
-          "name": "character-buffers-job",
-          "content_hashing": true
+          "name": "character-buffers-job"
         }
       ]
     })";
@@ -84,10 +78,6 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
   EXPECT_EQ(
     request->job_name, std::optional<std::string> { "character-buffers-job" });
   ASSERT_HAS_VALUE(request->buffer_container);
-
-  // Descriptor-level content_hashing overrides manifest defaults/job settings.
-  // Release must hash authored content even when the descriptor opts out.
-  EXPECT_EQ(request->options.with_content_hashing, kContentHashingDefault);
 
   const auto normalized
     = json::parse(request->buffer_container->normalized_descriptor_json);
