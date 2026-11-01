@@ -294,7 +294,7 @@ private:
   This specialization is used for operations that do not return a value but
   still need to indicate success or failure.
 */
-template <typename E> class Result<void, E> {
+template <typename E> class [[nodiscard]] Result<void, E> {
 public:
   //! Default constructor that initializes the Result with a success state.
   constexpr Result() noexcept
