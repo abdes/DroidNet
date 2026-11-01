@@ -219,7 +219,9 @@ NOLINT_TEST(SceneBuilderTest, EnvironmentAndTexturesReadBack)
   const auto read = scene->TryGetFogEnvironment();
   ASSERT_HAS_VALUE(read);
   EXPECT_EQ(read->extinction_sigma_t_per_m, 0.05F);
-  const auto resources = main.References().Resources();
+  // The references are a value: the span views them only while they live.
+  const auto references = main.References();
+  const auto resources = references.Resources();
   ASSERT_EQ(resources.size(), 1U);
   EXPECT_EQ(mask.get(), 0U);
   EXPECT_EQ(resources[0].index, oxygen::ResourceIndexT { 3U });
