@@ -393,7 +393,7 @@ eviction and hot reload, which Live Preview exercises constantly.
 (`LooseCookedWriter`, `LooseCookedLayout`, `LooseCookedIndexRegistry`),
 `Cooker/Import/Internal/ResourceTable*`, `Cooker/Import/Internal/Emitters/*`,
 `Cooker/Import/Internal/Utils/ContentHashUtils.h`,
-`Cooker/Import/Internal/SerioFileReader.*`,
+`Cooker/Import/Internal/FileSourceReader.*`,
 `Cooker/Import/Internal/SourceLayoutHash.h`; `design/proposals/cooked-sources/`.
 
 **Objectives.** A loose cooked root is written so that a reader never sees an

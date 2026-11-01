@@ -34,17 +34,17 @@ namespace oxygen::content::import {
  Safe for concurrent reads of different files on the loop thread of the
  driver.
 */
-class SerioFileReader final : public IAsyncFileReader {
+class FileSourceReader final : public IAsyncFileReader {
 public:
   //! A reader whose files are bound to `driver`, which outlives it, and
   //! whose reads return at most `source_limit` bytes.
-  OXGN_COOK_API SerioFileReader(
+  OXGN_COOK_API FileSourceReader(
     serio::IoDriver& driver, serio::ByteCount source_limit);
 
-  OXGN_COOK_API ~SerioFileReader() override;
+  OXGN_COOK_API ~FileSourceReader() override;
 
-  OXYGEN_MAKE_NON_COPYABLE(SerioFileReader)
-  OXYGEN_MAKE_NON_MOVABLE(SerioFileReader)
+  OXYGEN_MAKE_NON_COPYABLE(FileSourceReader)
+  OXYGEN_MAKE_NON_MOVABLE(FileSourceReader)
 
   using IAsyncFileReader::ReadFile;
 

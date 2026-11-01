@@ -14,7 +14,7 @@ own loop, gets its driver the same way.
 
 - **Source reads** go through `IAsyncFileReader`, the import's seam for
   sources. `ImportSourceSnapshot` decorates it to record and replay reads, and
-  tests substitute it. Its implementation, `SerioFileReader`, opens each source
+  tests substitute it. Its implementation, `FileSourceReader`, opens each source
   through the driver and awaits `serio::AsyncReadAll`, or, for a range,
   `serio::AsyncReadExactlyAt`.
 - **Cooked writes** go through `CookerStorage` only (see below).

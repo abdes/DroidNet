@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Import/Internal/SerioFileReader.cpp
+// Covers: Import/Internal/FileSourceReader.cpp
 
 #include <cstddef>
 #include <cstdint>
@@ -55,8 +55,8 @@ auto ToString(const serio::ByteBuffer& buffer) -> std::string
 }
 
 //! The reader over a real temporary folder, through both drivers.
-class SerioFileReaderTest : public oxygen::testing::TempDirTest,
-                            public ::testing::WithParamInterface<DriverKind> {
+class FileSourceReaderTest : public oxygen::testing::TempDirTest,
+                             public ::testing::WithParamInterface<DriverKind> {
 protected:
   auto SetUp() -> void override
   {
@@ -98,7 +98,7 @@ protected:
   std::unique_ptr<IAsyncFileReader> reader_;
 };
 
-INSTANTIATE_TEST_SUITE_P(Drivers, SerioFileReaderTest,
+INSTANTIATE_TEST_SUITE_P(Drivers, FileSourceReaderTest,
   ::testing::Values(DriverKind::kLoop, DriverKind::kInline),
   [](const ::testing::TestParamInfo<DriverKind>& info) -> std::string {
     return info.param == DriverKind::kLoop ? "LoopDriver" : "InlineDriver";
@@ -106,7 +106,7 @@ INSTANTIATE_TEST_SUITE_P(Drivers, SerioFileReaderTest,
 
 //=== ReadFile ===------------------------------------------------------------//
 
-NOLINT_TEST_P(SerioFileReaderTest, ReadFileReadsTheWholeFile)
+NOLINT_TEST_P(FileSourceReaderTest, ReadFileReadsTheWholeFile)
 {
   const std::string content = "Hello, World!";
   const auto path = CreateFile("small.txt", content);
@@ -117,7 +117,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ReadFileReadsTheWholeFile)
   EXPECT_EQ(ToString(*read), content);
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, ReadFileReadsALargerFile)
+NOLINT_TEST_P(FileSourceReaderTest, ReadFileReadsALargerFile)
 {
   std::string content(size_t { 64 } * 1024U, 'X');
   for (size_t i = 0; i < content.size(); ++i) {
@@ -131,7 +131,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ReadFileReadsALargerFile)
   EXPECT_EQ(ToString(*read), content);
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, ReadFileOfAnEmptyFileIsEmpty)
+NOLINT_TEST_P(FileSourceReaderTest, ReadFileOfAnEmptyFileIsEmpty)
 {
   const auto path = CreateFile("empty.bin", "");
 
@@ -141,7 +141,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ReadFileOfAnEmptyFileIsEmpty)
   EXPECT_TRUE(read->Empty());
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, ReadFileWithOffsetReadsFromOffset)
+NOLINT_TEST_P(FileSourceReaderTest, ReadFileWithOffsetReadsFromOffset)
 {
   const auto path = CreateFile("offset.txt", "Hello, World!");
 
@@ -151,7 +151,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ReadFileWithOffsetReadsFromOffset)
   EXPECT_EQ(ToString(*read), "World!");
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, ReadFileWithMaxBytesLimitsTheRead)
+NOLINT_TEST_P(FileSourceReaderTest, ReadFileWithMaxBytesLimitsTheRead)
 {
   const auto path = CreateFile("limited.txt", "Hello, World!");
 
@@ -161,7 +161,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ReadFileWithMaxBytesLimitsTheRead)
   EXPECT_EQ(ToString(*read), "Hello");
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, ReadFileWithOffsetAndMaxBytesReadsTheRange)
+NOLINT_TEST_P(FileSourceReaderTest, ReadFileWithOffsetAndMaxBytesReadsTheRange)
 {
   const auto path = CreateFile("range.txt", "Hello, World!");
 
@@ -171,7 +171,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ReadFileWithOffsetAndMaxBytesReadsTheRange)
   EXPECT_EQ(ToString(*read), "World");
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, ReadFileRangePastTheEndIsClamped)
+NOLINT_TEST_P(FileSourceReaderTest, ReadFileRangePastTheEndIsClamped)
 {
   const auto path = CreateFile("clamped.txt", "Hello");
 
@@ -181,7 +181,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ReadFileRangePastTheEndIsClamped)
   EXPECT_EQ(ToString(*read), "lo");
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, ReadFileOffsetPastTheEndReadsNothing)
+NOLINT_TEST_P(FileSourceReaderTest, ReadFileOffsetPastTheEndReadsNothing)
 {
   const auto path = CreateFile("short.txt", "Hello");
 
@@ -191,7 +191,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ReadFileOffsetPastTheEndReadsNothing)
   EXPECT_TRUE(read->Empty());
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, ReadFileOfAMissingFileIsNotFound)
+NOLINT_TEST_P(FileSourceReaderTest, ReadFileOfAMissingFileIsNotFound)
 {
   const auto read = Read(TempDir() / "missing.txt");
 
@@ -199,7 +199,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ReadFileOfAMissingFileIsNotFound)
   EXPECT_EQ(read.error(), serio::Error::kNotFound);
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, ReadFileOfADirectoryIsADirectoryError)
+NOLINT_TEST_P(FileSourceReaderTest, ReadFileOfADirectoryIsADirectoryError)
 {
   const auto read = Read(TempDir());
 
@@ -207,7 +207,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ReadFileOfADirectoryIsADirectoryError)
   EXPECT_EQ(read.error(), serio::Error::kIsDirectory);
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, ReadFileOfAnEmptyPathIsInvalid)
+NOLINT_TEST_P(FileSourceReaderTest, ReadFileOfAnEmptyPathIsInvalid)
 {
   const auto read = Read(std::filesystem::path {});
 
@@ -217,7 +217,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ReadFileOfAnEmptyPathIsInvalid)
 
 //=== GetFileInfo ===---------------------------------------------------------//
 
-NOLINT_TEST_P(SerioFileReaderTest, GetFileInfoOfAFileReportsItsSize)
+NOLINT_TEST_P(FileSourceReaderTest, GetFileInfoOfAFileReportsItsSize)
 {
   const std::string content = "Test content";
   const auto path = CreateFile("info.txt", content);
@@ -230,7 +230,7 @@ NOLINT_TEST_P(SerioFileReaderTest, GetFileInfoOfAFileReportsItsSize)
   EXPECT_FALSE(info->is_symlink);
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, GetFileInfoOfADirectoryReportsIt)
+NOLINT_TEST_P(FileSourceReaderTest, GetFileInfoOfADirectoryReportsIt)
 {
   const auto info = co::Run(*loop_, reader_->GetFileInfo(TempDir()));
 
@@ -238,7 +238,7 @@ NOLINT_TEST_P(SerioFileReaderTest, GetFileInfoOfADirectoryReportsIt)
   EXPECT_TRUE(info->is_directory);
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, GetFileInfoOfAMissingFileIsNotFound)
+NOLINT_TEST_P(FileSourceReaderTest, GetFileInfoOfAMissingFileIsNotFound)
 {
   const auto info
     = co::Run(*loop_, reader_->GetFileInfo(TempDir() / "missing.txt"));
@@ -249,7 +249,7 @@ NOLINT_TEST_P(SerioFileReaderTest, GetFileInfoOfAMissingFileIsNotFound)
 
 //=== Exists ===--------------------------------------------------------------//
 
-NOLINT_TEST_P(SerioFileReaderTest, ExistsIsTrueForAFileAndAFolder)
+NOLINT_TEST_P(FileSourceReaderTest, ExistsIsTrueForAFileAndAFolder)
 {
   const auto path = CreateFile("exists.txt", "content");
 
@@ -262,7 +262,7 @@ NOLINT_TEST_P(SerioFileReaderTest, ExistsIsTrueForAFileAndAFolder)
   EXPECT_TRUE(*folder);
 }
 
-NOLINT_TEST_P(SerioFileReaderTest, ExistsIsFalseForAMissingFile)
+NOLINT_TEST_P(FileSourceReaderTest, ExistsIsFalseForAMissingFile)
 {
   const auto exists
     = co::Run(*loop_, reader_->Exists(TempDir() / "missing.txt"));

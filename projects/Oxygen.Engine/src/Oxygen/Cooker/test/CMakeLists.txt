@@ -130,6 +130,7 @@ oxygen_cooker_test(
     "Import/CompressedTextureImport_functional_test.cpp"
     "Import/FbxLodGroups_functional_test.cpp"
     "Import/FbxSkinning_functional_test.cpp"
+    "Import/FileSourceReader_functional_test.cpp"
     "Import/GeometryDescriptorImportRequestBuilder_functional_test.cpp"
     "Import/GltfImportFidelity_functional_test.cpp"
     "Import/GltfMeshopt_functional_test.cpp"
@@ -174,7 +175,6 @@ oxygen_cooker_test(
     "Import/SourceLayoutHash_functional_test.cpp"
     "Import/TextureDescriptorImportRequestBuilder_functional_test.cpp"
     "Import/TextureDescriptorImportRequestBuilder_preparation_functional_test.cpp"
-    "Import/SerioFileReader_functional_test.cpp"
     "Import/SourceLimit_functional_test.cpp"
 )
 if(TARGET oxygen-cooker-test-visible-internals)

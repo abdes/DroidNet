@@ -430,7 +430,7 @@ graph TB
 
         IoDriver["serio::IoDriver - owned by ImportEventLoop"]
         ImportStorage["cooked::ImportStorage - PublishAsync / OpenData"]
-        AsyncFileReader["IAsyncFileReader - SerioFileReader"]
+        AsyncFileReader["IAsyncFileReader - FileSourceReader"]
 
         AsyncImporter -->|"creates & schedules"| JobScope
         Emitters -.->|"writes in the job nursery"| ImportStorage

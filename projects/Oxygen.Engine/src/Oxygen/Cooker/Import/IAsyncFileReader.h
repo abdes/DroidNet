@@ -41,7 +41,7 @@ struct ReadOptions {
 /*!
  The import's seam for reading sources: `ImportSourceSnapshot` decorates it to
  record and replay reads, and tests substitute it. Its one implementation,
- `SerioFileReader`, opens each source through the import loop's
+ `FileSourceReader`, opens each source through the import loop's
  `serio::IoDriver`. `GetFileInfo` and `Exists` are file system metadata, not
  bytes, and stay `std::filesystem` queries.
 

@@ -321,7 +321,7 @@ Moves onto it: the loader and its sources (one driver, never null);
 loose index's writers, `Open` maps sharing writes) and its import role
 `ImportStorage` (`PublishAsync`, `OpenData`), which only the real and the
 in-memory storages implement; the import (one driver on its loop,
-`SerioFileReader` behind `IAsyncFileReader`, emitters writing through
+`FileSourceReader` behind `IAsyncFileReader`, emitters writing through
 `CookerStorage` in the session nursery, `std::error_code` errors); the
 verified pak mount (async CRC on the loop); `ScriptQueryService`; the
 texture, buffer, script and physics resources and their producers;

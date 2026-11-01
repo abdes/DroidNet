@@ -753,7 +753,7 @@ has two writers with two error vocabularies.
   builds its own loop, builds its own driver with it.
 - **Source reads stay a port.** `IAsyncFileReader` is the import's seam for
   sources: `ImportSourceSnapshot` decorates it to record and replay reads,
-  and tests substitute it. Its one implementation, `SerioFileReader`, opens
+  and tests substitute it. Its one implementation, `FileSourceReader`, opens
   each source through the driver and awaits `AsyncReadAll` or, for a range,
   `AsyncReadExactlyAt`. `ReadFile` returns a `ByteBuffer`; `ReadOptions`
   keeps `offset` and `max_bytes` and loses the ignored `size_hint` and

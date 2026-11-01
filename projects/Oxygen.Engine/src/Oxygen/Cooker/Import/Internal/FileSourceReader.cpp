@@ -16,7 +16,7 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
-#include <Oxygen/Cooker/Import/Internal/SerioFileReader.h>
+#include <Oxygen/Cooker/Import/Internal/FileSourceReader.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/AsyncDevice.h>
 #include <Oxygen/Serio/ByteBuffer.h>
@@ -35,7 +35,7 @@ namespace {
   }
 } // namespace
 
-SerioFileReader::SerioFileReader(
+FileSourceReader::FileSourceReader(
   serio::IoDriver& driver, const serio::ByteCount source_limit)
   : driver_(make_observer(&driver))
   , source_limit_(source_limit)
@@ -43,9 +43,9 @@ SerioFileReader::SerioFileReader(
   DLOG_F(INFO, "Created");
 }
 
-SerioFileReader::~SerioFileReader() = default;
+FileSourceReader::~FileSourceReader() = default;
 
-auto SerioFileReader::ReadFile(const std::filesystem::path& path,
+auto FileSourceReader::ReadFile(const std::filesystem::path& path,
   const ReadOptions options) -> co::Co<Result<serio::ByteBuffer>>
 {
   if (path.empty()) {
@@ -94,7 +94,7 @@ auto SerioFileReader::ReadFile(const std::filesystem::path& path,
   co_return Ok(std::move(*buffer));
 }
 
-auto SerioFileReader::GetFileInfo(const std::filesystem::path& path)
+auto FileSourceReader::GetFileInfo(const std::filesystem::path& path)
   -> co::Co<Result<FileInfo>>
 {
   if (path.empty()) {
@@ -136,7 +136,7 @@ auto SerioFileReader::GetFileInfo(const std::filesystem::path& path)
   co_return Ok(info);
 }
 
-auto SerioFileReader::Exists(const std::filesystem::path& path)
+auto FileSourceReader::Exists(const std::filesystem::path& path)
   -> co::Co<Result<bool>>
 {
   if (path.empty()) {
@@ -155,7 +155,7 @@ auto SerioFileReader::Exists(const std::filesystem::path& path)
 auto CreateAsyncFileReader(serio::IoDriver& driver,
   const serio::ByteCount source_limit) -> std::unique_ptr<IAsyncFileReader>
 {
-  return std::make_unique<SerioFileReader>(driver, source_limit);
+  return std::make_unique<FileSourceReader>(driver, source_limit);
 }
 
 } // namespace oxygen::content::import
