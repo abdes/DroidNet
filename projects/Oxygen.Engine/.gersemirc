@@ -1,6 +1,10 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/BlankSpruce/gersemi/master/gersemi/configuration.schema.json
 
-definitions: ["cmake"]
+definitions:
+  - cmake
+  # Test helpers defined beside the tests that call them.
+  - src/Oxygen/Cooker/test/Support/CMakeLists.txt
+  - src/Oxygen/Serio/test/CMakeLists.txt
 indent: 2
 line_length: 80
 list_expansion: favour-expansion
