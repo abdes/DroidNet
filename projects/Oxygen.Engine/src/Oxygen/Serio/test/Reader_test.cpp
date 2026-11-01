@@ -24,6 +24,7 @@
 #include <Oxygen/Serio/MemoryFile.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Record.h>
 #include <Oxygen/Serio/Region.h>
 #include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Stream.h>
@@ -46,6 +47,22 @@ using oxygen::serio::testing::FaultInjectingDevice;
 using oxygen::serio::testing::FaultOperation;
 
 using testing::Types;
+
+namespace {
+//! A record declared over a padded layout.
+struct PaddedRecord {
+  uint8_t tag { 0 };
+  uint32_t value { 0 };
+};
+} // namespace
+
+template <> inline constexpr bool oxygen::serio::kIsRecord<PaddedRecord> = true;
+
+// A sequence of a record that fails its layout check never takes the bulk
+// copy: it reaches the record's own Load, whose assertion rejects it.
+static_assert(oxygen::serio::Record<PaddedRecord>);
+static_assert(!oxygen::serio::RecordLayout<PaddedRecord>);
+static_assert(!oxygen::serio::BulkElement<PaddedRecord>);
 
 namespace {
 
@@ -374,6 +391,37 @@ NOLINT_TEST_F(ReaderErrorTest, ReadArray_Fails_WhenTooLarge)
   const auto result = GetReader().Read<std::vector<uint32_t>>();
   EXPECT_FALSE(result);
   EXPECT_EQ(result.error(), Error::kTooLarge);
+}
+
+//! A length whose product with a huge element size passes `uint64_t` is too
+//! large: the check never wraps to a small number.
+NOLINT_TEST_F(ReaderErrorTest, ReadSequenceSize_Fails_WhenProductWraps)
+{
+  WritePod<SequenceSizeType>(2);
+  WritePod<uint64_t>(0);
+  SeekTo(0);
+  auto size = SequenceSizeType { 0 };
+
+  const auto result = GetAnyReader().ReadSequenceSize(
+    size, oxygen::serio::limits::kMaxArrayLength, size_t { 1 } << 63U);
+
+  ASSERT_FALSE(result);
+  EXPECT_EQ(result.error(), Error::kTooLarge);
+  EXPECT_EQ(size, 0U);
+}
+
+//! A vector of non-bulk elements whose length passes the elements the stream
+//! holds fails at the first missing element.
+NOLINT_TEST_F(ReaderErrorTest, ReadArrayOfStrings_Fails_WhenElementsRunOut)
+{
+  WritePod<SequenceSizeType>(3);
+  WriteString("only");
+  SeekTo(0);
+
+  const auto result = GetReader().Read<std::vector<std::string>>();
+
+  ASSERT_FALSE(result);
+  EXPECT_EQ(result.error(), Error::kEndOfData);
 }
 
 //! Fails when reading a POD value if the device fails.

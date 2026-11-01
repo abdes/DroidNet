@@ -8,7 +8,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
+#include <system_error>
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
@@ -185,6 +187,45 @@ NOLINT_TEST(RegionReadStreamShortDeviceTest, ShortDeviceEndsStreamEarly)
   EXPECT_EQ(read.error(), Error::kEndOfData);
 }
 
+//! A stream over a memory file reads the file as it is now: a write that
+//! grows the file after the stream was made moves its storage, and the
+//! stream still reads its region's bytes.
+NOLINT_TEST(RegionReadStreamContiguousTest, ReadsAMemoryFileThatGrew)
+{
+  const auto bytes = PatternBytes(64);
+  auto file = MemoryFile::FromBytes(bytes);
+  ASSERT_HAS_VALUE(file);
+  const auto region = Region<MemoryFile>::Whole(*file);
+  ASSERT_HAS_VALUE(region);
+  auto stream = RegionReadStream<MemoryFile>(*region);
+  auto out = std::vector<std::byte>(bytes.size());
+
+  ASSERT_TRUE(file->WriteAt(ByteOffset { bytes.size() }, PatternBytes(4096)));
+  const auto read = ReadExactly(stream, out);
+
+  ASSERT_TRUE(read) << read.error().message();
+  EXPECT_THAT(out, BytesEqual(bytes));
+}
+
+//! A stream over a memory file whose bytes were taken ends early, as over a
+//! truncated file, instead of reading storage the file no longer has.
+NOLINT_TEST(RegionReadStreamContiguousTest, EndsEarlyOverAnEmptiedMemoryFile)
+{
+  auto file = MemoryFile::FromBytes(PatternBytes(64));
+  ASSERT_HAS_VALUE(file);
+  const auto region = Region<MemoryFile>::Whole(*file);
+  ASSERT_HAS_VALUE(region);
+  auto stream = RegionReadStream<MemoryFile>(*region);
+  auto out = std::vector<std::byte>(16);
+
+  [[maybe_unused]] const auto taken = file->Take();
+  const auto read = ReadExactly(stream, out);
+
+  ASSERT_FALSE(read);
+  EXPECT_EQ(read.error(), Error::kEndOfData);
+  EXPECT_TRUE(region->Bytes().empty());
+}
+
 class RegionWriteStreamTest : public ::testing::Test {
 protected:
   static constexpr ByteCount kBufferSize { 1024 };
@@ -348,6 +389,57 @@ NOLINT_TEST(RegionReadStreamBufferTest, BufferNeverExceedsTheRegion)
   EXPECT_THAT(rest, BytesEqual(std::span(bytes).subspan(201, 99)));
   ASSERT_TRUE(read_past);
   EXPECT_EQ(read_past->get(), 0U);
+}
+
+//! A device that keeps no bytes and accepts every offset, recording the end
+//! of the last write, to drive a stream to the last representable offset.
+struct OffsetRecordingDevice {
+  uint64_t last_end { 0 };
+
+  [[nodiscard]] auto Size() const noexcept -> Result<ByteCount>
+  {
+    return ::oxygen::Ok(ByteCount { 0 });
+  }
+  [[nodiscard]] auto ReadAt(const ByteOffset /*at*/,
+    const std::span<std::byte> /*out*/) const noexcept -> Result<ByteCount>
+  {
+    return ::oxygen::Ok(ByteCount { 0 });
+  }
+  [[nodiscard]] auto WriteAt(const ByteOffset at,
+    const std::span<const std::byte> in) noexcept -> Result<void>
+  {
+    last_end = at.get() + in.size();
+    return {};
+  }
+  [[nodiscard]] auto Reserve(const ByteCount /*size*/) noexcept -> Result<void>
+  {
+    return {};
+  }
+  [[nodiscard]] auto Flush(
+    const oxygen::serio::Durability /*durability*/) noexcept -> Result<void>
+  {
+    return {};
+  }
+};
+
+//! Writes may end exactly at the last offset; one byte more fails with
+//! `value_too_large` and never reaches the device at a wrapped offset.
+NOLINT_TEST(RegionWriteStreamLimitTest, WritePastTheLastOffsetFails)
+{
+  constexpr auto kLast = std::numeric_limits<uint64_t>::max();
+  auto device = OffsetRecordingDevice {};
+  auto stream = RegionWriteStream<OffsetRecordingDevice>(
+    device, ByteOffset { kLast - 4 }, ByteCount { 2 });
+  const auto bytes = PatternBytes(5);
+
+  const auto fits = stream.Write(std::span(bytes).first(4));
+  const auto past = stream.Write(std::span(bytes).subspan(4));
+
+  ASSERT_TRUE(fits) << fits.error().message();
+  EXPECT_EQ(device.last_end, kLast);
+  ASSERT_FALSE(past);
+  EXPECT_EQ(past.error(), std::errc::value_too_large);
+  EXPECT_EQ(stream.Position().get(), 4U);
 }
 
 } // namespace

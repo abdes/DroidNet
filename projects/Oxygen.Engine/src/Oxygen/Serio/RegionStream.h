@@ -8,8 +8,8 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
-#include <optional>
 #include <span>
 #include <utility>
 
@@ -28,10 +28,13 @@ namespace oxygen::serio {
 //! A buffered input stream over a region of a device.
 /*!
  The stream's offsets are relative to the region; `Size()` and `Seek()` cost
- nothing. A contiguous region (memory, a mapped file) has no buffer: reads
- copy straight from its view. Otherwise reads fill a buffer, allocated on the
- first read and never larger than the region, and a read at least as large
- as the buffer goes straight into the caller's span with one `ReadAt`.
+ nothing. A contiguous region (memory, a mapped file) has no buffer: each
+ read is one `ReadAt` of the device into the caller's span, so a mapped file
+ copies under its guard and a memory file that grew or shrank since the
+ stream was made is read as it is now. Otherwise reads fill a buffer,
+ allocated on the first read and never larger than the region, and a read at
+ least as large as the buffer goes straight into the caller's span with one
+ `ReadAt`.
 
  A short device (a file truncated below its region) ends the stream early:
  `ReadSome` returns zero bytes and `ReadExactly` fails with `kEndOfData`.
@@ -48,7 +51,7 @@ public:
   explicit RegionReadStream(const Region<D> region,
     const ByteCount buffer_size = kDefaultBufferSize) noexcept
     : region_(region)
-    , view_(region.Contiguous())
+    , direct_(region.Contiguous().has_value())
     , buffer_size_(static_cast<size_t>(
         (std::min)(buffer_size.get(), region.Range().count.get())))
   {
@@ -68,17 +71,10 @@ public:
     if (want == 0) {
       return ::oxygen::Ok(ByteCount { 0 });
     }
-    if (view_) {
-      std::memcpy(out.data(),
-        view_->subspan(static_cast<size_t>(position_.get()), want).data(),
-        want);
-      position_ += CountOf(want);
-      return ::oxygen::Ok(CountOf(want));
-    }
     if (const auto buffered = CopyBuffered(out.first(want)); buffered != 0) {
       return ::oxygen::Ok(CountOf(buffered));
     }
-    if (want >= buffer_size_) {
+    if (direct_ || want >= buffer_size_) {
       const auto read = region_.ReadAt(position_, out.first(want));
       if (read) {
         position_ += *read;
@@ -153,7 +149,8 @@ private:
   }
 
   Region<D> region_;
-  std::optional<std::span<const std::byte>> view_;
+  //! The region is contiguous: reads skip the buffer.
+  bool direct_;
   size_t buffer_size_;
   ByteBuffer buffer_;
   ByteOffset buffer_start_ { 0 };
@@ -195,7 +192,9 @@ template <ReadableDevice D>
  device with `WriteAt` when it fills and on `Flush()`; a write at least as
  large as the buffer goes straight to the device. `Position()` counts the
  bytes written since `start`. `PatchAt` overwrites bytes already written,
- buffered or not, without moving the cursor.
+ buffered or not, without moving the cursor. A write whose device offsets
+ would pass the largest offset fails with `value_too_large` and writes
+ nothing.
 
  `Flush()` hands bytes to the device only; durability is the device's
  `Flush(Durability)`. A stream destroyed with buffered bytes flushes them and
@@ -248,6 +247,11 @@ public:
   {
     if (in.empty()) {
       return {};
+    }
+    if (const auto range = ByteRange::Make(
+          start_ + ByteCount { Position().get() }, CountOf(in.size()));
+      !range) {
+      return ::oxygen::Err(range.error());
     }
     if (in.size() >= buffer_size_) {
       CHECK_RESULT(Flush());

@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -19,6 +20,7 @@
 #include <Oxygen/Scripting/IScriptSourceResolver.h>
 #include <Oxygen/Scripting/Resolver/ExternalFileResolver.h>
 #include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/Error.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Types.h>
 
@@ -159,13 +161,17 @@ auto ExternalFileResolver::Resolve(
     };
   }
 
-  auto bytes = serio::ReadAll(*file);
+  auto bytes = serio::ReadAll(
+    *file, serio::ByteCount { data::pak::scripting::kMaxScriptBytes });
   if (!bytes) {
     return IScriptSourceResolver::ResolveResult {
       .ok = false,
       .blob = {},
-      .error_message
-      = "failed while reading external source file: " + full_path.string(),
+      .error_message = bytes.error() == serio::Error::kTooLarge
+        ? "external source file is larger than "
+          + std::to_string(data::pak::scripting::kMaxScriptBytes)
+          + " bytes: " + full_path.string()
+        : "failed while reading external source file: " + full_path.string(),
     };
   }
 

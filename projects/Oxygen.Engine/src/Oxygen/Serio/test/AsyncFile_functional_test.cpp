@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -46,6 +47,11 @@
 #ifdef OXYGEN_WINDOWS
 #  include <Windows.h> // IWYU pragma: keep
 #endif
+
+// A driver moves by construction, which keeps its files' state; assigning
+// over a driver would destroy that state under them.
+static_assert(std::is_move_constructible_v<oxygen::serio::IoDriver>);
+static_assert(!std::is_move_assignable_v<oxygen::serio::IoDriver>);
 
 namespace {
 

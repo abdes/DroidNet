@@ -6,8 +6,10 @@
 
 // Covers: Serio/MemoryFile.h, Serio/MemoryFile.cpp
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -73,6 +75,41 @@ NOLINT_TEST_F(MemoryFileTest, GrowthKeepsContent)
   ASSERT_TRUE(file.WriteAt(ByteOffset { 10 }, std::span(bytes_).subspan(10)));
 
   EXPECT_THAT(file.Bytes(), BytesEqual(bytes_));
+}
+
+//! A write of the file's own bytes that grows the storage copies them
+//! before the old storage is released.
+NOLINT_TEST_F(MemoryFileTest, WriteOfItsOwnBytesThatGrowsKeepsThem)
+{
+  auto file = MemoryFile {};
+  ASSERT_TRUE(file.WriteAt(ByteOffset { 0 }, bytes_));
+  auto expected = bytes_;
+  expected.insert(expected.end(), bytes_.begin(), bytes_.end());
+
+  ASSERT_TRUE(file.WriteAt(ByteOffset { bytes_.size() }, file.Bytes()));
+
+  EXPECT_THAT(file.Bytes(), BytesEqual(expected));
+}
+
+//! A write of the file's own bytes over an overlapping range moves them as
+//! one copy, in either direction.
+NOLINT_TEST_F(MemoryFileTest, OverlappingWriteOfItsOwnBytesMovesThem)
+{
+  auto forward = MemoryFile {};
+  ASSERT_TRUE(forward.WriteAt(ByteOffset { 0 }, bytes_));
+  auto backward = MemoryFile {};
+  ASSERT_TRUE(backward.WriteAt(ByteOffset { 0 }, bytes_));
+  auto moved_up = bytes_;
+  std::ranges::copy(std::span(bytes_).first(200), moved_up.begin() + 100);
+  auto moved_down = bytes_;
+  std::ranges::copy(std::span(bytes_).subspan(100), moved_down.begin());
+
+  ASSERT_TRUE(forward.WriteAt(ByteOffset { 100 }, forward.Bytes().first(200)));
+  ASSERT_TRUE(
+    backward.WriteAt(ByteOffset { 0 }, backward.Bytes().subspan(100)));
+
+  EXPECT_THAT(forward.Bytes(), BytesEqual(moved_up));
+  EXPECT_THAT(backward.Bytes(), BytesEqual(moved_down));
 }
 
 //! A moved-from file is empty and usable.

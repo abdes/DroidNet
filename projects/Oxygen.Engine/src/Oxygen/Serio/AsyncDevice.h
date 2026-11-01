@@ -38,17 +38,23 @@ template <AsyncReadableDevice D>
   co_return Result<void> {};
 }
 
-//! `ReadAll`, awaiting each read.
+//! `ReadAll`, awaiting each read; a device larger than `limit` is refused
+//! before anything is allocated.
 /*!
- @return The buffer, `Size()` bytes long; `kEndOfData` when the device ends
-         before its size, the allocation's or the device's errors otherwise.
+ @return The buffer, `Size()` bytes long; `kTooLarge` when the size passes
+         `limit`; `kEndOfData` when the device ends before its size, the
+         allocation's or the device's errors otherwise.
 */
 template <AsyncReadableDevice D>
-[[nodiscard]] auto AsyncReadAll(const D& device) -> co::Co<Result<ByteBuffer>>
+[[nodiscard]] auto AsyncReadAll(const D& device, const ByteCount limit)
+  -> co::Co<Result<ByteBuffer>>
 {
   const auto size = device.Size();
   if (!size) {
     co_return ::oxygen::Err(size.error());
+  }
+  if (*size > limit) {
+    co_return ::oxygen::Err(make_error_code(Error::kTooLarge));
   }
   auto buffer = ByteBuffer::Allocate(*size);
   if (!buffer) {

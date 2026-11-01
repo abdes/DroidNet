@@ -11,7 +11,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <limits>
 #include <new>
 #include <optional>
 #include <span>
@@ -36,10 +35,6 @@
 
 namespace oxygen::serio {
 namespace {
-
-  //! The largest transfer one `ReadFile`/`WriteFile` call takes.
-  constexpr auto kMaxTransfer
-    = static_cast<size_t>(std::numeric_limits<DWORD>::max());
 
   auto DesiredAccess(const Access access) noexcept -> DWORD
   {
@@ -211,14 +206,18 @@ auto NativeFile::OpenForDriver(const std::filesystem::path& path,
 auto NativeFile::Adopt(const std::filesystem::path& path,
   const Result<NativeHandle>& handle) noexcept -> Result<NativeFile>
 {
+  if (!handle) {
+    return ::oxygen::Err(handle.error());
+  }
+  // The file owns the handle before anything can throw, so a failed path
+  // copy closes it.
+  auto file = NativeFile(*handle, {});
   try {
-    if (!handle) {
-      return ::oxygen::Err(handle.error());
-    }
-    return ::oxygen::Ok(NativeFile(*handle, path));
+    file.path_ = path;
   } catch (const std::bad_alloc&) {
     return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
   }
+  return ::oxygen::Ok(std::move(file));
 }
 
 NativeFile::NativeFile(
@@ -271,7 +270,7 @@ namespace detail {
     auto total = ByteCount { 0 };
     while (!out.empty()) {
       const auto request
-        = static_cast<DWORD>((std::min)(out.size(), kMaxTransfer));
+        = static_cast<DWORD>((std::min)(out.size(), windows::kMaxTransfer));
       auto overlapped = BlockingOverlapped(at);
       if (!overlapped) {
         return ::oxygen::Err(overlapped.error());
@@ -304,7 +303,7 @@ namespace detail {
   {
     while (!in.empty()) {
       const auto request
-        = static_cast<DWORD>((std::min)(in.size(), kMaxTransfer));
+        = static_cast<DWORD>((std::min)(in.size(), windows::kMaxTransfer));
       auto overlapped = BlockingOverlapped(at);
       if (!overlapped) {
         return ::oxygen::Err(overlapped.error());
@@ -344,10 +343,24 @@ auto NativeFile::WriteAt(ByteOffset at, std::span<const std::byte> in) noexcept
 
 auto NativeFile::Reserve(const ByteCount size) noexcept -> Result<void>
 {
+  // An allocation below the end of file moves the end of file down to it, so
+  // only a reservation past both the allocation and the end is applied.
+  auto* const handle = windows::ToHandle(handle_);
+  auto standard = FILE_STANDARD_INFO {};
+  if (GetFileInformationByHandleEx(
+        handle, FileStandardInfo, &standard, sizeof(standard))
+    == FALSE) {
+    return ::oxygen::Err(base::LastSystemError());
+  }
+  const auto requested = static_cast<LONGLONG>(size.get());
+  if (requested <= (std::max)(standard.AllocationSize.QuadPart,
+        standard.EndOfFile.QuadPart)) {
+    return {};
+  }
   auto info = FILE_ALLOCATION_INFO {};
-  info.AllocationSize.QuadPart = static_cast<LONGLONG>(size.get());
+  info.AllocationSize.QuadPart = requested;
   if (SetFileInformationByHandle(
-        windows::ToHandle(handle_), FileAllocationInfo, &info, sizeof(info))
+        handle, FileAllocationInfo, &info, sizeof(info))
     == FALSE) {
     return ::oxygen::Err(base::LastSystemError());
   }

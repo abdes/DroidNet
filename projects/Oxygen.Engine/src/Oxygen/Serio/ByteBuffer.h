@@ -15,6 +15,7 @@
 #include <new>
 #include <span>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 
 #include <Oxygen/Base/Macros.h>
@@ -34,6 +35,10 @@ namespace detail {
     }
   };
 } // namespace detail
+
+// The views below are allowed aliasing only while `uint8_t` is a character
+// type, which C++ does not guarantee.
+static_assert(std::is_same_v<uint8_t, unsigned char>);
 
 //! `bytes` as unsigned bytes, for APIs that take `uint8_t`.
 /*!

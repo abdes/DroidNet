@@ -6,9 +6,9 @@
 
 // Covers: Serio/Operation.h, Serio/AsyncDevice.h, Serio/AsyncFile.h,
 // Serio/AnyDevice.h (AnyAsyncDevice), Serio/Region.h,
-// Serio/test/Support/AsyncDeviceConformance.h
+// Serio/test/Conformance/AsyncDeviceConformance.h
 
-#include "Support/AsyncDeviceConformance.h"
+#include "Conformance/AsyncDeviceConformance.h"
 #include "Support/DeviceFactories.h"
 #include "gtest/gtest.h"
 

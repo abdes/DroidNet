@@ -7,17 +7,32 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <system_error>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::serio::detail {
 
 //! Gives `temporary` the access permissions of `destination`, so a
-//! replacement keeps them. A missing destination has none to give.
+//! replacement keeps them, made as durable as `durability` asks. A missing
+//! destination has none to give; any other failure to read them is an error.
 //! Platform code.
 [[nodiscard]] auto CopyAccessControl(const std::filesystem::path& destination,
-  const std::filesystem::path& temporary) noexcept -> Result<void>;
+  const std::filesystem::path& temporary, Durability durability) noexcept
+  -> Result<void>;
+
+//! The folders a move of `from` to `to` changes: the destination's, and the
+//! source's when it is another folder. Both are flushed for a stable move.
+struct MovedFolders {
+  std::filesystem::path destination;
+  std::optional<std::filesystem::path> source;
+};
+
+//! The folders `MoveFileOver` flushes, from absolute paths.
+[[nodiscard]] auto FoldersOf(const std::filesystem::path& from,
+  const std::filesystem::path& to) -> MovedFolders;
 
 //! The error a failed move of `from` over `to` reports: `kIsDirectory` when
 //! either names a folder, `error` otherwise. Classified after the failure, so

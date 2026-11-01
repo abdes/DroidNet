@@ -208,9 +208,10 @@ concept ContiguousDevice = ReadableDevice<D> && requires(const D& d) {
 - **Free algorithms, not members,** build on the concepts once:
   `ReadExactlyAt(device, at, out)` (fails with `kEndOfData`) works for every
   device. `WriteAt` already writes all of its bytes or fails, so it needs no
-  `WriteAllAt` counterpart. `ReadAll(device)` reads a whole device or region
-  into a new `ByteBuffer` of its size, failing with `kEndOfData` when the
-  device ends first, and `AsyncReadAll` is its awaitable form; they replace every hand-written allocate-and-read.
+  `WriteAllAt` counterpart. `ReadAll(device, limit)` reads a whole device or
+  region into a new `ByteBuffer` of its size, failing with `kTooLarge`
+  before allocating when the size passes the caller's `limit` and with
+  `kEndOfData` when the device ends first, and `AsyncReadAll` is its awaitable form; they replace every hand-written allocate-and-read.
 - **Opening is a static factory** returning `Result<Device>`:
   `NativeFile::Open(path, OpenSpec)`, `MappedFile::Open(path)`. A constructor
   never fails.
@@ -445,6 +446,13 @@ concept OutputStream = requires(S& s, std::span<const std::byte> in) {
   allocates `min(buffer_size, region count)`, so reading a 200-byte
   descriptor allocates 200 bytes, not 64 KiB, and no caller sizes the buffer
   itself. A write stream has no region, so its buffer stays the size asked.
+- **A contiguous region is read through its device.** A read stream over
+  memory or a mapped file has no buffer, and each read is one `ReadAt` of the
+  device into the caller's span, never a copy from a view the stream kept: a
+  mapped file copies under its fault guard, and a memory file that grew or
+  shrank since the stream was made is read as it is now. A write stream
+  refuses (`value_too_large`) a write whose device offsets would pass the
+  largest offset, as `CountingSink` refuses a count that would.
 - **Patching is positional, not a seek.** An output stream has no `Seek`. A
   writer that completes a header once its content is known overwrites bytes
   it already wrote with `PatchAt(ByteOffset, bytes)`: buffered bytes in the
@@ -517,10 +525,13 @@ modules ([scope and layering](README.md#scope-and-layering)).
      (`RecordLayout`): trivially copyable, without padding (packed to one
      byte, or with a unique object representation, which a struct with
      floating-point members never has) and a little-endian target.
-     `LoadRecord` and `StoreRecord` are the copy itself: a type that checks
-     its values after reading them is not declared a record, so a sequence of
-     it never skips the check, and its own hook calls `LoadRecord`, then
-     checks.
+     `LoadRecord` and `StoreRecord` are the copy itself. A record is a raw
+     wire layout: Serio never checks its values, alone or in a sequence, and
+     the code that uses a field decides whether to check it. A type that must
+     be checked on every read is not declared a record; its own hook calls
+     `LoadRecord`, then checks. The layout check does not reach nested
+     members, so a nested struct is itself packed or has a unique object
+     representation.
   2. **Sequences:** a `vector`, `array` or `span` of records or arithmetic
      elements (`BulkElement`) moves as its count, one alignment and one copy;
      other elements one by one. The count is checked against the bytes that
@@ -550,7 +561,7 @@ modules ([scope and layering](README.md#scope-and-layering)).
 
   ```cpp
   //! Reads a region; positions are relative to it and every read is
-  //! bounded by it. A contiguous region is read from its view.
+  //! bounded by it. A contiguous region is read through its device.
   template <ReadableDevice D> class RegionReader final : public AnyReader {
   public:
     //! Views `region`, whose device outlives the reader.
@@ -608,9 +619,16 @@ struct FileReplacement {
   return the same `FileReplacement`; `AtomicFileCommit` is deleted.
 - **Errors come from the move, not from checks before it.** A missing `from`
   fails with `kNotFound`; a folder at `from` or `to` fails with
-  `kIsDirectory`, which the platform code classifies after the move failed,
-  so nothing is checked and then acted on. `CookerStorage::Move` is
-  `MoveFileOver`, and its contract names these conditions.
+  `kIsDirectory`, which the platform code classifies after the move failed.
+  The one check before the move is POSIX's: `rename(2)` moves a folder to a
+  free name, so a folder source is refused first. The source is the caller's
+  own file, so nothing replaces it between the check and the move.
+  `CookerStorage::Move` is `MoveFileOver`, and its contract names these
+  conditions.
+- **A stable move flushes every folder it changes.** The destination's
+  folder, and the source's when the move crosses folders. The permission copy
+  is made through a handle that flushes it too, so the metadata changed after
+  the data flush is as durable as the data.
 - **The code is platform code.** The Windows rename moves out of
   `AtomicFile.cpp` into `Platform/Windows/MoveFileOver.cpp`, and the POSIX
   one into `Platform/Posix/`; `AtomicFile.cpp` has no `#if` on the platform.
@@ -637,7 +655,7 @@ open_mode)` blocks until the lock is granted (`LockFileEx` without
   category and the `std::is_error_condition_enum` specialization: Serio's own
   codes (`kEndOfData`, `kOutOfBounds`, `kTooLarge`, `kDigestMismatch`) and the
   conditions OS codes map to (`kNotFound`, `kAccessDenied`,
-  `kSharingViolation`, `kNoSpace`, `kIsDirectory`, `kIo`).
+  `kSharingViolation`, `kNoSpace`, `kIsDirectory`, `kPathTooLong`, `kIo`).
 - `Error` is a condition enumeration only. With `std::is_error_code_enum` as
   well, `code == Error::kNotFound` would be ambiguous between the code and the
   condition comparison. Serio makes its own codes explicitly with

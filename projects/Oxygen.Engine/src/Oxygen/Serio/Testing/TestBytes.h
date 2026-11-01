@@ -26,15 +26,28 @@ enum class PatternSeed : uint8_t {
   kSecond = 101,
 };
 
-//! Deterministic test bytes in which no two nearby offsets hold the same
-//! value, so a read from a wrong offset never passes by accident.
+namespace detail {
+  //! A key for the 256-byte block `block` (the SplitMix64 finalizer), so
+  //! blocks differ and the pattern has no period.
+  [[nodiscard]] constexpr auto BlockKey(const size_t block) noexcept -> uint8_t
+  {
+    auto mixed = static_cast<uint64_t>(block) + 0x9E37'79B9'7F4A'7C15ULL;
+    mixed = (mixed ^ (mixed >> 30U)) * 0xBF58'476D'1CE4'E5B9ULL;
+    mixed = (mixed ^ (mixed >> 27U)) * 0x94D0'49BB'1331'11EBULL;
+    return static_cast<uint8_t>((mixed ^ (mixed >> 31U)) & 0xFFU);
+  }
+} // namespace detail
+
+//! Deterministic test bytes in which no two offsets of one 256-byte block
+//! hold the same value and blocks differ, so a read from a wrong offset, a
+//! multiple of 256 away included, never passes by accident.
 [[nodiscard]] inline auto PatternBytes(const size_t size,
   const PatternSeed seed = PatternSeed::kFirst) -> std::vector<std::byte>
 {
   auto bytes = std::vector<std::byte>(size);
   for (size_t i = 0; i < size; ++i) {
-    bytes[i] = static_cast<std::byte>(
-      ((i * 31U) + 7U + static_cast<uint8_t>(seed)) & 0xFFU);
+    const auto in_block = ((i * 31U) + 7U + static_cast<uint8_t>(seed)) & 0xFFU;
+    bytes[i] = static_cast<std::byte>(in_block ^ detail::BlockKey(i / 256U));
   }
   return bytes;
 }

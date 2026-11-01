@@ -28,7 +28,10 @@ namespace oxygen::serio {
  the adopting constructor takes a buffer the same way.
 
  `const` operations are safe from any number of threads at once; a write must
- not run concurrently with any other operation.
+ not run concurrently with any other operation. A transfer may view the
+ file's own bytes (`file.WriteAt(at, file.Bytes())`), overlapping or not.
+ `Bytes()` stays valid until the next `WriteAt` or `Reserve` that grows the
+ storage, or `Take()`.
 */
 class MemoryFile {
 public:
@@ -109,8 +112,10 @@ public:
   OXGN_SERIO_NDAPI auto Take() noexcept -> ByteBuffer;
 
 private:
-  //! Grows the storage to at least `capacity` bytes, keeping its content.
-  auto Grow(size_t capacity) noexcept -> Result<void>;
+  //! A storage of `capacity` bytes holding a copy of the content; the
+  //! file's own storage is left as it is.
+  [[nodiscard]] auto Grown(size_t capacity) const noexcept
+    -> Result<ByteBuffer>;
 
   ByteBuffer storage_;
   size_t size_ { 0 };

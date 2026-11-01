@@ -43,7 +43,9 @@ namespace oxygen::serio {
  that has no loop. Only a driver makes a file awaitable: a consumer that
  awaits reads always holds one, and never wraps a blocking device to make it
  look awaitable. The driver outlives the files it opens, and the loop
- outlives the driver.
+ outlives the driver. A driver moves only by construction, which keeps the
+ state its files point to; it cannot be assigned over, which would destroy
+ that state under them.
 
  ```cpp
  asio::io_context loop;
@@ -78,7 +80,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(IoDriver)
 
   OXGN_SERIO_API IoDriver(IoDriver&& other) noexcept;
-  OXGN_SERIO_API auto operator=(IoDriver&& other) noexcept -> IoDriver&;
+  auto operator=(IoDriver&& other) noexcept -> IoDriver& = delete;
 
   //! Opens the file at `path` as `spec` describes, bound to this driver.
   /*!

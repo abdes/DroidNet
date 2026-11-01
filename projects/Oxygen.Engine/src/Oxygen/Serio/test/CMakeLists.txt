@@ -58,8 +58,8 @@ endfunction()
 oxygen_serio_test(
   Unit
   SOURCES
+    "Conformance/StreamConformance.h"
     "Support/DeviceFactories.h"
-    "Support/StreamConformance.h"
     "Support/StreamFactories.h"
     "AnyDevice_test.cpp"
     "ByteBuffer_test.cpp"
@@ -86,10 +86,10 @@ oxygen_serio_test(
 oxygen_serio_test(
   Functional
   SOURCES
-    "Support/AsyncDeviceConformance.h"
-    "Support/DeviceConformance.h"
+    "Conformance/AsyncDeviceConformance.h"
+    "Conformance/DeviceConformance.h"
+    "Conformance/StreamConformance.h"
     "Support/DeviceFactories.h"
-    "Support/StreamConformance.h"
     "Support/StreamFactories.h"
     "AsyncDeviceConformance_functional_test.cpp"
     "AsyncFile_functional_test.cpp"

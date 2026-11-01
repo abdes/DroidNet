@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <limits>
 #include <memory>
 #include <new>
 #include <span>
@@ -37,10 +36,6 @@ namespace {
   {
     return std::span(buffer, request.size).subspan(request.done);
   }
-
-  //! The largest transfer one `ReadFile`/`WriteFile` call takes.
-  constexpr auto kMaxTransfer
-    = static_cast<size_t>(std::numeric_limits<DWORD>::max());
 
   auto Resume(IoRequest& request) noexcept -> void
   {
@@ -126,7 +121,7 @@ auto IocpBackend::Issue(IoRequest& request) noexcept -> bool
     overlapped->Offset = static_cast<DWORD>(at & 0xFFFF'FFFFU);
     overlapped->OffsetHigh = static_cast<DWORD>(at >> 32U);
     const auto chunk = static_cast<DWORD>(
-      (std::min)(request.size - request.done, kMaxTransfer));
+      (std::min)(request.size - request.done, windows::kMaxTransfer));
     auto* const handle = windows::ToHandle(request.target.handle);
     const auto started = request.kind == IoKind::kRead
       ? ReadFile(handle, Remaining(request.read_into, request).data(), chunk,

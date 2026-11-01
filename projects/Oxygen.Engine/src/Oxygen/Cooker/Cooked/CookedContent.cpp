@@ -134,7 +134,8 @@ namespace {
         continue;
       }
       const auto table_path = root / table.relative_path;
-      const auto rows = serio::ReadAll(OpenFile(storage, table_path));
+      const auto rows = serio::ReadAll(
+        OpenFile(storage, table_path), serio::ByteCount { table.size });
       if (!rows) {
         throw Unreadable(table_path);
       }

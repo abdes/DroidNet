@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/OxCo/Co.h>
@@ -70,7 +71,15 @@ namespace {
       }
       auto writer = std::move(*writer_);
       writer_.reset();
-      CHECK_RESULT(std::move(writer).Commit());
+      const auto replaced = std::move(writer).Commit();
+      if (!replaced) {
+        return ::oxygen::Err(replaced.error());
+      }
+      // Published, so the commit succeeded; only its durability is unknown.
+      if (replaced->durability_error) {
+        LOG_F(WARNING, "Cooked file committed; directory durability failed: {}",
+          replaced->durability_error.message());
+      }
       return {};
     }
 

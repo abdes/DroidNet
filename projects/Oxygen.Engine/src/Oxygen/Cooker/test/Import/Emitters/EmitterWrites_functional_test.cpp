@@ -131,7 +131,7 @@ NOLINT_TEST_F(EmitterWritesTest, PublishAsyncLeavesAnOpenReaderTheOldBytes)
   const auto published = Publish(storage, path, BytesOf("new"));
 
   ASSERT_TRUE(published);
-  const auto seen = serio::ReadAll(*reader);
+  const auto seen = serio::ReadAll(*reader, serio::ByteCount { 1024 });
   ASSERT_TRUE(seen);
   EXPECT_EQ(std::vector<std::byte>(seen->Bytes().begin(), seen->Bytes().end()),
     old_bytes);

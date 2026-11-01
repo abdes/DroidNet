@@ -32,10 +32,26 @@ namespace oxygen::serio {
 */
 class CountingSink {
 public:
+  //! A sink with nothing counted.
+  CountingSink() noexcept = default;
+
+  //! A sink that starts with `counted` bytes counted: the measure of a value
+  //! written after a prefix of known size, at the offset it will have.
+  explicit CountingSink(const ByteCount counted) noexcept
+    : count_(counted)
+  {
+  }
+
+  //! Counts `in`; `value_too_large` when the count would pass the largest
+  //! offset.
   [[nodiscard]] auto Write(const std::span<const std::byte> in) noexcept
     -> Result<void>
   {
-    count_ += CountOf(in.size());
+    const auto range = ByteRange::Make(Position(), CountOf(in.size()));
+    if (!range) {
+      return ::oxygen::Err(range.error());
+    }
+    count_ = ByteCount { range->End().get() };
     return {};
   }
 

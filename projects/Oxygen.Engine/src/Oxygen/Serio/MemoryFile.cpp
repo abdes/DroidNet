@@ -52,7 +52,8 @@ auto MemoryFile::ReadAt(const ByteOffset at,
   const auto offset = static_cast<size_t>(at.get());
   const auto count = (std::min)(out.size(), size_ - offset);
   if (count != 0) {
-    std::memcpy(
+    // `out` may view this file's own bytes.
+    std::memmove(
       out.data(), storage_.Bytes().subspan(offset, count).data(), count);
   }
   return ::oxygen::Ok(CountOf(count));
@@ -69,14 +70,24 @@ auto MemoryFile::WriteAt(const ByteOffset at,
   }
   const auto offset = static_cast<size_t>(at.get());
   const auto end = offset + in.size();
+  // `in` may view this file's own bytes: a grown storage replaces the old one
+  // only once `in` is copied, and a move within one storage may overlap.
+  auto grown = ByteBuffer {};
   if (end > static_cast<size_t>(storage_.Size().get())) {
-    CHECK_RESULT(Grow((std::max)(end, 2 * size_)));
+    auto copy = Grown((std::max)(end, 2 * size_));
+    if (const auto* error = copy.error_if()) {
+      return ::oxygen::Err(*error);
+    }
+    grown = std::move(*copy.value_if());
   }
-  auto bytes = storage_.Bytes();
+  auto bytes = grown.Empty() ? storage_.Bytes() : grown.Bytes();
   if (offset > size_) {
     std::memset(bytes.subspan(size_).data(), 0, offset - size_);
   }
-  std::memcpy(bytes.subspan(offset).data(), in.data(), in.size());
+  std::memmove(bytes.subspan(offset).data(), in.data(), in.size());
+  if (!grown.Empty()) {
+    storage_ = std::move(grown);
+  }
   size_ = (std::max)(size_, end);
   return {};
 }
@@ -89,7 +100,12 @@ auto MemoryFile::Reserve(const ByteCount size) noexcept -> Result<void>
   if (size.get() <= storage_.Size().get()) {
     return {};
   }
-  return Grow(static_cast<size_t>(size.get()));
+  auto grown = Grown(static_cast<size_t>(size.get()));
+  if (const auto* error = grown.error_if()) {
+    return ::oxygen::Err(*error);
+  }
+  storage_ = std::move(*grown.value_if());
+  return {};
 }
 
 auto MemoryFile::Take() noexcept -> ByteBuffer
@@ -99,7 +115,8 @@ auto MemoryFile::Take() noexcept -> ByteBuffer
   return std::move(storage_);
 }
 
-auto MemoryFile::Grow(const size_t capacity) noexcept -> Result<void>
+auto MemoryFile::Grown(const size_t capacity) const noexcept
+  -> Result<ByteBuffer>
 {
   auto grown = ByteBuffer::Allocate(CountOf(capacity), kMemoryAlignment);
   if (const auto* error = grown.error_if()) {
@@ -109,8 +126,7 @@ auto MemoryFile::Grow(const size_t capacity) noexcept -> Result<void>
     std::memcpy(
       grown.value_if()->Bytes().data(), storage_.Bytes().data(), size_);
   }
-  storage_ = std::move(*grown.value_if());
-  return {};
+  return grown;
 }
 
 } // namespace oxygen::serio

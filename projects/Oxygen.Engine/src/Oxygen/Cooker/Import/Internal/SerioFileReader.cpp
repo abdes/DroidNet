@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/Internal/SerioFileReader.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/AsyncDevice.h>
@@ -62,7 +63,7 @@ auto SerioFileReader::ReadFile(const std::filesystem::path& path,
   }
 
   if (options.offset == 0 && options.max_bytes == 0) {
-    co_return co_await serio::AsyncReadAll(*file);
+    co_return co_await serio::AsyncReadAll(*file, kDefaultMaxSourceBytes);
   }
 
   const auto size = file->Size();

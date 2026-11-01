@@ -23,6 +23,7 @@
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
@@ -118,7 +119,8 @@ namespace {
     auto by_index = std::unordered_map<uint32_t, std::string> {};
     for (const auto& path : sidecar_paths) {
       // A sidecar another import is replacing is read as it was opened.
-      const auto bytes = serio::ReadPublishedFile(path);
+      const auto bytes
+        = serio::ReadPublishedFile(path, kMaxImportMetadataBytes);
       if (!bytes.has_value()) {
         continue;
       }

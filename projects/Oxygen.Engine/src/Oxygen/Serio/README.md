@@ -13,7 +13,7 @@ API design is [serio-io/api.md](../../../design/proposals/serio-io/api.md).
 | Await reads and writes of a file      | `driver.Open(path, spec)`, an `AsyncFile`                             |
 | Await without an event loop           | `IoDriver::CreateInline()`: the awaiting thread blocks                |
 | Bytes in memory as a device           | `MemoryFile`, `ByteView`, both awaitable by themselves                |
-| Read a whole device into a buffer     | `ReadAll(device)`, `co_await AsyncReadAll(device)`                    |
+| Read a whole device into a buffer     | `ReadAll(device, limit)`, `co_await AsyncReadAll(device, limit)`      |
 | Own payload bytes                     | `ByteBuffer`: `Allocate`, `CopyOf`, `Unsigned()`                      |
 | Read or write values of a region      | `RegionReader<D>`, `RegionWriter<D>` (an `AnyReader`/`AnyWriter`)     |
 | Hash a device or region               | `Hash<H...>`, `ComputeSha256`, `ComputeCrc32`, `AsyncHash`            |

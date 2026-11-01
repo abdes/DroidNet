@@ -29,6 +29,7 @@ constexpr auto kAllErrors = std::array {
   Error::kNoSpace,
   Error::kIo,
   Error::kIsDirectory,
+  Error::kPathTooLong,
 };
 
 //! One Serio error value per test.
@@ -87,6 +88,25 @@ NOLINT_TEST(SerioErrorTest, IsDirectoryMatchesTheGenericCode)
     std::make_error_code(std::errc::is_a_directory), Error::kIsDirectory);
   EXPECT_EQ(code.message(), "is a directory");
   EXPECT_NE(std::make_error_code(std::errc::is_a_directory), Error::kIo);
+}
+
+//! A path longer than allowed is kPathTooLong, as a generic code and as the
+//! platform's own.
+NOLINT_TEST(SerioErrorTest, PathTooLongMatchesGenericAndSystemCodes)
+{
+#ifdef _WIN32
+  constexpr auto kSystemCode = 206; // ERROR_FILENAME_EXCED_RANGE
+#else
+  constexpr auto kSystemCode = ENAMETOOLONG;
+#endif
+
+  EXPECT_EQ(
+    std::make_error_code(std::errc::filename_too_long), Error::kPathTooLong);
+  EXPECT_EQ(
+    std::error_code(kSystemCode, std::system_category()), Error::kPathTooLong);
+  EXPECT_EQ(make_error_code(Error::kPathTooLong).message(), "path too long");
+  EXPECT_NE(
+    std::make_error_code(std::errc::filename_too_long), Error::kNotFound);
 }
 
 } // namespace

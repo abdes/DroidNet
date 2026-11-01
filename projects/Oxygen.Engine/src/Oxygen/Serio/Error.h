@@ -44,10 +44,13 @@ enum class Error : uint8_t {
   kDigestMismatch, //!< Bytes read do not match their expected digest.
   kNotFound, //!< The file or a directory of its path does not exist.
   kAccessDenied, //!< The caller may not open or modify the file.
-  kSharingViolation, //!< Another handle's sharing mode refuses the open.
+  //! Another handle's sharing mode, or its lock on the bytes, refuses the
+  //! operation.
+  kSharingViolation,
   kNoSpace, //!< The volume or the caller's quota is full.
   kIo, //!< The device failed to read or write.
   kIsDirectory, //!< The path names a folder where a file is needed.
+  kPathTooLong, //!< The path or one of its names is longer than allowed.
 };
 
 //! The category of `serio::Error` codes and conditions.

@@ -191,13 +191,12 @@ private:
 
 //=== Store specializations ===-----------------------------------------------//
 
-//! Serializes an integral value (except bool) as binary with platform
-//! endianness.
+//! Serializes an integral value (except bool) as little-endian binary.
 /*!
- Encodes the value as a contiguous sequence of bytes, using the platform's
- endianness (little-endian on most systems; bytes are swapped if needed). The
- value is by default aligned in the stream according to its natural alignment,
- unless a specific packing directive is currently set with `ScopedAlignment()`.
+ Encodes the value as a contiguous sequence of little-endian bytes, swapped
+ on a big-endian target. The value is by default aligned in the stream according
+ to its natural alignment, unless a specific packing directive is currently set
+ with `ScopedAlignment()`.
 
  @tparam T Integral type (not bool)
  @param writer Writer to serialize to
@@ -207,7 +206,7 @@ private:
  @see Store, AnyWriter
 */
 template <typename T>
-auto Store(AnyWriter& writer, T value) -> Result<void>
+[[nodiscard]] auto Store(AnyWriter& writer, T value) -> Result<void>
   requires(std::is_integral_v<T> && !std::is_same_v<T, bool>)
 {
   static_assert(std::is_trivially_copyable_v<T>,
@@ -218,18 +217,15 @@ auto Store(AnyWriter& writer, T value) -> Result<void>
   if (!IsLittleEndian() && sizeof(T) > 1) {
     value = ByteSwap(value);
   }
-  return writer.WriteBlob(
-    // NOLINTNEXTLINE(*-reinterpret-cast)
-    std::span(reinterpret_cast<const std::byte*>(&value), sizeof(T)));
+  return writer.WriteBlob(std::as_bytes(std::span { &value, 1 }));
 }
 
-//! Serializes a floating-point value as binary with platform endianness.
+//! Serializes a floating-point value as little-endian IEEE-754 binary.
 /*!
- Encodes the value as a contiguous sequence of bytes in IEEE-754 binary format,
- using the platform's endianness (little-endian on most systems; bytes are
- swapped if needed). The value is aligned in the stream according to its natural
- alignment, unless a specific packing directive is currently set with
- `ScopedAlignment()`.
+ Encodes the value as a contiguous sequence of little-endian bytes in
+ IEEE-754 binary format, swapped on a big-endian target. The value is aligned in
+ the stream according to its natural alignment, unless a specific packing
+ directive is currently set with `ScopedAlignment()`.
 
  @tparam T Floating-point type
  @param writer Writer to serialize to
@@ -239,7 +235,7 @@ auto Store(AnyWriter& writer, T value) -> Result<void>
  @see Store, AnyWriter
 */
 template <typename T>
-auto Store(AnyWriter& writer, T value) -> Result<void>
+[[nodiscard]] auto Store(AnyWriter& writer, T value) -> Result<void>
   requires(std::is_floating_point_v<T>)
 {
   static_assert(std::numeric_limits<T>::is_iec559,
@@ -248,14 +244,12 @@ auto Store(AnyWriter& writer, T value) -> Result<void>
   if (!IsLittleEndian() && sizeof(T) > 1) {
     value = ByteSwap(value);
   }
-  return writer.WriteBlob(
-    // NOLINTNEXTLINE(*-reinterpret-cast)
-    std::span(reinterpret_cast<const std::byte*>(&value), sizeof(T)));
+  return writer.WriteBlob(std::as_bytes(std::span { &value, 1 }));
 }
 
 //! Serializes an enum value via its underlying type.
 template <typename T>
-auto Store(AnyWriter& writer, const T value) -> Result<void>
+[[nodiscard]] auto Store(AnyWriter& writer, const T value) -> Result<void>
   requires(std::is_enum_v<T>)
 {
   return writer.Write(std::to_underlying(value));
@@ -264,7 +258,7 @@ auto Store(AnyWriter& writer, const T value) -> Result<void>
 //! Serializes a `bool` as one byte, 0 or 1. Only a `bool` binds here, so a
 //! type without its own `Store` never converts to `bool` silently.
 template <std::same_as<bool> T>
-auto Store(AnyWriter& writer, const T value) -> Result<void>
+[[nodiscard]] auto Store(AnyWriter& writer, const T value) -> Result<void>
 {
   return writer.Write(static_cast<uint8_t>(value ? 1U : 0U));
 }
@@ -275,7 +269,8 @@ auto Store(AnyWriter& writer, const T value) -> Result<void>
  @see kIsRecord, RecordLayout, LoadRecord
 */
 template <RecordLayout T>
-auto StoreRecord(AnyWriter& writer, const T& value) -> Result<void>
+[[nodiscard]] auto StoreRecord(AnyWriter& writer, const T& value)
+  -> Result<void>
 {
   CHECK_RESULT(writer.AlignTo(alignof(T)));
   return writer.WriteBlob(std::as_bytes(std::span { &value, 1 }));
@@ -283,7 +278,7 @@ auto StoreRecord(AnyWriter& writer, const T& value) -> Result<void>
 
 //! Serializes a record (`StoreRecord`).
 template <Record T>
-auto Store(AnyWriter& writer, const T& value) -> Result<void>
+[[nodiscard]] auto Store(AnyWriter& writer, const T& value) -> Result<void>
 {
   static_assert(RecordLayout<T>,
     "a record must be trivially copyable, without padding, on a "
@@ -293,7 +288,7 @@ auto Store(AnyWriter& writer, const T& value) -> Result<void>
 
 //! Serializes a std::string as a 32-bit length prefix followed by raw bytes.
 /*!
- Encodes the string as a 32-bit unsigned length (platform endianness), followed
+ Encodes the string as a 32-bit unsigned little-endian length, followed
  by the UTF-8 bytes of the string (no null terminator). The length is aligned in
  the stream according to its natural alignment, unless a specific packing
  directive is currently set with `ScopedAlignment()`. No alignment or padding is
@@ -305,7 +300,8 @@ auto Store(AnyWriter& writer, const T& value) -> Result<void>
 
  @see Store, AnyWriter
 */
-inline auto Store(AnyWriter& writer, const std::string& value) -> Result<void>
+[[nodiscard]] inline auto Store(AnyWriter& writer, const std::string& value)
+  -> Result<void>
 {
   if (value.length() > limits::kMaxStringLength) {
     return ::oxygen::Err(make_error_code(Error::kTooLarge));
@@ -318,9 +314,8 @@ inline auto Store(AnyWriter& writer, const std::string& value) -> Result<void>
 
   // Write string data
   if (!value.empty()) {
-    CHECK_RESULT(writer.WriteBlob(std::span(
-      // NOLINTNEXTLINE(*-reinterpret-cast)
-      reinterpret_cast<const std::byte*>(value.data()), value.length())));
+    CHECK_RESULT(
+      writer.WriteBlob(std::as_bytes(std::span(value.data(), value.length()))));
   }
   return {};
 }
@@ -336,7 +331,8 @@ inline auto Store(AnyWriter& writer, const std::string& value) -> Result<void>
 
  @see Load(AnyReader&, Uuid&)
 */
-inline auto Store(AnyWriter& writer, const Uuid& value) -> Result<void>
+[[nodiscard]] inline auto Store(AnyWriter& writer, const Uuid& value)
+  -> Result<void>
 {
   auto pack = writer.ScopedAlignment(1);
   return writer.WriteBlob(oxygen::as_bytes(value));
@@ -373,7 +369,8 @@ namespace detail {
 
 //! Serializes a std::vector as a sequence (`detail::StoreSequence`).
 template <typename T>
-auto Store(AnyWriter& writer, const std::vector<T>& value) -> Result<void>
+[[nodiscard]] auto Store(AnyWriter& writer, const std::vector<T>& value)
+  -> Result<void>
 {
   if constexpr (std::is_same_v<T, bool>) {
     if (value.size() > limits::kMaxArrayLength) {
@@ -393,14 +390,16 @@ auto Store(AnyWriter& writer, const std::vector<T>& value) -> Result<void>
 
 //! Serializes a std::array as a sequence (`detail::StoreSequence`).
 template <typename T, size_t N>
-auto Store(AnyWriter& writer, const std::array<T, N>& value) -> Result<void>
+[[nodiscard]] auto Store(AnyWriter& writer, const std::array<T, N>& value)
+  -> Result<void>
 {
   return detail::StoreSequence(writer, std::span<const T> { value });
 }
 
 //! Serializes a std::span as a sequence (`detail::StoreSequence`).
 template <typename T, size_t Extent>
-auto Store(AnyWriter& writer, const std::span<T, Extent> value) -> Result<void>
+[[nodiscard]] auto Store(AnyWriter& writer, const std::span<T, Extent> value)
+  -> Result<void>
 {
   return detail::StoreSequence(writer, std::span<const T> { value });
 }
@@ -408,7 +407,8 @@ auto Store(AnyWriter& writer, const std::span<T, Extent> value) -> Result<void>
 //! Serializes a std::optional: a `bool` that says whether a value follows,
 //! then the value.
 template <typename T>
-auto Store(AnyWriter& writer, const std::optional<T>& value) -> Result<void>
+[[nodiscard]] auto Store(AnyWriter& writer, const std::optional<T>& value)
+  -> Result<void>
 {
   CHECK_RESULT(writer.Write(value.has_value()));
   if (value) {

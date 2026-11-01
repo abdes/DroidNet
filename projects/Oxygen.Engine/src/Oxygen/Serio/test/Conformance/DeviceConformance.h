@@ -10,7 +10,6 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
-#include <cstdint>
 #include <span>
 #include <thread>
 #include <vector>
@@ -263,8 +262,28 @@ TYPED_TEST_P(
   EXPECT_THAT(out, BytesEqual(bytes));
 }
 
+//! A reservation at or below the size changes nothing: no reservation ever
+//! shortens the device or loses its bytes.
+TYPED_TEST_P(WritableDeviceConformance, ReserveBelowTheSizeKeepsBytes) // NOLINT
+{
+  const auto bytes = PatternBytes(4096 + 17);
+  auto device = this->MakeDevice(bytes);
+
+  ASSERT_TRUE(device.Reserve(ByteCount { 0 }));
+  ASSERT_TRUE(device.Reserve(ByteCount { bytes.size() / 2 }));
+  ASSERT_TRUE(device.Reserve(ByteCount { bytes.size() }));
+
+  const auto size = device.Size();
+  ASSERT_HAS_VALUE(size);
+  EXPECT_EQ(size->get(), bytes.size());
+  auto out = std::vector<std::byte>(bytes.size());
+  ASSERT_TRUE(ReadExactlyAt(device, ByteOffset { 0 }, out));
+  EXPECT_THAT(out, BytesEqual(bytes));
+}
+
 REGISTER_TYPED_TEST_SUITE_P(WritableDeviceConformance,
-  WritePastEndExtendsWithZeros, ReserveKeepsSizeAndFlushKeepsBytes);
+  WritePastEndExtendsWithZeros, ReserveKeepsSizeAndFlushKeepsBytes,
+  ReserveBelowTheSizeKeepsBytes);
 
 //! The cases of devices whose bytes are one span: `DeviceConformance`'s
 //! fixture, for factories whose devices satisfy `ContiguousDevice`.

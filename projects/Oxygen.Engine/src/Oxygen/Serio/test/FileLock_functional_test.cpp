@@ -13,10 +13,18 @@
 #include <thread>
 #include <utility>
 
+#include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Serio/Error.h>
 #include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
+
+#ifdef OXYGEN_WINDOWS
+#  include <Windows.h> // IWYU pragma: keep
+
+#  include <sddl.h>
+#endif
 
 namespace oxygen::serio::testing {
 namespace {
@@ -72,6 +80,98 @@ namespace {
     auto next = FileLock::TryAcquire(
       marker_, FileLockMode::kExclusive, FileLockOpenMode::kTemporary);
     EXPECT_TRUE(next);
+  }
+
+  //! A shared holder that releases leaves the lock to the holders that
+  //! remain: an exclusive contender stays excluded until the last holder
+  //! releases, which removes the file. While a holder remains, the file may
+  //! not be visible (Windows marks it for deletion), so only exclusion is
+  //! checked then.
+  NOLINT_TEST_F(FileLockTest, TemporarySharedLockStaysWhileAnotherHolderRemains)
+  {
+    auto first = FileLock::TryAcquire(
+      marker_, FileLockMode::kShared, FileLockOpenMode::kTemporary);
+    ASSERT_HAS_VALUE(first);
+    auto second = FileLock::TryAcquire(
+      marker_, FileLockMode::kShared, FileLockOpenMode::kTemporary);
+    ASSERT_HAS_VALUE(second);
+
+    *first = FileLock {};
+    const auto contender = FileLock::TryAcquire(
+      marker_, FileLockMode::kExclusive, FileLockOpenMode::kTemporary);
+    *second = FileLock {};
+    const auto removed = !std::filesystem::exists(marker_);
+
+    ASSERT_FALSE(contender);
+    EXPECT_EQ(contender.error(),
+      std::make_error_code(std::errc::device_or_resource_busy));
+    EXPECT_TRUE(removed);
+    EXPECT_TRUE(FileLock::TryAcquire(
+      marker_, FileLockMode::kExclusive, FileLockOpenMode::kTemporary));
+  }
+
+  //! Denies the caller every access to `path`, then gives it back when the
+  //! test ends, so the folder can be removed.
+  class DeniedAccess final {
+  public:
+    explicit DeniedAccess(std::filesystem::path path)
+      : path_(std::move(path))
+    {
+      Set(kDenyAll);
+    }
+    ~DeniedAccess() { Set(kAllowAll); }
+    DeniedAccess(const DeniedAccess&) = delete;
+    DeniedAccess(DeniedAccess&&) = delete;
+    auto operator=(const DeniedAccess&) -> DeniedAccess& = delete;
+    auto operator=(DeniedAccess&&) -> DeniedAccess& = delete;
+
+  private:
+#ifdef OXYGEN_WINDOWS
+    static constexpr auto kDenyAll = L"D:P(D;;FA;;;WD)";
+    static constexpr auto kAllowAll = L"D:P(A;;FA;;;WD)";
+
+    auto Set(const wchar_t* sddl) const noexcept -> void
+    {
+      PSECURITY_DESCRIPTOR descriptor = nullptr;
+      if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl, SDDL_REVISION_1, &descriptor, nullptr)
+        != FALSE) {
+        static_cast<void>(SetFileSecurityW(
+          path_.c_str(), DACL_SECURITY_INFORMATION, descriptor));
+        LocalFree(descriptor);
+      }
+    }
+#else
+    static constexpr auto kDenyAll = std::filesystem::perms::none;
+    static constexpr auto kAllowAll = std::filesystem::perms::owner_all;
+
+    auto Set(const std::filesystem::perms perms) const noexcept -> void
+    {
+      auto ignored = std::error_code {};
+      std::filesystem::permissions(path_, perms, ignored);
+    }
+#endif
+
+    std::filesystem::path path_;
+  };
+
+  //! A temporary lock whose file the caller may not open fails with the
+  //! denial, never with contention a caller would retry.
+  NOLINT_TEST_F(FileLockTest, TemporaryLockOnADeniedFileIsAccessDenied)
+  {
+    {
+      auto creator = FileLock::TryAcquire(
+        marker_, FileLockMode::kExclusive, FileLockOpenMode::kOpenOrCreate);
+      ASSERT_HAS_VALUE(creator);
+    }
+    const auto denied = DeniedAccess(marker_);
+
+    const auto lock = FileLock::TryAcquire(
+      marker_, FileLockMode::kShared, FileLockOpenMode::kTemporary);
+
+    ASSERT_FALSE(lock);
+    EXPECT_EQ(lock.error(), Error::kAccessDenied);
+    EXPECT_NE(lock.error(), std::errc::device_or_resource_busy);
   }
 
   //! A lock opened to create its file keeps the file after release.

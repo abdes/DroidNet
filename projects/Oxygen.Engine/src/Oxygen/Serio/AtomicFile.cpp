@@ -7,11 +7,14 @@
 #include <cstddef>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
+#include <string>
 #include <system_error>
 #include <utility>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Uuid.h>
@@ -29,14 +32,27 @@
 namespace oxygen::serio {
 
 namespace {
-  //! Removes the sibling unless it was published. Declared before the file
-  //! and its stream, it is destroyed after them, once the handle is closed.
+  //! A unique sibling of a destination: its path, and its file name, which
+  //! is ASCII, so a log can name it without converting the path.
+  struct SiblingName {
+    std::filesystem::path path;
+    std::string file_name;
+  };
+
+  //! Removes the sibling while it owns it. It owns the file only once the
+  //! exclusive create succeeded, so it never removes a file another writer
+  //! created, and stops owning it once it is published. Declared before the
+  //! file and its stream, it is destroyed after them, once the handle is
+  //! closed. A failed removal is logged: the sibling is left behind and
+  //! nothing else can report it.
   struct Sibling {
     std::filesystem::path path;
-    bool published = false;
+    std::string file_name;
+    bool owned = false;
 
-    explicit Sibling(std::filesystem::path sibling_path) noexcept
-      : path(std::move(sibling_path))
+    explicit Sibling(SiblingName name) noexcept
+      : path(std::move(name.path))
+      , file_name(std::move(name.file_name))
     {
     }
     OXYGEN_MAKE_NON_COPYABLE(Sibling)
@@ -44,19 +60,28 @@ namespace {
 
     ~Sibling() noexcept
     {
-      if (!published) {
-        std::error_code error;
-        std::filesystem::remove(path, error);
+      if (!owned) {
+        return;
+      }
+      auto error = std::error_code {};
+      std::filesystem::remove(path, error);
+      if (error) {
+        LOG_F(WARNING, "serio: temporary sibling '{}' left behind: {}",
+          file_name, error.message());
       }
     }
   };
 
   //! A unique sibling of `path`, in its folder, so the replacement is one
   //! rename on one volume.
-  auto SiblingOf(const std::filesystem::path& path) -> std::filesystem::path
+  auto SiblingOf(const std::filesystem::path& path) -> SiblingName
   {
-    return base::ToNativePath(
-      path.parent_path() / (".oxygen-" + Uuid::Generate().ToString() + ".tmp"));
+    auto file_name = ".oxygen-" + Uuid::Generate().ToString() + ".tmp";
+    auto sibling = base::ToNativePath(path.parent_path() / file_name);
+    return SiblingName {
+      .path = std::move(sibling),
+      .file_name = std::move(file_name),
+    };
   }
 
   //! How a sibling is opened: created, never shared, written front to back.
@@ -68,16 +93,18 @@ namespace {
   };
 
   //! Publishes a closed sibling over `destination`, keeping its permissions.
+  //! The permission copy makes itself as durable as the data, which was
+  //! flushed before it.
   auto Publish(Sibling& sibling, const std::filesystem::path& destination,
     const Durability durability) noexcept -> Result<FileReplacement>
   {
     if (const auto access
-      = detail::CopyAccessControl(destination, sibling.path);
+      = detail::CopyAccessControl(destination, sibling.path, durability);
       !access) {
       return Result<FileReplacement>::Err(access.error());
     }
     auto replaced = MoveFileOver(sibling.path, destination, durability);
-    sibling.published = replaced.has_value();
+    sibling.owned = !replaced.has_value();
     return replaced;
   }
 } // namespace
@@ -94,18 +121,31 @@ namespace detail {
     }
     return error;
   }
+
+  auto FoldersOf(const std::filesystem::path& from,
+    const std::filesystem::path& to) -> MovedFolders
+  {
+    auto folders = MovedFolders {
+      .destination = to.parent_path(),
+      .source = std::nullopt,
+    };
+    if (auto source = from.parent_path(); source != folders.destination) {
+      folders.source = std::move(source);
+    }
+    return folders;
+  }
 } // namespace detail
 
 struct AtomicFileWriter::State {
-  State(std::filesystem::path destination_path,
-    std::filesystem::path sibling_path, NativeFile opened,
-    const Durability durability_asked) noexcept
+  State(std::filesystem::path destination_path, SiblingName sibling_name,
+    NativeFile opened, const Durability durability_asked) noexcept
     : destination(std::move(destination_path))
     , durability(durability_asked)
-    , sibling(std::move(sibling_path))
+    , sibling(std::move(sibling_name))
     , file(std::move(opened))
     , stream(file)
   {
+    sibling.owned = true;
   }
 
   OXYGEN_MAKE_NON_COPYABLE(State)
@@ -141,13 +181,20 @@ auto AtomicFileWriter::Create(const std::filesystem::path& path,
     return Result<AtomicFileWriter>::Err(
       std::make_error_code(std::errc::invalid_argument));
   }
+  auto destination = base::ToNativePath(path);
   auto temporary = SiblingOf(path);
-  auto file = NativeFile::Open(temporary, kSiblingSpec);
+  // Owns the created sibling until the state's own guard does. Declared
+  // before the file, so a throw below removes it once the file is closed.
+  auto created = Sibling(temporary);
+  auto file = NativeFile::Open(temporary.path, kSiblingSpec);
   if (!file) {
     return Result<AtomicFileWriter>::Err(file.error());
   }
-  return Ok(AtomicFileWriter(std::make_unique<State>(base::ToNativePath(path),
-    std::move(temporary), std::move(*file), durability)));
+  created.owned = true;
+  auto state = std::make_unique<State>(
+    std::move(destination), std::move(temporary), std::move(*file), durability);
+  created.owned = false;
+  return Ok(AtomicFileWriter(std::move(state)));
 }
 
 auto AtomicFileWriter::Stream() noexcept -> RegionWriteStream<NativeFile>&
@@ -205,8 +252,10 @@ auto AsyncWriteFileAtomically(IoDriver& driver, std::filesystem::path path,
   {
     auto file = driver.Open(sibling.path, kSiblingSpec);
     if (!file) {
+      // A name collision fails here, before the guard owns anything.
       co_return Result<FileReplacement>::Err(file.error());
     }
+    sibling.owned = true;
     if (const auto written
       = co_await file->AsyncWriteAt(ByteOffset { 0 }, bytes);
       !written) {
@@ -228,13 +277,14 @@ auto OpenPublishedFile(const std::filesystem::path& path) -> Result<NativeFile>
     });
 }
 
-auto ReadPublishedFile(const std::filesystem::path& path) -> Result<ByteBuffer>
+auto ReadPublishedFile(const std::filesystem::path& path, const ByteCount limit)
+  -> Result<ByteBuffer>
 {
   const auto file = OpenPublishedFile(path);
   if (!file) {
     return Result<ByteBuffer>::Err(file.error());
   }
-  return ReadAll(*file);
+  return ReadAll(*file, limit);
 }
 
 } // namespace oxygen::serio

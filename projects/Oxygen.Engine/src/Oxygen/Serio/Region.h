@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 
@@ -120,12 +121,12 @@ public:
       range_.offset + ByteCount { relative.get() }, out.first(count));
   }
 
-  //! The region's bytes, a subspan of a contiguous device's view.
+  //! The region's bytes, a subspan of a contiguous device's view; shorter
+  //! when the device now ends inside the region.
   [[nodiscard]] auto Bytes() const noexcept -> std::span<const std::byte>
     requires ContiguousDevice<D>
   {
-    return device_->Bytes().subspan(static_cast<size_t>(range_.offset.get()),
-      static_cast<size_t>(range_.count.get()));
+    return Within(device_->Bytes());
   }
 
   //! The region's bytes when its device is contiguous, whether known from the
@@ -140,8 +141,7 @@ public:
       if (!bytes) {
         return std::nullopt;
       }
-      return bytes->subspan(static_cast<size_t>(range_.offset.get()),
-        static_cast<size_t>(range_.count.get()));
+      return Within(*bytes);
     } else {
       return std::nullopt;
     }
@@ -152,6 +152,19 @@ private:
     : device_(&device)
     , range_(range)
   {
+  }
+
+  //! The part of `device_bytes` the region covers. The device may have
+  //! shrunk since the region was made, so the range is clipped to it.
+  [[nodiscard]] auto Within(
+    const std::span<const std::byte> device_bytes) const noexcept
+    -> std::span<const std::byte>
+  {
+    const auto size = uint64_t { device_bytes.size() };
+    const auto offset = (std::min)(range_.offset.get(), size);
+    const auto count = (std::min)(range_.count.get(), size - offset);
+    return device_bytes.subspan(
+      static_cast<size_t>(offset), static_cast<size_t>(count));
   }
 
   const D* device_;

@@ -82,6 +82,14 @@ struct ByteRange {
       && other.count.get() <= End().get() - other.offset.get();
   }
 
+  //! Whether this range and `other` share at least one byte.
+  [[nodiscard]] constexpr auto Overlaps(const ByteRange other) const noexcept
+    -> bool
+  {
+    return count.get() != 0 && other.count.get() != 0 && other.offset < End()
+      && offset < other.End();
+  }
+
   [[nodiscard]] constexpr auto operator==(const ByteRange&) const noexcept
     -> bool = default;
 };

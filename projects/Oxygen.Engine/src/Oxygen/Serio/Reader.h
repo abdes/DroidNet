@@ -11,6 +11,8 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <new>
 #include <optional>
 #include <span>
 #include <string>
@@ -54,7 +56,9 @@ public:
   OXYGEN_DEFAULT_MOVABLE(AnyReader)
 
   //! Reads `size` bytes into a new buffer; `kTooLarge`, before allocating,
-  //! when fewer bytes remain.
+  //! when fewer bytes remain, `not_enough_memory` when the allocation fails.
+  //! `size` is the caller's budget: a length read from the stream is checked
+  //! against the caller's own limit before it is passed here.
   [[nodiscard]] virtual auto ReadBlob(size_t size) noexcept
     -> Result<std::vector<std::byte>> = 0;
   [[nodiscard]] virtual auto ReadBlobInto(std::span<std::byte> buffer) noexcept
@@ -69,8 +73,10 @@ public:
   {
     CHECK_RESULT(AlignTo(alignof(limits::SequenceSizeType)));
     CHECK_RESULT(ReadInto(size));
+    // `size * min_element_size` may pass `uint64_t`; the division cannot.
     if (size > max_size
-      || uint64_t { size } * min_element_size > Remaining().get()) {
+      || (min_element_size != 0
+        && uint64_t { size } > Remaining().get() / min_element_size)) {
       size = 0;
       return ::oxygen::Err(make_error_code(Error::kTooLarge));
     }
@@ -108,6 +114,8 @@ public:
         return ::oxygen::Err(result.error());
       }
       return {};
+    } catch (const std::bad_alloc&) {
+      return ::oxygen::Err(std::errc::not_enough_memory);
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "ADL specialization of Load failed: {}", ex.what());
       return ::oxygen::Err(std::errc::io_error);
@@ -174,7 +182,12 @@ public:
     if (CountOf(size) > Remaining()) {
       return ::oxygen::Err(make_error_code(Error::kTooLarge));
     }
-    std::vector<std::byte> buffer(size);
+    auto buffer = std::vector<std::byte> {};
+    try {
+      buffer.resize(size);
+    } catch (const std::bad_alloc&) {
+      return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
+    }
     auto result = ReadExactly(stream_.get(), std::span(buffer));
     if (!result) {
       return ::oxygen::Err(result.error());
@@ -254,10 +267,9 @@ private:
 //! Deserializes an integral value (except bool) from the stream.
 /*!
  Reads an integral value (except bool) from the stream as a contiguous sequence
- of bytes, using the platform's endianness (little-endian on most systems; bytes
- are swapped if needed). The value is aligned in the stream according to its
- natural alignment, unless a specific packing directive is currently set with
- `ScopedAlignment()`.
+ of little-endian bytes, swapped on a big-endian target. The value is aligned in
+ the stream according to its natural alignment, unless a specific packing
+ directive is currently set with `ScopedAlignment()`.
 
  @tparam T Integral type (not bool)
  @param reader Reader to deserialize from
@@ -267,7 +279,7 @@ private:
  @see Load, AnyReader
 */
 template <typename T>
-auto Load(AnyReader& reader, T& value) -> Result<void>
+[[nodiscard]] auto Load(AnyReader& reader, T& value) -> Result<void>
   requires(std::is_integral_v<T> &&
     // bool is not safe for binary serialization - use uint8_t
     !std::is_same_v<T, bool>)
@@ -277,9 +289,8 @@ auto Load(AnyReader& reader, T& value) -> Result<void>
   static_assert(std::has_unique_object_representations_v<T>,
     "Type may have platform-dependent representation");
   CHECK_RESULT(reader.AlignTo(alignof(T)));
-  CHECK_RESULT(reader.ReadBlobInto(
-    // NOLINTNEXTLINE(*-reinterpret-cast)
-    std::span(reinterpret_cast<std::byte*>(&value), sizeof(T))));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { &value, 1 })));
 
   if (!IsLittleEndian() && sizeof(T) > 1) {
     value = ByteSwap(value);
@@ -291,8 +302,8 @@ auto Load(AnyReader& reader, T& value) -> Result<void>
 //! Deserializes a floating-point value from the stream.
 /*!
  Reads a floating-point value from the stream as a contiguous sequence of bytes
- in IEEE-754 binary format, using the platform's endianness (little-endian on
- most systems; bytes are swapped if needed). The value is aligned in the stream
+ in little-endian IEEE-754 binary format, swapped on a big-endian target. The
+ value is aligned in the stream
  according to its natural alignment, unless a specific packing directive is
  currently set with `ScopedAlignment()`.
 
@@ -305,15 +316,14 @@ auto Load(AnyReader& reader, T& value) -> Result<void>
  @see Load, AnyReader
 */
 template <typename T>
-auto Load(AnyReader& reader, T& value) -> Result<void>
+[[nodiscard]] auto Load(AnyReader& reader, T& value) -> Result<void>
   requires(std::is_floating_point_v<T>)
 {
   static_assert(std::numeric_limits<T>::is_iec559,
     "Platform must use IEEE-754 floating point representation");
   CHECK_RESULT(reader.AlignTo(alignof(T)));
-  CHECK_RESULT(reader.ReadBlobInto(
-    // NOLINTNEXTLINE(*-reinterpret-cast)
-    std::span(reinterpret_cast<std::byte*>(&value), sizeof(T))));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { &value, 1 })));
 
   if (!IsLittleEndian() && sizeof(T) > 1) {
     value = ByteSwap(value);
@@ -329,7 +339,7 @@ auto Load(AnyReader& reader, T& value) -> Result<void>
  enum type.
 */
 template <typename T>
-auto Load(AnyReader& reader, T& value) -> Result<void>
+[[nodiscard]] auto Load(AnyReader& reader, T& value) -> Result<void>
   requires(std::is_enum_v<T>)
 {
   using RawType = std::underlying_type_t<T>;
@@ -341,8 +351,8 @@ auto Load(AnyReader& reader, T& value) -> Result<void>
 
 //! Deserializes a std::string from the stream.
 /*!
- Reads a std::string from the stream as a 32-bit length prefix (platform
- endianness), followed by the UTF-8 bytes of the string (no null terminator).
+ Reads a std::string from the stream as a 32-bit little-endian length prefix,
+ followed by the UTF-8 bytes of the string (no null terminator).
  The length is aligned in the stream according to its natural alignment, unless
  a specific packing directive is currently set with `ScopedAlignment()`. No
  alignment is considered between the length and the string data.
@@ -351,10 +361,12 @@ auto Load(AnyReader& reader, T& value) -> Result<void>
  @param value Reference to store the deserialized string
  @return Result of the read operation
 
- @note The function will clear the string if the length is zero.
+ @note The function will clear the string if the length is zero. A failed
+ allocation returns `not_enough_memory`.
  @see Load, AnyReader
 */
-inline auto Load(AnyReader& reader, std::string& value) noexcept -> Result<void>
+[[nodiscard]] inline auto Load(AnyReader& reader, std::string& value) noexcept
+  -> Result<void>
 {
   limits::SequenceSizeType length { 0 };
   CHECK_RESULT(reader.ReadSequenceSize(length, limits::kMaxStringLength));
@@ -362,12 +374,13 @@ inline auto Load(AnyReader& reader, std::string& value) noexcept -> Result<void>
     value.clear();
     return {};
   }
-  // Standard C++ strings do not require a manual null terminator
-  value.resize(length);
-  CHECK_RESULT(reader.ReadBlobInto(
-    // NOLINTNEXTLINE(*-reinterpret-cast)
-    std::span(reinterpret_cast<std::byte*>(value.data()), length)));
-  return {};
+  try {
+    value.resize(length);
+  } catch (const std::bad_alloc&) {
+    return ::oxygen::Err(std::errc::not_enough_memory);
+  }
+  return reader.ReadBlobInto(
+    std::as_writable_bytes(std::span(value.data(), value.size())));
 }
 
 //! Deserializes and validates a UUIDv7 from its raw 16-byte canonical payload.
@@ -386,7 +399,7 @@ inline auto Load(AnyReader& reader, std::string& value) noexcept -> Result<void>
  @see
  * Store(AnyWriter&, const Uuid&)
 */
-inline auto Load(AnyReader& reader, Uuid& value) -> Result<void>
+[[nodiscard]] inline auto Load(AnyReader& reader, Uuid& value) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   auto bytes = std::array<std::uint8_t, Uuid::kSize> {};
@@ -404,7 +417,7 @@ inline auto Load(AnyReader& reader, Uuid& value) -> Result<void>
 
 //! Deserializes a `bool` stored as one byte, 0 or 1; any other byte fails with
 //! `invalid_argument`.
-inline auto Load(AnyReader& reader, bool& value) -> Result<void>
+[[nodiscard]] inline auto Load(AnyReader& reader, bool& value) -> Result<void>
 {
   uint8_t raw = 0;
   CHECK_RESULT(reader.ReadInto(raw));
@@ -418,21 +431,23 @@ inline auto Load(AnyReader& reader, bool& value) -> Result<void>
 //! Reads `value` as one copy of its bytes, aligned like any value to its
 //! natural alignment unless a `ScopedAlignment()` is set.
 /*!
- Records load through it. A type that checks its values after reading them is
- not declared a record, so that sequences of it never skip the check; its own
- `Load` calls `LoadRecord`, then checks.
+ Records load through it, and nothing here checks their values. A type that
+ must be checked on every read is not declared a record; its own `Load` calls
+ `LoadRecord`, then checks, so every read of it, sequences included, runs the
+ check.
 
  @see kIsRecord, RecordLayout, StoreRecord
 */
 template <RecordLayout T>
-auto LoadRecord(AnyReader& reader, T& value) -> Result<void>
+[[nodiscard]] auto LoadRecord(AnyReader& reader, T& value) -> Result<void>
 {
   CHECK_RESULT(reader.AlignTo(alignof(T)));
   return reader.ReadBlobInto(std::as_writable_bytes(std::span { &value, 1 }));
 }
 
 //! Deserializes a record (`LoadRecord`).
-template <Record T> auto Load(AnyReader& reader, T& value) -> Result<void>
+template <Record T>
+[[nodiscard]] auto Load(AnyReader& reader, T& value) -> Result<void>
 {
   static_assert(RecordLayout<T>,
     "a record must be trivially copyable, without padding, on a "
@@ -469,8 +484,10 @@ namespace detail {
 /*!
  Reads a 32-bit length prefix, aligned to its natural alignment, followed by
  the elements. Records and arithmetic elements are read as one copy after
- aligning once to their natural alignment; other elements are read one by
- one. The length is checked against the bytes that remain before anything is
+ aligning once to their natural alignment, into storage the remaining bytes
+ bound; other elements are read one by one and appended as they are read, so
+ a hostile length allocates no more elements than the stream holds. The
+ length is checked against the bytes that remain before anything is
  allocated, and fails with `kTooLarge`.
 
  @tparam T Element type
@@ -481,29 +498,31 @@ namespace detail {
  @see Load, AnyReader
 */
 template <typename T>
-auto Load(AnyReader& reader, std::vector<T>& value) -> Result<void>
+[[nodiscard]] auto Load(AnyReader& reader, std::vector<T>& value)
+  -> Result<void>
 {
   limits::SequenceSizeType length = 0;
   CHECK_RESULT(reader.ReadSequenceSize(
     length, limits::kMaxArrayLength, detail::kMinEncodedSize<T>));
   value.clear();
-  if constexpr (std::is_same_v<T, bool>) {
-    for (limits::SequenceSizeType index = 0; index < length; ++index) {
-      bool element = false;
-      CHECK_RESULT(reader.ReadInto(element));
-      value.push_back(element);
-    }
-    return {};
-  } else {
+  if constexpr (BulkElement<T>) {
     value.resize(length);
     return detail::LoadElements(reader, std::span<T> { value });
+  } else {
+    for (limits::SequenceSizeType index = 0; index < length; ++index) {
+      auto element = T {};
+      CHECK_RESULT(reader.ReadInto(element));
+      value.push_back(std::move(element));
+    }
+    return {};
   }
 }
 
 //! Deserializes a std::array, stored like a vector; a stored length other
 //! than `N` fails with `invalid_argument`.
 template <typename T, size_t N>
-auto Load(AnyReader& reader, std::array<T, N>& value) -> Result<void>
+[[nodiscard]] auto Load(AnyReader& reader, std::array<T, N>& value)
+  -> Result<void>
 {
   limits::SequenceSizeType length = 0;
   CHECK_RESULT(reader.ReadSequenceSize(
@@ -517,7 +536,8 @@ auto Load(AnyReader& reader, std::array<T, N>& value) -> Result<void>
 //! Deserializes a std::optional: a `bool` that says whether a value follows,
 //! then the value.
 template <typename T>
-auto Load(AnyReader& reader, std::optional<T>& value) -> Result<void>
+[[nodiscard]] auto Load(AnyReader& reader, std::optional<T>& value)
+  -> Result<void>
 {
   bool has_value = false;
   CHECK_RESULT(reader.ReadInto(has_value));

@@ -42,9 +42,14 @@
 
 #ifdef OXYGEN_WINDOWS
 #  include <Windows.h> // IWYU pragma: keep
+
+#  include <sddl.h>
 #endif
 
 namespace {
+
+//! The most bytes a test reads back from a file it published.
+constexpr auto kReadLimit = oxygen::serio::ByteCount { 1024ULL * 1024 };
 
 //! Reads a file through a handle that stays open, sharing it as readers of
 //! published files do: reads and deletion, never writes.
@@ -223,25 +228,34 @@ NOLINT_TEST_F(AtomicFileTest, ReplacesDestinationWhileASharingReaderHoldsIt)
 
   ASSERT_TRUE(replaced) << replaced.error().message();
   EXPECT_EQ(reader.ReadAll(), before);
-  const auto current = oxygen::serio::ReadPublishedFile(path);
+  const auto current = oxygen::serio::ReadPublishedFile(path, kReadLimit);
   ASSERT_TRUE(current) << current.error().message();
   EXPECT_EQ(Text(current->Bytes()), after);
 }
 
 //! A reader opening the destination while it is replaced again and again
-//! always opens it: a publication leaves no handle on it that a reader not
-//! sharing writes conflicts with.
+//! always opens it, and every publication succeeds: a publication leaves no
+//! handle on it that a reader conflicts with, and a reader sharing deletion
+//! never blocks the replacement.
 NOLINT_TEST_F(AtomicFileTest, ReaderOpensTheDestinationDuringPublications)
 {
+  constexpr auto kPublications = 200U;
   const auto path = Root() / "container.index.bin";
   const std::string first = "published-first";
   const std::string second = "published-second";
   ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, Bytes(first)));
   auto done = std::atomic<bool> { false };
+  auto published = 0U;
+  auto publish_failure = std::string {};
   auto publisher = std::thread([&] -> void {
-    for (auto i = 0U; i < 200U; ++i) {
-      static_cast<void>(oxygen::serio::WriteFileAtomically(
-        path, Bytes((i % 2U) != 0U ? first : second)));
+    for (auto i = 0U; i < kPublications; ++i) {
+      const auto replaced = oxygen::serio::WriteFileAtomically(
+        path, Bytes((i % 2U) != 0U ? first : second));
+      if (replaced) {
+        ++published;
+      } else if (publish_failure.empty()) {
+        publish_failure = replaced.error().message();
+      }
     }
     done = true;
   });
@@ -249,7 +263,7 @@ NOLINT_TEST_F(AtomicFileTest, ReaderOpensTheDestinationDuringPublications)
   auto failure = std::string {};
   auto reads = 0U;
   while (!done || reads == 0U) {
-    const auto bytes = oxygen::serio::ReadPublishedFile(path);
+    const auto bytes = oxygen::serio::ReadPublishedFile(path, kReadLimit);
     if (!bytes) {
       failure = bytes.error().message();
     } else if (const auto text = Text(bytes->Bytes());
@@ -261,6 +275,7 @@ NOLINT_TEST_F(AtomicFileTest, ReaderOpensTheDestinationDuringPublications)
   publisher.join();
 
   EXPECT_TRUE(failure.empty()) << failure;
+  EXPECT_EQ(published, kPublications) << publish_failure;
 }
 
 //! The destination is named exactly as asked, whatever its length: the
@@ -290,15 +305,35 @@ NOLINT_TEST_F(AtomicFileTest, ReadPublishedFileReturnsEveryPublishedByte)
   const auto text = std::string(70000, 'x') + "tail";
   ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, Bytes(text)));
 
-  const auto bytes = oxygen::serio::ReadPublishedFile(path);
+  const auto bytes = oxygen::serio::ReadPublishedFile(path, kReadLimit);
 
   ASSERT_TRUE(bytes) << bytes.error().message();
   EXPECT_EQ(Text(bytes->Bytes()), text);
 }
 
+//! A published file one byte larger than the limit is refused with
+//! kTooLarge; at the limit it is read.
+NOLINT_TEST_F(AtomicFileTest, ReadPublishedFileRefusesAFileLargerThanTheLimit)
+{
+  const auto path = Root() / "large.bin";
+  ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, Bytes("0123456789")));
+
+  const auto refused
+    = oxygen::serio::ReadPublishedFile(path, oxygen::serio::ByteCount { 9 });
+  const auto read
+    = oxygen::serio::ReadPublishedFile(path, oxygen::serio::ByteCount { 10 });
+
+  ASSERT_FALSE(refused);
+  EXPECT_EQ(refused.error(), oxygen::serio::Error::kTooLarge);
+  ASSERT_HAS_VALUE(read);
+  EXPECT_EQ(Text(read->Bytes()), "0123456789");
+}
+
+//! A missing published file fails with its error.
 NOLINT_TEST_F(AtomicFileTest, ReadPublishedFileReportsAMissingFile)
 {
-  EXPECT_FALSE(oxygen::serio::ReadPublishedFile(Root() / "missing.bin"));
+  EXPECT_FALSE(
+    oxygen::serio::ReadPublishedFile(Root() / "missing.bin", kReadLimit));
 }
 
 //! A writer streams the content, patches a header once the content is known,
@@ -429,6 +464,130 @@ NOLINT_TEST_F(AtomicFileTest, MoveFileOverKeepsASharingReadersBytes)
   EXPECT_EQ(reader.ReadAll(), "before");
   EXPECT_EQ(Read(to), "after-bytes");
 }
+
+//! A stable move between two folders publishes the file under its new name
+//! and reports no durability error: both folders are flushed.
+NOLINT_TEST_F(AtomicFileTest, MoveFileOverBetweenFoldersIsStable)
+{
+  const auto source_folder = Root() / "source";
+  const auto target_folder = Root() / "target";
+  std::filesystem::create_directory(source_folder);
+  std::filesystem::create_directory(target_folder);
+  const auto from = source_folder / "from.bin";
+  const auto to = target_folder / "to.bin";
+  ASSERT_TRUE(oxygen::serio::WriteFileAtomically(from, Bytes("moved")));
+
+  const auto replaced = oxygen::serio::MoveFileOver(from, to);
+
+  ASSERT_TRUE(replaced) << replaced.error().message();
+  EXPECT_FALSE(replaced->durability_error)
+    << replaced->durability_error.message();
+  EXPECT_EQ(Read(to), "moved");
+  EXPECT_FALSE(std::filesystem::exists(from));
+}
+
+//! A read-only destination is replaced, as `rename(2)` replaces it, and the
+//! new file is read-only too.
+NOLINT_TEST_F(AtomicFileTest, ReplacesAReadOnlyDestinationAndKeepsItReadOnly)
+{
+  using std::filesystem::perms;
+  const auto path = Root() / "kept.bin";
+  ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, Bytes("old")));
+  constexpr auto kWrite
+    = perms::owner_write | perms::group_write | perms::others_write;
+  std::filesystem::permissions(
+    path, kWrite, std::filesystem::perm_options::remove);
+  const auto before = std::filesystem::status(path).permissions();
+
+  const auto replaced
+    = oxygen::serio::WriteFileAtomically(path, Bytes("new-bytes"));
+
+  ASSERT_TRUE(replaced) << replaced.error().message();
+  EXPECT_EQ(Read(path), "new-bytes");
+  EXPECT_EQ(std::filesystem::status(path).permissions(), before);
+  EXPECT_FALSE(oxygen::serio::testing::HasTemporarySibling(Root()));
+  std::filesystem::permissions(
+    path, perms::owner_write, std::filesystem::perm_options::add);
+}
+
+#ifdef OXYGEN_WINDOWS
+//! Gives `path` a DACL from its SDDL text; the test's own file, so its owner
+//! may always rewrite the DACL.
+auto SetAccess(const std::filesystem::path& path, const wchar_t* sddl) -> bool
+{
+  PSECURITY_DESCRIPTOR descriptor = nullptr;
+  if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        sddl, SDDL_REVISION_1, &descriptor, nullptr)
+    == FALSE) {
+    return false;
+  }
+  const auto applied
+    = SetFileSecurityW(path.c_str(), DACL_SECURITY_INFORMATION, descriptor);
+  LocalFree(descriptor);
+  return applied != FALSE;
+}
+
+//! A hidden destination stays hidden once replaced.
+NOLINT_TEST_F(AtomicFileTest, ReplacementKeepsAHiddenDestinationHidden)
+{
+  const auto path = Root() / "hidden.bin";
+  ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, Bytes("old")));
+  ASSERT_NE(SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_HIDDEN), FALSE);
+
+  const auto replaced
+    = oxygen::serio::WriteFileAtomically(path, Bytes("new-bytes"));
+
+  ASSERT_TRUE(replaced) << replaced.error().message();
+  EXPECT_EQ(Read(path), "new-bytes");
+  EXPECT_NE(GetFileAttributesW(path.c_str()) & FILE_ATTRIBUTE_HIDDEN, 0U);
+}
+
+//! A read-only destination a sharing reader holds is replaced; the reader
+//! keeps the bytes it opened.
+NOLINT_TEST_F(AtomicFileTest, ReplacesAReadOnlyDestinationASharingReaderHolds)
+{
+  const auto path = Root() / "held.bin";
+  ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, Bytes("before")));
+  ASSERT_NE(SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_READONLY), FALSE);
+  auto reader = SharingReader(path);
+  ASSERT_TRUE(reader.IsOpen());
+
+  const auto replaced
+    = oxygen::serio::WriteFileAtomically(path, Bytes("after-bytes"));
+
+  ASSERT_TRUE(replaced) << replaced.error().message();
+  EXPECT_EQ(reader.ReadAll(), "before");
+  EXPECT_EQ(Read(path), "after-bytes");
+  ASSERT_NE(SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL), FALSE);
+}
+
+//! A read-only destination whose attributes the caller may not change is
+//! not replaced: the failure is kAccessDenied and the destination keeps its
+//! bytes. Nothing clears the attribute in place.
+NOLINT_TEST_F(AtomicFileTest, ReadOnlyDestinationWithoutAttributeRightsIsKept)
+{
+  const auto path = Root() / "denied.bin";
+  ASSERT_TRUE(oxygen::serio::WriteFileAtomically(path, Bytes("before")));
+  ASSERT_NE(SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_READONLY), FALSE);
+  // Everyone may do anything but change the attributes.
+  ASSERT_TRUE(SetAccess(path, L"D:P(D;;0x100;;;WD)(A;;FA;;;WD)"));
+
+  const auto replaced
+    = oxygen::serio::WriteFileAtomically(path, Bytes("after-bytes"));
+  const auto kept = Read(path);
+  const auto attributes = GetFileAttributesW(path.c_str());
+  for (const auto& entry : std::filesystem::directory_iterator(Root())) {
+    static_cast<void>(SetAccess(entry.path(), L"D:P(A;;FA;;;WD)"));
+    static_cast<void>(
+      SetFileAttributesW(entry.path().c_str(), FILE_ATTRIBUTE_NORMAL));
+  }
+
+  ASSERT_FALSE(replaced);
+  EXPECT_EQ(replaced.error(), oxygen::serio::Error::kAccessDenied);
+  EXPECT_EQ(kept, "before");
+  EXPECT_NE(attributes & FILE_ATTRIBUTE_READONLY, 0U);
+}
+#endif
 
 //! A missing source fails with kNotFound.
 NOLINT_TEST_F(AtomicFileTest, MoveFileOverOfAMissingSourceIsNotFound)

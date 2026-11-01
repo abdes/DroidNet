@@ -38,6 +38,9 @@ inline constexpr std::string_view kArchiveJsonTypeKey = "type";
 inline constexpr std::string_view kArchiveJsonValueKey = "value";
 inline constexpr int kArchiveJsonVersion1 = 1;
 inline constexpr std::string_view kHistoryFileName = "console_history.json";
+//! The most bytes the console reads from its archive or history file.
+inline constexpr uint64_t kMaxPersistedFileBytes
+  = uint64_t { 64 } * 1024 * 1024;
 inline constexpr std::string_view kHistoryJsonVersionKey = "version";
 inline constexpr std::string_view kHistoryJsonEntriesKey = "history";
 inline constexpr int kHistoryJsonVersion1 = 1;

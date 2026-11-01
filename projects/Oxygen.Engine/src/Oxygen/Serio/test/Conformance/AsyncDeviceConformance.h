@@ -207,10 +207,24 @@ TYPED_TEST_P(AsyncDeviceConformance, AsyncReadAllReadsTheWholeDevice) // NOLINT
   const auto bytes = PatternBytes(TestFixture::kSize);
   const auto device = this->MakeDevice(bytes);
 
-  const auto all = this->Run(AsyncReadAll(device));
+  const auto all = this->Run(AsyncReadAll(device, CountOf(bytes.size())));
 
   ASSERT_TRUE(all);
   EXPECT_THAT(all->Bytes(), BytesEqual(bytes));
+}
+
+//! AsyncReadAll refuses a device one byte larger than the limit with
+//! kTooLarge, before reading or allocating.
+TYPED_TEST_P(AsyncDeviceConformance,
+  AsyncReadAllRefusesADeviceLargerThanTheLimit) // NOLINT
+{
+  const auto bytes = PatternBytes(TestFixture::kSize);
+  const auto device = this->MakeDevice(bytes);
+
+  const auto all = this->Run(AsyncReadAll(device, CountOf(bytes.size() - 1)));
+
+  ASSERT_FALSE(all);
+  EXPECT_EQ(all.error(), Error::kTooLarge);
 }
 
 //! AsyncReadAll of a region reads only the region's range.
@@ -224,7 +238,7 @@ TYPED_TEST_P(
     ByteRange { .offset = ByteOffset { 100 }, .count = ByteCount { 500 } });
   ASSERT_TRUE(region);
 
-  const auto all = this->Run(AsyncReadAll(*region));
+  const auto all = this->Run(AsyncReadAll(*region, ByteCount { 500 }));
 
   ASSERT_TRUE(all);
   EXPECT_THAT(all->Bytes(), BytesEqual(std::span(bytes).subspan(100, 500)));
@@ -236,7 +250,7 @@ TYPED_TEST_P(
 {
   const auto device = this->MakeDevice({});
 
-  const auto all = this->Run(AsyncReadAll(device));
+  const auto all = this->Run(AsyncReadAll(device, ByteCount { 0 }));
 
   ASSERT_TRUE(all);
   EXPECT_TRUE(all->Empty());
@@ -245,8 +259,8 @@ TYPED_TEST_P(
 REGISTER_TYPED_TEST_SUITE_P(AsyncDeviceConformance, AsyncReadMatchesReadAt,
   ZeroLengthAsyncReadSucceeds, AsyncReadExactlyAcrossEndIsEndOfData,
   ConcurrentAsyncReadsAreIndependent, RegionBoundsAsyncReads,
-  AsyncReadAllReadsTheWholeDevice, AsyncReadAllOfARegionReadsItsRange,
-  AsyncReadAllOfAnEmptyDeviceIsEmpty);
+  AsyncReadAllReadsTheWholeDevice, AsyncReadAllRefusesADeviceLargerThanTheLimit,
+  AsyncReadAllOfARegionReadsItsRange, AsyncReadAllOfAnEmptyDeviceIsEmpty);
 
 //! The cases of devices whose writes are awaited: `AsyncDeviceConformance`'s
 //! fixture, for factories whose devices satisfy `AsyncWritableDevice` and

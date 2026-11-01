@@ -23,7 +23,12 @@ namespace oxygen::serio {
  template <> inline constexpr bool serio::kIsRecord<SaveHeader> = true;
  ```
 
- Copying a record checks its layout at compile time (`RecordLayout`).
+ A record is a raw wire layout. Copying one checks its layout at compile
+ time (`RecordLayout`) and never its values: read alone or in a sequence,
+ its enumerations and flags hold whatever bytes the file held, and the code
+ that uses a field decides whether to check it. A type that must be checked
+ on every read validates in its own `Load` and is not declared a record (see
+ `LoadRecord`).
 */
 template <class T> inline constexpr bool kIsRecord = false;
 
@@ -34,19 +39,31 @@ concept Record = kIsRecord<std::remove_cv_t<T>>;
 //! A layout whose object bytes are its encoding: trivially copyable, without
 //! padding, on a little-endian target.
 /*!
- A struct packed to one byte has no padding whatever its members are; any
- other struct must have a unique object representation, which rules out
- padding and floating-point members.
+ A struct packed to one byte has no padding between its members; any other
+ struct must have a unique object representation, which rules out padding
+ and floating-point members. Neither reaches inside a member: a padded struct
+ nested in a packed record passes the check. Each nested struct is therefore
+ itself packed, or has a unique object representation; Oxygen's pak records
+ declare theirs inside the same packed block.
+
+ A record holds no C++ `bool`, whose invalid byte values are undefined
+ behavior to read; a 0/1 flag is an integer.
 */
 template <class T>
 concept RecordLayout = std::is_trivially_copyable_v<T>
   && (alignof(T) == 1 || std::has_unique_object_representations_v<T>)
   && std::endian::native == std::endian::little;
 
-//! An element a sequence moves with its neighbours as one copy: a record, or
-//! an arithmetic value other than `bool` on a little-endian target.
+//! An element a sequence moves with its neighbours as one copy: a record
+//! with a valid layout, or an arithmetic value other than `bool` on a
+//! little-endian target.
+/*!
+ A record whose layout fails `RecordLayout` is no bulk element: a sequence of
+ it reaches the record's own `Load`/`Store`, whose layout assertion rejects
+ it, so sequences never copy a layout that single records refuse.
+*/
 template <class T>
-concept BulkElement = Record<T>
+concept BulkElement = (Record<T> && RecordLayout<T>)
   || (std::is_arithmetic_v<T> && !std::is_same_v<T, bool>
     && std::endian::native == std::endian::little);
 

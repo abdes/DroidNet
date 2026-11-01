@@ -84,8 +84,6 @@ IoDriver::~IoDriver() noexcept
 
 IoDriver::IoDriver(IoDriver&& other) noexcept = default;
 
-auto IoDriver::operator=(IoDriver&& other) noexcept -> IoDriver& = default;
-
 auto IoDriver::Open(const std::filesystem::path& path,
   const OpenSpec& spec) noexcept -> Result<AsyncFile>
 {

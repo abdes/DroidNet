@@ -41,9 +41,16 @@ struct FileReplacement {
  elsewhere). Both paths are on one volume. With `kStable`, the move is made
  durable before the call returns.
 
- Nothing is checked before the move: a missing `from` fails with `kNotFound`,
- a folder at `from` or `to` with `kIsDirectory`, classified after the move
- failed.
+ A missing `from` fails with `kNotFound`, a folder at `from` or `to` with
+ `kIsDirectory`, classified after the move failed; POSIX, whose rename moves
+ folders, refuses a folder source before the move. A stable move between
+ folders flushes both.
+
+ A read-only `to` is replaced as `rename(2)` replaces it, when the caller may
+ change its attributes (`kAccessDenied` otherwise). On a file system without
+ POSIX renames, the replacing move fails while any reader holds `to`, even
+ one that shares deletion, and fails on a read-only `to`: nothing clears the
+ attribute in place. The caller retries or reports it.
 */
 OXGN_SERIO_NDAPI auto MoveFileOver(const std::filesystem::path& from,
   const std::filesystem::path& to,
@@ -62,6 +69,9 @@ OXGN_SERIO_NDAPI auto MoveFileOver(const std::filesystem::path& from,
  `kBuffered` leaves the bytes to the OS cache and replaces at once: for a file
  whose content a stable record elsewhere validates, such as a cooked
  descriptor whose digest the loose cooked index holds.
+
+ The sibling is `.oxygen-<uuid>.tmp` in the destination's folder. A process
+ that dies before `Commit()` leaves it behind; nothing removes it later.
 
  ```cpp
  auto writer = AtomicFileWriter::Create(path);
@@ -100,8 +110,9 @@ private:
 
 //! Writes and flushes a unique sibling file before atomically replacing the
 //! destination, through an `AtomicFileWriter`. The parent directory must
-//! exist. Existing destination access permissions are preserved. Callers own
-//! locking and expected-revision checks.
+//! exist. Existing destination access permissions are preserved: the POSIX
+//! mode, or the Windows DACL with the read-only and hidden attributes. Callers
+//! own locking and expected-revision checks.
 /*!
  The replacement succeeds while readers hold the destination open, as long as
  they share it for deletion, as `ReadPublishedFile` does: they keep the bytes
@@ -134,8 +145,9 @@ OXGN_SERIO_NDAPI auto OpenPublishedFile(const std::filesystem::path& path)
   -> Result<NativeFile>;
 
 //! Reads a whole file that `WriteFileAtomically` publishes
-//! (`OpenPublishedFile`).
-OXGN_SERIO_NDAPI auto ReadPublishedFile(const std::filesystem::path& path)
-  -> Result<ByteBuffer>;
+//! (`OpenPublishedFile`); `kTooLarge`, before allocating, when it holds more
+//! than `limit` bytes.
+OXGN_SERIO_NDAPI auto ReadPublishedFile(
+  const std::filesystem::path& path, ByteCount limit) -> Result<ByteBuffer>;
 
 } // namespace oxygen::serio

@@ -7,9 +7,10 @@
 // Covers: Serio/Device.h, Serio/NativeFile.h, Serio/MappedFile.h,
 // Serio/MemoryFile.h, Serio/ByteView.h, Serio/AnyDevice.h, Serio/Region.h,
 // Serio/Platform/*/NativeFile.cpp, Serio/Platform/*/MappedFile.cpp,
-// Serio/test/Support/DeviceConformance.h, Serio/Testing/FaultInjectingDevice.h
+// Serio/test/Conformance/DeviceConformance.h,
+// Serio/Testing/FaultInjectingDevice.h
 
-#include "Support/DeviceConformance.h"
+#include "Conformance/DeviceConformance.h"
 #include "Support/DeviceFactories.h"
 #include "gtest/gtest.h"
 

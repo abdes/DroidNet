@@ -8,6 +8,7 @@
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/Record.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
@@ -64,7 +65,6 @@ enum class InputTriggerBehavior : uint8_t {
 // NOLINTNEXTLINE(*-macro-*)
 #define OXNPUT_ACTION_TRIGGER_BEHAVIOR(name, value) name = value,
 #include <Oxygen/Core/Meta/Input/ActionTriggers.inc>
-#include <Oxygen/Serio/Record.h>
 #undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
 #undef OXNPUT_ACTION_TRIGGER_TYPE // NOLINT
 };

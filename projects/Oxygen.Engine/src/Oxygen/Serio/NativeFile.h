@@ -73,7 +73,9 @@ public:
 
   //! Preallocates `size` bytes of storage without changing `Size()`, so a
   //! producer that knows its size fails early on a full disk and writes
-  //! unfragmented. A size at or below the allocation changes nothing.
+  //! unfragmented. A size at or below the allocation or the size changes
+  //! nothing. The reservation reads the size, then sets the allocation: it
+  //! must not run beside a write that extends the file.
   OXGN_SERIO_NDAPI auto Reserve(ByteCount size) noexcept -> Result<void>;
 
   //! Makes the written bytes as durable as `durability` asks. Writes are

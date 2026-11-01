@@ -8,8 +8,10 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include <Oxygen/Serio/CountingSink.h>
@@ -22,6 +24,7 @@
 
 namespace {
 
+using oxygen::serio::ByteCount;
 using oxygen::serio::ByteOffset;
 using oxygen::serio::CountingSink;
 using oxygen::serio::Error;
@@ -38,6 +41,23 @@ template <class S> auto WriteSample(S& stream) -> void
   ASSERT_TRUE(writer.Write(std::string { "measured" }));
   ASSERT_TRUE(writer.Write(std::vector<double> { 1.0, 2.0 }));
   ASSERT_TRUE(writer.Write(true));
+}
+
+//! A sink counts up to the last offset; a write past it fails with
+//! `value_too_large` and leaves the count as it was.
+NOLINT_TEST(CountingSinkTest, CountStopsAtTheLastOffset)
+{
+  constexpr auto kLast = std::numeric_limits<uint64_t>::max();
+  auto sink = CountingSink { ByteCount { kLast - 1 } };
+  const auto byte = std::array { std::byte { 1 } };
+
+  const auto last = sink.Write(byte);
+  const auto past = sink.Write(byte);
+
+  ASSERT_TRUE(last) << last.error().message();
+  ASSERT_FALSE(past);
+  EXPECT_EQ(past.error(), std::errc::value_too_large);
+  EXPECT_EQ(sink.Count().get(), kLast);
 }
 
 //! A sink measures exactly the bytes a real stream receives, padding included.

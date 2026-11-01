@@ -39,6 +39,7 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -89,7 +90,7 @@ namespace {
   //! opened sharing deletion, so a publication while it is read replaces it.
   auto ReadText(const std::filesystem::path& path) -> std::string
   {
-    const auto bytes = serio::ReadPublishedFile(path);
+    const auto bytes = serio::ReadPublishedFile(path, kMaxImportMetadataBytes);
     if (!bytes) {
       throw std::runtime_error("Cannot read model import file: " + path.string()
         + ": " + bytes.error().message());

@@ -102,17 +102,27 @@ template <ReadableDevice D>
   return {};
 }
 
-//! Reads all of `device` (a region reads its range) into a new buffer.
+//! Reads all of `device` (a region reads its range) into a new buffer of at
+//! most `limit` bytes.
 /*!
- @return The buffer, `Size()` bytes long; `kEndOfData` when the device ends
-         before its size, the allocation's or the device's errors otherwise.
+ The size a device reports is whatever its file holds, so the caller names
+ the most it accepts: a recorded size, a region's count, or its own policy.
+ A larger device is refused before anything is allocated.
+
+ @return The buffer, `Size()` bytes long; `kTooLarge` when the size passes
+         `limit`; `kEndOfData` when the device ends before its size, the
+         allocation's or the device's errors otherwise.
 */
 template <ReadableDevice D>
-[[nodiscard]] auto ReadAll(const D& device) noexcept -> Result<ByteBuffer>
+[[nodiscard]] auto ReadAll(const D& device, const ByteCount limit) noexcept
+  -> Result<ByteBuffer>
 {
   const auto size = device.Size();
   if (!size) {
     return ::oxygen::Err(size.error());
+  }
+  if (*size > limit) {
+    return ::oxygen::Err(make_error_code(Error::kTooLarge));
   }
   auto buffer = ByteBuffer::Allocate(*size);
   if (!buffer) {

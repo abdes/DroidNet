@@ -134,6 +134,7 @@ set(
   "Import/ImportConcurrency.h"
   "Import/ImportDiagnostics.h"
   "Import/ImportJobId.h"
+  "Import/ImportLimits.h"
   "Import/ImportManifest.h"
   "Import/ImportOptions.h"
   "Import/ImportProgress.h"

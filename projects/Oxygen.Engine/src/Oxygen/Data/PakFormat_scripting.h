@@ -29,6 +29,9 @@ namespace oxygen::data::pak::scripting {
 
 inline constexpr uint8_t kScriptAssetVersion = version::kScriptAssetVersion;
 
+//! The most bytes a script source or a cooked script payload may hold.
+inline constexpr uint64_t kMaxScriptBytes = uint64_t { 64 } * 1024 * 1024;
+
 enum class ScriptParamType : uint32_t {
   kNone = 0,
   kBool = 1,

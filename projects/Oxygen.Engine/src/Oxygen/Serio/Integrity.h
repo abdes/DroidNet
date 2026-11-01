@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <optional>
 #include <span>
 #include <system_error>
@@ -74,7 +75,17 @@ namespace detail {
     std::tuple<H...> hashes_;
   };
 
+  //! The end of `skip`, saturated at the largest offset: a skip whose end
+  //! is not representable skips everything after its start.
+  constexpr auto SkipEnd(const ByteRange skip) noexcept -> uint64_t
+  {
+    constexpr auto kLast = std::numeric_limits<uint64_t>::max();
+    return skip.count.get() > kLast - skip.offset.get() ? kLast
+                                                        : skip.End().get();
+  }
+
   //! Hashes `bytes`, which start at `at`, except the parts inside `skips`.
+  //! Skips may overlap and come in any order; empty ones skip nothing.
   template <IncrementalHash... H>
   auto UpdateExcept(HashSet<H...>& hashes, const ByteOffset at,
     std::span<const std::byte> bytes, const std::span<const ByteRange> skips)
@@ -86,7 +97,7 @@ namespace detail {
       // The skip range that starts first among those this piece reaches.
       auto next_skip = std::optional<ByteRange> {};
       for (const auto& skip : skips) {
-        if (skip.count.get() == 0 || skip.End().get() <= position
+        if (skip.count.get() == 0 || SkipEnd(skip) <= position
           || skip.offset.get() >= end) {
           continue;
         }
@@ -105,15 +116,16 @@ namespace detail {
         bytes = bytes.subspan(hashed);
         position += hashed;
       }
-      const auto skipped = static_cast<size_t>(
-        (std::min)(next_skip->End().get(), end) - position);
+      const auto skipped
+        = static_cast<size_t>((std::min)(SkipEnd(*next_skip), end) - position);
       bytes = bytes.subspan(skipped);
       position += skipped;
     }
   }
 
   //! Reads all of `source` once through a buffer of at most
-  //! `kHashBufferSize`, handing each piece to `consume`.
+  //! `kHashBufferSize`, handing each piece to `consume`. The size is measured
+  //! once: bytes appended during the read are not part of it.
   template <ReadableDevice D, class Consume>
   auto ReadInPieces(const D& source, const Consume& consume) noexcept
     -> Result<void>
@@ -131,7 +143,9 @@ namespace detail {
     }
     auto at = ByteOffset { 0 };
     while (at.get() < size->get()) {
-      const auto read = source.ReadAt(at, buffer->Bytes());
+      const auto request = static_cast<size_t>(
+        (std::min)(buffer->Size().get(), size->get() - at.get()));
+      const auto read = source.ReadAt(at, buffer->Bytes().first(request));
       if (!read) {
         return ::oxygen::Err(read.error());
       }

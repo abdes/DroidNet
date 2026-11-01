@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <system_error>
 #include <vector>
@@ -32,6 +33,7 @@ using oxygen::serio::ByteCount;
 using oxygen::serio::ByteOffset;
 using oxygen::serio::ByteRange;
 using oxygen::serio::ByteView;
+using oxygen::serio::CountOf;
 using oxygen::serio::Error;
 using oxygen::serio::MemoryFile;
 using oxygen::serio::ReadAll;
@@ -155,10 +157,48 @@ NOLINT_TEST_F(RegionTest, ReadAllReadsTheWholeDevice)
   const auto file = MemoryFile::FromBytes(bytes_);
   ASSERT_TRUE(file);
 
-  const auto all = ReadAll(*file);
+  const auto all = ReadAll(*file, CountOf(bytes_.size()));
 
   ASSERT_TRUE(all);
   EXPECT_THAT(all->Bytes(), BytesEqual(bytes_));
+}
+
+//! A device one byte larger than the limit is refused with kTooLarge; at
+//! the limit it is read.
+NOLINT_TEST_F(RegionTest, ReadAllRefusesADeviceLargerThanTheLimit)
+{
+  const auto file = MemoryFile::FromBytes(bytes_);
+  ASSERT_HAS_VALUE(file);
+
+  const auto refused = ReadAll(*file, CountOf(bytes_.size() - 1));
+  const auto read = ReadAll(*file, CountOf(bytes_.size()));
+
+  ASSERT_FALSE(refused);
+  EXPECT_EQ(refused.error(), Error::kTooLarge);
+  EXPECT_TRUE(read);
+}
+
+//! A device reporting the largest size is refused before anything is
+//! allocated: an allocation would fail with `not_enough_memory` instead.
+NOLINT_TEST(RegionReadAllTest, HugeReportedSizeIsRefusedBeforeAllocating)
+{
+  struct HugeDevice {
+    [[nodiscard]] auto Size() const noexcept -> oxygen::Result<ByteCount>
+    {
+      return ::oxygen::Ok(ByteCount { std::numeric_limits<uint64_t>::max() });
+    }
+    [[nodiscard]] auto ReadAt(const ByteOffset /*at*/,
+      const std::span<std::byte> /*out*/) const noexcept
+      -> oxygen::Result<ByteCount>
+    {
+      return ::oxygen::Ok(ByteCount { 0 });
+    }
+  };
+
+  const auto all = ReadAll(HugeDevice {}, ByteCount { 1024 });
+
+  ASSERT_FALSE(all);
+  EXPECT_EQ(all.error(), Error::kTooLarge);
 }
 
 //! ReadAll of a region reads only the region's range.
@@ -167,7 +207,7 @@ NOLINT_TEST_F(RegionTest, ReadAllOfARegionReadsItsRange)
   const auto region = Region<ByteView>::Make(device_, Range(100, 250));
   ASSERT_TRUE(region);
 
-  const auto all = ReadAll(*region);
+  const auto all = ReadAll(*region, ByteCount { 250 });
 
   ASSERT_TRUE(all);
   EXPECT_THAT(all->Bytes(), BytesEqual(std::span(bytes_).subspan(100, 250)));
@@ -198,7 +238,7 @@ NOLINT_TEST(RegionReadAllTest, DeviceEndingBeforeItsSizeIsEndOfData)
   };
   const auto device = TruncatedDevice {};
 
-  const auto all = ReadAll(device);
+  const auto all = ReadAll(device, ByteCount { 100 });
 
   ASSERT_FALSE(all);
   EXPECT_EQ(all.error(), Error::kEndOfData);
@@ -211,7 +251,7 @@ NOLINT_TEST_F(RegionTest, ReadAllPropagatesDeviceErrors)
     = FaultInjectingDevice<MemoryFile>(MemoryFile::FromBytes(bytes_).value());
   device.FailOn(FaultOperation::kRead, 0, make_error_code(Error::kIo));
 
-  const auto all = ReadAll(device);
+  const auto all = ReadAll(device, CountOf(bytes_.size()));
 
   ASSERT_FALSE(all);
   EXPECT_EQ(all.error(), Error::kIo);
@@ -224,7 +264,7 @@ NOLINT_TEST_F(RegionTest, ReadAllSurvivesShortReads)
     = FaultInjectingDevice<MemoryFile>(MemoryFile::FromBytes(bytes_).value());
   device.LimitReads(ByteCount { 7 });
 
-  const auto all = ReadAll(device);
+  const auto all = ReadAll(device, CountOf(bytes_.size()));
 
   ASSERT_TRUE(all);
   EXPECT_THAT(all->Bytes(), BytesEqual(bytes_));

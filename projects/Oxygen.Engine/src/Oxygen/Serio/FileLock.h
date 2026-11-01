@@ -23,7 +23,10 @@ enum class FileLockMode : uint8_t { kShared, kExclusive };
  - `kOpenOrCreate`: the file is created if missing and stays after release.
  - `kTemporary`: the file exists only while it is locked. It is created if
    missing and removed when the last holder releases it, so a mutex leaves no
-   file behind. A contender that races the removal reports contention.
+   file behind. A contender that races the removal reports contention. Holders
+   that release together, or a killed holder, may leave the file, which the
+   next acquisition locks again. A denied access is always the caller's
+   permission (`kAccessDenied`), never contention.
 */
 enum class FileLockOpenMode : uint8_t { kExisting, kOpenOrCreate, kTemporary };
 

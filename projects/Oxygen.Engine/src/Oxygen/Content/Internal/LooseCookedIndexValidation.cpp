@@ -66,7 +66,8 @@ namespace {
         throw std::runtime_error("cannot open '" + table_path.string()
           + "': " + table_file.error().message());
       }
-      const auto rows = serio::ReadAll(*table_file);
+      const auto rows
+        = serio::ReadAll(*table_file, serio::ByteCount { table.size });
       if (!rows) {
         throw std::runtime_error("cannot read '" + table_path.string()
           + "': " + rows.error().message());

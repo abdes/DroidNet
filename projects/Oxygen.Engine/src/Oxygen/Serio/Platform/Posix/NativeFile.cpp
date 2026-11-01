@@ -120,14 +120,18 @@ auto NativeFile::OpenForDriver(const std::filesystem::path& path,
 auto NativeFile::Adopt(const std::filesystem::path& path,
   const Result<NativeHandle>& handle) noexcept -> Result<NativeFile>
 {
+  if (!handle) {
+    return ::oxygen::Err(handle.error());
+  }
+  // The file owns the handle before anything can throw, so a failed path
+  // copy closes it.
+  auto file = NativeFile(*handle, {});
   try {
-    if (!handle) {
-      return ::oxygen::Err(handle.error());
-    }
-    return ::oxygen::Ok(NativeFile(*handle, path));
+    file.path_ = path;
   } catch (const std::bad_alloc&) {
     return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
   }
+  return ::oxygen::Ok(std::move(file));
 }
 
 NativeFile::NativeFile(
@@ -236,6 +240,10 @@ auto NativeFile::WriteAt(ByteOffset at, std::span<const std::byte> in) noexcept
 auto NativeFile::Reserve(const ByteCount size) noexcept -> Result<void>
 {
 #ifdef FALLOC_FL_KEEP_SIZE
+  // `fallocate` refuses an empty range, which reserves nothing anyway.
+  if (size == ByteCount { 0 }) {
+    return {};
+  }
   if (::fallocate(ToDescriptor(handle_), FALLOC_FL_KEEP_SIZE, 0,
         static_cast<off_t>(size.get()))
     != 0) {

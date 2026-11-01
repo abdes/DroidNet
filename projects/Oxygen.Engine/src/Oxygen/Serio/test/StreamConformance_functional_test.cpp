@@ -7,8 +7,8 @@
 // Covers: Serio/RegionStream.h, Serio/AnyStream.h over Serio/NativeFile.h and
 // Serio/MappedFile.h
 
+#include "Conformance/StreamConformance.h"
 #include "Support/DeviceFactories.h"
-#include "Support/StreamConformance.h"
 #include "Support/StreamFactories.h"
 #include "gtest/gtest.h"
 

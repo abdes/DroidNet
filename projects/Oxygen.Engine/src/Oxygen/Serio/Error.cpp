@@ -29,6 +29,8 @@ namespace {
       return condition == Error::kIo;
     case std::errc::is_a_directory:
       return condition == Error::kIsDirectory;
+    case std::errc::filename_too_long:
+      return condition == Error::kPathTooLong;
     default:
       return false;
     }
@@ -64,6 +66,8 @@ namespace {
         return "device error";
       case Error::kIsDirectory:
         return "is a directory";
+      case Error::kPathTooLong:
+        return "path too long";
       }
       return "unknown serio error";
     }

@@ -78,7 +78,8 @@ auto ScriptQueryService::ReadScriptResourceForAsset(
     if (!region) {
       return nullptr;
     }
-    auto payload = serio::ReadAll(*region);
+    auto payload = serio::ReadAll(
+      *region, serio::ByteCount { data::pak::scripting::kMaxScriptBytes });
     if (!payload) {
       return nullptr;
     }

@@ -607,7 +607,8 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
   [[maybe_unused]] const CommandContext& context) -> CommandResult
 {
   const auto archive_path = path_finder.CVarsArchivePath();
-  const auto bytes = serio::ReadPublishedFile(archive_path);
+  const auto bytes = serio::ReadPublishedFile(
+    archive_path, serio::ByteCount { kMaxPersistedFileBytes });
   if (!bytes.has_value()) {
     // No archive is the normal state until the application first saves one.
     if (bytes.error() == serio::Error::kNotFound) {
@@ -821,7 +822,8 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
   -> CommandResult
 {
   const auto history_path = HistoryPathFor(path_finder);
-  const auto bytes = serio::ReadPublishedFile(history_path);
+  const auto bytes = serio::ReadPublishedFile(
+    history_path, serio::ByteCount { kMaxPersistedFileBytes });
   if (!bytes.has_value()) {
     // No history is the normal state until the console first saves one.
     if (bytes.error() == serio::Error::kNotFound) {

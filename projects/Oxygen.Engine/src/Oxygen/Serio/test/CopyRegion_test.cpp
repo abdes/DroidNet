@@ -7,6 +7,8 @@
 // Covers: Serio/CopyRegion.h, Serio/AsyncDevice.h
 
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <span>
 #include <system_error>
 #include <utility>
@@ -129,6 +131,53 @@ NOLINT_TEST_F(CopyRegionTest, ScratchSmallerThanTwoBytesIsInvalid)
 
   ASSERT_FALSE(copied);
   EXPECT_EQ(copied.error(), std::errc::invalid_argument);
+}
+
+//! A copy within one device whose ranges overlap, in either direction, is
+//! refused before anything is written; disjoint ranges of one device copy.
+NOLINT_TEST_F(CopyRegionTest, OverlappingRangesOfOneDeviceAreRefused)
+{
+  auto file = Required(MemoryFile::FromBytes(Bytes()), "file");
+  const auto head
+    = ByteRange { .offset = ByteOffset { 0 }, .count = ByteCount { 3 } };
+  const auto region = Required(Region<MemoryFile>::Make(file, head), "head");
+  auto scratch = std::vector<std::byte>(2);
+
+  const auto up = Run(CopyRegion(region, file, ByteOffset { 2 }, scratch));
+  const auto down = Run(CopyRegion(
+    Required(
+      Region<MemoryFile>::Make(file,
+        ByteRange { .offset = ByteOffset { 2 }, .count = ByteCount { 3 } }),
+      "tail"),
+    file, ByteOffset { 0 }, scratch));
+  const auto unchanged = std::vector(file.Bytes().begin(), file.Bytes().end());
+  const auto apart = Run(CopyRegion(region, file, ByteOffset { 500 }, scratch));
+
+  ASSERT_FALSE(up);
+  EXPECT_EQ(up.error(), std::errc::invalid_argument);
+  ASSERT_FALSE(down);
+  EXPECT_EQ(down.error(), std::errc::invalid_argument);
+  EXPECT_THAT(unchanged, BytesEqual(Bytes()));
+  ASSERT_TRUE(apart) << apart.error().message();
+  EXPECT_THAT(
+    file.Bytes().subspan(500, 3), BytesEqual(std::span(Bytes()).first(3)));
+}
+
+//! A destination range past the last offset is refused before anything is
+//! written.
+NOLINT_TEST_F(CopyRegionTest, DestinationPastTheLastOffsetIsRefused)
+{
+  const auto range
+    = ByteRange { .offset = ByteOffset { 0 }, .count = ByteCount { 10 } };
+  auto target = MemoryFile {};
+  auto scratch = std::vector<std::byte>(4);
+
+  const auto copied = Run(CopyRegion(RegionOf(range), target,
+    ByteOffset { std::numeric_limits<uint64_t>::max() - 5 }, scratch));
+
+  ASSERT_FALSE(copied);
+  EXPECT_EQ(copied.error(), std::errc::value_too_large);
+  EXPECT_TRUE(target.Bytes().empty());
 }
 
 //! Short reads still copy every byte.

@@ -5,14 +5,18 @@
 //===----------------------------------------------------------------------===//
 // Covers: Serio/Integrity.h
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Crc32.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Serio/Error.h>
 #include <Oxygen/Serio/Integrity.h>
@@ -116,6 +120,74 @@ NOLINT_TEST(IntegrityTest, ComputeCrc32_LeavesOutASkippedField)
   ASSERT_HAS_VALUE(sha);
   EXPECT_EQ(*crc, oxygen::base::ComputeCrc32(kept));
   EXPECT_EQ(*sha, oxygen::base::ComputeSha256(kept));
+}
+
+//! A device that a writer appends to once its first read is served: its
+//! size grows from `visible` to all of `content`.
+struct AppendedDevice {
+  MemoryFile content;
+  mutable uint64_t visible { 0 };
+
+  [[nodiscard]] auto Size() const noexcept -> oxygen::Result<ByteCount>
+  {
+    return ::oxygen::Ok(ByteCount { visible });
+  }
+  [[nodiscard]] auto ReadAt(const ByteOffset at,
+    const std::span<std::byte> out) const noexcept -> oxygen::Result<ByteCount>
+  {
+    const auto available = at.get() < visible ? visible - at.get() : 0U;
+    const auto count
+      = static_cast<size_t>(std::min<uint64_t>(out.size(), available));
+    const auto read = content.ReadAt(at, out.first(count));
+    visible = content.Bytes().size();
+    return read;
+  }
+};
+
+//! A device that grows while it is hashed is hashed at the size measured
+//! first: appended bytes are not part of the digest.
+NOLINT_TEST(IntegrityTest, Hash_StopsAtTheSizeMeasuredFirst)
+{
+  const auto measured = oxygen::serio::kHashBufferSize.get() + 1;
+  const auto bytes = PatternBytes(measured + 4096);
+  auto content = MemoryFile::FromBytes(bytes);
+  ASSERT_HAS_VALUE(content);
+  const auto device = AppendedDevice {
+    .content = std::move(*content),
+    .visible = measured,
+  };
+
+  const auto crc = oxygen::serio::ComputeCrc32(device);
+
+  ASSERT_HAS_VALUE(crc);
+  EXPECT_EQ(*crc,
+    oxygen::base::ComputeCrc32(
+      std::span(bytes).first(static_cast<size_t>(measured))));
+}
+
+//! Skips may overlap, come in any order and run past the last offset: each
+//! byte inside any of them is left out once.
+NOLINT_TEST(IntegrityTest, ComputeCrc32_LeavesOutOverlappingUnorderedSkips)
+{
+  const auto bytes = PatternBytes(4096);
+  const auto file = MemoryFile::FromBytes(bytes);
+  ASSERT_HAS_VALUE(file);
+  const auto skips = std::array {
+    ByteRange { .offset = ByteOffset { 10 }, .count = ByteCount { 10 } },
+    ByteRange { .offset = ByteOffset { 5 }, .count = ByteCount { 10 } },
+    ByteRange {
+      .offset = ByteOffset { 100 },
+      .count = ByteCount { std::numeric_limits<uint64_t>::max() },
+    },
+    ByteRange { .offset = ByteOffset { 50 }, .count = ByteCount { 0 } },
+  };
+
+  const auto crc = oxygen::serio::ComputeCrc32(*file, skips);
+
+  auto kept = std::vector(bytes.begin(), bytes.begin() + 5);
+  kept.insert(kept.end(), bytes.begin() + 20, bytes.begin() + 100);
+  ASSERT_HAS_VALUE(crc);
+  EXPECT_EQ(*crc, oxygen::base::ComputeCrc32(kept));
 }
 
 //! An empty device hashes to the digests of no bytes.

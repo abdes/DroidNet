@@ -5,10 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 // Covers: Serio/Stream.h, Serio/MemoryStream.h, Serio/RegionStream.h,
-// Serio/AnyStream.h, Serio/test/Support/StreamConformance.h
+// Serio/AnyStream.h, Serio/test/Conformance/StreamConformance.h
 
+#include "Conformance/StreamConformance.h"
 #include "Support/DeviceFactories.h"
-#include "Support/StreamConformance.h"
 #include "Support/StreamFactories.h"
 #include "gtest/gtest.h"
 

@@ -39,6 +39,7 @@
 #include <tinyexr.h>
 #include <webp/decode.h>
 
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/Internal/stb/stb_image.h>
 #include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/Error.h>
@@ -917,7 +918,7 @@ auto ReadImageFile(const std::filesystem::path& path)
         ? TextureImportError::kFileNotFound
         : TextureImportError::kFileReadFailed);
   }
-  auto bytes = serio::ReadAll(*file);
+  auto bytes = serio::ReadAll(*file, kDefaultMaxSourceBytes);
   if (!bytes || bytes->Empty()) {
     return Err(TextureImportError::kFileReadFailed);
   }

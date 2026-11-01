@@ -34,6 +34,8 @@ auto IsSystemErrorCondition(const int value, const Error condition) noexcept
     return condition == Error::kIo;
   case EISDIR:
     return condition == Error::kIsDirectory;
+  case ENAMETOOLONG:
+    return condition == Error::kPathTooLong;
   default:
     return false;
   }

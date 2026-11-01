@@ -66,7 +66,7 @@ auto PakSourceDevices::Read(const std::filesystem::path& path,
   if (!region) {
     return ::oxygen::Err(region.error());
   }
-  return serio::ReadAll(*region);
+  return serio::ReadAll(*region, range.count);
 }
 
 } // namespace oxygen::content::pak::internal

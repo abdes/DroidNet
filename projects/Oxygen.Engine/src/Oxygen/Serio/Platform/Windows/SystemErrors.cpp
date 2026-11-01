@@ -28,6 +28,8 @@ auto IsSystemErrorCondition(const int value, const Error condition) noexcept
   case ERROR_SHARING_VIOLATION:
   case ERROR_LOCK_VIOLATION:
     return condition == Error::kSharingViolation;
+  case ERROR_FILENAME_EXCED_RANGE:
+    return condition == Error::kPathTooLong;
   case ERROR_DISK_FULL:
   case ERROR_HANDLE_DISK_FULL:
   case ERROR_DISK_QUOTA_EXCEEDED:

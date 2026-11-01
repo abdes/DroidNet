@@ -1,0 +1,33 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <cstdint>
+#include <limits>
+
+#include <Oxygen/Serio/Types.h>
+
+namespace oxygen::content::import {
+
+//! The most bytes the import reads whole from a source file by default.
+/*!
+ A provisional product limit, not a measured memory budget: it admits large
+ binary sources and stays within the image decoders' `int` input size. A
+ larger source is refused before anything is allocated, with its own
+ diagnostic. Import configuration may set another limit.
+*/
+inline constexpr serio::ByteCount kDefaultMaxSourceBytes {
+  static_cast<uint64_t>(std::numeric_limits<int32_t>::max()),
+};
+
+//! The most bytes the import reads from one of its own metadata files: a
+//! model import record or a buffer sidecar.
+inline constexpr serio::ByteCount kMaxImportMetadataBytes {
+  uint64_t { 64 } * 1024 * 1024,
+};
+
+} // namespace oxygen::content::import

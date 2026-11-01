@@ -35,10 +35,16 @@ inline constexpr auto kCopyChunk = ByteCount { uint64_t { 1 } << 20U };
  completes. On a file opened through an `IoDriver`, the read of chunk N + 1
  and the write of chunk N are in flight together.
 
+ Chunks are read ahead of the writes, so a copy within one device whose
+ source and destination ranges overlap would read bytes it already
+ overwrote; it is refused. Two handles of one file are two devices: the
+ caller keeps their ranges apart.
+
  @return Success once every byte is written; `kEndOfData` when `from` ends
          before its range does; `invalid_argument` for scratch smaller than
-         two bytes; device errors unchanged. A failed copy leaves `to`
-         partially written.
+         two bytes or for overlapping ranges of one device; `value_too_large`
+         when the destination range passes the largest offset; device errors
+         unchanged. A failed copy leaves `to` partially written.
 */
 template <AsyncReadableDevice S, AsyncWritableDevice D>
 [[nodiscard]] auto CopyRegion(const Region<S> from, D& to, const ByteOffset at,
@@ -46,6 +52,14 @@ template <AsyncReadableDevice S, AsyncWritableDevice D>
 {
   const auto chunk = scratch.size() / 2;
   if (chunk == 0) {
+    co_return ::oxygen::Err(std::make_error_code(std::errc::invalid_argument));
+  }
+  const auto target = ByteRange::Make(at, from.Range().count);
+  if (!target) {
+    co_return ::oxygen::Err(target.error());
+  }
+  if (static_cast<const void*>(&from.Device()) == static_cast<const void*>(&to)
+    && target->Overlaps(from.Range())) {
     co_return ::oxygen::Err(std::make_error_code(std::errc::invalid_argument));
   }
   const auto total = from.Range().count.get();
