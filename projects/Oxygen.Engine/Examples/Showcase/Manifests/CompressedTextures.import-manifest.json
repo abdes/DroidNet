@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,64 +12,64 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Models/ChronographWatch-ktx2/ChronographWatch.gltf",
+      "id": "/Showcase/Models/ChronographWatch-ktx2/ChronographWatch.gltf",
       "type": "model",
-      "virtual_path": "/Content/Models/ChronographWatch-ktx2/ChronographWatch.gltf"
+      "virtual_path": "/Showcase/Models/ChronographWatch-ktx2/ChronographWatch.gltf"
     },
     {
-      "id": "/Content/Models/ChronographWatch-webp/ChronographWatch.gltf",
+      "id": "/Showcase/Models/ChronographWatch-webp/ChronographWatch.gltf",
       "type": "model",
-      "virtual_path": "/Content/Models/ChronographWatch-webp/ChronographWatch.gltf"
+      "virtual_path": "/Showcase/Models/ChronographWatch-webp/ChronographWatch.gltf"
     },
     {
-      "id": "/Content/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf",
+      "id": "/Showcase/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf",
       "type": "model",
-      "virtual_path": "/Content/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf"
+      "virtual_path": "/Showcase/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf"
     },
     {
-      "id": "/Content/Scenes/CompressedTextures/Rock030_base_color.otex",
+      "id": "/Showcase/Scenes/CompressedTextures/Rock030_base_color.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/CompressedTextures/Rock030_base_color.otex.json",
-      "virtual_path": "/Content/Scenes/CompressedTextures/Rock030_base_color.otex",
+      "source": "/Showcase/Scenes/CompressedTextures/Rock030_base_color.otex.json",
+      "virtual_path": "/Showcase/Scenes/CompressedTextures/Rock030_base_color.otex",
       "name": "Rock030_base_color"
     },
     {
-      "id": "/Content/Scenes/CompressedTextures/Rock030_normal.otex",
+      "id": "/Showcase/Scenes/CompressedTextures/Rock030_normal.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/CompressedTextures/Rock030_normal.otex.json",
-      "virtual_path": "/Content/Scenes/CompressedTextures/Rock030_normal.otex",
+      "source": "/Showcase/Scenes/CompressedTextures/Rock030_normal.otex.json",
+      "virtual_path": "/Showcase/Scenes/CompressedTextures/Rock030_normal.otex",
       "name": "Rock030_normal"
     },
     {
-      "id": "/Content/Scenes/CompressedTextures/Rock030_roughness.otex",
+      "id": "/Showcase/Scenes/CompressedTextures/Rock030_roughness.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/CompressedTextures/Rock030_roughness.otex.json",
-      "virtual_path": "/Content/Scenes/CompressedTextures/Rock030_roughness.otex",
+      "source": "/Showcase/Scenes/CompressedTextures/Rock030_roughness.otex.json",
+      "virtual_path": "/Showcase/Scenes/CompressedTextures/Rock030_roughness.otex",
       "name": "Rock030_roughness"
     },
     {
-      "id": "/Content/Scenes/CompressedTextures/Rock030.omat",
+      "id": "/Showcase/Scenes/CompressedTextures/Rock030.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/CompressedTextures/Rock030.omat.json",
-      "virtual_path": "/Content/Scenes/CompressedTextures/Rock030.omat",
+      "source": "/Showcase/Scenes/CompressedTextures/Rock030.omat.json",
+      "virtual_path": "/Showcase/Scenes/CompressedTextures/Rock030.omat",
       "name": "Rock030",
       "depends_on": [
-        "/Content/Scenes/CompressedTextures/Rock030_base_color.otex",
-        "/Content/Scenes/CompressedTextures/Rock030_normal.otex",
-        "/Content/Scenes/CompressedTextures/Rock030_roughness.otex"
+        "/Showcase/Scenes/CompressedTextures/Rock030_base_color.otex",
+        "/Showcase/Scenes/CompressedTextures/Rock030_normal.otex",
+        "/Showcase/Scenes/CompressedTextures/Rock030_roughness.otex"
       ]
     },
     {
-      "id": "/Content/Scenes/CompressedTextures/CompressedTextures.oscene",
+      "id": "/Showcase/Scenes/CompressedTextures/CompressedTextures.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/CompressedTextures/CompressedTextures.scene.json",
-      "virtual_path": "/Content/Scenes/CompressedTextures/CompressedTextures.oscene",
+      "source": "/Showcase/Scenes/CompressedTextures/CompressedTextures.scene.json",
+      "virtual_path": "/Showcase/Scenes/CompressedTextures/CompressedTextures.oscene",
       "name": "CompressedTextures",
       "depends_on": [
-        "/Content/Models/ChronographWatch-ktx2/ChronographWatch.gltf",
-        "/Content/Models/ChronographWatch-webp/ChronographWatch.gltf",
-        "/Content/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf",
-        "/Content/Scenes/CompressedTextures/Rock030.omat"
+        "/Showcase/Models/ChronographWatch-ktx2/ChronographWatch.gltf",
+        "/Showcase/Models/ChronographWatch-webp/ChronographWatch.gltf",
+        "/Showcase/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf",
+        "/Showcase/Scenes/CompressedTextures/Rock030.omat"
       ]
     }
   ]

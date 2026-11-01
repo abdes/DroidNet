@@ -13,10 +13,10 @@ struct RuntimePaths {
   std::filesystem::path showcase;
   //! The examples project root.
   std::filesystem::path content;
-  //! The project's `Content` mount folder.
+  //! The folder of the project's `Showcase` mount.
   std::filesystem::path content_mount;
   //! Where RenderScene's `Tools/cook` cooks the examples:
-  //! `<showcase>/.cooked/Content`.
+  //! `<showcase>/.cooked/Showcase`.
   std::filesystem::path cooked;
   //! Where its `Tools/pak` packages them: `<showcase>/.build/pak`.
   std::filesystem::path paks;

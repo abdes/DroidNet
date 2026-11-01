@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,24 +12,24 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Models/Showcase/tableRound.fbx",
+      "id": "/Showcase/Models/Showcase/tableRound.fbx",
       "type": "model",
-      "virtual_path": "/Content/Models/Showcase/tableRound.fbx"
+      "virtual_path": "/Showcase/Models/Showcase/tableRound.fbx"
     },
     {
-      "id": "/Content/Models/Showcase/chair.fbx",
+      "id": "/Showcase/Models/Showcase/chair.fbx",
       "type": "model",
-      "virtual_path": "/Content/Models/Showcase/chair.fbx"
+      "virtual_path": "/Showcase/Models/Showcase/chair.fbx"
     },
     {
-      "id": "/Content/Models/Showcase/lampRoundTable.fbx",
+      "id": "/Showcase/Models/Showcase/lampRoundTable.fbx",
       "type": "model",
-      "virtual_path": "/Content/Models/Showcase/lampRoundTable.fbx"
+      "virtual_path": "/Showcase/Models/Showcase/lampRoundTable.fbx"
     },
     {
-      "id": "/Content/Models/Showcase/pottedPlant.fbx",
+      "id": "/Showcase/Models/Showcase/pottedPlant.fbx",
       "type": "model",
-      "virtual_path": "/Content/Models/Showcase/pottedPlant.fbx"
+      "virtual_path": "/Showcase/Models/Showcase/pottedPlant.fbx"
     }
   ]
 }

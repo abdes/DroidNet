@@ -91,9 +91,9 @@ auto RunDemo(std::span<const char*> args, DemoMain demo) -> int
     config.engine.path_finder_config
       = PathFinderConfig::Create()
           .WithWorkspaceRoot(workspace_root)
-          // The examples project's committed mount: Content -> Content.
+          // The examples project's committed mount: Showcase -> Content.
           .WithSourceMount(
-            "Content", workspace_root / "Examples" / "Showcase" / "Content")
+            "Showcase", workspace_root / "Examples" / "Showcase" / "Content")
           // Each example keeps its own console variables and history, so a
           // setting changed in one does not leak into the others.
           .WithCVarsArchivePath(

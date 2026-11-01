@@ -520,7 +520,7 @@ path, file timestamp or generation name. Input fingerprints remain separate.
 A cooked root holds one mount, the one its asset identities name
 (`/Content/Scenes/A/B.oscene` lives at `Scenes/A/B.oscene` under a root of the
 `Content` mount). A tool keeps sibling containers in roots it owns:
-RenderScene cooks the examples project's scenes into its own `.cooked/Content`,
+RenderScene cooks the examples project's scenes into its own `.cooked/Showcase`,
 and a record-only model import retains generations in the caller's
 `<generations_root>/<source_identity>/<generation>`; the model import records
 stay in their models' mounts, at `<model identity>.import.json`. No container

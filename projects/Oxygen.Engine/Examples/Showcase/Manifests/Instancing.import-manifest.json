@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,27 +12,27 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Scenes/Instancing/MatInstanced.omat",
+      "id": "/Showcase/Scenes/Instancing/MatInstanced.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/Instancing/MatInstanced.omat.json",
-      "virtual_path": "/Content/Scenes/Instancing/MatInstanced.omat",
+      "source": "/Showcase/Scenes/Instancing/MatInstanced.omat.json",
+      "virtual_path": "/Showcase/Scenes/Instancing/MatInstanced.omat",
       "name": "MatInstanced"
     },
     {
-      "id": "/Content/Scenes/Instancing/GeoInstancedCube.ogeo",
+      "id": "/Showcase/Scenes/Instancing/GeoInstancedCube.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/Instancing/GeoInstancedCube.ogeo.json",
-      "virtual_path": "/Content/Scenes/Instancing/GeoInstancedCube.ogeo",
+      "source": "/Showcase/Scenes/Instancing/GeoInstancedCube.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/Instancing/GeoInstancedCube.ogeo",
       "name": "GeoInstancedCube",
-      "depends_on": ["/Content/Scenes/Instancing/MatInstanced.omat"]
+      "depends_on": ["/Showcase/Scenes/Instancing/MatInstanced.omat"]
     },
     {
-      "id": "/Content/Scenes/Instancing/InstancingTestScene.oscene",
+      "id": "/Showcase/Scenes/Instancing/InstancingTestScene.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/Instancing/InstancingTestScene.scene.json",
-      "virtual_path": "/Content/Scenes/Instancing/InstancingTestScene.oscene",
+      "source": "/Showcase/Scenes/Instancing/InstancingTestScene.scene.json",
+      "virtual_path": "/Showcase/Scenes/Instancing/InstancingTestScene.oscene",
       "name": "InstancingTestScene",
-      "depends_on": ["/Content/Scenes/Instancing/GeoInstancedCube.ogeo"]
+      "depends_on": ["/Showcase/Scenes/Instancing/GeoInstancedCube.ogeo"]
     }
   ]
 }

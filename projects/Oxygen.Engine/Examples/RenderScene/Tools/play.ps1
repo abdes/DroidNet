@@ -5,9 +5,9 @@ Plays a scene of an example in Oxygen.Player.
 
 .DESCRIPTION
 Writes a launch file that mounts the cooked examples (RenderScene's
-.cooked/Content) and binds the examples project's source mounts, so editing a scene's script reloads it
+.cooked/Showcase) and binds the examples project's source mounts, so editing a scene's script reloads it
 while playing, then runs Oxygen.Player with it. The scene is
-/Content/Scenes/<Example>/<Scene>.oscene; cook the example first (Tools/cook).
+/Showcase/Scenes/<Example>/<Scene>.oscene; cook the example first (Tools/cook).
 
 Player options follow the example and the scene, after `--` or directly (a
 PowerShell prompt consumes `--` itself): the first argument that is not a
@@ -115,7 +115,7 @@ if (-not $sceneName) {
     Write-Error "$($entry.name) has no scene '$Scene'; its scenes are $($entry.scenes -join ', ')."
     exit 1
 }
-$virtualPath = "/Content/Scenes/$($entry.name)/$sceneName.oscene"
+$virtualPath = "/Showcase/Scenes/$($entry.name)/$sceneName.oscene"
 if (-not (Test-Path -LiteralPath (Join-Path $ExamplesCookedRoot "Scenes/$($entry.name)/$sceneName.oscene") -PathType Leaf)) {
     Write-Error "$virtualPath is not cooked; run Tools/cook $($entry.name)."
     exit 1

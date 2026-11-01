@@ -119,28 +119,14 @@
     }
   },
   "content": {
-    "active_scene": {
+    "mounts": {
+      "sources": "dir F:/projects/DroidNet/projects/Oxygen.Engine/Examples/RenderScene/.cooked/Showcase"
+    },
+    "scene": {
       "key": "22014080-e351-658e-86fc-6d51055616c2",
-      "name": "/Content/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
-      "source_is_pak": false,
-      "source_path": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\RenderScene\\.cooked\\Content\\container.index.bin"
-    },
-    "explorer": {
-      "auto_dump_delay": 180.0,
-      "auto_dump_tex_mem": true,
-      "auto_load_on_import": true,
-      "dump_top_n": 20.0,
-      "include_fbx": true,
-      "include_glb": true,
-      "include_gltf": true,
-      "model_root": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\Showcase\\Content\\SourceMedia\\DCC"
-    },
-    "library": {
-      "mounted_indices": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\RenderScene\\.cooked\\Content\\container.index.bin",
-      "mounted_paks": ""
-    },
-    "paths": {
-      "last_cooked_output": "F:\\projects\\DroidNet\\projects\\Oxygen.Engine\\Examples\\RenderScene\\.cooked"
+      "source_kind": "dir",
+      "source_path": "F:/projects/DroidNet/projects/Oxygen.Engine/Examples/RenderScene/.cooked/Showcase",
+      "virtual_path": "/Showcase/Scenes/VsmTwoCubes/VsmTwoCubes.oscene"
     }
   },
   "demo_shell": {

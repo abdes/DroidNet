@@ -5,7 +5,7 @@ Packages the cooked examples into RenderScene's .build/pak/examples.pak.
 
 .DESCRIPTION
 Builds one pak with Oxygen PakTool from what Tools/cook cooked (RenderScene's
-.cooked/Content), with its catalog and manifest beside it. The models an
+.cooked/Showcase), with its catalog and manifest beside it. The models an
 example's manifest names are in that cooked root. The pak's source key is the
 examples project's Id (Project.oxy), and its external scripts resolve through
 the project's source mounts.

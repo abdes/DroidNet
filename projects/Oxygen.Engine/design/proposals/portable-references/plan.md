@@ -35,6 +35,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S6c   | Done                                                           |
 | S6d   | Done                                                           |
 | S6e   | Done                                                           |
+| S6f   | Done                                                           |
 | S7    | Not started                                                    |
 | S8    | Not started                                                    |
 | S9    | Not started                                                    |
@@ -90,8 +91,9 @@ flowchart LR
   S6b --> S6e
   S6c --> S6e
   S6d --> S6e
-  S6e --> S20
-  S3 --> S7[S7 editor formats]
+  S6e --> S6f[S6f engine examples and docs]
+  S6f --> S7[S7 editor formats]
+  S3 --> S7
   S4 --> S9[S9 editor records]
   S5 --> S8[S8 editor projects]
   S6 --> S8
@@ -123,8 +125,9 @@ decisions are in before S14.
 S6a to S6e finish the engine side of S6 and of the
 [Serio IO](../serio-io/README.md) and [cooked sources](../cooked-sources/README.md)
 work. They change no editor code; editor work they require is a task of the
-editor slice named in their rows. S6e, the builders and the tests that move
-onto them, comes last, by the owner's decision.
+editor slice named in their rows. S6f takes the engine share of S19 to S21, so
+from S7 on every slice is editor or interop work and touches the engine only
+incidentally.
 
 ## Slices
 
@@ -396,7 +399,7 @@ docs, ImportTool README, the import manifest schema docs.
 
 ### S6e. Cooked content builders
 
-By the owner's decision, the last engine slice. Implements steps 5 and 6 of
+By the owner's decision, the last engine code slice. Implements steps 5 and 6 of
 the [cooked content builders](../cooked-content-builders/README.md): the
 descriptor builders (`SceneBuilder`, `PhysicsSidecarBuilder` with bindings,
 `DescriptorDefects`) and `ModelRecord`, each with its hardening tests; moves
@@ -410,6 +413,54 @@ hand-written model records); reviews the test bodies migrated in steps 1 to
 the examples) onto the builders and `Materialize`. Done when no engine test
 lays out a cooked artifact or a descriptor by hand outside a format's own
 reader tests.
+
+### S6f. Engine examples and docs
+
+The engine share of S19 to S21, so the editor slices start from an engine with
+no old form left. The engine integration tests of the
+[test impact](#test-impact) table are already fixed: the full engine suite
+passes after S6d and S6e.
+
+- **Showcase mount `Showcase`.** The mount is renamed from `Content`, its
+  identities become `/Showcase/...`, and every hard-coded `Content` mount name
+  and `.cooked/Content` path in the examples follows, as the design's
+  "Examples and tools" lists them: `Project.oxy`'s mount entry, the 21
+  manifests and 11 records, the scene and descriptor sources,
+  `Examples.json`, the `Tools/Generators` scripts, `fetch.ps1` and the tool
+  schemas, `RenderScene/Tools/{cook,play,pak}.ps1`,
+  `internal/ExamplesTools.ps1`, `internal/prepare_showcase.py`,
+  `RuntimePaths`, `Showcase.cmake`, `DemoMain`, `VortexBasic`, the Scripting
+  and Cooker test CMake lists and sources that consume Showcase, and
+  `tools/cmake/tests/test_showcase.py`. Turning `Project.oxy` into a library
+  project (project schema version 3) stays in S19, with the editor's schema.
+- **One check.** `cook.ps1 -Check` loses `Test-ExamplesProject`, its
+  PowerShell copy of the identity and reference rules, and runs ImportTool's
+  source analysis over the manifests instead; only the manifest-per-example
+  and scene-file checks, which no engine rule covers, stay.
+- **The last hand-laid descriptors.** The cooked script, collision shape,
+  physics material and input descriptors that S6e left built by hand in some
+  tests move onto the kit, with a builder for each format that needs one.
+  First inventory them: tests that construct asset objects in memory are not
+  layouts and stay.
+- **Engine docs.** The engine documents of the docs ledger and every engine
+  document that still states an old form: `source-mounts/README.md`
+  (`.cooked/Content` output, `Imports/` records), `examples-project/README.md`,
+  `scene-composition.md` NGN14, `pak-builder-api-specification.md`
+  (`embed_browse_index`), the Showcase and RenderScene READMEs, `SDK_README.md`,
+  `loose_cooked_content.md`, the PakTool README and `paktool_design.md`, the
+  ImportTool README. The proposal's accepted engine parts move into the engine
+  documents its "Accepted designs this touches" table lists.
+- **Engine sweep.** The S21 sweep, run over `projects/Oxygen.Engine`:
+  `Imports/`, the `"Pak"` mount kind, `identity_conflict`, `canonical_*_path`
+  in reference positions, `asset:///` in authored files,
+  `--embed-browse-index`, `container.index.bin` naming a source. What remains
+  must be a test of a refusal or a reader of the URI spelling.
+
+Done when Showcase, every example scene and the engine content cook under the
+`Showcase` mount, the full engine suite passes, `cook.ps1 -Check` has no rule
+of its own, and the sweep finds no old form in the engine tree. Tests: the
+`test_showcase.py` and preset tooling tests, the moved descriptor tests, the
+builders' hardening tests.
 
 ### S7. Editor formats
 
@@ -547,16 +598,18 @@ each raises, for the owner's decision. Added to `design.md`.
 
 Writes `tooling/migrations/portable_references/` with unit tests over in-memory
 project trees for every rule of the design's migration table. Runs it on
-Showcase and on every project in `Oxygen Projects`, libraries first; reviews
-each report; fixes F1's two `.cooked` references by hand. Renames the Showcase
-mount through the examples tooling. Adds `Examples/Studio`. Done when every
+every project in `Oxygen Projects`, libraries first; reviews each report;
+fixes F1's two `.cooked` references by hand. Makes Showcase, whose mount S6f
+renamed, a library project with project schema version 3. Adds
+`Examples/Studio`. Done when every
 migrated project opens with no unexpected problem, and Showcase, F1 Validation,
 Instancing and Racer cook.
 
 ### S20. Integration tests
 
-Fixes every integration test listed in the [test impact](#test-impact) table,
-through the S1 writers, moving the remaining inline JSON to them. The count of
+Fixes every editor integration test listed in the [test impact](#test-impact)
+table, through the S1 writers, moving the remaining inline JSON to them; the
+engine column was fixed by S6a to S6e. The count of
 failing tests before the fix is compared with the table; a failure the table
 does not predict is diagnosed before it is fixed. Adds the integration tests
 the studio example can run without a window (L4, L9, L10, S9). Done when every
@@ -564,9 +617,10 @@ lane of every touched module passes, WinUI lanes included.
 
 ### S21. Docs sweep
 
-Updates every remaining doc of the ledger, moves the proposal's accepted parts
-into the documents it lists under "Accepted designs this touches", and checks
-the repository for any remaining old form (`Imports/`, `"Pak"`,
+Updates every remaining editor doc of the ledger, moves the proposal's accepted
+editor parts into the documents it lists under "Accepted designs this touches"
+(S6f moved the engine ones), and checks the repository outside
+`projects/Oxygen.Engine`, which S6f swept, for any remaining old form (`Imports/`, `"Pak"`,
 `identity_conflict`, `IdentityField`, `canonical_*_path` in reference
 positions, `asset:///` in authored files, `--embed-browse-index`).
 
@@ -577,44 +631,42 @@ done only when its rows are gone from the code.
 
 ### Engine
 
-| Old form                                                                           | Where                                                                                                                                                                 | Slice   |
-| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| Five reference resolvers                                                           | `MountedCookedSources`, `TextureReferenceResolver`, `GeometryDescriptorImportJob` (3), `VirtualPathResolver::ResolveAssetKey` callers, `InputImportPipeline::Resolve` | S3      |
-| Per-family invalid/unmounted reference codes                                       | Scene, geometry, buffer, physics, script, texture jobs                                                                                                                | S3      |
-| `canonical_*_path` in reference positions (20 definitions, 34 uses)                | Scene, geometry, physics sidecar, collision shape, buffer container schemas                                                                                           | S3      |
-| Inline `^/` pattern for `auto_exposure_metering_mask`                              | Scene descriptor schema                                                                                                                                               | S3      |
-| `action_reference` local-or-absolute rule                                          | Input schema, `InputImportPipeline`, `ImportSourceAnalysis.cpp:402`                                                                                                   | S3      |
-| Texture descriptor `virtual_path`, `identity_conflict`, descriptor identity source | Schema, `TextureDescriptorImportRequestBuilder.cpp:138,256`                                                                                                           | S3      |
-| Physics material and collision shape identity `virtual_path` and checks            | Schemas, both jobs, both request builders' normalized JSON                                                                                                            | S3      |
-| Absolute buffer product names; product mount from its own text                     | Buffer container and geometry schemas, `BufferSource`, `BufferImportSubmitter`                                                                                        | S3      |
-| Textual local-buffer comparison                                                    | `ImportSourceAnalysis.cpp:546`                                                                                                                                        | S3      |
-| Absolute same-mount built-in material                                              | `EngineContent.cpp:121`                                                                                                                                               | S3      |
-| `material_remap` absolute-only                                                     | `ModelSettings.h`, manifest schema                                                                                                                                    | S3      |
-| `Imports/` records folder and its API                                              | `ModelImportRecord.{h,cpp}`: `kRecordsFolder`, `RecordRelativePath`, `RootOfRecord`, `RecordPaths`, `ScanRecords`, `PathFor`, `ContentRootOf`                         | S4      |
-| Record `virtual_path`, content-root inputs                                         | `ModelImportRecordContent`, `Query`, `Save`; model import schema                                                                                                      | S4      |
-| `LocateRecordSource` bypassing `LocateReference`                                   | `ModelImportRecord.cpp:624`                                                                                                                                           | S4      |
-| Manifest model job `record`                                                        | `ImportManifest.cpp`, manifest schema, Showcase manifests                                                                                                             | S4, S19 |
-| `--root` record scan                                                               | `ImportRunner.cpp`, `FbxCommand`, `GltfCommand`, README                                                                                                               | S4      |
-| `import.reference_outside_mount` (second code for one rule)                        | `SourceMounts.h`, `LocateReference`                                                                                                                                   | S4      |
-| `MountKind::kPak`, `"Pak"` kind, folder-only `Cooked`                              | `SourceMounts`, `ImportManifest.cpp:304`, both schemas, `MountTableCases.json`                                                                                        | S5      |
-| Unknown mount kind silently `Source`                                               | `ImportManifest.cpp:304`                                                                                                                                              | S5      |
-| Two mount-name rules                                                               | `IsValidMountName`, `oxygen.mounts.schema.json`, `VirtualPath`                                                                                                        | S5      |
-| Cooked folders outside the overlap check                                           | `SourceMounts.cpp:734`                                                                                                                                                | S5      |
-| Untyped pak and index open failures                                                | `PakFile.cpp:202`, `PakCatalog.cpp:243`, `LooseCookedIndexImpl.cpp`                                                                                                   | S5      |
-| `Cooked` mounts unconnected to reference lookup                                    | `MountedCookedSources`, `cooked_context_roots`                                                                                                                        | S5      |
-| Exact-identity dependencies                                                        | `PakCatalog`, `PatchManifest`, `PakManifestWriter`, `PakCatalogIo`, catalog schema, `PakPlanBuilder`, `PakFileDumper`                                                 | S6      |
-| Loose layers unable to satisfy a dependency                                        | `ContentSourceRegistry.cpp:90`                                                                                                                                        | S6      |
-| Optional browse index                                                              | `--embed-browse-index`, `EngineContent/CMakeLists.txt`, `pak.ps1`                                                                                                     | S6      |
-| Uncaught dependency refusal at launch                                              | `PlayerModule.cpp:316`                                                                                                                                                | S6      |
-| `.cooked/Content` and `/Content` hard-coded in the examples                        | DemoMain, VortexBasic, DemoShell, RenderScene tools, `RuntimePaths.cpp`, `Showcase.cmake`, `generate_city.py`, test CMake lists, `test_showcase.py`                   | S19     |
-| `cook.ps1 -Check` second implementation of R2 and R4                               | `Examples/RenderScene/Tools/cook.ps1`                                                                                                                                 | S19     |
-| DemoShell scratch records in `Imports/`, borrowed `kRecordsFolder`                 | `ContentVm.cpp`, `FileBrowserService`                                                                                                                                 | S4      |
-| Content adapters standing in for Serio APIs                                        | `BlockingReads.h`, `RegionReader.h`, span copies into `ByteBuffer`, `reinterpret_cast` byte views                                                                     | S6a     |
-| Test-only span constructors                                                        | `TextureResource`, `BufferResource`                                                                                                                                   | S6a     |
-| A second replacing rename, with check-then-act pre-checks                          | `RealCookerStorage::Move`                                                                                                                                             | S6a     |
-| A blocking CRC pass on a pool worker                                               | Verified pak mount (`PrepareMountSetAsync`)                                                                                                                           | S6a     |
-| A loose source named by its index file; "library" in the content UI                | DemoShell `ContentVm`, `ContentLoaderPanel`, `ContentSettingsService`, `FileBrowserService`, `DemoShell.cpp`, `ContentVm_test`, RenderScene `MainModule.cpp`          | S6c     |
-| Mount refusals logged by the host, never shown; unsaved import settings            | RenderScene `MainModule.cpp`, `ContentSettingsService`, `ContentVm`                                                                                                   | S6c     |
+| Old form                                                                           | Where                                                                                                                                                                 | Slice |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| Five reference resolvers                                                           | `MountedCookedSources`, `TextureReferenceResolver`, `GeometryDescriptorImportJob` (3), `VirtualPathResolver::ResolveAssetKey` callers, `InputImportPipeline::Resolve` | S3    |
+| Per-family invalid/unmounted reference codes                                       | Scene, geometry, buffer, physics, script, texture jobs                                                                                                                | S3    |
+| `canonical_*_path` in reference positions (20 definitions, 34 uses)                | Scene, geometry, physics sidecar, collision shape, buffer container schemas                                                                                           | S3    |
+| Inline `^/` pattern for `auto_exposure_metering_mask`                              | Scene descriptor schema                                                                                                                                               | S3    |
+| `action_reference` local-or-absolute rule                                          | Input schema, `InputImportPipeline`, `ImportSourceAnalysis.cpp:402`                                                                                                   | S3    |
+| Texture descriptor `virtual_path`, `identity_conflict`, descriptor identity source | Schema, `TextureDescriptorImportRequestBuilder.cpp:138,256`                                                                                                           | S3    |
+| Physics material and collision shape identity `virtual_path` and checks            | Schemas, both jobs, both request builders' normalized JSON                                                                                                            | S3    |
+| Absolute buffer product names; product mount from its own text                     | Buffer container and geometry schemas, `BufferSource`, `BufferImportSubmitter`                                                                                        | S3    |
+| Textual local-buffer comparison                                                    | `ImportSourceAnalysis.cpp:546`                                                                                                                                        | S3    |
+| Absolute same-mount built-in material                                              | `EngineContent.cpp:121`                                                                                                                                               | S3    |
+| `material_remap` absolute-only                                                     | `ModelSettings.h`, manifest schema                                                                                                                                    | S3    |
+| `Imports/` records folder and its API                                              | `ModelImportRecord.{h,cpp}`: `kRecordsFolder`, `RecordRelativePath`, `RootOfRecord`, `RecordPaths`, `ScanRecords`, `PathFor`, `ContentRootOf`                         | S4    |
+| Record `virtual_path`, content-root inputs                                         | `ModelImportRecordContent`, `Query`, `Save`; model import schema                                                                                                      | S4    |
+| `LocateRecordSource` bypassing `LocateReference`                                   | `ModelImportRecord.cpp:624`                                                                                                                                           | S4    |
+| Manifest model job `record`                                                        | `ImportManifest.cpp`, manifest schema, Showcase manifests                                                                                                             | S4    |
+| `--root` record scan                                                               | `ImportRunner.cpp`, `FbxCommand`, `GltfCommand`, README                                                                                                               | S4    |
+| `import.reference_outside_mount` (second code for one rule)                        | `SourceMounts.h`, `LocateReference`                                                                                                                                   | S4    |
+| `MountKind::kPak`, `"Pak"` kind, folder-only `Cooked`                              | `SourceMounts`, `ImportManifest.cpp:304`, both schemas, `MountTableCases.json`                                                                                        | S5    |
+| Unknown mount kind silently `Source`                                               | `ImportManifest.cpp:304`                                                                                                                                              | S5    |
+| Two mount-name rules                                                               | `IsValidMountName`, `oxygen.mounts.schema.json`, `VirtualPath`                                                                                                        | S5    |
+| Cooked folders outside the overlap check                                           | `SourceMounts.cpp:734`                                                                                                                                                | S5    |
+| Untyped pak and index open failures                                                | `PakFile.cpp:202`, `PakCatalog.cpp:243`, `LooseCookedIndexImpl.cpp`                                                                                                   | S5    |
+| `Cooked` mounts unconnected to reference lookup                                    | `MountedCookedSources`, `cooked_context_roots`                                                                                                                        | S5    |
+| Exact-identity dependencies                                                        | `PakCatalog`, `PatchManifest`, `PakManifestWriter`, `PakCatalogIo`, catalog schema, `PakPlanBuilder`, `PakFileDumper`                                                 | S6    |
+| Loose layers unable to satisfy a dependency                                        | `ContentSourceRegistry.cpp:90`                                                                                                                                        | S6    |
+| Optional browse index                                                              | `--embed-browse-index`, `EngineContent/CMakeLists.txt`, `pak.ps1`                                                                                                     | S6    |
+| Uncaught dependency refusal at launch                                              | `PlayerModule.cpp:316`                                                                                                                                                | S6    |
+| DemoShell scratch records in `Imports/`, borrowed `kRecordsFolder`                 | `ContentVm.cpp`, `FileBrowserService`                                                                                                                                 | S4    |
+| Content adapters standing in for Serio APIs                                        | `BlockingReads.h`, `RegionReader.h`, span copies into `ByteBuffer`, `reinterpret_cast` byte views                                                                     | S6a   |
+| Test-only span constructors                                                        | `TextureResource`, `BufferResource`                                                                                                                                   | S6a   |
+| A second replacing rename, with check-then-act pre-checks                          | `RealCookerStorage::Move`                                                                                                                                             | S6a   |
+| A blocking CRC pass on a pool worker                                               | Verified pak mount (`PrepareMountSetAsync`)                                                                                                                           | S6a   |
+| A loose source named by its index file; "library" in the content UI                | DemoShell `ContentVm`, `ContentLoaderPanel`, `ContentSettingsService`, `FileBrowserService`, `DemoShell.cpp`, `ContentVm_test`, RenderScene `MainModule.cpp`          | S6c   |
+| Mount refusals logged by the host, never shown; unsaved import settings            | RenderScene `MainModule.cpp`, `ContentSettingsService`, `ContentVm`                                                                                                   | S6c   |
 
 ### Editor
 
@@ -665,8 +717,6 @@ done only when its rows are gone from the code.
 | `Data/Docs/physics.md`, `binary_packing_discipline.md`                                                                                                                               | S3, S6     |
 | PakTool README, `paktool_design.md`                                                                                                                                                  | S6         |
 | `design/runtime-core/scene-instantiation-and-player.md`                                                                                                                              | S6         |
-| `design/proposals/source-mounts/README.md`, `examples-project/README.md`                                                                                                             | S5, S21    |
-| `Examples/Showcase/README.md`, `Examples/RenderScene/README.md`                                                                                                                      | S19        |
 | `asset-identity.md`, `project-layout-and-templates.md`, `content-pipeline.md`, `content-explorer-asset-identity.md`                                                                  | S7 to S17  |
 | `project-services.md`, `scene-instances.md`, `model-editor.md`, `asset-family-modules.md`, `texture-editor.md`, `asset-primitives.md`, `scene-authoring-model.md`, `live-preview.md` | S7 to S14  |
 | Module READMEs: Managed.Core, Managed.Assets (and Pak, LooseCooked), Projects (and testing), Models, ContentPipeline, World                                                          | S2 to S13  |

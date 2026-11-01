@@ -24,9 +24,9 @@
             "minLength": 1
           },
           "path": {
-            "description": "Where the file lives: its mount path under /Content/SourceMedia. Absent for a download archive, which is read and never kept.",
+            "description": "Where the file lives: its mount path under /Showcase/SourceMedia. Absent for a download archive, which is read and never kept.",
             "type": "string",
-            "pattern": "^/Content/SourceMedia/.+"
+            "pattern": "^/Showcase/SourceMedia/.+"
           },
           "bytes": {
             "type": "integer",

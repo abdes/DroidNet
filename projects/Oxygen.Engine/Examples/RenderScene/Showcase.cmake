@@ -58,7 +58,7 @@ add_custom_command(
   OUTPUT
     "${OXYGEN_SHOWCASE_STAMP}"
   BYPRODUCTS
-    "${OXYGEN_SHOWCASE_RENDERSCENE}/.cooked/Content/container.index.bin"
+    "${OXYGEN_SHOWCASE_RENDERSCENE}/.cooked/Showcase/container.index.bin"
     "${OXYGEN_SHOWCASE_RENDERSCENE}/.build/pak/examples.pak"
     "${OXYGEN_SHOWCASE_RENDERSCENE}/.build/pak/examples.catalog.json"
     "${OXYGEN_SHOWCASE_RENDERSCENE}/.build/pak/examples.manifest.json"
@@ -82,7 +82,7 @@ add_custom_command(
     "$<GENEX_EVAL:$<TARGET_PROPERTY:oxygen-engine-content,OXYGEN_ENGINE_CONTENT_PAK>>"
   COMMAND
     "${OXYGEN_SHOWCASE_LAUNCHER}" "$<TARGET_FILE:oxygen-cooker-inspector>"
-    validate "${OXYGEN_SHOWCASE_RENDERSCENE}/.cooked/Content"
+    validate "${OXYGEN_SHOWCASE_RENDERSCENE}/.cooked/Showcase"
   COMMAND
     "${CMAKE_COMMAND}" -E touch "${OXYGEN_SHOWCASE_STAMP}"
   DEPENDS
@@ -109,7 +109,7 @@ oxygen_install_requires(oxygen-showcase-content)
 install(
   CODE
     "
-    if(NOT EXISTS \"${OXYGEN_SHOWCASE_RENDERSCENE}/.cooked/Content/container.index.bin\"
+    if(NOT EXISTS \"${OXYGEN_SHOWCASE_RENDERSCENE}/.cooked/Showcase/container.index.bin\"
        OR NOT EXISTS \"${OXYGEN_SHOWCASE_RENDERSCENE}/.build/pak/examples.pak\")
       message(FATAL_ERROR \"Build the selected configuration before installing the SDK: showcase content is missing.\")
     endif()

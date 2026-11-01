@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,48 +12,48 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Scenes/ProcCubes/ProcCubeBaseMat.omat",
+      "id": "/Showcase/Scenes/ProcCubes/ProcCubeBaseMat.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/ProcCubes/ProcCubeBaseMat.omat.json",
-      "virtual_path": "/Content/Scenes/ProcCubes/ProcCubeBaseMat.omat",
+      "source": "/Showcase/Scenes/ProcCubes/ProcCubeBaseMat.omat.json",
+      "virtual_path": "/Showcase/Scenes/ProcCubes/ProcCubeBaseMat.omat",
       "name": "ProcCubeBaseMat"
     },
     {
-      "id": "/Content/Scenes/ProcCubes/ProcCubeAccentMat.omat",
+      "id": "/Showcase/Scenes/ProcCubes/ProcCubeAccentMat.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/ProcCubes/ProcCubeAccentMat.omat.json",
-      "virtual_path": "/Content/Scenes/ProcCubes/ProcCubeAccentMat.omat",
+      "source": "/Showcase/Scenes/ProcCubes/ProcCubeAccentMat.omat.json",
+      "virtual_path": "/Showcase/Scenes/ProcCubes/ProcCubeAccentMat.omat",
       "name": "ProcCubeAccentMat"
     },
     {
-      "id": "/Content/Scenes/ProcCubes/proc_cubes.oscript",
+      "id": "/Showcase/Scenes/ProcCubes/proc_cubes.oscript",
       "type": "script",
-      "source": "/Content/Scenes/ProcCubes/proc_cubes.lua",
-      "virtual_path": "/Content/Scenes/ProcCubes/proc_cubes.oscript",
+      "source": "/Showcase/Scenes/ProcCubes/proc_cubes.lua",
+      "virtual_path": "/Showcase/Scenes/ProcCubes/proc_cubes.oscript",
       "name": "SceneProcCubesScript",
       "compile": false,
       "script_storage": "external"
     },
     {
-      "id": "/Content/Scenes/ProcCubes/SceneProcCubes.oscene",
+      "id": "/Showcase/Scenes/ProcCubes/SceneProcCubes.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/ProcCubes/SceneProcCubes.scene.json",
-      "virtual_path": "/Content/Scenes/ProcCubes/SceneProcCubes.oscene",
+      "source": "/Showcase/Scenes/ProcCubes/SceneProcCubes.scene.json",
+      "virtual_path": "/Showcase/Scenes/ProcCubes/SceneProcCubes.oscene",
       "name": "SceneProcCubes",
       "depends_on": [
-        "/Content/Scenes/ProcCubes/ProcCubeBaseMat.omat",
-        "/Content/Scenes/ProcCubes/ProcCubeAccentMat.omat",
-        "/Content/Scenes/ProcCubes/proc_cubes.oscript"
+        "/Showcase/Scenes/ProcCubes/ProcCubeBaseMat.omat",
+        "/Showcase/Scenes/ProcCubes/ProcCubeAccentMat.omat",
+        "/Showcase/Scenes/ProcCubes/proc_cubes.oscript"
       ]
     },
     {
-      "id": "/Content/Scenes/ProcCubes/SceneProcCubes.oscene#script-sidecar",
+      "id": "/Showcase/Scenes/ProcCubes/SceneProcCubes.oscene#script-sidecar",
       "type": "script-sidecar",
       "name": "SceneProcCubes_script_sidecar",
-      "target_scene_virtual_path": "/Content/Scenes/ProcCubes/SceneProcCubes.oscene",
+      "target_scene_virtual_path": "/Showcase/Scenes/ProcCubes/SceneProcCubes.oscene",
       "depends_on": [
-        "/Content/Scenes/ProcCubes/SceneProcCubes.oscene",
-        "/Content/Scenes/ProcCubes/proc_cubes.oscript"
+        "/Showcase/Scenes/ProcCubes/SceneProcCubes.oscene",
+        "/Showcase/Scenes/ProcCubes/proc_cubes.oscript"
       ],
       "bindings": [
         {

@@ -55,7 +55,7 @@ are available as `OXYGEN_SDK_ROOT`, `OXYGEN_RUNTIME_DIR`, and `OXYGEN_DATA_DIR`.
 - `share/oxygen/Showcase`: the examples project: curated source inputs and
   scripts.
 - `share/oxygen/RenderScene`: showcase documentation and local settings, its
-  `Tools`, and the cooked scenes (`.cooked/Content`) and PAK (`.build/pak`).
+  `Tools`, and the cooked scenes (`.cooked/Showcase`) and PAK (`.build/pak`).
 - `share/oxygen/licenses`: dependency license notices.
 
 Move or archive the complete SDK directory. RenderScene resolves its resources

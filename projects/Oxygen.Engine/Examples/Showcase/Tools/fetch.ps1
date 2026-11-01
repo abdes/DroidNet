@@ -35,7 +35,13 @@ if ($Help) {
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$inventoryPath = Join-Path $root 'Content/SourceMedia/showcase-assets.json'
+# The inventory's paths are mount paths in the Showcase mount; Project.oxy
+# names its folder.
+$project = Get-Content -LiteralPath (Join-Path $root 'Project.oxy') -Raw | ConvertFrom-Json
+$mount = @($project.Mounts | Where-Object Name -ceq 'Showcase')
+if ($mount.Count -ne 1) { throw 'Project.oxy has no Showcase mount.' }
+$mountRoot = [IO.Path]::GetFullPath((Join-Path $root $mount[0].Path))
+$inventoryPath = Join-Path $mountRoot 'SourceMedia/showcase-assets.json'
 $json = Get-Content -LiteralPath $inventoryPath -Raw
 if (-not (Test-Json -Json $json -SchemaFile (Join-Path $PSScriptRoot 'showcase-assets.schema.json'))) {
     throw 'showcase-assets.json does not match Tools/showcase-assets.schema.json.'
@@ -55,8 +61,7 @@ $archives = @{}
 $failed = [Collections.Generic.List[string]]::new()
 try {
     foreach ($asset in @($assets | Where-Object { $_.PSObject.Properties['path'] })) {
-        # A path is a mount path in the Content mount.
-        $file = Join-Path $root ($asset.path.Substring(1))
+        $file = Join-Path $mountRoot ($asset.path.Substring('/Showcase/'.Length))
         if (Test-Pinned $file $asset) { continue }
         if ($Check) { $failed.Add("$($asset.path) is missing or differs"); continue }
         $parent = Split-Path -Parent $file

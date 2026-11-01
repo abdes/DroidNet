@@ -9,7 +9,7 @@ checks every instance through the renderable API and logs one
 scene-authored instances prove the cooked overrides reach the renderables.
 
 The scene uses the lamp and potted-plant models of
-`/Content/Models/Showcase`, which the example's manifest cooks with it. From the
+`/Showcase/Models/Showcase`, which the example's manifest cooks with it. From the
 examples project root (see the [content workflow](../../../README.md)):
 
 ```powershell

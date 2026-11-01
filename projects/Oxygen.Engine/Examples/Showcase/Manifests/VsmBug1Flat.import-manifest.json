@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,50 +12,50 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Scenes/VsmBug1Flat/floor_default.omat",
+      "id": "/Showcase/Scenes/VsmBug1Flat/floor_default.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/VsmBug1Flat/floor_default.omat.json",
-      "virtual_path": "/Content/Scenes/VsmBug1Flat/floor_default.omat",
+      "source": "/Showcase/Scenes/VsmBug1Flat/floor_default.omat.json",
+      "virtual_path": "/Showcase/Scenes/VsmBug1Flat/floor_default.omat",
       "name": "floor_default"
     },
     {
-      "id": "/Content/Scenes/VsmBug1Flat/cube_red.omat",
+      "id": "/Showcase/Scenes/VsmBug1Flat/cube_red.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/VsmBug1Flat/cube_red.omat.json",
-      "virtual_path": "/Content/Scenes/VsmBug1Flat/cube_red.omat",
+      "source": "/Showcase/Scenes/VsmBug1Flat/cube_red.omat.json",
+      "virtual_path": "/Showcase/Scenes/VsmBug1Flat/cube_red.omat",
       "name": "cube_red"
     },
     {
-      "id": "/Content/Scenes/VsmBug1Flat/floor.ogeo",
+      "id": "/Showcase/Scenes/VsmBug1Flat/floor.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/VsmBug1Flat/floor.ogeo.json",
-      "virtual_path": "/Content/Scenes/VsmBug1Flat/floor.ogeo",
+      "source": "/Showcase/Scenes/VsmBug1Flat/floor.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/VsmBug1Flat/floor.ogeo",
       "name": "floor",
-      "depends_on": ["/Content/Scenes/VsmBug1Flat/floor_default.omat"]
+      "depends_on": ["/Showcase/Scenes/VsmBug1Flat/floor_default.omat"]
     },
     {
-      "id": "/Content/Scenes/VsmBug1Flat/cube.ogeo",
+      "id": "/Showcase/Scenes/VsmBug1Flat/cube.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/VsmBug1Flat/cube.ogeo.json",
-      "virtual_path": "/Content/Scenes/VsmBug1Flat/cube.ogeo",
+      "source": "/Showcase/Scenes/VsmBug1Flat/cube.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/VsmBug1Flat/cube.ogeo",
       "name": "cube",
-      "depends_on": ["/Content/Scenes/VsmBug1Flat/cube_red.omat"]
+      "depends_on": ["/Showcase/Scenes/VsmBug1Flat/cube_red.omat"]
     },
     {
-      "id": "/Content/Scenes/VsmBug1Flat/VsmBug1LargePlane.oscene",
+      "id": "/Showcase/Scenes/VsmBug1Flat/VsmBug1LargePlane.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/VsmBug1Flat/VsmBug1LargePlane.scene.json",
-      "virtual_path": "/Content/Scenes/VsmBug1Flat/VsmBug1LargePlane.oscene",
+      "source": "/Showcase/Scenes/VsmBug1Flat/VsmBug1LargePlane.scene.json",
+      "virtual_path": "/Showcase/Scenes/VsmBug1Flat/VsmBug1LargePlane.oscene",
       "name": "VsmBug1LargePlane",
-      "depends_on": ["/Content/Scenes/VsmBug1Flat/floor.ogeo"]
+      "depends_on": ["/Showcase/Scenes/VsmBug1Flat/floor.ogeo"]
     },
     {
-      "id": "/Content/Scenes/VsmBug1Flat/VsmBug1LargeThinCube.oscene",
+      "id": "/Showcase/Scenes/VsmBug1Flat/VsmBug1LargeThinCube.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/VsmBug1Flat/VsmBug1LargeThinCube.scene.json",
-      "virtual_path": "/Content/Scenes/VsmBug1Flat/VsmBug1LargeThinCube.oscene",
+      "source": "/Showcase/Scenes/VsmBug1Flat/VsmBug1LargeThinCube.scene.json",
+      "virtual_path": "/Showcase/Scenes/VsmBug1Flat/VsmBug1LargeThinCube.oscene",
       "name": "VsmBug1LargeThinCube",
-      "depends_on": ["/Content/Scenes/VsmBug1Flat/cube.ogeo"]
+      "depends_on": ["/Showcase/Scenes/VsmBug1Flat/cube.ogeo"]
     }
   ]
 }

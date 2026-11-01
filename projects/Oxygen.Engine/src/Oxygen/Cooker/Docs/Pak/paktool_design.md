@@ -398,7 +398,7 @@ Full build from a loose-cooked root:
 
 ```text
 Oxygen.Cooker.PakTool build ^
-  --loose-source Examples/RenderScene/.cooked/Content ^
+  --loose-source Examples/RenderScene/.cooked/Showcase ^
   --out Examples/RenderScene/.build/pak/examples.pak ^
   --catalog-out Examples/RenderScene/.build/pak/examples.catalog.json ^
   --manifest-out Examples/RenderScene/.build/pak/examples.manifest.json ^
@@ -410,7 +410,7 @@ Patch build against a previously published base PAK:
 
 ```text
 Oxygen.Cooker.PakTool patch ^
-  --loose-source Examples/RenderScene/.cooked/Content ^
+  --loose-source Examples/RenderScene/.cooked/Showcase ^
   --base-pak Examples/RenderScene/.build/pak/examples.pak ^
   --out Examples/RenderScene/.build/pak/examples-patch-1.pak ^
   --catalog-out Examples/RenderScene/.build/pak/examples-patch-1.catalog.json ^

@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,27 +12,27 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Materials/cube_red.omat",
+      "id": "/Showcase/Materials/cube_red.omat",
       "type": "material-descriptor",
-      "source": "/Content/Materials/cube_red.omat.json",
-      "virtual_path": "/Content/Materials/cube_red.omat",
+      "source": "/Showcase/Materials/cube_red.omat.json",
+      "virtual_path": "/Showcase/Materials/cube_red.omat",
       "name": "cube_red"
     },
     {
-      "id": "/Content/Geometry/cube.ogeo",
+      "id": "/Showcase/Geometry/cube.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Geometry/cube.ogeo.json",
-      "virtual_path": "/Content/Geometry/cube.ogeo",
+      "source": "/Showcase/Geometry/cube.ogeo.json",
+      "virtual_path": "/Showcase/Geometry/cube.ogeo",
       "name": "cube",
-      "depends_on": ["/Content/Materials/cube_red.omat"]
+      "depends_on": ["/Showcase/Materials/cube_red.omat"]
     },
     {
-      "id": "/Content/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
+      "id": "/Showcase/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/VsmTwoCubes/VsmTwoCubes.scene.json",
-      "virtual_path": "/Content/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
+      "source": "/Showcase/Scenes/VsmTwoCubes/VsmTwoCubes.scene.json",
+      "virtual_path": "/Showcase/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
       "name": "VsmTwoCubes",
-      "depends_on": ["/Content/Geometry/cube.ogeo"]
+      "depends_on": ["/Showcase/Geometry/cube.ogeo"]
     }
   ]
 }

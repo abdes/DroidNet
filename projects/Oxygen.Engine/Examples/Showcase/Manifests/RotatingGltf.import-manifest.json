@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,47 +12,47 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Models/backpack.glb",
+      "id": "/Showcase/Models/backpack.glb",
       "type": "model",
-      "virtual_path": "/Content/Models/backpack.glb"
+      "virtual_path": "/Showcase/Models/backpack.glb"
     },
     {
-      "id": "/Content/Models/chest.glb",
+      "id": "/Showcase/Models/chest.glb",
       "type": "model",
-      "virtual_path": "/Content/Models/chest.glb"
+      "virtual_path": "/Showcase/Models/chest.glb"
     },
     {
-      "id": "/Content/Scenes/RotatingGltf/rotate.oscript",
+      "id": "/Showcase/Scenes/RotatingGltf/rotate.oscript",
       "type": "script",
-      "source": "/Content/Scenes/RotatingGltf/rotate.lua",
-      "virtual_path": "/Content/Scenes/RotatingGltf/rotate.oscript",
+      "source": "/Showcase/Scenes/RotatingGltf/rotate.lua",
+      "virtual_path": "/Showcase/Scenes/RotatingGltf/rotate.oscript",
       "name": "rotate",
       "compile": false,
       "script_storage": "embedded"
     },
     {
-      "id": "/Content/Scenes/RotatingGltf/rotate.input",
+      "id": "/Showcase/Scenes/RotatingGltf/rotate.input",
       "type": "input",
-      "source": "/Content/Scenes/RotatingGltf/rotate.input.json",
-      "virtual_path": "/Content/Scenes/RotatingGltf/rotate.input"
+      "source": "/Showcase/Scenes/RotatingGltf/rotate.input.json",
+      "virtual_path": "/Showcase/Scenes/RotatingGltf/rotate.input"
     },
     {
-      "id": "/Content/Scenes/RotatingGltf/RotatingGltf.oscene",
+      "id": "/Showcase/Scenes/RotatingGltf/RotatingGltf.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/RotatingGltf/RotatingGltf.scene.json",
-      "virtual_path": "/Content/Scenes/RotatingGltf/RotatingGltf.oscene",
+      "source": "/Showcase/Scenes/RotatingGltf/RotatingGltf.scene.json",
+      "virtual_path": "/Showcase/Scenes/RotatingGltf/RotatingGltf.oscene",
       "name": "rotating_gltf",
       "depends_on": [
-        "/Content/Models/backpack.glb",
-        "/Content/Models/chest.glb",
-        "/Content/Scenes/RotatingGltf/rotate.input"
+        "/Showcase/Models/backpack.glb",
+        "/Showcase/Models/chest.glb",
+        "/Showcase/Scenes/RotatingGltf/rotate.input"
       ]
     },
     {
-      "id": "/Content/Scenes/RotatingGltf/RotatingGltf.oscene#script-sidecar",
+      "id": "/Showcase/Scenes/RotatingGltf/RotatingGltf.oscene#script-sidecar",
       "type": "script-sidecar",
       "name": "rotating_gltf_sidecar",
-      "target_scene_virtual_path": "/Content/Scenes/RotatingGltf/RotatingGltf.oscene",
+      "target_scene_virtual_path": "/Showcase/Scenes/RotatingGltf/RotatingGltf.oscene",
       "bindings": [
         {
           "node_index": 1,
@@ -102,9 +102,9 @@
         }
       ],
       "depends_on": [
-        "/Content/Scenes/RotatingGltf/RotatingGltf.oscene",
-        "/Content/Scenes/RotatingGltf/rotate.oscript",
-        "/Content/Scenes/RotatingGltf/rotate.input"
+        "/Showcase/Scenes/RotatingGltf/RotatingGltf.oscene",
+        "/Showcase/Scenes/RotatingGltf/rotate.oscript",
+        "/Showcase/Scenes/RotatingGltf/rotate.input"
       ]
     }
   ]

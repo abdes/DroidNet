@@ -4,7 +4,7 @@ Status: accepted and implemented (abdes/DroidNet#120), on the
 [source mounts](../source-mounts/README.md) contract. The
 [Today](#today) section records the layout it replaced.
 
-Last updated: 2026-10-29
+Last updated: 2026-11-01
 
 Read: [at a glance](#at-a-glance), [scenarios](#scenarios),
 [today](#today), [the project](#the-project),
@@ -15,21 +15,21 @@ Read: [at a glance](#at-a-glance), [scenarios](#scenarios),
 
 ## At a glance
 
-| Question     | Answer                                                                                                                                                                                                                                                                                                           |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| What is it?  | `Examples/Content` reorganized as `Examples/Showcase`, an ordinary Oxygen project and an editor project that no tool writes into, in the layout every project has: a `Project.oxy`, the `Content` mount, raw media in `Content/SourceMedia`, one folder and one manifest per example, and a catalog of examples. |
-| Why?         | It works today only through conventions no other project has: `../` webs between scene folders, flat `/.cooked/...` identities that collide, raw media mixed with descriptors, and an examples-only source list.                                                                                                 |
-| The rule     | The examples get no special case in the cooker, ImportTool, PakTool, the runtime or the editor. If the examples need something, every project gets it.                                                                                                                                                           |
-| Mounts       | One, `Content -> Content`, committed. Authored sources and raw media are separated by folder, as the project layout defines, not by mount.                                                                                                                                                                       |
-| Output       | The editor's `.cooked/`, `.build/` and `.mounts.json`, ignored, never inside a mount. RenderScene's tools cook, package and play into RenderScene's own `.cooked/Content`, `.build/pak` and `.scratch`.                                                                                                          |
-| Not in scope | Converting the cooker scene descriptors into editor scene documents; new examples; changes to the content of any example.                                                                                                                                                                                        |
+| Question     | Answer                                                                                                                                                                                                                                                                                                                                    |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| What is it?  | `Examples/Content` reorganized as `Examples/Showcase`, an ordinary Oxygen project and an editor project that no tool writes into, in the layout every project has: a `Project.oxy`, the `Showcase` mount on the `Content` folder, raw media in `Content/SourceMedia`, one folder and one manifest per example, and a catalog of examples. |
+| Why?         | It works today only through conventions no other project has: `../` webs between scene folders, flat `/.cooked/...` identities that collide, raw media mixed with descriptors, and an examples-only source list.                                                                                                                          |
+| The rule     | The examples get no special case in the cooker, ImportTool, PakTool, the runtime or the editor. If the examples need something, every project gets it.                                                                                                                                                                                    |
+| Mounts       | One, `Showcase -> Content`, committed. Authored sources and raw media are separated by folder, as the project layout defines, not by mount.                                                                                                                                                                                               |
+| Output       | The editor's `.cooked/`, `.build/` and `.mounts.json`, ignored, never inside a mount. RenderScene's tools cook, package and play into RenderScene's own `.cooked/Showcase`, `.build/pak` and `.scratch`.                                                                                                                                  |
+| Not in scope | Converting the cooker scene descriptors into editor scene documents; new examples; changes to the content of any example.                                                                                                                                                                                                                 |
 
 ## Scenarios
 
 **Cook and play one example.** A developer runs RenderScene's `Tools/cook BottleOnBox`, then
 `Tools/play BottleOnBox`. The first reads
 `Manifests/BottleOnBox.import-manifest.json`, which names everything the
-example needs, including the shared cube from `/Content/Geometry`. Nothing
+example needs, including the shared cube from `/Showcase/Geometry`. Nothing
 else is cooked.
 
 **Cook every example, or a group.** The build agent runs RenderScene's `Tools/cook -All`.
@@ -44,7 +44,7 @@ adds one entry to `Examples.json`. No CMake list, tool script or test changes.
 **Share a part between examples.** `VsmTwoCubes` needs the red cube that
 `BottleOnBox` uses. The cube's descriptors live in `Content/Geometry/` and
 `Content/Materials/`, and both manifests reference
-`/Content/Geometry/cube.ogeo.json`. Before, the
+`/Showcase/Geometry/cube.ogeo.json`. Before, the
 second example reaches into `../bottle-on-box/`, and `VsmBug1Flat`, which keeps
 its own `cube.geometry.json`, cooks to the same `/.cooked/Geometry/cube.ogeo`
 identity: one silently replaces the other (abdes/DroidNet#81).
@@ -52,10 +52,11 @@ identity: one silently replaces the other (abdes/DroidNet#81).
 **Import a model of one's own.** A developer wants to try
 `D:/Downloads/town4new.glb` in RenderScene. They add
 `"Downloads": "D:/Downloads"` to a `.mounts.json` at or above RenderScene and
-import it. The import goes to RenderScene's scratch project, `.scratch`, which
-mounts `Showcase/Content`: its record stores
-`"source": "/Downloads/town4new.glb"` and never enters the committed
-`Imports/`. Before, the record stored the absolute path beside the committed
+imports it. The import goes to RenderScene's scratch project, `.scratch`, which
+has its own writable `Scratch` mount and mounts the examples' `Showcase` mount
+read-only: its record is `/Scratch/Downloads/town4new.glb.import.json` and stores
+`"source": "/Downloads/town4new.glb"`, so it never enters the committed
+`Models/`. Before, the record stored the absolute path beside the committed
 ones, and an examples-only `import-sources.local.json` listed such files.
 
 **Regenerate a generated example.** A developer edits
@@ -97,13 +98,14 @@ schemas, and about 7 GB of ignored output (`.cooked/main`, `.cooked/imports`,
 
 ```text
 Examples/Showcase/                       # project root: an editor project
-  Project.oxy                            # Id; Mounts: Content -> Content
+  Project.oxy                            # Id; Mounts: Showcase -> Content
   Examples.json                          # the catalog of examples
   README.md
   .gitignore                             # .cooked/, .build/, .mounts.json:
                                          # the editor's outputs
-  Content/                               # mount Content: authored sources
+  Content/                               # mount Showcase: authored sources
     Geometry/  Materials/                # parts several examples use
+    Models/                              # model import records, committed
     Scenes/<Example>/                    # one folder per example with scenes
       <Scene>.scene.json                 # cooker scene descriptor(s)
       *.omat.json *.ogeo.json *.otex.json
@@ -115,7 +117,6 @@ Examples/Showcase/                       # project root: an editor project
       showcase-assets.json               # downloaded files: path, URL, hash
       ASSET_CREDITS.md
   Manifests/<Example>.import-manifest.json
-  Imports/<identity>.import.json         # model import records, committed
   Tools/                                 # fetch and the project's schemas
     Generators/                          # scripts that write sources
     examples.schema.json
@@ -124,9 +125,10 @@ Examples/Showcase/                       # project root: an editor project
 Examples/RenderScene/                    # owns the cooking
   Tools/                                 # cook, pak, play
     internal/                            # ExamplesTools.ps1, prepare_showcase.py
-  .cooked/Content/                       # cooked by Tools/cook, ignored
+  .cooked/Showcase/                      # cooked by Tools/cook, ignored
   .build/pak/                            # examples.pak and its catalog, ignored
   .scratch/                              # ad-hoc imports: a scratch project
+                                         # with its own Scratch mount
 ```
 
 ```json
@@ -134,13 +136,13 @@ Examples/RenderScene/                    # owns the cooking
   "Id": "018f8f8f-1234-7abc-8def-0123456789ab",
   "Name": "Oxygen Examples",
   "SchemaVersion": 2,
-  "Mounts": [{ "Name": "Content", "Kind": "Source", "Path": "Content" }]
+  "Mounts": [{ "Name": "Showcase", "Kind": "Source", "Path": "Content" }]
 }
 ```
 
 This is the layout of
 [project layout and templates](../../../../../design/editor/lld/project-layout-and-templates.md),
-which every Oxygen project follows: authored content in the `Content` mount,
+which every Oxygen project follows: authored content in a source mount on the `Content` folder,
 raw media in `Content/SourceMedia/` with its `DCC`, `Images`, `Audio` and
 `Video` folders. The examples use the two media folders they need.
 
@@ -150,8 +152,8 @@ raw media in `Content/SourceMedia/` with its `DCC`, `Images`, `Audio` and
 | ---------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | `Content/`             | Files written for Oxygen: descriptors, scene descriptors, scripts, input actions, physics, buffer layouts | Yes, each by a job; cooked identity mirrors its mount path |
 | `Content/SourceMedia/` | Files Oxygen reads but does not define: DCC models, exported mesh buffers, images                         | Only through a descriptor or a model import record         |
+| `Content/Models/`      | Model import records, each at the identity of the model it imports                                        | No: they drive model imports                               |
 | `Manifests/`           | One import manifest per example                                                                           | No: they drive the cook                                    |
-| `Imports/`             | Model import records, at their model's identity, as `ModelImportRecord` puts them for any project         | No: they drive model imports                               |
 | `Tools/`               | `fetch`, the generators that write sources, and the schemas of the catalogs                               | No                                                         |
 | `.cooked/`, `.build/`  | The editor's outputs when it opens the project                                                            | Output, ignored                                            |
 
@@ -164,11 +166,11 @@ comes from a DCC tool, a camera, a download or a binary export belongs in
 `SourceMedia` holds sources only. The engine refuses a cooked identity with a
 `SourceMedia` segment (`VirtualPath.cpp`, the authored rule set), so nothing is
 cooked into it. A texture descriptor
-`/Content/Scenes/SdkMaterials/SdkWood_base_color.otex.json` names
-`/Content/SourceMedia/Images/Showcase/Wood051_1K-JPG_Color.jpg` by its mount
-path and cooks to `/Content/Scenes/SdkMaterials/SdkWood_base_color.otex`. A
-descriptor names a file by mount path, or by a path relative to itself that
-stays in its mount.
+`/Showcase/Scenes/SdkMaterials/SdkWood_base_color.otex.json` names
+`../../SourceMedia/Images/Showcase/Wood051_1K-JPG_Color.jpg`, relative to
+itself, and cooks to `/Showcase/Scenes/SdkMaterials/SdkWood_base_color.otex`. An
+authored file names a file of its own mount by a path relative to itself, and a
+file of another mount by that mount's path (`/Engine/...`).
 
 ### Cooked identities
 
@@ -176,23 +178,23 @@ Every cooked identity is its source's mount path with the cooked extension:
 `.omat.json` becomes `.omat`, `.scene.json` becomes `.oscene`, `.lua`
 becomes `.oscript`.
 
-| Source                                                         | Cooked identity                                    |
-| -------------------------------------------------------------- | -------------------------------------------------- |
-| `/Content/Geometry/cube.ogeo.json`                             | `/Content/Geometry/cube.ogeo`                      |
-| `/Content/Scenes/BottleOnBox/BottleOnBox.scene.json`           | `/Content/Scenes/BottleOnBox/BottleOnBox.oscene`   |
-| `/Content/Scenes/MultiScript/day-night.lua`                    | `/Content/Scenes/MultiScript/day-night.oscript`    |
-| Model record for `/Content/SourceMedia/DCC/Showcase/chair.fbx` | `/Content/Models/Showcase/chair.fbx`, its record's |
+| Source                                                 | Cooked identity                                     |
+| ------------------------------------------------------ | --------------------------------------------------- |
+| `/Showcase/Geometry/cube.ogeo.json`                    | `/Showcase/Geometry/cube.ogeo`                      |
+| `/Showcase/Scenes/BottleOnBox/BottleOnBox.scene.json`  | `/Showcase/Scenes/BottleOnBox/BottleOnBox.oscene`   |
+| `/Showcase/Scenes/MultiScript/day-night.lua`           | `/Showcase/Scenes/MultiScript/day-night.oscript`    |
+| Record `Content/Models/Showcase/chair.fbx.import.json` | `/Showcase/Models/Showcase/chair.fbx`, its record's |
 
-A model's identity is `/Content/Models/<path under SourceMedia/DCC>`: the
-engine names a model by its source file's name and extension, and its
-products under it (`/Content/Models/Showcase/chair.fbx/chair.oscene`). Two
-sources can then never cook to one identity unless they are the same file.
+A model's identity is where its record lives, usually under `Models/`: the
+engine names a model by its authored file's name and extension, and its
+products under it (`/Showcase/Models/Showcase/chair.fbx/chair.oscene`). Two
+records never share one path, so two models never cook to one identity.
 A cooked root holds the one mount its identities name, so manifests declare no
 layout root.
 
 ### Mount rules applied
 
-- The `Content` mount is a committed relative path; a clone cooks with no
+- The `Showcase` mount is a committed relative path (the `Content` folder); a clone cooks with no
   `.mounts.json`.
 - The raw media are committed with the examples, so no mount is needed to
   reach them. Media too large to commit would get a placeholder mount of its
@@ -203,7 +205,7 @@ layout root.
 - `Examples/Showcase` is under `projects/Oxygen.Engine`, below the repository.
   A developer's `H:/projects/.mounts.json` applies to it like to any project.
   The examples do not set `"root": true`: they declare no placeholder, a
-  parent file can only add local mounts and never retarget `Content`, and
+  parent file can only add local mounts and never retarget `Showcase`, and
   what it adds is logged with every run.
 
 ## The examples
@@ -280,7 +282,7 @@ other file lists examples.
 | ------------- | ---------------------------------------------------------------------------------------------- |
 | `name`        | The example name; its folder and manifest follow from it                                       |
 | `description` | One sentence, shown by `Tools/cook -List`                                                      |
-| `scenes`      | Scene names, played as `/Content/Scenes/<name>/<scene>.oscene`; empty for model-only examples  |
+| `scenes`      | Scene names, played as `/Showcase/Scenes/<name>/<scene>.oscene`; empty for model-only examples |
 | `tags`        | Free words. `showcase` marks what the SDK ships; `validation` and `benchmark` mark test scenes |
 
 The schema is `Tools/examples.schema.json`. It is part of the examples project,
@@ -297,52 +299,69 @@ cooked root.
   "$schema": "oxygen.import-manifest.schema.json",
   "version": 1,
   "project_root": "..",
-  "mounts": [{ "name": "Content", "kind": "Source", "path": "Content" }],
+  "mounts": [
+    {
+      "name": "Showcase",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Materials/cube_red.omat",
+      "id": "/Showcase/Materials/cube_red.omat",
       "type": "material-descriptor",
-      "source": "/Content/Materials/cube_red.omat.json",
-      "virtual_path": "/Content/Materials/cube_red.omat"
+      "source": "/Showcase/Materials/cube_red.omat.json",
+      "virtual_path": "/Showcase/Materials/cube_red.omat",
+      "name": "cube_red"
     },
     {
-      "id": "/Content/Geometry/cube.ogeo",
+      "id": "/Showcase/Geometry/cube.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Geometry/cube.ogeo.json",
-      "virtual_path": "/Content/Geometry/cube.ogeo",
-      "depends_on": ["/Content/Materials/cube_red.omat"]
+      "source": "/Showcase/Geometry/cube.ogeo.json",
+      "virtual_path": "/Showcase/Geometry/cube.ogeo",
+      "name": "cube",
+      "depends_on": ["/Showcase/Materials/cube_red.omat"]
     },
     {
-      "id": "/Content/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
+      "id": "/Showcase/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/VsmTwoCubes/VsmTwoCubes.scene.json",
-      "virtual_path": "/Content/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
-      "depends_on": ["/Content/Geometry/cube.ogeo"]
+      "source": "/Showcase/Scenes/VsmTwoCubes/VsmTwoCubes.scene.json",
+      "virtual_path": "/Showcase/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
+      "name": "VsmTwoCubes",
+      "depends_on": ["/Showcase/Geometry/cube.ogeo"]
     }
   ]
 }
 ```
 
-- Each `virtual_path` follows the identity rule above. The rule is a
-  convention of the examples, checked by `Tools/cook -Check`; the cooker
-  accepts any identity, as for any project.
+- Each `virtual_path` follows the identity rule above. The rule has one
+  implementation, in ImportTool, which `Tools/cook -Check` runs through
+  `analyze-sources`; the tool scripts keep no copy of it.
 - A job's id is its identity, so ids never clash across the manifests of one
   batch, and a job several manifests name is one job.
 - `$schema` is a name. Validation uses the schemas the tools embed, so no
   manifest or descriptor points into the engine sources.
-- Model jobs name records by project path:
-  `"record": "Imports/Content/Models/Lantern.glb.import.json"`.
+- A `model` job names the model by `virtual_path` alone, for example
+  `/Showcase/Models/Showcase/chair.fbx`; its record is found at that identity
+  in the mount.
 
 ### Model import records
 
-A record lives at its model's identity under `Imports/`: the model
-`/Content/Models/Showcase/chair.fbx` has the record
-`Imports/Content/Models/Showcase/chair.fbx.import.json`. It stores `source` as
-a mount path (`"/Content/SourceMedia/DCC/Showcase/chair.fbx"`) and its UUIDv7
-source identity inside; giving the model another identity moves the record.
-Every record in `Imports/` is committed. Ad-hoc imports from RenderScene and DemoShell go to
-RenderScene's `.scratch` project, with identities under `/Content/Scratch/`, so
-no local record ever sits among the committed ones.
+A record is the model's authored file: it lives in the model's mount at the
+model's identity with the suffix `.import.json`. The model
+`/Showcase/Models/Showcase/chair.fbx` has the record
+`Content/Models/Showcase/chair.fbx.import.json`. The record does not repeat its
+identity; giving the model another identity moves the record. Its `source` is a
+file reference like any other: relative to the record when the file is in the
+same mount (`"../../SourceMedia/DCC/Showcase/chair.fbx"`), or the mount path of
+a file in another mount. Its UUIDv7 source identity is stored inside. Every
+record under `Content/Models/` is committed. Ad-hoc imports from RenderScene and
+DemoShell go to RenderScene's `.scratch` project, whose own writable `Scratch`
+mount holds the records at `/Scratch/<path>.import.json`, where `<path>` is the
+source's mount path without its leading `/`, and without `Showcase/SourceMedia`
+for the examples' own media; so no local record ever sits among the committed
+ones.
 
 ## Tools
 
@@ -352,15 +371,15 @@ RenderScene (`share/oxygen/Showcase` in the SDK) and the engine tools through
 the build selection it uses today (`-Preset`, `-BuildTree`, `-Config`,
 `-ToolPath`). They write only into RenderScene.
 
-| Command                       | Does                                                                                                                                                 |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Tools/cook <Name>...`        | One ImportTool `batch` with the named examples' manifests, into `.cooked/Content` (the global `--cooked-root`)                                       |
-| `Tools/cook -Tag <tag>`       | The same, for the examples with the tag                                                                                                              |
-| `Tools/cook -All`             | The same, for every example in `Examples.json`                                                                                                       |
-| `Tools/cook -List`            | Names, tags and descriptions from `Examples.json`                                                                                                    |
-| `Tools/cook -Check`           | Every example has its manifest, its scenes exist, every identity follows the identity rule, and every identity a manifest references is one it cooks |
-| `Tools/pak`                   | `.build/pak/examples.pak` from `.cooked/Content`, which holds the models the manifests name                                                          |
-| `Tools/play <Name> [<Scene>]` | Plays a scene of an example; the first scene by default                                                                                              |
+| Command                       | Does                                                                                                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Tools/cook <Name>...`        | One ImportTool `batch` with the named examples' manifests, into `.cooked/Showcase` (the global `--cooked-root`)                                                                                                     |
+| `Tools/cook -Tag <tag>`       | The same, for the examples with the tag                                                                                                                                                                             |
+| `Tools/cook -All`             | The same, for every example in `Examples.json`                                                                                                                                                                      |
+| `Tools/cook -List`            | Names, tags and descriptions from `Examples.json`                                                                                                                                                                   |
+| `Tools/cook -Check`           | Cooks nothing: every example has its manifest and every manifest its example, each example's scene files exist, then ImportTool's `analyze-sources` runs on every manifest and reports what the import rules refuse |
+| `Tools/pak`                   | `.build/pak/examples.pak` from `.cooked/Showcase`, which holds the models the manifests name                                                                                                                        |
+| `Tools/play <Name> [<Scene>]` | Plays a scene of an example; the first scene by default                                                                                                                                                             |
 
 The examples project keeps `Tools/fetch [-Check]`, which downloads and checks
 the files of `SourceMedia/showcase-assets.json` at their recorded paths, and
@@ -387,7 +406,7 @@ The SDK ships the examples tagged `showcase` as the same project, reduced, at
 their manifests, the `Content` files their jobs and records reach, those
 records, and `Tools/` without the generators. Beside it,
 `share/oxygen/RenderScene` holds RenderScene's `Tools/`, the content cooked
-from the project (`.cooked/Content`) and its pak (`.build/pak`). An SDK user
+from the project (`.cooked/Showcase`) and its pak (`.build/pak`). An SDK user
 runs the same RenderScene tools as a contributor.
 
 `prepare_showcase.py --tag showcase` follows manifests and records by mount
@@ -404,7 +423,7 @@ The move is one change, made by a one-time script that is not kept:
 1. Move files to the layout, with `git mv`, so history follows.
 2. Rename descriptors to the editor's source names.
 3. Rewrite every `/.cooked/...` reference (descriptors, scenes, records,
-   tests, C++ example code) to the new `/Content/...` identity, from a map
+   tests, C++ example code) to the new `/Showcase/...` identity, from a map
    the script builds from the moves.
 4. Rewrite every manifest: mounts, mount-path sources and new identities.
 5. Rewrite records' `source` and `virtual_path`.
@@ -417,22 +436,22 @@ change of the source mounts proposal.
 
 ## Dependencies
 
-| Dependency                                                                                                                            | Change                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `OXYGEN_EXAMPLE_SCENES_DIR` (Cooker and Scripting `test/CMakeLists.txt`)                                                              | Points at `Content/Examples`; the Lua type check walks it                                                                 |
-| RenderScene `RuntimePaths.cpp`, `MainModule.cpp`, `main_impl.cpp`                                                                     | Cooked root `RenderScene/.cooked/Content`; the `Showcase/Content` source mount; no installed-only default scene or skybox |
-| DemoShell `DemoMain.cpp`, `FileBrowserService.cpp`, `ContentVm.cpp`; VortexBasic                                                      | The `Content` mount folder; the file browser starts in `Content/SourceMedia/`; ad-hoc imports in RenderScene's `.scratch` |
-| InputSystem, LightBench, Physics `MainModule.cpp`                                                                                     | `content_root` stays the project root; their own `.cooked` folders are unchanged                                          |
-| `Examples/RenderScene/Showcase.cmake`, `prepare_showcase.py`                                                                          | Stage the project and RenderScene's content; the showcase set from the `showcase` tag                                     |
-| `tools/cmake/tests/test_showcase.py`, `tools/presets/tests/test_build_selection.py`                                                   | The new layout, catalog and script names                                                                                  |
-| `conanfile.py` exclusions, `.pre-commit-config.yaml` binary exclusions                                                                | `.cooked/`, `.build/`, `.scratch/`, `.mounts.json`, `Content/SourceMedia/DCC/`                                            |
-| Engine docs naming the old paths (ImportTool and PakTool READMEs, `PROJECT_LAYOUT.md`, `BUILD_SYSTEM.md`, runtime and cooker designs) | Rewritten for the layout                                                                                                  |
+| Dependency                                                                                                                            | Change                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `OXYGEN_EXAMPLE_SCENES_DIR` (Cooker and Scripting `test/CMakeLists.txt`)                                                              | Points at `Content/Examples`; the Lua type check walks it                                                                  |
+| RenderScene `RuntimePaths.cpp`, `MainModule.cpp`, `main_impl.cpp`                                                                     | Cooked root `RenderScene/.cooked/Showcase`; the `Showcase` source mount; no installed-only default scene or skybox         |
+| DemoShell `DemoMain.cpp`, `FileBrowserService.cpp`, `ContentVm.cpp`; VortexBasic                                                      | The `Showcase` mount folder; the file browser starts in `Content/SourceMedia/`; ad-hoc imports in RenderScene's `.scratch` |
+| InputSystem, LightBench, Physics `MainModule.cpp`                                                                                     | `content_root` stays the project root; their own `.cooked` folders are unchanged                                           |
+| `Examples/RenderScene/Showcase.cmake`, `prepare_showcase.py`                                                                          | Stage the project and RenderScene's content; the showcase set from the `showcase` tag                                      |
+| `tools/cmake/tests/test_showcase.py`, `tools/presets/tests/test_build_selection.py`                                                   | The new layout, catalog and script names                                                                                   |
+| `conanfile.py` exclusions, `.pre-commit-config.yaml` binary exclusions                                                                | `.cooked/`, `.build/`, `.scratch/`, `.mounts.json`, `Content/SourceMedia/DCC/`                                             |
+| Engine docs naming the old paths (ImportTool and PakTool READMEs, `PROJECT_LAYOUT.md`, `BUILD_SYSTEM.md`, runtime and cooker designs) | Rewritten for the layout                                                                                                   |
 
 ## Decisions
 
 - **An ordinary project.** The examples follow the project layout and the
   mount rules every project follows; no tool or runtime code knows them.
-- **The standard project layout.** One `Content` mount; raw media in
+- **The standard project layout.** One `Showcase` mount on `Content`; raw media in
   `Content/SourceMedia`, which the engine never cooks into. No layout of the
   examples' own, and no layout root: a cooked root holds the mount its
   identities name.
@@ -441,8 +460,9 @@ change of the source mounts proposal.
 - **One folder and one manifest per example.** Each example cooks alone;
   shared parts live in `Content/Geometry` and `Content/Materials` and are
   cooked once in a batch.
-- **Records at their identity.** `Imports/<identity>.import.json`, all
-  committed; ad-hoc imports live in RenderScene's ignored `.scratch` project.
+- **Records at their identity.** A record is the model's authored file,
+  `<identity>.import.json` in the model's mount, all committed; ad-hoc imports
+  live in the `Scratch` mount of RenderScene's ignored `.scratch` project.
 - **An editor project; RenderScene owns the cook.** No tool writes into the
   project; RenderScene's tools cook, package and play it into RenderScene's own
   folders. There is no import tool and no `.cooked/tools`.

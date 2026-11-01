@@ -23,8 +23,8 @@ if ($ExamplesInstalledSdk) {
     . (Join-Path $ExamplesEngineRoot 'tools/cli/BuildSelection.ps1')
 }
 
-# What Tools/cook cooks: one cooked root, holding the Content mount.
-$ExamplesCookedRoot = Join-Path $RenderSceneRoot '.cooked/Content'
+# What Tools/cook cooks: one cooked root, holding the Showcase mount.
+$ExamplesCookedRoot = Join-Path $RenderSceneRoot '.cooked/Showcase'
 # Where Tools/pak packages it.
 $ExamplesPakDirectory = Join-Path $RenderSceneRoot '.build/pak'
 
@@ -104,17 +104,28 @@ function Get-ExampleManifestPath([Parameter(Mandatory)][string]$Name) {
     return Join-Path $ExamplesRoot "Manifests/$Name.import-manifest.json"
 }
 
-# Writes the warnings and errors an ImportTool report holds: the importer
-# reports what it left out or repaired only there.
+# Writes the warnings and errors an ImportTool cook or source analysis report
+# holds: the importer reports what it left out or repaired only there.
 function Write-ImportReportDiagnostics([Parameter(Mandatory)][string]$ReportPath) {
     if ((Get-Item -LiteralPath $ReportPath).Length -eq 0) { return }
     $report = Get-Content -LiteralPath $ReportPath -Raw | ConvertFrom-Json
     foreach ($job in @($report.jobs)) {
+        # A cook report numbers its jobs; an analysis report names them by id,
+        # and by source when a job has no id.
+        $id = $job.PSObject.Properties['id']
+        $name = if ($id -and $id.Value) { $id.Value }
+                elseif ($job.PSObject.Properties['source_path']) { $job.source_path }
+                else { "job $($job.index)" }
         foreach ($diagnostic in @($job.diagnostics | Where-Object { $_ -and $_.severity -ne 'info' })) {
-            # The report omits an empty object path.
+            # A cook report omits an empty object path.
             $objectPath = $diagnostic.PSObject.Properties['object_path']
-            $where = if ($objectPath) { " ($($objectPath.Value))" } else { '' }
-            Write-Warning "job $($job.index) [$($diagnostic.code)] $($diagnostic.message)$where"
+            $where = if ($objectPath -and $objectPath.Value) { " ($($objectPath.Value))" } else { '' }
+            $line = "$name [$($diagnostic.code)] $($diagnostic.message)$where"
+            if ($diagnostic.severity -eq 'error') {
+                Write-Host "ERROR: $line" -ForegroundColor Red
+            } else {
+                Write-Warning $line
+            }
         }
     }
 }

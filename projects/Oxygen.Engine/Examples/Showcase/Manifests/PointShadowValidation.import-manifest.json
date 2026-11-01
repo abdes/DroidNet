@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,44 +12,44 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Materials/floor_default.omat",
+      "id": "/Showcase/Materials/floor_default.omat",
       "type": "material-descriptor",
-      "source": "/Content/Materials/floor_default.omat.json",
-      "virtual_path": "/Content/Materials/floor_default.omat",
+      "source": "/Showcase/Materials/floor_default.omat.json",
+      "virtual_path": "/Showcase/Materials/floor_default.omat",
       "name": "floor_default"
     },
     {
-      "id": "/Content/Materials/cube_red.omat",
+      "id": "/Showcase/Materials/cube_red.omat",
       "type": "material-descriptor",
-      "source": "/Content/Materials/cube_red.omat.json",
-      "virtual_path": "/Content/Materials/cube_red.omat",
+      "source": "/Showcase/Materials/cube_red.omat.json",
+      "virtual_path": "/Showcase/Materials/cube_red.omat",
       "name": "cube_red"
     },
     {
-      "id": "/Content/Geometry/floor.ogeo",
+      "id": "/Showcase/Geometry/floor.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Geometry/floor.ogeo.json",
-      "virtual_path": "/Content/Geometry/floor.ogeo",
+      "source": "/Showcase/Geometry/floor.ogeo.json",
+      "virtual_path": "/Showcase/Geometry/floor.ogeo",
       "name": "floor",
-      "depends_on": ["/Content/Materials/floor_default.omat"]
+      "depends_on": ["/Showcase/Materials/floor_default.omat"]
     },
     {
-      "id": "/Content/Geometry/cube.ogeo",
+      "id": "/Showcase/Geometry/cube.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Geometry/cube.ogeo.json",
-      "virtual_path": "/Content/Geometry/cube.ogeo",
+      "source": "/Showcase/Geometry/cube.ogeo.json",
+      "virtual_path": "/Showcase/Geometry/cube.ogeo",
       "name": "cube",
-      "depends_on": ["/Content/Materials/cube_red.omat"]
+      "depends_on": ["/Showcase/Materials/cube_red.omat"]
     },
     {
-      "id": "/Content/Scenes/PointShadowValidation/PointShadowValidation.oscene",
+      "id": "/Showcase/Scenes/PointShadowValidation/PointShadowValidation.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/PointShadowValidation/PointShadowValidation.scene.json",
-      "virtual_path": "/Content/Scenes/PointShadowValidation/PointShadowValidation.oscene",
+      "source": "/Showcase/Scenes/PointShadowValidation/PointShadowValidation.scene.json",
+      "virtual_path": "/Showcase/Scenes/PointShadowValidation/PointShadowValidation.oscene",
       "name": "PointShadowValidation",
       "depends_on": [
-        "/Content/Geometry/floor.ogeo",
-        "/Content/Geometry/cube.ogeo"
+        "/Showcase/Geometry/floor.ogeo",
+        "/Showcase/Geometry/cube.ogeo"
       ]
     }
   ]

@@ -139,7 +139,6 @@ enum class PakBuildPhase : uint8_t {
 
 struct PakBuildOptions {
   bool deterministic = true;
-  bool embed_browse_index = false;
   bool emit_manifest_in_full = false;
   bool compute_crc32 = true;
   bool fail_on_warnings = false;
@@ -236,7 +235,7 @@ It contains:
 - Table plans: texture, buffer, audio, script_resource, physics_resource.
 - Asset descriptor placement plan (absolute offsets/sizes/alignment).
 - Asset directory plan.
-- Optional browse index plan.
+- Browse index plan (every pak has one).
 - Mandatory embedded catalog with ordered baseline identities and deletions.
 - Footer plan (latest-schema footer layout).
 - CRC patch-field absolute offset.
@@ -313,7 +312,7 @@ Writer phases:
 3. Write resource tables (`texture`, `buffer`, `audio`, `script_resource`, `physics_resource`).
 4. Write asset descriptors.
 5. Write asset directory.
-6. Write optional browse index payload.
+6. Write the browse index payload.
 7. Write `pak::core::PakFooter` with `pak_crc32 = 0`.
 8. Flush.
 9. If `options.compute_crc32=true`, patch `pak_crc32`; otherwise leave `pak_crc32=0`.

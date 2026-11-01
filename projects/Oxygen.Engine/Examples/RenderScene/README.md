@@ -45,7 +45,7 @@ project no tool writes into. RenderScene's `Tools/` (PowerShell 7.4, each with a
 
 | Tool         | Does                                                                 | Writes                    |
 | ------------ | -------------------------------------------------------------------- | ------------------------- |
-| `Tools/cook` | Cooks examples with one ImportTool batch (`--cooked-root`)           | `.cooked/Content`         |
+| `Tools/cook` | Cooks examples with one ImportTool batch (`--cooked-root`)           | `.cooked/Showcase`        |
 | `Tools/pak`  | Packages the cooked root, with its catalog and manifest              | `.build/pak/examples.pak` |
 | `Tools/play` | Plays an example's scene in Oxygen.Player, with the project's mounts | a launch file             |
 
@@ -54,7 +54,7 @@ Tools/cook BottleOnBox VsmTwoCubes   # the named examples
 Tools/cook -Tag showcase             # the examples with a tag
 Tools/cook -All                      # every example
 Tools/cook -List                     # names, tags, descriptions
-Tools/cook -Check                    # the project's own consistency
+Tools/cook -Check                    # check the project, cook nothing
 Tools/pak
 Tools/play CameraSwitch              # the example's first scene
 Tools/play VsmBug1Flat VsmBug1LargeThinCube
@@ -67,14 +67,14 @@ first; `-Preset`, `-BuildTree`, `-Config` and `-ToolPath` choose another.
 `cook -NoTUI -Quiet` prints only failures and the result, as the build runs
 it. In an installed SDK the tools are at `share/oxygen/RenderScene/Tools`,
 beside the
-cooked content and pak the SDK ships (`.cooked/Content`, `.build/pak`) and
+cooked content and pak the SDK ships (`.cooked/Showcase`, `.build/pak`) and
 `share/oxygen/Showcase`, and use the SDK's tools. The launch file `Tools/play`
 writes mounts the cooked root and binds the project's source mounts, so editing
 a scene's script reloads it while playing; `Tools/play <Example> -- --help`
 lists the player's options.
 
 RenderScene's ad-hoc model imports go to `.scratch`, a scratch project that
-mounts `Showcase/Content`, with the local mounts of any `.mounts.json` at or
+mounts the examples' `Showcase` mount (`Showcase/Content`), with the local mounts of any `.mounts.json` at or
 above it (a downloads folder, for example; the Content Loader adds source
 folders to `.scratch/.mounts.json`). Nothing goes into the examples project.
 
@@ -115,7 +115,7 @@ versions of the same asset out of a baseline test.
    added as one first: a model's record names its source through a source
    folder.
 2. Source folders are listed on **Mounts → Source folders**: the examples'
-   `Content`, and the folders added with **+ Source folder…**, which the
+   `Showcase`, and the folders added with **+ Source folder…**, which the
    scratch project's `.mounts.json` keeps for this machine and which can be
    removed there.
 3. Filter the list and pick the formats (FBX, GLB, GLTF). Select a model: its

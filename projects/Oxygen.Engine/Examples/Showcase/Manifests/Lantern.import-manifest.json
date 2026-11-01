@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,26 +12,26 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Models/Lantern.glb",
+      "id": "/Showcase/Models/Lantern.glb",
       "type": "model",
-      "virtual_path": "/Content/Models/Lantern.glb"
+      "virtual_path": "/Showcase/Models/Lantern.glb"
     },
     {
-      "id": "/Content/Scenes/Lantern/Sky.otex",
+      "id": "/Showcase/Scenes/Lantern/Sky.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/Lantern/Sky.otex.json",
-      "virtual_path": "/Content/Scenes/Lantern/Sky.otex",
+      "source": "/Showcase/Scenes/Lantern/Sky.otex.json",
+      "virtual_path": "/Showcase/Scenes/Lantern/Sky.otex",
       "name": "Sky"
     },
     {
-      "id": "/Content/Scenes/Lantern/Lantern.oscene",
+      "id": "/Showcase/Scenes/Lantern/Lantern.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/Lantern/Lantern.scene.json",
-      "virtual_path": "/Content/Scenes/Lantern/Lantern.oscene",
+      "source": "/Showcase/Scenes/Lantern/Lantern.scene.json",
+      "virtual_path": "/Showcase/Scenes/Lantern/Lantern.oscene",
       "name": "Lantern",
       "depends_on": [
-        "/Content/Models/Lantern.glb",
-        "/Content/Scenes/Lantern/Sky.otex"
+        "/Showcase/Models/Lantern.glb",
+        "/Showcase/Scenes/Lantern/Sky.otex"
       ]
     }
   ]

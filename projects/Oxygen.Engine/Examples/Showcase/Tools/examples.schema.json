@@ -31,7 +31,7 @@
             "minLength": 1
           },
           "scenes": {
-            "description": "Scene names, played as /Content/Scenes/<name>/<scene>.oscene; empty for a model-only example.",
+            "description": "Scene names, played as /Showcase/Scenes/<name>/<scene>.oscene; empty for a model-only example.",
             "type": "array",
             "items": {
               "type": "string",

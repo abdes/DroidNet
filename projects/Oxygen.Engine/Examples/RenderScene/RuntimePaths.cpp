@@ -34,7 +34,7 @@ auto ResolveRuntimePaths() -> RuntimePaths
   // folder.
   const auto at = [](RuntimePaths paths) -> RuntimePaths {
     paths.content_mount = paths.content / "Content";
-    paths.cooked = paths.showcase / ".cooked" / "Content";
+    paths.cooked = paths.showcase / ".cooked" / "Showcase";
     paths.paks = paths.showcase / ".build" / "pak";
     paths.scratch = paths.showcase / ".scratch";
     return paths;

@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,78 +12,78 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Scenes/EngineAssets/UvProbe_albedo.otex",
+      "id": "/Showcase/Scenes/EngineAssets/UvProbe_albedo.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/EngineAssets/UvProbe_albedo.otex.json",
-      "virtual_path": "/Content/Scenes/EngineAssets/UvProbe_albedo.otex",
+      "source": "/Showcase/Scenes/EngineAssets/UvProbe_albedo.otex.json",
+      "virtual_path": "/Showcase/Scenes/EngineAssets/UvProbe_albedo.otex",
       "name": "UvProbe_albedo"
     },
     {
-      "id": "/Content/Scenes/EngineAssets/UvProbe_normal.otex",
+      "id": "/Showcase/Scenes/EngineAssets/UvProbe_normal.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/EngineAssets/UvProbe_normal.otex.json",
-      "virtual_path": "/Content/Scenes/EngineAssets/UvProbe_normal.otex",
+      "source": "/Showcase/Scenes/EngineAssets/UvProbe_normal.otex.json",
+      "virtual_path": "/Showcase/Scenes/EngineAssets/UvProbe_normal.otex",
       "name": "UvProbe_normal"
     },
     {
-      "id": "/Content/Scenes/EngineAssets/UvProbe.omat",
+      "id": "/Showcase/Scenes/EngineAssets/UvProbe.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/EngineAssets/UvProbe.omat.json",
-      "virtual_path": "/Content/Scenes/EngineAssets/UvProbe.omat",
+      "source": "/Showcase/Scenes/EngineAssets/UvProbe.omat.json",
+      "virtual_path": "/Showcase/Scenes/EngineAssets/UvProbe.omat",
       "name": "UvProbe",
       "depends_on": [
-        "/Content/Scenes/EngineAssets/UvProbe_albedo.otex",
-        "/Content/Scenes/EngineAssets/UvProbe_normal.otex"
+        "/Showcase/Scenes/EngineAssets/UvProbe_albedo.otex",
+        "/Showcase/Scenes/EngineAssets/UvProbe_normal.otex"
       ]
     },
     {
-      "id": "/Content/Scenes/EngineAssets/MatCube.omat",
+      "id": "/Showcase/Scenes/EngineAssets/MatCube.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/EngineAssets/MatCube.omat.json",
-      "virtual_path": "/Content/Scenes/EngineAssets/MatCube.omat",
+      "source": "/Showcase/Scenes/EngineAssets/MatCube.omat.json",
+      "virtual_path": "/Showcase/Scenes/EngineAssets/MatCube.omat",
       "name": "MatCube"
     },
     {
-      "id": "/Content/Scenes/EngineAssets/MatCubeB_mask.otex",
+      "id": "/Showcase/Scenes/EngineAssets/MatCubeB_mask.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/EngineAssets/MatCubeB_mask.otex.json",
-      "virtual_path": "/Content/Scenes/EngineAssets/MatCubeB_mask.otex",
+      "source": "/Showcase/Scenes/EngineAssets/MatCubeB_mask.otex.json",
+      "virtual_path": "/Showcase/Scenes/EngineAssets/MatCubeB_mask.otex",
       "name": "MatCubeB_mask"
     },
     {
-      "id": "/Content/Scenes/EngineAssets/MatCubeB.omat",
+      "id": "/Showcase/Scenes/EngineAssets/MatCubeB.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/EngineAssets/MatCubeB.omat.json",
-      "virtual_path": "/Content/Scenes/EngineAssets/MatCubeB.omat",
+      "source": "/Showcase/Scenes/EngineAssets/MatCubeB.omat.json",
+      "virtual_path": "/Showcase/Scenes/EngineAssets/MatCubeB.omat",
       "name": "MatCubeB",
-      "depends_on": ["/Content/Scenes/EngineAssets/MatCubeB_mask.otex"]
+      "depends_on": ["/Showcase/Scenes/EngineAssets/MatCubeB_mask.otex"]
     },
     {
-      "id": "/Content/Scenes/EngineAssets/MatCubeC.omat",
+      "id": "/Showcase/Scenes/EngineAssets/MatCubeC.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/EngineAssets/MatCubeC.omat.json",
-      "virtual_path": "/Content/Scenes/EngineAssets/MatCubeC.omat",
+      "source": "/Showcase/Scenes/EngineAssets/MatCubeC.omat.json",
+      "virtual_path": "/Showcase/Scenes/EngineAssets/MatCubeC.omat",
       "name": "MatCubeC"
     },
     {
-      "id": "/Content/Scenes/EngineAssets/MatCubeD.omat",
+      "id": "/Showcase/Scenes/EngineAssets/MatCubeD.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/EngineAssets/MatCubeD.omat.json",
-      "virtual_path": "/Content/Scenes/EngineAssets/MatCubeD.omat",
+      "source": "/Showcase/Scenes/EngineAssets/MatCubeD.omat.json",
+      "virtual_path": "/Showcase/Scenes/EngineAssets/MatCubeD.omat",
       "name": "MatCubeD"
     },
     {
-      "id": "/Content/Scenes/EngineAssets/EngineAssets.oscene",
+      "id": "/Showcase/Scenes/EngineAssets/EngineAssets.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/EngineAssets/EngineAssets.scene.json",
-      "virtual_path": "/Content/Scenes/EngineAssets/EngineAssets.oscene",
+      "source": "/Showcase/Scenes/EngineAssets/EngineAssets.scene.json",
+      "virtual_path": "/Showcase/Scenes/EngineAssets/EngineAssets.oscene",
       "name": "EngineAssets",
       "depends_on": [
-        "/Content/Scenes/EngineAssets/UvProbe.omat",
-        "/Content/Scenes/EngineAssets/MatCube.omat",
-        "/Content/Scenes/EngineAssets/MatCubeB.omat",
-        "/Content/Scenes/EngineAssets/MatCubeC.omat",
-        "/Content/Scenes/EngineAssets/MatCubeD.omat"
+        "/Showcase/Scenes/EngineAssets/UvProbe.omat",
+        "/Showcase/Scenes/EngineAssets/MatCube.omat",
+        "/Showcase/Scenes/EngineAssets/MatCubeB.omat",
+        "/Showcase/Scenes/EngineAssets/MatCubeC.omat",
+        "/Showcase/Scenes/EngineAssets/MatCubeD.omat"
       ]
     }
   ]

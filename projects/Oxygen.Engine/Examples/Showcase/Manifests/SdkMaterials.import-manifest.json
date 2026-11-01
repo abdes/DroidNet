@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,114 +12,114 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkMarble_base_color.otex",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkMarble_base_color.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkMarble_base_color.otex.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_base_color.otex",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkMarble_base_color.otex.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkMarble_base_color.otex",
       "name": "SdkMarble_base_color"
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkMarble_normal.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkMarble_normal.otex.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkMarble_normal.otex",
       "name": "SdkMarble_normal"
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkMarble_roughness.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkMarble_roughness.otex.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkMarble_roughness.otex",
       "name": "SdkMarble_roughness"
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkMarble.omat",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkMarble.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkMarble.omat.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMarble.omat",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkMarble.omat.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkMarble.omat",
       "name": "SdkMarble",
       "depends_on": [
-        "/Content/Scenes/SdkMaterials/SdkMarble_base_color.otex",
-        "/Content/Scenes/SdkMaterials/SdkMarble_normal.otex",
-        "/Content/Scenes/SdkMaterials/SdkMarble_roughness.otex"
+        "/Showcase/Scenes/SdkMaterials/SdkMarble_base_color.otex",
+        "/Showcase/Scenes/SdkMaterials/SdkMarble_normal.otex",
+        "/Showcase/Scenes/SdkMaterials/SdkMarble_roughness.otex"
       ]
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkWood_base_color.otex",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkWood_base_color.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkWood_base_color.otex.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_base_color.otex",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkWood_base_color.otex.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkWood_base_color.otex",
       "name": "SdkWood_base_color"
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkWood_normal.otex",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkWood_normal.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkWood_normal.otex.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_normal.otex",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkWood_normal.otex.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkWood_normal.otex",
       "name": "SdkWood_normal"
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkWood_roughness.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkWood_roughness.otex.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkWood_roughness.otex",
       "name": "SdkWood_roughness"
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkWood.omat",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkWood.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkWood.omat.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkWood.omat",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkWood.omat.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkWood.omat",
       "name": "SdkWood",
       "depends_on": [
-        "/Content/Scenes/SdkMaterials/SdkWood_base_color.otex",
-        "/Content/Scenes/SdkMaterials/SdkWood_normal.otex",
-        "/Content/Scenes/SdkMaterials/SdkWood_roughness.otex"
+        "/Showcase/Scenes/SdkMaterials/SdkWood_base_color.otex",
+        "/Showcase/Scenes/SdkMaterials/SdkWood_normal.otex",
+        "/Showcase/Scenes/SdkMaterials/SdkWood_roughness.otex"
       ]
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkCube.ogeo",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkCube.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkCube.ogeo.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkCube.ogeo",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkCube.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkCube.ogeo",
       "name": "SdkCube",
-      "depends_on": ["/Content/Scenes/SdkMaterials/SdkMarble.omat"]
+      "depends_on": ["/Showcase/Scenes/SdkMaterials/SdkMarble.omat"]
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkCubeB.ogeo",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkCubeB.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkCubeB.ogeo.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkCubeB.ogeo",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkCubeB.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkCubeB.ogeo",
       "name": "SdkCubeB",
-      "depends_on": ["/Content/Scenes/SdkMaterials/SdkWood.omat"]
+      "depends_on": ["/Showcase/Scenes/SdkMaterials/SdkWood.omat"]
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkCubeC.ogeo",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkCubeC.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkCubeC.ogeo.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkCubeC.ogeo",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkCubeC.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkCubeC.ogeo",
       "name": "SdkCubeC",
-      "depends_on": ["/Content/Scenes/SdkMaterials/SdkMarble.omat"]
+      "depends_on": ["/Showcase/Scenes/SdkMaterials/SdkMarble.omat"]
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkCubeD.ogeo",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkCubeD.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkCubeD.ogeo.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkCubeD.ogeo",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkCubeD.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkCubeD.ogeo",
       "name": "SdkCubeD",
-      "depends_on": ["/Content/Scenes/SdkMaterials/SdkWood.omat"]
+      "depends_on": ["/Showcase/Scenes/SdkMaterials/SdkWood.omat"]
     },
     {
-      "id": "/Content/Scenes/SdkMaterials/SdkMaterials.oscene",
+      "id": "/Showcase/Scenes/SdkMaterials/SdkMaterials.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/SdkMaterials/SdkMaterials.scene.json",
-      "virtual_path": "/Content/Scenes/SdkMaterials/SdkMaterials.oscene",
+      "source": "/Showcase/Scenes/SdkMaterials/SdkMaterials.scene.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/SdkMaterials.oscene",
       "name": "SdkMaterials",
       "depends_on": [
-        "/Content/Scenes/SdkMaterials/SdkCube.ogeo",
-        "/Content/Scenes/SdkMaterials/SdkCubeB.ogeo",
-        "/Content/Scenes/SdkMaterials/SdkCubeC.ogeo",
-        "/Content/Scenes/SdkMaterials/SdkCubeD.ogeo"
+        "/Showcase/Scenes/SdkMaterials/SdkCube.ogeo",
+        "/Showcase/Scenes/SdkMaterials/SdkCubeB.ogeo",
+        "/Showcase/Scenes/SdkMaterials/SdkCubeC.ogeo",
+        "/Showcase/Scenes/SdkMaterials/SdkCubeD.ogeo"
       ]
     }
   ]

@@ -32,9 +32,10 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parents[2]
 SCENE_NAME = "CityEnvironmentValidation"
 HERE = PROJECT / "Content" / "Scenes" / SCENE_NAME
-# The scene folder's mount path; every file this script writes is cooked to
-# its mount path with the cooked extension.
-FOLDER = f"/Content/Scenes/{SCENE_NAME}"
+# The scene folder's mount path in the Showcase mount; every file this script
+# writes is cooked to its mount path with the cooked extension. The files
+# reference each other relative to that folder, by file name.
+FOLDER = f"/Showcase/Scenes/{SCENE_NAME}"
 SURFACE_ID = "146b1397-c3e0-bc20-fce3-c55e470b4086"
 DEFAULT_MATERIAL = "MatCityConcreteWarm"
 # Every geometry has one surface with this id and the same default material, so
@@ -165,7 +166,7 @@ class SceneBuilder:
         index = self.node(name, translation, scale, rotation)
         renderable = {
             "node": index,
-            "geometry_ref": f"{FOLDER}/{geometry}.ogeo",
+            "geometry_ref": f"{geometry}.ogeo",
         }
         if material != DEFAULT_MATERIAL:
             renderable["overrides"] = {
@@ -174,7 +175,7 @@ class SceneBuilder:
                         "kind": "surface",
                         "id": SURFACE_ID,
                         "layout_revision": LAYOUT_REVISION,
-                        "values": {"/material": f"{FOLDER}/{material}.omat"},
+                        "values": {"/material": f"{material}.omat"},
                     }
                 ]
             }
@@ -836,7 +837,7 @@ def scene_document() -> dict:
             }
         ],
         "references": {
-            "materials": [f"{FOLDER}/{m}.omat" for m in MATERIALS],
+            "materials": [f"{m}.omat" for m in MATERIALS],
         },
     }
 
@@ -870,7 +871,7 @@ def geometry_document(name: str, generator: str, params: dict | None) -> dict:
                     {
                         "name": f"{name}_surface",
                         "surface_id": SURFACE_ID,
-                        "material_ref": f"{FOLDER}/{DEFAULT_MATERIAL}.omat",
+                        "material_ref": f"{DEFAULT_MATERIAL}.omat",
                         "views": [{"view_ref": "__all__"}],
                     }
                 ],
@@ -917,7 +918,7 @@ def manifest_document() -> dict:
         "$schema": "oxygen.import-manifest.schema.json",
         "version": 1,
         "project_root": "..",
-        "mounts": [{"name": "Content", "kind": "Source", "path": "Content"}],
+        "mounts": [{"name": "Showcase", "kind": "Source", "path": "Content"}],
         "max_in_flight_jobs": 1,
         "jobs": jobs,
     }

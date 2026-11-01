@@ -180,7 +180,7 @@ Full build from a loose-cooked root:
 
 ```powershell
 out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build `
-  --loose-source Examples/RenderScene/.cooked/Content `
+  --loose-source Examples/RenderScene/.cooked/Showcase `
   --out Examples/RenderScene/.build/pak/examples.pak `
   --catalog-out Examples/RenderScene/.build/pak/examples.catalog.json `
   --manifest-out Examples/RenderScene/.build/pak/examples.manifest.json `
@@ -192,7 +192,7 @@ Patch build against a published base catalog:
 
 ```powershell
 out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe patch `
-  --loose-source Examples/RenderScene/.cooked/Content `
+  --loose-source Examples/RenderScene/.cooked/Showcase `
   --base-pak Examples/RenderScene/.build/pak/examples.pak `
   --out Examples/RenderScene/.build/pak/examples-patch-1.pak `
   --catalog-out Examples/RenderScene/.build/pak/examples-patch-1.catalog.json `
@@ -205,7 +205,7 @@ Build with an emitted diagnostics report:
 
 ```powershell
 out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build `
-  --loose-source Examples/RenderScene/.cooked/Content `
+  --loose-source Examples/RenderScene/.cooked/Showcase `
   --out Examples/RenderScene/.build/pak/examples.pak `
   --catalog-out Examples/RenderScene/.build/pak/examples.catalog.json `
   --diagnostics-file Examples/RenderScene/.build/pak/examples.report.json `

@@ -813,7 +813,6 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
                 Path(self.generators_folder) / "oxygen-sdk"
             ).as_posix()
 
-        self._reset_legacy_presets(tc.presets_prefix)
         tc.generate()
 
         deps = CMakeConfigDeps(self)
@@ -1268,31 +1267,6 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
             json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n"
         )
         temporary.replace(path)
-
-    def _reset_legacy_presets(self, prefix):
-        """Let Conan regenerate legacy metadata on the first install.
-
-        Conan merges multi-config build/test entries by name. Retaining the old
-        names would leave colliding entries pointing at removed configure presets.
-        Also discard metadata changed by the former defaults postprocessor.
-        Only Conan-owned preset metadata is removed; build products stay intact.
-        """
-        path = Path(self.generators_folder) / "CMakePresets.json"
-        if not path.exists():
-            return
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if "conan" not in data.get("vendor", {}):
-            return  # Conan reports the ownership error without overwriting it.
-        presets = (
-            p
-            for section in ("configurePresets", "buildPresets", "testPresets")
-            for p in data.get(section, [])
-        )
-        if data.get("include") or any(
-            not p["name"].startswith(prefix + "-") or "inherits" in p for p in presets
-        ):
-            path.unlink()
-            self.output.info(f"Regenerating legacy presets with prefix '{prefix}'")
 
     def layout(self):
         cmake_layout(

@@ -3,8 +3,8 @@
 The stage holds what the SDK ships under share/oxygen:
 
 - `Showcase/`: the examples project reduced to one tag. Project.oxy,
-  Examples.json filtered to the tag, those examples' manifests, the Content
-  files their jobs and model import records reach, and the project's own
+  Examples.json filtered to the tag, those examples' manifests, the Showcase
+  mount files their jobs and model import records reach, and the project's own
   tools (fetch and the schemas).
 - `RenderScene/Tools/`: RenderScene's cook, pak and play tools, which cook the
   staged project into RenderScene's own `.cooked/` and `.build/`.
@@ -46,6 +46,25 @@ PROJECT_FILES = [
 
 # The tools' outputs in a staged project, which the build removes itself.
 OUTPUTS = (".cooked", ".build")
+# The mount the examples' identities and mount paths are in.
+MOUNT = "Showcase"
+MOUNT_PREFIX = f"/{MOUNT}/"
+
+
+def mount_folder(source: Path) -> Path:
+    """The folder of the project's `Showcase` mount, as Project.oxy names it."""
+    project = json.loads((source / "Project.oxy").read_text(encoding="utf-8"))
+    folders = [m["Path"] for m in project["Mounts"] if m["Name"] == MOUNT]
+    if len(folders) != 1:
+        raise ValueError(f"Project.oxy has no {MOUNT} mount")
+    return (source / folders[0]).resolve()
+
+
+def mount_file(content: Path, mount_path: str) -> Path:
+    """The file of `mount_path`, a mount path in the Showcase mount."""
+    if not mount_path.startswith(MOUNT_PREFIX):
+        raise ValueError(f"{mount_path} is not in the {MOUNT} mount")
+    return content / mount_path[len(MOUNT_PREFIX) :]
 
 
 def write_changed(path: Path, data: bytes) -> None:
@@ -93,7 +112,7 @@ def prepare(source: Path, stage: Path, tag: str) -> list[Path]:
     Returns every input read.
     """
     output = stage / "Showcase"
-    content = (source / "Content").resolve()
+    content = mount_folder(source)
     inputs: set[Path] = set()
     copied: set[Path] = set()
     staged: set[Path] = {output / "Examples.json"}
@@ -112,8 +131,8 @@ def prepare(source: Path, stage: Path, tag: str) -> list[Path]:
         # A file a JSON input names, by mount path or relative to the file,
         # ships with it: descriptor images, buffers, scripts, records.
         for text in strings(json.loads(path.read_text(encoding="utf-8"))):
-            if text.startswith("/Content/"):
-                candidate = content / text[len("/Content/") :]
+            if text.startswith(MOUNT_PREFIX):
+                candidate = mount_file(content, text)
             elif text.startswith("/") or ":" in text:
                 continue
             else:
@@ -136,12 +155,11 @@ def prepare(source: Path, stage: Path, tag: str) -> list[Path]:
         copy(manifest)
         for job in json.loads(manifest.read_text(encoding="utf-8"))["jobs"]:
             if "source" in job:
-                copy(content / job["source"][len("/Content/") :])
+                copy(mount_file(content, job["source"]))
             if job["type"] == "model":
-                # A model's record lives at its identity in the Content mount,
+                # A model's record lives at its identity in the Showcase mount,
                 # and names its source relative to itself.
-                identity = job["virtual_path"][len("/Content/") :]
-                copy(content / f"{identity}.import.json")
+                copy(mount_file(content, f"{job['virtual_path']}.import.json"))
     for name in PROJECT_FILES:
         copy(source / name)
     prune(output, staged)

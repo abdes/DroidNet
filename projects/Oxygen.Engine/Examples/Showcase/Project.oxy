@@ -4,7 +4,7 @@
   "SchemaVersion": 2,
   "Mounts": [
     {
-      "Name": "Content",
+      "Name": "Showcase",
       "Kind": "Source",
       "Path": "Content"
     }

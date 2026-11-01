@@ -641,7 +641,16 @@ Optional:
   (`share/oxygen/engine.pak` in an SDK) to reference `/Engine` assets.
 - `--max-in-flight-jobs <n>`
 
-`analyze-sources` also takes `--mounts`.
+`analyze-sources` also takes `--mounts`. It cooks nothing: for every job of
+the manifest it reports the files the job reads, the assets it produces and
+the references its authored files make, resolved as the cook resolves them,
+and the refusals the reference rules make. A source that is not valid JSON, or
+lacks what its job reads (a sidecar's bindings, a collision shape's
+`material_ref`, a container's `buffers`), is refused with
+`analysis.source_invalid`; a refused job makes the analysis incomplete and the
+command exit non-zero. A physics or script sidecar references its target
+scene, and its references resolve against the scene's identity; a physics
+sidecar produces the scene's `.opscene`.
 
 ### `versions`
 
@@ -770,6 +779,12 @@ Job rules:
 - `geometry-descriptor` jobs:
   - use `source` as descriptor JSON path
   - accept `output` and `name`
+- `buffer-container` jobs:
+  - use `source` as the container JSON path and take no `virtual_path`: the
+    container produces several buffers
+  - each buffer's `virtual_path` names its product relative to the container
+    (`"virtual_path": "Truck_p0_vb.obuf"` in `Truck.buffers.json`), resolved
+    as any reference
 - `scene-descriptor` jobs:
   - use `source` as descriptor JSON path
   - accept `output` and `name`

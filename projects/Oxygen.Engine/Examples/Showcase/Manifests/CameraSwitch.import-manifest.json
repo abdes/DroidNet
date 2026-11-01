@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,55 +12,55 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Scenes/CameraSwitch/CameraSwitchMat.omat",
+      "id": "/Showcase/Scenes/CameraSwitch/CameraSwitchMat.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/CameraSwitch/CameraSwitchMat.omat.json",
-      "virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitchMat.omat",
+      "source": "/Showcase/Scenes/CameraSwitch/CameraSwitchMat.omat.json",
+      "virtual_path": "/Showcase/Scenes/CameraSwitch/CameraSwitchMat.omat",
       "name": "CameraSwitchMat"
     },
     {
-      "id": "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
+      "id": "/Showcase/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo.json",
-      "virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
+      "source": "/Showcase/Scenes/CameraSwitch/CameraSwitchCube.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
       "name": "CameraSwitchCube",
-      "depends_on": ["/Content/Scenes/CameraSwitch/CameraSwitchMat.omat"]
+      "depends_on": ["/Showcase/Scenes/CameraSwitch/CameraSwitchMat.omat"]
     },
     {
-      "id": "/Content/Scenes/CameraSwitch/camera_switch.oscript",
+      "id": "/Showcase/Scenes/CameraSwitch/camera_switch.oscript",
       "type": "script",
-      "source": "/Content/Scenes/CameraSwitch/camera_switch.lua",
-      "virtual_path": "/Content/Scenes/CameraSwitch/camera_switch.oscript",
+      "source": "/Showcase/Scenes/CameraSwitch/camera_switch.lua",
+      "virtual_path": "/Showcase/Scenes/CameraSwitch/camera_switch.oscript",
       "name": "camera_switch",
       "compile": false,
       "script_storage": "external"
     },
     {
-      "id": "/Content/Scenes/CameraSwitch/camera_switch.input",
+      "id": "/Showcase/Scenes/CameraSwitch/camera_switch.input",
       "type": "input",
-      "source": "/Content/Scenes/CameraSwitch/camera_switch.input.json",
-      "virtual_path": "/Content/Scenes/CameraSwitch/camera_switch.input"
+      "source": "/Showcase/Scenes/CameraSwitch/camera_switch.input.json",
+      "virtual_path": "/Showcase/Scenes/CameraSwitch/camera_switch.input"
     },
     {
-      "id": "/Content/Scenes/CameraSwitch/CameraSwitch.oscene",
+      "id": "/Showcase/Scenes/CameraSwitch/CameraSwitch.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/CameraSwitch/CameraSwitch.scene.json",
-      "virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitch.oscene",
+      "source": "/Showcase/Scenes/CameraSwitch/CameraSwitch.scene.json",
+      "virtual_path": "/Showcase/Scenes/CameraSwitch/CameraSwitch.oscene",
       "name": "camera_switch",
       "depends_on": [
-        "/Content/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
-        "/Content/Scenes/CameraSwitch/camera_switch.input"
+        "/Showcase/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
+        "/Showcase/Scenes/CameraSwitch/camera_switch.input"
       ]
     },
     {
-      "id": "/Content/Scenes/CameraSwitch/CameraSwitch.oscene#script-sidecar",
+      "id": "/Showcase/Scenes/CameraSwitch/CameraSwitch.oscene#script-sidecar",
       "type": "script-sidecar",
       "name": "camera_switch_sidecar",
-      "target_scene_virtual_path": "/Content/Scenes/CameraSwitch/CameraSwitch.oscene",
+      "target_scene_virtual_path": "/Showcase/Scenes/CameraSwitch/CameraSwitch.oscene",
       "depends_on": [
-        "/Content/Scenes/CameraSwitch/CameraSwitch.oscene",
-        "/Content/Scenes/CameraSwitch/camera_switch.oscript",
-        "/Content/Scenes/CameraSwitch/camera_switch.input"
+        "/Showcase/Scenes/CameraSwitch/CameraSwitch.oscene",
+        "/Showcase/Scenes/CameraSwitch/camera_switch.oscript",
+        "/Showcase/Scenes/CameraSwitch/camera_switch.input"
       ],
       "bindings": [
         {

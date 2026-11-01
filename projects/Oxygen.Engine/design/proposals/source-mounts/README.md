@@ -4,7 +4,7 @@ Status: accepted. The engine, the tools and the examples follow it
 (abdes/DroidNet#81, #120); the editor part is
 [editor mounts](../../../../../design/editor/lld/project-layout-and-templates.md#mounts).
 
-Last updated: 2026-10-31
+Last updated: 2026-11-01
 
 Read: [at a glance](#at-a-glance), [scenarios](#scenarios),
 [today](#today), [the mount contract](#the-mount-contract),
@@ -129,15 +129,15 @@ stored.
 
 #### Rules
 
-| Rule                 | Contract                                                                                                                                                                                                                                                                                        |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unique names         | Names are unique, ignoring case, across a run's mount table                                                                                                                                                                                                                                     |
-| `Engine`             | Reserved for the engine content build; a project mount named `Engine` is refused                                                                                                                                                                                                                |
-| Name follows content | A folder is mounted under one name by every project that mounts it, because the references inside it carry that name. Mounting a studio library as `Studio` here and `Shared` there breaks every reference between its files in one of the two projects ([changing a mount](#changing-a-mount)) |
-| Kind is fixed        | `.mounts.json` binds or overrides a `Path`; it never changes a `Kind`                                                                                                                                                                                                                           |
-| Absolute paths       | Allowed only in `.mounts.json` ([below](#absolute-paths-only-in-mountsjson))                                                                                                                                                                                                                    |
-| No overlap           | Two Folders, of either kind, may not be the same folder or contain one another: a file has exactly one mount path ([why](#why-mounts-may-not-overlap)). A pak is a file, never compared                                                                                                         |
-| Not in output        | A `Source` Folder may not be or lie inside an [output folder](#output-folders); a cooked source may                                                                                                                                                                                             |
+| Rule                 | Contract                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unique names         | Names are unique, ignoring case, across a run's mount table                                                                                                                                                                                                                                                                                                                         |
+| `Engine`             | Reserved for the engine content build; a project mount named `Engine` is refused                                                                                                                                                                                                                                                                                                    |
+| Name follows content | A folder is mounted under one name by every project that mounts it, because its identities and the references other mounts hold to it carry that name. Its files reference each other relatively, without the name. Mounting a studio library as `Studio` here and `Shared` there breaks every reference into it in one of the two projects ([changing a mount](#changing-a-mount)) |
+| Kind is fixed        | `.mounts.json` binds or overrides a `Path`; it never changes a `Kind`                                                                                                                                                                                                                                                                                                               |
+| Absolute paths       | Allowed only in `.mounts.json` ([below](#absolute-paths-only-in-mountsjson))                                                                                                                                                                                                                                                                                                        |
+| No overlap           | Two Folders, of either kind, may not be the same folder or contain one another: a file has exactly one mount path ([why](#why-mounts-may-not-overlap)). A pak is a file, never compared                                                                                                                                                                                             |
+| Not in output        | A `Source` Folder may not be or lie inside an [output folder](#output-folders); a cooked source may                                                                                                                                                                                                                                                                                 |
 
 ### Absolute paths only in `.mounts.json`
 
@@ -326,12 +326,12 @@ mount table and never stored.
 
 ### Changing a mount
 
-| Change                                | Effect                                                                                   |
-| ------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Folder changed, same files            | None: names and recorded identities are unchanged                                        |
-| Folder changed to different files     | The ordinary changed-source rule: cooked output from the old files is stale and recooked |
-| Name changed                          | An identity change: every reference to the old name is updated, as for any asset rename  |
-| Placeholder bound, unbound or rebound | A folder change, with the same rules                                                     |
+| Change                                | Effect                                                                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Folder changed, same files            | None: names and recorded identities are unchanged                                                                                           |
+| Folder changed to different files     | The ordinary changed-source rule: cooked output from the old files is stale and recooked                                                    |
+| Name changed                          | An identity change of every file in it: references from other mounts are updated, as for any asset rename; its own relative references stay |
+| Placeholder bound, unbound or rebound | A folder change, with the same rules                                                                                                        |
 
 ## The `.mounts.json` file
 
@@ -471,7 +471,7 @@ and recooked, never misread.
 | Job `source`       | A mount path (`/Content/...`), the form manifests use; or a path relative to `project_root` that lies in a mount                                                                                                                                                                                                                                                                                                                                                                          |
 | Job `derived_from` | For a `source` in an output folder (a derived file the job reads): the mount path, in a `Source` mount, of the authored source it derives from, recorded as the producer instead of the derived file. Refused on a source outside output folders (`import.derived_from_not_derived`), when not a mount path in a `Source` mount (`import.derived_from_invalid`) or absolute (`path.absolute_committed`); a source in an output folder without it fails with `import.source_outside_mount` |
 | Every path         | Relative. An absolute path in any field is refused with `path.absolute_committed`; generated manifests pass absolute folders as options                                                                                                                                                                                                                                                                                                                                                   |
-| Model `record`     | A mount path or a file path, with the same rule                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Model job          | Names the model by its identity (`virtual_path`); its record is found at that identity                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Removed            | `script.source_root` (defaults and per job): a script's source is located by its mount path                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ImportTool options:
@@ -490,13 +490,16 @@ are unchanged except for the removed `script.source_root`.
 
 ### Model import records
 
-A record's `source` is stored as a mount path:
-`"source": "/Content/SourceMedia/DCC/Ship.glb"`. Committed records then never
-hold absolute paths, and a model whose mount moves keeps its record. A record
-lives at its model's identity: the model `/Content/Models/Ship.glb` has the
-record `<project_root>/Imports/Content/Models/Ship.glb.import.json`, and
-`Imports/` is read recursively. The UUIDv7 source identity is stored inside
-the record; giving the model another virtual path moves the record. A
+A record is the model's authored file, in the model's mount at the model's
+identity with the suffix `.import.json`: the model `/Content/Models/Ship.glb`
+has the record `Models/Ship.glb.import.json` in the `Content` mount's folder.
+The record never repeats its identity. Its `source` is a
+[file reference](#descriptor-references) from the record: relative in the
+same mount (`../SourceMedia/DCC/Ship.glb`), or the mount path of a file in
+another mount (`/RawMedia/Cars/Ship.glb`). Committed records then never hold
+absolute paths, and a model whose mount moves keeps its record. The UUIDv7
+source identity is stored inside the record; giving the model another virtual
+path moves the record. A
 record-only import publishes its generations into a folder the caller owns,
 `<generations_root>/<source_identity>/` with `head.json`, never into the
 project's own output folders. `LocateRecord` matches sources by mount path.
@@ -504,12 +507,17 @@ project's own output folders. `LocateRecord` matches sources by mount path.
 ### Descriptor references
 
 A descriptor names the files it reads, such as a texture descriptor's
-`source` and `sources[].file` or a buffer container's `buffers[].source`, by
-mount path, or by a path relative to the descriptor that stays in the
-descriptor's mount. A relative path that leaves it fails with
-`import.reference_outside_mount`, an absolute path with
-`path.absolute_committed`, and a mount no file binds with `import.mount_unbound`
-(`MountTable::LocateReference`).
+`source` and `sources[].file`, a buffer container's `buffers[].source` or a
+model record's `source`, with the grammar of every reference
+([virtual paths](../../../src/Oxygen/Content/Docs/virtual_paths.md#references)):
+relative to the descriptor in its own mount (`Brick.png`,
+`../SourceMedia/Brick.png`), or the mount path of a file in another mount
+(`/RawMedia/Walls/Brick.png`). A relative reference that climbs out of the
+mount fails with `vpath.reference_outside_mount`, an absolute reference into
+the descriptor's own mount with `vpath.reference_self_absolute`, a disk path
+with `path.absolute_committed`, and a mount no folder binds with
+`import.mount_unbound` (`MountTable::LocateReference`, which also reaches
+`SourceMedia`).
 
 ### External scripts
 
@@ -547,8 +555,9 @@ They hold no absolute path: the CMake rule passes the cooked folder as
 ## The examples project
 
 `Examples/Content` becomes `Examples/Showcase`, an ordinary editor project in
-the standard project layout that no tool writes into: one committed `Content`
-mount with raw media in `Content/SourceMedia`, one folder and manifest per
+the standard project layout that no tool writes into: one committed `Showcase`
+mount on its `Content` folder with raw media in `Content/SourceMedia`, one
+folder and manifest per
 example, and a catalog of examples. RenderScene's tools cook, package and play
 it into RenderScene's own folders. Its design,
 migration and dependencies are in

@@ -4,7 +4,7 @@
   "project_root": "..",
   "mounts": [
     {
-      "name": "Content",
+      "name": "Showcase",
       "kind": "Source",
       "path": "Content"
     }
@@ -12,116 +12,116 @@
   "max_in_flight_jobs": 1,
   "jobs": [
     {
-      "id": "/Content/Scenes/Emissive/MatEmissiveRed.omat",
+      "id": "/Showcase/Scenes/Emissive/MatEmissiveRed.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/Emissive/MatEmissiveRed.omat.json",
-      "virtual_path": "/Content/Scenes/Emissive/MatEmissiveRed.omat",
+      "source": "/Showcase/Scenes/Emissive/MatEmissiveRed.omat.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/MatEmissiveRed.omat",
       "name": "MatEmissiveRed"
     },
     {
-      "id": "/Content/Scenes/Emissive/MatEmissiveGreen.omat",
+      "id": "/Showcase/Scenes/Emissive/MatEmissiveGreen.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/Emissive/MatEmissiveGreen.omat.json",
-      "virtual_path": "/Content/Scenes/Emissive/MatEmissiveGreen.omat",
+      "source": "/Showcase/Scenes/Emissive/MatEmissiveGreen.omat.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/MatEmissiveGreen.omat",
       "name": "MatEmissiveGreen"
     },
     {
-      "id": "/Content/Scenes/Emissive/MatEmissiveBlue.omat",
+      "id": "/Showcase/Scenes/Emissive/MatEmissiveBlue.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/Emissive/MatEmissiveBlue.omat.json",
-      "virtual_path": "/Content/Scenes/Emissive/MatEmissiveBlue.omat",
+      "source": "/Showcase/Scenes/Emissive/MatEmissiveBlue.omat.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/MatEmissiveBlue.omat",
       "name": "MatEmissiveBlue"
     },
     {
-      "id": "/Content/Scenes/Emissive/MatEmissiveTextured.omat",
+      "id": "/Showcase/Scenes/Emissive/MatEmissiveTextured.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/Emissive/MatEmissiveTextured.omat.json",
-      "virtual_path": "/Content/Scenes/Emissive/MatEmissiveTextured.omat",
+      "source": "/Showcase/Scenes/Emissive/MatEmissiveTextured.omat.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/MatEmissiveTextured.omat",
       "name": "MatEmissiveTextured"
     },
     {
-      "id": "/Content/Scenes/Emissive/MatEmissiveMasked_mask.otex",
+      "id": "/Showcase/Scenes/Emissive/MatEmissiveMasked_mask.otex",
       "type": "texture-descriptor",
-      "source": "/Content/Scenes/Emissive/MatEmissiveMasked_mask.otex.json",
-      "virtual_path": "/Content/Scenes/Emissive/MatEmissiveMasked_mask.otex",
+      "source": "/Showcase/Scenes/Emissive/MatEmissiveMasked_mask.otex.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/MatEmissiveMasked_mask.otex",
       "name": "MatEmissiveMasked_mask"
     },
     {
-      "id": "/Content/Scenes/Emissive/MatEmissiveMasked.omat",
+      "id": "/Showcase/Scenes/Emissive/MatEmissiveMasked.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/Emissive/MatEmissiveMasked.omat.json",
-      "virtual_path": "/Content/Scenes/Emissive/MatEmissiveMasked.omat",
+      "source": "/Showcase/Scenes/Emissive/MatEmissiveMasked.omat.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/MatEmissiveMasked.omat",
       "name": "MatEmissiveMasked",
-      "depends_on": ["/Content/Scenes/Emissive/MatEmissiveMasked_mask.otex"]
+      "depends_on": ["/Showcase/Scenes/Emissive/MatEmissiveMasked_mask.otex"]
     },
     {
-      "id": "/Content/Scenes/Emissive/MatReference.omat",
+      "id": "/Showcase/Scenes/Emissive/MatReference.omat",
       "type": "material-descriptor",
-      "source": "/Content/Scenes/Emissive/MatReference.omat.json",
-      "virtual_path": "/Content/Scenes/Emissive/MatReference.omat",
+      "source": "/Showcase/Scenes/Emissive/MatReference.omat.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/MatReference.omat",
       "name": "MatReference"
     },
     {
-      "id": "/Content/Scenes/Emissive/GeoEmissiveRed.ogeo",
+      "id": "/Showcase/Scenes/Emissive/GeoEmissiveRed.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/Emissive/GeoEmissiveRed.ogeo.json",
-      "virtual_path": "/Content/Scenes/Emissive/GeoEmissiveRed.ogeo",
+      "source": "/Showcase/Scenes/Emissive/GeoEmissiveRed.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/GeoEmissiveRed.ogeo",
       "name": "GeoEmissiveRed",
-      "depends_on": ["/Content/Scenes/Emissive/MatEmissiveRed.omat"]
+      "depends_on": ["/Showcase/Scenes/Emissive/MatEmissiveRed.omat"]
     },
     {
-      "id": "/Content/Scenes/Emissive/GeoEmissiveGreen.ogeo",
+      "id": "/Showcase/Scenes/Emissive/GeoEmissiveGreen.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/Emissive/GeoEmissiveGreen.ogeo.json",
-      "virtual_path": "/Content/Scenes/Emissive/GeoEmissiveGreen.ogeo",
+      "source": "/Showcase/Scenes/Emissive/GeoEmissiveGreen.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/GeoEmissiveGreen.ogeo",
       "name": "GeoEmissiveGreen",
-      "depends_on": ["/Content/Scenes/Emissive/MatEmissiveGreen.omat"]
+      "depends_on": ["/Showcase/Scenes/Emissive/MatEmissiveGreen.omat"]
     },
     {
-      "id": "/Content/Scenes/Emissive/GeoEmissiveBlue.ogeo",
+      "id": "/Showcase/Scenes/Emissive/GeoEmissiveBlue.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/Emissive/GeoEmissiveBlue.ogeo.json",
-      "virtual_path": "/Content/Scenes/Emissive/GeoEmissiveBlue.ogeo",
+      "source": "/Showcase/Scenes/Emissive/GeoEmissiveBlue.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/GeoEmissiveBlue.ogeo",
       "name": "GeoEmissiveBlue",
-      "depends_on": ["/Content/Scenes/Emissive/MatEmissiveBlue.omat"]
+      "depends_on": ["/Showcase/Scenes/Emissive/MatEmissiveBlue.omat"]
     },
     {
-      "id": "/Content/Scenes/Emissive/GeoEmissiveTextured.ogeo",
+      "id": "/Showcase/Scenes/Emissive/GeoEmissiveTextured.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/Emissive/GeoEmissiveTextured.ogeo.json",
-      "virtual_path": "/Content/Scenes/Emissive/GeoEmissiveTextured.ogeo",
+      "source": "/Showcase/Scenes/Emissive/GeoEmissiveTextured.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/GeoEmissiveTextured.ogeo",
       "name": "GeoEmissiveTextured",
-      "depends_on": ["/Content/Scenes/Emissive/MatEmissiveTextured.omat"]
+      "depends_on": ["/Showcase/Scenes/Emissive/MatEmissiveTextured.omat"]
     },
     {
-      "id": "/Content/Scenes/Emissive/GeoEmissiveMasked.ogeo",
+      "id": "/Showcase/Scenes/Emissive/GeoEmissiveMasked.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/Emissive/GeoEmissiveMasked.ogeo.json",
-      "virtual_path": "/Content/Scenes/Emissive/GeoEmissiveMasked.ogeo",
+      "source": "/Showcase/Scenes/Emissive/GeoEmissiveMasked.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/GeoEmissiveMasked.ogeo",
       "name": "GeoEmissiveMasked",
-      "depends_on": ["/Content/Scenes/Emissive/MatEmissiveMasked.omat"]
+      "depends_on": ["/Showcase/Scenes/Emissive/MatEmissiveMasked.omat"]
     },
     {
-      "id": "/Content/Scenes/Emissive/GeoReference.ogeo",
+      "id": "/Showcase/Scenes/Emissive/GeoReference.ogeo",
       "type": "geometry-descriptor",
-      "source": "/Content/Scenes/Emissive/GeoReference.ogeo.json",
-      "virtual_path": "/Content/Scenes/Emissive/GeoReference.ogeo",
+      "source": "/Showcase/Scenes/Emissive/GeoReference.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/GeoReference.ogeo",
       "name": "GeoReference",
-      "depends_on": ["/Content/Scenes/Emissive/MatReference.omat"]
+      "depends_on": ["/Showcase/Scenes/Emissive/MatReference.omat"]
     },
     {
-      "id": "/Content/Scenes/Emissive/EmissiveScene.oscene",
+      "id": "/Showcase/Scenes/Emissive/EmissiveScene.oscene",
       "type": "scene-descriptor",
-      "source": "/Content/Scenes/Emissive/EmissiveScene.scene.json",
-      "virtual_path": "/Content/Scenes/Emissive/EmissiveScene.oscene",
+      "source": "/Showcase/Scenes/Emissive/EmissiveScene.scene.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/EmissiveScene.oscene",
       "name": "EmissiveScene",
       "depends_on": [
-        "/Content/Scenes/Emissive/GeoEmissiveRed.ogeo",
-        "/Content/Scenes/Emissive/GeoEmissiveGreen.ogeo",
-        "/Content/Scenes/Emissive/GeoEmissiveBlue.ogeo",
-        "/Content/Scenes/Emissive/GeoEmissiveTextured.ogeo",
-        "/Content/Scenes/Emissive/GeoEmissiveMasked.ogeo",
-        "/Content/Scenes/Emissive/GeoReference.ogeo"
+        "/Showcase/Scenes/Emissive/GeoEmissiveRed.ogeo",
+        "/Showcase/Scenes/Emissive/GeoEmissiveGreen.ogeo",
+        "/Showcase/Scenes/Emissive/GeoEmissiveBlue.ogeo",
+        "/Showcase/Scenes/Emissive/GeoEmissiveTextured.ogeo",
+        "/Showcase/Scenes/Emissive/GeoEmissiveMasked.ogeo",
+        "/Showcase/Scenes/Emissive/GeoReference.ogeo"
       ]
     }
   ]

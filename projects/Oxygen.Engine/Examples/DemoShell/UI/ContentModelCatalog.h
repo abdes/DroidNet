@@ -26,14 +26,14 @@
 namespace oxygen::examples::ui {
 
 //! The identity of an ad-hoc model import: its source's mount path under
-//! `/Scratch`, without the `Content/SourceMedia` folders a cooked identity
+//! `/Scratch`, without the `SourceMedia` folder a cooked identity
 //! never holds. Models of one file name in two folders stay two models, and
 //! none shadows a committed model; its products are named under this path.
 [[nodiscard]] auto ScratchModelVirtualPath(std::string_view source_mount_path)
   -> std::string;
 
 //! The scratch project's mounts: its own `Scratch` mount, where its records
-//! live, the examples' read-only `Content` mount, and the local mounts a
+//! live, the examples' read-only `Showcase` mount, and the local mounts a
 //! developer's `.mounts.json` files at or above the scratch project add, such
 //! as a downloads folder.
 /*!
@@ -58,7 +58,7 @@ enum class ModelState : uint8_t {
 //! A model file of a source mount.
 struct ModelEntry final {
   std::filesystem::path file;
-  //! Its mount path, such as `/Content/SourceMedia/DCC/dino-a.fbx`.
+  //! Its mount path, such as `/Showcase/SourceMedia/DCC/dino-a.fbx`.
   std::string mount_path;
   //! The folders between its mount and the file, such as `SourceMedia/DCC`:
   //! the band it is listed under.

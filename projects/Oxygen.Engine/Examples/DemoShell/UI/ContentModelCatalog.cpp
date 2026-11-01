@@ -94,7 +94,7 @@ namespace {
 auto ScratchModelVirtualPath(const std::string_view source_mount_path)
   -> std::string
 {
-  constexpr auto kSourceMedia = std::string_view { "/Content/SourceMedia/" };
+  constexpr auto kSourceMedia = std::string_view { "/Showcase/SourceMedia/" };
   const auto relative = source_mount_path.starts_with(kSourceMedia)
     ? source_mount_path.substr(kSourceMedia.size())
     : source_mount_path.substr(1);
@@ -117,7 +117,7 @@ auto MakeScratchMounts(const ContentRootPaths& roots)
         .path = std::string { kScratchMount },
       },
       MountDeclaration {
-        .name = "Content",
+        .name = "Showcase",
         .kind = content::import::MountKind::kSource,
         .path = (examples_root / "Content")
                   .lexically_relative(scratch_root)
