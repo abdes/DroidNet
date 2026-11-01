@@ -23,6 +23,12 @@ involved. It exists only when UI tests are enabled
   application module; `UiRunnerModule::RegisterUiTests` lists the suites.
 - `FileBrowser_ui.cpp` holds the file browser widget tests. Each test owns its
   widget and a scratch directory, so tests need no application state.
+- `ContentPanel_ui.cpp` holds the content panel's scenario tests: loading a
+  scene found by search, a refused pak's details, and going from a log row to
+  its mount. The runner hosts the panel with a scene-load stub and applies its
+  mount list with `ApplyContentMounts`; the tests write their cooked sources
+  with the cooked content builders (`ContentFixtures.*`, shared with
+  `ContentVm_test` and `ContentLoaderPanel_test`).
 - `UiTestSession.*` and `UiTestAssets.*` are shared by the runner and by the
   examples that run their own UI tests.
 
@@ -31,7 +37,7 @@ cmake --build --preset oxygen-ninja-debug --target oxygen-examples-demoshell-ui-
 ./tools/cli/oxy-ui-tests.ps1 -Demo DemoShell -BuildTree build-ninja -Config Debug
 ```
 
-Select a suite or case with `-Filter filebrowser`. Add a suite by writing its
+Select a suite or case with `-Filter filebrowser` or `-Filter content`. Add a suite by writing its
 registration function next to `FileBrowser_ui.cpp` and calling it from
 `UiRunnerModule::RegisterUiTests`. Tests that belong to an example stay in
 that example.

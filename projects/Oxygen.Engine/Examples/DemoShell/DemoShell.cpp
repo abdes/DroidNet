@@ -231,18 +231,12 @@ auto DemoShell::CompleteInitialization() -> bool
       impl_->content_vm->SetOnSceneLoadCancelRequested(
         impl_->config.on_scene_load_cancel_requested);
     }
-    if (impl_->config.on_clear_mounts) {
-      impl_->content_vm->SetOnClearMounts(impl_->config.on_clear_mounts);
-    }
-    if (impl_->config.on_pak_mounted) {
-      impl_->content_vm->SetOnPakMounted(impl_->config.on_pak_mounted);
-    }
-    if (impl_->config.on_loose_index_loaded) {
-      impl_->content_vm->SetOnIndexLoaded(impl_->config.on_loose_index_loaded);
-    }
+    impl_->content_vm->SetOnSceneUnloadRequested(
+      impl_->config.on_scene_unload_requested);
+    impl_->content_vm->SetOnMountsRequested(impl_->config.on_mounts_requested);
     impl_->content_vm->SetOnGenerationPublished(
       impl_->config.on_generation_published);
-    impl_->content_vm->RestorePersistedLibraryState();
+    impl_->content_vm->RestorePersistedState();
   }
 
   for (auto& panel : impl_->pending_panels) {

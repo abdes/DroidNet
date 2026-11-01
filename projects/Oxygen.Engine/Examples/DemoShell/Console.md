@@ -15,7 +15,7 @@ applies at the next frame start. `find <prefix>` lists a group and
 | Prefix           | Panel or example                                                            |
 | ---------------- | --------------------------------------------------------------------------- |
 | `demo.camera.*`  | Camera: mode (`orbit`, `fly`, `drone`), projection, lens, drone path, axes. |
-| `demo.content.*` | Content Loader: import options, library, scene loading, pak mounting.       |
+| `demo.content.*` | Content Loader: mount list, scene loading, model import and its settings.   |
 | `demo.diag.*`    | Diagnostics: frame diagnostics, GPU draw bounds, wireframe color.           |
 | `demo.env.*`     | Environment: profile, sun, sky atmosphere, sky sphere, sky light, fog.      |
 | `demo.grid.*`    | Ground grid.                                                                |

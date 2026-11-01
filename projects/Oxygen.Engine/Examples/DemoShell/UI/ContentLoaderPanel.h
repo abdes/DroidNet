@@ -6,9 +6,13 @@
 
 #pragma once
 
-#include <array>
 #include <string_view>
 
+#include "DemoShell/UI/ContentImportTab.h"
+#include "DemoShell/UI/ContentLogTab.h"
+#include "DemoShell/UI/ContentMountsTab.h"
+#include "DemoShell/UI/ContentPanelNavigation.h"
+#include "DemoShell/UI/ContentScenesTab.h"
 #include "DemoShell/UI/DemoPanel.h"
 
 #include <Oxygen/Base/Macros.h>
@@ -22,11 +26,13 @@ namespace oxygen::examples::ui {
 
 class ContentVm;
 
-//! Imports sources, mounts libraries and loads their scenes.
+//! Puts content in front of the renderer: mounts cooked sources, loads their
+//! scenes, imports models and says why something did not load.
 /*!
- Every control that changes settings or state runs a `demo.content.*`
- command; a file picked in a dialog runs the command the dialog was opened
- for. Text fields keep a local draft until they lose focus.
+ Four tabs by job (Scenes, Mounts, Import, Log) and a status strip shared by
+ them. Every control that changes settings or state runs a `demo.content.*`
+ command (`content_commands`); a file picked in a dialog runs the command the
+ dialog was opened for.
 */
 class ContentLoaderPanel final : public DemoPanel {
 public:
@@ -37,7 +43,6 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ContentLoaderPanel)
   OXYGEN_MAKE_NON_MOVABLE(ContentLoaderPanel)
 
-  //! Draw the panel content.
   auto DrawContents() -> void override;
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
@@ -47,24 +52,20 @@ public:
   auto OnUnloaded() -> void override;
 
 private:
-  auto DrawSourcesSection() -> void;
-  auto DrawLibrarySection() -> void;
-  auto DrawDiagnosticsSection() -> void;
-  auto DrawAdvancedSection() -> void;
-
-  auto DrawWorkflowSettings() -> void;
-  auto DrawImportSettings() -> void;
-  auto DrawTextureTuningSettings() -> void;
-  auto DrawImporterSettings() -> void;
-  auto DrawOutput() -> void;
-  auto DrawProgress(bool is_importing, bool is_scene_loading) -> void;
+  auto DrawTabs() -> void;
+  auto DrawStatusStrip() -> void;
   auto RunBrowseSelection() -> void;
 
   observer_ptr<ContentVm> vm_;
   observer_ptr<PanelCommands> commands_;
-  std::array<char, 128> source_filter_ {};
-  std::array<char, 128> scene_filter_ {};
-  bool importer_restart_pending_ { false };
+  ContentPanelNavigation navigation_;
+  ContentScenesTab scenes_tab_;
+  ContentMountsTab mounts_tab_;
+  ContentImportTab import_tab_;
+  ContentLogTab log_tab_;
+  //! The Import tab was open last frame; its models are listed again when it
+  //! opens.
+  bool import_tab_open_ { false };
 };
 
 } // namespace oxygen::examples::ui

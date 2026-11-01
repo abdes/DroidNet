@@ -5,10 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
+#include <filesystem>
 #include <memory>
+#include <optional>
+#include <string>
+#include <system_error>
 #include <utility>
+#include <vector>
 
 #include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/ContentMountApplier.h"
+#include "DemoShell/UI/ContentVm.h"
+#include "DemoShell/test/ContentPanel_ui.h"
 #include "DemoShell/test/FileBrowser_ui.h"
 #include "DemoShell/test/UiRunnerModule.h"
 #include <imgui_te_context.h>
@@ -16,7 +24,11 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Content/ContentMounts.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Host/HostConfig.h>
 #include <Oxygen/Host/HostModule.h>
@@ -38,6 +50,14 @@ UiRunnerModule::UiRunnerModule(const host::HostContext& host)
 {
 }
 
+UiRunnerModule::~UiRunnerModule()
+{
+  if (!fixture_root_.empty()) {
+    std::error_code error;
+    std::filesystem::remove_all(fixture_root_, error);
+  }
+}
+
 auto UiRunnerModule::BuildWindowProperties() const
   -> platform::window::Properties
 {
@@ -55,7 +75,26 @@ auto UiRunnerModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
 
   auto shell = std::make_unique<DemoShell>();
   auto shell_config = MakeShellConfig();
-  shell_config.panel_config.content_loader = false;
+  // The content panel's cooked sources and scratch project live in a folder
+  // of the run; its tests write their sources there.
+  fixture_root_ = std::filesystem::temp_directory_path()
+    / ("oxygen-demoshell-ui-" + Uuid::Generate().ToString());
+  std::filesystem::create_directories(fixture_root_ / "Content");
+  shell_config.content_roots = {
+    .content_root = fixture_root_,
+    .cooked_root = fixture_root_ / ".cooked",
+    .pak_directory = fixture_root_,
+    .scratch_root = fixture_root_ / ".scratch",
+  };
+  shell_config.on_mounts_requested
+    = [this](std::vector<content::ContentMount> mounts) -> void {
+    pending_mounts_ = std::move(mounts);
+  };
+  shell_config.on_scene_load_requested
+    = [this](const ui::SceneEntry& scene) -> void {
+    pending_scene_loads_.push_back(scene.key);
+  };
+  shell_config.panel_config.content_loader = true;
   shell_config.panel_config.camera_controls = true;
   shell_config.panel_config.environment = true;
   shell_config.panel_config.diagnostics = true;
@@ -87,11 +126,46 @@ auto UiRunnerModule::StageScene() -> void
 auto UiRunnerModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
+  co_await ServeContentPanel();
   if (HasRenderableWindow() && !active_scene_.IsValid()
     && !Stage().HasStagedScene()) {
     StageScene();
   }
   co_await Base::OnSceneMutation(context);
+}
+
+auto UiRunnerModule::GetContentVm() -> observer_ptr<ui::ContentVm>
+{
+  return GetShell().GetContentVm();
+}
+
+auto UiRunnerModule::GetActivePanelName() -> std::optional<std::string>
+{
+  return GetShell().GetActivePanelName();
+}
+
+auto UiRunnerModule::ServeContentPanel() -> co::Co<>
+{
+  const auto vm = GetShell().GetContentVm();
+  if (!vm) {
+    co_return;
+  }
+  if (pending_mounts_) {
+    auto mounts = std::move(*pending_mounts_);
+    pending_mounts_.reset();
+    auto outcome = runtime::MountOutcome {};
+    if (const auto loader = Host().engine->GetAssetLoader()) {
+      co_await loader->WaitForPendingLoadsAsync();
+      outcome
+        = co_await runtime::ApplyContentMounts(*loader, std::move(mounts));
+    } else {
+      outcome.error = "The engine has no asset loader";
+    }
+    vm->OnMountsApplied(outcome);
+  }
+  for (const auto& key : std::exchange(pending_scene_loads_, {})) {
+    vm->NotifySceneLoadCompleted(key, true);
+  }
 }
 
 auto UiRunnerModule::OnScenePublished(engine::FrameContext& context) -> void
@@ -127,6 +201,7 @@ auto UiRunnerModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
   };
 
   RegisterFileBrowserUiTests(engine);
+  RegisterContentPanelUiTests(engine, *this);
 }
 
 } // namespace oxygen::examples::testing

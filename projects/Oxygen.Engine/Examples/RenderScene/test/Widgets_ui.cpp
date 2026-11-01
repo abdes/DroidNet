@@ -5,10 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "DemoShell/DemoShell.h"
+#include "DemoShell/UI/ContentMountList.h"
 #include "DemoShell/UI/ContentVm.h"
 
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
@@ -20,6 +22,7 @@
 #include <fstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
@@ -108,41 +111,49 @@ namespace {
     ctx->Yield(3);
   }
 
-  auto FindChild(ImGuiTestContext* ctx, ImGuiWindow* root,
-    const std::string_view name) -> ImGuiWindow*
+  //! Loads `entry` from the Scenes tab: search, then double-click its row.
+  auto LoadSceneFromPanel(ImGuiTestContext* ctx, const ui::SceneEntry& entry)
+    -> void
   {
+    ctx->Yield(3);
+    ctx->SetRef("//Content Loader");
+    ctx->ItemClick("**/###Scenes");
+    ctx->Yield(3);
+    ctx->ItemInputValue("**/##SceneSearch", entry.name.c_str());
+    ctx->Yield(3);
+    // The rows are in the scene list's child window, which a path from the
+    // panel does not reach.
+    auto* panel = ctx->GetWindowByRef("//Content Loader");
+    IM_CHECK(panel != nullptr);
+    ImGuiWindow* list = nullptr;
     for (auto* window : ctx->UiContext->Windows) {
-      if (window->RootWindow == root->RootWindow
-        && std::string_view(window->Name).contains(name)) {
-        return window;
+      if (window->RootWindow == panel->RootWindow
+        && std::string_view(window->Name).contains("/SceneList_")) {
+        list = window;
       }
     }
-    return nullptr;
+    IM_CHECK(list != nullptr);
+    ctx->SetRef(list);
+    // The row's path: its mount, its folder when it has one, then its key.
+    const auto mount = std::filesystem::path(entry.virtual_path)
+                         .relative_path()
+                         .begin()
+                         ->string();
+    const auto folder
+      = entry.folder.empty() ? std::string {} : entry.folder + "/";
+    const auto row = mount + "/" + folder + "###" + data::to_string(entry.key);
+    ctx->ItemDoubleClick(row.c_str());
+    ctx->SetRef("//Content Loader");
   }
 
-  auto ClickScene(ImGuiTestContext* ctx, const ui::SceneEntry& entry) -> void
+  //! The mounted scenes of the content panel.
+  auto MountedScenes(const ui::ContentVm& vm) -> std::vector<ui::SceneEntry>
   {
-    ctx->Yield(3);
-    auto* root = ctx->GetWindowByRef("//Content Loader");
-    IM_CHECK(root);
-    auto* main = FindChild(ctx, root, "ContentLoaderMain");
-    IM_CHECK(main);
-    ctx->SetRef(main);
-    ctx->ItemClick("**/Library");
-    ctx->Yield(3);
-    ctx->ItemInputValue("**/##SceneFilter", entry.name.c_str());
-    ctx->Yield(3);
-    auto* scenes = FindChild(ctx, root, "LibraryScenes");
-    IM_CHECK(scenes);
-    const auto source
-      = std::string(
-          entry.source.kind == ui::SceneSourceKind::kPak ? "PAK: " : "Index: ")
-      + entry.source.path.filename().string();
-    const auto label = entry.name + " (" + source + ")##"
-      + std::string(nostd::to_string(entry.key)) + "-"
-      + entry.source.path.string();
-    ctx->SetRef(scenes);
-    ctx->ItemClick(scenes->GetID(label.c_str()));
+    auto scenes = std::vector<ui::SceneEntry> {};
+    for (const auto& group : vm.Scenes().Groups()) {
+      scenes.insert(scenes.end(), group.scenes.begin(), group.scenes.end());
+    }
+    return scenes;
   }
 
   auto CheckPersistedLighting(const scene::Scene& scene) -> void
@@ -220,12 +231,11 @@ auto MainModule::RegisterEmptySceneUiTest(ImGuiTestEngine* engine) -> void
   }
 }
 
-auto MainModule::RegisterModelImportLibraryUiTest(ImGuiTestEngine* engine)
+auto MainModule::RegisterModelImportRecordUiTest(ImGuiTestEngine* engine)
   -> void
 {
   if (!ContentSettingsService {}.GetMountedImportRecords().empty()) {
-    auto* test
-      = IM_REGISTER_TEST(engine, "renderscene", "model_import_library");
+    auto* test = IM_REGISTER_TEST(engine, "renderscene", "model_import_record");
     test->UserData = this;
     test->TestFunc = [](ImGuiTestContext* ctx) -> void {
       auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
@@ -237,10 +247,10 @@ auto MainModule::RegisterModelImportLibraryUiTest(ImGuiTestEngine* engine)
       IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
       const ContentSettingsService settings;
       const auto records = settings.GetMountedImportRecords();
-      const auto selection = settings.GetActiveSceneSelection();
-      IM_CHECK(!records.empty() && selection);
+      const auto loaded = settings.GetLoadedScene();
+      IM_CHECK(!records.empty() && loaded);
       IM_CHECK(std::string(nostd::to_string(*app.current_scene_key_))
-        == selection->scene_key);
+        == loaded->scene_key);
       const auto vm = app.GetShell().GetContentVm();
       IM_CHECK(vm);
       for (const auto& record : records) {
@@ -250,12 +260,11 @@ auto MainModule::RegisterModelImportLibraryUiTest(ImGuiTestEngine* engine)
               .root = vm->GetGeneratedStorageRoot(),
             });
         IM_CHECK(root);
-        const auto index = (*root / "container.index.bin").lexically_normal();
-        const auto count = std::ranges::count_if(
-          vm->GetLoadedIndices(), [&](const auto& loaded) -> auto {
-            return loaded.lexically_normal() == index;
-          });
-        IM_CHECK_EQ(count, 1);
+        const auto row = vm->Mounts().IndexOf(*root);
+        IM_CHECK(row.has_value());
+        const auto& source = vm->Mounts().Rows().at(*row);
+        IM_CHECK(source.origin == ui::SourceOrigin::kImportRecord);
+        IM_CHECK(source.state == ui::SourceState::kMounted);
       }
       const auto scene = app.GetShell().TryGetScene();
       const auto renderer = app.ResolveRenderer();
@@ -518,59 +527,6 @@ auto MainModule::RegisterStartupSkyboxUiTest(ImGuiTestEngine* engine) -> void
   }
 }
 
-auto MainModule::RegisterIblEditorReferenceUiTest(ImGuiTestEngine* engine)
-  -> void
-{
-  auto* test = IM_REGISTER_TEST(engine, "renderscene", "ibl_editor_reference");
-  test->UserData = this;
-  test->TestFunc = [](ImGuiTestContext* ctx) -> void {
-    auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
-    for (unsigned wait = 0U;
-      wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
-      ++wait) {
-      ctx->Yield();
-    }
-    IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
-    const auto scene = app.GetShell().TryGetScene();
-    const auto renderer = app.ResolveRenderer();
-    IM_CHECK(scene && renderer);
-    CheckGpuLighting(ctx, *renderer, *scene);
-    if (ctx->IsError()) {
-      return;
-    }
-    const auto exposure = renderer->InspectExposureSettings(
-      renderer->ResolvePublishedRuntimeViewId(app.main_view_id_));
-    IM_CHECK(exposure && exposure->active_settings);
-    IM_CHECK(exposure->active_settings->mode == engine::ExposureMode::kManual);
-    IM_CHECK_EQ(exposure->active_settings->manual_ev, 13.0F);
-    IM_CHECK_EQ(exposure->active_settings->key, 12.5F);
-    IM_CHECK_EQ(exposure->active_settings->compensation_ev, 0.0F);
-    ctx->Yield(30);
-    const auto graphics = app.Host().gfx_weak.lock();
-    IM_CHECK(graphics);
-    if (const auto capture = graphics->GetFrameCaptureController();
-      capture && capture->IsAvailable()) {
-      IM_CHECK(capture->TriggerNextFrame());
-      ctx->Yield(8);
-      IM_CHECK(!capture->IsCapturing());
-    }
-    const auto state = renderer->InspectSkyLight(*scene);
-    std::ofstream record(
-      SettingsService::ForDemoApp()->GetStoragePath().parent_path()
-      / "native-reference.json");
-    IM_CHECK(record.good());
-    record << nlohmann::json {
-      { "scene_key", std::string(nostd::to_string(*app.current_scene_key_)) },
-      { "published_revision", state.published_revision },
-      { "validated_revision", state.validated_revision },
-      { "source_radiance_scale", state.source_radiance_scale },
-      { "average_brightness", state.average_brightness },
-    }.dump(2);
-    record.flush();
-    IM_CHECK(record.good());
-  };
-}
-
 auto MainModule::RegisterIblAppearanceUiTests(ImGuiTestEngine* engine) -> void
 {
   for (const auto* name : { "ibl_appearance_off", "ibl_appearance_on" }) {
@@ -727,15 +683,13 @@ auto MainModule::RegisterIblPersistAndReplaceUiTest(ImGuiTestEngine* engine)
     }
     const auto vm = app.GetShell().GetContentVm();
     IM_CHECK(vm);
-    const auto& scenes = vm->GetAvailableScenes();
+    const auto scenes = MountedScenes(*vm);
     const auto original
       = std::ranges::find_if(scenes, [&](const auto& entry) -> auto {
           return entry.key == *app.current_scene_key_;
         });
-    const auto other
-      = std::ranges::find_if(scenes, [&](const auto& entry) -> auto {
-          return std::filesystem::path(entry.name).stem() == "Lantern";
-        });
+    const auto other = std::ranges::find_if(scenes,
+      [&](const auto& entry) -> auto { return entry.name == "Lantern"; });
     IM_CHECK(original != scenes.end() && other != scenes.end());
     const auto& original_entry = *original;
     const auto& other_entry = *other;
@@ -744,7 +698,7 @@ auto MainModule::RegisterIblPersistAndReplaceUiTest(ImGuiTestEngine* engine)
       const auto previous_lifetime
         = app.GetShell().TryGetScene()->GetLifetimeId();
       SelectPanel(ctx, app.GetShell(), kContentLoaderPanel);
-      ClickScene(ctx, target);
+      LoadSceneFromPanel(ctx, target);
       if (ctx->IsError()) {
         return;
       }
@@ -836,7 +790,7 @@ auto MainModule::RegisterIblReopenUiTest(ImGuiTestEngine* engine) -> void
 auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
 {
   RegisterEmptySceneUiTest(engine);
-  RegisterModelImportLibraryUiTest(engine);
+  RegisterModelImportRecordUiTest(engine);
   RegisterIblControlsUiTest(engine);
   RegisterIblSourceAndFogUiTest(engine);
   RegisterStartupSkyboxUiTest(engine);
@@ -845,7 +799,6 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     return;
   }
 
-  RegisterIblEditorReferenceUiTest(engine);
   RegisterIblAppearanceUiTests(engine);
   RegisterIblPersistAndReplaceUiTest(engine);
   RegisterIblReopenUiTest(engine);

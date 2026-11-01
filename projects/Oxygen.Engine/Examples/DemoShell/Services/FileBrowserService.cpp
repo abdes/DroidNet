@@ -265,44 +265,35 @@ auto MakePakFileBrowserConfig(const ContentRootPaths& roots)
   };
 }
 
-auto MakeFbxFileBrowserConfig(const ContentRootPaths& roots)
+auto MakeCookedRootBrowserConfig(const ContentRootPaths& roots)
   -> FileBrowserConfig
 {
   return FileBrowserConfig {
-    .title = "Select FBX File",
-    .initial_directory = roots.dcc_directory,
-    .filters = { MakeFilter("FBX", { ".fbx" }) },
-  };
-}
-
-auto MakeModelFileBrowserConfig(const ContentRootPaths& roots)
-  -> FileBrowserConfig
-{
-  return FileBrowserConfig {
-    .title = "Select Model File",
-    .initial_directory = roots.dcc_directory,
-    .filters = { MakeFilter("Model", { ".fbx", ".gltf", ".glb" }) },
-  };
-}
-
-auto MakeModelDirectoryBrowserConfig(const ContentRootPaths& roots)
-  -> FileBrowserConfig
-{
-  return FileBrowserConfig {
-    .title = "Select Model Directory",
-    .initial_directory = roots.dcc_directory,
+    .title = "Select Cooked Root",
+    .initial_directory = roots.cooked_root,
     .select_directory = true,
     .allow_create_directory = false,
   };
 }
 
-auto MakeLibraryBrowserConfig(const ContentRootPaths& roots)
+auto MakeSourceFolderBrowserConfig(const ContentRootPaths& roots)
   -> FileBrowserConfig
 {
   return FileBrowserConfig {
-    .title = "Select Content Library",
+    .title = "Select Source Folder",
     .initial_directory = roots.content_root,
-    .filters = { MakeFilter("Import record or index", { ".json", ".bin" }) },
+    .select_directory = true,
+    .allow_create_directory = false,
+  };
+}
+
+auto MakeModelFileBrowserConfig(const ContentRootPaths& roots,
+  std::vector<std::string> extensions) -> FileBrowserConfig
+{
+  return FileBrowserConfig {
+    .title = "Import Model File",
+    .initial_directory = roots.dcc_directory,
+    .filters = { MakeFilter("Models", std::move(extensions)) },
   };
 }
 

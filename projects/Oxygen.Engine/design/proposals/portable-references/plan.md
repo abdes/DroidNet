@@ -32,7 +32,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S6    | Done, committed, with the Serio step 6 and cooked sources work |
 | S6a   | Done                                                           |
 | S6b   | Done                                                           |
-| S6c   | Not started                                                    |
+| S6c   | Done                                                           |
 | S6d   | Not started                                                    |
 | S6e   | Not started (last engine slice)                                |
 | S7    | Not started                                                    |
@@ -83,7 +83,7 @@ flowchart LR
   S5 --> S6[S6 engine paks]
   S6 --> S6a[S6a Serio API completion]
   S6 --> S6b[S6b pak format 11 tests]
-  S6 --> S6c[S6c DemoShell cooked roots]
+  S6 --> S6c[S6c DemoShell content panel]
   S6a --> S6d[S6d resource digests]
   S6b --> S6d
   S6a --> S6e[S6e cooked content builders]
@@ -342,17 +342,32 @@ of `PakWriterTestSupport.h`. Unit tests: the writer tests, which keep proving
 the writer lays out a given plan. Docs: `binary_packing_discipline.md` if it
 states the old offsets.
 
-### S6c. DemoShell cooked roots
+### S6c. DemoShell content panel
 
-Deletes: identifying a loose source by `<root>/container.index.bin` in
-`ContentVm` (persisted mount lists included) and its test; "library" in
-DemoShell's content UI, view model and services (`BrowseForLibrary`,
-`BrowseTarget::kLibraryFile`, `MakeLibraryBrowserConfig`,
-`content.library.*` settings keys). Adds: loose sources by their cooked root
-(`data::CookedSource`); mount vocabulary in the UI, the commands and the
-settings keys. What happens to a user's saved `content.library.*` values is
-the owner's decision, taken at the start of the slice. Unit tests:
-`ContentVm_test`; the DemoShell UI tests through the cooked content builders.
+Rebuilds the DemoShell content panel, now documented in the
+[DemoShell README](../../../Examples/DemoShell/README.md#content-loader): the
+Scenes, Mounts, Import and Log tabs and the shared status strip, on a mount
+list of cooked sources applied through `PrepareMountsAsync` and
+`CommitPreparedMounts`, with summaries, refusals and model record states in
+the view model. Source folders of the scratch project are added and removed
+in its `.mounts.json`; Import file imports a model from anywhere by adding
+its folder.
+
+Deletes identifying a loose source by `<root>/container.index.bin`
+(DemoShell and RenderScene's `kLooseCookedIndexFileName`), "library" in the
+panel, view model, services, commands and settings keys (`BrowseForLibrary`,
+`BrowseTarget::kLibraryFile`, `MakeLibraryBrowserConfig`, `content.library.*`),
+the four old tabs, the whole-panel disable and the diagnostic markers. The
+saved `content.library.*` values are dropped: nothing reads them, and the
+developer adds their sources once. Every import option and the importer
+configuration the panel edits are persisted. RenderScene's mount hooks report
+refusals to the view model instead of logging and pruning them.
+
+Unit tests: `ContentVm_test`, `SettingsService_test` and a new
+`ContentLoaderPanel_test`, with cooked sources from the cooked content
+builders. Functional tests: UiRunner cases for loading from search, a refused
+pak's details and log detail navigation. Docs: the DemoShell README and the
+RenderScene guide's Load content section; the panel's proposal is deleted.
 
 ### S6d. Resource digests
 
@@ -594,7 +609,8 @@ done only when its rows are gone from the code.
 | Test-only span constructors                                                        | `TextureResource`, `BufferResource`                                                                                                                                   | S6a     |
 | A second replacing rename, with check-then-act pre-checks                          | `RealCookerStorage::Move`                                                                                                                                             | S6a     |
 | A blocking CRC pass on a pool worker                                               | Verified pak mount (`PrepareMountSetAsync`)                                                                                                                           | S6a     |
-| A loose source named by its index file; "library" in the content UI                | DemoShell `ContentVm`, `ContentLoaderPanel`, `ContentSettingsService`, `FileBrowserService`, `DemoShell.cpp`, `ContentVm_test`                                        | S6c     |
+| A loose source named by its index file; "library" in the content UI                | DemoShell `ContentVm`, `ContentLoaderPanel`, `ContentSettingsService`, `FileBrowserService`, `DemoShell.cpp`, `ContentVm_test`, RenderScene `MainModule.cpp`          | S6c     |
+| Mount refusals logged by the host, never shown; unsaved import settings            | RenderScene `MainModule.cpp`, `ContentSettingsService`, `ContentVm`                                                                                                   | S6c     |
 | Truncated resource hashes, whole-file data hashes, `content_hashing`               | Texture and buffer descriptors, `.otex`, `LooseCookedWriter::Finish`, `ImportOptions`, manifest schema, ImportTool, emitters and pipelines                            | S6d     |
 | Hand-built scene and sidecar descriptors, forged `.otex` files in tests            | The tests the builders proposal's "What it replaces" table lists                                                                                                      | S6e     |
 

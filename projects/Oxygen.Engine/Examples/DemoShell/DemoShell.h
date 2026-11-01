@@ -13,7 +13,9 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include "DemoShell/Runtime/ContentMountApplier.h"
 #include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
@@ -51,7 +53,6 @@ class CameraVm;
 class ContentVm;
 class CameraRigController;
 struct SceneEntry;
-struct GenerationPublication;
 } // namespace oxygen::examples::ui
 
 namespace oxygen::examples {
@@ -96,10 +97,14 @@ struct DemoShellConfig {
 
   std::function<void(const ui::SceneEntry&)> on_scene_load_requested;
   std::function<void()> on_scene_load_cancel_requested;
-  std::function<void()> on_clear_mounts;
-  std::function<void(const std::filesystem::path&)> on_pak_mounted;
-  std::function<void(const std::filesystem::path&)> on_loose_index_loaded;
-  std::function<void(const ui::GenerationPublication&)> on_generation_published;
+  std::function<void()> on_scene_unload_requested;
+  //! Applies the content panel's mount list, lowest precedence first, with
+  //! `runtime::ApplyContentMounts`, and answers `ContentVm::OnMountsApplied`.
+  std::function<void(std::vector<content::ContentMount>)> on_mounts_requested;
+  //! Mounts a model import's new generation and answers
+  //! `ContentVm::OnGenerationMounted`.
+  std::function<void(const runtime::GenerationPublication&)>
+    on_generation_published;
 };
 
 //! The demo panels, their services and the camera rig.

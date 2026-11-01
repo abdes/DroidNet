@@ -11,434 +11,536 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/CookedSource.h>
 
 namespace oxygen::examples {
 
 namespace {
-  auto JoinPaths(const std::vector<std::filesystem::path>& paths,
-    const SettingsService& settings) -> std::string
+  using content::import::ImportOptions;
+  using TextureTuning = ImportOptions::TextureTuning;
+
+  constexpr auto kMountSourcesKey = "content.mounts.sources";
+  constexpr auto kImportRecordsKey = "content.mounts.import_records";
+
+  constexpr auto kSceneKeyKey = "content.scene.key";
+  constexpr auto kSceneVirtualPathKey = "content.scene.virtual_path";
+  constexpr auto kSceneSourceKindKey = "content.scene.source_kind";
+  constexpr auto kSceneSourcePathKey = "content.scene.source_path";
+  constexpr auto kRecentScenesKey = "content.scene.recent";
+
+  constexpr auto kImportTabMountKey = "content.import_tab.source_mount";
+  constexpr auto kImportTabFilterKey = "content.import_tab.filter";
+  constexpr auto kImportTabFbxKey = "content.import_tab.fbx";
+  constexpr auto kImportTabGlbKey = "content.import_tab.glb";
+  constexpr auto kImportTabGltfKey = "content.import_tab.gltf";
+  constexpr auto kImportTabLoadSceneKey
+    = "content.import_tab.load_scene_after_import";
+
+  constexpr auto kPakTag = std::string_view { "pak" };
+  constexpr auto kDirTag = std::string_view { "dir" };
+
+  auto Settings() -> observer_ptr<SettingsService>
   {
-    std::string value;
-    bool first = true;
-    for (const auto& path : paths) {
-      if (path.empty()) {
-        continue;
-      }
-      if (!first) {
-        value.push_back('\n');
-      }
-      first = false;
-      value += settings.EncodePath(path).generic_string();
-    }
-    return value;
+    const auto settings = SettingsService::ForDemoApp();
+    DCHECK_NOTNULL_F(settings);
+    return settings;
   }
 
-  auto SplitPaths(const std::string& serialized,
-    const SettingsService& settings) -> std::vector<std::filesystem::path>
+  auto KindTag(const data::CookedSourceKind kind) -> std::string_view
   {
-    std::vector<std::filesystem::path> paths;
+    return kind == data::CookedSourceKind::kPak ? kPakTag : kDirTag;
+  }
+
+  auto KindOfTag(const std::string_view tag)
+    -> std::optional<data::CookedSourceKind>
+  {
+    if (tag == kPakTag) {
+      return data::CookedSourceKind::kPak;
+    }
+    if (tag == kDirTag) {
+      return data::CookedSourceKind::kLooseCooked;
+    }
+    return std::nullopt;
+  }
+
+  //! The lines of `text`, without empty ones.
+  auto Lines(const std::string_view text) -> std::vector<std::string_view>
+  {
+    auto lines = std::vector<std::string_view> {};
     std::size_t begin = 0;
-    while (begin <= serialized.size()) {
-      const auto end = serialized.find('\n', begin);
-      const auto token = serialized.substr(
-        begin, end == std::string::npos ? std::string::npos : end - begin);
-      if (!token.empty()) {
-        paths.push_back(settings.DecodePath(token));
-      }
-      if (end == std::string::npos) {
-        break;
+    while (begin < text.size()) {
+      const auto end = std::min(text.find('\n', begin), text.size());
+      if (end > begin) {
+        lines.push_back(text.substr(begin, end - begin));
       }
       begin = end + 1;
     }
-    return paths;
+    return lines;
   }
 
-  // Explorer Keys
-  constexpr auto kModelRootKey = "content.explorer.model_root";
-  constexpr auto kIncludeFbxKey = "content.explorer.include_fbx";
-  constexpr auto kIncludeGlbKey = "content.explorer.include_glb";
-  constexpr auto kIncludeGltfKey = "content.explorer.include_gltf";
-  constexpr auto kAutoLoadOnImportKey = "content.explorer.auto_load_on_import";
-
-  // Import Options Keys (subset of most important)
-  constexpr auto kNodePruningKey = "content.import.node_pruning";
-  constexpr auto kImportContentFlagsKey = "content.import.content_flags";
-  constexpr auto kWithHashingKey = "content.import.with_hashing";
-  constexpr auto kNormalPolicyKey = "content.import.normal_policy";
-  constexpr auto kTangentPolicyKey = "content.import.tangent_policy";
-  constexpr auto kUpAxisKey = "content.import.up_axis";
-  constexpr auto kSmoothingAngleKey = "content.import.smoothing_angle";
-  constexpr auto kGenerateLodsKey = "content.import.generate_lods";
-  constexpr auto kLodLevelsKey = "content.import.lod_levels";
-  constexpr auto kLodReductionKey = "content.import.lod_reduction";
-  constexpr auto kImportLightsKey = "content.import.lights";
-  constexpr auto kImportCamerasKey = "content.import.cameras";
-  constexpr auto kLightScaleKey = "content.import.light_intensity_scale";
-
-  // Paths
-  constexpr auto kMountedPaksKey = "content.library.mounted_paks";
-  constexpr auto kMountedIndicesKey = "content.library.mounted_indices";
-  constexpr auto kMountedImportsKey = "content.library.import_records";
-  constexpr auto kActiveImportRecordKey = "content.active_scene.import_record";
-
-  // Active scene selection
-  constexpr auto kActiveSceneNameKey = "content.active_scene.name";
-  constexpr auto kActiveSceneKeyKey = "content.active_scene.key";
-  constexpr auto kActiveSceneSourcePathKey = "content.active_scene.source_path";
-  constexpr auto kActiveSceneSourceIsPakKey
-    = "content.active_scene.source_is_pak";
-
-  // Texture Tuning Keys
-  constexpr auto kTexTuningEnabledKey = "content.import.tuning.enabled";
-  constexpr auto kTexTuningIntentKey = "content.import.tuning.intent";
-  constexpr auto kTexTuningColorSpaceKey = "content.import.tuning.color_space";
-  constexpr auto kTexTuningMipPolicyKey = "content.import.tuning.mip_policy";
-  constexpr auto kTexTuningMaxMipsKey = "content.import.tuning.max_mips";
-  constexpr auto kTexTuningMaxSizeKey = "content.import.tuning.max_size";
-  constexpr auto kTexTuningMipFilterKey = "content.import.tuning.mip_filter";
-  constexpr auto kTexTuningColorFormatKey
-    = "content.import.tuning.color_format";
-  constexpr auto kTexTuningDataFormatKey = "content.import.tuning.data_format";
-  constexpr auto kTexTuningBc7QualityKey = "content.import.tuning.bc7_quality";
-  constexpr auto kTexTuningHdrHandlingKey
-    = "content.import.tuning.hdr_handling";
-} // namespace
-
-auto ContentSettingsService::GetExplorerSettings() const
-  -> ContentExplorerSettings
-{
-  ContentExplorerSettings s;
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  if (auto val = settings->GetString(kModelRootKey)) {
-    s.model_root = settings->DecodePath(*val);
-  }
-  if (auto val = settings->GetBool(kIncludeFbxKey)) {
-    s.include_fbx = *val;
-  }
-  if (auto val = settings->GetBool(kIncludeGlbKey)) {
-    s.include_glb = *val;
-  }
-  if (auto val = settings->GetBool(kIncludeGltfKey)) {
-    s.include_gltf = *val;
-  }
-  if (auto val = settings->GetBool(kAutoLoadOnImportKey)) {
-    s.auto_load_on_import = *val;
+  auto JoinLines(const std::vector<std::string>& lines) -> std::string
+  {
+    auto text = std::string {};
+    for (const auto& line : lines) {
+      if (!text.empty()) {
+        text.push_back('\n');
+      }
+      text += line;
+    }
+    return text;
   }
 
-  return s;
-}
+  //! `<tag> <encoded path>`.
+  auto EncodeSource(const SettingsService& settings,
+    const ContentSourceSetting& source) -> std::string
+  {
+    return std::string(KindTag(source.kind)) + " "
+      + settings.EncodePath(source.path).generic_string();
+  }
 
-auto ContentSettingsService::SetExplorerSettings(
-  const ContentExplorerSettings& s) -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
+  auto DecodeSource(const SettingsService& settings,
+    const std::string_view line) -> std::optional<ContentSourceSetting>
+  {
+    const auto space = line.find(' ');
+    if (space == std::string_view::npos || space + 1 == line.size()) {
+      return std::nullopt;
+    }
+    const auto kind = KindOfTag(line.substr(0, space));
+    if (!kind) {
+      return std::nullopt;
+    }
+    return ContentSourceSetting {
+      .kind = *kind,
+      .path = settings.DecodePath(std::string(line.substr(space + 1))),
+    };
+  }
 
-  settings->SetString(
-    kModelRootKey, settings->EncodePath(s.model_root).generic_string());
-  settings->SetBool(kIncludeFbxKey, s.include_fbx);
-  settings->SetBool(kIncludeGlbKey, s.include_glb);
-  settings->SetBool(kIncludeGltfKey, s.include_gltf);
-  settings->SetBool(kAutoLoadOnImportKey, s.auto_load_on_import);
-  ++epoch_;
-}
+  // --- Typed reads that keep the default for a missing or invalid value ---
 
-auto ContentSettingsService::GetImportOptions() const
-  -> content::import::ImportOptions
-{
-  content::import::ImportOptions o;
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  if (auto val = settings->GetFloat(kNodePruningKey)) {
-    o.node_pruning
-      = static_cast<content::import::NodePruningPolicy>(static_cast<int>(*val));
-  }
-  if (auto val = settings->GetFloat(kImportContentFlagsKey)) {
-    o.import_content = static_cast<content::import::ImportContentFlags>(
-      static_cast<uint32_t>(*val));
-  }
-  if (auto val = settings->GetBool(kWithHashingKey)) {
-    o.with_content_hashing = *val;
-  }
-  if (auto val = settings->GetFloat(kNormalPolicyKey)) {
-    o.normal_policy = static_cast<content::import::GeometryAttributePolicy>(
-      static_cast<int>(*val));
-  }
-  if (auto val = settings->GetFloat(kTangentPolicyKey)) {
-    o.tangent_policy = static_cast<content::import::GeometryAttributePolicy>(
-      static_cast<int>(*val));
-  }
-  if (auto val = settings->GetFloat(kUpAxisKey)) {
-    const auto axis = static_cast<int>(*val);
-    if (axis >= static_cast<int>(content::import::SourceUpAxis::kFromFile)
-      && axis <= static_cast<int>(content::import::SourceUpAxis::kZ)) {
-      o.coordinate.up_axis = static_cast<content::import::SourceUpAxis>(axis);
+  auto Read(const SettingsService& settings, const std::string_view key,
+    bool& value) -> void
+  {
+    if (const auto stored = settings.GetBool(key)) {
+      value = *stored;
     }
   }
-  if (auto val = settings->GetFloat(kSmoothingAngleKey)) {
-    o.normals_smoothing_angle_deg = std::clamp(*val, 0.0F, 180.0F);
+
+  auto Read(const SettingsService& settings, const std::string_view key,
+    float& value, const float first, const float last) -> void
+  {
+    if (const auto stored = settings.GetFloat(key)) {
+      value = std::clamp(*stored, first, last);
+    }
   }
-  using content::import::LodGenerationOptions;
-  if (auto val = settings->GetBool(kGenerateLodsKey)) {
-    o.lod_generation.enabled = *val;
+
+  template <typename IntT>
+  auto Read(const SettingsService& settings, const std::string_view key,
+    IntT& value, const std::int64_t first, const std::int64_t last) -> void
+  {
+    if (const auto stored = settings.GetInt(key)) {
+      value = static_cast<IntT>(std::clamp(*stored, first, last));
+    }
   }
-  if (auto val = settings->GetFloat(kLodLevelsKey)) {
-    o.lod_generation.levels = std::clamp(static_cast<uint32_t>(*val),
+
+  //! Reads an enumerator stored by its value, one of `first`..`last`.
+  template <typename EnumT>
+  auto ReadEnum(const SettingsService& settings, const std::string_view key,
+    EnumT& value, const EnumT first, const EnumT last) -> void
+  {
+    const auto stored = settings.GetInt(key);
+    if (stored && *stored >= static_cast<std::int64_t>(first)
+      && *stored <= static_cast<std::int64_t>(last)) {
+      value = static_cast<EnumT>(*stored);
+    }
+  }
+
+  template <typename EnumT>
+  auto WriteEnum(SettingsService& settings, const std::string_view key,
+    const EnumT value) -> void
+  {
+    settings.SetInt(key, static_cast<std::int64_t>(value));
+  }
+
+  auto ImportKey(const std::string_view leaf) -> std::string
+  {
+    return "content.import." + std::string(leaf);
+  }
+
+  auto TextureKey(const std::string_view leaf) -> std::string
+  {
+    return "content.import.texture." + std::string(leaf);
+  }
+
+  auto ImporterKey(const std::string_view leaf) -> std::string
+  {
+    return "content.importer." + std::string(leaf);
+  }
+
+  auto ReadOptions(const SettingsService& s, ImportOptions& o) -> void
+  {
+    using namespace content::import; // NOLINT(*-using-namespace)
+    auto flags = static_cast<std::int64_t>(o.import_content);
+    Read(s, ImportKey("content_flags"), flags, 0,
+      static_cast<std::int64_t>(ImportContentFlags::kAll));
+    o.import_content = static_cast<ImportContentFlags>(flags);
+    Read(s, ImportKey("hashing"), o.with_content_hashing);
+    Read(s, ImportKey("ignore_non_mesh"), o.ignore_non_mesh_primitives);
+    ReadEnum(s, ImportKey("node_pruning"), o.node_pruning,
+      NodePruningPolicy::kKeepAll, NodePruningPolicy::kDropEmptyNodes);
+    ReadEnum(s, ImportKey("units"), o.coordinate.unit_normalization,
+      UnitNormalizationPolicy::kNormalizeToMeters,
+      UnitNormalizationPolicy::kApplyCustomFactor);
+    Read(s, ImportKey("unit_scale"), o.coordinate.unit_scale, 0.001F, 1000.0F);
+    ReadEnum(s, ImportKey("up_axis"), o.coordinate.up_axis,
+      SourceUpAxis::kFromFile, SourceUpAxis::kZ);
+    ReadEnum(s, ImportKey("normal_policy"), o.normal_policy,
+      GeometryAttributePolicy::kNone,
+      GeometryAttributePolicy::kAlwaysRecalculate);
+    ReadEnum(s, ImportKey("tangent_policy"), o.tangent_policy,
+      GeometryAttributePolicy::kNone,
+      GeometryAttributePolicy::kAlwaysRecalculate);
+    Read(s, ImportKey("smoothing_angle"), o.normals_smoothing_angle_deg, 0.0F,
+      180.0F);
+    Read(s, ImportKey("generate_lods"), o.lod_generation.enabled);
+    Read(s, ImportKey("lod_levels"), o.lod_generation.levels,
       LodGenerationOptions::kMinLevels, LodGenerationOptions::kMaxLevels);
-  }
-  if (auto val = settings->GetFloat(kLodReductionKey)) {
-    o.lod_generation.reduction_percent
-      = std::clamp(*val, LodGenerationOptions::kMinReductionPercent,
-        LodGenerationOptions::kMaxReductionPercent);
-  }
-  if (auto val = settings->GetBool(kImportLightsKey)) {
-    o.import_lights = *val;
-  }
-  if (auto val = settings->GetBool(kImportCamerasKey)) {
-    o.import_cameras = *val;
-  }
-  if (auto val = settings->GetFloat(kLightScaleKey)) {
-    o.light_intensity_scale = std::max(*val, 0.0F);
+    Read(s, ImportKey("lod_reduction"), o.lod_generation.reduction_percent,
+      LodGenerationOptions::kMinReductionPercent,
+      LodGenerationOptions::kMaxReductionPercent);
+    Read(s, ImportKey("lights"), o.import_lights);
+    Read(s, ImportKey("cameras"), o.import_cameras);
+    Read(s, ImportKey("light_intensity_scale"), o.light_intensity_scale, 0.0F,
+      1000.0F);
   }
 
-  return o;
-}
+  auto WriteOptions(SettingsService& s, const ImportOptions& o) -> void
+  {
+    s.SetInt(
+      ImportKey("content_flags"), static_cast<std::int64_t>(o.import_content));
+    s.SetBool(ImportKey("hashing"), o.with_content_hashing);
+    s.SetBool(ImportKey("ignore_non_mesh"), o.ignore_non_mesh_primitives);
+    WriteEnum(s, ImportKey("node_pruning"), o.node_pruning);
+    WriteEnum(s, ImportKey("units"), o.coordinate.unit_normalization);
+    s.SetFloat(ImportKey("unit_scale"), o.coordinate.unit_scale);
+    WriteEnum(s, ImportKey("up_axis"), o.coordinate.up_axis);
+    WriteEnum(s, ImportKey("normal_policy"), o.normal_policy);
+    WriteEnum(s, ImportKey("tangent_policy"), o.tangent_policy);
+    s.SetFloat(ImportKey("smoothing_angle"), o.normals_smoothing_angle_deg);
+    s.SetBool(ImportKey("generate_lods"), o.lod_generation.enabled);
+    s.SetInt(ImportKey("lod_levels"), o.lod_generation.levels);
+    s.SetFloat(ImportKey("lod_reduction"), o.lod_generation.reduction_percent);
+    s.SetBool(ImportKey("lights"), o.import_lights);
+    s.SetBool(ImportKey("cameras"), o.import_cameras);
+    s.SetFloat(ImportKey("light_intensity_scale"), o.light_intensity_scale);
+  }
 
-auto ContentSettingsService::SetImportOptions(
-  const content::import::ImportOptions& options) -> void
+  auto ReadTuning(const SettingsService& s, TextureTuning& t) -> void
+  {
+    using namespace content::import; // NOLINT(*-using-namespace)
+    Read(s, TextureKey("enabled"), t.enabled);
+    ReadEnum(s, TextureKey("intent"), t.intent, TextureIntent::kAlbedo,
+      TextureIntent::kHeightMap);
+    ReadEnum(s, TextureKey("color_space"), t.source_color_space,
+      ColorSpace::kLinear, ColorSpace::kSRGB);
+    ReadEnum(s, TextureKey("mip_policy"), t.mip_policy, MipPolicy::kNone,
+      MipPolicy::kMaxCount);
+    Read(s, TextureKey("max_mips"), t.max_mip_levels, 1, 16);
+    Read(s, TextureKey("max_size"), t.max_size, 0, 16384);
+    ReadEnum(s, TextureKey("mip_filter"), t.mip_filter, MipFilter::kBox,
+      MipFilter::kLanczos);
+    ReadEnum(s, TextureKey("color_format"), t.color_output_format,
+      Format::kUnknown, Format::kMaxFormat);
+    ReadEnum(s, TextureKey("data_format"), t.data_output_format,
+      Format::kUnknown, Format::kMaxFormat);
+    ReadEnum(s, TextureKey("bc7_quality"), t.bc7_quality, Bc7Quality::kNone,
+      Bc7Quality::kHigh);
+    ReadEnum(s, TextureKey("hdr_handling"), t.hdr_handling, HdrHandling::kError,
+      HdrHandling::kKeepFloat);
+    Read(s, TextureKey("bake_hdr"), t.bake_hdr_to_ldr);
+    Read(s, TextureKey("exposure_ev"), t.exposure_ev, -10.0F, 10.0F);
+    Read(s, TextureKey("flip_normal_green"), t.flip_normal_green);
+    Read(s, TextureKey("renormalize_mips"), t.renormalize_normals_in_mips);
+    Read(s, TextureKey("cubemap"), t.import_cubemap);
+    Read(s, TextureKey("equirect"), t.equirect_to_cubemap);
+    Read(s, TextureKey("face_size"), t.cubemap_face_size, 0, 8192);
+    ReadEnum(s, TextureKey("cube_layout"), t.cubemap_layout,
+      CubeMapImageLayout::kUnknown, CubeMapImageLayout::kVerticalCross);
+  }
+
+  auto WriteTuning(SettingsService& s, const TextureTuning& t) -> void
+  {
+    s.SetBool(TextureKey("enabled"), t.enabled);
+    WriteEnum(s, TextureKey("intent"), t.intent);
+    WriteEnum(s, TextureKey("color_space"), t.source_color_space);
+    WriteEnum(s, TextureKey("mip_policy"), t.mip_policy);
+    s.SetInt(TextureKey("max_mips"), t.max_mip_levels);
+    s.SetInt(TextureKey("max_size"), t.max_size);
+    WriteEnum(s, TextureKey("mip_filter"), t.mip_filter);
+    WriteEnum(s, TextureKey("color_format"), t.color_output_format);
+    WriteEnum(s, TextureKey("data_format"), t.data_output_format);
+    WriteEnum(s, TextureKey("bc7_quality"), t.bc7_quality);
+    WriteEnum(s, TextureKey("hdr_handling"), t.hdr_handling);
+    s.SetBool(TextureKey("bake_hdr"), t.bake_hdr_to_ldr);
+    s.SetFloat(TextureKey("exposure_ev"), t.exposure_ev);
+    s.SetBool(TextureKey("flip_normal_green"), t.flip_normal_green);
+    s.SetBool(TextureKey("renormalize_mips"), t.renormalize_normals_in_mips);
+    s.SetBool(TextureKey("cubemap"), t.import_cubemap);
+    s.SetBool(TextureKey("equirect"), t.equirect_to_cubemap);
+    s.SetInt(TextureKey("face_size"), t.cubemap_face_size);
+    WriteEnum(s, TextureKey("cube_layout"), t.cubemap_layout);
+  }
+
+  auto ReadImporter(const SettingsService& s,
+    content::import::AsyncImportService::Config& c) -> void
+  {
+    Read(s, ImporterKey("thread_pool"), c.thread_pool_size, 1, 128);
+    for (const auto& pipeline : kImporterPipelines) {
+      auto& concurrency = c.concurrency.*pipeline.member;
+      const auto prefix = std::string(pipeline.name);
+      Read(s, ImporterKey(prefix + ".workers"), concurrency.workers, 1, 64);
+      Read(
+        s, ImporterKey(prefix + ".queue"), concurrency.queue_capacity, 1, 256);
+    }
+  }
+
+  auto WriteImporter(SettingsService& s,
+    const content::import::AsyncImportService::Config& c) -> void
+  {
+    s.SetInt(ImporterKey("thread_pool"), c.thread_pool_size);
+    for (const auto& pipeline : kImporterPipelines) {
+      const auto& concurrency = c.concurrency.*pipeline.member;
+      const auto prefix = std::string(pipeline.name);
+      s.SetInt(ImporterKey(prefix + ".workers"), concurrency.workers);
+      s.SetInt(ImporterKey(prefix + ".queue"), concurrency.queue_capacity);
+    }
+  }
+} // namespace
+
+auto DefaultImportProfile() -> ImportProfile
 {
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  settings->SetFloat(kNodePruningKey,
-    static_cast<float>(static_cast<int>(options.node_pruning)));
-  settings->SetFloat(kImportContentFlagsKey,
-    static_cast<float>(static_cast<uint32_t>(options.import_content)));
-  settings->SetBool(kWithHashingKey, options.with_content_hashing);
-  settings->SetFloat(kNormalPolicyKey,
-    static_cast<float>(static_cast<int>(options.normal_policy)));
-  settings->SetFloat(kTangentPolicyKey,
-    static_cast<float>(static_cast<int>(options.tangent_policy)));
-  settings->SetFloat(kUpAxisKey,
-    static_cast<float>(static_cast<int>(options.coordinate.up_axis)));
-  settings->SetFloat(kSmoothingAngleKey, options.normals_smoothing_angle_deg);
-  settings->SetBool(kGenerateLodsKey, options.lod_generation.enabled);
-  settings->SetFloat(
-    kLodLevelsKey, static_cast<float>(options.lod_generation.levels));
-  settings->SetFloat(
-    kLodReductionKey, options.lod_generation.reduction_percent);
-  settings->SetBool(kImportLightsKey, options.import_lights);
-  settings->SetBool(kImportCamerasKey, options.import_cameras);
-  settings->SetFloat(kLightScaleKey, options.light_intensity_scale);
-  ++epoch_;
-}
-
-auto ContentSettingsService::GetTextureTuning() const
-  -> content::import::ImportOptions::TextureTuning
-{
+  auto profile = ImportProfile {};
   // Interactive imports keep full resolution and complete mip chains while
-  // using the faster filter and encoder tiers. Saved choices override these.
-  content::import::ImportOptions::TextureTuning t;
-  t.enabled = true;
-  t.mip_policy = content::import::MipPolicy::kFullChain;
-  t.mip_filter = content::import::MipFilter::kBox;
-  t.bc7_quality = content::import::Bc7Quality::kFast;
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
+  // using the faster filter and encoder tiers.
+  profile.tuning.enabled = true;
+  profile.tuning.mip_policy = content::import::MipPolicy::kFullChain;
+  profile.tuning.mip_filter = content::import::MipFilter::kBox;
+  profile.tuning.bc7_quality = content::import::Bc7Quality::kFast;
 
-  if (auto val = settings->GetBool(kTexTuningEnabledKey)) {
-    t.enabled = *val;
-  }
-  if (auto val = settings->GetFloat(kTexTuningIntentKey)) {
-    t.intent
-      = static_cast<content::import::TextureIntent>(static_cast<int>(*val));
-  }
-  if (auto val = settings->GetFloat(kTexTuningColorSpaceKey)) {
-    t.source_color_space = static_cast<ColorSpace>(static_cast<int>(*val));
-  }
-  if (auto val = settings->GetFloat(kTexTuningMipPolicyKey)) {
-    t.mip_policy
-      = static_cast<content::import::MipPolicy>(static_cast<int>(*val));
-  }
-  if (auto val = settings->GetFloat(kTexTuningMaxMipsKey)) {
-    t.max_mip_levels = static_cast<uint8_t>(*val);
-  }
-  if (auto val = settings->GetFloat(kTexTuningMaxSizeKey)) {
-    t.max_size = static_cast<uint32_t>(std::max(*val, 0.0F));
-  }
-  if (auto val = settings->GetFloat(kTexTuningMipFilterKey)) {
-    t.mip_filter
-      = static_cast<content::import::MipFilter>(static_cast<int>(*val));
-  }
-  if (auto val = settings->GetFloat(kTexTuningColorFormatKey)) {
-    t.color_output_format = static_cast<Format>(static_cast<int>(*val));
-  }
-  if (auto val = settings->GetFloat(kTexTuningDataFormatKey)) {
-    t.data_output_format = static_cast<Format>(static_cast<int>(*val));
-  }
-  if (auto val = settings->GetFloat(kTexTuningBc7QualityKey)) {
-    t.bc7_quality
-      = static_cast<content::import::Bc7Quality>(static_cast<int>(*val));
-  }
-  if (auto val = settings->GetFloat(kTexTuningHdrHandlingKey)) {
-    t.hdr_handling
-      = static_cast<content::import::HdrHandling>(static_cast<int>(*val));
-  }
-
-  return t;
+  auto& importer = profile.importer;
+  importer.thread_pool_size = 35;
+  importer.max_in_flight_jobs = 35;
+  importer.concurrency.texture = { .workers = 12, .queue_capacity = 64 };
+  importer.concurrency.buffer = { .workers = 2, .queue_capacity = 64 };
+  importer.concurrency.material = { .workers = 4, .queue_capacity = 64 };
+  importer.concurrency.mesh_build = { .workers = 12, .queue_capacity = 128 };
+  importer.concurrency.geometry = { .workers = 8, .queue_capacity = 64 };
+  importer.concurrency.scene = { .workers = 1, .queue_capacity = 8 };
+  return profile;
 }
 
-auto ContentSettingsService::SetTextureTuning(
-  const content::import::ImportOptions::TextureTuning& t) -> void
+auto ContentSettingsService::GetMountSources() const
+  -> std::vector<ContentSourceSetting>
 {
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  settings->SetBool(kTexTuningEnabledKey, t.enabled);
-  settings->SetFloat(
-    kTexTuningIntentKey, static_cast<float>(static_cast<int>(t.intent)));
-  settings->SetFloat(kTexTuningColorSpaceKey,
-    static_cast<float>(static_cast<int>(t.source_color_space)));
-  settings->SetFloat(
-    kTexTuningMipPolicyKey, static_cast<float>(static_cast<int>(t.mip_policy)));
-  settings->SetFloat(kTexTuningMaxMipsKey, t.max_mip_levels);
-  settings->SetFloat(kTexTuningMaxSizeKey, static_cast<float>(t.max_size));
-  settings->SetFloat(
-    kTexTuningMipFilterKey, static_cast<float>(static_cast<int>(t.mip_filter)));
-  settings->SetFloat(kTexTuningColorFormatKey,
-    static_cast<float>(static_cast<int>(t.color_output_format)));
-  settings->SetFloat(kTexTuningDataFormatKey,
-    static_cast<float>(static_cast<int>(t.data_output_format)));
-  settings->SetFloat(kTexTuningBc7QualityKey,
-    static_cast<float>(static_cast<int>(t.bc7_quality)));
-  settings->SetFloat(kTexTuningHdrHandlingKey,
-    static_cast<float>(static_cast<int>(t.hdr_handling)));
-  ++epoch_;
+  const auto settings = Settings();
+  const auto text = settings->GetString(kMountSourcesKey).value_or("");
+  auto sources = std::vector<ContentSourceSetting> {};
+  for (const auto line : Lines(text)) {
+    if (auto source = DecodeSource(*settings, line)) {
+      sources.push_back(std::move(*source));
+    } else {
+      LOG_F(WARNING, "Content settings: ignoring the mount entry '{}'", line);
+    }
+  }
+  return sources;
 }
 
-auto ContentSettingsService::GetMountedPakPaths() const
-  -> std::vector<std::filesystem::path>
+auto ContentSettingsService::SetMountSources(
+  const std::vector<ContentSourceSetting>& sources) -> void
 {
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  const auto serialized = settings->GetString(kMountedPaksKey).value_or("");
-  return SplitPaths(serialized, *settings);
-}
-
-auto ContentSettingsService::SetMountedPakPaths(
-  const std::vector<std::filesystem::path>& paths) -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  settings->SetString(kMountedPaksKey, JoinPaths(paths, *settings));
-  ++epoch_;
-}
-
-auto ContentSettingsService::GetMountedIndexPaths() const
-  -> std::vector<std::filesystem::path>
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  const auto serialized = settings->GetString(kMountedIndicesKey).value_or("");
-  return SplitPaths(serialized, *settings);
-}
-
-auto ContentSettingsService::SetMountedIndexPaths(
-  const std::vector<std::filesystem::path>& paths) -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  settings->SetString(kMountedIndicesKey, JoinPaths(paths, *settings));
-  ++epoch_;
+  const auto settings = Settings();
+  auto lines = std::vector<std::string> {};
+  for (const auto& source : sources) {
+    if (!source.path.empty()) {
+      lines.push_back(EncodeSource(*settings, source));
+    }
+  }
+  settings->SetString(kMountSourcesKey, JoinLines(lines));
+  BumpEpoch();
 }
 
 auto ContentSettingsService::GetMountedImportRecords() const
   -> std::vector<std::filesystem::path>
 {
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  return SplitPaths(
-    settings->GetString(kMountedImportsKey).value_or(""), *settings);
+  const auto settings = Settings();
+  const auto text = settings->GetString(kImportRecordsKey).value_or("");
+  auto records = std::vector<std::filesystem::path> {};
+  for (const auto line : Lines(text)) {
+    records.push_back(settings->DecodePath(std::string(line)));
+  }
+  return records;
 }
 
 auto ContentSettingsService::SetMountedImportRecords(
-  const std::vector<std::filesystem::path>& paths) -> void
+  const std::vector<std::filesystem::path>& records) -> void
 {
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  settings->SetString(kMountedImportsKey, JoinPaths(paths, *settings));
-  ++epoch_;
+  const auto settings = Settings();
+  auto lines = std::vector<std::string> {};
+  for (const auto& record : records) {
+    if (!record.empty()) {
+      lines.push_back(settings->EncodePath(record).generic_string());
+    }
+  }
+  settings->SetString(kImportRecordsKey, JoinLines(lines));
+  BumpEpoch();
 }
 
-auto ContentSettingsService::GetActiveSceneSelection() const
-  -> std::optional<ContentActiveSceneSelection>
+auto ContentSettingsService::GetLoadedScene() const
+  -> std::optional<ContentSceneSetting>
 {
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  const auto source_path
-    = settings->GetString(kActiveSceneSourcePathKey).value_or("");
-  if (source_path.empty()) {
+  const auto settings = Settings();
+  const auto key = settings->GetString(kSceneKeyKey).value_or("");
+  const auto path = settings->GetString(kSceneSourcePathKey).value_or("");
+  const auto kind = KindOfTag(
+    settings->GetString(kSceneSourceKindKey).value_or(std::string {}));
+  if (key.empty() || path.empty() || !kind) {
     return std::nullopt;
   }
-
-  ContentActiveSceneSelection selection;
-  selection.scene_name = settings->GetString(kActiveSceneNameKey).value_or("");
-  selection.scene_key = settings->GetString(kActiveSceneKeyKey).value_or("");
-  selection.source_path = settings->DecodePath(source_path);
-  selection.source_is_pak
-    = settings->GetBool(kActiveSceneSourceIsPakKey).value_or(true);
-  selection.import_record_path = settings->DecodePath(
-    settings->GetString(kActiveImportRecordKey).value_or(""));
-  return selection;
+  return ContentSceneSetting {
+    .scene_key = key,
+    .virtual_path = settings->GetString(kSceneVirtualPathKey).value_or(""),
+    .source = { .kind = *kind, .path = settings->DecodePath(path) },
+  };
 }
 
-auto ContentSettingsService::SetActiveSceneSelection(
-  const std::optional<ContentActiveSceneSelection>& selection) -> void
+auto ContentSettingsService::SetLoadedScene(
+  const std::optional<ContentSceneSetting>& scene) -> void
 {
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  if (!selection.has_value()) {
-    settings->SetString(kActiveSceneNameKey, "");
-    settings->SetString(kActiveSceneKeyKey, "");
-    settings->SetString(kActiveSceneSourcePathKey, "");
-    settings->SetBool(kActiveSceneSourceIsPakKey, true);
-    settings->Remove(kActiveImportRecordKey);
-    ++epoch_;
-    return;
-  }
-
-  settings->SetString(kActiveSceneNameKey, selection->scene_name);
-  settings->SetString(kActiveSceneKeyKey, selection->scene_key);
-  settings->SetString(kActiveSceneSourcePathKey,
-    settings->EncodePath(selection->source_path).generic_string());
-  settings->SetBool(kActiveSceneSourceIsPakKey, selection->source_is_pak);
-  if (selection->import_record_path.empty()) {
-    settings->Remove(kActiveImportRecordKey);
+  const auto settings = Settings();
+  if (!scene) {
+    settings->Remove(kSceneKeyKey);
+    settings->Remove(kSceneVirtualPathKey);
+    settings->Remove(kSceneSourceKindKey);
+    settings->Remove(kSceneSourcePathKey);
   } else {
-    settings->SetString(kActiveImportRecordKey,
-      settings->EncodePath(selection->import_record_path).generic_string());
+    settings->SetString(kSceneKeyKey, scene->scene_key);
+    settings->SetString(kSceneVirtualPathKey, scene->virtual_path);
+    settings->SetString(
+      kSceneSourceKindKey, std::string(KindTag(scene->source.kind)));
+    settings->SetString(kSceneSourcePathKey,
+      settings->EncodePath(scene->source.path).generic_string());
   }
-  ++epoch_;
+  BumpEpoch();
+}
+
+auto ContentSettingsService::GetRecentScenes() const
+  -> std::vector<RecentSceneSetting>
+{
+  // One `<key> <virtual path>` line per scene; keys hold no spaces.
+  const auto text = Settings()->GetString(kRecentScenesKey).value_or("");
+  auto scenes = std::vector<RecentSceneSetting> {};
+  for (const auto line : Lines(text)) {
+    const auto space = line.find(' ');
+    if (space == std::string_view::npos || space == 0
+      || space + 1 == line.size()) {
+      continue;
+    }
+    scenes.push_back({
+      .scene_key = std::string(line.substr(0, space)),
+      .virtual_path = std::string(line.substr(space + 1)),
+    });
+    if (scenes.size() == kRecentSceneCount) {
+      break;
+    }
+  }
+  return scenes;
+}
+
+auto ContentSettingsService::SetRecentScenes(
+  const std::vector<RecentSceneSetting>& scenes) -> void
+{
+  auto lines = std::vector<std::string> {};
+  for (const auto& scene : scenes) {
+    if (lines.size() == kRecentSceneCount) {
+      break;
+    }
+    if (!scene.scene_key.empty() && !scene.virtual_path.empty()) {
+      lines.push_back(scene.scene_key + " " + scene.virtual_path);
+    }
+  }
+  Settings()->SetString(kRecentScenesKey, JoinLines(lines));
+  BumpEpoch();
+}
+
+auto ContentSettingsService::GetImportProfile() const -> ImportProfile
+{
+  const auto settings = Settings();
+  auto profile = DefaultImportProfile();
+  ReadOptions(*settings, profile.options);
+  ReadTuning(*settings, profile.tuning);
+  ReadImporter(*settings, profile.importer);
+  return profile;
+}
+
+auto ContentSettingsService::SetImportProfile(const ImportProfile& profile)
+  -> void
+{
+  const auto settings = Settings();
+  WriteOptions(*settings, profile.options);
+  WriteTuning(*settings, profile.tuning);
+  WriteImporter(*settings, profile.importer);
+  BumpEpoch();
+}
+
+auto ContentSettingsService::GetImportTab() const -> ContentImportTabSettings
+{
+  const auto settings = Settings();
+  auto tab = ContentImportTabSettings {};
+  tab.source_mount = settings->GetString(kImportTabMountKey).value_or("");
+  tab.filter = settings->GetString(kImportTabFilterKey).value_or("");
+  Read(*settings, kImportTabFbxKey, tab.fbx);
+  Read(*settings, kImportTabGlbKey, tab.glb);
+  Read(*settings, kImportTabGltfKey, tab.gltf);
+  Read(*settings, kImportTabLoadSceneKey, tab.load_scene_after_import);
+  return tab;
+}
+
+auto ContentSettingsService::SetImportTab(
+  const ContentImportTabSettings& settings_value) -> void
+{
+  const auto settings = Settings();
+  settings->SetString(kImportTabMountKey, settings_value.source_mount);
+  settings->SetString(kImportTabFilterKey, settings_value.filter);
+  settings->SetBool(kImportTabFbxKey, settings_value.fbx);
+  settings->SetBool(kImportTabGlbKey, settings_value.glb);
+  settings->SetBool(kImportTabGltfKey, settings_value.gltf);
+  settings->SetBool(
+    kImportTabLoadSceneKey, settings_value.load_scene_after_import);
+  BumpEpoch();
 }
 
 auto ContentSettingsService::GetEpoch() const noexcept -> std::uint64_t
 {
   return epoch_.load(std::memory_order_acquire);
+}
+
+auto ContentSettingsService::BumpEpoch() noexcept -> void
+{
+  epoch_.fetch_add(1, std::memory_order_acq_rel);
 }
 
 } // namespace oxygen::examples

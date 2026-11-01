@@ -20,7 +20,7 @@ From the installed SDK root:
 
 The SDK launcher finds its executable and working directory without changing
 PATH; it can also be invoked by full path. The installed showcase has no
-default scene or sky: pick a scene in the Library (the Lantern example's scene
+default scene or sky: pick a scene on the content panel's Scenes tab (the Lantern example's scene
 owns its sky). Subsequent launches can restore your saved scene and settings.
 Copy the complete SDK, including `bin`, `lib`, `include`, `share` and launchers
 when moving it. SDK-local paths follow the copied tree; external originals remain external.
@@ -75,35 +75,58 @@ lists the player's options.
 
 RenderScene's ad-hoc model imports go to `.scratch`, a scratch project that
 mounts `Showcase/Content`, with the local mounts of any `.mounts.json` at or
-above it (a downloads folder, for example). Nothing goes into the examples
-project.
+above it (a downloads folder, for example; the Content Loader adds source
+folders to `.scratch/.mounts.json`). Nothing goes into the examples project.
 
 ## Load content
 
-### Open a library and scene
+The side panel's **Content Loader** has four tabs, Scenes, Mounts, Import and
+Log, above a status strip that every tab shares. The strip shows the loaded
+scene with its asset count and load time, or the running load or import with
+**Cancel**. Its error and warning counts open the Log. The Mounts tab is marked
+when a source has a problem; the Log tab counts the errors not yet seen.
 
-1. Open **Content Loader → Library** in the side panel.
-2. Use **Unload All** to remove previous mounts when isolating a source.
-3. Choose **Select Library** for the shared main index or a model import record
-   (`imports/*.import.json`), or **Select PAK** for a packaged library. Paths are in the Content guide.
-4. Check **Mounted Items**, then use **Search scenes...** under **Library Scenes**
-   and click a scene. Hover its entry for the path, key, and source details.
-5. Review **Diagnostics** and progress. **Cancel Scene Load** cancels an active
-   request.
+### Mount cooked sources and load a scene
+
+1. Open **Mounts**. Use **+ Pak…** for a pak or **+ Cooked root…** for a
+   loose cooked root folder. Paths are in the Content guide.
+2. The table lists the cooked sources by priority, mount and state; the top
+   row wins and the engine pak stays last. Drag a row to reorder it, or remove
+   it from its context menu. Select a row for its details: kind, origin, path,
+   source key, what it provides, deletes and requires, and its assets.
+3. A pak whose requirements are not met by the sources below it is
+   **Refused**. Its details list each failed requirement with its virtual
+   path and why it failed. **Retry** or **Remount** applies the list again;
+   **Show in folder** opens it in Explorer.
+4. Open **Scenes**, search by name or virtual path, or pick a mount chip.
+   **Recent** holds the last scenes loaded. Double-click a scene, or select it
+   and choose **Load**. The loaded scene has a green dot; the selection is the
+   highlighted row, in Recent or in its mount.
+5. **Log** lists every mount, load and import with its code. Filter it by
+   severity or text; **Go to the mount** opens the source a row concerns.
 
 For an external scene, also mount its required dependency sources. Keep duplicate
 versions of the same asset out of a baseline test.
 
 ### Import FBX, GLB, or glTF
 
-1. Open **Content Loader → Sources**.
-2. Under **Content Root**, use **Browse** and enable **FBX**, **GLB**, or **GLTF**,
-   then refresh discovery. Alternatively use **Select File**.
-3. Review **Import Configuration** and **Texture Tuning**. Selecting a discovered
-   source starts its import.
-4. Watch progress and **Diagnostics**. The imported index joins the library.
-   **Sources → Workflow Settings → Auto-load scene after import** controls
-   whether a scene is requested automatically.
+1. Open **Import** and pick a source folder, or choose **Import file…** to
+   import a model from anywhere. A file in no source folder has its folder
+   added as one first: a model's record names its source through a source
+   folder.
+2. Source folders are listed on **Mounts → Source folders**: the examples'
+   `Content`, and the folders added with **+ Source folder…**, which the
+   scratch project's `.mounts.json` keeps for this machine and which can be
+   removed there.
+3. Filter the list and pick the formats (FBX, GLB, GLTF). Select a model: its
+   row and details show whether it is imported, whether the panel's settings
+   differ from its record's, and its scene.
+4. Choose **Import**, **Reimport with panel** or **Reimport as is**, and watch
+   its progress. **Import settings** groups every setting; a changed group or
+   field is marked and **Reset** restores the defaults.
+5. The new generation replaces the previous one in the mount list. With
+   **Load the scene when an import finishes**, its scene loads once the
+   generation is mounted.
 
 Interactive model imports publish model import records and immutable generations
 in RenderScene's `.scratch` project (see
@@ -116,7 +139,7 @@ that diagnostic before assuming every node should become identity.
 
 ### Images and cubemaps
 
-RenderScene's **Select File** picker is for models. For images use
+The Import tab lists models only. For images use
 **Environment → Sky Sphere → Source: Cubemap → Skybox Loader**:
 
 1. Select an image using **Browse...** or **Path**.
@@ -144,18 +167,17 @@ preserve the source radiance range.
 ## Startup selection and source precedence
 
 `--scene <token>` discards a restored active-scene load, then selects the first
-matching entry among the mounted scenes: the PAKs and loose indexes the saved
-settings mount. Only when none of them holds the scene does it mount the shared
-main library from the SDK or source checkout and look again. Matching is
+matching entry among the mounted scenes: the cooked sources of the saved mount
+list. Only when none of them holds the scene does it add the examples' cooked
+root from the SDK or source checkout to the mount list and look again. Matching is
 case-insensitive and accepts a virtual path, filename stem, asset key, or
 substring.
 
 - Prefer a full virtual path or key; short substrings can match multiple scenes.
 - With `all.pak` mounted, `--scene` plays the scene from `all.pak` and mounts
   nothing else. The log names the resolved **source path**.
-- A scene load mounts a missing source, refreshes a changed source, and preserves
-  the cache for an unchanged mounted source. Selection does not always remount
-  the source or force it above every other mount.
+- A scene loads from the top mounted source that holds it. A rebuilt pak is
+  read again on **Remount**; a scene load never changes the mount list.
 - Without `--scene`, the UI can restore its last scene. If none loads, the app
   runs with a fallback scene/camera. That is not proof of a content-scene load.
 
@@ -240,7 +262,7 @@ panel's named light and this decision before diagnosing a dark surface.
 ## Scenes to verify
 
 Counts describe authored descriptors, before runtime script/physics changes.
-Smoke-load all scenes in the refreshed library and use their expected outcomes
+Smoke-load all scenes of the mounted sources and use their expected outcomes
 to choose representative captures. Use `--environment-profile scene` and
 `--preview-sun=false` for this authored lighting matrix, especially the emissive
 and point/spot-light scenes.
@@ -324,12 +346,12 @@ A build configured with `OXYGEN_BUILD_UI_TESTS` supports isolated settings:
 1. Copy `demo_settings.json` into a fresh directory under `out`.
 2. Set `OXYGEN_UI_TEST_OUTPUT` to that directory and `OXYGEN_UI_TEST_SETTINGS` to
    the copied file. Set `OXYGEN_UI_TEST_FILTER` to a test name, such as
-   `model_import_library` for a settings file with model import records configured.
+   `model_import_record` for a settings file with model import records configured.
 3. Run the existing executable with `--cvars-archive` pointing into that directory.
 4. Require a successful exit and a nonempty, passing `results.xml`. Remove those
    environment variables from the shell after the run.
 
-`model_import_library` checks the restored scene, one mounted generation per model
+`model_import_record` checks the restored scene, one mounted generation per model
 import record, renderer availability and usable sky lighting. `ibl_persist_and_replace`
 and `ibl_reopen` run as separate processes against the same copied settings; the
 second restores the saved scene/profile without CLI overrides. Without an isolated
@@ -384,21 +406,21 @@ and `gfx.capture.open_ui`. Ctrl+Shift+P opens the command palette.
 | Script scene summary has zero renderables        | Check script attachment, compilation, and runtime creation.                                                                                                                                                                                                                         |
 | Sidecar/dependency/schema/hash failures          | Use matching built/cooked generations and review diagnostics. Recook incompatible content with `Tools/cook`.                                                                                                                                                                        |
 | Skybox placeholder                               | Layout/output, valid dimensions, import status, and resource key.                                                                                                                                                                                                                   |
-| Selecting a file unexpectedly starts a cook      | Sources import; Library entries load already-cooked scenes.                                                                                                                                                                                                                         |
+| Selecting a file unexpectedly starts a cook      | The Import tab selects a model and imports only on Import; the Scenes tab loads already-cooked scenes.                                                                                                                                                                              |
 
 ## Contributor source map
 
 These paths are available in the source checkout:
 
-| Responsibility                                   | Source                                                                                                                                                                                                                             |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CLI, startup CVars and engine modules            | [main_impl.cpp](main_impl.cpp)                                                                                                                                                                                                     |
-| Mounts, scene selection and deferred physics     | [MainModule.cpp](MainModule.cpp)                                                                                                                                                                                                   |
-| Scene construction and hydration                 | [SceneLoaderService.cpp](../DemoShell/Services/SceneLoaderService.cpp)                                                                                                                                                             |
-| Library/import UI and desired record persistence | [ContentLoaderPanel.cpp](../DemoShell/UI/ContentLoaderPanel.cpp), [ContentVm.cpp](../DemoShell/UI/ContentVm.cpp)                                                                                                                   |
-| Settings lifecycle and camera persistence        | [SettingsService.cpp](../DemoShell/Services/SettingsService.cpp), [CameraSettingsService.cpp](../DemoShell/Services/CameraSettingsService.cpp)                                                                                     |
-| Environment UI and cubemap binding               | [EnvironmentDebugPanel.cpp](../DemoShell/UI/EnvironmentDebugPanel.cpp), [SkyboxService.cpp](../DemoShell/Services/SkyboxService.cpp)                                                                                               |
-| Preview eligibility and restoration              | [PreviewSunController.cpp](../DemoShell/Services/PreviewSunController.cpp), [DefaultSceneLighting.cpp](../DemoShell/Services/DefaultSceneLighting.cpp)                                                                             |
-| Profiles and authored-environment restoration    | [EnvironmentVm.cpp](../DemoShell/UI/EnvironmentVm.cpp), [EnvironmentSettingsService.cpp](../DemoShell/Services/EnvironmentSettingsService.cpp), [EnvironmentSceneSnapshot.cpp](../DemoShell/Services/EnvironmentSceneSnapshot.cpp) |
-| Capture CLI                                      | [RuntimeCli.cpp](../../src/Oxygen/Host/RuntimeCli.cpp)                                                                                                                                                                             |
-| Content production and cleanup                   | [Examples project](../Showcase/README.md)                                                                                                                                                                                          |
+| Responsibility                                | Source                                                                                                                                                                                                                             |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI, startup CVars and engine modules         | [main_impl.cpp](main_impl.cpp)                                                                                                                                                                                                     |
+| Mounts, scene selection and deferred physics  | [MainModule.cpp](MainModule.cpp)                                                                                                                                                                                                   |
+| Scene construction and hydration              | [SceneLoaderService.cpp](../DemoShell/Services/SceneLoaderService.cpp)                                                                                                                                                             |
+| Content panel: mounts, scenes, import, log    | [DemoShell README](../DemoShell/README.md#content-loader), [ContentVm.cpp](../DemoShell/UI/ContentVm.cpp), [ContentMountApplier.cpp](../DemoShell/Runtime/ContentMountApplier.cpp)                                                 |
+| Settings lifecycle and camera persistence     | [SettingsService.cpp](../DemoShell/Services/SettingsService.cpp), [CameraSettingsService.cpp](../DemoShell/Services/CameraSettingsService.cpp)                                                                                     |
+| Environment UI and cubemap binding            | [EnvironmentDebugPanel.cpp](../DemoShell/UI/EnvironmentDebugPanel.cpp), [SkyboxService.cpp](../DemoShell/Services/SkyboxService.cpp)                                                                                               |
+| Preview eligibility and restoration           | [PreviewSunController.cpp](../DemoShell/Services/PreviewSunController.cpp), [DefaultSceneLighting.cpp](../DemoShell/Services/DefaultSceneLighting.cpp)                                                                             |
+| Profiles and authored-environment restoration | [EnvironmentVm.cpp](../DemoShell/UI/EnvironmentVm.cpp), [EnvironmentSettingsService.cpp](../DemoShell/Services/EnvironmentSettingsService.cpp), [EnvironmentSceneSnapshot.cpp](../DemoShell/Services/EnvironmentSceneSnapshot.cpp) |
+| Capture CLI                                   | [RuntimeCli.cpp](../../src/Oxygen/Host/RuntimeCli.cpp)                                                                                                                                                                             |
+| Content production and cleanup                | [Examples project](../Showcase/README.md)                                                                                                                                                                                          |

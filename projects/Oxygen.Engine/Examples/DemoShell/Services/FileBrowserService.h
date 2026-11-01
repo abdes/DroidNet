@@ -149,21 +149,17 @@ private:
 auto MakePakFileBrowserConfig(const ContentRootPaths& roots)
   -> FileBrowserConfig;
 
-//! Creates a file browser configuration for FBX files.
-auto MakeFbxFileBrowserConfig(const ContentRootPaths& roots)
+//! Picks a loose cooked root folder.
+auto MakeCookedRootBrowserConfig(const ContentRootPaths& roots)
   -> FileBrowserConfig;
 
-//! Creates a file browser configuration for FBX/GLTF/GLB files.
-auto MakeModelFileBrowserConfig(const ContentRootPaths& roots)
+//! Picks a folder of source models.
+auto MakeSourceFolderBrowserConfig(const ContentRootPaths& roots)
   -> FileBrowserConfig;
 
-//! Creates a directory browser configuration for model source folders.
-auto MakeModelDirectoryBrowserConfig(const ContentRootPaths& roots)
-  -> FileBrowserConfig;
-
-//! Creates a browser for model import records and loose cooked indexes.
-auto MakeLibraryBrowserConfig(const ContentRootPaths& roots)
-  -> FileBrowserConfig;
+//! Picks a model file to import, of the model file `extensions`.
+auto MakeModelFileBrowserConfig(const ContentRootPaths& roots,
+  std::vector<std::string> extensions) -> FileBrowserConfig;
 
 //! Creates a file browser configuration for skybox images.
 auto MakeSkyboxFileBrowserConfig(const ContentRootPaths& roots)

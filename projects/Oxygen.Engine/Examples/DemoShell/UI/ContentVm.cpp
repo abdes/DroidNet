@@ -5,132 +5,82 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
-#include <cstdint>
+#include <cstddef>
 #include <exception>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
-#include "DemoShell/Runtime/PathNormalization.h"
+#include "DemoShell/Runtime/ContentMountApplier.h"
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/UI/ContentImportProfile.h"
+#include "DemoShell/UI/ContentLog.h"
+#include "DemoShell/UI/ContentModelCatalog.h"
+#include "DemoShell/UI/ContentMountList.h"
+#include "DemoShell/UI/ContentSceneCatalog.h"
+#include "DemoShell/UI/ContentSourceFolders.h"
 #include "DemoShell/UI/ContentVm.h"
+#include <fmt/format.h>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Cooker/Cooked/CookedContent.h>
-#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
-#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
-#include <Oxygen/Cooker/Import/SceneImportSettings.h>
-#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::examples::ui {
 
 namespace {
+  using content::import::ModelImportRecord;
 
-  auto NormalizePathForKey(const std::filesystem::path& path) -> std::string
+  //! `Showcase showcase.pak (#4)`: a row as log rows name it.
+  auto RowName(const CookedSourceRow& row, const std::size_t index)
+    -> std::string
   {
-    return runtime::NormalizePath(path).string();
+    return fmt::format(
+      "{} {} (#{})", MountNameOf(row), row.path.filename().string(), index + 1);
   }
 
+  auto Plural(const std::size_t count, const std::string_view word)
+    -> std::string
+  {
+    return fmt::format("{} {}{}", count, word, count == 1 ? "" : "s");
+  }
 } // namespace
 
-auto ContentVm::MakeSceneEntryKey(const SceneEntry& entry) -> SceneEntryKey
-{
-  return SceneEntryKey {
-    .key = entry.key,
-    .source_kind = entry.source.kind,
-    .source_key = NormalizePathForKey(entry.source.path),
-  };
-}
-
-auto ContentVm::RebuildSceneList(
-  const std::unordered_map<SceneEntryKey, SceneEntry, SceneEntryKeyHash,
-    SceneEntryKeyEq>& entries,
-  std::vector<SceneEntry>& out) -> void
-{
-  out.clear();
-  out.reserve(entries.size());
-  for (const auto& entry : entries | std::views::values) {
-    out.push_back(entry);
-  }
-
-  std::ranges::sort(out, [](const auto& a, const auto& b) -> auto {
-    if (a.name != b.name) {
-      return a.name < b.name;
-    }
-    if (a.source.kind != b.source.kind) {
-      return static_cast<int>(a.source.kind) < static_cast<int>(b.source.kind);
-    }
-    return a.source.path.string() < b.source.path.string();
-  });
-}
-
-ContentVm::ContentVm(observer_ptr<ContentSettingsService> settings_service,
-  observer_ptr<FileBrowserService> file_browser_service,
-  observer_ptr<content::IAssetLoader> asset_loader)
-  : settings_(settings_service)
-  , file_browser_(file_browser_service)
+ContentVm::ContentVm(const observer_ptr<ContentSettingsService> settings,
+  const observer_ptr<FileBrowserService> file_browser,
+  const observer_ptr<content::IAssetLoader> asset_loader)
+  : settings_(settings)
+  , file_browser_(file_browser)
   , asset_loader_(asset_loader)
 {
-  // Default config for import service
-  service_config_.thread_pool_size = 35;
-  service_config_.max_in_flight_jobs = 35;
-  service_config_.concurrency.texture.workers = 12;
-  service_config_.concurrency.texture.queue_capacity = 64;
-  service_config_.concurrency.buffer.workers = 2;
-  service_config_.concurrency.buffer.queue_capacity = 64;
-  service_config_.concurrency.material.workers = 4;
-  service_config_.concurrency.material.queue_capacity = 64;
-  service_config_.concurrency.mesh_build.workers = 12;
-  service_config_.concurrency.mesh_build.queue_capacity = 128;
-  service_config_.concurrency.geometry.workers = 8;
-  service_config_.concurrency.geometry.queue_capacity = 64;
-  service_config_.concurrency.scene.workers = 1;
-  service_config_.concurrency.scene.queue_capacity = 8;
-
+  DCHECK_NOTNULL_F(settings_, "ContentVm requires its settings");
+  profile_ = settings_->GetImportProfile();
+  import_tab_ = settings_->GetImportTab();
+  running_importer_ = profile_.importer;
   import_service_
-    = std::make_unique<content::import::AsyncImportService>(service_config_);
+    = std::make_unique<content::import::AsyncImportService>(running_importer_);
 
-  // Initialize default model root from file browser if current settings are
-  // empty
-  if (file_browser_) {
-    auto s = settings_->GetExplorerSettings();
-    if (s.model_root.empty()) {
-      const auto defaults = file_browser_->GetContentRoots();
-      s.model_root = defaults.dcc_directory;
-      LOG_F(INFO, "ContentVm: Initializing default model root to: '{}'",
-        s.model_root.string());
-      settings_->SetExplorerSettings(s);
-    }
-  }
-
-  RefreshLibrary();
+  LoadScratchMounts();
 }
 
 ContentVm::~ContentVm()
@@ -140,1080 +90,18 @@ ContentVm::~ContentVm()
   }
 }
 
-auto ContentVm::Update() -> void
+// --- Host ---
+
+auto ContentVm::SetOnMountsRequested(
+  std::function<void(std::vector<content::ContentMount>)> callback) -> void
 {
-  // Dismiss the scene-load message five seconds after the load finished.
-  if (import_state_.scene_load_finish_time) {
-    auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration_cast<std::chrono::seconds>(
-          now - *import_state_.scene_load_finish_time)
-          .count()
-      >= 5) {
-      import_state_.scene_load_finish_time.reset();
-      import_state_.scene_load_message.clear();
-    }
-  }
-
-  if (!import_state_.completion_ready.load(std::memory_order_relaxed)) {
-    TryResolvePendingSceneSelection();
-    return;
-  }
-
-  std::optional<content::import::ImportReport> report;
-  std::string completion_error;
-  {
-    std::scoped_lock lock(import_state_.completion_mutex);
-    report = import_state_.completion_report;
-    completion_error = import_state_.completion_error;
-    import_state_.completion_report.reset();
-    import_state_.completion_error.clear();
-  }
-
-  const auto import_path = import_state_.current_path;
-
-  import_state_.completion_ready.store(false, std::memory_order_relaxed);
-  import_state_.cancel_requested.store(false, std::memory_order_relaxed);
-  import_state_.current_path.clear();
-  import_state_.job_id = content::import::kInvalidJobId;
-  import_state_.is_importing.store(false, std::memory_order_relaxed);
-
-  if (!completion_error.empty()) {
-    LOG_F(ERROR, "ContentVm: Import failed with error: {}", completion_error);
-    AddDiagnosticMarker("Import: " + import_path + " (Failed)", false);
-  } else if (report) {
-    LOG_F(INFO,
-      "ContentVm: Import job completed. Success: {}. Materials: {}. Geometry: "
-      "{}. Scenes: {}.",
-      report->success, report->materials_written, report->geometry_written,
-      report->scenes_written);
-
-    {
-      std::scoped_lock lock(import_state_.progress_mutex);
-      import_state_.diagnostics.insert(import_state_.diagnostics.end(),
-        report->diagnostics.begin(), report->diagnostics.end());
-    }
-    std::string label = "Import: " + import_path;
-    AddDiagnosticMarker(
-      label + (report->success ? " (Completed)" : " (Failed)"), false);
-
-    if (report->success) {
-      // Logic to extract scenes from the newly imported content
-      const auto index_path = report->cooked_root / "container.index.bin";
-
-      try {
-        LOG_F(INFO, "ContentVm: Inspecting imported index: '{}'",
-          index_path.string());
-        const auto inspection = content::cooked::CookedContent::Open(
-          content::cooked::RealCookerStorage(), report->cooked_root);
-
-        int scene_count = 0;
-        std::vector<SceneEntry> imported_scenes;
-        std::unordered_map<std::string, SceneEntry> scene_by_virtual_path;
-        const SceneSource source {
-          .kind = SceneSourceKind::kLooseIndex,
-          .path = index_path,
-        };
-        {
-          std::scoped_lock data_lock(data_mutex_);
-          if (report->model_record_path
-            && std::ranges::find(
-                 loaded_import_records_, *report->model_record_path)
-              == loaded_import_records_.end()) {
-            loaded_import_records_.push_back(*report->model_record_path);
-            settings_->SetMountedImportRecords(loaded_import_records_);
-          }
-          if (report->previous_cooked_root) {
-            const auto previous_index = runtime::NormalizePath(
-              *report->previous_cooked_root / "container.index.bin");
-            std::erase_if(scenes_map_, [&](const auto& entry) -> auto {
-              return entry.second.source.kind == SceneSourceKind::kLooseIndex
-                && runtime::NormalizePath(entry.second.source.path)
-                == previous_index;
-            });
-            std::erase(loaded_indices_, previous_index);
-          }
-          for (const auto& asset : inspection.Assets()) {
-            if (asset.type == data::AssetType::kScene) {
-              const SceneEntry entry {
-                .name = asset.virtual_path,
-                .key = asset.key,
-                .source = source,
-              };
-              scenes_map_[MakeSceneEntryKey(entry)] = entry;
-              scene_count++;
-              scene_by_virtual_path.emplace(asset.virtual_path, entry);
-            }
-          }
-
-          RebuildSceneList(scenes_map_, available_scenes_);
-        }
-        LOG_F(INFO, "ContentVm: Discovered {} new scenes in imported content.",
-          scene_count);
-
-        // Notify engine about the new index so it can be mounted for loading
-        {
-          std::scoped_lock data_lock(data_mutex_);
-          if (std::ranges::find(loaded_indices_, index_path)
-            == loaded_indices_.end()) {
-            loaded_indices_.push_back(index_path);
-          }
-        }
-        if (report->model_record_path) {
-          MountGeneration(GenerationPublication {
-            .cooked_root = report->cooked_root,
-            .previous_root = report->previous_cooked_root,
-          });
-        } else if (on_index_loaded_) {
-          on_index_loaded_(index_path);
-        }
-
-        if (settings_->GetExplorerSettings().auto_load_on_import
-          && scene_count > 0) {
-          for (const auto& product : report->products) {
-            const auto it = scene_by_virtual_path.find(product.virtual_path);
-            if (it != scene_by_virtual_path.end()) {
-              imported_scenes.push_back(it->second);
-            }
-          }
-
-          if (!imported_scenes.empty()) {
-            const auto& imported_scene = imported_scenes.back();
-            LOG_F(INFO, "ContentVm: Auto-loading imported scene: '{}'",
-              imported_scene.name);
-            RequestSceneLoad(imported_scene);
-          } else if (!available_scenes_.empty()) {
-            const auto& fallback_scene = available_scenes_.back();
-            LOG_F(INFO, "ContentVm: Auto-loading latest scene: '{}'",
-              fallback_scene.name);
-            RequestSceneLoad(fallback_scene);
-          }
-        }
-      } catch (const std::exception& ex) {
-        LOG_F(WARNING, "ContentVm: Failed to inspect imported assets: {}",
-          ex.what());
-      }
-    }
-  }
-}
-
-//! The source mounts of the app's scratch project: the examples project's
-//! `Content` folder, and the local mounts a developer's `.mounts.json` files at
-//! or above the scratch project add, such as a downloads folder. A model's
-//! recorded source is its mount path.
-//! The writable mount of the scratch project, which holds its records.
-constexpr auto kScratchMount = std::string_view { "Scratch" };
-
-//! The scratch project's mounts: its own `Scratch` mount, where its records
-//! live, and the examples' read-only `Content` mount its sources come from.
-auto ScratchMounts(const std::filesystem::path& scratch_root,
-  const std::filesystem::path& examples_root) -> content::import::MountTable
-{
-  using content::import::MountDeclaration;
-  std::filesystem::create_directories(scratch_root / kScratchMount);
-  auto mounts = content::import::ResolveMountTable({
-    .project_root = scratch_root,
-    .declarations = {
-      MountDeclaration {
-        .name = std::string { kScratchMount },
-        .kind = content::import::MountKind::kSource,
-        .path = std::string { kScratchMount },
-      },
-      MountDeclaration {
-        .name = "Content",
-        .kind = content::import::MountKind::kSource,
-        .path = (examples_root / "Content")
-                  .lexically_relative(scratch_root)
-                  .generic_string(),
-      },
-    },
-    .form = content::import::MountDeclarationForm::kCommittedFile,
-    .declared_in = "DemoShell scratch project",
-    .working_directory = scratch_root,
-    .mounts_option = std::nullopt,
-    .owner = content::import::MountTableOwner::kProject,
-  });
-  if (!mounts.IsValid()) {
-    throw std::runtime_error("The scratch project's mounts are invalid: "
-      + mounts.diagnostics.front().message);
-  }
-  return mounts;
-}
-
-//! The identity of a scratch import of a source: in the `Scratch` mount, at
-//! the source's path below the examples' source media.
-auto ScratchModelVirtualPath(const std::string_view source_mount_path)
-  -> std::string
-{
-  constexpr auto kSourceMedia = std::string_view { "/Content/SourceMedia/" };
-  const auto relative = source_mount_path.starts_with(kSourceMedia)
-    ? source_mount_path.substr(kSourceMedia.size())
-    : source_mount_path.substr(1);
-  return "/" + std::string(kScratchMount) + "/" + std::string(relative);
-}
-
-auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
-{
-  if (IsImportInProgress()) {
-    return;
-  }
-
-  import_state_.current_path = source_path.string();
-  import_state_.is_importing.store(true, std::memory_order_relaxed);
-  import_state_.cancel_requested.store(false, std::memory_order_relaxed);
-  import_state_.completion_ready.store(false, std::memory_order_relaxed);
-
-  AddDiagnosticMarker("Import: " + source_path.string() + " (Started)", true);
-
-  LOG_F(INFO, "ContentVm: Starting import of '{}'", source_path.string());
-
-  try {
-    if (!file_browser_) {
-      throw std::logic_error("App-owned Content roots are unavailable");
-    }
-    auto options = settings_->GetImportOptions();
-    options.texture_tuning = settings_->GetTextureTuning();
-    auto model = content::import::SceneImportSettings::FromOptions(options);
-    model.source_path = source_path.string();
-    // Ad-hoc imports keep their records and generations in the app's scratch
-    // project, never in the examples project; their sources resolve through
-    // the scratch project's mounts.
-    const auto roots = file_browser_->GetContentRoots();
-    if (roots.scratch_root.empty()) {
-      throw std::logic_error("This app has no scratch project for imports");
-    }
-    std::filesystem::create_directories(roots.scratch_root);
-    const auto mounts = ScratchMounts(roots.scratch_root, roots.content_root);
-    auto located = std::vector<content::import::ImportDiagnostic> {};
-    const auto source = mounts.MountPathOf(source_path, located);
-    if (!source.has_value()) {
-      throw std::runtime_error(located.front().message
-        + "; add a local mount for its folder to a .mounts.json at or above "
-        + roots.scratch_root.generic_string());
-    }
-    model.virtual_path = ScratchModelVirtualPath(source->mount_path);
-    auto location = content::import::ModelImportRecord::LocateRecord({
-      .source = source_path,
-      .identity = model.virtual_path,
-      .mounts = make_observer(&mounts),
-    });
-    content::import::ModelImportRecord::Save({
-      .record_path = location.record_path,
-      .source = source_path,
-      .settings_json = content::import::ModelImportRecord::MakeSettings(model),
-      .mounts = make_observer(&mounts),
-    });
-    auto publication
-      = content::import::ModelImportRecord::Prepare(location.record_path,
-        GeneratedStorage(), mounts, std::move(location.diagnostics));
-    const auto job_id = import_service_->SubmitModelImport(
-      std::move(publication),
-      [this](content::import::ImportJobId id,
-        const content::import::ImportReport& report) -> void {
-        OnImportComplete(id, report);
-      },
-      [this](const content::import::ProgressEvent& progress) -> void {
-        OnImportProgress(progress);
-      });
-    if (!job_id) {
-      throw std::runtime_error("Import service could not accept this request");
-    }
-    import_state_.job_id = *job_id;
-  } catch (const std::exception& error) {
-    import_state_.is_importing.store(false);
-    AddDiagnosticMarker(std::string("Import failed: ") + error.what(), false);
-    LOG_F(ERROR, "Content import failed: {}", error.what());
-  }
-}
-
-auto ContentVm::CancelActiveImport() -> void
-{
-  if (!IsImportInProgress()) {
-    return;
-  }
-  import_state_.cancel_requested = true;
-  // False means the job already finished; its completion ends the import.
-  static_cast<void>(import_service_->CancelJob(import_state_.job_id));
-}
-
-auto ContentVm::BrowseForModelRoot() -> void
-{
-  if (!file_browser_) {
-    return;
-  }
-  auto config
-    = MakeModelDirectoryBrowserConfig(file_browser_->GetContentRoots());
-  const auto s = settings_->GetExplorerSettings();
-  if (!s.model_root.empty()) {
-    config.initial_directory = s.model_root;
-  }
-  browse_request_id_ = file_browser_->Open(config);
-  browse_target_ = BrowseTarget::kModelRoot;
-}
-
-auto ContentVm::BrowseForSourceFile() -> void
-{
-  if (!file_browser_) {
-    return;
-  }
-  auto config = MakeModelFileBrowserConfig(file_browser_->GetContentRoots());
-  const auto s = settings_->GetExplorerSettings();
-  if (!s.model_root.empty()) {
-    config.initial_directory = s.model_root;
-  }
-  browse_request_id_ = file_browser_->Open(config);
-  browse_target_ = BrowseTarget::kSourceFile;
-}
-
-auto ContentVm::IsImportInProgress() const -> bool
-{
-  return import_state_.is_importing.load();
-}
-auto ContentVm::GetActiveImportPath() const -> std::string
-{
-  return import_state_.current_path;
-}
-
-auto ContentVm::GetActiveImportProgress() const -> float
-{
-  std::scoped_lock lock(import_state_.progress_mutex);
-  return import_state_.progress.header.overall_progress;
-}
-
-auto ContentVm::GetActiveImportMessage() const -> std::string
-{
-  std::scoped_lock lock(import_state_.progress_mutex);
-  return import_state_.progress.header.message;
-}
-
-auto ContentVm::RefreshSources() -> void
-{
-  const auto s = settings_->GetExplorerSettings();
-  std::vector<ContentSource> sources;
-
-  LOG_F(INFO, "ContentVm: Refreshing sources. Model root: '{}'",
-    s.model_root.string());
-
-  // A saved root can outlive the folder it named (content moves); scan the
-  // default DCC folder instead, without overwriting the saved choice.
-  auto root = s.model_root;
-  std::error_code ec;
-  if (!root.empty() && file_browser_
-    && !std::filesystem::exists(base::ToNativePath(root), ec) && !ec) {
-    const auto fallback = file_browser_->GetContentRoots().dcc_directory;
-    LOG_F(WARNING,
-      "ContentVm: Model root does not exist: '{}'; scanning the default '{}'",
-      root.string(), fallback.string());
-    root = fallback;
-  }
-  if (root.empty()) {
-    LOG_F(WARNING, "ContentVm: Model root is empty. No sources will be found.");
-  } else if (!std::filesystem::exists(base::ToNativePath(root), ec)) {
-    if (ec) {
-      LOG_F(WARNING, "ContentVm: Cannot check model root '{}': {}",
-        root.string(), ec.message());
-    } else {
-      LOG_F(
-        WARNING, "ContentVm: Model root does not exist: '{}'", root.string());
-    }
-  } else if (!std::filesystem::is_directory(base::ToNativePath(root), ec)) {
-    if (ec) {
-      LOG_F(WARNING, "ContentVm: Cannot check model root '{}': {}",
-        root.string(), ec.message());
-    } else {
-      LOG_F(WARNING, "ContentVm: Model root is not a directory: '{}'",
-        root.string());
-    }
-  } else {
-    LOG_F(INFO, "ContentVm: Scanning model root for FBX/GLB/GLTF files...");
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(
-           base::ToNativePath(root), ec)) {
-      if (ec) {
-        LOG_F(ERROR, "ContentVm: Error during iteration at '{}': {}",
-          entry.path().string(), ec.message());
-        ec.clear(); // Clear so we can potentially continue or at least not fail
-                    // the whole function
-        continue;
-      }
-      if (!entry.is_regular_file()) {
-        continue;
-      }
-
-      const auto ext = entry.path().extension().string();
-      const bool included = (s.include_fbx && ext == ".fbx")
-        || (s.include_glb && ext == ".glb")
-        || (s.include_gltf && ext == ".gltf");
-      if (!included) {
-        continue;
-      }
-      const auto path = base::ToLogicalPath(entry.path());
-      sources.push_back({
-        .path = path,
-        .relative_path = path.lexically_relative(root).generic_string(),
-        .format = ext == ".fbx" ? content::import::ImportFormat::kFbx
-                                : content::import::ImportFormat::kGltf,
-      });
-      DLOG_F(INFO, "ContentVm: Found source: {}", entry.path().string());
-    }
-    if (ec) {
-      LOG_F(ERROR, "ContentVm: Iteration ended with error: {}", ec.message());
-    }
-    LOG_F(
-      INFO, "ContentVm: Discovery complete. Found {} sources.", sources.size());
-  }
-
-  std::scoped_lock lock(data_mutex_);
-  cached_sources_ = std::move(sources);
-}
-
-auto ContentVm::GetSources() const -> const std::vector<ContentSource>&
-{
-  return cached_sources_;
-}
-
-auto ContentVm::RefreshLibrary() -> void
-{
-  const auto roots = file_browser_->GetContentRoots();
-  std::vector<std::filesystem::path> paks;
-
-  std::error_code ec;
-  if (std::filesystem::is_directory(
-        base::ToNativePath(roots.pak_directory), ec)) {
-    for (const auto& entry : std::filesystem::directory_iterator(
-           base::ToNativePath(roots.pak_directory), ec)) {
-      if (entry.path().extension() == ".pak") {
-        paks.push_back(base::ToLogicalPath(entry.path()));
-      }
-    }
-  }
-
-  std::unordered_map<SceneEntryKey, SceneEntry, SceneEntryKeyHash,
-    SceneEntryKeyEq>
-    runtime_scenes {};
-  std::vector<std::filesystem::path> runtime_loaded_paks;
-  std::vector<std::filesystem::path> runtime_loaded_indices;
-  if (asset_loader_) {
-    for (const auto& mounted_source :
-      asset_loader_->EnumerateMountedSources()) {
-      if (mounted_source.source_kind
-        == content::IAssetLoader::ContentSourceKind::kPak) {
-        runtime_loaded_paks.push_back(mounted_source.source_path);
-      } else {
-        runtime_loaded_indices.push_back(
-          mounted_source.source_path / "container.index.bin");
-      }
-    }
-    for (const auto& mounted_scene : asset_loader_->EnumerateMountedScenes()) {
-      std::filesystem::path scene_source_path = mounted_scene.source_path;
-      if (mounted_scene.source_kind
-        == content::IAssetLoader::ContentSourceKind::kLooseCooked) {
-        scene_source_path /= "container.index.bin";
-      }
-      const SceneSource source {
-        .kind = mounted_scene.source_kind
-            == content::IAssetLoader::ContentSourceKind::kPak
-          ? SceneSourceKind::kPak
-          : SceneSourceKind::kLooseIndex,
-        .path = std::move(scene_source_path),
-      };
-      std::string scene_name;
-      if (!mounted_scene.virtual_path.empty()) {
-        scene_name = mounted_scene.virtual_path;
-      } else if (!mounted_scene.display_name.empty()) {
-        scene_name = mounted_scene.display_name;
-      } else {
-        scene_name = "Scene (No Name)";
-      }
-      const SceneEntry scene_entry {
-        .name = std::move(scene_name),
-        .key = mounted_scene.scene_key,
-        .source = source,
-      };
-      runtime_scenes[MakeSceneEntryKey(scene_entry)] = scene_entry;
-    }
-  }
-
-  {
-    std::scoped_lock lock(data_mutex_);
-    discovered_paks_ = std::move(paks);
-    loaded_paks_ = std::move(runtime_loaded_paks);
-    loaded_indices_ = std::move(runtime_loaded_indices);
-    scenes_map_ = std::move(runtime_scenes);
-    RebuildSceneList(scenes_map_, available_scenes_);
-  }
-  TryResolvePendingSceneSelection();
-}
-
-auto ContentVm::SetOnPakMounted(
-  std::function<void(const std::filesystem::path&)> callback) -> void
-{
-  on_pak_mounted_ = std::move(callback);
-}
-auto ContentVm::SetOnIndexLoaded(
-  std::function<void(const std::filesystem::path&)> callback) -> void
-{
-  on_index_loaded_ = std::move(callback);
+  on_mounts_requested_ = std::move(callback);
 }
 
 auto ContentVm::SetOnGenerationPublished(
-  std::function<void(const GenerationPublication&)> callback) -> void
+  std::function<void(const runtime::GenerationPublication&)> callback) -> void
 {
   on_generation_published_ = std::move(callback);
-}
-
-auto ContentVm::SetOnClearMounts(std::function<void()> callback) -> void
-{
-  on_clear_mounts_ = std::move(callback);
-}
-
-auto ContentVm::MountPak(const std::filesystem::path& path) -> void
-{
-  const auto normalized = runtime::NormalizePath(path);
-  if (on_pak_mounted_) {
-    on_pak_mounted_(normalized);
-  } else if (asset_loader_) {
-    asset_loader_->AddPakFile(normalized);
-    RefreshLibrary();
-    PersistMountedSources();
-  }
-}
-
-auto ContentVm::LoadIndex(const std::filesystem::path& path) -> void
-{
-  try {
-    std::error_code ec;
-    const bool is_dir
-      = std::filesystem::is_directory(base::ToNativePath(path), ec);
-    if (ec) {
-      LOG_F(WARNING,
-        "ContentVm: Failed to stat index path '{}': {} (treating as file)",
-        path.string(), ec.message());
-    }
-
-    std::filesystem::path index_path = path;
-    if (!ec && is_dir) {
-      LOG_F(INFO, "ContentVm: Loading loose cooked root '{}'", path.string());
-      index_path = path / "container.index.bin";
-    } else {
-      LOG_F(INFO, "ContentVm: Loading loose cooked index '{}'", path.string());
-    }
-    if (std::filesystem::exists(base::ToNativePath(index_path.parent_path()
-          / data::loose_cooked::kGenerationLeaseFileName))) {
-      if (const auto record = FindModelImportRecord(index_path)) {
-        LoadImportRecord(*record);
-      } else {
-        AddDiagnosticMarker(
-          "Select this library's authored .import.json record.", false);
-      }
-      return;
-    }
-    if (on_index_loaded_) {
-      on_index_loaded_(index_path);
-    } else if (asset_loader_) {
-      const auto loose_root = (!ec && is_dir) ? path : path.parent_path();
-      asset_loader_->AddLooseCookedRoot(loose_root);
-      RefreshLibrary();
-      PersistMountedSources();
-    }
-  } catch (const std::exception& ex) {
-    LOG_F(ERROR, "ContentVm: Failed to load index '{}': {}", path.string(),
-      ex.what());
-  }
-}
-
-auto ContentVm::MountGeneration(const GenerationPublication& publication)
-  -> void
-{
-  if (on_generation_published_) {
-    on_generation_published_(publication);
-  } else if (asset_loader_) {
-    std::optional<data::SourceKey> previous;
-    std::vector<data::SourceKey> older;
-    bool selected_is_mounted = false;
-    const auto selected = runtime::NormalizePath(publication.cooked_root);
-    for (const auto& source : asset_loader_->EnumerateMountedSources()) {
-      const auto mounted = runtime::NormalizePath(source.source_path);
-      if (source.source_kind
-          == content::IAssetLoader::ContentSourceKind::kLooseCooked
-        && mounted == selected) {
-        selected_is_mounted = true;
-      } else if (source.source_kind
-          == content::IAssetLoader::ContentSourceKind::kLooseCooked
-        && mounted.parent_path() == selected.parent_path()) {
-        previous = source.source_key;
-        older.push_back(source.source_key);
-      }
-    }
-    if (selected_is_mounted) {
-      previous.reset();
-    }
-    static_cast<void>(asset_loader_->MountLooseCookedGeneration(
-      publication.cooked_root, previous));
-    for (const auto key : older) {
-      if (!previous || key != *previous) {
-        static_cast<void>(asset_loader_->RetireLooseCookedGeneration(key));
-      }
-    }
-    RefreshLibrary();
-    PersistMountedSources();
-  }
-}
-
-auto ContentVm::LoadImportRecord(const std::filesystem::path& path) -> void
-{
-  try {
-    const auto record = runtime::NormalizePath(path);
-    const auto root = content::import::ModelImportRecord::SelectedGeneration(
-      record, GeneratedStorage());
-    if (!root
-      || !std::filesystem::exists(
-        base::ToNativePath(*root / "container.index.bin"))) {
-      AddDiagnosticMarker(
-        "Model import needs recooking: " + record.string(), false);
-      return;
-    }
-    MountGeneration(
-      GenerationPublication { .cooked_root = *root, .previous_root = {} });
-    if (std::ranges::find(loaded_import_records_, record)
-      == loaded_import_records_.end()) {
-      loaded_import_records_.push_back(record);
-    }
-    settings_->SetMountedImportRecords(loaded_import_records_);
-  } catch (const std::exception& error) {
-    AddDiagnosticMarker(
-      std::string("Model import unavailable: ") + error.what(), false);
-  }
-}
-
-auto ContentVm::UnloadAllLibrary() -> void
-{
-  {
-    std::scoped_lock lock(data_mutex_);
-    loaded_paks_.clear();
-    loaded_indices_.clear();
-    loaded_import_records_.clear();
-    scenes_map_.clear();
-    available_scenes_.clear();
-  }
-
-  if (settings_) {
-    settings_->SetMountedPakPaths({});
-    settings_->SetMountedIndexPaths({});
-    settings_->SetMountedImportRecords({});
-    settings_->SetActiveSceneSelection(std::nullopt);
-  }
-
-  if (on_clear_mounts_) {
-    on_clear_mounts_();
-  } else if (asset_loader_) {
-    asset_loader_->ClearMounts();
-  }
-}
-
-auto ContentVm::RestorePersistedLibraryState() -> void
-{
-  if (persisted_library_state_restored_) {
-    return;
-  }
-
-  if (!settings_) {
-    return;
-  }
-
-  persisted_library_state_restored_ = true;
-
-  // Mount callbacks may persist the current partial library immediately.
-  const auto paks = settings_->GetMountedPakPaths();
-  const auto indices = settings_->GetMountedIndexPaths();
-  loaded_import_records_ = settings_->GetMountedImportRecords();
-  const auto selection = settings_->GetActiveSceneSelection();
-  for (const auto& pak_path : paks) {
-    if (!pak_path.empty()) {
-      MountPak(pak_path);
-    }
-  }
-  for (const auto& index_path : indices) {
-    if (!index_path.empty()) {
-      LoadIndex(index_path);
-    }
-  }
-  const auto records = loaded_import_records_;
-  for (const auto& record : records) {
-    LoadImportRecord(record);
-  }
-
-  RefreshLibrary();
-
-  if (!selection.has_value()) {
-    return;
-  }
-  pending_scene_selection_restore_ = selection;
-  if (!pending_scene_selection_restore_->import_record_path.empty()) {
-    try {
-      if (const auto root
-        = content::import::ModelImportRecord::SelectedGeneration(
-          pending_scene_selection_restore_->import_record_path,
-          GeneratedStorage())) {
-        pending_scene_selection_restore_->source_path
-          = *root / "container.index.bin";
-        pending_scene_selection_restore_->source_is_pak = false;
-      }
-    } catch (const std::exception& error) {
-      AddDiagnosticMarker(
-        std::string("Model import needs attention: ") + error.what(), false);
-    }
-  }
-  TryResolvePendingSceneSelection();
-}
-
-auto ContentVm::PersistLibraryState() -> void { PersistMountedSources(); }
-
-auto ContentVm::PrunePersistedMountedSource(
-  const SceneSourceKind source_kind, const std::filesystem::path& path) -> void
-{
-  if (!settings_ || path.empty()) {
-    return;
-  }
-
-  // A failed generation mount does not remove the authored library intent.
-  // Model import records remain retryable until the user explicitly clears
-  // them.
-  if (source_kind == SceneSourceKind::kLooseIndex
-    && FindModelImportRecord(path).has_value()) {
-    return;
-  }
-
-  const auto normalized_target = NormalizePathForKey(path);
-  auto remove_matching_path
-    = [&normalized_target](std::vector<std::filesystem::path>& paths) -> bool {
-    const auto original_size = paths.size();
-    std::erase_if(
-      paths, [&normalized_target](const std::filesystem::path& entry) -> bool {
-        return NormalizePathForKey(entry) == normalized_target;
-      });
-    return paths.size() != original_size;
-  };
-
-  auto removed = false;
-  if (source_kind == SceneSourceKind::kPak) {
-    auto pak_paths = settings_->GetMountedPakPaths();
-    removed = remove_matching_path(pak_paths);
-    if (removed) {
-      settings_->SetMountedPakPaths(pak_paths);
-    }
-  } else {
-    auto index_paths = settings_->GetMountedIndexPaths();
-    removed = remove_matching_path(index_paths) || removed;
-    if (removed) {
-      settings_->SetMountedIndexPaths(index_paths);
-    }
-  }
-
-  if (removed) {
-    PruneActiveSceneSelectionForSource(source_kind, path);
-  }
-}
-
-auto ContentVm::GetDiscoveredPaks() const
-  -> const std::vector<std::filesystem::path>&
-{
-  return discovered_paks_;
-}
-auto ContentVm::GetLoadedPaks() const
-  -> const std::vector<std::filesystem::path>&
-{
-  return loaded_paks_;
-}
-auto ContentVm::GetLoadedIndices() const
-  -> const std::vector<std::filesystem::path>&
-{
-  return loaded_indices_;
-}
-
-auto ContentVm::BrowseForPak() -> void
-{
-  if (!file_browser_) {
-    return;
-  }
-  auto config = MakePakFileBrowserConfig(file_browser_->GetContentRoots());
-  browse_request_id_ = file_browser_->Open(config);
-  browse_target_ = BrowseTarget::kPakFile;
-}
-
-auto ContentVm::BrowseForLibrary() -> void
-{
-  if (!file_browser_) {
-    return;
-  }
-  auto config = MakeLibraryBrowserConfig(file_browser_->GetContentRoots());
-  browse_request_id_ = file_browser_->Open(config);
-  browse_target_ = BrowseTarget::kLibraryFile;
-}
-
-auto ContentVm::GetAvailableScenes() const -> const std::vector<SceneEntry>&
-{
-  return available_scenes_;
-}
-
-auto ContentVm::RequestSceneLoad(const SceneEntry& entry) -> void
-{
-  if (IsSceneLoading()) {
-    LOG_F(WARNING, "ContentVm: Scene load already in progress");
-    return;
-  }
-  if (on_scene_load_requested_) {
-    PersistActiveSceneSelection(entry);
-    const auto scene_name = entry.name;
-    {
-      std::scoped_lock lock(import_state_.progress_mutex);
-      import_state_.is_scene_loading = true;
-      import_state_.scene_load_progress = 0.0F;
-      import_state_.scene_load_message = "Loading scene: " + scene_name;
-      import_state_.scene_load_label = scene_name;
-      import_state_.scene_load_key = entry.key;
-      import_state_.scene_load_finish_time.reset();
-    }
-
-    AddDiagnosticMarker("Load Scene: " + scene_name + " (Started)", true);
-    on_scene_load_requested_(entry);
-  }
-}
-
-auto ContentVm::PersistMountedSources() -> void
-{
-  if (!settings_) {
-    return;
-  }
-
-  std::vector<std::filesystem::path> paks;
-  std::vector<std::filesystem::path> indices;
-  std::vector<std::filesystem::path> all_indices;
-  if (asset_loader_) {
-    for (const auto& mounted_source :
-      asset_loader_->EnumerateMountedSources()) {
-      if (mounted_source.source_kind
-        == content::IAssetLoader::ContentSourceKind::kPak) {
-        paks.push_back(mounted_source.source_path);
-      } else {
-        const auto index = mounted_source.source_path / "container.index.bin";
-        all_indices.push_back(index);
-        if (!std::filesystem::exists(
-              base::ToNativePath(mounted_source.source_path
-                / data::loose_cooked::kGenerationLeaseFileName))) {
-          indices.push_back(index);
-        }
-      }
-    }
-    {
-      std::scoped_lock lock(data_mutex_);
-      loaded_paks_ = paks;
-      loaded_indices_ = std::move(all_indices);
-    }
-  } else {
-    std::scoped_lock lock(data_mutex_);
-    paks = loaded_paks_;
-    indices = loaded_indices_;
-  }
-  settings_->SetMountedPakPaths(paks);
-  settings_->SetMountedIndexPaths(indices);
-  settings_->SetMountedImportRecords(loaded_import_records_);
-}
-
-auto ContentVm::FindModelImportRecord(const std::filesystem::path& index_path)
-  -> std::optional<std::filesystem::path>
-{
-  const auto generation_parent
-    = runtime::NormalizePath(index_path).parent_path().parent_path();
-  for (const auto& record : loaded_import_records_) {
-    try {
-      const auto selected
-        = content::import::ModelImportRecord::SelectedGeneration(
-          record, GeneratedStorage());
-      if (selected
-        && runtime::NormalizePath(*selected).parent_path()
-          == generation_parent) {
-        return record;
-      }
-    } catch (const std::exception& error) {
-      AddDiagnosticMarker(
-        std::string("Model import unavailable: ") + error.what(), false);
-    }
-  }
-  return std::nullopt;
-}
-
-auto ContentVm::PersistActiveSceneSelection(const SceneEntry& entry) -> void
-{
-  if (!settings_) {
-    return;
-  }
-
-  const auto import_record = entry.source.kind == SceneSourceKind::kLooseIndex
-    ? FindModelImportRecord(entry.source.path)
-    : std::nullopt;
-  settings_->SetActiveSceneSelection(ContentActiveSceneSelection {
-    .scene_name = entry.name,
-    .scene_key = nostd::to_string(entry.key),
-    .source_path = entry.source.path,
-    .source_is_pak = entry.source.kind == SceneSourceKind::kPak,
-    .import_record_path = import_record.value_or(std::filesystem::path {}),
-  });
-}
-
-auto ContentVm::PruneActiveSceneSelectionForSource(
-  const SceneSourceKind source_kind, const std::filesystem::path& path) -> void
-{
-  if (!settings_ || path.empty()) {
-    return;
-  }
-
-  const auto selection = settings_->GetActiveSceneSelection();
-  if (!selection.has_value()) {
-    return;
-  }
-
-  const auto matches_kind
-    = selection->source_is_pak == (source_kind == SceneSourceKind::kPak);
-  if (!matches_kind) {
-    return;
-  }
-
-  if (NormalizePathForKey(selection->source_path)
-    != NormalizePathForKey(path)) {
-    return;
-  }
-
-  settings_->SetActiveSceneSelection(std::nullopt);
-  pending_scene_selection_restore_.reset();
-}
-
-auto ContentVm::TryResolvePendingSceneSelection() -> void
-{
-  if (!pending_scene_selection_restore_.has_value()) {
-    return;
-  }
-
-  const auto& selection = *pending_scene_selection_restore_;
-  const auto desired_kind = selection.source_is_pak
-    ? SceneSourceKind::kPak
-    : SceneSourceKind::kLooseIndex;
-  const auto desired_path = NormalizePathForKey(selection.source_path);
-
-  std::optional<SceneEntry> match;
-  {
-    std::scoped_lock lock(data_mutex_);
-    for (const auto& scene : available_scenes_) {
-      if (scene.source.kind != desired_kind) {
-        continue;
-      }
-      if (NormalizePathForKey(scene.source.path) != desired_path) {
-        continue;
-      }
-      if (!selection.scene_key.empty()
-        && nostd::to_string(scene.key) != selection.scene_key) {
-        continue;
-      }
-      if (selection.scene_key.empty()
-        && (selection.scene_name.empty()
-          || scene.name != selection.scene_name)) {
-        continue;
-      }
-      match = scene;
-      break;
-    }
-  }
-
-  if (!match.has_value()) {
-    return;
-  }
-  pending_scene_selection_restore_.reset();
-  RequestSceneLoad(*match);
-}
-
-auto ContentVm::IsSceneLoading() const -> bool
-{
-  return import_state_.is_scene_loading;
-}
-auto ContentVm::GetSceneLoadProgress() const -> float
-{
-  return import_state_.scene_load_progress;
-}
-auto ContentVm::GetSceneLoadMessage() const -> std::string
-{
-  std::scoped_lock lock(import_state_.progress_mutex);
-  return import_state_.scene_load_message;
-}
-auto ContentVm::ShouldShowSceneLoadProgress() const -> bool
-{
-  return import_state_.is_scene_loading
-    || !import_state_.scene_load_message.empty();
-}
-
-auto ContentVm::CancelSceneLoad() -> void
-{
-  if (!IsSceneLoading()) {
-    return;
-  }
-
-  if (on_scene_load_cancel_requested_) {
-    on_scene_load_cancel_requested_();
-  }
-
-  std::optional<data::AssetKey> scene_key;
-  std::string scene_label;
-  {
-    std::scoped_lock lock(import_state_.progress_mutex);
-    scene_key = import_state_.scene_load_key;
-    scene_label = import_state_.scene_load_label;
-  }
-  const auto scene_name
-    = scene_label.empty() ? ResolveSceneLabel(scene_key) : scene_label;
-  {
-    std::scoped_lock lock(import_state_.progress_mutex);
-    import_state_.is_scene_loading = false;
-    import_state_.scene_load_progress = 1.0F;
-    import_state_.scene_load_message = "Cancelled scene load: " + scene_name;
-    import_state_.scene_load_key.reset();
-    import_state_.scene_load_label.clear();
-    import_state_.scene_load_finish_time = std::chrono::steady_clock::now();
-  }
-  AddDiagnosticMarker("Load Scene: " + scene_name + " (Cancelled)", false);
-}
-
-auto ContentVm::NotifySceneLoadCompleted(
-  const data::AssetKey& key, bool success) -> void
-{
-  if (!IsSceneLoading()) {
-    return;
-  }
-
-  std::optional<data::AssetKey> active_key;
-  std::string scene_label;
-  {
-    std::scoped_lock lock(import_state_.progress_mutex);
-    active_key = import_state_.scene_load_key;
-    scene_label = import_state_.scene_load_label;
-  }
-  if (active_key.has_value() && *active_key != key) {
-    LOG_F(WARNING, "ContentVm: Ignoring scene completion for stale key");
-    return;
-  }
-
-  const auto scene_name
-    = scene_label.empty() ? ResolveSceneLabel(key) : scene_label;
-  {
-    std::scoped_lock lock(import_state_.progress_mutex);
-    import_state_.is_scene_loading = false;
-    import_state_.scene_load_progress = 1.0F;
-    import_state_.scene_load_message = success
-      ? "Loaded scene: " + scene_name
-      : "Failed to load scene: " + scene_name;
-    import_state_.scene_load_key.reset();
-    import_state_.scene_load_label.clear();
-    import_state_.scene_load_finish_time = std::chrono::steady_clock::now();
-  }
-  AddDiagnosticMarker(
-    "Load Scene: " + scene_name + (success ? " (Completed)" : " (Failed)"),
-    false);
 }
 
 auto ContentVm::SetOnSceneLoadRequested(
@@ -1228,96 +116,240 @@ auto ContentVm::SetOnSceneLoadCancelRequested(std::function<void()> callback)
   on_scene_load_cancel_requested_ = std::move(callback);
 }
 
-auto ContentVm::GeneratedStorage() const
-  -> content::import::ModelImportGenerations
+auto ContentVm::SetOnSceneUnloadRequested(std::function<void()> callback)
+  -> void
 {
-  return { .root = GetGeneratedStorageRoot() };
+  on_scene_unload_requested_ = std::move(callback);
 }
 
-auto ContentVm::GetGeneratedStorageRoot() const -> std::string
+auto ContentVm::RestorePersistedState() -> void
+{
+  if (restored_) {
+    return;
+  }
+  restored_ = true;
+  mounts_.SetAdded(settings_->GetMountSources());
+  ResolveRecords(settings_->GetMountedImportRecords());
+  scene_to_restore_ = settings_->GetLoadedScene();
+  RequestMounts();
+}
+
+auto ContentVm::Update() -> void
+{
+  if (remount_pending_ && !mounting_) {
+    remount_pending_ = false;
+    RequestMounts();
+  }
+  if (model_states_dirty_) {
+    model_states_dirty_ = false;
+    RefreshModelStates();
+  }
+
+  auto report = std::optional<content::import::ImportReport> {};
+  {
+    std::scoped_lock lock(import_.mutex);
+    report = std::exchange(import_.report, std::nullopt);
+  }
+  if (report) {
+    FinishImport(*report);
+  }
+}
+
+// --- Mounts ---
+
+auto ContentVm::AddSource(const ContentSourceSetting& source) -> void
+{
+  if (!mounts_.Add(source)) {
+    return;
+  }
+  PersistMounts();
+  RequestMounts();
+}
+
+auto ContentVm::RemoveSource(const std::size_t row) -> void
+{
+  if (!mounts_.Remove(row)) {
+    return;
+  }
+  PersistMounts();
+  RequestMounts();
+}
+
+auto ContentVm::MoveSource(const ContentMountList::RowMove move) -> void
+{
+  if (!mounts_.Move(move) || move.from == move.to) {
+    return;
+  }
+  PersistMounts();
+  RequestMounts();
+}
+
+auto ContentVm::Remount() -> void
+{
+  ResolveRecords(mounts_.Records());
+  RequestMounts();
+}
+
+auto ContentVm::SourceDetailsOf(const std::size_t row, std::string& error)
+  -> const SourceDetails*
+{
+  if (row >= mounts_.Rows().size()) {
+    error = "No such source";
+    return nullptr;
+  }
+  const auto& path = mounts_.Rows().at(row).path;
+  if (const auto found = details_.find(path); found != details_.end()) {
+    return &found->second;
+  }
+  if (const auto failed = details_errors_.find(path);
+    failed != details_errors_.end()) {
+    error = failed->second;
+    return nullptr;
+  }
+  try {
+    return &details_.emplace(path, ReadSourceDetails(path)).first->second;
+  } catch (const std::exception& read_error) {
+    error = details_errors_.emplace(path, read_error.what()).first->second;
+    return nullptr;
+  }
+}
+
+auto ContentVm::LoadScratchMounts() -> void
+{
+  if (file_browser_ && !file_browser_->GetContentRoots().scratch_root.empty()) {
+    try {
+      models_.SetMounts(MakeScratchMounts(file_browser_->GetContentRoots()));
+    } catch (const std::exception& error) {
+      log_.Add({
+        .severity = LogSeverity::kError,
+        .code = std::string(log_codes::kImportRecordUnavailable),
+        .message = error.what(),
+      });
+    }
+  }
+  RefreshModels();
+}
+
+auto ContentVm::LocalMounts() const -> std::filesystem::path
 {
   if (!file_browser_ || file_browser_->GetContentRoots().scratch_root.empty()) {
     return {};
   }
-  return (file_browser_->GetContentRoots().scratch_root / ".cooked"
-    / content::import::ModelImportRecord::kModelGenerationsFolder)
-    .string();
+  return LocalMountsFile(file_browser_->GetContentRoots().scratch_root);
 }
 
-auto ContentVm::GetExplorerSettings() const -> ContentExplorerSettings
+auto ContentVm::SourceFolders() const -> std::vector<SourceFolder>
 {
-  return settings_->GetExplorerSettings();
-}
-auto ContentVm::SetExplorerSettings(const ContentExplorerSettings& settings)
-  -> void
-{
-  settings_->SetExplorerSettings(settings);
-}
-
-auto ContentVm::GetImportOptions() const -> content::import::ImportOptions
-{
-  return settings_->GetImportOptions();
-}
-auto ContentVm::SetImportOptions(const content::import::ImportOptions& options)
-  -> void
-{
-  settings_->SetImportOptions(options);
-}
-
-auto ContentVm::GetTextureTuning() const
-  -> content::import::ImportOptions::TextureTuning
-{
-  return settings_->GetTextureTuning();
-}
-auto ContentVm::SetTextureTuning(
-  const content::import::ImportOptions::TextureTuning& tuning) -> void
-{
-  settings_->SetTextureTuning(tuning);
-}
-
-auto ContentVm::GetServiceConfig() const
-  -> content::import::AsyncImportService::Config
-{
-  return service_config_;
-}
-auto ContentVm::SetServiceConfig(
-  const content::import::AsyncImportService::Config& config) -> void
-{
-  service_config_ = config;
-}
-
-auto ContentVm::RestartImportService() -> void
-{
-  if (import_service_) {
-    import_service_->Stop();
+  const auto local = LocalMounts();
+  auto folders = std::vector<SourceFolder> {};
+  for (const auto& mount : models_.SourceMounts()) {
+    std::error_code error;
+    folders.push_back({
+      .name = mount.name,
+      .folder = mount.folder,
+      .removable = !mount.mounts_file.empty()
+        && std::filesystem::equivalent(mount.mounts_file, local, error),
+    });
   }
-  import_service_
-    = std::make_unique<content::import::AsyncImportService>(service_config_);
+  return folders;
 }
 
-auto ContentVm::AddDiagnosticMarker(const std::string& label, bool is_start)
-  -> void
+auto ContentVm::AddSourceFolder(const std::filesystem::path& folder)
+  -> std::optional<std::string>
 {
-  content::import::ImportDiagnostic diag;
-  diag.severity = content::import::ImportSeverity::kInfo;
-  diag.code = is_start ? "marker.start" : "marker.end";
-  diag.message = "--- " + label + " ---";
-
-  std::scoped_lock lock(import_state_.progress_mutex);
-  import_state_.diagnostics.push_back(std::move(diag));
+  const auto* mounts = models_.Mounts();
+  const auto file = LocalMounts();
+  try {
+    if (mounts == nullptr || file.empty()) {
+      throw std::runtime_error("Imports are unavailable: no scratch project");
+    }
+    const auto canonical = std::filesystem::canonical(folder);
+    if (!std::filesystem::is_directory(canonical)) {
+      throw std::runtime_error(canonical.string() + " is not a folder");
+    }
+    auto taken = std::vector<std::string> {};
+    for (const auto& mount : mounts->mounts) {
+      taken.push_back(mount.name);
+    }
+    auto name = SourceFolderMountName(canonical, taken);
+    AddLocalMount(file, name, canonical);
+    LoadScratchMounts();
+    log_.Add({
+      .severity = LogSeverity::kInfo,
+      .code = std::string(log_codes::kSourceFolderAdded),
+      .message = fmt::format("Mounted {} as /{}", canonical.string(), name),
+      .path = canonical.generic_string(),
+    });
+    return name;
+  } catch (const std::exception& error) {
+    log_.Add({
+      .severity = LogSeverity::kError,
+      .code = std::string(log_codes::kSourceFolderFailed),
+      .message = "The source folder was not added",
+      .details = error.what(),
+      .path = folder.generic_string(),
+    });
+    return std::nullopt;
+  }
 }
 
-auto ContentVm::GetDiagnostics() const
-  -> const std::vector<content::import::ImportDiagnostic>&
+auto ContentVm::RemoveSourceFolder(const std::string_view name) -> void
 {
-  std::scoped_lock lock(import_state_.progress_mutex);
-  return import_state_.diagnostics;
+  const auto folders = SourceFolders();
+  const auto found = std::ranges::find(folders, name, &SourceFolder::name);
+  if (found == folders.end() || !found->removable) {
+    return;
+  }
+  try {
+    RemoveLocalMount(LocalMounts(), name);
+  } catch (const std::exception& error) {
+    log_.Add({
+      .severity = LogSeverity::kError,
+      .code = std::string(log_codes::kSourceFolderFailed),
+      .message = fmt::format("/{} was not removed", name),
+      .details = error.what(),
+      .path = LocalMounts().generic_string(),
+    });
+    return;
+  }
+  LoadScratchMounts();
 }
 
-auto ContentVm::ClearDiagnostics() -> void
+auto ContentVm::BrowseForPak() -> void
 {
-  std::scoped_lock lock(import_state_.progress_mutex);
-  import_state_.diagnostics.clear();
+  if (file_browser_) {
+    OpenBrowser(MakePakFileBrowserConfig(file_browser_->GetContentRoots()),
+      BrowseTarget::kPakFile);
+  }
+}
+
+auto ContentVm::BrowseForCookedRoot() -> void
+{
+  if (file_browser_) {
+    OpenBrowser(MakeCookedRootBrowserConfig(file_browser_->GetContentRoots()),
+      BrowseTarget::kCookedRoot);
+  }
+}
+
+auto ContentVm::BrowseForSourceFolder() -> void
+{
+  if (file_browser_) {
+    OpenBrowser(MakeSourceFolderBrowserConfig(file_browser_->GetContentRoots()),
+      BrowseTarget::kSourceFolder);
+  }
+}
+
+auto ContentVm::BrowseForModelFile() -> void
+{
+  if (file_browser_) {
+    OpenBrowser(MakeModelFileBrowserConfig(file_browser_->GetContentRoots(),
+                  {
+                    std::string(kFbxExtension),
+                    std::string(kGlbExtension),
+                    std::string(kGltfExtension),
+                  }),
+      BrowseTarget::kModelFile);
+  }
 }
 
 auto ContentVm::ConsumeBrowseSelection() -> std::optional<BrowseSelection>
@@ -1338,67 +370,679 @@ auto ContentVm::ConsumeBrowseSelection() -> std::optional<BrowseSelection>
   return BrowseSelection { .target = target, .path = result->path };
 }
 
-auto ContentVm::SetModelRoot(const std::filesystem::path& root) -> void
+auto ContentVm::OnMountsApplied(const runtime::MountOutcome& outcome) -> void
 {
-  auto explorer = settings_->GetExplorerSettings();
-  explorer.model_root = root;
-  settings_->SetExplorerSettings(explorer);
-  RefreshSources();
-}
-
-auto ContentVm::LoadLibrary(const std::filesystem::path& path) -> void
-{
-  if (path.filename().string().ends_with(".import.json")) {
-    LoadImportRecord(path);
-  } else {
-    LoadIndex(path);
-  }
-}
-
-auto ContentVm::OnImportComplete(content::import::ImportJobId job_id,
-  const content::import::ImportReport& report) -> void
-{
-  if (import_state_.job_id != job_id) {
+  mounting_ = false;
+  if (outcome.retry) {
+    remount_pending_ = true;
     return;
   }
+  mounts_.ApplyOutcome(outcome,
+    asset_loader_ ? asset_loader_->EnumerateMountedSources()
+                  : std::vector<content::IAssetLoader::MountedSourceEntry> {});
+  details_.clear();
+  details_errors_.clear();
 
-  LOG_F(INFO, "ContentVm: OnImportComplete for job {}", job_id.get());
-  {
-    std::scoped_lock lock(import_state_.completion_mutex);
-    import_state_.completion_report = report;
+  const auto& rows = mounts_.Rows();
+  if (outcome.error) {
+    log_.Add({
+      .severity = LogSeverity::kError,
+      .code = std::string(log_codes::kMountFailed),
+      .message = "The mount list was not applied; the mounts are unchanged",
+      .details = *outcome.error,
+    });
   }
-  import_state_.completion_ready.store(true);
+  for (const auto& refusal : outcome.refused) {
+    const auto index = mounts_.IndexOf(refusal.pak);
+    auto searched = std::vector<std::string> {};
+    for (auto below = index.value_or(rows.size()) + 1; below < rows.size();
+      ++below) {
+      searched.push_back(RowName(rows.at(below), below));
+    }
+    log_.Add({
+      .severity = LogSeverity::kError,
+      .code = std::string(log_codes::kMountRefused),
+      .message = fmt::format("{} refused: {} not met",
+        index ? RowName(rows.at(*index), *index)
+              : refusal.pak.filename().string(),
+        Plural(refusal.failures.size(), "requirement")),
+      .details = refusal.message,
+      .path = refusal.pak.generic_string(),
+      .searched = std::move(searched),
+      .cooked_source = refusal.pak,
+    });
+  }
+  if (!outcome.error) {
+    log_.Add({
+      .severity = LogSeverity::kInfo,
+      .code = std::string(log_codes::kMountsApplied),
+      .message = Plural(outcome.mounted.size(), "cooked source") + " mounted",
+    });
+  }
+
+  RefreshScenes();
+  TryRestoreScene();
+  if (remount_pending_) {
+    remount_pending_ = false;
+    RequestMounts();
+  }
 }
 
-auto ContentVm::OnImportProgress(const content::import::ProgressEvent& progress)
+auto ContentVm::OnGenerationMounted(
+  const runtime::GenerationPublication& publication,
+  const std::optional<std::string>& error) -> void
+{
+  const auto row = mounts_.IndexOf(publication.cooked_root);
+  if (row) {
+    mounts_.InspectRow(*row);
+  }
+  if (error) {
+    if (row) {
+      mounts_.SetRowState(*row, SourceState::kUnreadable, *error);
+    }
+    log_.Add({
+      .severity = LogSeverity::kError,
+      .code = std::string(log_codes::kGenerationMountFailed),
+      .message = "The model's new generation was not mounted",
+      .details = *error,
+      .path = publication.cooked_root.generic_string(),
+      .cooked_source = publication.cooked_root,
+    });
+  } else if (row) {
+    mounts_.SetRowState(*row, SourceState::kMounted, {});
+  }
+  RefreshScenes();
+  if (error) {
+    imported_products_.clear();
+  } else {
+    LoadImportedScene();
+  }
+}
+
+auto ContentVm::RequestMounts() -> void
+{
+  if (mounting_) {
+    remount_pending_ = true;
+    return;
+  }
+  auto mounts = mounts_.Inspect();
+  const auto& rows = mounts_.Rows();
+  for (std::size_t index = 0; index < rows.size(); ++index) {
+    const auto& row = rows.at(index);
+    if (row.state != SourceState::kMissing
+      && row.state != SourceState::kUnreadable) {
+      continue;
+    }
+    const auto missing = row.state == SourceState::kMissing;
+    log_.Add({
+      .severity = missing ? LogSeverity::kWarning : LogSeverity::kError,
+      .code = std::string(missing ? log_codes::kMountSourceMissing
+                                  : log_codes::kMountSourceUnreadable),
+      .message = fmt::format(
+        "{} is {}", RowName(row, index), missing ? "missing" : "unreadable"),
+      .details = row.error,
+      .path = row.path.generic_string(),
+      .cooked_source = row.path,
+    });
+  }
+  if (!on_mounts_requested_) {
+    // Without a host nothing mounts; the rows stay pending.
+    return;
+  }
+  mounting_ = true;
+  on_mounts_requested_(std::move(mounts));
+}
+
+auto ContentVm::ResolveRecords(
+  const std::vector<std::filesystem::path>& records) -> void
+{
+  auto generations = std::vector<RecordGeneration> {};
+  for (const auto& record : records) {
+    auto entry = RecordGeneration { .record = record };
+    try {
+      if (const auto generation
+        = ModelImportRecord::SelectedGeneration(record, Generations())) {
+        entry.generation = *generation;
+      } else {
+        entry.error = "The record selects no generation; import it again";
+      }
+    } catch (const std::exception& error) {
+      entry.error = error.what();
+    }
+    generations.push_back(std::move(entry));
+  }
+  mounts_.SetRecords(generations);
+}
+
+auto ContentVm::PersistMounts() const -> void
+{
+  settings_->SetMountSources(mounts_.Added());
+  settings_->SetMountedImportRecords(mounts_.Records());
+}
+
+// --- Scenes ---
+
+auto ContentVm::RefreshScenes() -> void
+{
+  if (!asset_loader_) {
+    return;
+  }
+  scenes_.Rebuild(asset_loader_->EnumerateMountedScenes(),
+    [this](const std::filesystem::path& source) -> std::optional<std::size_t> {
+      return mounts_.IndexOf(source);
+    });
+}
+
+auto ContentVm::TryRestoreScene() -> void
+{
+  if (!scene_to_restore_ || scene_load_) {
+    return;
+  }
+  for (const auto& group : scenes_.Groups()) {
+    for (const auto& scene : group.scenes) {
+      if (nostd::to_string(scene.key) == scene_to_restore_->scene_key) {
+        scene_to_restore_.reset();
+        RequestSceneLoad(scene);
+        return;
+      }
+    }
+  }
+}
+
+auto ContentVm::RecentScenes() const -> std::vector<RecentSceneSetting>
+{
+  return settings_->GetRecentScenes();
+}
+
+auto ContentVm::RequestSceneLoad(const SceneEntry& scene) -> void
+{
+  if (scene_load_ || !on_scene_load_requested_) {
+    return;
+  }
+  scene_load_
+    = SceneLoad { .scene = scene, .started = std::chrono::steady_clock::now() };
+  on_scene_load_requested_(scene);
+}
+
+auto ContentVm::ReloadScene() -> void
+{
+  if (loaded_scene_) {
+    RequestSceneLoad(loaded_scene_->scene);
+  }
+}
+
+auto ContentVm::UnloadScene() -> void
+{
+  if (!loaded_scene_ || scene_load_) {
+    return;
+  }
+  if (on_scene_unload_requested_) {
+    on_scene_unload_requested_();
+  }
+  loaded_scene_.reset();
+  settings_->SetLoadedScene(std::nullopt);
+}
+
+auto ContentVm::CancelSceneLoad() -> void
+{
+  if (!scene_load_) {
+    return;
+  }
+  if (on_scene_load_cancel_requested_) {
+    on_scene_load_cancel_requested_();
+  }
+  log_.Add({
+    .severity = LogSeverity::kInfo,
+    .code = std::string(log_codes::kSceneLoadCancelled),
+    .message = "Cancelled loading " + scene_load_->scene.name,
+    .scene = scene_load_->scene.virtual_path,
+  });
+  scene_load_.reset();
+}
+
+auto ContentVm::LoadingScene() const noexcept -> const SceneEntry*
+{
+  return scene_load_ ? &scene_load_->scene : nullptr;
+}
+
+auto ContentVm::NotifySceneLoadCompleted(const data::AssetKey& key,
+  const bool success, const std::string_view error) -> void
+{
+  if (!scene_load_ || scene_load_->scene.key != key) {
+    return;
+  }
+  const auto load = std::move(*scene_load_);
+  scene_load_.reset();
+  const auto& scene = load.scene;
+  if (!success) {
+    log_.Add({
+      .severity = LogSeverity::kError,
+      .code = std::string(log_codes::kSceneLoadFailed),
+      .message = scene.name + " did not load",
+      .details = std::string(error),
+      .scene = scene.virtual_path,
+      .path = scene.virtual_path,
+      .cooked_source = scene.source_path,
+    });
+    return;
+  }
+  auto sources = std::vector<std::filesystem::path> {};
+  for (const auto& row : mounts_.Rows()) {
+    if (row.state == SourceState::kMounted) {
+      sources.push_back(row.path);
+    }
+  }
+  const auto loaded = LoadedScene {
+    .scene = scene,
+    .asset_count = CountSceneAssets(key, sources),
+    .load_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - load.started),
+  };
+  log_.Add({
+    .severity = LogSeverity::kInfo,
+    .code = std::string(log_codes::kSceneLoaded),
+    .message = fmt::format("{}, {} in {} ms", scene.name,
+      Plural(loaded.asset_count, "asset"), loaded.load_time.count()),
+    .scene = scene.virtual_path,
+    .cooked_source = scene.source_path,
+  });
+  RememberLoadedScene(loaded);
+}
+
+auto ContentVm::RememberLoadedScene(const LoadedScene& loaded) -> void
+{
+  loaded_scene_ = loaded;
+  const auto key = std::string(nostd::to_string(loaded.scene.key));
+  settings_->SetLoadedScene(ContentSceneSetting {
+    .scene_key = key,
+    .virtual_path = loaded.scene.virtual_path,
+    .source = {
+      .kind = loaded.scene.source_kind,
+      .path = loaded.scene.source_path,
+    },
+  });
+  auto recent = settings_->GetRecentScenes();
+  std::erase_if(recent, [&key](const RecentSceneSetting& scene) -> bool {
+    return scene.scene_key == key;
+  });
+  recent.insert(recent.begin(),
+    RecentSceneSetting {
+      .scene_key = key,
+      .virtual_path = loaded.scene.virtual_path,
+    });
+  if (recent.size() > ContentSettingsService::kRecentSceneCount) {
+    recent.resize(ContentSettingsService::kRecentSceneCount);
+  }
+  settings_->SetRecentScenes(recent);
+}
+
+// --- Import ---
+
+auto ContentVm::SetImportTab(const ContentImportTabSettings& tab) -> void
+{
+  if (tab == import_tab_) {
+    return;
+  }
+  const auto rescan = tab.source_mount != import_tab_.source_mount
+    || tab.fbx != import_tab_.fbx || tab.glb != import_tab_.glb
+    || tab.gltf != import_tab_.gltf;
+  import_tab_ = tab;
+  settings_->SetImportTab(import_tab_);
+  if (rescan) {
+    RefreshModels();
+  }
+}
+
+auto ContentVm::RefreshModels() -> void
+{
+  auto mount = import_tab_.source_mount;
+  const auto source_mounts = models_.SourceMounts();
+  const auto known
+    = std::ranges::contains(source_mounts, mount, &SourceMountEntry::name);
+  if (!known && !source_mounts.empty()) {
+    mount = source_mounts.front().name;
+  }
+  models_.Scan(mount,
+    {
+      .fbx = import_tab_.fbx,
+      .glb = import_tab_.glb,
+      .gltf = import_tab_.gltf,
+    });
+  record_view_.reset();
+  RefreshModelStates();
+}
+
+auto ContentVm::RefreshModelStates() -> void
+{
+  models_.Refresh(PanelSettingsJson(), Generations());
+}
+
+auto ContentVm::ModelRecordOf(const std::filesystem::path& file)
+  -> const ModelRecordView&
+{
+  if (!record_view_ || record_view_model_ != file) {
+    const auto* model = models_.Find(file);
+    record_view_ = model != nullptr
+      ? models_.ReadRecord(*model, PanelSettingsJson(), Generations())
+      : ModelRecordView { .error = "No such model" };
+    record_view_model_ = file;
+  }
+  return *record_view_;
+}
+
+auto ContentVm::SetImportProfile(const ImportProfile& profile) -> void
+{
+  profile_ = profile;
+  settings_->SetImportProfile(profile_);
+  record_view_.reset();
+  model_states_dirty_ = true;
+}
+
+auto ContentVm::ChangedImportGroups() const -> std::vector<ImportSettingsGroup>
+{
+  return ChangedGroups(profile_);
+}
+
+auto ContentVm::ResetImportGroup(const ImportSettingsGroup group) -> void
+{
+  SetImportProfile(ResetGroup(profile_, group));
+}
+
+auto ContentVm::IsImporterRestartPending() const -> bool
+{
+  return !SameImporterConfig(profile_.importer, running_importer_);
+}
+
+auto ContentVm::RestartImportService() -> void
+{
+  if (IsImportInProgress()) {
+    return;
+  }
+  if (import_service_) {
+    import_service_->Stop();
+  }
+  running_importer_ = profile_.importer;
+  import_service_
+    = std::make_unique<content::import::AsyncImportService>(running_importer_);
+}
+
+auto ContentVm::StartImport(const std::filesystem::path& model_file,
+  const ImportSettingsSource settings) -> void
+{
+  if (IsImportInProgress()) {
+    return;
+  }
+  const auto* model = models_.Find(model_file);
+  const auto* mounts = models_.Mounts();
+  try {
+    if (model == nullptr || mounts == nullptr) {
+      throw std::invalid_argument(
+        "Not a model of a source mount: " + model_file.string());
+    }
+    auto location = ModelImportRecord::LocateRecord({
+      .source = model->file,
+      .identity = model->identity,
+      .mounts = make_observer(mounts),
+    });
+    if (settings == ImportSettingsSource::kPanel) {
+      auto model_settings = MakeModelImportSettings(profile_);
+      model_settings.source_path = model->file.string();
+      model_settings.virtual_path = model->identity;
+      ModelImportRecord::Save({
+        .record_path = location.record_path,
+        .source = model->file,
+        .settings_json = ModelImportRecord::MakeSettings(model_settings),
+        .mounts = make_observer(mounts),
+      });
+    } else if (!location.exists) {
+      throw std::invalid_argument(
+        model->file.filename().string() + " has no record to import as is");
+    }
+    auto publication = ModelImportRecord::Prepare(location.record_path,
+      Generations(), *mounts, std::move(location.diagnostics));
+    import_.model = model->file;
+    import_.running = true;
+    import_cancel_requested_ = false;
+    {
+      std::scoped_lock lock(import_.mutex);
+      import_.progress = {};
+    }
+    const auto job_id = import_service_->SubmitModelImport(
+      std::move(publication),
+      [this](const content::import::ImportJobId id,
+        const content::import::ImportReport& report) -> void {
+        std::scoped_lock lock(import_.mutex);
+        if (id == import_.job_id
+          || import_.job_id == content::import::kInvalidJobId) {
+          import_.report = report;
+        }
+      },
+      [this](const content::import::ProgressEvent& progress) -> void {
+        std::scoped_lock lock(import_.mutex);
+        import_.progress = progress;
+      });
+    if (!job_id) {
+      throw std::runtime_error("The importer did not accept the import");
+    }
+    {
+      std::scoped_lock lock(import_.mutex);
+      import_.job_id = *job_id;
+    }
+    models_.SetImporting(model->file);
+  } catch (const std::exception& error) {
+    import_.running = false;
+    models_.SetImportFinished(model_file, false);
+    model_states_dirty_ = true;
+    log_.Add({
+      .severity = LogSeverity::kError,
+      .code = std::string(log_codes::kImportFailed),
+      .message = model_file.filename().string() + " was not imported",
+      .details = error.what(),
+      .path = model_file.generic_string(),
+    });
+  }
+}
+
+auto ContentVm::ImportFile(const std::filesystem::path& file) -> void
+{
+  if (IsImportInProgress()) {
+    return;
+  }
+  std::error_code error;
+  const auto model = std::filesystem::weakly_canonical(file, error);
+  auto mount = std::optional<std::string> {};
+  for (const auto& folder : models_.SourceMounts()) {
+    const auto relative = model.lexically_relative(folder.folder);
+    if (!relative.empty() && *relative.begin() != "..") {
+      mount = folder.name;
+    }
+  }
+  if (!mount) {
+    mount = AddSourceFolder(model.parent_path());
+    if (!mount) {
+      return;
+    }
+  }
+  // The model is listed: its folder's mount, its format shown.
+  auto tab = import_tab_;
+  tab.source_mount = *mount;
+  const auto own = ContentModelCatalog::FormatsOf(model);
+  tab.fbx = tab.fbx || own.fbx;
+  tab.glb = tab.glb || own.glb;
+  tab.gltf = tab.gltf || own.gltf;
+  SetImportTab(tab);
+  StartImport(model);
+}
+
+auto ContentVm::CancelActiveImport() -> void
+{
+  if (!IsImportInProgress()) {
+    return;
+  }
+  import_cancel_requested_ = true;
+  auto job_id = content::import::kInvalidJobId;
+  {
+    std::scoped_lock lock(import_.mutex);
+    job_id = import_.job_id;
+  }
+  // False means the job already finished; its completion ends the import.
+  static_cast<void>(import_service_->CancelJob(job_id));
+}
+
+auto ContentVm::IsImportInProgress() const -> bool
+{
+  return import_.running.load();
+}
+
+auto ContentVm::GetImportProgress() const -> ImportProgressView
+{
+  std::scoped_lock lock(import_.mutex);
+  auto view = ImportProgressView {
+    .model = import_.model,
+    .phase = content::import::to_string(import_.progress.header.phase),
+    .progress = import_.progress.header.overall_progress,
+  };
+  if (const auto* item
+    = std::get_if<content::import::ItemProgress>(&import_.progress.payload)) {
+    view.item = item->item_kind + " " + item->item_name;
+  }
+  return view;
+}
+
+auto ContentVm::FinishImport(const content::import::ImportReport& report)
   -> void
 {
-  std::scoped_lock lock(import_state_.progress_mutex);
-  import_state_.progress = progress;
+  const auto model = import_.model;
+  const auto name = model.filename().string();
+  {
+    std::scoped_lock lock(import_.mutex);
+    import_.job_id = content::import::kInvalidJobId;
+  }
+  import_.running = false;
+  for (const auto& diagnostic : report.diagnostics) {
+    log_.AddDiagnostic(diagnostic);
+  }
+  models_.SetImportFinished(model, report.success || import_cancel_requested_);
+  record_view_.reset();
+  model_states_dirty_ = true;
+  if (!report.success) {
+    const auto errors = std::ranges::count(report.diagnostics,
+      LogSeverity::kError, &content::import::ImportDiagnostic::severity);
+    log_.Add({
+      .severity
+      = import_cancel_requested_ ? LogSeverity::kInfo : LogSeverity::kError,
+      .code = std::string(import_cancel_requested_ ? log_codes::kImportCancelled
+                                                   : log_codes::kImportFailed),
+      .message = import_cancel_requested_
+        ? "Cancelled the import of " + name
+        : fmt::format("{} failed: {}", name,
+            Plural(static_cast<std::size_t>(errors), "error")),
+      .path = model.generic_string(),
+    });
+    return;
+  }
+  log_.Add({
+    .severity = LogSeverity::kInfo,
+    .code = std::string(log_codes::kImportPublished),
+    .message = fmt::format(
+      "{} published, {}", name, Plural(report.products.size(), "product")),
+    .path = model.generic_string(),
+    .cooked_source = report.cooked_root,
+  });
+  imported_products_.clear();
+  if (import_tab_.load_scene_after_import) {
+    for (const auto& product : report.products) {
+      imported_products_.push_back(product.virtual_path);
+    }
+  }
+  // A published generation loads its scene once it is mounted, which the
+  // host may do on a later frame.
+  if (!PublishGeneration(report)) {
+    LoadImportedScene();
+  }
 }
+
+auto ContentVm::PublishGeneration(const content::import::ImportReport& report)
+  -> bool
+{
+  if (!report.model_record_path) {
+    return false;
+  }
+  auto records = mounts_.Records();
+  std::erase(records, *report.model_record_path);
+  records.insert(records.begin(), *report.model_record_path);
+  ResolveRecords(records);
+  PersistMounts();
+  const auto publication = runtime::GenerationPublication {
+    .cooked_root = report.cooked_root,
+    .previous_root = report.previous_cooked_root,
+  };
+  if (on_generation_published_) {
+    on_generation_published_(publication);
+    return true;
+  }
+  if (!asset_loader_) {
+    return false;
+  }
+  try {
+    runtime::MountGeneration(*asset_loader_, publication);
+    OnGenerationMounted(publication, std::nullopt);
+  } catch (const std::exception& error) {
+    OnGenerationMounted(publication, std::string(error.what()));
+  }
+  return true;
+}
+
+auto ContentVm::LoadImportedScene() -> void
+{
+  const auto products = std::exchange(imported_products_, {});
+  for (const auto& product : products) {
+    for (const auto& group : scenes_.Groups()) {
+      const auto found
+        = std::ranges::find(group.scenes, product, &SceneEntry::virtual_path);
+      if (found != group.scenes.end()) {
+        RequestSceneLoad(*found);
+        return;
+      }
+    }
+  }
+}
+
+auto ContentVm::PanelSettingsJson() const -> std::string
+{
+  return ModelImportRecord::MakeSettings(MakeModelImportSettings(profile_));
+}
+
+auto ContentVm::Generations() const -> content::import::ModelImportGenerations
+{
+  return { .root = GetGeneratedStorageRoot() };
+}
+
+auto ContentVm::GetGeneratedStorageRoot() const -> std::filesystem::path
+{
+  if (!file_browser_ || file_browser_->GetContentRoots().scratch_root.empty()) {
+    return {};
+  }
+  return file_browser_->GetContentRoots().scratch_root / ".cooked"
+    / ModelImportRecord::kModelGenerationsFolder;
+}
+
+// --- Log ---
+
+auto ContentVm::ClearLog() -> void { log_.Clear(); }
+
+auto ContentVm::MarkLogSeen() -> void { log_.MarkSeen(); }
 
 auto ContentVm::GetFileBrowser() const -> observer_ptr<FileBrowserService>
 {
   return file_browser_;
 }
 
-auto ContentVm::ResolveSceneLabel(
-  const std::optional<data::AssetKey>& key) const -> std::string
+auto ContentVm::OpenBrowser(
+  const FileBrowserConfig& config, const BrowseTarget target) -> void
 {
-  if (!key.has_value()) {
-    return "Unknown Scene";
-  }
-
-  {
-    std::scoped_lock lock(data_mutex_);
-    for (const auto& [entry_key, entry] : scenes_map_) {
-      if (entry_key.key == *key) {
-        return entry.name;
-      }
-    }
-  }
-
-  return data::to_string(*key);
+  browse_request_id_ = file_browser_->Open(config);
+  browse_target_ = target;
 }
 
 } // namespace oxygen::examples::ui

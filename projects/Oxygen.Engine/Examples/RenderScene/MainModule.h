@@ -11,10 +11,10 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <unordered_map>
 #include <vector>
 
 #include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/ContentMountApplier.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "DemoShell/Runtime/MainViewState.h"
 #include "DemoShell/UI/ContentVm.h"
@@ -22,11 +22,14 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Host/HostConfig.h>
 #include <Oxygen/Host/SceneStage.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/CompositionView.h>
@@ -114,15 +117,18 @@ private:
 #ifdef OXYGEN_BUILD_UI_TESTS
   auto RegisterUiTests(ImGuiTestEngine* engine) -> void override;
   auto RegisterEmptySceneUiTest(ImGuiTestEngine* engine) -> void;
-  auto RegisterModelImportLibraryUiTest(ImGuiTestEngine* engine) -> void;
+  auto RegisterModelImportRecordUiTest(ImGuiTestEngine* engine) -> void;
   auto RegisterIblControlsUiTest(ImGuiTestEngine* engine) -> void;
   auto RegisterIblSourceAndFogUiTest(ImGuiTestEngine* engine) -> void;
   auto RegisterStartupSkyboxUiTest(ImGuiTestEngine* engine) -> void;
-  auto RegisterIblEditorReferenceUiTest(ImGuiTestEngine* engine) -> void;
   auto RegisterIblAppearanceUiTests(ImGuiTestEngine* engine) -> void;
   auto RegisterIblPersistAndReplaceUiTest(ImGuiTestEngine* engine) -> void;
   auto RegisterIblReopenUiTest(ImGuiTestEngine* engine) -> void;
 #endif
+  //! Applies the content panel's latest mount list once no scene loads.
+  auto ApplyPendingMounts() -> co::Co<>;
+  //! Mounts the generations model imports published, in order.
+  auto MountPendingGenerations() -> void;
   auto ReleaseCurrentSceneAsset(const char* reason) -> void;
 
   auto ResetMainViewState(observer_ptr<engine::FrameContext> context = nullptr)
@@ -135,7 +141,7 @@ private:
 
   struct SceneLoadRequest {
     data::AssetKey key;
-    ui::SceneSourceKind source_kind { ui::SceneSourceKind::kPak };
+    data::CookedSourceKind source_kind { data::CookedSourceKind::kLooseCooked };
     std::filesystem::path source_path;
     std::string scene_name;
   };
@@ -158,20 +164,10 @@ private:
   std::optional<data::AssetKey> active_scene_load_key_;
   Extent<uint32_t> last_viewport_;
 
-  // Deferred lifecycle actions (applied in OnFrameStart)
-  enum class PendingSourceAction : uint8_t {
-    kNone,
-    kClear,
-    kMountPak,
-    kMountIndex,
-    kMountGeneration,
-  };
-  struct PendingSourceRequest final {
-    PendingSourceAction action { PendingSourceAction::kNone };
-    std::filesystem::path path {};
-    std::optional<std::filesystem::path> previous_root;
-  };
-  std::deque<PendingSourceRequest> pending_source_requests_;
+  // Content panel requests, applied in OnSceneMutation.
+  //! The mount list to apply, lowest precedence first; the latest wins.
+  std::optional<std::vector<content::ContentMount>> pending_mounts_;
+  std::deque<runtime::GenerationPublication> pending_generations_;
   std::optional<SceneLoadRequest> pending_scene_load_;
   StartupOptions startup_;
   std::optional<std::string> startup_scene_name_;
@@ -179,14 +175,10 @@ private:
   bool startup_sky_light_lifecycle_enable_applied_ { false };
   bool startup_scene_load_requested_ { false };
   bool startup_scene_missing_logged_ { false };
-  //! The main library's index, mounted for a startup scene that no mounted
-  //! source holds.
-  std::filesystem::path startup_library_index_;
-  bool startup_library_mount_requested_ { false };
-  std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
-    mounted_pak_write_times_;
-  std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
-    mounted_loose_index_write_times_;
+  //! The examples' cooked root, added to the mount list for a startup scene
+  //! that no mounted source holds.
+  std::filesystem::path startup_cooked_root_;
+  bool startup_cooked_root_added_ { false };
   bool pending_scene_clear_ { false };
   bool loaded_scene_active_ { false };
 };
