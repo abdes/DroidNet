@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <expected>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -21,11 +22,16 @@
 #include <new>
 #include <numbers>
 #include <span>
+// MSVC declares the platform-specific _dupenv_s in the C runtime header.
+// NOLINTNEXTLINE(modernize-deprecated-headers)
+#include <stdlib.h>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include <combaseapi.h>
+#include <d3d12.h>
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
@@ -54,6 +60,7 @@
 #include <Oxygen/Graphics/Common/test/HeapAllocationFailure.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Environment/Internal/IblBrdfLookup.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/StaticSkyLightProcessor.h>
@@ -99,10 +106,18 @@ namespace {
     return result;
   }
 
+  //! A point on face `face` of a cube of `size` texels, in texel units.
+  struct CubePoint {
+    std::uint32_t face;
+    float x;
+    float y;
+    std::uint32_t size;
+  };
+
   // Independent face basis in hardware cube space, converted to Oxygen +Z up.
-  auto DirectionAt(std::uint32_t face, float x, float y, std::uint32_t size)
-    -> glm::vec3
+  auto DirectionAt(const CubePoint& point) -> glm::vec3
   {
+    const auto face = point.face;
     constexpr auto centers = std::array {
       glm::vec3 { 1, 0, 0 },
       glm::vec3 { -1, 0, 0 },
@@ -127,18 +142,24 @@ namespace {
       glm::vec3 { 0, -1, 0 },
       glm::vec3 { 0, -1, 0 },
     };
-    const auto u = 2.0F * (x + 0.5F) / size - 1.0F;
-    const auto v = 2.0F * (y + 0.5F) / size - 1.0F;
+    const auto size = static_cast<float>(point.size);
+    const auto u = (2.0F * (point.x + 0.5F) / size) - 1.0F;
+    const auto v = (2.0F * (point.y + 0.5F) / size) - 1.0F;
     const auto p = centers[face] + u * rights[face] + v * downs[face];
     const auto inverse_length
-      = 1.0F / std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+      = 1.0F / std::sqrt((p.x * p.x) + (p.y * p.y) + (p.z * p.z));
     return glm::vec3 { p.x, -p.z, p.y } * inverse_length;
   }
 
   auto Direction(std::uint32_t face, std::uint32_t x, std::uint32_t y,
     std::uint32_t size) -> glm::vec3
   {
-    return DirectionAt(face, float(x), float(y), size);
+    return DirectionAt({
+      .face = face,
+      .x = static_cast<float>(x),
+      .y = static_cast<float>(y),
+      .size = size,
+    });
   }
 
   struct ReferenceSample {
@@ -157,10 +178,24 @@ namespace {
   // Double-precision CPU integration chooses directions, PDFs, footprint LODs
   // and weights independently of the production HLSL. The GPU probe supplies
   // only native seamless TextureCube sampling from the common source mips.
-  auto PrefilterReferencePlan(glm::dvec3 normal, double roughness,
-    std::uint32_t size, std::uint32_t maximum_mip, std::uint32_t count,
-    ShaderVisibleIndex source) -> ReferencePlan
+  struct PrefilterSampling {
+    glm::dvec3 normal;
+    double roughness;
+    //! Face size of the source cube's first mip.
+    std::uint32_t size;
+    std::uint32_t maximum_mip;
+    std::uint32_t count;
+    ShaderVisibleIndex source;
+  };
+
+  auto PrefilterReferencePlan(const PrefilterSampling& sampling)
+    -> ReferencePlan
   {
+    const auto& normal = sampling.normal;
+    const auto roughness = sampling.roughness;
+    const auto size = sampling.size;
+    const auto maximum_mip = static_cast<double>(sampling.maximum_mip);
+    const auto count = sampling.count;
     auto result = ReferencePlan {};
     const auto tangent = glm::normalize(
       glm::cross(std::abs(normal.z) < 0.999 ? glm::dvec3 { 0, 0, 1 }
@@ -177,8 +212,8 @@ namespace {
       }
       const auto phi = 2.0 * std::numbers::pi * sample / count;
       auto direction = glm::dvec3 {};
-      double pdf;
-      double weight;
+      double pdf = 0.0;
+      double weight = 0.0;
       if (roughness > 0.99) {
         const auto cosine = std::sqrt(inverse);
         const auto sine = std::sqrt(1.0 - inverse);
@@ -194,23 +229,28 @@ namespace {
         const auto h
           = glm::dvec3 { sine * std::cos(phi), sine * std::sin(phi), nh };
         direction = 2.0 * nh * h - glm::dvec3 { 0, 0, 1 };
-        if (direction.z <= 0.0)
+        if (direction.z <= 0.0) {
           continue;
-        const auto denominator = sine * sine + alpha * alpha * nh * nh;
+        }
+        const auto denominator = (sine * sine) + (alpha * alpha * nh * nh);
         pdf = alpha * alpha
           / (4.0 * std::numbers::pi * denominator * denominator);
         weight = direction.z;
       }
       const auto lod = pdf > 0.0
         ? std::clamp(std::log2(1.0 / (count * pdf * texel_angle)) / 2.0, 0.0,
-            double(maximum_mip))
-        : double(maximum_mip);
+            maximum_mip)
+        : maximum_mip;
       const auto world = tangent * direction.x + bitangent * direction.y
         + normal * direction.z;
       result.samples.push_back({
-        { float(world.x), float(world.y), float(world.z) },
-        float(lod),
-        source.get(),
+        .direction = {
+          static_cast<float>(world.x),
+          static_cast<float>(world.y),
+          static_cast<float>(world.z),
+        },
+        .lod = static_cast<float>(lod),
+        .source = sampling.source.get(),
       });
       result.weights.push_back(weight);
     }
@@ -224,8 +264,9 @@ namespace {
       char* value = nullptr;
       std::size_t size = 0U;
       if (_dupenv_s(&value, &size, "OXYGEN_IBL_CAPTURE") != 0
-        || value == nullptr)
+        || value == nullptr) {
         return {};
+      }
       const auto owned
         = std::unique_ptr<char, decltype(&std::free)>(value, &std::free);
       return owned.get();
@@ -241,8 +282,9 @@ namespace {
     auto BeginCapture() -> void
     {
       const auto path = CapturePath();
-      if (path.empty())
+      if (path.empty()) {
         return;
+      }
       WaitForQueueIdle();
       const auto capture = Backend().GetFrameCaptureController();
       CHECK_F(capture && capture->IsAvailable());
@@ -253,8 +295,9 @@ namespace {
     auto EndCapture() -> void
     {
       if (const auto capture = Backend().GetFrameCaptureController();
-        capture && capture->IsCapturing())
+        capture && capture->IsCapturing()) {
         CHECK_F(capture->EndCapture());
+      }
     }
 
     auto TearDown() -> void override
@@ -269,18 +312,20 @@ namespace {
     std::unique_ptr<IblGpuProcessor> processor_;
     auto Processor() -> IblGpuProcessor&
     {
-      if (!processor_)
+      if (!processor_) {
         processor_ = std::make_unique<IblGpuProcessor>(Backend());
+      }
       return *processor_;
     }
 
     auto PrepareBrdf()
       -> std::shared_ptr<const environment::internal::IblBrdfProduct>
     {
-      if (!brdf_resources_)
+      if (!brdf_resources_) {
         brdf_resources_
           = std::make_unique<environment::internal::IblBrdfResources>(
             Backend());
+      }
       auto prepared = brdf_resources_->Prepare();
       CHECK_F(prepared.has_value());
       return *prepared;
@@ -359,8 +404,10 @@ namespace {
       auto sum = glm::dvec3 {};
       auto total = 0.0;
       for (auto i = 0U; i < plan.weights.size(); ++i) {
-        for (auto c = 0U; c < 3U; ++c)
-          sum[c] += std::bit_cast<float>(samples[i * 3U + c]) * plan.weights[i];
+        for (auto c = 0U; c < 3U; ++c) {
+          sum[static_cast<glm::length_t>(c)]
+            += std::bit_cast<float>(samples[(i * 3U) + c]) * plan.weights[i];
+        }
         total += plan.weights[i];
       }
       return sum / total;
@@ -385,8 +432,9 @@ namespace {
         = graphics.GetResourceRegistry().RegisterManaged(texture);
       CHECK_F(registration.has_value());
       auto subresources = std::array<upload::UploadSubresource, 6> {};
-      for (auto face = 0U; face < 6U; ++face)
+      for (auto face = 0U; face < 6U; ++face) {
         subresources[face].array_slice = face;
+      }
       const auto plan
         = upload::UploadPlanner::PlanTexture2D({ .dst = texture }, subresources,
           upload::UploadPolicy {
@@ -401,11 +449,12 @@ namespace {
       for (auto face = 0U; face < 6U; ++face) {
         const auto& region = plan->regions[face];
         for (auto y = 0U; y < size; ++y) {
-          for (auto x = 0U; x < size; ++x)
+          for (auto x = 0U; x < size; ++x) {
             row[x] = texel(face, x, y);
+          }
           staging->Update(row.data(), row.size() * sizeof(Pixel),
             region.buffer_offset
-              + static_cast<std::uint64_t>(y) * region.buffer_row_pitch);
+              + (static_cast<std::uint64_t>(y) * region.buffer_row_pitch));
         }
       }
       SubmitCommands("IBL reference upload",
@@ -417,12 +466,16 @@ namespace {
             *texture, ResourceStates::kCommon);
           recorder.RequireResourceState(*texture, ResourceStates::kCopyDest);
           recorder.FlushBarriers();
-          for (const auto& region : plan->regions)
+          for (const auto& region : plan->regions) {
             recorder.CopyBufferToTexture(*staging, region, *texture);
+          }
           recorder.RequireResourceStateFinal(
             *texture, ResourceStates::kShaderResource);
         });
-      return { texture, std::move(*registration) };
+      return {
+        .texture = texture,
+        .registration = std::move(*registration),
+      };
     }
 
     template <typename Value, typename Owner>
@@ -469,24 +522,27 @@ namespace {
         });
       auto mapped = readback->MapNow();
       CHECK_F(mapped.has_value());
-      auto pixels = std::vector<Pixel>(size * size);
+      auto pixels = std::vector<Pixel>(std::size_t { size } * size);
       const bool half_storage
         = texture.GetDescriptor().format == Format::kRGBA16Float;
+      const std::size_t texel_bytes = half_storage ? 8U : sizeof(Pixel);
+      const std::size_t row_pitch = mapped->Layout().row_pitch.get();
+      const auto bytes = std::span(mapped->Data(), row_pitch * size);
       for (auto y = 0U; y < size; ++y) {
         for (auto x = 0U; x < size; ++x) {
+          const auto texel
+            = bytes.subspan((y * row_pitch) + (x * texel_bytes), texel_bytes);
           if (!half_storage) {
-            std::memcpy(pixels[y * size + x].data(),
-              mapped->Data() + y * mapped->Layout().row_pitch.get()
-                + x * sizeof(Pixel),
-              sizeof(Pixel));
+            std::memcpy(
+              pixels[(y * size) + x].data(), texel.data(), sizeof(Pixel));
             continue;
           }
           auto half = std::array<std::uint16_t, 4> {};
-          std::memcpy(half.data(),
-            mapped->Data() + y * mapped->Layout().row_pitch.get() + x * 8U, 8U);
-          for (auto channel = 0U; channel < 4U; ++channel)
-            pixels[y * size + x][channel]
+          std::memcpy(half.data(), texel.data(), texel_bytes);
+          for (auto channel = 0U; channel < 4U; ++channel) {
+            pixels[(y * size) + x][channel]
               = data::HalfFloat { half[channel] }.ToFloat();
+          }
         }
       }
       return pixels;
@@ -499,13 +555,13 @@ namespace {
         = ReadBuffer<std::array<glm::vec4, 8>>(expected, *expected.diffuse_sh);
       const auto b
         = ReadBuffer<std::array<glm::vec4, 8>>(actual, *actual.diffuse_sh);
-      EXPECT_EQ(std::memcmp(a.data(), b.data(), sizeof(a)), 0);
+      EXPECT_EQ(a, b);
       const auto ma = ReadBuffer<environment::IblProductMetadata>(
         expected, *expected.metadata);
       const auto mb
         = ReadBuffer<environment::IblProductMetadata>(actual, *actual.metadata);
-      EXPECT_EQ(ma.processing_flags, 3U);
-      EXPECT_EQ(mb.processing_flags, 3U);
+      EXPECT_EQ(ma.processing_flags, environment::kIblProductReady);
+      EXPECT_EQ(mb.processing_flags, environment::kIblProductReady);
       EXPECT_EQ(ma.source_radiance_scale, mb.source_radiance_scale);
       EXPECT_EQ(ma.average_brightness, mb.average_brightness);
       EXPECT_EQ(ma.maximum_half_gain, mb.maximum_half_gain);
@@ -555,10 +611,12 @@ namespace {
   private:
     auto BeforeAllocation(const std::string_view name) const -> void
     {
-      if (remaining_ < 0 || !name.starts_with("IBL."))
+      if (remaining_ < 0 || !name.starts_with("IBL.")) {
         return;
-      if (remaining_-- == 0)
+      }
+      if (remaining_-- == 0) {
         throw std::bad_alloc {};
+      }
     }
     mutable int remaining_ { -1 };
   };
@@ -615,9 +673,11 @@ namespace {
       });
       const auto row = std::array { pixel, pixel, pixel, pixel };
       const auto& region = plan->regions.front();
-      for (unsigned y = 0U; y < 4U; ++y)
+      for (unsigned y = 0U; y < 4U; ++y) {
         staging->Update(row.data(), sizeof(row),
-          region.buffer_offset + y * std::uint64_t(region.buffer_row_pitch));
+          region.buffer_offset
+            + (y * static_cast<std::uint64_t>(region.buffer_row_pitch)));
+      }
       staging->Update(pixel.data(), sizeof(pixel), plan->total_bytes);
       SubmitCommands("Allocation test LUT upload",
         [&](graphics::CommandRecorder& recorder) -> void {
@@ -696,18 +756,20 @@ namespace {
           WaitForQueueIdle();
         }
         const auto process
-          = [&]() -> std::expected<std::shared_ptr<const IblGpuProducts>,
-                    environment::internal::IblProcessError> {
+          = [&] -> std::expected<std::shared_ptr<const IblGpuProducts>,
+                  environment::internal::IblProcessError> {
           const auto settings = IblProcessSettings {
             .face_size = 32U,
             .lower_hemisphere_solid_color = false,
           };
-          return scenario == Scenario::kFog
-            ? Processor().ProcessSky(sky, brdf, settings, 802U)
-            : scenario == Scenario::kAtmosphere
-            ? Processor().ProcessSky(atmosphere, brdf, settings, 802U)
-            : Processor().Process(
-                source.texture, source.registration, brdf, settings, 802U);
+          if (scenario == Scenario::kFog) {
+            return Processor().ProcessSky(sky, brdf, settings, 802U);
+          }
+          if (scenario == Scenario::kAtmosphere) {
+            return Processor().ProcessSky(atmosphere, brdf, settings, 802U);
+          }
+          return Processor().Process(
+            source.texture, source.registration, brdf, settings, 802U);
         };
         Faults().FailAfter(allowed);
         auto candidate = process();
@@ -736,7 +798,7 @@ namespace {
         const auto metadata = ReadBuffer<environment::IblProductMetadata>(
           **candidate, *(*candidate)->metadata);
         EXPECT_EQ(metadata.product_revision, 802U);
-        EXPECT_EQ(metadata.processing_flags, 3U);
+        EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
         candidate->reset();
         WaitForQueueIdle();
         EXPECT_EQ(Processor().GetStats().normal_in_use, retained ? 1U : 0U);
@@ -744,13 +806,15 @@ namespace {
         Backend().PollCompletedUses();
         EXPECT_EQ(Backend().GetResourceRegistry().GetRegisteredResourceCount(),
           live_resources);
-        if (retained)
+        if (retained) {
           EXPECT_EQ(ReadBuffer<environment::IblProductMetadata>(
                       *retained, *retained->metadata)
                       .product_revision,
             800U);
-        if (completed)
+        }
+        if (completed) {
           break;
+        }
       }
       EXPECT_TRUE(completed);
       EXPECT_EQ(failures, expected_failures);
@@ -789,9 +853,10 @@ namespace {
     EXPECT_EQ(Backend().GetResourceRegistry().GetRegisteredResourceCount(),
       registered - 1U);
     for (const unsigned tile_size : { 8U, 16U, 0U }) {
-      if (tile_size != 8U)
+      if (tile_size != 8U) {
         Faults().FailAfter(
           0); // Smaller/whole work must reuse the grown buffer.
+      }
       auto built = Processor().Process(source.texture, source.registration,
         brdf, { .face_size = 32U, .dispatch_tile_size = tile_size },
         952U + tile_size);
@@ -843,7 +908,7 @@ namespace {
         = frame::Slot { frame_index % frame::kFramesInFlight.get() };
       Backend().BeginFrame(sequence, slot);
       const ScopeGuard end_frame(
-        [&]() noexcept -> void { Backend().EndFrame(sequence, slot); });
+        [&] noexcept -> void { Backend().EndFrame(sequence, slot); });
       if (frame_index == 0U) {
         const auto begun = Processor().Begin(
           source.texture, source.registration, brdf, settings, 981U);
@@ -866,7 +931,7 @@ namespace {
       const auto retained = ReadBuffer<environment::IblProductMetadata>(
         **reference, *(*reference)->metadata);
       EXPECT_EQ(retained.product_revision, 980U);
-      EXPECT_EQ(retained.processing_flags, 3U);
+      EXPECT_EQ(retained.processing_flags, environment::kIblProductReady);
     }
     EndCapture();
     ASSERT_TRUE(completed);
@@ -894,8 +959,8 @@ namespace {
     const auto backend = Backend().GetBackendLifetime();
     backend->MarkSubmissionFault();
     const ScopeGuard restore(
-      [backend]() noexcept -> void { backend->ClearSubmissionFault(); });
-    const auto expect_closed = [&]() -> void {
+      [backend] noexcept -> void { backend->ClearSubmissionFault(); });
+    const auto expect_closed = [&] -> void {
       for (const auto& job : { *complete, *pending }) {
         for (const auto limit : { 0U, UINT32_MAX }) {
           const auto denied = Processor().Advance(job, limit);
@@ -980,7 +1045,7 @@ namespace {
     ASSERT_TRUE(SUCCEEDED(Backend().GetCurrentDevice()->CreateFence(
       0U, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gate.GetAddressOf()))));
     const ScopeGuard release_gate(
-      [gate]() noexcept -> void { static_cast<void>(gate->Signal(1U)); });
+      [gate] noexcept -> void { static_cast<void>(gate->Signal(1U)); });
     auto* queue = static_cast<graphics::d3d12::CommandQueue*>(GetQueue().get());
     ASSERT_TRUE(SUCCEEDED(queue->GetCommandQueue()->Wait(gate.Get(), 1U)));
     const auto partial = Processor().Advance(*job, 3U);
@@ -1009,7 +1074,7 @@ namespace {
   {
     const auto source = MakeSource(32U, [](auto face, auto x, auto y) -> Pixel {
       return Pixel {
-        100000.0F * (1U + face) + 100.0F * x,
+        (100000.0F * (1U + face)) + (100.0F * x),
         0.25F * (1U + y),
         0x1p-24F * (1U + x + y),
         1.0F,
@@ -1049,17 +1114,17 @@ namespace {
       for (const unsigned tile_size : { 8U, 16U }) {
         SCOPED_TRACE(::testing::Message()
           << "capture=" << captured << " tile=" << tile_size);
-        if (!captured && tile_size == 8U)
+        if (!captured && tile_size == 8U) {
           BeginCapture();
+        }
         const auto tiled = build(tile_size);
         ASSERT_TRUE(tiled);
-        if (!captured && tile_size == 8U)
+        if (!captured && tile_size == 8U) {
           EndCapture();
+        }
         const auto actual_sh = ReadBuffer<std::array<glm::vec4, 8>>(
           **tiled, *(*tiled)->diffuse_sh);
-        EXPECT_EQ(
-          std::memcmp(actual_sh.data(), expected_sh.data(), sizeof(actual_sh)),
-          0);
+        EXPECT_EQ(actual_sh, expected_sh);
         const auto actual_metadata
           = ReadBuffer<environment::IblProductMetadata>(
             **tiled, *(*tiled)->metadata);
@@ -1116,7 +1181,7 @@ namespace {
     const auto& products = **built;
     const auto metadata = ReadBuffer<environment::IblProductMetadata>(
       products, *products.metadata);
-    EXPECT_EQ(metadata.processing_flags, 3U);
+    EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
     EXPECT_NE(metadata.processed_half_srv, kInvalidBindlessIndex);
     EXPECT_NE(metadata.specular_half_srv, kInvalidBindlessIndex);
     const auto pairs = std::array {
@@ -1162,7 +1227,7 @@ namespace {
       const auto& products = **built;
       const auto metadata = ReadBuffer<environment::IblProductMetadata>(
         products, *products.metadata);
-      EXPECT_EQ(metadata.processing_flags, 3U);
+      EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
       EXPECT_EQ(metadata.product_revision, 1000U + size);
       EXPECT_EQ(
         metadata.precision_flags, environment::kIblHalfCertificateComplete);
@@ -1187,12 +1252,14 @@ namespace {
     // Sample both stored representations directly. This measures native
     // filtering; it does not override the production admission certificate.
     auto directions = std::vector<std::array<float, 3>> {};
-    for (auto face = 0U; face < 6U; ++face)
-      for (auto y = 0U; y < 16U; ++y)
+    for (auto face = 0U; face < 6U; ++face) {
+      for (auto y = 0U; y < 16U; ++y) {
         for (auto x = 0U; x < 16U; ++x) {
           const auto n = Direction(face, x, y, 16U);
           directions.push_back({ n.x, n.z, -n.y });
         }
+      }
+    }
     constexpr auto edge = std::array {
       -1.00001F,
       -1.0F,
@@ -1206,9 +1273,9 @@ namespace {
       1.0F,
       1.00001F,
     };
-    for (auto axis = 0U; axis < 3U; ++axis)
-      for (const auto sign : { -1.0F, 1.0F })
-        for (const auto u : edge)
+    for (auto axis = 0U; axis < 3U; ++axis) {
+      for (const auto sign : { -1.0F, 1.0F }) {
+        for (const auto u : edge) {
           for (const auto v : edge) {
             auto direction = std::array<float, 3> {};
             direction[axis] = sign;
@@ -1216,6 +1283,9 @@ namespace {
             direction[(axis + 2U) % 3U] = v;
             directions.push_back(direction);
           }
+        }
+      }
+    }
     constexpr auto phases = std::array {
       -0x1p-9F,
       0.0F,
@@ -1226,20 +1296,30 @@ namespace {
       1.0F - 0x1p-9F,
       1.0F + 0x1p-9F,
     };
-    for (auto face = 0U; face < 6U; ++face)
-      for (const auto x : { 0U, 63U, 127U })
-        for (const auto y : { 0U, 63U, 127U })
-          for (const auto u : phases)
+    for (auto face = 0U; face < 6U; ++face) {
+      for (const auto x : { 0U, 63U, 127U }) {
+        for (const auto y : { 0U, 63U, 127U }) {
+          for (const auto u : phases) {
             for (const auto v : phases) {
-              const auto n
-                = DirectionAt(face, float(x) + u, float(y) + v, 128U);
+              const auto n = DirectionAt({
+                .face = face,
+                .x = static_cast<float>(x) + u,
+                .y = static_cast<float>(y) + v,
+                .size = 128U,
+              });
               directions.push_back({ n.x, n.z, -n.y });
             }
+          }
+        }
+      }
+    }
     auto lods = std::vector<float> { 7.0F };
-    for (auto mip = 0U; mip < 7U; ++mip)
+    for (auto mip = 0U; mip < 7U; ++mip) {
       for (const auto fraction :
-        { 0.0F, 0x1p-9F, 0x1p-8F, 0.5F, 1.0F - 0x1p-8F, 1.0F - 0x1p-9F })
-        lods.push_back(float(mip) + fraction);
+        { 0.0F, 0x1p-9F, 0x1p-8F, 0.5F, 1.0F - 0x1p-8F, 1.0F - 0x1p-9F }) {
+        lods.push_back(static_cast<float>(mip) + fraction);
+      }
+    }
 
     auto maximum_rgb_error = 0.0;
     auto maximum_ev_error = 0.0;
@@ -1255,16 +1335,17 @@ namespace {
             return Pixel { value, value * 0.713F, value * 0.317F, 1.0F };
           }
           const auto n = Direction(face, x, y, 128U);
-          if (n.z < 0.0F)
+          if (n.z < 0.0F) {
             return Pixel { 0.0317F, 0.0413F, 0.0171F, 1.0F };
+          }
           const auto sun = 1000.0F
             * std::pow(std::max(0.0F,
                          glm::dot(n, glm::normalize(glm::vec3 { 1, 2, 3 }))),
               64.0F);
           return Pixel {
-            4.1F + 16.3F * n.z * n.z + sun,
-            7.3F + 24.1F * n.z * n.z + 0.6F * sun,
-            12.7F + 40.3F * n.z * n.z + 0.2F * sun,
+            4.1F + (16.3F * n.z * n.z) + sun,
+            7.3F + (24.1F * n.z * n.z) + (0.6F * sun),
+            12.7F + (40.3F * n.z * n.z) + (0.2F * sun),
             1.0F,
           };
         });
@@ -1283,7 +1364,7 @@ namespace {
       const auto mapping_input = std::array<float, 4> {
         1.0F,
         0.0F,
-        float(products.maximum_mip),
+        static_cast<float>(products.maximum_mip),
         0.04F,
       };
       const auto mapping = Decode({
@@ -1306,19 +1387,27 @@ namespace {
            }) {
         auto samples = std::vector<ReferenceSample> {};
         samples.reserve(directions.size() * lods.size() * 2U);
-        for (const auto& direction : directions)
-          for (const auto lod : lods)
-            for (const auto descriptor : descriptors)
-              samples.push_back({ direction, lod, descriptor });
+        for (const auto& direction : directions) {
+          for (const auto lod : lods) {
+            for (const auto descriptor : descriptors) {
+              samples.push_back({
+                .direction = direction,
+                .lod = lod,
+                .source = descriptor,
+              });
+            }
+          }
+        }
         auto words = std::vector<std::uint32_t> {};
         words.reserve(samples.size() * 3U);
-        // The probe has one thread per group. Keep both representations in
-        // the same batch while respecting D3D12's per-dimension group limit.
+        // The probe has one thread per group. Keep both representations
+        // in the same batch while respecting D3D12's per-dimension group
+        // limit.
         constexpr auto kBatchRecords = 65534U;
         for (std::size_t first = 0U; first < samples.size();
           first += kBatchRecords) {
           const auto batch = std::span(samples).subspan(first,
-            std::min(std::size_t(kBatchRecords), samples.size() - first));
+            std::min(std::size_t { kBatchRecords }, samples.size() - first));
           const auto decoded = Decode({
             .records = std::as_bytes(batch),
             .stride = sizeof(ReferenceSample),
@@ -1339,7 +1428,7 @@ namespace {
         auto worst_sample = ReferenceSample {};
         auto worst_channel = 0U;
         auto worst_values = std::array<double, 2> {};
-        for (auto index = 0U; index < words.size(); index += 6U)
+        for (auto index = 0U; index < words.size(); index += 6U) {
           for (auto channel = 0U; channel < 3U; ++channel) {
             const double reference
               = std::bit_cast<float>(words[index + channel]);
@@ -1365,8 +1454,9 @@ namespace {
                 std::abs(narrowed - reference) / reference);
               ++consumer_comparisons;
             }
-            if (ev_error > 1.0 / 1024.0)
+            if (ev_error > 1.0 / 1024.0) {
               ++failed_ev_pairs;
+            }
             if (ev_error > chain_ev_error) {
               chain_ev_error = ev_error;
               worst_sample = samples[index / 3U];
@@ -1375,6 +1465,7 @@ namespace {
             }
             ++comparisons;
           }
+        }
         const auto prefix = std::string(checker ? "checker_" : "sky_")
           + (descriptors[0] == products.processed_srv.get() ? "processed_"
                                                             : "specular_");
@@ -1406,13 +1497,16 @@ namespace {
         RecordProperty(prefix + "worst_lod_bits",
           std::to_string(std::bit_cast<std::uint32_t>(worst_sample.lod)));
         RecordProperty(prefix + "worst_reference_bits",
-          std::to_string(std::bit_cast<std::uint32_t>(float(worst_values[0]))));
+          std::to_string(
+            std::bit_cast<std::uint32_t>(static_cast<float>(worst_values[0]))));
         RecordProperty(prefix + "worst_half_bits",
-          std::to_string(std::bit_cast<std::uint32_t>(float(worst_values[1]))));
+          std::to_string(
+            std::bit_cast<std::uint32_t>(static_cast<float>(worst_values[1]))));
       }
     }
-    // Broader samples remain diagnostic evidence. Production samples only the
-    // prefiltered cube, over its roughness mapping's reachable LOD interval.
+    // Broader samples remain diagnostic evidence. Production samples only
+    // the prefiltered cube, over its roughness mapping's reachable LOD
+    // interval.
     EXPECT_GT(consumer_comparisons, 0U);
     EXPECT_LE(consumer_maximum_rgb_error, 0.0025);
     EXPECT_LE(consumer_maximum_ev_error, 2.0 / 1024.0);
@@ -1455,16 +1549,18 @@ namespace {
     auto invalid = std::array<SurfaceInput, 5> {};
     invalid.fill(input);
     const auto infinity = std::numeric_limits<float>::infinity();
-    for (auto& value : invalid)
+    for (auto& value : invalid) {
       value.light.tint_rgb = { 0.0F, 0.0F, 0.0F };
+    }
     invalid[0].light.radiance_scale = infinity;
     invalid[1].f0 = { 0.0F, 0.0F, 0.0F };
     invalid[1].light.tint_rgb = { infinity, 0.0F, 0.0F };
     invalid[2].f0 = { infinity, 0.0F, 0.0F };
     invalid[3].light.specular_intensity = infinity;
     invalid[4].light.radiance_scale = -1.0F;
-    for (const auto descriptor : SelectedSpecular(products, invalid))
+    for (const auto descriptor : SelectedSpecular(products, invalid)) {
       EXPECT_EQ(descriptor, products.specular_srv.get());
+    }
     const auto shaded = Shade(products, inputs)[0];
     const auto response = BrdfResponse(input);
     const auto brdf = response[0] + response[1];
@@ -1537,7 +1633,7 @@ namespace {
     EndCapture();
     const auto metadata = ReadBuffer<environment::IblProductMetadata>(
       **products, *(*products)->metadata);
-    EXPECT_EQ(metadata.processing_flags, 3U);
+    EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
     EXPECT_EQ(metadata.product_revision, 31U);
     EXPECT_FLOAT_EQ(metadata.source_radiance_scale, 1.0F);
     EXPECT_NEAR(metadata.average_brightness, 1.625F / 3.0F, 0.0001F);
@@ -1583,22 +1679,24 @@ namespace {
       const auto& products = **result;
       const auto metadata = ReadBuffer<environment::IblProductMetadata>(
         products, *products.metadata);
-      EXPECT_EQ(metadata.processing_flags, 3U);
+      EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
       const double gain = wide ? 1.0 : 0x1p50;
       for (const auto& texture :
         { products.processed_cube, products.specular_cube }) {
         ASSERT_EQ(texture->GetDescriptor().format, Format::kRGBA32Float);
-        for (unsigned face = 0U; face < 6U; ++face)
+        for (unsigned face = 0U; face < 6U; ++face) {
           for (unsigned mip = 0U; mip <= products.maximum_mip; ++mip) {
             const auto pixels = ReadFace(products, *texture, face, mip);
-            for (const auto& pixel : pixels)
+            for (const auto& pixel : pixels) {
               for (unsigned c = 0U; c < 3U; ++c) {
                 const double expected = color[c] * gain;
                 EXPECT_NEAR(static_cast<double>(pixel[c])
                     * metadata.source_radiance_scale * gain,
                   expected, std::abs(expected) * 2.0e-5);
               }
+            }
           }
+        }
       }
     }
   }
@@ -1614,9 +1712,10 @@ namespace {
     fog.min_transmittance = 0.25F;
     fog.max_opacity = 0.75F;
     fog.fog_inscattering_luminance_rgb = { 1.0e8F, 2.0e6F, 8.0F };
-    // A prior sky light must never enter captured lighting. Atmosphere-off
-    // capture owns no LUT resources; a captured Sky Sphere is set only by
-    // CapturedSkySource and is covered by the surface tests.
+    // A prior sky light must never enter captured lighting.
+    // Atmosphere-off capture owns no LUT resources; a captured Sky Sphere
+    // is set only by CapturedSkySource and is covered by the surface
+    // tests.
     source.environment.sky_light.enabled = 1U;
     unsigned revision = 200U;
     for (const bool main_pass : { false, true }) {
@@ -1624,17 +1723,19 @@ namespace {
         fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
           | (main_pass ? kGpuFogFlagRenderInMainPass : 0U)
           | (capture_visible ? kGpuFogFlagVisibleInRealTimeSkyCaptures : 0U);
-        if (!main_pass && capture_visible)
+        if (!main_pass && capture_visible) {
           BeginCapture();
+        }
         const auto products = Processor().ProcessSky(source, PrepareBrdf(),
           { .face_size = 128U, .lower_hemisphere_solid_color = false },
           ++revision);
         ASSERT_TRUE(products.has_value());
-        if (!main_pass && capture_visible)
+        if (!main_pass && capture_visible) {
           EndCapture();
+        }
         const auto metadata = ReadBuffer<environment::IblProductMetadata>(
           **products, *(*products)->metadata);
-        EXPECT_EQ(metadata.processing_flags, 3U);
+        EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
         EXPECT_EQ(metadata.product_revision, revision);
         const auto expected = std::array {
           capture_visible ? 7.5e7F : 0.0F,
@@ -1651,19 +1752,21 @@ namespace {
                 << texture->GetDescriptor().debug_name << " face=" << face
                 << " mip=" << mip);
               const auto pixels = ReadFace(**products, *texture, face, mip);
-              for (const auto& pixel : pixels)
+              for (const auto& pixel : pixels) {
                 for (unsigned c = 0U; c < 3U; ++c) {
                   const float normalized
                     = expected[c] / metadata.source_radiance_scale;
-                  // Source storage, native filtering and output storage round
-                  // in binary16. Bound the combined error in that domain;
-                  // a percentage of scene radiance ignores its ULP spacing.
+                  // Source storage, native filtering and output storage
+                  // round in binary16. Bound the combined error in that
+                  // domain; a percentage of scene radiance ignores its
+                  // ULP spacing.
                   const float ulp = normalized == 0.0F
                     ? 0.0F
                     : std::ldexp(
                         1.0F, std::max(-24, std::ilogb(normalized) - 10));
                   ASSERT_NEAR(pixel[c], normalized, 2.0F * ulp);
                 }
+              }
             }
           }
         }
@@ -1673,9 +1776,10 @@ namespace {
           = environment::internal::EvaluatePackedStaticSkyLightDiffuseSh(
               sh, { 0, 0, 1 })
           * metadata.source_radiance_scale;
-        for (unsigned c = 0U; c < 3U; ++c)
+        for (unsigned c = 0U; c < 3U; ++c) {
           EXPECT_NEAR(
             diffuse[c], expected[c], std::max(0.001F, expected[c] * 0.001F));
+        }
       }
     }
   }
@@ -1713,14 +1817,15 @@ namespace {
     ASSERT_TRUE(products.has_value());
     const auto metadata = ReadBuffer<environment::IblProductMetadata>(
       **products, *(*products)->metadata);
-    EXPECT_EQ(metadata.processing_flags, 3U);
+    EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
     EXPECT_FLOAT_EQ(metadata.average_brightness, 0.0F);
     for (unsigned face = 0U; face < 6U; ++face) {
       for (const auto& texture :
         { (*products)->processed_cube, (*products)->specular_cube }) {
         const auto pixels = ReadFace(**products, *texture, face, 0U);
-        for (const auto& pixel : pixels)
+        for (const auto& pixel : pixels) {
           EXPECT_EQ(pixel, (Pixel { 0.0F, 0.0F, 0.0F, 1.0F }));
+        }
       }
     }
   }
@@ -1784,7 +1889,7 @@ namespace {
     ASSERT_TRUE(products.has_value());
     const auto metadata = ReadBuffer<environment::IblProductMetadata>(
       **products, *(*products)->metadata);
-    EXPECT_EQ(metadata.processing_flags, 3U);
+    EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
     EXPECT_NEAR(metadata.source_radiance_scale, 1.0e8F / 65504.0F, 0.001F);
     const auto sh = ReadBuffer<std::array<glm::vec4, 8>>(
       **products, *(*products)->diffuse_sh);
@@ -1809,9 +1914,9 @@ namespace {
       = MakeSource(128U, [](auto face, auto x, auto y) -> Pixel {
           const auto n = Direction(face, x, y, 128U);
           return Pixel {
-            1.0F + 0.75F * n.x,
-            1.0F + 0.75F * n.y,
-            1.0F + 0.75F * n.z,
+            1.0F + (0.75F * n.x),
+            1.0F + (0.75F * n.y),
+            1.0F + (0.75F * n.z),
             1.0F,
           };
         });
@@ -1831,9 +1936,9 @@ namespace {
          }) {
       const auto diffuse
         = environment::internal::EvaluatePackedStaticSkyLightDiffuseSh(sh, n);
-      EXPECT_NEAR(diffuse.r, 1.0F + 0.5F * n.x, 0.001F);
-      EXPECT_NEAR(diffuse.g, 1.0F + 0.5F * n.y, 0.001F);
-      EXPECT_NEAR(diffuse.b, 1.0F + 0.5F * n.z, 0.001F);
+      EXPECT_NEAR(diffuse.r, 1.0F + (0.5F * n.x), 0.001F);
+      EXPECT_NEAR(diffuse.g, 1.0F + (0.5F * n.y), 0.001F);
+      EXPECT_NEAR(diffuse.b, 1.0F + (0.5F * n.z), 0.001F);
     }
     for (auto face = 0U; face < 6U; ++face) {
       const auto pixels
@@ -1841,9 +1946,10 @@ namespace {
       for (const auto y : { 0U, 63U, 127U }) {
         for (const auto x : { 0U, 63U, 127U }) {
           const auto direction = Direction(face, x, y, 128U);
-          for (auto channel = 0U; channel < 3U; ++channel)
-            EXPECT_NEAR(pixels[y * 128U + x][channel],
-              1.0F + 0.75F * direction[channel], 0.001F);
+          for (auto channel = 0U; channel < 3U; ++channel) {
+            EXPECT_NEAR(pixels[(y * 128U) + x][channel],
+              1.0F + (0.75F * direction[channel]), 0.001F);
+          }
         }
       }
     }
@@ -1909,10 +2015,12 @@ namespace {
     const auto up = ReadFace(**products, *(*products)->processed_cube, 2U, 0U);
     const auto down
       = ReadFace(**products, *(*products)->processed_cube, 3U, 0U);
-    for (const auto& pixel : up)
+    for (const auto& pixel : up) {
       EXPECT_EQ(pixel, (Pixel { 1, 0, 0, 1 }));
-    for (const auto& pixel : down)
+    }
+    for (const auto& pixel : down) {
       EXPECT_EQ(pixel, (Pixel { 0, 0, 1, 1 }));
+    }
     const auto sh = ReadBuffer<std::array<glm::vec4, 8>>(
       **products, *(*products)->diffuse_sh);
     const auto horizon
@@ -1954,7 +2062,7 @@ namespace {
     ASSERT_TRUE(mapped.has_value());
     environment::IblProductMetadata metadata;
     std::memcpy(&metadata, mapped->Bytes().data(), sizeof(metadata));
-    EXPECT_EQ(metadata.processing_flags, 3U);
+    EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
     EXPECT_EQ(metadata.product_revision, 36U);
   }
 
@@ -2001,23 +2109,24 @@ namespace {
       for (const auto x : { 0U, 31U, 127U }) {
         for (auto material = 0U; material < 3U; ++material) {
           auto input = Surface(**products);
-          const auto nv = (x + 0.5F) / 128.0F;
-          input.view = { std::sqrt(1.0F - nv * nv), 0.0F, nv };
-          input.roughness = (y + 0.5F) / 32.0F;
+          const auto nv = (static_cast<float>(x) + 0.5F) / 128.0F;
+          input.view = { std::sqrt(1.0F - (nv * nv)), 0.0F, nv };
+          input.roughness = (static_cast<float>(y) + 0.5F) / 32.0F;
           input.light.tint_rgb = { 0.25F, 0.5F, 0.75F };
           input.light.radiance_scale = 1.5F;
           input.light.diffuse_intensity = 2.0F;
           input.light.specular_intensity = 3.0F;
           input.occlusion = 0.35F;
           input.metallic = material == 0U ? 0.0F : 1.0F;
-          if (material == 1U)
+          if (material == 1U) {
             input.f0 = input.base_color;
+          }
           if (material == 2U) {
             input.f0 = { 0.002F, 0.001F, 0.0005F };
             input.base_color = input.f0;
           }
-          const auto a = brdf[y * 128U + x][0] / 65535.0F;
-          const auto b = brdf[y * 128U + x][1] / 65535.0F;
+          const auto a = static_cast<float>(brdf[(y * 128U) + x][0]) / 65535.0F;
+          const auto b = static_cast<float>(brdf[(y * 128U) + x][1]) / 65535.0F;
           constexpr auto radiance = std::array { 2.0F, 0.5F, 1.0F };
           auto reference = std::array<float, 6> {};
           for (auto channel = 0U; channel < 3U; ++channel) {
@@ -2026,8 +2135,8 @@ namespace {
             reference[channel] = gain * input.base_color[channel]
               * (1.0F - input.metallic) * input.occlusion * 2.0F;
             reference[channel + 3U] = gain * 3.0F
-              * (input.f0[channel] * a
-                + std::min(1.0F, 50.0F * input.f0[1]) * b);
+              * ((input.f0[channel] * a)
+                + (std::min(1.0F, 50.0F * input.f0[1]) * b));
           }
           inputs.push_back(input);
           expected.push_back(reference);
@@ -2038,9 +2147,10 @@ namespace {
     EndCapture();
     for (auto index = 0U; index < inputs.size(); ++index) {
       SCOPED_TRACE(index);
-      for (auto channel = 0U; channel < 6U; ++channel)
+      for (auto channel = 0U; channel < 6U; ++channel) {
         EXPECT_NEAR(actual[index][channel], expected[index][channel],
           0.001F * std::max(0.01F, expected[index][channel]));
+      }
     }
   }
 
@@ -2089,18 +2199,20 @@ namespace {
     auto input = Surface(**products);
     input.base_color = { 1.0F, 1.0F, 1.0F };
     const auto nv = 127.5F / 128.0F;
-    input.view = { std::sqrt(1.0F - nv * nv), 0.0F, nv };
+    input.view = { std::sqrt(1.0F - (nv * nv)), 0.0F, nv };
     input.roughness = 15.5F / 32.0F;
     input.light.radiance_scale = 2.0F;
     const auto actual = Shade(**products, std::array { input }).front();
     const auto lookup = environment::internal::GetIblBrdfLookup();
-    const auto a = lookup[15U * 128U + 127U][0] / 65535.0F;
-    const auto b = lookup[15U * 128U + 127U][1] / 65535.0F;
+    const auto a
+      = static_cast<float>(lookup[(15U * 128U) + 127U][0]) / 65535.0F;
+    const auto b
+      = static_cast<float>(lookup[(15U * 128U) + 127U][1]) / 65535.0F;
     constexpr auto radiance = std::array { 1.0e8F, 2.0e6F, 8.0F };
     for (auto channel = 0U; channel < 3U; ++channel) {
       EXPECT_NEAR(
         actual[channel], radiance[channel] * 2.0F, radiance[channel] * 0.002F);
-      const auto reference = radiance[channel] * 2.0F * (0.04F * a + b);
+      const auto reference = radiance[channel] * 2.0F * ((0.04F * a) + b);
       EXPECT_NEAR(actual[channel + 3U], reference, reference * 0.002F);
     }
   }
@@ -2111,14 +2223,14 @@ namespace {
     const auto source
       = MakeSource(128U, [](auto face, auto x, auto y) -> Pixel {
           const auto n = Direction(face, x, y, 128U);
-          const auto sun_cosine
-            = std::max(0.0F, (0.4F * n.x - 0.2F * n.y + n.z) / std::sqrt(1.2F));
+          const auto sun_cosine = std::max(
+            0.0F, ((0.4F * n.x) - (0.2F * n.y) + n.z) / std::sqrt(1.2F));
           const auto sun = std::pow(sun_cosine, 128.0F);
-          const auto sky = 0.3F + 0.7F * std::max(0.0F, n.z);
+          const auto sky = 0.3F + (0.7F * std::max(0.0F, n.z));
           return Pixel {
-            0.1F * sky + 40.0F * sun,
-            0.2F * sky + 24.0F * sun,
-            0.4F * sky + 12.0F * sun,
+            (0.1F * sky) + (40.0F * sun),
+            (0.2F * sky) + (24.0F * sun),
+            (0.4F * sky) + (12.0F * sun),
             1.0F,
           };
         });
@@ -2128,13 +2240,13 @@ namespace {
     ASSERT_TRUE(products.has_value());
     constexpr auto width = 256U;
     constexpr auto height = 64U;
-    auto inputs = std::vector<SurfaceInput>(width * height);
+    auto inputs = std::vector<SurfaceInput>(std::size_t { width } * height);
     for (auto y = 0U; y < height; ++y) {
       for (auto x = 0U; x < width; ++x) {
         auto input = Surface(**products);
         const auto nx = (static_cast<float>(x % 64U) + 0.5F - 32.0F) / 28.0F;
         const auto ny = (32.0F - static_cast<float>(y) - 0.5F) / 28.0F;
-        const auto radius_squared = nx * nx + ny * ny;
+        const auto radius_squared = (nx * nx) + (ny * ny);
         input.normal = radius_squared < 1.0F
           ? std::array { nx, ny, std::sqrt(1.0F - radius_squared) }
           : std::array { 0.0F, 0.0F, 0.0F };
@@ -2144,23 +2256,24 @@ namespace {
         input.metallic = material == 0U ? 0.0F : 1.0F;
         input.base_color = material == 0U ? std::array { 0.55F, 0.2F, 0.07F }
                                           : std::array { 0.95F, 0.64F, 0.54F };
-        if (material != 0U)
+        if (material != 0U) {
           input.f0 = input.base_color;
-        inputs[y * width + x] = input;
+        }
+        inputs[(y * width) + x] = input;
       }
     }
     const auto pixels = Shade(**products, inputs);
     auto peak = std::array<float, 4> {};
-    auto image = std::vector<float>(width * height * 3U);
+    auto image = std::vector<float>(std::size_t { width } * height * 3U);
     for (auto y = 0U; y < height; ++y) {
       for (auto x = 0U; x < width; ++x) {
         for (auto channel = 0U; channel < 3U; ++channel) {
-          const auto& pixel = pixels[y * width + x];
+          const auto& pixel = pixels[(y * width) + x];
           const auto value = pixel[channel] + pixel[channel + 3U];
           ASSERT_TRUE(std::isfinite(value));
           ASSERT_GE(value, 0.0F);
           peak[x / 64U] = std::max(peak[x / 64U], value);
-          image[((height - 1U - y) * width + x) * 3U + channel] = value;
+          image[((((height - 1U - y) * width) + x) * 3U) + channel] = value;
         }
       }
     }
@@ -2174,13 +2287,19 @@ namespace {
       = std::unique_ptr<char, decltype(&std::free)>(path, &std::free);
     if (owned) {
       const auto destination = std::filesystem::path(owned.get());
-      if (destination.has_parent_path())
+      if (destination.has_parent_path()) {
         std::filesystem::create_directories(destination.parent_path());
+      }
       auto stream = std::ofstream(destination, std::ios::binary);
       ASSERT_TRUE(stream.good());
       stream << "PF\n" << width << " " << height << "\n-1.0\n";
-      stream.write(reinterpret_cast<const char*>(image.data()),
-        static_cast<std::streamsize>(image.size() * sizeof(float)));
+      const auto bytes = std::as_bytes(std::span { image });
+      auto chars = std::vector<char>(bytes.size());
+      std::ranges::transform(
+        bytes, chars.begin(), [](const std::byte value) -> char {
+          return std::bit_cast<char>(value);
+        });
+      stream.write(chars.data(), static_cast<std::streamsize>(chars.size()));
       ASSERT_TRUE(stream.good());
     }
   }
@@ -2236,7 +2355,7 @@ namespace {
       const auto metadata = ReadBuffer<environment::IblProductMetadata>(
         *products, *products->metadata);
       EXPECT_EQ(metadata.product_revision, revision);
-      EXPECT_EQ(metadata.processing_flags, 3U);
+      EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
       if (physical) {
         EXPECT_EQ(products->specular_cube.get(), physical);
         EXPECT_EQ(products->specular_srv, descriptor);
@@ -2325,8 +2444,9 @@ namespace {
     Backend().PollCompletedUses();
     EXPECT_EQ(Processor().GetStats().normal_in_use, 1U);
     auto normal = std::vector<std::shared_ptr<const IblGpuProducts>> { third };
-    for (unsigned i = 1U; i < IblGpuProcessor::kNormalSlots; ++i)
+    for (unsigned i = 1U; i < IblGpuProcessor::kNormalSlots; ++i) {
       normal.push_back(make(503U + i));
+    }
     EXPECT_EQ(
       Processor().GetStats().normal_in_use, IblGpuProcessor::kNormalSlots);
     EXPECT_EQ(Processor().GetStats().available, 0U);
@@ -2406,7 +2526,7 @@ namespace {
     ASSERT_TRUE(SUCCEEDED(Backend().GetCurrentDevice()->CreateFence(
       0U, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gate.GetAddressOf()))));
     const auto release_gate = ScopeGuard(
-      [gate]() noexcept -> void { static_cast<void>(gate->Signal(1U)); });
+      [gate] noexcept -> void { static_cast<void>(gate->Signal(1U)); });
     auto* queue = static_cast<graphics::d3d12::CommandQueue*>(GetQueue().get());
     ASSERT_TRUE(SUCCEEDED(queue->GetCommandQueue()->Wait(gate.Get(), 1U)));
     ASSERT_TRUE(submitted.Submit());
@@ -2479,10 +2599,11 @@ namespace {
     auto recording = AcquireRecorder("IBL faulted capture",
       graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
     const auto backend = Backend().GetBackendLifetime();
-    // Exercise the existing admission gate without issuing uncertain GPU work.
+    // Exercise the existing admission gate without issuing uncertain GPU
+    // work.
     backend->MarkSubmissionFault();
     const auto restore = ScopeGuard(
-      [backend]() noexcept -> void { backend->ClearSubmissionFault(); });
+      [backend] noexcept -> void { backend->ClearSubmissionFault(); });
     const auto denied = (*result)->AcquireCapture();
     ASSERT_FALSE(denied);
     EXPECT_EQ(denied.error(), environment::IblCaptureError::kClosed);
@@ -2559,7 +2680,8 @@ namespace {
     *capture = {};
     EXPECT_EQ(Processor().GetStats().normal_in_use, 0U);
     EXPECT_EQ(Processor().GetStats().captured_generations, 0U);
-    // Recovery never revives a poisoned generation; a fresh owner rebuilds.
+    // Recovery never revives a poisoned generation; a fresh owner
+    // rebuilds.
     processor_.reset();
     brdf_resources_.reset();
     const auto rebuilt = Processor().Process(source.texture,
@@ -2590,7 +2712,7 @@ namespace {
     recording->FlushBarriers();
     *capture = {};
     const auto submitted = recording.SubmitWithReceipt();
-    ASSERT_TRUE(submitted.receipt);
+    ASSERT_HAS_VALUE(submitted.receipt);
     EXPECT_EQ(Processor().GetStats().captured_generations, 1U);
     graphics::internal::SubmissionFaultTestAccess::LoseDevice(*GetQueue());
     EXPECT_EQ(GetQueue()->QueryCompletion(*submitted.receipt),
@@ -2639,8 +2761,9 @@ namespace {
       EXPECT_EQ(Processor().GetStats().normal_in_use, 1U);
       EXPECT_EQ(
         Processor().GetStats().available, IblGpuProcessor::kMaximumSlots - 1U);
-      if (succeeded)
+      if (succeeded) {
         break;
+      }
     }
     EXPECT_GE(failures, 3U);
     EXPECT_TRUE(succeeded);
@@ -2660,7 +2783,8 @@ namespace {
       [](auto, auto, auto) -> Pixel { return Pixel { 1, 0.5F, 0.25F, 1 }; });
     for (const bool submit : { false, true }) {
       auto result = Processor().Process(source.texture, source.registration,
-        PrepareBrdf(), { .face_size = 16U }, 696U + unsigned(submit));
+        PrepareBrdf(), { .face_size = 16U },
+        696U + static_cast<unsigned>(submit));
       ASSERT_TRUE(result);
       auto product = std::move(*result);
       auto capture = product->AcquireCapture();
@@ -2752,8 +2876,9 @@ namespace {
     processor_.reset();
     brdf_resources_.reset();
     const auto values = Shade(**products, std::array { Surface(**products) });
-    for (const auto value : values.front())
+    for (const auto value : values.front()) {
       EXPECT_GT(value, 0.0F);
+    }
   }
 
   NOLINT_TEST_F(IblConvolutionGpuTest, ResizingAFreeSlotReplacesItsResources)
@@ -2786,9 +2911,9 @@ namespace {
           const auto n = Direction(face, x, y, 128U);
           const auto peak = std::pow(std::max(0.0F, n.z), 32.0F);
           return Pixel {
-            1.0F + 0.5F * n.x,
-            1.0F + 0.5F * n.y,
-            0.2F + 5.0F * peak,
+            1.0F + (0.5F * n.x),
+            1.0F + (0.5F * n.y),
+            0.2F + (5.0F * peak),
             1.0F,
           };
         });
@@ -2802,7 +2927,8 @@ namespace {
     unsigned comparisons = 0U;
     for (const auto mip : { 0U, 2U, 4U, 5U, 7U }) {
       const auto size = 128U >> mip;
-      const auto roughness = std::exp2((double(mip) + 2.0 - 7.0) / 1.2);
+      const auto roughness
+        = std::exp2((static_cast<double>(mip) + 2.0 - 7.0) / 1.2);
       for (auto face = 0U; face < 6U; ++face) {
         const auto values
           = ReadFace(**products, *(*products)->specular_cube, face, mip);
@@ -2819,22 +2945,36 @@ namespace {
           const auto cube_normal
             = glm::normalize(glm::dvec3 { n.x, n.z, -n.y });
           const auto matching = Reference(**products,
-            PrefilterReferencePlan(cube_normal, roughness, 128U, 7U,
-              roughness < 0.1 ? 32U : 64U, (*products)->processed_srv));
+            PrefilterReferencePlan({
+              .normal = cube_normal,
+              .roughness = roughness,
+              .size = 128U,
+              .maximum_mip = 7U,
+              .count = roughness < 0.1 ? 32U : 64U,
+              .source = (*products)->processed_srv,
+            }));
           const auto high_sample = Reference(**products,
-            PrefilterReferencePlan(cube_normal, roughness, 128U, 7U, 1024U,
-              (*products)->processed_srv));
+            PrefilterReferencePlan({
+              .normal = cube_normal,
+              .roughness = roughness,
+              .size = 128U,
+              .maximum_mip = 7U,
+              .count = 1024U,
+              .source = (*products)->processed_srv,
+            }));
           for (auto c = 0U; c < 3U; ++c) {
             SCOPED_TRACE(::testing::Message()
               << "mip " << mip << " face " << face << " x " << x << " channel "
               << c);
-            const auto value = values[y * size + x][c];
+            const auto value = values[(y * size) + x][c];
             // Native arithmetic plus FP16 storage, independent of the
             // separately measured 32/64 versus 1024-sample estimator error.
-            EXPECT_NEAR(value, matching[c], 0.001 * std::max(1.0, matching[c]));
-            peak_matching_error
-              = std::max(peak_matching_error, std::abs(value - matching[c]));
-            const auto error = std::abs(value - high_sample[c]) / 5.2;
+            const auto component = static_cast<glm::length_t>(c);
+            EXPECT_NEAR(value, matching[component],
+              0.001 * std::max(1.0, matching[component]));
+            peak_matching_error = std::max(
+              peak_matching_error, std::abs(value - matching[component]));
+            const auto error = std::abs(value - high_sample[component]) / 5.2;
             peak_high_sample_error = std::max(peak_high_sample_error, error);
             squared_high_sample_error += error * error;
             ++comparisons;
