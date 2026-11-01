@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <system_error>
+
 #include <Oxygen/Base/NoInline.h>
 #include <Oxygen/Base/ReturnAddress.h> // used
 #include <Oxygen/OxCo/Detail/GetAwaiter.h>
@@ -54,7 +56,7 @@ namespace detail {
       Executor executor(*event_loop_);
       executor_ = &executor;
       Executor* prev_exec = std::exchange(CurrentExecutor(), &executor);
-      ScopeGuard guard([this, prev_exec]() noexcept -> void {
+      ScopeGuard guard([this, prev_exec] noexcept -> void {
         executor_ = nullptr;
         CurrentExecutor() = prev_exec;
       });
@@ -65,7 +67,16 @@ namespace detail {
           runner->executor_->RunSoon(
             +[](Runner* r) noexcept -> void {
               EventLoop* loop = std::exchange(r->event_loop_, nullptr);
-              Traits::Stop(*loop);
+              // An awaitable that completed before the loop ran leaves it
+              // untouched: stopping it would leave it stopped for the next
+              // Run().
+              if (r->loop_running_) {
+                try {
+                  Traits::Stop(*loop);
+                } catch (const std::system_error& error) {
+                  ABORT_F("Failed to stop event loop: {}", error.what());
+                }
+              }
             },
             runner);
         };
@@ -76,7 +87,9 @@ namespace detail {
         executor.RunSoon();
         // the event_loop_ is reset in the `resume_fn`
         if (event_loop_) {
+          loop_running_ = true;
           Traits::Run(*event_loop_);
+          loop_running_ = false;
         }
         if (event_loop_) {
           // The event loop was stopped before the awaitable completed.
@@ -88,7 +101,7 @@ namespace detail {
           // I/O that's not going to happen anymore. Fail.
           // Do our best to clean up if there is a custom implementation
           // of FAIL_FOR_DANGLING_TASKS that throws an exception.
-          ScopeGuard cleanup_guard([&]() noexcept -> void {
+          ScopeGuard cleanup_guard([&] noexcept -> void {
             if (awaiter.await_cancel(ToHandle())) {
               // cancelled immediately
               return;
@@ -115,6 +128,7 @@ namespace detail {
   private:
     EventLoop* event_loop_;
     Executor* executor_ = nullptr;
+    bool loop_running_ = false;
   };
 
   //! Run a task or other awaitable from non-async context, using the given

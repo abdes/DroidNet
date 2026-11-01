@@ -16,7 +16,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -98,6 +97,23 @@ NOLINT_TEST_F(AsioTest, SmokeTest)
     co_await t.async_wait(asio_awaitable);
     EXPECT_GE(Clock::now() - from, 90ms);
   });
+}
+
+//! A Run() whose awaitable completes without the loop leaves the loop able to
+//! run the next one.
+NOLINT_TEST_F(AsioTest, RunAfterARunThatNeverWaitedStillRunsTheLoop)
+{
+  const auto immediate = ::Run(*io_, [] -> Co<int> { co_return 1; });
+
+  const auto waited = ::Run(*io_, [&] -> Co<int> {
+    asio::steady_timer t(*io_);
+    t.expires_after(1ms);
+    co_await t.async_wait(asio_awaitable);
+    co_return 2;
+  });
+
+  EXPECT_EQ(immediate, 1);
+  EXPECT_EQ(waited, 2);
 }
 
 NOLINT_TEST_F(AsioTest, AnyOf)
