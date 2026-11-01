@@ -27,7 +27,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/TextureResourceDescriptor.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::testing {

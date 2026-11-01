@@ -18,7 +18,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
@@ -42,14 +42,14 @@ public:
     data::pak::core::ResourceIndexT resource_index
       = data::pak::core::kNoResourceIndex;
     data::pak::core::BufferResourceDesc descriptor {};
-    std::vector<internal::BufferDescriptorView> views;
+    std::vector<data::BufferResourceView> views;
   };
 
   struct Submission final {
     size_t submitted_count = 0;
     std::unordered_map<std::string, std::string>
       descriptor_relpath_by_source_id;
-    std::unordered_map<std::string, std::vector<internal::BufferDescriptorView>>
+    std::unordered_map<std::string, std::vector<data::BufferResourceView>>
       descriptor_views_by_source_id;
   };
 
@@ -64,9 +64,9 @@ public:
     const Submission& submission) -> co::Co<std::vector<EmittedBuffer>>;
 
 private:
-  ImportSession& session_;
-  const ImportRequest& request_;
-  observer_ptr<IAsyncFileReader> reader_ {};
+  observer_ptr<ImportSession> session_;
+  observer_ptr<const ImportRequest> request_;
+  observer_ptr<IAsyncFileReader> reader_;
   std::stop_token stop_token_ {};
 };
 

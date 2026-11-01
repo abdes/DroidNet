@@ -35,7 +35,6 @@
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Pak/Internal/PakSourceDevices.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
@@ -56,6 +55,7 @@
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/ByteBuffer.h>
@@ -1019,17 +1019,15 @@ auto CollectBufferSidecar(PlanningState& state, const SourceCollection& context,
   if (!bytes) {
     return;
   }
-  auto parsed = content::import::internal::ParsedBufferDescriptorSidecar {};
-  auto error = std::string {};
-  if (!content::import::internal::ParseBufferDescriptorSidecar(
-        bytes->Bytes(), parsed, error)) {
+  const auto decoded = data::DecodeBufferResourceDescriptor(bytes->Bytes());
+  if (!decoded) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       pak::PakBuildPhase::kPlanning, "pak.plan.buffer_sidecar_invalid",
-      "Buffer sidecar is invalid: " + error, path);
+      "Buffer sidecar is invalid: " + decoded.error(), path);
     return;
   }
   state.buffer_sidecars[context.order].insert_or_assign(
-    parsed.resource_index.get(), sidecar.name);
+    decoded->index.get(), sidecar.name);
 }
 
 //! Records the source's layer identity, deletions, named textures and buffer

@@ -20,8 +20,9 @@ Current implementation status snapshot:
 4. Implemented: `BufferImportSubmitter` — reusable submitter shared between
    standalone buffer-container imports and geometry/scene pipeline imports of
    embedded buffer data.
-5. Implemented: `BufferDescriptorSidecar` — per-buffer `.obuf` sidecar files
-   carrying `BufferResourceDesc` + named `BufferDescriptorView[]`.
+5. Implemented: per-buffer `.obuf` sidecar files carrying the buffer's row,
+   its `BufferResourceDesc` and named `data::BufferResourceView`s, encoded by
+   `Oxygen/Data/ResourceDescriptor.h`.
 6. Implemented: Loose-cooked emission (`Buffers/<name>.obuf` sidecar,
    `buffers.table`, `buffers.data`) via `BufferEmitter` and
    `ResourceDescriptorEmitter`.
@@ -43,7 +44,7 @@ In scope:
    format.
 2. One buffer-container descriptor (`*.json`) → N named buffer resources, each
    emitted as a separate `.obuf` sidecar entry in the loose cooked layout.
-3. Named sub-range views (`BufferDescriptorView`) within each buffer.
+3. Named sub-range views (`data::BufferResourceView`) within each buffer.
 4. Loose-cooked emission: `.obuf` sidecars, `buffers.table`, `buffers.data`.
 5. `BufferResourceDesc` binary format (32 bytes, `PakFormat_core.h`).
 6. Runtime loading via `LoadBufferResource` and `BufferResource`.
@@ -103,7 +104,7 @@ The following facts were confirmed during the documentation pass:
 | Per-entry validation (not job-level re-validation) | `BufferImportSubmitter.cpp` (`ValidateBufferChunkSchema` per entry; job only re-parses JSON, no schema re-validate)                                                                             |
 | Binary format lives in core, not render            | `src/Oxygen/Data/PakFormat_core.h` (`BufferResourceDesc`, `static_assert(sizeof(...))==32)`)                                                                                                    |
 | Loose cooked layout for buffers                    | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`kBufferDescriptorExtension = ".obuf"`, `BufferDescriptorRelPath()`, `BufferVirtualPath()`, `buffers_table_file_name`, `buffers_data_file_name`) |
-| Sidecar binary format defined                      | `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h` (`SerializeBufferDescriptorSidecar`, `ParsedBufferDescriptorSidecar`)                                                       |
+| Sidecar binary format defined                      | `src/Oxygen/Data/ResourceDescriptor.h` (`EncodeBufferResourceDescriptor`, `DecodeBufferResourceDescriptor`)                                                                                     |
 | Runtime loader exists                              | `src/Oxygen/Content/Loaders/BufferLoader.h` (`LoadBufferResource`)                                                                                                                              |
 | `BufferImportSubmitter` is reusable                | `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h` (not a member of `BufferContainerImportJob`; used standalone and by scene imports)                                             |
 | Pipeline does only content hashing                 | `src/Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h` (comment: "does not perform any I/O and does not assign resource indices")                                                       |
@@ -197,8 +198,8 @@ Architectural split:
 3. `BufferEmitter` handles deduplication (same content hash → same
    `ResourceIndexT`) and writes `buffers.table` / `buffers.data`.
 4. `ResourceDescriptorEmitter` writes the per-buffer `.obuf` sidecar containing
-   the `BufferResourceDesc` + `BufferDescriptorView[]`.
-5. Runtime loading reads `BufferResourceDesc` from the `.obuf` sidecar, then
+   the row, its `BufferResourceDesc` and its `BufferResourceView`s.
+5. Runtime loading reads `BufferResourceDesc` from `buffers.table`, then
    reads the raw payload bytes from `buffers.data` at `data_offset`.
 
 ## 6. Class Design
@@ -296,21 +297,21 @@ Architectural split:
 **Buffer View Types:**
 
 1. `oxygen::content::import::internal::BufferDescriptorViewSpec`
-   - file: `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h`
+   - file: `src/Oxygen/Cooker/Import/Internal/Utils/BufferViews.h`
    - role: optionally-addressed view specification parsed from JSON. Fields
      `byte_offset`, `byte_length`, `element_offset`, `element_count` may all be
      `std::nullopt` before normalization.
 
-2. `oxygen::content::import::internal::BufferDescriptorView`
-   - file: `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h`
+2. `oxygen::data::BufferResourceView`
+   - file: `src/Oxygen/Data/ResourceDescriptor.h`
    - role: resolved view with all address fields populated. Produced by
      `NormalizeBufferViews`. Written into the `.obuf` sidecar.
 
-3. `oxygen::content::import::internal::ParsedBufferDescriptorSidecar`
-   - file: `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h`
-   - role: result of reading back a `.obuf` sidecar at runtime or import time.
-     Contains `resource_index`, `BufferResourceDesc`, and
-     `vector<BufferDescriptorView>`.
+3. `oxygen::data::BufferResourceDescriptor`
+   - file: `src/Oxygen/Data/ResourceDescriptor.h`
+   - role: a decoded `.obuf` sidecar, as the importer and pak planner read
+     it back. Contains the row `index`, `BufferResourceDesc`, and
+     `vector<BufferResourceView>`.
 
 **Cooked Payload:**
 
@@ -608,20 +609,27 @@ Buffer types:
 
 ### 9.2 `.obuf` Sidecar File Layout
 
-Each buffer resource is described by a sidecar binary file (`<name>.obuf`). The
-sidecar is produced by `SerializeBufferDescriptorSidecar` and consumed by
-`ParseBufferDescriptorSidecar`.
+Each named buffer is described by a sidecar binary file (`<name>.obuf`). Its
+layout and its only encoder and decoder are in
+`src/Oxygen/Data/ResourceDescriptor.h` (`EncodeBufferResourceDescriptor`,
+`DecodeBufferResourceDescriptor`), which also owns the `.otex` texture
+descriptor. Both start with the same `ResourceDescriptorHeader`; the version is
+`buffer_descriptor` in `PakFormatVersions.inc`.
 
 ```text
-[ResourceIndexT]              — resource index in buffers.table (4 bytes)
-[BufferResourceDesc]          — 32 bytes (packed)
-[uint32_t view_count]         — number of named views stored
-[BufferDescriptorView × N]    — each view: name(64B) + byte_offset(8B) + byte_length(8B)
-                                           + element_offset(8B) + element_count(8B)
+[ResourceDescriptorHeader]    — magic "OBUF", buffers.table row (u32),
+                                u16 version (10 bytes)
+[BufferResourceDesc]          — copy of the row (53 bytes, packed)
+[u32 view_count, u32 strings_size]
+[BufferViewRecord × N]        — byte_offset, byte_length, element_offset,
+                                element_count (u64 each), name offset (u32)
+[string table]                — view names
 ```
 
-The implicit `__all__` view (entire buffer) is always the first entry in the
-view array when serialized.
+View names are non-empty and distinct, and one is `__all__`, the entire buffer
+(`data::WholeBufferView`, counting elements of `data::BufferElementStride`); the
+decoder rejects any other file. The importer writes `__all__` first
+(`WithWholeBufferView`, `Import/Internal/Utils/BufferViews.h`).
 
 ### 9.3 Payload Layout (inside `buffers.data`)
 
@@ -700,13 +708,12 @@ startup.
 Runtime load sequence:
 
 1. `AssetLoader` receives a buffer resource request (index or virtual path).
-2. `LoadBufferResource(context)` opens the `.obuf` sidecar from the mounted
-   `Buffers/` directory.
-3. `BufferResourceDesc` is read with `reader.ScopedAlignment(1)` (packed, no
+2. `LoadBufferResource(context)` reads the buffer's `BufferResourceDesc` row
+   from `buffers.table` with `reader.ScopedAlignment(1)` (packed, no
    padding).
-4. Raw bytes are read from `buffers.data` at `desc.data_offset` for
+3. Raw bytes are read from `buffers.data` at `desc.data_offset` for
    `desc.size_bytes` bytes.
-5. `std::make_unique<data::BufferResource>(desc, data_buffer)` is returned.
+4. `std::make_unique<data::BufferResource>(desc, data_buffer)` is returned.
 
 Key contracts:
 
@@ -719,8 +726,7 @@ Key contracts:
 3. `BufferResource` does not own a GPU handle. Buffer upload and GPU resource
    creation are the renderer's responsibility.
 4. Named views stored in the `.obuf` sidecar are available to tools and geometry
-   systems; the runtime `LoadBufferResource` loader does not parse view data —
-   it reads only `BufferResourceDesc`.
+   systems; the runtime does not read `.obuf` sidecars.
 5. Source file size is capped at `DataBlobSizeT::max` (4 GiB = `uint32_t::max`
    bytes). Files exceeding this limit are rejected during import with
    `buffer.container.source_too_large`.

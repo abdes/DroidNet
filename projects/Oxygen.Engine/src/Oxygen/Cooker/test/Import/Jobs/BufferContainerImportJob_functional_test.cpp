@@ -9,8 +9,6 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <span>
 #include <stdexcept>
@@ -26,16 +24,13 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Serio/ByteReader.h>
-#include <Oxygen/Serio/Record.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -47,102 +42,15 @@ namespace {
   using oxygen::cooker::test::ReadBytes;
   using oxygen::cooker::test::WriteBytes;
 
-  // The cooker-internal `.obuf` sidecar layout, mirrored to read
-  // the cooked output.
-#pragma pack(push, 1)
-  struct BufferSidecarHeader final {
-    std::array<char, 4> magic = { 'O', 'B', 'U', 'F' };
-    uint16_t version = import::internal::kBufferSidecarVersion;
-    uint16_t reserved = 0;
-    data::pak::core::ResourceIndexT resource_index
-      = data::pak::core::kNoResourceIndex;
-    data::pak::core::BufferResourceDesc descriptor {};
-    uint32_t view_count = 0;
-    uint32_t strings_size = 0;
-  };
-
-  struct BufferSidecarViewEntry final {
-    uint32_t name_offset = 0;
-    uint64_t byte_offset = 0;
-    uint64_t byte_length = 0;
-    uint64_t element_offset = 0;
-    uint64_t element_count = 0;
-  };
-#pragma pack(pop)
-
-} // namespace
-} // namespace oxygen::content::import::test
-
-// clang-format off
-namespace oxygen::serio {
-template <> inline constexpr bool kIsRecord<content::import::test::BufferSidecarHeader> = true;
-template <> inline constexpr bool kIsRecord<content::import::test::BufferSidecarViewEntry> = true;
-} // namespace oxygen::serio
-// clang-format on
-
-namespace oxygen::content::import::test {
-namespace {
-
-  struct SidecarView final {
-    std::string name;
-    uint64_t byte_offset = 0;
-    uint64_t byte_length = 0;
-    uint64_t element_offset = 0;
-    uint64_t element_count = 0;
-  };
-
-  struct Sidecar final {
-    data::pak::core::ResourceIndexT resource_index
-      = data::pak::core::kNoResourceIndex;
-    data::pak::core::BufferResourceDesc descriptor {};
-    std::vector<SidecarView> views;
-  };
-
-  //! Reads a cooked buffer sidecar; throws when it is not the current version.
-  auto ParseSidecar(const std::vector<std::byte>& bytes) -> Sidecar
+  //! Reads a cooked buffer sidecar; throws when it is not the current format.
+  auto ParseSidecar(const std::vector<std::byte>& bytes)
+    -> data::BufferResourceDescriptor
   {
-    const auto read_header
-      = oxygen::serio::CopyAt<BufferSidecarHeader>(std::span { bytes });
-    if (!read_header) {
-      throw std::runtime_error("buffer sidecar is truncated");
+    auto decoded = data::DecodeBufferResourceDescriptor(bytes);
+    if (!decoded) {
+      throw std::runtime_error(decoded.error());
     }
-    const auto& header = *read_header;
-    if (std::string_view(std::data(header.magic), 4U) != "OBUF"
-      || header.version != import::internal::kBufferSidecarVersion) {
-      throw std::runtime_error("buffer sidecar magic or version is wrong");
-    }
-    const auto entries_size
-      = size_t { header.view_count } * sizeof(BufferSidecarViewEntry);
-    if (bytes.size() != sizeof(header) + entries_size + header.strings_size) {
-      throw std::runtime_error("buffer sidecar size is wrong");
-    }
-    const auto table = std::span(bytes).subspan(sizeof(header) + entries_size);
-    auto chars = std::vector<char>(table.size());
-    std::memcpy(chars.data(), table.data(), table.size());
-    const auto strings = data::DescriptorStrings { std::move(chars) };
-
-    auto sidecar = Sidecar {
-      .resource_index = header.resource_index,
-      .descriptor = header.descriptor,
-      .views = {},
-    };
-    for (uint32_t i = 0; i < header.view_count; ++i) {
-      const auto entry
-        = oxygen::serio::CopyAt<BufferSidecarViewEntry>(std::span { bytes },
-          oxygen::serio::ByteOffset {
-            sizeof(header) + (i * sizeof(BufferSidecarViewEntry)) });
-      if (!entry) {
-        throw std::runtime_error("buffer sidecar view entry is truncated");
-      }
-      sidecar.views.push_back({
-        .name = std::string { strings.Get(entry->name_offset) },
-        .byte_offset = entry->byte_offset,
-        .byte_length = entry->byte_length,
-        .element_offset = entry->element_offset,
-        .element_count = entry->element_count,
-      });
-    }
-    return sidecar;
+    return std::move(*decoded);
   }
 
   class BufferContainerImportJobTest : public ImportServiceTest { };
@@ -264,7 +172,7 @@ namespace {
 
     const auto sidecar = ParseSidecar(
       ReadBytes(cooked_root / std::filesystem::path { kSidecarRelPath }));
-    EXPECT_NE(sidecar.resource_index, data::pak::core::kNoResourceIndex);
+    EXPECT_NE(sidecar.index, data::pak::core::kNoResourceIndex);
     EXPECT_EQ(sidecar.descriptor.usage_flags, 3U);
     EXPECT_EQ(sidecar.descriptor.element_stride, 16U);
     EXPECT_EQ(sidecar.descriptor.size_bytes, buffer_bytes.size());

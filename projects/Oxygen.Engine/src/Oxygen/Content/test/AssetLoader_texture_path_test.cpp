@@ -8,7 +8,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <ios>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -19,14 +18,18 @@
 
 #include "AssetLoader_test.h"
 
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/TextureResourceDescriptor.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/RegionStream.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -54,8 +57,10 @@ namespace {
     const Descriptor& descriptor, const std::uint32_t index = 1U) -> void
   {
     auto file = serio::NativeFile::Open(path,
-      { .access = serio::Access::kWrite,
-        .creation = serio::Creation::kCreateAlways });
+      {
+        .access = serio::Access::kWrite,
+        .creation = serio::Creation::kCreateAlways,
+      });
     ASSERT_TRUE(file) << file.error().message();
     auto stream = FileWriteStream(*file);
     auto writer = serio::Writer<FileWriteStream>(stream);
@@ -67,8 +72,10 @@ namespace {
   auto OpenForPatch(const std::filesystem::path& path) -> serio::NativeFile
   {
     auto file = serio::NativeFile::Open(path,
-      { .access = serio::Access::kWrite,
-        .creation = serio::Creation::kOpenExisting });
+      {
+        .access = serio::Access::kWrite,
+        .creation = serio::Creation::kOpenExisting,
+      });
     if (!file) {
       throw std::runtime_error(
         "Test file could not be opened: " + file.error().message());
@@ -153,14 +160,18 @@ namespace {
     auto material = data::MaterialAsset(
       data::AssetKey {}, data::pak::render::MaterialAssetDesc {});
     auto references = data::AssetReferences::Create(
-      { {
-        .kind = data::ResourceKind::kExternalTexture,
-        .index = data::pak::core::ResourceIndexT { 0U },
-      } },
-      { {
-        .key = data::TextureKeyFromVirtualPath(kMeterPath),
-        .kind = data::KeyReferenceKind::kTexture,
-      } });
+      {
+        {
+          .kind = data::ResourceKind::kExternalTexture,
+          .index = data::pak::core::ResourceIndexT { 0U },
+        },
+      },
+      {
+        {
+          .key = data::TextureKeyFromVirtualPath(kMeterPath),
+          .kind = data::KeyReferenceKind::kTexture,
+        },
+      });
     ASSERT_TRUE(references.has_value());
     material.SetReferences(std::move(*references));
     asset_loader_->AddLooseCookedRoot(first);
@@ -189,7 +200,7 @@ namespace {
     const auto descriptor = WriteSource(root, { .identity = 33U, .width = 1U });
     asset_loader_->AddLooseCookedRoot(root);
     const auto sidecar = root / std::filesystem::path(kMeterFile);
-    const auto resolve = [this]() -> void {
+    const auto resolve = [this] -> void {
       static_cast<void>(asset_loader_->ResolveTextureResourceKey(kMeterPath));
     };
     auto stale = descriptor;

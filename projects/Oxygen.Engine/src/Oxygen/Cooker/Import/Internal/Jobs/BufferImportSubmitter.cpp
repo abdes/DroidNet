@@ -30,9 +30,10 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/BufferViews.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/AtomicFile.h>
 
@@ -122,10 +123,8 @@ namespace {
         continue;
       }
 
-      auto parsed = internal::ParsedBufferDescriptorSidecar {};
-      auto parse_error = std::string {};
-      if (!internal::ParseBufferDescriptorSidecar(
-            bytes->Bytes(), parsed, parse_error)) {
+      const auto decoded = data::DecodeBufferResourceDescriptor(bytes->Bytes());
+      if (!decoded) {
         continue;
       }
 
@@ -135,8 +134,8 @@ namespace {
         continue;
       }
 
-      by_index.try_emplace(parsed.resource_index.get(),
-        NormalizeRelPath(relpath.generic_string()));
+      by_index.try_emplace(
+        decoded->index.get(), NormalizeRelPath(relpath.generic_string()));
     }
 
     return by_index;
@@ -147,8 +146,8 @@ namespace {
 BufferImportSubmitter::BufferImportSubmitter(ImportSession& session,
   const ImportRequest& request, const observer_ptr<IAsyncFileReader> reader,
   std::stop_token stop_token)
-  : session_(session)
-  , request_(request)
+  : session_(&session)
+  , request_(&request)
   , reader_(reader)
   , stop_token_(std::move(stop_token))
 {
@@ -161,19 +160,19 @@ auto BufferImportSubmitter::SubmitBuffers(
   auto submission = Submission {};
 
   if (reader_ == nullptr) {
-    AddDiagnostic(session_, request_, ImportSeverity::kError,
+    AddDiagnostic(*session_, *request_, ImportSeverity::kError,
       "buffer.container.reader_unavailable",
       "Async file reader is not available");
     co_return submission;
   }
 
   if (entries.empty()) {
-    AddDiagnostic(session_, request_, ImportSeverity::kError,
+    AddDiagnostic(*session_, *request_, ImportSeverity::kError,
       "buffer.container.no_buffers", "No valid buffer entries were produced");
     co_return submission;
   }
 
-  if (session_.HasErrors()) {
+  if (session_->HasErrors()) {
     co_return submission;
   }
 
@@ -185,8 +184,8 @@ auto BufferImportSubmitter::SubmitBuffers(
     // A product is named relative to its container, so it lives in the
     // container's mount; an absolute product elsewhere has no cooked root here.
     if (!internal::TryVirtualPathToRelPath(
-          request_, entry.source_id, relpath)) {
-      AddDiagnostic(session_, request_, ImportSeverity::kError,
+          *request_, entry.source_id, relpath)) {
+      AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.virtual_path_unmounted",
         "Buffer virtual_path '" + entry.source_id
           + "' is outside the mount the container cooks into",
@@ -196,16 +195,16 @@ auto BufferImportSubmitter::SubmitBuffers(
     submission.descriptor_relpath_by_source_id.emplace(
       entry.source_id, std::move(relpath));
   }
-  if (session_.HasErrors()) {
+  if (session_->HasErrors()) {
     co_return submission;
   }
   for (const auto& entry : entries) {
     const auto read_start = std::chrono::steady_clock::now();
     auto read_result = co_await reader_->ReadFile(entry.source_path);
-    session_.AddSourceLoadDuration(
+    session_->AddSourceLoadDuration(
       MakeDuration(read_start, std::chrono::steady_clock::now()));
     if (!read_result.has_value()) {
-      AddDiagnostic(session_, request_, ImportSeverity::kError,
+      AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.source_read_failed",
         "Failed reading buffer source '" + entry.source_path.string()
           + "': " + read_result.error().message(),
@@ -215,7 +214,7 @@ auto BufferImportSubmitter::SubmitBuffers(
 
     const auto source_size = read_result.value().Size().get();
     if (source_size > std::numeric_limits<uint32_t>::max()) {
-      AddDiagnostic(session_, request_, ImportSeverity::kError,
+      AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.source_too_large",
         "Buffer source exceeds maximum supported size of 4 GiB",
         entry.object_path + ".source");
@@ -231,7 +230,7 @@ auto BufferImportSubmitter::SubmitBuffers(
     auto view_issues = std::vector<internal::BufferDescriptorViewIssue> {};
     auto normalized_views = internal::NormalizeBufferViews(
       entry.view_specs, descriptor, entry.object_path + ".views", view_issues);
-    AddViewIssues(session_, request_, view_issues);
+    AddViewIssues(*session_, *request_, view_issues);
     if (!view_issues.empty()) {
       continue;
     }
@@ -264,9 +263,9 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
 {
   auto emitted_buffers = std::vector<EmittedBuffer> {};
   emitted_buffers.reserve(submission.submitted_count);
-  const auto cooked_root = request_.cooked_root.has_value()
-    ? request_.cooked_root.value()
-    : request_.source_path.parent_path();
+  const auto cooked_root = request_->cooked_root.has_value()
+    ? request_->cooked_root.value()
+    : request_->source_path.parent_path();
   auto canonical_relpath_by_index
     = LoadCanonicalBufferSidecarRelpathsByIndex(cooked_root);
 
@@ -274,9 +273,9 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
     auto result = co_await pipeline.Collect();
 
     if (result.telemetry.cook_duration.has_value()) {
-      session_.AddCookDuration(*result.telemetry.cook_duration);
+      session_->AddCookDuration(*result.telemetry.cook_duration);
     }
-    AddDiagnostics(session_, std::move(result.diagnostics));
+    AddDiagnostics(*session_, std::move(result.diagnostics));
     if (!result.success) {
       continue;
     }
@@ -284,7 +283,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
     const auto relpath_it
       = submission.descriptor_relpath_by_source_id.find(result.source_id);
     if (relpath_it == submission.descriptor_relpath_by_source_id.end()) {
-      AddDiagnostic(session_, request_, ImportSeverity::kError,
+      AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.internal_lookup_failed",
         "Internal buffer entry lookup failed", result.source_id);
       continue;
@@ -293,7 +292,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
     const auto views_it
       = submission.descriptor_views_by_source_id.find(result.source_id);
     if (views_it == submission.descriptor_views_by_source_id.end()) {
-      AddDiagnostic(session_, request_, ImportSeverity::kError,
+      AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.internal_lookup_failed",
         "Internal buffer views lookup failed", result.source_id);
       continue;
@@ -301,14 +300,14 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
 
     const auto emit_start = std::chrono::steady_clock::now();
     const auto emitted_index
-      = session_.BufferEmitter().Emit(std::move(result.cooked));
-    session_.AddEmitDuration(
+      = session_->BufferEmitter().Emit(std::move(result.cooked));
+    session_->AddEmitDuration(
       MakeDuration(emit_start, std::chrono::steady_clock::now()));
 
     const auto descriptor
-      = session_.BufferEmitter().TryGetDescriptor(emitted_index);
+      = session_->BufferEmitter().TryGetDescriptor(emitted_index);
     if (!descriptor.has_value()) {
-      AddDiagnostic(session_, request_, ImportSeverity::kError,
+      AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.descriptor_missing",
         "Missing buffer descriptor for emitted resource index",
         result.source_id);
@@ -319,7 +318,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
     const auto existing = canonical_relpath_by_index.find(emitted_index);
     if (existing != canonical_relpath_by_index.end()
       && existing->second != requested_relpath) {
-      AddDiagnostic(session_, request_, ImportSeverity::kError,
+      AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.dedup_virtual_path_conflict",
         "Equivalent buffers deduped to one resource index must share one "
         "canonical virtual_path",
@@ -331,11 +330,11 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
 
     try {
       [[maybe_unused]] const auto relpath
-        = session_.ResourceDescriptorEmitter().EmitBufferAtRelPath(
+        = session_->ResourceDescriptorEmitter().EmitBufferAtRelPath(
           requested_relpath, data::pak::core::ResourceIndexT { emitted_index },
           *descriptor, views_it->second);
     } catch (const std::exception& ex) {
-      AddDiagnostic(session_, request_, ImportSeverity::kError,
+      AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.sidecar_emit_failed",
         "Failed to emit buffer sidecar descriptor: " + std::string(ex.what()),
         result.source_id);

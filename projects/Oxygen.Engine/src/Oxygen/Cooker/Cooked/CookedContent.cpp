@@ -42,7 +42,7 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
-#include <Oxygen/Data/TextureResourceDescriptor.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Device.h>

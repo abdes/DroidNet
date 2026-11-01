@@ -133,7 +133,7 @@ Out of scope:
     at runtime for actual buffer population. Source preparation never generates
     meshes. A descriptor never authors a procedural LOD's bounds: its LOD,
     submesh and view bounds are the generated mesh's.
-15. `kImplicitBufferViewName` (`"__all__"`) is the only valid `view_ref` for
+15. `data::kWholeBufferViewName` (`"__all__"`) is the only valid `view_ref` for
     procedural submesh views. Any other value MUST be rejected at cook time.
 
 ---
@@ -381,7 +381,7 @@ Architectural split:
       `RefuseUnmountedReference`) and searches all mounted cooked roots in
       reverse order. A match must belong to the geometry's cooked root
       (`geometry.buffer.foreign_root` otherwise). Reads and parses the `.obuf`
-      sidecar file via `ParseBufferDescriptorSidecar` to obtain
+      sidecar file via `data::DecodeBufferResourceDescriptor` to obtain
       `ResourceIndexT`, buffer descriptor, and named views. Caches and returns
       a `ResolvedBufferSidecar`. Emits `geometry.buffer.sidecar_ambiguous` if
       multiple candidate files are found.

@@ -54,13 +54,13 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
-#include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/RegionStream.h>

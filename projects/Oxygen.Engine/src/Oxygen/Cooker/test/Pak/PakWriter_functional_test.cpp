@@ -19,12 +19,11 @@
 #include <Oxygen/Cooker/testing/PackedPak.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -79,10 +78,11 @@ NOLINT_TEST_F(PakWriterTest, CrcEnabledWritesValidPakAndPatchesFooterCrc)
 {
   const auto request = Workspace().FullRequest({ MinimalSource() });
 
-  const auto packed = Workspace().Pack(request);
+  const auto packed = PakWorkspace::Pack(request);
 
   ASSERT_THAT(packed.Diagnostics(), HasNoErrors());
   ASSERT_HAS_VALUE(packed.written);
+  ASSERT_HAS_VALUE(packed.planned.plan);
   EXPECT_EQ(packed.written->file_size, packed.planned.plan->PlannedFileSize());
   EXPECT_NE(packed.written->pak_crc32, 0U);
   EXPECT_TRUE(packed.written->writing_duration.has_value());
@@ -142,11 +142,13 @@ NOLINT_TEST_F(
     .leaf = "Scenes/Main.opscene",
     .descriptor = sidecar_bytes,
     .references = data::AssetReferences::Create({},
-      { {
-        .key = scene,
-        .kind = data::KeyReferenceKind::kLogical,
-        .expected_type = data::AssetType::kScene,
-      } })
+      {
+        {
+          .key = scene,
+          .kind = data::KeyReferenceKind::kLogical,
+          .expected_type = data::AssetType::kScene,
+        },
+      })
       .value(),
   });
 
@@ -165,8 +167,8 @@ NOLINT_TEST_F(PakWriterTest, DeterministicModeProducesBitExactOutputs)
   auto second_request = first_request;
   second_request.output_pak_path = PakWorkspace::PakPath("second.pak");
 
-  const auto first = Workspace().Pack(first_request);
-  const auto second = Workspace().Pack(second_request);
+  const auto first = PakWorkspace::Pack(first_request);
+  const auto second = PakWorkspace::Pack(second_request);
 
   ASSERT_THAT(first.Diagnostics(), HasNoErrors());
   ASSERT_THAT(second.Diagnostics(), HasNoErrors());

@@ -25,10 +25,10 @@
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Data/ProceduralMeshDefaults.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
@@ -367,7 +367,7 @@ namespace {
               : submesh.bounds,
           };
           if (std::holds_alternative<GeometrySource::Procedural>(lod.mesh)
-            && view.view_ref != kImplicitBufferViewName) {
+            && view.view_ref != data::kWholeBufferViewName) {
             AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
               "geometry.procedural.view_ref_invalid",
               "Procedural submesh view_ref must be '__all__'",

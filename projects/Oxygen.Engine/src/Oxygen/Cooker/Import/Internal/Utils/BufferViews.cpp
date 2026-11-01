@@ -4,18 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <exception>
 #include <limits>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -23,23 +19,16 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
-#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
-#include <Oxygen/Core/Detail/FormatUtils.h>
-#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
-#include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/BufferViews.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Serio/ByteReader.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 
 namespace oxygen::content::import::internal {
 
 namespace {
 
-  using oxygen::Format;
+  using oxygen::data::BufferResourceView;
   using oxygen::data::pak::core::BufferResourceDesc;
-  using oxygen::data::pak::core::ResourceIndexT;
-  using oxygen::graphics::detail::GetFormatInfo;
 
   auto AddIssue(std::vector<BufferDescriptorViewIssue>& issues,
     std::string code, std::string message, std::string object_path) -> void
@@ -58,62 +47,6 @@ namespace {
       return false;
     }
     return lhs > std::numeric_limits<uint64_t>::max() / rhs;
-  }
-
-  [[nodiscard]] auto EffectiveElementStride(
-    const BufferResourceDesc& descriptor) -> uint64_t
-  {
-    if (descriptor.element_stride > 0) {
-      return descriptor.element_stride;
-    }
-    if (descriptor.element_format == 0) {
-      return 1;
-    }
-
-    const auto format = static_cast<Format>(descriptor.element_format);
-    const auto& info = GetFormatInfo(format);
-    if (info.bytes_per_block == 0 || info.block_size != 1) {
-      return 0;
-    }
-    return info.bytes_per_block;
-  }
-
-  [[nodiscard]] auto BuildImplicitAllView(const BufferResourceDesc& descriptor)
-    -> BufferDescriptorView
-  {
-    const auto stride
-      = (std::max)(uint64_t { 1 }, EffectiveElementStride(descriptor));
-    return BufferDescriptorView {
-      .name = std::string(kImplicitBufferViewName),
-      .byte_offset = 0,
-      .byte_length = descriptor.size_bytes,
-      .element_offset = 0,
-      .element_count = descriptor.size_bytes / stride,
-    };
-  }
-
-  [[nodiscard]] auto EnsureImplicitAllView(
-    std::span<const BufferDescriptorView> views,
-    const BufferResourceDesc& descriptor) -> std::vector<BufferDescriptorView>
-  {
-    auto normalized = std::vector<BufferDescriptorView> {};
-    normalized.reserve(views.size() + 1U);
-    normalized.push_back(BuildImplicitAllView(descriptor));
-
-    auto seen_names = std::unordered_set<std::string> {};
-    seen_names.insert(std::string(kImplicitBufferViewName));
-
-    for (const auto& view : views) {
-      if (view.name.empty() || view.name == kImplicitBufferViewName) {
-        continue;
-      }
-      if (!seen_names.insert(view.name).second) {
-        continue;
-      }
-      normalized.push_back(view);
-    }
-
-    return normalized;
   }
 
 } // namespace
@@ -155,7 +88,7 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
 
     auto spec = BufferDescriptorViewSpec {};
     spec.name = view_json.at("name").get<std::string>();
-    if (spec.name == kImplicitBufferViewName) {
+    if (spec.name == data::kWholeBufferViewName) {
       AddIssue(issues, "buffer.view.explicit_all_disallowed",
         "View name '__all__' is reserved and must not be declared explicitly",
         item_path + ".name");
@@ -221,13 +154,13 @@ auto NormalizeBufferViews(
   const BufferResourceDesc& descriptor,
   const std::string_view object_path_prefix,
   std::vector<BufferDescriptorViewIssue>& issues)
-  -> std::vector<BufferDescriptorView>
+  -> std::vector<BufferResourceView>
 {
-  auto normalized = std::vector<BufferDescriptorView> {};
+  auto normalized = std::vector<BufferResourceView> {};
   normalized.reserve(declared_views.size() + 1U);
-  normalized.push_back(BuildImplicitAllView(descriptor));
+  normalized.push_back(data::WholeBufferView(descriptor));
 
-  const auto element_stride = EffectiveElementStride(descriptor);
+  const auto element_stride = data::BufferElementStride(descriptor);
   if (element_stride == 0) {
     AddIssue(issues, "buffer.view.element_stride_invalid",
       "Cannot compute effective element stride from buffer descriptor",
@@ -236,7 +169,7 @@ auto NormalizeBufferViews(
   }
 
   for (const auto& spec : declared_views) {
-    auto view = BufferDescriptorView { .name = spec.name };
+    auto view = BufferResourceView { .name = spec.name };
 
     if (spec.byte_offset.has_value() && spec.byte_length.has_value()) {
       const auto byte_offset = *spec.byte_offset;
@@ -301,127 +234,28 @@ auto NormalizeBufferViews(
   return normalized;
 }
 
-auto SerializeBufferDescriptorSidecar(const ResourceIndexT resource_index,
-  const BufferResourceDesc& descriptor,
-  const std::span<const BufferDescriptorView> views) -> std::vector<std::byte>
+auto WithWholeBufferView(const BufferResourceDesc& descriptor,
+  const std::span<const BufferResourceView> views)
+  -> std::vector<BufferResourceView>
 {
-  const auto final_views = EnsureImplicitAllView(views, descriptor);
-
-  auto strings = data::DescriptorStringsBuilder {};
-  auto entries = std::vector<BufferSidecarViewEntry> {};
-  entries.reserve(final_views.size());
-  for (const auto& view : final_views) {
-    entries.push_back(BufferSidecarViewEntry {
-      .name_offset = strings.Add(view.name),
-      .byte_offset = view.byte_offset,
-      .byte_length = view.byte_length,
-      .element_offset = view.element_offset,
-      .element_count = view.element_count,
-    });
-  }
-
-  auto header = BufferSidecarHeader {};
-  header.resource_index = resource_index;
-  header.descriptor = descriptor;
-  header.view_count = static_cast<uint32_t>(entries.size());
-  header.strings_size = strings.Size();
-
-  const auto entries_bytes = std::as_bytes(std::span(entries));
-  const auto strings_bytes = strings.Bytes();
-  auto bytes = std::vector<std::byte>(sizeof(BufferSidecarHeader));
-  std::memcpy(bytes.data(), &header, sizeof(BufferSidecarHeader));
-  bytes.insert(bytes.end(), entries_bytes.begin(), entries_bytes.end());
-  bytes.insert(bytes.end(), strings_bytes.begin(), strings_bytes.end());
-  return bytes;
-}
-
-auto ParseBufferDescriptorSidecar(const std::span<const std::byte> bytes,
-  ParsedBufferDescriptorSidecar& out, std::string& error_message) -> bool
-{
-  error_message.clear();
-  out = ParsedBufferDescriptorSidecar {};
-
-  auto reader = serio::ByteReader { bytes };
-  const auto header_read = reader.Read<BufferSidecarHeader>();
-  if (!header_read) {
-    error_message = "Buffer descriptor file is truncated";
-    return false;
-  }
-  const auto& header = *header_read;
-  if (header.magic != kBufferSidecarMagic) {
-    error_message = "Buffer descriptor has invalid magic";
-    return false;
-  }
-
-  if (header.version != kBufferSidecarVersion) {
-    error_message = "Buffer descriptor has unsupported version";
-    return false;
-  }
-
-  const auto entries_size
-    = static_cast<size_t>(header.view_count) * sizeof(BufferSidecarViewEntry);
-  const auto expected_size
-    = sizeof(BufferSidecarHeader) + entries_size + header.strings_size;
-  if (bytes.size() != expected_size) {
-    error_message = "Buffer descriptor view table is truncated";
-    return false;
-  }
-
-  auto strings = data::DescriptorStrings {};
-  try {
-    const auto table
-      = bytes.subspan(sizeof(BufferSidecarHeader) + entries_size);
-    auto chars = std::vector<char>(table.size());
-    std::memcpy(chars.data(), table.data(), table.size());
-    strings = data::DescriptorStrings { std::move(chars) };
-  } catch (const std::invalid_argument&) {
-    error_message = "Buffer descriptor string table is invalid";
-    return false;
-  }
-
-  out.resource_index = header.resource_index;
-  out.descriptor = header.descriptor;
-  out.views.reserve(header.view_count);
+  auto normalized = std::vector<BufferResourceView> {};
+  normalized.reserve(views.size() + 1U);
+  normalized.push_back(data::WholeBufferView(descriptor));
 
   auto seen_names = std::unordered_set<std::string> {};
-  for (uint32_t i = 0; i < header.view_count; ++i) {
-    const auto entry_read = reader.Read<BufferSidecarViewEntry>();
-    if (!entry_read) {
-      error_message = "Buffer descriptor view table is truncated";
-      return false;
-    }
-    const auto& entry = *entry_read;
+  seen_names.insert(std::string(data::kWholeBufferViewName));
 
-    const auto name_view = strings.TryGet(entry.name_offset);
-    if (!name_view || name_view->empty()) {
-      error_message = "Buffer descriptor contains an empty view name";
-      return false;
+  for (const auto& view : views) {
+    if (view.name.empty() || view.name == data::kWholeBufferViewName) {
+      continue;
     }
-    auto name = std::string { *name_view };
-    if (!seen_names.insert(name).second) {
-      error_message = "Buffer descriptor contains duplicate view names";
-      return false;
+    if (!seen_names.insert(view.name).second) {
+      continue;
     }
-
-    out.views.push_back(BufferDescriptorView {
-      .name = std::move(name),
-      .byte_offset = entry.byte_offset,
-      .byte_length = entry.byte_length,
-      .element_offset = entry.element_offset,
-      .element_count = entry.element_count,
-    });
+    normalized.push_back(view);
   }
 
-  const auto has_implicit_all = std::ranges::any_of(
-    out.views, [](const BufferDescriptorView& view) -> bool {
-      return view.name == kImplicitBufferViewName;
-    });
-  if (!has_implicit_all) {
-    error_message = "Buffer descriptor is missing required '__all__' view";
-    return false;
-  }
-
-  return true;
+  return normalized;
 }
 
 } // namespace oxygen::content::import::internal

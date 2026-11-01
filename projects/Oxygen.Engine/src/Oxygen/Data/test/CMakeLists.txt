@@ -53,6 +53,7 @@ m_gtest_program(
     "ProceduralConformance_test.cpp"
     "PhysicsResource_test.cpp"
     "ProceduralMeshes_test.cpp"
+    "ResourceDescriptor_test.cpp"
     "SceneNodeReferences_test.cpp"
     "ScriptResource_test.cpp"
     "SceneOverrides_test.cpp"

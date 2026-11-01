@@ -21,10 +21,10 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/BufferViews.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/TextureResourceDescriptor.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Serio/IoDriver.h>
@@ -72,16 +72,18 @@ auto ResourceDescriptorEmitter::EmitBufferAtRelPath(
   const std::string_view relpath,
   const data::pak::core::ResourceIndexT resource_index,
   const data::pak::core::BufferResourceDesc& descriptor,
-  const std::span<const internal::BufferDescriptorView> views) -> std::string
+  const std::span<const data::BufferResourceView> views) -> std::string
 {
   if (relpath.empty()) {
     throw std::runtime_error("buffer descriptor relpath must not be empty");
   }
 
   auto path = std::string(relpath);
-  auto bytes
-    = std::vector<std::byte>(internal::SerializeBufferDescriptorSidecar(
-      resource_index, descriptor, views));
+  auto bytes = data::EncodeBufferResourceDescriptor({
+    .index = resource_index,
+    .descriptor = descriptor,
+    .views = internal::WithWholeBufferView(descriptor, views),
+  });
   if (RecordOnce(path, bytes, {})) {
     QueueWrite(std::move(path), std::move(bytes));
   }

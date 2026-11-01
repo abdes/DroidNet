@@ -24,7 +24,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/TextureResourceDescriptor.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::internal {

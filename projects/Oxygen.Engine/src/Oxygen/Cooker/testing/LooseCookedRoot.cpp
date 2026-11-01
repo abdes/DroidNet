@@ -34,8 +34,8 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -276,6 +276,18 @@ auto LooseCookedRoot::DescribeTexture(
     }),
     path);
   return path;
+}
+
+auto LooseCookedRoot::DescribeBuffer(
+  std::string relpath, const ResourceIndexT row) -> LooseCookedRoot&
+{
+  const auto& desc = buffers_.rows.at(row.get());
+  return AddFile(lc::FileKind::kAuxiliary, std::move(relpath),
+    data::EncodeBufferResourceDescriptor({
+      .index = row,
+      .descriptor = desc,
+      .views = { data::WholeBufferView(desc) },
+    }));
 }
 
 auto LooseCookedRoot::BufferRow(const ResourceIndexT row) const

@@ -2,7 +2,7 @@
 
 Status: steps 1-4 implemented; steps 5 and 6 and `ModelRecord` in progress
 
-Last updated: 2026-10-31
+Last updated: 2026-11-01
 
 Engine tests need cooked content: loose cooked roots, paks, their catalogs and
 browse indexes, the asset descriptors inside them, pak build requests and
@@ -75,7 +75,7 @@ in-memory implementation of the Cooker file system port) or bytes.
 
 | Builder                 | Produces                                                                | From the product                                                                                                          |
 | ----------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `LooseCookedRoot`       | A loose cooked root: index, descriptors, resource tables and data files | The descriptor builders, resource descriptor structs, `EncodeTextureResourceDescriptor`, the loose index encoder          |
+| `LooseCookedRoot`       | A loose cooked root: index, descriptors, resource tables and data files | The descriptor builders, resource descriptor structs, the `ResourceDescriptor` codec, the loose index encoder             |
 | `SceneBuilder`          | The descriptor of a scene                                               | `SceneAssetDesc`, the node and component records, `DescriptorStringsBuilder`, `MakeDescriptorBytes`                       |
 | `PhysicsSidecarBuilder` | The descriptor of a scene's physics sidecar                             | `PhysicsSceneAssetDesc`, the binding records; the scene's own bytes for its key, node count and hash                      |
 | `CookedPak`             | The bytes of a pak of one mount                                         | `PakPlanBuilder` and `PakWriter` over its loose roots, in memory                                                          |
@@ -150,9 +150,10 @@ game.PhysicsSidecar("Scenes/Main.opscene", "Scenes/Main.oscene",
 - **Materials and geometry** keep their builders (`MaterialDescriptor`,
   `TexturedMaterialDescriptor`, `GeometryDescriptor`), extended the same way
   when a test needs more than they take: texture slots by name, more meshes.
-- **Texture descriptor files** come only from `DescribeTexture(leaf, row)`,
-  which encodes them with the product's `EncodeTextureResourceDescriptor`
-  from the row's own descriptor.
+- **Texture and buffer descriptor files** come only from
+  `DescribeTexture(leaf, row)` and `DescribeBuffer(relpath, row)`, which
+  encode them with the product's `EncodeTextureResourceDescriptor` and
+  `EncodeBufferResourceDescriptor` from the row's own descriptor.
 
 ## Invariants
 

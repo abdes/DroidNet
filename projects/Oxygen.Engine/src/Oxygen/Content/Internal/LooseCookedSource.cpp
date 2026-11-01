@@ -23,9 +23,9 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsResource.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/IoDriver.h>

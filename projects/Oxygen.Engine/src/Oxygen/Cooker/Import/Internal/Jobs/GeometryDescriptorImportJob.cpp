@@ -39,7 +39,6 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -51,6 +50,7 @@
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/OxCo/Co.h>
@@ -67,7 +67,7 @@ namespace {
     data::pak::core::ResourceIndexT resource_index
       = data::pak::core::kNoResourceIndex;
     data::pak::core::BufferResourceDesc descriptor {};
-    std::unordered_map<std::string, internal::BufferDescriptorView> views;
+    std::unordered_map<std::string, data::BufferResourceView> views;
   };
 
   //! Borrowed for the duration of one job execution, which owns both.
@@ -122,11 +122,10 @@ namespace {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
   }
 
-  auto BuildViewMap(const std::span<const internal::BufferDescriptorView> views)
-    -> std::unordered_map<std::string, internal::BufferDescriptorView>
+  auto BuildViewMap(const std::span<const data::BufferResourceView> views)
+    -> std::unordered_map<std::string, data::BufferResourceView>
   {
-    auto map
-      = std::unordered_map<std::string, internal::BufferDescriptorView> {};
+    auto map = std::unordered_map<std::string, data::BufferResourceView> {};
     map.reserve(views.size());
     for (const auto& view : views) {
       map.insert_or_assign(view.name, view);
@@ -248,19 +247,18 @@ namespace {
         co_return std::nullopt;
       }
 
-      auto parsed = internal::ParsedBufferDescriptorSidecar {};
-      auto parse_error = std::string {};
-      if (!internal::ParseBufferDescriptorSidecar(
-            read_result.value().Bytes(), parsed, parse_error)) {
+      const auto decoded
+        = data::DecodeBufferResourceDescriptor(read_result.value().Bytes());
+      if (!decoded) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "geometry.buffer.sidecar_invalid", parse_error, object_path);
+          "geometry.buffer.sidecar_invalid", decoded.error(), object_path);
         co_return std::nullopt;
       }
 
       auto resolved = ResolvedBufferSidecar {
-        .resource_index = parsed.resource_index,
-        .descriptor = parsed.descriptor,
-        .views = BuildViewMap(parsed.views),
+        .resource_index = decoded->index,
+        .descriptor = decoded->descriptor,
+        .views = BuildViewMap(decoded->views),
       };
       context.buffer_cache.insert_or_assign(reference->resolved, resolved);
       co_return resolved;
@@ -360,7 +358,7 @@ namespace {
   }
 
   auto FindBufferView(const ResolvedBufferSidecar& sidecar,
-    std::string_view view_name) -> const internal::BufferDescriptorView*
+    std::string_view view_name) -> const data::BufferResourceView*
   {
     const auto it = sidecar.views.find(std::string(view_name));
     if (it == sidecar.views.end()) {

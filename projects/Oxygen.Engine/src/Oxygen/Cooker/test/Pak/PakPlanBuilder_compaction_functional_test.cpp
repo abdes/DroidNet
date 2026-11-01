@@ -16,7 +16,6 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
@@ -25,20 +24,16 @@
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
-namespace core = oxygen::data::pak::core;
 namespace data = oxygen::data;
 namespace fixtures = oxygen::cooker::testing;
-namespace lc = oxygen::data::loose_cooked;
 namespace pak = oxygen::content::pak;
 
 using oxygen::ResourceIndexT;
@@ -72,15 +67,6 @@ auto Payload(const uint8_t seed) -> std::vector<std::byte>
 auto ContentRoot(const uint8_t seed = 1U) -> LooseCookedRoot
 {
   return LooseCookedRoot { "Content", seed };
-}
-
-//! Adds the `.obuf` sidecar `Buffers/<leaf>` naming buffer `row`.
-auto AddBufferSidecar(LooseCookedRoot& library, const std::string& leaf,
-  const ResourceIndexT row) -> void
-{
-  library.AddFile(lc::FileKind::kAuxiliary, "Buffers/" + leaf,
-    oxygen::content::import::internal::SerializeBufferDescriptorSidecar(
-      row, library.BufferRow(row), {}));
 }
 
 //! Adds the material `Wood`, whose base color binds texture `texture`.
@@ -147,7 +133,7 @@ NOLINT_TEST(PakCompactionTest, FullPakDropsStaleEntriesAndRemapsBindings)
   const auto request = workspace.FullRequest({ source });
 
   // Act
-  const auto packed = workspace.Pack(request);
+  const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);
 
   // Assert
   ASSERT_THAT(packed.Diagnostics(), HasNoErrors());
@@ -183,7 +169,7 @@ NOLINT_TEST(PakCompactionTest, TextureRecookedUnderTheSameNameKeepsTheNewEntry)
   const auto request = workspace.FullRequest({ workspace.Add(content) });
 
   // Act
-  const auto packed = workspace.Pack(request);
+  const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);
 
   // Assert
   ASSERT_THAT(packed.Diagnostics(), HasNoErrors());
@@ -211,7 +197,7 @@ NOLINT_TEST(PakCompactionTest, TextureRecookedUnderANewNameDropsTheOldEntry)
   const auto request = workspace.FullRequest({ workspace.Add(content) });
 
   // Act
-  const auto packed = workspace.Pack(request);
+  const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);
 
   // Assert
   ASSERT_THAT(packed.Diagnostics(), HasNoErrors());
@@ -234,8 +220,8 @@ NOLINT_TEST(PakCompactionTest, BufferWithoutGeometryWarnsWithItsSidecar)
   auto content = ContentRoot();
   const auto crate_buffer = content.AddBuffer(Payload(1U));
   AddCrate(content, crate_buffer);
-  AddBufferSidecar(content, "Crate.obuf", crate_buffer);
-  AddBufferSidecar(content, "Orphan.obuf", content.AddBuffer(Payload(2U)));
+  content.DescribeBuffer("Buffers/Crate.obuf", crate_buffer)
+    .DescribeBuffer("Buffers/Orphan.obuf", content.AddBuffer(Payload(2U)));
   const auto request = workspace.FullRequest({ workspace.Add(content) });
 
   // Act
@@ -267,7 +253,8 @@ NOLINT_TEST(PakCompactionTest, PatchOverCompactedBasePacksOnlyChangedResources)
   AddCrate(base, base.AddBuffer(Payload(4U)));
   const auto base_request
     = workspace.FullRequest({ workspace.Add(base) }, "base.pak");
-  const auto base_packed = workspace.Pack(base_request);
+  const auto base_packed
+    = oxygen::cooker::testing::PakWorkspace::Pack(base_request);
   ASSERT_THAT(base_packed.Diagnostics(), HasNoErrors());
   ASSERT_HAS_VALUE(base_packed.planned.plan);
   ASSERT_EQ(TableCount(*base_packed.planned.plan, "texture_table"), 3U);
@@ -285,7 +272,7 @@ NOLINT_TEST(PakCompactionTest, PatchOverCompactedBasePacksOnlyChangedResources)
   request.base_texture_keys = { data::TextureKeyFromVirtualPath(sky) };
 
   // Act
-  const auto packed = workspace.Pack(request);
+  const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);
 
   // Assert
   ASSERT_THAT(packed.Diagnostics(), HasNoErrors());

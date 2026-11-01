@@ -276,7 +276,7 @@ set(
   "Import/Internal/TextureCooker.h"
   "Import/Internal/TextureImportRequestBuilder.h"
   "Import/Internal/TextureSourceAssembly_internal.h"
-  "Import/Internal/Utils/BufferDescriptorSidecar.h"
+  "Import/Internal/Utils/BufferViews.h"
   "Import/Internal/Utils/ContentHashUtils.h"
   "Import/Internal/Utils/DescriptorDocument.h"
   "Import/Internal/Utils/ImportSettingsUtils.h"
@@ -394,7 +394,7 @@ set(
   "Import/Internal/TextureCooker.cpp"
   "Import/Internal/TextureDescriptorImportRequestBuilder.cpp"
   "Import/Internal/TextureImportRequestBuilder.cpp"
-  "Import/Internal/Utils/BufferDescriptorSidecar.cpp"
+  "Import/Internal/Utils/BufferViews.cpp"
   "Import/ImportSourceDocument.cpp"
   "Import/Internal/Utils/ImportSettingsUtils.cpp"
   "Import/Internal/SerioFileReader.cpp"
@@ -435,7 +435,6 @@ if(OXYGEN_BUILD_TESTS AND BUILD_SHARED_LIBS)
     STATIC
     "Import/Internal/SurfaceAllocation.cpp"
     "Import/Internal/ImportSourceSnapshot.cpp"
-    "Import/Internal/Utils/BufferDescriptorSidecar.cpp"
   )
   set_target_properties(
     oxygen-cooker-test-visible-internals

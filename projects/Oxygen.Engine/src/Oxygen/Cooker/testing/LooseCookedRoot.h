@@ -146,6 +146,11 @@ public:
   auto DescribeTexture(std::string_view leaf, ResourceIndexT row)
     -> std::string;
 
+  //! Adds the buffer descriptor file `relpath` that names buffer `row`, with
+  //! only its whole-buffer view.
+  auto DescribeBuffer(std::string relpath, ResourceIndexT row)
+    -> LooseCookedRoot&;
+
   //! The buffer row `row`, with where its payload lies in the data file.
   [[nodiscard]] auto BufferRow(ResourceIndexT row) const
     -> data::pak::core::BufferResourceDesc;

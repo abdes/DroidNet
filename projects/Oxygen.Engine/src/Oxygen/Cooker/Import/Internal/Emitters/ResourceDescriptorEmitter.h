@@ -21,9 +21,9 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Serio/IoDriver.h>
@@ -70,7 +70,7 @@ public:
   OXGN_COOK_NDAPI auto EmitBufferAtRelPath(std::string_view relpath,
     data::pak::core::ResourceIndexT resource_index,
     const data::pak::core::BufferResourceDesc& descriptor,
-    std::span<const internal::BufferDescriptorView> views = {}) -> std::string;
+    std::span<const data::BufferResourceView> views = {}) -> std::string;
 
   //! Snapshot of emitted descriptor records.
   OXGN_COOK_NDAPI auto Records() const -> std::vector<Record>;
