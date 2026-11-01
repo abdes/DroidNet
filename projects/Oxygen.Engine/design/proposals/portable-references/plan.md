@@ -31,7 +31,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S5    | Done, committed                                                |
 | S6    | Done, committed, with the Serio step 6 and cooked sources work |
 | S6a   | Done                                                           |
-| S6b   | Not started                                                    |
+| S6b   | Done                                                           |
 | S6c   | Not started                                                    |
 | S6d   | Not started                                                    |
 | S6e   | Not started (last engine slice)                                |
@@ -594,7 +594,6 @@ done only when its rows are gone from the code.
 | Test-only span constructors                                                        | `TextureResource`, `BufferResource`                                                                                                                                   | S6a     |
 | A second replacing rename, with check-then-act pre-checks                          | `RealCookerStorage::Move`                                                                                                                                             | S6a     |
 | A blocking CRC pass on a pool worker                                               | Verified pak mount (`PrepareMountSetAsync`)                                                                                                                           | S6a     |
-| 256-byte payload layouts in writer tests                                           | `PakWriterTestSupport.h`                                                                                                                                              | S6b     |
 | A loose source named by its index file; "library" in the content UI                | DemoShell `ContentVm`, `ContentLoaderPanel`, `ContentSettingsService`, `FileBrowserService`, `DemoShell.cpp`, `ContentVm_test`                                        | S6c     |
 | Truncated resource hashes, whole-file data hashes, `content_hashing`               | Texture and buffer descriptors, `.otex`, `LooseCookedWriter::Finish`, `ImportOptions`, manifest schema, ImportTool, emitters and pipelines                            | S6d     |
 | Hand-built scene and sidecar descriptors, forged `.otex` files in tests            | The tests the builders proposal's "What it replaces" table lists                                                                                                      | S6e     |

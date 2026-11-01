@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -35,11 +34,12 @@
 //! Hand-made plans for the `PakWriter_*_functional_test.cpp` files, which test
 //! the writer against plans the planner would never make.
 /*!
- A canonical plan lays its sections out in the order the writer writes them:
- header, resource regions, resource tables, asset descriptors, directory,
- browse index, catalog, footer. The writer only moves forward, so a test moves
- only the section it is about, and the sources the plan names live in the
- fixture's in-memory workspace, where the writer also publishes the pak.
+ A canonical plan is a format 11 plan, laid out as the planner lays one out:
+ header, resource regions from the first payload boundary, each padded to one,
+ resource tables, asset descriptors, directory, browse index, catalog, footer.
+ The writer only moves forward, so a test moves only the section it is about,
+ and the sources the plan names live in the fixture's in-memory workspace,
+ where the writer also publishes the pak.
 */
 namespace oxygen::content::pak::test {
 
@@ -50,128 +50,85 @@ inline constexpr auto kHeaderSize
   = uint32_t { sizeof(data::pak::core::PakHeader) };
 inline constexpr auto kFooterSize
   = uint32_t { sizeof(data::pak::core::PakFooter) };
+//! Where a payload starts and a region holding payloads ends.
+inline constexpr auto kPayloadAlignment
+  = uint64_t { data::pak::core::kPakPayloadAlignment };
+//! The alignment the planner gives the tables and every section after them.
+inline constexpr auto kSectionAlignment = uint64_t { 16U };
 
-struct RegionPlanSpec final {
-  std::string region_name;
-  uint64_t offset = 0U;
-  uint64_t size_bytes = 0U;
-  uint32_t alignment = 1U;
-};
+//! `value` rounded up to a multiple of the power of two `alignment`.
+[[nodiscard]] constexpr auto AlignUp(
+  const uint64_t value, const uint64_t alignment) -> uint64_t
+{
+  return (value + alignment - 1U) & ~(alignment - 1U);
+}
 
-[[nodiscard]] inline auto MakeRegionPlan(RegionPlanSpec spec) -> PakRegionPlan
+//! The first payload boundary after the header, where the regions start.
+inline constexpr auto kFirstPayloadOffset
+  = AlignUp(kHeaderSize, kPayloadAlignment);
+
+[[nodiscard]] inline auto MakeRegionPlan(std::string region_name,
+  const uint64_t offset, const uint64_t size_bytes) -> PakRegionPlan
 {
   return PakRegionPlan {
-    .region_name = std::move(spec.region_name),
-    .offset = spec.offset,
-    .size_bytes = spec.size_bytes,
-    .alignment = spec.alignment,
+    .region_name = std::move(region_name),
+    .offset = offset,
+    .size_bytes = size_bytes,
+    .alignment = static_cast<uint32_t>(kPayloadAlignment),
   };
 }
 
-struct TablePlanSpec final {
-  std::string table_name;
-  uint64_t offset = 0U;
-  uint64_t size_bytes = 0U;
-  uint32_t count = 0U;
-  uint32_t entry_size = 0U;
-};
+//! The five resource regions from the first payload boundary; only the
+//! texture region may hold payloads, in `texture_region_size` bytes.
+[[nodiscard]] inline auto MakeCanonicalRegions(
+  const uint64_t texture_region_size) -> std::vector<PakRegionPlan>
+{
+  const auto trailing_offset = kFirstPayloadOffset + texture_region_size;
+  return {
+    MakeRegionPlan("texture_region", kFirstPayloadOffset, texture_region_size),
+    MakeRegionPlan("buffer_region", trailing_offset, 0U),
+    MakeRegionPlan("audio_region", trailing_offset, 0U),
+    MakeRegionPlan("script_region", trailing_offset, 0U),
+    MakeRegionPlan("physics_region", trailing_offset, 0U),
+  };
+}
 
-[[nodiscard]] inline auto MakeTablePlan(TablePlanSpec spec) -> PakTablePlan
+[[nodiscard]] inline auto MakeTablePlan(std::string table_name,
+  const uint64_t offset, const uint32_t count, const size_t entry_size)
+  -> PakTablePlan
 {
   return PakTablePlan {
-    .table_name = std::move(spec.table_name),
-    .offset = spec.offset,
-    .size_bytes = spec.size_bytes,
-    .count = spec.count,
-    .entry_size = spec.entry_size,
-    .expected_entry_size = spec.entry_size,
-    .alignment = 1U,
+    .table_name = std::move(table_name),
+    .offset = offset,
+    .size_bytes = uint64_t { count } * entry_size,
+    .count = count,
+    .entry_size = static_cast<uint32_t>(entry_size),
+    .expected_entry_size = static_cast<uint32_t>(entry_size),
+    .alignment = static_cast<uint32_t>(kSectionAlignment),
     .index_zero_required = false,
     .index_zero_present = false,
     .index_zero_forbidden = false,
   };
 }
 
-struct CanonicalRegionSpec final {
-  uint64_t base_offset = 0U;
-  uint64_t texture_region_size = 0U;
-};
-
-//! The five resource regions; only the texture region may be non-empty.
-[[nodiscard]] inline auto MakeCanonicalRegions(const CanonicalRegionSpec spec)
-  -> std::vector<PakRegionPlan>
+//! The five resource tables from `offset`; only the texture table may hold
+//! rows, `texture_count` of them.
+[[nodiscard]] inline auto MakeCanonicalTables(const uint64_t offset,
+  const uint32_t texture_count) -> std::vector<PakTablePlan>
 {
-  const auto trailing_offset = spec.base_offset + spec.texture_region_size;
-  return {
-    MakeRegionPlan(RegionPlanSpec {
-      .region_name = "texture_region",
-      .offset = spec.base_offset,
-      .size_bytes = spec.texture_region_size,
-    }),
-    MakeRegionPlan(RegionPlanSpec {
-      .region_name = "buffer_region",
-      .offset = trailing_offset,
-    }),
-    MakeRegionPlan(RegionPlanSpec {
-      .region_name = "audio_region",
-      .offset = trailing_offset,
-    }),
-    MakeRegionPlan(RegionPlanSpec {
-      .region_name = "script_region",
-      .offset = trailing_offset,
-    }),
-    MakeRegionPlan(RegionPlanSpec {
-      .region_name = "physics_region",
-      .offset = trailing_offset,
-    }),
-  };
-}
-
-struct CanonicalTableSpec final {
-  uint64_t texture_table_offset = 0U;
-  uint32_t texture_count = 0U;
-  uint64_t texture_table_size = 0U;
-};
-
-//! The five resource tables; only the texture table may be non-empty.
-[[nodiscard]] inline auto MakeCanonicalTables(const CanonicalTableSpec spec)
-  -> std::vector<PakTablePlan>
-{
+  constexpr auto kTextureRowSize = sizeof(data::pak::core::TextureResourceDesc);
   const auto trailing_offset
-    = spec.texture_table_offset + spec.texture_table_size;
+    = offset + (uint64_t { texture_count } * kTextureRowSize);
   return {
-    MakeTablePlan(TablePlanSpec {
-      .table_name = "texture_table",
-      .offset = spec.texture_table_offset,
-      .size_bytes = spec.texture_table_size,
-      .count = spec.texture_count,
-      .entry_size
-      = static_cast<uint32_t>(sizeof(data::pak::core::TextureResourceDesc)),
-    }),
-    MakeTablePlan(TablePlanSpec {
-      .table_name = "buffer_table",
-      .offset = trailing_offset,
-      .entry_size
-      = static_cast<uint32_t>(sizeof(data::pak::core::BufferResourceDesc)),
-    }),
-    MakeTablePlan(TablePlanSpec {
-      .table_name = "audio_table",
-      .offset = trailing_offset,
-      .entry_size
-      = static_cast<uint32_t>(sizeof(data::pak::audio::AudioResourceDesc)),
-    }),
-    MakeTablePlan(TablePlanSpec {
-      .table_name = "script_resource_table",
-      .offset = trailing_offset,
-      .entry_size
-      = static_cast<uint32_t>(sizeof(data::pak::scripting::ScriptResourceDesc)),
-    }),
-    MakeTablePlan(TablePlanSpec {
-      .table_name = "physics_resource_table",
-      .offset = trailing_offset,
-      .entry_size
-      = static_cast<uint32_t>(sizeof(data::pak::physics::PhysicsResourceDesc)),
-    }),
+    MakeTablePlan("texture_table", offset, texture_count, kTextureRowSize),
+    MakeTablePlan("buffer_table", trailing_offset, 0U,
+      sizeof(data::pak::core::BufferResourceDesc)),
+    MakeTablePlan("audio_table", trailing_offset, 0U,
+      sizeof(data::pak::audio::AudioResourceDesc)),
+    MakeTablePlan("script_resource_table", trailing_offset, 0U,
+      sizeof(data::pak::scripting::ScriptResourceDesc)),
+    MakeTablePlan("physics_resource_table", trailing_offset, 0U,
+      sizeof(data::pak::physics::PhysicsResourceDesc)),
   };
 }
 
@@ -197,9 +154,16 @@ struct CanonicalTableSpec final {
   return SourceKeyOf(kSeed);
 }
 
-//! Lays out, right after the directory, the empty browse index, the catalog
-//! that lists `entries`, and the footer, in that order; the file ends at the
-//! footer.
+//! The end of the last resource table, after which the asset descriptors go.
+[[nodiscard]] inline auto TablesEnd(const PakPlan::Data& plan) -> uint64_t
+{
+  const auto& last = plan.tables.back();
+  return last.offset + last.size_bytes;
+}
+
+//! Lays out, after the directory, the empty browse index, the catalog that
+//! lists `entries`, and the footer, in that order and with the planner's
+//! alignments; the file ends at the footer.
 inline auto LayOutTail(
   PakPlan::Data& plan, std::vector<data::PakCatalogEntry> entries = {}) -> void
 {
@@ -213,7 +177,8 @@ inline auto LayOutTail(
   catalog.catalog_digest = catalog.ComputeDigest().value();
 
   plan.browse_index = PakBrowseIndexPlan {
-    .offset = plan.directory.offset + plan.directory.size_bytes,
+    .offset = AlignUp(
+      plan.directory.offset + plan.directory.size_bytes, kSectionAlignment),
     .size_bytes = sizeof(data::pak::core::PakBrowseIndexHeader),
     .entries = {},
     .textures = {},
@@ -222,7 +187,8 @@ inline auto LayOutTail(
     .offset = plan.browse_index.offset + plan.browse_index.size_bytes,
     .bytes = catalog.Encode().value(),
   };
-  const auto footer_offset = plan.catalog.offset + plan.catalog.bytes.size();
+  const auto footer_offset = AlignUp(
+    plan.catalog.offset + plan.catalog.bytes.size(), kSectionAlignment);
   plan.footer = PakFooterPlan {
     .offset = footer_offset,
     .size_bytes = kFooterSize,
@@ -232,27 +198,30 @@ inline auto LayOutTail(
   plan.planned_file_size = footer_offset + kFooterSize;
 }
 
-//! Places the geometry `key`, whose descriptor is `descriptor`, at
-//! `descriptor_offset`, lists it in the directory and the catalog, and lays
-//! the tail out again after the grown directory.
+//! Places the geometry `key`, whose descriptor is `descriptor`, after the
+//! resource tables, lists it in the directory and the catalog, and lays the
+//! directory and the tail out again after it.
 /*!
  The plan names no source for the descriptor: a test adds one, or leaves it
- out to test a plan without one.
+ out to test a plan without one. The descriptor is at
+ `plan.assets.front().offset`.
 */
 inline auto AddGeometryAsset(PakPlan::Data& plan, const data::AssetKey& key,
-  const uint64_t descriptor_offset, const std::span<const std::byte> descriptor)
-  -> void
+  const std::span<const std::byte> descriptor) -> void
 {
+  const auto descriptor_offset = AlignUp(TablesEnd(plan), kSectionAlignment);
   plan.assets = {
     PakAssetPlacementPlan {
       .asset_key = key,
       .asset_type = data::AssetType::kGeometry,
       .offset = descriptor_offset,
       .size_bytes = descriptor.size(),
-      .alignment = 1U,
+      .alignment = static_cast<uint32_t>(kSectionAlignment),
       .reserved_bytes_zeroed = true,
     },
   };
+  plan.directory.offset
+    = AlignUp(descriptor_offset + descriptor.size(), kSectionAlignment);
   plan.directory.size_bytes = sizeof(data::pak::core::AssetDirectoryEntry);
   plan.directory.entries = {
     PakAssetDirectoryEntryPlan {
@@ -264,39 +233,37 @@ inline auto AddGeometryAsset(PakPlan::Data& plan, const data::AssetKey& key,
     },
   };
   LayOutTail(plan,
-    { {
-      .asset_key = key,
-      .asset_type = data::AssetType::kGeometry,
-      .descriptor_digest = base::ComputeSha256(descriptor),
-      .transitive_resource_digest = {},
-    } });
+    {
+      {
+        .asset_key = key,
+        .asset_type = data::AssetType::kGeometry,
+        .descriptor_digest = base::ComputeSha256(descriptor),
+        .transitive_resource_digest = {},
+      },
+    });
 }
 
-//! Layout knobs for `MakeCanonicalPlan`.
-/*!
- Regions start at `base_offset`, and the tables too unless `tables_offset`
- says otherwise. The directory follows the tables unless `directory_offset`
- says otherwise; the browse index, the catalog and the footer follow it.
-*/
+//! Contents of `MakeCanonicalPlan`.
 struct CanonicalPlanSpec final {
   uint16_t content_version = 1U;
-  uint64_t base_offset = 256U;
-  uint64_t texture_region_size = 0U;
-  std::optional<uint64_t> tables_offset;
-  std::optional<uint64_t> directory_offset;
-  uint32_t texture_count = 0U;
-  uint64_t texture_table_size = 0U;
+  //! The size of the one texture payload the plan places; none when zero.
+  uint64_t texture_payload_size = 0U;
 };
 
-//! A minimal plan with no resources or assets, and the browse index and
-//! catalog every pak holds, both empty.
+//! A minimal format 11 plan, with the browse index and catalog every pak
+//! holds, both empty.
 /*!
- Negative tests mutate the one field they are about.
+ With a texture payload, the plan places it at the start of the texture
+ region, pads the region to a payload boundary and lists one texture table
+ row; a test adds the payload and row sources. Negative tests mutate the one
+ field they are about.
 */
 [[nodiscard]] inline auto MakeCanonicalPlan(const CanonicalPlanSpec& spec = {})
   -> PakPlan::Data
 {
-  const auto tables_offset = spec.tables_offset.value_or(spec.base_offset);
+  const auto texture_region_size
+    = AlignUp(spec.texture_payload_size, kPayloadAlignment);
+  const auto texture_count = spec.texture_payload_size == 0U ? 0U : 1U;
 
   auto plan = PakPlan::Data {};
   plan.header = PakHeaderPlan {
@@ -305,18 +272,17 @@ struct CanonicalPlanSpec final {
     .content_version = spec.content_version,
     .source_key = CanonicalSourceKey(),
   };
-  plan.regions = MakeCanonicalRegions(CanonicalRegionSpec {
-    .base_offset = spec.base_offset,
-    .texture_region_size = spec.texture_region_size,
-  });
-  plan.tables = MakeCanonicalTables(CanonicalTableSpec {
-    .texture_table_offset = tables_offset,
-    .texture_count = spec.texture_count,
-    .texture_table_size = spec.texture_table_size,
-  });
+  plan.regions = MakeCanonicalRegions(texture_region_size);
+  plan.tables = MakeCanonicalTables(
+    AlignUp(kFirstPayloadOffset + texture_region_size, kSectionAlignment),
+    texture_count);
+  if (texture_count != 0U) {
+    plan.resources = {
+      MakeTexturePlacement(kFirstPayloadOffset, spec.texture_payload_size),
+    };
+  }
   plan.directory = PakDirectoryPlan {
-    .offset
-    = spec.directory_offset.value_or(tables_offset + spec.texture_table_size),
+    .offset = AlignUp(TablesEnd(plan), kSectionAlignment),
     .size_bytes = 0U,
     .entries = {},
   };

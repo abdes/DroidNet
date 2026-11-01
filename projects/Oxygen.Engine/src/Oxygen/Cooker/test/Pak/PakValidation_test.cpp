@@ -26,12 +26,12 @@ namespace paktest = oxygen::content::pak::test;
 using oxygen::cooker::test::HasDiagnostic;
 using oxygen::cooker::test::HasNoErrors;
 
+using paktest::kFirstPayloadOffset;
+using paktest::kPayloadAlignment;
+
 constexpr auto kContentVersion = uint16_t { 23U };
-constexpr auto kRegionBaseOffset = uint64_t { 256U };
-constexpr auto kRegionSize = uint64_t { 64U };
-constexpr auto kOverlapOffset = uint64_t { 288U };
-constexpr auto kPayloadBoundary
-  = uint64_t { oxygen::data::pak::core::kPakPayloadAlignment };
+//! A size smaller than a payload boundary.
+constexpr auto kSubBoundarySize = uint64_t { 64U };
 
 //! Validates canonical plans, empty paks of library `Game`, that each test
 //! mutates in the one field it is about.
@@ -66,12 +66,10 @@ NOLINT_TEST_F(PakDomainValidationTest, RejectsOverlappingSections)
   ASSERT_GE(plan.regions.size(), 2U);
   auto& first = plan.regions.at(0);
   auto& second = plan.regions.at(1);
-  first.offset = kRegionBaseOffset;
-  first.size_bytes = kRegionSize;
-  first.alignment = 1U;
-  second.offset = kOverlapOffset;
-  second.size_bytes = kRegionSize;
-  second.alignment = 1U;
+  first.offset = kFirstPayloadOffset;
+  first.size_bytes = 2U * kPayloadAlignment;
+  second.offset = kFirstPayloadOffset + kPayloadAlignment;
+  second.size_bytes = kPayloadAlignment;
 
   const auto result = Validate(std::move(plan));
 
@@ -106,11 +104,10 @@ NOLINT_TEST_F(PakDomainValidationTest, RejectsTableEntrySizeMismatch)
 NOLINT_TEST_F(PakDomainValidationTest, RejectsAPayloadOffItsBoundary)
 {
   auto plan = BaselinePlan();
-  auto& region = plan.regions.front();
-  region.offset = kPayloadBoundary;
-  region.size_bytes = kPayloadBoundary;
+  plan.regions.front().size_bytes = kPayloadAlignment;
   plan.resources = {
-    paktest::MakeTexturePlacement(kPayloadBoundary + kRegionSize, kRegionSize),
+    paktest::MakeTexturePlacement(
+      kFirstPayloadOffset + kSubBoundarySize, kSubBoundarySize),
   };
 
   const auto result = Validate(std::move(plan));
@@ -123,9 +120,7 @@ NOLINT_TEST_F(PakDomainValidationTest, RejectsAPayloadOffItsBoundary)
 NOLINT_TEST_F(PakDomainValidationTest, RejectsAnUnpaddedPayloadRegion)
 {
   auto plan = BaselinePlan();
-  auto& region = plan.regions.front();
-  region.offset = kPayloadBoundary;
-  region.size_bytes = kRegionSize;
+  plan.regions.front().size_bytes = kSubBoundarySize;
 
   const auto result = Validate(std::move(plan));
 

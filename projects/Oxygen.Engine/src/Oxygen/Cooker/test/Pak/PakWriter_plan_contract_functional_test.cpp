@@ -35,12 +35,13 @@ using ::testing::Not;
 //! that names the broken invariant.
 class PakWriterPlanContractTest : public paktest::PakWriterFixture { };
 
-//! Regions planned inside the header put the cursor past their offset.
+//! A region planned inside the header puts the cursor past its offset.
 NOLINT_TEST_F(
   PakWriterPlanContractTest, OffsetMismatchEmitsActionableDiagnostic)
 {
   constexpr auto kInsideTheHeader = uint64_t { 1U };
-  auto plan = CanonicalPlan({ .base_offset = kInsideTheHeader });
+  auto plan = CanonicalPlan();
+  plan.regions.front().offset = kInsideTheHeader;
 
   const auto written = Write(Request(1U), std::move(plan));
 
@@ -66,10 +67,8 @@ NOLINT_TEST_F(
   PakWriterPlanContractTest, TablePayloadSizeMismatchEmitsDiagnostic)
 {
   constexpr auto kContentVersion = uint16_t { 7U };
-  auto plan = CanonicalPlan({
-    .content_version = kContentVersion,
-    .texture_count = 1U,
-  });
+  auto plan = CanonicalPlan({ .content_version = kContentVersion });
+  plan.tables.front().count = 1U;
 
   const auto written = Write(Request(kContentVersion), std::move(plan));
 
@@ -95,32 +94,19 @@ class PakWriterPlanContractPayloadKindTest
 protected:
   static constexpr auto kContentVersion = uint16_t { 10U };
   static constexpr auto kPayloadSize = size_t { 8U };
-  static constexpr auto kPayloadOffset = uint64_t { 256U };
-  static constexpr auto kTablesOffset = uint64_t { 512U };
-  static constexpr auto kDirectoryOffset = uint64_t { 512U };
 
   //! The plan of the payload of the parameter's kind, with no payload source.
   [[nodiscard]] static auto UnsourcedPlan() -> pak::PakPlan::Data
   {
     if (GetParam() == PayloadKind::kResource) {
-      auto plan = CanonicalPlan({
+      return CanonicalPlan({
         .content_version = kContentVersion,
-        .base_offset = kPayloadOffset,
-        .texture_region_size = kPayloadSize,
-        .tables_offset = kTablesOffset,
-        .texture_count = 1U,
-        .texture_table_size = sizeof(core::TextureResourceDesc),
+        .texture_payload_size = kPayloadSize,
       });
-      plan.resources
-        = { paktest::MakeTexturePlacement(kPayloadOffset, kPayloadSize) };
-      return plan;
     }
-    auto plan = CanonicalPlan({
-      .content_version = kContentVersion,
-      .directory_offset = kDirectoryOffset,
-    });
+    auto plan = CanonicalPlan({ .content_version = kContentVersion });
     paktest::AddGeometryAsset(plan,
-      data::AssetKey::FromVirtualPath("/Game/Mesh.ogeo"), kPayloadOffset,
+      data::AssetKey::FromVirtualPath("/Game/Mesh.ogeo"),
       PatternBytes(kPayloadSize));
     return plan;
   }

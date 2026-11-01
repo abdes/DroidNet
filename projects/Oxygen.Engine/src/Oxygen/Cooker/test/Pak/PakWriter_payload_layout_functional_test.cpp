@@ -61,33 +61,22 @@ NOLINT_TEST_F(PakWriterPayloadLayoutTest,
   StoresResourceAndDescriptorPayloadBytesFromSources)
 {
   constexpr auto kContentVersion = uint16_t { 8U };
-  constexpr auto kTextureRegionOffset = uint64_t { 256U };
   constexpr auto kTexturePayloadSize = size_t { 8U };
-  constexpr auto kTextureTableOffset = uint64_t { 512U };
-  constexpr auto kDescriptorOffset = uint64_t { 768U };
   constexpr auto kDescriptorSize = size_t { 12U };
-  constexpr auto kDirectoryOffset = uint64_t { 896U };
   const auto texture_payload = PatternBytes(kTexturePayloadSize);
   const auto descriptor = PatternBytes(kDescriptorSize, PatternSeed::kSecond);
   auto plan = CanonicalPlan({
     .content_version = kContentVersion,
-    .base_offset = kTextureRegionOffset,
-    .texture_region_size = kTexturePayloadSize,
-    .tables_offset = kTextureTableOffset,
-    .directory_offset = kDirectoryOffset,
-    .texture_count = 1U,
-    .texture_table_size = sizeof(core::TextureResourceDesc),
+    .texture_payload_size = kTexturePayloadSize,
   });
-  plan.resources = {
-    paktest::MakeTexturePlacement(kTextureRegionOffset, kTexturePayloadSize),
-  };
   plan.resource_payload_sources = { AddSource("texture.bin", texture_payload) };
   plan.resource_descriptor_sources
     = { AddSource("texture_descriptor.bin", BlankTextureDescriptor()) };
-  paktest::AddGeometryAsset(plan,
-    data::AssetKey::FromVirtualPath("/Game/Mesh.ogeo"), kDescriptorOffset,
-    descriptor);
+  paktest::AddGeometryAsset(
+    plan, data::AssetKey::FromVirtualPath("/Game/Mesh.ogeo"), descriptor);
   plan.asset_payload_sources = { AddSource("mesh.ogeo", descriptor) };
+  const auto texture_offset = plan.resources.front().offset;
+  const auto descriptor_offset = plan.assets.front().offset;
   const auto planned_size = plan.planned_file_size;
   const auto request = Request(kContentVersion, "payload_copy.pak", false);
 
@@ -96,40 +85,32 @@ NOLINT_TEST_F(PakWriterPayloadLayoutTest,
   ASSERT_THAT(written.diagnostics, HasNoErrors());
   const auto bytes = Published(request);
   ASSERT_EQ(bytes.size(), planned_size);
-  EXPECT_THAT(Slice(bytes, kTextureRegionOffset, kTexturePayloadSize),
+  EXPECT_THAT(Slice(bytes, texture_offset, kTexturePayloadSize),
     BytesEqual(texture_payload));
   EXPECT_THAT(
-    Slice(bytes, kDescriptorOffset, kDescriptorSize), BytesEqual(descriptor));
+    Slice(bytes, descriptor_offset, kDescriptorSize), BytesEqual(descriptor));
 }
 
 NOLINT_TEST_F(
   PakWriterPayloadLayoutTest, ZeroFillsPlannedPaddingAndTrailingGaps)
 {
   constexpr auto kContentVersion = uint16_t { 2U };
-  constexpr auto kTextureRegionOffset = uint64_t { 512U };
   constexpr auto kTexturePayloadSize = size_t { 32U };
-  constexpr auto kTextureRegionEnd = kTextureRegionOffset + kTexturePayloadSize;
-  constexpr auto kTableOffset = uint64_t { 1024U };
-  constexpr auto kDirectoryOffset = uint64_t { 1152U };
   constexpr auto kTrailingGap = uint64_t { 512U };
   auto plan = CanonicalPlan({
     .content_version = kContentVersion,
-    .base_offset = kTextureRegionOffset,
-    .texture_region_size = kTexturePayloadSize,
-    .tables_offset = kTableOffset,
-    .directory_offset = kDirectoryOffset,
-    .texture_count = 1U,
-    .texture_table_size = sizeof(core::TextureResourceDesc),
+    .texture_payload_size = kTexturePayloadSize,
   });
-  plan.resources = {
-    paktest::MakeTexturePlacement(kTextureRegionOffset, kTexturePayloadSize),
-  };
   plan.resource_payload_sources
     = { AddSource("texture.bin", PatternBytes(kTexturePayloadSize)) };
   plan.resource_descriptor_sources
     = { AddSource("texture_descriptor.bin", BlankTextureDescriptor()) };
   // A gap after the footer, which the writer must zero-fill too.
   plan.planned_file_size += kTrailingGap;
+  const auto texture_offset = plan.resources.front().offset;
+  const auto texture_end = texture_offset + kTexturePayloadSize;
+  // The texture region is padded to a payload boundary, where the tables start.
+  const auto table_offset = plan.tables.front().offset;
   const auto planned_size = plan.planned_file_size;
   const auto footer_end = plan.footer.offset + kFooterSize;
   const auto request = Request(kContentVersion, "zero_fill.pak");
@@ -141,9 +122,8 @@ NOLINT_TEST_F(
   const auto bytes = Published(request);
   ASSERT_EQ(bytes.size(), planned_size);
   EXPECT_TRUE(
-    IsAllZero(Slice(bytes, kHeaderSize, kTextureRegionOffset - kHeaderSize)));
-  EXPECT_TRUE(IsAllZero(
-    Slice(bytes, kTextureRegionEnd, kTableOffset - kTextureRegionEnd)));
+    IsAllZero(Slice(bytes, kHeaderSize, texture_offset - kHeaderSize)));
+  EXPECT_TRUE(IsAllZero(Slice(bytes, texture_end, table_offset - texture_end)));
   EXPECT_TRUE(IsAllZero(Slice(bytes, footer_end, kTrailingGap)));
 }
 
