@@ -110,6 +110,11 @@ m_gtest_program(
     "SceneLoader_test.cpp"
     "TextureLoader_test.cpp"
 )
+target_link_libraries(
+  "${META_MODULE_NAME}.Loaders.Tests"
+  PRIVATE
+    oxygen::cooker::testing
+)
 
 m_gtest_program(PayloadBudget SOURCES "PayloadBudget_test.cpp")
 
@@ -181,6 +186,11 @@ m_gtest_program(
   SOURCES
     "PhysicsResourceLoader_test.cpp"
     "PhysicsSceneLoader_test.cpp"
+)
+target_link_libraries(
+  "${META_MODULE_NAME}.LoadersPhysics.Tests"
+  PRIVATE
+    oxygen::cooker::testing
 )
 
 m_gtest_program(LoadersScripting SOURCES "SceneScriptingLoader_test.cpp")

@@ -41,7 +41,7 @@
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
-#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
+#include <Oxygen/Cooker/testing/ModelRecord.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SceneIds.h>
@@ -70,7 +70,7 @@ using oxygen::content::import::MountTable;
 using oxygen::content::import::MountTableOwner;
 using oxygen::content::import::MountTableRequest;
 using oxygen::content::import::ResolveMountTable;
-using oxygen::cooker::test::ModelImportRecordDocument;
+using oxygen::cooker::testing::ModelRecord;
 using oxygen::data::NodeId;
 
 //! The model of the fixture's record, beside its source.
@@ -142,14 +142,20 @@ protected:
     return *path;
   }
 
-  //! Writes `document`, a hand-shaped record, at its model's record.
-  [[nodiscard]] auto WriteRecord(
-    const ModelImportRecordDocument& document) const -> std::filesystem::path
+  //! A damaged record of the model `identity`, with its `text`.
+  struct DamagedRecord {
+    std::string_view identity;
+    std::string_view text;
+  };
+
+  //! Writes the damaged record at the record location of its model.
+  [[nodiscard]] auto WriteRecord(const DamagedRecord& damaged) const
+    -> std::filesystem::path
   {
-    const auto path = RecordOf(document.Identity());
+    const auto path = RecordOf(damaged.identity);
     std::filesystem::create_directories(path.parent_path());
     std::ofstream output(path, std::ios::binary);
-    output << document.Text();
+    output << damaged.text;
     return path;
   }
 
@@ -278,9 +284,11 @@ NOLINT_TEST_F(
 //! refuses a machine's path as its `source`.
 NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesAnAbsoluteSource)
 {
+  auto document = json::parse(
+    ModelRecord { std::string(kIdentity) }.Source(kIdentity).Text());
+  document["source"] = source_.generic_string();
   const auto record
-    = WriteRecord(ModelImportRecordDocument(std::string(kIdentity), kIdentity)
-        .Set("/source", source_.generic_string()));
+    = WriteRecord({ .identity = kIdentity, .text = document.dump(2) });
 
   try {
     static_cast<void>(ModelImportRecord::Read(record, mounts_));
@@ -867,10 +875,14 @@ NOLINT_TEST_F(ModelImportRecordTest, LocateFindsTheModelsRecord)
 //! document; the model's own record is still found and still imports.
 NOLINT_TEST_F(ModelImportRecordTest, AnUnreadableRecordIsSkippedWithAWarning)
 {
-  const auto outdated = WriteRecord(
-    ModelImportRecordDocument("/Content/Models/Outdated.gltf", kIdentity)
-      .Remove("/schema_version")
-      .Set("/published_generation", json { { "id", "not-quoted" } }));
+  constexpr std::string_view kOutdatedIdentity
+    = "/Content/Models/Outdated.gltf";
+  auto document = json::parse(
+    ModelRecord { std::string(kOutdatedIdentity) }.Source(kIdentity).Text());
+  document.erase("schema_version");
+  document["published_generation"] = json { { "id", "not-quoted" } };
+  const auto outdated
+    = WriteRecord({ .identity = kOutdatedIdentity, .text = document.dump(2) });
 
   const auto location = ModelImportRecord::LocateRecord({
     .source = source_,

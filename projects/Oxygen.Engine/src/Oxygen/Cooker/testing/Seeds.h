@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakCatalog.h>
@@ -29,16 +30,29 @@ namespace oxygen::cooker::testing {
   return std::vector<std::byte>(count, static_cast<std::byte>(seed));
 }
 
-//! A valid UUIDv7 source identity derived from `seed`.
-[[nodiscard]] inline auto SourceKeyOf(const uint8_t seed) -> data::SourceKey
+//! The bytes of a valid UUIDv7 derived from `seed`.
+[[nodiscard]] inline auto UuidBytesOf(const uint8_t seed)
+  -> std::array<uint8_t, Uuid::kSize>
 {
-  auto bytes = std::array<uint8_t, data::SourceKey::kSizeBytes> {};
+  auto bytes = std::array<uint8_t, Uuid::kSize> {};
   for (auto i = size_t { 0U }; i < bytes.size(); ++i) {
     bytes.at(i) = static_cast<uint8_t>(seed + static_cast<uint8_t>(i));
   }
   bytes.at(6) = static_cast<uint8_t>((bytes.at(6) & 0x0FU) | 0x70U);
   bytes.at(8) = static_cast<uint8_t>((bytes.at(8) & 0x3FU) | 0x80U);
-  return data::SourceKey::FromBytes(bytes).value();
+  return bytes;
+}
+
+//! A valid UUIDv7 derived from `seed`.
+[[nodiscard]] inline auto UuidOf(const uint8_t seed) -> Uuid
+{
+  return Uuid::FromBytes(UuidBytesOf(seed)).value();
+}
+
+//! A valid UUIDv7 source identity derived from `seed`.
+[[nodiscard]] inline auto SourceKeyOf(const uint8_t seed) -> data::SourceKey
+{
+  return data::SourceKey::FromBytes(UuidBytesOf(seed)).value();
 }
 
 //! The base catalog entry of an asset with no resources, whose descriptor was

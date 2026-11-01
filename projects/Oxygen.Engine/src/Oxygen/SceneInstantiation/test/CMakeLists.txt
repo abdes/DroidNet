@@ -12,5 +12,6 @@ m_gtest_program(SceneInstantiation SOURCES "SceneInstantiation_test.cpp")
 target_link_libraries(
   "${META_MODULE_NAME}.SceneInstantiation.Tests"
   PRIVATE
+    oxygen::cooker::testing
     oxygen::input
 )

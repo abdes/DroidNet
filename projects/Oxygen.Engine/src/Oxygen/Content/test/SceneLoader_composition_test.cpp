@@ -6,27 +6,24 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Data/SceneIds.h>
-#include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -39,118 +36,6 @@ using oxygen::base::CheckedAt;
 using oxygen::content::loaders::LoadSceneAsset;
 using oxygen::data::AssetKey;
 using oxygen::data::ComponentType;
-
-//! Scene-level values of a three-node scene whose node 2 owns a camera.
-struct CompositionInput {
-  world::SceneAssetFlags flags = world::SceneAssetFlags::kNone;
-  world::SceneNodeIndexT starting_camera = world::kNoStartingCamera;
-  std::vector<world::SceneInstanceRecord> instances;
-  std::vector<world::StartingInputContextRecord> contexts;
-};
-
-constexpr world::SceneNodeIndexT kNodeCount = 3U;
-constexpr world::SceneNodeIndexT kCameraNode = 2U;
-
-template <typename T>
-auto Append(std::vector<std::byte>& bytes, const T& value) -> void
-{
-  const auto view = std::as_bytes(std::span<const T, 1>(&value, 1));
-  bytes.insert(bytes.end(), view.begin(), view.end());
-}
-
-template <typename T>
-auto AppendTable(std::vector<std::byte>& bytes, const std::vector<T>& records)
-  -> void
-{
-  const auto view = std::as_bytes(std::span(records));
-  bytes.insert(bytes.end(), view.begin(), view.end());
-}
-
-auto MakeComposedScene(const CompositionInput& input) -> std::vector<std::byte>
-{
-  auto camera = world::MakeDefaultRecord<world::PerspectiveCameraRecord>();
-  camera.node_index = kCameraNode;
-  const auto cameras = std::vector { camera };
-
-  auto tables = std::vector<world::SceneComponentTableDesc> {};
-  const auto add_table
-    = [&tables](const ComponentType type, const size_t entry_size,
-        const size_t count) -> void {
-    if (count != 0U) {
-      tables.push_back({
-        .component_type = static_cast<uint32_t>(type),
-        .table = { .offset = 0U,
-          .count = static_cast<uint32_t>(count),
-          .entry_size = static_cast<uint32_t>(entry_size), },
-      });
-    }
-  };
-  add_table(ComponentType::kPerspectiveCamera,
-    sizeof(world::PerspectiveCameraRecord), cameras.size());
-  add_table(ComponentType::kSceneInstance, sizeof(world::SceneInstanceRecord),
-    input.instances.size());
-  add_table(ComponentType::kStartingInputContext,
-    sizeof(world::StartingInputContextRecord), input.contexts.size());
-
-  auto descriptor = world::SceneAssetDesc {};
-  descriptor.header.asset_type
-    = static_cast<uint8_t>(oxygen::data::AssetType::kScene);
-  descriptor.header.version = world::kSceneAssetVersion;
-  descriptor.nodes = {
-    .offset = sizeof(world::SceneAssetDesc),
-    .count = kNodeCount,
-    .entry_size = sizeof(world::NodeRecord),
-  };
-  descriptor.flags = input.flags;
-  descriptor.starting_camera.node_index = input.starting_camera;
-  auto offset
-    = descriptor.nodes.offset + (kNodeCount * sizeof(world::NodeRecord));
-  const auto strings = oxygen::data::DescriptorStringsBuilder {};
-  descriptor.header.strings = {
-    .offset = static_cast<oxygen::data::pak::core::StringTableOffsetT>(offset),
-    .size = strings.Size(),
-  };
-  offset += strings.Size();
-  descriptor.component_table_directory_offset = offset;
-  descriptor.component_table_count = static_cast<uint32_t>(tables.size());
-  offset += tables.size() * sizeof(world::SceneComponentTableDesc);
-  for (auto& table : tables) {
-    table.table.offset = offset;
-    offset += size_t { table.table.count } * table.table.entry_size;
-  }
-
-  auto bytes = std::vector<std::byte> {};
-  Append(bytes, descriptor);
-  for (world::SceneNodeIndexT index = 0; index < kNodeCount; ++index) {
-    auto node = world::NodeRecord {};
-    node.node_id = oxygen::data::NodeId::FromStableIdentity(
-      "/test/node/" + std::to_string(index));
-    node.parent_index = 0U;
-    Append(bytes, node);
-  }
-  const auto table_bytes = strings.Bytes();
-  bytes.insert(bytes.end(), table_bytes.begin(), table_bytes.end());
-  AppendTable(bytes, tables);
-  AppendTable(bytes, cameras);
-  AppendTable(bytes, input.instances);
-  AppendTable(bytes, input.contexts);
-  auto environment = world::SceneEnvironmentBlockHeader {};
-  environment.byte_size = sizeof(environment);
-  Append(bytes, environment);
-  return bytes;
-}
-
-auto LoadParseOnly(std::vector<std::byte>& bytes)
-  -> std::unique_ptr<oxygen::data::SceneAsset>
-{
-  auto stream
-    = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
-  auto reader = oxygen::serio::Reader(stream);
-  auto context = oxygen::content::LoaderContext {};
-  context.desc_reader = &reader;
-  context.parse_only = true;
-  return LoadSceneAsset(context);
-}
 
 auto ModelKey() -> AssetKey
 {
@@ -167,17 +52,73 @@ auto MenuKey() -> AssetKey
   return AssetKey::FromVirtualPath("/Input/Menu.oimap");
 }
 
+using oxygen::cooker::testing::DescriptorDefects;
+using oxygen::cooker::testing::SceneBuilder;
+
+constexpr world::SceneNodeIndexT kNodeCount = 3U;
+constexpr world::SceneNodeIndexT kCameraNode = 2U;
+
+//! A starting input context and its priority.
+struct StartingContext {
+  AssetKey key;
+  int32_t priority = 0;
+};
+
+//! Scene-level values of a three-node scene whose node 2 owns a camera.
+struct CompositionInput {
+  bool model_scene = false;
+  bool starting_camera = false;
+  //! The nodes that instance the model scene.
+  std::vector<world::SceneNodeIndexT> instances;
+  std::vector<StartingContext> contexts;
+};
+
+auto MakeComposedScene(const CompositionInput& input) -> std::vector<std::byte>
+{
+  auto scene = SceneBuilder { "test" };
+  auto nodes = std::vector<oxygen::cooker::testing::SceneNode> {};
+  for (world::SceneNodeIndexT index = 0; index < kNodeCount; ++index) {
+    nodes.push_back(scene.Node("node" + std::to_string(index)));
+  }
+  scene.PerspectiveCamera(nodes.at(kCameraNode));
+  for (const auto node : input.instances) {
+    scene.Instance(nodes.at(node), ModelKey());
+  }
+  for (const auto& context : input.contexts) {
+    scene.StartingInputContext(context.key, context.priority);
+  }
+  if (input.starting_camera) {
+    scene.StartingCamera(nodes.at(kCameraNode));
+  }
+  if (input.model_scene) {
+    scene.ModelScene();
+  }
+  return scene.Bytes();
+}
+
+auto LoadParseOnly(std::vector<std::byte>& bytes)
+  -> std::unique_ptr<oxygen::data::SceneAsset>
+{
+  auto stream
+    = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
+  auto reader = oxygen::serio::Reader(stream);
+  auto context = oxygen::content::LoaderContext {};
+  context.desc_reader = &reader;
+  context.parse_only = true;
+  return LoadSceneAsset(context);
+}
+
 //! The loader keeps the scene flags, starting camera, instances and the
 //! starting contexts in their authored order.
 NOLINT_TEST(SceneCompositionLoadTest, PreservesInstancesAndStartState)
 {
   constexpr int32_t kMenuPriority = -4;
   auto input = CompositionInput {};
-  input.starting_camera = kCameraNode;
-  input.instances = { { .node_index = 1U, .scene_key = ModelKey() } };
+  input.starting_camera = true;
+  input.instances = { 1U };
   input.contexts = {
-    { .context_key = MenuKey(), .priority = kMenuPriority },
-    { .context_key = GameplayKey(), .priority = 1 },
+    { .key = MenuKey(), .priority = kMenuPriority },
+    { .key = GameplayKey(), .priority = 1 },
   };
   auto bytes = MakeComposedScene(input);
 
@@ -203,7 +144,7 @@ NOLINT_TEST(SceneCompositionLoadTest, PreservesInstancesAndStartState)
 NOLINT_TEST(SceneCompositionLoadTest, ReportsModelScene)
 {
   auto input = CompositionInput {};
-  input.flags = world::SceneAssetFlags::kModelScene;
+  input.model_scene = true;
   auto bytes = MakeComposedScene(input);
 
   const auto scene = LoadParseOnly(bytes);
@@ -219,8 +160,8 @@ NOLINT_TEST(
   SceneCompositionLoadTest, InstancesAndContextsAreNotLoadDependencies)
 {
   auto input = CompositionInput {};
-  input.instances = { { .node_index = 1U, .scene_key = ModelKey() } };
-  input.contexts = { { .context_key = GameplayKey(), .priority = 0 } };
+  input.instances = { 1U };
+  input.contexts = { { .key = GameplayKey(), .priority = 0 } };
   auto bytes = MakeComposedScene(input);
   auto stream
     = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
@@ -241,36 +182,86 @@ NOLINT_TEST(
   EXPECT_TRUE(collector->AssetDependencies().empty());
 }
 
-//! One invalid composition per case, each otherwise valid.
-auto InvalidCompositions() -> std::vector<CompositionInput>
+//! One invalid composition per case: a valid scene with one defect.
+auto InvalidCompositions() -> std::vector<std::vector<std::byte>>
 {
-  auto inputs = std::vector<CompositionInput> {};
-  const auto add
-    = [&inputs] -> CompositionInput& { return inputs.emplace_back(); };
-  add().starting_camera = 0U; // Not a camera node.
-  add().starting_camera = kNodeCount; // Not a node.
-  add().instances = { { .node_index = kNodeCount, .scene_key = ModelKey() } };
-  add().instances = { { .node_index = 1U, .scene_key = {} } };
-  add().instances = {
-    { .node_index = 1U, .scene_key = ModelKey() },
-    { .node_index = 1U, .scene_key = ModelKey() },
+  using oxygen::data::ComponentType;
+  auto cases = std::vector<std::vector<std::byte>> {};
+
+  const auto with_camera
+    = [] { return MakeComposedScene({ .starting_camera = true }); };
+  // Not a camera node.
+  cases.push_back(with_camera());
+  DescriptorDefects::SetStartingCamera(
+    cases.back(), world::NodeRef { .node_index = 0U });
+  // Not a node.
+  cases.push_back(with_camera());
+  DescriptorDefects::SetStartingCamera(
+    cases.back(), world::NodeRef { .node_index = kNodeCount });
+
+  const auto instance_defect
+    = [&cases](std::vector<world::SceneNodeIndexT> nodes, const auto& damage) {
+        auto bytes = MakeComposedScene({ .instances = std::move(nodes) });
+        damage(bytes);
+        cases.push_back(std::move(bytes));
+      };
+  const auto set_instance = [](std::vector<std::byte>& bytes,
+                              const uint32_t index, const auto& edit) {
+    auto record = DescriptorDefects::ComponentAt<world::SceneInstanceRecord>(
+      bytes, ComponentType::kSceneInstance, index);
+    edit(record);
+    DescriptorDefects::SetComponent(
+      bytes, ComponentType::kSceneInstance, index, record);
   };
-  add().contexts = { { .context_key = {}, .priority = 0 } };
-  add().contexts = {
-    { .context_key = MenuKey(), .priority = 0 },
-    { .context_key = MenuKey(), .priority = 1 },
+  instance_defect({ 1U }, [&set_instance](std::vector<std::byte>& bytes) {
+    set_instance(bytes, 0U, [](world::SceneInstanceRecord& record) {
+      record.node_index = kNodeCount;
+    });
+  });
+  instance_defect({ 1U }, [&set_instance](std::vector<std::byte>& bytes) {
+    set_instance(bytes, 0U,
+      [](world::SceneInstanceRecord& record) { record.scene_key = {}; });
+  });
+  instance_defect({ 0U, 1U }, [&set_instance](std::vector<std::byte>& bytes) {
+    const auto first
+      = DescriptorDefects::ComponentAt<world::SceneInstanceRecord>(
+        bytes, ComponentType::kSceneInstance, 0U);
+    set_instance(bytes, 1U, [&first](world::SceneInstanceRecord& record) {
+      record.node_index = first.node_index;
+    });
+  });
+
+  const auto set_context = [](std::vector<std::byte>& bytes,
+                             const uint32_t index, const AssetKey& key) {
+    auto record
+      = DescriptorDefects::ComponentAt<world::StartingInputContextRecord>(
+        bytes, ComponentType::kStartingInputContext, index);
+    record.context_key = key;
+    DescriptorDefects::SetComponent(
+      bytes, ComponentType::kStartingInputContext, index, record);
   };
-  add().flags = static_cast<world::SceneAssetFlags>(1U << 1U);
-  return inputs;
+  cases.push_back(MakeComposedScene({ .contexts = { { .key = MenuKey() } } }));
+  set_context(cases.back(), 0U, AssetKey {});
+  cases.push_back(MakeComposedScene({
+    .contexts
+    = { { .key = MenuKey() }, { .key = GameplayKey(), .priority = 1 } },
+  }));
+  set_context(cases.back(), 1U,
+    DescriptorDefects::ComponentAt<world::StartingInputContextRecord>(
+      cases.back(), ComponentType::kStartingInputContext, 0U)
+      .context_key);
+
+  cases.push_back(MakeComposedScene({}));
+  DescriptorDefects::SetSceneFlags(cases.back(), 1U << 1U);
+  return cases;
 }
 
 //! Invalid start state or instances fail both the asset and the loader.
 NOLINT_TEST(SceneCompositionLoadTest, RejectsInvalidCompositionRecords)
 {
   auto case_index = size_t { 0 };
-  for (const auto& input : InvalidCompositions()) {
+  for (auto& bytes : InvalidCompositions()) {
     SCOPED_TRACE(case_index++);
-    auto bytes = MakeComposedScene(input);
     EXPECT_THROW(
       (oxygen::data::SceneAsset(AssetKey {}, bytes)), std::runtime_error);
     EXPECT_THROW(LoadParseOnly(bytes), std::runtime_error);

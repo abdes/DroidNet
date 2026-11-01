@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <limits>
@@ -39,29 +38,30 @@
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
-#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
-#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Types.h>
@@ -76,7 +76,6 @@ namespace {
 
   using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
-  using oxygen::cooker::test::WriteBytes;
   using oxygen::cooker::test::WriteText;
   using oxygen::cooker::testing::LooseCookedRoot;
   using oxygen::cooker::testing::Materialize;
@@ -416,42 +415,33 @@ namespace {
       scene.GetNodePath(CheckedAt(changes, 0).target), std::vector { *eye });
   }
 
-  auto WriteTextureSidecar(const std::filesystem::path& root,
-    const std::string_view name, const Format format, const uint32_t index,
-    const TextureType type) -> void
+  //! Describes the metering mask `Textures/Meter.otex` as a 1x1 texture of
+  //! `format` into `root`, naming the row it holds, or the reserved row zero
+  //! when `reserved_row`. Returns the row the texture lives in.
+  auto MaterializeMeteringMask(const std::filesystem::path& root,
+    const Format format, const bool reserved_row = false) -> ResourceIndexT
   {
-    const bool cube = type == TextureType::kTextureCube;
-    WriteBytes(root / "Textures" / name,
-      data::EncodeTextureResourceDescriptor({
-        .index = data::pak::core::ResourceIndexT { index },
-        .descriptor = data::pak::core::TextureResourceDesc {
-          .data_offset = 0U,
-          .size_bytes = cube ? 24U : 4U,
-          .texture_type = static_cast<uint8_t>(type),
-          .compression_type = 0U,
-          .width = 1U,
-          .height = 1U,
-          .depth = 1U,
-          .array_layers = static_cast<uint16_t>(cube ? 6U : 1U),
-          .mip_levels = 1U,
-          .format = static_cast<uint8_t>(format),
-          .alignment = 256U,
-        },
-      }));
+    auto textures = LooseCookedRoot { ".cooked" };
+    auto desc = LooseCookedRoot::OnePixelTexture();
+    desc.format = static_cast<uint8_t>(format);
+    const auto row = textures.AddTexture(SeedBytes(1U), desc);
+    textures.DescribeTexture(
+      "Textures/Meter.otex", reserved_row ? ResourceIndexT { 0U } : row);
+    Materialize(textures.Files(), root);
+    return row;
   }
 
-  auto WriteMeteringMaskSidecar(const std::filesystem::path& root,
-    const Format format, const uint32_t index) -> void
+  //! Adds a 1x1 RGBA16F cubemap to `textures`, described at `leaf`.
+  auto AddCubemap(LooseCookedRoot& textures, const std::string_view leaf)
+    -> ResourceIndexT
   {
-    WriteTextureSidecar(
-      root, "Meter.otex", format, index, TextureType::kTexture2D);
-  }
-
-  auto WriteCubemapSidecar(const std::filesystem::path& root,
-    const std::string_view name, const uint32_t index) -> void
-  {
-    WriteTextureSidecar(
-      root, name, Format::kRGBA16Float, index, TextureType::kTextureCube);
+    auto desc = LooseCookedRoot::OnePixelTexture();
+    desc.texture_type = static_cast<uint8_t>(TextureType::kTextureCube);
+    desc.array_layers = 6U;
+    desc.format = static_cast<uint8_t>(Format::kRGBA16Float);
+    const auto row = textures.AddTexture(SeedBytes(1U, 24U), desc);
+    textures.DescribeTexture(leaf, row);
+    return row;
   }
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
@@ -462,7 +452,7 @@ namespace {
     std::filesystem::create_directories(root);
     constexpr auto kDescriptor = R"({"name":"MaskScene","nodes":[{}],
       "environment":{"post_process_volume":{"auto_exposure_metering_mask":"../Textures/Meter.otex"}}})";
-    WriteMeteringMaskSidecar(root, Format::kRGBA8UNorm, 4U);
+    const auto mask_row = MaterializeMeteringMask(root, Format::kRGBA8UNorm);
     const auto success = Import(MakeRequest(root, kDescriptor));
     ASSERT_HAS_VALUE(success);
     ASSERT_TRUE(success->success);
@@ -480,23 +470,27 @@ namespace {
     EXPECT_THAT(references->Resources(),
       ::testing::ElementsAre(data::ResourceBinding {
         .kind = data::ResourceKind::kTexture,
-        .index = ResourceIndexT { 4U },
+        .index = mask_row,
       }));
 
-    WriteMeteringMaskSidecar(root, Format::kRGBA8UNormSRGB, 4U);
+    MaterializeMeteringMask(root, Format::kRGBA8UNormSRGB);
     const auto srgb = Import(MakeRequest(root, kDescriptor));
     ASSERT_HAS_VALUE(srgb);
     EXPECT_FALSE(srgb->success);
     EXPECT_TRUE(HasDiagnosticCode(
       srgb->diagnostics, "scene.descriptor.mask_format_invalid"));
-    WriteMeteringMaskSidecar(root, Format::kRGBA8UNorm, 0U);
+    MaterializeMeteringMask(root, Format::kRGBA8UNorm, true);
     const auto absent = Import(MakeRequest(root, kDescriptor));
     ASSERT_HAS_VALUE(absent);
     EXPECT_FALSE(absent->success);
     EXPECT_TRUE(HasDiagnosticCode(
       absent->diagnostics, "scene.descriptor.texture_descriptor_invalid"));
 
-    // A deleted mask leaves the scene without one, with a warning.
+    // A deleted mask, a root that keeps the texture but no longer describes
+    // it, leaves the scene without one, with a warning.
+    auto undescribed = LooseCookedRoot { ".cooked" };
+    static_cast<void>(undescribed.AddTexture(SeedBytes(1U)));
+    Materialize(undescribed.Files(), root);
     std::filesystem::remove(root / "Textures/Meter.otex");
     const auto deleted = Import(MakeRequest(root, kDescriptor));
     ASSERT_HAS_VALUE(deleted);
@@ -1006,19 +1000,6 @@ namespace {
     EXPECT_FLOAT_EQ(CheckedAt(directional, 0).distance_fadeout_fraction, 0.1F);
 
     // Exercise strict binary ingress with otherwise valid cooked content.
-    using oxygen::data::pak::world::SceneAssetDesc;
-    using oxygen::data::pak::world::SceneComponentTableDesc;
-    const auto scene_desc
-      = oxygen::serio::CopyAt<SceneAssetDesc>(std::span { scene_bytes });
-    ASSERT_HAS_VALUE(scene_desc);
-    const auto& descriptor = *scene_desc;
-    ASSERT_EQ(descriptor.component_table_count, 1U);
-    const auto table_read = oxygen::serio::CopyAt<SceneComponentTableDesc>(
-      std::span { scene_bytes },
-      oxygen::serio::ByteOffset {
-        descriptor.component_table_directory_offset });
-    ASSERT_HAS_VALUE(table_read);
-    const auto& table = *table_read;
     for (unsigned malformed = 0U; malformed < 8U; ++malformed) {
       SCOPED_TRACE(malformed);
       auto record = CheckedAt(directional, 0);
@@ -1049,8 +1030,8 @@ namespace {
         break;
       }
       auto malformed_bytes = scene_bytes;
-      std::memcpy(std::span(malformed_bytes).subspan(table.table.offset).data(),
-        &record, sizeof(record));
+      oxygen::cooker::testing::DescriptorDefects::SetComponent(malformed_bytes,
+        oxygen::data::ComponentType::kDirectionalLight, 0U, record);
       EXPECT_THROW(
         static_cast<void>(oxygen::data::SceneAsset(oxygen::data::AssetKey {},
           std::span<const std::byte>(malformed_bytes))),
@@ -1083,12 +1064,11 @@ namespace {
 
     const auto cooked_root = TempDir() / "environment_and_local_fog";
     std::filesystem::create_directories(cooked_root);
-    constexpr auto kSkyProbe = 5U;
-    constexpr auto kFogProbe = 6U;
-    constexpr auto kBackdrop = 7U;
-    WriteCubemapSidecar(cooked_root, "sky_probe.otex", kSkyProbe);
-    WriteCubemapSidecar(cooked_root, "fog_probe.otex", kFogProbe);
-    WriteCubemapSidecar(cooked_root, "backdrop.otex", kBackdrop);
+    auto textures = LooseCookedRoot { ".cooked" };
+    const auto sky_probe = AddCubemap(textures, "Textures/sky_probe.otex");
+    const auto fog_probe = AddCubemap(textures, "Textures/fog_probe.otex");
+    const auto backdrop = AddCubemap(textures, "Textures/backdrop.otex");
+    Materialize(textures.Files(), cooked_root);
 
     const auto report = Import(MakeRequest(cooked_root, R"({
       "name": "EnvironmentScene",
@@ -1231,9 +1211,9 @@ namespace {
         reference, data::ResourceKind::kTexture);
       return resolved && resolved->has_value() ? resolved->value().get() : 0U;
     };
-    EXPECT_EQ(texture_of(fog->inscattering_color_cubemap), kFogProbe);
-    EXPECT_EQ(texture_of(sky_light->cubemap), kSkyProbe);
-    EXPECT_EQ(texture_of(sky_sphere->cubemap), kBackdrop);
+    EXPECT_EQ(texture_of(fog->inscattering_color_cubemap), fog_probe.get());
+    EXPECT_EQ(texture_of(sky_light->cubemap), sky_probe.get());
+    EXPECT_EQ(texture_of(sky_sphere->cubemap), backdrop.get());
 
     const auto local_fog
       = scene.GetComponents<oxygen::data::pak::world::LocalFogVolumeRecord>();

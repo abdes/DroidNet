@@ -36,17 +36,16 @@
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
-#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
@@ -72,7 +71,9 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
 //! Throws when the loose cooked root `root` is not one the runtime loads.
 auto ValidateRoot(const std::filesystem::path& root) -> void
 {
-  using namespace oxygen::content::cooked;
+  using oxygen::content::cooked::CookedContent;
+  using oxygen::content::cooked::RealCookerStorage;
+  using oxygen::content::cooked::Validate;
   Validate(CookedContent::Open(RealCookerStorage(), root));
 }
 
@@ -80,6 +81,7 @@ using oxygen::cooker::testing::LooseAsset;
 using oxygen::cooker::testing::LooseCookedRoot;
 using oxygen::cooker::testing::Materialize;
 using oxygen::cooker::testing::PakWorkspace;
+using oxygen::cooker::testing::SceneBuilder;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetReferences;
 using oxygen::data::SurfaceId;
@@ -282,86 +284,18 @@ auto WriteOverrideScene(const std::filesystem::path& root,
   const oxygen::data::SurfaceId surface,
   const oxygen::base::Sha256Digest& layout_revision) -> void
 {
-  namespace world = oxygen::data::pak::world;
-  auto assignment = world::OverrideRecord {
-    .target = { .node_index = 0 },
-    .override_id = oxygen::data::schema::OverrideId::kGeometrySurfaceMaterial,
-    .part_id = surface,
-    .layout_revision = layout_revision,
-  };
-  assignment.value.as_asset
+  auto value = oxygen::data::pak::world::OverrideValue {};
+  value.as_asset
     = AssetKey::FromVirtualPath("/Content/Materials/Override.omat");
-  auto descriptor = world::SceneAssetDesc {};
-  descriptor.header.asset_type
-    = static_cast<uint8_t>(oxygen::data::AssetType::kScene);
-  descriptor.header.version = world::kSceneAssetVersion;
-  descriptor.nodes = {
-    .offset = sizeof(descriptor),
-    .count = 1,
-    .entry_size = sizeof(world::NodeRecord),
-  };
-  descriptor.header.strings = {
-    .offset = sizeof(descriptor) + sizeof(world::NodeRecord),
-    .size = 1,
-  };
-  descriptor.component_table_directory_offset
-    = descriptor.header.strings.offset + 1;
-  descriptor.component_table_count = 2;
-  const auto records_offset = descriptor.component_table_directory_offset
-    + (2 * sizeof(world::SceneComponentTableDesc));
-  const auto directory = std::array {
-    world::SceneComponentTableDesc {
-      .component_type
-      = static_cast<uint32_t>(oxygen::data::ComponentType::kRenderable),
-      .table = { .offset = records_offset,
-        .count = 1,
-        .entry_size = sizeof(world::RenderableRecord), },
-    },
-    world::SceneComponentTableDesc {
-      .component_type
-      = static_cast<uint32_t>(oxygen::data::ComponentType::kOverride),
-      .table = { .offset = records_offset + sizeof(world::RenderableRecord),
-        .count = 1,
-        .entry_size = sizeof(world::OverrideRecord), },
-    },
-  };
-  auto node = world::NodeRecord {};
-  node.node_id
-    = oxygen::data::NodeId::FromStableIdentity("/Content/Nodes/Root");
-  const auto renderable = world::RenderableRecord {
-    .node_index = 0,
-    .geometry_key = AssetKey::FromVirtualPath(kGeometryPath),
-  };
-  auto environment = world::SceneEnvironmentBlockHeader {};
-  environment.byte_size = sizeof(environment);
-  auto bytes = std::vector<std::byte> {};
-  AppendRecord(bytes, descriptor);
-  AppendRecord(bytes, node);
-  bytes.push_back(std::byte { 0 });
-  for (const auto& table : directory) {
-    AppendRecord(bytes, table);
-  }
-  AppendRecord(bytes, renderable);
-  AppendRecord(bytes, assignment);
-  AppendRecord(bytes, environment);
-  auto references = AssetReferences::Create({},
-    {
-      {
-        .key = renderable.geometry_key,
-        .kind = oxygen::data::KeyReferenceKind::kAsset,
-        .expected_type = oxygen::data::AssetType::kGeometry,
-      },
-      {
-        .key = assignment.value.as_asset,
-        .kind = oxygen::data::KeyReferenceKind::kAsset,
-        .expected_type = oxygen::data::AssetType::kMaterial,
-      },
-    });
+  auto scene = SceneBuilder { "Inspection" };
+  const auto node = scene.Node("Root");
+  scene.Renderable(node, AssetKey::FromVirtualPath(kGeometryPath));
+  scene.Override(node,
+    oxygen::data::schema::OverrideId::kGeometrySurfaceMaterial, value, surface,
+    layout_revision);
   auto library = ContentRoot();
   library.Add(GeometryAsset({}));
-  library.Add(DescriptorAsset("/Content/Scenes/Inspection.oscene",
-    oxygen::data::AssetType::kScene, std::move(bytes),
-    std::move(references).value()));
+  library.Scene("Scenes/Inspection.oscene", scene);
   Materialize(library.Files(), root);
 }
 

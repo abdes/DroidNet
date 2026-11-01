@@ -14,18 +14,21 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "PakSceneTestSupport.h"
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/PackedPak.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -80,10 +83,12 @@ auto Repack(PakWorkspace& workspace, std::vector<data::CookedSource> sources,
   static_cast<void>(workspace.PackOrThrow(merged));
   auto from_pak
     = std::vector { PakWorkspace::PakSource(merged.output_pak_path) };
-  return workspace.PackOrThrow(mode == BuildMode::kFull
-      ? workspace.FullRequest(std::move(from_pak), "repacked.pak")
-      : workspace.PatchRequest(std::move(from_pak),
-          { LooseCookedRoot {}.BaseCatalog() }, "repacked.pak"));
+  if (mode == BuildMode::kFull) {
+    return workspace.PackOrThrow(
+      workspace.FullRequest(std::move(from_pak), "repacked.pak"));
+  }
+  return workspace.PackOrThrow(workspace.PatchRequest(
+    std::move(from_pak), { LooseCookedRoot {}.BaseCatalog() }, "repacked.pak"));
 }
 
 //! Checks the content hash a descriptor's header holds against its bytes.
@@ -110,8 +115,9 @@ NOLINT_TEST(PakRepackTest, RejectsDescriptorBytesThatDisagreeWithTheCatalog)
     .descriptor = oxygen::cooker::testing::MakeEmptySceneDescriptor(),
   });
   const auto request = workspace.FullRequest({ workspace.Add(game) });
-  const auto packed = workspace.Pack(request);
+  const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);
   ASSERT_THAT(packed.Diagnostics(), HasNoErrors());
+  ASSERT_HAS_VALUE(packed.planned.plan);
   // Corrupt the descriptor's variant flags after the pak was published.
   const auto published = workspace.Storage().Bytes(request.output_pak_path);
   auto bytes = std::vector<std::byte>(published.begin(), published.end());
@@ -119,8 +125,9 @@ NOLINT_TEST(PakRepackTest, RejectsDescriptorBytesThatDisagreeWithTheCatalog)
     + offsetof(core::AssetHeader, variant_flags)) = std::byte { 'X' };
   workspace.Storage().AddFile(request.output_pak_path, bytes);
 
-  const auto rejected = workspace.Pack(workspace.FullRequest(
-    { PakWorkspace::PakSource(request.output_pak_path) }, "repacked.pak"));
+  const auto rejected
+    = oxygen::cooker::testing::PakWorkspace::Pack(workspace.FullRequest(
+      { PakWorkspace::PakSource(request.output_pak_path) }, "repacked.pak"));
 
   EXPECT_FALSE(rejected.planned.plan.has_value());
   EXPECT_THAT(
@@ -341,10 +348,11 @@ protected:
     if (from_pak) {
       return Repack(workspace_, std::move(sources), mode);
     }
-    return workspace_.PackOrThrow(mode == BuildMode::kFull
-        ? workspace_.FullRequest(std::move(sources))
-        : workspace_.PatchRequest(
-            std::move(sources), { LooseCookedRoot {}.BaseCatalog() }));
+    if (mode == BuildMode::kFull) {
+      return workspace_.PackOrThrow(workspace_.FullRequest(std::move(sources)));
+    }
+    return workspace_.PackOrThrow(workspace_.PatchRequest(
+      std::move(sources), { LooseCookedRoot {}.BaseCatalog() }));
   }
 
 private:
@@ -358,7 +366,7 @@ NOLINT_TEST_P(PakRepackScriptTest, KeepsSceneDescriptorsVerbatim)
   for (const auto seed : kSeeds) {
     SCOPED_TRACE(int { seed });
     EXPECT_THAT(pak.Descriptor(pak::test::MakeSceneScripts(seed).scene),
-      BytesEqual(pak::test::BuildSceneDescriptorWithScriptingSlots(seed)));
+      BytesEqual(pak::test::BuildScriptsScene(seed).Bytes()));
   }
 }
 
@@ -372,7 +380,9 @@ NOLINT_TEST_P(PakRepackScriptTest, KeepsScriptSlotsAndParameters)
     const auto bindings
       = scene.GetComponents<script::ScriptingComponentRecord>();
     ASSERT_EQ(bindings.size(), 2U);
-    for (uint8_t index = 0U; index < bindings.size(); ++index) {
+    for (size_t binding_index = 0U; binding_index < bindings.size();
+      ++binding_index) {
+      const auto index = static_cast<uint8_t>(binding_index);
       SCOPED_TRACE(::testing::Message()
         << "seed " << int { seed } << " binding " << int { index });
       const auto& binding = oxygen::base::CheckedAt(bindings, index);

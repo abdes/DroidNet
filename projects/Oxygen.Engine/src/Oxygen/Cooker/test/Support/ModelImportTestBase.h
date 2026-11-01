@@ -71,9 +71,7 @@ protected:
   };
 
   struct SceneReadback {
-    SceneAssetDesc desc {};
     std::vector<NodeRecord> nodes;
-    std::vector<SceneComponentTableDesc> component_entries;
     std::vector<RenderableRecord> renderables;
     std::vector<DirectionalLightRecord> directional_lights;
     std::vector<PointLightRecord> point_lights;

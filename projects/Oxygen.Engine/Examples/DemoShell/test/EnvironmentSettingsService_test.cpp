@@ -30,13 +30,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/PostProcess.h>
-#include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/PakFormat_world.h>
-#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -56,8 +53,6 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/SceneInstantiation/EnvironmentHydration.h>
-#include <Oxygen/Serio/MemoryStream.h>
-#include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
 
@@ -1735,33 +1730,15 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 NOLINT_TEST_F(EnvironmentSettingsServiceTest, HydratesAuthoredMieAbsorption)
 {
   namespace world = data::pak::world;
-  auto descriptor = world::SceneAssetDesc {};
-  descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
-  descriptor.header.version = world::kSceneAssetVersion;
-  const auto strings = data::DescriptorStringsBuilder {};
-  descriptor.header.strings = {
-    .offset = sizeof(descriptor),
-    .size = strings.Size(),
-  };
   auto atmosphere = world::SkyAtmosphereEnvironmentRecord {};
   atmosphere.mie_absorption_rgb[0] = 1.1e-6F;
   atmosphere.mie_absorption_rgb[1] = 2.2e-6F;
   atmosphere.mie_absorption_rgb[2] = 3.3e-6F;
-  const auto block = world::SceneEnvironmentBlockHeader {
-    .byte_size
-    = sizeof(world::SceneEnvironmentBlockHeader) + sizeof(atmosphere),
-    .systems_count = 1,
-  };
-  serio::MemoryStream stream;
-  serio::Writer writer(stream);
-  const auto packed = writer.ScopedAlignment(1);
-  ASSERT_TRUE(writer.Write(descriptor));
-  ASSERT_TRUE(writer.WriteBlob(strings.Bytes()));
-  ASSERT_TRUE(writer.Write(block));
-  ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span(&atmosphere, 1))));
-  const auto asset = data::SceneAsset(data::AssetKey {}, stream.Data());
+  auto builder = oxygen::cooker::testing::SceneBuilder { "MieAbsorption" };
+  builder.Environment(atmosphere);
+  const auto asset = builder.Build(data::AssetKey {});
   auto environment = scene::SceneEnvironment {};
-  instantiation::HydrateEnvironment(environment, asset, {});
+  instantiation::HydrateEnvironment(environment, *asset, {});
   const auto sky
     = environment.TryGetSystem<scene::environment::SkyAtmosphere>();
   ASSERT_TRUE(sky);
@@ -1772,14 +1749,7 @@ NOLINT_TEST_F(
   EnvironmentSettingsServiceTest, HydratesCompletePostProcessAndBackground)
 {
   namespace world = data::pak::world;
-  auto descriptor = world::SceneAssetDesc {};
-  descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
-  descriptor.header.version = world::kSceneAssetVersion;
-  const auto strings = data::DescriptorStringsBuilder {};
-  descriptor.header.strings = {
-    .offset = sizeof(descriptor),
-    .size = strings.Size(),
-  };
+  auto builder = oxygen::cooker::testing::SceneBuilder { "PostProcess" };
   auto post = world::PostProcessVolumeEnvironmentRecord {};
   post.tone_mapper = engine::ToneMapper::kReinhard;
   post.exposure_mode = engine::ExposureMode::kManualCamera;
@@ -1800,7 +1770,8 @@ NOLINT_TEST_F(
   post.auto_exposure_spot_meter_radius = 0.35F;
   post.auto_exposure_black_influence = 0.4F;
   post.auto_exposure_transition_distance_ev = 2.5F;
-  post.auto_exposure_metering_mask = data::ResourceReferenceIndex { 4U };
+  post.auto_exposure_metering_mask
+    = builder.Texture(data::pak::core::ResourceIndexT { 4U });
   const auto keys = std::array {
     world::ExposureCompensationKeyRecord {
       .metered_ev = -4.0F,
@@ -1812,7 +1783,6 @@ NOLINT_TEST_F(
     },
   };
   post.curve_key_count = static_cast<uint32_t>(keys.size());
-  post.header.record_size = sizeof(post) + sizeof(keys);
   post.bloom_intensity = 0.6F;
   post.bloom_threshold = 2.25F;
   post.saturation = 0.8F;
@@ -1823,35 +1793,16 @@ NOLINT_TEST_F(
   background.color_rgb[0] = 0.05F;
   background.color_rgb[1] = 0.25F;
   background.color_rgb[2] = 0.75F;
-  const auto block = world::SceneEnvironmentBlockHeader {
-    .byte_size
-    = static_cast<uint32_t>(sizeof(world::SceneEnvironmentBlockHeader)
-      + post.header.record_size + sizeof(background)),
-    .systems_count = 2,
-  };
-  serio::MemoryStream stream;
-  serio::Writer writer(stream);
-  const auto packed = writer.ScopedAlignment(1);
-  ASSERT_TRUE(writer.Write(descriptor));
-  ASSERT_TRUE(writer.WriteBlob(strings.Bytes()));
-  ASSERT_TRUE(writer.Write(block));
-  ASSERT_TRUE(serio::Store(writer, post));
-  for (const auto& key : keys) {
-    ASSERT_TRUE(serio::Store(writer, key));
-  }
-  ASSERT_TRUE(writer.Write(background.header));
-  ASSERT_TRUE(writer.Write(background.enabled));
-  for (const auto channel : background.color_rgb) {
-    ASSERT_TRUE(writer.Write(channel));
-  }
-  const auto asset = data::SceneAsset(data::AssetKey {}, stream.Data());
+  builder.Environment(post, std::as_bytes(std::span(keys)));
+  builder.Environment(background);
+  const auto asset = builder.Build(data::AssetKey {});
   auto environment = scene::SceneEnvironment {};
-  EXPECT_THROW(instantiation::HydrateEnvironment(environment, asset, {}),
+  EXPECT_THROW(instantiation::HydrateEnvironment(environment, *asset, {}),
     std::invalid_argument);
   EXPECT_FALSE(environment.TryGetSystem<scene::environment::Background>());
   const auto mask = content::ResourceKey { 0x0001000000000004ULL };
   instantiation::HydrateEnvironment(
-    environment, asset, { .metering_mask = mask });
+    environment, *asset, { .metering_mask = mask });
   const auto volume
     = environment.TryGetSystem<scene::environment::PostProcessVolume>();
   ASSERT_TRUE(volume);

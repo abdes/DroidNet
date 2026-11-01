@@ -31,7 +31,6 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -39,25 +38,12 @@ namespace oxygen::content::import::test {
 
 namespace {
 
-  using data::pak::core::ResourceIndexT;
-  using data::pak::core::TextureResourceDesc;
   using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
-  using oxygen::cooker::test::WriteBytes;
   using oxygen::cooker::testing::CookedPak;
   using oxygen::cooker::testing::LooseCookedRoot;
   using oxygen::cooker::testing::Materialize;
   using oxygen::cooker::testing::SeedBytes;
-
-  auto WriteTextureSidecar(const std::filesystem::path& path,
-    const ResourceIndexT resource_index) -> void
-  {
-    WriteBytes(path,
-      data::EncodeTextureResourceDescriptor({
-        .index = resource_index,
-        .descriptor = TextureResourceDesc {},
-      }));
-  }
 
   auto ReadMaterialDesc(const std::vector<std::byte>& bytes)
     -> data::pak::render::MaterialAssetDesc
@@ -183,10 +169,11 @@ namespace {
   {
     const auto cooked_root = TempDir() / "resolve_texture_virtual_path";
     std::filesystem::create_directories(cooked_root);
-    const auto sidecar_path
-      = cooked_root / "Resources" / "Textures" / "woodfloor007_color.otex";
-    constexpr auto kTextureIndex = ResourceIndexT { 7U };
-    WriteTextureSidecar(sidecar_path, kTextureIndex);
+    auto textures = LooseCookedRoot { ".cooked" };
+    const auto texture_row = textures.AddTexture(SeedBytes(1U));
+    textures.DescribeTexture(
+      "Resources/Textures/woodfloor007_color.otex", texture_row);
+    Materialize(textures.Files(), cooked_root);
 
     const auto report = Import(MakeRequest(cooked_root, R"({
       "name": "woodfloor007",
@@ -219,7 +206,7 @@ namespace {
     EXPECT_THAT(references->Resources(),
       ::testing::ElementsAre(data::ResourceBinding {
         .kind = data::ResourceKind::kTexture,
-        .index = kTextureIndex,
+        .index = texture_row,
       }));
   }
 
@@ -230,9 +217,12 @@ namespace {
   {
     const auto cooked_root = TempDir() / "ignore_hashed_texture_name";
     std::filesystem::create_directories(cooked_root);
-    WriteTextureSidecar(cooked_root / "Resources" / "Textures"
-        / "woodfloor007_color_1234567890abcdef.otex",
-      ResourceIndexT { 7U });
+    auto textures = LooseCookedRoot { ".cooked" };
+    const auto texture_row = textures.AddTexture(SeedBytes(1U));
+    textures.DescribeTexture(
+      "Resources/Textures/woodfloor007_color_1234567890abcdef.otex",
+      texture_row);
+    Materialize(textures.Files(), cooked_root);
 
     const auto report = Import(MakeRequest(cooked_root, R"({
       "name": "woodfloor007",

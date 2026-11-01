@@ -23,8 +23,11 @@
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -64,55 +67,18 @@ namespace {
 
   auto WriteSidecar(const std::filesystem::path& root) -> void
   {
-    physics::PhysicsSceneAssetDesc descriptor {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
-    descriptor.header.version = physics::kPhysicsSceneAssetVersion;
-    descriptor.target_scene_key = kScene;
-    descriptor.target_node_count = 1U;
-    descriptor.component_table_count = 1U;
-    descriptor.component_table_directory_offset = sizeof(descriptor);
-    physics::PhysicsComponentTableDesc table {};
-    table.binding_type = physics::PhysicsBindingType::kRigidBody;
-    table.table.offset = sizeof(descriptor) + sizeof(table);
-    table.table.count = 1U;
-    table.table.entry_size = sizeof(physics::RigidBodyBindingRecord);
-    physics::RigidBodyBindingRecord body {};
-    body.shape_asset_key = kShape;
-    body.material_asset_key = kMaterial;
-    std::vector<std::byte> bytes;
-    const auto append = [&bytes](const auto& record) -> auto {
-      const auto chunk = std::as_bytes(std::span(&record, 1U));
-      bytes.insert(bytes.end(), chunk.begin(), chunk.end());
-    };
-    append(descriptor);
-    append(table);
-    append(body);
-    data::AppendDescriptorStrings(bytes, data::DescriptorStringsBuilder {});
+    auto scene = cooker::testing::SceneBuilder { "scene" };
+    const auto body = scene.Node("body");
+    auto bindings = cooker::testing::PhysicsSidecarBuilder {};
+    bindings.RigidBody(body, kShape, kMaterial);
+    auto sidecar = cooker::testing::PhysicsSidecarDescriptor(
+      kScene, scene.Bytes(), bindings);
     auto owner = LooseCookedRoot { "test", kOwnerSeed };
     owner.Add({
       .type = data::AssetType::kPhysicsScene,
       .leaf = "scene.opscene",
-      .descriptor = std::move(bytes),
-      .references = data::AssetReferences::Create({},
-        {
-          {
-            .key = kScene,
-            .kind = data::KeyReferenceKind::kLogical,
-            .expected_type = data::AssetType::kScene,
-          },
-          {
-            .key = kShape,
-            .kind = data::KeyReferenceKind::kAsset,
-            .expected_type = data::AssetType::kCollisionShape,
-          },
-          {
-            .key = kMaterial,
-            .kind = data::KeyReferenceKind::kAsset,
-            .expected_type = data::AssetType::kPhysicsMaterial,
-          },
-        })
-        .value(),
+      .descriptor = std::move(sidecar.bytes),
+      .references = std::move(sidecar.references),
       .key = kSidecar,
     });
     cooker::testing::Materialize(owner.Files(), root);

@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <fstream>
-#include <ios>
+#include <span>
+#include <string_view>
 #include <system_error>
 
 #include "./AssetLoader_test.h"
@@ -14,6 +14,7 @@
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -26,10 +27,9 @@ namespace {
 NOLINT_TEST_F(AssetLoaderBasicTest, TruncatedPakLeavesMountsUnchanged)
 {
   const auto path = TempDir() / "truncated.pak";
-  {
-    std::ofstream file(path, std::ios::binary);
-    file << "NOT_A_PAK";
-  }
+  constexpr std::string_view kNotAPak = "NOT_A_PAK";
+  oxygen::cooker::testing::Materialize(
+    std::as_bytes(std::span(kNotAPak.data(), kNotAPak.size())), path);
   try {
     asset_loader_->AddPakFile(path);
     FAIL() << "Truncated header was accepted";

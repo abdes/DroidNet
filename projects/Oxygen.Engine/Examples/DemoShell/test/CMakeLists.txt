@@ -6,12 +6,16 @@
 
 include(GTestHelpers)
 
-m_gtest_program(SceneLoaderService SOURCES "SceneLoaderService_test.cpp")
-
 m_gtest_program(SettingsService SOURCES "SettingsService_test.cpp")
 m_gtest_program(FileBrowser SOURCES "FileBrowser_test.cpp")
-# The content panel's tests write their cooked sources with the cooked content
-# builders.
+# These tests build their cooked sources, scenes and sidecars with the cooked
+# content builders.
+m_gtest_program(SceneLoaderService SOURCES "SceneLoaderService_test.cpp")
+m_gtest_program(
+  EnvironmentSettingsService
+  SOURCES
+    "EnvironmentSettingsService_test.cpp"
+)
 m_gtest_program(
   ContentVm
   SOURCES
@@ -26,7 +30,15 @@ m_gtest_program(
     "ContentFixtures.cpp"
     "ContentFixtures.h"
 )
-foreach(_content_test IN ITEMS ContentVm ContentLoaderPanel)
+foreach(
+  _content_test
+  IN
+  ITEMS
+    ContentVm
+    ContentLoaderPanel
+    SceneLoaderService
+    EnvironmentSettingsService
+)
   target_link_libraries(
     "${META_MODULE_NAME}.${_content_test}.Tests"
     PRIVATE
@@ -48,12 +60,6 @@ m_gtest_program(SkyboxService SOURCES "SkyboxService_test.cpp")
 m_gtest_program(OrbitCameraController SOURCES "OrbitCameraController_test.cpp")
 m_gtest_program(DroneCameraController SOURCES "DroneCameraController_test.cpp")
 m_gtest_program(CameraSettingsService SOURCES "CameraSettingsService_test.cpp")
-
-m_gtest_program(
-  EnvironmentSettingsService
-  SOURCES
-    "EnvironmentSettingsService_test.cpp"
-)
 
 m_gtest_program(EnvironmentVm SOURCES "EnvironmentVm_test.cpp")
 m_gtest_program(

@@ -7,13 +7,16 @@
 // Covers: SceneAsset override validation (ComponentType::kOverride and
 // ComponentType::kOverrideLodPolicy).
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
-#include <utility>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -21,7 +24,6 @@
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
-#include <Oxygen/Data/test/Fixtures/SceneAssetBuilder.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -30,7 +32,9 @@ namespace world = data::pak::world;
 namespace geometry = data::pak::geometry;
 using data::ComponentType;
 using data::schema::OverrideId;
-using data::testing::SceneAssetBuilder;
+using oxygen::cooker::testing::DescriptorDefects;
+using oxygen::cooker::testing::SceneBuilder;
+using oxygen::cooker::testing::SceneNode;
 
 constexpr float kLodDistance = 10.0F;
 constexpr float kLodHysteresis = 0.1F;
@@ -47,27 +51,23 @@ auto Surface() -> data::SurfaceId
   return data::SurfaceId::FromStableIdentity("SceneOverridesTest/surface");
 }
 
-auto SurfaceFlag(const OverrideId id, const uint8_t value)
-  -> world::OverrideRecord
+auto SceneKey() -> data::AssetKey
 {
-  auto record = world::OverrideRecord {
-    .target = { .node_index = 0U },
-    .override_id = id,
-    .part_id = Surface(),
-    .layout_revision = Revision(),
-  };
-  record.value.as_bool = value;
-  return record;
+  return data::AssetKey::FromVirtualPath("/test/Scene.oscene");
 }
 
-auto LodPolicyOverride(const uint32_t index) -> world::OverrideRecord
+auto FlagValue(const uint8_t value) -> world::OverrideValue
 {
-  auto record = world::OverrideRecord {
-    .target = { .node_index = 0U },
-    .override_id = OverrideId::kGeometryLodPolicy,
-  };
-  record.value.as_record_index = world::OverrideRecordIndex { index };
-  return record;
+  auto result = world::OverrideValue {};
+  result.as_bool = value;
+  return result;
+}
+
+auto MaterialValue() -> world::OverrideValue
+{
+  auto result = world::OverrideValue {};
+  result.as_asset = data::AssetKey::FromVirtualPath("/test/Material.omat");
+  return result;
 }
 
 auto DistancePolicy() -> geometry::LodPolicyRecord
@@ -81,49 +81,69 @@ auto DistancePolicy() -> geometry::LodPolicyRecord
   return policy;
 }
 
-//! A one-node scene with a renderable and `overrides`, plus `policies` when
-//! any.
-auto Scene(std::vector<world::OverrideRecord> overrides,
-  std::vector<geometry::LodPolicyRecord> policies = {})
+//! Adds a node that renders a geometry to `scene`.
+auto AddMesh(SceneBuilder& scene, const std::string_view name = "Mesh")
+  -> SceneNode
+{
+  const auto mesh = scene.Node(name);
+  scene.Renderable(mesh, data::AssetKey::FromVirtualPath("/test/Mesh.ogeo"));
+  return mesh;
+}
+
+//! The scene asset the reader reads from `descriptor`.
+auto Read(const std::vector<std::byte>& descriptor)
   -> std::shared_ptr<data::SceneAsset>
 {
-  auto builder = SceneAssetBuilder {};
-  builder.AddNode("Mesh");
-  builder.AddComponents(ComponentType::kRenderable,
-    std::vector {
-      world::RenderableRecord {
-        .node_index = 0U,
-        .geometry_key = data::AssetKey::FromVirtualPath("/test/Mesh.ogeo"),
-      },
-    });
-  builder.AddComponents(ComponentType::kOverride, std::move(overrides));
-  if (!policies.empty()) {
-    builder.AddComponents(
-      ComponentType::kOverrideLodPolicy, std::move(policies));
-  }
-  return builder.Build();
+  return std::make_shared<data::SceneAsset>(SceneKey(), descriptor);
+}
+
+//! The record `index` of the override table of `descriptor`.
+auto OverrideAt(const std::vector<std::byte>& descriptor, const uint32_t index)
+  -> world::OverrideRecord
+{
+  return DescriptorDefects::ComponentAt<world::OverrideRecord>(
+    descriptor, ComponentType::kOverride, index);
+}
+
+auto SetOverride(std::vector<std::byte>& descriptor, const uint32_t index,
+  const world::OverrideRecord& record) -> void
+{
+  DescriptorDefects::SetComponent(
+    descriptor, ComponentType::kOverride, index, record);
+}
+
+//! A descriptor of a mesh with a surface visibility override.
+auto VisibilityScene() -> std::vector<std::byte>
+{
+  auto scene = SceneBuilder { "SceneOverridesTest" };
+  const auto mesh = AddMesh(scene);
+  scene.Override(mesh, OverrideId::kGeometrySurfaceVisibility, FlagValue(1U),
+    Surface(), Revision());
+  return scene.Bytes();
+}
+
+//! A descriptor of a mesh with a LOD policy.
+auto LodPolicyScene() -> std::vector<std::byte>
+{
+  auto scene = SceneBuilder { "SceneOverridesTest" };
+  scene.LodPolicy(AddMesh(scene), DistancePolicy());
+  return scene.Bytes();
 }
 
 //! Each value type's override is accepted with a well-formed value.
 NOLINT_TEST(SceneOverridesTest, AcceptsOneOverrideOfEachValueType)
 {
-  auto material = world::OverrideRecord {
-    .target = { .node_index = 0U },
-    .override_id = OverrideId::kGeometrySurfaceMaterial,
-    .part_id = Surface(),
-    .layout_revision = Revision(),
-  };
-  material.value.as_asset
-    = data::AssetKey::FromVirtualPath("/test/Material.omat");
+  auto builder = SceneBuilder { "SceneOverridesTest" };
+  const auto mesh = AddMesh(builder);
+  builder.Override(mesh, OverrideId::kGeometrySurfaceMaterial, MaterialValue(),
+    Surface(), Revision());
+  builder.Override(mesh, OverrideId::kGeometrySurfaceVisibility, FlagValue(0U),
+    Surface(), Revision());
+  builder.Override(mesh, OverrideId::kGeometrySurfaceCastsShadows,
+    FlagValue(1U), Surface(), Revision());
+  builder.LodPolicy(mesh, DistancePolicy());
 
-  const auto scene = Scene(
-    {
-      material,
-      SurfaceFlag(OverrideId::kGeometrySurfaceVisibility, 0U),
-      SurfaceFlag(OverrideId::kGeometrySurfaceCastsShadows, 1U),
-      LodPolicyOverride(0U),
-    },
-    { DistancePolicy() });
+  const auto scene = builder.Build(SceneKey());
 
   EXPECT_EQ(scene->GetComponents<world::OverrideRecord>().size(), 4U);
   EXPECT_EQ(scene->GetComponents<geometry::LodPolicyRecord>().size(), 1U);
@@ -132,90 +152,128 @@ NOLINT_TEST(SceneOverridesTest, AcceptsOneOverrideOfEachValueType)
 //! An id the schema does not declare is refused.
 NOLINT_TEST(SceneOverridesTest, RejectsUnknownOverrideId)
 {
-  auto record = SurfaceFlag(OverrideId::kGeometrySurfaceVisibility, 1U);
+  auto descriptor = VisibilityScene();
+  auto record = OverrideAt(descriptor, 0U);
   record.override_id = OverrideId::kInvalid;
+  SetOverride(descriptor, 0U, record);
 
-  EXPECT_THROW(Scene({ record }), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(descriptor)), std::runtime_error);
 }
 
 //! A surface property needs its surface and layout revision; a component
 //! property names neither.
 NOLINT_TEST(SceneOverridesTest, RejectsPartsThatDoNotMatchTheProperty)
 {
-  auto no_surface = SurfaceFlag(OverrideId::kGeometrySurfaceVisibility, 1U);
-  no_surface.part_id = data::SurfaceId {};
-  auto no_revision = SurfaceFlag(OverrideId::kGeometrySurfaceVisibility, 1U);
-  no_revision.layout_revision = {};
-  auto with_surface = LodPolicyOverride(0U);
-  with_surface.part_id = Surface();
+  auto no_surface = VisibilityScene();
+  auto record = OverrideAt(no_surface, 0U);
+  record.part_id = data::SurfaceId {};
+  SetOverride(no_surface, 0U, record);
 
-  EXPECT_THROW(Scene({ no_surface }), std::runtime_error);
-  EXPECT_THROW(Scene({ no_revision }), std::runtime_error);
-  EXPECT_THROW(
-    Scene({ with_surface }, { DistancePolicy() }), std::runtime_error);
+  auto no_revision = VisibilityScene();
+  record = OverrideAt(no_revision, 0U);
+  record.layout_revision = {};
+  SetOverride(no_revision, 0U, record);
+
+  auto with_surface = LodPolicyScene();
+  record = OverrideAt(with_surface, 0U);
+  record.part_id = Surface();
+  SetOverride(with_surface, 0U, record);
+
+  EXPECT_THROW(static_cast<void>(Read(no_surface)), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(no_revision)), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(with_surface)), std::runtime_error);
 }
 
 //! The table is sorted and names each property and part once per node.
 NOLINT_TEST(SceneOverridesTest, RejectsUnsortedOrRepeatedOverrides)
 {
-  const auto visible = SurfaceFlag(OverrideId::kGeometrySurfaceVisibility, 1U);
-  const auto shadows
-    = SurfaceFlag(OverrideId::kGeometrySurfaceCastsShadows, 1U);
+  auto builder = SceneBuilder { "SceneOverridesTest" };
+  const auto mesh = AddMesh(builder);
+  builder.Override(mesh, OverrideId::kGeometrySurfaceVisibility, FlagValue(1U),
+    Surface(), Revision());
+  builder.Override(mesh, OverrideId::kGeometrySurfaceCastsShadows,
+    FlagValue(1U), Surface(), Revision());
+  const auto valid = builder.Bytes();
+  const auto first = OverrideAt(valid, 0U);
+  const auto second = OverrideAt(valid, 1U);
 
-  EXPECT_THROW(Scene({ shadows, visible }), std::runtime_error);
-  EXPECT_THROW(Scene({ visible, visible }), std::runtime_error);
+  auto unsorted = valid;
+  SetOverride(unsorted, 0U, second);
+  SetOverride(unsorted, 1U, first);
+  auto repeated = valid;
+  SetOverride(repeated, 1U, first);
+
+  EXPECT_THROW(static_cast<void>(Read(unsorted)), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(repeated)), std::runtime_error);
 }
 
 //! A bool is 0 or 1, an asset value is not nil, and a LOD policy names a
 //! valid, otherwise unused entry of its record table.
 NOLINT_TEST(SceneOverridesTest, RejectsMalformedValues)
 {
-  auto nil_material = world::OverrideRecord {
-    .target = { .node_index = 0U },
-    .override_id = OverrideId::kGeometrySurfaceMaterial,
-    .part_id = Surface(),
-    .layout_revision = Revision(),
-  };
-  auto decreasing = DistancePolicy();
-  decreasing.boundary_count = 2U;
-  decreasing.thresholds[1] = kLodDistance / 2.0F;
+  auto bad_bool = VisibilityScene();
+  auto record = OverrideAt(bad_bool, 0U);
+  record.value.as_bool = 2U;
+  SetOverride(bad_bool, 0U, record);
 
-  EXPECT_THROW(
-    Scene({ SurfaceFlag(OverrideId::kGeometrySurfaceVisibility, 2U) }),
-    std::runtime_error);
-  EXPECT_THROW(Scene({ nil_material }), std::runtime_error);
-  EXPECT_THROW(
-    Scene({ LodPolicyOverride(1U) }, { DistancePolicy() }), std::runtime_error);
-  EXPECT_THROW(
-    Scene({ LodPolicyOverride(0U) }, { decreasing }), std::runtime_error);
+  auto material_scene = SceneBuilder { "SceneOverridesTest" };
+  material_scene.Override(AddMesh(material_scene),
+    OverrideId::kGeometrySurfaceMaterial, MaterialValue(), Surface(),
+    Revision());
+  auto nil_material = material_scene.Bytes();
+  record = OverrideAt(nil_material, 0U);
+  record.value.as_asset = data::AssetKey {};
+  SetOverride(nil_material, 0U, record);
+
+  auto past_the_table = LodPolicyScene();
+  record = OverrideAt(past_the_table, 0U);
+  record.value.as_record_index = world::OverrideRecordIndex { 1U };
+  SetOverride(past_the_table, 0U, record);
+
+  auto policy = DistancePolicy();
+  policy.boundary_count = 2U;
+  policy.thresholds[1] = kLodDistance * 2.0F;
+  auto policy_scene = SceneBuilder { "SceneOverridesTest" };
+  policy_scene.LodPolicy(AddMesh(policy_scene), policy);
+  auto decreasing = policy_scene.Bytes();
+  policy.thresholds[1] = kLodDistance / 2.0F;
+  DescriptorDefects::SetComponent(
+    decreasing, ComponentType::kOverrideLodPolicy, 0U, policy);
+
+  EXPECT_THROW(static_cast<void>(Read(bad_bool)), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(nil_material)), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(past_the_table)), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(decreasing)), std::runtime_error);
 }
 
 //! A LOD policy record no override names is refused.
 NOLINT_TEST(SceneOverridesTest, RejectsUnusedLodPolicyRecords)
 {
-  EXPECT_THROW(
-    Scene({ LodPolicyOverride(0U) }, { DistancePolicy(), DistancePolicy() }),
-    std::runtime_error);
+  auto builder = SceneBuilder { "SceneOverridesTest" };
+  builder.LodPolicy(AddMesh(builder, "First"), DistancePolicy());
+  builder.LodPolicy(AddMesh(builder, "Second"), DistancePolicy());
+  auto descriptor = builder.Bytes();
+  auto record = OverrideAt(descriptor, 1U);
+  record.value.as_record_index = world::OverrideRecordIndex { 0U };
+  SetOverride(descriptor, 1U, record);
+
+  EXPECT_THROW(static_cast<void>(Read(descriptor)), std::runtime_error);
 }
 
 //! An override on a node without a renderable is refused.
 NOLINT_TEST(SceneOverridesTest, RejectsOverridesOfNodesWithoutRenderable)
 {
-  auto record = SurfaceFlag(OverrideId::kGeometrySurfaceVisibility, 1U);
-  record.target.node_index = 1U;
-  auto builder = SceneAssetBuilder {};
-  builder.AddNode("Mesh");
-  builder.AddNode("Empty");
-  builder.AddComponents(ComponentType::kRenderable,
-    std::vector {
-      world::RenderableRecord {
-        .node_index = 0U,
-        .geometry_key = data::AssetKey::FromVirtualPath("/test/Mesh.ogeo"),
-      },
-    });
-  builder.AddComponents(ComponentType::kOverride, std::vector { record });
+  auto builder = SceneBuilder { "SceneOverridesTest" };
+  const auto mesh = AddMesh(builder);
+  const auto empty = builder.Node("Empty");
+  builder.Override(mesh, OverrideId::kGeometrySurfaceVisibility, FlagValue(1U),
+    Surface(), Revision());
+  auto descriptor = builder.Bytes();
+  auto record = OverrideAt(descriptor, 0U);
+  record.target.node_index = empty.Index();
+  SetOverride(descriptor, 0U, record);
 
-  EXPECT_THROW(static_cast<void>(builder.Build()), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(descriptor)), std::runtime_error);
 }
 
 } // namespace

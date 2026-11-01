@@ -17,6 +17,8 @@
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -27,6 +29,23 @@ using oxygen::content::loaders::LoadPhysicsSceneAsset;
 namespace {
 
 namespace pak7 = oxygen::data::pak::physics;
+using oxygen::cooker::testing::DescriptorDefects;
+using oxygen::cooker::testing::PhysicsSidecarBuilder;
+
+auto ShapeKey() -> oxygen::data::AssetKey
+{
+  return oxygen::data::AssetKey::FromVirtualPath("/test/Shape.ocshape");
+}
+
+auto MaterialKey() -> oxygen::data::AssetKey
+{
+  return oxygen::data::AssetKey::FromVirtualPath("/test/Material.opmat");
+}
+
+auto ConstraintKey() -> oxygen::data::AssetKey
+{
+  return oxygen::data::AssetKey::FromVirtualPath("/test/Constraint.opcon");
+}
 
 class PhysicsSceneLoaderHappyPathTest
   : public oxygen::content::testing::PhysicsSceneFixtureBase { };
@@ -43,9 +62,7 @@ class PhysicsSceneLoaderTypeTest
 
 NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadMinimalZeroBindingsSucceeds)
 {
-  WriteAs(writer_, MakeMinimalDesc());
-  WriteEmptyStringTable(writer_, stream_);
-  ASSERT_TRUE(writer_.Flush());
+  WriteBytes(SidecarBytes());
 
   auto asset = LoadPhysicsSceneAsset(MakeContext());
 
@@ -61,19 +78,23 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadMinimalZeroBindingsSucceeds)
 
 NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadOneRigidBodyRecordSucceeds)
 {
+  constexpr uint32_t kNodeCount = 4U;
+  AddNodes(kNodeCount);
   pak7::RigidBodyBindingRecord rec {};
-  rec.node_index = 3;
   rec.body_type = pak7::PhysicsBodyType::kKinematic;
   rec.mass = 42.0F;
+  auto bindings = PhysicsSidecarBuilder {};
+  bindings.RigidBody(NodeAt(kNodeCount - 1U), ShapeKey(), MaterialKey(), rec);
 
-  WriteOneRigidBodyTable(rec);
+  WriteBytes(SidecarBytes(bindings));
 
   auto asset = LoadPhysicsSceneAsset(MakeContext());
 
   ASSERT_NE(asset, nullptr);
   auto rigid = asset->GetBindings<pak7::RigidBodyBindingRecord>();
   ASSERT_EQ(rigid.size(), 1U);
-  EXPECT_EQ(oxygen::base::CheckedAt(rigid, 0).node_index, 3U);
+  EXPECT_EQ(oxygen::base::CheckedAt(rigid, 0).node_index,
+    NodeAt(kNodeCount - 1U).Index());
   EXPECT_EQ(oxygen::base::CheckedAt(rigid, 0).body_type,
     pak7::PhysicsBodyType::kKinematic);
   EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(rigid, 0).mass, 42.0F);
@@ -81,48 +102,11 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadOneRigidBodyRecordSucceeds)
 
 NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadMultipleBindingTypesSucceeds)
 {
-  // Layout:
-  //   [PhysicsSceneAssetDesc 256B]
-  //   [PhysicsComponentTableDesc 20B] x2  (dir at offset 256, size 40B)
-  //   [RigidBodyBindingRecord 64B]         (at offset 296)
-  //   [ColliderBindingRecord  32B]         (at offset 360)
-
-  constexpr uint32_t kDescSize = sizeof(pak7::PhysicsSceneAssetDesc); // 256
-  constexpr uint32_t kEntrySize = sizeof(pak7::PhysicsComponentTableDesc); // 20
-  constexpr uint32_t kDirOffset = kDescSize; // 256
-  constexpr uint32_t kRigidOffset = kDirOffset + 2 * kEntrySize; // 296
-  constexpr uint32_t kColliderOffset
-    = kRigidOffset + sizeof(pak7::RigidBodyBindingRecord); // 360
-
-  pak7::PhysicsSceneAssetDesc desc = MakeMinimalDesc();
-  desc.component_table_count = 2;
-  desc.component_table_directory_offset = kDirOffset;
-
-  pak7::PhysicsComponentTableDesc rigid_entry {};
-  rigid_entry.binding_type = pak7::PhysicsBindingType::kRigidBody;
-  rigid_entry.table.offset = kRigidOffset;
-  rigid_entry.table.count = 1;
-  rigid_entry.table.entry_size = sizeof(pak7::RigidBodyBindingRecord);
-
-  pak7::PhysicsComponentTableDesc collider_entry {};
-  collider_entry.binding_type = pak7::PhysicsBindingType::kCollider;
-  collider_entry.table.offset = kColliderOffset;
-  collider_entry.table.count = 1;
-  collider_entry.table.entry_size = sizeof(pak7::ColliderBindingRecord);
-
-  pak7::RigidBodyBindingRecord rb {};
-  rb.node_index = 1;
-
-  pak7::ColliderBindingRecord col {};
-  col.node_index = 2;
-
-  WriteAs(writer_, desc);
-  WriteAs(writer_, rigid_entry);
-  WriteAs(writer_, collider_entry);
-  WriteAs(writer_, rb);
-  WriteAs(writer_, col);
-  WriteEmptyStringTable(writer_, stream_);
-  ASSERT_TRUE(writer_.Flush());
+  AddNodes(3U);
+  auto bindings = PhysicsSidecarBuilder {};
+  bindings.RigidBody(NodeAt(1U), ShapeKey(), MaterialKey());
+  bindings.Collider(NodeAt(2U), ShapeKey(), MaterialKey());
+  WriteBytes(SidecarBytes(bindings));
 
   auto asset = LoadPhysicsSceneAsset(MakeContext());
 
@@ -132,102 +116,53 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadMultipleBindingTypesSucceeds)
   EXPECT_EQ(oxygen::base::CheckedAt(
               asset->GetBindings<pak7::RigidBodyBindingRecord>(), 0)
               .node_index,
-    1U);
+    NodeAt(1U).Index());
   EXPECT_EQ(oxygen::base::CheckedAt(
               asset->GetBindings<pak7::ColliderBindingRecord>(), 0)
               .node_index,
-    2U);
+    NodeAt(2U).Index());
 }
 
 NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
 {
-  constexpr uint32_t kDescSize = sizeof(pak7::PhysicsSceneAssetDesc);
-  constexpr uint32_t kEntrySize = sizeof(pak7::PhysicsComponentTableDesc);
-  constexpr uint32_t kTableCount = 7;
-  constexpr uint32_t kDirOffset = kDescSize;
-  constexpr uint32_t kDataBaseOffset = kDirOffset + (kTableCount * kEntrySize);
+  // The bindings name nodes 11 to 18 of the scene.
+  constexpr uint32_t kFirstNode = 11U;
+  AddNodes(kFirstNode + 8U);
+  const auto node = [this](const uint32_t offset) -> auto {
+    return NodeAt(kFirstNode + offset);
+  };
 
   pak7::RigidBodyBindingRecord rb {};
-  rb.node_index = 11;
   rb.mass = 3.25F;
 
   pak7::ColliderBindingRecord col {};
-  col.node_index = 12;
   col.collision_layer = 7;
 
   pak7::CharacterBindingRecord chr {};
-  chr.node_index = 13;
   chr.max_strength = 22.5F;
 
   pak7::SoftBodyBindingRecord soft {};
-  soft.node_index = 14;
   soft.solver_iteration_count = 9;
   auto topology_asset_key_bytes = std::array<oxygen::data::AssetKey::value_type,
     oxygen::data::AssetKey::kSizeBytes> {};
   topology_asset_key_bytes.at(0) = 42U;
-  soft.topology_asset_key
+  const auto topology_key
     = oxygen::data::AssetKey::FromBytes(topology_asset_key_bytes);
   soft.topology_format
     = pak7::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary;
 
-  pak7::JointBindingRecord joint {};
-  joint.node_index_a = 15;
-  joint.node_index_b = 16;
-
-  pak7::VehicleBindingRecord veh {};
-  veh.node_index = 17;
-
   pak7::AggregateBindingRecord agg {};
-  agg.node_index = 18;
   agg.max_bodies = 24;
 
-  uint32_t cursor = kDataBaseOffset;
-  const auto add_entry
-    = [&](const pak7::PhysicsBindingType type,
-        const uint32_t size) -> pak7::PhysicsComponentTableDesc {
-    pak7::PhysicsComponentTableDesc e {};
-    e.binding_type = type;
-    e.table.offset = cursor;
-    e.table.count = 1;
-    e.table.entry_size = size;
-    cursor += size;
-    return e;
-  };
-
-  auto desc = MakeMinimalDesc();
-  desc.component_table_count = kTableCount;
-  desc.component_table_directory_offset = kDirOffset;
-
-  std::array<pak7::PhysicsComponentTableDesc, kTableCount> entries {
-    add_entry(pak7::PhysicsBindingType::kRigidBody,
-      sizeof(pak7::RigidBodyBindingRecord)),
-    add_entry(
-      pak7::PhysicsBindingType::kCollider, sizeof(pak7::ColliderBindingRecord)),
-    add_entry(pak7::PhysicsBindingType::kCharacter,
-      sizeof(pak7::CharacterBindingRecord)),
-    add_entry(
-      pak7::PhysicsBindingType::kSoftBody, sizeof(pak7::SoftBodyBindingRecord)),
-    add_entry(
-      pak7::PhysicsBindingType::kJoint, sizeof(pak7::JointBindingRecord)),
-    add_entry(
-      pak7::PhysicsBindingType::kVehicle, sizeof(pak7::VehicleBindingRecord)),
-    add_entry(pak7::PhysicsBindingType::kAggregate,
-      sizeof(pak7::AggregateBindingRecord)),
-  };
-
-  WriteAs(writer_, desc);
-  for (const auto& entry : entries) {
-    WriteAs(writer_, entry);
-  }
-  WriteAs(writer_, rb);
-  WriteAs(writer_, col);
-  WriteAs(writer_, chr);
-  WriteAs(writer_, soft);
-  WriteAs(writer_, joint);
-  WriteAs(writer_, veh);
-  WriteAs(writer_, agg);
-  WriteEmptyStringTable(writer_, stream_);
-  ASSERT_TRUE(writer_.Flush());
+  auto bindings = PhysicsSidecarBuilder {};
+  bindings.RigidBody(node(0U), ShapeKey(), MaterialKey(), rb)
+    .Collider(node(1U), ShapeKey(), MaterialKey(), col)
+    .Character(node(2U), ShapeKey(), chr)
+    .SoftBody(node(3U), topology_key, soft)
+    .Joint(node(4U), node(5U), ConstraintKey())
+    .Vehicle(node(6U), ConstraintKey())
+    .Aggregate(node(7U), agg);
+  WriteBytes(SidecarBytes(bindings));
 
   auto asset = LoadPhysicsSceneAsset(MakeContext());
   ASSERT_NE(asset, nullptr);
@@ -243,23 +178,23 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
   EXPECT_EQ(oxygen::base::CheckedAt(
               asset->GetBindings<pak7::RigidBodyBindingRecord>(), 0)
               .node_index,
-    11U);
+    node(0U).Index());
   EXPECT_EQ(oxygen::base::CheckedAt(
               asset->GetBindings<pak7::ColliderBindingRecord>(), 0)
               .node_index,
-    12U);
+    node(1U).Index());
   EXPECT_EQ(oxygen::base::CheckedAt(
               asset->GetBindings<pak7::CharacterBindingRecord>(), 0)
               .node_index,
-    13U);
+    node(2U).Index());
   EXPECT_EQ(oxygen::base::CheckedAt(
               asset->GetBindings<pak7::SoftBodyBindingRecord>(), 0)
               .node_index,
-    14U);
+    node(3U).Index());
   EXPECT_EQ(oxygen::base::CheckedAt(
               asset->GetBindings<pak7::SoftBodyBindingRecord>(), 0)
               .topology_asset_key,
-    soft.topology_asset_key);
+    topology_key);
   EXPECT_EQ(oxygen::base::CheckedAt(
               asset->GetBindings<pak7::SoftBodyBindingRecord>(), 0)
               .topology_format,
@@ -267,19 +202,19 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
   EXPECT_EQ(
     oxygen::base::CheckedAt(asset->GetBindings<pak7::JointBindingRecord>(), 0)
       .node_index_a,
-    15U);
+    node(4U).Index());
   EXPECT_EQ(
     oxygen::base::CheckedAt(asset->GetBindings<pak7::JointBindingRecord>(), 0)
       .node_index_b,
-    16U);
+    node(5U).Index());
   EXPECT_EQ(
     oxygen::base::CheckedAt(asset->GetBindings<pak7::VehicleBindingRecord>(), 0)
       .node_index,
-    17U);
+    node(6U).Index());
   EXPECT_EQ(oxygen::base::CheckedAt(
               asset->GetBindings<pak7::AggregateBindingRecord>(), 0)
               .node_index,
-    18U);
+    node(7U).Index());
 }
 
 // ============================================================================
@@ -288,11 +223,9 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
 
 NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadWrongAssetTypeThrows)
 {
-  auto desc = MakeMinimalDesc();
-  desc.header.asset_type
-    = static_cast<uint8_t>(oxygen::data::AssetType::kScene); // wrong
-  WriteAs(writer_, desc);
-  ASSERT_TRUE(writer_.Flush());
+  auto bytes = SidecarBytes();
+  DescriptorDefects::SetAssetType(bytes, oxygen::data::AssetType::kScene);
+  WriteBytes(bytes);
 
   EXPECT_THROW(
     { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
@@ -300,10 +233,9 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadWrongAssetTypeThrows)
 
 NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadWrongVersionThrows)
 {
-  auto desc = MakeMinimalDesc();
-  desc.header.version = 0xFF; // unsupported
-  WriteAs(writer_, desc);
-  ASSERT_TRUE(writer_.Flush());
+  auto bytes = SidecarBytes();
+  DescriptorDefects::SetVersion(bytes, 0xFF); // unsupported
+  WriteBytes(bytes);
 
   EXPECT_THROW(
     { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
@@ -311,11 +243,10 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadWrongVersionThrows)
 
 NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadTruncatedDescriptorThrows)
 {
-  // Write only half of a PhysicsSceneAssetDesc (stream too short).
-  std::vector<std::byte> half(
-    sizeof(pak7::PhysicsSceneAssetDesc) / 2, std::byte { 0 });
-  ASSERT_TRUE(writer_.WriteBlob(std::span<const std::byte>(half)));
-  ASSERT_TRUE(writer_.Flush());
+  // Keep only half of the descriptor (stream too short).
+  auto bytes = SidecarBytes();
+  bytes.resize(bytes.size() / 2);
+  WriteBytes(bytes);
 
   EXPECT_THROW(
     { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
@@ -331,55 +262,57 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadEntrySizeMismatchThrows)
   const std::array<Case, 7> cases {
     {
       {
-        pak7::PhysicsBindingType::kRigidBody,
-        sizeof(pak7::RigidBodyBindingRecord),
+        .type = pak7::PhysicsBindingType::kRigidBody,
+        .expected_size = sizeof(pak7::RigidBodyBindingRecord),
       },
       {
-        pak7::PhysicsBindingType::kCollider,
-        sizeof(pak7::ColliderBindingRecord),
+        .type = pak7::PhysicsBindingType::kCollider,
+        .expected_size = sizeof(pak7::ColliderBindingRecord),
       },
       {
-        pak7::PhysicsBindingType::kCharacter,
-        sizeof(pak7::CharacterBindingRecord),
+        .type = pak7::PhysicsBindingType::kCharacter,
+        .expected_size = sizeof(pak7::CharacterBindingRecord),
       },
       {
-        pak7::PhysicsBindingType::kSoftBody,
-        sizeof(pak7::SoftBodyBindingRecord),
+        .type = pak7::PhysicsBindingType::kSoftBody,
+        .expected_size = sizeof(pak7::SoftBodyBindingRecord),
       },
-      { pak7::PhysicsBindingType::kJoint, sizeof(pak7::JointBindingRecord) },
-      { pak7::PhysicsBindingType::kVehicle,
-        sizeof(pak7::VehicleBindingRecord) },
       {
-        pak7::PhysicsBindingType::kAggregate,
-        sizeof(pak7::AggregateBindingRecord),
+        .type = pak7::PhysicsBindingType::kJoint,
+        .expected_size = sizeof(pak7::JointBindingRecord),
+      },
+      {
+        .type = pak7::PhysicsBindingType::kVehicle,
+        .expected_size = sizeof(pak7::VehicleBindingRecord),
+      },
+      {
+        .type = pak7::PhysicsBindingType::kAggregate,
+        .expected_size = sizeof(pak7::AggregateBindingRecord),
       },
     },
   };
 
+  // A sidecar holding one binding of every type.
+  AddNodes(8U);
+  auto bindings = PhysicsSidecarBuilder {};
+  bindings.RigidBody(NodeAt(0U), ShapeKey(), MaterialKey())
+    .Collider(NodeAt(1U), ShapeKey(), MaterialKey())
+    .Character(NodeAt(2U), ShapeKey())
+    .SoftBody(NodeAt(3U), ShapeKey())
+    .Joint(NodeAt(4U), NodeAt(5U), ConstraintKey())
+    .Vehicle(NodeAt(6U), ConstraintKey())
+    .Aggregate(NodeAt(7U));
+  const auto valid = SidecarBytes(bindings);
+
   for (const auto& tc : cases) {
+    auto bytes = valid;
+    DescriptorDefects::SetBindingEntrySize(
+      bytes, tc.type, tc.expected_size + 1); // force mismatch
+
     MemoryStream local_stream {};
     Writer local_writer(local_stream);
     Reader local_reader(local_stream);
-
-    constexpr uint32_t kDirOffset = sizeof(pak7::PhysicsSceneAssetDesc);
-    constexpr uint32_t kDataOffset
-      = kDirOffset + sizeof(pak7::PhysicsComponentTableDesc);
-
-    auto desc = MakeMinimalDesc();
-    desc.component_table_count = 1;
-    desc.component_table_directory_offset = kDirOffset;
-
-    pak7::PhysicsComponentTableDesc entry {};
-    entry.binding_type = tc.type;
-    entry.table.offset = kDataOffset;
-    entry.table.count = 1;
-    entry.table.entry_size = tc.expected_size + 1; // force mismatch
-
-    WriteAs(local_writer, desc);
-    WriteAs(local_writer, entry);
-    std::vector<std::byte> payload(entry.table.entry_size, std::byte { 0 });
-    ASSERT_TRUE(local_writer.WriteBlob(std::span<const std::byte>(payload)));
-    WriteEmptyStringTable(local_writer, local_stream);
+    ASSERT_TRUE(local_writer.WriteBlob(std::span<const std::byte>(bytes)));
     ASSERT_TRUE(local_writer.Flush());
 
     ASSERT_TRUE(local_stream.Seek(oxygen::serio::ByteOffset { 0 }));
@@ -399,15 +332,16 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
 {
   // Verify that the data blob captured by the loader faithfully encodes the
   // serialized record; GetBindings() must return the same field values.
+  constexpr uint32_t kNodeCount = 8U;
+  AddNodes(kNodeCount);
   pak7::RigidBodyBindingRecord rec {};
-  rec.node_index = 7;
   rec.body_type = pak7::PhysicsBodyType::kDynamic;
   rec.motion_quality = pak7::PhysicsMotionQuality::kLinearCast;
   rec.mass = 10.5F;
   rec.linear_damping = 0.1F;
   rec.angular_damping = 0.2F;
   rec.gravity_factor = 0.5F;
-  rec.shape_asset_key = oxygen::data::AssetKey::FromBytes({
+  const auto shape_key = oxygen::data::AssetKey::FromBytes({
     0x10,
     0x01,
     0x02,
@@ -425,7 +359,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
     0xee,
     0x01,
   });
-  rec.material_asset_key = oxygen::data::AssetKey::FromBytes({
+  const auto material_key = oxygen::data::AssetKey::FromBytes({
     0x20,
     0x11,
     0x22,
@@ -444,7 +378,9 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
     0x02,
   });
 
-  WriteOneRigidBodyTable(rec);
+  auto bindings = PhysicsSidecarBuilder {};
+  bindings.RigidBody(NodeAt(kNodeCount - 1U), shape_key, material_key, rec);
+  WriteBytes(SidecarBytes(bindings));
 
   auto asset = LoadPhysicsSceneAsset(MakeContext());
   ASSERT_NE(asset, nullptr);
@@ -452,22 +388,20 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
   auto rigid = asset->GetBindings<pak7::RigidBodyBindingRecord>();
   ASSERT_EQ(rigid.size(), 1U);
   const auto& r = oxygen::base::CheckedAt(rigid, 0);
-  EXPECT_EQ(r.node_index, 7U);
+  EXPECT_EQ(r.node_index, NodeAt(kNodeCount - 1U).Index());
   EXPECT_EQ(r.body_type, pak7::PhysicsBodyType::kDynamic);
   EXPECT_EQ(r.motion_quality, pak7::PhysicsMotionQuality::kLinearCast);
   EXPECT_FLOAT_EQ(r.mass, 10.5F);
   EXPECT_FLOAT_EQ(r.linear_damping, 0.1F);
   EXPECT_FLOAT_EQ(r.angular_damping, 0.2F);
   EXPECT_FLOAT_EQ(r.gravity_factor, 0.5F);
-  EXPECT_EQ(r.shape_asset_key, rec.shape_asset_key);
-  EXPECT_EQ(r.material_asset_key, rec.material_asset_key);
+  EXPECT_EQ(r.shape_asset_key, shape_key);
+  EXPECT_EQ(r.material_asset_key, material_key);
 }
 
 NOLINT_TEST_F(PhysicsSceneLoaderTypeTest, LoadAssetTypeIsPhysicsScene)
 {
-  WriteAs(writer_, MakeMinimalDesc());
-  WriteEmptyStringTable(writer_, stream_);
-  ASSERT_TRUE(writer_.Flush());
+  WriteBytes(SidecarBytes());
 
   auto asset = LoadPhysicsSceneAsset(MakeContext());
   ASSERT_NE(asset, nullptr);

@@ -4,183 +4,138 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <span>
 #include <stdexcept>
-#include <string>
 #include <vector>
 
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
-#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 namespace data = oxygen::data;
-namespace world = data::pak::world;
 namespace script = data::pak::scripting;
+using oxygen::cooker::testing::DescriptorDefects;
+using oxygen::cooker::testing::SceneBuilder;
+using oxygen::cooker::testing::ScriptParam;
 
-class SceneScriptLayoutTest : public testing::Test {
-protected:
-  SceneScriptLayoutTest()
-  {
-    descriptor_.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kScene);
-    descriptor_.header.version = world::kSceneAssetVersion;
-    descriptor_.nodes = {
-      .offset = sizeof(descriptor_),
-      .count = 1U,
-      .entry_size = sizeof(node_),
-    };
-    descriptor_.header.strings.offset = sizeof(descriptor_) + sizeof(node_);
-    descriptor_.header.strings.size = sizeof(kStrings);
-    descriptor_.component_table_directory_offset
-      = descriptor_.header.strings.offset + sizeof(kStrings);
-    descriptor_.component_table_count = 1U;
-    table_.component_type
-      = static_cast<uint32_t>(data::ComponentType::kScripting);
-    table_.table = {
-      .offset = descriptor_.component_table_directory_offset + sizeof(table_),
-      .count = 1U,
-      .entry_size = sizeof(component_),
-    };
-    component_.slot_count = 2U;
-    node_.node_id = data::NodeId::FromStableIdentity("/test/root");
-    node_.parent_index = 0U;
-    descriptor_.script_slots = {
-      .offset = table_.table.offset + sizeof(component_),
-      .count = 2U,
-      .entry_size = sizeof(script::ScriptSlotRecord),
-    };
-    auto offset = descriptor_.script_slots.offset + sizeof(slots_);
-    for (size_t i = 0; i < slots_.size(); ++i) {
-      auto& slot = slots_.at(i);
-      slot.slot_id = data::ScriptSlotId::FromStableIdentity(
-        "/test/slot/" + std::to_string(i));
-      slot.script_asset_key
-        = data::AssetKey::FromVirtualPath("/test/script.oscript");
-      slot.params_count = 1U;
-      slot.params_array_offset = offset;
-      offset += sizeof(script::ScriptParamRecord);
-      auto& parameter = parameters_.at(i);
-      parameter.key_offset = kKeyOffset;
-      parameter.type = script::ScriptParamType::kInt32;
-      parameter.value.as_int32 = static_cast<int32_t>(i);
-    }
-    environment_.byte_size = sizeof(environment_);
-  }
+constexpr uint32_t kSlotCount = 2U;
 
-  [[nodiscard]] auto Bytes() const -> std::vector<std::byte>
-  {
-    std::vector<std::byte> result;
-    const auto append = [&result](const auto& value) -> auto {
-      const auto bytes = std::as_bytes(std::span(&value, 1U));
-      result.insert(result.end(), bytes.begin(), bytes.end());
-    };
-    append(descriptor_);
-    append(node_);
-    append(kStrings);
-    append(table_);
-    append(component_);
-    append(slots_);
-    append(parameters_);
-    append(environment_);
-    return result;
-  }
-
-  //! The descriptor string table: the empty string and the key "v".
-  static constexpr std::array<char, 3> kStrings { '\0', 'v', '\0' };
-  static constexpr data::pak::core::StringTableOffsetT kKeyOffset = 1U;
-
-  world::SceneAssetDesc descriptor_ {};
-  world::NodeRecord node_ {};
-  world::SceneComponentTableDesc table_ {};
-  script::ScriptingComponentRecord component_ {};
-  std::array<script::ScriptSlotRecord, 2> slots_ {};
-  std::array<script::ScriptParamRecord, 2> parameters_ {};
-  world::SceneEnvironmentBlockHeader environment_ {};
-};
-
-NOLINT_TEST_F(SceneScriptLayoutTest, ReadsLocalSlotsAndParameters)
+//! A scene of one node with two script slots, each with the int32 parameter
+//! "v" holding the slot's position.
+auto ValidScene() -> std::vector<std::byte>
 {
-  const auto bytes = Bytes();
+  auto scene = SceneBuilder { "SceneScriptLayoutTest" };
+  const auto root = scene.Node("root");
+  for (auto i = uint32_t { 0 }; i < kSlotCount; ++i) {
+    scene.ScriptSlot(root,
+      data::AssetKey::FromVirtualPath("/test/script.oscript"),
+      { ScriptParam { .key = "v", .value = static_cast<int32_t>(i) } });
+  }
+  return scene.Bytes();
+}
+
+auto ReadsAsScene(const std::vector<std::byte>& bytes) -> void
+{
+  static_cast<void>(data::SceneAsset({}, bytes));
+}
+
+NOLINT_TEST(SceneScriptLayoutTest, ReadsLocalSlotsAndParameters)
+{
+  const auto bytes = ValidScene();
   const auto scene = data::SceneAsset({}, bytes);
   EXPECT_TRUE(scene.ReadScriptSlots(0U, 0U).empty());
-  const auto slots = scene.ReadScriptSlots(0U, 2U);
-  ASSERT_EQ(slots.size(), 2U);
+  const auto slots = scene.ReadScriptSlots(0U, kSlotCount);
+  ASSERT_EQ(slots.size(), kSlotCount);
   for (size_t i = 0; i < slots.size(); ++i) {
     const auto parameters = scene.ReadScriptParameters(slots.at(i));
     ASSERT_EQ(parameters.size(), 1U);
     EXPECT_EQ(parameters.front().value.as_int32, static_cast<int32_t>(i));
   }
-  EXPECT_THROW(
-    static_cast<void>(scene.ReadScriptSlots(2U, 1U)), std::out_of_range);
+  EXPECT_THROW(static_cast<void>(scene.ReadScriptSlots(kSlotCount, 1U)),
+    std::out_of_range);
   auto invalid = slots.front();
   invalid.params_array_offset = std::numeric_limits<uint64_t>::max();
   EXPECT_THROW(
     static_cast<void>(scene.ReadScriptParameters(invalid)), std::out_of_range);
 }
 
-NOLINT_TEST_F(SceneScriptLayoutTest, RejectsOverlappingParameterRanges)
+NOLINT_TEST(SceneScriptLayoutTest, RejectsOverlappingParameterRanges)
 {
-  slots_.back().params_array_offset = slots_.front().params_array_offset;
-  const auto bytes = Bytes();
-  EXPECT_THROW(
-    static_cast<void>(data::SceneAsset({}, bytes)), std::runtime_error);
+  auto bytes = ValidScene();
+  auto slot = DescriptorDefects::ScriptSlotAt(bytes, 1U);
+  slot.params_array_offset
+    = DescriptorDefects::ScriptSlotAt(bytes, 0U).params_array_offset;
+  DescriptorDefects::SetScriptSlot(bytes, 1U, slot);
+
+  EXPECT_THROW(ReadsAsScene(bytes), std::runtime_error);
 }
 
-NOLINT_TEST_F(SceneScriptLayoutTest, RejectsTruncatedParameters)
+NOLINT_TEST(SceneScriptLayoutTest, RejectsTruncatedParameters)
 {
-  auto bytes = Bytes();
-  bytes.resize(static_cast<size_t>(slots_.back().params_array_offset));
-  EXPECT_THROW(
-    static_cast<void>(data::SceneAsset({}, bytes)), std::runtime_error);
+  auto bytes = ValidScene();
+  bytes.resize(static_cast<size_t>(
+    DescriptorDefects::ScriptSlotAt(bytes, 1U).params_array_offset));
+
+  EXPECT_THROW(ReadsAsScene(bytes), std::runtime_error);
 }
 
-NOLINT_TEST_F(SceneScriptLayoutTest, RejectsUnownedSlots)
+NOLINT_TEST(SceneScriptLayoutTest, RejectsUnownedSlots)
 {
-  component_.slot_count = 1U;
-  const auto bytes = Bytes();
-  EXPECT_THROW(
-    static_cast<void>(data::SceneAsset({}, bytes)), std::runtime_error);
+  auto bytes = ValidScene();
+  auto component
+    = DescriptorDefects::ComponentAt<script::ScriptingComponentRecord>(
+      bytes, data::ComponentType::kScripting, 0U);
+  component.slot_count = 1U;
+  DescriptorDefects::SetComponent(
+    bytes, data::ComponentType::kScripting, 0U, component);
+
+  EXPECT_THROW(ReadsAsScene(bytes), std::runtime_error);
 }
 
-NOLINT_TEST_F(SceneScriptLayoutTest, RejectsInvalidLocalSlotRange)
+NOLINT_TEST(SceneScriptLayoutTest, RejectsInvalidLocalSlotRange)
 {
-  component_.slot_start_index = std::numeric_limits<uint32_t>::max();
-  const auto bytes = Bytes();
-  EXPECT_THROW(
-    static_cast<void>(data::SceneAsset({}, bytes)), std::runtime_error);
+  auto bytes = ValidScene();
+  auto component
+    = DescriptorDefects::ComponentAt<script::ScriptingComponentRecord>(
+      bytes, data::ComponentType::kScripting, 0U);
+  component.slot_start_index = std::numeric_limits<uint32_t>::max();
+  DescriptorDefects::SetComponent(
+    bytes, data::ComponentType::kScripting, 0U, component);
+
+  EXPECT_THROW(ReadsAsScene(bytes), std::runtime_error);
 }
 
-NOLINT_TEST_F(SceneScriptLayoutTest, RejectsMissingScriptIdentity)
+NOLINT_TEST(SceneScriptLayoutTest, RejectsMissingScriptIdentity)
 {
-  slots_.front().script_asset_key = {};
-  const auto bytes = Bytes();
-  EXPECT_THROW(
-    static_cast<void>(data::SceneAsset({}, bytes)), std::runtime_error);
+  auto bytes = ValidScene();
+  auto slot = DescriptorDefects::ScriptSlotAt(bytes, 0U);
+  slot.script_asset_key = {};
+  DescriptorDefects::SetScriptSlot(bytes, 0U, slot);
+
+  EXPECT_THROW(ReadsAsScene(bytes), std::runtime_error);
 }
 
 //! A change of a slot's parameter names the slot by its ID, so every slot has
 //! one, unique among its node's slots.
-NOLINT_TEST_F(SceneScriptLayoutTest, RejectsMissingOrRepeatedSlotIds)
+NOLINT_TEST(SceneScriptLayoutTest, RejectsMissingOrRepeatedSlotIds)
 {
-  slots_.front().slot_id = {};
-  const auto missing = Bytes();
-  slots_.front().slot_id = slots_.back().slot_id;
-  const auto repeated = Bytes();
+  const auto valid = ValidScene();
+  auto missing = valid;
+  auto slot = DescriptorDefects::ScriptSlotAt(valid, 0U);
+  slot.slot_id = {};
+  DescriptorDefects::SetScriptSlot(missing, 0U, slot);
+  auto repeated = valid;
+  slot.slot_id = DescriptorDefects::ScriptSlotAt(valid, 1U).slot_id;
+  DescriptorDefects::SetScriptSlot(repeated, 0U, slot);
 
-  EXPECT_THROW(
-    static_cast<void>(data::SceneAsset({}, missing)), std::runtime_error);
-  EXPECT_THROW(
-    static_cast<void>(data::SceneAsset({}, repeated)), std::runtime_error);
+  EXPECT_THROW(ReadsAsScene(missing), std::runtime_error);
+  EXPECT_THROW(ReadsAsScene(repeated), std::runtime_error);
 }
 } // namespace

@@ -24,20 +24,21 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
-#include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
-#include <Oxygen/Cooker/testing/PackedPak.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_input.h>
@@ -53,20 +54,19 @@ namespace fixtures = oxygen::cooker::testing;
 namespace pak = oxygen::content::pak;
 namespace core = oxygen::data::pak::core;
 namespace input = oxygen::data::pak::input;
-namespace lc = oxygen::data::loose_cooked;
 namespace physics = oxygen::data::pak::physics;
 namespace script = oxygen::data::pak::scripting;
 
 using oxygen::ResourceIndexT;
 using oxygen::cooker::test::HasDiagnostic;
 using oxygen::cooker::test::HasNoErrors;
+using oxygen::cooker::testing::DescriptorDefects;
 using oxygen::cooker::testing::LooseCookedRoot;
-using oxygen::cooker::testing::PackedPak;
 using oxygen::cooker::testing::PakWorkspace;
 using oxygen::cooker::testing::ResourceTable;
+using oxygen::cooker::testing::SceneBuilder;
 using oxygen::cooker::testing::SeedBytes;
 using oxygen::serio::testing::BytesEqual;
-using pak::test::PhysicsSidecarDescriptor;
 
 auto FindTable(const pak::PakPlan& plan, const std::string_view name)
   -> const pak::PakTablePlan*
@@ -219,9 +219,10 @@ NOLINT_TEST(PakPlanBuilderTest, PlanningTheSameRequestTwiceGivesTheSamePlan)
 {
   // Arrange
   auto workspace = PakWorkspace {};
-  const auto request
-    = workspace.FullRequest({ workspace.Add(MaterialRoot(1U, "Z")),
-      workspace.Add(MaterialRoot(2U, "A")) });
+  const auto request = workspace.FullRequest({
+    workspace.Add(MaterialRoot(1U, "Z")),
+    workspace.Add(MaterialRoot(2U, "A")),
+  });
   const auto builder = pak::PakPlanBuilder {};
 
   // Act
@@ -445,7 +446,7 @@ NOLINT_TEST(PakPlanBuilderTest, RemapsSceneMaskIndicesAcrossCookedSources)
     { workspace.Add(first.root), workspace.Add(second.root) });
 
   // Act
-  const auto packed = workspace.Pack(request);
+  const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);
 
   // Assert
   ASSERT_THAT(packed.Diagnostics(), HasNoErrors());
@@ -457,8 +458,8 @@ NOLINT_TEST(PakPlanBuilderTest, RemapsSceneMaskIndicesAcrossCookedSources)
   EXPECT_EQ(source.size_bytes, descriptor.size());
   const auto pak = workspace.Open(request.output_pak_path);
   EXPECT_THAT(pak.Descriptor(second.scene), BytesEqual(descriptor));
-  EXPECT_EQ(pak.Resolve(second.scene, data::ResourceReferenceIndex { 0U },
-              data::ResourceKind::kTexture),
+  EXPECT_EQ(
+    pak.Resolve(second.scene, second.mask, data::ResourceKind::kTexture),
     ResourceIndexT { 2U });
 }
 
@@ -562,7 +563,7 @@ NOLINT_TEST(PakPlanBuilderTest, LayeredPhysicsPayloadUsesWinningSourceInFull)
     = workspace.FullRequest({ workspace.Add(layers.owner), library });
 
   // Act
-  const auto packed = workspace.Pack(request);
+  const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);
 
   // Assert
   ASSERT_THAT(packed.Diagnostics(), HasNoErrors());
@@ -620,40 +621,7 @@ NOLINT_TEST(PakPlanBuilderTest, LayeredPhysicsPayloadUsesWinningSourceInPatch)
 //! Adds an empty scene; returns its key.
 auto AddScene(LooseCookedRoot& library) -> data::AssetKey
 {
-  return library.Add({
-    .type = data::AssetType::kScene,
-    .leaf = "Scene.oscene",
-    .descriptor = fixtures::MakeEmptySceneDescriptor(),
-  });
-}
-
-//! Adds the physics sidecar `leaf` with `descriptor`; returns its key.
-auto AddSidecar(LooseCookedRoot& library, std::vector<std::byte> descriptor,
-  std::string leaf = "Scene.opscene", data::AssetReferences references = {})
-  -> data::AssetKey
-{
-  return library.Add({
-    .type = data::AssetType::kPhysicsScene,
-    .leaf = std::move(leaf),
-    .descriptor = std::move(descriptor),
-    .references = std::move(references),
-  });
-}
-
-//! The sidecar of the empty scene `scene`.
-auto EmptySceneSidecar(const data::AssetKey& scene) -> std::vector<std::byte>
-{
-  return PhysicsSidecarDescriptor(scene, fixtures::MakeEmptySceneDescriptor());
-}
-
-//! `sidecar` expecting `node_count` nodes in its scene, hashed again.
-auto WithTargetNodeCount(const std::span<const std::byte> sidecar,
-  const uint32_t node_count) -> std::vector<std::byte>
-{
-  auto record = PackedPak::RecordAt<physics::PhysicsSceneAssetDesc>(sidecar, 0);
-  record.target_node_count = node_count;
-  record.header.content_hash = {};
-  return pak::test::WithDescriptorHash(data::MakeDescriptorBytes(record));
+  return library.Scene("Scene.oscene");
 }
 
 //! `catalog` with the descriptor digest of `key` changed.
@@ -676,20 +644,10 @@ NOLINT_TEST(PakPlanBuilderTest, PatchRecordsDeletedSidecarAsTombstone)
   auto workspace = PakWorkspace {};
   auto game = LooseCookedRoot {};
   const auto scene = AddScene(game);
-  const auto sidecar
-    = AddSidecar(game, EmptySceneSidecar(scene), "Scene.opscene",
-      data::AssetReferences::Create({},
-        {
-          {
-            .key = scene,
-            .kind = data::KeyReferenceKind::kLogical,
-            .expected_type = data::AssetType::kScene,
-          },
-        })
-        .value());
+  const auto sidecar = game.PhysicsSidecar("Scene.opscene", scene);
   const auto base_request
     = workspace.FullRequest({ workspace.Add(game) }, "base.pak");
-  const auto base = workspace.Pack(base_request);
+  const auto base = oxygen::cooker::testing::PakWorkspace::Pack(base_request);
   ASSERT_THAT(base.Diagnostics(), HasNoErrors());
   ASSERT_TRUE(workspace.Open(base_request.output_pak_path)
       .Pak()
@@ -716,8 +674,14 @@ NOLINT_TEST(PakPlanBuilderTest, RejectsSidecarOfAnotherSceneDescriptor)
   auto workspace = PakWorkspace {};
   auto game = LooseCookedRoot {};
   const auto scene = AddScene(game);
-  AddSidecar(game,
-    PhysicsSidecarDescriptor(scene, fixtures::SceneDescriptor("Other").bytes));
+  auto sidecar = fixtures::PhysicsSidecarDescriptor(
+    scene, fixtures::SceneDescriptor("Other").bytes);
+  game.Add({
+    .type = data::AssetType::kPhysicsScene,
+    .leaf = "Scene.opscene",
+    .descriptor = std::move(sidecar.bytes),
+    .references = std::move(sidecar.references),
+  });
   const auto request = workspace.FullRequest({ workspace.Add(game) });
 
   // Act
@@ -735,8 +699,8 @@ NOLINT_TEST(PakPlanBuilderTest, RejectsTwoSidecarsOfOneScene)
   auto workspace = PakWorkspace {};
   auto game = LooseCookedRoot {};
   const auto scene = AddScene(game);
-  AddSidecar(game, EmptySceneSidecar(scene));
-  AddSidecar(game, EmptySceneSidecar(scene), "Duplicate.opscene");
+  game.PhysicsSidecar("Scene.opscene", scene);
+  game.PhysicsSidecar("Duplicate.opscene", scene);
   const auto request = workspace.FullRequest({ workspace.Add(game) });
 
   // Act
@@ -754,8 +718,16 @@ NOLINT_TEST(PakPlanBuilderTest, RejectsSidecarOfAnotherNodeCount)
   // Arrange
   auto workspace = PakWorkspace {};
   auto game = LooseCookedRoot {};
-  const auto scene = AddScene(game);
-  AddSidecar(game, WithTargetNodeCount(EmptySceneSidecar(scene), 1U));
+  const auto empty = SceneBuilder { "Scene" };
+  const auto scene = game.Scene("Scene.oscene", empty);
+  auto sidecar = fixtures::PhysicsSidecarDescriptor(scene, empty.Bytes());
+  DescriptorDefects::SetSidecarNodeCount(sidecar.bytes, 1U);
+  game.Add({
+    .type = data::AssetType::kPhysicsScene,
+    .leaf = "Scene.opscene",
+    .descriptor = std::move(sidecar.bytes),
+    .references = std::move(sidecar.references),
+  });
   const auto request = workspace.FullRequest({ workspace.Add(game) });
 
   // Act
@@ -780,7 +752,7 @@ NOLINT_TEST_P(PakPlanBuilderPairPatchTest, IncludesBothMembersOfThePair)
   auto workspace = PakWorkspace {};
   auto game = LooseCookedRoot {};
   const auto scene = AddScene(game);
-  const auto sidecar = AddSidecar(game, EmptySceneSidecar(scene));
+  const auto sidecar = game.PhysicsSidecar("Scene.opscene", scene);
   const auto source = workspace.Add(game);
   const auto baseline
     = pak::PakPlanBuilder {}.Build(workspace.FullRequest({ source }));

@@ -46,11 +46,11 @@
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -63,7 +63,6 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
@@ -132,55 +131,20 @@ namespace {
     return data::AssetKey::FromVirtualPath("/test/material.omat");
   }
 
-  auto SceneBytes(const data::AssetKey& material) -> std::vector<std::byte>
+  //! The scene of the tests: one node, which with a `material` renders the
+  //! bound cube and paints its surface with it.
+  auto GenerationScene(const data::AssetKey& material)
+    -> cooker::testing::SceneBuilder
   {
-    using data::pak::world::kSceneAssetVersion;
-    using data::pak::world::NodeRecord;
-    using data::pak::world::OverrideRecord;
-    using data::pak::world::RenderableRecord;
-    using data::pak::world::SceneAssetDesc;
-    using data::pak::world::SceneComponentTableDesc;
-    using data::pak::world::SceneEnvironmentBlockHeader;
-    SceneAssetDesc descriptor {};
-    descriptor.header.asset_type
-      = static_cast<std::uint8_t>(data::AssetType::kScene);
-    descriptor.header.version = kSceneAssetVersion;
-    descriptor.nodes.offset = sizeof(SceneAssetDesc);
-    descriptor.nodes.count = 1U;
-    descriptor.nodes.entry_size = sizeof(NodeRecord);
-    const auto strings = std::array { '\0', 'r', '\0' };
-    descriptor.header.strings.offset
-      = sizeof(SceneAssetDesc) + sizeof(NodeRecord);
-    descriptor.header.strings.size
-      = static_cast<data::pak::core::StringTableSizeT>(strings.size());
-    std::array<SceneComponentTableDesc, 2> tables {};
-    RenderableRecord renderable {};
-    OverrideRecord assignment {};
+    auto scene = cooker::testing::SceneBuilder { "test" };
+    const auto root = scene.Node("root");
     if (!material.IsNil()) {
-      descriptor.component_table_count = static_cast<uint32_t>(tables.size());
-      descriptor.component_table_directory_offset
-        = descriptor.header.strings.offset + strings.size();
-      tables.at(0).component_type
-        = static_cast<uint32_t>(data::ComponentType::kRenderable);
-      tables.at(0).table.offset
-        = descriptor.component_table_directory_offset + sizeof(tables);
-      tables.at(0).table.count = 1U;
-      tables.at(0).table.entry_size = sizeof(renderable);
-      tables.at(1).component_type
-        = static_cast<uint32_t>(data::ComponentType::kOverride);
-      tables.at(1).table.offset
-        = tables.at(0).table.offset + sizeof(renderable);
-      tables.at(1).table.count = 1U;
-      tables.at(1).table.entry_size = sizeof(assignment);
-      renderable.geometry_key
-        = data::AssetKey::FromVirtualPath("/test/bound-cube.ogeo");
-      assignment.override_id
-        = data::schema::OverrideId::kGeometrySurfaceMaterial;
-      assignment.value.as_asset = material;
-      assignment.part_id
+      scene.Renderable(
+        root, data::AssetKey::FromVirtualPath("/test/bound-cube.ogeo"));
+      const auto part
         = data::SurfaceId::FromStableIdentity("generation-test-slot");
       const std::array surfaces { data::Surface {
-        .surface_id = assignment.part_id,
+        .surface_id = part,
         .display_name = "fixture",
         .bindings = { { .lod_index = oxygen::data::LodIndex {},
           .submesh_index = oxygen::data::SubmeshIndex {},
@@ -190,29 +154,18 @@ namespace {
       if (!revision) {
         throw std::logic_error("Invalid fixture surface layout");
       }
-      assignment.layout_revision = revision.value();
+      auto value = data::pak::world::OverrideValue {};
+      value.as_asset = material;
+      scene.Override(root, data::schema::OverrideId::kGeometrySurfaceMaterial,
+        value, part, revision.value());
     }
-    NodeRecord node {};
-    node.node_id = data::NodeId::FromStableIdentity("/test/root");
-    node.parent_index = 0U;
-    node.scene_name_offset = 1U;
-    SceneEnvironmentBlockHeader environment {};
-    environment.byte_size = sizeof(environment);
-    std::vector<std::byte> bytes;
-    const auto append = [&bytes](const auto& record) -> auto {
-      const auto encoded = std::as_bytes(std::span { &record, 1U });
-      bytes.insert(bytes.end(), encoded.begin(), encoded.end());
-    };
-    append(descriptor);
-    append(node);
-    append(strings);
-    if (!material.IsNil()) {
-      append(tables);
-      append(renderable);
-      append(assignment);
-    }
-    append(environment);
-    return bytes;
+    return scene;
+  }
+
+  //! The descriptor of the scene of the tests that renders nothing.
+  auto PlainSceneBytes() -> std::vector<std::byte>
+  {
+    return GenerationScene({}).Bytes();
   }
 
   auto BoundCubeKey() -> data::AssetKey
@@ -319,28 +272,15 @@ namespace {
       throw std::system_error(exclusive.error());
     }
     auto source = LooseCookedRoot { "test", recipe.seed };
-    std::vector<data::KeyReference> scene_keys;
     if (!recipe.scene_material.IsNil()) {
       AddBoundCube(source, recipe.scene_material);
-      scene_keys = {
-        {
-          .key = BoundCubeKey(),
-          .kind = data::KeyReferenceKind::kAsset,
-          .expected_type = data::AssetType::kGeometry,
-        },
-        {
-          .key = recipe.scene_material,
-          .kind = data::KeyReferenceKind::kAsset,
-          .expected_type = data::AssetType::kMaterial,
-        },
-      };
     }
+    const auto scene = GenerationScene(recipe.scene_material);
     source.Add({
       .type = data::AssetType::kScene,
       .leaf = "generation.oscene",
-      .descriptor = SceneBytes(recipe.scene_material),
-      .references
-      = data::AssetReferences::Create({}, std::move(scene_keys)).value(),
+      .descriptor = scene.Bytes(),
+      .references = scene.References(),
       .key = SceneKey(),
     });
     if (!recipe.material.IsNil()) {
@@ -1314,7 +1254,8 @@ namespace {
       .type = data::AssetType::kPhysicsScene,
       .leaf = "scene.opscene",
       .descriptor
-      = cooker::testing::PhysicsSidecarDescriptor(target, SceneBytes({})).bytes,
+      = cooker::testing::PhysicsSidecarDescriptor(target, PlainSceneBytes())
+        .bytes,
     });
     return root;
   }
@@ -1334,7 +1275,7 @@ namespace {
     AssetLoader loader(engine::internal::EngineTagFactory::Get());
     loader.AddLooseCookedRoot(base);
     const auto original = loader.BeginLoadScope();
-    const auto scene_bytes = SceneBytes({});
+    const auto scene_bytes = PlainSceneBytes();
     data::SceneAsset scene(SceneKey(), scene_bytes);
     EXPECT_EQ(
       loader.FindPhysicsSidecarAssetKeyForScene(scene, original), sidecar_key);
@@ -1372,7 +1313,7 @@ namespace {
     AssetLoader loader(engine::internal::EngineTagFactory::Get());
     loader.AddPakFile(base);
     const auto original = loader.BeginLoadScope();
-    const auto scene_bytes = SceneBytes({});
+    const auto scene_bytes = PlainSceneBytes();
     data::SceneAsset scene(SceneKey(), scene_bytes);
     loader.AddPakFile(patch);
     EXPECT_FALSE(loader.FindPhysicsSidecarAssetKeyForScene(

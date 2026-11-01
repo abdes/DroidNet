@@ -8,10 +8,13 @@
 // nodes an instance brings in (overrides, script parameter changes, the
 // starting camera).
 
+#include <cstddef>
 #include <memory>
 #include <stdexcept>
 #include <vector>
 
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -19,7 +22,6 @@
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
-#include <Oxygen/Data/test/Fixtures/SceneAssetBuilder.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -29,160 +31,186 @@ namespace script = data::pak::scripting;
 using data::ComponentType;
 using data::NodeId;
 using data::schema::OverrideId;
-using data::testing::SceneAssetBuilder;
+using oxygen::cooker::testing::DescriptorDefects;
+using oxygen::cooker::testing::SceneBuilder;
+using oxygen::cooker::testing::SceneNode;
+using oxygen::cooker::testing::ScriptParam;
 
-constexpr world::SceneNodeIndexT kInstanceRoot = 1U;
-
+//! The nodes `Lamp/Bulb` the instanced scene brings in; they belong to that
+//! scene, not to the one under test.
 auto Lamp() -> NodeId { return NodeId::FromStableIdentity("/test/Lamp"); }
 auto Bulb() -> NodeId { return NodeId::FromStableIdentity("/test/Bulb"); }
 
-//! A root and an instance root (node 1) whose instance holds `Lamp/Bulb`.
-auto InstancingScene() -> SceneAssetBuilder
+//! A slot of the instanced scene.
+auto LampSlot() -> data::ScriptSlotId
 {
-  auto builder = SceneAssetBuilder {};
-  builder.AddNode("Root");
-  builder.AddNode("Lamps", 0U);
-  builder.AddComponents(ComponentType::kSceneInstance,
-    std::vector {
-      world::SceneInstanceRecord {
-        .node_index = kInstanceRoot,
-        .scene_key = data::AssetKey::FromVirtualPath("/test/Lamp.oscene"),
-      },
-    });
-  builder.AddComponents(ComponentType::kNodePath,
-    std::vector { world::NodePathRecord { .first = 0U, .count = 2U } });
-  builder.AddComponents(ComponentType::kNodePathElement,
-    std::vector {
-      world::NodePathElement { .node_id = Lamp() },
-      world::NodePathElement { .node_id = Bulb() },
-    });
-  return builder;
+  return data::ScriptSlotId::FromStableIdentity("/test/slot");
 }
 
-//! A change of the instanced node's position.
-auto PositionChange(const world::NodeRef& target) -> world::OverrideRecord
+auto SceneKey() -> data::AssetKey
 {
-  auto record = world::OverrideRecord {
-    .target = target,
-    .override_id = OverrideId::kTransformPositionX,
-  };
-  record.value.as_float = 2.0F;
-  return record;
+  return data::AssetKey::FromVirtualPath("/test/Scene.oscene");
+}
+
+//! A root and an instance root whose instance holds `Lamp/Bulb`.
+struct InstancingScene final {
+  SceneBuilder scene { "SceneNodeReferencesTest" };
+  SceneNode root;
+  SceneNode lamps;
+
+  InstancingScene()
+    : root(scene.Node("Root"))
+    , lamps(scene.Node("Lamps", root))
+  {
+    scene.Instance(lamps, data::AssetKey::FromVirtualPath("/test/Lamp.oscene"));
+  }
+};
+
+//! A change of the instanced node's position.
+auto PositionValue() -> world::OverrideValue
+{
+  auto value = world::OverrideValue {};
+  value.as_float = 2.0F;
+  return value;
+}
+
+auto Read(const std::vector<std::byte>& descriptor)
+  -> std::shared_ptr<data::SceneAsset>
+{
+  return std::make_shared<data::SceneAsset>(SceneKey(), descriptor);
 }
 
 //! Composition finds nodes by ID, so a scene refuses a node without one and
 //! two nodes with one ID.
 NOLINT_TEST(SceneNodeReferencesTest, RejectsMissingAndRepeatedNodeIds)
 {
-  auto missing = SceneAssetBuilder {};
-  missing.AddNode("Root");
-  missing.Node(0U).node_id = {};
-  auto repeated = SceneAssetBuilder {};
-  repeated.AddNode("Root");
-  repeated.AddNode("Child", 0U);
-  repeated.Node(1U).node_id = repeated.Node(0U).node_id;
+  auto single = SceneBuilder { "SceneNodeReferencesTest" };
+  single.Node("Root");
+  auto missing = single.Bytes();
+  auto node = DescriptorDefects::NodeAt(missing, 0U);
+  node.node_id = {};
+  DescriptorDefects::SetNode(missing, 0U, node);
 
-  EXPECT_THROW(static_cast<void>(missing.Build()), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(repeated.Build()), std::runtime_error);
+  auto pair = SceneBuilder { "SceneNodeReferencesTest" };
+  pair.Node("Child", pair.Node("Root"));
+  auto repeated = pair.Bytes();
+  node = DescriptorDefects::NodeAt(repeated, 1U);
+  node.node_id = DescriptorDefects::NodeAt(repeated, 0U).node_id;
+  DescriptorDefects::SetNode(repeated, 1U, node);
+
+  EXPECT_THROW(static_cast<void>(Read(missing)), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(repeated)), std::runtime_error);
 }
 
 //! A change addresses an instanced node by its instance root and the path of
 //! node IDs below it, shallowest first.
 NOLINT_TEST(SceneNodeReferencesTest, ReadsTheChangeOfAnInstancedNode)
 {
-  auto builder = InstancingScene();
-  builder.AddComponents(ComponentType::kOverride,
-    std::vector {
-      PositionChange({ .node_index = kInstanceRoot, .node_path = 0U }),
-    });
+  auto fixture = InstancingScene {};
+  fixture.scene.Change(fixture.lamps, { Lamp(), Bulb() },
+    OverrideId::kTransformPositionX, PositionValue());
 
-  const auto scene = builder.Build();
+  const auto scene = fixture.scene.Build(SceneKey());
 
   const auto changes = scene->GetComponents<world::OverrideRecord>();
   ASSERT_EQ(changes.size(), 1U);
-  EXPECT_EQ(changes[0].target.node_index, kInstanceRoot);
+  EXPECT_EQ(changes[0].target.node_index, fixture.lamps.Index());
   EXPECT_EQ(
     scene->GetNodePath(changes[0].target), (std::vector { Lamp(), Bulb() }));
-  EXPECT_TRUE(scene->GetNodePath({ .node_index = 0U }).empty());
+  EXPECT_TRUE(
+    scene->GetNodePath({ .node_index = fixture.root.Index() }).empty());
 }
 
 //! A node of the scene stores its own values in its records: only an
 //! asset-sourced property is an override of it.
 NOLINT_TEST(SceneNodeReferencesTest, RejectsAnOwnedNodeChangeOfARecordValue)
 {
-  auto builder = InstancingScene();
-  builder.AddComponents(ComponentType::kOverride,
-    std::vector { PositionChange({ .node_index = kInstanceRoot }) });
+  auto fixture = InstancingScene {};
+  fixture.scene.Change(fixture.lamps, { Lamp(), Bulb() },
+    OverrideId::kTransformPositionX, PositionValue());
+  auto descriptor = fixture.scene.Bytes();
+  auto record = DescriptorDefects::ComponentAt<world::OverrideRecord>(
+    descriptor, ComponentType::kOverride, 0U);
+  record.target.node_path = world::kNoNodePath;
+  DescriptorDefects::SetComponent(
+    descriptor, ComponentType::kOverride, 0U, record);
 
-  EXPECT_THROW(static_cast<void>(builder.Build()), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(descriptor)), std::runtime_error);
 }
 
 //! A path runs below an instance root and names a path the scene holds.
 NOLINT_TEST(SceneNodeReferencesTest, RejectsInvalidNodePaths)
 {
-  auto not_a_root = InstancingScene();
-  not_a_root.AddComponents(ComponentType::kOverride,
-    std::vector { PositionChange({ .node_index = 0U, .node_path = 0U }) });
-  auto out_of_range = InstancingScene();
-  out_of_range.AddComponents(ComponentType::kOverride,
-    std::vector {
-      PositionChange({ .node_index = kInstanceRoot, .node_path = 1U }),
-    });
-  auto bad_elements = SceneAssetBuilder {};
-  bad_elements.AddNode("Root");
-  bad_elements.AddComponents(ComponentType::kNodePath,
-    std::vector { world::NodePathRecord { .first = 0U, .count = 3U } });
+  auto fixture = InstancingScene {};
+  fixture.scene.Change(fixture.lamps, { Lamp(), Bulb() },
+    OverrideId::kTransformPositionX, PositionValue());
+  const auto valid = fixture.scene.Bytes();
+  const auto change = DescriptorDefects::ComponentAt<world::OverrideRecord>(
+    valid, ComponentType::kOverride, 0U);
 
-  EXPECT_THROW(static_cast<void>(not_a_root.Build()), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(out_of_range.Build()), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(bad_elements.Build()), std::runtime_error);
+  auto not_a_root = valid;
+  auto record = change;
+  record.target.node_index = fixture.root.Index();
+  DescriptorDefects::SetComponent(
+    not_a_root, ComponentType::kOverride, 0U, record);
+
+  auto out_of_range = valid;
+  record = change;
+  record.target.node_path = change.target.node_path + 1U;
+  DescriptorDefects::SetComponent(
+    out_of_range, ComponentType::kOverride, 0U, record);
+
+  auto bad_elements = valid;
+  auto path = DescriptorDefects::ComponentAt<world::NodePathRecord>(
+    valid, ComponentType::kNodePath, 0U);
+  path.count = 3U;
+  DescriptorDefects::SetComponent(
+    bad_elements, ComponentType::kNodePath, 0U, path);
+
+  EXPECT_THROW(static_cast<void>(Read(not_a_root)), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(out_of_range)), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(bad_elements)), std::runtime_error);
 }
 
 //! A script parameter change names an instanced node, its slot and the key.
 NOLINT_TEST(SceneNodeReferencesTest, ReadsScriptParameterChanges)
 {
-  auto builder = InstancingScene();
-  auto change = script::ScriptParamOverrideRecord {
-    .target = { .node_index = kInstanceRoot, .node_path = 0U },
-    .slot_id = data::ScriptSlotId::FromStableIdentity("/test/slot"),
-  };
-  change.param.key_offset = builder.AddString("speed");
-  change.param.type = script::ScriptParamType::kFloat;
-  change.param.value.as_float = 1.5F;
-  auto owned = change;
-  owned.target = { .node_index = kInstanceRoot };
-  auto rejected = InstancingScene();
-  rejected.AddString("speed");
-  builder.AddComponents(
-    ComponentType::kScriptParamOverride, std::vector { change });
-  rejected.AddComponents(
-    ComponentType::kScriptParamOverride, std::vector { owned });
+  auto fixture = InstancingScene {};
+  fixture.scene.ScriptChange(fixture.lamps, { Lamp(), Bulb() }, LampSlot(),
+    ScriptParam { .key = "speed", .value = 1.5F });
+  auto rejected = fixture.scene.Bytes();
+  auto owned
+    = DescriptorDefects::ComponentAt<script::ScriptParamOverrideRecord>(
+      rejected, ComponentType::kScriptParamOverride, 0U);
+  owned.target.node_path = world::kNoNodePath;
+  DescriptorDefects::SetComponent(
+    rejected, ComponentType::kScriptParamOverride, 0U, owned);
 
-  const auto scene = builder.Build();
+  const auto scene = fixture.scene.Build(SceneKey());
 
   EXPECT_EQ(
     scene->GetComponents<script::ScriptParamOverrideRecord>().size(), 1U);
-  EXPECT_THROW(static_cast<void>(rejected.Build()), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(rejected)), std::runtime_error);
 }
 
 //! The starting camera may be a node an instance brings in; one of the
 //! scene's own nodes must own a camera.
 NOLINT_TEST(SceneNodeReferencesTest, AcceptsAnInstancedStartingCamera)
 {
-  auto instanced = InstancingScene();
-  instanced.SetStartingCamera(
-    world::NodeRef { .node_index = kInstanceRoot, .node_path = 0U });
-  auto owned = InstancingScene();
-  owned.SetStartingCamera(kInstanceRoot);
+  auto fixture = InstancingScene {};
+  fixture.scene.StartingCamera(fixture.lamps, { Lamp(), Bulb() });
+  auto owned = fixture.scene.Bytes();
+  DescriptorDefects::SetStartingCamera(
+    owned, world::NodeRef { .node_index = fixture.lamps.Index() });
 
-  const auto scene = instanced.Build();
+  const auto scene = fixture.scene.Build(SceneKey());
 
   const auto camera = scene->GetStartingCamera();
   if (!camera.has_value()) {
     FAIL() << "the scene has no starting camera";
   }
   EXPECT_EQ(camera->node_path, 0U);
-  EXPECT_THROW(static_cast<void>(owned.Build()), std::runtime_error);
+  EXPECT_THROW(static_cast<void>(Read(owned)), std::runtime_error);
 }
 
 } // namespace

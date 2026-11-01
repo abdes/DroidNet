@@ -16,6 +16,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -112,17 +114,22 @@ public:
   //! Adds a procedural cube geometry; returns its key.
   auto Geometry(std::string_view leaf) -> data::AssetKey;
 
-  //! Adds an empty scene; returns its key.
+  //! Adds a scene with no nodes; returns its key.
   auto Scene(std::string_view leaf) -> data::AssetKey;
 
-  //! Adds the physics sidecar of the scene `scene`, which the root already
-  //! holds, matching it as a cook does: its key, node count and content hash.
-  //! Returns the sidecar's key.
-  /*!
-   @throw std::invalid_argument When the root holds no scene `scene`.
-  */
-  auto PhysicsSidecar(std::string_view leaf, const data::AssetKey& scene)
+  //! Adds the scene `scene` describes, with its references; returns its key.
+  auto Scene(std::string_view leaf, const SceneBuilder& scene)
     -> data::AssetKey;
+
+  //! Adds the physics sidecar of the scene `scene`, which the root already
+  //! holds, with `bindings`, matching it as a cook does: its key, node count
+  //! and content hash. Returns the sidecar's key.
+  /*!
+   @throw std::invalid_argument When the root holds no scene `scene`, or the
+   bindings name the nodes of another scene.
+  */
+  auto PhysicsSidecar(std::string_view leaf, const data::AssetKey& scene,
+    const PhysicsSidecarBuilder& bindings = {}) -> data::AssetKey;
 
   //! Adds a texture row with `payload`; returns its row. Every `Add*` row
   //! records the offset, size and SHA-256 of its payload, whatever `desc`
@@ -199,6 +206,8 @@ private:
   std::string mount_;
   data::SourceKey source_key_;
   std::vector<LooseAsset> assets_;
+  //! The builder of each scene a `SceneBuilder` described.
+  std::map<data::AssetKey, SceneBuilderId> scene_builders_;
   std::vector<MemberFile> members_;
   Table<data::pak::core::TextureResourceDesc> textures_;
   Table<data::pak::core::BufferResourceDesc> buffers_;

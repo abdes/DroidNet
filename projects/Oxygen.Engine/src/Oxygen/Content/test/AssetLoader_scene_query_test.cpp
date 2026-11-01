@@ -22,19 +22,13 @@
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/ComponentType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/PakFormat_geometry.h>
-#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneIds.h>
-#include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
-#include <Oxygen/Data/test/Fixtures/SceneAssetBuilder.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -42,18 +36,15 @@ namespace {
 namespace data = oxygen::data;
 namespace world = oxygen::data::pak::world;
 using data::AssetKey;
-using data::ComponentType;
 using data::NodeId;
 using data::schema::OverrideId;
-using data::testing::SceneAssetBuilder;
 using oxygen::content::IAssetLoader;
 using oxygen::content::testing::AssetLoaderBasicTest;
+using oxygen::cooker::testing::NodeTransform;
+using oxygen::cooker::testing::SceneBuilder;
+using oxygen::cooker::testing::SceneNode;
 using SceneIssueCode = IAssetLoader::SceneHierarchyIssueCode;
 
-constexpr world::SceneNodeIndexT kRoot = 0U;
-constexpr world::SceneNodeIndexT kHolder = 1U;
-constexpr world::SceneNodeIndexT kBody = 0U;
-constexpr world::SceneNodeIndexT kWheel = 1U;
 constexpr float kModelX = 1.0F;
 constexpr float kCarX = 2.0F;
 constexpr float kStreetX = 3.0F;
@@ -102,49 +93,30 @@ auto RimSurface() -> data::SurfaceId
 constexpr std::string_view kWheelGeometryPath = "/test/query/Wheel.ogeo";
 constexpr std::string_view kPaintPath = "/test/query/Paint.omat";
 
-auto AssetReference(const AssetKey& key, const data::AssetType type)
-  -> data::KeyReference
-{
-  return {
-    .key = key,
-    .kind = data::KeyReferenceKind::kAsset,
-    .expected_type = type,
-  };
-}
-
 //! `Body` with a perspective camera and a child `Wheel` at x = 1, which
 //! renders the wheel geometry with its rim painted, and holds a point light.
-auto Model() -> SceneAssetBuilder
+struct ModelFixture {
+  SceneBuilder scene;
+  SceneNode body;
+  SceneNode wheel;
+};
+
+auto Model() -> ModelFixture
 {
-  auto model = SceneAssetBuilder {};
-  model.AddNode("Body");
-  model.AddNode("Wheel", kBody);
-  model.Node(kWheel).translation[0] = kModelX;
-  auto camera = world::MakeDefaultRecord<world::PerspectiveCameraRecord>();
-  camera.node_index = kBody;
-  model.AddComponents(
-    ComponentType::kPerspectiveCamera, std::vector { camera });
-  model.AddComponents(ComponentType::kRenderable,
-    std::vector {
-      world::RenderableRecord {
-        .node_index = kWheel,
-        .geometry_key = WheelGeometryKey(),
-      },
-    });
-  auto light = world::MakeDefaultRecord<world::PointLightRecord>();
-  light.node_index = kWheel;
-  model.AddComponents(ComponentType::kPointLight, std::vector { light });
+  auto scene = SceneBuilder { "Model" };
+  const auto body = scene.Node("Body");
+  const auto wheel = scene.Node("Wheel", body);
+  scene.Place(wheel, NodeTransform { .translation = { kModelX, 0.0F, 0.0F } });
+  scene.PerspectiveCamera(body);
+  scene.Renderable(wheel, WheelGeometryKey());
+  scene.PointLight(wheel);
   auto revision = oxygen::base::Sha256Digest {};
   revision.fill(1U);
-  auto paint = world::OverrideRecord {
-    .target = { .node_index = kWheel, .node_path = world::kNoNodePath },
-    .override_id = OverrideId::kGeometrySurfaceMaterial,
-    .part_id = RimSurface(),
-    .layout_revision = revision,
-  };
-  paint.value.as_asset = PaintKey();
-  model.AddComponents(ComponentType::kOverride, std::vector { paint });
-  return model;
+  auto paint = world::OverrideValue {};
+  paint.as_asset = PaintKey();
+  scene.Override(
+    wheel, OverrideId::kGeometrySurfaceMaterial, paint, RimSurface(), revision);
+  return { .scene = std::move(scene), .body = body, .wheel = wheel };
 }
 
 //! A scene with a root `<name>Root` and its child `<name>Holder`, which
@@ -155,44 +127,24 @@ struct InstancingSpec {
   std::vector<std::pair<std::vector<NodeId>, float>> changes;
 };
 
-auto Instancing(const InstancingSpec& spec) -> SceneAssetBuilder
+struct InstancingFixture {
+  SceneBuilder scene;
+  SceneNode root;
+  SceneNode holder;
+};
+
+auto Instancing(const InstancingSpec& spec) -> InstancingFixture
 {
-  auto builder = SceneAssetBuilder {};
-  builder.AddNode(std::string(spec.name) + "Root");
-  builder.AddNode(std::string(spec.name) + "Holder", kRoot);
-  builder.AddComponents(ComponentType::kSceneInstance,
-    std::vector {
-      world::SceneInstanceRecord {
-        .node_index = kHolder,
-        .scene_key = spec.source,
-      },
-    });
-  if (spec.changes.empty()) {
-    return builder;
-  }
-  auto paths = std::vector<world::NodePathRecord> {};
-  auto elements = std::vector<world::NodePathElement> {};
-  auto overrides = std::vector<world::OverrideRecord> {};
+  auto scene = SceneBuilder { std::string(spec.name) };
+  const auto root = scene.Node(std::string(spec.name) + "Root");
+  const auto holder = scene.Node(std::string(spec.name) + "Holder", root);
+  scene.Instance(holder, spec.source);
   for (const auto& [path, x] : spec.changes) {
-    auto change = world::OverrideRecord {
-      .target = { .node_index = kHolder,
-        .node_path = static_cast<uint32_t>(paths.size()), },
-      .override_id = OverrideId::kTransformPositionX,
-    };
-    change.value.as_float = x;
-    overrides.push_back(change);
-    paths.push_back({
-      .first = static_cast<uint32_t>(elements.size()),
-      .count = static_cast<uint32_t>(path.size()),
-    });
-    for (const auto& id : path) {
-      elements.push_back({ .node_id = id });
-    }
+    auto value = world::OverrideValue {};
+    value.as_float = x;
+    scene.Change(holder, path, OverrideId::kTransformPositionX, value);
   }
-  builder.AddComponents(ComponentType::kOverride, overrides);
-  builder.AddComponents(ComponentType::kNodePath, paths);
-  builder.AddComponents(ComponentType::kNodePathElement, elements);
-  return builder;
+  return { .scene = std::move(scene), .root = root, .holder = holder };
 }
 
 auto ValueOf(const IAssetLoader::SceneNodeValues& values, const OverrideId id,
@@ -224,78 +176,52 @@ protected:
   {
     AssetLoaderBasicTest::SetUp();
     auto model = Model();
-    body_ = model.Node(kBody).node_id;
-    wheel_ = model.Node(kWheel).node_id;
+    body_ = model.scene.IdOf(model.body);
+    wheel_ = model.scene.IdOf(model.wheel);
     auto car = Instancing({
       .name = "Car",
       .source = ModelKey(),
       .changes = { { { wheel_ }, kCarX } },
     });
-    car_root_ = car.Node(kRoot).node_id;
-    car_holder_ = car.Node(kHolder).node_id;
+    car_root_ = car.scene.IdOf(car.root);
+    car_holder_ = car.scene.IdOf(car.holder);
     auto street = Instancing({
       .name = "Street",
       .source = CarKey(),
       .changes = { { { car_holder_, wheel_ }, kStreetX } },
     });
-    street_root_ = street.Node(kRoot).node_id;
-    street_holder_ = street.Node(kHolder).node_id;
+    street_root_ = street.scene.IdOf(street.root);
+    street_holder_ = street.scene.IdOf(street.holder);
     auto garage = Instancing({ .name = "Garage", .source = MissingKey() });
-    garage_holder_ = garage.Node(kHolder).node_id;
+    garage_holder_ = garage.scene.IdOf(garage.holder);
+    garage_holder_index_ = garage.holder.Index();
     auto loop_a = Instancing({ .name = "LoopA", .source = LoopBKey() });
-    loop_a_holder_ = loop_a.Node(kHolder).node_id;
+    loop_a_holder_ = loop_a.scene.IdOf(loop_a.holder);
     auto loop_b = Instancing({ .name = "LoopB", .source = LoopAKey() });
-    loop_b_holder_ = loop_b.Node(kHolder).node_id;
+    loop_b_holder_ = loop_b.scene.IdOf(loop_b.holder);
 
     const auto root = TempDir() / "scene_query";
     auto source = oxygen::cooker::testing::LooseCookedRoot { "test" };
     const auto write_scene
       = [&source](const AssetKey& key, const std::string_view name,
-          const SceneAssetBuilder& builder,
-          std::vector<data::KeyReference> references) -> void {
+          const SceneBuilder& scene) -> void {
       source.Add({
         .type = data::AssetType::kScene,
         .leaf = "query/" + std::string(name) + ".oscene",
-        .descriptor = builder.Bytes(),
-        .references
-        = data::AssetReferences::Create({}, std::move(references)).value(),
+        .descriptor = scene.Bytes(),
+        .references = scene.References(),
         .key = key,
       });
     };
-    write_scene(ModelKey(), "Model", model,
-      {
-        AssetReference(WheelGeometryKey(), data::AssetType::kGeometry),
-        AssetReference(PaintKey(), data::AssetType::kMaterial),
-      });
-    write_scene(CarKey(), "Car", car,
-      { AssetReference(ModelKey(), data::AssetType::kScene) });
-    write_scene(StreetKey(), "Street", street,
-      { AssetReference(CarKey(), data::AssetType::kScene) });
-    write_scene(GarageKey(), "Garage", garage,
-      { AssetReference(MissingKey(), data::AssetType::kScene) });
-    write_scene(LoopAKey(), "LoopA", loop_a,
-      { AssetReference(LoopBKey(), data::AssetType::kScene) });
-    write_scene(LoopBKey(), "LoopB", loop_b,
-      { AssetReference(LoopAKey(), data::AssetType::kScene) });
+    write_scene(ModelKey(), "Model", model.scene);
+    write_scene(CarKey(), "Car", car.scene);
+    write_scene(StreetKey(), "Street", street.scene);
+    write_scene(GarageKey(), "Garage", garage.scene);
+    write_scene(LoopAKey(), "LoopA", loop_a.scene);
+    write_scene(LoopBKey(), "LoopB", loop_b.scene);
 
-    auto geometry = data::pak::geometry::GeometryAssetDesc {};
-    geometry.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kGeometry);
-    source.Add({
-      .type = data::AssetType::kGeometry,
-      .leaf = "query/Wheel.ogeo",
-      .descriptor = data::MakeDescriptorBytes(geometry),
-      .key = WheelGeometryKey(),
-    });
-    auto paint = data::pak::render::MaterialAssetDesc {};
-    paint.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
-    paint.header.version = data::pak::render::kMaterialAssetVersion;
-    source.Add({
-      .type = data::AssetType::kMaterial,
-      .leaf = "query/Paint.omat",
-      .descriptor = data::MakeDescriptorBytes(paint),
-      .key = PaintKey(),
-    });
+    EXPECT_EQ(source.Geometry("query/Wheel.ogeo"), WheelGeometryKey());
+    EXPECT_EQ(source.Material("query/Paint.omat"), PaintKey());
     oxygen::cooker::testing::Materialize(source.Files(), root);
     asset_loader_->AddLooseCookedRoot(root);
   }
@@ -309,6 +235,7 @@ protected:
   NodeId garage_holder_;
   NodeId loop_a_holder_;
   NodeId loop_b_holder_;
+  world::SceneNodeIndexT garage_holder_index_ = 0U;
 };
 
 //! The outermost scene's change wins, two nesting levels down; each level read
@@ -381,7 +308,8 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, UnreadableInstancedSceneHasNoNodes)
   EXPECT_EQ(hierarchy->nodes.size(), 2U);
   ASSERT_EQ(hierarchy->issues.size(), 1U);
   EXPECT_EQ(hierarchy->issues.front().code, SceneIssueCode::kSceneUnavailable);
-  EXPECT_EQ(hierarchy->issues.front().node, std::optional<uint32_t>(kHolder));
+  EXPECT_EQ(hierarchy->issues.front().node,
+    std::optional<uint32_t>(garage_holder_index_));
   EXPECT_EQ(hierarchy->issues.front().scene_key, MissingKey());
 }
 

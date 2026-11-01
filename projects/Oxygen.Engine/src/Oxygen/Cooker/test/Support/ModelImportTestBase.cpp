@@ -6,20 +6,22 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
-#include <ios>
 #include <optional>
-#include <span>
-#include <type_traits>
+#include <vector>
 
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
-#include <Oxygen/Serio/NativeFile.h>
-#include <Oxygen/Serio/RegionStream.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
+
+using data::pak::world::OrthographicCameraRecord;
+using data::pak::world::PerspectiveCameraRecord;
 
 auto ModelImportTestBase::LoadInspection(const std::filesystem::path& root)
   -> CookedContent
@@ -57,113 +59,20 @@ auto ModelImportTestBase::LoadSceneReadback(const ImportReport& report)
     return {};
   }
 
-  const auto scene_path = content.DescriptorStored(scene_entry->key).file;
-
-  auto scene_file = serio::NativeFile::Open(scene_path, {});
-  EXPECT_TRUE(scene_file) << scene_file.error().message();
-  if (!scene_file) {
-    return {};
-  }
-  auto scene_stream = serio::OpenReadStream(*scene_file);
-  EXPECT_TRUE(scene_stream) << scene_stream.error().message();
-  if (!scene_stream) {
-    return {};
-  }
-  Reader scene_reader(*scene_stream);
-  auto packed = scene_reader.ScopedAlignment(1);
-
-  const auto base_pos_res = scene_reader.Position();
-  EXPECT_TRUE(base_pos_res);
-  if (!base_pos_res) {
-    return {};
-  }
-  const auto base_pos = *base_pos_res;
-
-  auto read_component_table
-    = [&](const SceneComponentTableDesc& entry, auto& out) -> bool {
-    using Record = std::remove_reference_t<decltype(out)>::value_type;
-    if (entry.table.count == 0U) {
-      out.clear();
-      return true;
-    }
-
-    out.resize(entry.table.count);
-    const auto seek_table
-      = scene_reader.Seek(base_pos + static_cast<size_t>(entry.table.offset));
-    EXPECT_TRUE(seek_table);
-    if (!seek_table) {
-      return false;
-    }
-
-    auto read_result = scene_reader.ReadBlobInto(
-      std::as_writable_bytes(std::span<Record>(out.data(), out.size())));
-    EXPECT_TRUE(read_result);
-    return static_cast<bool>(read_result);
+  const auto scene = data::SceneAsset(scene_entry->key,
+    oxygen::cooker::test::ReadBytes(
+      content.DescriptorStored(scene_entry->key).file));
+  const auto copy_of = [](const auto records) -> auto {
+    return std::vector(records.begin(), records.end());
   };
 
   SceneReadback readback {};
-  auto scene_desc_result = scene_reader.ReadBlobInto(
-    std::as_writable_bytes(std::span<SceneAssetDesc, 1>(&readback.desc, 1)));
-  EXPECT_TRUE(scene_desc_result);
-  if (!scene_desc_result) {
-    return {};
-  }
-
-  if (readback.desc.nodes.count > 0U) {
-    readback.nodes.resize(readback.desc.nodes.count);
-    const auto seek_nodes = scene_reader.Seek(
-      base_pos + static_cast<size_t>(readback.desc.nodes.offset));
-    EXPECT_TRUE(seek_nodes);
-    if (!seek_nodes) {
-      return {};
-    }
-
-    auto nodes_result = scene_reader.ReadBlobInto(std::as_writable_bytes(
-      std::span<NodeRecord>(readback.nodes.data(), readback.nodes.size())));
-    EXPECT_TRUE(nodes_result);
-    if (!nodes_result) {
-      return {};
-    }
-  }
-
-  if (readback.desc.component_table_count > 0U) {
-    readback.component_entries.resize(readback.desc.component_table_count);
-    const auto seek_dir = scene_reader.Seek(base_pos
-      + static_cast<size_t>(readback.desc.component_table_directory_offset));
-    EXPECT_TRUE(seek_dir);
-    if (!seek_dir) {
-      return {};
-    }
-
-    auto entries_result = scene_reader.ReadBlobInto(
-      std::as_writable_bytes(std::span<SceneComponentTableDesc>(
-        readback.component_entries.data(), readback.component_entries.size())));
-    EXPECT_TRUE(entries_result);
-    if (!entries_result) {
-      return {};
-    }
-
-    for (const auto& entry : readback.component_entries) {
-      const auto type = static_cast<ComponentType>(entry.component_type);
-      if (type == ComponentType::kRenderable) {
-        if (!read_component_table(entry, readback.renderables)) {
-          return {};
-        }
-      } else if (type == ComponentType::kDirectionalLight) {
-        if (!read_component_table(entry, readback.directional_lights)) {
-          return {};
-        }
-      } else if (type == ComponentType::kPointLight) {
-        if (!read_component_table(entry, readback.point_lights)) {
-          return {};
-        }
-      } else if ((type == ComponentType::kSpotLight)
-        && (!read_component_table(entry, readback.spot_lights))) {
-        return {};
-      }
-    }
-  }
-
+  readback.nodes = copy_of(scene.GetNodes());
+  readback.renderables = copy_of(scene.GetComponents<RenderableRecord>());
+  readback.directional_lights
+    = copy_of(scene.GetComponents<DirectionalLightRecord>());
+  readback.point_lights = copy_of(scene.GetComponents<PointLightRecord>());
+  readback.spot_lights = copy_of(scene.GetComponents<SpotLightRecord>());
   return readback;
 }
 
@@ -190,78 +99,25 @@ auto ModelImportTestBase::ValidateSceneOutputs(
   const auto scene_entry = FindAssetOfType(content, AssetType::kScene);
   ASSERT_HAS_VALUE(scene_entry);
 
-  const auto scene_path = content.DescriptorStored(scene_entry->key).file;
-
-  auto scene_file = serio::NativeFile::Open(scene_path, {});
-  ASSERT_TRUE(scene_file) << scene_file.error().message();
-  auto scene_stream = serio::OpenReadStream(*scene_file);
-  ASSERT_TRUE(scene_stream) << scene_stream.error().message();
-  Reader scene_reader(*scene_stream);
-  auto packed = scene_reader.ScopedAlignment(1);
-
-  const auto base_pos_res = scene_reader.Position();
-  ASSERT_TRUE(base_pos_res);
-  const auto base_pos = *base_pos_res;
-
-  SceneAssetDesc scene_desc {};
-  auto scene_desc_result = scene_reader.ReadBlobInto(
-    std::as_writable_bytes(std::span<SceneAssetDesc, 1>(&scene_desc, 1)));
-  ASSERT_TRUE(scene_desc_result);
+  const auto scene = data::SceneAsset(scene_entry->key,
+    oxygen::cooker::test::ReadBytes(
+      content.DescriptorStored(scene_entry->key).file));
   if (expected.nodes_min.has_value()) {
-    EXPECT_GE(scene_desc.nodes.count,
-      static_cast<uint32_t>(expected.nodes_min.value()));
+    EXPECT_GE(scene.GetNodes().size(), expected.nodes_min.value());
   }
 
-  ASSERT_GT(scene_desc.component_table_count, 0U);
-  ASSERT_NE(scene_desc.component_table_directory_offset, 0U);
-
-  auto seek_dir = scene_reader.Seek(base_pos
-    + static_cast<size_t>(scene_desc.component_table_directory_offset));
-  ASSERT_TRUE(seek_dir);
-
-  std::optional<SceneComponentTableDesc> renderables_entry;
-  bool has_perspective = false;
-  bool has_orthographic = false;
-  bool has_directional = false;
-  bool has_point = false;
-  bool has_spot = false;
-
-  for (uint32_t i = 0; i < scene_desc.component_table_count; ++i) {
-    SceneComponentTableDesc entry {};
-    auto entry_result = scene_reader.ReadBlobInto(
-      std::as_writable_bytes(std::span<SceneComponentTableDesc, 1>(&entry, 1)));
-    ASSERT_TRUE(entry_result);
-
-    const auto type = static_cast<ComponentType>(entry.component_type);
-    if (type == ComponentType::kRenderable) {
-      renderables_entry = entry;
-    } else if (type == ComponentType::kPerspectiveCamera) {
-      has_perspective = true;
-    } else if (type == ComponentType::kOrthographicCamera) {
-      has_orthographic = true;
-    } else if (type == ComponentType::kDirectionalLight) {
-      has_directional = true;
-    } else if (type == ComponentType::kPointLight) {
-      has_point = true;
-    } else if (type == ComponentType::kSpotLight) {
-      has_spot = true;
-    }
-  }
-
-  ASSERT_HAS_VALUE(renderables_entry);
-  EXPECT_EQ(renderables_entry->table.entry_size, sizeof(RenderableRecord));
+  const auto renderables = scene.GetComponents<RenderableRecord>();
   if (expected.geometry.has_value()) {
-    EXPECT_EQ(renderables_entry->table.count,
-      static_cast<uint32_t>(expected.geometry.value()));
+    EXPECT_EQ(renderables.size(), expected.geometry.value());
   } else {
-    EXPECT_GT(renderables_entry->table.count, 0U);
+    EXPECT_GT(renderables.size(), 0U);
   }
 
-  EXPECT_FALSE(has_perspective);
-  EXPECT_FALSE(has_orthographic);
-  EXPECT_FALSE(has_directional);
-  EXPECT_FALSE(has_point);
-  EXPECT_FALSE(has_spot);
+  EXPECT_TRUE(scene.GetComponents<PerspectiveCameraRecord>().empty());
+  EXPECT_TRUE(scene.GetComponents<OrthographicCameraRecord>().empty());
+  EXPECT_TRUE(scene.GetComponents<DirectionalLightRecord>().empty());
+  EXPECT_TRUE(scene.GetComponents<PointLightRecord>().empty());
+  EXPECT_TRUE(scene.GetComponents<SpotLightRecord>().empty());
 
   const auto& textures = content.ResourceTable(data::ResourceKind::kTexture);
   const auto texture_count = static_cast<size_t>(textures.RowCount());

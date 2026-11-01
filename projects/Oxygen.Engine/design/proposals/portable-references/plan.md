@@ -34,7 +34,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S6b   | Done                                                           |
 | S6c   | Done                                                           |
 | S6d   | Done                                                           |
-| S6e   | Not started (last engine slice)                                |
+| S6e   | Done                                                           |
 | S7    | Not started                                                    |
 | S8    | Not started                                                    |
 | S9    | Not started                                                    |
@@ -615,7 +615,6 @@ done only when its rows are gone from the code.
 | A blocking CRC pass on a pool worker                                               | Verified pak mount (`PrepareMountSetAsync`)                                                                                                                           | S6a     |
 | A loose source named by its index file; "library" in the content UI                | DemoShell `ContentVm`, `ContentLoaderPanel`, `ContentSettingsService`, `FileBrowserService`, `DemoShell.cpp`, `ContentVm_test`, RenderScene `MainModule.cpp`          | S6c     |
 | Mount refusals logged by the host, never shown; unsaved import settings            | RenderScene `MainModule.cpp`, `ContentSettingsService`, `ContentVm`                                                                                                   | S6c     |
-| Hand-built scene and sidecar descriptors, forged `.otex` files in tests            | The tests the builders proposal's "What it replaces" table lists                                                                                                      | S6e     |
 
 ### Editor
 

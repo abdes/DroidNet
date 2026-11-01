@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <iterator>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -18,6 +17,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -41,6 +42,21 @@ struct DescriptorFixture final {
 };
 
 enum class MaterialVariant : uint8_t { kPlain, kWithShader };
+
+//! Records in the asset header of the descriptor `bytes` the SHA-256 of
+//! its bytes, taken with that field zeroed, as a cook does.
+inline auto StampContentHash(std::vector<std::byte>& bytes) -> void
+{
+  constexpr auto kOffset = offsetof(data::pak::core::AssetHeader, content_hash);
+  constexpr auto kSize = sizeof(data::pak::core::AssetHeader::content_hash);
+  if (bytes.size() < kOffset + kSize) {
+    throw std::invalid_argument("descriptor is smaller than its header");
+  }
+  const auto field = std::span(bytes).subspan(kOffset, kSize);
+  std::ranges::fill(field, std::byte { 0 });
+  const auto hash = base::ComputeSha256(bytes);
+  std::ranges::copy(std::as_bytes(std::span(hash)), field.begin());
+}
 
 template <typename T>
 auto AppendRecord(std::vector<std::byte>& bytes, const T& record) -> void
@@ -71,6 +87,7 @@ inline auto MaterialDescriptor(const std::string_view name,
     AppendRecord(fixture.bytes, shader);
   }
   data::AppendDescriptorStrings(fixture.bytes, strings);
+  StampContentHash(fixture.bytes);
   return fixture;
 }
 
@@ -87,6 +104,7 @@ inline auto TexturedMaterialDescriptor(const std::string_view name,
   auto descriptor = *read;
   descriptor.base_color_texture = data::ResourceReferenceIndex { 0U };
   std::memcpy(fixture.bytes.data(), &descriptor, sizeof(descriptor));
+  StampContentHash(fixture.bytes);
   fixture.references = data::AssetReferences::Create(
     {
       {
@@ -101,20 +119,16 @@ inline auto TexturedMaterialDescriptor(const std::string_view name,
 
 //! The physics sidecar of the scene `scene_key`, whose descriptor is
 //! `scene_bytes`, as a cook makes it: the scene's key, node count and content
-//! hash, and no bindings.
+//! hash, and the bindings `bindings`; for a scene stored in another source.
 inline auto PhysicsSidecarDescriptor(const data::AssetKey& scene_key,
-  const std::span<const std::byte> scene_bytes) -> DescriptorFixture
+  const std::span<const std::byte> scene_bytes,
+  const PhysicsSidecarBuilder& bindings = {},
+  const std::string_view name = "PhysicsScene") -> DescriptorFixture
 {
-  auto descriptor = data::pak::physics::PhysicsSceneAssetDesc {};
-  descriptor.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
-  descriptor.header.version = data::pak::physics::kPhysicsSceneAssetVersion;
-  descriptor.target_scene_key = scene_key;
-  descriptor.target_node_count = static_cast<uint32_t>(
-    data::SceneAsset(scene_key, scene_bytes).GetNodes().size());
-  const auto hash = base::ComputeSha256(scene_bytes);
-  std::ranges::copy(hash, std::begin(descriptor.target_scene_content_hash));
-  return { .bytes = data::MakeDescriptorBytes(descriptor), .references = {} };
+  return {
+    .bytes = bindings.Bytes(scene_key, scene_bytes, name),
+    .references = bindings.References(scene_key),
+  };
 }
 
 inline auto GeometryDescriptor(const std::string_view name) -> DescriptorFixture
@@ -154,33 +168,15 @@ inline auto GeometryDescriptor(const std::string_view name) -> DescriptorFixture
   AppendRecord(fixture.bytes, view);
   AppendRecord(fixture.bytes, surface);
   data::AppendDescriptorStrings(fixture.bytes, strings);
+  StampContentHash(fixture.bytes);
   return fixture;
 }
 
-//! A scene with no nodes; `padding` grows its string table, for size tests.
-inline auto SceneDescriptor(
-  const std::string_view name, const uint32_t padding = 0U) -> DescriptorFixture
+//! A scene with no nodes.
+inline auto SceneDescriptor(const std::string_view name) -> DescriptorFixture
 {
-  data::pak::world::SceneAssetDesc descriptor {};
-  descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
-  descriptor.header.version = data::pak::world::kSceneAssetVersion;
-  auto strings = data::DescriptorStringsBuilder {};
-  descriptor.header.name_offset = strings.Add(name);
-  if (padding != 0U) {
-    static_cast<void>(strings.Add(std::string(padding, 'x')));
-  }
-  descriptor.header.strings = {
-    .offset = sizeof(descriptor),
-    .size = strings.Size(),
-  };
-  data::pak::world::SceneEnvironmentBlockHeader environment {};
-  environment.byte_size = sizeof(environment);
-  DescriptorFixture fixture;
-  AppendRecord(fixture.bytes, descriptor);
-  const auto table = strings.Bytes();
-  fixture.bytes.insert(fixture.bytes.end(), table.begin(), table.end());
-  AppendRecord(fixture.bytes, environment);
-  return fixture;
+  const auto scene = SceneBuilder { std::string(name) };
+  return { .bytes = scene.Bytes(), .references = scene.References() };
 }
 
 //! Resolves a string of the cooked descriptor `bytes` hold.

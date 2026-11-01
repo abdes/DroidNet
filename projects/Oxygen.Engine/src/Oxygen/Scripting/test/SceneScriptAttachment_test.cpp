@@ -17,6 +17,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/test/Fakes/StubAssetLoader.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetType.h>
@@ -24,7 +25,6 @@
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneComposition.h>
 #include <Oxygen/Data/ScriptAsset.h>
-#include <Oxygen/Data/test/Fixtures/SceneAssetBuilder.h>
 #include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
 #include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Scene/Scene.h>
@@ -44,7 +44,6 @@ namespace {
   using data::ScriptAssetParam;
   using data::ScriptNodeParam;
   using data::pak::scripting::ScriptLanguage;
-  using data::pak::scripting::ScriptSlotRecord;
   using CompileState = scene::ScriptingComponent::Slot::CompileState;
   using State = SceneScriptSlotOutcome::State;
 
@@ -139,22 +138,17 @@ namespace {
     //! node 0, and creates the matching runtime nodes.
     auto MakeScene() -> std::shared_ptr<data::SceneAsset>
     {
-      auto builder = data::testing::SceneAssetBuilder {};
-      const auto root = builder.AddNode("Root");
-      builder.AddNode("Target", root);
-      builder.AddNode("Other", root);
+      auto builder = cooker::testing::SceneBuilder { "Attachment" };
+      const auto root = builder.Node("Root");
+      builder.Node("Target", root);
+      builder.Node("Other", root);
       // The composed slots are the ones a test sets; the cooked record only
       // has to be valid.
-      builder.AddScripting(root,
-        {
-          ScriptSlotRecord {
-            .script_asset_key = Key("/test/Cooked.oscript"),
-          },
-        });
+      builder.ScriptSlot(root, Key("/test/Cooked.oscript"));
       for (const auto* name : { "Root", "Target", "Other" }) {
         nodes_.push_back(scene_->CreateNode(name));
       }
-      return builder.Build();
+      return builder.Build(Key("/test/Scene.oscene"));
     }
 
     //! Sets the composed slots of the scene's root node.

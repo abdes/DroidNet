@@ -55,6 +55,11 @@ m_gtest_program(
     "SceneScriptAttachment_test.cpp"
     "ScriptSourceReload_test.cpp"
 )
+target_link_libraries(
+  "Oxygen.Scripting.Attachment.Tests"
+  PRIVATE
+    oxygen::cooker::testing
+)
 
 m_gtest_program(Resolver SOURCES "ScriptSourceResolver_test.cpp")
 target_link_libraries("Oxygen.Scripting.Resolver.Tests" PRIVATE oxygen::loader)

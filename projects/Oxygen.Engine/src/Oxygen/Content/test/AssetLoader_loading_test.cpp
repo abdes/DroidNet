@@ -5,14 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <iterator>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -29,13 +25,13 @@
 #include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -58,8 +54,6 @@ using testing::NotNull;
 using oxygen::observer_ptr;
 using oxygen::co::Co;
 using oxygen::co::testing::TestEventLoop;
-using oxygen::data::BufferResource;
-using oxygen::data::GeometryAsset;
 using oxygen::data::InputMappingContextAsset;
 using oxygen::data::MaterialAsset;
 using oxygen::data::TextureResource;
@@ -85,19 +79,14 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
   const oxygen::data::AssetKey& key) -> void
 {
   using oxygen::data::AssetType;
-  using oxygen::data::pak::world::SceneAssetDesc;
 
-  SceneAssetDesc desc {};
-  desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
-  auto strings = oxygen::data::DescriptorStringsBuilder {};
-  desc.header.name_offset = strings.Add("LooseScene");
-  desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
-
+  auto scene = oxygen::cooker::testing::SceneDescriptor("LooseScene");
   auto root = LooseCookedRoot { "test" };
   root.Add({
     .type = AssetType::kScene,
     .leaf = "Scenes/LooseScene.scene",
-    .descriptor = oxygen::data::MakeDescriptorBytes(desc, strings),
+    .descriptor = std::move(scene.bytes),
+    .references = std::move(scene.references),
     .key = key,
   });
   oxygen::cooker::testing::Materialize(root.Files(), cooked_root);

@@ -11,6 +11,10 @@ oxygen_cooker_test(
   SOURCES
     "CookedBytes_test.cpp"
     "CookedPak_test.cpp"
+    "DescriptorDefects_test.cpp"
     "LooseCookedRoot_test.cpp"
+    "ModelRecord_test.cpp"
     "PakWorkspace_test.cpp"
+    "PhysicsSidecarBuilder_test.cpp"
+    "SceneBuilder_test.cpp"
 )

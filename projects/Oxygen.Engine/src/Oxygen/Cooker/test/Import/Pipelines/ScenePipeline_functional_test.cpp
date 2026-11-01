@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <span>
 #include <string>
@@ -26,8 +25,8 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Naming.h>
-#include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -57,64 +56,14 @@ namespace {
 //=== Test Helpers
 //===---------------------------------------------------------//
 
-auto ReadSceneDesc(const std::vector<std::byte>& bytes)
+//! The descriptor header of `scene`, for the layout facts the scene's
+//! accessors do not expose.
+auto ReadSceneDesc(const data::SceneAsset& scene)
   -> data::pak::world::SceneAssetDesc
 {
   return oxygen::serio::CopyAt<data::pak::world::SceneAssetDesc>(
-    std::span { bytes })
+    scene.GetRawData())
     .value_or(data::pak::world::SceneAssetDesc {});
-}
-
-auto ReadNodeRecord(const std::vector<std::byte>& bytes,
-  const data::pak::world::SceneAssetDesc& desc, size_t index)
-  -> data::pak::world::NodeRecord
-{
-  const auto offset
-    = desc.nodes.offset + (index * sizeof(data::pak::world::NodeRecord));
-  return oxygen::serio::CopyAt<data::pak::world::NodeRecord>(
-    std::span { bytes }, oxygen::serio::ByteOffset { offset })
-    .value_or(data::pak::world::NodeRecord {});
-}
-
-auto ReadEnvironmentHeader(const std::vector<std::byte>& bytes, size_t offset)
-  -> data::pak::world::SceneEnvironmentBlockHeader
-{
-  return oxygen::serio::CopyAt<data::pak::world::SceneEnvironmentBlockHeader>(
-    std::span { bytes }, oxygen::serio::ByteOffset { offset })
-    .value_or(data::pak::world::SceneEnvironmentBlockHeader {});
-}
-
-auto ReadComponentDirectory(const std::vector<std::byte>& bytes,
-  const data::pak::world::SceneAssetDesc& desc)
-  -> std::vector<data::pak::world::SceneComponentTableDesc>
-{
-  if (desc.component_table_count == 0) {
-    return {};
-  }
-
-  const size_t dir_bytes = static_cast<size_t>(desc.component_table_count)
-    * sizeof(data::pak::world::SceneComponentTableDesc);
-  if (bytes.size() < desc.component_table_directory_offset + dir_bytes) {
-    return {};
-  }
-
-  std::vector<data::pak::world::SceneComponentTableDesc> entries;
-  entries.resize(desc.component_table_count);
-  std::memcpy(entries.data(),
-    std::span(bytes).subspan(desc.component_table_directory_offset).data(),
-    dir_bytes);
-  return entries;
-}
-
-auto ReadRenderableRecord(const std::vector<std::byte>& bytes,
-  const data::pak::world::SceneComponentTableDesc& entry, size_t index)
-  -> data::pak::world::RenderableRecord
-{
-  const auto offset
-    = entry.table.offset + (index * sizeof(data::pak::world::RenderableRecord));
-  return oxygen::serio::CopyAt<data::pak::world::RenderableRecord>(
-    std::span { bytes }, oxygen::serio::ByteOffset { offset })
-    .value_or(data::pak::world::RenderableRecord {});
 }
 
 class ScenePipelineTest : public testing::Test {
@@ -185,20 +134,20 @@ NOLINT_TEST_F(ScenePipelineTest, CollectMinimalSceneBuildsDescriptor)
   ASSERT_TRUE(result.success);
   ASSERT_HAS_VALUE(result.cooked)
     << "Expected result.cooked to contain a value";
-  const auto& bytes = result.cooked->descriptor_bytes;
-  const auto desc = ReadSceneDesc(bytes);
-  EXPECT_EQ(desc.nodes.count, 1U);
-  EXPECT_EQ(desc.component_table_count, 0U);
+  const auto scene
+    = data::SceneAsset(data::AssetKey {}, result.cooked->descriptor_bytes);
+  ASSERT_EQ(scene.GetNodes().size(), 1U);
+  EXPECT_EQ(ReadSceneDesc(scene).component_table_count, 0U);
 
-  const auto node = ReadNodeRecord(bytes, desc, 0);
+  const auto& node = scene.GetNode(0U);
   EXPECT_EQ(node.parent_index, 0U);
   EXPECT_NE(node.scene_name_offset, 0U);
+  EXPECT_EQ(scene.GetNodeName(node), "Root");
 
-  const auto env_header_offset
-    = bytes.size() - sizeof(data::pak::world::SceneEnvironmentBlockHeader);
-  const auto env_header = ReadEnvironmentHeader(bytes, env_header_offset);
-  EXPECT_EQ(env_header.systems_count, 0U);
-  EXPECT_EQ(env_header.byte_size,
+  const auto* env_header = scene.GetEnvironmentBlockHeader();
+  ASSERT_NE(env_header, nullptr);
+  EXPECT_EQ(env_header->systems_count, 0U);
+  EXPECT_EQ(env_header->byte_size,
     sizeof(data::pak::world::SceneEnvironmentBlockHeader));
 }
 
@@ -266,25 +215,20 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
   ASSERT_TRUE(result.success);
   ASSERT_HAS_VALUE(result.cooked)
     << "Expected result.cooked to contain a value";
-  const auto& bytes = result.cooked->descriptor_bytes;
-  const auto desc = ReadSceneDesc(bytes);
+  const auto scene
+    = data::SceneAsset(data::AssetKey {}, result.cooked->descriptor_bytes);
+  const auto desc = ReadSceneDesc(scene);
   EXPECT_EQ(desc.component_table_count, 1U);
   EXPECT_EQ(desc.component_table_directory_offset,
     desc.header.strings.offset + desc.header.strings.size);
 
-  const auto entries = ReadComponentDirectory(bytes, desc);
-  ASSERT_EQ(entries.size(), 1U);
-  EXPECT_EQ(entries.at(0).component_type,
-    static_cast<uint32_t>(data::ComponentType::kRenderable));
-  EXPECT_EQ(
-    entries.at(0).table.entry_size, sizeof(data::pak::world::RenderableRecord));
-  EXPECT_EQ(entries.at(0).table.count, 2U);
-
-  const auto renderable0 = ReadRenderableRecord(bytes, entries.at(0), 0);
-  const auto renderable1 = ReadRenderableRecord(bytes, entries.at(0), 1);
-  EXPECT_LT(renderable0.node_index, renderable1.node_index);
-  EXPECT_EQ(renderable0.geometry_key, MakeFirstByteAssetKey(43U));
-  EXPECT_EQ(renderable1.geometry_key, MakeFirstByteAssetKey(42U));
+  // The one table is the renderables', of the record's entry size.
+  const auto renderables
+    = scene.GetComponents<data::pak::world::RenderableRecord>();
+  ASSERT_EQ(renderables.size(), 2U);
+  EXPECT_LT(renderables[0].node_index, renderables[1].node_index);
+  EXPECT_EQ(renderables[0].geometry_key, MakeFirstByteAssetKey(43U));
+  EXPECT_EQ(renderables[1].geometry_key, MakeFirstByteAssetKey(42U));
 }
 
 NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
@@ -333,14 +277,15 @@ NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
   ASSERT_HAS_VALUE(result.cooked)
     << "Expected result.cooked to contain a value";
 
-  const auto& bytes = result.cooked->descriptor_bytes;
+  const auto scene
+    = data::SceneAsset(data::AssetKey {}, result.cooked->descriptor_bytes);
   const auto header_size
     = sizeof(data::pak::world::SceneEnvironmentBlockHeader);
   const auto record_size = sizeof(data::pak::world::FogEnvironmentRecord);
-  const auto env_header_offset = bytes.size() - header_size - record_size;
-  const auto env_header = ReadEnvironmentHeader(bytes, env_header_offset);
-  EXPECT_EQ(env_header.systems_count, 1U);
-  EXPECT_EQ(env_header.byte_size, header_size + record_size);
+  const auto* env_header = scene.GetEnvironmentBlockHeader();
+  ASSERT_NE(env_header, nullptr);
+  EXPECT_EQ(env_header->systems_count, 1U);
+  EXPECT_EQ(env_header->byte_size, header_size + record_size);
 }
 
 } // namespace

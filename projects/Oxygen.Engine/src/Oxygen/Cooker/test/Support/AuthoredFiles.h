@@ -14,10 +14,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
-#include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Data/MaterialAsset.h>
 
 //! The one writer of each authored format in the Cooker tests.
@@ -344,29 +342,6 @@ public:
   {
     return Append(
       "/renderables", { { "node", node }, { "geometry_ref", Spell(target) } });
-  }
-};
-
-//! A model import record (`<identity>.import.json`) of the model `identity`
-//! that imports the file `source`, a mount path, with default settings and a
-//! fresh source identity. A record the product writes comes from
-//! `ModelImportRecord::Save`; this writer is for hand-shaped records only.
-class ModelImportRecordDocument final
-  : public AuthoredDocument<ModelImportRecordDocument> {
-public:
-  ModelImportRecordDocument(
-    const std::string& identity, const std::string_view source)
-    : AuthoredDocument(identity,
-        {
-          {
-            "schema_version",
-            content::import::ModelImportRecord::kSchemaVersion,
-          },
-          { "source", SpellReference(identity, source) },
-          { "settings", nlohmann::json::object() },
-          { "source_identity", Uuid::Generate().ToString() },
-        })
-  {
   }
 };
 

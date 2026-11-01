@@ -21,6 +21,8 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -223,8 +225,22 @@ auto LooseCookedRoot::Scene(const std::string_view leaf) -> data::AssetKey
   });
 }
 
-auto LooseCookedRoot::PhysicsSidecar(
-  const std::string_view leaf, const data::AssetKey& scene) -> data::AssetKey
+auto LooseCookedRoot::Scene(
+  const std::string_view leaf, const SceneBuilder& scene) -> data::AssetKey
+{
+  const auto key = Add({
+    .type = data::AssetType::kScene,
+    .leaf = std::string(leaf),
+    .descriptor = scene.Bytes(),
+    .references = scene.References(),
+  });
+  scene_builders_.insert_or_assign(key, scene.Owner());
+  return key;
+}
+
+auto LooseCookedRoot::PhysicsSidecar(const std::string_view leaf,
+  const data::AssetKey& scene, const PhysicsSidecarBuilder& bindings)
+  -> data::AssetKey
 {
   const auto held
     = std::ranges::find_if(assets_, [&scene](const LooseAsset& asset) -> bool {
@@ -234,10 +250,20 @@ auto LooseCookedRoot::PhysicsSidecar(
     throw std::invalid_argument("no scene '" + to_string(scene)
       + "' for the physics sidecar '" + std::string(leaf) + "'");
   }
+  const auto builder = scene_builders_.find(scene);
+  if (bindings.Owner().has_value()
+    && (builder == scene_builders_.end()
+      || *bindings.Owner() != builder->second)) {
+    throw std::invalid_argument("the bindings of the physics sidecar '"
+      + std::string(leaf) + "' name the nodes of another scene");
+  }
+  auto descriptor
+    = PhysicsSidecarDescriptor(scene, held->descriptor, bindings, NameOf(leaf));
   return Add({
     .type = data::AssetType::kPhysicsScene,
     .leaf = std::string(leaf),
-    .descriptor = PhysicsSidecarDescriptor(scene, held->descriptor).bytes,
+    .descriptor = std::move(descriptor.bytes),
+    .references = std::move(descriptor.references),
   });
 }
 

@@ -70,6 +70,7 @@ m_gtest_program(
 target_link_libraries(
   "${META_MODULE_NAME}.All.Tests"
   PRIVATE
+    oxygen::cooker::testing
     oxygen::serio::testing
 )
 
@@ -79,4 +80,10 @@ m_gtest_program(
     "SceneChanges_test.cpp"
     "SceneComposition_test.cpp"
     "SceneSchema_test.cpp"
+)
+
+target_link_libraries(
+  "${META_MODULE_NAME}.SceneSchema.Tests"
+  PRIVATE
+    oxygen::cooker::testing
 )

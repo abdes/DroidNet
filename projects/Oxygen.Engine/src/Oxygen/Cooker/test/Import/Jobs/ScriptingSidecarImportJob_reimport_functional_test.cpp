@@ -8,8 +8,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <optional>
 #include <span>
@@ -32,7 +30,6 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneIds.h>
-#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -627,8 +624,6 @@ namespace {
   NOLINT_TEST_F(ScriptingSidecarImportJobReimportTest,
     ScenePatchPreservesNodeAndStringTables)
   {
-    using data::pak::world::SceneAssetDesc;
-
     const ScopedTempDir temp;
     const auto cooked_root
       = temp.Path() / "script_sidecar_scene_patch_preserves_core_tables";
@@ -642,57 +637,18 @@ namespace {
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
     ASSERT_HAS_VALUE(script_asset) << "Expected script asset to be present";
 
-    const auto before_scene_bytes
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
-    ASSERT_GE(before_scene_bytes.size(), sizeof(SceneAssetDesc));
-
+    // The scene's node table and string table, as the product reads them.
     const auto ExtractCoreTables = [](const std::vector<std::byte>& bytes)
-      -> std::optional<
-        std::pair<std::vector<std::byte>, std::vector<std::byte>>> {
-      const auto desc_read
-        = oxygen::serio::CopyAt<SceneAssetDesc>(std::span { bytes });
-      if (!desc_read) {
-        return std::nullopt;
-      }
-      const auto& desc = *desc_read;
-      const auto range_ok
-        = [&](const uint64_t offset, const uint64_t size) -> bool {
-        return offset <= bytes.size() && size <= (bytes.size() - offset);
-      };
-
-      const auto node_size = static_cast<uint64_t>(desc.nodes.count)
-        * static_cast<uint64_t>(desc.nodes.entry_size);
-      const auto string_size = static_cast<uint64_t>(desc.header.strings.size);
-      if (!range_ok(desc.nodes.offset, node_size)
-        || !range_ok(desc.header.strings.offset, string_size)) {
-        return std::nullopt;
-      }
-
-      auto nodes = std::vector<std::byte> {};
-      nodes.resize(static_cast<size_t>(node_size));
-      if (!nodes.empty()) {
-        std::memcpy(nodes.data(),
-          std::span(bytes)
-            .subspan(static_cast<size_t>(desc.nodes.offset))
-            .data(),
-          nodes.size());
-      }
-
-      auto strings = std::vector<std::byte> {};
-      strings.resize(static_cast<size_t>(string_size));
-      if (!strings.empty()) {
-        std::memcpy(strings.data(),
-          std::span(bytes)
-            .subspan(static_cast<size_t>(desc.header.strings.offset))
-            .data(),
-          strings.size());
-      }
-      return std::make_optional(
-        std::make_pair(std::move(nodes), std::move(strings)));
+      -> std::pair<std::vector<std::byte>, std::vector<std::byte>> {
+      const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
+      const auto nodes = std::as_bytes(scene.GetNodes());
+      const auto strings = std::as_bytes(scene.GetStrings().Bytes());
+      return { std::vector<std::byte>(nodes.begin(), nodes.end()),
+        std::vector<std::byte>(strings.begin(), strings.end()) };
     };
 
-    const auto core_before = ExtractCoreTables(before_scene_bytes);
-    ASSERT_HAS_VALUE(core_before) << "Expected core before to be present";
+    const auto core_before = ExtractCoreTables(
+      ReadBytes(cooked_root / scene_asset->descriptor_relpath));
 
     const auto sidecar_source
       = cooked_root / "input" / "patch_guard_sidecar.json";
@@ -706,17 +662,15 @@ namespace {
                        }))
         .success);
 
-    const auto after_scene_bytes
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
-    const auto core_after = ExtractCoreTables(after_scene_bytes);
-    ASSERT_HAS_VALUE(core_after) << "Expected core after to be present";
+    const auto core_after = ExtractCoreTables(
+      ReadBytes(cooked_root / scene_asset->descriptor_relpath));
 
     // Nodes are untouched; the slot parameters' strings join the string
     // table after the strings already there, which keep their offsets.
-    EXPECT_EQ(core_before->first, core_after->first);
-    ASSERT_GE(core_after->second.size(), core_before->second.size());
-    EXPECT_TRUE(std::ranges::equal(core_before->second,
-      std::span(core_after->second).first(core_before->second.size())));
+    EXPECT_EQ(core_before.first, core_after.first);
+    ASSERT_GE(core_after.second.size(), core_before.second.size());
+    EXPECT_TRUE(std::ranges::equal(core_before.second,
+      std::span(core_after.second).first(core_before.second.size())));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobReimportTest,

@@ -21,7 +21,6 @@
 
 #include "PakSceneTestSupport.h"
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
@@ -34,13 +33,13 @@
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_render.h>
-#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
@@ -435,7 +434,7 @@ NOLINT_TEST(PakPlanBuilderPatchTest, PatchPreservesSceneLocalScriptDescriptor)
     { workspace.Add(scripts.root) }, { scripts.root.BaseCatalog() }));
 
   EXPECT_THAT(packed.Descriptor(scripts.scene),
-    BytesEqual(pak::test::BuildSceneDescriptorWithScriptingSlots(1U)));
+    BytesEqual(pak::test::BuildScriptsScene(1U).Bytes()));
 }
 
 //! A patch of a pak over that pak's own catalog changes nothing.
@@ -444,7 +443,7 @@ NOLINT_TEST(PakPlanBuilderPatchTest, UnchangedPatchEmitsNoAssets)
   auto workspace = PakWorkspace {};
   const auto full = workspace.FullRequest(
     { workspace.Add(pak::test::MakeSceneMask(1U).root) }, "scene.pak");
-  const auto base = workspace.Pack(full);
+  const auto base = oxygen::cooker::testing::PakWorkspace::Pack(full);
   ASSERT_THAT(base.Diagnostics(), HasNoErrors());
   const auto request
     = workspace.PatchRequest({ PakWorkspace::PakSource(full.output_pak_path) },
@@ -473,14 +472,14 @@ protected:
   auto Pack(const pak::PakBuildRequest& request)
     -> pak::PakPlanBuilder::BuildResult
   {
-    const auto packed = workspace_.Pack(request);
+    const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);
     EXPECT_THAT(packed.Diagnostics(), HasNoErrors());
     EXPECT_TRUE(packed.written.has_value());
     return packed.planned;
   }
 
   //! Exports the pak `request` published; returns where it is on disk.
-  auto Export(const pak::PakBuildRequest& request) const
+  [[nodiscard]] auto Export(const pak::PakBuildRequest& request) const
     -> std::filesystem::path
   {
     const auto disk_path

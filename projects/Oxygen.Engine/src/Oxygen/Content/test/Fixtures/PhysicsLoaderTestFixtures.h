@@ -7,15 +7,18 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "LoaderTestFixtures.h"
 
 #include <Oxygen/Content/LoaderContext.h>
-#include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -31,33 +34,6 @@ protected:
   using MemoryStream = oxygen::serio::MemoryStream;
   using Reader = oxygen::serio::Reader<MemoryStream>;
   using Writer = oxygen::serio::Writer<MemoryStream>;
-
-  template <typename T>
-  static auto WriteAs(Writer& writer, const T& value) -> void
-  {
-    const auto result = writer.WriteBlob(std::span<const std::byte>(
-      reinterpret_cast<const std::byte*>(&value), sizeof(T)));
-    ASSERT_TRUE(result) << result.error().message();
-  }
-
-  //! Ends the descriptor written so far with an empty string table and
-  //! records its location in the descriptor's header.
-  static auto WriteEmptyStringTable(Writer& writer, MemoryStream& stream)
-    -> void
-  {
-    const auto end = writer.Position();
-    ASSERT_TRUE(end);
-    const auto strings = data::DescriptorStringsBuilder {};
-    ASSERT_TRUE(writer.WriteBlob(strings.Bytes()));
-    const auto table = data::pak::core::DescriptorStringTable {
-      .offset = static_cast<data::pak::core::StringTableOffsetT>(*end),
-      .size = strings.Size(),
-    };
-    ASSERT_TRUE(stream.Seek(oxygen::serio::ByteOffset {
-      offsetof(data::pak::core::AssetHeader, strings) }));
-    ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { &table, 1U })));
-    ASSERT_TRUE(stream.Seek(oxygen::serio::ByteOffset { stream.Size().get() }));
-  }
 };
 
 class PhysicsResourceFixtureBase : public PhysicsLoaderFixtureBase {
@@ -93,8 +69,7 @@ protected:
     const uint8_t fill) -> void
   {
     auto packed_desc = desc_writer_.ScopedAlignment(1);
-    const auto desc_bytes = std::span<const std::byte>(
-      reinterpret_cast<const std::byte*>(&desc), sizeof(desc));
+    const auto desc_bytes = std::as_bytes(std::span { &desc, 1U });
     const auto desc_result = desc_writer_.WriteBlob(desc_bytes);
     if (!desc_result) {
       throw std::runtime_error(
@@ -158,43 +133,44 @@ protected:
     };
   }
 
-  auto MakeMinimalDesc() -> pak7::PhysicsSceneAssetDesc
+  //! The key of the scene the sidecars of this fixture pair with.
+  static auto SceneKey() -> oxygen::data::AssetKey
   {
-    pak7::PhysicsSceneAssetDesc desc {};
-    desc.header.asset_type
-      = static_cast<uint8_t>(oxygen::data::AssetType::kPhysicsScene);
-    desc.header.version = pak7::kPhysicsSceneAssetVersion;
-    desc.component_table_count = 0;
-    desc.component_table_directory_offset = 0;
-    desc.target_scene_key
-      = oxygen::data::AssetKey::FromVirtualPath("/test/PhysicsScene.oscene");
-    return desc;
+    return oxygen::data::AssetKey::FromVirtualPath("/test/PhysicsScene.oscene");
   }
 
-  auto WriteOneRigidBodyTable(pak7::RigidBodyBindingRecord record = {}) -> void
+  //! Adds `count` nodes to the scene the sidecars pair with.
+  auto AddNodes(const uint32_t count) -> void
   {
-    pak7::PhysicsSceneAssetDesc desc = MakeMinimalDesc();
-    desc.component_table_count = 1;
+    for (uint32_t i = 0; i < count; ++i) {
+      nodes_.push_back(scene_.Node("node" + std::to_string(nodes_.size())));
+    }
+  }
 
-    constexpr uint32_t kDirOffset = sizeof(pak7::PhysicsSceneAssetDesc);
-    constexpr uint32_t kTableOffset
-      = kDirOffset + sizeof(pak7::PhysicsComponentTableDesc);
+  [[nodiscard]] auto NodeAt(const size_t index) const
+    -> oxygen::cooker::testing::SceneNode
+  {
+    return nodes_.at(index);
+  }
 
-    desc.component_table_directory_offset = kDirOffset;
+  //! The sidecar of the fixture's scene holding `bindings`.
+  [[nodiscard]] auto SidecarBytes(
+    const oxygen::cooker::testing::PhysicsSidecarBuilder& bindings = {}) const
+    -> std::vector<std::byte>
+  {
+    return bindings.Bytes(SceneKey(), scene_.Bytes(), "PhysicsScene");
+  }
 
-    pak7::PhysicsComponentTableDesc entry {};
-    entry.binding_type = pak7::PhysicsBindingType::kRigidBody;
-    entry.table.offset = kTableOffset;
-    entry.table.count = 1;
-    entry.table.entry_size = sizeof(pak7::RigidBodyBindingRecord);
-
-    WriteAs(writer_, desc);
-    WriteAs(writer_, entry);
-    WriteAs(writer_, record);
-    WriteEmptyStringTable(writer_, stream_);
+  //! Writes `bytes` as the descriptor the loader reads.
+  auto WriteBytes(const std::span<const std::byte> bytes) -> void
+  {
+    const auto written = writer_.WriteBlob(bytes);
+    ASSERT_TRUE(written) << written.error().message();
     ASSERT_TRUE(writer_.Flush()) << "Flush failed";
   }
 
+  oxygen::cooker::testing::SceneBuilder scene_ { "PhysicsScene" };
+  std::vector<oxygen::cooker::testing::SceneNode> nodes_;
   MemoryStream stream_;
   Writer writer_;
   Reader reader_;

@@ -6,9 +6,7 @@
 
 #include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -24,7 +22,6 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Config/PathFinder.h>
@@ -34,13 +31,14 @@
 #include <Oxygen/Content/ResidencyPin.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/ComponentType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/InputActionAsset.h>
@@ -56,7 +54,6 @@
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneIds.h>
-#include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
@@ -78,13 +75,6 @@ namespace oxygen::examples::testing {
 
 namespace {
   namespace pakw = data::pak::world;
-  namespace pakp = data::pak::physics;
-
-  // Scene string tables used by the descriptor builders start with the empty
-  // name; each node name offset points just past the previous name.
-  constexpr uint32_t kRootNameOffset = 1U;
-  constexpr uint32_t kSecondNameOffset = 6U; // after "\0Root\0"
-  constexpr uint32_t kThirdNameOffset = 16U; // after "\0Root\0Inherited\0"
 
   // Values the descriptor builders write and the hydration tests read back.
   constexpr float kFogRadialExtinction = 0.3F;
@@ -113,87 +103,23 @@ namespace {
   };
   constexpr auto kRuntimeSceneCapacity = 64U;
 
-  template <typename T>
-  auto AppendRecord(std::vector<std::byte>& bytes, const T& record) -> void
+  //! A scene of `node_count` nodes, the first the root of the others.
+  auto MinimalScene(const uint32_t node_count) -> cooker::testing::SceneBuilder
   {
-    const auto view = std::as_bytes(std::span(&record, 1));
-    bytes.insert(bytes.end(), view.begin(), view.end());
-  }
-
-  auto AppendText(std::vector<std::byte>& bytes, std::string_view text) -> void
-  {
-    const auto view = std::as_bytes(std::span(text));
-    bytes.insert(bytes.end(), view.begin(), view.end());
-  }
-
-  auto BuildMinimalSceneDescriptorBytes(const uint32_t node_count)
-    -> std::vector<std::byte>
-  {
-    auto desc = pakw::SceneAssetDesc {};
-    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
-    desc.header.version = pakw::kSceneAssetVersion;
-    desc.nodes.offset = static_cast<data::pak::core::OffsetT>(sizeof(desc));
-    desc.nodes.count = node_count;
-    desc.nodes.entry_size = sizeof(pakw::NodeRecord);
-    const auto nodes_bytes
-      = static_cast<size_t>(node_count) * sizeof(pakw::NodeRecord);
-    desc.header.strings.offset
-      = static_cast<data::pak::core::StringTableOffsetT>(
-        desc.nodes.offset + static_cast<data::pak::core::OffsetT>(nodes_bytes));
-    desc.header.strings.size = 1;
-
-    auto bytes = std::vector<std::byte> {};
-    AppendRecord(bytes, desc);
-    for (uint32_t i = 0; i < node_count; ++i) {
-      auto node = pakw::NodeRecord {};
-      node.node_id
-        = data::NodeId::FromStableIdentity("/test/node/" + std::to_string(i));
-      AppendRecord(bytes, node);
+    auto builder = cooker::testing::SceneBuilder { "Minimal" };
+    const auto root = builder.Node("Root");
+    for (uint32_t i = 1U; i < node_count; ++i) {
+      builder.Node("Node" + std::to_string(i), root);
     }
-    AppendText(bytes, std::string_view("\0", 1));
-    return bytes;
+    return builder;
   }
 
-  auto BuildSceneDescriptorBytesWithLocalFog() -> std::vector<std::byte>
+  auto SceneWithLocalFog() -> cooker::testing::SceneBuilder
   {
-    auto desc = pakw::SceneAssetDesc {};
-    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
-    desc.header.version = pakw::kSceneAssetVersion;
-    desc.nodes.offset = static_cast<data::pak::core::OffsetT>(sizeof(desc));
-    desc.nodes.count = 2U;
-    desc.nodes.entry_size = sizeof(pakw::NodeRecord);
-
-    auto root = pakw::NodeRecord {};
-    root.node_id = data::NodeId::FromStableIdentity("/test/root");
-    root.parent_index = 0U;
-    root.scene_name_offset = kRootNameOffset;
-
-    auto fog_node = pakw::NodeRecord {};
-    fog_node.node_id = data::NodeId::FromStableIdentity("/test/fog");
-    fog_node.parent_index = 0U;
-    fog_node.scene_name_offset = kSecondNameOffset;
-
-    constexpr auto strings = std::string_view("\0Root\0FogNode\0", 14);
-    const auto nodes_bytes = sizeof(root) + sizeof(fog_node);
-    desc.header.strings.offset
-      = static_cast<data::pak::core::StringTableOffsetT>(
-        desc.nodes.offset + nodes_bytes);
-    desc.header.strings.size
-      = static_cast<data::pak::core::StringTableSizeT>(strings.size());
-    desc.component_table_directory_offset
-      = desc.header.strings.offset + desc.header.strings.size;
-    desc.component_table_count = 1U;
-
-    auto table_desc = pakw::SceneComponentTableDesc {};
-    table_desc.component_type
-      = static_cast<uint32_t>(data::ComponentType::kLocalFogVolume);
-    table_desc.table.offset = desc.component_table_directory_offset
-      + static_cast<data::pak::core::OffsetT>(sizeof(table_desc));
-    table_desc.table.count = 1U;
-    table_desc.table.entry_size = sizeof(pakw::LocalFogVolumeRecord);
-
-    auto local_fog = pakw::LocalFogVolumeRecord {};
-    local_fog.node_index = 1U;
+    auto builder = cooker::testing::SceneBuilder { "LocalFog" };
+    const auto root = builder.Node("Root");
+    const auto fog_node = builder.Node("FogNode", root);
+    auto local_fog = cooker::testing::SceneBuilder::DefaultLocalFogVolume();
     local_fog.enabled = 1U;
     local_fog.radial_fog_extinction = kFogRadialExtinction;
     local_fog.height_fog_extinction = kFogHeightExtinction;
@@ -203,87 +129,32 @@ namespace {
     std::ranges::copy(kFogAlbedo, std::begin(local_fog.fog_albedo));
     std::ranges::copy(kFogEmissive, std::begin(local_fog.fog_emissive));
     local_fog.sort_priority = kFogSortPriority;
-
-    auto bytes = std::vector<std::byte> {};
-    AppendRecord(bytes, desc);
-    AppendRecord(bytes, root);
-    AppendRecord(bytes, fog_node);
-    AppendText(bytes, strings);
-    AppendRecord(bytes, table_desc);
-    AppendRecord(bytes, local_fog);
-    return bytes;
+    builder.LocalFogVolume(fog_node, local_fog);
+    return builder;
   }
 
-  auto BuildSceneDescriptorBytesWithFlagModes() -> std::vector<std::byte>
+  auto SceneWithFlagModes() -> cooker::testing::SceneBuilder
   {
-    auto descriptor = pakw::SceneAssetDesc {};
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kScene);
-    descriptor.header.version = pakw::kSceneAssetVersion;
-    descriptor.nodes.offset = sizeof(descriptor);
-    descriptor.nodes.count = 3U;
-    descriptor.nodes.entry_size = sizeof(pakw::NodeRecord);
-    auto nodes = std::array<pakw::NodeRecord, 3> {};
-    for (size_t i = 0; i < nodes.size(); ++i) {
-      nodes.at(i).node_id
-        = data::NodeId::FromStableIdentity("/test/node/" + std::to_string(i));
-    }
-    nodes.at(0).scene_name_offset = kRootNameOffset;
-    nodes.at(1).scene_name_offset = kSecondNameOffset;
-    nodes.at(1).inherited_flags = pakw::kSceneNodeFlags_Inheritable;
-    nodes.at(2).scene_name_offset = kThirdNameOffset;
-    nodes.at(2).node_flags = pakw::kSceneNodeFlag_Visible;
-    nodes.at(2).inherited_flags = pakw::kSceneNodeFlag_ReceivesShadows;
-    constexpr auto strings = std::string_view("\0Root\0Inherited\0Local\0", 22);
-    descriptor.header.strings.offset = sizeof(descriptor) + sizeof(nodes);
-    descriptor.header.strings.size = static_cast<uint32_t>(strings.size());
-    auto bytes = std::vector<std::byte> {};
-    AppendRecord(bytes, descriptor);
-    AppendRecord(bytes, nodes);
-    AppendText(bytes, strings);
-    return bytes;
+    auto builder = cooker::testing::SceneBuilder { "FlagModes" };
+    const auto root = builder.Node("Root");
+    const auto inherited = builder.Node("Inherited", root);
+    const auto local = builder.Node("Local", root);
+    builder.Flags(inherited,
+      { .values = 0U, .inherited = pakw::kSceneNodeFlags_Inheritable });
+    builder.Flags(local,
+      {
+        .values = pakw::kSceneNodeFlag_Visible,
+        .inherited = pakw::kSceneNodeFlag_ReceivesShadows,
+      });
+    return builder;
   }
 
-  auto BuildSceneDescriptorBytesWithDirectionalLight() -> std::vector<std::byte>
+  auto SceneWithDirectionalLight() -> cooker::testing::SceneBuilder
   {
-    auto desc = pakw::SceneAssetDesc {};
-    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
-    desc.header.version = pakw::kSceneAssetVersion;
-    desc.nodes.offset = static_cast<data::pak::core::OffsetT>(sizeof(desc));
-    desc.nodes.count = 2U;
-    desc.nodes.entry_size = sizeof(pakw::NodeRecord);
-
-    auto root = pakw::NodeRecord {};
-    root.node_id = data::NodeId::FromStableIdentity("/test/root");
-    root.parent_index = 0U;
-    root.scene_name_offset = kRootNameOffset;
-
-    auto sun_node = pakw::NodeRecord {};
-    sun_node.node_id = data::NodeId::FromStableIdentity("/test/sun");
-    sun_node.parent_index = 0U;
-    sun_node.scene_name_offset = kSecondNameOffset;
-
-    constexpr auto strings = std::string_view("\0Root\0SunNode\0", 14);
-    const auto nodes_bytes = sizeof(root) + sizeof(sun_node);
-    desc.header.strings.offset
-      = static_cast<data::pak::core::StringTableOffsetT>(
-        desc.nodes.offset + nodes_bytes);
-    desc.header.strings.size
-      = static_cast<data::pak::core::StringTableSizeT>(strings.size());
-    desc.component_table_directory_offset
-      = desc.header.strings.offset + desc.header.strings.size;
-    desc.component_table_count = 1U;
-
-    auto table_desc = pakw::SceneComponentTableDesc {};
-    table_desc.component_type
-      = static_cast<uint32_t>(data::ComponentType::kDirectionalLight);
-    table_desc.table.offset = desc.component_table_directory_offset
-      + static_cast<data::pak::core::OffsetT>(sizeof(table_desc));
-    table_desc.table.count = 1U;
-    table_desc.table.entry_size = sizeof(pakw::DirectionalLightRecord);
-
-    auto directional = pakw::MakeDefaultRecord<pakw::DirectionalLightRecord>();
-    directional.node_index = 1U;
+    auto builder = cooker::testing::SceneBuilder { "Sun" };
+    const auto root = builder.Node("Root");
+    const auto sun_node = builder.Node("SunNode", root);
+    auto directional = cooker::testing::SceneBuilder::DefaultDirectionalLight();
     directional.common.casts_shadows = 1U;
     directional.common.shadow.bias = kSunShadowBias;
     directional.common.shadow.normal_bias = kSunShadowNormalBias;
@@ -300,15 +171,8 @@ namespace {
     directional.transition_fraction = kSunTransitionFraction;
     directional.distance_fadeout_fraction = kSunFadeoutFraction;
     directional.intensity_lux = kSunIntensityLux;
-
-    auto bytes = std::vector<std::byte> {};
-    AppendRecord(bytes, desc);
-    AppendRecord(bytes, root);
-    AppendRecord(bytes, sun_node);
-    AppendText(bytes, strings);
-    AppendRecord(bytes, table_desc);
-    AppendRecord(bytes, directional);
-    return bytes;
+    builder.DirectionalLight(sun_node, directional);
+    return builder;
   }
 
   //! Assets a renderable material override scene refers to.
@@ -317,78 +181,20 @@ namespace {
     data::AssetKey material;
   };
 
-  auto BuildSceneDescriptorBytesWithRenderableMaterialOverride(
-    const RenderableOverrideKeys& keys, const data::GeometryAsset& geometry)
-    -> std::vector<std::byte>
+  auto SceneWithRenderableMaterialOverride(const RenderableOverrideKeys& keys,
+    const data::GeometryAsset& geometry) -> cooker::testing::SceneBuilder
   {
-    auto desc = pakw::SceneAssetDesc {};
-    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
-    desc.header.version = pakw::kSceneAssetVersion;
-    desc.nodes = {
-      .offset = sizeof(desc),
-      .count = 2,
-      .entry_size = sizeof(pakw::NodeRecord),
-    };
-    auto root = pakw::NodeRecord {};
-    root.node_id = data::NodeId::FromStableIdentity("/test/root");
-    root.scene_name_offset = kRootNameOffset;
-    auto mesh_node = pakw::NodeRecord {};
-    mesh_node.node_id = data::NodeId::FromStableIdentity("/test/mesh");
-    mesh_node.parent_index = 0;
-    mesh_node.scene_name_offset = kSecondNameOffset;
-    constexpr auto strings = std::string_view("\0Root\0MeshNode\0", 15);
-    desc.header.strings = {
-      .offset = static_cast<data::pak::core::StringTableOffsetT>(
-        desc.nodes.offset + sizeof(root) + sizeof(mesh_node)),
-      .size = static_cast<data::pak::core::StringTableSizeT>(strings.size()),
-    };
-    desc.component_table_directory_offset
-      = desc.header.strings.offset + desc.header.strings.size;
-    desc.component_table_count = 2;
-    const auto record_offset = desc.component_table_directory_offset
-      + (2 * sizeof(pakw::SceneComponentTableDesc));
-    const auto tables = std::array {
-      pakw::SceneComponentTableDesc {
-        .component_type
-        = static_cast<uint32_t>(data::ComponentType::kRenderable),
-        .table = { .offset = record_offset,
-          .count = 1,
-          .entry_size = sizeof(pakw::RenderableRecord), },
-      },
-      pakw::SceneComponentTableDesc {
-        .component_type
-        = static_cast<uint32_t>(data::ComponentType::kOverride),
-        .table = { .offset = record_offset + sizeof(pakw::RenderableRecord),
-          .count = 1,
-          .entry_size = sizeof(pakw::OverrideRecord), },
-      },
-    };
-    const auto renderable = pakw::RenderableRecord {
-      .node_index = 1,
-      .geometry_key = keys.geometry,
-    };
+    auto builder = cooker::testing::SceneBuilder { "MaterialOverride" };
+    const auto root = builder.Node("Root");
+    const auto mesh_node = builder.Node("MeshNode", root);
+    builder.Renderable(mesh_node, keys.geometry);
     const auto& inventory = geometry.Surfaces();
-    auto assignment = pakw::OverrideRecord {
-      .target = { .node_index = 1 },
-      .override_id = data::schema::OverrideId::kGeometrySurfaceMaterial,
-      .part_id = inventory.surfaces.at(0).surface_id,
-      .layout_revision = inventory.layout_revision,
-    };
-    assignment.value.as_asset = keys.material;
-    auto environment = pakw::SceneEnvironmentBlockHeader {};
-    environment.byte_size = sizeof(environment);
-    auto bytes = std::vector<std::byte> {};
-    AppendRecord(bytes, desc);
-    AppendRecord(bytes, root);
-    AppendRecord(bytes, mesh_node);
-    AppendText(bytes, strings);
-    for (const auto& table : tables) {
-      AppendRecord(bytes, table);
-    }
-    AppendRecord(bytes, renderable);
-    AppendRecord(bytes, assignment);
-    AppendRecord(bytes, environment);
-    return bytes;
+    auto assignment = pakw::OverrideValue {};
+    assignment.as_asset = keys.material;
+    builder.Override(mesh_node,
+      data::schema::OverrideId::kGeometrySurfaceMaterial, assignment,
+      inventory.surfaces.at(0).surface_id, inventory.layout_revision);
+    return builder;
   }
 
   auto BuildSingleSubmeshGeometry(
@@ -469,23 +275,6 @@ namespace {
     }
 
     return std::nullopt;
-  }
-
-  auto BuildMinimalPhysicsSidecarDescriptorBytes(
-    const data::AssetKey& scene_key, const uint32_t node_count,
-    const base::Sha256Digest& scene_hash) -> std::vector<std::byte>
-  {
-    auto desc = pakp::PhysicsSceneAssetDesc {};
-    desc.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
-    desc.header.version = pakp::kPhysicsSceneAssetVersion;
-    desc.target_scene_key = scene_key;
-    desc.target_node_count = node_count;
-    std::ranges::copy(scene_hash, std::begin(desc.target_scene_content_hash));
-    desc.component_table_count = 0;
-    desc.component_table_directory_offset = 0;
-
-    return data::MakeDescriptorBytes(desc);
   }
 
   class SceneLoaderTestAssetLoader final : public content::IAssetLoader {
@@ -1054,17 +843,24 @@ namespace {
   auto StartLoadWithSidecar(SceneLoaderTestAssetLoader& loader,
     const SidecarTarget& target) -> std::shared_ptr<SceneLoaderService>
   {
-    auto scene = std::make_shared<data::SceneAsset>(
-      SceneKey(), BuildMinimalSceneDescriptorBytes(1U));
-    auto hash = base::ComputeSha256(scene->GetRawData());
+    using cooker::testing::DescriptorDefects;
+    auto scene = MinimalScene(1U).Build(SceneKey());
+    auto sidecar = cooker::testing::PhysicsSidecarDescriptor(
+      SceneKey(), scene->GetRawData())
+                     .bytes;
     if (!target.matches_content) {
-      hash.at(0) = static_cast<std::uint8_t>(~hash.at(0));
+      DescriptorDefects::CorruptSidecarSceneHash(sidecar);
+    }
+    if (target.scene_key != SceneKey()) {
+      DescriptorDefects::SetSidecarScene(sidecar, target.scene_key);
+    }
+    if (target.node_count != 1U) {
+      DescriptorDefects::SetSidecarNodeCount(sidecar, target.node_count);
     }
     loader.PutScene(SceneKey(), scene);
     loader.PutPhysicsSidecar(SceneKey(), SidecarKey(),
-      std::make_shared<data::PhysicsSceneAsset>(SidecarKey(),
-        BuildMinimalPhysicsSidecarDescriptorBytes(
-          target.scene_key, target.node_count, hash)));
+      std::make_shared<data::PhysicsSceneAsset>(
+        SidecarKey(), std::move(sidecar)));
     auto service = MakeService(loader);
     service->StartLoad(SceneKey());
     return service;
@@ -1077,9 +873,7 @@ namespace {
 NOLINT_TEST(SceneLoaderServiceLoadTest, LoadsASceneThatHasNoSidecar)
 {
   auto loader = SceneLoaderTestAssetLoader {};
-  loader.PutScene(SceneKey(),
-    std::make_shared<data::SceneAsset>(
-      SceneKey(), BuildMinimalSceneDescriptorBytes(1U)));
+  loader.PutScene(SceneKey(), MinimalScene(1U).Build(SceneKey()));
   auto service = MakeService(loader);
 
   service->StartLoad(SceneKey());
@@ -1157,8 +951,7 @@ NOLINT_TEST(SceneLoaderServiceBuildTest, KeepsEachNodeFlagSourceMode)
     SceneNodeFlags::kReceivesShadows,
   };
   auto loader = SceneLoaderTestAssetLoader {};
-  const auto asset = std::make_shared<data::SceneAsset>(
-    SceneKey(), BuildSceneDescriptorBytesWithFlagModes());
+  const auto asset = SceneWithFlagModes().Build(SceneKey());
   loader.PutScene(SceneKey(), asset);
   auto service = MakeService(loader);
   auto runtime_scene
@@ -1210,8 +1003,7 @@ NOLINT_TEST(SceneLoaderServiceBuildTest, KeepsEachNodeFlagSourceMode)
 NOLINT_TEST(SceneLoaderServiceBuildTest, BuildsADirectionalLightFromItsRecord)
 {
   auto loader = SceneLoaderTestAssetLoader {};
-  auto scene_asset = std::make_shared<data::SceneAsset>(
-    SceneKey(), BuildSceneDescriptorBytesWithDirectionalLight());
+  auto scene_asset = SceneWithDirectionalLight().Build(SceneKey());
   loader.PutScene(SceneKey(), scene_asset);
   auto service = MakeService(loader);
   auto runtime_scene = std::make_shared<scene::Scene>(
@@ -1248,8 +1040,7 @@ NOLINT_TEST(SceneLoaderServiceBuildTest, BuildsADirectionalLightFromItsRecord)
 NOLINT_TEST(SceneLoaderServiceBuildTest, BuildsALocalFogVolumeFromItsRecord)
 {
   auto loader = SceneLoaderTestAssetLoader {};
-  auto scene_asset = std::make_shared<data::SceneAsset>(
-    SceneKey(), BuildSceneDescriptorBytesWithLocalFog());
+  auto scene_asset = SceneWithLocalFog().Build(SceneKey());
   loader.PutScene(SceneKey(), scene_asset);
   auto service = MakeService(loader);
   auto runtime_scene = std::make_shared<scene::Scene>(
@@ -1292,9 +1083,9 @@ NOLINT_TEST(SceneLoaderServiceBuildTest, AppliesASurfaceMaterialOverride)
   auto override_material = BuildTestMaterial(material_key);
   auto geometry
     = BuildSingleSubmeshGeometry(data::MaterialAsset::CreateDefault());
-  auto scene_asset = std::make_shared<data::SceneAsset>(SceneKey(),
-    BuildSceneDescriptorBytesWithRenderableMaterialOverride(
-      { .geometry = geometry_key, .material = material_key }, *geometry));
+  auto scene_asset = SceneWithRenderableMaterialOverride(
+    { .geometry = geometry_key, .material = material_key }, *geometry)
+                       .Build(SceneKey());
   loader.PutScene(SceneKey(), scene_asset);
   loader.PutGeometry(geometry_key, geometry);
   loader.PutMaterial(material_key, override_material);

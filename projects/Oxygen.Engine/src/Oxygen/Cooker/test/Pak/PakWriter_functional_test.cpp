@@ -11,17 +11,15 @@
 #include <span>
 #include <vector>
 
-#include "PakSceneTestSupport.h"
-
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/PackedPak.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
@@ -29,13 +27,13 @@
 
 namespace {
 namespace data = oxygen::data;
-namespace pak = oxygen::content::pak;
 
 using oxygen::ResourceIndexT;
 using oxygen::cooker::test::HasNoErrors;
 using oxygen::cooker::testing::LooseCookedRoot;
 using oxygen::cooker::testing::PackedPak;
 using oxygen::cooker::testing::PakWorkspace;
+using oxygen::cooker::testing::SceneBuilder;
 using oxygen::cooker::testing::SeedBytes;
 using oxygen::serio::testing::BytesEqual;
 using oxygen::serio::testing::PatternBytes;
@@ -129,28 +127,13 @@ NOLINT_TEST_F(
   PakWriterTest, FullModeWritesPhysicsSceneDescriptorsIntoFinalPakDirectory)
 {
   auto game = LooseCookedRoot {};
-  const auto scene_bytes = oxygen::cooker::testing::MakeEmptySceneDescriptor();
-  const auto scene = game.Add({
-    .type = data::AssetType::kScene,
-    .leaf = "Main.oscene",
-    .descriptor = scene_bytes,
-  });
-  const auto sidecar_bytes
-    = pak::test::PhysicsSidecarDescriptor(scene, scene_bytes);
-  const auto sidecar = game.Add({
-    .type = data::AssetType::kPhysicsScene,
-    .leaf = "Scenes/Main.opscene",
-    .descriptor = sidecar_bytes,
-    .references = data::AssetReferences::Create({},
-      {
-        {
-          .key = scene,
-          .kind = data::KeyReferenceKind::kLogical,
-          .expected_type = data::AssetType::kScene,
-        },
-      })
-      .value(),
-  });
+  const auto main = SceneBuilder { "Main" };
+  const auto scene = game.Scene("Main.oscene", main);
+  const auto sidecar = game.PhysicsSidecar("Scenes/Main.opscene", scene);
+  // The sidecar's descriptor name is its file name.
+  const auto sidecar_bytes = oxygen::cooker::testing::PhysicsSidecarDescriptor(
+    scene, main.Bytes(), {}, "Main")
+                               .bytes;
 
   const auto pak = Workspace().PackOrThrow(
     Workspace().FullRequest({ Workspace().Add(game) }));

@@ -25,14 +25,13 @@
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/OxCo/Co.h>
@@ -136,122 +135,32 @@ auto WriteLooseCookedSceneWithScripting(
   -> void
 {
   using oxygen::cooker::testing::ResourceTable;
+  using oxygen::cooker::testing::ScriptAssetValue;
+  using oxygen::cooker::testing::ScriptParam;
   using oxygen::data::AssetType;
-  using oxygen::data::pak::scripting::ScriptingComponentRecord;
-  using oxygen::data::pak::scripting::ScriptParamRecord;
-  using oxygen::data::pak::scripting::ScriptParamType;
-  using oxygen::data::pak::scripting::ScriptSlotRecord;
-  using oxygen::data::pak::world::NodeRecord;
-  using oxygen::data::pak::world::SceneAssetDesc;
-  using oxygen::data::pak::world::SceneComponentTableDesc;
-  using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
 
-  SceneAssetDesc desc {};
-  desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
-  desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
-
-  const uint32_t offset_nodes = sizeof(SceneAssetDesc);
-  const uint32_t offset_strings = offset_nodes + sizeof(NodeRecord);
-  static constexpr auto kStrings = std::to_array("\0root\0helper\0");
-  constexpr uint32_t kHelperKeyOffset = 6U;
-  const uint32_t strings_size = sizeof(kStrings) - 1;
-  const uint32_t offset_dir = offset_strings + strings_size;
-  const uint32_t offset_table = offset_dir + sizeof(SceneComponentTableDesc);
-  const uint32_t offset_slots = offset_table + sizeof(ScriptingComponentRecord);
-  const uint32_t offset_params = offset_slots + sizeof(ScriptSlotRecord);
-  const uint32_t params_size = with_asset_param ? sizeof(ScriptParamRecord) : 0;
-  const uint32_t offset_env = offset_params + params_size;
-  desc.script_slots = {
-    .offset = offset_slots,
-    .count = 1U,
-    .entry_size = sizeof(ScriptSlotRecord),
-  };
-  ScriptSlotRecord slot {};
-  slot.slot_id = oxygen::data::ScriptSlotId::FromStableIdentity("/test/slot");
-  slot.script_asset_key
+  const auto script_key
     = oxygen::data::AssetKey::FromVirtualPath("/test/scene-script.oscript");
-  slot.execution_order = kSlotExecutionOrder;
-  ScriptParamRecord param {};
+  auto params = std::vector<ScriptParam> {};
   if (with_asset_param) {
-    slot.params_array_offset = offset_params;
-    slot.params_count = 1U;
-    param.key_offset = kHelperKeyOffset;
-    param.type = ScriptParamType::kAsset;
-    param.value.as_asset = {
-      .key = ParamScriptKey(),
-      .asset_type = AssetType::kScript,
-    };
-  }
-
-  desc.nodes.offset = offset_nodes;
-  desc.nodes.count = 1;
-  desc.nodes.entry_size = sizeof(NodeRecord);
-  desc.header.strings.offset = offset_strings;
-  desc.header.strings.size = strings_size;
-  desc.component_table_directory_offset = offset_dir;
-  desc.component_table_count = 1;
-
-  NodeRecord node {};
-  node.node_id = oxygen::data::NodeId::FromStableIdentity("/test/root");
-  node.scene_name_offset = 1;
-  node.parent_index = 0;
-
-  SceneComponentTableDesc component_desc {};
-  component_desc.component_type
-    = static_cast<uint32_t>(oxygen::data::ComponentType::kScripting);
-  component_desc.table.offset = offset_table;
-  component_desc.table.count = 1;
-  component_desc.table.entry_size = sizeof(ScriptingComponentRecord);
-
-  ScriptingComponentRecord scripting {};
-  scripting.node_index = 0;
-  scripting.slot_start_index = 0;
-  scripting.slot_count = 1;
-
-  SceneEnvironmentBlockHeader env {};
-  env.byte_size = sizeof(SceneEnvironmentBlockHeader);
-  env.systems_count = 0;
-
-  std::vector<std::byte> bytes(offset_env + sizeof(env));
-  std::memcpy(bytes.data(), &desc, sizeof(desc));
-  std::memcpy(
-    std::span(bytes).subspan(offset_nodes).data(), &node, sizeof(node));
-  std::memcpy(std::span(bytes).subspan(offset_strings).data(), kStrings.data(),
-    strings_size);
-  std::memcpy(std::span(bytes).subspan(offset_dir).data(), &component_desc,
-    sizeof(component_desc));
-  std::memcpy(std::span(bytes).subspan(offset_table).data(), &scripting,
-    sizeof(scripting));
-  std::memcpy(
-    std::span(bytes).subspan(offset_slots).data(), &slot, sizeof(slot));
-  if (with_asset_param) {
-    std::memcpy(
-      std::span(bytes).subspan(offset_params).data(), &param, sizeof(param));
-  }
-  std::memcpy(std::span(bytes).subspan(offset_env).data(), &env, sizeof(env));
-
-  auto scene_keys = std::vector<oxygen::data::KeyReference> {
-    {
-      .key = slot.script_asset_key,
-      .kind = oxygen::data::KeyReferenceKind::kAsset,
-      .expected_type = AssetType::kScript,
-    },
-  };
-  if (with_asset_param) {
-    scene_keys.push_back({
-      .key = ParamScriptKey(),
-      .kind = oxygen::data::KeyReferenceKind::kAsset,
-      .expected_type = AssetType::kScript,
+    params.push_back({
+      .key = "helper",
+      .value = ScriptAssetValue {
+        .key = ParamScriptKey(),
+        .type = AssetType::kScript,
+      },
     });
   }
+  auto scene = oxygen::cooker::testing::SceneBuilder { "test" };
+  const auto node = scene.Node("root");
+  scene.ScriptSlot(node, script_key, std::move(params), kSlotExecutionOrder);
 
   auto root = LooseCookedRoot { "test" };
   root.Add({
     .type = AssetType::kScene,
     .leaf = "Scenes/ScriptScene.scene",
-    .descriptor = std::move(bytes),
-    .references
-    = oxygen::data::AssetReferences::Create({}, std::move(scene_keys)).value(),
+    .descriptor = scene.Bytes(),
+    .references = scene.References(),
     .key = scene_key,
   });
   oxygen::data::pak::scripting::ScriptAssetDesc script {};
@@ -261,7 +170,7 @@ auto WriteLooseCookedSceneWithScripting(
     .type = AssetType::kScript,
     .leaf = "scene-script.oscript",
     .descriptor = oxygen::data::MakeDescriptorBytes(script),
-    .key = slot.script_asset_key,
+    .key = script_key,
   });
   if (with_asset_param) {
     root.Add({

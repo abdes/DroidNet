@@ -26,6 +26,7 @@
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -565,10 +566,14 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(AssetEmitterTest, EmitLargeDescriptorWrittenCorrectly)
 {
-
-  constexpr uint32_t kStringTableBytes = 100U * 1024U;
-  const auto large_bytes
-    = fixtures::SceneDescriptor("Large", kStringTableBytes).bytes;
+  constexpr size_t kLargeBytes = size_t { 100U } * 1024U;
+  constexpr uint32_t kNodeCount = 2048U;
+  auto large = fixtures::SceneBuilder { "Large" };
+  for (uint32_t i = 0U; i < kNodeCount; ++i) {
+    large.Node("node-" + std::to_string(i));
+  }
+  const auto large_bytes = large.Bytes();
+  ASSERT_GE(large_bytes.size(), kLargeBytes);
   const auto expected_size = large_bytes.size();
 
   RunInNursery([&](co::Nursery& writes) -> Co<> {

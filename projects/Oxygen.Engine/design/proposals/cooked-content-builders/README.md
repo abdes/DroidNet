@@ -1,6 +1,6 @@
 # Cooked content builders
 
-Status: steps 1-4 implemented; steps 5 and 6 and `ModelRecord` in progress
+Status: implemented
 
 Last updated: 2026-11-01
 
@@ -48,18 +48,18 @@ restatement breaks separately, and each one is fixed by hand.
 A builder describes cooked content the way the engine defines it, never the
 way a test happens to need it:
 
-| Concept        | Engine definition                                                                                                      | Builder term                                                                                                  |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Cooked source  | One mount's cooked content, a loose cooked root or a pak                                                               | `LooseCookedRoot("Props")`; every leaf it takes is relative to `/Props`                                       |
-| Asset          | A typed descriptor at a virtual path; its key derives from the path                                                    | `.Material(leaf)`, `.Geometry(leaf)`, `.Scene(leaf, scene)`, `.PhysicsSidecar(leaf, scene_leaf)`, `.Add(...)` |
-| Asset contents | The records of a descriptor: a scene's nodes and components, a sidecar's bindings                                      | `SceneBuilder`, `PhysicsSidecarBuilder` ([descriptor builders](#descriptor-builders))                         |
-| Resource       | A texture, buffer, script or physics resource in the source's tables                                                   | `.AddTexture(payload)`, `.AddBuffer(...)`, `.AddScript(...)`, `.AddPhysics(...)`, each returning its row      |
-| Named texture  | A virtual path bound to a texture row (a texture descriptor file)                                                      | `.DescribeTexture(leaf, row)`                                                                                 |
-| Reference      | An asset's reference to a resource row or to another asset, possibly under another mount                               | A descriptor builder's references, by row or by key                                                           |
-| Several mounts | A loose root whose content lies in more than one mount (development roots)                                             | `LooseAsset::mount`, per asset                                                                                |
-| Deletion       | A pak's tombstone of a lower asset                                                                                     | `CookedPak(...).PatchOf(base)`: what the base holds and the patch no longer does                              |
-| Pak            | Cooked content of one mount with its catalog, browse index and requirements, over dependencies and, for a patch, bases | `CookedPak` of one or more `LooseCookedRoot`s, `.DependsOn(engine)`, `.PatchOf(base)`                         |
-| Model record   | `<model identity>.import.json` in the model's mount                                                                    | `ModelRecord("/Props/Models/Truck.glb").Source("Truck.fbx")`                                                  |
+| Concept        | Engine definition                                                                                                      | Builder term                                                                                                 |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Cooked source  | One mount's cooked content, a loose cooked root or a pak                                                               | `LooseCookedRoot("Props")`; every leaf it takes is relative to `/Props`                                      |
+| Asset          | A typed descriptor at a virtual path; its key derives from the path                                                    | `.Material(leaf)`, `.Geometry(leaf)`, `.Scene(leaf, scene)`, `.PhysicsSidecar(leaf, scene_key)`, `.Add(...)` |
+| Asset contents | The records of a descriptor: a scene's nodes and components, a sidecar's bindings                                      | `SceneBuilder`, `PhysicsSidecarBuilder` ([descriptor builders](#descriptor-builders))                        |
+| Resource       | A texture, buffer, script or physics resource in the source's tables                                                   | `.AddTexture(payload)`, `.AddBuffer(...)`, `.AddScript(...)`, `.AddPhysics(...)`, each returning its row     |
+| Named texture  | A virtual path bound to a texture row (a texture descriptor file)                                                      | `.DescribeTexture(leaf, row)`                                                                                |
+| Reference      | An asset's reference to a resource row or to another asset, possibly under another mount                               | A descriptor builder's references, by row or by key                                                          |
+| Several mounts | A loose root whose content lies in more than one mount (development roots)                                             | `LooseAsset::mount`, per asset                                                                               |
+| Deletion       | A pak's tombstone of a lower asset                                                                                     | `CookedPak(...).PatchOf(base)`: what the base holds and the patch no longer does                             |
+| Pak            | Cooked content of one mount with its catalog, browse index and requirements, over dependencies and, for a patch, bases | `CookedPak` of one or more `LooseCookedRoot`s, `.DependsOn(engine)`, `.PatchOf(base)`                        |
+| Model record   | `<model identity>.import.json` in the model's mount                                                                    | `ModelRecord("/Props/Models/Truck.glb").Source("Truck.fbx")`                                                 |
 
 A test names only what it is about: a material with one texture, a scene with
 two nodes. Every other field has the value a cook writes.
@@ -77,13 +77,13 @@ in-memory implementation of the Cooker file system port) or bytes.
 | ----------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `LooseCookedRoot`       | A loose cooked root: index, descriptors, resource tables and data files | The descriptor builders, resource descriptor structs, the `ResourceDescriptor` codec, the loose index encoder             |
 | `SceneBuilder`          | The descriptor of a scene                                               | `SceneAssetDesc`, the node and component records, `DescriptorStringsBuilder`, `MakeDescriptorBytes`                       |
-| `PhysicsSidecarBuilder` | The descriptor of a scene's physics sidecar                             | `PhysicsSceneAssetDesc`, the binding records; the scene's own bytes for its key, node count and hash                      |
+| `PhysicsSidecarBuilder` | The bindings of a scene's physics sidecar                               | `PhysicsSceneAssetDesc`, the binding records; the scene's own bytes for its key, node count and hash                      |
 | `CookedPak`             | The bytes of a pak of one mount                                         | `PakPlanBuilder` and `PakWriter` over its loose roots, in memory                                                          |
 | `PakWorkspace`          | `PakBuildRequest`s: full or patch, sources, dependencies and bases      | The request types; dependencies and bases read through `PakFile` from built paks; each request a distinct source identity |
 | `PackedPak`             | A read view of a built pak                                              | `PakFile` over a `MemoryFile` or the workspace's storage                                                                  |
 | `ModelRecord`           | A model import record at its identity                                   | The record's serializer                                                                                                   |
 | `CookedBytes`           | A named defect applied to a built artifact's bytes                      | The format structs (`PakHeader`, `PakFooter`, the catalog and index headers)                                              |
-| `DescriptorDefects`     | A named defect applied to a built descriptor's bytes                    | The descriptor structs (`SceneAssetDesc`, its tables)                                                                     |
+| `DescriptorDefects`     | A named defect applied to a built descriptor's bytes                    | The descriptor structs (`SceneAssetDesc`, its tables, `PhysicsSceneAssetDesc`)                                            |
 
 Every byte a builder emits comes from a product routine. `CookedPak` decides
 nothing about the pak format: it writes its loose roots into a workspace and
@@ -115,38 +115,47 @@ a component or a slot the descriptor does not hold.
 ```cpp
 auto game = LooseCookedRoot { "Game" };
 const auto crate_geometry = game.Geometry("Props/Crate.ogeo");
-const auto spin = game.Script("Scripts/Spin.oscript");
 
 auto main = SceneBuilder { "Main" };
 const auto root = main.Node("root");
 const auto crate = main.Node("crate", root); // its parent
 main.Renderable(crate, crate_geometry);
-main.ScriptSlot(crate, spin, { { "speed", 3 }, { "label", "fast" } });
-main.Override(crate, data::schema::kMaterialOverride, game.KeyOf("Red.omat"));
+main.ScriptSlot(crate, game.KeyOf("Scripts/Spin.oscript"),
+  { { "speed", 3 }, { "label", std::string("fast") } });
+main.Override(crate, OverrideId::kGeometrySurfaceMaterial,
+  { .as_asset = game.KeyOf("Materials/Red.omat") }, surface, layout_revision);
 
 const auto scene = game.Scene("Scenes/Main.oscene", main);
-game.PhysicsSidecar("Scenes/Main.opscene", "Scenes/Main.oscene",
-  PhysicsSidecarBuilder {}.RigidBody(crate, shape_key, physics_material_key));
+auto bindings = PhysicsSidecarBuilder {};
+bindings.RigidBody(crate, shape_key, physics_material_key);
+game.PhysicsSidecar("Scenes/Main.opscene", scene, bindings);
 ```
 
-- **`SceneBuilder`** holds the scene's name, its nodes (each with a name and a
-  parent, its node ID derived from its stable identity as the cooker derives
-  it, `/Main/root`), its components (renderables, cameras, lights, local fog
-  volumes, scripting slots with typed parameters, overrides, starting input
-  contexts) and its environment block. `Bytes()` lays out the descriptor the
-  way the scene cooker does: component tables in the cooker's order, one
-  string table, the environment block last. A parent that does not exist, a
-  component on a node of another builder, or a parameter whose type the
-  format does not hold throws where it is added.
+- **`SceneBuilder`** holds the scene's name, its nodes (each with a name, a
+  parent, a transform and flags, its node ID derived from its stable identity
+  `/Main/root/crate`), its components (renderables, cameras, lights, local
+  fog volumes, scripting slots with typed parameters, overrides and LOD
+  policies), its composition (instances, changes and script changes below
+  them by node path, starting input contexts, a starting camera, the model
+  scene flag), its environment block and the texture rows its records bind.
+  `Bytes()` lays out the descriptor the way the scene and scripting cookers
+  do: component tables sorted as they sort them and in component type order,
+  one string table, script slots and their parameters, the environment block
+  last, and the header's content hash; `References()` are the references the
+  cook records. A handle of another builder, a repeated node, flags or a
+  record size a cook never writes, or a scene the product reader refuses
+  throws, where it is added or at `Bytes()`; handles are tied to their
+  builder by a `SceneBuilderId`.
 - **`LooseCookedRoot::Scene(leaf)`** keeps its meaning, a scene with only its
   root node; `Scene(leaf, builder)` adds the built scene.
 - **`PhysicsSidecarBuilder`** holds the sidecar's bindings (rigid bodies,
-  colliders, characters, soft bodies, joints) by node handle.
-  `LooseCookedRoot::PhysicsSidecar(leaf, scene_leaf, bindings)` takes the
-  scene the root already holds and records what a cook records of it: its key,
-  its node count and the SHA-256 of its bytes, so the planner's pairing check
-  always holds. `PhysicsSidecarDescriptor(scene_key, scene_bytes)` builds the
-  same descriptor for a scene stored in another source.
+  colliders, characters, soft bodies, joints, vehicles, aggregates) by node
+  handle, all of one scene. `LooseCookedRoot::PhysicsSidecar(leaf, scene_key,
+bindings)` takes the scene the root already holds, refuses bindings of
+  another scene's nodes, and records what a cook records of it: its key, its
+  node count and the SHA-256 of its bytes, so the planner's pairing check
+  always holds. `PhysicsSidecarDescriptor(scene_key, scene_bytes, bindings)`
+  builds the same descriptor for a scene stored in another source.
 - **Materials and geometry** keep their builders (`MaterialDescriptor`,
   `TexturedMaterialDescriptor`, `GeometryDescriptor`), extended the same way
   when a test needs more than they take: texture slots by name, more meshes.
@@ -263,8 +272,10 @@ the same bytes.
 | A physics sidecar with bindings (`AssetLoader_physics_test`, `PhysicsLoaderTestFixtures.h`)                                                                                                                                                                                                                                                                     | `PhysicsSidecarBuilder`                           |
 | Texture descriptor files forged in `MaterialDescriptorImportJob_functional_test` and `SceneDescriptorImportJob_functional_test`                                                                                                                                                                                                                                 | `AddTexture`, `DescribeTexture`                   |
 | Hand-written records in model record tests                                                                                                                                                                                                                                                                                                                      | `ModelRecord`                                     |
+| The Data tests' scene builder (`SceneAssetBuilder`) and its users: the scene composition, override and node reference tests, `AssetLoader_scene_query_test`, the Inspector scene metadata test, `SceneInstantiation_test`, `SceneScriptAttachment_test`                                                                                                         | `SceneBuilder`; their defects `DescriptorDefects` |
+| Hand-laid scenes and sidecars of the DemoShell scene loader and environment settings tests                                                                                                                                                                                                                                                                      | `SceneBuilder`, `PhysicsSidecarDescriptor`        |
 
-Already replaced (steps 1-4): the tests' loose index writer and layout, the
+Replaced in steps 1-4: the tests' loose index writer and layout, the
 second pak encoder, the interim pak kit, the texture root fixture, file-local
 `WriteRoot`/`Material`/`MakeCatalog` helpers, `data::PakCatalog` literals
 outside the catalog's own tests, the local index encoders of multi-mount
@@ -283,12 +294,12 @@ tests, which are about laying out a given plan.
 4. Done: unit and functional tests of Content, Cooker, PakTool and Inspector
    on the kit; the encoder refuses what the reader refuses; multi-mount roots
    and scene-matched physics sidecars in the kit.
-5. Integration tests (`AssetLoader` mounting, the Player, the examples) move
-   to the kit, by replacing their setup with builder calls and `Materialize`.
-6. The descriptor builders (`SceneBuilder`, `PhysicsSidecarBuilder`,
+5. Done: integration tests (`AssetLoader` mounting, the Player, the
+   examples) on the kit, their setup builder calls and `Materialize`.
+6. Done: the descriptor builders (`SceneBuilder`, `PhysicsSidecarBuilder`,
    `DescriptorDefects`) and `ModelRecord`, with their hardening tests; every
-   test in [what it replaces](#what-it-replaces) moves onto them and its
-   hand-written builder is deleted.
+   test in [what it replaces](#what-it-replaces) on them, its hand-written
+   builder deleted.
 
 ## Decisions
 

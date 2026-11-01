@@ -4,16 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
-#include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
 #include <filesystem>
-#include <span>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -22,13 +16,14 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
@@ -55,52 +50,16 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   const oxygen::data::AssetKey& scene_key) -> void
 {
   using oxygen::data::AssetType;
-  using oxygen::data::pak::world::NodeRecord;
-  using oxygen::data::pak::world::SceneAssetDesc;
-  using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
 
-  // Arrange: write cooked scene descriptor bytes.
-  SceneAssetDesc desc {};
-  desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
-  desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
-
-  desc.nodes.offset = sizeof(SceneAssetDesc);
-  desc.nodes.count = 1;
-  desc.nodes.entry_size = sizeof(NodeRecord);
-
-  static constexpr auto kStrings = std::to_array("\0root\0");
-  desc.header.strings.offset = sizeof(SceneAssetDesc) + sizeof(NodeRecord);
-  desc.header.strings.size = sizeof(kStrings) - 1;
-
-  NodeRecord node {};
-  node.node_id = oxygen::data::NodeId::FromStableIdentity("/test/root");
-  node.scene_name_offset = 1; // "root"
-  node.parent_index = 0; // root parent is self
-  node.node_flags = 0;
-
-  const size_t total_size
-    = static_cast<size_t>(desc.header.strings.offset + desc.header.strings.size)
-    + sizeof(SceneEnvironmentBlockHeader);
-  std::vector<std::byte> bytes(total_size);
-  std::memcpy(bytes.data(), &desc, sizeof(desc));
-  std::memcpy(
-    std::span(bytes).subspan(desc.nodes.offset).data(), &node, sizeof(node));
-  std::memcpy(std::span(bytes).subspan(desc.header.strings.offset).data(),
-    kStrings.data(), kStrings.size() - 1);
-
-  SceneEnvironmentBlockHeader env_header {};
-  env_header.byte_size = sizeof(SceneEnvironmentBlockHeader);
-  env_header.systems_count = 0;
-  std::memcpy(std::span(bytes)
-                .subspan(desc.header.strings.offset + desc.header.strings.size)
-                .data(),
-    &env_header, sizeof(env_header));
+  auto scene = oxygen::cooker::testing::SceneBuilder { "test" };
+  scene.Node("root");
 
   auto root = oxygen::cooker::testing::LooseCookedRoot { "test" };
   root.Add({
     .type = AssetType::kScene,
     .leaf = "TestScene.scene",
-    .descriptor = std::move(bytes),
+    .descriptor = scene.Bytes(),
+    .references = scene.References(),
     .key = scene_key,
   });
   oxygen::cooker::testing::Materialize(root.Files(), cooked_root);
@@ -173,11 +132,10 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetLooseCookedSceneLoads)
 NOLINT_TEST(
   SceneVersionMigrationTest, PackedSceneV7IsRejectedBeforeDecodingRecords)
 {
-  oxygen::data::pak::world::SceneAssetDesc descriptor {};
   constexpr uint8_t kRetiredSceneVersion = 7U;
-  descriptor.header.version = kRetiredSceneVersion;
-  auto bytes = std::vector<std::byte>(sizeof(descriptor));
-  std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
+  auto bytes = oxygen::cooker::testing::SceneBuilder { "Retired" }.Bytes();
+  oxygen::cooker::testing::DescriptorDefects::SetVersion(
+    bytes, kRetiredSceneVersion);
   try {
     const auto scene = oxygen::data::SceneAsset { oxygen::data::AssetKey {},
       std::move(bytes) };
@@ -192,38 +150,15 @@ NOLINT_TEST(
   SceneVersionMigrationTest, CurrentSceneRejectsRetiredSkyLightRecordSize)
 {
   namespace world = oxygen::data::pak::world;
-  world::SceneAssetDesc descriptor {};
-  descriptor.header.version = world::kSceneAssetVersion;
-  descriptor.nodes = {
-    .offset = sizeof(descriptor),
-    .count = 1U,
-    .entry_size = sizeof(world::NodeRecord),
-  };
-  descriptor.header.strings.offset
-    = sizeof(descriptor) + sizeof(world::NodeRecord);
-  descriptor.header.strings.size = 1U;
-  const auto environment_offset = descriptor.header.strings.offset + 1U;
-  world::SceneEnvironmentBlockHeader environment {};
   constexpr uint32_t kRetiredSkyLightRecordSize = 92U;
-  environment.byte_size = sizeof(environment) + kRetiredSkyLightRecordSize;
-  environment.systems_count = 1U;
-  world::SkyLightEnvironmentRecord retired {};
-  retired.header.record_size = kRetiredSkyLightRecordSize;
-  auto bytes
-    = std::vector<std::byte>(environment_offset + environment.byte_size);
-  std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
-  const auto node = world::NodeRecord {
-    .node_id = oxygen::data::NodeId::FromStableIdentity("/test/root"),
-  };
-  std::memcpy(std::span(bytes).subspan(descriptor.nodes.offset).data(), &node,
-    sizeof(node));
-  std::memcpy(std::span(bytes).subspan(environment_offset).data(), &environment,
-    sizeof(environment));
-  std::memcpy(
-    std::span(bytes).subspan(environment_offset + sizeof(environment)).data(),
-    &retired, sizeof(retired));
+  auto scene = oxygen::cooker::testing::SceneBuilder { "Retired" };
+  scene.Node("root");
+  scene.Environment(world::SkyLightEnvironmentRecord {});
+  auto bytes = scene.Bytes();
+  oxygen::cooker::testing::DescriptorDefects::SetEnvironmentRecordSize(bytes,
+    world::EnvironmentComponentType::kSkyLight, kRetiredSkyLightRecordSize);
   try {
-    const auto scene = oxygen::data::SceneAsset { oxygen::data::AssetKey {},
+    const auto asset = oxygen::data::SceneAsset { oxygen::data::AssetKey {},
       std::move(bytes) };
     FAIL() << "Retired SkyLight record was accepted";
   } catch (const std::runtime_error& error) {
