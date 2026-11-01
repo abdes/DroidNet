@@ -33,6 +33,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
@@ -787,10 +788,18 @@ namespace {
       source);
   }
 
+  //! What reading a texture's source produced: its diagnostics, and whether
+  //! the source limit refused the source, which fails the texture without a
+  //! fallback or a placeholder.
+  struct SourceLoad {
+    std::vector<ImportDiagnostic> diagnostics;
+    bool too_large = false;
+  };
+
   auto LoadSourceBytesIfNeeded(TexturePipeline::WorkItem& item,
     const observer_ptr<IAsyncFileReader> reader,
     const std::function<void(std::chrono::microseconds)>& on_io_duration)
-    -> co::Co<std::vector<ImportDiagnostic>>
+    -> co::Co<SourceLoad>
   {
     const auto MakeDuration
       = [](const std::chrono::steady_clock::time_point start,
@@ -799,13 +808,14 @@ namespace {
       return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     };
 
-    auto diagnostics = std::vector<ImportDiagnostic> {};
+    auto load = SourceLoad {};
+    auto& diagnostics = load.diagnostics;
 
     auto* source_bytes
       = std::get_if<TexturePipeline::SourceBytes>(&item.source);
     if (source_bytes == nullptr || !source_bytes->bytes.empty()
       || item.source_path.empty()) {
-      co_return diagnostics;
+      co_return load;
     }
 
     const auto source_path_string = item.source_path.string();
@@ -813,11 +823,20 @@ namespace {
       diagnostics.push_back(MakeErrorDiagnosticMessage("import.file_reader",
         "Import session has no async file reader", item.source_id,
         source_path_string));
-      co_return diagnostics;
+      co_return load;
     }
 
     const auto read_start = std::chrono::steady_clock::now();
     auto read_result = co_await reader.get()->ReadFile(item.source_path);
+    // An oversized source is not missing: no file found by name stands in.
+    if (!read_result.has_value()) {
+      if (auto too_large = detail::SourceTooLargeDiagnostic(
+            read_result.error(), item.source_path, reader->SourceLimit())) {
+        diagnostics.push_back(std::move(*too_large));
+        load.too_large = true;
+        co_return load;
+      }
+    }
     if (!read_result.has_value()
       && read_result.error() != std::errc::operation_canceled) {
       for (const auto& fallback_path : item.fallback_source_paths) {
@@ -845,7 +864,7 @@ namespace {
       LOG_F(INFO,
         "TexturePipeline::Worker read failed: source_id='{}' path='{}'",
         item.source_id, source_path_string);
-      co_return diagnostics;
+      co_return load;
     }
 
     auto bytes
@@ -855,7 +874,7 @@ namespace {
     LOG_F(INFO,
       "TexturePipeline::Worker read ok: source_id='{}' path='{}' bytes={}",
       item.source_id, source_path_string, bytes->Size().get());
-    co_return diagnostics;
+    co_return load;
   }
 
   auto RunCookTaskForItem(TexturePipeline::WorkItem& item,
@@ -950,7 +969,10 @@ namespace {
 
     const auto error = cooked.cooked.error();
     finalized.cook_error = error;
-    if (error == TextureImportError::kCancelled) {
+    // The read diagnostics already report an oversized source; it is never
+    // replaced by a placeholder.
+    if (error == TextureImportError::kCancelled
+      || error == TextureImportError::kSourceTooLarge) {
       return finalized;
     }
 
@@ -1123,17 +1145,22 @@ auto TexturePipeline::Worker() -> co::Co<>
       }
     };
 
-    auto read_diagnostics = co_await LoadSourceBytesIfNeeded(
+    auto load = co_await LoadSourceBytesIfNeeded(
       item, config_.file_reader, config_.on_io_duration);
 
     const auto& policy = ResolvePackingPolicy(item.packing_policy_id);
     const bool unknown_policy = item.packing_policy_id != policy.Id();
     const auto cook_start = std::chrono::steady_clock::now();
-    auto cooked = co_await RunCookTaskForItem(item, thread_pool_, policy);
+    auto cooked = load.too_large
+      ? CookOutcome {
+          .cooked = Err(TextureImportError::kSourceTooLarge),
+          .decode_duration = {},
+        }
+      : co_await RunCookTaskForItem(item, thread_pool_, policy);
     const auto cook_end = std::chrono::steady_clock::now();
 
     auto finalized = FinalizeCookedTextureWork(item, policy, unknown_policy,
-      std::move(read_diagnostics), std::move(cooked),
+      std::move(load.diagnostics), std::move(cooked),
       MakeDuration(cook_start, cook_end));
 
     if (!finalized.cook_error.has_value()) {

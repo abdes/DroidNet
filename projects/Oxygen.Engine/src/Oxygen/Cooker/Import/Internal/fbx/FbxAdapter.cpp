@@ -36,15 +36,18 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/matrix.hpp>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/DroppedSourceFeatures.h>
+#include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
@@ -60,6 +63,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/CoordTransform.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
@@ -77,6 +81,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import::adapters {
 
@@ -1579,6 +1584,19 @@ namespace {
       diagnostics.push_back(MakeErrorDiagnostic("fbx.invalid_custom_unit_scale",
         "unit_scale must be > 0 when using custom unit normalization",
         input.source_id_prefix, input.object_path_prefix));
+      return {};
+    }
+
+    // ufbx reads the whole file itself: refuse a source past the limit first.
+    const auto limit = input.source_snapshot != nullptr
+      ? input.source_snapshot->SourceLimit()
+      : kDefaultMaxSourceBytes;
+    auto size_error = std::error_code {};
+    const auto size
+      = std::filesystem::file_size(base::ToNativePath(path), size_error);
+    if (!size_error && serio::ByteCount { size } > limit) {
+      diagnostics.push_back(detail::MakeSourceTooLargeDiagnostic(
+        path, size, limit, std::string(input.object_path_prefix)));
       return {};
     }
 

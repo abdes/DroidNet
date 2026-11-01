@@ -50,6 +50,7 @@ Global options are available for all commands.
 | `--no-tui`                     | Disable TUI; force text progress                                    |
 | `--theme <plain\|dark\|light>` | Help/output theme                                                   |
 | `--thread-pool-size <n>`       | Override import service worker count                                |
+| `--max-source-bytes <n>`       | Override the most bytes a job reads from one source                 |
 | `--concurrency <spec>`         | Override pipeline concurrency (`t,b,m,h,g,s` as `workers/queue`)    |
 
 Example concurrency override:
@@ -674,6 +675,7 @@ Top-level fields:
   "thread_pool_size": 8,
   "max_in_flight_jobs": 16,
   "job_admission_capacity": 64,
+  "max_source_bytes": 2147483647,
   "concurrency": {
     "texture": { "workers": 4, "queue_capacity": 64 },
     "buffer": { "workers": 2, "queue_capacity": 32 },
@@ -709,6 +711,15 @@ Execution settings are optional; the schema states each default.
 `job_admission_capacity` to 64, and each `concurrency` pipeline's `workers`
 and `queue_capacity` to the values of `ImportConcurrency.h`. A pipeline may set
 one of the two and leave the other at its default.
+
+`max_source_bytes` is the most bytes a job reads from one source file, or one
+range of it: the model and its external buffers, images, sidecars and
+descriptors. Its default, 2,147,483,647 bytes (`kDefaultMaxSourceBytes` in
+`ImportLimits.h`), is a provisional limit that stays within the image
+decoders' input size. A larger source is refused before anything is
+allocated, and its job fails with `import.source_too_large`, which names the
+path, its size and the limit. A texture refused this way gets no stand-in
+found by name and no placeholder. `--max-source-bytes` overrides the manifest.
 
 `project_root` is relative to the manifest's folder (default: the folder);
 `--root` replaces it. `mounts` lists the mounts: `name`, optional `kind`

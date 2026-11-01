@@ -39,6 +39,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
@@ -280,18 +281,28 @@ namespace {
     if (table_exists) {
       const auto table_read = co_await reader->ReadFile(table_path);
       if (!table_read.has_value()) {
-        script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.asset.scripts_table_read_failed",
-          "Failed to read existing scripts.table '" + table_path.string()
-            + "': " + table_read.error().message());
+        if (auto too_large = detail::SourceTooLargeDiagnostic(
+              table_read.error(), table_path, reader->SourceLimit())) {
+          session.AddDiagnostic(std::move(*too_large));
+        } else {
+          script_import::AddDiagnostic(session, request, ImportSeverity::kError,
+            "script.asset.scripts_table_read_failed",
+            "Failed to read existing scripts.table '" + table_path.string()
+              + "': " + table_read.error().message());
+        }
         co_return false;
       }
       const auto data_read = co_await reader->ReadFile(data_path);
       if (!data_read.has_value()) {
-        script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.asset.scripts_data_read_failed",
-          "Failed to read existing scripts.data '" + data_path.string()
-            + "': " + data_read.error().message());
+        if (auto too_large = detail::SourceTooLargeDiagnostic(
+              data_read.error(), data_path, reader->SourceLimit())) {
+          session.AddDiagnostic(std::move(*too_large));
+        } else {
+          script_import::AddDiagnostic(session, request, ImportSeverity::kError,
+            "script.asset.scripts_data_read_failed",
+            "Failed to read existing scripts.data '" + data_path.string()
+              + "': " + data_read.error().message());
+        }
         co_return false;
       }
 

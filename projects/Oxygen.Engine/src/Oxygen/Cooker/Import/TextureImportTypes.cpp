@@ -116,6 +116,7 @@ auto to_string(const TextureImportError value) -> const char*
     case TextureImportError::kFileNotFound:          return "FileNotFound";
     case TextureImportError::kFileReadFailed:        return "FileReadFailed";
     case TextureImportError::kWriteFailed:           return "WriteFailed";
+    case TextureImportError::kSourceTooLarge:        return "SourceTooLarge";
 
     // Cancellation
     case TextureImportError::kCancelled:             return "Cancelled";

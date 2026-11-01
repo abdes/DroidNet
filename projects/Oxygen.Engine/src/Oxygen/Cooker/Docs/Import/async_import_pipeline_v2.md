@@ -543,6 +543,7 @@ struct Config {
   uint32_t max_in_flight_jobs = std::thread::hardware_concurrency();
   uint32_t job_admission_capacity = 64;
   ImportConcurrency concurrency{}; // per-pipeline workers & queue capacities
+  serio::ByteCount max_source_bytes = kDefaultMaxSourceBytes;
 };
 ```
 
@@ -552,6 +553,7 @@ The config specifies global resources shared across all import jobs:
 - **max_in_flight_jobs**: Maximum number of jobs processed concurrently by the importer (default is hardware_concurrency; defaults to 1 in some deployments)
 - **job_admission_capacity**: Maximum number of jobs admitted and not yet finished (default 64). A submission beyond it is refused; the batch command defers it until a job finishes (backpressure).
 - **concurrency**: Per-pipeline concurrency knobs (`ImportConcurrency`) that control worker counts and queue capacities for texture/buffer/material/mesh/scene pipelines.
+- **max_source_bytes**: The most bytes a job reads from one source file or range (default 2,147,483,647, `kDefaultMaxSourceBytes`). The service's file reader refuses a larger read with `serio::Error::kTooLarge` before allocating (`IAsyncFileReader::SourceLimit()`), and the parsers that read their own files (the cgltf file callback, the FBX path loader) apply the same limit. The job reports `import.source_too_large`.
 
 #### Core API
 

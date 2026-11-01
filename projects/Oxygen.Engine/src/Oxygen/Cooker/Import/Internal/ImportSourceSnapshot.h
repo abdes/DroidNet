@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/ImportSourceObservation.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import::detail {
 
@@ -79,6 +80,10 @@ public:
     -> co::Co<Result<FileInfo>> override;
   auto Exists(const std::filesystem::path& path)
     -> co::Co<Result<bool>> override;
+  [[nodiscard]] auto SourceLimit() const noexcept -> serio::ByteCount override
+  {
+    return reader_->SourceLimit();
+  }
   //! Hash a parser-owned buffer on its worker, without rereading or copying it.
   auto RecordConsumed(const std::filesystem::path& path,
     std::span<const std::byte> bytes, ReadOptions options = {}) -> void;

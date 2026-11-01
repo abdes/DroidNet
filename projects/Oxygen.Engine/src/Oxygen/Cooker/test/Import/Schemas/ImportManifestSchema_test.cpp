@@ -135,6 +135,18 @@ INSTANTIATE_TEST_SUITE_P(Cases, ImportManifestExecutionSchemaTest,
       R"({"jobs":[],"thread_pool_size":0})",
       false,
       "below minimum",
+    },
+    SchemaCase {
+      "AcceptsASourceLimitPastFourGigabytes",
+      R"({"jobs":[],"max_source_bytes":5000000000})",
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsAZeroSourceLimit",
+      R"({"jobs":[],"max_source_bytes":0})",
+      false,
+      "below minimum",
     }),
   oxygen::cooker::test::SchemaCaseName);
 

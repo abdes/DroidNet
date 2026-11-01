@@ -32,6 +32,7 @@
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import {
 
@@ -39,7 +40,7 @@ struct ImportSourceAnalysis;
 
 struct ImportManifestJob {
   std::string job_type;
-  std::optional<data::SourceKey> source_key {};
+  std::optional<data::SourceKey> source_key;
   TextureImportSettings texture;
   SceneImportSettings fbx;
   SceneImportSettings gltf;
@@ -84,7 +85,7 @@ struct ImportManifestJob {
 };
 
 struct ImportManifestDefaults {
-  std::optional<data::SourceKey> source_key {};
+  std::optional<data::SourceKey> source_key;
   TextureImportSettings texture;
   SceneImportSettings fbx;
   SceneImportSettings gltf;
@@ -123,6 +124,9 @@ struct ImportManifest {
   std::optional<uint32_t> thread_pool_size;
   std::optional<uint32_t> max_in_flight_jobs;
   std::optional<uint32_t> job_admission_capacity;
+  //! The most bytes a job reads from one source; the service's default when
+  //! unset.
+  std::optional<serio::ByteCount> max_source_bytes;
   std::optional<ImportConcurrency> concurrency;
   ImportManifestDefaults defaults;
   std::vector<ImportManifestJob> jobs;

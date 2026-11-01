@@ -22,6 +22,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ServiceConfig.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import::tool {
 
@@ -151,6 +152,7 @@ auto ApplyServiceConfigOverrides(const CommandLineContext& context,
   -> toolkit::ToolResult
 {
   overrides.thread_pool_size = context.ovm.HasOption("thread-pool-size");
+  overrides.max_source_bytes = context.ovm.HasOption("max-source-bytes");
   overrides.concurrency = context.ovm.HasOption("concurrency");
 
   if (overrides.thread_pool_size) {
@@ -160,6 +162,22 @@ auto ApplyServiceConfigOverrides(const CommandLineContext& context,
         service_config.thread_pool_size = *size;
       }
     }
+  }
+
+  if (overrides.max_source_bytes) {
+    const auto& values = context.ovm.ValuesOf("max-source-bytes");
+    const auto* limit = values.empty()
+      ? nullptr
+      : std::any_cast<uint64_t>(&values.back().Value());
+    if (limit == nullptr || *limit == 0U) {
+      constexpr std::string_view kMessage
+        = "ERROR: --max-source-bytes must be a positive byte count";
+      if (global_options.writer != nullptr) {
+        global_options.writer->Error(kMessage);
+      }
+      return std::unexpected(toolkit::ToolError::Usage());
+    }
+    service_config.max_source_bytes = serio::ByteCount { *limit };
   }
 
   if (!overrides.concurrency) {
@@ -208,6 +226,9 @@ auto CreateImportService(ImportCommand& active_command,
   }
   if (overrides.thread_pool_size) {
     final_config.thread_pool_size = service_config.thread_pool_size;
+  }
+  if (overrides.max_source_bytes) {
+    final_config.max_source_bytes = service_config.max_source_bytes;
   }
   if (overrides.concurrency) {
     final_config.concurrency = service_config.concurrency;

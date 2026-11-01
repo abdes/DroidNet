@@ -13,6 +13,7 @@
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Serio/IoDriver.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import {
 
@@ -35,8 +36,10 @@ namespace oxygen::content::import {
 */
 class SerioFileReader final : public IAsyncFileReader {
 public:
-  //! A reader whose files are bound to `driver`, which outlives it.
-  OXGN_COOK_API explicit SerioFileReader(serio::IoDriver& driver);
+  //! A reader whose files are bound to `driver`, which outlives it, and
+  //! whose reads return at most `source_limit` bytes.
+  OXGN_COOK_API SerioFileReader(
+    serio::IoDriver& driver, serio::ByteCount source_limit);
 
   OXGN_COOK_API ~SerioFileReader() override;
 
@@ -54,8 +57,14 @@ public:
   OXGN_COOK_NDAPI auto Exists(const std::filesystem::path& path)
     -> co::Co<Result<bool>> override;
 
+  [[nodiscard]] auto SourceLimit() const noexcept -> serio::ByteCount override
+  {
+    return source_limit_;
+  }
+
 private:
   observer_ptr<serio::IoDriver> driver_;
+  serio::ByteCount source_limit_;
 };
 
 } // namespace oxygen::content::import

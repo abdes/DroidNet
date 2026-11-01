@@ -919,7 +919,12 @@ auto ReadImageFile(const std::filesystem::path& path)
         : TextureImportError::kFileReadFailed);
   }
   auto bytes = serio::ReadAll(*file, kDefaultMaxSourceBytes);
-  if (!bytes || bytes->Empty()) {
+  if (!bytes) {
+    return Err(bytes.error() == serio::Error::kTooLarge
+        ? TextureImportError::kSourceTooLarge
+        : TextureImportError::kFileReadFailed);
+  }
+  if (bytes->Empty()) {
     return Err(TextureImportError::kFileReadFailed);
   }
   return Ok(std::move(bytes).value());
@@ -932,9 +937,7 @@ auto DecodeImageRgba8FromFile(const std::filesystem::path& path)
   if (!bytes) {
     return ImageDecodeResult {
       .image = std::nullopt,
-      .error = bytes.error() == TextureImportError::kFileNotFound
-        ? "failed to open file"
-        : "failed to read file",
+      .error = std::string(to_string(bytes.error())),
     };
   }
   return DecodeImageRgba8FromMemory(bytes->Bytes());

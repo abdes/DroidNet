@@ -39,6 +39,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
@@ -303,9 +304,13 @@ namespace {
             const auto candidate = mount->root / relative;
             const auto exists = co_await file_reader.Exists(candidate);
             if (exists && exists.value()) {
-              if (auto read = co_await file_reader.ReadFile(candidate)) {
+              auto read = co_await file_reader.ReadFile(candidate);
+              if (read.has_value()) {
                 file_bytes = std::move(read.value());
                 found = true;
+              } else if (auto too_large = SourceTooLargeDiagnostic(read.error(),
+                           candidate, file_reader.SourceLimit())) {
+                context.session.AddDiagnostic(std::move(*too_large));
               }
             }
           }

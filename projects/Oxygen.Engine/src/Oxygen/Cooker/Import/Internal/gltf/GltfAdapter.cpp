@@ -47,10 +47,12 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
@@ -72,6 +74,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfMeshopt.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
@@ -266,6 +269,18 @@ namespace {
     return { std::u8string(text.begin(), text.end()) };
   }
 
+  //! What the cgltf file callback reads with: the snapshot that records each
+  //! read, the source limit, and the first file the limit refused.
+  struct CgltfFileContext {
+    observer_ptr<detail::ImportSourceSnapshot> snapshot;
+    serio::ByteCount limit;
+    struct Refused {
+      std::filesystem::path path;
+      uint64_t size { 0 };
+    };
+    std::optional<Refused> refused;
+  };
+
   // cgltf owns successful reads until file.release; failures retain local RAII.
   auto ReadCgltfFile(const cgltf_memory_options* /*unused*/,
     const cgltf_file_options* file_options, const char* path, cgltf_size* size,
@@ -277,12 +292,14 @@ namespace {
     *data = nullptr;
     try {
       const auto logical = PathFromUtf8(path);
+      if (file_options == nullptr || file_options->user_data == nullptr) {
+        return cgltf_result_invalid_options;
+      }
+      auto& context = *static_cast<CgltfFileContext*>(file_options->user_data);
       auto observed
         = std::optional<detail::ImportSourceSnapshot::ParserRead> {};
-      if (file_options != nullptr && file_options->user_data != nullptr) {
-        auto* snapshot
-          = static_cast<detail::ImportSourceSnapshot*>(file_options->user_data);
-        observed.emplace(snapshot->BeginParserRead(logical));
+      if (context.snapshot != nullptr) {
+        observed.emplace(context.snapshot->BeginParserRead(logical));
       }
       const auto requested_maximum = *size;
       const auto file = serio::NativeFile::Open(
@@ -307,6 +324,16 @@ namespace {
       const auto requested
         = *size == 0U ? static_cast<cgltf_size>(length) : *size;
       if (std::cmp_greater(requested, length)) {
+        return cgltf_result_io_error;
+      }
+      // Refused before allocating; the loader reports the refusal itself.
+      if (serio::ByteCount { requested } > context.limit) {
+        if (!context.refused) {
+          context.refused = CgltfFileContext::Refused {
+            .path = logical,
+            .size = length,
+          };
+        }
         return cgltf_result_io_error;
       }
       // cgltf frees this raw buffer through ReleaseCgltfFile.
@@ -350,13 +377,41 @@ namespace {
     const std::unique_ptr<char[]> bytes(static_cast<char*>(data));
   }
 
-  auto MakeCgltfOptions(const AdapterInput& input) -> cgltf_options
+  //! The file context of a parse of `input`: its snapshot's limit, or the
+  //! import default without one.
+  auto MakeCgltfFileContext(const AdapterInput& input) -> CgltfFileContext
+  {
+    const auto& snapshot = input.source_snapshot;
+    return CgltfFileContext {
+      .snapshot = make_observer(snapshot.get()),
+      .limit
+      = snapshot != nullptr ? snapshot->SourceLimit() : kDefaultMaxSourceBytes,
+      .refused = std::nullopt,
+    };
+  }
+
+  //! Options whose file callback reads through `context`, which outlives the
+  //! parse.
+  auto MakeCgltfOptions(CgltfFileContext& context) -> cgltf_options
   {
     cgltf_options options {};
-    options.file.user_data = input.source_snapshot.get();
+    options.file.user_data = &context;
     options.file.read = &ReadCgltfFile;
     options.file.release = &ReleaseCgltfFile;
     return options;
+  }
+
+  //! The diagnostic of a failed cgltf call: a source the limit refused, or
+  //! the call's result.
+  auto MakeLoadDiagnostic(const CgltfFileContext& context,
+    const AdapterInput& input, const cgltf_result result) -> ImportDiagnostic
+  {
+    if (context.refused) {
+      return detail::MakeSourceTooLargeDiagnostic(context.refused->path,
+        context.refused->size, context.limit,
+        std::string(input.object_path_prefix));
+    }
+    return MakeParseDiagnostic(input.source_id_prefix, result);
   }
 
   //! Refuses a document cgltf finds inconsistent, such as a node cycle or an
@@ -549,7 +604,8 @@ namespace {
       return { nullptr, &cgltf_free };
     }
 
-    const auto options = MakeCgltfOptions(input);
+    auto file_context = MakeCgltfFileContext(input);
+    const auto options = MakeCgltfOptions(file_context);
     cgltf_data* data = nullptr;
     const auto parse_result
       = cgltf_parse_file(&options, Utf8Path(path).c_str(), &data);
@@ -557,7 +613,7 @@ namespace {
       LOG_F(ERROR, "glTF parse failed: path='{}' result='{}'", path.string(),
         ResultToMessage(parse_result));
       diagnostics.push_back(
-        MakeParseDiagnostic(input.source_id_prefix, parse_result));
+        MakeLoadDiagnostic(file_context, input, parse_result));
       return { nullptr, &cgltf_free };
     }
 
@@ -571,7 +627,7 @@ namespace {
       LOG_F(ERROR, "glTF buffer load failed: path='{}' result='{}'",
         path.string(), ResultToMessage(load_result));
       diagnostics.push_back(
-        MakeParseDiagnostic(input.source_id_prefix, load_result));
+        MakeLoadDiagnostic(file_context, input, load_result));
       cgltf_free(data);
       return { nullptr, &cgltf_free };
     }
@@ -593,7 +649,8 @@ namespace {
       return { nullptr, &cgltf_free };
     }
 
-    const auto options = MakeCgltfOptions(input);
+    auto file_context = MakeCgltfFileContext(input);
+    const auto options = MakeCgltfOptions(file_context);
     cgltf_data* data = nullptr;
     const auto parse_result
       = cgltf_parse(&options, bytes.data(), bytes.size(), &data);
@@ -601,7 +658,7 @@ namespace {
       LOG_F(ERROR, "glTF parse failed (memory): result='{}'",
         ResultToMessage(parse_result));
       diagnostics.push_back(
-        MakeParseDiagnostic(input.source_id_prefix, parse_result));
+        MakeLoadDiagnostic(file_context, input, parse_result));
       return { nullptr, &cgltf_free };
     }
 
@@ -615,7 +672,7 @@ namespace {
       LOG_F(ERROR, "glTF buffer load failed (memory): result='{}'",
         ResultToMessage(load_result));
       diagnostics.push_back(
-        MakeParseDiagnostic(input.source_id_prefix, load_result));
+        MakeLoadDiagnostic(file_context, input, load_result));
       cgltf_free(data);
       return { nullptr, &cgltf_free };
     }

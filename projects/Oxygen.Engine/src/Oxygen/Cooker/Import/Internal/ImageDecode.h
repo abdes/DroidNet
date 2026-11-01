@@ -44,7 +44,8 @@ struct ImageDecodeResult final {
 
 //! Reads the whole image file `path` into a buffer.
 /*!
- @return The bytes; `kFileNotFound` when no file is there, `kFileReadFailed`
+ @return The bytes; `kFileNotFound` when no file is there, `kSourceTooLarge`
+         when it holds more than `kDefaultMaxSourceBytes`, `kFileReadFailed`
          when it is empty or cannot be read.
 */
 OXGN_COOK_NDAPI auto ReadImageFile(const std::filesystem::path& path)

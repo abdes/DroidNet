@@ -175,6 +175,7 @@ oxygen_cooker_test(
     "Import/TextureDescriptorImportRequestBuilder_functional_test.cpp"
     "Import/TextureDescriptorImportRequestBuilder_preparation_functional_test.cpp"
     "Import/SerioFileReader_functional_test.cpp"
+    "Import/SourceLimit_functional_test.cpp"
 )
 if(TARGET oxygen-cooker-test-visible-internals)
   target_link_libraries(

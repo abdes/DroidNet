@@ -95,6 +95,12 @@ namespace {
         .WithValue<uint32_t>()
         .Build());
 
+    group->Add(Option::WithKey("max-source-bytes")
+        .About("Override the most bytes a job reads from one source")
+        .Long("max-source-bytes")
+        .WithValue<uint64_t>()
+        .Build());
+
     group->Add(Option::WithKey("concurrency")
         .About("Override pipeline concurrency (t,b,m,h,g,s as workers/queue)")
         .Long("concurrency")

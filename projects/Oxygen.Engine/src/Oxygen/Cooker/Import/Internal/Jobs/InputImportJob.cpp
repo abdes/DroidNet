@@ -18,6 +18,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
@@ -140,10 +141,15 @@ auto InputImportJob::LoadSource(ImportSession& session) -> co::Co<LoadedSource>
 
   auto read = co_await reader->ReadFile(request.source_path);
   if (!read.has_value()) {
-    AddDiagnostic(session, request, ImportSeverity::kError,
-      "input.import.source_read_failed",
-      "Failed to read source file '" + request.source_path.string()
-        + "': " + read.error().message());
+    if (auto too_large = SourceTooLargeDiagnostic(
+          read.error(), request.source_path, reader->SourceLimit())) {
+      session.AddDiagnostic(std::move(*too_large));
+    } else {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "input.import.source_read_failed",
+        "Failed to read source file '" + request.source_path.string()
+          + "': " + read.error().message());
+    }
     co_return LoadedSource {
       .success = false,
       .bytes = {},

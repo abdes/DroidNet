@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/OxCo/Algorithms.h>
@@ -34,6 +35,7 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -75,6 +77,11 @@ namespace {
         : std::min<std::size_t>(options.max_bytes, bytes.size() - offset);
       const auto selected = bytes.subspan(offset, count);
       co_return serio::ByteBuffer::CopyOf(selected);
+    }
+
+    [[nodiscard]] auto SourceLimit() const noexcept -> serio::ByteCount override
+    {
+      return kDefaultMaxSourceBytes;
     }
 
     auto GetFileInfo(const std::filesystem::path& path)

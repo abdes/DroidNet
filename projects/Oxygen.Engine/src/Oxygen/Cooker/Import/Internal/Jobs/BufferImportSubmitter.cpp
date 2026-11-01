@@ -32,6 +32,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferViews.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
@@ -206,11 +207,16 @@ auto BufferImportSubmitter::SubmitBuffers(
     session_->AddSourceLoadDuration(
       MakeDuration(read_start, std::chrono::steady_clock::now()));
     if (!read_result.has_value()) {
-      AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-        "buffer.container.source_read_failed",
-        "Failed reading buffer source '" + entry.source_path.string()
-          + "': " + read_result.error().message(),
-        entry.source_id);
+      if (auto too_large = SourceTooLargeDiagnostic(
+            read_result.error(), entry.source_path, reader_->SourceLimit())) {
+        session_->AddDiagnostic(std::move(*too_large));
+      } else {
+        AddDiagnostic(*session_, *request_, ImportSeverity::kError,
+          "buffer.container.source_read_failed",
+          "Failed reading buffer source '" + entry.source_path.string()
+            + "': " + read_result.error().message(),
+          entry.source_id);
+      }
       continue;
     }
 

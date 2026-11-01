@@ -42,6 +42,7 @@
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
@@ -56,6 +57,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
@@ -192,6 +194,10 @@ namespace {
       AddFile(path);
       auto bytes = co_await reader->ReadFile(path, options);
       if (!bytes) {
+        if (const auto too_large = detail::SourceTooLargeDiagnostic(
+              bytes.error(), path, reader->SourceLimit())) {
+          throw std::runtime_error(too_large->message);
+        }
         throw std::runtime_error(
           "Cannot read '" + path.string() + "': " + bytes.error().message());
       }
@@ -1173,7 +1179,8 @@ auto ImportManifest::AnalyzeSources(const std::stop_token& stop_token,
   -> ImportSourceAnalysis
 {
   auto loop = ImportEventLoop {};
-  auto reader = CreateAsyncFileReader(loop.Driver());
+  auto reader = CreateAsyncFileReader(
+    loop.Driver(), max_source_bytes.value_or(kDefaultMaxSourceBytes));
   auto pool = co::ThreadPool(loop, 1U);
   return detail::RunSourceAnalysis(
     *this, loop, *reader, pool, stop_token, std::move(captured_inputs));

@@ -16,7 +16,6 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
-#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/Internal/SerioFileReader.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/AsyncDevice.h>
@@ -36,8 +35,10 @@ namespace {
   }
 } // namespace
 
-SerioFileReader::SerioFileReader(serio::IoDriver& driver)
+SerioFileReader::SerioFileReader(
+  serio::IoDriver& driver, const serio::ByteCount source_limit)
   : driver_(make_observer(&driver))
+  , source_limit_(source_limit)
 {
   DLOG_F(INFO, "Created");
 }
@@ -63,7 +64,7 @@ auto SerioFileReader::ReadFile(const std::filesystem::path& path,
   }
 
   if (options.offset == 0 && options.max_bytes == 0) {
-    co_return co_await serio::AsyncReadAll(*file, kDefaultMaxSourceBytes);
+    co_return co_await serio::AsyncReadAll(*file, source_limit_);
   }
 
   const auto size = file->Size();
@@ -77,6 +78,9 @@ auto SerioFileReader::ReadFile(const std::filesystem::path& path,
   const auto count = options.max_bytes > 0
     ? std::min(options.max_bytes, available)
     : available;
+  if (serio::ByteCount { count } > source_limit_) {
+    co_return Err(make_error_code(serio::Error::kTooLarge));
+  }
 
   auto buffer = serio::ByteBuffer::Allocate(serio::ByteCount { count });
   if (!buffer) {
@@ -148,10 +152,10 @@ auto SerioFileReader::Exists(const std::filesystem::path& path)
   co_return Ok(exists);
 }
 
-auto CreateAsyncFileReader(serio::IoDriver& driver)
-  -> std::unique_ptr<IAsyncFileReader>
+auto CreateAsyncFileReader(serio::IoDriver& driver,
+  const serio::ByteCount source_limit) -> std::unique_ptr<IAsyncFileReader>
 {
-  return std::make_unique<SerioFileReader>(driver);
+  return std::make_unique<SerioFileReader>(driver, source_limit);
 }
 
 } // namespace oxygen::content::import

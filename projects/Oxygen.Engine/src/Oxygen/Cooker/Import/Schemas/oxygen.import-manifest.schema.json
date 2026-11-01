@@ -28,6 +28,11 @@
       "minimum": 1,
       "default": 64
     },
+    "max_source_bytes": {
+      "description": "The most bytes a job reads from one source file or range; a larger source fails its job with import.source_too_large. Default: the import service's limit.",
+      "type": "integer",
+      "minimum": 1
+    },
     "concurrency": {
       "description": "Each pipeline's workers and queue capacity; an unset value takes its default.",
       "type": "object",

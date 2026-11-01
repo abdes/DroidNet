@@ -19,6 +19,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -26,6 +27,7 @@
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::co {
 class Event;
@@ -163,6 +165,10 @@ public:
 
     //! Per-pipeline concurrency settings (workers and queue capacity).
     ImportConcurrency concurrency {};
+
+    //! The most bytes the import reads from one source file, or one range
+    //! of it; a larger source fails its job with `import.source_too_large`.
+    serio::ByteCount max_source_bytes = kDefaultMaxSourceBytes;
 
     //! Optional script compiler callback.
     /*!

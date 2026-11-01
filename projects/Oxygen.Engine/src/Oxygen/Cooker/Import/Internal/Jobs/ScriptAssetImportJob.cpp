@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/ScriptAssetImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
@@ -149,10 +150,15 @@ auto ScriptAssetImportJob::LoadSource(ImportSession& session)
 
   auto read = co_await reader->ReadFile(req.source_path);
   if (!read.has_value()) {
-    AddDiagnostic(session, req, ImportSeverity::kError,
-      "script.asset.source_read_failed",
-      "Failed to read source file '" + req.source_path.string()
-        + "': " + read.error().message());
+    if (auto too_large = SourceTooLargeDiagnostic(
+          read.error(), req.source_path, reader->SourceLimit())) {
+      session.AddDiagnostic(std::move(*too_large));
+    } else {
+      AddDiagnostic(session, req, ImportSeverity::kError,
+        "script.asset.source_read_failed",
+        "Failed to read source file '" + req.source_path.string()
+          + "': " + read.error().message());
+    }
     co_return LoadedSource {
       .success = false,
       .bytes = {},

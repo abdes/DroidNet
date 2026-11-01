@@ -13,9 +13,11 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::serio {
 class IoDriver;
@@ -96,6 +98,9 @@ public:
    @return The bytes read on success, or the error.
 
    ### Errors
+   - `serio::Error::kTooLarge`, before anything is allocated, when the bytes
+     the read would return pass `SourceLimit()`: the whole file, or the
+     clamped range. A read is refused, never clipped to the limit.
    - `serio::Error::kNotFound` if the file does not exist.
    - `serio::Error::kAccessDenied` if read permission is denied.
    - `serio::Error::kIsDirectory` if the path names a directory.
@@ -126,15 +131,22 @@ public:
   */
   [[nodiscard]] virtual auto Exists(const std::filesystem::path& path)
     -> co::Co<Result<bool>> = 0;
+
+  //! The most bytes one read returns; a larger read fails with
+  //! `serio::Error::kTooLarge`.
+  [[nodiscard]] virtual auto SourceLimit() const noexcept -> serio::ByteCount
+    = 0;
 };
 
 //! Create the async file reader of the import loop.
 /*!
  @param driver The driver of the import loop's `asio::io_context`; it outlives
                the reader.
+ @param source_limit The most bytes one read returns (`SourceLimit()`).
  @return Unique pointer to async file reader.
 */
-OXGN_COOK_NDAPI auto CreateAsyncFileReader(serio::IoDriver& driver)
+OXGN_COOK_NDAPI auto CreateAsyncFileReader(serio::IoDriver& driver,
+  serio::ByteCount source_limit = kDefaultMaxSourceBytes)
   -> std::unique_ptr<IAsyncFileReader>;
 
 } // namespace oxygen::content::import

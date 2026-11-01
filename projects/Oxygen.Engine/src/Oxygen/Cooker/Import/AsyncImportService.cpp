@@ -324,7 +324,8 @@ struct AsyncImportService::Impl {
     }
 
     // Source reads go through the loop's IO driver
-    file_reader_ = CreateAsyncFileReader(event_loop_->Driver());
+    file_reader_
+      = CreateAsyncFileReader(event_loop_->Driver(), config_.max_source_bytes);
 
     table_registry_ = std::make_unique<ResourceTableRegistry>(
       event_loop_->Driver(), config_.cooked_storage);

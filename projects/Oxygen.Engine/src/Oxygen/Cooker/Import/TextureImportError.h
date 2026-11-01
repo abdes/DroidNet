@@ -56,6 +56,7 @@ enum class TextureImportError : uint8_t {
   kFileNotFound  = 60,  //!< Source file does not exist
   kFileReadFailed = 61,  //!< Failed to read source file
   kWriteFailed   = 62,  //!< Failed to write output data
+  kSourceTooLarge = 63, //!< Source file is larger than the import reads
 
   //=== Cancellation (80-89) ===---------------------------------------------//
   kCancelled     = 80,  //!< Operation was canceled by the caller

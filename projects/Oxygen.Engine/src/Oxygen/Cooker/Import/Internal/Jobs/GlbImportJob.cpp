@@ -34,6 +34,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/WorkDispatcher.h>
 #include <Oxygen/Cooker/Import/Internal/WorkPayloadStore.h>
@@ -245,9 +246,14 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
       source_bytes
         = std::make_shared<serio::ByteBuffer>(std::move(read_result.value()));
     } else {
-      session.AddDiagnostic(MakeErrorDiagnostic("gltf.read_failed",
-        "Failed to read glTF source bytes", request_copy.source_path.string(),
-        ""));
+      if (auto too_large = SourceTooLargeDiagnostic(read_result.error(),
+            request_copy.source_path, reader.get()->SourceLimit())) {
+        session.AddDiagnostic(std::move(*too_large));
+      } else {
+        session.AddDiagnostic(MakeErrorDiagnostic("gltf.read_failed",
+          "Failed to read glTF source bytes", request_copy.source_path.string(),
+          ""));
+      }
       ParsedGlbAsset failed;
       failed.success = false;
       co_return failed;

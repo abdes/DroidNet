@@ -40,6 +40,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -239,11 +240,16 @@ namespace {
       context.session.AddLoadDuration(
         MakeDuration(read_start, std::chrono::steady_clock::now()));
       if (!read_result.has_value()) {
-        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "geometry.buffer.sidecar_read_failed",
-          "Failed reading buffer descriptor '" + descriptor_path.string()
-            + "': " + read_result.error().message(),
-          object_path);
+        if (auto too_large = SourceTooLargeDiagnostic(read_result.error(),
+              descriptor_path, context.reader->SourceLimit())) {
+          context.session.AddDiagnostic(std::move(*too_large));
+        } else {
+          AddDiagnostic(context.session, context.request,
+            ImportSeverity::kError, "geometry.buffer.sidecar_read_failed",
+            "Failed reading buffer descriptor '" + descriptor_path.string()
+              + "': " + read_result.error().message(),
+            object_path);
+        }
         co_return std::nullopt;
       }
 

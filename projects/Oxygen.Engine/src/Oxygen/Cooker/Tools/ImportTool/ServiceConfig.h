@@ -21,10 +21,12 @@ class ImportCommand;
 //! Service settings given on the command line, which override a command's.
 struct ServiceOverrides {
   bool thread_pool_size = false;
+  bool max_source_bytes = false;
   bool concurrency = false;
 };
 
-//! Reads `--thread-pool-size` and `--concurrency` into `service_config`.
+//! Reads `--thread-pool-size`, `--max-source-bytes` and `--concurrency` into
+//! `service_config`.
 /*!
  An invalid `--concurrency` specification is reported on the global writer and
  fails with `ExitCode::kUsage`.

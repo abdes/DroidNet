@@ -32,6 +32,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportPolicy.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
@@ -395,13 +396,18 @@ auto TextureImportJob::LoadSource(ImportSession& session)
 
       if (!read_result.has_value()) {
         const auto error = read_result.error();
-        session.AddDiagnostic({
-          .severity = ImportSeverity::kError,
-          .code = "texture.read_failed",
-          .message = error.message(),
-          .source_path = mapping.path.string(),
-          .object_path = {},
-        });
+        if (auto too_large = SourceTooLargeDiagnostic(
+              error, mapping.path, reader.get()->SourceLimit())) {
+          session.AddDiagnostic(std::move(*too_large));
+        } else {
+          session.AddDiagnostic({
+            .severity = ImportSeverity::kError,
+            .code = "texture.read_failed",
+            .message = error.message(),
+            .source_path = mapping.path.string(),
+            .object_path = {},
+          });
+        }
         co_return StampDurations(source);
       }
 
@@ -459,13 +465,18 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       AddDuration(io_duration, read_start, read_end);
       if (!read_result.has_value()) {
         const auto error = read_result.error();
-        session.AddDiagnostic({
-          .severity = ImportSeverity::kError,
-          .code = "texture.read_failed",
-          .message = error.message(),
-          .source_path = Request().source_path.string(),
-          .object_path = {},
-        });
+        if (auto too_large = SourceTooLargeDiagnostic(
+              error, Request().source_path, reader.get()->SourceLimit())) {
+          session.AddDiagnostic(std::move(*too_large));
+        } else {
+          session.AddDiagnostic({
+            .severity = ImportSeverity::kError,
+            .code = "texture.read_failed",
+            .message = error.message(),
+            .source_path = Request().source_path.string(),
+            .object_path = {},
+          });
+        }
         co_return StampDurations(source);
       }
 
@@ -501,13 +512,18 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       AddDuration(io_duration, read_start, read_end);
       if (!read_result.has_value()) {
         const auto error = read_result.error();
-        session.AddDiagnostic({
-          .severity = ImportSeverity::kError,
-          .code = "texture.read_failed",
-          .message = error.message(),
-          .source_path = Request().source_path.string(),
-          .object_path = {},
-        });
+        if (auto too_large = SourceTooLargeDiagnostic(
+              error, Request().source_path, reader.get()->SourceLimit())) {
+          session.AddDiagnostic(std::move(*too_large));
+        } else {
+          session.AddDiagnostic({
+            .severity = ImportSeverity::kError,
+            .code = "texture.read_failed",
+            .message = error.message(),
+            .source_path = Request().source_path.string(),
+            .object_path = {},
+          });
+        }
         co_return StampDurations(source);
       }
 
@@ -557,13 +573,18 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       AddDuration(io_duration, read_start, read_end);
       if (!read_result.has_value()) {
         const auto error = read_result.error();
-        session.AddDiagnostic({
-          .severity = ImportSeverity::kError,
-          .code = "texture.read_failed",
-          .message = error.message(),
-          .source_path = face_path.string(),
-          .object_path = {},
-        });
+        if (auto too_large = SourceTooLargeDiagnostic(
+              error, face_path, reader.get()->SourceLimit())) {
+          session.AddDiagnostic(std::move(*too_large));
+        } else {
+          session.AddDiagnostic({
+            .severity = ImportSeverity::kError,
+            .code = "texture.read_failed",
+            .message = error.message(),
+            .source_path = face_path.string(),
+            .object_path = {},
+          });
+        }
         co_return StampDurations(source);
       }
 
@@ -601,13 +622,18 @@ auto TextureImportJob::LoadSource(ImportSession& session)
   AddDuration(io_duration, read_start, read_end);
   if (!read_result.has_value()) {
     const auto error = read_result.error();
-    session.AddDiagnostic({
-      .severity = ImportSeverity::kError,
-      .code = "texture.read_failed",
-      .message = error.message(),
-      .source_path = Request().source_path.string(),
-      .object_path = {},
-    });
+    if (auto too_large = SourceTooLargeDiagnostic(
+          error, Request().source_path, reader.get()->SourceLimit())) {
+      session.AddDiagnostic(std::move(*too_large));
+    } else {
+      session.AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = "texture.read_failed",
+        .message = error.message(),
+        .source_path = Request().source_path.string(),
+        .object_path = {},
+      });
+    }
     co_return StampDurations(source);
   }
 

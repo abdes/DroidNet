@@ -16,6 +16,7 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/ImportSourceObservation.h>
 #include <Oxygen/Serio/Device.h>
@@ -55,6 +56,13 @@ auto ImportSourceDocument::Load(const std::filesystem::path& path,
   const auto length = file->Size();
   if (!length || !std::in_range<size_t>(length->get())) {
     errors << "ERROR: invalid " << kind << " descriptor size: " << path.string()
+           << '\n';
+    return std::nullopt;
+  }
+  if (*length > kDefaultMaxSourceBytes) {
+    errors << "ERROR: " << kind << " descriptor holds " << length->get()
+           << " bytes, more than the import reads from one source ("
+           << kDefaultMaxSourceBytes.get() << " bytes): " << path.string()
            << '\n';
     return std::nullopt;
   }

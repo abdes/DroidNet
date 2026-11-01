@@ -951,6 +951,9 @@ auto BatchCommand::PrepareImportServiceConfig()
   if (manifest->job_admission_capacity.has_value()) {
     service_config.job_admission_capacity = *manifest->job_admission_capacity;
   }
+  if (manifest->max_source_bytes.has_value()) {
+    service_config.max_source_bytes = *manifest->max_source_bytes;
+  }
   if (manifest->concurrency.has_value()) {
     service_config.concurrency = *manifest->concurrency;
   }

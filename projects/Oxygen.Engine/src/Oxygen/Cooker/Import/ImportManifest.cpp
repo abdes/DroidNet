@@ -69,6 +69,7 @@
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import {
 
@@ -783,6 +784,22 @@ namespace {
       return false;
     }
     target = value;
+    return true;
+  }
+
+  //! Reads an optional positive byte count, which may pass `uint32_t`.
+  auto ReadOptionalByteCountField(const json& obj, const char* name,
+    std::optional<serio::ByteCount>& target, std::ostream& errors) -> bool
+  {
+    if (!obj.contains(name)) {
+      return true;
+    }
+    const auto& value = obj.at(name);
+    if (!value.is_number_unsigned() || value.get<uint64_t>() == 0U) {
+      errors << "ERROR: '" << name << "' must be a positive integer\n";
+      return false;
+    }
+    target = serio::ByteCount { value.get<uint64_t>() };
     return true;
   }
 
@@ -1540,6 +1557,10 @@ namespace {
     }
     if (!ReadOptionalUIntField(*json_data, "job_admission_capacity",
           manifest.job_admission_capacity, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ReadOptionalByteCountField(*json_data, "max_source_bytes",
+          manifest.max_source_bytes, error_stream)) {
       return std::nullopt;
     }
     if (json_data->contains("concurrency")) {

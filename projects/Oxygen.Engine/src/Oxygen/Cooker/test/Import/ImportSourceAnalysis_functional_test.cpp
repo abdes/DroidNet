@@ -33,6 +33,7 @@
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
@@ -48,6 +49,7 @@
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 #include <Oxygen/Testing/TempDirTest.h>
@@ -78,6 +80,11 @@ namespace {
       -> co::Co<Result<bool>> override
     {
       co_return Ok(true);
+    }
+
+    [[nodiscard]] auto SourceLimit() const noexcept -> serio::ByteCount override
+    {
+      return kDefaultMaxSourceBytes;
     }
 
     auto GetFileInfo(const std::filesystem::path& /*path*/)
