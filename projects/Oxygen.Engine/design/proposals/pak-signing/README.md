@@ -56,7 +56,7 @@ replaced. A signature therefore covers a table of the pak's stored regions:
 ## Modules
 
 Each part lives where its knowledge lives
-([Serio's layering](../serio-io/README.md#scope-and-layering)):
+([Serio's place among the modules](../../../src/Oxygen/Serio/Docs/architecture.md#place-among-the-modules)):
 
 | Module                                | Holds                                                                                                                             |
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |

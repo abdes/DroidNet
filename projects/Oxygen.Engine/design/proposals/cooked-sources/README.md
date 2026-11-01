@@ -10,7 +10,7 @@ it reads, a **cooked source**, in the engine's own terms, and the one file
 system port through which the Cooker reads Serio devices and publishes
 atomically, in memory for tests.
 
-It is the Cooker side of the [Serio IO](../serio-io/README.md) consumers
+It is the Cooker side of the [Serio](../../../src/Oxygen/Serio/README.md) consumers
 (`PakPlanBuilder`, `PakWriter`, `PakManifestWriter`, the Cooker file helpers
 and ports). The [cooked content builders](../cooked-content-builders/README.md)
 build cooked sources for tests.

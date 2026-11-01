@@ -9,8 +9,8 @@ upload staging row by row, and from staging to the GPU. This proposal removes
 the CPU copies: a payload whose cooked layout is the one the GPU copy needs is
 read straight into upload staging, and, where DirectStorage is available,
 straight into the texture with no staging at all. It builds on the
-[Serio IO proposal](../serio-io/README.md) (regions, awaitable reads, 4 KiB
-payload alignment).
+[Serio](../../../src/Oxygen/Serio/README.md) (regions, awaited reads) and the pak
+format's 4 KiB payload alignment.
 
 ## Contents
 

@@ -80,7 +80,7 @@ unselected generation after acquiring its existing marker exclusively. Loaded
 objects, cached objects and in-flight operations are all holders. The operating
 system lock also protects against reclamation by another process. Publisher CAS
 and selection rules are separate from this byte-lifetime contract; the shared
-lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
+lock primitive is owned by [Serio](../../Serio/Docs/publication.md#file-locks).
 
 Writers of one root's index serialize their read, merge and publication on
 `container.index.lock`, a sibling of the index taken exclusively with

@@ -123,7 +123,7 @@ S18 (mockups) has no code dependency and starts with S1, so the owner's UX
 decisions are in before S14.
 
 S6a to S6e finish the engine side of S6 and of the
-[Serio IO](../serio-io/README.md) and [cooked sources](../cooked-sources/README.md)
+[Serio](../../../src/Oxygen/Serio/README.md) and [cooked sources](../cooked-sources/README.md)
 work. They change no editor code; editor work they require is a task of the
 editor slice named in their rows. S6f takes the engine share of S19 to S21, so
 from S7 on every slice is editor or interop work and touches the engine only
@@ -273,8 +273,8 @@ in this slice.
 
 Closes the gaps consumers worked around, in Serio itself, and moves every
 duplicate of a Serio facility onto it, so the API is complete and consistent
-and Serio is the one IO stack. The design is `serio-io/api.md`, reviewed by
-the owner before code.
+and Serio is the one IO stack. The design is the
+[Serio documentation](../../../src/Oxygen/Serio/README.md).
 
 Deletes:
 
@@ -332,7 +332,7 @@ on `container.index.lock`).
 Unit tests: each new API's own tests in Serio (conformance where it is a
 device or backend), and the moved consumers' tests migrated with them,
 including the emitter, import session and job tests onto the in-memory
-storage. Docs: `serio-io/api.md`, `serio-io/README.md`, the Serio, Content
+storage. Docs: the Serio README and `Serio/Docs`, the Content
 and Cooker import READMEs.
 
 ### S6b. Pak format 11 tests

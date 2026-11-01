@@ -180,8 +180,8 @@ come first.
 ## R1. Serio IO
 
 **Files.** `Serio/*.h`, `Serio/*.cpp`, `Serio/Detail/*`,
-`Serio/Platform/Windows/*`, `Serio/Platform/Posix/*`; `Serio/README.md`;
-`design/proposals/serio-io/` (`api.md` and the README).
+`Serio/Platform/Windows/*`, `Serio/Platform/Posix/*`; `Serio/README.md`,
+`Serio/Docs/*.md`.
 
 **Objectives.** The byte layer is correct, bounded and crash-safe, and its
 API is the only way the engine reads, writes, hashes and publishes files.
