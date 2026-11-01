@@ -415,7 +415,8 @@ struct LooseCookedWriter::Impl final {
     // A descriptor nothing here produced is read once, to validate and hash.
     const auto path_on_disk
       = cooked_root_ / std::filesystem::path(descriptor_relpath);
-    const auto bytes = cooked::ReadWholeFile(*storage_, path_on_disk);
+    const auto bytes = cooked::ReadWholeFile(
+      *storage_, path_on_disk, cooked::kMaxMetadataBytes);
     if (!bytes) {
       throw std::system_error(bytes.error(),
         "Failed to read registered descriptor '" + path_on_disk.string() + "'");
@@ -788,7 +789,8 @@ private:
     }
 
     try {
-      auto bytes = cooked::ReadWholeFile(*storage_, index_path);
+      auto bytes = cooked::ReadWholeFile(
+        *storage_, index_path, cooked::kMaxMetadataBytes);
       if (!bytes) {
         throw std::runtime_error(
           "Failed to read existing index: " + bytes.error().message());

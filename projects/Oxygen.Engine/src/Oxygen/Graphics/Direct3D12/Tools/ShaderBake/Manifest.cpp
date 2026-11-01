@@ -8,11 +8,7 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <iomanip>
-#include <ios>
 #include <span>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -26,6 +22,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
@@ -35,34 +32,14 @@ namespace {
 
   constexpr uint32_t kManifestSchemaVersion = 1;
 
-  auto FormatRequestKeyHex(const uint64_t request_key) -> std::string
-  {
-    std::ostringstream stream;
-    stream << std::hex << std::setw(16) << std::setfill('0') << request_key;
-    return stream.str();
-  }
-
   auto ParseRequestKeyHex(const std::string& text) -> uint64_t
   {
-    if (text.size() != 16) {
+    const auto key = RequestKeyFromHex(text);
+    if (!key) {
       throw std::runtime_error(
         "request_key_hex must be 16 lowercase hex characters");
     }
-
-    uint64_t value = 0;
-    for (const char ch : text) {
-      value <<= 4;
-      if (ch >= '0' && ch <= '9') {
-        value |= static_cast<uint64_t>(ch - '0');
-      } else if (ch >= 'a' && ch <= 'f') {
-        value |= static_cast<uint64_t>(ch - 'a' + 10);
-      } else {
-        throw std::runtime_error(
-          "request_key_hex contains a non-hex character");
-      }
-    }
-
-    return value;
+    return *key;
   }
 
   auto ShaderStageToManifestString(const ShaderType stage) -> std::string_view
@@ -204,7 +181,7 @@ auto WriteManifestFile(const std::filesystem::path& manifest_path,
   auto requests_json = json::array();
   for (const auto& request : snapshot.requests) {
     requests_json.push_back(json {
-      { "request_key_hex", FormatRequestKeyHex(request.request_key) },
+      { "request_key_hex", RequestKeyToHex(request.request_key) },
       { "source_path", request.request.source_path },
       { "entry_point", request.request.entry_point },
       {
@@ -229,14 +206,11 @@ auto WriteManifestFile(const std::filesystem::path& manifest_path,
 auto ReadManifestFile(const std::filesystem::path& manifest_path)
   -> ManifestSnapshot
 {
-  std::ifstream stream(manifest_path, std::ios::binary);
-  if (!stream.is_open()) {
-    throw std::runtime_error(
-      "failed to open manifest `" + ToUtf8PathString(manifest_path) + "`");
-  }
+  const auto bytes = ReadFileBytes(manifest_path, "manifest");
 
   try {
-    const auto payload = json::parse(stream);
+    const auto text = bytes.Unsigned();
+    const auto payload = json::parse(text.begin(), text.end());
     const auto schema_version = payload.at("schema_version").get<uint32_t>();
     if (schema_version != kManifestSchemaVersion) {
       throw std::runtime_error("unsupported manifest schema version");

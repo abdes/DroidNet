@@ -241,6 +241,7 @@ target_link_libraries(
   oxygen-scripting-definitions
   PRIVATE
     ${META_MODULE_TARGET}
+    oxygen::serio
 )
 set(
   OXYGEN_SCRIPTING_DEFINITIONS_FILE

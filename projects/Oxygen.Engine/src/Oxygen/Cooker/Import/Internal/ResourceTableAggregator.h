@@ -404,7 +404,8 @@ private:
       throw ResourceTableError(table_path_, "is not a file");
     }
 
-    const auto bytes = cooked::ReadWholeFile(*storage_, table_path_);
+    const auto bytes = cooked::ReadWholeFile(
+      *storage_, table_path_, cooked::kMaxMetadataBytes);
     if (!bytes) {
       throw ResourceTableError(
         table_path_, "cannot be read: " + bytes.error().message());

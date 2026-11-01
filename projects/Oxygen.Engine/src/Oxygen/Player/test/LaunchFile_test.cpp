@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <string>
 #include <string_view>
 
@@ -170,6 +171,22 @@ NOLINT_TEST_F(LaunchFileTest, UnreadableFileIsReported)
 {
   EXPECT_THROW(static_cast<void>(ReadLaunchFile(TempDir() / "missing.json")),
     LaunchFileError);
+}
+
+//! A launch file past the limit is refused before it is read.
+NOLINT_TEST_F(LaunchFileTest, FilePastTheLimitIsReported)
+{
+  const auto path = TempDir() / "large.json";
+  std::ofstream(path, std::ios::binary)
+    << std::string(oxygen::player::kMaxLaunchFileBytes.get() + 1U, ' ');
+
+  try {
+    static_cast<void>(ReadLaunchFile(path));
+    ADD_FAILURE() << "an oversized launch file was read";
+  } catch (const LaunchFileError& error) {
+    EXPECT_NE(std::string_view(error.what()).find("large.json"),
+      std::string_view::npos);
+  }
 }
 
 } // namespace

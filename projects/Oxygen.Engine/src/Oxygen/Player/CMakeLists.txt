@@ -59,6 +59,7 @@ target_link_libraries(
     oxygen::host
     oxygen::sceneinstantiation
     oxygen::scripting
+    oxygen::serio
     oxygen::vortex
     nlohmann_json::nlohmann_json
   PRIVATE

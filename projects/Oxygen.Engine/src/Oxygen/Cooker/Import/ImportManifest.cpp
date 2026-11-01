@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -30,7 +29,6 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/VirtualPath.h>
@@ -41,6 +39,7 @@
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -69,6 +68,8 @@
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import {
@@ -173,17 +174,16 @@ namespace {
   auto ReadJsonFile(const std::filesystem::path& path,
     std::ostream& error_stream) -> std::optional<json>
   {
-    std::ifstream input(base::ToNativePath(path));
-    if (!input) {
-      error_stream << "ERROR: failed to open manifest: " << path.string()
-                   << "\n";
+    const auto bytes = serio::ReadPublishedFile(path, kMaxImportMetadataBytes);
+    if (!bytes) {
+      error_stream << "ERROR: failed to read manifest: " << path.string()
+                   << ": " << bytes.error().message() << "\n";
       return std::nullopt;
     }
 
     try {
-      json parsed;
-      input >> parsed;
-      return parsed;
+      const auto text = bytes->Unsigned();
+      return json::parse(text.begin(), text.end());
     } catch (const std::exception& e) {
       error_stream << "ERROR: invalid manifest JSON: " << e.what() << "\n";
       return std::nullopt;

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -188,9 +189,25 @@ public:
 //! `serio::AtomicFileWriter`.
 OXGN_COOK_NDAPI auto RealCookerStorage() -> ImportStorage&;
 
+//! The most bytes the Cooker reads whole from a cooked metadata file: an
+//! index, a descriptor, a resource table or a pak catalog.
+inline constexpr serio::ByteCount kMaxMetadataBytes {
+  uint64_t { 64 } * 1024 * 1024,
+};
+
+//! The most bytes the Cooker reads whole from a cooked resource data file.
+inline constexpr serio::ByteCount kMaxDataFileBytes {
+  static_cast<uint64_t>(std::numeric_limits<int32_t>::max()),
+};
+
 //! The whole file `path`, read through `storage`.
+/*!
+ A file larger than `limit` is `serio::Error::kTooLarge`, refused before
+ anything is allocated.
+*/
 OXGN_COOK_NDAPI auto ReadWholeFile(const CookerStorageReader& storage,
-  const std::filesystem::path& path) -> Result<std::vector<std::byte>>;
+  const std::filesystem::path& path, serio::ByteCount limit)
+  -> Result<std::vector<std::byte>>;
 
 //! Publishes `bytes` as the file `path` through `storage`.
 OXGN_COOK_NDAPI auto PublishWholeFile(CookerStorage& storage,

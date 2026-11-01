@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
-#include <memory>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -32,6 +31,7 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
@@ -252,7 +252,8 @@ namespace {
   auto ReadText(const IMountFileSystem& files, const fs::path& path)
     -> std::optional<std::string>
   {
-    const auto bytes = cooked::ReadWholeFile(files, path);
+    const auto bytes
+      = cooked::ReadWholeFile(files, path, kMaxImportMetadataBytes);
     if (!bytes) {
       return std::nullopt;
     }

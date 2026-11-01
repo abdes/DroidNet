@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-11-01
+Last updated: 2026-11-02
 
 The C++23 shape of the [Serio IO and serialization proposal](README.md): the
 layers as headers, the concepts every device, stream, backend and algorithm
@@ -790,12 +790,21 @@ has two writers with two error vocabularies.
   branches on `kNotFound` and `kCancelled` compare against those
   conditions.
 
-**Not Serio's, they stay:** text read or written through iostreams where a
-torn file is harmless or rewritten whole on the next run (Inspector JSON
-reports, `LaunchFile`, Scripting `WriteDefinitions`, the Vortex GPU profiler
-traces, benchmark CSV and JSON, the Cooker test kit's `FileIo`), the
-logger's own `fopen`, and pixel buffers cast for image codecs, which are
-not `ByteBuffer`s.
+**Parsed inputs, read through Serio with a limit:** the import manifest, the
+ImportTool and Inspector requests, `LaunchFile`, Scripting
+`WriteDefinitions` (which compares and republishes its output) and
+ShaderBake's sources, module artifacts, manifest and build state. Each
+whole-file read names the limit of its family of files, listed in the
+[Serio README](../../../src/Oxygen/Serio/README.md#io-outside-serio), and
+`cooked::ReadWholeFile` takes one too.
+
+**Not Serio's, they stay:** text written for people through iostreams,
+where a torn file is rewritten whole on the next run (Inspector and
+ImportTool JSON reports, the Vortex GPU profiler traces, crash dumps,
+benchmark CSV and JSON), console scripts read line by line, the logger's
+own `fopen`, tests and benchmarks with their fixtures (the Cooker test
+kit's `FileIo`), and pixel buffers cast for image codecs, which are not
+`ByteBuffer`s.
 
 ## Decisions
 

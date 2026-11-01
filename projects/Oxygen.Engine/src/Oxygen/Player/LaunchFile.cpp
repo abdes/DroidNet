@@ -6,11 +6,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <ios>
-#include <iterator>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -22,6 +20,8 @@
 
 #include <Oxygen/Player/LaunchFile.h>
 #include <Oxygen/Player/SchemaCheck.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::player {
 
@@ -138,13 +138,15 @@ auto ParseLaunchFile(const std::string_view text,
 
 auto ReadLaunchFile(const std::filesystem::path& path) -> PlayerLaunch
 {
-  auto stream = std::ifstream(path, std::ios::binary);
-  if (!stream) {
-    throw LaunchFileError(
-      fmt::format("cannot read launch file '{}'", path.string()));
+  const auto bytes = serio::ReadPublishedFile(path, kMaxLaunchFileBytes);
+  if (!bytes) {
+    throw LaunchFileError(fmt::format("cannot read launch file '{}': {}",
+      path.string(), bytes.error().message()));
   }
-  const auto text = std::string(
-    std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char> {});
+  const auto chars = bytes->Bytes();
+  auto text = std::string(chars.size(), '\0');
+  std::ranges::transform(chars, text.begin(),
+    [](const std::byte byte) -> char { return static_cast<char>(byte); });
   const auto absolute = std::filesystem::absolute(path);
   return ParseLaunchFile(text, absolute.parent_path(), path.string());
 }

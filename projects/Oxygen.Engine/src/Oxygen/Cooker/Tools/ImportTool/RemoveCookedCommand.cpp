@@ -6,7 +6,6 @@
 
 #include <expected>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -20,15 +19,17 @@
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/RemoveCookedCommand.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import::tool {
 
@@ -96,12 +97,14 @@ auto RemoveCookedCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
 auto RemoveCookedCommand::Execute() -> std::expected<void, std::error_code>
 {
-  auto stream = std::ifstream(base::ToNativePath(request_path_));
-  if (!stream) {
-    throw std::runtime_error(
-      "Failed to open the removal request: " + request_path_);
+  const auto bytes = serio::ReadPublishedFile(
+    std::filesystem::path(request_path_), kMaxImportMetadataBytes);
+  if (!bytes) {
+    throw std::runtime_error("Failed to read the removal request: "
+      + request_path_ + ": " + bytes.error().message());
   }
-  const auto request = nlohmann::json::parse(stream);
+  const auto text = bytes->Unsigned();
+  const auto request = nlohmann::json::parse(text.begin(), text.end());
   const auto virtual_paths = ReadStrings(request, "virtual_paths");
   const auto auxiliary_files = ReadStrings(request, "auxiliary_files");
   if (virtual_paths.empty() && auxiliary_files.empty()) {

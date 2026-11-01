@@ -9,9 +9,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
@@ -30,6 +34,10 @@ struct BuildRootLayout {
 [[nodiscard]] auto GetBuildRootLayout(const std::filesystem::path& build_root)
   -> BuildRootLayout;
 [[nodiscard]] auto RequestKeyToHex(uint64_t request_key) -> std::string;
+//! The key `RequestKeyToHex` wrote: 16 lowercase hex characters, else
+//! nothing.
+[[nodiscard]] auto RequestKeyFromHex(std::string_view text)
+  -> std::optional<uint64_t>;
 //! Leaf name of a published request sidecar: `<entry-point>__<key><ext>`.
 [[nodiscard]] auto GetRequestPublishedArtifactFileName(
   std::string_view entry_point, uint64_t request_key,
@@ -57,6 +65,17 @@ auto RemoveLegacyDebugExportTree(const BuildRootLayout& layout) -> void;
 
 [[nodiscard]] auto ToUtf8PathString(const std::filesystem::path& path)
   -> std::string;
+
+//! The most bytes ShaderBake reads whole from one file: a shader source, a
+//! module artifact, the manifest or the build state.
+inline constexpr serio::ByteCount kMaxReadBytes {
+  uint64_t { 64 } * 1024 * 1024,
+};
+
+//! The whole file `path`, read while its writers may republish it; a
+//! failed or oversized read throws, naming the file `what`.
+[[nodiscard]] auto ReadFileBytes(const std::filesystem::path& path,
+  std::string_view what) -> serio::ByteBuffer;
 
 auto WriteBinaryFileAtomically(const std::filesystem::path& final_path,
   std::span<const std::byte> contents) -> void;

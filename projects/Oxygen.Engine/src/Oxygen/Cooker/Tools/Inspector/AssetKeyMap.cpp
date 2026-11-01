@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <filesystem>
 #include <fstream>
 #include <ios>
 #include <memory>
@@ -20,10 +21,13 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/AssetKeyMap_schema.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::inspection {
 
@@ -53,8 +57,14 @@ auto BuildAssetKeyMapCommand(AssetKeyMapOptions& options)
 
 auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> toolkit::ToolResult
 {
-  std::ifstream input(options.input, std::ios::binary);
-  const auto request = nlohmann::json::parse(input);
+  const auto bytes = serio::ReadPublishedFile(
+    std::filesystem::path(options.input), import::kMaxImportMetadataBytes);
+  if (!bytes) {
+    throw std::runtime_error("Could not read asset key request " + options.input
+      + ": " + bytes.error().message());
+  }
+  const auto text = bytes->Unsigned();
+  const auto request = nlohmann::json::parse(text.begin(), text.end());
   nlohmann::json_schema::json_validator validator;
   validator.set_root_schema(nlohmann::json::parse(kAssetKeyRequestSchema));
   import::internal::ValidateJsonSchema(

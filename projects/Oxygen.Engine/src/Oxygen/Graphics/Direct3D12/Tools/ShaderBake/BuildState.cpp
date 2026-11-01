@@ -9,8 +9,6 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -22,11 +20,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
@@ -37,28 +37,15 @@ namespace {
   constexpr uint32_t kBuildStateSchemaVersion = 1;
   constexpr uint32_t kShaderBakeStateVersion = 1;
 
-  auto ParseHexU64(std::string_view text, std::string_view field_name)
-    -> uint64_t
+  //! The request key stored as hex in the field `field` of `object`.
+  auto ReadKeyHex(const json& object, const char* const field) -> uint64_t
   {
-    if (text.size() != 16) {
+    const auto key = RequestKeyFromHex(object.at(field).get<std::string>());
+    if (!key) {
       throw std::runtime_error(
-        std::string(field_name) + " must be 16 lowercase hex characters");
+        std::string(field) + " must be 16 lowercase hex characters");
     }
-
-    uint64_t value = 0;
-    for (const char ch : text) {
-      value <<= 4;
-      if (ch >= '0' && ch <= '9') {
-        value |= static_cast<uint64_t>(ch - '0');
-      } else if (ch >= 'a' && ch <= 'f') {
-        value |= static_cast<uint64_t>(ch - 'a' + 10);
-      } else {
-        throw std::runtime_error(
-          std::string(field_name) + " contains a non-hex character");
-      }
-    }
-
-    return value;
+    return *key;
   }
 
   auto ShaderStageToStateString(const ShaderType stage) -> std::string_view
@@ -300,8 +287,7 @@ namespace {
         = NormalizeRelativeArtifactPath(module.module_artifact_relpath);
     }
 
-    std::sort(validated.modules.begin(), validated.modules.end(),
-      CompareBuildStateModules);
+    std::ranges::sort(validated.modules, CompareBuildStateModules);
     return validated;
   }
 
@@ -329,8 +315,7 @@ auto BuildBuildStateSnapshot(const std::filesystem::path& workspace_root,
     state.modules.push_back(MakeModuleRecord(layout, artifact));
   }
 
-  std::sort(
-    state.modules.begin(), state.modules.end(), CompareBuildStateModules);
+  std::ranges::sort(state.modules, CompareBuildStateModules);
   return state;
 }
 
@@ -372,14 +357,11 @@ auto WriteBuildStateFile(const std::filesystem::path& build_state_path,
 auto ReadBuildStateFile(const std::filesystem::path& build_state_path)
   -> BuildStateSnapshot
 {
-  std::ifstream stream(build_state_path, std::ios::binary);
-  if (!stream.is_open()) {
-    throw std::runtime_error("failed to open build-state `"
-      + ToUtf8PathString(build_state_path) + "`");
-  }
+  const auto bytes = ReadFileBytes(build_state_path, "build-state");
 
   try {
-    const auto payload = json::parse(stream);
+    const auto text = bytes.Unsigned();
+    const auto payload = json::parse(text.begin(), text.end());
     if (payload.at("schema_version").get<uint32_t>()
       != kBuildStateSchemaVersion) {
       throw std::runtime_error("unsupported build-state schema version");
@@ -410,10 +392,8 @@ auto ReadBuildStateFile(const std::filesystem::path& build_state_path)
 
     for (const auto& module_json : modules_json) {
       state.modules.push_back(BuildStateModuleRecord {
-        .request_key = ParseHexU64(
-          module_json.at("request_key_hex").get<std::string>(), "request_key_hex"),
-        .action_key = ParseHexU64(
-          module_json.at("action_key_hex").get<std::string>(), "action_key_hex"),
+        .request_key = ReadKeyHex(module_json, "request_key_hex"),
+        .action_key = ReadKeyHex(module_json, "action_key_hex"),
         .request = ShaderRequest {
           .stage = StateStringToShaderStage(
             module_json.at("stage").get<std::string>()),
@@ -467,8 +447,7 @@ auto ScanModulesForBuildState(const std::filesystem::path& workspace_root,
       + ToUtf8PathString(layout.modules_dir) + "`: " + ec.message());
   }
 
-  std::sort(
-    state.modules.begin(), state.modules.end(), CompareBuildStateModules);
+  std::ranges::sort(state.modules, CompareBuildStateModules);
   return state;
 }
 
@@ -480,7 +459,10 @@ auto LoadOrRecoverBuildStateFile(const std::filesystem::path& workspace_root,
     if (SnapshotMatchesLayout(state, workspace_root, layout)) {
       return state;
     }
-  } catch (const std::exception&) {
+  } catch (const std::exception& error) {
+    // A missing or stale state is rebuilt from the module artifacts.
+    LOG_F(
+      INFO, "Rebuilding the build state from its modules: {}", error.what());
   }
 
   return ScanModulesForBuildState(workspace_root, layout);

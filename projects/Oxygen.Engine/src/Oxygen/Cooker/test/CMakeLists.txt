@@ -256,6 +256,7 @@ oxygen_cooker_test(
     nlohmann_json_schema_validator
   SOURCES
     "Cooked/CookedContent_test.cpp"
+    "Cooked/CookerStorage_test.cpp"
     "Cooked/Validate_test.cpp"
 )
 

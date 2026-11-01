@@ -161,8 +161,9 @@ NOLINT_TEST(ResourceTableRegistryTest, LastSessionReportsTheTablesItWrote)
   ASSERT_EQ(second_end.written.size(), 1U);
   const auto& table = second_end.written.front();
   EXPECT_EQ(table.kind, oxygen::data::loose_cooked::FileKind::kBuffersTable);
-  const auto bytes = oxygen::content::cooked::ReadWholeFile(
-    storage, root / imp::internal::loose_layout::kBuffersTable);
+  const auto bytes = oxygen::content::cooked::ReadWholeFile(storage,
+    root / imp::internal::loose_layout::kBuffersTable,
+    oxygen::content::cooked::kMaxMetadataBytes);
   ASSERT_HAS_VALUE(bytes);
   EXPECT_EQ(table.digest.size, bytes->size());
   EXPECT_EQ(table.digest.sha256, oxygen::base::ComputeSha256(*bytes));

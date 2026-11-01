@@ -9,16 +9,12 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
-#include <iterator>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include <fmt/format.h>
 
@@ -27,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -99,24 +96,6 @@ namespace {
       .dxil = artifact.dxil,
       .reflection = artifact.reflection,
     };
-  }
-
-  auto ReadBinaryFile(const std::filesystem::path& file)
-    -> std::vector<std::byte>
-  {
-    std::ifstream in(file, std::ios::binary);
-    if (!in.is_open()) {
-      throw std::runtime_error(
-        "failed to open module artifact `" + ToUtf8PathString(file) + "`");
-    }
-
-    std::vector<char> bytes {
-      std::istreambuf_iterator<char>(in),
-      std::istreambuf_iterator<char>(),
-    };
-    return std::vector<std::byte>(
-      reinterpret_cast<const std::byte*>(bytes.data()),
-      reinterpret_cast<const std::byte*>(bytes.data()) + bytes.size());
   }
 
   auto WriteReservedBytes(serio::AnyWriter& writer) -> void
@@ -217,9 +196,9 @@ auto WriteModuleArtifactFile(const std::filesystem::path& artifact_path,
 auto ReadModuleArtifactFile(const std::filesystem::path& artifact_path)
   -> ModuleArtifact
 {
-  const auto bytes = ReadBinaryFile(artifact_path);
+  const auto bytes = ReadFileBytes(artifact_path, "module artifact");
 
-  serio::ReadOnlyMemoryStream stream(bytes);
+  serio::ReadOnlyMemoryStream stream(bytes.Bytes());
   serio::Reader<serio::ReadOnlyMemoryStream> reader(stream);
   const auto packed = PackedGuard(reader);
   (void)packed;

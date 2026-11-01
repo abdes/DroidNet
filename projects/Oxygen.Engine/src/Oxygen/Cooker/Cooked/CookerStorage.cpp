@@ -22,6 +22,7 @@
 #include <Oxygen/Serio/AsyncFile.h>
 #include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/Error.h>
 #include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/MappedFile.h>
@@ -266,8 +267,8 @@ auto RealCookerStorage() -> ImportStorage&
   return storage;
 }
 
-auto ReadWholeFile(const CookerStorageReader& storage, const fs::path& path)
-  -> Result<std::vector<std::byte>>
+auto ReadWholeFile(const CookerStorageReader& storage, const fs::path& path,
+  const serio::ByteCount limit) -> Result<std::vector<std::byte>>
 {
   auto device = storage.Open(path);
   if (!device) {
@@ -276,6 +277,9 @@ auto ReadWholeFile(const CookerStorageReader& storage, const fs::path& path)
   const auto size = device->Size();
   if (!size) {
     return ::oxygen::Err(size.error());
+  }
+  if (*size > limit) {
+    return ::oxygen::Err(make_error_code(serio::Error::kTooLarge));
   }
   auto bytes = std::vector<std::byte>(static_cast<size_t>(size->get()));
   CHECK_RESULT(serio::ReadExactlyAt(*device, serio::ByteOffset { 0 }, bytes));

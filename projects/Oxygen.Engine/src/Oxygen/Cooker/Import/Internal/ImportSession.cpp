@@ -155,7 +155,8 @@ namespace {
   auto ReadBinaryFile(const cooked::CookerStorage& storage,
     const std::filesystem::path& path) -> std::vector<std::byte>
   {
-    auto bytes = cooked::ReadWholeFile(storage, path);
+    auto bytes
+      = cooked::ReadWholeFile(storage, path, cooked::kMaxMetadataBytes);
     return bytes ? std::move(bytes).value() : std::vector<std::byte> {};
   }
 
@@ -604,7 +605,8 @@ auto ImportSession::Producer() const -> LooseCookedProducer
     if (storage_->KindOf(index_path) != cooked::PathKind::kFile) {
       continue;
     }
-    auto bytes = cooked::ReadWholeFile(*storage_, index_path);
+    auto bytes
+      = cooked::ReadWholeFile(*storage_, index_path, cooked::kMaxMetadataBytes);
     if (!bytes) {
       throw std::system_error(
         bytes.error(), "Failed to read the index of '" + root.string() + "'");

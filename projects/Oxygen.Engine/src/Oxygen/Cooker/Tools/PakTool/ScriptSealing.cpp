@@ -51,6 +51,7 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Serio/ByteReader.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -99,10 +100,11 @@ namespace {
     observer_ptr<StagedSourceStorage> storage;
     observer_ptr<std::vector<std::filesystem::path>> published;
 
-    [[nodiscard]] auto Read(const std::filesystem::path& path) const
+    [[nodiscard]] auto Read(
+      const std::filesystem::path& path, const serio::ByteCount limit) const
       -> std::optional<std::vector<std::byte>>
     {
-      auto bytes = cooked::ReadWholeFile(*storage, path);
+      auto bytes = cooked::ReadWholeFile(*storage, path, limit);
       if (!bytes) {
         return std::nullopt;
       }
@@ -286,8 +288,8 @@ namespace {
       return tables;
     }
 
-    const auto table_bytes = io.Read(table_path);
-    const auto data_bytes = io.Read(data_path);
+    const auto table_bytes = io.Read(table_path, cooked::kMaxMetadataBytes);
+    const auto data_bytes = io.Read(data_path, cooked::kMaxDataFileBytes);
     if (!table_bytes.has_value() || !data_bytes.has_value()) {
       return std::nullopt;
     }
@@ -383,7 +385,7 @@ namespace {
       return std::nullopt;
     }
     auto path = root / std::filesystem::path(relpath);
-    const auto bytes = io.Read(path);
+    const auto bytes = io.Read(path, cooked::kMaxMetadataBytes);
     return ReadScriptAssetContext(
       asset_entry, std::move(relpath), std::move(path), bytes);
   }
@@ -555,7 +557,8 @@ namespace {
           });
       }
 
-      const auto source_bytes = io.Read(*resolved_path);
+      const auto source_bytes = io.Read(*resolved_path,
+        serio::ByteCount { data::pak::scripting::kMaxScriptBytes });
       if (!source_bytes.has_value()) {
         return Result<std::optional<SealedDescriptor>, ScriptSealingError>::Err(
           ScriptSealingError {
@@ -689,8 +692,9 @@ namespace {
     try {
       content.emplace(
         cooked::CookedContent::Open(*io.storage, *normalized_root));
-      const auto index_bytes = cooked::ReadWholeFile(
-        *io.storage, *normalized_root / loose_layout::kIndexFileName);
+      const auto index_bytes = cooked::ReadWholeFile(*io.storage,
+        *normalized_root / loose_layout::kIndexFileName,
+        cooked::kMaxMetadataBytes);
       if (!index_bytes) {
         throw std::system_error(index_bytes.error(), "read the source's index");
       }

@@ -6,36 +6,18 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <ios>
-#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <system_error>
-#include <vector>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
 namespace {
-
-  auto ReadBinaryFile(const std::filesystem::path& file_path)
-    -> std::vector<char>
-  {
-    std::ifstream in(file_path, std::ios::binary);
-    if (!in.is_open()) {
-      throw std::runtime_error(
-        "failed to open file `" + ToUtf8PathString(file_path) + "`");
-    }
-
-    return std::vector<char> {
-      std::istreambuf_iterator<char>(in),
-      std::istreambuf_iterator<char>(),
-    };
-  }
 
   auto GetWriteTimeUtcTicks(const std::filesystem::path& file_path) -> int64_t
   {
@@ -95,9 +77,10 @@ auto ComputeFileFingerprint(const std::filesystem::path& file_path,
       + ToUtf8PathString(normalized_file) + "`: " + ec.message());
   }
 
-  const auto bytes = ReadBinaryFile(normalized_file);
+  const auto file = ReadFileBytes(normalized_file, "file");
+  const auto bytes = file.Bytes();
   return DependencyFingerprint {
-    .path = CanonicalizeWorkspaceRelativePath(normalized_file, workspace_root),
+    .path = CanonicalizeWorkspaceRelativePath(file_path, workspace_root),
     .content_hash = oxygen::ComputeFNV1a64(bytes.data(), bytes.size()),
     .size_bytes = file_size,
     .write_time_utc = GetWriteTimeUtcTicks(normalized_file),

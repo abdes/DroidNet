@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-11-01
+Last updated: 2026-11-02
 
 Serio is the engine's IO and binary serialization library. This proposal takes
 it to what the content pipeline and the asset manager need: one set of
@@ -640,8 +640,11 @@ Three features use Serio and live elsewhere:
   lets a parser alias memory and mapped files without the parser knowing which
   device it reads.
 - **Base owns the primitives, Serio owns the IO.** Paths, hashes, hex and
-  error conversion are Base's and Serio calls them; every byte read from or
-  written to a file goes through Serio.
+  error conversion are Base's and Serio calls them; every file a program
+  parses or publishes for another reader goes through Serio, and every
+  whole-file read names a limit. Text written for people, console scripts,
+  the logger, tests and benchmarks keep their streams
+  ([IO outside Serio](api.md#io-outside-serio)).
 - **Serio knows no format, codec or key.** Formats are Data's, the codec is the
   Compression module's, keys are the Crypto module's and their policy is
   Content's; Serio moves, hashes and verifies bytes for all of them.

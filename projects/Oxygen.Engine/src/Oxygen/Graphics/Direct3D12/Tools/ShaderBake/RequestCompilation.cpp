@@ -8,9 +8,6 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
-#include <iterator>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -32,6 +29,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Reflect.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/RequestCompilation.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 using oxygen::graphics::ShaderDefine;
 using oxygen::graphics::ShaderInfo;
@@ -42,15 +40,9 @@ namespace {
 
   auto ReadFileUtf8(const std::filesystem::path& file) -> std::u8string
   {
-    std::ifstream in(file, std::ios::binary);
-    if (!in.is_open()) {
-      throw std::runtime_error(
-        fmt::format("failed to open shader source file: {}", file.string()));
-    }
-
-    const std::string bytes(
-      (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    return { bytes.begin(), bytes.end() };
+    const auto bytes = ReadFileBytes(file, "shader source file");
+    const auto text = bytes.Unsigned();
+    return { text.begin(), text.end() };
   }
 
 } // namespace

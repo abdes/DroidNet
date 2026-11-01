@@ -24,8 +24,9 @@ inline constexpr serio::ByteCount kDefaultMaxSourceBytes {
   static_cast<uint64_t>(std::numeric_limits<int32_t>::max()),
 };
 
-//! The most bytes the import reads from one of its own metadata files: a
-//! model import record or a buffer sidecar.
+//! The most bytes the Cooker reads whole from a metadata file written for
+//! it: a manifest, a mounts file, a tool request, a model import record or
+//! a buffer sidecar.
 inline constexpr serio::ByteCount kMaxImportMetadataBytes {
   uint64_t { 64 } * 1024 * 1024,
 };

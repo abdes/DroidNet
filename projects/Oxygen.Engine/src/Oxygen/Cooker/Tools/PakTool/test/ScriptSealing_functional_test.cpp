@@ -429,8 +429,9 @@ NOLINT_TEST(
   EXPECT_EQ(memory.KindOf(staged_root / "spin.oscript"), PathKind::kFile);
   EXPECT_EQ(memory.KindOf(staged_root / "Ship/Hull.obuf"), PathKind::kNone);
   EXPECT_EQ(staged.KindOf(staged_root / "Ship/Hull.obuf"), PathKind::kFile);
-  const auto index_bytes = oxygen::content::cooked::ReadWholeFile(
-    staged, staged_root / oxygen::data::loose_cooked::kIndexFileName);
+  const auto index_bytes = oxygen::content::cooked::ReadWholeFile(staged,
+    staged_root / oxygen::data::loose_cooked::kIndexFileName,
+    oxygen::content::cooked::kMaxMetadataBytes);
   ASSERT_HAS_VALUE(index_bytes);
   const auto index
     = oxygen::content::lc::LooseCookedIndex::LoadFromBytes(*index_bytes);

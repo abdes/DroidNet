@@ -236,7 +236,7 @@ namespace {
         "'" + root.generic_string() + "' holds no "
           + std::string(kIndexFileName));
     }
-    auto bytes = ReadWholeFile(storage, index_path);
+    auto bytes = ReadWholeFile(storage, index_path, kMaxMetadataBytes);
     if (!bytes) {
       throw Unreadable(index_path);
     }

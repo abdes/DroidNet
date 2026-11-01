@@ -16,6 +16,7 @@
 
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/ContentMounts.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::player {
 
@@ -81,9 +82,15 @@ struct PlayerLaunch {
   const std::filesystem::path& base_dir, std::string_view source_name)
   -> PlayerLaunch;
 
+//! The most bytes a launch file may hold.
+inline constexpr serio::ByteCount kMaxLaunchFileBytes {
+  uint64_t { 1024 } * 1024,
+};
+
 //! Reads and parses a launch file; relative paths resolve against its folder.
 /*!
- \throws LaunchFileError
+ \throws LaunchFileError when the file cannot be read, is larger than
+ `kMaxLaunchFileBytes` or is not a valid launch file.
 */
 [[nodiscard]] auto ReadLaunchFile(const std::filesystem::path& path)
   -> PlayerLaunch;

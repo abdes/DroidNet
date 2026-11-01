@@ -7,11 +7,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 
 #include <fmt/format.h>
 
@@ -19,6 +21,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 #include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
@@ -96,6 +99,26 @@ auto RequestKeyToHex(const uint64_t request_key) -> std::string
   return fmt::format("{:016x}", request_key);
 }
 
+auto RequestKeyFromHex(const std::string_view text) -> std::optional<uint64_t>
+{
+  constexpr auto kDigits = std::size_t { 16 };
+  if (text.size() != kDigits) {
+    return std::nullopt;
+  }
+  auto value = uint64_t { 0 };
+  for (const char ch : text) {
+    value <<= 4U;
+    if (ch >= '0' && ch <= '9') {
+      value |= static_cast<uint64_t>(ch - '0');
+    } else if (ch >= 'a' && ch <= 'f') {
+      value |= static_cast<uint64_t>(ch - 'a') + 10U;
+    } else {
+      return std::nullopt;
+    }
+  }
+  return value;
+}
+
 auto GetRequestPublishedArtifactFileName(const std::string_view entry_point,
   const uint64_t request_key, const std::string_view extension) -> std::string
 {
@@ -169,6 +192,17 @@ auto RemoveLegacyDebugExportTree(const BuildRootLayout& layout) -> void
 auto ToUtf8PathString(const std::filesystem::path& path) -> std::string
 {
   return WideToUtf8String(path.wstring());
+}
+
+auto ReadFileBytes(const std::filesystem::path& path,
+  const std::string_view what) -> serio::ByteBuffer
+{
+  auto bytes = serio::ReadPublishedFile(path, kMaxReadBytes);
+  if (!bytes) {
+    throw std::runtime_error(fmt::format("failed to read {} `{}`: {}", what,
+      ToUtf8PathString(path), bytes.error().message()));
+  }
+  return std::move(*bytes);
 }
 
 auto WriteBinaryFileAtomically(const std::filesystem::path& final_path,

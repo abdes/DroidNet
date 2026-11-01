@@ -416,7 +416,8 @@ auto PakCatalogIo::Parse(const std::string_view text)
 auto PakCatalogIo::Read(const std::filesystem::path& path,
   const cooked::CookerStorageReader& storage) -> Result<data::PakCatalog>
 {
-  const auto bytes = cooked::ReadWholeFile(storage, path);
+  const auto bytes
+    = cooked::ReadWholeFile(storage, path, cooked::kMaxMetadataBytes);
   if (!bytes) {
     return Result<data::PakCatalog>::Err(bytes.error());
   }
