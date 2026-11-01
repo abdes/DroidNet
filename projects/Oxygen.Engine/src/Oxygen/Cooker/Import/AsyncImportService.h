@@ -120,8 +120,8 @@ using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
      UpdateProgressBar(progress.header.overall_progress);
    });
 
- // Later, if needed:
- service.CancelJob(job_id);
+ // Later, if needed; false means the job already finished:
+ static_cast<void>(service.CancelJob(job_id));
  ```
 
  @see ImportRequest, ImportReport, ProgressEvent
@@ -295,7 +295,7 @@ public:
    @param job_id The job to cancel.
    @return True if the job was found, false if already completed or invalid.
   */
-  OXGN_COOK_API auto CancelJob(ImportJobId job_id) const -> bool;
+  [[nodiscard]] OXGN_COOK_API auto CancelJob(ImportJobId job_id) const -> bool;
 
   //! Cancel all pending and in-flight imports. Thread-safe.
   /*!

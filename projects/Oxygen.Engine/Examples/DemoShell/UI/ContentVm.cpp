@@ -431,7 +431,8 @@ auto ContentVm::CancelActiveImport() -> void
     return;
   }
   import_state_.cancel_requested = true;
-  import_service_->CancelJob(import_state_.job_id);
+  // False means the job already finished; its completion ends the import.
+  static_cast<void>(import_service_->CancelJob(import_state_.job_id));
 }
 
 auto ContentVm::BrowseForModelRoot() -> void

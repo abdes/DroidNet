@@ -763,7 +763,8 @@ NOLINT_TEST_F(AsyncImportServiceConcurrencyTest, RapidSubmitAndCancelNoDeadlock)
 
     // Randomly cancel some jobs immediately
     if (i % 3 == 0) {
-      service.CancelJob(job_id);
+      // The job may already have finished.
+      static_cast<void>(service.CancelJob(job_id));
     }
 
     // Occasionally cancel all
