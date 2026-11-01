@@ -31,6 +31,7 @@
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::cooker::testing {
 
@@ -78,8 +79,12 @@ inline auto TexturedMaterialDescriptor(const std::string_view name,
   const MaterialVariant variant = MaterialVariant::kPlain) -> DescriptorFixture
 {
   auto fixture = MaterialDescriptor(name, variant);
-  data::pak::render::MaterialAssetDesc descriptor {};
-  std::memcpy(&descriptor, fixture.bytes.data(), sizeof(descriptor));
+  const auto read = serio::CopyAt<data::pak::render::MaterialAssetDesc>(
+    std::span<const std::byte> { fixture.bytes });
+  if (!read) {
+    throw std::invalid_argument("descriptor is smaller than its record");
+  }
+  auto descriptor = *read;
   descriptor.base_color_texture = data::ResourceReferenceIndex { 0U };
   std::memcpy(fixture.bytes.data(), &descriptor, sizeof(descriptor));
   fixture.references = data::AssetReferences::Create(
@@ -185,13 +190,12 @@ inline auto SceneDescriptor(
 inline auto ReadDescriptorString(const std::span<const std::byte> bytes,
   const data::pak::core::StringTableOffsetT offset) -> std::string
 {
-  if (bytes.size() < sizeof(data::pak::core::AssetHeader)) {
+  const auto header = serio::CopyAt<data::pak::core::AssetHeader>(bytes);
+  if (!header) {
     throw std::invalid_argument("descriptor is smaller than its header");
   }
-  auto header = data::pak::core::AssetHeader {};
-  std::memcpy(&header, bytes.data(), sizeof(header));
   return std::string {
-    data::DescriptorStrings::FromDescriptor(bytes, header.strings).Get(offset),
+    data::DescriptorStrings::FromDescriptor(bytes, header->strings).Get(offset),
   };
 }
 

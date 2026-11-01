@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-10-31
+Last updated: 2026-11-01
 
 This plan implements the [proposal](README.md) as specified by the
 [design](design.md). It orders the work into slices, says what each slice
@@ -30,7 +30,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S4    | Done, committed                                                |
 | S5    | Done, committed                                                |
 | S6    | Done, committed, with the Serio step 6 and cooked sources work |
-| S6a   | Not started (design for owner review first)                    |
+| S6a   | Done                                                           |
 | S6b   | Not started                                                    |
 | S6c   | Not started                                                    |
 | S6d   | Not started                                                    |
@@ -268,40 +268,69 @@ in this slice.
 
 ### S6a. Serio API completion
 
-Closes the gaps consumers worked around, in Serio itself, so the API is
-complete and consistent. The design goes into `serio-io/api.md` first and the
-owner reviews it before code.
+Closes the gaps consumers worked around, in Serio itself, and moves every
+duplicate of a Serio facility onto it, so the API is complete and consistent
+and Serio is the one IO stack. The design is `serio-io/api.md`, reviewed by
+the owner before code.
 
-Deletes: `Content/Internal/BlockingReads.h`, `Content/Internal/RegionReader.h`,
-the hand-written span copies into a `ByteBuffer` (`TextureResource.h`,
-`BufferResource.cpp`, `StagePayload`) and the `reinterpret_cast` views of one as
-`uint8_t`, the test-only span constructors of `TextureResource` and
-`BufferResource`, `RealCookerStorage::Move`'s `MoveFileExW` and its
-check-then-act pre-checks, and the verified pak mount's blocking CRC pass on a
-thread pool worker. Adds:
+Deletes:
 
-- Awaiting a blocking device: either an inline `IoDriver` mode, so a consumer
-  never branches on a missing driver, or one explicitly named adapter whose
-  name says the awaiting thread blocks; reads and writes; keeps
-  `Contiguous()`, erasure and regions; states which devices are awaitable by
-  themselves (`MappedFile` never silently). `ScriptQueryService`'s payload
-  reads follow it.
-- An owning reader of a region or of a device it owns, itself an `AnyReader`;
-  `RegionReadStream` caps its buffer at its region; the writer side reviewed
-  the same way.
-- Copying bytes into a `ByteBuffer`, and its view as unsigned bytes. Script
-  and physics resources then own the `ByteBuffer` their loader read, as
-  texture and buffer resources do, with one payload copy fewer; their other
-  producers (the collision shape job, PakDump, the Scripting source resolver,
-  `ScriptQueryService`) copy into one.
-- The replacing rename `AtomicFile` uses, exposed for `CookerStorage::Move`.
-- A verified pak mount hashes through the driver with async reads.
-- An audit of every IO helper written outside `src/Oxygen/Serio`; each is a
-  Serio gap closed here or stays, with the reason.
+- Content: `Internal/BlockingReads.h`, `Internal/RegionReader.h`, the
+  no-driver branches of `LooseCookedSource` and `PakFile`, the verified pak
+  mount's blocking CRC pass on a thread pool worker, and the path-keyed index
+  mutex (`LockFileShared`, `LockFileExclusive`).
+- Data: the hand-written span copies into a `ByteBuffer` (`TextureResource`,
+  `BufferResource`, the test kit's `StagePayload`), the `reinterpret_cast`
+  views of one as `uint8_t`, the span constructors of `TextureResource` and
+  `BufferResource`, the `memcpy` header parsing of `TextureResource`, and the
+  `std::vector<uint8_t>` payloads of `ScriptResource` and `PhysicsResource`.
+- Cooker: `RealCookerStorage::Move`'s rename and its check-then-act
+  pre-checks; `IAsyncFileWriter`, `WindowsFileReader`, `WindowsFileWriter`,
+  `FileError`, `FileErrorInfo` and their tests; the emitters' callbacks,
+  pending counts and polling flush; `PakSourceDevices::Read`'s vector; the
+  PakDump helpers `ReadDescriptorBytes`, `TryReadAssetHeader`,
+  `ReadStructAt`, `ReadRecordAt` and the scene dumper's buffer copies.
+- Engine and others: `ScriptCompilationService`'s stream records,
+  `PublishCacheFile` and its `MoveFileExW`; `ScriptSourceBlob`'s vector;
+  `ExternalFileResolver`'s `ifstream` read; `ControlServer`'s hand-written
+  temporary and rename; `Console::Registry`'s in-place archive and history
+  writes; `AtomicFileCommit` and the `#if` in `AtomicFile.cpp`.
+
+Adds, in Serio:
+
+- `IoDriver::CreateInline()`, the inline backend, and every async suite run
+  once per backend. Only a driver makes a file awaitable; `MappedFile` is
+  never awaitable.
+- `ByteBuffer::CopyOf`, `Unsigned()`, `AsUnsigned`; `ReadAll` and
+  `AsyncReadAll`.
+- `RegionReader<D>` and `RegionWriter<D>`, each an `AnyReader` or
+  `AnyWriter`, viewing or owning their device; `RegionReadStream` caps its
+  buffer at its region.
+- `MoveFileOver` and `FileReplacement` in `Platform/<os>/`; `kIsDirectory`;
+  durability on `WriteFileAtomically`; `AsyncWriteFileAtomically`;
+  `FileLock::Acquire`.
+- `AsyncHash`, `AsyncComputeCrc32`, `AsyncComputeSha256`.
+- `MappedFile::Open(path, sharing)`, so a file another handle writes maps;
+  `NativeFile::Open` of a folder is `kIsDirectory` on every platform.
+
+Moves onto it: the loader and its sources (one driver, never null);
+`CookerStorage` (`Move` is `MoveFileOver`, `LockExclusive` serializes the
+loose index's writers, `Open` maps sharing writes) and its import role
+`ImportStorage` (`PublishAsync`, `OpenData`), which only the real and the
+in-memory storages implement; the import (one driver on its loop,
+`SerioFileReader` behind `IAsyncFileReader`, emitters writing through
+`CookerStorage` in the session nursery, `std::error_code` errors); the
+verified pak mount (async CRC on the loop); `ScriptQueryService`; the
+texture, buffer, script and physics resources and their producers;
+`PakPlanBuilder`; PakDump; the bytecode cache; `ExternalFileResolver`;
+`ControlServer`; `Console::Registry`; the loose index (a blocking file lock
+on `container.index.lock`).
 
 Unit tests: each new API's own tests in Serio (conformance where it is a
-device), and the moved consumers' tests. Docs: `serio-io/api.md`,
-`serio-io/README.md`, Serio and Content READMEs.
+device or backend), and the moved consumers' tests migrated with them,
+including the emitter, import session and job tests onto the in-memory
+storage. Docs: `serio-io/api.md`, `serio-io/README.md`, the Serio, Content
+and Cooker import READMEs.
 
 ### S6b. Pak format 11 tests
 

@@ -52,6 +52,9 @@ inline constexpr std::string_view kIndexFileName = "container.index.bin";
 //! generation.
 inline constexpr std::string_view kGenerationLeaseFileName = ".generation.lock";
 
+//! The lock file that serializes the writers of the index, at the cooked root.
+inline constexpr std::string_view kIndexLockFileName = "container.index.lock";
+
 //! 8-byte header magic: {'O','X','L','C','I','D','X',0}
 constexpr std::array<char, 8> kHeaderMagic
   = { 'O', 'X', 'L', 'C', 'I', 'D', 'X', 0 };
@@ -64,6 +67,8 @@ inline constexpr uint16_t kIndexVersion
   = pak::version::kLooseCookedIndexVersion;
 
 //! Required-section declarations in the current index.
+// The flag values are implicitly convertible to the on-disk uint32_t mask.
+// NOLINTNEXTLINE(cppcoreguidelines-use-enum-class)
 enum IndexFlags : uint32_t {
   //! Declares that asset entries contain valid virtual paths.
   kHasVirtualPaths = OXYGEN_FLAG(0),
@@ -105,6 +110,8 @@ struct IndexHeader {
   CountT file_record_count = 0;
   uint32_t file_record_size = 0; // sizeof(FileRecord) for this schema
 
+  // The packed record uses fixed C arrays to specify its binary layout.
+  // NOLINTNEXTLINE(modernize-avoid-c-arrays)
   uint8_t _reserved[176] = {}; // Tail reserve to keep fixed 256-byte header
 };
 #pragma pack(pop)
@@ -130,6 +137,7 @@ struct AssetEntry {
 
   // Mandatory descriptor integrity; runtime hash verification is opt-in.
   SizeT descriptor_size = 0;
+  // NOLINTNEXTLINE(modernize-avoid-c-arrays) - packed wire representation
   uint8_t descriptor_sha256[kSha256Size] = {};
   pak::core::AssetReferenceTable references {};
 };

@@ -20,6 +20,7 @@
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::pakdump {
 
@@ -40,20 +41,19 @@ public:
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
     asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
-    const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
+    const auto data = asset_dump_helpers::TryDescriptorBytes(pak, entry);
     if (!data) {
       ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
-    if (data->size() < sizeof(InputMappingContextAssetDesc)) {
+    const auto desc_read = serio::CopyAt<InputMappingContextAssetDesc>(*data);
+    if (!desc_read) {
       ctx.Out() << "    InputMappingContextAssetDesc: (insufficient data)\n\n";
       co_return;
     }
-
-    InputMappingContextAssetDesc desc {};
-    std::memcpy(&desc, data->data(), sizeof(desc));
+    const auto& desc = *desc_read;
 
     asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), desc.header,
       asset_dump_helpers::DescriptorString(
@@ -121,9 +121,13 @@ public:
       for (size_t i = 0; i < mapping_limit; ++i) {
         const auto record_offset = static_cast<size_t>(desc.mappings.offset)
           + (i * sizeof(InputActionMappingRecord));
-        const auto record
-          = asset_dump_helpers::ReadRecordAt<InputActionMappingRecord>(
-            *data, record_offset);
+        const auto record_read = serio::CopyAt<InputActionMappingRecord>(
+          *data, serio::ByteOffset { record_offset });
+        if (!record_read) {
+          ctx.Out() << "      [" << i << "] (insufficient data)\n";
+          break;
+        }
+        const auto& record = *record_read;
 
         const auto slot_name = asset_dump_helpers::DescriptorString(
           *data, desc.header, record.slot_name_offset);
@@ -157,9 +161,13 @@ public:
       for (size_t i = 0; i < trigger_limit; ++i) {
         const auto record_offset = static_cast<size_t>(desc.triggers.offset)
           + (i * sizeof(InputTriggerRecord));
-        const auto record
-          = asset_dump_helpers::ReadRecordAt<InputTriggerRecord>(
-            *data, record_offset);
+        const auto record_read = serio::CopyAt<InputTriggerRecord>(
+          *data, serio::ByteOffset { record_offset });
+        if (!record_read) {
+          ctx.Out() << "      [" << i << "] (insufficient data)\n";
+          break;
+        }
+        const auto& record = *record_read;
 
         ctx.Out() << "      [" << i
                   << "] type=" << nostd::to_string(record.type)
@@ -187,9 +195,13 @@ public:
       for (size_t i = 0; i < aux_limit; ++i) {
         const auto record_offset = static_cast<size_t>(desc.trigger_aux.offset)
           + (i * sizeof(InputTriggerAuxRecord));
-        const auto record
-          = asset_dump_helpers::ReadRecordAt<InputTriggerAuxRecord>(
-            *data, record_offset);
+        const auto record_read = serio::CopyAt<InputTriggerAuxRecord>(
+          *data, serio::ByteOffset { record_offset });
+        if (!record_read) {
+          ctx.Out() << "      [" << i << "] (insufficient data)\n";
+          break;
+        }
+        const auto& record = *record_read;
         ctx.Out() << "      [" << i << "] action="
                   << oxygen::data::to_string(record.action_asset_key)
                   << " completion=0x" << std::hex << record.completion_states

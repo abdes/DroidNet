@@ -8,13 +8,12 @@
 
 #include <concepts>
 #include <cstddef>
-#include <cstring>
 #include <optional>
 #include <ostream>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <vector>
 
 #include "DumpContext.h"
@@ -28,6 +27,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::pakdump::asset_dump_helpers {
 
@@ -65,7 +65,7 @@ template <std::integral T>
 }
 
 inline auto PrintAssetDescriptorHexPreview(
-  const std::vector<std::byte>& data, DumpContext& ctx) -> void
+  const std::span<const std::byte> data, DumpContext& ctx) -> void
 {
   if (!ctx.show_asset_descriptors) {
     return;
@@ -77,7 +77,8 @@ inline auto PrintAssetDescriptorHexPreview(
 }
 
 //! Resolves a string of a descriptor's string table, for display.
-[[nodiscard]] inline auto DescriptorString(const std::vector<std::byte>& data,
+[[nodiscard]] inline auto DescriptorString(
+  const std::span<const std::byte> data,
   const oxygen::data::pak::core::AssetHeader& header,
   const oxygen::data::pak::core::StringTableOffsetT offset) -> std::string
 {
@@ -107,20 +108,6 @@ inline auto PrintAssetHeaderFields(std::ostream& out,
   PrintUtils::Field(out, "Variant Flags", ToHexString(h.variant_flags), indent);
 }
 
-[[nodiscard]] inline auto TryReadAssetHeader(const std::vector<std::byte>& data)
-  -> std::optional<oxygen::data::pak::core::AssetHeader>
-{
-  using oxygen::data::pak::core::AssetHeader;
-
-  if (data.size() < sizeof(AssetHeader)) {
-    return std::nullopt;
-  }
-
-  AssetHeader header {};
-  std::memcpy(&header, data.data(), sizeof(header));
-  return header;
-}
-
 [[nodiscard]] inline auto FormatVec3(const std::span<const float, 3> v)
   -> std::string
 {
@@ -132,16 +119,6 @@ inline auto PrintAssetHeaderFields(std::ostream& out,
 {
   return fmt::format(
     "[{:.3f}, {:.3f}, {:.3f}, {:.3f}]", q[0], q[1], q[2], q[3]);
-}
-
-[[nodiscard]] inline auto ReadStructAt(const std::vector<std::byte>& data,
-  const size_t offset, const size_t struct_size, void* out) -> bool
-{
-  if (offset > data.size() || struct_size > (data.size() - offset)) {
-    return false;
-  }
-  std::memcpy(out, std::span(data).subspan(offset).data(), struct_size);
-  return true;
 }
 
 inline auto PrintAssetMetadata(std::ostream& out,
@@ -156,28 +133,16 @@ inline auto PrintAssetMetadata(std::ostream& out,
   PrintUtils::Field(out, "Desc Size", std::to_string(e.desc_size) + " bytes");
 }
 
-//! Copies the trivially copyable record of type `T` stored at `offset`.
-//! The caller guarantees `offset + sizeof(T) <= bytes.size()`.
-template <typename T>
-  requires(
-    std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>)
-[[nodiscard]] inline auto ReadRecordAt(
-  const std::span<const std::byte> bytes, const size_t offset) -> T
-{
-  T record {};
-  std::memcpy(&record, bytes.subspan(offset, sizeof(T)).data(), sizeof(T));
-  return record;
-}
-
-[[nodiscard]] inline auto ReadDescriptorBytes(
+//! The descriptor bytes of `entry`, a view of the mapped pak; empty when the
+//! entry lies outside the file.
+[[nodiscard]] inline auto TryDescriptorBytes(
   const oxygen::content::PakFile& pak,
   const oxygen::data::pak::core::AssetDirectoryEntry& entry)
-  -> std::optional<std::vector<std::byte>>
+  -> std::optional<std::span<const std::byte>>
 {
   try {
-    const auto bytes = pak.DescriptorBytes(entry);
-    return std::vector<std::byte>(bytes.begin(), bytes.end());
-  } catch (...) {
+    return pak.DescriptorBytes(entry);
+  } catch (const std::out_of_range&) {
     return std::nullopt;
   }
 }

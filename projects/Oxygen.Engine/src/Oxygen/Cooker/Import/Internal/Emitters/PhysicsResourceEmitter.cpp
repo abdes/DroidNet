@@ -9,7 +9,6 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -21,11 +20,11 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Cooker/Import/FileError.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/DedupCollision.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
@@ -33,6 +32,9 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import {
 
@@ -80,18 +82,17 @@ namespace {
 
 } // namespace
 
-PhysicsResourceEmitter::PhysicsResourceEmitter(IAsyncFileWriter& file_writer,
+PhysicsResourceEmitter::PhysicsResourceEmitter(co::Nursery& writes,
   PhysicsTableAggregator& table_aggregator,
   const std::filesystem::path& cooked_root)
-  : PhysicsResourceEmitter(
-      file_writer, table_aggregator, cooked_root, Config {})
+  : PhysicsResourceEmitter(writes, table_aggregator, cooked_root, Config {})
 {
 }
 
-PhysicsResourceEmitter::PhysicsResourceEmitter(IAsyncFileWriter& file_writer,
+PhysicsResourceEmitter::PhysicsResourceEmitter(co::Nursery& writes,
   PhysicsTableAggregator& table_aggregator,
   const std::filesystem::path& cooked_root, Config config)
-  : file_writer_(file_writer)
+  : writes_(writes)
   , table_aggregator_(table_aggregator)
   , config_(std::move(config))
   , data_path_(cooked_root / internal::loose_layout::kPhysicsData)
@@ -102,7 +103,7 @@ PhysicsResourceEmitter::PhysicsResourceEmitter(IAsyncFileWriter& file_writer,
 
 PhysicsResourceEmitter::~PhysicsResourceEmitter()
 {
-  const auto pending = pending_count_.load(std::memory_order_acquire);
+  const auto pending = writes_.Running();
   if (pending > 0) {
     LOG_F(WARNING, "Destroyed with {} pending writes", pending);
   }
@@ -131,19 +132,15 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
         ? existing_index_it->second
         : 0U;
 
+      const auto action
+        = internal::DedupCollisionAction(config_.collision_policy);
       const auto diagnostic = ImportDiagnostic {
         .severity = (config_.collision_policy == DedupCollisionPolicy::kError)
           ? ImportSeverity::kError
           : ImportSeverity::kWarning,
         .code = "import.dedup_collision.physics",
-        .message = "policy=" + to_string(config_.collision_policy) + ";action="
-          + std::string(
-            config_.collision_policy == DedupCollisionPolicy::kWarnReplace
-              ? "replace"
-              : (config_.collision_policy
-                      == DedupCollisionPolicy::kWarnKeepFirst
-                    ? "keep_first"
-                    : "error"))
+        .message = "policy=" + to_string(config_.collision_policy)
+          + ";action=" + std::string(action)
           + ";existing_index=" + std::to_string(existing_index),
         .source_path = key,
         .object_path = "physics",
@@ -177,8 +174,10 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
   const auto acquire = table_aggregator_.AcquireOrInsert(signature,
     [&]
     -> std::pair<data::pak::physics::PhysicsResourceDesc, WriteReservation> {
-      const auto reserved = table_aggregator_.ReserveDataRange(
-        resource_alignment, cooked.data.size());
+      const auto reserved = table_aggregator_.ReserveDataRange({
+        .alignment = resource_alignment,
+        .payload_size = cooked.data.size(),
+      });
       auto desc
         = MakeTableEntry(cooked, reserved.aligned_offset, resource_asset_key);
       return std::make_pair(desc, reserved);
@@ -200,15 +199,12 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
 
   const auto reserved = acquire.reservation;
   if (reserved.padding_size > 0) {
-    auto padding = std::make_shared<std::vector<std::byte>>(
-      reserved.padding_size, std::byte { 0 });
-    QueueDataWrite(
-      WriteKind::kPadding, std::nullopt, reserved.reservation_start, padding);
+    QueueDataWrite(WriteKind::kPadding, std::nullopt,
+      reserved.reservation_start,
+      std::vector<std::byte>(reserved.padding_size, std::byte { 0 }));
   }
-  auto payload
-    = std::make_shared<std::vector<std::byte>>(std::move(cooked.data));
-  QueueDataWrite(
-    WriteKind::kPayload, acquire.index, reserved.aligned_offset, payload);
+  QueueDataWrite(WriteKind::kPayload, acquire.index, reserved.aligned_offset,
+    std::move(cooked.data));
 
   if (hash_missing && !signature_salt.empty()) {
     const auto key = std::string(signature_salt);
@@ -227,14 +223,9 @@ auto PhysicsResourceEmitter::Count() const noexcept -> uint32_t
   return emitted_count_.load(std::memory_order_acquire);
 }
 
-auto PhysicsResourceEmitter::PendingCount() const noexcept -> size_t
-{
-  return pending_count_.load(std::memory_order_acquire);
-}
-
 auto PhysicsResourceEmitter::ErrorCount() const noexcept -> size_t
 {
-  return error_count_.load(std::memory_order_acquire);
+  return writes_.ErrorCount();
 }
 
 auto PhysicsResourceEmitter::DataFileSize() const noexcept -> uint64_t
@@ -248,18 +239,11 @@ auto PhysicsResourceEmitter::TryGetDescriptor(const uint32_t index) const
   return table_aggregator_.TryGetDescriptor(index);
 }
 
-auto PhysicsResourceEmitter::Finalize() -> co::Co<Result<void, FileErrorInfo>>
+auto PhysicsResourceEmitter::Finalize() -> co::Co<Result<void, WriteFailure>>
 {
   finalize_started_.store(true, std::memory_order_release);
 
-  const auto flush_result = co_await file_writer_.Flush();
-  if (first_error_) {
-    co_return Result<void, FileErrorInfo>::Err(*first_error_);
-  }
-  if (!flush_result) {
-    co_return Result<void, FileErrorInfo>::Err(flush_result.error());
-  }
-  co_return Result<void, FileErrorInfo>::Ok();
+  co_return co_await writes_.Join();
 }
 
 auto PhysicsResourceEmitter::MakeTableEntry(
@@ -274,51 +258,42 @@ auto PhysicsResourceEmitter::MakeTableEntry(
   entry.format = cooked.format;
   entry.resource_asset_key = resource_asset_key;
   static_assert(sizeof(entry.content_hash) == sizeof(cooked.content_hash));
-  std::memcpy(
-    entry.content_hash, cooked.content_hash.data(), sizeof(entry.content_hash));
+  std::memcpy(std::span { entry.content_hash }.data(),
+    cooked.content_hash.data(), sizeof(entry.content_hash));
   return entry;
 }
 
 auto PhysicsResourceEmitter::QueueDataWrite(const WriteKind kind,
   const std::optional<uint32_t> index, const uint64_t offset,
-  std::shared_ptr<std::vector<std::byte>> data) -> void
+  std::vector<std::byte> data) -> void
 {
-  auto keepalive = std::move(data);
-  DCHECK_F(
-    keepalive != nullptr, "physics resource write payload must not be null");
-  const auto bytes = std::span<const std::byte>(*keepalive);
-
-  pending_count_.fetch_add(1, std::memory_order_acq_rel);
-
-  file_writer_.WriteAtAsync(data_path_, offset, bytes,
-    WriteOptions { .create_directories = true, .share_write = true },
-    [this, kind, index, data = std::move(keepalive)](const FileErrorInfo& error,
-      [[maybe_unused]] uint64_t bytes_written) -> void {
-      OnWriteComplete(kind, index, error);
-    });
+  const auto file = table_aggregator_.DataFile();
+  if (!file) {
+    LOG_F(ERROR, "Failed to open '{}': {}", data_path_.string(),
+      file.error().message());
+    writes_.Fail(data_path_, file.error());
+    return;
+  }
+  writes_.Start(
+    data_path_, WriteData(*file, kind, index, offset, std::move(data)));
 }
 
-auto PhysicsResourceEmitter::OnWriteComplete(const WriteKind kind,
-  const std::optional<uint32_t> index, const FileErrorInfo& error) -> void
+auto PhysicsResourceEmitter::WriteData(serio::AnyAsyncDevice* const file,
+  const WriteKind kind, const std::optional<uint32_t> index,
+  const uint64_t offset, std::vector<std::byte> data) -> co::Co<Result<void>>
 {
-  pending_count_.fetch_sub(1, std::memory_order_acq_rel);
-
-  if (!error.IsError()) {
-    return;
+  const auto written = co_await file->AsyncWriteAt(
+    serio::ByteOffset { offset }, std::span<const std::byte>(data));
+  if (!written) {
+    if (kind == WriteKind::kPadding) {
+      LOG_F(ERROR, "Failed to write physics resource padding to '{}': {}",
+        data_path_.string(), written.error().message());
+    } else {
+      LOG_F(ERROR, "Failed to write physics resource {} to '{}': {}",
+        index.value_or(0U), data_path_.string(), written.error().message());
+    }
   }
-
-  error_count_.fetch_add(1, std::memory_order_acq_rel);
-  if (!first_error_) {
-    first_error_ = error;
-  }
-  if (kind == WriteKind::kPadding) {
-    LOG_F(
-      ERROR, "Failed to write physics resource padding: {}", error.ToString());
-    return;
-  }
-
-  LOG_F(ERROR, "Failed to write physics resource {}: {}", index.value_or(0U),
-    error.ToString());
+  co_return written;
 }
 
 } // namespace oxygen::content::import

@@ -31,13 +31,23 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::content::import;
-using namespace oxygen::co;
-namespace co = oxygen::co;
 using oxygen::Format;
 using oxygen::TextureType;
+using oxygen::co::ThreadPool;
+using oxygen::content::import::Bc7Quality;
+using oxygen::content::import::ImportEventLoop;
+using oxygen::content::import::MakeDescFromPreset;
+using oxygen::content::import::MipPolicy;
+using oxygen::content::import::ScratchImage;
+using oxygen::content::import::TextureImportDesc;
+using oxygen::content::import::TexturePipeline;
+using oxygen::content::import::TexturePreset;
+using oxygen::content::import::TextureSourceSet;
+using oxygen::content::import::TightPackedPolicy;
 
 namespace {
 
@@ -45,6 +55,13 @@ namespace {
 //===---------------------------------------------------------//
 
 using oxygen::cooker::test::MakeBmp;
+
+//! A buffer holding a copy of `bytes`.
+[[nodiscard]] auto ToBuffer(const std::span<const std::byte> bytes)
+  -> oxygen::serio::ByteBuffer
+{
+  return oxygen::serio::ByteBuffer::CopyOf(bytes).value();
+}
 
 //! Returns the test BMP image as a span of bytes.
 [[nodiscard]] auto GetTestImageBytes() -> std::span<const std::byte>
@@ -113,7 +130,7 @@ NOLINT_TEST_F(
 
     const auto result = RunOnce(std::move(item));
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(result.cooked);
+    ASSERT_HAS_VALUE(result.cooked);
     EXPECT_EQ(result.cooked->desc.format, desc.output_format);
     EXPECT_EQ(result.cooked->desc.mip_levels, 2U);
   }
@@ -137,7 +154,7 @@ NOLINT_TEST_F(
     item.output_format_policy = policy;
     const auto result = RunOnce(std::move(item));
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(result.cooked);
+    ASSERT_HAS_VALUE(result.cooked);
     EXPECT_EQ(result.cooked->desc.format, Format::kRGBA8UNorm);
     EXPECT_EQ(result.cooked->desc.mip_levels, 2U);
   }
@@ -157,18 +174,21 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, MaterialPresetPreservesHdrRadiance)
     = TexturePipeline::OutputFormatPolicy::kMaterialPreset;
   const auto result = RunOnce(std::move(item));
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked);
+  ASSERT_HAS_VALUE(result.cooked);
   EXPECT_EQ(result.cooked->desc.format, Format::kRGBA32Float);
   ASSERT_FALSE(result.cooked->layouts.empty());
-  oxygen::data::pak::render::TexturePayloadHeader header {};
-  ASSERT_GE(result.cooked->payload.size(), sizeof(header));
-  std::memcpy(&header, result.cooked->payload.data(), sizeof(header));
+  const auto header_read
+    = oxygen::serio::CopyAt<oxygen::data::pak::render::TexturePayloadHeader>(
+      std::span { result.cooked->payload });
+  ASSERT_HAS_VALUE(header_read);
+  const auto& header = *header_read;
   const auto& layout = result.cooked->layouts.front();
   std::array<float, 4> actual {};
   const auto offset = header.data_offset_bytes + layout.offset_bytes;
   ASSERT_GE(result.cooked->payload.size(), offset + sizeof(actual));
-  std::memcpy(
-    actual.data(), result.cooked->payload.data() + offset, sizeof(actual));
+  std::memcpy(actual.data(),
+    std::span { result.cooked->payload }.subspan(offset, sizeof(actual)).data(),
+    sizeof(actual));
   EXPECT_EQ(actual, pixel);
 }
 
@@ -226,8 +246,7 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectDepthSliceNon3DFails)
 
   const auto bytes = GetTestImageBytes();
   TextureSourceSet sources;
-  sources.AddDepthSlice(
-    1, std::vector<std::byte>(bytes.begin(), bytes.end()), "slice1.bmp");
+  sources.AddDepthSlice(1, ToBuffer(bytes), "slice1.bmp");
 
   auto item = MakeWorkItem(desc, "slice_non3d.bmp", std::move(sources),
     std::string(TightPackedPolicy::Instance().Id()));
@@ -252,10 +271,8 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectDuplicateArrayLayerFails)
 
   const auto bytes = GetTestImageBytes();
   TextureSourceSet sources;
-  sources.AddArrayLayer(
-    0, std::vector<std::byte>(bytes.begin(), bytes.end()), "layer0_a.bmp");
-  sources.AddArrayLayer(
-    0, std::vector<std::byte>(bytes.begin(), bytes.end()), "layer0_b.bmp");
+  sources.AddArrayLayer(0, ToBuffer(bytes), "layer0_a.bmp");
+  sources.AddArrayLayer(0, ToBuffer(bytes), "layer0_b.bmp");
 
   auto item = MakeWorkItem(desc, "dup_layer.bmp", std::move(sources),
     std::string(TightPackedPolicy::Instance().Id()));

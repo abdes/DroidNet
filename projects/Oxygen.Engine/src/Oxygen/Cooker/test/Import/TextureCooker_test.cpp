@@ -30,6 +30,8 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -57,6 +59,13 @@ using oxygen::content::import::TightPackedPolicy;
 //===----------------------------------------------------------------------===//
 
 using oxygen::cooker::test::MakeBmp;
+
+//! A buffer holding a copy of `bytes`.
+[[nodiscard]] auto ToBuffer(const std::span<const std::byte> bytes)
+  -> oxygen::serio::ByteBuffer
+{
+  return oxygen::serio::ByteBuffer::CopyOf(bytes).value();
+}
 
 //! Returns the test BMP image as a span of bytes.
 [[nodiscard]] auto GetTestImageBytes() -> std::span<const std::byte>
@@ -144,8 +153,11 @@ NOLINT_TEST(
         = CookTexture(std::move(image), desc, TightPackedPolicy::Instance());
       ASSERT_HAS_VALUE(cooked) << static_cast<int>(cooked.error());
       EXPECT_EQ(cooked->desc.format, output);
-      oxygen::data::pak::render::TexturePayloadHeader header {};
-      std::memcpy(&header, cooked->payload.data(), sizeof(header));
+      const auto header_read = oxygen::serio::CopyAt<
+        oxygen::data::pak::render::TexturePayloadHeader>(
+        std::span { cooked->payload });
+      ASSERT_HAS_VALUE(header_read);
+      const auto& header = *header_read;
       const auto data = std::span { cooked->payload }.subspan(
         header.data_offset_bytes + cooked->layouts.at(0).offset_bytes);
       for (unsigned c = 0; c < 4; ++c) {
@@ -216,8 +228,11 @@ NOLINT_TEST(TextureCookerColorTransferTest, FiltersColorMipsInLinearLight)
         = CookTexture(std::move(image), desc, TightPackedPolicy::Instance());
       ASSERT_HAS_VALUE(cooked) << static_cast<int>(cooked.error());
       ASSERT_EQ(cooked->desc.mip_levels, 2U);
-      oxygen::data::pak::render::TexturePayloadHeader header {};
-      std::memcpy(&header, cooked->payload.data(), sizeof(header));
+      const auto header_read = oxygen::serio::CopyAt<
+        oxygen::data::pak::render::TexturePayloadHeader>(
+        std::span { cooked->payload });
+      ASSERT_HAS_VALUE(header_read);
+      const auto& header = *header_read;
       std::array<float, 4> actual {};
       std::memcpy(actual.data(),
         std::span { cooked->payload }
@@ -263,8 +278,11 @@ NOLINT_TEST(
       = CookTexture(std::move(image), desc, TightPackedPolicy::Instance());
     ASSERT_HAS_VALUE(cooked) << static_cast<int>(cooked.error());
     ASSERT_EQ(cooked->desc.mip_levels, size == 2 ? 2 : 3);
-    oxygen::data::pak::render::TexturePayloadHeader header {};
-    std::memcpy(&header, cooked->payload.data(), sizeof(header));
+    const auto header_read
+      = oxygen::serio::CopyAt<oxygen::data::pak::render::TexturePayloadHeader>(
+        std::span { cooked->payload });
+    ASSERT_HAS_VALUE(header_read);
+    const auto& header = *header_read;
     for (unsigned mip = 1; mip < cooked->desc.mip_levels; ++mip) {
       const double linear
         = 1.0 / (255.0 * static_cast<double>(1U << (mip * 2)));
@@ -566,10 +584,10 @@ NOLINT_TEST(TextureCookerNormalMapTest, CooksNormalMap)
 NOLINT_TEST(TextureCookerMultiSourceTest, AssemblesArrayLayersAndMips)
 {
   TextureSourceSet sources;
-  sources.AddMipLevel(0, 0, MakeBmp(2, 2), "layer0_mip0.bmp");
-  sources.AddMipLevel(0, 1, MakeBmp(1, 1), "layer0_mip1.bmp");
-  sources.AddMipLevel(1, 0, MakeBmp(2, 2), "layer1_mip0.bmp");
-  sources.AddMipLevel(1, 1, MakeBmp(1, 1), "layer1_mip1.bmp");
+  sources.AddMipLevel(0, 0, ToBuffer(MakeBmp(2, 2)), "layer0_mip0.bmp");
+  sources.AddMipLevel(0, 1, ToBuffer(MakeBmp(1, 1)), "layer0_mip1.bmp");
+  sources.AddMipLevel(1, 0, ToBuffer(MakeBmp(2, 2)), "layer1_mip0.bmp");
+  sources.AddMipLevel(1, 1, ToBuffer(MakeBmp(1, 1)), "layer1_mip1.bmp");
 
   TextureImportDesc desc;
   desc.source_id = "array_layers";
@@ -589,8 +607,8 @@ NOLINT_TEST(
   TextureCookerMultiSourceTest, RejectsMismatchedDimensionsAcrossLayers)
 {
   TextureSourceSet sources;
-  sources.AddMipLevel(0, 0, MakeBmp(2, 2), "layer0_mip0.bmp");
-  sources.AddMipLevel(1, 0, MakeBmp(1, 1), "layer1_mip0.bmp");
+  sources.AddMipLevel(0, 0, ToBuffer(MakeBmp(2, 2)), "layer0_mip0.bmp");
+  sources.AddMipLevel(1, 0, ToBuffer(MakeBmp(1, 1)), "layer1_mip0.bmp");
 
   TextureImportDesc desc;
   desc.source_id = "array_layers_mismatch";
@@ -607,9 +625,9 @@ NOLINT_TEST(
 NOLINT_TEST(TextureCookerMultiSourceTest, RejectsMissingMipLevel)
 {
   TextureSourceSet sources;
-  sources.AddMipLevel(0, 0, MakeBmp(2, 2), "layer0_mip0.bmp");
-  sources.AddMipLevel(0, 1, MakeBmp(1, 1), "layer0_mip1.bmp");
-  sources.AddMipLevel(1, 0, MakeBmp(2, 2), "layer1_mip0.bmp");
+  sources.AddMipLevel(0, 0, ToBuffer(MakeBmp(2, 2)), "layer0_mip0.bmp");
+  sources.AddMipLevel(0, 1, ToBuffer(MakeBmp(1, 1)), "layer0_mip1.bmp");
+  sources.AddMipLevel(1, 0, ToBuffer(MakeBmp(2, 2)), "layer1_mip0.bmp");
 
   TextureImportDesc desc;
   desc.source_id = "array_layers_missing_mip";
@@ -677,8 +695,10 @@ NOLINT_TEST(TextureCookerHdrTest, HalfOutputClampsOutOfRangeRadiance)
   };
   const auto decode
     = [](const CookedTexturePayload& cooked) -> std::array<float, 8> {
-    oxygen::data::pak::render::TexturePayloadHeader header {};
-    std::memcpy(&header, cooked.payload.data(), sizeof(header));
+    const auto header
+      = oxygen::serio::CopyAt<oxygen::data::pak::render::TexturePayloadHeader>(
+        std::span { cooked.payload })
+          .value_or(oxygen::data::pak::render::TexturePayloadHeader {});
     std::array<std::uint16_t, 8> bits {};
     std::memcpy(bits.data(),
       std::span { cooked.payload }
@@ -849,8 +869,11 @@ NOLINT_TEST(TextureCookerMaxSizeTest, LargerTexturesAreHalvedUntilTheyFit)
   const auto cooked = CookTexture(MakeHalvesImage(8, 4),
     MakeDataDesc(MipPolicy::kNone, 2), TightPackedPolicy::Instance());
   ASSERT_HAS_VALUE(cooked);
-  oxygen::data::pak::render::TexturePayloadHeader header {};
-  std::memcpy(&header, cooked->payload.data(), sizeof(header));
+  const auto header_read
+    = oxygen::serio::CopyAt<oxygen::data::pak::render::TexturePayloadHeader>(
+      std::span { cooked->payload });
+  ASSERT_HAS_VALUE(header_read);
+  const auto& header = *header_read;
   const auto data = std::span { cooked->payload }.subspan(
     header.data_offset_bytes + cooked->layouts.at(0).offset_bytes);
   EXPECT_GT(std::to_integer<int>(data[0]), 200);

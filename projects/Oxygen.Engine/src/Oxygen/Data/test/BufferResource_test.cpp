@@ -7,17 +7,17 @@
 // Standard library
 #include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
-#include <cstring>
+#include <span>
 #include <utility>
 #include <vector>
 
 // GTest
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project
@@ -51,7 +51,7 @@ NOLINT_TEST_F(BufferResourceDeathTest, IndexBufferSizeNotAligned_Throws)
 
   // Assert
   EXPECT_DEATH([[maybe_unused]] auto _
-    = BufferResource(std::move(bad_desc), std::move(data)),
+    = BufferResource(bad_desc, oxygen::serio::testing::OwnedBytes(data)),
     "not aligned to element stride");
 #endif
 }
@@ -74,7 +74,7 @@ NOLINT_TEST_F(BufferResourceDeathTest, FormattedBufferNonzeroStride_Throws)
 
   // Act & Assert
   EXPECT_DEATH([[maybe_unused]] auto _
-    = BufferResource(std::move(bad_desc), std::move(data)),
+    = BufferResource(bad_desc, oxygen::serio::testing::OwnedBytes(data)),
     "formatted buffer must have zero element_stride");
 #endif
 }
@@ -97,7 +97,7 @@ NOLINT_TEST_F(BufferResourceDeathTest, StructuredBufferZeroStride_Throws)
 
   // Act & Assert
   EXPECT_DEATH([[maybe_unused]] auto _
-    = BufferResource(std::move(bad_desc), std::move(data)),
+    = BufferResource(bad_desc, oxygen::serio::testing::OwnedBytes(data)),
     "element_stride cannot be zero for structured buffer");
 #endif
 }
@@ -151,9 +151,12 @@ NOLINT_TEST_F(BufferResourceBasicTest, ClassificationVariants_Correct)
   std::vector<uint8_t> raw_bytes(8, 0xEF);
 
   // Act
-  BufferResource formatted { formatted_desc, std::move(formatted_bytes) };
-  BufferResource structured { structured_desc, std::move(structured_bytes) };
-  BufferResource raw { raw_desc, std::move(raw_bytes) };
+  BufferResource formatted { formatted_desc,
+    oxygen::serio::testing::OwnedBytes(formatted_bytes) };
+  BufferResource structured { structured_desc,
+    oxygen::serio::testing::OwnedBytes(structured_bytes) };
+  BufferResource raw { raw_desc,
+    oxygen::serio::testing::OwnedBytes(raw_bytes) };
 
   // Assert
   EXPECT_TRUE(formatted.IsFormatted());
@@ -188,7 +191,7 @@ NOLINT_TEST_F(BufferResourceDataOffsetTest, DataOffsetPreserved)
   };
   std::vector<uint8_t> bytes(4, 0x22);
 
-  BufferResource resource { desc, std::move(bytes) };
+  BufferResource resource { desc, oxygen::serio::testing::OwnedBytes(bytes) };
   EXPECT_EQ(resource.GetDataOffset(), kOffset);
 }
 
@@ -214,7 +217,7 @@ NOLINT_TEST_F(BufferResourceDataSizeTest, DataSizeMatchesDescriptor)
   };
   std::vector<uint8_t> bytes(48, 0x11);
 
-  BufferResource resource { desc, std::move(bytes) };
+  BufferResource resource { desc, oxygen::serio::testing::OwnedBytes(bytes) };
   EXPECT_EQ(resource.GetDataSize(), 48U);
 }
 
@@ -243,7 +246,7 @@ NOLINT_TEST_F(BufferResourceMoveTest, MoveConstructor_TransfersOwnership)
   };
   std::vector<uint8_t> bytes(32, 0x5A);
 
-  BufferResource original { desc, std::move(bytes) };
+  BufferResource original { desc, oxygen::serio::testing::OwnedBytes(bytes) };
   ASSERT_EQ(original.GetDataSize(), 32U);
 
   // Act
@@ -322,16 +325,13 @@ NOLINT_TEST_F(BufferResourceBasicTest, OwnsTheBufferItIsGiven)
     .element_stride = 1,
   };
   auto buffer
-    = oxygen::serio::ByteBuffer::Allocate(oxygen::serio::CountOf(kBytes.size()))
+    = oxygen::serio::ByteBuffer::CopyOf(std::as_bytes(std::span { kBytes }))
         .value();
-  std::memcpy(buffer.Bytes().data(), kBytes.data(), kBytes.size());
-  const auto* const storage = buffer.Bytes().data();
+  const auto* const storage = buffer.Unsigned().data();
 
   const auto resource = BufferResource(desc, std::move(buffer));
 
-  // NOLINTNEXTLINE(*-reinterpret-cast)
-  EXPECT_EQ(
-    reinterpret_cast<const std::byte*>(resource.GetData().data()), storage);
+  EXPECT_EQ(resource.GetData().data(), storage);
   EXPECT_EQ(resource.GetDataSize(), kBytes.size());
   EXPECT_TRUE(std::ranges::equal(resource.GetData(), kBytes));
 }

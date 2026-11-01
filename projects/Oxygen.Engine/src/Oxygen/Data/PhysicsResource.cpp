@@ -4,17 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstdint>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PhysicsResource.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::data {
 
 PhysicsResource::PhysicsResource(
-  pak::physics::PhysicsResourceDesc desc, std::vector<uint8_t> data)
+  pak::physics::PhysicsResourceDesc desc, serio::ByteBuffer data)
   : desc_(desc)
   , data_(std::move(data))
 {

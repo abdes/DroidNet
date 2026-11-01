@@ -5,22 +5,50 @@
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
+#include <system_error>
 #include <thread>
+#include <utility>
 
 #include "ImportEventLoop.h"
 #include <asio/executor_work_guard.hpp>
 #include <asio/io_context.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Serio/IoDriver.h>
 
 namespace oxygen::content::import {
 
-ImportEventLoop::ImportEventLoop() { DLOG_F(INFO, "Created"); }
+namespace {
+
+  //! The driver of `context`; the OS error when its backend cannot be created.
+  auto CreateDriver(asio::io_context& context) -> serio::IoDriver
+  {
+    auto driver = serio::IoDriver::Create(context);
+    if (!driver) {
+      throw std::system_error(
+        driver.error(), "Failed to create the import IO driver");
+    }
+    return std::move(driver).value();
+  }
+
+} // namespace
+
+ImportEventLoop::ImportEventLoop()
+  : driver_(CreateDriver(io_context_))
+{
+  DLOG_F(INFO, "Created");
+}
 
 ImportEventLoop::~ImportEventLoop()
 {
   if (running_.load(std::memory_order_acquire)) {
-    Stop();
+    try {
+      Stop();
+    } catch (const std::system_error& error) {
+      ABORT_F("Failed to stop import event loop during destruction: {}",
+        error.what());
+    }
   }
   DLOG_F(INFO, "Destroyed");
 }
@@ -34,6 +62,8 @@ auto ImportEventLoop::IoContext() const noexcept -> const asio::io_context&
 {
   return io_context_;
 }
+
+auto ImportEventLoop::Driver() noexcept -> serio::IoDriver& { return driver_; }
 
 auto ImportEventLoop::Run() -> void
 {

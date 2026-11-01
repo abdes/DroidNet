@@ -46,7 +46,7 @@ private:
 //! Discover six faces in CubeFace order using the native suffix conventions.
 //! The source reader observes every candidate probe, including rejected sets.
 [[nodiscard]] auto DiscoverCubeFacePaths(const std::filesystem::path& path,
-  IAsyncFileReader& reader) -> co::Co<Result<CubeFacePaths, FileErrorInfo>>;
+  IAsyncFileReader& reader) -> co::Co<Result<CubeFacePaths>>;
 
 //! Get bytes per pixel for a given format.
 [[nodiscard]] auto GetBytesPerPixel(Format format) -> std::size_t;

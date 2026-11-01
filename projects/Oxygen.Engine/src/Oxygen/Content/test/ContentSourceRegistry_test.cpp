@@ -17,12 +17,22 @@
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Serio/FileLock.h>
+#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::testing {
 namespace {
 
   constexpr auto kSecondRootSeed = uint8_t { 2U };
+
+  //! The driver payload-reading mounts await through: it completes on the
+  //! awaiting thread, as the tests have no loop.
+  auto InlineDriver() -> std::shared_ptr<serio::IoDriver>
+  {
+    return std::make_shared<serio::IoDriver>(
+      serio::IoDriver::CreateInline().value());
+  }
 
   //! Puts an empty loose cooked root of identity `seed` at `root`.
   auto WriteEmptyRoot(
@@ -44,7 +54,8 @@ namespace {
     using Mode = internal::LooseCookedSource::OpenMode;
     const internal::LooseCookedSource index(root, Mode::kIndexOnly);
     EXPECT_EQ(index.GetAssetCount(), 0U);
-    EXPECT_THROW(internal::LooseCookedSource(root, Mode::kValidateMetadata),
+    EXPECT_THROW(internal::LooseCookedSource(root, Mode::kValidateMetadata,
+                   serio::FileLock {}, InlineDriver()),
       std::runtime_error);
   }
 
@@ -53,8 +64,9 @@ namespace {
   {
     const auto root = TempDir() / "source";
     WriteEmptyRoot(root);
-    auto source = std::make_shared<internal::LooseCookedSource>(
-      root, internal::LooseCookedSource::OpenMode::kVerifyContent);
+    auto source = std::make_shared<internal::LooseCookedSource>(root,
+      internal::LooseCookedSource::OpenMode::kVerifyContent, serio::FileLock {},
+      InlineDriver());
     internal::ContentSourceRegistry registry;
     const auto first = registry.MountLoose(source->DebugName(), source);
     registry.Clear();
@@ -70,8 +82,9 @@ namespace {
   {
     const auto root = TempDir() / "source";
     WriteEmptyRoot(root);
-    auto source = std::make_shared<internal::LooseCookedSource>(
-      root, internal::LooseCookedSource::OpenMode::kVerifyContent);
+    auto source = std::make_shared<internal::LooseCookedSource>(root,
+      internal::LooseCookedSource::OpenMode::kVerifyContent, serio::FileLock {},
+      InlineDriver());
     internal::ContentSourceRegistry registry;
     const auto mounted = registry.MountGeneration(source, std::nullopt);
     const auto key = source->GetSourceKey();
@@ -90,8 +103,9 @@ namespace {
   {
     const auto root = TempDir() / "source";
     WriteEmptyRoot(root);
-    const auto source = std::make_shared<internal::LooseCookedSource>(
-      root, internal::LooseCookedSource::OpenMode::kVerifyContent);
+    const auto source = std::make_shared<internal::LooseCookedSource>(root,
+      internal::LooseCookedSource::OpenMode::kVerifyContent, serio::FileLock {},
+      InlineDriver());
     internal::ContentSourceRegistry first_registry;
     internal::ContentSourceRegistry second_registry;
     const auto first = first_registry.MountLoose(source->DebugName(), source);
@@ -105,19 +119,22 @@ namespace {
   {
     const auto root = TempDir() / "generation";
     WriteEmptyRoot(root);
-    auto first_source = std::make_shared<internal::LooseCookedSource>(
-      root, internal::LooseCookedSource::OpenMode::kVerifyContent);
+    auto first_source = std::make_shared<internal::LooseCookedSource>(root,
+      internal::LooseCookedSource::OpenMode::kVerifyContent, serio::FileLock {},
+      InlineDriver());
     internal::ContentSourceRegistry registry;
     const auto first = registry.MountGeneration(first_source, std::nullopt);
     const auto key = first_source->GetSourceKey();
     ASSERT_TRUE(registry.RetireGeneration(key));
-    const auto new_source = std::make_shared<internal::LooseCookedSource>(
-      root, internal::LooseCookedSource::OpenMode::kVerifyContent);
+    const auto new_source = std::make_shared<internal::LooseCookedSource>(root,
+      internal::LooseCookedSource::OpenMode::kVerifyContent, serio::FileLock {},
+      InlineDriver());
     const auto reopened = registry.MountGeneration(new_source, std::nullopt);
     EXPECT_NE(first.source_id, reopened.source_id);
     const auto repeated = registry.MountGeneration(
-      std::make_shared<internal::LooseCookedSource>(
-        root, internal::LooseCookedSource::OpenMode::kVerifyContent),
+      std::make_shared<internal::LooseCookedSource>(root,
+        internal::LooseCookedSource::OpenMode::kVerifyContent,
+        serio::FileLock {}, InlineDriver()),
       std::nullopt);
     EXPECT_EQ(repeated.source_id, reopened.source_id);
     EXPECT_EQ(registry.Sources().size(), 1U);
@@ -137,21 +154,25 @@ namespace {
     const auto second_root = TempDir() / "second";
     WriteEmptyRoot(first_root);
     WriteEmptyRoot(second_root, kSecondRootSeed);
-    const auto first = std::make_shared<internal::LooseCookedSource>(
-      first_root, internal::LooseCookedSource::OpenMode::kVerifyContent);
+    const auto first = std::make_shared<internal::LooseCookedSource>(first_root,
+      internal::LooseCookedSource::OpenMode::kVerifyContent, serio::FileLock {},
+      InlineDriver());
     const auto second = std::make_shared<internal::LooseCookedSource>(
-      second_root, internal::LooseCookedSource::OpenMode::kVerifyContent);
+      second_root, internal::LooseCookedSource::OpenMode::kVerifyContent,
+      serio::FileLock {}, InlineDriver());
     internal::ContentSourceRegistry registry;
     const auto original = registry.MountGeneration(first, std::nullopt);
     static_cast<void>(registry.MountGeneration(second, first->GetSourceKey()));
     const auto restored = registry.MountGeneration(
-      std::make_shared<internal::LooseCookedSource>(
-        first_root, internal::LooseCookedSource::OpenMode::kVerifyContent),
+      std::make_shared<internal::LooseCookedSource>(first_root,
+        internal::LooseCookedSource::OpenMode::kVerifyContent,
+        serio::FileLock {}, InlineDriver()),
       second->GetSourceKey());
     EXPECT_NE(original.source_id, restored.source_id);
     const auto repeated = registry.MountGeneration(
-      std::make_shared<internal::LooseCookedSource>(
-        first_root, internal::LooseCookedSource::OpenMode::kVerifyContent),
+      std::make_shared<internal::LooseCookedSource>(first_root,
+        internal::LooseCookedSource::OpenMode::kVerifyContent,
+        serio::FileLock {}, InlineDriver()),
       first->GetSourceKey());
     EXPECT_EQ(restored.source_id, repeated.source_id);
     EXPECT_EQ(registry.Sources().size(), 1U);
@@ -163,8 +184,9 @@ namespace {
   {
     const auto root = TempDir() / "source";
     WriteEmptyRoot(root);
-    const auto source = std::make_shared<internal::LooseCookedSource>(
-      root, internal::LooseCookedSource::OpenMode::kVerifyContent);
+    const auto source = std::make_shared<internal::LooseCookedSource>(root,
+      internal::LooseCookedSource::OpenMode::kVerifyContent, serio::FileLock {},
+      InlineDriver());
     internal::ContentSourceRegistry registry;
     const auto first = registry.MountLoose(source->DebugName(), source);
     const auto second = registry.MountLoose(source->DebugName(), source);

@@ -11,9 +11,6 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <set>
@@ -88,18 +85,19 @@ namespace {
 
   constexpr auto kHeadFileName = "head.json";
 
+  //! The text of a record file, which its writers publish atomically: it is
+  //! opened sharing deletion, so a publication while it is read replaces it.
   auto ReadText(const std::filesystem::path& path) -> std::string
   {
-    std::ifstream input(base::ToNativePath(path), std::ios::binary);
-    if (!input) {
-      throw std::runtime_error(
-        "Cannot read model import file: " + path.string());
+    const auto bytes = serio::ReadPublishedFile(path);
+    if (!bytes) {
+      throw std::runtime_error("Cannot read model import file: " + path.string()
+        + ": " + bytes.error().message());
     }
-    std::string text(std::istreambuf_iterator<char>(input), {});
-    if (input.bad()) {
-      throw std::runtime_error(
-        "Model import file read failed: " + path.string());
-    }
+    const auto chars = bytes->Bytes();
+    auto text = std::string(chars.size(), ' ');
+    std::ranges::transform(chars, text.begin(),
+      [](const std::byte byte) -> char { return static_cast<char>(byte); });
     return text;
   }
 

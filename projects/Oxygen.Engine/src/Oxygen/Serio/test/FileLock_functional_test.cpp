@@ -6,10 +6,14 @@
 
 // Covers: Serio/FileLock.h, Serio/FileLock.cpp
 
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <system_error>
+#include <thread>
 #include <utility>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
@@ -90,6 +94,73 @@ namespace {
     EXPECT_FALSE(FileLock::TryAcquire(marker_, FileLockMode::kExclusive));
     owner.value() = FileLock {};
     EXPECT_TRUE(FileLock::TryAcquire(marker_, FileLockMode::kShared));
+  }
+
+  //! Acquire waits: a second exclusive acquisition completes only after the
+  //! first lock is released.
+  NOLINT_TEST_F(FileLockTest, AcquireWaitsUntilTheHolderReleases)
+  {
+    using namespace std::chrono_literals;
+    auto holder = FileLock::Acquire(
+      marker_, FileLockMode::kExclusive, FileLockOpenMode::kOpenOrCreate);
+    ASSERT_TRUE(holder);
+    std::atomic<bool> acquired { false };
+    auto waiter_result = Result<FileLock> { FileLock {} };
+
+    auto waiter = std::thread([&] {
+      waiter_result = FileLock::Acquire(marker_, FileLockMode::kExclusive);
+      acquired.store(true);
+    });
+    std::this_thread::sleep_for(100ms);
+    const auto acquired_while_held = acquired.load();
+    holder.value() = FileLock {};
+    waiter.join();
+
+    EXPECT_FALSE(acquired_while_held);
+    EXPECT_TRUE(acquired.load());
+    ASSERT_TRUE(waiter_result);
+    EXPECT_TRUE(waiter_result->IsLocked());
+  }
+
+  //! Each acquisition opens its own handle, so a lock taken by Acquire
+  //! excludes a TryAcquire of the same process.
+  NOLINT_TEST_F(FileLockTest, TryAcquireAfterAcquireInTheSameProcessIsBusy)
+  {
+    auto holder = FileLock::Acquire(
+      marker_, FileLockMode::kExclusive, FileLockOpenMode::kOpenOrCreate);
+    ASSERT_TRUE(holder);
+
+    const auto contender
+      = FileLock::TryAcquire(marker_, FileLockMode::kExclusive);
+
+    ASSERT_FALSE(contender);
+    EXPECT_EQ(contender.error(),
+      std::make_error_code(std::errc::device_or_resource_busy));
+  }
+
+  //! A temporary lock file cannot be waited for.
+  NOLINT_TEST_F(FileLockTest, AcquireRefusesATemporaryLock)
+  {
+    const auto lock = FileLock::Acquire(
+      marker_, FileLockMode::kExclusive, FileLockOpenMode::kTemporary);
+
+    ASSERT_FALSE(lock);
+    EXPECT_EQ(lock.error(), std::errc::invalid_argument);
+    EXPECT_FALSE(std::filesystem::exists(marker_));
+  }
+
+  //! Shared acquisitions do not wait for each other.
+  NOLINT_TEST_F(FileLockTest, SharedAcquisitionsCoexist)
+  {
+    auto first = FileLock::Acquire(
+      marker_, FileLockMode::kShared, FileLockOpenMode::kOpenOrCreate);
+    ASSERT_TRUE(first);
+
+    const auto second = FileLock::Acquire(marker_, FileLockMode::kShared);
+
+    ASSERT_TRUE(second);
+    EXPECT_TRUE(first->IsLocked());
+    EXPECT_TRUE(second->IsLocked());
   }
 
 } // namespace

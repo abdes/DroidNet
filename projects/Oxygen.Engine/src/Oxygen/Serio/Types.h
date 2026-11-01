@@ -81,6 +81,9 @@ struct ByteRange {
     return other.offset >= offset && other.offset.get() <= End().get()
       && other.count.get() <= End().get() - other.offset.get();
   }
+
+  [[nodiscard]] constexpr auto operator==(const ByteRange&) const noexcept
+    -> bool = default;
 };
 
 //! What a device flush guarantees once it succeeds.

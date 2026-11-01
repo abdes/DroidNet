@@ -6,23 +6,26 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+
+namespace oxygen::serio {
+class IoDriver;
+} // namespace oxygen::serio
 
 namespace oxygen::content::import {
 
 //! Options for async file read operations.
 /*!
- Controls offset, size limits, and optimization hints for file reads.
+ Selects the byte range of a read. The default reads the whole file.
 */
 struct ReadOptions {
   //! Byte offset to start reading from (0 = beginning of file).
@@ -30,27 +33,15 @@ struct ReadOptions {
 
   //! Maximum bytes to read (0 = read entire file from offset).
   uint64_t max_bytes = 0;
-
-  //! Hint for expected file size to enable buffer pre-allocation.
-  /*!
-   If provided and accurate, reduces memory reallocations during read.
-   Zero means no hint is provided.
-  */
-  uint64_t size_hint = 0;
-
-  //! Buffer alignment requirement for read buffer (0 = no requirement).
-  /*!
-   Some applications (e.g., GPU uploads) require aligned buffers.
-   When non-zero, the returned buffer will be aligned to this boundary.
-  */
-  size_t alignment = 0;
 };
 
 //! Async file reader interface.
 /*!
- Platform-agnostic interface for asynchronous file reading operations.
- Implementations may use native async I/O (IOCP on Windows, io_uring on
- Linux) or ThreadPool-based blocking I/O as a fallback.
+ The import's seam for reading sources: `ImportSourceSnapshot` decorates it to
+ record and replay reads, and tests substitute it. Its one implementation,
+ `SerioFileReader`, opens each source through the import loop's
+ `serio::IoDriver`. `GetFileInfo` and `Exists` are file system metadata, not
+ bytes, and stay `std::filesystem` queries.
 
  ### Thread Safety
 
@@ -59,90 +50,91 @@ struct ReadOptions {
 
  ### Cancellation
 
- All operations respect coroutine cancellation. When a coroutine is
- canceled, pending operations return `FileError::kCancelled`.
+ All operations respect coroutine cancellation: cancelling the awaiting task
+ cancels the pending read.
 
  ### Error Handling
 
- All operations return `Result<T, FileErrorInfo>`. No exceptions are thrown.
+ All operations return `Result<T>` with `std::error_code` errors; callers
+ compare them with Serio's conditions (`serio::Error::kNotFound`,
+ `serio::Error::kIsDirectory`) and name the path in their diagnostics. No
+ exceptions are thrown.
 
  ### Example
 
  ```cpp
- auto reader = CreateAsyncFileReader(pool);
- co_await Run(loop, [&]() -> Co<> {
-   auto result = co_await reader->ReadFile("path/to/file.bin");
-   if (result.has_value()) {
-     auto& bytes = result.value();
-     // Process bytes...
-   } else {
-     LOG_F(ERROR, "%s", result.error().ToString().c_str());
-   }
-   co_return;
- });
+ auto reader = CreateAsyncFileReader(loop.Driver());
+ auto result = co_await reader->ReadFile("path/to/file.bin");
+ if (result) {
+   const auto bytes = result->Bytes();
+   // Process bytes...
+ } else {
+   LOG_F(ERROR, "{}: {}", path.string(), result.error().message());
+ }
  ```
 */
 class IAsyncFileReader {
 public:
+  IAsyncFileReader() = default;
   virtual ~IAsyncFileReader() = default;
 
-  //! Read entire file contents into memory.
-  /*!
-   Reads the specified file (or portion of it) into a byte vector.
+  OXYGEN_DEFAULT_COPYABLE(IAsyncFileReader)
+  OXYGEN_DEFAULT_MOVABLE(IAsyncFileReader)
 
+  //! Read the whole file into memory.
+  [[nodiscard]] auto ReadFile(const std::filesystem::path& path)
+    -> co::Co<Result<serio::ByteBuffer>>
+  {
+    return ReadFile(path, ReadOptions {});
+  }
+
+  //! Read a file (or a range of it) into memory.
+  /*!
    @param path    Absolute or relative path to the file.
-   @param options Read options (offset, max_bytes, hints).
-   @return File contents on success, or error information on failure.
+   @param options Byte range to read. An offset past the end reads nothing,
+                  and a range reaching past the end is clamped to it.
+   @return The bytes read on success, or the error.
 
    ### Errors
-   - `kNotFound` if file does not exist.
-   - `kAccessDenied` if read permission is denied.
-   - `kIsDirectory` if path points to a directory.
-   - `kCancelled` if operation was canceled.
-   - `kIOError` for other I/O failures.
+   - `serio::Error::kNotFound` if the file does not exist.
+   - `serio::Error::kAccessDenied` if read permission is denied.
+   - `serio::Error::kIsDirectory` if the path names a directory.
+   - `std::errc::invalid_argument` for an empty path.
+   - `std::errc::operation_canceled` if the operation was canceled.
   */
-  [[nodiscard]] virtual auto ReadFile(
-    const std::filesystem::path& path, ReadOptions options = {})
-    -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>> = 0;
+  [[nodiscard]] virtual auto ReadFile(const std::filesystem::path& path,
+    ReadOptions options) -> co::Co<Result<serio::ByteBuffer>> = 0;
 
   //! Get file metadata without reading contents.
   /*!
-   Retrieves file size, modification time, and type information.
-
    @param path Absolute or relative path to the file.
-   @return File metadata on success, or error information on failure.
+   @return File metadata on success, or the error.
 
    ### Errors
-   - `kNotFound` if file does not exist.
-   - `kAccessDenied` if stat permission is denied.
+   - `serio::Error::kNotFound` if the file does not exist.
+   - `serio::Error::kAccessDenied` if stat permission is denied.
   */
   [[nodiscard]] virtual auto GetFileInfo(const std::filesystem::path& path)
-    -> co::Co<Result<FileInfo, FileErrorInfo>> = 0;
+    -> co::Co<Result<FileInfo>> = 0;
 
   //! Check if a file exists.
   /*!
    @param path Absolute or relative path to check.
-   @return True if file exists, false otherwise. Error only on I/O failure.
+   @return True if the file exists, false otherwise. Error only on I/O failure.
 
    Note: This returns `false` for non-existent files without an error.
-   An error is only returned if the existence check itself fails.
   */
   [[nodiscard]] virtual auto Exists(const std::filesystem::path& path)
-    -> co::Co<Result<bool, FileErrorInfo>> = 0;
+    -> co::Co<Result<bool>> = 0;
 };
 
-// Forward declaration
-class ImportEventLoop;
-
-//! Create a platform-appropriate async file reader.
+//! Create the async file reader of the import loop.
 /*!
- On Windows, returns a WindowsFileReader using IOCP.
- On other platforms, returns an appropriate implementation.
-
- @param loop The import event loop.
+ @param driver The driver of the import loop's `asio::io_context`; it outlives
+               the reader.
  @return Unique pointer to async file reader.
 */
-OXGN_COOK_NDAPI auto CreateAsyncFileReader(ImportEventLoop& loop)
+OXGN_COOK_NDAPI auto CreateAsyncFileReader(serio::IoDriver& driver)
   -> std::unique_ptr<IAsyncFileReader>;
 
 } // namespace oxygen::content::import

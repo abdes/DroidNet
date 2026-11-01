@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <optional>
 #include <span>
@@ -19,7 +18,6 @@
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Composition/Typed.h>
@@ -31,7 +29,6 @@
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
 #include <Oxygen/Content/Internal/PayloadBudget.h>
-#include <Oxygen/Content/Internal/RegionReader.h>
 #include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
 #include <Oxygen/Content/Internal/ResourceTypes.h>
 #include <Oxygen/Content/LoaderContext.h>
@@ -50,12 +47,27 @@
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/AsyncDevice.h>
 #include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/ByteView.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Region.h>
+#include <Oxygen/Serio/RegionReader.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::internal {
 namespace {
+
+  //! A reader of a resource descriptor row, which owns its view of `row`.
+  auto DescriptorReaderOf(const std::span<const std::byte> row)
+    -> std::unique_ptr<serio::AnyReader>
+  {
+    auto reader
+      = serio::RegionReader<serio::ByteView>::Owning(serio::ByteView(row));
+    if (!reader) {
+      throw std::system_error(reader.error(), "read a resource descriptor");
+    }
+    return std::move(reader).value();
+  }
 
   struct SourceReadAccess final {
     observer_ptr<const ContentSourceRegistry> registry;
@@ -107,7 +119,7 @@ namespace {
     if (!publication.value) {
       return {};
     }
-    return WithResourceType(publication.type, [&]<typename T>() -> auto {
+    return WithResourceType(publication.type, [&]<typename T> -> auto {
       return ContentAcquisition {
         .publication = publication,
         .owner = publication.Acquire<T>(cache, releases, owner),
@@ -171,7 +183,7 @@ namespace {
   auto DescriptorSizeOf(const TypeId resource_type) -> size_t
   {
     return WithResourceType(resource_type,
-      []<typename T>() -> size_t { return sizeof(typename T::DescT); });
+      []<typename T> -> size_t { return sizeof(typename T::DescT); });
   }
 
   //! The payload extent the descriptor `row` of `resource_type` names.
@@ -179,15 +191,14 @@ namespace {
     const std::span<const std::byte> row) -> serio::ByteRange
   {
     return WithResourceType(
-      resource_type, [row]<typename T>() -> serio::ByteRange {
-        auto desc = typename T::DescT {};
-        if (row.size() < sizeof(desc)) {
+      resource_type, [row]<typename T> -> serio::ByteRange {
+        const auto desc = serio::CopyAt<typename T::DescT>(row);
+        if (!desc) {
           throw std::runtime_error("Resource descriptor is truncated");
         }
-        std::memcpy(&desc, row.data(), sizeof(desc));
         return {
-          .offset = serio::ByteOffset { desc.data_offset },
-          .count = serio::ByteCount { desc.size_bytes },
+          .offset = serio::ByteOffset { desc->data_offset },
+          .count = serio::ByteCount { desc->size_bytes },
         };
       });
   }
@@ -232,8 +243,8 @@ namespace {
   {
     // The lease stays in this frame, on the loop thread, until the loader has
     // taken the buffer.
-    auto payload = co_await ReadPayload(
-      std::move(prepared.payloads), prepared.extent, budget);
+    auto payload
+      = co_await ReadPayload(prepared.payloads, prepared.extent, budget);
     co_return co_await pool->Run(
       [prepared = std::move(prepared), bytes = std::move(payload.bytes),
         work_offline, default_priority,
@@ -283,8 +294,7 @@ namespace {
     PreparedResourceDecode prepared {};
     prepared.loader = std::move(*loader_opt);
     prepared.source_instance = resolved_source->source_instance;
-    prepared.desc_reader
-      = RegionReader<serio::ByteView>::Owning(serio::ByteView(*row));
+    prepared.desc_reader = DescriptorReaderOf(*row);
     prepared.extent = PayloadExtentOf(resource_type, *row);
     prepared.payloads = source->PayloadRegion(resource_type);
     prepared.source_content = source;
@@ -302,13 +312,13 @@ namespace {
     InFlightOperationTable::OperationId operation_id, DecodeFn decode_fn)
     -> co::Co<SharedContentResult>
   {
-    const auto erase = Finally([&]() noexcept -> auto {
+    const auto erase = Finally([&] noexcept -> auto {
       in_flight_ops->Erase(resource_type, key.get(), operation_id);
     });
     if (!access.IsReadable()) {
       co_return SharedContentResult {};
     }
-    auto cached = WithResourceType(resource_type, [&]<typename T>() -> auto {
+    auto cached = WithResourceType(resource_type, [&]<typename T> -> auto {
       return SharedContentResult::FromCache<T>(*cache, *releases, key.get());
     });
     if (cached) {
@@ -333,8 +343,8 @@ namespace {
     if (!access.IsReadable()) {
       co_return SharedContentResult {};
     }
-    const auto publish = [&]() -> auto {
-      return WithResourceType(resource_type, [&]<typename T>() -> auto {
+    const auto publish = [&] -> auto {
+      return WithResourceType(resource_type, [&]<typename T> -> auto {
         return SharedContentResult::Publish(
           *cache, *releases, key.get(), std::static_pointer_cast<T>(decoded));
       });
@@ -381,7 +391,7 @@ namespace {
     if (callbacks.on_resource_request) {
       callbacks.on_resource_request(resource_type);
     }
-    auto cached = WithResourceType(resource_type, [&]<typename T>() -> auto {
+    auto cached = WithResourceType(resource_type, [&]<typename T> -> auto {
       return ContentAcquisition::FromCache<T>(
         cache, *releases, key.get(), owner);
     });
@@ -545,9 +555,8 @@ auto ResourceLoadPipeline::LoadErasedFromCooked(const TypeId resource_type,
     auto prepared = PreparedResourceDecode {
       .loader = std::move(*loader_opt),
       .source_instance = {},
-      .desc_reader
-      = RegionReader<serio::ByteView>::Owning(serio::ByteView(bytes.first(
-        (std::min)(bytes.size(), DescriptorSizeOf(resource_type))))),
+      .desc_reader = DescriptorReaderOf(
+        bytes.first((std::min)(bytes.size(), DescriptorSizeOf(resource_type)))),
       .extent = PayloadExtentOf(resource_type, bytes),
       .payloads = serio::Region<serio::AnyAsyncDevice>::Whole(device).value(),
       .source_content = nullptr,

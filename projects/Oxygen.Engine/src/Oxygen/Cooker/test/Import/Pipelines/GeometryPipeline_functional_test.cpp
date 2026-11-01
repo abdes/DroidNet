@@ -56,6 +56,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -303,18 +304,6 @@ namespace {
     return item;
   }
 
-  template <typename T>
-  [[nodiscard]] auto ReadStructAt(
-    const std::vector<std::byte>& bytes, const size_t offset) -> T
-  {
-    T out {};
-    if (bytes.size() < offset + sizeof(T)) {
-      return out;
-    }
-    std::memcpy(&out, std::span(bytes).subspan(offset).data(), sizeof(T));
-    return out;
-  }
-
   //=== Basic Behavior Tests
   //===-----------------------------------------------------//
 
@@ -353,8 +342,11 @@ namespace {
     const auto& bytes = cooked.descriptor_bytes;
     ASSERT_GE(bytes.size(), sizeof(data::pak::geometry::GeometryAssetDesc));
 
-    const auto asset_desc
-      = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(bytes, 0);
+    const auto asset_desc_read
+      = oxygen::serio::CopyAt<data::pak::geometry::GeometryAssetDesc>(
+        std::span { bytes });
+    ASSERT_HAS_VALUE(asset_desc_read);
+    const auto& asset_desc = *asset_desc_read;
     EXPECT_EQ(asset_desc.header.asset_type,
       static_cast<uint8_t>(data::AssetType::kGeometry));
     EXPECT_EQ(
@@ -369,22 +361,31 @@ namespace {
     EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_JointWeights), 0U);
 
     size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
-    const auto mesh_desc
-      = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, offset);
+    const auto mesh_desc_read
+      = oxygen::serio::CopyAt<data::pak::geometry::MeshDesc>(
+        std::span { bytes }, oxygen::serio::ByteOffset { offset });
+    ASSERT_HAS_VALUE(mesh_desc_read);
+    const auto& mesh_desc = *mesh_desc_read;
     EXPECT_EQ(mesh_desc.submesh_count, 1U);
     EXPECT_EQ(mesh_desc.mesh_view_count, 1U);
     EXPECT_EQ(
       mesh_desc.mesh_type, static_cast<uint8_t>(data::MeshType::kStandard));
 
     offset += sizeof(data::pak::geometry::MeshDesc);
-    const auto submesh_desc
-      = ReadStructAt<data::pak::geometry::SubMeshDesc>(bytes, offset);
+    const auto submesh_desc_read
+      = oxygen::serio::CopyAt<data::pak::geometry::SubMeshDesc>(
+        std::span { bytes }, oxygen::serio::ByteOffset { offset });
+    ASSERT_HAS_VALUE(submesh_desc_read);
+    const auto& submesh_desc = *submesh_desc_read;
     EXPECT_EQ(submesh_desc.mesh_view_count, 1U);
     EXPECT_EQ(submesh_desc.material_asset_key, MakeDefaultMaterialKey());
 
     offset += sizeof(data::pak::geometry::SubMeshDesc);
-    const auto view_desc
-      = ReadStructAt<data::pak::geometry::MeshViewDesc>(bytes, offset);
+    const auto view_desc_read
+      = oxygen::serio::CopyAt<data::pak::geometry::MeshViewDesc>(
+        std::span { bytes }, oxygen::serio::ByteOffset { offset });
+    ASSERT_HAS_VALUE(view_desc_read);
+    const auto& view_desc = *view_desc_read;
     EXPECT_EQ(view_desc.first_index, 0U);
     EXPECT_EQ(view_desc.index_count, 3U);
     EXPECT_EQ(view_desc.vertex_count, 3U);
@@ -411,10 +412,17 @@ namespace {
     ASSERT_TRUE(result.success);
     ASSERT_HAS_VALUE(result.cooked);
     const auto& bytes = result.cooked.value().descriptor_bytes;
-    const auto asset
-      = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(bytes, 0);
-    const auto mesh = ReadStructAt<data::pak::geometry::MeshDesc>(
-      bytes, sizeof(data::pak::geometry::GeometryAssetDesc));
+    const auto asset_read
+      = oxygen::serio::CopyAt<data::pak::geometry::GeometryAssetDesc>(
+        std::span { bytes });
+    ASSERT_HAS_VALUE(asset_read);
+    const auto& asset = *asset_read;
+    const auto mesh_read = oxygen::serio::CopyAt<data::pak::geometry::MeshDesc>(
+      std::span { bytes },
+      oxygen::serio::ByteOffset {
+        sizeof(data::pak::geometry::GeometryAssetDesc) });
+    ASSERT_HAS_VALUE(mesh_read);
+    const auto& mesh = *mesh_read;
     EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
                 bytes, asset.header.name_offset),
       item_mesh_name);
@@ -448,8 +456,11 @@ namespace {
     ASSERT_GE(bytes.size(), sizeof(data::pak::geometry::GeometryAssetDesc));
 
     size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
-    const auto mesh_desc
-      = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, offset);
+    const auto mesh_desc_read
+      = oxygen::serio::CopyAt<data::pak::geometry::MeshDesc>(
+        std::span { bytes }, oxygen::serio::ByteOffset { offset });
+    ASSERT_HAS_VALUE(mesh_desc_read);
+    const auto& mesh_desc = *mesh_desc_read;
     EXPECT_EQ(
       mesh_desc.mesh_type, static_cast<uint8_t>(data::MeshType::kSkinned));
     EXPECT_EQ(mesh_desc.submesh_count, 1U);
@@ -458,14 +469,20 @@ namespace {
     EXPECT_EQ(mesh_desc.info.skinned.influences_per_vertex, 4U);
 
     offset += sizeof(data::pak::geometry::MeshDesc);
-    const auto submesh_desc
-      = ReadStructAt<data::pak::geometry::SubMeshDesc>(bytes, offset);
+    const auto submesh_desc_read
+      = oxygen::serio::CopyAt<data::pak::geometry::SubMeshDesc>(
+        std::span { bytes }, oxygen::serio::ByteOffset { offset });
+    ASSERT_HAS_VALUE(submesh_desc_read);
+    const auto& submesh_desc = *submesh_desc_read;
     EXPECT_EQ(submesh_desc.mesh_view_count, 1U);
     EXPECT_EQ(submesh_desc.material_asset_key, MakeDefaultMaterialKey());
 
     offset += sizeof(data::pak::geometry::SubMeshDesc);
-    const auto view_desc
-      = ReadStructAt<data::pak::geometry::MeshViewDesc>(bytes, offset);
+    const auto view_desc_read
+      = oxygen::serio::CopyAt<data::pak::geometry::MeshViewDesc>(
+        std::span { bytes }, oxygen::serio::ByteOffset { offset });
+    ASSERT_HAS_VALUE(view_desc_read);
+    const auto& view_desc = *view_desc_read;
     EXPECT_EQ(view_desc.first_index, 0U);
     EXPECT_EQ(view_desc.index_count, 3U);
     EXPECT_EQ(view_desc.vertex_count, 3U);
@@ -557,13 +574,19 @@ namespace {
     ASSERT_TRUE(diagnostics.empty());
 
     const auto& bytes = finalized->bytes;
-    const auto asset_desc
-      = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(bytes, 0);
+    const auto asset_desc_read
+      = oxygen::serio::CopyAt<data::pak::geometry::GeometryAssetDesc>(
+        std::span { bytes });
+    ASSERT_HAS_VALUE(asset_desc_read);
+    const auto& asset_desc = *asset_desc_read;
     EXPECT_FALSE(base::IsAllZero(asset_desc.header.content_hash));
 
     size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
-    const auto mesh_desc
-      = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, offset);
+    const auto mesh_desc_read
+      = oxygen::serio::CopyAt<data::pak::geometry::MeshDesc>(
+        std::span { bytes }, oxygen::serio::ByteOffset { offset });
+    ASSERT_HAS_VALUE(mesh_desc_read);
+    const auto& mesh_desc = *mesh_desc_read;
     const auto vertex = finalized->references.ResolveResource(
       mesh_desc.info.standard.vertex_buffer, data::ResourceKind::kBuffer);
     const auto index = finalized->references.ResolveResource(
@@ -764,11 +787,16 @@ namespace {
 
     auto result = CookedViews {};
     auto offset = sizeof(GeometryAssetDesc) + sizeof(MeshDesc);
-    result.submesh = ReadStructAt<SubMeshDesc>(cooked.descriptor_bytes, offset);
+    result.submesh = oxygen::serio::CopyAt<SubMeshDesc>(
+      std::span { cooked.descriptor_bytes },
+      oxygen::serio::ByteOffset { offset })
+                       .value_or(SubMeshDesc {});
     offset += sizeof(SubMeshDesc);
     for (uint32_t view = 0U; view < result.submesh.mesh_view_count; ++view) {
-      result.views.push_back(
-        ReadStructAt<MeshViewDesc>(cooked.descriptor_bytes, offset));
+      result.views.push_back(oxygen::serio::CopyAt<MeshViewDesc>(
+        std::span { cooked.descriptor_bytes },
+        oxygen::serio::ByteOffset { offset })
+          .value_or(MeshViewDesc {}));
       offset += sizeof(MeshViewDesc);
     }
     const auto& lod = cooked.lods.front();
@@ -1213,15 +1241,22 @@ namespace {
     using data::pak::geometry::SubMeshDesc;
 
     auto result = CookedLods {};
-    result.asset = ReadStructAt<GeometryAssetDesc>(cooked.descriptor_bytes, 0);
+    result.asset = oxygen::serio::CopyAt<GeometryAssetDesc>(
+      std::span { cooked.descriptor_bytes })
+                     .value_or(GeometryAssetDesc {});
     auto offset = sizeof(GeometryAssetDesc);
     for (uint32_t lod = 0U; lod < result.asset.lod_count; ++lod) {
-      const auto mesh = ReadStructAt<MeshDesc>(cooked.descriptor_bytes, offset);
+      const auto mesh
+        = oxygen::serio::CopyAt<MeshDesc>(std::span { cooked.descriptor_bytes },
+          oxygen::serio::ByteOffset { offset })
+            .value_or(MeshDesc {});
       offset += sizeof(MeshDesc);
       auto& read = result.lods.emplace_back();
       for (uint32_t submesh = 0U; submesh < mesh.submesh_count; ++submesh) {
-        const auto desc
-          = ReadStructAt<SubMeshDesc>(cooked.descriptor_bytes, offset);
+        const auto desc = oxygen::serio::CopyAt<SubMeshDesc>(
+          std::span { cooked.descriptor_bytes },
+          oxygen::serio::ByteOffset { offset })
+                            .value_or(SubMeshDesc {});
         offset += sizeof(SubMeshDesc)
           + (static_cast<size_t>(desc.mesh_view_count) * sizeof(MeshViewDesc));
         read.surfaces.push_back(desc.surface_id);

@@ -6,15 +6,16 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <span>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/api_export.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::data {
 
@@ -32,9 +33,10 @@ public:
   //! Type alias for the descriptor type used by this resource.
   using DescT = pak::physics::PhysicsResourceDesc;
 
-  //! Constructs a PhysicsResource with descriptor + exclusive data ownership.
+  //! Constructs a PhysicsResource that owns `data`, the buffer its loader
+  //! read the payload into.
   OXGN_DATA_API PhysicsResource(
-    pak::physics::PhysicsResourceDesc desc, std::vector<uint8_t> data);
+    pak::physics::PhysicsResourceDesc desc, serio::ByteBuffer data);
 
   ~PhysicsResource() override = default;
 
@@ -45,13 +47,19 @@ public:
   {
     return desc_.data_offset;
   }
-  [[nodiscard]] auto GetDataSize() const noexcept { return data_.size(); }
+  [[nodiscard]] auto GetDataSize() const noexcept
+  {
+    return data_.Bytes().size();
+  }
   [[nodiscard]] auto GetFormat() const noexcept { return desc_.format; }
   [[nodiscard]] auto GetContentHash() const noexcept -> uint64_t
   {
-    uint64_t hash_prefix = 0;
-    std::memcpy(&hash_prefix, desc_.content_hash, sizeof(hash_prefix));
-    return hash_prefix;
+    const auto hash_prefix = serio::CopyAt<uint64_t>(
+      std::as_bytes(std::span<const uint8_t> { desc_.content_hash }));
+    if (!hash_prefix) {
+      return 0;
+    }
+    return *hash_prefix;
   }
   [[nodiscard]] auto GetContentHashBytes() const noexcept
     -> std::span<const uint8_t, 32>
@@ -61,12 +69,12 @@ public:
 
   [[nodiscard]] auto GetData() const noexcept -> std::span<const uint8_t>
   {
-    return std::span<const uint8_t>(data_.data(), data_.size());
+    return data_.Unsigned();
   }
 
 private:
   pak::physics::PhysicsResourceDesc desc_ {};
-  std::vector<uint8_t> data_;
+  serio::ByteBuffer data_;
 };
 
 } // namespace oxygen::data

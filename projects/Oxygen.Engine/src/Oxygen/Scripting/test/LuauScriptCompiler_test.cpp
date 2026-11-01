@@ -4,15 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstdint>
+#include <span>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -23,20 +23,17 @@ using oxygen::scripting::ScriptBlobCanonicalName;
 using oxygen::scripting::ScriptBlobOrigin;
 using oxygen::scripting::ScriptSourceBlob;
 
-auto ToBytes(const std::string_view text) -> std::vector<uint8_t>
+auto ToBytes(const std::string_view text) -> oxygen::serio::ByteBuffer
 {
-  std::vector<uint8_t> bytes;
-  bytes.reserve(text.size());
-  for (const auto ch : text) {
-    bytes.push_back(static_cast<uint8_t>(ch));
-  }
-  return bytes;
+  return oxygen::serio::ByteBuffer::CopyOf(
+    std::as_bytes(std::span<const char>(text)))
+    .value();
 }
 
 NOLINT_TEST(LuauScriptCompilerTest, CompileValidSourceProducesBytecode)
 {
   LuauScriptCompiler compiler;
-  const auto source = ToBytes("local x = 1\nreturn x\n");
+  auto source = ToBytes("local x = 1\nreturn x\n");
 
   const auto result = compiler.Compile(
     ScriptSourceBlob::FromOwned(std::move(source),
@@ -53,7 +50,7 @@ NOLINT_TEST(LuauScriptCompilerTest, CompileValidSourceProducesBytecode)
 NOLINT_TEST(LuauScriptCompilerTest, CompileInvalidSourceReturnsDiagnostics)
 {
   LuauScriptCompiler compiler;
-  const auto source = ToBytes("local x =\n");
+  auto source = ToBytes("local x =\n");
 
   const auto result = compiler.Compile(
     ScriptSourceBlob::FromOwned(std::move(source),

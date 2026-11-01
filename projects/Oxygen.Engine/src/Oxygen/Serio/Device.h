@@ -11,6 +11,7 @@
 #include <span>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Error.h>
 #include <Oxygen/Serio/Operation.h>
 #include <Oxygen/Serio/Types.h>
@@ -99,6 +100,30 @@ template <ReadableDevice D>
     at += *read;
   }
   return {};
+}
+
+//! Reads all of `device` (a region reads its range) into a new buffer.
+/*!
+ @return The buffer, `Size()` bytes long; `kEndOfData` when the device ends
+         before its size, the allocation's or the device's errors otherwise.
+*/
+template <ReadableDevice D>
+[[nodiscard]] auto ReadAll(const D& device) noexcept -> Result<ByteBuffer>
+{
+  const auto size = device.Size();
+  if (!size) {
+    return ::oxygen::Err(size.error());
+  }
+  auto buffer = ByteBuffer::Allocate(*size);
+  if (!buffer) {
+    return buffer;
+  }
+  if (const auto read
+    = ReadExactlyAt(device, ByteOffset { 0 }, buffer->Bytes());
+    !read) {
+    return ::oxygen::Err(read.error());
+  }
+  return buffer;
 }
 
 } // namespace oxygen::serio

@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <optional>
 #include <span>
@@ -30,9 +29,11 @@
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -75,12 +76,9 @@ namespace {
   auto ReadMaterialDesc(const std::vector<std::byte>& bytes)
     -> data::pak::render::MaterialAssetDesc
   {
-    auto desc = data::pak::render::MaterialAssetDesc {};
-    if (bytes.size() < sizeof(desc)) {
-      return desc;
-    }
-    std::memcpy(&desc, bytes.data(), sizeof(desc));
-    return desc;
+    return oxygen::serio::CopyAt<data::pak::render::MaterialAssetDesc>(
+      std::span { bytes })
+      .value_or(data::pak::render::MaterialAssetDesc {});
   }
 
   using oxygen::cooker::test::HasDiagnosticCode;

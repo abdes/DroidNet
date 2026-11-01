@@ -105,7 +105,7 @@ static_assert(sizeof(InputMappingContextAssetDesc) == 107);
 
 #pragma pack(push, 1)
 struct InputActionMappingRecord {
-  AssetKey action_asset_key = {};
+  AssetKey action_asset_key;
   core::StringTableOffsetT slot_name_offset = 0; // Descriptor string table
   uint32_t trigger_start_index = 0;
   uint32_t trigger_count = 0;
@@ -122,7 +122,7 @@ struct InputTriggerRecord {
   InputTriggerBehavior behavior = InputTriggerBehavior::kImplicit;
   uint32_t flags = 0;
   float actuation_threshold = 0.5F;
-  AssetKey linked_action_asset_key = {};
+  AssetKey linked_action_asset_key;
   uint32_t aux_start_index = 0;
   uint32_t aux_count = 0;
   float fparams[5] = {};
@@ -133,7 +133,7 @@ static_assert(sizeof(InputTriggerRecord) == 74);
 
 #pragma pack(push, 1)
 struct InputTriggerAuxRecord {
-  AssetKey action_asset_key = {};
+  AssetKey action_asset_key;
   uint32_t completion_states = 0;
   uint64_t time_to_complete_ns = 0;
   uint32_t flags = 0;
@@ -146,6 +146,8 @@ static_assert(sizeof(InputTriggerAuxRecord) == 32);
 // clang-format off
 namespace oxygen::serio {
 template <> inline constexpr bool kIsRecord<data::pak::input::InputDataTable> = true;
+template <> inline constexpr bool kIsRecord<data::pak::input::InputActionAssetDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::input::InputMappingContextAssetDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::input::InputActionMappingRecord> = true;
 template <> inline constexpr bool kIsRecord<data::pak::input::InputTriggerRecord> = true;
 template <> inline constexpr bool kIsRecord<data::pak::input::InputTriggerAuxRecord> = true;

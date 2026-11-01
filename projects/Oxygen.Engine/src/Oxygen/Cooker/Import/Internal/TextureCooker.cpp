@@ -38,6 +38,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::import {
 
@@ -57,8 +58,12 @@ namespace {
   {
     const auto count = src.size() / sizeof(float);
     for (size_t i = 0; i < count; ++i) {
-      auto value = 0.0F;
-      std::memcpy(&value, src.subspan(i * sizeof(float)).data(), sizeof(value));
+      const auto read
+        = serio::CopyAt<float>(src, serio::ByteOffset { i * sizeof(float) });
+      if (!read) {
+        break;
+      }
+      auto value = *read;
       if (!std::isfinite(value)) {
         ++stats.non_finite;
         value = 0.0F;
@@ -1389,7 +1394,7 @@ auto CookTexture(const TextureSourceSet& sources, const TextureImportDesc& desc,
       decode_opts.extension_hint = source.source_id.substr(dot_pos);
     }
 
-    auto decoded = DecodeToScratchImage(source.bytes, decode_opts);
+    auto decoded = DecodeToScratchImage(source.bytes.Bytes(), decode_opts);
     if (!decoded) {
       return Err(decoded.error());
     }

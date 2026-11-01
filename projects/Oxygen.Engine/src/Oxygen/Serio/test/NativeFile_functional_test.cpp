@@ -79,6 +79,18 @@ NOLINT_TEST_F(NativeFileTest, OpenMissingIsNotFound)
   EXPECT_EQ(file.error(), Error::kNotFound);
 }
 
+//! Opening a folder fails with kIsDirectory on every platform.
+NOLINT_TEST_F(NativeFileTest, OpenFolderIsADirectory)
+{
+  const auto folder = Files().Path("folder");
+  std::filesystem::create_directory(folder);
+
+  const auto file = NativeFile::Open(folder, {});
+
+  ASSERT_FALSE(file);
+  EXPECT_EQ(file.error(), Error::kIsDirectory);
+}
+
 //! Creating a new file where one exists fails, and leaves it unchanged.
 NOLINT_TEST_F(NativeFileTest, CreateNewRefusesExistingFile)
 {

@@ -13,7 +13,6 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <ios>
 #include <limits>
 #include <optional>
 #include <span>
@@ -62,9 +61,11 @@
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/RegionStream.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -87,8 +88,10 @@ namespace {
     namespace geometry = data::pak::geometry;
     std::filesystem::create_directories(path.parent_path());
     auto file = serio::NativeFile::Open(path,
-      { .access = serio::Access::kWrite,
-        .creation = serio::Creation::kCreateAlways });
+      {
+        .access = serio::Access::kWrite,
+        .creation = serio::Creation::kCreateAlways,
+      });
     ASSERT_TRUE(file) << file.error().message();
     serio::RegionWriteStream<serio::NativeFile> stream(*file);
     serio::Writer writer(stream);
@@ -1011,15 +1014,17 @@ namespace {
     // Exercise strict binary ingress with otherwise valid cooked content.
     using oxygen::data::pak::world::SceneAssetDesc;
     using oxygen::data::pak::world::SceneComponentTableDesc;
-    SceneAssetDesc descriptor {};
-    std::memcpy(&descriptor, scene_bytes.data(), sizeof(descriptor));
+    const auto scene_desc
+      = oxygen::serio::CopyAt<SceneAssetDesc>(std::span { scene_bytes });
+    ASSERT_HAS_VALUE(scene_desc);
+    const auto& descriptor = *scene_desc;
     ASSERT_EQ(descriptor.component_table_count, 1U);
-    SceneComponentTableDesc table {};
-    std::memcpy(&table,
-      std::span(scene_bytes)
-        .subspan(descriptor.component_table_directory_offset)
-        .data(),
-      sizeof(table));
+    const auto table_read = oxygen::serio::CopyAt<SceneComponentTableDesc>(
+      std::span { scene_bytes },
+      oxygen::serio::ByteOffset {
+        descriptor.component_table_directory_offset });
+    ASSERT_HAS_VALUE(table_read);
+    const auto& table = *table_read;
     for (unsigned malformed = 0U; malformed < 8U; ++malformed) {
       SCOPED_TRACE(malformed);
       auto record = CheckedAt(directional, 0);

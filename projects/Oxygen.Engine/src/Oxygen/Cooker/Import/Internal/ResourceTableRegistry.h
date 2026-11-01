@@ -24,19 +24,21 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Semaphore.h>
+#include <Oxygen/Serio/IoDriver.h>
 
 namespace oxygen::content::import {
-
-class IAsyncFileWriter;
 
 class ResourceTableRegistry final {
 public:
   class SharedTableLockGuard;
 
-  //! Keeps the resource tables of cooked roots held by `storage`; payloads
-  //! and tables are written through `file_writer`.
+  //! Keeps the resource tables of cooked roots held by `storage`; tables are
+  //! published and data files opened through it, awaited on `driver`, which
+  //! outlives the registry.
   OXGN_COOK_API ResourceTableRegistry(
-    IAsyncFileWriter& file_writer, observer_ptr<cooked::CookerStorage> storage);
+    serio::IoDriver& driver, observer_ptr<cooked::ImportStorage> storage);
+
+  ~ResourceTableRegistry() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(ResourceTableRegistry)
   OXYGEN_MAKE_NON_MOVABLE(ResourceTableRegistry)
@@ -93,8 +95,8 @@ private:
   [[nodiscard]] auto AcquireSharedTableLock(std::string key)
     -> co::Co<SharedTableLockGuard>;
 
-  IAsyncFileWriter& file_writer_;
-  observer_ptr<cooked::CookerStorage> storage_;
+  observer_ptr<serio::IoDriver> driver_;
+  observer_ptr<cooked::ImportStorage> storage_;
   std::mutex mutex_;
   std::unordered_map<std::string, std::unique_ptr<TextureTableAggregator>>
     texture_tables_;
@@ -115,13 +117,13 @@ private:
 class [[nodiscard]] ResourceTableRegistry::SharedTableLockGuard final {
 public:
   SharedTableLockGuard() = default;
+  ~SharedTableLockGuard() = default;
 
   SharedTableLockGuard(SharedTableLockGuard&&) noexcept = default;
   auto operator=(SharedTableLockGuard&&) noexcept
-    -> SharedTableLockGuard& = default;
+    -> SharedTableLockGuard& = delete;
 
-  SharedTableLockGuard(const SharedTableLockGuard&) = delete;
-  auto operator=(const SharedTableLockGuard&) -> SharedTableLockGuard& = delete;
+  OXYGEN_MAKE_NON_COPYABLE(SharedTableLockGuard)
 
 private:
   explicit SharedTableLockGuard(std::shared_ptr<SharedTableLockState> state,

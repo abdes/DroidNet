@@ -18,27 +18,33 @@ namespace oxygen::serio::testing {
 namespace {
 
   // Every asynchronous Serio device and its compositions: memory, whose
-  // operations complete at once, and files opened through a driver; the
+  // operations complete at once, and files opened through a loop driver or an
+  // inline driver (which completes on the awaiting thread); the
   // writable suite takes those that write. Files make the suites functional.
 
   using Factories = ::testing::Types<test::MemoryFileFactory,
-    test::ByteViewFactory, test::AsyncFileFactory,
+    test::ByteViewFactory, test::AsyncFileFactory, test::InlineAsyncFileFactory,
     test::AnyAsyncDeviceFactory<test::ByteViewFactory>,
     test::AnyAsyncDeviceFactory<test::MemoryFileFactory>,
     test::AnyAsyncDeviceFactory<test::AsyncFileFactory>,
+    test::AnyAsyncDeviceFactory<test::InlineAsyncFileFactory>,
     test::FaultInjectingFactory<test::MemoryFileFactory>,
     test::FaultInjectingFactory<test::AsyncFileFactory>,
+    test::FaultInjectingFactory<test::InlineAsyncFileFactory>,
     test::RegionFactory<test::MemoryFileFactory>,
-    test::RegionFactory<test::AsyncFileFactory>>;
+    test::RegionFactory<test::AsyncFileFactory>,
+    test::RegionFactory<test::InlineAsyncFileFactory>>;
 
   INSTANTIATE_TYPED_TEST_SUITE_P(Serio, AsyncDeviceConformance, Factories);
 
-  using WritableFactories
-    = ::testing::Types<test::MemoryFileFactory, test::AsyncFileFactory,
-      test::AnyAsyncDeviceFactory<test::MemoryFileFactory>,
-      test::AnyAsyncDeviceFactory<test::AsyncFileFactory>,
-      test::FaultInjectingFactory<test::MemoryFileFactory>,
-      test::FaultInjectingFactory<test::AsyncFileFactory>>;
+  using WritableFactories = ::testing::Types<test::MemoryFileFactory,
+    test::AsyncFileFactory, test::InlineAsyncFileFactory,
+    test::AnyAsyncDeviceFactory<test::MemoryFileFactory>,
+    test::AnyAsyncDeviceFactory<test::AsyncFileFactory>,
+    test::AnyAsyncDeviceFactory<test::InlineAsyncFileFactory>,
+    test::FaultInjectingFactory<test::MemoryFileFactory>,
+    test::FaultInjectingFactory<test::AsyncFileFactory>,
+    test::FaultInjectingFactory<test::InlineAsyncFileFactory>>;
 
   INSTANTIATE_TYPED_TEST_SUITE_P(
     Serio, AsyncWritableDeviceConformance, WritableFactories);

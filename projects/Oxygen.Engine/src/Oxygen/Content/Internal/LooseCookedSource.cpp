@@ -12,22 +12,29 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
-#include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
 
-#include <Oxygen/Content/Internal/BlockingReads.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
-#include <Oxygen/Content/Internal/RegionReader.h>
+#include <Oxygen/Content/Internal/ResourceTypes.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
+#include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/MappedFile.h>
 #include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Region.h>
+#include <Oxygen/Serio/RegionReader.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::internal {
 
@@ -49,31 +56,25 @@ namespace {
     .sharing = serio::Sharing::kReadWriteDelete,
   };
 
-  auto OpenData(const std::filesystem::path& path, serio::IoDriver* driver)
+  auto OpenData(const std::filesystem::path& path, serio::IoDriver& driver)
     -> serio::AnyAsyncDevice
   {
-    const auto failed = [&path](const std::error_code error) -> auto {
-      return std::system_error(
-        error, "Could not open resource data '" + path.string() + "'");
-    };
-    if (driver != nullptr) {
-      auto file = driver->Open(path, kDataSpec);
-      if (!file) {
-        throw failed(file.error());
-      }
-      return serio::AnyAsyncDevice(std::move(file).value());
-    }
-    auto file = serio::NativeFile::Open(path, kDataSpec);
+    auto file = driver.Open(path, kDataSpec);
     if (!file) {
-      throw failed(file.error());
+      throw std::system_error(
+        file.error(), "Could not open resource data '" + path.string() + "'");
     }
-    return serio::AnyAsyncDevice(BlockingReads(std::move(file).value()));
+    return serio::AnyAsyncDevice(std::move(file).value());
   }
 
 } // namespace
 
 auto LooseCookedSource::OpenFiles() -> void
 {
+  if (!driver_) {
+    throw std::invalid_argument(
+      "A loose cooked source that reads payloads needs an IO driver");
+  }
   const auto open
     = [this](ResourceFiles& files,
         const std::optional<std::filesystem::path>& table,
@@ -82,7 +83,7 @@ auto LooseCookedSource::OpenFiles() -> void
       files.table = MapTable(*table);
     }
     if (data) {
-      files.data = OpenData(*data, driver_.get());
+      files.data = OpenData(*data, *driver_);
       auto whole = serio::Region<serio::AnyAsyncDevice>::Whole(*files.data);
       if (!whole) {
         throw std::system_error(whole.error(),
@@ -106,10 +107,10 @@ auto LooseCookedSource::FilesOf(const TypeId resource_type) const noexcept
 {
   return VisitResourceType(
     resource_type,
-    [this]<typename T>() -> const ResourceFiles* {
+    [this]<typename T> -> const ResourceFiles* {
       return &files_.at(kResourceTypeIndex<T>);
     },
-    []() -> const ResourceFiles* { return nullptr; });
+    [] -> const ResourceFiles* { return nullptr; });
 }
 
 auto LooseCookedSource::ResourceRowSpace(
@@ -138,7 +139,13 @@ auto LooseCookedSource::OpenDescriptor(const std::filesystem::path& path)
     throw std::system_error(
       file.error(), "Could not open asset descriptor '" + path.string() + "'");
   }
-  return RegionReader<serio::NativeFile>::Owning(std::move(file).value());
+  auto reader
+    = serio::RegionReader<serio::NativeFile>::Owning(std::move(file).value());
+  if (!reader) {
+    throw std::system_error(reader.error(),
+      "Could not read asset descriptor '" + path.string() + "'");
+  }
+  return std::move(reader).value();
 }
 
 auto LooseCookedSource::FindTextureIndexByVirtualPath(
@@ -176,6 +183,9 @@ auto LooseCookedSource::FindTextureIndexByVirtualPath(
   }
   // An index-only source maps no table at mount; it maps this one to compare.
   const auto& textures = files_.at(kResourceTypeIndex<data::TextureResource>);
+  if (!textures.table && !textures_table_path_) {
+    throw std::runtime_error("Texture descriptor has no source textures table");
+  }
   const auto mapped = textures.table
     ? std::optional<serio::MappedFile> {}
     : std::optional { MapTable(*textures_table_path_) };

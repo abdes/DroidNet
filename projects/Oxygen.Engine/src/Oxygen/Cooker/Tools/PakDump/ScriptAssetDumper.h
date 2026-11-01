@@ -18,6 +18,7 @@
 
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::pakdump {
 
@@ -35,20 +36,19 @@ public:
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
     asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
-    const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
+    const auto data = asset_dump_helpers::TryDescriptorBytes(pak, entry);
     if (!data) {
       ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
-    if (data->size() < sizeof(ScriptAssetDesc)) {
+    const auto desc_read = serio::CopyAt<ScriptAssetDesc>(*data);
+    if (!desc_read) {
       ctx.Out() << "    ScriptAssetDesc: (insufficient data)\n\n";
       co_return;
     }
-
-    ScriptAssetDesc desc {};
-    std::memcpy(&desc, data->data(), sizeof(desc));
+    const auto& desc = *desc_read;
 
     asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), desc.header,
       asset_dump_helpers::DescriptorString(

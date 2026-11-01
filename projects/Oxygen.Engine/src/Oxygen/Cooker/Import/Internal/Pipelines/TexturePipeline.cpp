@@ -18,6 +18,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -26,7 +27,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
@@ -45,6 +45,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import {
 
@@ -508,7 +509,7 @@ namespace {
     std::chrono::microseconds decode_accum { 0 };
 
     for (const auto& source : source_set.Sources()) {
-      if (source.bytes.empty()) {
+      if (source.bytes.Empty()) {
         return {
           .cooked = Err(TextureImportError::kFileNotFound),
           .decode_duration = {},
@@ -518,7 +519,8 @@ namespace {
       auto per_source_desc = desc;
       per_source_desc.source_id = source.source_id;
       const auto decode_start = std::chrono::steady_clock::now();
-      auto decoded = detail::DecodeSource(source.bytes, per_source_desc);
+      auto decoded
+        = detail::DecodeSource(source.bytes.Bytes(), per_source_desc);
       const auto decode_end = std::chrono::steady_clock::now();
       decode_accum += std::chrono::duration_cast<std::chrono::microseconds>(
         decode_end - decode_start);
@@ -823,7 +825,7 @@ namespace {
     const auto read_start = std::chrono::steady_clock::now();
     auto read_result = co_await reader.get()->ReadFile(item.source_path);
     if (!read_result.has_value()
-      && read_result.error().code != FileError::kCancelled) {
+      && read_result.error() != std::errc::operation_canceled) {
       for (const auto& fallback_path : item.fallback_source_paths) {
         auto fallback = co_await reader.get()->ReadFile(fallback_path);
         if (fallback.has_value()) {
@@ -842,8 +844,8 @@ namespace {
       on_io_duration(MakeDuration(read_start, read_end));
     }
     if (!read_result.has_value()) {
-      const auto message
-        = "Failed to read texture file: " + read_result.error().ToString();
+      const auto message = "Failed to read texture file '" + source_path_string
+        + "': " + read_result.error().message();
       diagnostics.push_back(MakeWarningDiagnostic("import.texture.load_failed",
         message, item.source_id, source_path_string));
       LOG_F(INFO,
@@ -852,14 +854,13 @@ namespace {
       co_return diagnostics;
     }
 
-    auto bytes = std::make_shared<std::vector<std::byte>>(
-      std::move(read_result.value()));
-    source_bytes->bytes
-      = std::span<const std::byte>(bytes->data(), bytes->size());
+    auto bytes
+      = std::make_shared<serio::ByteBuffer>(std::move(read_result.value()));
+    source_bytes->bytes = std::as_const(*bytes).Bytes();
     source_bytes->owner = std::static_pointer_cast<const void>(bytes);
     LOG_F(INFO,
       "TexturePipeline::Worker read ok: source_id='{}' path='{}' bytes={}",
-      item.source_id, source_path_string, bytes->size());
+      item.source_id, source_path_string, bytes->Size().get());
     co_return diagnostics;
   }
 

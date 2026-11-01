@@ -146,9 +146,7 @@ protected:
       return;
     }
 
-    WriteTextFile(GetRequestPdbPath(out_file_, request.request.source_path,
-                    request.request.entry_point, request.request_key),
-      "pdb");
+    WriteTextFile(GetRequestPdbPath(out_file_, request), "pdb");
   }
 
   [[nodiscard]] static auto HasReason(

@@ -24,7 +24,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Span.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
@@ -34,6 +33,8 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Error.h>
 
 namespace oxygen::content::import {
 
@@ -145,7 +146,7 @@ auto detail::CubeFaceSearch::TakeResult() && -> std::optional<CubeFacePaths>
 }
 
 auto detail::DiscoverCubeFacePaths(const std::filesystem::path& path,
-  IAsyncFileReader& reader) -> co::Co<Result<CubeFacePaths, FileErrorInfo>>
+  IAsyncFileReader& reader) -> co::Co<Result<CubeFacePaths>>
 {
   auto search = CubeFaceSearch(path);
   while (!search.Candidate().empty()) {
@@ -159,8 +160,8 @@ auto detail::DiscoverCubeFacePaths(const std::filesystem::path& path,
   if (paths.has_value()) {
     co_return Ok(std::move(*paths));
   }
-  co_return Err(MakeFileError(
-    path, FileError::kNotFound, "No complete cubemap face set was found"));
+  // No complete cubemap face set was found for `path`.
+  co_return Err(serio::make_error_code(serio::Error::kNotFound));
 }
 
 //=== TextureSourceSet Implementation
@@ -171,8 +172,8 @@ void TextureSourceSet::Add(TextureSource source)
   sources_.push_back(std::move(source));
 }
 
-void TextureSourceSet::AddArrayLayer(const uint16_t array_layer,
-  std::vector<std::byte> bytes, std::string source_id)
+void TextureSourceSet::AddArrayLayer(
+  const uint16_t array_layer, serio::ByteBuffer bytes, std::string source_id)
 {
   sources_.push_back(TextureSource{
     .bytes = std::move(bytes),
@@ -186,7 +187,7 @@ void TextureSourceSet::AddArrayLayer(const uint16_t array_layer,
 }
 
 void TextureSourceSet::AddCubeFace(
-  const CubeFace face, std::vector<std::byte> bytes, std::string source_id)
+  const CubeFace face, serio::ByteBuffer bytes, std::string source_id)
 {
   const auto face_index = static_cast<uint16_t>(face);
   sources_.push_back(TextureSource{
@@ -200,8 +201,8 @@ void TextureSourceSet::AddCubeFace(
   });
 }
 
-void TextureSourceSet::AddDepthSlice(const uint16_t slice_index,
-  std::vector<std::byte> bytes, std::string source_id)
+void TextureSourceSet::AddDepthSlice(
+  const uint16_t slice_index, serio::ByteBuffer bytes, std::string source_id)
 {
   sources_.push_back(TextureSource{
     .bytes = std::move(bytes),
@@ -215,7 +216,7 @@ void TextureSourceSet::AddDepthSlice(const uint16_t slice_index,
 }
 
 void TextureSourceSet::AddMipLevel(const uint16_t array_layer,
-  const uint16_t mip_level, std::vector<std::byte> bytes, std::string source_id)
+  const uint16_t mip_level, serio::ByteBuffer bytes, std::string source_id)
 {
   sources_.push_back(TextureSource{
     .bytes = std::move(bytes),

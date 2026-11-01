@@ -125,7 +125,8 @@ auto LooseCookedIndexImpl::CheckContent(
       continue;
     }
     if (relative == oxygen::data::loose_cooked::kIndexFileName
-      || relative == data::loose_cooked::kGenerationLeaseFileName) {
+      || relative == data::loose_cooked::kGenerationLeaseFileName
+      || relative == data::loose_cooked::kIndexLockFileName) {
       continue;
     }
     const auto found = remaining.find(relative);

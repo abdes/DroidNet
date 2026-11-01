@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -522,9 +521,7 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod,
       context.dependency_collector->AddAssetDependency(
         sm_desc.material_asset_key);
     }
-    if (context.parse_only) {
-      material = MaterialAsset::CreateDefault();
-    } else if (context.dependency_collector) {
+    if (context.parse_only || context.dependency_collector) {
       material = MaterialAsset::CreateDefault();
     } else {
       LOG_F(ERROR,
@@ -551,7 +548,7 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod,
   return builder.Build();
 }
 
-inline auto LoadGeometryAsset(LoaderContext context)
+inline auto LoadGeometryAsset(const LoaderContext& context)
   -> std::unique_ptr<data::GeometryAsset>
 {
   using oxygen::data::Mesh;
@@ -701,8 +698,11 @@ inline auto LoadGeometryAsset(LoaderContext context)
   // default LOD policy.
   const auto name_offset = desc.header.name_offset;
   auto geometry = std::make_unique<data::GeometryAsset>(
-    context.current_asset_key, std::move(desc), std::move(lod_meshes),
-    data::SourceOrigin { context.source_key, context.source_instance },
+    context.current_asset_key, desc, std::move(lod_meshes),
+    data::SourceOrigin {
+      .key = context.source_key,
+      .instance = context.source_instance,
+    },
     surface_table);
   geometry->SetAssetName(
     ResolveDescriptorString(strings, name_offset, "asset name"));

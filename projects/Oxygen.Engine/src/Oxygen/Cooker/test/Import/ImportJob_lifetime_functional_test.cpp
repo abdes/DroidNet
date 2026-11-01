@@ -7,7 +7,6 @@
 // Covers: Import/Internal/ImportJob.cpp
 
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -16,17 +15,13 @@
 #include <stdexcept>
 #include <utility>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Result.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
@@ -36,6 +31,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/test/Support/HoldingStorage.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -53,107 +49,7 @@ namespace {
 namespace co = oxygen::co;
 namespace imp = oxygen::content::import;
 
-class HeldCompletionWriter final : public imp::IAsyncFileWriter {
-public:
-  explicit HeldCompletionWriter(imp::ImportEventLoop& loop)
-    : writer_(imp::CreateAsyncFileWriter(loop))
-  {
-  }
-  ~HeldCompletionWriter() override = default;
-  OXYGEN_MAKE_NON_COPYABLE(HeldCompletionWriter)
-  OXYGEN_MAKE_NON_MOVABLE(HeldCompletionWriter)
-
-  co::Event callback_held;
-  co::Event table_write_held;
-  auto HoldTableWrites() -> void { hold_tables_ = true; }
-  auto ReleaseTableWrites() -> void
-  {
-    hold_tables_ = false;
-    table_released_.Trigger();
-  }
-  auto Release() -> void
-  {
-    hold_ = false;
-    if (!pending_) {
-      throw std::logic_error("No held write callback");
-    }
-    auto pending = std::move(*pending_);
-    pending_.reset();
-    pending.callback(pending.error, pending.bytes);
-    released_.Trigger();
-  }
-  auto Write(const std::filesystem::path& path,
-    std::span<const std::byte> bytes, imp::WriteOptions options)
-    -> co::Co<oxygen::Result<uint64_t, imp::FileErrorInfo>> override
-  {
-    if (hold_tables_ && path.extension() == ".table") {
-      table_write_held.Trigger();
-      co_await table_released_;
-    }
-    co_return co_await writer_->Write(path, bytes, options);
-  }
-  auto WriteAt(const std::filesystem::path& path, uint64_t offset,
-    std::span<const std::byte> bytes, imp::WriteOptions options)
-    -> co::Co<oxygen::Result<uint64_t, imp::FileErrorInfo>> override
-  {
-    return writer_->WriteAt(path, offset, bytes, options);
-  }
-  auto WriteAsync(const std::filesystem::path& path,
-    std::span<const std::byte> bytes, imp::WriteOptions options,
-    imp::WriteCompletionCallback callback) -> void override
-  {
-    writer_->WriteAsync(path, bytes, options, Gate(std::move(callback)));
-  }
-  auto WriteAtAsync(const std::filesystem::path& path, uint64_t offset,
-    std::span<const std::byte> bytes, imp::WriteOptions options,
-    imp::WriteCompletionCallback callback) -> void override
-  {
-    writer_->WriteAtAsync(
-      path, offset, bytes, options, Gate(std::move(callback)));
-  }
-  auto Flush() -> co::Co<oxygen::Result<void, imp::FileErrorInfo>> override
-  {
-    const auto first = co_await writer_->Flush();
-    if (pending_) {
-      co_await released_;
-    }
-    const auto rest = co_await writer_->Flush();
-    co_return first ? rest : first;
-  }
-  auto CancelAll() -> void override { writer_->CancelAll(); }
-  [[nodiscard]] auto PendingCount() const -> size_t override
-  {
-    return writer_->PendingCount() + (pending_ ? 1U : 0U);
-  }
-
-private:
-  struct Pending final {
-    imp::WriteCompletionCallback callback;
-    imp::FileErrorInfo error;
-    uint64_t bytes = 0;
-  };
-  auto Gate(imp::WriteCompletionCallback callback)
-    -> imp::WriteCompletionCallback
-  {
-    return [this, callback = std::move(callback)](
-             const imp::FileErrorInfo& error, uint64_t bytes) -> void {
-      if (hold_) {
-        CHECK_F(!pending_);
-        pending_.emplace(
-          Pending { .callback = callback, .error = error, .bytes = bytes });
-        callback_held.Trigger();
-      } else {
-        callback(error, bytes);
-      }
-    };
-  }
-  std::unique_ptr<imp::IAsyncFileWriter> writer_;
-  std::optional<Pending> pending_;
-  co::Event released_;
-  co::Event table_released_;
-  bool hold_tables_ = false;
-  bool hold_ = true;
-};
+using oxygen::cooker::testing::HoldingStorage;
 
 struct ProducerState final {
   bool exited = false;
@@ -264,10 +160,9 @@ NOLINT_TEST(ImportJobLifetimeTest, ExceptionPreservesDrainedSessionTelemetry)
 {
   const oxygen::testing::ScopedTempDir temp;
   imp::ImportEventLoop loop;
-  auto reader = imp::CreateAsyncFileReader(loop);
-  auto writer = imp::CreateAsyncFileWriter(loop);
+  auto reader = imp::CreateAsyncFileReader(loop.Driver());
   co::ThreadPool pool(loop, 1);
-  imp::ResourceTableRegistry tables(*writer,
+  imp::ResourceTableRegistry tables(loop.Driver(),
     oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
   imp::LooseCookedIndexRegistry indexes(
     oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
@@ -286,7 +181,7 @@ NOLINT_TEST(ImportJobLifetimeTest, ExceptionPreservesDrainedSessionTelemetry)
     .on_progress = {},
     .cancel_event = {},
     .reader = oxygen::make_observer(reader.get()),
-    .writer = oxygen::make_observer(writer.get()),
+    .driver = oxygen::make_observer(&loop.Driver()),
     .thread_pool = oxygen::make_observer(&pool),
     .registry = oxygen::make_observer(&tables),
     .index_registry = oxygen::make_observer(&indexes),
@@ -294,11 +189,9 @@ NOLINT_TEST(ImportJobLifetimeTest, ExceptionPreservesDrainedSessionTelemetry)
     .script_compile_callback = {},
     .stop_token = {},
     .model_import_record = {},
-    .generation_writer = {},
   });
   co::Run(loop, RunFailingJob(&job));
   EXPECT_FALSE(result.success);
-  EXPECT_EQ(writer->PendingCount(), 0U);
   EXPECT_EQ(result.telemetry.io_duration, kRecordedIo);
   EXPECT_TRUE(result.telemetry.source_load_duration.has_value());
   EXPECT_TRUE(result.telemetry.decode_duration.has_value());
@@ -311,18 +204,18 @@ NOLINT_TEST(ImportJobLifetimeTest, ExceptionPreservesDrainedSessionTelemetry)
     result.telemetry.total_duration, result.telemetry.finalize_duration);
 }
 
-NOLINT_TEST(
-  ImportJobLifetimeTest, CancellationDrainsCallbacksAndAllowsSameRootRetry)
+NOLINT_TEST(ImportJobLifetimeTest,
+  CancellationJoinsInFlightWritesBeforeRetiringAndAllowsSameRootRetry)
 {
   const oxygen::testing::ScopedTempDir temp;
   imp::ImportEventLoop loop;
-  auto reader = imp::CreateAsyncFileReader(loop);
-  HeldCompletionWriter writer(loop);
+  auto reader = imp::CreateAsyncFileReader(loop.Driver());
+  HoldingStorage storage(oxygen::content::cooked::RealCookerStorage());
   co::ThreadPool pool(loop, 1);
-  imp::ResourceTableRegistry tables(writer,
-    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
-  imp::LooseCookedIndexRegistry indexes(
-    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
+  const auto held_storage
+    = oxygen::make_observer<oxygen::content::cooked::ImportStorage>(&storage);
+  imp::ResourceTableRegistry tables(loop.Driver(), held_storage);
+  imp::LooseCookedIndexRegistry indexes(held_storage);
   const auto root = temp.Path() / "oxygen_job_lifetime_retry";
   imp::ImportRequest request;
   request.source_path = root / "source.json";
@@ -344,7 +237,7 @@ NOLINT_TEST(
       .on_progress = {},
       .cancel_event = {},
       .reader = oxygen::make_observer(reader.get()),
-      .writer = oxygen::make_observer<imp::IAsyncFileWriter>(&writer),
+      .driver = oxygen::make_observer(&loop.Driver()),
       .thread_pool = oxygen::make_observer(&pool),
       .registry = oxygen::make_observer(&tables),
       .index_registry = oxygen::make_observer(&indexes),
@@ -352,7 +245,6 @@ NOLINT_TEST(
       .script_compile_callback = {},
       .stop_token = {},
       .model_import_record = {},
-      .generation_writer = {},
     };
   };
   EmittingJob first(params([&](auto, const auto& report) -> auto {
@@ -370,17 +262,21 @@ NOLINT_TEST(
     {
       co_await jobs.Start(&EmittingJob::ActivateAsync, &first);
       first.Run();
-      co_await writer.callback_held;
+      co_await storage.publication_held;
+      EXPECT_EQ(storage.InFlight(), 1U);
       first.Stop();
-      co_await first_state.destroyed;
-      EXPECT_TRUE(first_state.destroyed_after_exit);
+      // The write in flight is not cancelled yet: the producers' nursery, and
+      // so the job, wait for it before anything is retired.
       EXPECT_EQ(completions, 0U);
+      EXPECT_EQ(storage.InFlight(), 1U);
+      EXPECT_FALSE(first_state.destroyed.Triggered());
       EXPECT_FALSE(std::filesystem::exists(root / "container.index.bin"));
-      writer.Release();
+      storage.Release();
       co_await first.Wait();
       EXPECT_EQ(completions, 1U);
       EXPECT_FALSE(first_report.success);
-      EXPECT_EQ(writer.PendingCount(), 0U);
+      EXPECT_EQ(storage.InFlight(), 0U);
+      EXPECT_TRUE(first_state.destroyed_after_exit);
       co_await jobs.Start(&EmittingJob::ActivateAsync, &retry);
       retry.Run();
       co_await retry.Wait();

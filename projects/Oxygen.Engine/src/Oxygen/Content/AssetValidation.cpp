@@ -6,7 +6,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <span>
 #include <stdexcept>
 
@@ -26,6 +25,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -35,11 +35,11 @@ auto ValidateAssetDescriptor(const data::AssetType type,
   const data::AssetKey& key, const std::span<const std::byte> bytes,
   const data::AssetReferences& references) -> void
 {
-  data::pak::core::AssetHeader header {};
-  if (bytes.size() < sizeof(header)) {
+  const auto parsed_header = serio::CopyAt<data::pak::core::AssetHeader>(bytes);
+  if (!parsed_header) {
     throw std::runtime_error("Asset descriptor is smaller than its header");
   }
-  std::memcpy(&header, bytes.data(), sizeof(header));
+  const auto header = *parsed_header;
   const auto version = data::pak::CurrentAssetVersion(type);
   if (!version || header.version != *version
     || header.asset_type != static_cast<uint8_t>(type)) {

@@ -9,16 +9,23 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::vortex::testing {
 
@@ -132,15 +139,14 @@ namespace detail {
     || payload.size() - data_offset < data_size) {
     return nullptr;
   }
-  std::vector<uint8_t> data(data_size);
-  const auto slice = payload.subspan(data_offset, data_size);
-  detail::CopyBytes(std::as_writable_bytes(std::span {
-                      data,
-                    }),
-    std::as_bytes(slice));
-
+  auto data = serio::ByteBuffer::CopyOf(
+    std::as_bytes(payload.subspan(data_offset, data_size)));
+  if (!data) {
+    return nullptr;
+  }
   try {
-    return std::make_shared<data::TextureResource>(desc, std::move(data));
+    return std::make_shared<data::TextureResource>(
+      desc, std::move(data).value());
   } catch (...) {
     return nullptr;
   }
@@ -498,6 +504,107 @@ namespace detail {
       payload,
     }));
   return bytes;
+}
+
+//! Shape of a synthetic single-mip, uncompressed texture.
+struct SyntheticTextureShape {
+  TextureType type { TextureType::kTexture2D };
+  std::uint32_t width { 1U };
+  std::uint32_t height { 1U };
+  std::uint16_t layers { 1U };
+  Format format { Format::kRGBA32Float };
+  //! Identity of the texel data; the loader key when the texture is registered.
+  std::uint64_t content_hash { 0U };
+};
+
+//! The shape of a cube with square faces of `size` texels.
+[[nodiscard]] inline auto CubeShape(const std::uint32_t size,
+  const Format format = Format::kRGBA32Float) -> SyntheticTextureShape
+{
+  return {
+    .type = TextureType::kTextureCube,
+    .width = size,
+    .height = size,
+    .layers = 6U,
+    .format = format,
+    .content_hash = 0U,
+  };
+}
+
+//! Builds a texture of `shape` from its tightly packed `texels`, layer by
+//! layer.
+[[nodiscard]] inline auto MakeSyntheticTexture(
+  const SyntheticTextureShape& shape,
+  const std::span<const std::uint8_t> texels)
+  -> std::shared_ptr<data::TextureResource>
+{
+  const auto texel_bytes
+    = oxygen::graphics::detail::GetFormatInfo(shape.format).bytes_per_block;
+  const auto row_bytes = std::size_t { shape.width } * texel_bytes;
+  const auto layer_bytes = row_bytes * shape.height;
+  CHECK_EQ_F(texels.size(), layer_bytes * shape.layers,
+    "texels must hold every texel of every layer");
+
+  data::pak::core::TextureResourceDesc desc {};
+  desc.texture_type = static_cast<std::uint8_t>(shape.type);
+  desc.width = shape.width;
+  desc.height = shape.height;
+  desc.depth = desc.mip_levels = 1U;
+  desc.array_layers = shape.layers;
+  desc.format = static_cast<std::uint8_t>(shape.format);
+  desc.alignment = 256U;
+  desc.content_hash = shape.content_hash;
+  std::vector<data::pak::render::SubresourceLayout> layouts;
+  layouts.reserve(shape.layers);
+  for (std::uint16_t layer = 0U; layer < shape.layers; ++layer) {
+    layouts.push_back({
+      .offset_bytes = static_cast<std::uint32_t>(layer * layer_bytes),
+      .row_pitch_bytes = static_cast<std::uint32_t>(row_bytes),
+      .size_bytes = static_cast<std::uint32_t>(layer_bytes),
+    });
+  }
+  auto payload = detail::BuildV4TexturePayload(desc, layouts, texels);
+  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+  return std::make_shared<data::TextureResource>(desc,
+    serio::ByteBuffer::CopyOf(std::as_bytes(std::span { payload })).value());
+}
+
+//! The RGBA value of the texel at column `x` and row `y` of layer `layer`.
+using SyntheticTexel = std::function<std::array<float, 4>(
+  std::uint32_t layer, std::uint32_t x, std::uint32_t y)>;
+
+//! Builds an RGBA32Float or RGBA8UNorm texture of `shape` from `texel`.
+/*!
+ RGBA8UNorm texels are clamped to [0, 1] and rounded to the nearest code.
+*/
+[[nodiscard]] inline auto MakeSyntheticTexture(
+  const SyntheticTextureShape& shape, const SyntheticTexel& texel)
+  -> std::shared_ptr<data::TextureResource>
+{
+  const bool unorm8 = shape.format == Format::kRGBA8UNorm;
+  CHECK_F(unorm8 || shape.format == Format::kRGBA32Float,
+    "texel functions encode only RGBA32Float and RGBA8UNorm");
+  const std::size_t texel_bytes = unorm8 ? 4U : sizeof(std::array<float, 4>);
+  std::vector<std::uint8_t> texels(
+    std::size_t { shape.layers } * shape.height * shape.width * texel_bytes);
+  auto destination = std::as_writable_bytes(std::span { texels });
+  for (std::uint32_t layer = 0U; layer < shape.layers; ++layer) {
+    for (std::uint32_t y = 0U; y < shape.height; ++y) {
+      for (std::uint32_t x = 0U; x < shape.width; ++x) {
+        const auto value = texel(layer, x, y);
+        if (unorm8) {
+          for (std::size_t c = 0U; c < 4U; ++c) {
+            destination[c] = static_cast<std::byte>(
+              std::lround(std::clamp(value.at(c), 0.0F, 1.0F) * 255.0F));
+          }
+        } else {
+          detail::CopyBytes(destination, std::as_bytes(std::span { value }));
+        }
+        destination = destination.subspan(texel_bytes);
+      }
+    }
+  }
+  return MakeSyntheticTexture(shape, texels);
 }
 
 } // namespace oxygen::vortex::testing

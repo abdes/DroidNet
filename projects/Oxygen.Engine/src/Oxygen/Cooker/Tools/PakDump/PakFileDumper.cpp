@@ -135,8 +135,14 @@ auto PrintV4TexturePayloadSummary(
     return;
   }
 
-  TexturePayloadHeader header {};
-  std::memcpy(&header, payload.data(), sizeof(header));
+  const auto payload_bytes = std::as_bytes(payload);
+  auto header_reader = oxygen::serio::ByteReader { payload_bytes };
+  const auto header_read = header_reader.Read<TexturePayloadHeader>();
+  if (!header_read) {
+    Field(out, "Texture Payload", "Too small to contain v4 header", indent);
+    return;
+  }
+  const auto& header = *header_read;
   if (header.magic != kTexturePayloadMagic) {
     Field(out, "Texture Payload", "Missing v4 magic (expected 'OTX1')", indent);
     return;
@@ -187,10 +193,20 @@ auto PrintV4TexturePayloadSummary(
       << "Subresource Layouts (" << count
       << (layout_count > count ? " shown" : "") << "):\n";
   for (size_t i = 0; i < count; ++i) {
-    SubresourceLayout layout {};
     const auto offset = layouts_offset + (i * sizeof(SubresourceLayout));
-    std::memcpy(
-      &layout, payload.subspan(offset, sizeof(layout)).data(), sizeof(layout));
+    auto layout_reader = oxygen::serio::ByteReader { payload_bytes };
+    if (!layout_reader.Seek(oxygen::serio::ByteOffset { offset })) {
+      out << std::string(static_cast<size_t>(indent), ' ') << "  [" << i
+          << "] (truncated)\n";
+      break;
+    }
+    const auto layout_read = layout_reader.Read<SubresourceLayout>();
+    if (!layout_read) {
+      out << std::string(static_cast<size_t>(indent), ' ') << "  [" << i
+          << "] (truncated)\n";
+      break;
+    }
+    const auto& layout = *layout_read;
     const auto abs_data_offset
       = data_offset + static_cast<size_t>(layout.offset_bytes);
     const auto end = abs_data_offset + static_cast<size_t>(layout.size_bytes);

@@ -307,9 +307,7 @@ NOLINT_TEST_F(ShaderBakeExecutionTest,
     "VortexAtmosphereMultiScatteringLutCS", ShaderType::kCompute);
   const auto key_hex = RequestKeyToHex(request.request_key);
 
-  const auto dxil_path
-    = GetRequestDxilPath(out_file_, request.request.source_path,
-      request.request.entry_point, request.request_key);
+  const auto dxil_path = GetRequestDxilPath(out_file_, request);
   const auto expected_dxil = out_file_.parent_path() / "dxil" / "Vortex"
     / "Services" / "Environment" / "AtmosphereMultiScatteringLut.hlsl"
     / ("VortexAtmosphereMultiScatteringLutCS__" + key_hex + ".dxil");
@@ -320,9 +318,7 @@ NOLINT_TEST_F(ShaderBakeExecutionTest,
   EXPECT_EQ(dxil_path.filename().generic_string(),
     "VortexAtmosphereMultiScatteringLutCS__" + key_hex + ".dxil");
 
-  const auto pdb_path
-    = GetRequestPdbPath(out_file_, request.request.source_path,
-      request.request.entry_point, request.request_key);
+  const auto pdb_path = GetRequestPdbPath(out_file_, request);
   const auto expected_pdb = out_file_.parent_path() / "pdb" / "Vortex"
     / "Services" / "Environment" / "AtmosphereMultiScatteringLut.hlsl"
     / ("VortexAtmosphereMultiScatteringLutCS__" + key_hex + ".pdb");
@@ -391,18 +387,11 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesOnlyEditedLeafRequest)
   ASSERT_HAS_VALUE(first_run);
   EXPECT_EQ(first_run->compiled_request_count, 2U);
   EXPECT_EQ(first_run->clean_request_count, 0U);
-  EXPECT_TRUE(std::filesystem::exists(GetRequestDxilPath(out_file_,
-    first.request.source_path, first.request.entry_point, first.request_key)));
-  EXPECT_TRUE(std::filesystem::exists(
-    GetRequestDxilPath(out_file_, second.request.source_path,
-      second.request.entry_point, second.request_key)));
+  EXPECT_TRUE(std::filesystem::exists(GetRequestDxilPath(out_file_, first)));
+  EXPECT_TRUE(std::filesystem::exists(GetRequestDxilPath(out_file_, second)));
   if (compiler.Profile().WritesPdbSidecars()) {
-    EXPECT_TRUE(std::filesystem::exists(
-      GetRequestPdbPath(out_file_, first.request.source_path,
-        first.request.entry_point, first.request_key)));
-    EXPECT_TRUE(std::filesystem::exists(
-      GetRequestPdbPath(out_file_, second.request.source_path,
-        second.request.entry_point, second.request_key)));
+    EXPECT_TRUE(std::filesystem::exists(GetRequestPdbPath(out_file_, first)));
+    EXPECT_TRUE(std::filesystem::exists(GetRequestPdbPath(out_file_, second)));
   }
 
   WriteTextFile(shader_root_ / first.request.source_path,
@@ -430,9 +419,7 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesRequestWithMissingPdb)
     workspace_root_, shader_root_, include_dirs_, toolchain_hash_);
   ASSERT_TRUE(ExecuteUpdate(MakeOptions(requests, compiler)).has_value());
 
-  const auto pdb_path
-    = GetRequestPdbPath(out_file_, request.request.source_path,
-      request.request.entry_point, request.request_key);
+  const auto pdb_path = GetRequestPdbPath(out_file_, request);
   ASSERT_TRUE(std::filesystem::remove(pdb_path));
 
   const auto second_run = ExecuteUpdate(MakeOptions(requests, compiler));
@@ -454,9 +441,7 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, ProfileWithoutPdbsRemovesStaleSidecars)
   FakeCompiler compiler(
     workspace_root_, shader_root_, include_dirs_, toolchain_hash_);
   ASSERT_TRUE(ExecuteUpdate(MakeOptions(requests, compiler)).has_value());
-  const auto pdb_path
-    = GetRequestPdbPath(out_file_, request.request.source_path,
-      request.request.entry_point, request.request_key);
+  const auto pdb_path = GetRequestPdbPath(out_file_, request);
   ASSERT_TRUE(std::filesystem::exists(pdb_path));
 
   compiler.SetProfile(MakeShaderCompileProfile(ShaderConfig::kRelease));
@@ -542,13 +527,9 @@ NOLINT_TEST_F(
   EXPECT_EQ(second_run->stale_request_count, 1U);
   EXPECT_FALSE(std::filesystem::exists(stale_artifact_path));
   EXPECT_EQ(ReadArchiveModuleCount(out_file_), 1U);
-  EXPECT_FALSE(std::filesystem::exists(
-    GetRequestDxilPath(out_file_, second.request.source_path,
-      second.request.entry_point, second.request_key)));
+  EXPECT_FALSE(std::filesystem::exists(GetRequestDxilPath(out_file_, second)));
   if (compiler.Profile().WritesPdbSidecars()) {
-    EXPECT_FALSE(std::filesystem::exists(
-      GetRequestPdbPath(out_file_, second.request.source_path,
-        second.request.entry_point, second.request_key)));
+    EXPECT_FALSE(std::filesystem::exists(GetRequestPdbPath(out_file_, second)));
   }
 
   const auto manifest = ReadManifestFile(layout_.manifest_file);

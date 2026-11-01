@@ -9,7 +9,6 @@
 #include <cstring>
 #include <memory>
 #include <type_traits>
-#include <utility>
 #include <vector>
 
 // Third-party (math)
@@ -18,6 +17,7 @@
 
 // GTest
 #include <Oxygen/Data/MeshType.h>
+#include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project
@@ -28,7 +28,6 @@
 #include <Oxygen/Data/Vertex.h>
 
 using oxygen::data::MaterialAsset;
-using oxygen::data::Mesh;
 using oxygen::data::MeshBuilder;
 using oxygen::data::Vertex;
 
@@ -214,9 +213,9 @@ NOLINT_TEST_F(
   std::memcpy(ibytes.data(), ib_view.data(), ibytes.size());
 
   auto vertex_buffer = std::make_shared<oxygen::data::BufferResource>(
-    std::move(vdesc), std::move(vbytes));
+    vdesc, oxygen::serio::testing::OwnedBytes(vbytes));
   auto index_buffer = std::make_shared<oxygen::data::BufferResource>(
-    std::move(idesc), std::move(ibytes));
+    idesc, oxygen::serio::testing::OwnedBytes(ibytes));
 
   auto material = MaterialAsset::CreateDefault();
   MeshBuilder builder;

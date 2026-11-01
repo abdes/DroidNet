@@ -12,6 +12,7 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -25,11 +26,12 @@
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
-#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedOpenError.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -39,7 +41,7 @@ namespace core = oxygen::data::pak::core;
 namespace data = oxygen::data;
 namespace fixtures = oxygen::cooker::testing;
 namespace fs = std::filesystem;
-namespace pak = oxygen::content::pak;
+namespace serio = oxygen::serio;
 
 using cooked::CookedContent;
 using cooked::Validate;
@@ -87,8 +89,9 @@ auto LibraryOf(std::vector<std::byte> descriptor,
 auto WoodWithVersionShifted(const int delta) -> std::vector<std::byte>
 {
   auto bytes = fixtures::MaterialDescriptor("Wood").bytes;
-  auto header = core::AssetHeader {};
-  std::memcpy(&header, bytes.data(), sizeof(header));
+  const auto read = serio::CopyAt<core::AssetHeader>(std::span { bytes });
+  EXPECT_TRUE(read.has_value());
+  auto header = read.value_or(core::AssetHeader {});
   header.version = static_cast<uint8_t>(header.version + delta);
   std::memcpy(bytes.data(), &header, sizeof(header));
   return bytes;

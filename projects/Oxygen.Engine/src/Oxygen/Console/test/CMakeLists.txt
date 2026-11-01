@@ -39,3 +39,4 @@ m_gtest_program(
     "Registry_test.cpp"
     "Visibility_test.cpp"
 )
+target_link_libraries(Oxygen.Console.Console.Tests PRIVATE oxygen::serio)

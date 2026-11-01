@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -28,6 +29,7 @@
 #include "RequestSnapshot.h"
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
@@ -39,6 +41,7 @@
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/ScriptSealing.h>
 #include <Oxygen/Cooker/Tools/PakTool/StagedSourceStorage.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -47,7 +50,7 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
-#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -348,13 +351,16 @@ namespace {
       return std::nullopt;
     }
 
-    if (!descriptor_bytes.has_value()
-      || descriptor_bytes->size() < sizeof(ScriptAssetDesc)) {
+    if (!descriptor_bytes.has_value()) {
       return std::nullopt;
     }
 
-    auto descriptor = ScriptAssetDesc {};
-    std::memcpy(&descriptor, descriptor_bytes->data(), sizeof(ScriptAssetDesc));
+    const auto descriptor_read
+      = serio::CopyAt<ScriptAssetDesc>(*descriptor_bytes);
+    if (!descriptor_read) {
+      return std::nullopt;
+    }
+    const auto& descriptor = *descriptor_read;
     if (static_cast<AssetType>(descriptor.header.asset_type)
         != AssetType::kScript
       || descriptor.header.version
@@ -639,6 +645,10 @@ namespace {
     const std::unordered_map<data::AssetKey, SealedDescriptor>& sealed,
     const ScriptTables& tables) -> Result<void, ScriptSealingError>
   {
+    // Finishing the index locks the staged root through its lock file, which
+    // is staging too, whether or not the refresh succeeds.
+    io.published->push_back(
+      staged_root / data::loose_cooked::kIndexLockFileName);
     try {
       auto writer = import::LooseCookedWriter(staged_root, *io.storage);
       for (const auto& asset : content.Assets()) {

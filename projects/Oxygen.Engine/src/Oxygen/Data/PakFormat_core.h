@@ -7,7 +7,6 @@
 #pragma once
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <limits>
 
@@ -40,7 +39,7 @@ namespace oxygen::data::pak::core {
 
 //=== Type Aliases ===--------------------------------------------------------//
 
-using ResourceIndexT = oxygen::ResourceIndexT;
+using oxygen::ResourceIndexT;
 
 //! Offset type for file positions
 using OffsetT = uint64_t;
@@ -68,7 +67,7 @@ using ContentHashDigest = oxygen::base::Sha256Digest;
 
 //! Maximum size for data blobs in bytes.
 [[maybe_unused]] constexpr DataBlobSizeT kDataBlobMaxSize
-  = (std::numeric_limits<uint32_t>::max)();
+  = std::numeric_limits<uint32_t>::max();
 
 //! Canonical 8-byte PAK header magic bytes for the PAK container.
 inline constexpr std::array<char, 8> kPakHeaderMagic
@@ -224,7 +223,7 @@ static_assert(sizeof(PakFooter) == 256);
 */
 #pragma pack(push, 1)
 struct AssetDirectoryEntry {
-  AssetKey asset_key {};
+  AssetKey asset_key;
   AssetType asset_type { AssetType::kUnknown };
   OffsetT entry_offset = 0; // Absolute offset of *this* directory entry
   OffsetT desc_offset = 0; // Absolute offset of the asset descriptor

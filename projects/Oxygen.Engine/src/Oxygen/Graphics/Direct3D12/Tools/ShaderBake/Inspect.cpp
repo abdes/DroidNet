@@ -7,7 +7,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <optional>
 #include <span>
 #include <string>
@@ -16,9 +15,12 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/ShaderLibraryIO.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Inspect.h>
+#include <Oxygen/Serio/ByteReader.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
@@ -27,75 +29,19 @@ namespace {
   inline constexpr uint32_t kOxygenReflectionMagic = 0x4F585246U; // "OXRF"
   inline constexpr uint32_t kOxygenReflectionVersion = 1;
 
-  class ByteCursor {
-  public:
-    explicit ByteCursor(std::span<const std::byte> bytes) noexcept
-      : bytes_(bytes)
-    {
+  //! Reads a string prefixed by its 16-bit length.
+  auto ReadString16(serio::ByteReader& reader) -> Result<std::string>
+  {
+    const auto length = reader.Read<uint16_t>();
+    if (!length) {
+      return ::oxygen::Err(length.error());
     }
-
-    [[nodiscard]] auto Remaining() const noexcept -> size_t
-    {
-      return bytes_.size() - pos_;
+    const auto text = reader.ReadStringView(serio::CountOf(*length));
+    if (!text) {
+      return ::oxygen::Err(text.error());
     }
-
-    auto ReadU8() -> std::optional<uint8_t>
-    {
-      if (Remaining() < sizeof(uint8_t)) {
-        return std::nullopt;
-      }
-      const uint8_t v = static_cast<uint8_t>(bytes_[pos_]);
-      pos_ += sizeof(uint8_t);
-      return v;
-    }
-
-    auto ReadU16() -> std::optional<uint16_t>
-    {
-      if (Remaining() < sizeof(uint16_t)) {
-        return std::nullopt;
-      }
-      const uint8_t b0 = static_cast<uint8_t>(bytes_[pos_ + 0]);
-      const uint8_t b1 = static_cast<uint8_t>(bytes_[pos_ + 1]);
-      pos_ += sizeof(uint16_t);
-      return static_cast<uint16_t>(
-        static_cast<uint16_t>(b0) | (static_cast<uint16_t>(b1) << 8));
-    }
-
-    auto ReadU32() -> std::optional<uint32_t>
-    {
-      if (Remaining() < sizeof(uint32_t)) {
-        return std::nullopt;
-      }
-      const uint8_t b0 = static_cast<uint8_t>(bytes_[pos_ + 0]);
-      const uint8_t b1 = static_cast<uint8_t>(bytes_[pos_ + 1]);
-      const uint8_t b2 = static_cast<uint8_t>(bytes_[pos_ + 2]);
-      const uint8_t b3 = static_cast<uint8_t>(bytes_[pos_ + 3]);
-      pos_ += sizeof(uint32_t);
-      return static_cast<uint32_t>(static_cast<uint32_t>(b0)
-        | (static_cast<uint32_t>(b1) << 8) | (static_cast<uint32_t>(b2) << 16)
-        | (static_cast<uint32_t>(b3) << 24));
-    }
-
-    auto ReadString16() -> std::optional<std::string>
-    {
-      const auto len_opt = ReadU16();
-      if (!len_opt) {
-        return std::nullopt;
-      }
-      const auto len = *len_opt;
-      if (Remaining() < len) {
-        return std::nullopt;
-      }
-      const char* data = reinterpret_cast<const char*>(bytes_.data() + pos_);
-      std::string out(data, data + len);
-      pos_ += len;
-      return out;
-    }
-
-  private:
-    std::span<const std::byte> bytes_;
-    size_t pos_ = 0;
-  };
+    return ::oxygen::Ok(std::string(*text));
+  }
 
   auto BindKindToString(const uint8_t kind) -> std::string_view
   {
@@ -122,19 +68,19 @@ namespace {
       return;
     }
 
-    ByteCursor cur(blob);
+    auto cur = serio::ByteReader { blob };
 
-    const auto magic = cur.ReadU32();
-    const auto version = cur.ReadU32();
-    const auto stage_u8 = cur.ReadU8();
-    const auto sm_major = cur.ReadU8();
-    const auto sm_minor = cur.ReadU8();
-    const auto reserved = cur.ReadU8();
-    const auto entry_point = cur.ReadString16();
-    const auto bound_resources = cur.ReadU32();
-    const auto tgx = cur.ReadU32();
-    const auto tgy = cur.ReadU32();
-    const auto tgz = cur.ReadU32();
+    const auto magic = cur.Read<uint32_t>();
+    const auto version = cur.Read<uint32_t>();
+    const auto stage_u8 = cur.Read<uint8_t>();
+    const auto sm_major = cur.Read<uint8_t>();
+    const auto sm_minor = cur.Read<uint8_t>();
+    const auto reserved = cur.Read<uint8_t>();
+    const auto entry_point = ReadString16(cur);
+    const auto bound_resources = cur.Read<uint32_t>();
+    const auto tgx = cur.Read<uint32_t>();
+    const auto tgy = cur.Read<uint32_t>();
+    const auto tgz = cur.Read<uint32_t>();
 
     if (!magic || !version || !stage_u8 || !sm_major || !sm_minor || !reserved
       || !entry_point || !bound_resources || !tgx || !tgy || !tgz) {
@@ -164,13 +110,13 @@ namespace {
 
     LOG_SCOPE_F(INFO, "Resources");
     for (uint32_t i = 0; i < *bound_resources; ++i) {
-      const auto resource_type = cur.ReadU8();
-      const auto bind_kind = cur.ReadU8();
-      const auto space = cur.ReadU16();
-      const auto bind_point = cur.ReadU32();
-      const auto bind_count = cur.ReadU32();
-      const auto byte_size = cur.ReadU32();
-      const auto name = cur.ReadString16();
+      const auto resource_type = cur.Read<uint8_t>();
+      const auto bind_kind = cur.Read<uint8_t>();
+      const auto space = cur.Read<uint16_t>();
+      const auto bind_point = cur.Read<uint32_t>();
+      const auto bind_count = cur.Read<uint32_t>();
+      const auto byte_size = cur.Read<uint32_t>();
+      const auto name = ReadString16(cur);
 
       if (!resource_type || !bind_kind || !space || !bind_point || !bind_count
         || !byte_size || !name) {

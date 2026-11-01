@@ -8,7 +8,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -20,15 +19,18 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
-#include <Oxygen/Cooker/Import/FileError.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/DedupCollision.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import {
 
@@ -80,17 +82,17 @@ namespace {
 
 } // namespace
 
-BufferEmitter::BufferEmitter(IAsyncFileWriter& file_writer,
+BufferEmitter::BufferEmitter(co::Nursery& writes,
   BufferTableAggregator& table_aggregator,
   const std::filesystem::path& cooked_root)
-  : BufferEmitter(file_writer, table_aggregator, cooked_root, Config {})
+  : BufferEmitter(writes, table_aggregator, cooked_root, Config {})
 {
 }
 
-BufferEmitter::BufferEmitter(IAsyncFileWriter& file_writer,
+BufferEmitter::BufferEmitter(co::Nursery& writes,
   BufferTableAggregator& table_aggregator,
   const std::filesystem::path& cooked_root, Config config)
-  : file_writer_(file_writer)
+  : writes_(writes)
   , table_aggregator_(table_aggregator)
   , config_(std::move(config))
   , data_path_(cooked_root / internal::loose_layout::kBuffersData)
@@ -100,7 +102,7 @@ BufferEmitter::BufferEmitter(IAsyncFileWriter& file_writer,
 
 BufferEmitter::~BufferEmitter()
 {
-  const auto pending = pending_count_.load(std::memory_order_acquire);
+  const auto pending = writes_.Running();
   if (pending > 0) {
     LOG_F(WARNING, "Destroyed with {} pending writes", pending);
   }
@@ -125,19 +127,15 @@ auto BufferEmitter::Emit(
         ? existing_index_it->second
         : 0U;
 
+      const auto action
+        = internal::DedupCollisionAction(config_.collision_policy);
       ImportDiagnostic diagnostic {
         .severity = (config_.collision_policy == DedupCollisionPolicy::kError)
           ? ImportSeverity::kError
           : ImportSeverity::kWarning,
         .code = "import.dedup_collision.buffer",
-        .message = "policy=" + to_string(config_.collision_policy) + ";action="
-          + std::string(
-            config_.collision_policy == DedupCollisionPolicy::kWarnReplace
-              ? "replace"
-              : (config_.collision_policy
-                      == DedupCollisionPolicy::kWarnKeepFirst
-                    ? "keep_first"
-                    : "error"))
+        .message = "policy=" + to_string(config_.collision_policy)
+          + ";action=" + std::string(action)
           + ";existing_index=" + std::to_string(existing_index),
         .source_path = key,
         .object_path = "buffer",
@@ -177,8 +175,10 @@ auto BufferEmitter::Emit(
 
   const auto acquire = table_aggregator_.AcquireOrInsert(signature,
     [&] -> std::pair<data::pak::core::BufferResourceDesc, WriteReservation> {
-      const auto reserved = table_aggregator_.ReserveDataRange(
-        buffer_alignment, cooked.data.size());
+      const auto reserved = table_aggregator_.ReserveDataRange({
+        .alignment = buffer_alignment,
+        .payload_size = cooked.data.size(),
+      });
       auto desc = MakeTableEntry(cooked, reserved.aligned_offset);
       return std::make_pair(desc, reserved);
     });
@@ -202,19 +202,14 @@ auto BufferEmitter::Emit(
     reserved.padding_size, cooked.usage_flags, cooked.element_stride);
 
   if (reserved.padding_size > 0) {
-    auto padding_ptr = std::make_shared<std::vector<std::byte>>(
-      reserved.padding_size, std::byte { 0 });
     QueueDataWrite(WriteKind::kPadding, std::nullopt,
-      reserved.reservation_start, padding_ptr);
+      reserved.reservation_start,
+      std::vector<std::byte>(reserved.padding_size, std::byte { 0 }));
   }
 
-  // Move payload into shared_ptr for async lifetime management
-  auto payload_ptr
-    = std::make_shared<std::vector<std::byte>>(std::move(cooked.data));
-
-  // Queue async write at explicit offset for buffer data
-  QueueDataWrite(
-    WriteKind::kPayload, acquire.index, reserved.aligned_offset, payload_ptr);
+  // Queue async write at explicit offset for buffer data; the write owns it.
+  QueueDataWrite(WriteKind::kPayload, acquire.index, reserved.aligned_offset,
+    std::move(cooked.data));
 
   if (cooked.content_hash == 0ULL && !signature_salt.empty()) {
     const std::string key(signature_salt);
@@ -227,39 +222,35 @@ auto BufferEmitter::Emit(
 
 auto BufferEmitter::QueueDataWrite(const WriteKind kind,
   const std::optional<uint32_t> index, const uint64_t offset,
-  std::shared_ptr<std::vector<std::byte>> data) -> void
+  std::vector<std::byte> data) -> void
 {
-  pending_count_.fetch_add(1, std::memory_order_acq_rel);
-
-  file_writer_.WriteAtAsync(data_path_, offset,
-    std::span<const std::byte>(*data),
-    WriteOptions { .create_directories = true, .share_write = true },
-    [this, kind, index, data](const FileErrorInfo& error,
-      [[maybe_unused]] uint64_t bytes_written) -> void {
-      OnWriteComplete(kind, index, error);
-    });
+  const auto file = table_aggregator_.DataFile();
+  if (!file) {
+    LOG_F(ERROR, "Failed to open '{}': {}", data_path_.string(),
+      file.error().message());
+    writes_.Fail(data_path_, file.error());
+    return;
+  }
+  writes_.Start(
+    data_path_, WriteData(*file, kind, index, offset, std::move(data)));
 }
 
-auto BufferEmitter::OnWriteComplete(const WriteKind kind,
-  const std::optional<uint32_t> index, const FileErrorInfo& error) -> void
+auto BufferEmitter::WriteData(serio::AnyAsyncDevice* const file,
+  const WriteKind kind, const std::optional<uint32_t> index,
+  const uint64_t offset, std::vector<std::byte> data) -> co::Co<Result<void>>
 {
-  pending_count_.fetch_sub(1, std::memory_order_acq_rel);
-
-  if (!error.IsError()) {
-    return;
+  const auto written = co_await file->AsyncWriteAt(
+    serio::ByteOffset { offset }, std::span<const std::byte>(data));
+  if (!written) {
+    if (kind == WriteKind::kPadding) {
+      LOG_F(ERROR, "Failed to write padding to '{}': {}", data_path_.string(),
+        written.error().message());
+    } else {
+      LOG_F(ERROR, "Failed to write buffer {} to '{}': {}", index.value_or(0),
+        data_path_.string(), written.error().message());
+    }
   }
-
-  error_count_.fetch_add(1, std::memory_order_acq_rel);
-  if (!first_error_) {
-    first_error_ = error;
-  }
-  if (kind == WriteKind::kPadding) {
-    LOG_F(ERROR, "Failed to write padding: {}", error.ToString());
-    return;
-  }
-
-  LOG_F(ERROR, "Failed to write buffer {}: {}", index.value_or(0),
-    error.ToString());
+  co_return written;
 }
 
 auto BufferEmitter::Count() const noexcept -> uint32_t
@@ -267,14 +258,9 @@ auto BufferEmitter::Count() const noexcept -> uint32_t
   return emitted_count_.load(std::memory_order_acquire);
 }
 
-auto BufferEmitter::PendingCount() const noexcept -> size_t
-{
-  return pending_count_.load(std::memory_order_acquire);
-}
-
 auto BufferEmitter::ErrorCount() const noexcept -> size_t
 {
-  return error_count_.load(std::memory_order_acquire);
+  return writes_.ErrorCount();
 }
 
 auto BufferEmitter::DataFileSize() const noexcept -> uint64_t
@@ -288,22 +274,13 @@ auto BufferEmitter::TryGetDescriptor(const uint32_t index) const
   return table_aggregator_.TryGetDescriptor(index);
 }
 
-auto BufferEmitter::Finalize() -> co::Co<Result<void, FileErrorInfo>>
+auto BufferEmitter::Finalize() -> co::Co<Result<void, WriteFailure>>
 {
   finalize_started_.store(true, std::memory_order_release);
 
-  DLOG_F(INFO, "Finalize: waiting for {} pending writes",
-    pending_count_.load(std::memory_order_acquire));
+  DLOG_F(INFO, "Finalize: waiting for {} pending writes", writes_.Running());
 
-  // Wait for all pending writes via flush
-  const auto flush_result = co_await file_writer_.Flush();
-  if (first_error_) {
-    co_return Result<void, FileErrorInfo>::Err(*first_error_);
-  }
-  if (!flush_result) {
-    co_return Result<void, FileErrorInfo>::Err(flush_result.error());
-  }
-  co_return Result<void, FileErrorInfo>::Ok();
+  co_return co_await writes_.Join();
 }
 
 auto BufferEmitter::MakeTableEntry(

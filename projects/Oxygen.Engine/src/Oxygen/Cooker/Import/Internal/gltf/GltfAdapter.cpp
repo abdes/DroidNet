@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <iomanip>
 #include <ios>
 #include <limits>
@@ -90,6 +89,10 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import::adapters {
 
@@ -282,29 +285,36 @@ namespace {
         observed.emplace(snapshot->BeginParserRead(logical));
       }
       const auto requested_maximum = *size;
-      // NOLINTNEXTLINE(*-signed-bitwise) - std::ios openmode bitmask
-      constexpr auto kOpenMode = std::ios::binary | std::ios::ate;
-      std::ifstream file(
+      const auto file = serio::NativeFile::Open(
         base::ToNativePath(observed ? observed->PhysicalPath() : logical),
-        kOpenMode);
+        {
+          .sharing = serio::Sharing::kReadDelete,
+          .hint = serio::AccessHint::kSequential,
+        });
       if (!file) {
-        return cgltf_result_file_not_found;
+        return file.error() == serio::Error::kNotFound
+          ? cgltf_result_file_not_found
+          : cgltf_result_io_error;
       }
-      const auto length = static_cast<std::streamoff>(file.tellg());
-      if (length < 0 || !std::in_range<cgltf_size>(length)) {
+      const auto file_size = file->Size();
+      if (!file_size) {
+        return cgltf_result_io_error;
+      }
+      const auto length = file_size->get();
+      if (!std::in_range<cgltf_size>(length)) {
         return cgltf_result_io_error;
       }
       const auto requested
         = *size == 0U ? static_cast<cgltf_size>(length) : *size;
-      if (std::cmp_greater(requested, length)
-        || !std::in_range<std::streamsize>(requested)) {
+      if (std::cmp_greater(requested, length)) {
         return cgltf_result_io_error;
       }
       // cgltf frees this raw buffer through ReleaseCgltfFile.
       // NOLINTNEXTLINE(*-avoid-c-arrays)
       auto bytes = std::make_unique_for_overwrite<char[]>(requested);
-      file.seekg(0);
-      if (!file.read(bytes.get(), static_cast<std::streamsize>(requested))) {
+      const auto read = serio::ReadExactlyAt(*file, serio::ByteOffset { 0 },
+        std::as_writable_bytes(std::span(bytes.get(), requested)));
+      if (!read) {
         return cgltf_result_io_error;
       }
       if (observed) {
@@ -315,8 +325,6 @@ namespace {
             .offset = 0U,
             .max_bytes
             = std::cmp_equal(requested, length) ? 0U : requested_maximum,
-            .size_hint = 0U,
-            .alignment = 0U,
           });
       }
       *size = requested;

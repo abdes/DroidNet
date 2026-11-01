@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
-#include <chrono>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -13,6 +14,7 @@
 #include <filesystem>
 #include <functional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -31,6 +33,7 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
@@ -62,7 +65,7 @@ constexpr auto kSource = std::string_view { "/Content/Ship/Ship.glb" };
 auto TestSourceKey() -> oxygen::data::SourceKey
 {
   auto bytes = std::array<uint8_t, 16> {};
-  for (uint8_t i = 0; i < bytes.size(); ++i) {
+  for (std::size_t i = 0; i < bytes.size(); ++i) {
     bytes.at(i) = static_cast<uint8_t>(i + 1);
   }
   bytes.at(6) = static_cast<uint8_t>((bytes.at(6) & 0x0FU) | 0x70U);
@@ -126,9 +129,9 @@ auto Encode(const std::span<const IndexedAsset> assets,
 
 auto HeaderOf(const Bytes& bytes) -> IndexHeader
 {
-  auto header = IndexHeader {};
-  std::memcpy(&header, bytes.data(), sizeof(header));
-  return header;
+  const auto header = oxygen::serio::CopyAt<IndexHeader>(std::span { bytes });
+  EXPECT_TRUE(header.has_value());
+  return header.value_or(IndexHeader {});
 }
 
 //! Overwrites the bytes at `offset` with the object representation of
@@ -136,7 +139,8 @@ auto HeaderOf(const Bytes& bytes) -> IndexHeader
 template <typename T>
 auto Patch(Bytes& bytes, const uint64_t offset, const T& value) -> void
 {
-  std::memcpy(bytes.data() + offset, &value, sizeof(T));
+  const auto target = std::span { bytes }.subspan(offset, sizeof(T));
+  std::memcpy(target.data(), &value, sizeof(T));
 }
 
 //! Replaces the string `valid` of the encoded string table with `broken`, of
@@ -147,11 +151,13 @@ auto ReplaceString(Bytes& bytes, const std::string_view valid,
 {
   ASSERT_EQ(valid.size(), broken.size());
   auto whole = std::string(1, '\0') + std::string(valid) + '\0';
-  const auto text = std::string_view(
-    reinterpret_cast<const char*>(bytes.data()), bytes.size());
-  const auto at = text.find(whole);
-  ASSERT_NE(at, std::string_view::npos) << valid;
-  std::memcpy(bytes.data() + at + 1, broken.data(), broken.size());
+  const auto match
+    = std::ranges::search(bytes, std::as_bytes(std::span(whole)));
+  ASSERT_NE(match.begin(), bytes.end()) << valid;
+  const auto offset
+    = static_cast<std::size_t>(match.begin() - bytes.begin()) + 1U;
+  const auto target = std::span { bytes }.subspan(offset, broken.size());
+  std::memcpy(target.data(), broken.data(), broken.size());
 }
 
 auto PatchHeader(Bytes& bytes, const std::function<void(IndexHeader&)>& edit)
@@ -198,11 +204,19 @@ NOLINT_TEST(LooseCookedIndexLoadTest, EncodedContentReadsBack)
 {
   // Arrange
   auto references = oxygen::data::AssetReferences::Create(
-    { { .kind = oxygen::data::ResourceKind::kTexture,
-      .index = oxygen::data::pak::core::ResourceIndexT { 3U } } },
-    { { .key = AssetKey::FromVirtualPath("/Content/Materials/Base.omat"),
-      .kind = oxygen::data::KeyReferenceKind::kAsset,
-      .expected_type = AssetType::kMaterial } });
+    {
+      {
+        .kind = oxygen::data::ResourceKind::kTexture,
+        .index = oxygen::data::pak::core::ResourceIndexT { 3U },
+      },
+    },
+    {
+      {
+        .key = AssetKey::FromVirtualPath("/Content/Materials/Base.omat"),
+        .kind = oxygen::data::KeyReferenceKind::kAsset,
+        .expected_type = AssetType::kMaterial,
+      },
+    });
   ASSERT_HAS_VALUE(references);
   auto wood = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
   wood.references = std::move(*references);
@@ -402,18 +416,26 @@ NOLINT_TEST(LooseCookedIndexAssetTest, ContentPathsMustBeContainerRelative)
     std::string_view message;
   };
   const auto cases = std::array {
-    Case { .valid = "Materials/Wood.omat",
+    Case {
+      .valid = "Materials/Wood.omat",
       .relpath = "Materials\\Wood.omat",
-      .message = "'/' as the separator" },
-    Case { .valid = "AMaterials/Wood.omat",
+      .message = "'/' as the separator",
+    },
+    Case {
+      .valid = "AMaterials/Wood.omat",
       .relpath = "/Materials/Wood.omat",
-      .message = "container-relative" },
-    Case { .valid = "Materials/xx/Wood.omat",
+      .message = "container-relative",
+    },
+    Case {
+      .valid = "Materials/xx/Wood.omat",
       .relpath = "Materials/../Wood.omat",
-      .message = "'..'" },
-    Case { .valid = "container.index.bxn",
+      .message = "'..'",
+    },
+    Case {
+      .valid = "container.index.bxn",
       .relpath = "container.index.bin",
-      .message = "Reserved path" },
+      .message = "Reserved path",
+    },
   };
   for (const auto& test_case : cases) {
     // Arrange
@@ -434,22 +456,22 @@ NOLINT_TEST(LooseCookedIndexAssetTest, IdentitiesListedTwiceAreCorrupt)
     Material("/Content/Materials/B.omat", "Materials/B.omat"),
   };
   const auto encoded = Encode(assets);
-  auto first = AssetEntry {};
-  std::memcpy(
-    &first, encoded.data() + AssetEntryOffset(encoded, 0), sizeof(first));
+  const auto first = oxygen::serio::CopyAt<AssetEntry>(std::span { encoded },
+    oxygen::serio::ByteOffset { AssetEntryOffset(encoded, 0) });
+  ASSERT_HAS_VALUE(first);
   auto same_key = encoded;
   Patch(same_key,
     AssetEntryOffset(same_key, 1) + offsetof(AssetEntry, asset_key),
-    first.asset_key);
+    first->asset_key);
   auto same_path = encoded;
   Patch(same_path,
     AssetEntryOffset(same_path, 1) + offsetof(AssetEntry, virtual_path_offset),
-    first.virtual_path_offset);
+    first->virtual_path_offset);
   auto same_file = encoded;
   Patch(same_file,
     AssetEntryOffset(same_file, 1)
       + offsetof(AssetEntry, descriptor_relpath_offset),
-    first.descriptor_relpath_offset);
+    first->descriptor_relpath_offset);
 
   // Act & Assert
   ExpectCorrupt(same_key, "Duplicate AssetKey");
@@ -579,12 +601,10 @@ NOLINT_TEST(LooseCookedIndexFileTest, InvalidFileVirtualPathsAreCorrupt)
   // Files are encoded in path order: the hull's record, then the sky's.
   constexpr auto kHull = size_t { 0 };
   constexpr auto kSky = size_t { 1 };
-  const auto sky_record = [&valid] -> FileRecord {
-    auto record = FileRecord {};
-    std::memcpy(
-      &record, valid.data() + FileRecordOffset(valid, kSky), sizeof(record));
-    return record;
-  }();
+  const auto sky_copy = oxygen::serio::CopyAt<FileRecord>(std::span { valid },
+    oxygen::serio::ByteOffset { FileRecordOffset(valid, kSky) });
+  ASSERT_HAS_VALUE(sky_copy);
+  const auto sky_record = *sky_copy;
   const auto vpath_field = offsetof(FileRecord, virtual_path_offset);
 
   struct Case {
@@ -594,16 +614,22 @@ NOLINT_TEST(LooseCookedIndexFileTest, InvalidFileVirtualPathsAreCorrupt)
   };
   const auto cases = std::array {
     // The table's leading NUL: an empty virtual path.
-    Case { .name = "texture without virtual path",
+    Case {
+      .name = "texture without virtual path",
       .record = kSky,
-      .virtual_path_offset = 0U },
+      .virtual_path_offset = 0U,
+    },
     // Past the leading '/': `Content/Textures/Sky.otex`, not canonical.
-    Case { .name = "texture with a relative virtual path",
+    Case {
+      .name = "texture with a relative virtual path",
       .record = kSky,
-      .virtual_path_offset = sky_record.virtual_path_offset + 1U },
-    Case { .name = "auxiliary file with a virtual path",
+      .virtual_path_offset = sky_record.virtual_path_offset + 1U,
+    },
+    Case {
+      .name = "auxiliary file with a virtual path",
       .record = kHull,
-      .virtual_path_offset = sky_record.virtual_path_offset },
+      .virtual_path_offset = sky_record.virtual_path_offset,
+    },
   };
   for (const auto& test_case : cases) {
     // Arrange
@@ -629,11 +655,12 @@ NOLINT_TEST(LooseCookedIndexFileTest, TextureAndAssetShareNoVirtualPath)
   // A texture descriptor records the source that produced it.
   sky.source_path = std::string(kSource);
   auto bytes = Encode(std::array { wood }, std::array { sky });
-  auto entry = AssetEntry {};
-  std::memcpy(&entry, bytes.data() + AssetEntryOffset(bytes, 0), sizeof(entry));
+  const auto entry = oxygen::serio::CopyAt<AssetEntry>(std::span { bytes },
+    oxygen::serio::ByteOffset { AssetEntryOffset(bytes, 0) });
+  ASSERT_HAS_VALUE(entry);
   Patch(bytes,
     FileRecordOffset(bytes, 0) + offsetof(FileRecord, virtual_path_offset),
-    entry.virtual_path_offset);
+    entry->virtual_path_offset);
 
   // Act & Assert
   ExpectCorrupt(bytes, "Duplicate virtual path");
@@ -687,37 +714,50 @@ NOLINT_TEST_F(LooseCookedIndexFileSystemTest, MappedIndexSurvivesRepublication)
     base.virtual_path);
 }
 
-//! Index loads wait for an in-process publication to finish.
+//! A reader takes no lock and still reads one whole index during publication.
 /*!
- Holds the exclusive index file lock through a differently spelled path while
- the index is absent, as during a replace. A concurrent load must wait and
- read the republished index instead of failing on the missing file.
+ The index is replaced atomically, so every load made while another thread
+ keeps publishing maps either the old index or the new one, never a missing
+ or torn file.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexFileSystemTest, LoadFromRootWaitsForExclusivePublication)
+  LooseCookedIndexFileSystemTest, ReaderDuringPublicationReadsWholeIndex)
 {
   // Arrange
-  Publish("container.index.bin", Encode({}));
-  auto publication = LooseCookedIndexImpl::LockFileExclusive(
-    TempPath("./container.index.bin"));
-  std::filesystem::remove(IndexPath());
+  const auto wood
+    = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  const auto base
+    = Material("/Content/Materials/Base.omat", "Materials/Base.omat");
+  Publish("container.index.bin", Encode(std::array { wood }));
+  auto done = std::atomic<bool> { false };
+  auto publisher = std::thread([&] -> void {
+    for (auto i = 0U; i < 100U; ++i) {
+      const auto bytes = Encode(std::array { (i % 2U) != 0U ? wood : base });
+      static_cast<void>(oxygen::serio::WriteFileAtomically(IndexPath(), bytes));
+    }
+    done = true;
+  });
 
   // Act
-  auto load_error = std::string {};
-  auto reader = std::thread([this, &load_error] -> void {
+  auto torn = std::string {};
+  auto loads = 0U;
+  while (!done || loads == 0U) {
     try {
-      static_cast<void>(LooseCookedIndex::LoadFromRoot(TempDir()));
+      const auto index = LooseCookedIndexImpl::LoadFromFile(IndexPath());
+      const auto has_wood = index.FindVirtualPath(wood.key).has_value();
+      const auto has_base = index.FindVirtualPath(base.key).has_value();
+      if (has_wood == has_base) {
+        torn = "not exactly one of the two published versions";
+      }
     } catch (const std::exception& ex) {
-      load_error = ex.what();
+      torn = ex.what();
     }
-  });
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  Publish("container.index.bin", Encode({}));
-  publication.unlock();
-  reader.join();
+    ++loads;
+  }
+  publisher.join();
 
   // Assert
-  EXPECT_TRUE(load_error.empty()) << load_error;
+  EXPECT_TRUE(torn.empty()) << torn;
 }
 
 //! A full check hashes each descriptor against its indexed digest.

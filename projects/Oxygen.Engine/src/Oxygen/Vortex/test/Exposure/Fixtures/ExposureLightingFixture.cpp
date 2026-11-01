@@ -9,7 +9,6 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <string>
 #include <utility>
@@ -26,16 +25,13 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
-#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -297,34 +293,9 @@ auto ExposureLightingGpuTest::SetUp() -> void
 auto ExposureLightingGpuTest::MakeEmissiveMaterial(float value)
   -> std::shared_ptr<data::MaterialAsset>
 {
-  data::pak::core::TextureResourceDesc desc {};
-  desc.texture_type = static_cast<std::uint8_t>(TextureType::kTexture2D);
-  desc.width = desc.height = desc.depth = desc.mip_levels = desc.array_layers
-    = 1;
-  desc.format = static_cast<std::uint8_t>(Format::kRGBA32Float);
-  desc.alignment = 256;
-  const auto key = owned_asset_loader_->MintSyntheticTextureKey();
-  desc.content_hash = key.get();
-  const Pixel pixel {
-    value,
-    value,
-    value,
-    1,
-  };
-  std::vector<std::uint8_t> bytes(sizeof(pixel));
-  std::memcpy(bytes.data(), pixel.data(), sizeof(pixel));
-  const std::array layouts {
-    data::pak::render::SubresourceLayout {
-      .offset_bytes = 0,
-      .row_pitch_bytes = sizeof(pixel),
-      .size_bytes = sizeof(pixel),
-    },
-  };
-  auto payload
-    = vortex::testing::detail::BuildV4TexturePayload(desc, layouts, bytes);
-  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
-  owned_asset_loader_->SetTexture(
-    key, std::make_shared<data::TextureResource>(desc, std::move(payload)));
+  const auto key = owned_asset_loader_->AddSyntheticTexture({},
+    [value](std::uint32_t /*layer*/, std::uint32_t /*x*/,
+      std::uint32_t /*y*/) -> Pixel { return { value, value, value, 1.0F }; });
   data::pak::render::MaterialAssetDesc authored {};
   authored.flags = data::pak::render::kMaterialFlag_DoubleSided;
   authored.base_color[3] = 1;

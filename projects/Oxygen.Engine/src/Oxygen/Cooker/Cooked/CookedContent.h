@@ -8,11 +8,9 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <map>
 #include <memory>
-#include <optional>
 #include <set>
 #include <span>
 #include <stdexcept>
@@ -35,6 +33,7 @@
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::cooked {
@@ -50,7 +49,7 @@ struct StoredBytes final {
 
 //! An asset of a cooked source: a typed descriptor at a virtual path.
 struct CookedAsset final {
-  data::AssetKey key {};
+  data::AssetKey key;
   data::AssetType type = data::AssetType::kUnknown;
   //! Its virtual path, `/<Mount>/...`; empty when a pak's browse index does
   //! not list it.
@@ -140,9 +139,11 @@ public:
     if (bytes.size() != sizeof(Desc)) {
       throw std::invalid_argument("the descriptor is not of this table's kind");
     }
-    auto desc = Desc {};
-    std::memcpy(&desc, bytes.data(), sizeof(Desc));
-    return desc;
+    const auto desc = serio::CopyAt<Desc>(bytes);
+    if (!desc) {
+      throw std::invalid_argument("the descriptor is not of this table's kind");
+    }
+    return *desc;
   }
 
   //! Where the payload of row `row` is stored; throws `std::out_of_range`

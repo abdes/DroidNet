@@ -33,13 +33,24 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::content::import;
-using namespace oxygen::co;
-namespace co = oxygen::co;
 using oxygen::Format;
 using oxygen::TextureType;
+using oxygen::co::ThreadPool;
+using oxygen::content::import::Bc7Quality;
+using oxygen::content::import::CookTexture;
+using oxygen::content::import::DecodeToScratchImage;
+using oxygen::content::import::ImportEventLoop;
+using oxygen::content::import::MipPolicy;
+using oxygen::content::import::ScratchImage;
+using oxygen::content::import::ScratchImageMeta;
+using oxygen::content::import::TextureImportDesc;
+using oxygen::content::import::TextureImportError;
+using oxygen::content::import::TexturePipeline;
+using oxygen::content::import::TextureSourceSet;
+using oxygen::content::import::TightPackedPolicy;
 using oxygen::cooker::test::RunPipelineOnce;
 namespace graphics_detail = oxygen::graphics::detail;
 
@@ -49,6 +60,13 @@ namespace {
 //===---------------------------------------------------------//
 
 using oxygen::cooker::test::MakeBmp;
+
+//! A buffer holding a copy of `bytes`.
+[[nodiscard]] auto ToBuffer(const std::span<const std::byte> bytes)
+  -> oxygen::serio::ByteBuffer
+{
+  return oxygen::serio::ByteBuffer::CopyOf(bytes).value();
+}
 
 //! Returns the test BMP image as a span of bytes.
 [[nodiscard]] auto GetTestImageBytes() -> std::span<const std::byte>
@@ -112,7 +130,7 @@ using oxygen::cooker::test::MakeBmp;
   for (uint16_t slice = 0; slice < depth; ++slice) {
     const auto src_view = slices.at(slice).GetImage(0, 0);
     std::ranges::copy(
-      src_view.pixels, dst_pixels.data() + (slice_size_bytes * slice));
+      src_view.pixels, dst_pixels.subspan(slice_size_bytes * slice).begin());
   }
 
   return oxygen::Ok(std::move(volume));
@@ -207,8 +225,7 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, CollectDepthSlicesParityMatches)
 
   TextureSourceSet sources;
   for (uint16_t slice = 0; slice < kDepth; ++slice) {
-    sources.AddDepthSlice(
-      slice, std::vector<std::byte>(bytes.begin(), bytes.end()), "slice.bmp");
+    sources.AddDepthSlice(slice, ToBuffer(bytes), "slice.bmp");
   }
 
   const auto result = RunPipelineOnce<TexturePipeline>(loop_,
@@ -238,10 +255,8 @@ NOLINT_TEST_F(
 
   const auto bytes = GetTestImageBytes();
   TextureSourceSet sources;
-  sources.AddDepthSlice(
-    0, std::vector<std::byte>(bytes.begin(), bytes.end()), "slice0.bmp");
-  sources.AddDepthSlice(
-    2, std::vector<std::byte>(bytes.begin(), bytes.end()), "slice2.bmp");
+  sources.AddDepthSlice(0, ToBuffer(bytes), "slice0.bmp");
+  sources.AddDepthSlice(2, ToBuffer(bytes), "slice2.bmp");
 
   const auto result = RunPipelineOnce<TexturePipeline>(loop_,
     MakeWorkItem(desc, "volume_gap.bmp", std::move(sources)), pool_,

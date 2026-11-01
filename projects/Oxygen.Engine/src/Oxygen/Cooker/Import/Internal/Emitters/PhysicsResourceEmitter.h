@@ -21,17 +21,17 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/AnyDevice.h>
 
 namespace oxygen::content::import {
-
-class IAsyncFileWriter;
 
 //! Cooked payload consumed by `PhysicsResourceEmitter`.
 struct CookedPhysicsResourcePayload final {
@@ -44,10 +44,15 @@ struct CookedPhysicsResourcePayload final {
 
 struct EmittedPhysicsResourceRef final {
   uint32_t resource_index = 0;
-  data::AssetKey resource_asset_key = {};
+  data::AssetKey resource_asset_key;
 };
 
 //! Emits cooked physics resources to `physics.data` and `physics.table`.
+/*!
+ The data is written at its reserved offset to the data file the aggregator
+ opened once, by tasks of the import session's nursery; `Finalize` joins them
+ and returns the first error.
+*/
 class PhysicsResourceEmitter final {
 public:
   struct Config final {
@@ -56,11 +61,12 @@ public:
     std::function<void(ImportDiagnostic)> on_dedup_diagnostic;
   };
 
-  OXGN_COOK_API PhysicsResourceEmitter(IAsyncFileWriter& file_writer,
+  //! `writes` is the nursery the writes run in; it outlives them.
+  OXGN_COOK_API PhysicsResourceEmitter(co::Nursery& writes,
     PhysicsTableAggregator& table_aggregator,
     const std::filesystem::path& cooked_root);
 
-  OXGN_COOK_API PhysicsResourceEmitter(IAsyncFileWriter& file_writer,
+  OXGN_COOK_API PhysicsResourceEmitter(co::Nursery& writes,
     PhysicsTableAggregator& table_aggregator,
     const std::filesystem::path& cooked_root, Config config);
 
@@ -73,14 +79,13 @@ public:
     std::string_view signature_salt) -> EmittedPhysicsResourceRef;
 
   OXGN_COOK_NDAPI auto Count() const noexcept -> uint32_t;
-  OXGN_COOK_NDAPI auto PendingCount() const noexcept -> size_t;
   OXGN_COOK_NDAPI auto ErrorCount() const noexcept -> size_t;
   OXGN_COOK_NDAPI auto DataFileSize() const noexcept -> uint64_t;
 
   OXGN_COOK_NDAPI auto TryGetDescriptor(uint32_t index) const
     -> std::optional<data::pak::physics::PhysicsResourceDesc>;
 
-  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
+  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, WriteFailure>>;
 
 private:
   enum class WriteKind : uint8_t {
@@ -92,19 +97,17 @@ private:
     uint64_t data_offset, const data::AssetKey& resource_asset_key)
     -> data::pak::physics::PhysicsResourceDesc;
   auto QueueDataWrite(WriteKind kind, std::optional<uint32_t> index,
-    uint64_t offset, std::shared_ptr<std::vector<std::byte>> data) -> void;
-  auto OnWriteComplete(WriteKind kind, std::optional<uint32_t> index,
-    const FileErrorInfo& error) -> void;
+    uint64_t offset, std::vector<std::byte> data) -> void;
+  auto WriteData(serio::AnyAsyncDevice* file, WriteKind kind,
+    std::optional<uint32_t> index, uint64_t offset, std::vector<std::byte> data)
+    -> co::Co<Result<void>>;
 
-  IAsyncFileWriter& file_writer_;
+  WriteGroup writes_;
   PhysicsTableAggregator& table_aggregator_;
   Config config_ {};
   std::filesystem::path data_path_;
   std::atomic<bool> finalize_started_ { false };
   std::atomic<uint32_t> emitted_count_ { 0 };
-  std::atomic<size_t> pending_count_ { 0 };
-  std::atomic<size_t> error_count_ { 0 };
-  std::optional<FileErrorInfo> first_error_ {}; // Import-thread callbacks.
   std::unordered_map<std::string, std::string> identity_by_key_;
   std::unordered_map<std::string, uint32_t> index_by_key_;
 };

@@ -8,8 +8,8 @@
 #include <array>
 #include <atomic>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <functional>
@@ -22,7 +22,6 @@
 #include <string_view>
 #include <system_error>
 #include <thread>
-#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -64,6 +63,7 @@
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/PakFileSource.h>
+#include <Oxygen/Content/Internal/PakVerification.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/Internal/PayloadBudget.h>
 #include <Oxygen/Content/Internal/PhysicsBindings.h>
@@ -123,6 +123,8 @@
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/TaskCancelledException.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/AsyncFile.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/Reader.h>
@@ -308,14 +310,18 @@ auto ReadInputMappingContextAssetDesc(const internal::IContentSource& source,
   const auto base_pos = desc_reader->Position();
   auto blob = desc_reader->ReadBlob(
     sizeof(oxygen::data::pak::input::InputMappingContextAssetDesc));
-  if (!base_pos || !blob
-    || blob->size()
-      < sizeof(oxygen::data::pak::input::InputMappingContextAssetDesc)) {
+  if (!base_pos || !blob) {
+    return std::nullopt;
+  }
+  const auto parsed_desc = oxygen::serio::CopyAt<
+    oxygen::data::pak::input::InputMappingContextAssetDesc>(
+    std::span<const std::byte>(*blob));
+  if (!parsed_desc) {
     return std::nullopt;
   }
 
   auto result = MountedInputContextDesc {};
-  std::memcpy(&result.desc, blob->data(), sizeof(result.desc));
+  result.desc = *parsed_desc;
   if (static_cast<oxygen::data::AssetType>(result.desc.header.asset_type)
     != oxygen::data::AssetType::kInputMappingContext) {
     return std::nullopt;
@@ -332,15 +338,17 @@ auto ReadInputMappingContextAssetDesc(const internal::IContentSource& source,
   return result;
 }
 
-//! The driver sources open payload files through, on `loop`; none without
-//! one.
+//! The driver sources open payload files through: on `loop`, or inline when
+//! the loader has no loop (a tool, a unit test), so a source never runs
+//! without one.
 auto CreateIoDriver(const oxygen::observer_ptr<asio::io_context> loop)
   -> std::shared_ptr<oxygen::serio::IoDriver>
 {
   if (!loop) {
-    return nullptr;
+    LOG_F(INFO, "Content IO is inline: the loader has no event loop");
   }
-  auto driver = oxygen::serio::IoDriver::Create(*loop);
+  auto driver = loop ? oxygen::serio::IoDriver::Create(*loop)
+                     : oxygen::serio::IoDriver::CreateInline();
   if (!driver) {
     throw std::system_error(driver.error(), "Create the content IO driver");
   }
@@ -1237,28 +1245,62 @@ auto AssetLoader::PrepareMountSetAsync(
     throw OperationCancelledException(
       "Content mounts changed before preparation began");
   }
+  // Every pak is opened through the driver here, on the loop, and a verified
+  // mount hashes it with awaited reads; the pool only maps and parses.
+  const auto open_pak
+    = [&driver, verify_content](
+        const std::filesystem::path& path) -> co::Co<serio::AsyncFile> {
+    auto file = driver->Open(path, {});
+    if (!file) {
+      throw std::system_error(file.error(), "open '" + path.string() + "'");
+    }
+    if (verify_content) {
+      co_await internal::VerifyPakAsync(*file, path);
+    }
+    co_return std::move(file).value();
+  };
+  auto engine_pak_file = std::optional<serio::AsyncFile> {};
+  if (engine_content_pak) {
+    engine_pak_file = co_await open_pak(*engine_content_pak);
+  }
+  auto pak_files = std::vector<std::optional<serio::AsyncFile>>(mounts.size());
+  for (size_t index = 0; index < mounts.size(); ++index) {
+    auto& mount = mounts.at(index);
+    mount.path = base::ToLogicalPath(
+      std::filesystem::weakly_canonical(base::ToNativePath(mount.path)));
+    if (mount.kind == ContentMount::Kind::kPakFile) {
+      pak_files.at(index) = co_await open_pak(mount.path);
+    }
+  }
+  if (state->lifetime.expired() || state->epoch->IsClosed()) {
+    throw OperationCancelledException(
+      "Loader stopped during mount preparation");
+  }
+
   auto sources = co_await pool->Run(
-    [engine_pak = std::move(engine_content_pak), requested = std::move(mounts),
-      verify = verify_content, driver = std::move(driver)]
-    -> std::vector<internal::ContentSourceRegistry::PreparedSource> {
+    [engine_pak = std::move(engine_content_pak),
+      engine_file = std::move(engine_pak_file), requested = std::move(mounts),
+      files = std::move(pak_files), verify = verify_content,
+      driver = std::move(driver)] mutable
+      -> std::vector<internal::ContentSourceRegistry::PreparedSource> {
       std::vector<internal::ContentSourceRegistry::PreparedSource> prepared;
       prepared.reserve(requested.size() + 1);
       // The engine content stays beneath every replacement set.
       if (engine_pak) {
         prepared.push_back({
           .source = std::make_shared<internal::PakFileSource>(
-            *engine_pak, verify, driver),
+            *engine_pak, std::move(*engine_file), driver),
           .kind = internal::ContentSourceRegistry::PreparedSourceKind::kPak,
           .pak_path = *engine_pak,
         });
       }
-      for (const auto& mount : requested) {
-        const auto normalized = base::ToLogicalPath(
-          std::filesystem::weakly_canonical(base::ToNativePath(mount.path)));
+      for (size_t index = 0; index < requested.size(); ++index) {
+        const auto& mount = requested.at(index);
+        const auto& normalized = mount.path;
         if (mount.kind == ContentMount::Kind::kPakFile) {
           prepared.push_back({
             .source = std::make_shared<internal::PakFileSource>(
-              normalized, verify, driver),
+              normalized, std::move(*files.at(index)), driver),
             .kind = internal::ContentSourceRegistry::PreparedSourceKind::kPak,
             .pak_path = normalized,
           });
@@ -2964,8 +3006,12 @@ auto AssetLoader::FindPhysicsSidecarAssetKeyForScene(
       if (!bytes) {
         throw std::runtime_error("Cannot read physics sidecar descriptor");
       }
-      data::pak::physics::PhysicsSceneAssetDesc descriptor {};
-      std::memcpy(&descriptor, bytes->data(), sizeof(descriptor));
+      const auto parsed_descriptor
+        = serio::CopyAt<data::pak::physics::PhysicsSceneAssetDesc>(*bytes);
+      if (!parsed_descriptor) {
+        throw std::runtime_error("Cannot read physics sidecar descriptor");
+      }
+      const auto& descriptor = *parsed_descriptor;
       if (descriptor.header.asset_type
           != static_cast<uint8_t>(data::AssetType::kPhysicsScene)
         || descriptor.header.version

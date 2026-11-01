@@ -30,7 +30,7 @@ protected:
     -> void
   {
     std::filesystem::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    std::ofstream out(path, std::ios::binary);
     out << text;
   }
 };

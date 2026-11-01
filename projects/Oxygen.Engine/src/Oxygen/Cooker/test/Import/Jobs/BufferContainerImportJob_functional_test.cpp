@@ -32,6 +32,8 @@
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/ByteReader.h>
+#include <Oxygen/Serio/Record.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -66,6 +68,19 @@ namespace {
   };
 #pragma pack(pop)
 
+} // namespace
+} // namespace oxygen::content::import::test
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<content::import::test::BufferSidecarHeader> = true;
+template <> inline constexpr bool kIsRecord<content::import::test::BufferSidecarViewEntry> = true;
+} // namespace oxygen::serio
+// clang-format on
+
+namespace oxygen::content::import::test {
+namespace {
+
   struct SidecarView final {
     std::string name;
     uint64_t byte_offset = 0;
@@ -84,11 +99,12 @@ namespace {
   //! Reads a cooked buffer sidecar; throws when it is not version 3.
   auto ParseSidecar(const std::vector<std::byte>& bytes) -> Sidecar
   {
-    auto header = BufferSidecarHeader {};
-    if (bytes.size() < sizeof(header)) {
+    const auto read_header
+      = oxygen::serio::CopyAt<BufferSidecarHeader>(std::span { bytes });
+    if (!read_header) {
       throw std::runtime_error("buffer sidecar is truncated");
     }
-    std::memcpy(&header, bytes.data(), sizeof(header));
+    const auto& header = *read_header;
     if (std::string_view(std::data(header.magic), 4U) != "OBUF"
       || header.version != 3U) {
       throw std::runtime_error("buffer sidecar magic or version is wrong");
@@ -109,16 +125,19 @@ namespace {
       .views = {},
     };
     for (uint32_t i = 0; i < header.view_count; ++i) {
-      auto entry = BufferSidecarViewEntry {};
-      const auto entry_bytes = std::span(bytes).subspan(
-        sizeof(header) + (i * sizeof(BufferSidecarViewEntry)), sizeof(entry));
-      std::memcpy(&entry, entry_bytes.data(), sizeof(entry));
+      const auto entry
+        = oxygen::serio::CopyAt<BufferSidecarViewEntry>(std::span { bytes },
+          oxygen::serio::ByteOffset {
+            sizeof(header) + (i * sizeof(BufferSidecarViewEntry)) });
+      if (!entry) {
+        throw std::runtime_error("buffer sidecar view entry is truncated");
+      }
       sidecar.views.push_back({
-        .name = std::string { strings.Get(entry.name_offset) },
-        .byte_offset = entry.byte_offset,
-        .byte_length = entry.byte_length,
-        .element_offset = entry.element_offset,
-        .element_count = entry.element_count,
+        .name = std::string { strings.Get(entry->name_offset) },
+        .byte_offset = entry->byte_offset,
+        .byte_length = entry->byte_length,
+        .element_offset = entry->element_offset,
+        .element_count = entry->element_count,
       });
     }
     return sidecar;

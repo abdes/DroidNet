@@ -12,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -28,10 +29,10 @@
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneIds.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -648,11 +649,12 @@ namespace {
     const auto ExtractCoreTables = [](const std::vector<std::byte>& bytes)
       -> std::optional<
         std::pair<std::vector<std::byte>, std::vector<std::byte>>> {
-      if (bytes.size() < sizeof(SceneAssetDesc)) {
+      const auto desc_read
+        = oxygen::serio::CopyAt<SceneAssetDesc>(std::span { bytes });
+      if (!desc_read) {
         return std::nullopt;
       }
-      auto desc = SceneAssetDesc {};
-      std::memcpy(&desc, bytes.data(), sizeof(desc));
+      const auto& desc = *desc_read;
       const auto range_ok
         = [&](const uint64_t offset, const uint64_t size) -> bool {
         return offset <= bytes.size() && size <= (bytes.size() - offset);

@@ -28,25 +28,26 @@ namespace oxygen::data::pak::render {
 //! material and use scalar fallbacks only.
 //!
 //! Per-slot absent references remain distinct; this flag disables every slot.
-[[maybe_unused]] constexpr uint32_t kMaterialFlag_NoTextureSampling = (1U << 0);
+[[maybe_unused]] constexpr uint32_t kMaterialFlag_NoTextureSampling
+  = (1U << 0U);
 
 //! Material flag indicating that the material should be treated as
 //! double-sided.
 //!
 //! When set, the renderer should disable backface culling for this material.
-[[maybe_unused]] constexpr uint32_t kMaterialFlag_DoubleSided = (1U << 1);
+[[maybe_unused]] constexpr uint32_t kMaterialFlag_DoubleSided = (1U << 1U);
 
 //! Material flag indicating that the material uses alpha testing (cutout).
 //!
 //! When set, the renderer/shaders should apply alpha cutoff testing using the
 //! material's `alpha_cutoff` parameter.
-[[maybe_unused]] constexpr uint32_t kMaterialFlag_AlphaTest = (1U << 2);
+[[maybe_unused]] constexpr uint32_t kMaterialFlag_AlphaTest = (1U << 2U);
 
 //! Material flag indicating that the material is unlit.
 //!
 //! When set, shading should not apply lighting and should render using
 //! base color + emissive only.
-[[maybe_unused]] constexpr uint32_t kMaterialFlag_Unlit = (1U << 3);
+[[maybe_unused]] constexpr uint32_t kMaterialFlag_Unlit = (1U << 3U);
 
 //! Material flag indicating glTF ORM channel packing semantics.
 //!
@@ -55,14 +56,14 @@ namespace oxygen::data::pak::render {
 //! - Metalness is sampled from the B channel
 //! Ambient occlusion is typically sampled from the R channel of the AO/ORM
 //! texture.
-[[maybe_unused]] constexpr uint32_t kMaterialFlag_GltfOrmPacked = (1U << 4);
+[[maybe_unused]] constexpr uint32_t kMaterialFlag_GltfOrmPacked = (1U << 4U);
 
 //! Material flag indicating procedural grid shading.
-[[maybe_unused]] constexpr uint32_t kMaterialFlag_ProceduralGrid = (1U << 5);
+[[maybe_unused]] constexpr uint32_t kMaterialFlag_ProceduralGrid = (1U << 5U);
 
 //! Interpret ambient_occlusion as texture strength: lerp(1, sample, strength).
 //! Without a sampled AO binding, this mode is unoccluded.
-inline constexpr uint32_t kMaterialFlag_AmbientOcclusionStrength = (1U << 6);
+inline constexpr uint32_t kMaterialFlag_AmbientOcclusionStrength = (1U << 6U);
 
 //! Material asset descriptor version for current PAK schema.
 [[maybe_unused]] constexpr uint8_t kMaterialAssetVersion
@@ -214,9 +215,9 @@ enum class TexturePackingPolicyId : uint8_t {
 */
 enum class TexturePayloadFlags : uint8_t {
   kNone = 0,
-  kPremultipliedAlpha = (1 << 0), //!< Alpha is premultiplied
+  kPremultipliedAlpha = (1U << 0U), //!< Alpha is premultiplied
   kTailMipsUncompressed = (
-    1 << 1), //!< Tail mips stored uncompressed (reserved)
+    1U << 1U), //!< Tail mips stored uncompressed (reserved)
   // Bits 2-7 reserved for future use.
 };
 
@@ -296,6 +297,7 @@ static_assert(sizeof(TexturePayloadHeader) == 28);
 
 // clang-format off
 namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::pak::render::MaterialAssetDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::render::ShaderReferenceDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::render::SubresourceLayout> = true;
 template <> inline constexpr bool kIsRecord<data::pak::render::TexturePayloadHeader> = true;

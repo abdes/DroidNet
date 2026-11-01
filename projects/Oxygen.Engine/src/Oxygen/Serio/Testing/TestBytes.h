@@ -9,11 +9,13 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <new>
 #include <ostream>
 #include <span>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::serio::testing {
@@ -35,6 +37,27 @@ enum class PatternSeed : uint8_t {
       ((i * 31U) + 7U + static_cast<uint8_t>(seed)) & 0xFFU);
   }
   return bytes;
+}
+
+//! A buffer holding a copy of `bytes`, for a resource or a device to own.
+/*!
+ @throw std::bad_alloc When the buffer cannot be allocated.
+*/
+[[nodiscard]] inline auto OwnedBytes(const std::span<const std::byte> bytes)
+  -> ByteBuffer
+{
+  auto buffer = ByteBuffer::CopyOf(bytes);
+  if (!buffer) {
+    throw std::bad_alloc();
+  }
+  return std::move(buffer).value();
+}
+
+//! `OwnedBytes` of unsigned bytes.
+[[nodiscard]] inline auto OwnedBytes(const std::span<const uint8_t> bytes)
+  -> ByteBuffer
+{
+  return OwnedBytes(std::as_bytes(bytes));
 }
 
 //! Matches a contiguous range of bytes equal to the expected bytes.

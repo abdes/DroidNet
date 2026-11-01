@@ -26,14 +26,12 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Data/Vertex.h>
@@ -41,6 +39,7 @@
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -164,23 +163,9 @@ namespace {
     }
     auto AddTexture(const exposure::Pixel& pixel) -> content::ResourceKey
     {
-      auto desc = data::pak::core::TextureResourceDesc {};
-      desc.texture_type = static_cast<std::uint8_t>(TextureType::kTexture2D);
-      desc.width = desc.height = desc.depth = desc.mip_levels
-        = desc.array_layers = 1U;
-      desc.format = static_cast<std::uint8_t>(Format::kRGBA32Float);
-      constexpr std::uint32_t alignment = 256U;
-      desc.alignment = alignment;
-      auto bytes = std::vector<std::uint8_t>(sizeof(pixel));
-      std::memcpy(bytes.data(), pixel.data(), sizeof(pixel));
-      const auto layouts = std::array {
-        data::pak::render::SubresourceLayout {
-          .offset_bytes = 0U,
-          .row_pitch_bytes = sizeof(pixel),
-          .size_bytes = sizeof(pixel),
-        },
-      };
-      return AddTexture(desc, layouts, bytes);
+      return owned_asset_loader_->AddSyntheticTexture({},
+        [pixel](std::uint32_t /*layer*/, std::uint32_t /*x*/,
+          std::uint32_t /*y*/) -> exposure::Pixel { return pixel; });
     }
 
     auto AddTexture(data::pak::core::TextureResourceDesc desc,
@@ -191,8 +176,9 @@ namespace {
       desc.content_hash = key.get();
       auto payload = detail::BuildV4TexturePayload(desc, layouts, bytes);
       desc.size_bytes = static_cast<std::uint32_t>(payload.size());
-      owned_asset_loader_->SetTexture(
-        key, std::make_shared<data::TextureResource>(desc, std::move(payload)));
+      owned_asset_loader_->SetTexture(key,
+        std::make_shared<data::TextureResource>(
+          desc, oxygen::serio::testing::OwnedBytes(payload)));
       return key;
     }
 
@@ -315,10 +301,13 @@ namespace {
             = surface_case == SurfaceCase::kMaskedDiscarded ? 0.25F : 0.75F;
           desc.metalness = data::Unorm16 { 0.6F };
           desc.roughness = data::Unorm16 { 0.8F };
-          desc.ambient_occlusion
-            = data::Unorm16 { layout == TextureLayout::kOrmStrengthZero ? 0.0F
-                  : layout == TextureLayout::kOrmStrengthOne            ? 1.0F
-                                                             : 0.5F };
+          auto occlusion_strength = 0.5F;
+          if (layout == TextureLayout::kOrmStrengthZero) {
+            occlusion_strength = 0.0F;
+          } else if (layout == TextureLayout::kOrmStrengthOne) {
+            occlusion_strength = 1.0F;
+          }
+          desc.ambient_occlusion = data::Unorm16 { occlusion_strength };
           desc.normal_scale = normal_scale;
           desc.emissive_factor[0] = 2.0F;
           desc.emissive_factor[1] = 4.0F;

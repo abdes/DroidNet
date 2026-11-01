@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <filesystem>
 #include <stdexcept>
 #include <string_view>
@@ -38,7 +39,8 @@ namespace {
 
 auto RequireIndexRelPath(const std::string_view relpath) -> void
 {
-  if (relpath == kIndexFileName || relpath == kGenerationLeaseFileName) {
+  if (relpath == kIndexFileName || relpath == kGenerationLeaseFileName
+    || relpath == kIndexLockFileName) {
     throw std::runtime_error("Reserved path in loose cooked inventory");
   }
   if (relpath.empty()) {

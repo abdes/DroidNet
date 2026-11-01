@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -22,6 +23,7 @@
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::Format;
@@ -42,6 +44,15 @@ using oxygen::content::import::TextureSourceSet;
 using oxygen::content::import::to_string;
 
 namespace {
+
+//! A buffer holding `bytes`.
+[[nodiscard]] auto MakeBuffer(const std::initializer_list<std::byte> bytes)
+  -> oxygen::serio::ByteBuffer
+{
+  return oxygen::serio::ByteBuffer::CopyOf(
+    std::span<const std::byte>(bytes.begin(), bytes.size()))
+    .value();
+}
 
 //=== CubeFace Tests
 //===----------------------------------------------------===//
@@ -127,10 +138,9 @@ NOLINT_TEST(TextureSourceAssemblyTest, DefaultConstructionIsEmpty)
 NOLINT_TEST(TextureSourceAssemblyTest, AddAddsSource)
 {
   TextureSourceSet set;
-  std::vector<std::byte> bytes { std::byte { 0x01 }, std::byte { 0x02 } };
 
   set.Add(TextureSource {
-    .bytes = bytes,
+    .bytes = MakeBuffer({ std::byte { 0x01 }, std::byte { 0x02 } }),
     .subresource = SubresourceId { .array_layer = 1, .mip_level = 2 },
     .source_id = "test.png",
   });
@@ -144,7 +154,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, ClearRemovesAllSources)
 {
   TextureSourceSet set;
   set.Add(TextureSource {
-    .bytes = { std::byte { 0x01 } },
+    .bytes = MakeBuffer({ std::byte { 0x01 } }),
     .subresource = {},
     .source_id = "test.png",
   });
@@ -161,12 +171,12 @@ NOLINT_TEST(TextureSourceAssemblyTest, GetSourceReturnsCorrectSource)
 {
   TextureSourceSet set;
   set.Add(TextureSource {
-    .bytes = { std::byte { 0xAA } },
+    .bytes = MakeBuffer({ std::byte { 0xAA } }),
     .subresource = SubresourceId { .array_layer = 5 },
     .source_id = "first.png",
   });
   set.Add(TextureSource {
-    .bytes = { std::byte { 0xBB } },
+    .bytes = MakeBuffer({ std::byte { 0xBB } }),
     .subresource = SubresourceId { .array_layer = 7 },
     .source_id = "second.png",
   });
@@ -196,7 +206,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, AddArrayLayerSetsCorrectFields)
 {
   TextureSourceSet set;
 
-  set.AddArrayLayer(3, { std::byte { 0x01 } }, "layer3.png");
+  set.AddArrayLayer(3, MakeBuffer({ std::byte { 0x01 } }), "layer3.png");
 
   const auto& source = set.GetSource(0);
   EXPECT_EQ(source.subresource.array_layer, 3);
@@ -210,9 +220,9 @@ NOLINT_TEST(TextureSourceAssemblyTest, AddArrayLayerMultipleLayers)
 {
   TextureSourceSet set;
 
-  set.AddArrayLayer(0, { std::byte { 0x00 } }, "layer0.png");
-  set.AddArrayLayer(1, { std::byte { 0x01 } }, "layer1.png");
-  set.AddArrayLayer(2, { std::byte { 0x02 } }, "layer2.png");
+  set.AddArrayLayer(0, MakeBuffer({ std::byte { 0x00 } }), "layer0.png");
+  set.AddArrayLayer(1, MakeBuffer({ std::byte { 0x01 } }), "layer1.png");
+  set.AddArrayLayer(2, MakeBuffer({ std::byte { 0x02 } }), "layer2.png");
 
   ASSERT_EQ(set.Count(), 3);
   EXPECT_EQ(set.GetSource(0).subresource.array_layer, 0);
@@ -228,8 +238,10 @@ NOLINT_TEST(TextureSourceAssemblyTest, AddCubeFaceMapsToArrayLayer)
 {
   TextureSourceSet set;
 
-  set.AddCubeFace(CubeFace::kPositiveX, { std::byte { 0x00 } }, "px.hdr");
-  set.AddCubeFace(CubeFace::kNegativeZ, { std::byte { 0x05 } }, "nz.hdr");
+  set.AddCubeFace(
+    CubeFace::kPositiveX, MakeBuffer({ std::byte { 0x00 } }), "px.hdr");
+  set.AddCubeFace(
+    CubeFace::kNegativeZ, MakeBuffer({ std::byte { 0x05 } }), "nz.hdr");
 
   EXPECT_EQ(set.GetSource(0).subresource.array_layer, 0); // kPositiveX = 0
   EXPECT_EQ(set.GetSource(1).subresource.array_layer, 5); // kNegativeZ = 5
@@ -240,12 +252,18 @@ NOLINT_TEST(TextureSourceAssemblyTest, AddAllFacesCreatesCompleteCube)
 {
   TextureSourceSet set;
 
-  set.AddCubeFace(CubeFace::kPositiveX, { std::byte { 0x00 } }, "px.hdr");
-  set.AddCubeFace(CubeFace::kNegativeX, { std::byte { 0x01 } }, "nx.hdr");
-  set.AddCubeFace(CubeFace::kPositiveY, { std::byte { 0x02 } }, "py.hdr");
-  set.AddCubeFace(CubeFace::kNegativeY, { std::byte { 0x03 } }, "ny.hdr");
-  set.AddCubeFace(CubeFace::kPositiveZ, { std::byte { 0x04 } }, "pz.hdr");
-  set.AddCubeFace(CubeFace::kNegativeZ, { std::byte { 0x05 } }, "nz.hdr");
+  set.AddCubeFace(
+    CubeFace::kPositiveX, MakeBuffer({ std::byte { 0x00 } }), "px.hdr");
+  set.AddCubeFace(
+    CubeFace::kNegativeX, MakeBuffer({ std::byte { 0x01 } }), "nx.hdr");
+  set.AddCubeFace(
+    CubeFace::kPositiveY, MakeBuffer({ std::byte { 0x02 } }), "py.hdr");
+  set.AddCubeFace(
+    CubeFace::kNegativeY, MakeBuffer({ std::byte { 0x03 } }), "ny.hdr");
+  set.AddCubeFace(
+    CubeFace::kPositiveZ, MakeBuffer({ std::byte { 0x04 } }), "pz.hdr");
+  set.AddCubeFace(
+    CubeFace::kNegativeZ, MakeBuffer({ std::byte { 0x05 } }), "nz.hdr");
 
   ASSERT_EQ(set.Count(), 6);
   for (size_t i = 0; i < 6; ++i) {
@@ -261,7 +279,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, AddDepthSliceSetsCorrectFields)
 {
   TextureSourceSet set;
 
-  set.AddDepthSlice(7, { std::byte { 0x07 } }, "slice7.png");
+  set.AddDepthSlice(7, MakeBuffer({ std::byte { 0x07 } }), "slice7.png");
 
   const auto& source = set.GetSource(0);
   EXPECT_EQ(source.subresource.array_layer, 0);
@@ -276,8 +294,8 @@ NOLINT_TEST(TextureSourceAssemblyTest, AddDepthSliceMultipleSlices)
   TextureSourceSet set;
 
   for (uint16_t i = 0; i < 16; ++i) {
-    set.AddDepthSlice(
-      i, { static_cast<std::byte>(i) }, "slice" + std::to_string(i) + ".png");
+    set.AddDepthSlice(i, MakeBuffer({ static_cast<std::byte>(i) }),
+      "slice" + std::to_string(i) + ".png");
   }
 
   ASSERT_EQ(set.Count(), 16);
@@ -294,7 +312,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, AddMipLevelSetsCorrectFields)
 {
   TextureSourceSet set;
 
-  set.AddMipLevel(2, 3, { std::byte { 0x23 } }, "layer2_mip3.png");
+  set.AddMipLevel(2, 3, MakeBuffer({ std::byte { 0x23 } }), "layer2_mip3.png");
 
   const auto& source = set.GetSource(0);
   EXPECT_EQ(source.subresource.array_layer, 2);
@@ -309,10 +327,10 @@ NOLINT_TEST(TextureSourceAssemblyTest, AddMipLevelFullMipChain)
   TextureSourceSet set;
 
   // Add mip chain for a single array layer
-  set.AddMipLevel(0, 0, { std::byte { 0x00 } }, "mip0.png");
-  set.AddMipLevel(0, 1, { std::byte { 0x01 } }, "mip1.png");
-  set.AddMipLevel(0, 2, { std::byte { 0x02 } }, "mip2.png");
-  set.AddMipLevel(0, 3, { std::byte { 0x03 } }, "mip3.png");
+  set.AddMipLevel(0, 0, MakeBuffer({ std::byte { 0x00 } }), "mip0.png");
+  set.AddMipLevel(0, 1, MakeBuffer({ std::byte { 0x01 } }), "mip1.png");
+  set.AddMipLevel(0, 2, MakeBuffer({ std::byte { 0x02 } }), "mip2.png");
+  set.AddMipLevel(0, 3, MakeBuffer({ std::byte { 0x03 } }), "mip3.png");
 
   ASSERT_EQ(set.Count(), 4);
   for (size_t i = 0; i < 4; ++i) {
@@ -328,9 +346,9 @@ NOLINT_TEST(TextureSourceAssemblyTest, AddMipLevelFullMipChain)
 NOLINT_TEST(TextureSourceAssemblyTest, SourcesReturnsAllSources)
 {
   TextureSourceSet set;
-  set.AddArrayLayer(0, { std::byte { 0x00 } }, "a.png");
-  set.AddArrayLayer(1, { std::byte { 0x01 } }, "b.png");
-  set.AddArrayLayer(2, { std::byte { 0x02 } }, "c.png");
+  set.AddArrayLayer(0, MakeBuffer({ std::byte { 0x00 } }), "a.png");
+  set.AddArrayLayer(1, MakeBuffer({ std::byte { 0x01 } }), "b.png");
+  set.AddArrayLayer(2, MakeBuffer({ std::byte { 0x02 } }), "c.png");
 
   const auto sources = set.Sources();
 

@@ -16,9 +16,13 @@
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/AsyncFile.h>
 #include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/FileLock.h>
+#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/MappedFile.h>
 #include <Oxygen/Serio/Types.h>
 
@@ -80,7 +84,19 @@ namespace {
     std::optional<serio::AtomicFileWriter> writer_;
   };
 
-  class RealFiles final : public CookerStorage {
+  //! An operating-system lock held for the storage's caller.
+  class HeldFileLock final : public StorageLock {
+  public:
+    explicit HeldFileLock(serio::FileLock lock) noexcept
+      : lock_(std::move(lock))
+    {
+    }
+
+  private:
+    serio::FileLock lock_;
+  };
+
+  class RealFiles final : public ImportStorage {
   public:
     [[nodiscard]] auto KindOf(const fs::path& path) const -> PathKind override
     {
@@ -95,7 +111,11 @@ namespace {
     [[nodiscard]] auto Open(const fs::path& path) const
       -> Result<serio::AnyDevice> override
     {
-      auto file = serio::MappedFile::Open(path);
+      // Shares writes: an import's resource data files stay open for its
+      // appends while the loose writer hashes them. Every other cooked file
+      // is replaced by a rename, never written in place.
+      auto file
+        = serio::MappedFile::Open(path, serio::Sharing::kReadWriteDelete);
       if (!file) {
         return ::oxygen::Err(file.error());
       }
@@ -112,6 +132,37 @@ namespace {
       }
       return ::oxygen::Ok(std::unique_ptr<Publication>(
         std::make_unique<AtomicPublication>(std::move(writer).value())));
+    }
+
+    [[nodiscard]] auto PublishAsync(serio::IoDriver& driver, fs::path path,
+      const std::span<const std::byte> bytes) -> co::Co<Result<void>> override
+    {
+      if (const auto parent = CreateParent(path); !parent) {
+        co_return ::oxygen::Err(parent.error());
+      }
+      const auto written = co_await serio::AsyncWriteFileAtomically(
+        driver, path, bytes, serio::Durability::kBuffered);
+      if (!written) {
+        co_return ::oxygen::Err(written.error());
+      }
+      co_return Result<void> {};
+    }
+
+    [[nodiscard]] auto OpenData(serio::IoDriver& driver, const fs::path& path)
+      -> Result<serio::AnyAsyncDevice> override
+    {
+      CHECK_RESULT(CreateParent(path));
+      auto file = driver.Open(path,
+        serio::OpenSpec {
+          .access = serio::Access::kReadWrite,
+          .creation = serio::Creation::kOpenAlways,
+          .sharing = serio::Sharing::kReadWriteDelete,
+          .hint = serio::AccessHint::kRandom,
+        });
+      if (!file) {
+        return ::oxygen::Err(file.error());
+      }
+      return ::oxygen::Ok(serio::AnyAsyncDevice(std::move(file).value()));
     }
 
     [[nodiscard]] auto Remove(const fs::path& path) -> Result<void> override
@@ -145,23 +196,27 @@ namespace {
     [[nodiscard]] auto Move(const fs::path& from, const fs::path& to)
       -> Result<void> override
     {
-      const auto native_from = base::ToNativePath(from);
-      const auto native_to = base::ToNativePath(to);
-      auto ec = std::error_code {};
-      if (!fs::is_regular_file(native_from, ec)) {
-        return ::oxygen::Err(
-          std::make_error_code(std::errc::no_such_file_or_directory));
-      }
-      if (fs::is_directory(native_to, ec)) {
-        return ::oxygen::Err(std::make_error_code(std::errc::is_a_directory));
-      }
-      // Replaces `to` in one step (MoveFileExW with MOVEFILE_REPLACE_EXISTING
-      // on Windows, rename(2) elsewhere).
-      fs::rename(native_from, native_to, ec);
-      if (ec) {
-        return ::oxygen::Err(ec);
+      // One step that replaces `to`; its errors come from the move itself.
+      const auto moved
+        = serio::MoveFileOver(base::ToNativePath(from), base::ToNativePath(to));
+      if (!moved) {
+        return ::oxygen::Err(moved.error());
       }
       return {};
+    }
+
+    [[nodiscard]] auto LockExclusive(const fs::path& path)
+      -> Result<std::unique_ptr<StorageLock>> override
+    {
+      CHECK_RESULT(CreateParent(path));
+      auto lock = serio::FileLock::Acquire(base::ToNativePath(path),
+        serio::FileLockMode::kExclusive,
+        serio::FileLockOpenMode::kOpenOrCreate);
+      if (!lock) {
+        return ::oxygen::Err(lock.error());
+      }
+      return ::oxygen::Ok(std::unique_ptr<StorageLock>(
+        std::make_unique<HeldFileLock>(std::move(lock).value())));
     }
 
     [[nodiscard]] auto SizeOf(const fs::path& path) const
@@ -195,7 +250,7 @@ namespace {
 
 } // namespace
 
-auto RealCookerStorage() -> CookerStorage&
+auto RealCookerStorage() -> ImportStorage&
 {
   // Stateless: one instance serves every caller.
   static auto storage = RealFiles {};

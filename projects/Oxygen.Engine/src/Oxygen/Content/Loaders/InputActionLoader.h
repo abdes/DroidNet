@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstring>
 #include <memory>
 
 #include <fmt/format.h>
@@ -18,6 +17,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::loaders {
 
@@ -46,8 +46,10 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
   auto desc_blob
     = reader.ReadBlob(sizeof(data::pak::input::InputActionAssetDesc));
   check_result(desc_blob, "InputActionAssetDesc");
-  data::pak::input::InputActionAssetDesc desc {};
-  std::memcpy(&desc, desc_blob->data(), sizeof(desc));
+  const auto parsed_desc
+    = serio::CopyAt<data::pak::input::InputActionAssetDesc>(*desc_blob);
+  check_result(parsed_desc, "InputActionAssetDesc");
+  const auto desc = *parsed_desc;
 
   if (desc.header.version != data::pak::input::kInputActionAssetVersion) {
     throw std::runtime_error(
@@ -70,7 +72,10 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
 
   auto asset
     = std::make_unique<data::InputActionAsset>(context.current_asset_key, desc,
-      data::SourceOrigin { context.source_key, context.source_instance });
+      data::SourceOrigin {
+        .key = context.source_key,
+        .instance = context.source_instance,
+      });
   asset->SetAssetName(
     ResolveDescriptorString(strings, desc.header.name_offset, "asset name"));
   return asset;

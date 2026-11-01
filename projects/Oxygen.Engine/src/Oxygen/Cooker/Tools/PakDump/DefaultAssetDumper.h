@@ -11,6 +11,8 @@
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
 
+#include <Oxygen/Serio/ByteReader.h>
+
 namespace oxygen::content::pakdump {
 
 //! Fallback dumper used for unknown asset types.
@@ -27,13 +29,14 @@ public:
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
     asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
-    const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
+    const auto data = asset_dump_helpers::TryDescriptorBytes(pak, entry);
     if (!data) {
       ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
-    if (const auto header = asset_dump_helpers::TryReadAssetHeader(*data)) {
+    if (const auto header
+      = serio::CopyAt<oxygen::data::pak::core::AssetHeader>(*data)) {
       asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), *header,
         asset_dump_helpers::DescriptorString(
           *data, *header, header->name_offset),

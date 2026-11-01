@@ -82,6 +82,13 @@ system lock also protects against reclamation by another process. Publisher CAS
 and selection rules are separate from this byte-lifetime contract; the shared
 lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
 
+Writers of one root's index serialize their read, merge and publication on
+`container.index.lock`, a sibling of the index taken exclusively with
+`serio::FileLock::Acquire`: it excludes writers in other processes as well as
+other threads, so a cooker and an editor importing into the same root keep
+each other's records. Readers take no lock: the index is replaced atomically,
+so a reader maps a whole index, the old one or the new one.
+
 ---
 
 ## Scope and constraints
@@ -156,7 +163,8 @@ lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
 
    The loader is async-first:
 
-   - Worker threads may perform blocking I/O and CPU decode.
+   - Payloads are awaited through the loader's IO driver, a loop driver or,
+     without a loop, an inline one; worker threads only decode.
    - Only the owning thread may mutate loader state (mounts, cache publish,
      dependency graph mutation, callbacks).
    - Loader decode must not call back into `AssetLoader` (dependencies are
@@ -450,8 +458,8 @@ as a runtime content source.
 The native loose index owns the complete output inventory. Published descriptors
 and resource table/data files have canonical relative paths, exact sizes and
 mandatory SHA-256 digests. Inventory membership is complete. The index's own
-digest lives in the selecting publication record; `.generation.lock` is the
-explicit non-content exception.
+digest lives in the selecting publication record; `.generation.lock` and
+`container.index.lock` are the explicit non-content exceptions.
 
 LooseCookedWriter finalization owns inventory production after all writes and
 resource tables finish. Reuse emitter hashes only for the exact finalized bytes;

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -16,18 +17,15 @@
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
-using testing::AllOf;
-using testing::Eq;
-using testing::SizeIs;
-
-using AssetHeader = oxygen::data::pak::core::AssetHeader;
-using ReadOnlyMemoryStream = oxygen::serio::ReadOnlyMemoryStream;
+using oxygen::data::pak::core::AssetHeader;
+using oxygen::serio::ReadOnlyMemoryStream;
 using Reader = oxygen::serio::Reader<ReadOnlyMemoryStream>;
 
 //=== LoadAssetHeader Basic Tests ===--------------------------------------//
@@ -36,18 +34,18 @@ using Reader = oxygen::serio::Reader<ReadOnlyMemoryStream>;
 NOLINT_TEST(LoadAssetHeaderBasic, ReturnsCorrectHeader)
 {
   // Arrange
-  std::array<std::byte, sizeof(AssetHeader)> buffer {};
-  auto* header = reinterpret_cast<AssetHeader*>(buffer.data());
-  header->asset_type = 3;
-  header->strings = { .offset = 200U, .size = 9U };
-  header->name_offset = 1U;
-  header->version = 42;
-  header->streaming_priority = 7;
+  auto header = AssetHeader {};
+  header.asset_type = 3;
+  header.strings = { .offset = 200U, .size = 9U };
+  header.name_offset = 1U;
+  header.version = 42;
+  header.streaming_priority = 7;
   constexpr uint64_t kExpectedHashPrefix = 0x123456789ABCDEF0ULL;
-  std::memset(header->content_hash.data(), 0, header->content_hash.size());
-  std::memcpy(header->content_hash.data(), &kExpectedHashPrefix,
+  std::memcpy(header.content_hash.data(), &kExpectedHashPrefix,
     sizeof(kExpectedHashPrefix));
-  header->variant_flags = 0xAABBCCDD;
+  header.variant_flags = 0xAABBCCDD;
+  const auto buffer
+    = std::bit_cast<std::array<std::byte, sizeof(AssetHeader)>>(header);
 
   ReadOnlyMemoryStream stream(
     std::span<const std::byte>(buffer.data(), buffer.size()));
@@ -64,9 +62,10 @@ NOLINT_TEST(LoadAssetHeaderBasic, ReturnsCorrectHeader)
   EXPECT_EQ(result.name_offset, 1U);
   EXPECT_EQ(result.version, 42);
   EXPECT_EQ(result.streaming_priority, 7);
-  uint64_t hash_prefix = 0;
-  std::memcpy(&hash_prefix, result.content_hash.data(), sizeof(hash_prefix));
-  EXPECT_EQ(hash_prefix, kExpectedHashPrefix);
+  const auto hash_prefix = oxygen::serio::CopyAt<uint64_t>(
+    std::as_bytes(std::span { result.content_hash }));
+  ASSERT_HAS_VALUE(hash_prefix);
+  EXPECT_EQ(*hash_prefix, kExpectedHashPrefix);
   EXPECT_EQ(result.variant_flags, 0xAABBCCDDU);
 }
 
@@ -74,9 +73,10 @@ NOLINT_TEST(LoadAssetHeaderBasic, ReturnsCorrectHeader)
 NOLINT_TEST(LoadAssetHeaderError, ThrowsOnInvalidAssetType)
 {
   // Arrange
-  std::array<std::byte, sizeof(AssetHeader)> buffer {};
-  auto* header = reinterpret_cast<AssetHeader*>(buffer.data());
-  header->asset_type = 255; // Invalid (assuming kMaxAssetType < 255)
+  auto header = AssetHeader {};
+  header.asset_type = 255; // Invalid (assuming kMaxAssetType < 255)
+  const auto buffer
+    = std::bit_cast<std::array<std::byte, sizeof(AssetHeader)>>(header);
 
   ReadOnlyMemoryStream stream(
     std::span<const std::byte>(buffer.data(), buffer.size()));

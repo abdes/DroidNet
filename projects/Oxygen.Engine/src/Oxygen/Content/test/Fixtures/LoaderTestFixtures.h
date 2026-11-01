@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstring>
 #include <span>
 #include <stdexcept>
 #include <utility>
@@ -16,6 +15,7 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -31,24 +31,19 @@ template <class DescT>
 auto StagePayload(const std::span<const std::byte> descriptor,
   const std::span<const std::byte> data) -> oxygen::serio::ByteBuffer
 {
-  auto desc = DescT {};
-  if (descriptor.size() < sizeof(desc)) {
+  const auto read = oxygen::serio::CopyAt<DescT>(descriptor);
+  if (!read) {
     return {};
   }
-  std::memcpy(&desc, descriptor.data(), sizeof(desc));
+  const auto& desc = *read;
   if (desc.data_offset > data.size()
     || desc.size_bytes > data.size() - desc.data_offset) {
     return {};
   }
-  auto payload = oxygen::serio::ByteBuffer::Allocate(
-    oxygen::serio::CountOf(desc.size_bytes))
-                   .value();
-  if (desc.size_bytes != 0U) {
-    std::memcpy(payload.Bytes().data(),
-      data.subspan(static_cast<size_t>(desc.data_offset)).data(),
-      desc.size_bytes);
-  }
-  return payload;
+  return oxygen::serio::ByteBuffer::CopyOf(
+    data.subspan(static_cast<size_t>(desc.data_offset),
+      static_cast<size_t>(desc.size_bytes)))
+    .value();
 }
 
 class BinaryAssetLoaderFixtureBase : public ::testing::Test {

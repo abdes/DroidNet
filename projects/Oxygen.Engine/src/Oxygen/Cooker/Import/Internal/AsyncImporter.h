@@ -19,7 +19,6 @@
 
 namespace oxygen::content::import {
 
-class IAsyncFileWriter;
 class ResourceTableRegistry;
 
 } // namespace oxygen::content::import
@@ -60,9 +59,6 @@ public:
 
     //! Maximum number of jobs processed concurrently.
     size_t max_in_flight_jobs = 1;
-
-    //! Async file writer used by import sessions.
-    IAsyncFileWriter* file_writer = nullptr;
 
     //! Resource table registry for global aggregation.
     ResourceTableRegistry* table_registry = nullptr;

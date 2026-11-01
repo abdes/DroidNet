@@ -26,6 +26,7 @@
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportSourceObservation.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import::detail {
 
@@ -71,18 +72,13 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ImportSourceSnapshot)
   OXYGEN_MAKE_NON_MOVABLE(ImportSourceSnapshot)
 
+  using IAsyncFileReader::ReadFile;
   auto ReadFile(const std::filesystem::path& path, ReadOptions options)
-    -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>> override;
-  //! Read with default options; the override above cannot carry the default.
-  auto ReadFile(const std::filesystem::path& path)
-    -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>>
-  {
-    return ReadFile(path, ReadOptions {});
-  }
+    -> co::Co<Result<serio::ByteBuffer>> override;
   auto GetFileInfo(const std::filesystem::path& path)
-    -> co::Co<Result<FileInfo, FileErrorInfo>> override;
+    -> co::Co<Result<FileInfo>> override;
   auto Exists(const std::filesystem::path& path)
-    -> co::Co<Result<bool, FileErrorInfo>> override;
+    -> co::Co<Result<bool>> override;
   //! Hash a parser-owned buffer on its worker, without rereading or copying it.
   auto RecordConsumed(const std::filesystem::path& path,
     std::span<const std::byte> bytes, ReadOptions options = {}) -> void;
@@ -110,16 +106,15 @@ private:
   auto CaptureFor(const std::filesystem::path& path) -> const CapturedInput*;
   auto Invalidate() noexcept -> void;
   auto ReadSource(const std::filesystem::path& path, ReadOptions options)
-    -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>>;
+    -> co::Co<Result<serio::ByteBuffer>>;
   auto SourceInfo(const std::filesystem::path& path)
-    -> co::Co<Result<FileInfo, FileErrorInfo>>;
-  auto SourceExists(const std::filesystem::path& path)
-    -> co::Co<Result<bool, FileErrorInfo>>;
+    -> co::Co<Result<FileInfo>>;
+  auto SourceExists(const std::filesystem::path& path) -> co::Co<Result<bool>>;
   auto VerifyCapturedFiles() -> co::Co<>;
 
   struct Observation {
     bool exists = false;
-    std::optional<FileInfo> metadata {};
+    std::optional<FileInfo> metadata;
     bool content_read = false;
   };
 

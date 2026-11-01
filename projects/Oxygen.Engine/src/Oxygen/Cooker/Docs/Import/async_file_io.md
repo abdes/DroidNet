@@ -1,251 +1,76 @@
-# Async File I/O Abstraction
+# Import File I/O
 
-**Status:** Approved Design
-**Date:** 2026-01-14
+**Status:** Current
 **Parent:** [async_import_pipeline_v2.md](async_import_pipeline_v2.md)
 
 ---
 
 ## Overview
 
-This document specifies `IAsyncFileReader`, a platform-agnostic async file I/O
-abstraction designed for the Oxygen Engine import pipeline. The API is designed
-to be implementable using native async I/O on Windows (IOCP), Linux (io_uring),
-and macOS (kqueue/dispatch_io). The current implementation ships a Windows
-IOCP-based reader (see `WindowsFileReader`), with additional platform
-implementations and optional fallbacks planned in future phases.
+The import reads its sources and writes its cooked files through one
+`serio::IoDriver`, owned by the import thread's `ImportEventLoop` and created
+over its `asio::io_context`. `ImportManifest::AnalyzeSources`, which builds its
+own loop, gets its driver the same way.
 
----
+- **Source reads** go through `IAsyncFileReader`, the import's seam for
+  sources. `ImportSourceSnapshot` decorates it to record and replay reads, and
+  tests substitute it. Its implementation, `SerioFileReader`, opens each source
+  through the driver and awaits `serio::AsyncReadAll`, or, for a range,
+  `serio::AsyncReadExactlyAt`.
+- **Cooked writes** go through `CookerStorage` only (see below).
 
-## Goals
-
-1. **Future-Proof API**: Design for true async I/O without requiring API
-   changes when native implementations are added.
-
-2. **Cross-Platform**: Abstract over Windows, Linux, and macOS differences.
-
-3. **OxCo Integration**: Return awaitables compatible with the import event
-   loop.
-
-4. **Error Handling**: Use `Result<T, E>` for all operations; no exceptions.
-
-5. **Cancellation**: Support cooperative cancellation via coroutine
-   cancellation.
-
-6. **Streaming**: Support both full-file reads and chunked streaming.
-
----
-
-## API Design
-
-### Error Types
+## IAsyncFileReader
 
 ```cpp
-namespace oxygen::content::import {
-
-//! File I/O error codes.
-enum class FileError : uint32_t {
-  kOk = 0,
-  kNotFound,
-  kAccessDenied,
-  kAlreadyExists,
-  kIsDirectory,
-  kNotDirectory,
-  kTooManyOpenFiles,
-  kNoSpace,
-  kDiskFull,
-  kReadOnly,
-  kInvalidPath,
-  kPathTooLong,
-  kIOError,
-  kCancelled,
-  kUnknown,
-};
-
-//! Detailed file error with path and system error code.
-struct FileErrorInfo {
-  FileError code = FileError::kUnknown;
-  std::filesystem::path path;
-  std::error_code system_error;
-  std::string message;
-
-  [[nodiscard]] auto ToString() const -> std::string;
-};
-
-} // namespace oxygen::content::import
-```
-
-### IAsyncFileReader Interface
-
-```cpp
-namespace oxygen::content::import {
-
-//! Read options for async file operations.
 struct ReadOptions {
-  //! Offset to start reading from (0 = beginning).
-  uint64_t offset = 0;
-
-  //! Maximum bytes to read (0 = entire file from offset).
-  uint64_t max_bytes = 0;
-
-  //! Hint for expected file size (enables pre-allocation).
-  uint64_t size_hint = 0;
-
-  //! Buffer alignment requirement (0 = no requirement).
-  size_t alignment = 0;
+  uint64_t offset = 0;     // first byte to read
+  uint64_t max_bytes = 0;  // 0 reads to the end of the file
 };
 
-//! File metadata.
-struct FileInfo {
-  uint64_t size = 0;
-  std::filesystem::file_time_type last_modified;
-  bool is_directory = false;
-  bool is_symlink = false;
-};
-
-//! Async file reader interface.
-/*!
- Platform-agnostic interface for asynchronous file reading. Implementations
- may use native async I/O (IOCP, io_uring, kqueue) or ThreadPool-based
- blocking I/O.
-
- ### Thread Safety
-
- Implementations must be safe to use from the import event loop thread.
- Multiple concurrent reads to different files are supported.
-
- ### Cancellation
-
- All operations respect coroutine cancellation. When canceled, operations
- return `FileError::kCancelled`.
-
- ### Error Handling
-
- All operations return `Result<T, FileErrorInfo>`. No exceptions are thrown.
-*/
 class IAsyncFileReader {
 public:
-  virtual ~IAsyncFileReader() = default;
-
-  //! Read entire file contents.
-  /*!
-   @param path    Absolute path to file.
-   @param options Read options (offset, max_bytes, etc.)
-   @return File contents or error.
-  */
-  [[nodiscard]] virtual auto ReadFile(
-    const std::filesystem::path& path,
-    ReadOptions options = {}
-  ) -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>> = 0;
-
-  //! Get file metadata without reading contents.
-  [[nodiscard]] virtual auto GetFileInfo(
-    const std::filesystem::path& path
-  ) -> co::Co<Result<FileInfo, FileErrorInfo>> = 0;
-
-  //! Check if file exists.
-  [[nodiscard]] virtual auto Exists(
-    const std::filesystem::path& path
-  ) -> co::Co<Result<bool, FileErrorInfo>> = 0;
+  virtual auto ReadFile(const std::filesystem::path& path,
+    ReadOptions options = {}) -> co::Co<Result<serio::ByteBuffer>> = 0;
+  virtual auto GetFileInfo(const std::filesystem::path& path)
+    -> co::Co<Result<FileInfo>> = 0;
+  virtual auto Exists(const std::filesystem::path& path)
+    -> co::Co<Result<bool>> = 0;
 };
 
-} // namespace oxygen::content::import
+auto CreateAsyncFileReader(serio::IoDriver& driver)
+  -> std::unique_ptr<IAsyncFileReader>;
 ```
 
-### Streaming API (Future Extension)
+- A range is clamped to the file: an offset past the end reads nothing.
+- `GetFileInfo` and `Exists` are file system metadata, not bytes, and stay
+  `std::filesystem` queries.
+- Cancelling the awaiting task cancels the pending read.
 
-For very large files, a streaming interface avoids loading everything into
-memory:
+## Errors
 
-```cpp
-namespace oxygen::content::import {
+Ports return `Result<T>`, whose error is a `std::error_code`. Callers compare
+it with Serio's conditions (`serio::Error::kNotFound`, `kAccessDenied`,
+`kIsDirectory`) or with `std::errc` (`invalid_argument` for an empty path,
+`operation_canceled`). A caller that reports an error names the path in its own
+diagnostic.
 
-//! Async file stream for chunked reading.
-class IAsyncFileStream {
-public:
-  virtual ~IAsyncFileStream() = default;
+## Cooked writes
 
-  //! Read next chunk of data.
-  /*!
-   @param buffer      Buffer to read into.
-   @param max_bytes   Maximum bytes to read.
-   @return Bytes actually read (0 = EOF), or error.
-  */
-  [[nodiscard]] virtual auto Read(
-    std::span<std::byte> buffer,
-    size_t max_bytes
-  ) -> co::Co<Result<size_t, FileErrorInfo>> = 0;
+`cooked::ImportStorage`, the role of `CookerStorage` that awaits its writes,
+publishes the cooked files. The real file system and the in-memory test storage
+implement it, so the in-memory storage covers the import too; storages that
+never import (the pak tool's staging overlay) implement `CookerStorage` alone:
 
-  //! Get current position in file.
-  [[nodiscard]] virtual auto Position() const -> uint64_t = 0;
+- `PublishAsync(driver, path, bytes)` publishes a whole file atomically
+  (`serio::AsyncWriteFileAtomically`, buffered durability), for asset and
+  resource descriptors and resource tables. A cancelled or failed import never
+  leaves a torn descriptor.
+- `OpenData(driver, path)` opens a data file (`buffers.data`, `textures.data`,
+  `physics.data`) once, created when missing, never truncated and sharing
+  reads and writes. The table aggregator holds it and reserves each write's
+  range; emitters await `AsyncWriteAt` at the reserved offset, padding
+  included.
 
-  //! Seek to position.
-  [[nodiscard]] virtual auto Seek(uint64_t position)
-    -> co::Co<Result<void, FileErrorInfo>> = 0;
-
-  //! Get file size.
-  [[nodiscard]] virtual auto Size() const -> uint64_t = 0;
-
-  //! Close the stream.
-  virtual auto Close() -> co::Co<void> = 0;
-};
-
-//! Extended reader with streaming support.
-class IAsyncFileReaderWithStreaming : public IAsyncFileReader {
-public:
-  //! Open file for streaming.
-  [[nodiscard]] virtual auto OpenStream(
-    const std::filesystem::path& path,
-    ReadOptions options = {}
-  ) -> co::Co<Result<std::unique_ptr<IAsyncFileStream>, FileErrorInfo>> = 0;
-};
-
-} // namespace oxygen::content::import
-```
-
----
-
-## Error Mapping
-
-Error mapping is centralized via utility helpers that operate on `std::error_code`.
-The public helpers are:
-
-- `auto MapSystemError(std::error_code ec) -> FileError` — maps `std::errc` values
-  and platform system error categories (Windows `std::system_category`) to the
-  cross-platform `FileError` enum.
-
-- `auto MakeFileError(const std::filesystem::path& path, std::error_code ec)
--> FileErrorInfo` — convenience to produce a fully-populated `FileErrorInfo`
-  with the mapped `FileError`, the supplied path, and the underlying system
-  message.
-
-These helpers ensure the same mapping logic is used across Windows and POSIX
-paths (mapping `ENOENT`/`ERROR_FILE_NOT_FOUND` → `kNotFound`, permission
-errors → `kAccessDenied`, disk full/read-only/path-too-long, cancellation, etc.).
-
----
-
-## Usage in Import Pipeline
-
-```cpp
-// In AsyncImporter construction
-file_reader_ = CreateAsyncFileReader(*loop_);
-
-// In texture worker
-auto bytes_result = co_await file_reader_->ReadFile(texture_path);
-if (!bytes_result) {
-  result.status = TextureWorkStatus::kFailed;
-  result.error_message = bytes_result.error().ToString();
-  co_await results_writer->Send(std::move(result));
-  continue;
-}
-
-auto cooked = co_await CookTextureAsync(*bytes_result, ...);
-```
-
----
-
-## See Also
-
-- [async_import_pipeline_v2.md](async_import_pipeline_v2.md) - Main architecture
-- [texture_work_pipeline_v2.md](texture_work_pipeline_v2.md) - Texture pipeline
+Each emitter starts its writes as tasks of the import session's nursery
+(`WriteGroup`), keeps the first error, and `Finalize` joins them. Cancelling
+the session cancels the writes through the driver.

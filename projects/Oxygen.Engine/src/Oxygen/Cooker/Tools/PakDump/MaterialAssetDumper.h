@@ -19,6 +19,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::pakdump {
 
@@ -39,27 +40,27 @@ public:
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
     asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
-    const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
+    const auto data = asset_dump_helpers::TryDescriptorBytes(pak, entry);
     if (!data) {
       ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
-    const auto header = asset_dump_helpers::TryReadAssetHeader(*data);
+    const auto header
+      = serio::CopyAt<oxygen::data::pak::core::AssetHeader>(*data);
     if (!header
       || header->version != oxygen::data::pak::render::kMaterialAssetVersion) {
       ctx.Out()
         << "    Unsupported material descriptor version; re-cook the asset\n\n";
       co_return;
     }
-    if (data->size() < sizeof(MaterialAssetDesc)) {
+    const auto mat_read = serio::CopyAt<MaterialAssetDesc>(*data);
+    if (!mat_read) {
       ctx.Out() << "    MaterialAssetDesc: (insufficient data)\n\n";
       co_return;
     }
-
-    MaterialAssetDesc mat {};
-    std::memcpy(&mat, data->data(), sizeof(mat));
+    const auto& mat = *mat_read;
 
     asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), mat.header,
       asset_dump_helpers::DescriptorString(
@@ -196,13 +197,14 @@ public:
 
     size_t offset = sizeof(MaterialAssetDesc);
     for (size_t i = 0; i < num_refs; ++i) {
-      ShaderReferenceDesc shader_ref {};
-      if (!asset_dump_helpers::ReadStructAt(
-            *data, offset, sizeof(shader_ref), &shader_ref)) {
+      const auto shader_ref_read = serio::CopyAt<ShaderReferenceDesc>(
+        *data, serio::ByteOffset { offset });
+      if (!shader_ref_read) {
         ctx.Out() << "      [" << i
                   << "] ShaderReferenceDesc: (insufficient data)\n";
         break;
       }
+      const auto& shader_ref = *shader_ref_read;
 
       ctx.Out() << "      [" << i << "] ShaderReferenceDesc:\n";
       PrintUtils::Field(

@@ -5,17 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <bit>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <functional>
 #include <memory>
 #include <numbers>
-#include <utility>
 #include <vector>
 
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Resources/CubeIlluminance.h>
@@ -24,7 +22,6 @@
 namespace {
 
 using oxygen::Format;
-using oxygen::TextureType;
 using oxygen::vortex::resources::CalibrationScale;
 using oxygen::vortex::resources::MeasureCubeIlluminance;
 
@@ -41,43 +38,23 @@ auto MakeCube(const std::uint32_t size,
   const Format format = Format::kRGBA32Float, const std::uint32_t packed = 0U)
   -> std::shared_ptr<oxygen::data::TextureResource>
 {
-  const auto texel_bytes = format == Format::kRGBA32Float ? 16U : 4U;
-  namespace pak = oxygen::data::pak;
-  auto desc = pak::core::TextureResourceDesc {};
-  desc.texture_type = static_cast<std::uint8_t>(TextureType::kTextureCube);
-  desc.width = desc.height = size;
-  desc.depth = desc.mip_levels = 1U;
-  desc.array_layers = 6U;
-  desc.format = static_cast<std::uint8_t>(format);
-  desc.alignment = 256U;
-  const auto face_bytes = size * size * texel_bytes;
-  auto bytes = std::vector<std::uint8_t>(6U * face_bytes);
-  auto layouts = std::vector<pak::render::SubresourceLayout> {};
-  for (auto face = 0U; face < 6U; ++face) {
-    for (auto y = 0U; y < size; ++y) {
-      for (auto x = 0U; x < size; ++x) {
-        auto* dst
-          = bytes.data() + (face * face_bytes) + ((y * size + x) * texel_bytes);
-        if (format == Format::kRGBA32Float) {
-          const auto rgb = radiance(face, x, y);
-          const std::array<float, 4> texel { rgb[0], rgb[1], rgb[2], 1.0F };
-          std::memcpy(dst, texel.data(), sizeof(texel));
-        } else {
-          std::memcpy(dst, &packed, sizeof(packed));
-        }
-      }
-    }
-    layouts.push_back({
-      .offset_bytes = face * face_bytes,
-      .row_pitch_bytes = size * texel_bytes,
-      .size_bytes = face_bytes,
-    });
+  const auto shape = oxygen::vortex::testing::CubeShape(size, format);
+  if (format == Format::kRGBA32Float) {
+    return oxygen::vortex::testing::MakeSyntheticTexture(shape,
+      [&radiance](const std::uint32_t face, const std::uint32_t x,
+        const std::uint32_t y) -> std::array<float, 4> {
+        const auto rgb = radiance(face, x, y);
+        return { rgb[0], rgb[1], rgb[2], 1.0F };
+      });
   }
-  auto payload = oxygen::vortex::testing::detail::BuildV4TexturePayload(
-    desc, layouts, bytes);
-  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
-  return std::make_shared<oxygen::data::TextureResource>(
-    desc, std::move(payload));
+  const auto texel = std::bit_cast<std::array<std::uint8_t, 4>>(packed);
+  const auto count = std::size_t { 6U } * size * size;
+  auto texels = std::vector<std::uint8_t> {};
+  texels.reserve(count * texel.size());
+  for (std::size_t i = 0; i < count; ++i) {
+    texels.insert(texels.end(), texel.begin(), texel.end());
+  }
+  return oxygen::vortex::testing::MakeSyntheticTexture(shape, texels);
 }
 
 NOLINT_TEST(CubeIlluminanceTest, UniformSkyDeliversPiTimesItsLuminance)
@@ -87,7 +64,7 @@ NOLINT_TEST(CubeIlluminanceTest, UniformSkyDeliversPiTimesItsLuminance)
 
   const auto measured = MeasureCubeIlluminance(*cube);
 
-  ASSERT_TRUE(measured.has_value());
+  ASSERT_HAS_VALUE(measured);
   // Per-texel midpoint solid angles at 32 texels per face stay within 0.2%.
   constexpr auto kExpected = 2.0F * std::numbers::pi_v<float>;
   EXPECT_NEAR(*measured, kExpected, kExpected * 2.0e-3F);
@@ -102,7 +79,7 @@ NOLINT_TEST(CubeIlluminanceTest, OnlyTheUpperHemisphereCounts)
 
   const auto measured = MeasureCubeIlluminance(*cube);
 
-  ASSERT_TRUE(measured.has_value());
+  ASSERT_HAS_VALUE(measured);
   EXPECT_FLOAT_EQ(*measured, 0.0F);
 }
 
@@ -122,9 +99,9 @@ NOLINT_TEST(CubeIlluminanceTest, PackedFloatCubesAreMeasured)
   const auto e5 = MeasureCubeIlluminance(
     *MakeCube(32U, none, Format::kR9G9B9E5Float, kR9G9B9E5Two));
 
-  ASSERT_TRUE(r11.has_value());
+  ASSERT_HAS_VALUE(r11);
   EXPECT_NEAR(*r11, kExpected, kExpected * 2.0e-3F);
-  ASSERT_TRUE(e5.has_value());
+  ASSERT_HAS_VALUE(e5);
   EXPECT_NEAR(*e5, kExpected, kExpected * 2.0e-3F);
 }
 

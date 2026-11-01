@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 #include <Oxygen/Base/Filesystem.h>
@@ -23,11 +24,24 @@
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Serio/IoDriver.h>
 
 namespace oxygen::content {
 
 struct VirtualPathResolver::Impl final {
+  //! Paks open their payload file through it; a resolver reads no payload,
+  //! and has no loop, so the driver is inline.
+  std::shared_ptr<serio::IoDriver> driver = MakeInlineDriver();
   internal::ContentSourceRegistry sources;
+
+  static auto MakeInlineDriver() -> std::shared_ptr<serio::IoDriver>
+  {
+    auto driver = serio::IoDriver::CreateInline();
+    if (!driver) {
+      throw std::system_error(driver.error(), "Create the resolver IO driver");
+    }
+    return std::make_shared<serio::IoDriver>(std::move(driver).value());
+  }
 };
 
 VirtualPathResolver::VirtualPathResolver()
@@ -64,7 +78,8 @@ auto VirtualPathResolver::AddPakFile(const std::filesystem::path& pak_path)
   std::filesystem::path normalized
     = std::filesystem::weakly_canonical(pak_path);
 
-  auto source = std::make_shared<internal::PakFileSource>(normalized, false);
+  auto source = std::make_shared<internal::PakFileSource>(
+    normalized, false, impl_->driver);
   static_cast<void>(impl_->sources.MountPak(std::move(normalized),
     std::move(source), internal::ContentSourceRegistry::MountMode::kAppend));
 }

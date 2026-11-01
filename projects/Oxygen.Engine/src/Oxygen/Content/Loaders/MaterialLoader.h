@@ -421,7 +421,10 @@ inline auto LoadMaterialAsset(LoaderContext context)
   auto material_asset
     = std::make_unique<data::MaterialAsset>(context.current_asset_key, desc,
       std::move(shader_refs), std::vector<ResourceKey> {},
-      data::SourceOrigin { context.source_key, context.source_instance });
+      data::SourceOrigin {
+        .key = context.source_key,
+        .instance = context.source_instance,
+      });
   material_asset->SetAssetName(
     ResolveDescriptorString(strings, desc.header.name_offset, "asset name"));
 

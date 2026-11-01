@@ -26,10 +26,12 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -50,6 +52,11 @@ struct WriteReservation {
   uint64_t reservation_start = 0;
   uint64_t aligned_offset = 0;
   uint64_t padding_size = 0;
+};
+
+struct WriteRangeRequest {
+  uint64_t alignment = 0;
+  uint64_t payload_size = 0;
 };
 
 struct TextureTableTraits {
@@ -147,7 +154,7 @@ struct PhysicsTableTraits {
     signature.append(std::to_string(static_cast<uint32_t>(desc.format)));
     signature.append(";n=");
     signature.append(std::to_string(desc.size_bytes));
-    if (std::any_of(std::begin(desc.content_hash), std::end(desc.content_hash),
+    if (std::ranges::any_of(desc.content_hash,
           [](const uint8_t byte) -> bool { return byte != 0U; })) {
       signature.append(";h=");
       signature.append(
@@ -168,11 +175,12 @@ public:
     Reservation reservation {};
   };
 
-  //! Loads the table of `cooked_root` held by `storage`; payloads and the
-  //! table are written through `file_writer`.
-  ResourceTableAggregator(IAsyncFileWriter& file_writer,
-    cooked::CookerStorage& storage, const std::filesystem::path& cooked_root)
-    : file_writer_(file_writer)
+  //! Loads the table of `cooked_root` held by `storage`. The table is
+  //! published and the data file is opened through `storage`, awaited on
+  //! `driver`, which outlives the aggregator.
+  ResourceTableAggregator(serio::IoDriver& driver,
+    cooked::ImportStorage& storage, const std::filesystem::path& cooked_root)
+    : driver_(make_observer(&driver))
     , storage_(make_observer(&storage))
     , table_path_(cooked_root / Traits::kTableRelPath)
     , data_path_(cooked_root / Traits::kDataRelPath)
@@ -183,6 +191,8 @@ public:
     LoadExistingTable();
     EnsureSentinelAtZero();
   }
+
+  ~ResourceTableAggregator() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(ResourceTableAggregator)
   OXYGEN_MAKE_NON_MOVABLE(ResourceTableAggregator)
@@ -205,7 +215,7 @@ public:
 
     EnsureTableFileExists();
     const uint32_t index = next_index_++;
-    auto [descriptor, reservation] = builder();
+    auto [descriptor, reservation] = std::forward<Builder>(builder)();
     table_.push_back(descriptor);
     index_by_signature_.emplace(signature, index);
 
@@ -257,17 +267,16 @@ public:
       co_return false;
     }
 
-    auto result
-      = co_await file_writer_.Write(table_path_, std::span(stream.Data()),
-        WriteOptions { .create_directories = true, .overwrite = true });
-
-    if (!result.has_value()) {
-      LOG_F(ERROR, "ResourceTableAggregator: write failed: {}",
-        result.error().ToString());
+    const auto published = co_await storage_->PublishAsync(
+      *driver_, table_path_, std::span<const std::byte>(stream.Data()));
+    if (!published) {
+      LOG_F(ERROR, "ResourceTableAggregator: failed to write '{}': {}",
+        table_path_.string(), published.error().message());
       co_return false;
     }
 
-    DLOG_F(INFO, "ResourceTableAggregator: wrote {} bytes", result.value());
+    DLOG_F(
+      INFO, "ResourceTableAggregator: wrote {} bytes", stream.Data().size());
     written_ = LooseCookedFileDigest {
       .size = stream.Data().size(),
       .sha256 = base::ComputeSha256(stream.Data()),
@@ -290,18 +299,20 @@ public:
 
   auto TablePath() const -> const std::filesystem::path& { return table_path_; }
 
-  auto ReserveDataRange(const uint64_t alignment, const uint64_t payload_size)
-    -> WriteReservation
+  auto ReserveDataRange(const WriteRangeRequest request) -> WriteReservation
   {
     uint64_t current_size = data_file_size_.load(std::memory_order_acquire);
     uint64_t aligned_offset = 0;
     uint64_t new_size = 0;
 
-    do {
-      aligned_offset = AlignUp(current_size, alignment);
-      new_size = aligned_offset + payload_size;
-    } while (!data_file_size_.compare_exchange_weak(
-      current_size, new_size, std::memory_order_acq_rel));
+    while (true) {
+      aligned_offset = AlignUp(current_size, request.alignment);
+      new_size = aligned_offset + request.payload_size;
+      if (data_file_size_.compare_exchange_weak(
+            current_size, new_size, std::memory_order_acq_rel)) {
+        break;
+      }
+    }
 
     return {
       .reservation_start = current_size,
@@ -314,6 +325,30 @@ public:
   {
     return data_file_size_.load(std::memory_order_acquire);
   }
+
+  //! The data file, opened on first use and held until the aggregator ends.
+  /*!
+   Emitters await `AsyncWriteAt` on it at the ranges `ReserveDataRange`
+   reserved. The file is created when missing and never truncated, and it is
+   open for writes while the aggregator lives.
+
+   @return The device, or the error opening it; the pointer stays valid until
+           the aggregator is destroyed.
+  */
+  [[nodiscard]] auto DataFile() -> Result<serio::AnyAsyncDevice*>
+  {
+    std::scoped_lock lock(data_file_mutex_);
+    if (!data_file_) {
+      auto opened = storage_->OpenData(*driver_, data_path_);
+      if (!opened) {
+        return ::oxygen::Err(opened.error());
+      }
+      data_file_.emplace(std::move(opened).value());
+    }
+    return ::oxygen::Ok(&*data_file_);
+  }
+
+  auto DataPath() const -> const std::filesystem::path& { return data_path_; }
 
   [[nodiscard]] auto TryGetDescriptor(uint32_t index) const
     -> std::optional<Descriptor>
@@ -413,11 +448,13 @@ private:
       static_cast<uint32_t>(table_.size()), std::memory_order_release);
   }
 
-  IAsyncFileWriter& file_writer_;
-  observer_ptr<cooked::CookerStorage> storage_;
+  observer_ptr<serio::IoDriver> driver_;
+  observer_ptr<cooked::ImportStorage> storage_;
   std::filesystem::path table_path_;
   std::filesystem::path data_path_;
   mutable std::mutex mutex_;
+  std::mutex data_file_mutex_;
+  std::optional<serio::AnyAsyncDevice> data_file_;
   std::vector<Descriptor> table_;
   std::unordered_map<std::string, uint32_t> index_by_signature_;
   std::atomic<uint32_t> next_index_ { 0 };

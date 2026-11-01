@@ -42,16 +42,18 @@ public:
   class DescriptorEditGuard;
   struct Publication {
     data::SourceKey source_key {};
-    std::optional<LooseCookedWriteResult> write_result {};
+    std::optional<LooseCookedWriteResult> write_result;
   };
 
   //! Keeps the writers of cooked roots held by `storage`.
   OXGN_COOK_API explicit LooseCookedIndexRegistry(
-    observer_ptr<cooked::CookerStorage> storage);
+    observer_ptr<cooked::ImportStorage> storage);
+
+  ~LooseCookedIndexRegistry() = default;
 
   //! The file system every writer of this registry goes through.
   OXGN_COOK_NDAPI auto Storage() const noexcept
-    -> observer_ptr<cooked::CookerStorage>;
+    -> observer_ptr<cooked::ImportStorage>;
 
   OXYGEN_MAKE_NON_COPYABLE(LooseCookedIndexRegistry)
   OXYGEN_MAKE_NON_MOVABLE(LooseCookedIndexRegistry)
@@ -115,30 +117,30 @@ public:
 
 private:
   struct Completion {
-    co::Event ready {};
+    co::Event ready;
     data::SourceKey source_key {};
-    std::exception_ptr failure {};
+    std::exception_ptr failure;
     bool aborted = false;
   };
 
   struct Entry {
     std::mutex mutex;
-    std::unique_ptr<LooseCookedWriter> writer {};
+    std::unique_ptr<LooseCookedWriter> writer;
     uint32_t active_sessions = 0;
     bool aborted = false;
-    std::optional<data::SourceKey> source_key {};
-    std::shared_ptr<Completion> completion {};
+    std::optional<data::SourceKey> source_key;
+    std::shared_ptr<Completion> completion;
     std::unordered_map<std::string, std::shared_ptr<co::Semaphore>>
       descriptor_locks;
   };
 
-  auto NormalizeKey(const std::filesystem::path& cooked_root) const
-    -> std::string;
+  [[nodiscard]] auto NormalizeKey(
+    const std::filesystem::path& cooked_root) const -> std::string;
 
   auto GetEntry(const std::filesystem::path& cooked_root)
     -> std::shared_ptr<Entry>;
 
-  observer_ptr<cooked::CookerStorage> storage_;
+  observer_ptr<cooked::ImportStorage> storage_;
   std::mutex mutex_;
   std::unordered_map<std::string, std::shared_ptr<Entry>> entries_;
 };

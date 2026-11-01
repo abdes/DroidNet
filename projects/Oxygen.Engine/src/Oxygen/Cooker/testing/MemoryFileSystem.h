@@ -6,14 +6,17 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <new>
 #include <optional>
 #include <set>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -24,8 +27,12 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/MemoryFile.h>
+#include <Oxygen/Serio/Operation.h>
 #include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Types.h>
 
@@ -39,7 +46,7 @@ namespace oxygen::cooker::testing {
  folder adds its parent folders. Nothing is a link, so a path's canonical
  spelling is its lexically normal one.
 */
-class MemoryFileSystem final : public content::cooked::CookerStorage,
+class MemoryFileSystem final : public content::cooked::ImportStorage,
                                public content::import::IMountFileSystem {
 public:
   //! Adds a folder and its parents.
@@ -129,6 +136,41 @@ public:
       std::make_unique<Publication>(*this, path)));
   }
 
+  //! Stores `bytes` as the file `path`, as `Publish` and `Commit` do; the
+  //! awaited write completes without suspending, so `driver` is not used.
+  [[nodiscard]] auto PublishAsync(serio::IoDriver& /*driver*/,
+    std::filesystem::path path, const std::span<const std::byte> bytes)
+    -> co::Co<Result<void>> override
+  {
+    if (const auto it = unpublishable_.find(Key(path));
+      it != unpublishable_.end()) {
+      co_return ::oxygen::Err(it->second);
+    }
+    AddFile(path, bytes);
+    co_return Result<void> {};
+  }
+
+  //! A device over the stored bytes of the file `path`, created empty when
+  //! missing. Writes land in the file system, so `Open`, `SizeOf` and `Bytes`
+  //! see them; the device must not outlive the file system.
+  [[nodiscard]] auto OpenData(serio::IoDriver& /*driver*/,
+    const std::filesystem::path& path) -> Result<serio::AnyAsyncDevice> override
+  {
+    if (!files_.contains(Key(path))) {
+      AddFile(path, std::span<const std::byte> {});
+    }
+    return ::oxygen::Ok(serio::AnyAsyncDevice(DataFile(*this, Key(path))));
+  }
+
+  //! Makes writes through a device `OpenData` returned for `path` fail with
+  //! `error`, as a full volume does.
+  auto FailDataWrites(const std::filesystem::path& path,
+    const std::error_code error
+    = serio::make_error_code(serio::Error::kNoSpace)) -> void
+  {
+    unwritable_data_.insert_or_assign(Key(path), error);
+  }
+
   [[nodiscard]] auto Remove(const std::filesystem::path& path)
     -> Result<void> override
   {
@@ -167,19 +209,20 @@ public:
   [[nodiscard]] auto Move(const std::filesystem::path& from,
     const std::filesystem::path& to) -> Result<void> override
   {
+    // The errors of `serio::MoveFileOver`.
     const auto it = files_.find(Key(from));
     if (it == files_.end()) {
-      return ::oxygen::Err(
-        std::make_error_code(std::errc::no_such_file_or_directory));
+      return ::oxygen::Err(folders_.contains(Key(from))
+          ? serio::make_error_code(serio::Error::kIsDirectory)
+          : serio::make_error_code(serio::Error::kNotFound));
     }
     const auto key = Key(to);
     if (folders_.contains(key)) {
-      return ::oxygen::Err(std::make_error_code(std::errc::is_a_directory));
+      return ::oxygen::Err(serio::make_error_code(serio::Error::kIsDirectory));
     }
     if (const auto parent = std::filesystem::path(key).parent_path();
       !parent.empty() && !folders_.contains(Key(parent))) {
-      return ::oxygen::Err(
-        std::make_error_code(std::errc::no_such_file_or_directory));
+      return ::oxygen::Err(serio::make_error_code(serio::Error::kNotFound));
     }
     if (const auto failure = unmovable_.find(Key(from));
       failure != unmovable_.end()) {
@@ -189,6 +232,27 @@ public:
     files_.erase(it);
     files_.insert_or_assign(key, std::move(bytes));
     return {};
+  }
+
+  //! An in-process lock per path: threads of a test exclude each other as
+  //! processes do on the real file system. The lock file is added as an empty
+  //! file, as the real file system creates it.
+  [[nodiscard]] auto LockExclusive(const std::filesystem::path& path)
+    -> Result<std::unique_ptr<content::cooked::StorageLock>> override
+  {
+    auto* mutex = [this, &path] -> std::mutex* {
+      const std::scoped_lock guard(locks_mutex_);
+      if (!files_.contains(Key(path))) {
+        AddFile(path, std::span<const std::byte> {});
+      }
+      auto& slot = locks_[Key(path)];
+      if (!slot) {
+        slot = std::make_unique<std::mutex>();
+      }
+      return slot.get();
+    }();
+    return ::oxygen::Ok(std::unique_ptr<content::cooked::StorageLock>(
+      std::make_unique<HeldMutex>(*mutex)));
   }
 
   [[nodiscard]] auto SizeOf(const std::filesystem::path& path) const
@@ -216,6 +280,112 @@ public:
   }
 
 private:
+  //! A held in-process lock of one path.
+  class HeldMutex final : public content::cooked::StorageLock {
+  public:
+    explicit HeldMutex(std::mutex& mutex)
+      : lock_(mutex)
+    {
+    }
+
+  private:
+    std::unique_lock<std::mutex> lock_;
+  };
+
+  //! The device `OpenData` hands out: it reads and writes the stored bytes of
+  //! one file, growing them as `serio::MemoryFile` does.
+  class DataFile {
+  public:
+    DataFile(MemoryFileSystem& file_system, std::string key) noexcept
+      : file_system_(make_observer(&file_system))
+      , key_(std::move(key))
+    {
+    }
+
+    [[nodiscard]] auto Size() const noexcept -> Result<serio::ByteCount>
+    {
+      return ::oxygen::Ok(serio::CountOf(Stored().size()));
+    }
+
+    [[nodiscard]] auto ReadAt(const serio::ByteOffset at,
+      const std::span<std::byte> out) const noexcept -> Result<serio::ByteCount>
+    {
+      const auto stored = Stored();
+      if (at.get() >= stored.size()) {
+        return ::oxygen::Ok(serio::ByteCount { 0 });
+      }
+      const auto start = static_cast<size_t>(at.get());
+      const auto count = std::min(out.size(), stored.size() - start);
+      std::ranges::copy(stored.subspan(start, count), out.begin());
+      return ::oxygen::Ok(serio::CountOf(count));
+    }
+
+    //! Writes all of `in` at `at`, growing the file; the gap reads as zero.
+    [[nodiscard]] auto WriteAt(const serio::ByteOffset at,
+      const std::span<const std::byte> in) noexcept -> Result<void>
+    {
+      if (const auto failure = file_system_->unwritable_data_.find(key_);
+        failure != file_system_->unwritable_data_.end()) {
+        return ::oxygen::Err(failure->second);
+      }
+      try {
+        auto& stored = file_system_->files_[key_];
+        const auto start = static_cast<size_t>(at.get());
+        if (stored.size() < start + in.size()) {
+          stored.resize(start + in.size());
+        }
+        std::ranges::copy(
+          in, stored.begin() + static_cast<std::ptrdiff_t>(start));
+        return {};
+      } catch (const std::bad_alloc&) {
+        return ::oxygen::Err(
+          std::make_error_code(std::errc::not_enough_memory));
+      }
+    }
+
+    [[nodiscard]] auto Reserve(const serio::ByteCount size) noexcept
+      -> Result<void>
+    {
+      try {
+        file_system_->files_[key_].reserve(static_cast<size_t>(size.get()));
+        return {};
+      } catch (const std::bad_alloc&) {
+        return ::oxygen::Err(
+          std::make_error_code(std::errc::not_enough_memory));
+      }
+    }
+
+    [[nodiscard]] auto Flush(const serio::Durability /*durability*/) noexcept
+      -> Result<void>
+    {
+      return {};
+    }
+
+    [[nodiscard]] auto AsyncReadAt(const serio::ByteOffset at,
+      const std::span<std::byte> out) const noexcept -> serio::ReadOperation
+    {
+      return serio::ReadOperation::Ready(ReadAt(at, out));
+    }
+
+    [[nodiscard]] auto AsyncWriteAt(const serio::ByteOffset at,
+      const std::span<const std::byte> in) noexcept -> serio::WriteOperation
+    {
+      return serio::WriteOperation::Ready(WriteAt(at, in));
+    }
+
+  private:
+    [[nodiscard]] auto Stored() const noexcept -> std::span<const std::byte>
+    {
+      const auto it = file_system_->files_.find(key_);
+      return it == file_system_->files_.end()
+        ? std::span<const std::byte> {}
+        : std::span<const std::byte>(it->second);
+    }
+
+    observer_ptr<MemoryFileSystem> file_system_;
+    std::string key_;
+  };
+
   //! Streams into memory; the file appears only when committed.
   class Publication final : public content::cooked::Publication {
   public:
@@ -251,7 +421,15 @@ private:
     [[nodiscard]] auto Commit() noexcept -> Result<void> override
     {
       CHECK_RESULT(stream_.Flush());
-      file_system_->AddFile(path_, file_.Bytes());
+      try {
+        file_system_->AddFile(path_, file_.Bytes());
+      } catch (const std::bad_alloc&) {
+        return ::oxygen::Err(std::errc::not_enough_memory);
+      } catch (const std::system_error& error) {
+        return ::oxygen::Err(error.code());
+      } catch (const std::length_error&) {
+        return ::oxygen::Err(std::errc::value_too_large);
+      }
       return {};
     }
 
@@ -264,14 +442,14 @@ private:
   };
 
   //! The key of a folder entry or a file entry.
-  static auto Path(const std::string& folder) -> const std::string&
+  static auto Path(const std::string& folder) -> std::string_view
   {
     return folder;
   }
 
   template <typename Value>
   static auto Path(const std::pair<const std::string, Value>& file)
-    -> const std::string&
+    -> std::string_view
   {
     return file.first;
   }
@@ -289,6 +467,10 @@ private:
   std::map<std::string, std::vector<std::byte>> files_;
   std::map<std::string, std::error_code> unpublishable_;
   std::map<std::string, std::error_code> unmovable_;
+  std::map<std::string, std::error_code> unwritable_data_;
+  //! Entries are never erased, so a held lock's mutex outlives it.
+  std::map<std::string, std::unique_ptr<std::mutex>> locks_;
+  std::mutex locks_mutex_;
 };
 
 } // namespace oxygen::cooker::testing

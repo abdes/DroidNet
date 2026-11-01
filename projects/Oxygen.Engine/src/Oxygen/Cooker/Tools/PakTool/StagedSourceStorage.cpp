@@ -8,9 +8,13 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Tools/PakTool/StagedSourceStorage.h>
+#include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -92,6 +96,12 @@ auto StagedSourceStorage::Publish(const std::filesystem::path& path)
   -> Result<std::unique_ptr<cooked::Publication>>
 {
   return storage_->Publish(path);
+}
+
+auto StagedSourceStorage::LockExclusive(const std::filesystem::path& path)
+  -> Result<std::unique_ptr<cooked::StorageLock>>
+{
+  return storage_->LockExclusive(path);
 }
 
 auto StagedSourceStorage::Remove(const std::filesystem::path& path)

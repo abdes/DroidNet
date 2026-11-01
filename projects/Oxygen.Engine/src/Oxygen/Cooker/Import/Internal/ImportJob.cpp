@@ -128,7 +128,7 @@ ImportJob::ImportJob(ImportJobParams params)
   , cancel_event_(std::move(params.cancel_event))
   , file_reader_(params.reader)
   , cooked_reader_(params.reader)
-  , file_writer_(params.writer)
+  , driver_(params.driver)
   , thread_pool_(params.thread_pool)
   , table_registry_(params.registry)
   , index_registry_(params.index_registry)
@@ -147,19 +147,14 @@ ImportJob::ImportJob(ImportJobParams params)
     source_snapshot_->RecordPreparation(preparation);
     file_reader_ = observer_ptr { source_snapshot_.get() };
   }
+  CHECK_NOTNULL_F(driver_, "ImportJob requires an IO driver");
   if (model_import_record_) {
-    CHECK_NOTNULL_F(
-      file_writer_, "Model import records require a generation writer");
-    generation_writer_ = std::move(params.generation_writer);
-    CHECK_NOTNULL_F(generation_writer_,
-      "Model import records require an isolated native writer");
-    file_writer_ = observer_ptr { generation_writer_.get() };
     CHECK_NOTNULL_F(index_registry_,
       "Model import records require the service's index registry");
     // The generation's registries share the service's file system.
     const auto storage = index_registry_->Storage();
     generation_tables_
-      = std::make_unique<ResourceTableRegistry>(*file_writer_, storage);
+      = std::make_unique<ResourceTableRegistry>(*driver_, storage);
     generation_index_ = std::make_unique<LooseCookedIndexRegistry>(storage);
     table_registry_ = observer_ptr { generation_tables_.get() };
     index_registry_ = observer_ptr { generation_index_.get() };
@@ -243,9 +238,9 @@ auto ImportJob::FileReader() const noexcept -> observer_ptr<IAsyncFileReader>
   return file_reader_;
 }
 
-auto ImportJob::FileWriter() const noexcept -> observer_ptr<IAsyncFileWriter>
+auto ImportJob::Driver() const noexcept -> observer_ptr<serio::IoDriver>
 {
-  return file_writer_;
+  return driver_;
 }
 
 auto ImportJob::ThreadPool() const noexcept -> observer_ptr<co::ThreadPool>
@@ -305,9 +300,11 @@ auto ImportJob::ProgressCallback() const noexcept
 auto ImportJob::Session() -> ImportSession&
 {
   if (!session_) {
-    session_
-      = std::make_unique<ImportSession>(request_, file_reader_, file_writer_,
-        thread_pool_, table_registry_, index_registry_, cooked_reader_);
+    DCHECK_F(
+      producer_nursery_ != nullptr, "ImportJob producer nursery is not open");
+    session_ = std::make_unique<ImportSession>(request_, file_reader_, driver_,
+      observer_ptr { producer_nursery_ }, thread_pool_, table_registry_,
+      index_registry_, cooked_reader_);
     // What finding the model's record decided is part of the import's
     // diagnostics, streamed and reported like the import's own.
     if (model_import_record_) {
@@ -392,8 +389,9 @@ auto ImportJob::AttachFingerprint(ImportReport& report) const -> void
 
 auto ImportJob::MainAsync() -> co::Co<>
 {
-  // Cancellation stops producers. The owning orchestrator stays alive to join
-  // them and then drain callbacks before destroying session-owned emitters.
+  // Cancellation stops producers, including the session's cooked writes. The
+  // owning orchestrator stays alive to join them before destroying
+  // session-owned emitters.
   co_await co::AnyOf(co::NonCancellable(RunOwnedSessionToCompletion()),
     co::UntilCancelledAnd([this] -> co::Co<> {
       RequestProducerStop();
@@ -542,26 +540,6 @@ auto ImportJob::MakeCancelledReport(const ImportRequest& request) const
     .severity = ImportSeverity::kInfo,
     .code = "import.canceled",
     .message = "Import canceled",
-    .source_path = request.source_path.string(),
-  });
-
-  return report;
-}
-
-auto ImportJob::MakeNoFileWriterReport(const ImportRequest& request) const
-  -> ImportReport
-{
-  auto report = ImportReport {};
-  report.cooked_root
-    = request.cooked_root.value_or(request.source_path.parent_path());
-  report.success = false;
-
-  report.telemetry = MakeZeroTelemetry();
-
-  report.diagnostics.push_back({
-    .severity = ImportSeverity::kError,
-    .code = "import.no_file_writer",
-    .message = "AsyncImporter has no IAsyncFileWriter configured",
     .source_path = request.source_path.string(),
   });
 

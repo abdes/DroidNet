@@ -38,4 +38,28 @@ template <AsyncReadableDevice D>
   co_return Result<void> {};
 }
 
+//! `ReadAll`, awaiting each read.
+/*!
+ @return The buffer, `Size()` bytes long; `kEndOfData` when the device ends
+         before its size, the allocation's or the device's errors otherwise.
+*/
+template <AsyncReadableDevice D>
+[[nodiscard]] auto AsyncReadAll(const D& device) -> co::Co<Result<ByteBuffer>>
+{
+  const auto size = device.Size();
+  if (!size) {
+    co_return ::oxygen::Err(size.error());
+  }
+  auto buffer = ByteBuffer::Allocate(*size);
+  if (!buffer) {
+    co_return buffer;
+  }
+  if (const auto read
+    = co_await AsyncReadExactlyAt(device, ByteOffset { 0 }, buffer->Bytes());
+    !read) {
+    co_return ::oxygen::Err(read.error());
+  }
+  co_return buffer;
+}
+
 } // namespace oxygen::serio

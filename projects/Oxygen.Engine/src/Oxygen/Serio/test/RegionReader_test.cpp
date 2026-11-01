@@ -3,39 +3,45 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
-// Covers: Content/Internal/RegionReader.h, Content/Internal/BlockingReads.h
+
+// Covers: Serio/RegionReader.h
 
 #include <array>
+#include <concepts>
 #include <cstddef>
 #include <span>
-#include <system_error>
-#include <utility>
 #include <vector>
 
-#include <Oxygen/Content/Internal/BlockingReads.h>
-#include <Oxygen/Content/Internal/RegionReader.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/ByteView.h>
 #include <Oxygen/Serio/Error.h>
 #include <Oxygen/Serio/MemoryFile.h>
+#include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Region.h>
+#include <Oxygen/Serio/RegionReader.h>
 #include <Oxygen/Serio/Testing/FaultInjectingDevice.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
-using oxygen::content::internal::BlockingReads;
-using oxygen::content::internal::RegionReader;
+using oxygen::serio::AnyReader;
 using oxygen::serio::ByteCount;
 using oxygen::serio::ByteOffset;
 using oxygen::serio::ByteRange;
 using oxygen::serio::ByteView;
+using oxygen::serio::Error;
+using oxygen::serio::MemoryFile;
 using oxygen::serio::Region;
+using oxygen::serio::RegionReader;
 using oxygen::serio::testing::BytesEqual;
 using oxygen::serio::testing::FaultInjectingDevice;
 using oxygen::serio::testing::PatternBytes;
 
-using SlowDevice = FaultInjectingDevice<oxygen::serio::MemoryFile>;
+using SlowDevice = FaultInjectingDevice<MemoryFile>;
+
+static_assert(std::derived_from<RegionReader<ByteView>, AnyReader>);
 
 //! The 32 bytes at offset 16 of `device`.
 template <class D> auto Middle(const D& device) -> Region<D>
@@ -48,7 +54,7 @@ template <class D> auto Middle(const D& device) -> Region<D>
 //! A device without a view, so its region is read through a stream buffer.
 auto Slow(const std::span<const std::byte> bytes) -> SlowDevice
 {
-  return SlowDevice(oxygen::serio::MemoryFile::FromBytes(bytes).value());
+  return SlowDevice(MemoryFile::FromBytes(bytes).value());
 }
 
 //! Positions start at the region's start, whatever its offset in the device.
@@ -80,7 +86,7 @@ NOLINT_TEST(RegionReaderTest, ReadsStopAtTheRegionEnd)
   const auto seek_past_end = reader.Seek(33);
 
   ASSERT_FALSE(past_end.has_value());
-  EXPECT_EQ(past_end.error(), oxygen::serio::Error::kTooLarge);
+  EXPECT_EQ(past_end.error(), Error::kTooLarge);
   EXPECT_FALSE(seek_past_end.has_value());
 }
 
@@ -103,44 +109,50 @@ NOLINT_TEST(RegionReaderTest, OwningReaderReadsAllOfItsDevice)
   const auto bytes = PatternBytes(48);
   const auto reader = RegionReader<SlowDevice>::Owning(Slow(bytes));
 
-  const auto read = reader->ReadBlob(bytes.size());
+  ASSERT_HAS_VALUE(reader);
+  const auto read = (*reader)->ReadBlob(bytes.size());
 
   ASSERT_HAS_VALUE(read);
   EXPECT_THAT(*read, BytesEqual(bytes));
-  EXPECT_EQ(reader->Remaining(), ByteCount { 0 });
+  EXPECT_EQ((*reader)->Remaining(), ByteCount { 0 });
 }
 
-//! An awaited read of the adapter is ready at once, with the blocking read's
-//! result.
-NOLINT_TEST(BlockingReadsTest, AwaitedReadsCompleteAtOnce)
+//! An owning reader of a device whose size cannot be read reports that error
+//! instead of throwing.
+NOLINT_TEST(RegionReaderTest, OwningReportsTheDevicesSizeError)
+{
+  //! Fails to report its size, as a file on a lost network share does.
+  struct UnsizedDevice {
+    [[nodiscard]] auto Size() const noexcept -> oxygen::Result<ByteCount>
+    {
+      return ::oxygen::Err(make_error_code(Error::kIo));
+    }
+    [[nodiscard]] auto ReadAt(ByteOffset /*at*/,
+      std::span<std::byte> /*out*/) const noexcept -> oxygen::Result<ByteCount>
+    {
+      return ::oxygen::Ok(ByteCount { 0 });
+    }
+  };
+
+  const auto reader = RegionReader<UnsizedDevice>::Owning(UnsizedDevice {});
+
+  ASSERT_FALSE(reader);
+  EXPECT_EQ(reader.error(), Error::kIo);
+}
+
+//! The reader is usable through the AnyReader interface.
+NOLINT_TEST(RegionReaderTest, ReadsThroughTheAnyReaderInterface)
 {
   const auto bytes = PatternBytes(64);
-  const auto device = BlockingReads(Slow(bytes));
-  auto out = std::array<std::byte, 8> {};
+  const auto device = ByteView(bytes);
+  auto reader = RegionReader<ByteView>(Middle(device));
+  AnyReader& any = reader;
 
-  auto read = device.AsyncReadAt(ByteOffset { 60 }, out);
+  const auto read = any.ReadBlob(8);
 
-  ASSERT_TRUE(read.await_ready());
-  const auto result = read.await_resume();
-  ASSERT_HAS_VALUE(result);
-  EXPECT_EQ(*result, ByteCount { 4 });
-  EXPECT_THAT(std::span(out).first(4), BytesEqual(std::span(bytes).last(4)));
-}
-
-//! A failed blocking read is the awaited read's failure.
-NOLINT_TEST(BlockingReadsTest, AwaitedReadsReportTheDeviceError)
-{
-  const auto bytes = PatternBytes(16);
-  auto slow = Slow(bytes);
-  slow.FailOn(oxygen::serio::testing::FaultOperation::kRead, 0,
-    std::make_error_code(std::errc::io_error));
-  const auto device = BlockingReads(std::move(slow));
-  auto out = std::array<std::byte, 4> {};
-
-  auto read = device.AsyncReadAt(ByteOffset { 0 }, out);
-
-  ASSERT_TRUE(read.await_ready());
-  EXPECT_FALSE(read.await_resume().has_value());
+  ASSERT_HAS_VALUE(read);
+  EXPECT_THAT(*read, BytesEqual(std::span(bytes).subspan(16, 8)));
+  EXPECT_EQ(any.Remaining(), ByteCount { 24 });
 }
 
 } // namespace

@@ -32,6 +32,7 @@
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/StableId.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
@@ -139,8 +140,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    }));
   ASSERT_HAS_VALUE(report);
   ASSERT_TRUE(report->success)
     << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
@@ -181,8 +186,10 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
         json {
           { "name", "LOD0" },
           { "mesh_type", "procedural" },
-          { "procedural",
-            { { "generator", "Cube" }, { "mesh_name", "Cube" } } },
+          {
+            "procedural",
+            { { "generator", "Cube" }, { "mesh_name", "Cube" } },
+          },
           {
             "submeshes",
             json::array({
@@ -208,8 +215,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    }));
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
   EXPECT_TRUE(std::ranges::any_of(report->diagnostics,
@@ -281,8 +292,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    }));
   ASSERT_HAS_VALUE(report);
   ASSERT_TRUE(report->success)
     << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
@@ -298,9 +313,11 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   ASSERT_GE(
     descriptor_bytes.size(), sizeof(data::pak::geometry::GeometryAssetDesc));
 
-  const auto geometry_desc
-    = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(
-      descriptor_bytes, 0U);
+  const auto geometry_desc_read
+    = oxygen::serio::CopyAt<data::pak::geometry::GeometryAssetDesc>(
+      std::span { descriptor_bytes });
+  ASSERT_HAS_VALUE(geometry_desc_read);
+  const auto& geometry_desc = *geometry_desc_read;
   EXPECT_FLOAT_EQ(geometry_desc.bounding_box_min[0], -5.0F);
   EXPECT_FLOAT_EQ(geometry_desc.bounding_box_min[1], -5.0F);
   EXPECT_FLOAT_EQ(geometry_desc.bounding_box_min[2], 0.0F);
@@ -354,8 +371,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
     const auto doc = MakeCapsuleDescriptor(test_case.params);
     WriteText(source_path, doc.dump(2));
-    const auto report = SubmitAndWait(
-      service, MakeGeometryRequest(source_path, cooked_root, doc));
+    const auto report = SubmitAndWait(service,
+      MakeGeometryRequest({
+        .source_path = source_path,
+        .cooked_root = cooked_root,
+        .descriptor_doc = doc,
+      }));
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
     ASSERT_EQ(report->geometry_written, 1U);
@@ -367,29 +388,39 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     constexpr auto params_offset
       = mesh_offset + sizeof(data::pak::geometry::MeshDesc);
     ASSERT_GE(bytes.size(), params_offset + 16U);
-    const auto mesh_desc
-      = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, mesh_offset);
+    const auto mesh_desc_read
+      = oxygen::serio::CopyAt<data::pak::geometry::MeshDesc>(
+        std::span { bytes }, oxygen::serio::ByteOffset { mesh_offset });
+    ASSERT_HAS_VALUE(mesh_desc_read);
+    const auto& mesh_desc = *mesh_desc_read;
     EXPECT_TRUE(mesh_desc.IsProcedural());
     EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
                 bytes, mesh_desc.name_offset),
       "Capsule/Capsule");
     EXPECT_EQ(mesh_desc.info.procedural.params_size, 16U);
-    EXPECT_EQ(ReadStructAt<uint32_t>(bytes, params_offset),
-      test_case.hemisphere_segments);
-    EXPECT_EQ(ReadStructAt<uint32_t>(bytes, params_offset + 4U),
-      test_case.radial_segments);
-    EXPECT_FLOAT_EQ(
-      ReadStructAt<float>(bytes, params_offset + 8U), test_case.height);
-    EXPECT_FLOAT_EQ(
-      ReadStructAt<float>(bytes, params_offset + 12U), test_case.radius);
+    const auto hemisphere_segments = oxygen::serio::CopyAt<uint32_t>(
+      std::span { bytes }, oxygen::serio::ByteOffset { params_offset });
+    const auto radial_segments = oxygen::serio::CopyAt<uint32_t>(
+      std::span { bytes }, oxygen::serio::ByteOffset { params_offset + 4U });
+    const auto height = oxygen::serio::CopyAt<float>(
+      std::span { bytes }, oxygen::serio::ByteOffset { params_offset + 8U });
+    const auto radius = oxygen::serio::CopyAt<float>(
+      std::span { bytes }, oxygen::serio::ByteOffset { params_offset + 12U });
+    ASSERT_HAS_VALUE(hemisphere_segments);
+    ASSERT_HAS_VALUE(radial_segments);
+    ASSERT_HAS_VALUE(height);
+    ASSERT_HAS_VALUE(radius);
+    EXPECT_EQ(*hemisphere_segments, test_case.hemisphere_segments);
+    EXPECT_EQ(*radial_segments, test_case.radial_segments);
+    EXPECT_FLOAT_EQ(*height, test_case.height);
+    EXPECT_FLOAT_EQ(*radius, test_case.radius);
 
     auto stream = serio::ReadOnlyMemoryStream(std::span(bytes));
     auto reader = serio::Reader(stream);
     auto context = content::LoaderContext {};
     context.desc_reader = &reader;
     context.parse_only = true;
-    const auto geometry
-      = content::loaders::LoadGeometryAsset(std::move(context));
+    const auto geometry = content::loaders::LoadGeometryAsset(context);
     ASSERT_NE(geometry, nullptr);
     ASSERT_EQ(geometry->LodCount(), 1U);
     const auto& mesh = geometry->MeshAt(oxygen::data::LodIndex {});
@@ -480,8 +511,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
       doc["lod_policy"] = test_case.lod_policy;
     }
     WriteText(source_path, doc.dump(2));
-    const auto report = SubmitAndWait(
-      service, MakeGeometryRequest(source_path, cooked_root, doc));
+    const auto report = SubmitAndWait(service,
+      MakeGeometryRequest({
+        .source_path = source_path,
+        .cooked_root = cooked_root,
+        .descriptor_doc = doc,
+      }));
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
     const auto output = FindOutputByExtension(*report, ".ogeo");
@@ -493,8 +528,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     auto context = content::LoaderContext {};
     context.desc_reader = &reader;
     context.parse_only = true;
-    const auto geometry
-      = content::loaders::LoadGeometryAsset(std::move(context));
+    const auto geometry = content::loaders::LoadGeometryAsset(context);
     ASSERT_NE(geometry, nullptr);
     ASSERT_EQ(geometry->Surfaces().surfaces.size(), 1U);
     const auto& defaults = geometry->Surfaces().surfaces.front().defaults;
@@ -538,8 +572,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
     const auto doc = MakeCapsuleDescriptor(cases.at(index));
     WriteText(source_path, doc.dump(2));
-    const auto report = SubmitAndWait(
-      service, MakeGeometryRequest(source_path, cooked_root, doc));
+    const auto report = SubmitAndWait(service,
+      MakeGeometryRequest({
+        .source_path = source_path,
+        .cooked_root = cooked_root,
+        .descriptor_doc = doc,
+      }));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_EQ(report->geometry_written, 0U);
@@ -605,8 +643,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    }));
   ASSERT_HAS_VALUE(report);
   ASSERT_TRUE(report->success)
     << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
@@ -623,21 +665,29 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   constexpr auto params_offset
     = mesh_offset + sizeof(data::pak::geometry::MeshDesc);
   ASSERT_GE(descriptor_bytes.size(), params_offset + sizeof(uint32_t));
-  const auto mesh_desc = ReadStructAt<data::pak::geometry::MeshDesc>(
-    descriptor_bytes, mesh_offset);
+  const auto mesh_desc_read
+    = oxygen::serio::CopyAt<data::pak::geometry::MeshDesc>(
+      std::span { descriptor_bytes },
+      oxygen::serio::ByteOffset { mesh_offset });
+  ASSERT_HAS_VALUE(mesh_desc_read);
+  const auto& mesh_desc = *mesh_desc_read;
   EXPECT_TRUE(mesh_desc.IsProcedural());
   EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
               descriptor_bytes, mesh_desc.name_offset),
     "IcoSphere/SoftBall");
   EXPECT_EQ(mesh_desc.info.procedural.params_size, sizeof(uint32_t));
-  EXPECT_EQ(ReadStructAt<uint32_t>(descriptor_bytes, params_offset), 2U);
+  const auto param_count
+    = oxygen::serio::CopyAt<uint32_t>(std::span { descriptor_bytes },
+      oxygen::serio::ByteOffset { params_offset });
+  ASSERT_HAS_VALUE(param_count);
+  EXPECT_EQ(*param_count, 2U);
 
   auto stream = serio::ReadOnlyMemoryStream(std::span(descriptor_bytes));
   auto reader = serio::Reader(stream);
   auto context = content::LoaderContext {};
   context.desc_reader = &reader;
   context.parse_only = true;
-  const auto geometry = content::loaders::LoadGeometryAsset(std::move(context));
+  const auto geometry = content::loaders::LoadGeometryAsset(context);
   ASSERT_NE(geometry, nullptr);
   ASSERT_EQ(geometry->LodCount(), 1U);
   const auto& mesh = geometry->MeshAt(oxygen::data::LodIndex {});
@@ -714,8 +764,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    }));
   ASSERT_HAS_VALUE(report);
   ASSERT_TRUE(report->success)
     << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);

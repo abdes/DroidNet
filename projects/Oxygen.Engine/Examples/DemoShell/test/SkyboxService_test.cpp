@@ -9,11 +9,11 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <memory>
+#include <span>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -31,6 +31,8 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::engine::internal {
@@ -83,14 +85,15 @@ namespace {
       content::CookedResourceData<data::TextureResource> cooked,
       TextureCallback on_complete) -> void override
     {
-      data::TextureResource::DescT desc;
-      ASSERT_GE(cooked.bytes.size(), sizeof(desc));
-      std::memcpy(&desc, cooked.bytes.data(), sizeof(desc));
+      const auto read = serio::CopyAt<data::TextureResource::DescT>(
+        std::as_bytes(cooked.bytes));
+      ASSERT_HAS_VALUE(read);
+      const auto desc = *read;
       const auto payload = cooked.bytes.subspan(sizeof(desc));
       requests.push_back(Request {
         .key = cooked.key,
         .texture = std::make_shared<data::TextureResource>(
-          desc, std::vector<std::uint8_t>(payload.begin(), payload.end())),
+          desc, serio::ByteBuffer::CopyOf(std::as_bytes(payload)).value()),
         .callback = std::move(on_complete),
       });
     }

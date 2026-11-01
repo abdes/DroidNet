@@ -12,8 +12,8 @@
 #include <fstream>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string_view>
-#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -38,6 +38,7 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
@@ -246,7 +247,9 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptInstancesAreIsolated)
                              "= counter + 1\nreturn counter";
   const auto bytes_vec = std::vector<uint8_t>(source.begin(), source.end());
   constexpr uint64_t kTestId = 123;
-  auto blob = ScriptSourceBlob::FromOwned(bytes_vec,
+  auto blob = ScriptSourceBlob::FromOwned(
+    oxygen::serio::ByteBuffer::CopyOf(std::as_bytes(std::span(bytes_vec)))
+      .value(),
     oxygen::data::pak::scripting::ScriptLanguage::kLuau,
     oxygen::data::pak::scripting::ScriptCompression::kNone, kTestId,
     oxygen::scripting::ScriptBlobOrigin::kExternalFile,

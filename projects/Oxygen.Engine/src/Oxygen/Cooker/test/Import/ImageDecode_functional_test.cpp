@@ -6,11 +6,14 @@
 
 // Covers: Import/Internal/ImageDecode.cpp
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
+#include <Oxygen/Cooker/Import/TextureImportError.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Testing/GTest.h>
@@ -22,6 +25,8 @@ using oxygen::Format;
 using oxygen::content::import::DecodeImageRgba8FromFile;
 using oxygen::content::import::DecodeOptions;
 using oxygen::content::import::DecodeToScratchImage;
+using oxygen::content::import::ReadImageFile;
+using oxygen::content::import::TextureImportError;
 
 class ImageDecodeTest : public oxygen::testing::TempDirTest { };
 
@@ -31,23 +36,22 @@ class ImageDecodeTest : public oxygen::testing::TempDirTest { };
   bytes.reserve(70);
 
   const auto push_u16 = [&](const uint16_t v) -> void {
-    bytes.push_back(std::byte { static_cast<uint8_t>(v & 0xFFU) });
-    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 8) & 0xFFU) });
+    const auto value = static_cast<uint32_t>(v);
+    bytes.push_back(std::byte { static_cast<uint8_t>(value & 0xFFU) });
+    bytes.push_back(std::byte { static_cast<uint8_t>((value >> 8U) & 0xFFU) });
   };
   const auto push_u32 = [&](const uint32_t v) -> void {
     bytes.push_back(std::byte { static_cast<uint8_t>(v & 0xFFU) });
-    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 8) & 0xFFU) });
-    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 16) & 0xFFU) });
-    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 24) & 0xFFU) });
+    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 8U) & 0xFFU) });
+    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 16U) & 0xFFU) });
+    bytes.push_back(std::byte { static_cast<uint8_t>((v >> 24U) & 0xFFU) });
   };
   const auto push_i32
     = [&](const int32_t v) -> void { push_u32(static_cast<uint32_t>(v)); };
-  const auto push_bgra = [&](const uint8_t b, const uint8_t g, const uint8_t r,
-                           const uint8_t a) -> void {
-    bytes.push_back(std::byte { b });
-    bytes.push_back(std::byte { g });
-    bytes.push_back(std::byte { r });
-    bytes.push_back(std::byte { a });
+  const auto push_bgra = [&](const std::array<uint8_t, 4>& bgra) -> void {
+    for (const auto channel : bgra) {
+      bytes.push_back(std::byte { channel });
+    }
   };
 
   constexpr uint32_t kFileSize = 14U + 40U + 16U;
@@ -74,10 +78,10 @@ class ImageDecodeTest : public oxygen::testing::TempDirTest { };
   push_u32(0U);
 
   // Pixel data (BGRA), bottom-up rows.
-  push_bgra(255U, 0U, 0U, 255U);
-  push_bgra(255U, 255U, 255U, 255U);
-  push_bgra(0U, 0U, 255U, 255U);
-  push_bgra(0U, 255U, 0U, 255U);
+  push_bgra({ 255U, 0U, 0U, 255U });
+  push_bgra({ 255U, 255U, 255U, 255U });
+  push_bgra({ 0U, 0U, 255U, 255U });
+  push_bgra({ 0U, 255U, 0U, 255U });
 
   return bytes;
 }
@@ -110,6 +114,35 @@ NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImageFromFileLdrBmp)
   EXPECT_EQ(result->Meta().width, 2U);
   EXPECT_EQ(result->Meta().height, 2U);
   EXPECT_EQ(result->Meta().format, Format::kRGBA8UNorm);
+}
+
+//! An image file is read whole, as its bytes.
+NOLINT_TEST_F(ImageDecodeTest, ReadImageFileReadsTheWholeFile)
+{
+  const auto path = TempPath("image.bin");
+  const auto bytes = std::vector<std::byte>(300, std::byte { 9 });
+  oxygen::cooker::test::WriteBytes(path, bytes);
+
+  const auto read = ReadImageFile(path);
+
+  ASSERT_TRUE(read);
+  EXPECT_TRUE(std::ranges::equal(read->Bytes(), bytes));
+}
+
+//! A missing image file is kFileNotFound; an empty one cannot be decoded and
+//! is kFileReadFailed.
+NOLINT_TEST_F(ImageDecodeTest, ReadImageFileReportsMissingAndEmptyFiles)
+{
+  const auto empty = TempPath("empty.bin");
+  oxygen::cooker::test::WriteBytes(empty, std::vector<std::byte> {});
+
+  const auto missing = ReadImageFile(TempPath("missing.bin"));
+  const auto none = ReadImageFile(empty);
+
+  ASSERT_FALSE(missing);
+  EXPECT_EQ(missing.error(), TextureImportError::kFileNotFound);
+  ASSERT_FALSE(none);
+  EXPECT_EQ(none.error(), TextureImportError::kFileReadFailed);
 }
 
 } // namespace

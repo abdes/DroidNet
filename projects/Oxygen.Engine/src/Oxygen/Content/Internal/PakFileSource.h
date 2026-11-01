@@ -13,26 +13,31 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
-#include <Oxygen/Content/Internal/RegionReader.h>
 #include <Oxygen/Content/Internal/ResourceTypes.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/AsyncFile.h>
+#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/Region.h>
+#include <Oxygen/Serio/RegionReader.h>
 #include <Oxygen/Serio/Types.h>
-
-namespace oxygen::serio {
-class IoDriver;
-} // namespace oxygen::serio
 
 namespace oxygen::content::internal {
 
-//! A mounted pak: its mapped metadata and the device its payloads are awaited
-//! from, both opened when it is mounted.
+//! A mounted pak: its mapped metadata, and the file its payloads are awaited
+//! from, opened through the loader's driver.
+/*!
+ `PakFile` parses the mapping; the source owns the payload file, because only
+ the loader awaits payloads. A verified mount checks the CRC32 before the
+ source is made (`VerifyPakAsync`), so the source itself verifies only when
+ asked to by a synchronous mount.
+*/
 class PakFileSource final : public IContentSource {
 public:
   OXYGEN_TYPED(PakFileSource)
@@ -42,22 +47,21 @@ public:
   //! through it.
   PakFileSource(const std::filesystem::path& pak_path,
     const bool verify_content_hashes,
-    std::shared_ptr<serio::IoDriver> driver = {})
-    : pak_(pak_path, VerificationOf(verify_content_hashes), std::move(driver))
-    , debug_name_(pak_.FilePath().string())
+    const std::shared_ptr<serio::IoDriver>& driver)
+    // `driver` is copied: a moved argument could be emptied before
+    // `OpenPayloads` reads it, as argument order is unspecified.
+    : PakFileSource(pak_path, VerificationOf(verify_content_hashes),
+        OpenPayloads(pak_path, *driver), driver)
   {
-    Mount();
   }
 
-  //! Mounts the pak `device` holds, a contiguous device such as memory;
-  //! `name` stands for its path.
-  PakFileSource(serio::AnyDevice device, std::filesystem::path name,
-    const bool verify_content_hashes)
-    : pak_(std::move(device), std::move(name),
-        VerificationOf(verify_content_hashes))
-    , debug_name_(pak_.FilePath().string())
+  //! Mounts the pak at `pak_path`, whose payload file `payloads` was opened
+  //! through `driver` (and verified with it) before.
+  PakFileSource(const std::filesystem::path& pak_path,
+    serio::AsyncFile payloads, std::shared_ptr<serio::IoDriver> driver)
+    : PakFileSource(pak_path, PakFile::Verification::kNone, std::move(payloads),
+        std::move(driver))
   {
-    Mount();
   }
 
   ~PakFileSource() override = default;
@@ -143,7 +147,7 @@ public:
     if (!region) {
       throw std::out_of_range("PAK asset descriptor is out of bounds");
     }
-    return std::make_unique<RegionReader<serio::AnyDevice>>(*region);
+    return std::make_unique<serio::RegionReader<serio::AnyDevice>>(*region);
   }
 
   [[nodiscard]] auto ReadAssetReferenceMetadata(const data::AssetKey& key) const
@@ -181,10 +185,10 @@ public:
   {
     return VisitResourceType(
       resource_type,
-      [this]<typename T>() -> Payloads {
+      [this]<typename T> -> PayloadRegionOpt {
         return payloads_.at(kResourceTypeIndex<T>);
       },
-      []() -> Payloads { return std::nullopt; });
+      [] -> PayloadRegionOpt { return std::nullopt; });
   }
 
   [[nodiscard]] auto ResolveVirtualPath(
@@ -219,8 +223,14 @@ public:
 
   [[nodiscard]] auto Pak() const noexcept -> const PakFile& { return pak_; }
 
+  //! The device the pak's payloads are awaited from.
+  [[nodiscard]] auto Payloads() const noexcept -> const serio::AnyAsyncDevice&
+  {
+    return payload_file_;
+  }
+
 private:
-  using Payloads = std::optional<serio::Region<serio::AnyAsyncDevice>>;
+  using PayloadRegionOpt = std::optional<serio::Region<serio::AnyAsyncDevice>>;
 
   [[nodiscard]] auto ResourceRowSpace(const TypeId resource_type) const noexcept
     -> std::span<const std::byte> override
@@ -229,13 +239,37 @@ private:
     // Pak table offsets are offsets of the pak.
     return VisitResourceType(
       resource_type,
-      [this]<typename T>() -> Space {
+      [this]<typename T> -> Space {
         return pak_.HasTableOf<T>() ? pak_.Bytes() : Space {};
       },
-      []() -> Space { return {}; });
+      [] -> Space { return {}; });
   }
 
-  //! A verified mount checks the pak's CRC32 in the pass that opens it.
+  PakFileSource(const std::filesystem::path& pak_path,
+    const PakFile::Verification verification, serio::AsyncFile payloads,
+    std::shared_ptr<serio::IoDriver> driver)
+    : driver_(std::move(driver))
+    , pak_(pak_path, verification)
+    , payload_file_(std::move(payloads))
+    , debug_name_(pak_.FilePath().string())
+  {
+    Mount();
+  }
+
+  //! Opens the pak file through `driver` for its payloads.
+  static auto OpenPayloads(const std::filesystem::path& pak_path,
+    serio::IoDriver& driver) -> serio::AsyncFile
+  {
+    auto file = driver.Open(pak_path, {});
+    if (!file) {
+      LOG_F(ERROR, "Failed to open pak file '{}' for payloads: {}",
+        pak_path.string(), file.error().message());
+      throw std::system_error(file.error(), "open '" + pak_path.string() + "'");
+    }
+    return std::move(file).value();
+  }
+
+  //! A synchronous verified mount checks the pak's CRC32 as it maps it.
   static auto VerificationOf(const bool verify_content_hashes) noexcept
     -> PakFile::Verification
   {
@@ -259,7 +293,7 @@ private:
     if (!pak_.HasTableOf<T>()) {
       return;
     }
-    auto payloads = serio::Region<serio::AnyAsyncDevice>::Make(pak_.Payloads(),
+    auto payloads = serio::Region<serio::AnyAsyncDevice>::Make(payload_file_,
       {
         .offset = serio::ByteOffset { region.offset },
         .count = serio::ByteCount { region.size },
@@ -270,9 +304,13 @@ private:
     payloads_.at(kResourceTypeIndex<T>) = *payloads;
   }
 
+  //! Declared first: the driver outlives the payload file it opened.
+  std::shared_ptr<serio::IoDriver> driver_;
   PakFile pak_;
+  //! Declared before the regions that view it.
+  serio::AnyAsyncDevice payload_file_;
   std::string debug_name_;
-  std::array<Payloads, kResourceTypeCount> payloads_ {};
+  std::array<PayloadRegionOpt, kResourceTypeCount> payloads_ {};
 };
 
 } // namespace oxygen::content::internal

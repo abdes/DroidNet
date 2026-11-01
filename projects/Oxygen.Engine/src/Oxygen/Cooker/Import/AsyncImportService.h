@@ -35,7 +35,6 @@ class ThreadPool;
 namespace oxygen::content::import {
 
 class IAsyncFileReader;
-class IAsyncFileWriter;
 class ResourceTableRegistry;
 class ModelImportRecord;
 
@@ -171,11 +170,12 @@ public:
 
      * `script.asset.compiler_unavailable`.
     */
-    ScriptCompileCallback script_compile_callback {};
+    ScriptCompileCallback script_compile_callback;
 
     //! Where every job of the service reads and writes cooked roots' indexes,
-    //! tables and descriptors; payloads go through the async file writer.
-    observer_ptr<cooked::CookerStorage> cooked_storage
+    //! tables and descriptors; payload files are written through the import
+    //! loop's IO driver.
+    observer_ptr<cooked::ImportStorage> cooked_storage
       = make_observer(&cooked::RealCookerStorage());
   };
 

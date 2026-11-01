@@ -6,9 +6,7 @@
 
 #pragma once
 
-#include <cstring>
 #include <memory>
-#include <vector>
 
 #include <fmt/format.h>
 
@@ -25,7 +23,7 @@
 namespace oxygen::content::loaders {
 
 //! Loads a physics resource from a PAK file stream.
-inline auto LoadPhysicsResource(LoaderContext context)
+inline auto LoadPhysicsResource(const LoaderContext& context)
   -> std::unique_ptr<data::PhysicsResource>
 {
   LOG_SCOPE_F(1, "Load Physics Resource");
@@ -55,14 +53,7 @@ inline auto LoadPhysicsResource(LoaderContext context)
   LOG_F(1, "data offset    : {}", desc.data_offset);
   LOG_F(1, "data size      : {}", desc.size_bytes);
 
-  const auto payload
-    = TakePayload(context, desc.size_bytes, "physics resource");
-  const auto payload_bytes = payload.Bytes();
-  // PhysicsResource owns a vector: the payload is copied into it.
-  std::vector<uint8_t> data_buffer(desc.size_bytes);
-  if (!payload_bytes.empty()) {
-    std::memcpy(data_buffer.data(), payload_bytes.data(), payload_bytes.size());
-  }
+  auto data_buffer = TakePayload(context, desc.size_bytes, "physics resource");
 
   return std::make_unique<data::PhysicsResource>(desc, std::move(data_buffer));
 }

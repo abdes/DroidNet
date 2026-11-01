@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Detail/InlineBackend.h>
 #include <Oxygen/Serio/Operation.h>
 #include <Oxygen/Serio/Types.h>
 
@@ -49,13 +50,14 @@ concept IoBackend = requires(
   } noexcept -> std::same_as<Result<ByteBuffer>>;
 };
 
-//! The backends of this platform; the driver holds one of them.
+//! The backends of this platform, inline first; the driver holds one of them.
+static_assert(IoBackend<InlineBackend>);
 #ifdef OXYGEN_WINDOWS
 static_assert(IoBackend<IocpBackend>);
-using Backend = std::variant<IocpBackend>;
+using Backend = std::variant<InlineBackend, IocpBackend>;
 #else
 static_assert(IoBackend<UringBackend>);
-using Backend = std::variant<UringBackend>;
+using Backend = std::variant<InlineBackend, UringBackend>;
 #endif
 
 // A backend is a handful of pointers; the driver copies it into its state.

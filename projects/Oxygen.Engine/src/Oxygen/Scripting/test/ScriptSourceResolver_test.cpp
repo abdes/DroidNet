@@ -11,11 +11,11 @@
 #include <fstream>
 #include <ios>
 #include <memory>
+#include <new>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -41,6 +41,7 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
@@ -88,7 +89,12 @@ namespace {
     desc.encoding = encoding;
     desc.compression = data::pak::scripting::ScriptCompression::kNone;
     desc.content_hash = hash;
-    return std::make_shared<const data::ScriptResource>(desc, bytes);
+    auto buffer = serio::ByteBuffer::CopyOf(std::as_bytes(std::span { bytes }));
+    if (!buffer) {
+      throw std::bad_alloc();
+    }
+    return std::make_shared<const data::ScriptResource>(
+      desc, std::move(buffer).value());
   }
 
 } // namespace
@@ -183,6 +189,38 @@ NOLINT_TEST_F(
   ASSERT_HAS_VALUE(result.blob);
   ASSERT_TRUE(std::holds_alternative<ScriptSourceBlob>(*result.blob));
   EXPECT_EQ(std::get<ScriptSourceBlob>(*result.blob).Size(), 16);
+}
+
+//! An external script resolves while an editor holds it open for writing:
+//! the resolver shares writes, so a hot reload never fails on sharing.
+NOLINT_TEST_F(
+  ScriptSourceResolverTest, ExternalSourceResolvesWhileAnEditorHoldsIt)
+{
+  const auto asset
+    = MakeScriptAsset("/Content/runtime/edited", ScriptAssetResourceIndices {},
+      data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
+  const auto script_path = TempDir() / "scripts/runtime/edited.luau";
+  WriteFile(script_path, "edited content");
+  // An editor's handle: open for writing, sharing reads and writes.
+  constexpr auto mode
+    = static_cast<std::ios::openmode>(static_cast<unsigned>(std::ios::binary)
+      | static_cast<unsigned>(std::ios::app));
+  auto editor = std::ofstream(script_path, mode);
+  ASSERT_TRUE(editor.is_open());
+
+  const auto result = Resolver().Resolve({
+    .asset = *asset,
+    .load_script_resource =
+      [](const data::ResourceReferenceIndex) {
+        return std::shared_ptr<const data::ScriptResource> {};
+      },
+    .map_resource_origin = {},
+  });
+
+  ASSERT_TRUE(result.ok) << result.error_message;
+  ASSERT_HAS_VALUE(result.blob);
+  ASSERT_TRUE(std::holds_alternative<ScriptSourceBlob>(*result.blob));
+  EXPECT_EQ(std::get<ScriptSourceBlob>(*result.blob).Size(), 14);
 }
 
 NOLINT_TEST_F(

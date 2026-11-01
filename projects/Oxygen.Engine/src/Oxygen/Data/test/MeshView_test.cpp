@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
-#include <utility>
 #include <vector>
 
 // GTest
@@ -16,6 +15,7 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/Vertex.h>
+#include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project
@@ -74,8 +74,6 @@ private:
 //! Fixture for index type widening / promotion behavior (edge / format cases)
 class MeshViewIndexTypeTest : public ::testing::Test { };
 
-using ::testing::AllOf;
-using ::testing::HasSubstr;
 using ::testing::SizeIs;
 
 //! Tests MeshView construction with valid data and accessor methods.
@@ -432,8 +430,8 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_WidenedIterationMatches)
   };
   std::vector<uint8_t> vertex_bytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vertex_bytes.data(), vertices.data(), vertex_bytes.size());
-  auto vbuf
-    = std::make_shared<BufferResource>(vertex_desc, std::move(vertex_bytes));
+  auto vbuf = std::make_shared<BufferResource>(
+    vertex_desc, oxygen::serio::testing::OwnedBytes(vertex_bytes));
 
   // Index buffer desc: element_format = kR16UInt, stride inferred by format
   pak::core::BufferResourceDesc index_desc {
@@ -446,8 +444,8 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_WidenedIterationMatches)
   };
   std::vector<uint8_t> index_bytes(u16_indices.size() * sizeof(uint16_t));
   std::memcpy(index_bytes.data(), u16_indices.data(), index_bytes.size());
-  auto ibuf
-    = std::make_shared<BufferResource>(index_desc, std::move(index_bytes));
+  auto ibuf = std::make_shared<BufferResource>(
+    index_desc, oxygen::serio::testing::OwnedBytes(index_bytes));
 
   auto material = MaterialAsset::CreateDefault();
   MeshBuilder builder;
@@ -498,7 +496,8 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_IndexTypeCached)
   };
   std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
-  auto vbuf = std::make_shared<BufferResource>(vdesc, std::move(vbytes));
+  auto vbuf = std::make_shared<BufferResource>(
+    vdesc, oxygen::serio::testing::OwnedBytes(vbytes));
   pak::core::BufferResourceDesc idesc {
     .data_offset = 0,
     .size_bytes = static_cast<pak::core::DataBlobSizeT>(
@@ -510,7 +509,8 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_IndexTypeCached)
   };
   std::vector<uint8_t> ibytes(indices16.size() * sizeof(uint16_t));
   std::memcpy(ibytes.data(), indices16.data(), ibytes.size());
-  auto ibuf = std::make_shared<BufferResource>(idesc, std::move(ibytes));
+  auto ibuf = std::make_shared<BufferResource>(
+    idesc, oxygen::serio::testing::OwnedBytes(ibytes));
   auto material = MaterialAsset::CreateDefault();
   auto mesh = MeshBuilder()
                 .WithBufferResources(vbuf, ibuf)
@@ -554,7 +554,8 @@ NOLINT_TEST_F(MeshViewBasicTest, VertexOnlyMesh_IndexBufferEmpty)
   };
   std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
-  auto vbuf = std::make_shared<BufferResource>(vdesc, std::move(vbytes));
+  auto vbuf = std::make_shared<BufferResource>(
+    vdesc, oxygen::serio::testing::OwnedBytes(vbytes));
   auto material = MaterialAsset::CreateDefault();
   auto mesh = MeshBuilder()
                 .WithBufferResources(vbuf, nullptr)
@@ -598,7 +599,8 @@ NOLINT_TEST(MeshBasicTest, VertexOnlyMesh_IsIndexedFalse)
   };
   std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
-  auto vbuf = std::make_shared<BufferResource>(vdesc, std::move(vbytes));
+  auto vbuf = std::make_shared<BufferResource>(
+    vdesc, oxygen::serio::testing::OwnedBytes(vbytes));
   auto material = MaterialAsset::CreateDefault();
   auto mesh = MeshBuilder()
                 .WithBufferResources(vbuf, nullptr)
@@ -662,7 +664,8 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, IndexBufferView_NoCopySizeMatches)
   };
   std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
-  auto vbuf = std::make_shared<BufferResource>(vdesc, std::move(vbytes));
+  auto vbuf = std::make_shared<BufferResource>(
+    vdesc, oxygen::serio::testing::OwnedBytes(vbytes));
   pak::core::BufferResourceDesc idesc {
     .data_offset = 0,
     .size_bytes
@@ -674,7 +677,8 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, IndexBufferView_NoCopySizeMatches)
   };
   std::vector<uint8_t> ibytes(indices.size() * sizeof(uint32_t));
   std::memcpy(ibytes.data(), indices.data(), ibytes.size());
-  auto ibuf = std::make_shared<BufferResource>(idesc, std::move(ibytes));
+  auto ibuf = std::make_shared<BufferResource>(
+    idesc, oxygen::serio::testing::OwnedBytes(ibytes));
   auto material = MaterialAsset::CreateDefault();
   auto mesh = MeshBuilder()
                 .WithBufferResources(vbuf, ibuf)

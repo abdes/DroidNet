@@ -10,25 +10,21 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <memory>
-#include <optional>
 #include <span>
 #include <stdexcept>
 #include <utility>
 
 #include "LooseCookedWriterTestSupport.h"
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
-#include <Oxygen/Cooker/Import/FileError.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/test/Support/HoldingStorage.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -43,116 +39,19 @@ namespace {
 namespace co = oxygen::co;
 namespace imp = oxygen::content::import;
 
-class HeldCompletionWriter final : public imp::IAsyncFileWriter {
-public:
-  explicit HeldCompletionWriter(imp::ImportEventLoop& loop)
-    : writer_(imp::CreateAsyncFileWriter(loop))
-  {
-  }
-  ~HeldCompletionWriter() override = default;
-  OXYGEN_MAKE_NON_COPYABLE(HeldCompletionWriter)
-  OXYGEN_MAKE_NON_MOVABLE(HeldCompletionWriter)
-
-  co::Event callback_held;
-  co::Event table_write_held;
-  auto HoldTableWrites() -> void { hold_tables_ = true; }
-  auto ReleaseTableWrites() -> void
-  {
-    hold_tables_ = false;
-    table_released_.Trigger();
-  }
-  auto Release() -> void
-  {
-    hold_ = false;
-    if (!pending_) {
-      throw std::logic_error("No held write callback");
-    }
-    auto pending = std::move(*pending_);
-    pending_.reset();
-    pending.callback(pending.error, pending.bytes);
-    released_.Trigger();
-  }
-  auto Write(const std::filesystem::path& path,
-    std::span<const std::byte> bytes, imp::WriteOptions options)
-    -> co::Co<oxygen::Result<uint64_t, imp::FileErrorInfo>> override
-  {
-    if (hold_tables_ && path.extension() == ".table") {
-      table_write_held.Trigger();
-      co_await table_released_;
-    }
-    co_return co_await writer_->Write(path, bytes, options);
-  }
-  auto WriteAt(const std::filesystem::path& path, uint64_t offset,
-    std::span<const std::byte> bytes, imp::WriteOptions options)
-    -> co::Co<oxygen::Result<uint64_t, imp::FileErrorInfo>> override
-  {
-    return writer_->WriteAt(path, offset, bytes, options);
-  }
-  auto WriteAsync(const std::filesystem::path& path,
-    std::span<const std::byte> bytes, imp::WriteOptions options,
-    imp::WriteCompletionCallback callback) -> void override
-  {
-    writer_->WriteAsync(path, bytes, options, Gate(std::move(callback)));
-  }
-  auto WriteAtAsync(const std::filesystem::path& path, uint64_t offset,
-    std::span<const std::byte> bytes, imp::WriteOptions options,
-    imp::WriteCompletionCallback callback) -> void override
-  {
-    writer_->WriteAtAsync(
-      path, offset, bytes, options, Gate(std::move(callback)));
-  }
-  auto Flush() -> co::Co<oxygen::Result<void, imp::FileErrorInfo>> override
-  {
-    const auto first = co_await writer_->Flush();
-    if (pending_) {
-      co_await released_;
-    }
-    const auto rest = co_await writer_->Flush();
-    co_return first ? rest : first;
-  }
-  auto CancelAll() -> void override { writer_->CancelAll(); }
-  [[nodiscard]] auto PendingCount() const -> size_t override
-  {
-    return writer_->PendingCount() + (pending_ ? 1U : 0U);
-  }
-
-private:
-  struct Pending final {
-    imp::WriteCompletionCallback callback;
-    imp::FileErrorInfo error;
-    uint64_t bytes = 0;
-  };
-  auto Gate(imp::WriteCompletionCallback callback)
-    -> imp::WriteCompletionCallback
-  {
-    return [this, callback = std::move(callback)](
-             const imp::FileErrorInfo& error, uint64_t bytes) -> void {
-      if (hold_) {
-        CHECK_F(!pending_);
-        pending_.emplace(
-          Pending { .callback = callback, .error = error, .bytes = bytes });
-        callback_held.Trigger();
-      } else {
-        callback(error, bytes);
-      }
-    };
-  }
-  std::unique_ptr<imp::IAsyncFileWriter> writer_;
-  std::optional<Pending> pending_;
-  co::Event released_;
-  co::Event table_released_;
-  bool hold_tables_ = false;
-  bool hold_ = true;
-};
+using oxygen::cooker::testing::HoldingStorage;
 
 NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
 {
   const oxygen::testing::ScopedTempDir temp;
   imp::ImportEventLoop loop;
-  HeldCompletionWriter writer(loop);
-  writer.HoldTableWrites();
-  imp::ResourceTableRegistry tables(writer,
-    oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
+  // Only the publication of a table is held in flight.
+  HoldingStorage storage(oxygen::content::cooked::RealCookerStorage(),
+    [](const std::filesystem::path& path) -> bool {
+      return path.extension() == ".table";
+    });
+  imp::ResourceTableRegistry tables(loop.Driver(),
+    oxygen::make_observer<oxygen::content::cooked::ImportStorage>(&storage));
   const auto root = temp.Path() / "oxygen_table_admission";
   auto first = tables.BeginSession(root);
   const auto inserted = tables.BufferAggregator(root).AcquireOrInsert("first",
@@ -171,7 +70,7 @@ NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
       tasks.Start([&] -> co::Co<> {
         EXPECT_TRUE((co_await tables.EndSession(first)).ok);
       });
-      co_await writer.table_write_held;
+      co_await storage.publication_held;
       EXPECT_FALSE(first.IsActive());
       EXPECT_THROW(
         static_cast<void>(tables.BeginSession(root)), std::logic_error);
@@ -196,7 +95,7 @@ NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
       });
       co_await attempting;
       EXPECT_FALSE(admitted);
-      writer.ReleaseTableWrites();
+      storage.Release();
       co_await finished;
       co_return co::kJoin;
     };
@@ -214,13 +113,13 @@ NOLINT_TEST(ResourceTableRegistryTest, UnreadableExistingTableFailsTheImport)
 {
   // Arrange
   imp::ImportEventLoop loop;
-  const auto writer = imp::CreateAsyncFileWriter(loop);
   auto storage = oxygen::cooker::testing::MemoryFileSystem {};
   const auto root = oxygen::content::testing::MemoryRoot() / "broken_table";
   // One byte: not a whole number of buffer rows.
   storage.AddFile(root / imp::internal::loose_layout::kBuffersTable,
     std::array { std::byte { 1U } });
-  imp::ResourceTableRegistry tables(*writer, oxygen::make_observer(&storage));
+  imp::ResourceTableRegistry tables(
+    loop.Driver(), oxygen::make_observer(&storage));
 
   // Act + Assert
   EXPECT_THROW(
@@ -234,9 +133,9 @@ NOLINT_TEST(ResourceTableRegistryTest, LastSessionReportsTheTablesItWrote)
   // Arrange
   const oxygen::testing::ScopedTempDir temp;
   imp::ImportEventLoop loop;
-  const auto writer = imp::CreateAsyncFileWriter(loop);
   auto& storage = oxygen::content::cooked::RealCookerStorage();
-  imp::ResourceTableRegistry tables(*writer, oxygen::make_observer(&storage));
+  imp::ResourceTableRegistry tables(
+    loop.Driver(), oxygen::make_observer(&storage));
   const auto root = temp.Path() / "oxygen_table_digests";
   auto first = tables.BeginSession(root);
   auto second = tables.BeginSession(root);
@@ -268,4 +167,83 @@ NOLINT_TEST(ResourceTableRegistryTest, LastSessionReportsTheTablesItWrote)
   EXPECT_EQ(table.digest.size, bytes->size());
   EXPECT_EQ(table.digest.sha256, oxygen::base::ComputeSha256(*bytes));
 }
+
+//! The data file is opened once and never truncated: ranges written through it
+//! by two holders of the aggregator both land, and bytes already in the file
+//! outside them stay.
+NOLINT_TEST(ResourceTableRegistryTest, ReservedRangesWrittenThroughOneDataFile)
+{
+  // Arrange
+  imp::ImportEventLoop loop;
+  auto storage = oxygen::cooker::testing::MemoryFileSystem {};
+  const auto root = oxygen::content::testing::MemoryRoot() / "ranges";
+  const auto data_path = root / imp::internal::loose_layout::kBuffersData;
+  storage.AddFile(
+    data_path, std::array { std::byte { 0xAA }, std::byte { 0xBB } });
+  imp::ResourceTableRegistry tables(
+    loop.Driver(), oxygen::make_observer(&storage));
+  auto& aggregator = tables.BufferAggregator(root);
+  const auto first
+    = aggregator.ReserveDataRange({ .alignment = 1U, .payload_size = 3U });
+  const auto second
+    = aggregator.ReserveDataRange({ .alignment = 1U, .payload_size = 2U });
+  const auto one
+    = std::array { std::byte { 1U }, std::byte { 2U }, std::byte { 3U } };
+  const auto two = std::array { std::byte { 4U }, std::byte { 5U } };
+
+  // Act
+  const auto file = aggregator.DataFile();
+  ASSERT_HAS_VALUE(file);
+  const auto reopened = aggregator.DataFile();
+  co::Run(loop, [&] -> co::Co<> {
+    // Out of reservation order, as concurrent emitters complete.
+    EXPECT_TRUE(co_await (*file)->AsyncWriteAt(
+      oxygen::serio::ByteOffset { second.aligned_offset }, two));
+    EXPECT_TRUE(co_await (*file)->AsyncWriteAt(
+      oxygen::serio::ByteOffset { first.aligned_offset }, one));
+  });
+
+  // Assert
+  ASSERT_HAS_VALUE(reopened);
+  EXPECT_EQ(*reopened, *file);
+  const auto bytes = storage.Bytes(data_path);
+  ASSERT_EQ(bytes.size(), 7U);
+  EXPECT_EQ(bytes[0], std::byte { 0xAA });
+  EXPECT_EQ(bytes[1], std::byte { 0xBB });
+  EXPECT_EQ(bytes[2], std::byte { 1U });
+  EXPECT_EQ(bytes[4], std::byte { 3U });
+  EXPECT_EQ(bytes[5], std::byte { 4U });
+  EXPECT_EQ(bytes[6], std::byte { 5U });
+}
+
+//! A table that cannot be published fails the session that finalizes it, and
+//! the failure is the storage's error.
+NOLINT_TEST(ResourceTableRegistryTest, TableThatCannotBePublishedFailsTheEnd)
+{
+  // Arrange
+  imp::ImportEventLoop loop;
+  auto storage = oxygen::cooker::testing::MemoryFileSystem {};
+  const auto root = oxygen::content::testing::MemoryRoot() / "unpublishable";
+  storage.AddFolder(root);
+  imp::ResourceTableRegistry tables(
+    loop.Driver(), oxygen::make_observer(&storage));
+  auto session = tables.BeginSession(root);
+  static_cast<void>(tables.BufferAggregator(root).AcquireOrInsert("only",
+    [] -> std::pair<oxygen::data::pak::core::BufferResourceDesc,
+         imp::WriteReservation> {
+      return std::pair { oxygen::data::pak::core::BufferResourceDesc {},
+        imp::WriteReservation {} };
+    }));
+  // The empty table is created at the first entry; its publication fails.
+  storage.FailPublishing(root / imp::internal::loose_layout::kBuffersTable);
+
+  // Act
+  auto end = imp::ResourceTableRegistry::SessionEnd {};
+  co::Run(loop, [&] -> co::Co<> { end = co_await tables.EndSession(session); });
+
+  // Assert
+  EXPECT_FALSE(end.ok);
+  EXPECT_TRUE(end.written.empty());
+}
+
 } // namespace

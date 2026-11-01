@@ -12,7 +12,6 @@
 #include <filesystem>
 #include <limits>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -23,6 +22,7 @@
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/RegionStream.h>
@@ -116,13 +116,15 @@ namespace serio_utils {
     -> std::string_view
   {
     const auto end = std::ranges::find(backend, '\0');
-    return std::string_view(
-      backend.data(), static_cast<size_t>(std::distance(backend.begin(), end)));
+    return {
+      backend.data(),
+      static_cast<size_t>(std::distance(backend.begin(), end)),
+    };
   }
 
   inline auto CheckedSizeT(const uint64_t v, std::string_view what) -> size_t
   {
-    if (v > static_cast<uint64_t>((std::numeric_limits<size_t>::max)())) {
+    if (v > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
       throw std::runtime_error(std::string(what) + " is too large");
     }
     return static_cast<size_t>(v);
@@ -152,20 +154,16 @@ public:
   {
     std::filesystem::create_directories(out_file.parent_path());
 
-    const auto tmp_path = out_file.wstring() + L".tmp";
-    const std::filesystem::path tmp_file(tmp_path);
-
-    // Ensure the file handle is released before rename on Windows.
+    // A rebuild regenerates the library, so the OS cache is durable enough.
+    auto file
+      = serio::AtomicFileWriter::Create(out_file, serio::Durability::kBuffered);
+    if (!file) {
+      throw std::system_error(
+        file.error(), "create '" + out_file.string() + "'");
+    }
     {
-      auto file = serio::NativeFile::Open(tmp_file,
-        { .access = serio::Access::kWrite,
-          .creation = serio::Creation::kCreateAlways });
-      if (!file) {
-        throw std::system_error(
-          file.error(), "open '" + tmp_file.string() + "'");
-      }
-      serio::RegionWriteStream<serio::NativeFile> stream(*file);
-      serio::Writer<serio::RegionWriteStream<serio::NativeFile>> w(stream);
+      serio::Writer<serio::RegionWriteStream<serio::NativeFile>> w(
+        file->Stream());
       const auto packed = serio_utils::PackedGuard(w);
       (void)packed;
 
@@ -184,7 +182,7 @@ public:
           size += size_of_string16(d.name);
           size += size_of_string16(d.value.value_or(""));
         }
-        size += 8U * 4U; // offsets/sizes
+        size += static_cast<uint64_t>(8U) * 4U; // offsets/sizes
         return size;
       };
 
@@ -275,10 +273,10 @@ public:
       serio_utils::ThrowOnError(w.Flush(), "flush");
     }
 
-    if (std::filesystem::exists(out_file)) {
-      std::filesystem::remove(out_file);
+    if (const auto published = std::move(*file).Commit(); !published) {
+      throw std::system_error(
+        published.error(), "publish '" + out_file.string() + "'");
     }
-    std::filesystem::rename(tmp_file, out_file);
   }
 
 private:

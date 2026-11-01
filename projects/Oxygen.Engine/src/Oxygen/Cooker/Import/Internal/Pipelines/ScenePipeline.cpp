@@ -44,6 +44,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -490,16 +491,16 @@ namespace {
     env_header.systems_count = 0;
 
     for (const auto& system : environment_systems) {
-      if (system.record_bytes.size()
-        < sizeof(SceneEnvironmentSystemRecordHeader)) {
+      const auto header_read
+        = serio::CopyAt<SceneEnvironmentSystemRecordHeader>(
+          std::as_bytes(std::span { system.record_bytes }));
+      if (!header_read) {
         diagnostics.push_back(
           MakeErrorDiagnostic("scene.environment.record_too_small",
             "Environment system record is too small", source_id, {}));
         return outcome;
       }
-
-      SceneEnvironmentSystemRecordHeader header {};
-      std::memcpy(&header, system.record_bytes.data(), sizeof(header));
+      const auto& header = *header_read;
       if (header.record_size < sizeof(SceneEnvironmentSystemRecordHeader)) {
         diagnostics.push_back(
           MakeErrorDiagnostic("scene.environment.record_size_invalid",
@@ -536,9 +537,15 @@ namespace {
     }
 
     for (const auto& system : environment_systems) {
-      SceneEnvironmentSystemRecordHeader header {};
-      std::memcpy(&header, system.record_bytes.data(), sizeof(header));
-      const auto record_size = static_cast<size_t>(header.record_size);
+      const auto header_read
+        = serio::CopyAt<SceneEnvironmentSystemRecordHeader>(
+          std::as_bytes(std::span { system.record_bytes }));
+      if (!header_read) {
+        diagnostics.push_back(MakeErrorDiagnostic("scene.serialize_failed",
+          "Failed to write environment record", source_id, {}));
+        return outcome;
+      }
+      const auto record_size = static_cast<size_t>(header_read->record_size);
       if (auto result
         = writer.WriteBlob(std::span(system.record_bytes.data(), record_size));
         !result.has_value()) {

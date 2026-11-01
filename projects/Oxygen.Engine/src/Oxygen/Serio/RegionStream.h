@@ -30,8 +30,8 @@ namespace oxygen::serio {
  The stream's offsets are relative to the region; `Size()` and `Seek()` cost
  nothing. A contiguous region (memory, a mapped file) has no buffer: reads
  copy straight from its view. Otherwise reads fill a buffer, allocated on the
- first read, and a read at least as large as the buffer goes straight into the
- caller's span with one `ReadAt`.
+ first read and never larger than the region, and a read at least as large
+ as the buffer goes straight into the caller's span with one `ReadAt`.
 
  A short device (a file truncated below its region) ends the stream early:
  `ReadSome` returns zero bytes and `ReadExactly` fails with `kEndOfData`.
@@ -49,7 +49,8 @@ public:
     const ByteCount buffer_size = kDefaultBufferSize) noexcept
     : region_(region)
     , view_(region.Contiguous())
-    , buffer_size_(static_cast<size_t>(buffer_size.get()))
+    , buffer_size_(static_cast<size_t>(
+        (std::min)(buffer_size.get(), region.Range().count.get())))
   {
   }
 

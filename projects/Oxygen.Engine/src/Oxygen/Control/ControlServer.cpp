@@ -13,10 +13,9 @@
 #include <deque>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <memory>
 #include <random>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -67,6 +66,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/asio.h>
+#include <Oxygen/Serio/AtomicFile.h>
 
 namespace oxygen::control {
 
@@ -410,25 +410,26 @@ auto ControlServer::Run() -> void
   std::filesystem::create_directories(folder);
   RemoveStaleDiscoveryFiles(folder);
   impl_->discovery_file = folder / fmt::format("{}.json", ProcessId());
-  // Written aside and renamed into place, so a client never reads a partial
-  // file.
-  auto pending_file = impl_->discovery_file;
-  pending_file += ".tmp";
-  {
-    auto file = std::ofstream(pending_file, std::ios::trunc);
-    file << json {
-      { "protocol", kProtocolVersion },
-      { "pid", ProcessId() },
-      { "application", impl_->config.application },
-      { "name", impl_->config.name },
-      { "started", UtcNow() },
-      { "command_line", loguru::arguments() },
-      { "port", impl_->port },
-      { "token", impl_->token },
-    }
-              .dump(2);
+  // Published atomically, so a client never reads a partial file.
+  const auto text = json {
+    { "protocol", kProtocolVersion },
+    { "pid", ProcessId() },
+    { "application", impl_->config.application },
+    { "name", impl_->config.name },
+    { "started", UtcNow() },
+    { "command_line", loguru::arguments() },
+    { "port", impl_->port },
+    { "token", impl_->token },
   }
-  std::filesystem::rename(pending_file, impl_->discovery_file);
+                      .dump(2);
+  if (const auto written = serio::WriteFileAtomically(
+        impl_->discovery_file, std::as_bytes(std::span(text)));
+    !written.has_value()) {
+    LOG_F(ERROR, "control server cannot publish its discovery file '{}': {}",
+      impl_->discovery_file.string(), written.error().message());
+    throw std::system_error(written.error(),
+      fmt::format("cannot publish '{}'", impl_->discovery_file.string()));
+  }
   LOG_F(INFO, "control server listening on 127.0.0.1:{} ({})", impl_->port,
     impl_->discovery_file.string());
 

@@ -59,14 +59,6 @@ public:
   OXGN_DATA_API BufferResource(
     pak::core::BufferResourceDesc desc, serio::ByteBuffer data);
 
-  //! Constructs a BufferResource from a copy of `data`: a buffer built in
-  //! memory, such as procedural geometry or a test's.
-  /*!
-   @throw std::bad_alloc When the buffer cannot be allocated.
-  */
-  OXGN_DATA_API BufferResource(
-    pak::core::BufferResourceDesc desc, std::span<const uint8_t> data);
-
   ~BufferResource() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(BufferResource)
@@ -128,9 +120,7 @@ public:
   //! Returns an immutable span of the loaded buffer data.
   [[nodiscard]] auto GetData() const noexcept -> std::span<const uint8_t>
   {
-    const auto bytes = data_.Bytes();
-    // NOLINTNEXTLINE(*-reinterpret-cast): bytes viewed as unsigned bytes.
-    return { reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size() };
+    return data_.Unsigned();
   }
 
 private:

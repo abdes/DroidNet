@@ -6,8 +6,6 @@
 
 #include <array>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -23,6 +21,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/StableId.h>
+#include <Oxygen/Serio/AtomicFile.h>
 
 namespace {
 
@@ -140,14 +139,16 @@ auto GeometryDescriptor(const EngineShape& shape) -> json
   };
 }
 
+//! Publishes `value` at `path` atomically: a reader finds the whole file.
 auto WriteJson(const std::filesystem::path& path, const json& value) -> void
 {
   std::filesystem::create_directories(path.parent_path());
-  auto stream = std::ofstream(path, std::ios::binary);
-  stream << value.dump(2) << '\n';
-  stream.close();
-  if (!stream) {
-    throw std::runtime_error("Cannot write " + path.generic_string());
+  const auto text = value.dump(2) + "\n";
+  if (const auto written
+    = oxygen::serio::WriteFileAtomically(path, std::as_bytes(std::span(text)));
+    !written) {
+    throw std::runtime_error("Cannot write " + path.generic_string() + ": "
+      + written.error().message());
   }
 }
 

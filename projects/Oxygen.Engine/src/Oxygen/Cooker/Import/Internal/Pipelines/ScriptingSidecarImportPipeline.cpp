@@ -39,7 +39,7 @@
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
@@ -50,7 +50,6 @@
 #include <Oxygen/Cooker/Import/Internal/NodePathTable.h>
 #include <Oxygen/Cooker/Import/Internal/NodeReferenceJson.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptingSidecarImportPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
@@ -68,6 +67,7 @@
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::import {
 namespace {
@@ -1149,11 +1149,11 @@ namespace {
   auto DecodeScriptDeclarations(std::span<const std::byte> bytes)
     -> std::optional<std::vector<SidecarParam>>
   {
-    if (bytes.size() < sizeof(script::ScriptAssetDesc)) {
+    const auto desc_read = serio::CopyAt<script::ScriptAssetDesc>(bytes);
+    if (!desc_read) {
       return std::nullopt;
     }
-    auto desc = script::ScriptAssetDesc {};
-    std::memcpy(&desc, bytes.data(), sizeof(desc));
+    const auto& desc = *desc_read;
     if (static_cast<data::AssetType>(desc.header.asset_type)
         != data::AssetType::kScript
       || desc.header.version != script::kScriptAssetVersion) {
@@ -1952,7 +1952,7 @@ namespace {
   }
 
   struct ScriptingSidecarIoHandles final {
-    IAsyncFileWriter* writer = nullptr;
+    cooked::CookerStorage* storage = nullptr;
     LooseCookedIndexRegistry* index_registry = nullptr;
   };
 
@@ -1984,13 +1984,13 @@ namespace {
     -> std::optional<ScriptingSidecarIoHandles>
   {
     auto handles = ScriptingSidecarIoHandles {
-      .writer = session.FileWriter().get(),
+      .storage = session.Storage().get(),
       .index_registry = index_registry.get(),
     };
-    if (handles.writer == nullptr || handles.index_registry == nullptr) {
+    if (handles.storage == nullptr || handles.index_registry == nullptr) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "script.sidecar.io_unavailable",
-        "Scripting sidecar emission requires a file writer and an index "
+        "Scripting sidecar emission requires a storage and an index "
         "registry");
       return std::nullopt;
     }
@@ -2253,7 +2253,8 @@ auto ScriptingSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  const auto parsed = ParseSidecarDocument(item.source_bytes, *session, req);
+  const auto parsed
+    = ParseSidecarDocument(item.source_bytes.Bytes(), *session, req);
   if (!parsed.has_value()) {
     co_return false;
   }

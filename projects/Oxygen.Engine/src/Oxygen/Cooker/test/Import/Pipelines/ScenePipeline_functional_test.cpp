@@ -33,6 +33,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace co = oxygen::co;
@@ -59,36 +60,28 @@ namespace {
 auto ReadSceneDesc(const std::vector<std::byte>& bytes)
   -> data::pak::world::SceneAssetDesc
 {
-  data::pak::world::SceneAssetDesc desc {};
-  if (bytes.size() < sizeof(desc)) {
-    return desc;
-  }
-  std::memcpy(&desc, bytes.data(), sizeof(desc));
-  return desc;
+  return oxygen::serio::CopyAt<data::pak::world::SceneAssetDesc>(
+    std::span { bytes })
+    .value_or(data::pak::world::SceneAssetDesc {});
 }
 
 auto ReadNodeRecord(const std::vector<std::byte>& bytes,
   const data::pak::world::SceneAssetDesc& desc, size_t index)
   -> data::pak::world::NodeRecord
 {
-  data::pak::world::NodeRecord record {};
-  const auto offset = desc.nodes.offset + (index * sizeof(record));
-  if (bytes.size() < offset + sizeof(record)) {
-    return record;
-  }
-  std::memcpy(&record, std::span(bytes).subspan(offset).data(), sizeof(record));
-  return record;
+  const auto offset
+    = desc.nodes.offset + (index * sizeof(data::pak::world::NodeRecord));
+  return oxygen::serio::CopyAt<data::pak::world::NodeRecord>(
+    std::span { bytes }, oxygen::serio::ByteOffset { offset })
+    .value_or(data::pak::world::NodeRecord {});
 }
 
 auto ReadEnvironmentHeader(const std::vector<std::byte>& bytes, size_t offset)
   -> data::pak::world::SceneEnvironmentBlockHeader
 {
-  data::pak::world::SceneEnvironmentBlockHeader header {};
-  if (bytes.size() < offset + sizeof(header)) {
-    return header;
-  }
-  std::memcpy(&header, std::span(bytes).subspan(offset).data(), sizeof(header));
-  return header;
+  return oxygen::serio::CopyAt<data::pak::world::SceneEnvironmentBlockHeader>(
+    std::span { bytes }, oxygen::serio::ByteOffset { offset })
+    .value_or(data::pak::world::SceneEnvironmentBlockHeader {});
 }
 
 auto ReadComponentDirectory(const std::vector<std::byte>& bytes,
@@ -117,13 +110,11 @@ auto ReadRenderableRecord(const std::vector<std::byte>& bytes,
   const data::pak::world::SceneComponentTableDesc& entry, size_t index)
   -> data::pak::world::RenderableRecord
 {
-  data::pak::world::RenderableRecord record {};
-  const auto offset = entry.table.offset + (index * sizeof(record));
-  if (bytes.size() < offset + sizeof(record)) {
-    return record;
-  }
-  std::memcpy(&record, std::span(bytes).subspan(offset).data(), sizeof(record));
-  return record;
+  const auto offset
+    = entry.table.offset + (index * sizeof(data::pak::world::RenderableRecord));
+  return oxygen::serio::CopyAt<data::pak::world::RenderableRecord>(
+    std::span { bytes }, oxygen::serio::ByteOffset { offset })
+    .value_or(data::pak::world::RenderableRecord {});
 }
 
 class ScenePipelineTest : public testing::Test {

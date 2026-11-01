@@ -5,8 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cstddef>
-#include <cstring>
+#include <cstdint>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -20,9 +19,11 @@
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -37,6 +38,7 @@ using oxygen::serio::testing::BytesEqual;
 namespace cooked = oxygen::content::cooked;
 namespace base = oxygen::base;
 namespace data = oxygen::data;
+namespace serio = oxygen::serio;
 
 class LooseCookedRootTest : public ::testing::Test {
 protected:
@@ -102,16 +104,15 @@ NOLINT_TEST_F(LooseCookedRootTest, DescriptorsCarryTheirTypeAndVersion)
 
   const auto content = Open(game);
 
-  const auto header_of
-    = [&content](const data::AssetKey& key) -> data::pak::core::AssetHeader {
-    const auto bytes = content.Descriptor(key);
-    auto header = data::pak::core::AssetHeader {};
-    std::memcpy(&header, bytes.data(), sizeof(header));
-    return header;
-  };
-  EXPECT_EQ(header_of(material).asset_type,
+  const auto material_header
+    = serio::CopyAt<data::pak::core::AssetHeader>(content.Descriptor(material));
+  const auto geometry_header
+    = serio::CopyAt<data::pak::core::AssetHeader>(content.Descriptor(geometry));
+  ASSERT_HAS_VALUE(material_header);
+  ASSERT_HAS_VALUE(geometry_header);
+  EXPECT_EQ(material_header->asset_type,
     static_cast<uint8_t>(data::AssetType::kMaterial));
-  EXPECT_EQ(header_of(geometry).asset_type,
+  EXPECT_EQ(geometry_header->asset_type,
     static_cast<uint8_t>(data::AssetType::kGeometry));
 }
 
@@ -139,9 +140,10 @@ NOLINT_TEST_F(LooseCookedRootTest, PhysicsSidecarMatchesItsScene)
 
   const auto scene_bytes = content.Descriptor(scene);
   const auto sidecar_bytes = content.Descriptor(sidecar);
-  auto descriptor = data::pak::physics::PhysicsSceneAssetDesc {};
-  ASSERT_GE(sidecar_bytes.size(), sizeof(descriptor));
-  std::memcpy(&descriptor, sidecar_bytes.data(), sizeof(descriptor));
+  const auto read
+    = serio::CopyAt<data::pak::physics::PhysicsSceneAssetDesc>(sidecar_bytes);
+  ASSERT_HAS_VALUE(read);
+  const auto& descriptor = *read;
   EXPECT_EQ(descriptor.target_scene_key, scene);
   EXPECT_EQ(descriptor.target_node_count,
     data::SceneAsset(scene, scene_bytes).GetNodes().size());

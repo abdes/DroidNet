@@ -66,7 +66,7 @@ public:
     // below is sourced from the engine's validated loader.
     if (ctx.show_asset_descriptors) {
       if (const auto data
-        = asset_dump_helpers::ReadDescriptorBytes(pak, entry)) {
+        = asset_dump_helpers::TryDescriptorBytes(pak, entry)) {
         asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
       }
     }
@@ -405,9 +405,8 @@ public:
       co_return;
     }
 
-    SceneEnvironmentBlockHeader env_header {};
-    std::memcpy(&env_header, scene->GetEnvironmentBlockHeader(),
-      sizeof(SceneEnvironmentBlockHeader));
+    const SceneEnvironmentBlockHeader env_header
+      = *scene->GetEnvironmentBlockHeader();
 
     ctx.Out() << "    SceneEnvironment Block:\n";
     PrintUtils::Field(ctx.Out(), "Byte Size", env_header.byte_size, 8);
@@ -451,9 +450,7 @@ public:
         if (bytes.size() != sizeof(SkyAtmosphereEnvironmentRecord)) {
           return std::nullopt;
         }
-        std::vector<std::byte> buffer;
-        buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
         oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
           stream);
         auto packed = reader.ScopedAlignment(1);
@@ -471,9 +468,7 @@ public:
         if (bytes.size() != sizeof(VolumetricCloudsEnvironmentRecord)) {
           return std::nullopt;
         }
-        std::vector<std::byte> buffer;
-        buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
         oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
           stream);
         auto packed = reader.ScopedAlignment(1);
@@ -490,9 +485,7 @@ public:
         if (bytes.size() != sizeof(FogEnvironmentRecord)) {
           return std::nullopt;
         }
-        std::vector<std::byte> buffer;
-        buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
         oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
           stream);
         auto packed = reader.ScopedAlignment(1);
@@ -509,9 +502,7 @@ public:
         if (bytes.size() != sizeof(SkyLightEnvironmentRecord)) {
           return std::nullopt;
         }
-        std::vector<std::byte> buffer;
-        buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
         oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
           stream);
         auto packed = reader.ScopedAlignment(1);
@@ -528,9 +519,7 @@ public:
         if (bytes.size() != sizeof(SkySphereEnvironmentRecord)) {
           return std::nullopt;
         }
-        std::vector<std::byte> buffer;
-        buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
         oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
           stream);
         auto packed = reader.ScopedAlignment(1);
@@ -547,9 +536,7 @@ public:
         if (bytes.size() != sizeof(BackgroundEnvironmentRecord)) {
           return std::nullopt;
         }
-        std::vector<std::byte> buffer;
-        buffer.assign(bytes.begin(), bytes.end());
-        oxygen::serio::ReadOnlyMemoryStream stream { buffer };
+        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
         oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
           stream);
         auto packed = reader.ScopedAlignment(1);

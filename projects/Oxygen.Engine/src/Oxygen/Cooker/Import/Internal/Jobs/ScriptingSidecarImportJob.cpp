@@ -5,11 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
-#include <cstddef>
-#include <cstring>
+#include <span>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -23,6 +21,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/ScriptingSidecarImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptingSidecarImportPipeline.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import::detail {
 
@@ -142,14 +141,20 @@ auto ScriptingSidecarImportJob::LoadSource(ImportSession& session)
   const auto& req = Request();
   const auto& inline_bindings = req.options.scripting.inline_bindings_json;
   if (!inline_bindings.empty()) {
-    auto bytes = std::vector<std::byte> {};
-    bytes.resize(inline_bindings.size());
-    if (!inline_bindings.empty()) {
-      std::memcpy(bytes.data(), inline_bindings.data(), inline_bindings.size());
+    auto bytes = serio::ByteBuffer::CopyOf(
+      std::as_bytes(std::span(inline_bindings.data(), inline_bindings.size())));
+    if (!bytes.has_value()) {
+      AddDiagnostic(session, req, ImportSeverity::kError,
+        "script.sidecar.source_read_failed",
+        "Failed to hold the inline bindings: " + bytes.error().message());
+      co_return LoadedSource {
+        .success = false,
+        .bytes = {},
+      };
     }
     co_return LoadedSource {
       .success = true,
-      .bytes = std::move(bytes),
+      .bytes = std::move(bytes.value()),
     };
   }
 
@@ -174,11 +179,12 @@ auto ScriptingSidecarImportJob::LoadSource(ImportSession& session)
     };
   }
 
-  const auto read = co_await reader->ReadFile(req.source_path);
+  auto read = co_await reader->ReadFile(req.source_path);
   if (!read.has_value()) {
     AddDiagnostic(session, req, ImportSeverity::kError,
       "script.sidecar.source_read_failed",
-      "Failed to read source file: " + read.error().ToString());
+      "Failed to read source file '" + req.source_path.string()
+        + "': " + read.error().message());
     co_return LoadedSource {
       .success = false,
       .bytes = {},
@@ -187,7 +193,7 @@ auto ScriptingSidecarImportJob::LoadSource(ImportSession& session)
 
   co_return LoadedSource {
     .success = true,
-    .bytes = read.value(),
+    .bytes = std::move(read.value()),
   };
 }
 

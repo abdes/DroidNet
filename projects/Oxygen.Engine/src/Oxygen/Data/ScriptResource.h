@@ -8,12 +8,12 @@
 
 #include <cstdint>
 #include <span>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/api_export.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::data {
 
@@ -33,9 +33,10 @@ public:
   //! Type alias for the descriptor type used by this resource.
   using DescT = pak::scripting::ScriptResourceDesc;
 
-  //! Constructs a ScriptResource with descriptor + payload bytes.
+  //! Constructs a ScriptResource that owns `data`, the buffer its loader read
+  //! the payload into.
   OXGN_DATA_API ScriptResource(
-    pak::scripting::ScriptResourceDesc desc, std::vector<uint8_t> data);
+    pak::scripting::ScriptResourceDesc desc, serio::ByteBuffer data);
 
   ~ScriptResource() override = default;
 
@@ -49,7 +50,10 @@ public:
   }
 
   //! Returns the payload size in bytes.
-  [[nodiscard]] auto GetDataSize() const noexcept { return data_.size(); }
+  [[nodiscard]] auto GetDataSize() const noexcept
+  {
+    return data_.Bytes().size();
+  }
 
   //! Returns the script language (Luau, etc.).
   [[nodiscard]] auto GetLanguage() const noexcept { return desc_.language; }
@@ -72,12 +76,12 @@ public:
   //! Returns an immutable span of the script payload bytes.
   [[nodiscard]] auto GetData() const noexcept -> std::span<const uint8_t>
   {
-    return { data_.data(), data_.size() };
+    return data_.Unsigned();
   }
 
 private:
   pak::scripting::ScriptResourceDesc desc_ {};
-  std::vector<uint8_t> data_;
+  serio::ByteBuffer data_;
 };
 
 } // namespace oxygen::data

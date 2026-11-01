@@ -7,14 +7,11 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <ios>
-#include <iterator>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <system_error>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -22,13 +19,16 @@
 #include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Scripting/IScriptSourceResolver.h>
 #include <Oxygen/Scripting/Resolver/ExternalFileResolver.h>
+#include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::scripting {
 
 namespace {
 
   auto ComputeExternalSourceFingerprint(const std::filesystem::path& full_path,
-    const std::vector<uint8_t>& bytes) -> uint64_t
+    const std::span<const uint8_t> bytes) -> uint64_t
   {
     constexpr uint64_t kFnvOffsetBasis = 1469598103934665603ULL;
     constexpr uint64_t kFnvPrime = 1099511628211ULL;
@@ -187,8 +187,13 @@ auto ExternalFileResolver::Resolve(
   }
 
   const auto& full_path = *resolved_path;
-  std::ifstream input(full_path, std::ios::binary);
-  if (!input.is_open()) {
+  // Editors may hold the script open for writing while it is reloaded.
+  auto file = serio::NativeFile::Open(full_path,
+    {
+      .sharing = serio::Sharing::kReadWriteDelete,
+      .hint = serio::AccessHint::kSequential,
+    });
+  if (!file) {
     return IScriptSourceResolver::ResolveResult {
       .ok = false,
       .blob = {},
@@ -197,9 +202,8 @@ auto ExternalFileResolver::Resolve(
     };
   }
 
-  std::vector<uint8_t> bytes(
-    (std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-  if (input.bad()) {
+  auto bytes = serio::ReadAll(*file);
+  if (!bytes) {
     return IScriptSourceResolver::ResolveResult {
       .ok = false,
       .blob = {},
@@ -208,9 +212,10 @@ auto ExternalFileResolver::Resolve(
     };
   }
 
-  const auto content_hash = ComputeExternalSourceFingerprint(full_path, bytes);
+  const auto content_hash
+    = ComputeExternalSourceFingerprint(full_path, bytes->Unsigned());
 
-  auto blob = ScriptSourceBlob::FromOwned(std::move(bytes),
+  auto blob = ScriptSourceBlob::FromOwned(std::move(bytes).value(),
     data::pak::scripting::ScriptLanguage::kLuau,
     data::pak::scripting::ScriptCompression::kNone, content_hash,
     ScriptBlobOrigin::kExternalFile,

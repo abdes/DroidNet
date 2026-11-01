@@ -14,6 +14,7 @@
 
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::pakdump {
 
@@ -33,19 +34,18 @@ public:
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
     asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
-    const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
+    const auto data = asset_dump_helpers::TryDescriptorBytes(pak, entry);
     if (!data) {
       ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
-    if (data->size() < sizeof(CollisionShapeAssetDesc)) {
+    const auto shape_read = serio::CopyAt<CollisionShapeAssetDesc>(*data);
+    if (!shape_read) {
       ctx.Out() << "    CollisionShapeAssetDesc: (insufficient data)\n\n";
       co_return;
     }
-
-    CollisionShapeAssetDesc shape {};
-    std::memcpy(&shape, data->data(), sizeof(shape));
+    const auto& shape = *shape_read;
 
     asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), shape.header,
       asset_dump_helpers::DescriptorString(

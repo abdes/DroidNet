@@ -4,23 +4,28 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstring>
 #include <filesystem>
 #include <span>
+#include <stdexcept>
 
 #include "DemoShell/test/UiTestAssets.h"
 
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Vortex/test/Fixtures/TextureBinderPayloads.h>
 
 namespace oxygen::examples::testing {
 auto WriteUiTextureFixture(const std::filesystem::path& root) -> void
 {
   const auto packed = vortex::testing::MakeCookedTexture1x1Rgba8Payload();
-  data::pak::core::TextureResourceDesc descriptor {};
-  std::memcpy(&descriptor, packed.data(), sizeof(descriptor));
+  const auto read = serio::CopyAt<data::pak::core::TextureResourceDesc>(
+    std::as_bytes(std::span(packed)));
+  if (!read) {
+    throw std::runtime_error("the texture payload lacks its descriptor");
+  }
+  const auto descriptor = *read;
   const auto payload
     = std::as_bytes(std::span(packed))
         .subspan(descriptor.data_offset, descriptor.size_bytes);

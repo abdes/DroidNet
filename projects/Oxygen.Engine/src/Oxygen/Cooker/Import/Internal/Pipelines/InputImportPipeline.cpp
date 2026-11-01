@@ -1314,10 +1314,10 @@ auto InputImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   const auto container = InputContainer { .placement = std::move(*placement) };
 
   std::string source_text {};
-  source_text.resize(item.source_bytes.size());
-  if (!item.source_bytes.empty()) {
-    std::memcpy(
-      source_text.data(), item.source_bytes.data(), item.source_bytes.size());
+  const auto source_bytes = item.source_bytes.Bytes();
+  source_text.resize(source_bytes.size());
+  if (!source_bytes.empty()) {
+    std::memcpy(source_text.data(), source_bytes.data(), source_bytes.size());
   }
 
   json doc {};

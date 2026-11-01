@@ -147,11 +147,12 @@ auto ScriptAssetImportJob::LoadSource(ImportSession& session)
     };
   }
 
-  const auto read = co_await reader->ReadFile(req.source_path);
+  auto read = co_await reader->ReadFile(req.source_path);
   if (!read.has_value()) {
     AddDiagnostic(session, req, ImportSeverity::kError,
       "script.asset.source_read_failed",
-      "Failed to read source file: " + read.error().ToString());
+      "Failed to read source file '" + req.source_path.string()
+        + "': " + read.error().message());
     co_return LoadedSource {
       .success = false,
       .bytes = {},
@@ -160,7 +161,7 @@ auto ScriptAssetImportJob::LoadSource(ImportSession& session)
 
   co_return LoadedSource {
     .success = true,
-    .bytes = read.value(),
+    .bytes = std::move(read.value()),
   };
 }
 

@@ -188,9 +188,9 @@ Source bytes consumed during import are checked again before publication.
 
 Physical I/O uses [Base filesystem paths](../../../Base/Docs/Filesystem.md),
 including parser callbacks and generated output. Authored paths and identities
-keep their logical spelling. Emitter failures retain the original file error
-through session finalization, even when another emitter has flushed the shared
-writer.
+keep their logical spelling. Emitter failures retain the original file path and
+error (`WriteFailure`) through session finalization; each emitter joins its own
+writes, so one emitter's failure never hides another's.
 
 DemoShell's ad-hoc imports are records in its scratch project's own writable
 `Scratch` mount (`/Scratch/DCC/Ship.glb.import.json`), never in the read-only
@@ -208,10 +208,10 @@ reclamation requires the owning Content lifetime to release them.
 `ReclaimUnusedGenerations` checks selection under the record lock, then removes
 only UUID-named private generations for that source whose exclusive marker lock
 can be acquired. Import workers run this cleanup before new work; selected,
-mounted and in-flight generations remain. Model import jobs own existing native
-file writers and registries per generation. Cancellation drains that writer
-before destroying its session/emitters, without cancelling or draining another
-job. One source namespace belongs to one authored record. Hosts expose
+mounted and in-flight generations remain. Model import jobs own their registries
+per generation, and their emitters start cooked writes in the job's nursery.
+Cancellation cancels and joins that job's writes before destroying its
+session/emitters, without cancelling or draining another job. One source namespace belongs to one authored record. Hosts expose
 the selected generation without adding workspace-selection UI.
 
 Acceptance: interrupted/failed cooks preserve the selected record and all prior
@@ -287,8 +287,8 @@ remain valid through generation replacement.
 
 16. **Log-Structured Allocation (Append Semantics)**: Re-importing an asset
     allocates NEW space with a NEW index (append-like). Old data remains but is
-    stale. Allocation is done by reserving explicit offsets and writing via
-    `WriteAt*` to avoid interleaving. The index file is always accurate: a
+    stale. Allocation is done by reserving explicit offsets and writing with
+    `AsyncWriteAt` to avoid interleaving. The index file is always accurate: a
     re-cook retires the outputs its source no longer produces. The pak step
     compacts the tables: its planner packs only the resources the assets bind
     or loaders reach by key, and remaps their indices.
@@ -423,15 +423,18 @@ graph TB
 
             JobPipelines -->|"runs pipelines"| ImportSession
             ImportSession -->|"collect results"| Emitters
-            ImportSession -.->|"uses"| AsyncFileReader
-            ImportSession -.->|"uses"| AsyncFileWriter
+            ImportSession -.->|"reads sources"| AsyncFileReader
+            ImportSession -.->|"cooked storage"| ImportStorage
         end
 
-        AsyncFileWriter["AsyncFileWriter - WriteAtAsync"]
-        AsyncFileReader["AsyncFileReader - ReadFile"]
+        IoDriver["serio::IoDriver - owned by ImportEventLoop"]
+        ImportStorage["cooked::ImportStorage - PublishAsync / OpenData"]
+        AsyncFileReader["IAsyncFileReader - SerioFileReader"]
 
         AsyncImporter -->|"creates & schedules"| JobScope
-        Emitters -.->|"queues async writes"| AsyncFileWriter
+        Emitters -.->|"writes in the job nursery"| ImportStorage
+        ImportStorage -.->|"awaits through"| IoDriver
+        AsyncFileReader -.->|"awaits through"| IoDriver
     end
 
     ThreadPool["co::ThreadPool<br/><small>CPU-bound worker threads</small>"]
@@ -449,22 +452,23 @@ graph TB
     style JobPipelines stroke:#00bcd4,stroke-width:2px
     style Emitters stroke:#8bc34a,stroke-width:2px
     style ThreadPool stroke:#607d8b,stroke-width:2px
-    style AsyncFileWriter stroke:#607d8b,stroke-width:2px
+    style IoDriver stroke:#607d8b,stroke-width:2px
+    style ImportStorage stroke:#607d8b,stroke-width:2px
 ```
 
 ### Actor Summary
 
-| Actor                  | Scope     | Owns                                                                    | Role                                                  |
-| ---------------------- | --------- | ----------------------------------------------------------------------- | ----------------------------------------------------- |
-| **AsyncImportService** | Singleton | Import thread, AsyncImporter                                            | Thread-safe public API                                |
-| **AsyncImporter**      | Shared    | Job channel + scheduler                                                 | Import-thread job runner                              |
-| **ImportJob**          | Per-job   | Child nursery, cancellation signal, ImportSession, pipelines            | Single job actor: owns one job’s lifetime + resources |
-| **ImportSession**      | Per-job   | Async I/O + ThreadPool access, Emitters, LooseCookedWriter, Diagnostics | Per-import output + infra access                      |
-| **TexturePipeline**    | Per-job   | Internal queues + worker tasks                                          | Pure compute: decode/transcode → in-memory payload    |
-| **TextureEmitter**     | Per-job   | `textures.data`, `textures.table`                                       | Async I/O: Emit() → index + background write          |
-| **BufferEmitter**      | Per-job   | `buffers.data`, `buffers.table`                                         | Async I/O for geometry/animation buffers              |
-| **AssetEmitter**       | Per-job   | `*.omat`, `*.ogeo`, `*.oscene`                                          | Async I/O for asset descriptors                       |
-| **LooseCookedWriter**  | Per-job   | `container.index.bin`                                                   | Finalization: write index file LAST                   |
+| Actor                  | Scope     | Owns                                                              | Role                                                  |
+| ---------------------- | --------- | ----------------------------------------------------------------- | ----------------------------------------------------- |
+| **AsyncImportService** | Singleton | Import thread, AsyncImporter                                      | Thread-safe public API                                |
+| **AsyncImporter**      | Shared    | Job channel + scheduler                                           | Import-thread job runner                              |
+| **ImportJob**          | Per-job   | Child nursery, cancellation signal, ImportSession, pipelines      | Single job actor: owns one job’s lifetime + resources |
+| **ImportSession**      | Per-job   | Source reader, driver, storage, ThreadPool, Emitters, Diagnostics | Per-import output + infra access                      |
+| **TexturePipeline**    | Per-job   | Internal queues + worker tasks                                    | Pure compute: decode/transcode → in-memory payload    |
+| **TextureEmitter**     | Per-job   | `textures.data`, `textures.table`                                 | Async I/O: Emit() → index + background write          |
+| **BufferEmitter**      | Per-job   | `buffers.data`, `buffers.table`                                   | Async I/O for geometry/animation buffers              |
+| **AssetEmitter**       | Per-job   | `*.omat`, `*.ogeo`, `*.oscene`                                    | Async I/O for asset descriptors                       |
+| **LooseCookedWriter**  | Per-job   | `container.index.bin`                                             | Finalization: write index file LAST                   |
 
 ---
 
@@ -911,38 +915,25 @@ auto GetOrCreateTextureResourceIndexWithCooker(
 // Async: Same extraction, different dispatch
 // Note: This is a helper; the actual Submit happens in the job
 
+//! `resolved_path` is the texture file resolved against the source file, as
+//! `FbxAdapter` resolves it.
 TexturePipeline::WorkItem MakeTextureWorkItem(
-  const ufbx_texture* texture,
-  const CookerConfig& config,
-  std::span<const std::byte> bytes,
-  std::shared_ptr<const void> bytes_owner)
+  const std::filesystem::path& resolved_path, const CookerConfig& config)
 {
-  // 1. Resolve source (same helper as sync)
-  const auto* file_tex = ResolveFileTexture(texture);
+  // 1. The correlation id of a file texture is its normalized path.
+  const auto source_id = NormalizeTexturePathId(resolved_path);
 
-  // 2. Build source_id for correlation (same helper as sync)
-  const auto source_id = NormalizeTexturePathId(TextureIdString(*file_tex));
-
-  // 3. Build WorkItem using existing metadata types
+  // 2. Build the WorkItem: the pipeline reads a file source itself, through
+  //    the session's reader, into a serio::ByteBuffer it owns.
   return TexturePipeline::WorkItem {
     .source_id = source_id,
-    .bytes = bytes,
-    .bytes_owner = std::move(bytes_owner),
+    .source_path = resolved_path,
     .desc = MakeImportDescFromConfig(config, source_id),
   };
 }
 
 // Usage in ImportJob::ExecuteAsync():
-//   if (is_embedded) {
-//     auto bytes = std::span<const std::byte>(...);
-//     auto owner = scene_owner;  // keeps embedded bytes alive
-//     co_await pipeline.Submit(MakeTextureWorkItem(tex, config, bytes, owner));
-//   } else {
-//     auto file_bytes = co_await reader->ReadFile(path);
-//     auto owner = std::make_shared<std::vector<std::byte>>(std::move(*file_bytes));
-//     auto bytes = std::span<const std::byte>(owner->data(), owner->size());
-//     co_await pipeline.Submit(MakeTextureWorkItem(tex, config, bytes, owner));
-//   }
+//   co_await pipeline.Submit(MakeTextureWorkItem(resolved_path, config));
 ```
 
 #### Commit Responsibility
@@ -1030,10 +1021,11 @@ progress state, and job metadata) lives inside `ImportJob`, not in the entry.
 ### 5. ImportSession (Per-Job State + Emitters)
 
 Each import job gets its own session. The session owns emitters, tracks I/O,
-and provides the single access point for infrastructure services
-(async file reader/writer and ThreadPool). The session stores non-owning
-handles via `oxygen::observer_ptr` or owning smart pointers, but never raw
-reference members.
+and provides the single access point for infrastructure services: the source
+reader, the import loop's `serio::IoDriver`, the cooked-file storage
+(`cooked::ImportStorage`), the nursery the emitters write in, and the
+ThreadPool. The session stores non-owning handles via `oxygen::observer_ptr` or
+owning smart pointers, but never raw reference members.
 
 ```cpp
 namespace oxygen::content::import {
@@ -1042,17 +1034,30 @@ namespace oxygen::content::import {
 /*!
  The session provides a clean boundary between:
  - AsyncImporter (shared compute infrastructure)
- - Per-job output state (emitters, diagnostics, pending I/O)
+ - Per-job output state (emitters, diagnostics, pending writes)
 
  Emitters are created lazily on first use. The session calls Finalize()
- to wait for all I/O and write the index file.
+ to join all writes and write the index file.
 */
 class ImportSession {
 public:
-  explicit ImportSession(const ImportRequest& request,
-    oxygen::observer_ptr<IAsyncFileReader> file_reader,
-    oxygen::observer_ptr<IAsyncFileWriter> file_writer,
-    oxygen::observer_ptr<co::ThreadPool> thread_pool);
+  //! `writes` is the nursery the emitters start their writes in. It outlives
+  //! the session's emitters; the session never closes it.
+  ImportSession(const ImportRequest& request,
+    observer_ptr<IAsyncFileReader> file_reader,
+    observer_ptr<serio::IoDriver> driver, observer_ptr<co::Nursery> writes,
+    observer_ptr<co::ThreadPool> thread_pool,
+    observer_ptr<ResourceTableRegistry> table_registry,
+    observer_ptr<LooseCookedIndexRegistry> index_registry,
+    observer_ptr<IAsyncFileReader> cooked_reader = {});
+
+  //=== Infrastructure ===//
+
+  [[nodiscard]] auto FileReader() const noexcept
+    -> observer_ptr<IAsyncFileReader>;
+  [[nodiscard]] auto Driver() const noexcept -> observer_ptr<serio::IoDriver>;
+  [[nodiscard]] auto Storage() const noexcept
+    -> observer_ptr<cooked::ImportStorage>;
 
   //=== Lazy Emitters ===//
 
@@ -1068,180 +1073,148 @@ public:
   //=== Diagnostics ===//
 
   auto AddDiagnostic(ImportDiagnostic diag) -> void;
-  [[nodiscard]] auto Diagnostics() const -> const std::vector<ImportDiagnostic>&;
 
   //=== Finalization ===//
 
-  //! Wait for all pending I/O, flush tables, write index file.
+  //! Join every emitter's writes, publish tables, write the index file.
   /*!
    @return ImportReport with success flag and diagnostics.
   */
   [[nodiscard]] auto Finalize() -> co::Co<ImportReport>;
-
-private:
-  ImportRequest request_;
-  oxygen::observer_ptr<IAsyncFileReader> file_reader_;
-  oxygen::observer_ptr<IAsyncFileWriter> file_writer_;
-  oxygen::observer_ptr<co::ThreadPool> thread_pool_;
-  LooseCookedWriter cooked_writer_;
-
-  // Lazy emitters (nullptr until first use)
-  std::unique_ptr<TextureEmitter> texture_emitter_;
-  std::unique_ptr<BufferEmitter> buffer_emitter_;
-  std::unique_ptr<AssetEmitter> asset_emitter_;
-
-  // Thread-safe diagnostics collection
-  std::vector<ImportDiagnostic> diagnostics_;
-  std::mutex diagnostics_mutex_;
 };
 
 } // namespace oxygen::content::import
 ```
 
-#### TextureEmitter Implementation
+`Finalize()` finalizes each emitter the session created. An emitter whose
+`Finalize()` returns a `WriteFailure` becomes an error diagnostic whose message
+names the file and the reason (for example
+`import.texture_emitter_finalize_failed`).
+
+#### Emitter Write Path
+
+An emitter does not own a file or a writer. Its table aggregator
+(`ResourceTableAggregator`, one per resource kind) owns the table and the data
+file's reserved size, and opens the data file once through the storage:
 
 ```cpp
-//! Emits cooked textures with async I/O.
-/*!
- Emit() returns a stable table index IMMEDIATELY and queues async I/O.
- No blocking. The index is valid the moment Emit() returns.
-*/
-class TextureEmitter {
+// Opened on first use, created when missing, never truncated, sharing writes.
+auto DataFile() -> Result<serio::AnyAsyncDevice*>;  // storage->OpenData(...)
+
+// Reserves a unique, aligned range of the data file (atomic).
+auto ReserveDataRange(uint64_t alignment, uint64_t payload_size)
+  -> WriteReservation;  // reservation_start, aligned_offset, padding_size
+```
+
+Each emitter holds a `WriteGroup`, the writes it has in flight. The group
+starts every write as a task of the import session's nursery and keeps the
+first error:
+
+```cpp
+class WriteGroup final {
 public:
-  explicit TextureEmitter(
-    IAsyncFileWriter& file_writer,
-    const std::filesystem::path& cooked_root);
+  explicit WriteGroup(co::Nursery& nursery) noexcept;
 
-  //! Emit a cooked texture. Returns stable table index.
-  /*!
-   Index is assigned synchronously (counter increment).
-   Data write is queued as async I/O.
-   Table entry is added in memory.
+  //! Starts `write` of the file `path` in the nursery.
+  auto Start(std::filesystem::path path, co::Co<Result<void>> write) -> void;
 
-   @param cooked The cooked texture payload.
-   @return Table index (stable immediately, usable for material refs).
-  */
-  [[nodiscard]] auto Emit(CookedTexturePayload cooked) -> uint32_t {
-    // 1. Assign stable index NOW (before any I/O)
-    auto idx = next_index_++;
+  //! Records a write that failed before it started.
+  auto Fail(const std::filesystem::path& path, std::error_code error) -> void;
 
-    // 2. Reserve a unique range in the data file (append semantics)
-    //    - CAS loop reserves a non-overlapping range
-    //    - Alignment is applied to payload start
-    const uint64_t payload_size = cooked.payload.size();
-    uint64_t current_size = data_file_size_.load();
-    uint64_t aligned_offset = 0;
-    uint64_t new_size = 0;
-    do {
-      aligned_offset = AlignUp(current_size, util::kRowPitchAlignment);
-      new_size = aligned_offset + payload_size;
-    } while (!data_file_size_.compare_exchange_weak(current_size, new_size));
+  //! Waits for every write started; the first failure, if any.
+  [[nodiscard]] auto Join() -> co::Co<Result<void, WriteFailure>>;
 
-    const uint64_t padding_size = aligned_offset - current_size;
+  [[nodiscard]] auto ErrorCount() const noexcept -> size_t;
+  [[nodiscard]] auto Running() const noexcept -> size_t;
+};
 
-    // 3. Build table entry in memory (tiny: ~100 bytes)
-    //    NOTE: The offset is stable immediately after reservation.
-    table_.push_back(TextureResourceDesc{
-      .data_offset = aligned_offset,
-      .data_size = static_cast<uint32_t>(payload_size),
-      .format = cooked.desc.format,
-      // ... other fields
-    });
-
-    // 4. Queue async writes using explicit offsets (WriteAtAsync)
-    //    This avoids interleaving caused by concurrent append.
-    if (padding_size > 0) {
-      pending_writes_++;
-      file_writer_.WriteAtAsync(
-        data_file_path_,
-        current_size,
-        ZeroBytes(padding_size),
-        WriteOptions{ .create_directories = true, .share_write = true },
-        [this](const FileErrorInfo& error, uint64_t) {
-          if (error.IsError()) errors_.fetch_add(1);
-          pending_writes_--;
-        });
-    }
-
-    pending_writes_++;
-    file_writer_.WriteAtAsync(
-      data_file_path_,
-      aligned_offset,
-      cooked.payload,
-      WriteOptions{ .create_directories = true, .share_write = true },
-      [this](const FileErrorInfo& error, uint64_t) {
-        if (error.IsError()) errors_.fetch_add(1);
-        pending_writes_--;
-      });
-
-    return idx;  // Caller can use this NOW
-  }
-
-  //! How many writes still in flight?
-  [[nodiscard]] auto PendingCount() const -> size_t {
-    return pending_writes_.load();
-  }
-
-  //! Wait for all data writes, then flush table to disk.
-  [[nodiscard]] auto Finalize() -> co::Co<> {
-    // Wait for all async data writes
-    while (pending_writes_.load() > 0) {
-      co_await co::Yield();
-    }
-
-    // Check for I/O errors
-    if (errors_.load() > 0) {
-      // Handle errors (diagnostics already collected)
-    }
-
-    // Flush table to disk (single write)
-    co_await async_io_.Write(table_file_path_, SerializeTable(table_));
-  }
-
-private:
-  IAsyncFileWriter& file_writer_;
-  std::filesystem::path data_file_path_;
-  std::filesystem::path table_file_path_;
-
-  std::vector<TextureResourceDesc> table_;
-  std::atomic<uint64_t> data_file_size_{0};
-  uint32_t next_index_ = 0;
-
-  std::atomic<size_t> pending_writes_{0};
-  std::atomic<size_t> errors_{0};
+//! A cooked write that failed: the file it wrote and why.
+struct WriteFailure {
+  std::filesystem::path path;
+  std::error_code error;
+  [[nodiscard]] auto Message() const -> std::string;
 };
 ```
 
-#### Async File Writer Contracts (WriteAt*)
-
-Emitters depend on an async writer API that supports explicit-offset writes.
-On Windows, the async write surface is `WriteAt`/`WriteAtAsync` (append-based
-APIs are intentionally avoided).
-
-**Core API surface (conceptual):**
+#### Emitter Implementation (Shape)
 
 ```cpp
-// Explicit-offset write: does not rely on a shared file pointer.
-auto WriteAt(path, offset, bytes, options) -> std::optional<FileErrorInfo>;
+// Emit() assigns the index, reserves the range and starts the writes.
+// No blocking: the index is valid the moment Emit() returns.
+auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t {
+  // 1. Stable index and table entry, in memory (tiny: ~100 bytes).
+  // 2. Reserve an aligned range in the data file.
+  const auto range = table_aggregator_.ReserveDataRange(
+    alignment, cooked.data.size());
 
-// Async explicit-offset write: invokes callback on completion.
-auto WriteAtAsync(path, offset, bytes, options, on_complete) -> void;
+  // 3. Start the writes in the session's nursery; the data lives in the
+  //    write coroutine.
+  if (range.padding_size > 0) {
+    QueueDataWrite(WriteKind::kPadding, std::nullopt,
+      range.reservation_start, std::vector<std::byte>(range.padding_size));
+  }
+  QueueDataWrite(
+    WriteKind::kPayload, index, range.aligned_offset, std::move(cooked.data));
+  return index;  // The caller can use this NOW.
+}
 
-// Flush any OS buffers for the file(s) written.
-auto Flush(path) -> std::optional<FileErrorInfo>;
+auto BufferEmitter::QueueDataWrite(WriteKind kind,
+  std::optional<uint32_t> index, uint64_t offset, std::vector<std::byte> data)
+  -> void {
+  const auto file = table_aggregator_.DataFile();
+  if (!file) {
+    writes_.Fail(data_path_, file.error());
+    return;
+  }
+  writes_.Start(
+    data_path_, WriteData(*file, kind, index, offset, std::move(data)));
+}
+
+auto BufferEmitter::WriteData(serio::AnyAsyncDevice* file, WriteKind kind,
+  std::optional<uint32_t> index, uint64_t offset, std::vector<std::byte> data)
+  -> co::Co<Result<void>> {
+  co_return co_await file->AsyncWriteAt(
+    serio::ByteOffset { offset }, std::span<const std::byte>(data));
+}
+
+// Joins the writes; the tables are published by the table aggregator.
+auto BufferEmitter::Finalize() -> co::Co<Result<void, WriteFailure>> {
+  co_return co_await writes_.Join();
+}
+```
+
+#### Cooked Write Contracts (ImportStorage)
+
+Emitters depend on `cooked::ImportStorage`, the role of `CookerStorage` that
+awaits its writes through the import loop's driver. The real file system and the
+in-memory test storage implement it:
+
+```cpp
+// Whole-file atomic replacement (buffered durability): descriptors, tables.
+auto PublishAsync(serio::IoDriver& driver, std::filesystem::path path,
+  std::span<const std::byte> bytes) -> co::Co<Result<void>>;
+
+// A data file for writes at reserved offsets: created when missing, never
+// truncated, sharing reads and writes.
+auto OpenData(serio::IoDriver& driver, const std::filesystem::path& path)
+  -> Result<serio::AnyAsyncDevice>;
 ```
 
 **Contracts / guarantees:**
 
-- **No implicit append**: callers must provide the file offset.
-- **Concurrency safety**: concurrent `WriteAt*` calls are allowed as long as
-  their byte ranges do not overlap. Overlapping writes produce undefined final
-  content.
-- **Completion ordering**: completions may occur out-of-order.
-- **Error reporting**: errors are reported via `FileErrorInfo` in the callback;
-  no exceptions cross async boundaries.
-- **Sharing options**: writers should support a `share_write`-style option for
-  multi-writer scenarios (e.g., emitter padding+payload writes).
+- **No implicit append**: callers provide the file offset
+  (`AsyncWriteAt(serio::ByteOffset, bytes)`).
+- **Concurrency safety**: concurrent `AsyncWriteAt` calls on one data file are
+  allowed as long as their byte ranges do not overlap. Overlapping writes
+  produce undefined final content.
+- **Completion ordering**: writes may complete out of order.
+- **Atomic publication**: `PublishAsync` replaces the whole file atomically; a
+  cancelled or failed publication leaves the destination as it was.
+- **Error reporting**: errors are `std::error_code` values in a `Result`
+  (compared with `serio::Error` conditions or `std::errc`); no exceptions cross
+  async boundaries. The `WriteFailure` returned by `Finalize()` names the file.
+- **Cancellation**: cancelling the session's nursery cancels the writes through
+  the driver; the nursery joins them before the storage goes away.
 
 #### Emitter Contracts and Design Principles
 
@@ -1252,27 +1225,27 @@ simple:
 1. **Stable index returned immediately**: `Emit()` assigns and returns an index
    synchronously, before any I/O completes.
 2. **Dedup by signature** (when applicable): if the resource signature already
-   exists, `Emit()` returns the existing index and queues no additional I/O.
-3. **Append semantics via allocation**: the emitter maintains an atomic
-   `data_file_size_` and reserves a unique range using a CAS loop.
+   exists, `Emit()` returns the existing index and starts no additional write.
+3. **Append semantics via allocation**: the table aggregator maintains an atomic
+   data file size and reserves a unique range with `ReserveDataRange()`.
 4. **Alignment-aware layout**: the reservation computes `aligned_offset` and
    optional `padding_size`; padding is written as zero bytes at the reserved
    start.
 5. **Table/index stability**: the table entry is recorded before (or alongside)
-   queuing writes, so the returned index and descriptor mapping are stable
+   starting writes, so the returned index and descriptor mapping are stable
    immediately after `Emit()` returns.
-6. **Explicit-offset writes only**: both padding and payload are written using
-   `WriteAtAsync(path, offset, ...)` with `share_write=true`.
-7. **Emitter owns async buffer lifetimes**: payload/padding buffers are moved
-   into shared ownership captured by completion callbacks.
-8. **Pending/error accounting**: each queued write increments a pending counter;
-   completion decrements it and increments an error counter on failure.
-9. **Finalize defines the durability boundary**: `Finalize()` waits for all
-   pending writes, flushes and writes tables, and only then allows the session
-   to write `container.index.bin` last.
+6. **Explicit-offset writes only**: both padding and payload are written with
+   `AsyncWriteAt(offset, bytes)` on the aggregator's data file, opened once.
+7. **The write owns its buffers**: payload and padding are moved into the write
+   coroutine that the `WriteGroup` starts, so they live until it completes.
+8. **Error accounting**: the `WriteGroup` counts every failed write and keeps
+   the first one (file path and `std::error_code`).
+9. **Finalize defines the durability boundary**: `Finalize()` joins all writes
+   and returns `Result<void, WriteFailure>`; the tables are then published with
+   `PublishAsync`, and only then does the session write `container.index.bin`
+   last.
 10. **Single-threaded mutation**: emitter internal tables and maps are mutated
-    on the import thread; async completion handlers are expected to run on the
-    same event loop to safely touch emitter state.
+    on the import thread; the writes run on the same event loop.
 
 TextureEmitter-specific rule:
 
@@ -1355,10 +1328,11 @@ private:
 ```cpp
 auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
-  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool());
+  // The job's session: its reader, driver, writes nursery and registries.
+  auto& session = Session();
   auto& pool = *session.ThreadPool();
   TexturePipeline tex_pipe(pool, {/* config */});
-  tex_pipe.Start(JobNursery());
+  StartPipeline(tex_pipe);
 
   // Get emitters from session (lazy creation)
   auto& tex_emitter = session.TextureEmitter();
@@ -1483,14 +1457,14 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
 ├────────────────────────────────────────────────────────────────────────────┤
 │ ImportJob calls session.Finalize()                                         │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ 7. Wait for all pending I/O (tex_emitter, buf_emitter, asset_emitter)      │
-│ 8. Flush table files (single async write each)                             │
+│ 7. Join each emitter's WriteGroup (tex, buf, asset emitters)               │
+│ 8. Publish table files (PublishAsync, one atomic write each)               │
 │ 9. Write container.index.bin (LooseCookedWriter::Finish())                 │
 │ 10. Return ImportReport                                                    │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 7. Append-Style Allocation (WriteAt*), Deferred Index File Pattern
+### 7. Append-Style Allocation (AsyncWriteAt), Deferred Index File Pattern
 
 **The existing architecture is already optimal!** Let me trace how it works:
 
@@ -1599,7 +1573,7 @@ knowing the final size of each `.table` and `.data` file.
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ DURING IMPORT (streaming)                                               │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ textures.data  ← Reserve range + WriteAt*, get stable offset            │
+│ textures.data  ← Reserve range + AsyncWriteAt, get stable offset        │
 │ table vector   ← Push descriptor entries (in memory, ~100 bytes each)  │
 │ texture index  ← Just the vector position (stable at push time)         │
 ├─────────────────────────────────────────────────────────────────────────┤
@@ -1672,9 +1646,10 @@ position (or if async writes interleave).
 
 **Options:**
 
-A) **Single-threaded allocation, concurrent WriteAt** (current design):
+A) **Single-threaded allocation, concurrent AsyncWriteAt** (current design):
 All coroutines resume on import thread → serialized reservations and table
-mutation, while file I/O completes concurrently via `WriteAtAsync()`.
+mutation, while file I/O completes concurrently via `AsyncWriteAt()` tasks of
+the session's nursery.
 
 B) **Mutex-protected appends**:
 
@@ -1688,14 +1663,15 @@ auto Append(std::span<const std::byte> bytes) -> uint64_t {
 }
 ```
 
-C) **Reserve offsets, parallel WriteAt** (same core idea as emitters):
+C) **Reserve offsets, parallel AsyncWriteAt** (same core idea as emitters):
 
 ```cpp
 // Phase 1: Reserve offset ranges (fast, serialized)
 const auto range = ReserveAlignedRange(size, alignment);
 
 // Phase 2: Write at explicit offset (safe concurrency)
-WriteAtAsync(path, range.aligned_offset, payload_bytes, options, on_complete);
+writes.Start(path,
+  file->AsyncWriteAt(serio::ByteOffset { range.aligned_offset }, payload_bytes));
 ```
 
 For most cases, **Option A** (single-threaded allocation on import thread) is sufficient
@@ -1709,12 +1685,13 @@ because:
 
 ```cpp
 auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport> {
-  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool());
+  // The job's session: its reader, driver, writes nursery and registries.
+  auto& session = Session();
   auto& pool = *session.ThreadPool();
   TexturePipeline tex_pipe(pool, {/* config */});
-  tex_pipe.Start(JobNursery());
+  StartPipeline(tex_pipe);
 
-  // Emit via emitter (tables in memory, data via WriteAtAsync)
+  // Emit via emitter (tables in memory, data via AsyncWriteAt)
   auto& tex_emitter = session.TextureEmitter();
 
   auto scene = co_await pool.Run([&] { return ParseFbxScene(...); });
@@ -1732,7 +1709,7 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport> {
     while (tex_pipe.HasPending()) {
       auto result = co_await tex_pipe.Collect();
 
-      // Reserve range + queue WriteAtAsync (fast, on import thread)
+      // Reserve range + start the write task (fast, on import thread)
       auto idx = tex_emitter.Emit(std::move(result.cooked_data));
       texture_indices[result.source_id] = idx;
 
@@ -1753,12 +1730,11 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport> {
 
   co_await nursery.Join();
 
-  // Flush tables (tiny, fast)
-  tex_state.FlushTable(out);
-  buf_state.FlushTable(out);
-
   // Scene graph
   EmitSceneGraph(scene, mesh_indices, material_indices, out);
+
+  // session.Finalize() (called by ImportJob) joins the emitters' writes and
+  // publishes the tables (tiny, one atomic write each).
 }
 ```
 
@@ -1782,9 +1758,9 @@ TIME (ms) →    0    200   400   600   800   1000  1200  1400  1600  1800  2000
 Parse FBX     ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
               │
 Cores 0-27    │ ████████████████████████████████████████████████████████████
-(textures)    │ BC7 encode → reserve+WriteAt to .data (streaming)
+(textures)    │ BC7 encode → reserve+AsyncWriteAt to .data (streaming)
               │
-Import thread │ ░░░collect→queueWriteAt░░collect→queueWriteAt░░collect→queueWriteAt░░
+Import thread │ ░░░collect→startWrite░░collect→startWrite░░collect→startWrite░░░░░░░
               │ (coroutines interleave, each write submission is fast)
               │
 Tables flush  │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█
@@ -1805,7 +1781,7 @@ overlaps with compute, and explicit-offset writes avoid append interleaving.
    on the import thread. They interleave when suspended on co_await.
 
 3. **Reserve + write immediately**: reserve a unique range and queue
-   `WriteAtAsync()` to `.data`. No implicit append; no interleaving.
+   `AsyncWriteAt()` to `.data`. No implicit append; no interleaving.
 
 4. **Buffer only table entries**: Table descriptors (~100 bytes each) are
    kept in memory and flushed once at the end.
@@ -1820,7 +1796,7 @@ overlaps with compute, and explicit-offset writes avoid append interleaving.
 
 8. **Thread-safe by construction**: All coroutines resume on import thread.
    Allocation + table mutation is serialized without explicit locks; I/O is
-   concurrent via non-overlapping `WriteAtAsync()`.
+   concurrent via non-overlapping `AsyncWriteAt()`.
 
 ### 8. Import Event Loop
 
@@ -1841,6 +1817,10 @@ public:
   //! Get the underlying ASIO io_context.
   [[nodiscard]] auto IoContext() -> asio::io_context&;
 
+  //! The IO driver of the io_context: files opened through it are awaited
+  //! by coroutines running on this loop.
+  [[nodiscard]] auto Driver() noexcept -> serio::IoDriver&;
+
   //! Run the event loop (blocks until stopped).
   auto Run() -> void;
 
@@ -1853,6 +1833,7 @@ public:
 
 private:
   asio::io_context io_context_;
+  serio::IoDriver driver_;  // over io_context_; destroyed by the loop
   asio::executor_work_guard<asio::io_context::executor_type> work_guard_;
 };
 
@@ -2180,7 +2161,9 @@ auto result = co_await thread_pool_->Run(
 2. **Exceptions within coroutines**: Caught at nursery boundaries and
    converted to error reports.
 
-3. **File I/O errors**: Returned as `Result<bytes, FileError>`, never thrown.
+3. **File I/O errors**: Returned as `Result<T>` whose error is a
+   `std::error_code` (compared with `serio::Error` conditions or `std::errc`),
+   never thrown. Cooked-write failures carry the file path (`WriteFailure`).
 
 4. **ThreadPool exceptions**: Caught by the awaiter and rethrown on resume;
    we catch at the coroutine level.
@@ -2472,41 +2455,12 @@ struct TextureImportRequest {
 
 ### Internal Routing
 
-```cpp
-auto AsyncImporter::ProcessStandaloneTexture(TextureImportRequest& req)
-  -> co::Co<ImportReport>
-{
-  // 1. Read file via IAsyncFileReader (I/O is importer-owned)
-  auto bytes_result = co_await file_reader_->ReadFile(req.source_path);
-  if (!bytes_result) {
-    co_return ErrorReport(bytes_result.error());
-  }
-
-  // Keep bytes alive across suspension + ThreadPool work
-  auto bytes_owner
-    = std::make_shared<std::vector<std::byte>>(std::move(*bytes_result));
-
-  // 2. Cook via TexturePipeline (compute-only)
-  co_await texture_pipeline_.Submit(TexturePipeline::WorkItem{
-    .source_id = req.source_path.string(),
-    .bytes = std::span<const std::byte>(bytes_owner->data(), bytes_owner->size()),
-    .bytes_owner = bytes_owner,
-    .desc = req.options.ToDesc(),
-  });
-  // Note: do not Close() a shared pipeline per job.
-
-  auto cooked = co_await texture_pipeline_.Collect();
-  if (!cooked.success || !cooked.cooked.has_value()) {
-    co_return ImportReport{ .success = false, .diagnostics = std::move(cooked.diagnostics) };
-  }
-
-  // 3. Write cooked output via IAsyncFileWriter (NOT the reader)
-  // Note: standalone output is a convenience path; normal imports commit via emitters.
-  auto write_result
-    = co_await file_writer_->Write(req.output_path, cooked.cooked->payload);
-  co_return ImportReport{ .success = write_result.has_value() };
-}
-```
+A standalone texture request runs as a `TextureImportJob`, like any import: the
+job reads its sources through the session's `IAsyncFileReader` into
+`serio::ByteBuffer`s, cooks them through the `TexturePipeline`, and emits the
+result through the session's `TextureEmitter`, whose writes go to the cooked
+root's `textures.data` through `cooked::ImportStorage`. There is no separate
+standalone write path.
 
 ---
 
@@ -2707,7 +2661,7 @@ The following concise set of items remain to complete or extend the architecture
 
 ## See Also
 
-- [async_file_io.md](async_file_io.md) - Async file I/O abstraction
+- [async_file_io.md](async_file_io.md) - Import source reads and cooked writes
 - [implementation_plan.md](implementation_plan.md) - Phased implementation
 - [OxCo/Docs/ThreadPool.md](../src/Oxygen/OxCo/Docs/ThreadPool.md) - ThreadPool usage
 - [OxCo/Docs/Live_Objects.md](../src/Oxygen/OxCo/Docs/Live_Objects.md) - LiveObject pattern

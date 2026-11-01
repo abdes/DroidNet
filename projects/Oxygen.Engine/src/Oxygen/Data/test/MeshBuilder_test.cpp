@@ -13,6 +13,7 @@
 #include <vector>
 
 // GTest
+#include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project
@@ -24,7 +25,6 @@
 
 using oxygen::data::BufferResource;
 using oxygen::data::MaterialAsset;
-using oxygen::data::Mesh;
 using oxygen::data::MeshBuilder;
 using oxygen::data::Vertex;
 
@@ -90,7 +90,7 @@ protected:
     std::memcpy(vertex_data.data(), vertices_.data(), vertex_data.size());
 
     vertex_buffer_ = std::make_shared<BufferResource>(
-      std::move(vertex_desc), std::move(vertex_data));
+      vertex_desc, oxygen::serio::testing::OwnedBytes(vertex_data));
 
     // Create descriptor for index buffer
     pak::core::BufferResourceDesc index_desc = {
@@ -107,8 +107,9 @@ protected:
     std::vector<uint8_t> index_data(indices_.size() * sizeof(std::uint32_t));
     std::memcpy(index_data.data(), indices_.data(), index_data.size());
 
-    index_buffer_ = std::make_shared<BufferResource>(std::move(index_desc),
-      std::move(index_data)); // Create a mock material asset
+    index_buffer_ = std::make_shared<BufferResource>(index_desc,
+      oxygen::serio::testing::OwnedBytes(
+        index_data)); // Create a mock material asset
     material_ = MaterialAsset::CreateDefault();
   }
 
@@ -155,7 +156,7 @@ protected:
     std::memcpy(vertex_data.data(), vertices_.data(), vertex_data.size());
 
     vertex_buffer_ = std::make_shared<BufferResource>(
-      std::move(vertex_desc), std::move(vertex_data));
+      vertex_desc, oxygen::serio::testing::OwnedBytes(vertex_data));
 
     // Create descriptor for index buffer
     pak::core::BufferResourceDesc index_desc = {
@@ -173,7 +174,7 @@ protected:
     std::memcpy(index_data.data(), indices_.data(), index_data.size());
 
     index_buffer_ = std::make_shared<BufferResource>(
-      std::move(index_desc), std::move(index_data));
+      index_desc, oxygen::serio::testing::OwnedBytes(index_data));
 
     material_ = MaterialAsset::CreateDefault();
   }
@@ -224,8 +225,8 @@ protected:
     };
     std::vector<uint8_t> vbytes(vertices_.size() * sizeof(Vertex));
     std::memcpy(vbytes.data(), vertices_.data(), vbytes.size());
-    vertex_buffer_
-      = std::make_shared<BufferResource>(vertex_desc, std::move(vbytes));
+    vertex_buffer_ = std::make_shared<BufferResource>(
+      vertex_desc, oxygen::serio::testing::OwnedBytes(vbytes));
   }
 
   std::vector<Vertex> vertices_;

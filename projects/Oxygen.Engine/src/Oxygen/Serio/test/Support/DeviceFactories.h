@@ -143,6 +143,26 @@ struct AsyncFileFactory {
   TempFiles files;
 };
 
+//! Files opened through an inline driver: operations complete on the
+//! awaiting thread. The factory still owns a loop, for running coroutines.
+struct InlineAsyncFileFactory {
+  using Device = AsyncFile;
+
+  auto Make(const std::span<const std::byte> bytes) -> Device
+  {
+    return Required(
+      driver.Open(files.Write(bytes), { .access = Access::kReadWrite }),
+      "IoDriver::Open");
+  }
+
+  auto Loop() -> asio::io_context& { return loop; }
+
+  asio::io_context loop;
+  IoDriver driver
+    = Required(IoDriver::CreateInline(), "IoDriver::CreateInline");
+  TempFiles files;
+};
+
 struct MappedFileFactory {
   using Device = MappedFile;
 

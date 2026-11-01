@@ -47,7 +47,8 @@ public:
           defaults to read and delete, so an atomic replacement of the file
           succeeds while it is open.
    @return The open file, or the OS error (`kNotFound`, `kAccessDenied`,
-           `kSharingViolation` compare equal to it).
+           `kSharingViolation` compare equal to it); `kIsDirectory` on
+           every platform when `path` names a folder.
   */
   OXGN_SERIO_NDAPI static auto Open(const std::filesystem::path& path,
     const OpenSpec& spec) noexcept -> Result<NativeFile>;

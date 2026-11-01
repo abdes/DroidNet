@@ -12,6 +12,7 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -24,10 +25,12 @@
 
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::import::internal {
 
@@ -37,33 +40,6 @@ namespace {
   using oxygen::data::pak::core::BufferResourceDesc;
   using oxygen::data::pak::core::ResourceIndexT;
   using oxygen::graphics::detail::GetFormatInfo;
-
-  constexpr uint16_t kBufferSidecarVersion = 3;
-
-#pragma pack(push, 1)
-  struct BufferSidecarHeader final {
-    char magic[4] = { 'O', 'B', 'U', 'F' };
-    uint16_t version = kBufferSidecarVersion;
-    uint16_t reserved = 0;
-    ResourceIndexT resource_index = oxygen::data::pak::core::kNoResourceIndex;
-    BufferResourceDesc descriptor {};
-    uint32_t view_count = 0;
-    //! Size of the string table that follows the view entries.
-    uint32_t strings_size = 0;
-  };
-
-  struct BufferSidecarViewEntry final {
-    //! View name, in the string table that follows the view entries.
-    uint32_t name_offset = 0;
-    uint64_t byte_offset = 0;
-    uint64_t byte_length = 0;
-    uint64_t element_offset = 0;
-    uint64_t element_count = 0;
-  };
-#pragma pack(pop)
-
-  static_assert(std::is_trivially_copyable_v<BufferSidecarHeader>);
-  static_assert(std::is_trivially_copyable_v<BufferSidecarViewEntry>);
 
   auto AddIssue(std::vector<BufferDescriptorViewIssue>& issues,
     std::string code, std::string message, std::string object_path) -> void
@@ -81,7 +57,7 @@ namespace {
     if (lhs == 0 || rhs == 0) {
       return false;
     }
-    return lhs > (std::numeric_limits<uint64_t>::max)() / rhs;
+    return lhs > std::numeric_limits<uint64_t>::max() / rhs;
   }
 
   [[nodiscard]] auto EffectiveElementStride(
@@ -365,14 +341,14 @@ auto ParseBufferDescriptorSidecar(const std::span<const std::byte> bytes,
   error_message.clear();
   out = ParsedBufferDescriptorSidecar {};
 
-  if (bytes.size() < sizeof(BufferSidecarHeader)) {
+  auto reader = serio::ByteReader { bytes };
+  const auto header_read = reader.Read<BufferSidecarHeader>();
+  if (!header_read) {
     error_message = "Buffer descriptor file is truncated";
     return false;
   }
-
-  auto header = BufferSidecarHeader {};
-  std::memcpy(&header, bytes.data(), sizeof(BufferSidecarHeader));
-  if (std::memcmp(header.magic, "OBUF", 4) != 0) {
+  const auto& header = *header_read;
+  if (header.magic != kBufferSidecarMagic) {
     error_message = "Buffer descriptor has invalid magic";
     return false;
   }
@@ -408,11 +384,13 @@ auto ParseBufferDescriptorSidecar(const std::span<const std::byte> bytes,
   out.views.reserve(header.view_count);
 
   auto seen_names = std::unordered_set<std::string> {};
-  const auto* read_ptr = bytes.data() + sizeof(BufferSidecarHeader);
   for (uint32_t i = 0; i < header.view_count; ++i) {
-    auto entry = BufferSidecarViewEntry {};
-    std::memcpy(&entry, read_ptr, sizeof(BufferSidecarViewEntry));
-    read_ptr += sizeof(BufferSidecarViewEntry);
+    const auto entry_read = reader.Read<BufferSidecarViewEntry>();
+    if (!entry_read) {
+      error_message = "Buffer descriptor view table is truncated";
+      return false;
+    }
+    const auto& entry = *entry_read;
 
     const auto name_view = strings.TryGet(entry.name_offset);
     if (!name_view || name_view->empty()) {

@@ -29,7 +29,6 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
@@ -256,9 +255,6 @@ struct AsyncImportService::Impl {
   //! Async file reader (created on import thread).
   std::unique_ptr<IAsyncFileReader> file_reader_;
 
-  //! Async file writer (created on import thread).
-  std::unique_ptr<IAsyncFileWriter> file_writer_;
-
   //! Resource table registry (created on import thread).
   std::unique_ptr<ResourceTableRegistry> table_registry_;
 
@@ -316,17 +312,22 @@ struct AsyncImportService::Impl {
   {
     DLOG_F(INFO, "Import thread started");
 
-    // Create event loop on this thread
-    event_loop_ = std::make_unique<ImportEventLoop>();
+    // Create event loop on this thread, with its IO driver
+    try {
+      event_loop_ = std::make_unique<ImportEventLoop>();
+    } catch (const std::exception& ex) {
+      // No loop, no service: submissions are refused as the thread is not
+      // running.
+      LOG_F(ERROR, "Import thread cannot start: {}", ex.what());
+      startup_latch_.count_down();
+      return;
+    }
 
-    // Create platform-specific file reader via factory
-    file_reader_ = CreateAsyncFileReader(*event_loop_);
-
-    // Create platform-specific file writer via factory
-    file_writer_ = CreateAsyncFileWriter(*event_loop_);
+    // Source reads go through the loop's IO driver
+    file_reader_ = CreateAsyncFileReader(event_loop_->Driver());
 
     table_registry_ = std::make_unique<ResourceTableRegistry>(
-      *file_writer_, config_.cooked_storage);
+      event_loop_->Driver(), config_.cooked_storage);
     index_registry_
       = std::make_unique<LooseCookedIndexRegistry>(config_.cooked_storage);
 
@@ -339,7 +340,6 @@ struct AsyncImportService::Impl {
       = std::make_unique<detail::AsyncImporter>(detail::AsyncImporter::Config {
         .channel_capacity = config_.job_admission_capacity,
         .max_in_flight_jobs = config_.max_in_flight_jobs,
-        .file_writer = file_writer_.get(),
         .table_registry = table_registry_.get(),
       });
 
@@ -390,9 +390,6 @@ struct AsyncImportService::Impl {
     }
     if (index_registry_) {
       index_registry_.reset();
-    }
-    if (file_writer_) {
-      file_writer_.reset();
     }
     if (file_reader_) {
       file_reader_.reset();
@@ -513,12 +510,10 @@ auto AsyncImportService::SubmitModelImport(
     return std::nullopt;
   }
   return SubmitImport(std::move(request), on_complete, on_progress,
-    [publication = std::move(publication), importer = *importer,
-      loop = observer_ptr(impl_->event_loop_.get())](
+    [publication = std::move(publication), importer = *importer](
       detail::ImportJobParams params) -> std::shared_ptr<detail::ImportJob> {
       publication->ClaimSubmission();
       params.model_import_record = publication;
-      params.generation_writer = CreateAsyncFileWriter(*loop);
       return CreateJob(importer, std::move(params));
     });
 }
@@ -562,11 +557,6 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 
   if (!impl_->file_reader_) {
     LOG_F(WARNING, "Submit rejected: async file reader not ready");
-    return std::nullopt;
-  }
-
-  if (!impl_->file_writer_) {
-    LOG_F(WARNING, "Submit rejected: async file writer not ready");
     return std::nullopt;
   }
 
@@ -631,7 +621,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   const auto job_name = request.job_name.value_or(default_job_name);
 
   const auto file_reader = observer_ptr(impl_->file_reader_.get());
-  const auto file_writer = observer_ptr(impl_->file_writer_.get());
+  const auto driver = observer_ptr(&impl_->event_loop_->Driver());
   const auto thread_pool = observer_ptr(impl_->thread_pool_.get());
   const auto table_registry = observer_ptr(impl_->table_registry_.get());
   const auto index_registry = observer_ptr(impl_->index_registry_.get());
@@ -647,7 +637,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     .on_progress = on_progress,
     .cancel_event = cancel_event,
     .reader = file_reader,
-    .writer = file_writer,
+    .driver = driver,
     .thread_pool = thread_pool,
     .registry = table_registry,
     .index_registry = index_registry,

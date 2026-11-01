@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-10-31
+Last updated: 2026-11-01
 
 The C++23 shape of the [Serio IO and serialization proposal](README.md): the
 layers as headers, the concepts every device, stream, backend and algorithm
@@ -16,6 +16,7 @@ around it.
 - [Principles](#principles)
 - [Layers and headers](#layers-and-headers)
 - [Vocabulary types](#vocabulary-types)
+- [Buffers](#buffers)
 - [Devices](#devices)
 - [Type erasure](#type-erasure)
 - [Regions](#regions)
@@ -23,10 +24,12 @@ around it.
 - [Streams](#streams)
 - [Algorithms](#algorithms)
 - [Serialization](#serialization)
+- [Publication](#publication)
 - [Errors](#errors)
 - [Platform code](#platform-code)
 - [Test seams](#test-seams)
 - [Extension points](#extension-points)
+- [IO outside Serio](#io-outside-serio)
 - [Decisions](#decisions)
 
 ## Principles
@@ -40,7 +43,10 @@ around it.
   concept has one value-semantic erased wrapper used at coarse boundaries: once
   per file, region or asset. IO backends are a closed, platform-known set, so
   the driver holds them in a `std::variant` and dispatches with `std::visit`.
-  Nothing has a public virtual interface.
+  The serialization boundary is the one virtual interface: `AnyReader` and
+  `AnyWriter` are abstract bases that `Reader<S>` and `Writer<S>` implement,
+  because every type's hooks take them by reference and a loader holds one
+  per asset, so their cost is the one the erasure rule already pays.
 - **Capabilities are types, not runtime failures.** A device that cannot write
   does not satisfy `WritableDevice`; a device that cannot be awaited does not
   satisfy `AsyncReadableDevice`. Asking for what a type cannot do fails to
@@ -57,18 +63,18 @@ around it.
 
 ## Layers and headers
 
-| Layer         | Headers (under `Oxygen/Serio/`)                                                                        | May include                     |
-| ------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------- |
-| Vocabulary    | `Types.h`, `Error.h`                                                                                   | Base                            |
-| Buffers       | `ByteBuffer.h`                                                                                         | Vocabulary                      |
-| Devices       | `Device.h` (concepts), `NativeFile.h`, `MemoryFile.h`, `MappedFile.h`, `ByteView.h`, `AnyDevice.h`     | Buffers, Vocabulary             |
-| Regions       | `Region.h`                                                                                             | Devices                         |
-| Async IO      | `IoDriver.h`, `AsyncFile.h`, `AsyncDevice.h` (`AsyncReadExactlyAt`)                                    | Regions, Devices, OxCo          |
-| Streams       | `Stream.h` (concepts), `RegionStream.h`, `MemoryStream.h`, `AnyStream.h`, `CopyRegion.h`               | Regions, Async IO               |
-| Algorithms    | `Integrity.h` (concept, hashing streams, region and file hashing, `VerifiedRead`)                      | Streams, Regions, Base hashes   |
-| Serialization | `Reader.h`, `Writer.h`, `Record.h`, `ByteReader.h`, `CountingSink.h`                                   | Streams, Regions                |
-| Publication   | `AtomicFile.h` (`AtomicFileWriter`), `FileLock.h`                                                      | Streams, Devices                |
-| Test kit      | `Testing/FaultInjectingDevice.h`, `Testing/TestBytes.h` (the conformance suites are Serio's own tests) | Any layer; linked by tests only |
+| Layer         | Headers (under `Oxygen/Serio/`)                                                                                                | May include                     |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| Vocabulary    | `Types.h`, `Error.h`                                                                                                           | Base                            |
+| Buffers       | `ByteBuffer.h` (`CopyOf`, `AsUnsigned`)                                                                                        | Vocabulary                      |
+| Devices       | `Device.h` (concepts, `ReadExactlyAt`, `ReadAll`), `NativeFile.h`, `MemoryFile.h`, `MappedFile.h`, `ByteView.h`, `AnyDevice.h` | Buffers, Vocabulary             |
+| Regions       | `Region.h`                                                                                                                     | Devices                         |
+| Async IO      | `IoDriver.h`, `AsyncFile.h`, `AsyncDevice.h` (`AsyncReadExactlyAt`, `AsyncReadAll`)                                            | Regions, Devices, OxCo          |
+| Streams       | `Stream.h` (concepts), `RegionStream.h`, `MemoryStream.h`, `AnyStream.h`, `CopyRegion.h`                                       | Regions, Async IO               |
+| Algorithms    | `Integrity.h` (concept, hashing streams, region and file hashing, `AsyncHash`, `VerifiedRead`)                                 | Streams, Regions, Base hashes   |
+| Serialization | `Reader.h`, `Writer.h`, `Record.h`, `ByteReader.h`, `CountingSink.h`, `RegionReader.h`, `RegionWriter.h`                       | Streams, Regions                |
+| Publication   | `AtomicFile.h` (`AtomicFileWriter`, `WriteFileAtomically`, `AsyncWriteFileAtomically`, `MoveFileOver`), `FileLock.h`           | Streams, Async IO, Devices      |
+| Test kit      | `Testing/FaultInjectingDevice.h`, `Testing/TestBytes.h` (the conformance suites are Serio's own tests)                         | Any layer; linked by tests only |
 
 `Detail/` holds the erasure tables, the backend variant and buffer internals;
 no header outside Serio includes it. A layer's tests include only that layer's
@@ -115,6 +121,48 @@ struct OpenSpec {
 } // namespace oxygen::serio
 ```
 
+## Buffers
+
+`ByteBuffer` is the one owner of bytes read from or for a device: an aligned,
+move-only allocation whose bytes are indeterminate until written. Every
+module that holds a payload holds one, so a loader hands the buffer it read
+to the resource that keeps it, and nothing copies it into a `std::vector`.
+
+```cpp
+class ByteBuffer {
+public:
+  [[nodiscard]] static auto Allocate(ByteCount size,
+    size_t alignment = kIoAlignment) noexcept -> Result<ByteBuffer>;
+  //! A buffer holding a copy of `bytes`; `not_enough_memory` when the
+  //! allocation fails.
+  [[nodiscard]] static auto CopyOf(std::span<const std::byte> bytes,
+    size_t alignment = kIoAlignment) noexcept -> Result<ByteBuffer>;
+  [[nodiscard]] auto Bytes() noexcept -> std::span<std::byte>;
+  [[nodiscard]] auto Bytes() const noexcept -> std::span<const std::byte>;
+  //! `Bytes()` as unsigned bytes, for APIs that take `uint8_t`.
+  [[nodiscard]] auto Unsigned() const noexcept -> std::span<const uint8_t>;
+  // Size, Empty, Truncate as today.
+};
+
+//! Any byte span as unsigned bytes: the one place the cast is written.
+[[nodiscard]] auto AsUnsigned(std::span<const std::byte> bytes) noexcept
+  -> std::span<const uint8_t>;
+[[nodiscard]] auto AsUnsigned(std::span<std::byte> bytes) noexcept
+  -> std::span<uint8_t>;
+```
+
+- **One copy, one cast.** `CopyOf` is the only way bytes held elsewhere enter
+  a buffer, and `AsUnsigned` the only `std::byte` to `uint8_t` view; both
+  return or view, never throw. Accessing `std::byte` storage through
+  `unsigned char` (`uint8_t`) is allowed aliasing, so the view is defined
+  behaviour.
+- **Resources own the buffer they were read into.** Texture, buffer, script
+  and physics resources take a `ByteBuffer` and expose it as `uint8_t` with
+  `Unsigned()`; none has a span constructor. A producer whose bytes are not
+  a loader's read (a collision shape job, PakDump, the Scripting source
+  resolver, a synchronous script query) copies them into a buffer with
+  `CopyOf` or reads them into one with `ReadAll`.
+
 ## Devices
 
 ```cpp
@@ -141,13 +189,16 @@ concept ContiguousDevice = ReadableDevice<D> && requires(const D& d) {
 };
 ```
 
-| Device       | Readable | Writable | Contiguous | Async |
-| ------------ | -------- | -------- | ---------- | ----- |
-| `NativeFile` | Yes      | Yes      | No         | No    |
-| `AsyncFile`  | Yes      | Yes      | No         | Yes   |
-| `MemoryFile` | Yes      | Yes      | Yes        | Yes   |
-| `MappedFile` | Yes      | No       | Yes        | No    |
-| `ByteView`   | Yes      | No       | Yes        | Yes   |
+| Device                    | Readable | Writable | Contiguous | Awaitable                                        |
+| ------------------------- | -------- | -------- | ---------- | ------------------------------------------------ |
+| `NativeFile`              | Yes      | Yes      | No         | No: open the file through a driver               |
+| `AsyncFile`               | Yes      | Yes      | No         | Yes, through its driver (a loop or inline)       |
+| `MemoryFile`              | Yes      | Yes      | Yes        | Yes, by itself: operations are ready at once     |
+| `MappedFile`              | Yes      | No       | Yes        | Never: a read is a page fault on the caller      |
+| `ByteView`                | Yes      | No       | Yes        | Yes, by itself: operations are ready at once     |
+| `Region<D>`               | Yes      | No       | As `D`     | As `D`                                           |
+| `FaultInjectingDevice<D>` | As `D`   | As `D`   | No         | As `D`                                           |
+| `AnyDevice`               | Yes      | Run time | Run time   | No: an `AnyAsyncDevice` is the awaitable erasure |
 
 - **Contract for every device,** checked by the conformance suite: `const`
   operations are safe from any number of threads at once (a device has no
@@ -157,12 +208,25 @@ concept ContiguousDevice = ReadableDevice<D> && requires(const D& d) {
 - **Free algorithms, not members,** build on the concepts once:
   `ReadExactlyAt(device, at, out)` (fails with `kEndOfData`) works for every
   device. `WriteAt` already writes all of its bytes or fails, so it needs no
-  `WriteAllAt` counterpart.
+  `WriteAllAt` counterpart. `ReadAll(device)` reads a whole device or region
+  into a new `ByteBuffer` of its size, failing with `kEndOfData` when the
+  device ends first, and `AsyncReadAll` is its awaitable form; they replace every hand-written allocate-and-read.
 - **Opening is a static factory** returning `Result<Device>`:
   `NativeFile::Open(path, OpenSpec)`, `MappedFile::Open(path)`. A constructor
   never fails.
-- **`MappedFile` is not async.** A view is parsed in place; a consumer that
-  also awaits payload reads from the same file opens it as an `AsyncFile`.
+- **A mapping can share writes.** `MappedFile::Open(path, sharing)` maps a
+  file another handle holds open for writing when `sharing` is
+  `kReadWriteDelete` (an import's resource data file, which writers append
+  to); the default refuses one.
+- **A folder is not a file.** `NativeFile::Open` of a folder fails with
+  `kIsDirectory` on every platform: Windows refuses it with a denied access
+  and POSIX opens it read-only, and Serio reports both alike.
+- **`MappedFile` is never awaitable, not even through an adapter.** A view
+  is parsed in place, and a read of it blocks the reader on page faults that
+  no operation can report. A consumer that also awaits payload reads from
+  the same file opens it a second time, through its driver, as an
+  `AsyncFile`: a mounted pak's `PakFileSource` does, while `PakFile` parses
+  the mapping.
 
 ## Type erasure
 
@@ -172,14 +236,14 @@ heap otherwise, and dispatches through a `static constexpr` table of function
 pointers generated per type in `Detail/`, so there is one indirect call per
 operation and no virtual base:
 
-| Wrapper           | Wraps any                   | Adds                                                         |
-| ----------------- | --------------------------- | ------------------------------------------------------------ |
-| `AnyDevice`       | `ReadableDevice`            | `Writable()`, `Contiguous() -> optional<span>` from the type |
-| `AnyAsyncDevice`  | `AsyncReadableDevice`       | Everything `AnyDevice` has, plus the awaitable operations    |
-| `AnyInputStream`  | `InputStream`               |                                                              |
-| `AnyOutputStream` | `OutputStream`              |                                                              |
-| `AnyReader`       | `Reader<S>`, `ByteReader`   | The boundary a loader receives once per asset                |
-| `AnyWriter`       | `Writer<S>`, `CountingSink` | The boundary an encoder receives once per artifact           |
+| Wrapper           | Wraps any                                      | Adds                                                         |
+| ----------------- | ---------------------------------------------- | ------------------------------------------------------------ |
+| `AnyDevice`       | `ReadableDevice`                               | `Writable()`, `Contiguous() -> optional<span>` from the type |
+| `AnyAsyncDevice`  | `AsyncReadableDevice`                          | Everything `AnyDevice` has, plus the awaitable operations    |
+| `AnyInputStream`  | `InputStream`                                  |                                                              |
+| `AnyOutputStream` | `OutputStream`                                 |                                                              |
+| `AnyReader`       | `Reader<S>`, `RegionReader<D>` (abstract base) | The boundary a loader receives once per asset                |
+| `AnyWriter`       | `Writer<S>`, `RegionWriter<D>` (abstract base) | The boundary an encoder receives once per artifact           |
 
 `AnyDevice` itself satisfies `ReadableDevice` (and `ContiguousDevice` is a
 run-time query on it, because the erased type is no longer known), so every
@@ -227,11 +291,16 @@ fixed bound means nothing for it: there is no writable region, and a
 ## IO driver and backends
 
 ```cpp
-//! One per event loop. Owns the backend and every file registered with it.
+//! One per event loop, or one inline driver for code without a loop. Owns
+//! the backend and every file registered with it.
 class IoDriver {
 public:
   [[nodiscard]] static auto Create(asio::io_context& loop) noexcept
     -> Result<IoDriver>;
+  //! A driver whose operations complete on the awaiting thread, which
+  //! blocks for each of them: for tools and tests that have no loop.
+  [[nodiscard]] static auto CreateInline() noexcept -> Result<IoDriver>;
+  [[nodiscard]] auto Inline() const noexcept -> bool;
   [[nodiscard]] auto Open(const std::filesystem::path& path, OpenSpec spec)
     noexcept -> Result<AsyncFile>;
   [[nodiscard]] auto AllocateBuffer(ByteCount size) noexcept
@@ -283,16 +352,22 @@ concept AsyncWritableDevice = AsyncReadableDevice<D> && WritableDevice<D>
     { b.Cancel(request) } noexcept -> std::same_as<void>;
     { b.AllocateBuffer(ByteCount{}) } noexcept -> std::same_as<Result<ByteBuffer>>;
   };
-  // Windows: IocpBackend; Linux: UringBackend.
-  using Backend = std::variant<IocpBackend>;
+  // Every platform: InlineBackend; Windows: IocpBackend; Linux: UringBackend.
+  using Backend = std::variant<InlineBackend, IocpBackend>;
   } // namespace oxygen::serio::detail
   ```
 
-  `Create` selects the alternative from the OS's capabilities. Adding or
-  deleting a backend changes the variant and its platform file, nothing else.
-  A backend is trivially copyable: its state is the loop it serves. Each
-  platform has one backend; a second one also adds a way for tests to run
-  every async suite once per backend.
+  `Create` selects the loop alternative from the OS's capabilities, and
+  `CreateInline` the inline one. Adding or deleting a backend changes the
+  variant and its platform file, nothing else. A backend is trivially
+  copyable: its state is the loop it serves, or nothing. Every async suite
+  runs once per backend of its platform, inline included.
+
+- **Inline** (`Detail/InlineBackend`, platform-neutral): `Register` keeps the
+  handle, `Submit` performs the request with the file's blocking `ReadAt` or
+  `WriteAt` and returns `false` (completed at once, so the awaiter never
+  suspends), and `Cancel` has nothing to cancel. `AllocateBuffer` is
+  `ByteBuffer::Allocate`.
 
 - **IOCP** (`Platform/Windows/IocpBackend`): a registered file is associated
   with the loop's completion port through an asio handle owning a duplicate
@@ -304,6 +379,45 @@ concept AsyncWritableDevice = AsyncReadableDevice<D> && WritableDevice<D>
   `ASIO_HAS_IO_URING` and liburing, so the loop's context owns a ring; a
   registered file is an `asio::random_access_file` over a duplicate
   descriptor, and each request carries its own cancellation signal.
+
+### Awaiting a blocking device
+
+A consumer that awaits reads (a content source, a pak's payloads, an import
+job) always holds a driver, and opens every file it awaits through it. Code
+with a loop holds a loop driver; a tool or a unit test without one holds an
+inline driver. The consumer is the same code in both cases: it never asks
+whether a driver exists, and never wraps a device to make it look
+awaitable.
+
+| Device a consumer holds           | How it is awaited                                      |
+| --------------------------------- | ------------------------------------------------------ |
+| A file it opens by path           | `driver.Open(path, spec)`, an `AsyncFile`              |
+| Memory (`MemoryFile`, `ByteView`) | By itself; its operations are ready at once            |
+| A region of either                | `Region<D>::AsyncReadAt`, as its device                |
+| A mapped view (`MappedFile`)      | Never; the same file is also opened through the driver |
+
+- **Inline mode, not an adapter.** An adapter over an open device (the
+  `BlockingReads` that content wrote) makes any device look awaitable,
+  mapped views included, and leaves every consumer branching on whether it
+  has a driver. The inline driver keeps the one rule above: only a driver
+  makes a file awaitable, and which kind of driver is decided once, by the
+  code that owns the loop or knows it has none.
+- **Everything else is unchanged.** An inline `AsyncFile` is an `AsyncFile`:
+  it reads and writes, erases into `AnyAsyncDevice`, has regions,
+  `Contiguous()` empty, and `CopyRegion` and `AsyncHash` run over it, each
+  operation completing before the awaiter would suspend.
+- **Owners decide the mode once.** The asset loader creates a loop driver
+  from its configured loop, and an inline driver, logged at INFO, when it is
+  given none; its sources receive that driver, never a null one, and a
+  loose source that reads payloads refuses to open without one. Only the
+  loader awaits pak payloads, so the payload file belongs to its
+  `PakFileSource`: `PakFile` itself, which the cooker also reads, holds only
+  the mapping and needs no driver. The path resolver, which reads no
+  payload, holds an inline driver.
+- **A synchronous query reads blocking.** `ReadScriptResourceForAsset` is a
+  synchronous API by contract: it reads the payload with `ReadAll` of the
+  source's payload region, which is an `AsyncFile`'s blocking read, into the
+  `ByteBuffer` the script resource then owns.
 
 ## Streams
 
@@ -327,6 +441,10 @@ concept OutputStream = requires(S& s, std::span<const std::byte> in) {
   `RegionWriteStream<D>`, `MemoryStream`, `ReadOnlyMemoryStream`.
   `Position()` and `Size()` cannot fail: a stream knows both.
   `OpenReadStream(device)` is a read stream over a whole device, in one call.
+- **A read stream's buffer never exceeds its region.** `RegionReadStream`
+  allocates `min(buffer_size, region count)`, so reading a 200-byte
+  descriptor allocates 200 bytes, not 64 KiB, and no caller sizes the buffer
+  itself. A write stream has no region, so its buffer stays the size asked.
 - **Patching is positional, not a seek.** An output stream has no `Seek`. A
   writer that completes a header once its content is known overwrites bytes
   it already wrote with `PatchAt(ByteOffset, bytes)`: buffered bytes in the
@@ -367,8 +485,21 @@ concept IncrementalHash = std::default_initializable<H>
   `ComputeCrc32(region)` are its one-hash spellings, and
   `ComputeFileSha256(path)` opens a file and hashes it. All return errors,
   never throw.
+- `AsyncHash<H...>(region, skip)` is `Hash` over an `AsyncReadableDevice`:
+  a coroutine, double-buffered like `CopyRegion`, that keeps one read in
+  flight while it hashes the other buffer, and returns the same tuple.
+  `AsyncComputeCrc32` and `AsyncComputeSha256` are its one-hash spellings.
+  Over an inline driver it is `Hash` with one more buffer.
 - `VerifiedRead(region, expected, out)` is `Hash<base::Sha256>` fused with the
   read into `out`, failing with `kDigestMismatch`.
+- **A verified pak mount hashes through the driver.** The loader opens the
+  pak through its driver, reads the footer, and awaits `AsyncComputeCrc32`
+  of the file, skipping the footer's CRC field, on the loop; only parsing the
+  directory runs on the thread pool, and no pool worker reads the file to
+  hash it. The footer rules (a zero CRC refused or skipped, a mismatch
+  reported as corrupt) are one content function, shared with the blocking
+  verified open that tools without a loop keep, which hashes with
+  `ComputeCrc32`.
 
 A new hash is a type that satisfies the concept; nothing in Serio changes. A
 codec or a signature scheme is not an algorithm here: they live in their own
@@ -410,12 +541,94 @@ modules ([scope and layering](README.md#scope-and-layering)).
   `Read<T>` for records and arithmetic values (returns a copy, so no object
   is aliased from raw bytes), `ReadBytes(n)` and `ReadStringView(n)` (views
   of bytes and characters only), `Seek`, `Skip` and `AlignTo`.
+  `CopyAt<T>(bytes, at)` is its one-read form, for a value whose offset is
+  known.
 - **`CountingSink`** satisfies `PatchableOutputStream` and counts, so
   measuring a value is writing it to a sink through a `Writer`.
+- **Region readers and writers** are the `AnyReader` and `AnyWriter` a
+  consumer hands on, with the stream and the reader they need inside them:
+
+  ```cpp
+  //! Reads a region; positions are relative to it and every read is
+  //! bounded by it. A contiguous region is read from its view.
+  template <ReadableDevice D> class RegionReader final : public AnyReader {
+  public:
+    //! Views `region`, whose device outlives the reader.
+    explicit RegionReader(Region<D> region) noexcept;
+    //! Owns `device` and reads all of it.
+    [[nodiscard]] static auto Owning(D device) noexcept
+      -> Result<std::unique_ptr<RegionReader>>;
+  };
+
+  //! Writes a device from a start offset, through a `RegionWriteStream`.
+  template <WritableDevice D> class RegionWriter final : public AnyWriter {
+  public:
+    explicit RegionWriter(D& device, ByteOffset start = {}) noexcept;
+    [[nodiscard]] static auto Owning(D device, ByteOffset start = {})
+      noexcept -> Result<std::unique_ptr<RegionWriter>>;
+    [[nodiscard]] auto Stream() noexcept -> RegionWriteStream<D>&;
+    [[nodiscard]] auto Device() noexcept -> D&;
+  };
+  ```
+
+  Both are neither copyable nor movable, since the reader or writer inside
+  refers to the stream beside it, so an owning one is returned in a
+  `unique_ptr`. It declares its device before its stream, so the stream is
+  destroyed, and flushed, first. `Owning` reports the device's size error
+  instead of throwing. Content's descriptor and table readers,
+  `AtomicFileWriter`'s state and the cooker's in-memory file system's
+  writer, each of which kept a device, a stream and its member order by
+  hand, use them.
+
 - **Bounded reads:** `AnyReader::Remaining()` is the bytes a reader may still
   read; length prefixes and `ReadBlob` fail with `kTooLarge` past it.
 - **Alignment** is the reader's or writer's state, set by an RAII
   `ScopedAlignment`, and free when it is 1.
+
+## Publication
+
+```cpp
+//! What a replacement leaves: the name moved; `durability_error` holds the
+//! failure to make the move stable, if any.
+struct FileReplacement {
+  std::error_code durability_error;
+};
+
+//! Moves the file `from` over `to` in one step, replacing the file `to`
+//! names, if any.
+[[nodiscard]] auto MoveFileOver(const std::filesystem::path& from,
+  const std::filesystem::path& to) noexcept -> Result<FileReplacement>;
+```
+
+- **One replacing rename.** `MoveFileOver` is the rename `AtomicFileWriter`
+  commits with, exposed: POSIX semantics on Windows (readers that share
+  deletion keep the file they opened), a replacing move where the file
+  system has none, and `rename(2)` elsewhere, each made durable. Both paths
+  are on one volume. `AtomicFileWriter::Commit` and `WriteFileAtomically`
+  return the same `FileReplacement`; `AtomicFileCommit` is deleted.
+- **Errors come from the move, not from checks before it.** A missing `from`
+  fails with `kNotFound`; a folder at `from` or `to` fails with
+  `kIsDirectory`, which the platform code classifies after the move failed,
+  so nothing is checked and then acted on. `CookerStorage::Move` is
+  `MoveFileOver`, and its contract names these conditions.
+- **The code is platform code.** The Windows rename moves out of
+  `AtomicFile.cpp` into `Platform/Windows/MoveFileOver.cpp`, and the POSIX
+  one into `Platform/Posix/`; `AtomicFile.cpp` has no `#if` on the platform.
+
+- **Whole files publish atomically, awaited or not.**
+  `WriteFileAtomically(path, bytes, durability)` and its awaitable form
+  `AsyncWriteFileAtomically(driver, path, bytes, durability)` write a unique
+  sibling (through the driver for the awaitable one), flush it to the
+  durability asked, and `MoveFileOver` it over `path`. `kStable` is the
+  default and waits for the disk before the rename; `kBuffered` leaves the
+  bytes to the OS cache and renames at once, for outputs a stable record
+  elsewhere validates (cooked descriptors and tables, whose digests the
+  stable loose index holds).
+- **`FileLock::Acquire` waits.** Beside `TryAcquire`, `Acquire(path, mode,
+open_mode)` blocks until the lock is granted (`LockFileEx` without
+  `LOCKFILE_FAIL_IMMEDIATELY`, `flock` without `LOCK_NB`). Each acquisition
+  opens its own handle, so two threads of one process exclude each other as
+  two processes do.
 
 ## Errors
 
@@ -424,7 +637,7 @@ modules ([scope and layering](README.md#scope-and-layering)).
   category and the `std::is_error_condition_enum` specialization: Serio's own
   codes (`kEndOfData`, `kOutOfBounds`, `kTooLarge`, `kDigestMismatch`) and the
   conditions OS codes map to (`kNotFound`, `kAccessDenied`,
-  `kSharingViolation`, `kNoSpace`, `kIo`).
+  `kSharingViolation`, `kNoSpace`, `kIsDirectory`, `kIo`).
 - `Error` is a condition enumeration only. With `std::is_error_code_enum` as
   well, `code == Error::kNotFound` would be ambiguous between the code and the
   condition comparison. Serio makes its own codes explicitly with
@@ -437,9 +650,9 @@ modules ([scope and layering](README.md#scope-and-layering)).
 
 - `NativeHandle` is an opaque value type (`void*` on Windows, `int` on POSIX)
   declared in a public header; nothing public includes `<windows.h>`.
-- `Platform/Windows/` holds `NativeFile`, `MappedFile` and `IocpBackend`;
-  `Platform/Posix/` holds their POSIX counterparts and the
-  io_uring backend. CMake selects the directory; a public header carries no
+- `Platform/Windows/` holds `NativeFile`, `MappedFile`, `MoveFileOver` and
+  `IocpBackend`; `Platform/Posix/` holds their POSIX counterparts and the
+  io_uring backend; `Detail/InlineBackend` is the same on every platform. CMake selects the directory; a public header carries no
   `#if` on the platform, and `detail::Backend` is the one alias that differs.
 
 ## Test seams
@@ -467,8 +680,125 @@ modules ([scope and layering](README.md#scope-and-layering)).
 | A record format    | The packed struct and its `kIsRecord` specialization       | None                                          |
 | A variable format  | `Load`/`Store` hooks for the type, beside it               | None                                          |
 
+## IO outside Serio
+
+Every IO helper written outside `src/Oxygen/Serio` is either a gap this API
+closes, a duplicate of what Serio already has, or IO that is not Serio's.
+
+**Gaps closed, the helper deleted:**
+
+| Helper (module)                                                                                                                        | Replaced by                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `BlockingReads` and its no-driver branches (Content: `LooseCookedSource`, `PakFile::ReadsOf`)                                          | The inline driver; `PakFileSource` opens payloads through it |
+| `RegionReader` (Content: pak and loose sources, `ResourceLoadPipeline`)                                                                | `serio::RegionReader`                                        |
+| Device, stream and member order kept by hand (`AtomicFileWriter`, cooker `MemoryFileSystem`)                                           | `serio::RegionWriter`                                        |
+| `CopyOf` twice, span constructors (Data: `TextureResource`, `BufferResource`)                                                          | `ByteBuffer::CopyOf`; the constructors are deleted           |
+| `reinterpret_cast` to `uint8_t` (Data: texture and buffer resources)                                                                   | `ByteBuffer::Unsigned`, `AsUnsigned`                         |
+| `std::vector<uint8_t>` payloads (Data: `ScriptResource`, `PhysicsResource`; their loaders copy)                                        | A `ByteBuffer` the loader's read fills, one copy fewer       |
+| Allocate-and-read (Content: `ScriptQueryService`; Cooker: `PakSourceDevices::Read`; Scripting: `ExternalFileResolver` with `ifstream`) | `ReadAll`                                                    |
+| `memcpy` of headers and layouts out of a payload (Data: `TextureResource`)                                                             | `ByteReader`                                                 |
+| `StagePayload` (Content test fixtures)                                                                                                 | `ByteBuffer::CopyOf` of the payload's subspan                |
+| `RealCookerStorage::Move` (Cooker: `fs::rename` after existence checks)                                                                | `MoveFileOver`                                               |
+| Blocking CRC pass on a pool worker (Content: verified pak mount)                                                                       | `AsyncComputeCrc32` on the loop                              |
+| `ReadPublishedFile` returning `std::vector<std::byte>` (Serio)                                                                         | Returns a `ByteBuffer`                                       |
+
+**Duplicates of existing Serio facilities, migrated onto it:**
+
+| Helper (module)                                                                                                    | Becomes                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `WindowsFileReader`, `WindowsFileWriter`, `IAsyncFileWriter`, `FileError` (Cooker import)                          | [Import IO](#import-io)                                                                                                                                                                                                                                |
+| Bytecode cache (Engine: `ScriptCompilationService`)                                                                | Header and index entries are records; the snapshot is an `AtomicFileWriter` through a `Writer`, the header patched last; reads are `OpenPublishedFile` and `ReadExactlyAt`. `PublishCacheFile`, the temporary name, its guard and `put()` are deleted. |
+| `ReadDescriptorBytes`, `TryReadAssetHeader`, `ReadStructAt`, unchecked `ReadRecordAt`, six buffer copies (PakDump) | A `ByteReader` over `PakFile::DescriptorBytes`, bounds checked, with no copy                                                                                                                                                                           |
+| `<pid>.json.tmp`, then an unchecked `std::filesystem::rename` (Control: `ControlServer`)                           | `WriteFileAtomically` of the discovery file, which holds the control token                                                                                                                                                                             |
+| CVar archive and history truncated in place, read with `ifstream` (Console: `Registry`)                            | `WriteFileAtomically` and `ReadPublishedFile`; a script file stays a text stream, written by people                                                                                                                                                    |
+| In-process path-keyed mutex around the loose index (Content: `LooseCookedIndexImpl`, Cooker: `LooseCookedWriter`)  | A blocking `FileLock::Acquire` of the sibling `container.index.lock`, held by a writer for its read, merge and publication; readers take no lock, since the replacement gives them a whole index                                                       |
+| `ScriptSourceBlob` owning a `std::vector<uint8_t>` (Engine: Scripting)                                             | Owns a `ByteBuffer`; `BytesView()` is its `Unsigned()`                                                                                                                                                                                                 |
+| Record tables copied with `memcpy` (Cooker: `PakPlanBuilder`)                                                      | `ReadAll` of the region and a `ByteReader`                                                                                                                                                                                                             |
+
+The in-process mutex excluded only one process's writers, so a cooker and
+an editor merging the same cooked root lost each other's records; the file
+lock closes that, and the test that held the mutex holds the lock instead.
+
+### Import IO
+
+The import reads its sources and writes its cooked files through its own
+asio stack, beside Serio: `WindowsFileReader` and `WindowsFileWriter` open
+raw overlapped handles on the import loop, map errors to their own
+`FileError`, write whole files truncating them in place, and poll a pending
+count to flush. The cooked files it writes are the ones the loose cooked
+writer then publishes atomically through `CookerStorage`, so one cooked root
+has two writers with two error vocabularies.
+
+- **One loop, one driver.** The import thread's `ImportEventLoop` owns a
+  `serio::IoDriver` over its `asio::io_context`, and every import read and
+  cooked write goes through it. `ImportManifest::AnalyzeSources`, which
+  builds its own loop, builds its own driver with it.
+- **Source reads stay a port.** `IAsyncFileReader` is the import's seam for
+  sources: `ImportSourceSnapshot` decorates it to record and replay reads,
+  and tests substitute it. Its one implementation, `SerioFileReader`, opens
+  each source through the driver and awaits `AsyncReadAll` or, for a range,
+  `AsyncReadExactlyAt`. `ReadFile` returns a `ByteBuffer`; `ReadOptions`
+  keeps `offset` and `max_bytes` and loses the ignored `size_hint` and
+  `alignment`. `GetFileInfo` and `Exists` are file system metadata, not
+  bytes, and stay `std::filesystem` queries.
+- **Cooked writes go through the storage port, by role.** `IAsyncFileWriter`
+  and its implementation are deleted. The two awaited writes the emitters
+  need form `ImportStorage`, a `CookerStorage` that the real and the
+  in-memory storages implement, so the in-memory test storage covers the
+  import too. A pak build and script sealing publish through `CookerStorage`
+  alone, so the pak tool's staging overlay implements no import write. Both
+  roles hold `LockExclusive`, which serializes the loose index's writers:
+  - `PublishAsync(path, bytes)`: `AsyncWriteFileAtomically` with
+    `kBuffered`, for asset and resource descriptors and resource tables.
+    They become atomic replacements instead of files truncated in place, so
+    a cancelled or failed import never leaves a torn descriptor.
+  - `OpenData(path) -> AnyAsyncDevice`: a data file (`buffers.data`,
+    `textures.data`, `physics.data`, `scripts.data`) opened once through the
+    driver, sharing writes, and held by its table aggregator, which already
+    reserves each write's range. Emitters await `AsyncWriteAt` at the
+    reserved offset, padding included, instead of opening a handle per
+    write.
+- **Writes in flight are a nursery, not a counter.** Each emitter starts its
+  writes in the import session's nursery, keeps the first error, and
+  `Finalize` joins them. The callbacks, `WriteAsync`, `WriteAtAsync`,
+  `CancelAll`, `PendingCount` and the zero-delay polling `Flush` are
+  deleted; cancelling the session cancels its writes through the driver.
+  The per-job `generation_writer` is gone, as there is no writer object.
+- **Errors are `std::error_code`.** `FileError`, `FileErrorInfo`,
+  `MapSystemError` and `MapWindowsError` are deleted. Ports return
+  `Result<T>` with Serio's conditions (`kNotFound`, `kIsDirectory`, ...)
+  and `std::errc::operation_canceled`; a caller that reports an error names
+  the path in its diagnostic, which `FileErrorInfo` carried before. The
+  branches on `kNotFound` and `kCancelled` compare against those
+  conditions.
+
+**Not Serio's, they stay:** text read or written through iostreams where a
+torn file is harmless or rewritten whole on the next run (Inspector JSON
+reports, `LaunchFile`, Scripting `WriteDefinitions`, the Vortex GPU profiler
+traces, benchmark CSV and JSON, the Cooker test kit's `FileIo`), the
+logger's own `fopen`, and pixel buffers cast for image codecs, which are
+not `ByteBuffer`s.
+
 ## Decisions
 
+- **Inline driver over an awaiting adapter.** Only a driver makes a file
+  awaitable, so no consumer branches on a missing driver and a mapped view
+  can never pass as an awaitable device.
+- **`ByteBuffer` is the one payload owner.** Copies and the unsigned view
+  are written once in Serio; resources take the buffer their loader read.
+- **Region readers and writers live in Serio,** so no consumer keeps a
+  device, a stream and a reader in the right member order by hand.
+- **One replacing rename,** with errors from the move itself and the
+  platform code under `Platform/`.
+- **`AnyReader` and `AnyWriter` stay abstract bases.** Hooks take them by
+  reference and the cost is once per asset; the principle states it.
+- **The import is a Serio consumer like any other.** One driver on its
+  loop, one source-read port, cooked writes through `CookerStorage` only,
+  errors as `std::error_code`.
+- **Cooked files publish atomically with buffered durability;** the loose
+  index, which holds their digests, publishes with stable durability.
+- **The loose index is guarded by a file lock,** which excludes writers in
+  other processes as well as threads.
 - **Concepts over base classes.** Contracts are checked at compile time,
   extension needs no inheritance, and hot paths are direct calls.
 - **One erasure per concept, used at boundaries.** Erasure costs one indirect

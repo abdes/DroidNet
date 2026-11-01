@@ -33,7 +33,6 @@
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
-#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -618,17 +617,6 @@ NOLINT_TEST_F(
          false,
          true,
        }) {
-    data::pak::core::TextureResourceDesc desc {};
-    desc.texture_type = static_cast<std::uint8_t>(TextureType::kTextureCube);
-    desc.width = desc.height = 2U;
-    desc.depth = 1U;
-    desc.array_layers = 6U;
-    desc.mip_levels = 1U;
-    desc.format = static_cast<std::uint8_t>(Format::kRGBA32Float);
-    desc.alignment = 256U;
-    desc.content_hash = wide ? 2U : 1U;
-    std::vector<std::uint8_t> data_region(6ULL * 4U * sizeof(Pixel));
-    std::vector<data::pak::render::SubresourceLayout> layouts;
     std::array<Pixel, 6U> colors {};
     for (unsigned face = 0U; face < 6U; ++face) {
       colors.at(face) = {
@@ -637,25 +625,12 @@ NOLINT_TEST_F(
         .25F + (static_cast<float>(face) * .125F),
         1.0F,
       };
-      for (unsigned pixel = 0U; pixel < 4U; ++pixel) {
-        std::memcpy(
-          std::span {
-            data_region,
-          }
-            .subspan(((face * 4U) + pixel) * sizeof(Pixel), sizeof(Pixel))
-            .data(),
-          colors.at(face).data(), sizeof(Pixel));
-      }
-      layouts.push_back({
-        .offset_bytes = face * 64U,
-        .row_pitch_bytes = 32U,
-        .size_bytes = 64U,
-      });
     }
-    auto payload = vortex::testing::detail::BuildV4TexturePayload(
-      desc, layouts, data_region);
-    desc.size_bytes = static_cast<std::uint32_t>(payload.size());
-    auto source = data::TextureResource(desc, std::move(payload));
+    auto shape = vortex::testing::CubeShape(2U);
+    shape.content_hash = wide ? 2U : 1U;
+    auto source = vortex::testing::MakeSyntheticTexture(shape,
+      [&colors](std::uint32_t face, std::uint32_t /*x*/,
+        std::uint32_t /*y*/) -> Pixel { return colors.at(face); });
     auto model = environment::SkyLightEnvironmentModel {};
     model.enabled = true;
     model.source = environment::kSkyLightSourceSpecifiedCubemap;
@@ -663,8 +638,7 @@ NOLINT_TEST_F(
       wide ? 502U : 501U,
     };
     model.lower_hemisphere_is_solid_color = false;
-    owned_asset_loader_->SetTexture(model.cubemap_resource,
-      std::make_shared<data::TextureResource>(std::move(source)));
+    owned_asset_loader_->SetTexture(model.cubemap_resource, std::move(source));
     auto processor = environment::internal::IblProcessor(*renderer_);
     auto stable = environment::internal::StableAtmosphereState {};
     stable.view_products.sky_light = model;
@@ -692,7 +666,7 @@ NOLINT_TEST_F(
     ASSERT_TRUE(products->specular_srv.IsValid());
     const auto metadata = Read<environment::IblProductMetadata>(
       *products->metadata, ResourceStates::kShaderResource);
-    EXPECT_EQ(metadata.processing_flags, 3U);
+    EXPECT_EQ(metadata.processing_flags, environment::kIblProductReady);
     const auto scale = metadata.source_radiance_scale;
     for (unsigned face = 0U; face < 6U; ++face) {
       for (unsigned mip = 0U; mip < 2U; ++mip) {
@@ -771,40 +745,11 @@ NOLINT_TEST_F(ExposureGpuTest,
   binder->OnFrameStart();
   binder->EnsureFrameResources();
 
-  data::pak::core::TextureResourceDesc desc {};
-  desc.texture_type = static_cast<std::uint8_t>(TextureType::kTextureCube);
-  desc.width = desc.height = desc.depth = 1U;
-  desc.array_layers = 6U;
-  desc.mip_levels = 1U;
-  desc.format = static_cast<std::uint8_t>(Format::kRGBA32Float);
-  desc.alignment = 256U;
-  desc.content_hash = 99U;
-  std::vector<std::uint8_t> bytes(6U * sizeof(Pixel));
-  std::vector<data::pak::render::SubresourceLayout> layouts;
-  const Pixel color {
-    0x1p-50F,
-    0x1p-50F,
-    0x1p-50F,
-    1.0F,
-  };
-  for (unsigned face = 0U; face < 6U; ++face) {
-    std::memcpy(
-      std::span {
-        bytes,
-      }
-        .subspan(face * sizeof(Pixel), sizeof(Pixel))
-        .data(),
-      color.data(), sizeof(Pixel));
-    layouts.push_back({
-      .offset_bytes = face * 16U,
-      .row_pitch_bytes = 16U,
-      .size_bytes = 16U,
-    });
-  }
-  auto payload
-    = vortex::testing::detail::BuildV4TexturePayload(desc, layouts, bytes);
-  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
-  auto source = data::TextureResource(desc, std::move(payload));
+  auto shape = vortex::testing::CubeShape(1U);
+  shape.content_hash = 99U;
+  auto source = vortex::testing::MakeSyntheticTexture(shape,
+    [](std::uint32_t /*layer*/, std::uint32_t /*x*/, std::uint32_t /*y*/)
+      -> Pixel { return { 0x1p-50F, 0x1p-50F, 0x1p-50F, 1.0F }; });
   auto model = environment::SkyLightEnvironmentModel {};
   model.enabled = true;
   model.source = environment::kSkyLightSourceSpecifiedCubemap;
@@ -812,8 +757,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     511U,
   };
   model.lower_hemisphere_is_solid_color = false;
-  owned_asset_loader_->SetTexture(model.cubemap_resource,
-    std::make_shared<data::TextureResource>(std::move(source)));
+  owned_asset_loader_->SetTexture(model.cubemap_resource, std::move(source));
   auto processor = environment::internal::IblProcessor(*renderer_);
   auto stable = environment::internal::StableAtmosphereState {};
   const auto refresh = [&](const EnvironmentProbeState& previous) -> auto {

@@ -19,6 +19,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::pakdump {
 
@@ -42,20 +43,19 @@ public:
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
     asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
-    const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
+    const auto data = asset_dump_helpers::TryDescriptorBytes(pak, entry);
     if (!data) {
       ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
-    if (data->size() < sizeof(GeometryAssetDesc)) {
+    const auto geo_read = serio::CopyAt<GeometryAssetDesc>(*data);
+    if (!geo_read) {
       ctx.Out() << "    GeometryAssetDesc: (insufficient data)\n\n";
       co_return;
     }
-
-    GeometryAssetDesc geo {};
-    std::memcpy(&geo, data->data(), sizeof(geo));
+    const auto& geo = *geo_read;
 
     asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), geo.header,
       asset_dump_helpers::DescriptorString(
@@ -89,12 +89,13 @@ public:
 
     size_t offset = sizeof(GeometryAssetDesc);
     for (uint32_t lod = 0; lod < geo.lod_count; ++lod) {
-      MeshDesc mesh_desc {};
-      if (!asset_dump_helpers::ReadStructAt(
-            *data, offset, sizeof(mesh_desc), &mesh_desc)) {
+      const auto mesh_desc_read
+        = serio::CopyAt<MeshDesc>(*data, serio::ByteOffset { offset });
+      if (!mesh_desc_read) {
         ctx.Out() << "    LOD[" << lod << "]: MeshDesc: (insufficient data)\n";
         break;
       }
+      const auto& mesh_desc = *mesh_desc_read;
 
       const auto mesh_name = asset_dump_helpers::DescriptorString(
         *data, geo.header, mesh_desc.name_offset);
@@ -186,13 +187,14 @@ public:
       }
 
       for (uint32_t sm = 0; sm < submesh_limit; ++sm) {
-        SubMeshDesc submesh_desc {};
-        if (!asset_dump_helpers::ReadStructAt(
-              *data, offset, sizeof(submesh_desc), &submesh_desc)) {
+        const auto submesh_desc_read
+          = serio::CopyAt<SubMeshDesc>(*data, serio::ByteOffset { offset });
+        if (!submesh_desc_read) {
           ctx.Out() << "        [" << sm
                     << "] SubMeshDesc: (insufficient data)\n";
           break;
         }
+        const auto& submesh_desc = *submesh_desc_read;
 
         const auto submesh_name = asset_dump_helpers::DescriptorString(
           *data, geo.header, submesh_desc.name_offset);
@@ -214,13 +216,14 @@ public:
           = ctx.verbose ? view_count : (std::min)(view_count, 8U);
 
         for (uint32_t v = 0; v < view_limit; ++v) {
-          MeshViewDesc view_desc {};
-          if (!asset_dump_helpers::ReadStructAt(
-                *data, offset, sizeof(view_desc), &view_desc)) {
+          const auto view_desc_read
+            = serio::CopyAt<MeshViewDesc>(*data, serio::ByteOffset { offset });
+          if (!view_desc_read) {
             ctx.Out() << "          [" << v
                       << "] MeshViewDesc: (insufficient data)\n";
             break;
           }
+          const auto& view_desc = *view_desc_read;
 
           ctx.Out() << "          [" << v << "]";
           ctx.Out() << " first_index=" << view_desc.first_index;
@@ -250,11 +253,12 @@ public:
                   << " more submeshes)\n";
 
         for (uint32_t sm = submesh_limit; sm < submesh_count; ++sm) {
-          SubMeshDesc submesh_desc {};
-          if (!asset_dump_helpers::ReadStructAt(
-                *data, offset, sizeof(submesh_desc), &submesh_desc)) {
+          const auto submesh_desc_read
+            = serio::CopyAt<SubMeshDesc>(*data, serio::ByteOffset { offset });
+          if (!submesh_desc_read) {
             break;
           }
+          const auto& submesh_desc = *submesh_desc_read;
           offset += sizeof(SubMeshDesc);
           offset += static_cast<size_t>(submesh_desc.mesh_view_count)
             * sizeof(MeshViewDesc);
@@ -266,12 +270,14 @@ public:
 
     ctx.Out() << "    Surfaces (" << geo.surface_count << "):\n";
     for (uint32_t surface = 0; surface < geo.surface_count; ++surface) {
-      data::pak::geometry::SurfaceDesc surface_desc {};
-      if (!asset_dump_helpers::ReadStructAt(
-            *data, offset, sizeof(surface_desc), &surface_desc)) {
+      const auto surface_desc_read
+        = serio::CopyAt<data::pak::geometry::SurfaceDesc>(
+          *data, serio::ByteOffset { offset });
+      if (!surface_desc_read) {
         ctx.Out() << "        (surface table not present in descriptor)\n";
         break;
       }
+      const auto& surface_desc = *surface_desc_read;
       offset += sizeof(surface_desc);
       ctx.Out() << "        " << data::to_string(surface_desc.surface_id)
                 << std::boolalpha << ": visible="

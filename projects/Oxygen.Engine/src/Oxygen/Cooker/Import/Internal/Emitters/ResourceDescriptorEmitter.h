@@ -6,11 +6,8 @@
 
 #pragma once
 
-#include <atomic>
 #include <cstdint>
 #include <filesystem>
-#include <memory>
-#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -18,25 +15,28 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Cooker/Import/FileError.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/IoDriver.h>
 
 namespace oxygen::content::import {
-
-class IAsyncFileWriter;
 
 //! Emits sidecar descriptors for resource-table entries (`.otex`, `.obuf`).
 /*!
  Writes compact descriptor files that map a stable authored name to an emitted
  resource-table index and descriptor payload.
 
- Files are emitted asynchronously and finalized with `Finalize()`.
+ Each descriptor is published through `ImportStorage::PublishAsync` by a task
+ of the import session's nursery, and `Finalize()` joins the writes.
 */
 class ResourceDescriptorEmitter final {
 public:
@@ -49,8 +49,12 @@ public:
     std::string virtual_path;
   };
 
-  OXGN_COOK_API ResourceDescriptorEmitter(
-    IAsyncFileWriter& file_writer, std::filesystem::path cooked_root);
+  //! `writes` is the nursery the writes run in; it outlives them.
+  OXGN_COOK_API ResourceDescriptorEmitter(cooked::ImportStorage& storage,
+    serio::IoDriver& driver, co::Nursery& writes,
+    std::filesystem::path cooked_root);
+
+  ~ResourceDescriptorEmitter() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(ResourceDescriptorEmitter)
   OXYGEN_MAKE_NON_MOVABLE(ResourceDescriptorEmitter)
@@ -72,7 +76,7 @@ public:
   OXGN_COOK_NDAPI auto Records() const -> std::vector<Record>;
 
   //! Wait for pending descriptor writes and report success.
-  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
+  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, WriteFailure>>;
 
 private:
   //! Records the descriptor `bytes` at `relpath`; false when an equal
@@ -80,20 +84,17 @@ private:
   /*!
    @throw std::runtime_error When `relpath` already holds other bytes.
   */
-  auto RecordOnce(const std::string& relpath,
-    const std::shared_ptr<std::vector<std::byte>>& bytes,
+  auto RecordOnce(const std::string& relpath, std::span<const std::byte> bytes,
     std::string virtual_path) -> bool;
-  auto QueueWrite(std::string relpath,
-    const std::shared_ptr<std::vector<std::byte>>& bytes) -> void;
-  auto OnWriteComplete(std::string_view relpath, const FileErrorInfo& error)
-    -> void;
+  auto QueueWrite(std::string relpath, std::vector<std::byte> bytes) -> void;
+  auto WriteDescriptor(std::string relpath, std::vector<std::byte> bytes)
+    -> co::Co<Result<void>>;
 
-  IAsyncFileWriter& file_writer_;
+  observer_ptr<cooked::ImportStorage> storage_;
+  observer_ptr<serio::IoDriver> driver_;
+  WriteGroup writes_;
   std::filesystem::path cooked_root_;
   std::unordered_map<std::string, Record> records_;
-  std::atomic<size_t> pending_count_ { 0 };
-  std::atomic<size_t> error_count_ { 0 };
-  std::optional<FileErrorInfo> first_error_ {}; // Import-thread callbacks.
 };
 
 } // namespace oxygen::content::import

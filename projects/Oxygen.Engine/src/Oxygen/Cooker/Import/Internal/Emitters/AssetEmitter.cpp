@@ -8,7 +8,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -19,17 +18,21 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/AssetValidation.h>
 #include <Oxygen/Content/VirtualPath.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/IoDriver.h>
 
 namespace oxygen::content::import {
 
@@ -47,10 +50,13 @@ namespace {
 
 } // namespace
 
-AssetEmitter::AssetEmitter(
-  IAsyncFileWriter& file_writer, const std::filesystem::path& cooked_root)
-  : file_writer_(file_writer)
-  , cooked_root_(cooked_root)
+AssetEmitter::AssetEmitter(cooked::ImportStorage& storage,
+  serio::IoDriver& driver, co::Nursery& writes,
+  std::filesystem::path cooked_root)
+  : storage_(make_observer(&storage))
+  , driver_(make_observer(&driver))
+  , writes_(writes)
+  , cooked_root_(std::move(cooked_root))
 {
   DLOG_F(
     INFO, "Created asset emitter: cooked_root='{}'", cooked_root_.string());
@@ -58,7 +64,7 @@ AssetEmitter::AssetEmitter(
 
 AssetEmitter::~AssetEmitter()
 {
-  const auto pending = pending_count_.load(std::memory_order_acquire);
+  const auto pending = writes_.Running();
   if (pending > 0) {
     LOG_F(WARNING, "Destroyed with {} pending writes", pending);
   }
@@ -131,12 +137,12 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
   const auto sha256 = base::ComputeSha256(bytes);
 
   const auto descriptor_path = cooked_root_ / descriptor_relpath;
-  const auto write_result = co_await file_writer_.Write(descriptor_path, bytes,
-    WriteOptions { .create_directories = true, .overwrite = true });
-  if (!write_result.has_value()) {
+  const auto write_result
+    = co_await storage_->PublishAsync(*driver_, descriptor_path, bytes);
+  if (!write_result) {
     throw std::runtime_error("Failed to write '"
-      + std::string(descriptor_relpath)
-      + "': " + write_result.error().ToString());
+      + std::string(descriptor_relpath) + "' (" + descriptor_path.string()
+      + "): " + write_result.error().message());
   }
 
   RecordAsset(key, asset_type, virtual_path, descriptor_relpath, bytes.size(),
@@ -145,14 +151,9 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
 
 auto AssetEmitter::Count() const noexcept -> size_t { return records_.size(); }
 
-auto AssetEmitter::PendingCount() const noexcept -> size_t
-{
-  return pending_count_.load(std::memory_order_acquire);
-}
-
 auto AssetEmitter::ErrorCount() const noexcept -> size_t
 {
-  return error_count_.load(std::memory_order_acquire);
+  return writes_.ErrorCount();
 }
 
 auto AssetEmitter::Records() const noexcept
@@ -220,8 +221,7 @@ auto AssetEmitter::QueueDescriptorWrite(
   const std::filesystem::path& descriptor_path,
   std::string_view descriptor_relpath, std::span<const std::byte> bytes) -> void
 {
-  auto bytes_ptr
-    = std::make_shared<std::vector<std::byte>>(bytes.begin(), bytes.end());
+  auto owned = std::vector<std::byte>(bytes.begin(), bytes.end());
 
   auto& state = write_state_by_relpath_[std::string(descriptor_relpath)];
   if (state.descriptor_path.empty()) {
@@ -229,77 +229,46 @@ auto AssetEmitter::QueueDescriptorWrite(
   }
 
   if (state.write_in_flight) {
-    state.queued_bytes = std::move(bytes_ptr);
+    state.queued_bytes = std::move(owned);
     return;
   }
 
   state.write_in_flight = true;
-  pending_count_.fetch_add(1, std::memory_order_acq_rel);
-
-  file_writer_.WriteAsync(descriptor_path,
-    std::span<const std::byte>(*bytes_ptr),
-    WriteOptions { .create_directories = true, .share_write = true },
-    [this, bytes_ptr, relpath = std::string(descriptor_relpath)](
-      const FileErrorInfo& error, [[maybe_unused]] uint64_t bytes_written)
-      -> void { OnWriteComplete(relpath, error); });
+  writes_.Start(descriptor_path,
+    WriteDescriptor(std::string(descriptor_relpath), std::move(owned)));
 }
 
-auto AssetEmitter::OnWriteComplete(
-  const std::string_view descriptor_relpath, const FileErrorInfo& error) -> void
+auto AssetEmitter::WriteDescriptor(const std::string descriptor_relpath,
+  std::vector<std::byte> bytes) -> co::Co<Result<void>>
 {
-  pending_count_.fetch_sub(1, std::memory_order_acq_rel);
-
-  const auto state_it
-    = write_state_by_relpath_.find(std::string(descriptor_relpath));
-  if (state_it != write_state_by_relpath_.end()) {
-    auto& state = state_it->second;
-    state.write_in_flight = false;
-
-    if (state.queued_bytes) {
-      auto bytes_ptr = std::move(state.queued_bytes);
-      state.queued_bytes.reset();
-      state.write_in_flight = true;
-      pending_count_.fetch_add(1, std::memory_order_acq_rel);
-
-      file_writer_.WriteAsync(state.descriptor_path,
-        std::span<const std::byte>(*bytes_ptr),
-        WriteOptions { .create_directories = true, .share_write = true },
-        [this, bytes_ptr, relpath = std::string(descriptor_relpath)](
-          const FileErrorInfo& next_error,
-          [[maybe_unused]] uint64_t bytes_written) -> void {
-          OnWriteComplete(relpath, next_error);
-        });
+  for (;;) {
+    auto& state = write_state_by_relpath_.at(descriptor_relpath);
+    const auto written = co_await storage_->PublishAsync(
+      *driver_, state.descriptor_path, std::span<const std::byte>(bytes));
+    if (!written) {
+      LOG_F(ERROR, "Failed to write '{}' ({}): {}", descriptor_relpath,
+        state.descriptor_path.string(), written.error().message());
+      writes_.Record(state.descriptor_path, written);
     }
-  }
 
-  if (!error.IsError()) {
-    return;
+    // The latest bytes queued while this write was in flight go next.
+    auto& after = write_state_by_relpath_.at(descriptor_relpath);
+    if (!after.queued_bytes) {
+      after.write_in_flight = false;
+      co_return Result<void> {};
+    }
+    bytes = std::move(*after.queued_bytes);
+    after.queued_bytes.reset();
   }
-
-  error_count_.fetch_add(1, std::memory_order_acq_rel);
-  if (!first_error_) {
-    first_error_ = error;
-  }
-  LOG_F(
-    ERROR, "Failed to write '{}': {}", descriptor_relpath, error.ToString());
 }
 
-auto AssetEmitter::Finalize() -> co::Co<Result<void, FileErrorInfo>>
+auto AssetEmitter::Finalize() -> co::Co<Result<void, WriteFailure>>
 {
   finalize_started_.store(true, std::memory_order_release);
 
-  DLOG_F(INFO, "Finalize: waiting for {} pending writes",
-    pending_count_.load(std::memory_order_acquire));
+  DLOG_F(INFO, "Finalize: waiting for {} pending writes", writes_.Running());
 
-  // Wait for all pending writes via flush
-  const auto flush_result = co_await file_writer_.Flush();
-  if (first_error_) {
-    co_return Result<void, FileErrorInfo>::Err(*first_error_);
-  }
-  if (!flush_result) {
-    co_return Result<void, FileErrorInfo>::Err(flush_result.error());
-  }
-  co_return Result<void, FileErrorInfo>::Ok();
+  co_return co_await writes_.Join();
 }
 
 } // namespace oxygen::content::import

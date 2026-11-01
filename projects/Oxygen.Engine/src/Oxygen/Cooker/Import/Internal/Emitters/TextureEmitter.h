@@ -19,18 +19,18 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/AnyDevice.h>
 
 namespace oxygen::content::import {
-
-class IAsyncFileWriter;
 
 //! Emits cooked textures with async I/O.
 /*!
@@ -51,8 +51,9 @@ class IAsyncFileWriter;
  1. **Stable Index Immediately**: `Emit()` returns the table index
     synchronously. The index is valid the moment it's returned.
 
- 2. **Async I/O in Background**: Data is written via `IAsyncFileWriter`
-    without blocking the import thread.
+ 2. **Async I/O in Background**: Data is written at its reserved offset to
+    the data file the aggregator opened once, by tasks of the import
+    session's nursery, without blocking the import thread.
 
  3. **Shared Table Aggregation**: Table entries are submitted to the
    `TextureTableAggregator`. The table file is written once during service
@@ -69,7 +70,7 @@ class IAsyncFileWriter;
  config.cooked_root = cooked_root;
  config.packing_policy_id = "d3d12";
 
- TextureEmitter emitter(file_writer, table_aggregator, config);
+ TextureEmitter emitter(session_nursery, table_aggregator, config);
 
  // During import (returns immediately)
  auto idx1 = emitter.Emit(cooked_texture1);  // Returns >= 1
@@ -82,11 +83,11 @@ class IAsyncFileWriter;
 
  ### Thread Safety
 
- - `Emit()` must be called from the import thread only (not thread-safe).
- - `PendingCount()` and `ErrorCount()` are thread-safe (atomic reads).
+ - `Emit()` must be called from the import thread only (not thread-safe),
+   inside the coroutine scope of the nursery the emitter was given.
  - `Finalize()` must be called from the import thread.
 
- @see IAsyncFileWriter, CookedTexturePayload
+ @see CookedTexturePayload
 */
 class TextureEmitter final {
 public:
@@ -112,24 +113,25 @@ public:
       = DedupCollisionPolicy::kWarnKeepFirst;
 
     //! Optional sink used to publish collision diagnostics.
-    std::function<void(ImportDiagnostic)> on_dedup_diagnostic {};
+    std::function<void(ImportDiagnostic)> on_dedup_diagnostic;
   };
 
   //! Runtime statistics for the emitter.
   struct Stats final {
     uint32_t emitted_textures = 0;
     uint64_t data_file_size = 0;
-    size_t pending_writes = 0;
     size_t error_count = 0;
   };
 
   //! Create a texture emitter writing under `Config::cooked_root`.
   /*!
-   @param file_writer Async file writer for output operations.
-   @param table_aggregator Shared texture table aggregator.
+   @param writes The nursery the writes run in; it outlives them (the
+     session's job nursery).
+   @param table_aggregator Shared texture table aggregator; it holds the open
+     data file.
    @param config Emission configuration.
   */
-  OXGN_COOK_API TextureEmitter(IAsyncFileWriter& file_writer,
+  OXGN_COOK_API TextureEmitter(co::Nursery& writes,
     TextureTableAggregator& table_aggregator, Config config);
 
   OXGN_COOK_API ~TextureEmitter();
@@ -142,7 +144,7 @@ public:
 
   //! Emit a cooked texture, returning a stable table index.
   /*!
-   Assigns a table index immediately and queues an async write for the
+   Assigns a table index immediately and starts an async write for the
    texture data. The index is valid the moment this method returns.
 
    @param cooked The cooked texture payload containing descriptor and data.
@@ -158,14 +160,13 @@ public:
    1. Assigns the next index via atomic increment.
    2. Creates a `TextureResourceDesc` with data offset (based on current
       data file position).
-   3. Queues async writes at explicit offsets to `textures.data`.
+   3. Starts async writes at explicit offsets to `textures.data`.
    4. Adds the descriptor to the in-memory table vector.
    5. Returns the index.
 
    ### Error Handling
 
-   I/O errors are tracked via `ErrorCount()`. The caller should check
-   this during finalization.
+   I/O errors are counted in `GetStats()` and returned by `Finalize()`.
 
    @note The returned index is stable even if the I/O fails later.
   */
@@ -194,17 +195,16 @@ public:
    This method:
    1. Waits for all pending async writes to complete.
 
-   @return Success or the first I/O failure, including its path and system
-   error.
+   @return Success or the first I/O error.
 
    ### Errors
 
    If any I/O errors occurred during `Emit()` calls, this method returns
-   the first failure. The caller should check `ErrorCount()` for details.
+   the first one; each is logged with its path as it happens.
 
    @note Must be called from the import thread.
   */
-  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
+  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, WriteFailure>>;
 
 private:
   using TextureResourceDesc = data::pak::core::TextureResourceDesc;
@@ -219,14 +219,15 @@ private:
     kUser,
   };
 
-  //! Queue a write (padding or payload) to the data file.
+  //! Start a write (padding or payload) to the data file.
   auto QueueDataWrite(WriteKind kind, TextureKind texture_kind,
-    std::optional<uint32_t> index, uint64_t offset,
-    std::shared_ptr<std::vector<std::byte>> data) -> void;
+    std::optional<uint32_t> index, uint64_t offset, std::vector<std::byte> data)
+    -> void;
 
-  //! Common completion handling for queued writes.
-  auto OnWriteComplete(WriteKind kind, TextureKind texture_kind,
-    std::optional<uint32_t> index, const FileErrorInfo& error) -> void;
+  //! The write task: awaits the data at its offset and logs a failure.
+  auto WriteData(serio::AnyAsyncDevice* file, WriteKind kind,
+    TextureKind texture_kind, std::optional<uint32_t> index, uint64_t offset,
+    std::vector<std::byte> data) -> co::Co<Result<void>>;
 
   auto UpdateDataFileSize(uint64_t new_size) -> void;
   auto RecordEmissionSignature(const std::string& signature) -> void;
@@ -235,7 +236,7 @@ private:
   auto ToPakDescriptor(const CookedTexturePayload& cooked,
     uint64_t data_offset) const -> TextureResourceDesc;
 
-  IAsyncFileWriter& file_writer_;
+  WriteGroup writes_;
   TextureTableAggregator& table_aggregator_;
   Config config_ {};
   std::filesystem::path data_path_;
@@ -246,9 +247,6 @@ private:
   std::unordered_map<std::string, std::string> identity_by_key_;
   std::unordered_map<std::string, uint32_t> index_by_key_;
   std::atomic<uint64_t> data_file_size_ { 0 };
-  std::atomic<size_t> pending_count_ { 0 };
-  std::atomic<size_t> error_count_ { 0 };
-  std::optional<FileErrorInfo> first_error_ {}; // Import-thread callbacks.
 };
 
 } // namespace oxygen::content::import

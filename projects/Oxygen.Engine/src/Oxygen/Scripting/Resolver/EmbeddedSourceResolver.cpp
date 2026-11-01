@@ -8,7 +8,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Data/AssetReferences.h>
@@ -17,6 +19,7 @@
 #include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Scripting/IScriptSourceResolver.h>
 #include <Oxygen/Scripting/Resolver/EmbeddedSourceResolver.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::scripting {
 
@@ -61,18 +64,27 @@ namespace {
 
     if (resource->GetEncoding()
       == data::pak::scripting::ScriptEncoding::kSource) {
+      auto bytes = serio::ByteBuffer::CopyOf(
+        std::as_bytes(std::span<const uint8_t>(resource->GetData())));
+      if (!bytes) {
+        return IScriptSourceResolver::ResolveResult {
+          .ok = false,
+          .blob = {},
+          .error_message = "unable to copy embedded script resource for index "
+            + std::to_string(index.get()),
+        };
+      }
       return IScriptSourceResolver::ResolveResult {
         .ok = true,
         .blob = std::optional<ResolvedScriptBlob> { ScriptSourceBlob::FromOwned(
-          std::vector<uint8_t>(
-            resource->GetData().begin(), resource->GetData().end()),
-          resource->GetLanguage(), resource->GetCompression(),
-          resource->GetContentHash(), origin,
+          std::move(bytes).value(), resource->GetLanguage(),
+          resource->GetCompression(), resource->GetContentHash(), origin,
           ScriptBlobCanonicalName {
             "embedded-resource:" + std::to_string(index.get()) }) },
         .error_message = {},
       };
-    } else if (resource->GetEncoding()
+    }
+    if (resource->GetEncoding()
       == data::pak::scripting::ScriptEncoding::kBytecode) {
       return IScriptSourceResolver::ResolveResult {
         .ok = true,
@@ -86,13 +98,12 @@ namespace {
             "embedded-resource:" + std::to_string(index.get()) }) },
         .error_message = {},
       };
-    } else {
-      return IScriptSourceResolver::ResolveResult {
-        .ok = false,
-        .blob = {},
-        .error_message = "embedded script resource encoding is unsupported",
-      };
     }
+    return IScriptSourceResolver::ResolveResult {
+      .ok = false,
+      .blob = {},
+      .error_message = "embedded script resource encoding is unsupported",
+    };
   }
 
 } // namespace

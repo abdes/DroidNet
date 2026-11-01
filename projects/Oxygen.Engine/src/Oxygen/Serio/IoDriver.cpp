@@ -9,11 +9,13 @@
 #include <new>
 #include <system_error>
 #include <utility>
+#include <variant>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/AsyncFile.h>
 #include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Detail/InlineBackend.h>
 #include <Oxygen/Serio/Detail/IoBackend.h>
 #include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/NativeFile.h>
@@ -53,6 +55,21 @@ auto IoDriver::Create(asio::io_context& loop) noexcept -> Result<IoDriver>
   return ::oxygen::Ok(IoDriver(std::move(state)));
 }
 
+auto IoDriver::CreateInline() noexcept -> Result<IoDriver>
+{
+  auto state = std::unique_ptr<detail::DriverState>(new (std::nothrow)
+      detail::DriverState(detail::Backend { detail::InlineBackend {} }));
+  if (!state) {
+    return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
+  }
+  return ::oxygen::Ok(IoDriver(std::move(state)));
+}
+
+auto IoDriver::Inline() const noexcept -> bool
+{
+  return std::holds_alternative<detail::InlineBackend>(state_->backend);
+}
+
 IoDriver::IoDriver(std::unique_ptr<detail::DriverState> state) noexcept
   : state_(std::move(state))
 {
@@ -72,7 +89,9 @@ auto IoDriver::operator=(IoDriver&& other) noexcept -> IoDriver& = default;
 auto IoDriver::Open(const std::filesystem::path& path,
   const OpenSpec& spec) noexcept -> Result<AsyncFile>
 {
-  auto file = NativeFile::OpenForDriver(path, spec);
+  // An inline driver's files are ordinary ones: nothing completes on a port.
+  auto file = Inline() ? NativeFile::Open(path, spec)
+                       : NativeFile::OpenForDriver(path, spec);
   if (!file) {
     return ::oxygen::Err(file.error());
   }

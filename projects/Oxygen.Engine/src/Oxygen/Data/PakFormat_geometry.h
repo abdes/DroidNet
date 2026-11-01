@@ -334,6 +334,9 @@ static_assert(std::is_trivially_copyable_v<MeshViewDesc>);
 
 // clang-format off
 namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::pak::geometry::GeometryAssetDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::geometry::MeshDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::geometry::SubMeshDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::geometry::MeshViewDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::geometry::LodPolicyRecord> = true;
 template <> inline constexpr bool kIsRecord<data::pak::geometry::SurfaceDesc> = true;

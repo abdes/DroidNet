@@ -6,8 +6,9 @@
 
 #pragma once
 
-#include <cstring>
+#include <cstddef>
 #include <memory>
+#include <span>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -15,6 +16,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::loaders {
 
@@ -50,13 +52,15 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
   const size_t base_pos = *base_pos_res;
 
   // Read the fixed descriptor to compute the total payload size.
-  data::pak::physics::PhysicsSceneAssetDesc desc {};
-  {
-    auto blob_res = reader.ReadBlob(sizeof(desc));
-    CheckLoaderResult(
-      blob_res, "physics scene asset", "ReadBlob(PhysicsSceneAssetDesc)");
-    std::memcpy(&desc, (*blob_res).data(), sizeof(desc));
-  }
+  const auto desc_blob
+    = reader.ReadBlob(sizeof(data::pak::physics::PhysicsSceneAssetDesc));
+  CheckLoaderResult(
+    desc_blob, "physics scene asset", "ReadBlob(PhysicsSceneAssetDesc)");
+  const auto parsed_desc
+    = serio::CopyAt<data::pak::physics::PhysicsSceneAssetDesc>(*desc_blob);
+  CheckLoaderResult(
+    parsed_desc, "physics scene asset", "PhysicsSceneAssetDesc");
+  const auto desc = *parsed_desc;
 
   // Validate asset type.
   if (static_cast<data::AssetType>(desc.header.asset_type)
@@ -95,11 +99,16 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
       seek_res, "physics scene asset", "Seek(component_table_directory)");
 
     for (uint32_t i = 0; i < desc.component_table_count; ++i) {
-      data::pak::physics::PhysicsComponentTableDesc entry {};
-      auto entry_blob = reader.ReadBlob(sizeof(entry));
+      auto entry_blob = reader.ReadBlob(
+        sizeof(data::pak::physics::PhysicsComponentTableDesc));
       CheckLoaderResult(entry_blob, "physics scene asset",
         "ReadBlob(PhysicsComponentTableDesc)");
-      std::memcpy(&entry, (*entry_blob).data(), sizeof(entry));
+      const auto parsed_entry
+        = serio::CopyAt<data::pak::physics::PhysicsComponentTableDesc>(
+          *entry_blob);
+      CheckLoaderResult(
+        parsed_entry, "physics scene asset", "PhysicsComponentTableDesc");
+      const auto entry = *parsed_entry;
 
       if (entry.table.count > 0) {
         const size_t table_bytes
@@ -135,7 +144,10 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
   // Construct the in-memory asset (validates all ranges internally).
   auto asset = std::make_unique<data::PhysicsSceneAsset>(
     context.current_asset_key, std::move(bytes),
-    data::SourceOrigin { context.source_key, context.source_instance });
+    data::SourceOrigin {
+      .key = context.source_key,
+      .instance = context.source_instance,
+    });
   asset->SetAssetName(std::move(name));
   if (context.asset_references) {
     namespace physics = data::pak::physics;

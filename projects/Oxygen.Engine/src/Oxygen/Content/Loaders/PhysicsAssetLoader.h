@@ -8,7 +8,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
@@ -17,18 +17,22 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::loaders {
 
 inline auto LoadPhysicsMaterialDescriptor(const LoaderContext& context)
   -> data::pak::physics::PhysicsMaterialAssetDesc
 {
-  data::pak::physics::PhysicsMaterialAssetDesc descriptor {};
   const auto base_pos = context.desc_reader->Position();
   CheckLoaderResult(base_pos, "physics material", "position");
-  const auto bytes = context.desc_reader->ReadBlob(sizeof(descriptor));
+  const auto bytes = context.desc_reader->ReadBlob(
+    sizeof(data::pak::physics::PhysicsMaterialAssetDesc));
   CheckLoaderResult(bytes, "physics material", "descriptor");
-  std::memcpy(&descriptor, bytes->data(), sizeof(descriptor));
+  const auto parsed
+    = serio::CopyAt<data::pak::physics::PhysicsMaterialAssetDesc>(*bytes);
+  CheckLoaderResult(parsed, "physics material", "descriptor");
+  const auto descriptor = *parsed;
   if (descriptor.header.asset_type
       != static_cast<uint8_t>(data::AssetType::kPhysicsMaterial)
     || descriptor.header.version
@@ -50,12 +54,13 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
   namespace physics = data::pak::physics;
   auto& reader = *context.desc_reader;
   const auto packed = reader.ScopedAlignment(1U);
-  physics::CollisionShapeAssetDesc descriptor {};
   const auto base_pos = reader.Position();
   CheckLoaderResult(base_pos, "collision shape", "position");
-  const auto bytes = reader.ReadBlob(sizeof(descriptor));
+  const auto bytes = reader.ReadBlob(sizeof(physics::CollisionShapeAssetDesc));
   CheckLoaderResult(bytes, "collision shape", "descriptor");
-  std::memcpy(&descriptor, bytes->data(), sizeof(descriptor));
+  const auto parsed = serio::CopyAt<physics::CollisionShapeAssetDesc>(*bytes);
+  CheckLoaderResult(parsed, "collision shape", "descriptor");
+  const auto descriptor = *parsed;
   if (descriptor.header.asset_type
       != static_cast<uint8_t>(data::AssetType::kCollisionShape)
     || descriptor.header.version != physics::kCollisionShapeAssetVersion) {
@@ -126,12 +131,14 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
         reader.Forward(compound.child_byte_offset - sizeof(descriptor)),
         "collision shape", "compound child offset");
       for (uint32_t index = 0U; index < compound.child_count; ++index) {
-        physics::CompoundShapeChildDesc child {};
-        const auto child_bytes = reader.ReadBlob(sizeof(child));
+        const auto child_bytes
+          = reader.ReadBlob(sizeof(physics::CompoundShapeChildDesc));
         CheckLoaderResult(child_bytes, "collision shape", "compound child");
-        std::memcpy(&child, child_bytes->data(), sizeof(child));
+        const auto child
+          = serio::CopyAt<physics::CompoundShapeChildDesc>(*child_bytes);
+        CheckLoaderResult(child, "collision shape", "compound child");
         keys.push_back({
-          .key = child.payload_asset_key,
+          .key = child->payload_asset_key,
           .kind = data::KeyReferenceKind::kPhysicsResource,
           .expected_type = data::AssetType::kUnknown,
         });

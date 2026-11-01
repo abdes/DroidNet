@@ -7,10 +7,10 @@
 // Covers: Import/Internal/gltf/GltfAdapter.cpp (UV sets, emissive strength)
 
 #include <algorithm>
-#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -29,6 +29,7 @@
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -126,12 +127,13 @@ namespace {
     ASSERT_NE(product, report->products.end());
     const auto bytes
       = ReadBytes(report->cooked_root / product->descriptor_relpath);
-    auto desc = data::pak::render::MaterialAssetDesc {};
-    ASSERT_GE(bytes.size(), sizeof(desc));
-    std::memcpy(&desc, bytes.data(), sizeof(desc));
-    EXPECT_FLOAT_EQ(desc.emissive_factor[0], 8.0F);
-    EXPECT_FLOAT_EQ(desc.emissive_factor[1], 4.0F);
-    EXPECT_FLOAT_EQ(desc.emissive_factor[2], 2.0F);
+    const auto desc
+      = oxygen::serio::CopyAt<data::pak::render::MaterialAssetDesc>(
+        std::span { bytes });
+    ASSERT_HAS_VALUE(desc);
+    EXPECT_FLOAT_EQ(desc->emissive_factor[0], 8.0F);
+    EXPECT_FLOAT_EQ(desc->emissive_factor[1], 4.0F);
+    EXPECT_FLOAT_EQ(desc->emissive_factor[2], 2.0F);
   }
 
 } // namespace

@@ -7,6 +7,8 @@
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/ShaderManager.h>
+#include <Oxygen/Serio/Record.h>
+#include <Oxygen/Serio/Types.h>
 
 // NOTE: ShaderManager is intentionally compilation-free.
 
@@ -31,6 +33,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/ShaderLibraryIO.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 using oxygen::ShaderType;
 using oxygen::graphics::ShaderManager;
@@ -79,72 +82,27 @@ struct OxrfResource {
   std::string name;
 };
 
-class ByteCursor {
-public:
-  explicit ByteCursor(std::span<const std::byte> bytes)
-    : bytes_(bytes)
-  {
+template <oxygen::serio::BulkElement T>
+auto ReadOrThrow(oxygen::serio::ByteReader& reader, const std::string_view what)
+  -> T
+{
+  const auto value = reader.Read<T>();
+  if (!value) {
+    throw std::runtime_error(std::string(what) + ": truncated");
   }
+  return *value;
+}
 
-  [[nodiscard]] auto Remaining() const noexcept -> size_t
-  {
-    return bytes_.size() - offset_;
+auto ReadString16OrThrow(
+  oxygen::serio::ByteReader& reader, const std::string_view what) -> std::string
+{
+  const auto length = ReadOrThrow<uint16_t>(reader, "read string length");
+  const auto text = reader.ReadStringView(oxygen::serio::CountOf(length));
+  if (!text) {
+    throw std::runtime_error(std::string(what) + ": truncated");
   }
-
-  auto ReadU8(std::string_view what) -> uint8_t
-  {
-    if (Remaining() < sizeof(uint8_t)) {
-      throw std::runtime_error(std::string(what) + ": truncated");
-    }
-    const uint8_t out = std::to_integer<uint8_t>(bytes_[offset_]);
-    offset_ += sizeof(uint8_t);
-    return out;
-  }
-
-  auto ReadU16(std::string_view what) -> uint16_t
-  {
-    if (Remaining() < sizeof(uint16_t)) {
-      throw std::runtime_error(std::string(what) + ": truncated");
-    }
-    uint16_t out {};
-    std::memcpy(&out, bytes_.data() + offset_, sizeof(uint16_t));
-    offset_ += sizeof(uint16_t);
-    return out;
-  }
-
-  auto ReadU32(std::string_view what) -> uint32_t
-  {
-    if (Remaining() < sizeof(uint32_t)) {
-      throw std::runtime_error(std::string(what) + ": truncated");
-    }
-    uint32_t out {};
-    std::memcpy(&out, bytes_.data() + offset_, sizeof(uint32_t));
-    offset_ += sizeof(uint32_t);
-    return out;
-  }
-
-  auto ReadString16(std::string_view what) -> std::string
-  {
-    const uint16_t len = ReadU16("read string length");
-    if (Remaining() < len) {
-      throw std::runtime_error(std::string(what) + ": truncated");
-    }
-
-    std::string out;
-    out.resize(len);
-    if (len > 0U) {
-      std::memcpy(out.data(), bytes_.data() + offset_, len);
-      offset_ += len;
-    }
-    return out;
-  }
-
-  [[nodiscard]] auto Offset() const noexcept -> size_t { return offset_; }
-
-private:
-  std::span<const std::byte> bytes_;
-  size_t offset_ {};
-};
+  return std::string(*text);
+}
 
 auto NormalizePathForCompare(std::string_view s) -> std::string
 {
@@ -174,52 +132,52 @@ auto IsExcludedFromReflectionValidation(
 auto ParseOxrfOrThrow(std::span<const std::byte> blob)
   -> std::pair<OxrfHeader, std::vector<OxrfResource>>
 {
-  ByteCursor c(blob);
-  const uint32_t magic = c.ReadU32("read OXRF magic");
-  const uint32_t version = c.ReadU32("read OXRF version");
+  auto c = oxygen::serio::ByteReader { blob };
+  const auto magic = ReadOrThrow<uint32_t>(c, "read OXRF magic");
+  const auto version = ReadOrThrow<uint32_t>(c, "read OXRF version");
 
   if (magic != kOxrfMagic || version != kOxrfVersion) {
     throw std::runtime_error("invalid OXRF blob header");
   }
 
-  const auto stage_u8 = c.ReadU8("read stage");
-  const auto sm_major = c.ReadU8("read shader_model_major");
-  const auto sm_minor = c.ReadU8("read shader_model_minor");
-  (void)c.ReadU8("read reserved");
-  auto entry_point = c.ReadString16("read entry_point");
+  const auto stage_u8 = ReadOrThrow<uint8_t>(c, "read stage");
+  const auto sm_major = ReadOrThrow<uint8_t>(c, "read shader_model_major");
+  const auto sm_minor = ReadOrThrow<uint8_t>(c, "read shader_model_minor");
+  (void)ReadOrThrow<uint8_t>(c, "read reserved");
+  auto entry_point = ReadString16OrThrow(c, "read entry_point");
 
   OxrfHeader header {
     .stage = static_cast<ShaderType>(static_cast<uint32_t>(stage_u8)),
     .shader_model_major = sm_major,
     .shader_model_minor = sm_minor,
     .entry_point = std::move(entry_point),
-    .bound_resources = c.ReadU32("read bound_resources"),
-    .tgx = c.ReadU32("read tgx"),
-    .tgy = c.ReadU32("read tgy"),
-    .tgz = c.ReadU32("read tgz"),
+    .bound_resources = ReadOrThrow<uint32_t>(c, "read bound_resources"),
+    .tgx = ReadOrThrow<uint32_t>(c, "read tgx"),
+    .tgy = ReadOrThrow<uint32_t>(c, "read tgy"),
+    .tgz = ReadOrThrow<uint32_t>(c, "read tgz"),
   };
 
   std::vector<OxrfResource> resources;
   resources.reserve(header.bound_resources);
 
   for (uint32_t i = 0; i < header.bound_resources; ++i) {
-    const uint8_t resource_type = c.ReadU8("read resource_type");
-    const uint8_t kind_u8 = c.ReadU8("read bind_kind");
+    const auto resource_type = ReadOrThrow<uint8_t>(c, "read resource_type");
+    const auto kind_u8 = ReadOrThrow<uint8_t>(c, "read bind_kind");
     const auto bind_kind = static_cast<OxrfBindKind>(kind_u8);
 
     OxrfResource r {
       .resource_type = resource_type,
       .bind_kind = bind_kind,
-      .space = c.ReadU16("read space"),
-      .bind_point = c.ReadU32("read bind_point"),
-      .bind_count = c.ReadU32("read bind_count"),
-      .byte_size = c.ReadU32("read byte_size"),
-      .name = c.ReadString16("read name"),
+      .space = ReadOrThrow<uint16_t>(c, "read space"),
+      .bind_point = ReadOrThrow<uint32_t>(c, "read bind_point"),
+      .bind_count = ReadOrThrow<uint32_t>(c, "read bind_count"),
+      .byte_size = ReadOrThrow<uint32_t>(c, "read byte_size"),
+      .name = ReadString16OrThrow(c, "read name"),
     };
     resources.push_back(std::move(r));
   }
 
-  if (c.Remaining() != 0U) {
+  if (c.Remaining().get() != 0U) {
     throw std::runtime_error("OXRF blob has trailing bytes");
   }
 
@@ -401,7 +359,7 @@ auto ShaderManager::Load() -> void
     const auto lib = oxygen::graphics::ShaderLibraryReader::ReadFromFile(
       archive_path_, config_.backend_name);
 
-    for (auto& m : lib.modules) {
+    for (const auto& m : lib.modules) {
       auto dxil_words = BytesToU32Words(m.dxil_blob);
 
       const auto request = CanonicalizeShaderRequest(ShaderRequest {
@@ -421,7 +379,7 @@ auto ShaderManager::Load() -> void
         .bytecode = std::make_shared<
           oxygen::graphics::ShaderByteCode<std::vector<uint32_t>>>(
           std::move(dxil_words)),
-        .reflection_blob = std::move(m.reflection_blob),
+        .reflection_blob = m.reflection_blob,
       };
     }
   } catch (const std::exception& e) {

@@ -22,7 +22,6 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -31,7 +30,6 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -49,6 +47,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 #include <Oxygen/Testing/TempDirTest.h>
@@ -61,9 +60,8 @@ namespace {
     size_t reads = 0;
     bool drained = false;
 
-    auto ReadFile(
-      const std::filesystem::path& /*path*/, ReadOptions /*options*/)
-      -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>> override
+    auto ReadFile(const std::filesystem::path& /*path*/,
+      ReadOptions /*options*/) -> co::Co<Result<serio::ByteBuffer>> override
     {
       ++reads;
       if (reads == 2U) {
@@ -73,19 +71,17 @@ namespace {
         co_await pending_;
       }
       constexpr auto text = std::string_view { R"({"name":"Observed"})" };
-      auto bytes = std::vector<std::byte>(text.size());
-      std::memcpy(bytes.data(), text.data(), text.size());
-      co_return Ok(std::move(bytes));
+      co_return serio::ByteBuffer::CopyOf(std::as_bytes(std::span(text)));
     }
 
     auto Exists(const std::filesystem::path& /*path*/)
-      -> co::Co<Result<bool, FileErrorInfo>> override
+      -> co::Co<Result<bool>> override
     {
       co_return Ok(true);
     }
 
     auto GetFileInfo(const std::filesystem::path& /*path*/)
-      -> co::Co<Result<FileInfo, FileErrorInfo>> override
+      -> co::Co<Result<FileInfo>> override
     {
       co_return Ok(FileInfo {});
     }

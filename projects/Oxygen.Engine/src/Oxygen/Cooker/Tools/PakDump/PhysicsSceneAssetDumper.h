@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <ostream>
+#include <span>
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
@@ -16,6 +17,7 @@
 
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::pakdump {
 
@@ -52,7 +54,7 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
   }
 
   static auto PrintSampleRecord(std::ostream& out,
-    const std::vector<std::byte>& blob, const size_t table_offset,
+    const std::span<const std::byte> blob, const size_t table_offset,
     const oxygen::data::pak::physics::PhysicsBindingType type) -> void
   {
     using oxygen::data::pak::physics::AggregateBindingRecord;
@@ -66,9 +68,13 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
 
     switch (type) {
     case PhysicsBindingType::kRigidBody: {
-      const auto record
-        = asset_dump_helpers::ReadRecordAt<RigidBodyBindingRecord>(
-          blob, table_offset);
+      const auto record_read = serio::CopyAt<RigidBodyBindingRecord>(
+        blob, serio::ByteOffset { table_offset });
+      if (!record_read) {
+        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
+        break;
+      }
+      const auto& record = *record_read;
       PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
       PrintUtils::Field(out, "Sample Shape Key",
         oxygen::data::to_string(record.shape_asset_key), 10);
@@ -77,9 +83,13 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       break;
     }
     case PhysicsBindingType::kCollider: {
-      const auto record
-        = asset_dump_helpers::ReadRecordAt<ColliderBindingRecord>(
-          blob, table_offset);
+      const auto record_read = serio::CopyAt<ColliderBindingRecord>(
+        blob, serio::ByteOffset { table_offset });
+      if (!record_read) {
+        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
+        break;
+      }
+      const auto& record = *record_read;
       PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
       PrintUtils::Field(out, "Sample Shape Key",
         oxygen::data::to_string(record.shape_asset_key), 10);
@@ -87,18 +97,26 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       break;
     }
     case PhysicsBindingType::kCharacter: {
-      const auto record
-        = asset_dump_helpers::ReadRecordAt<CharacterBindingRecord>(
-          blob, table_offset);
+      const auto record_read = serio::CopyAt<CharacterBindingRecord>(
+        blob, serio::ByteOffset { table_offset });
+      if (!record_read) {
+        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
+        break;
+      }
+      const auto& record = *record_read;
       PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
       PrintUtils::Field(out, "Sample Shape Key",
         oxygen::data::to_string(record.shape_asset_key), 10);
       break;
     }
     case PhysicsBindingType::kSoftBody: {
-      const auto record
-        = asset_dump_helpers::ReadRecordAt<SoftBodyBindingRecord>(
-          blob, table_offset);
+      const auto record_read = serio::CopyAt<SoftBodyBindingRecord>(
+        blob, serio::ByteOffset { table_offset });
+      if (!record_read) {
+        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
+        break;
+      }
+      const auto& record = *record_read;
       PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
       PrintUtils::Field(out, "Sample Topology Asset Key",
         oxygen::data::to_string(record.topology_asset_key), 10);
@@ -113,16 +131,25 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       break;
     }
     case PhysicsBindingType::kJoint: {
-      const auto record = asset_dump_helpers::ReadRecordAt<JointBindingRecord>(
-        blob, table_offset);
+      const auto record_read = serio::CopyAt<JointBindingRecord>(
+        blob, serio::ByteOffset { table_offset });
+      if (!record_read) {
+        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
+        break;
+      }
+      const auto& record = *record_read;
       PrintUtils::Field(out, "Sample Node A", record.node_index_a, 10);
       PrintUtils::Field(out, "Sample Node B", record.node_index_b, 10);
       break;
     }
     case PhysicsBindingType::kVehicle: {
-      const auto record
-        = asset_dump_helpers::ReadRecordAt<VehicleBindingRecord>(
-          blob, table_offset);
+      const auto record_read = serio::CopyAt<VehicleBindingRecord>(
+        blob, serio::ByteOffset { table_offset });
+      if (!record_read) {
+        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
+        break;
+      }
+      const auto& record = *record_read;
       PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
       PrintUtils::Field(out, "Sample Controller Type",
         static_cast<uint32_t>(record.controller_type), 10);
@@ -133,9 +160,13 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       break;
     }
     case PhysicsBindingType::kAggregate: {
-      const auto record
-        = asset_dump_helpers::ReadRecordAt<AggregateBindingRecord>(
-          blob, table_offset);
+      const auto record_read = serio::CopyAt<AggregateBindingRecord>(
+        blob, serio::ByteOffset { table_offset });
+      if (!record_read) {
+        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
+        break;
+      }
+      const auto& record = *record_read;
       PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
       PrintUtils::Field(out, "Sample Max Bodies", record.max_bodies, 10);
       break;
@@ -159,19 +190,18 @@ public:
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
     asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
-    const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
+    const auto data = asset_dump_helpers::TryDescriptorBytes(pak, entry);
     if (!data) {
       ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
-    if (data->size() < sizeof(PhysicsSceneAssetDesc)) {
+    const auto scene_read = serio::CopyAt<PhysicsSceneAssetDesc>(*data);
+    if (!scene_read) {
       ctx.Out() << "    PhysicsSceneAssetDesc: (insufficient data)\n\n";
       co_return;
     }
-
-    PhysicsSceneAssetDesc scene {};
-    std::memcpy(&scene, data->data(), sizeof(scene));
+    const auto& scene = *scene_read;
 
     asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), scene.header,
       asset_dump_helpers::DescriptorString(
@@ -212,9 +242,14 @@ public:
       const size_t entry_offset = dir_offset
         + (static_cast<size_t>(i)
           * sizeof(oxygen::data::pak::physics::PhysicsComponentTableDesc));
-      const auto table_desc = asset_dump_helpers::ReadRecordAt<
-        oxygen::data::pak::physics::PhysicsComponentTableDesc>(
-        *data, entry_offset);
+      const auto table_desc_read
+        = serio::CopyAt<oxygen::data::pak::physics::PhysicsComponentTableDesc>(
+          *data, serio::ByteOffset { entry_offset });
+      if (!table_desc_read) {
+        PrintUtils::Field(ctx.Out(), "Binding Tables", "truncated", 8);
+        break;
+      }
+      const auto& table_desc = *table_desc_read;
 
       const auto table_offset = static_cast<size_t>(table_desc.table.offset);
       const auto count = static_cast<size_t>(table_desc.table.count);

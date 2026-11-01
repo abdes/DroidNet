@@ -9,10 +9,13 @@
 #include <algorithm>
 #include <cstddef>
 #include <filesystem>
+#include <functional>
+#include <latch>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <vector>
 
 #include "LooseCookedWriterTestSupport.h"
@@ -23,7 +26,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
-#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -31,6 +34,7 @@
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace oxygen::content::testing {
 namespace fixtures = oxygen::cooker::testing;
@@ -92,6 +96,40 @@ namespace {
     (void)writer.Finish();
 
     EXPECT_EQ(Asset(Inspect(storage, cooked_root)).source_path, kRedSource);
+  }
+
+  //! Two writers of one cooked root that finish at once keep each other's
+  //! records: each merges the published index under the root's index lock,
+  //! which excludes writers in other threads and processes alike.
+  NOLINT_TEST(LooseCookedWriterUpdateTest, ConcurrentWritersKeepBothRecords)
+  {
+    const auto temp = oxygen::testing::ScopedTempDir {};
+    auto& storage = cooked::RealCookerStorage();
+    const auto cooked_root = temp.Path() / "concurrent";
+    const auto bytes = Material();
+    // Both writers read the root before either publishes: without the lock,
+    // the second publication would drop the first one's record.
+    LooseCookedWriter red(cooked_root, storage);
+    LooseCookedWriter blue(cooked_root, storage);
+    red.WriteAssetDescriptor(MakeFirstByteAssetKey(0x31), AssetType::kMaterial,
+      "/.cooked/Materials/Red.omat", "Materials/Red.omat", bytes, {},
+      FromSource("/.cooked/Materials/Red.omat.json"));
+    blue.WriteAssetDescriptor(MakeFirstByteAssetKey(0x32), AssetType::kMaterial,
+      "/.cooked/Materials/Blue.omat", "Materials/Blue.omat", bytes, {},
+      FromSource("/.cooked/Materials/Blue.omat.json"));
+
+    auto start = std::latch { 2 };
+    auto finish = [&start](LooseCookedWriter& writer) -> void {
+      start.arrive_and_wait();
+      (void)writer.Finish();
+    };
+    auto red_thread = std::thread(finish, std::ref(red));
+    auto blue_thread = std::thread(finish, std::ref(blue));
+    red_thread.join();
+    blue_thread.join();
+
+    const auto content = CookedContent::Open(storage, cooked_root);
+    EXPECT_EQ(content.Assets().size(), 2U);
   }
 
   //! A source cooking its asset again replaces its entry.

@@ -10,12 +10,14 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <variant>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::scripting {
 
@@ -31,7 +33,7 @@ using ScriptBlobCanonicalName = NamedType<std::string,
 //! Container for script source code data.
 /*!
   ScriptSourceBlob acts as a unified container for script source data,
-  supporting both 'owned' storage (std::vector) and 'referenced' storage
+  supporting both 'owned' storage (serio::ByteBuffer) and 'referenced' storage
   (std::span).
 
   ### Design Contracts
@@ -44,7 +46,7 @@ using ScriptBlobCanonicalName = NamedType<std::string,
 class ScriptSourceBlob final {
 public:
   struct OwnedStorage final {
-    std::vector<uint8_t> bytes;
+    serio::ByteBuffer bytes;
   };
 
   struct ReferencedStorage final {
@@ -59,7 +61,7 @@ public:
   auto operator=(ScriptSourceBlob&&) noexcept -> ScriptSourceBlob& = default;
   ~ScriptSourceBlob() = default;
 
-  [[nodiscard]] static auto FromOwned(std::vector<uint8_t> bytes,
+  [[nodiscard]] static auto FromOwned(serio::ByteBuffer bytes,
     data::pak::scripting::ScriptLanguage language,
     data::pak::scripting::ScriptCompression compression, uint64_t content_hash,
     ScriptBlobOrigin origin, ScriptBlobCanonicalName canonical_name)
@@ -140,7 +142,12 @@ private:
     : storage_(std::move(storage))
     , bytes_(std::visit(
         [](const auto& s) -> std::span<const uint8_t> {
-          return std::span<const uint8_t>(s.bytes);
+          if constexpr (std::is_same_v<std::decay_t<decltype(s)>,
+                          OwnedStorage>) {
+            return s.bytes.Unsigned();
+          } else {
+            return s.bytes;
+          }
         },
         storage_))
     , language_(language)

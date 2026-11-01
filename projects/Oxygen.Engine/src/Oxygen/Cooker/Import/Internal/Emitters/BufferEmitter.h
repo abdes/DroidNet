@@ -19,17 +19,17 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/AnyDevice.h>
 
 namespace oxygen::content::import {
-
-class IAsyncFileWriter;
 
 //! Emits cooked buffers with async I/O.
 /*!
@@ -43,8 +43,9 @@ class IAsyncFileWriter;
  1. **Stable Index Immediately**: `Emit()` returns the table index
     synchronously. The index is valid the moment it's returned.
 
- 2. **Async I/O in Background**: Data is written via `IAsyncFileWriter`
-    without blocking the import thread.
+ 2. **Async I/O in Background**: Data is written at its reserved offset to
+    the data file the aggregator opened once, by tasks of the import
+    session's nursery, without blocking the import thread.
 
  3. **Shared Table Aggregation**: Table entries are submitted to the
    `BufferTableAggregator`. The table file is written once during service
@@ -73,7 +74,7 @@ class IAsyncFileWriter;
  ### Usage Pattern
 
  ```cpp
- BufferEmitter emitter(file_writer, table_aggregator, cooked_root);
+ BufferEmitter emitter(session_nursery, table_aggregator, cooked_root);
 
  // During import (returns immediately)
  auto vb_idx = emitter.Emit(vertex_buffer_payload);  // Returns 0
@@ -86,11 +87,11 @@ class IAsyncFileWriter;
 
  ### Thread Safety
 
- - `Emit()` must be called from the import thread only (not thread-safe).
- - `PendingCount()` and `ErrorCount()` are thread-safe (atomic reads).
+ - `Emit()` must be called from the import thread only (not thread-safe),
+   inside the coroutine scope of the nursery the emitter was given.
  - `Finalize()` must be called from the import thread.
 
- @see IAsyncFileWriter, CookedBufferPayload, BufferResourceDesc
+ @see CookedBufferPayload, BufferResourceDesc
 */
 class BufferEmitter final {
 public:
@@ -102,15 +103,17 @@ public:
 
   //! Create a buffer emitter writing under a cooked root.
   /*!
-   @param file_writer Async file writer for output operations.
-   @param table_aggregator Shared buffer table aggregator.
+   @param writes The nursery the writes run in; it outlives them (the
+     session's job nursery).
+   @param table_aggregator Shared buffer table aggregator; it holds the open
+     data file.
    @param cooked_root Root directory for cooked output.
   */
-  OXGN_COOK_API BufferEmitter(IAsyncFileWriter& file_writer,
+  OXGN_COOK_API BufferEmitter(co::Nursery& writes,
     BufferTableAggregator& table_aggregator,
     const std::filesystem::path& cooked_root);
 
-  OXGN_COOK_API BufferEmitter(IAsyncFileWriter& file_writer,
+  OXGN_COOK_API BufferEmitter(co::Nursery& writes,
     BufferTableAggregator& table_aggregator,
     const std::filesystem::path& cooked_root, Config config);
 
@@ -123,7 +126,7 @@ public:
 
   //! Emit a cooked buffer, returning a stable table index.
   /*!
-   Assigns a table index immediately and queues an async write for the
+   Assigns a table index immediately and starts an async write for the
    buffer data. The index is valid the moment this method returns.
 
    @param cooked The cooked buffer payload containing data and metadata.
@@ -136,15 +139,14 @@ public:
   2. If the signature was seen before, returns the existing index.
   3. Otherwise assigns the next index.
   4. Calculates an aligned data offset based on the buffer's alignment.
-  5. Queues async writes at explicit offsets (padding, then buffer bytes)
+  5. Starts async writes at explicit offsets (padding, then buffer bytes)
      to `buffers.data`.
   6. Adds the descriptor to the in-memory table and records the signature.
   7. Returns the assigned index.
 
    ### Error Handling
 
-   I/O errors are tracked via `ErrorCount()`. The caller should check
-   this during finalization.
+   I/O errors are tracked via `ErrorCount()` and returned by `Finalize()`.
 
    @note The returned index is stable even if the I/O fails later.
   */
@@ -155,9 +157,6 @@ public:
 
   //! Get the number of buffers emitted so far.
   OXGN_COOK_NDAPI auto Count() const noexcept -> uint32_t;
-
-  //! Get the number of pending async write operations.
-  OXGN_COOK_NDAPI auto PendingCount() const noexcept -> size_t;
 
   //! Get the number of I/O errors encountered.
   OXGN_COOK_NDAPI auto ErrorCount() const noexcept -> size_t;
@@ -176,17 +175,16 @@ public:
    This method:
    1. Waits for all pending async writes to complete.
 
-   @return Success or the first I/O failure, including its path and system
-   error.
+   @return Success or the first I/O error.
 
    ### Errors
 
    If any I/O errors occurred during `Emit()` calls, this method returns
-   the first failure. The caller should check `ErrorCount()` for details.
+   the first one; each is logged with its path as it happens.
 
    @note Must be called from the import thread.
   */
-  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
+  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, WriteFailure>>;
 
 private:
   using BufferResourceDesc = data::pak::core::BufferResourceDesc;
@@ -200,23 +198,21 @@ private:
   auto MakeTableEntry(const CookedBufferPayload& cooked, uint64_t data_offset)
     -> BufferResourceDesc;
 
-  //! Queue a write (padding or payload) to the data file.
+  //! Start a write (padding or payload) to the data file.
   auto QueueDataWrite(WriteKind kind, std::optional<uint32_t> index,
-    uint64_t offset, std::shared_ptr<std::vector<std::byte>> data) -> void;
+    uint64_t offset, std::vector<std::byte> data) -> void;
 
-  //! Common completion handling for queued writes.
-  auto OnWriteComplete(WriteKind kind, std::optional<uint32_t> index,
-    const FileErrorInfo& error) -> void;
+  //! The write task: awaits the data at its offset and logs a failure.
+  auto WriteData(serio::AnyAsyncDevice* file, WriteKind kind,
+    std::optional<uint32_t> index, uint64_t offset, std::vector<std::byte> data)
+    -> co::Co<Result<void>>;
 
-  IAsyncFileWriter& file_writer_;
+  WriteGroup writes_;
   BufferTableAggregator& table_aggregator_;
   Config config_ {};
   std::filesystem::path data_path_;
   std::atomic<bool> finalize_started_ { false };
   std::atomic<uint32_t> emitted_count_ { 0 };
-  std::atomic<size_t> pending_count_ { 0 };
-  std::atomic<size_t> error_count_ { 0 };
-  std::optional<FileErrorInfo> first_error_ {}; // Import-thread callbacks.
   std::unordered_map<std::string, std::string> identity_by_key_;
   std::unordered_map<std::string, uint32_t> index_by_key_;
 };

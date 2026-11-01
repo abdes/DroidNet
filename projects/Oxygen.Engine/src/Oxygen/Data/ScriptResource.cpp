@@ -5,14 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
-#include <cstdint>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 using oxygen::data::ScriptResource;
 
@@ -20,12 +19,11 @@ static_assert(std::is_trivially_copyable_v<
                 oxygen::data::pak::scripting::ScriptResourceDesc>,
   "ScriptResourceDesc must be trivially copyable");
 ScriptResource::ScriptResource(
-  oxygen::data::pak::scripting::ScriptResourceDesc desc,
-  std::vector<uint8_t> data)
+  oxygen::data::pak::scripting::ScriptResourceDesc desc, serio::ByteBuffer data)
   : desc_(desc)
   , data_(std::move(data))
 {
-  DCHECK_EQ_F(static_cast<size_t>(desc_.size_bytes), data_.size(),
+  DCHECK_EQ_F(static_cast<size_t>(desc_.size_bytes), data_.Bytes().size(),
     "ScriptResource payload size mismatch: expected {}, got {}",
-    desc_.size_bytes, data_.size());
+    desc_.size_bytes, data_.Bytes().size());
 }

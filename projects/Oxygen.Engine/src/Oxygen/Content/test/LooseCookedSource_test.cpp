@@ -5,11 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cstddef>
+#include <bit>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -27,10 +28,14 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Serio/FileLock.h>
+#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
@@ -52,6 +57,14 @@ constexpr auto kMount = "Content";
 constexpr auto kUnsupportedIndexVersion = uint16_t { 999U };
 constexpr auto kForgedDescriptorSize = uint64_t { 16U };
 constexpr auto kForgedDigestByte = uint8_t { 0xABU };
+
+//! The driver payload-reading mounts await through: it completes on the
+//! awaiting thread, as the tests have no loop.
+auto InlineDriver() -> std::shared_ptr<oxygen::serio::IoDriver>
+{
+  return std::make_shared<oxygen::serio::IoDriver>(
+    oxygen::serio::IoDriver::CreateInline().value());
+}
 
 //! A key no root of these tests lists.
 auto AbsentKey() -> AssetKey
@@ -89,12 +102,16 @@ auto RootWithMembers(const std::vector<std::string>& relpaths)
 //! Changes the first byte of the file at `path`, keeping its size.
 auto ChangeFirstByte(const std::filesystem::path& path) -> void
 {
-  auto file
-    = std::fstream(path, std::ios::in | std::ios::out | std::ios::binary);
+  constexpr auto mode = static_cast<std::ios::openmode>(
+    static_cast<unsigned>(std::ios::in) | static_cast<unsigned>(std::ios::out)
+    | static_cast<unsigned>(std::ios::binary));
+  auto file = std::fstream(path, mode);
   auto first = char { 0 };
   file.get(first);
   file.seekp(0);
-  file.put(static_cast<char>(first ^ 1));
+  const auto changed
+    = static_cast<unsigned char>(static_cast<unsigned char>(first) ^ 1U);
+  file.put(std::bit_cast<char>(changed));
 }
 
 class LooseCookedSourceTest : public oxygen::testing::TempDirTest {
@@ -120,8 +137,9 @@ TEST_F(LooseCookedSourceTest, ConstructorMissingIndexFileThrows)
 {
   EXPECT_THROW(
     {
-      LooseCookedSource source(
-        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+      LooseCookedSource source(CookedRoot(),
+        LooseCookedSource::OpenMode::kValidateMetadata,
+        oxygen::serio::FileLock {}, InlineDriver());
     },
     std::runtime_error);
 }
@@ -130,8 +148,9 @@ TEST_F(LooseCookedSourceTest, ConstructorValidEmptyIndexInitializes)
 {
   WriteValidEmptyIndex();
   EXPECT_NO_THROW({
-    LooseCookedSource source(
-      CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    LooseCookedSource source(CookedRoot(),
+      LooseCookedSource::OpenMode::kValidateMetadata,
+      oxygen::serio::FileLock {}, InlineDriver());
   });
 }
 
@@ -144,8 +163,9 @@ TEST_F(LooseCookedSourceTest, ConstructorFileMissingThrows)
 
   EXPECT_THROW(
     {
-      LooseCookedSource source(
-        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+      LooseCookedSource source(CookedRoot(),
+        LooseCookedSource::OpenMode::kValidateMetadata,
+        oxygen::serio::FileLock {}, InlineDriver());
     },
     std::runtime_error);
 }
@@ -155,8 +175,9 @@ TEST_F(LooseCookedSourceTest, ConstructorFileMissingThrows)
 TEST_F(LooseCookedSourceTest, MountedDataFileAcceptsAnAppendingWriter)
 {
   Write(RootWithBuffers());
-  const auto source = LooseCookedSource(
-    CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+  const auto source = LooseCookedSource(CookedRoot(),
+    LooseCookedSource::OpenMode::kValidateMetadata, oxygen::serio::FileLock {},
+    InlineDriver());
   ASSERT_TRUE(source.PayloadRegion(oxygen::data::BufferResource::ClassTypeId())
       .has_value());
 
@@ -184,8 +205,9 @@ TEST_F(LooseCookedSourceTest, ConstructorFileSizeMismatchThrows)
 
   EXPECT_THROW(
     {
-      LooseCookedSource source(
-        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+      LooseCookedSource source(CookedRoot(),
+        LooseCookedSource::OpenMode::kValidateMetadata,
+        oxygen::serio::FileLock {}, InlineDriver());
     },
     std::runtime_error);
 }
@@ -198,8 +220,9 @@ TEST_F(LooseCookedSourceTest, ConstructorDescriptorMissingThrows)
 
   EXPECT_THROW(
     {
-      LooseCookedSource source(
-        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+      LooseCookedSource source(CookedRoot(),
+        LooseCookedSource::OpenMode::kValidateMetadata,
+        oxygen::serio::FileLock {}, InlineDriver());
     },
     std::runtime_error);
 }
@@ -213,15 +236,17 @@ TEST_F(LooseCookedSourceTest, ConstructorDescriptorSha256MismatchThrows)
 
   // Without verification, loads fine despite invalid hash mismatch
   EXPECT_NO_THROW({
-    LooseCookedSource source(
-      CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    LooseCookedSource source(CookedRoot(),
+      LooseCookedSource::OpenMode::kValidateMetadata,
+      oxygen::serio::FileLock {}, InlineDriver());
   });
 
   // With verification enabled, throws
   EXPECT_THROW(
     {
-      LooseCookedSource source(
-        CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
+      LooseCookedSource source(CookedRoot(),
+        LooseCookedSource::OpenMode::kVerifyContent, oxygen::serio::FileLock {},
+        InlineDriver());
     },
     std::runtime_error);
 }
@@ -230,8 +255,9 @@ TEST_F(LooseCookedSourceTest, HoldsNoResourcesWhenFilesOmitted)
 {
   WriteValidEmptyIndex();
   {
-    LooseCookedSource source(
-      CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    LooseCookedSource source(CookedRoot(),
+      LooseCookedSource::OpenMode::kValidateMetadata,
+      oxygen::serio::FileLock {}, InlineDriver());
 
     for (const auto type : {
            oxygen::data::BufferResource::ClassTypeId(),
@@ -252,19 +278,22 @@ TEST_F(LooseCookedSourceTest, FullIntegrityChecksEveryAuxiliaryFile)
 {
   Write(RootWithMembers({ "Resources/first.obuf", "Resources/second.obuf" }));
   EXPECT_NO_THROW({
-    LooseCookedSource source(
-      CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
+    LooseCookedSource source(CookedRoot(),
+      LooseCookedSource::OpenMode::kVerifyContent, oxygen::serio::FileLock {},
+      InlineDriver());
   });
 
   ChangeFirstByte(CookedRoot() / "Resources/second.obuf");
   EXPECT_NO_THROW({
-    LooseCookedSource source(
-      CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    LooseCookedSource source(CookedRoot(),
+      LooseCookedSource::OpenMode::kValidateMetadata,
+      oxygen::serio::FileLock {}, InlineDriver());
   });
   EXPECT_THROW(
     {
-      LooseCookedSource source(
-        CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
+      LooseCookedSource source(CookedRoot(),
+        LooseCookedSource::OpenMode::kVerifyContent, oxygen::serio::FileLock {},
+        InlineDriver());
     },
     std::runtime_error);
 }
@@ -279,16 +308,18 @@ TEST_F(LooseCookedSourceTest, MetadataAdmissionRejectsExtraAndMissingMembers)
   }
   EXPECT_THROW(
     {
-      LooseCookedSource source(
-        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+      LooseCookedSource source(CookedRoot(),
+        LooseCookedSource::OpenMode::kValidateMetadata,
+        oxygen::serio::FileLock {}, InlineDriver());
     },
     std::runtime_error);
   std::filesystem::remove(extra);
   std::filesystem::remove(CookedRoot() / "Resources/first.obuf");
   EXPECT_THROW(
     {
-      LooseCookedSource source(
-        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+      LooseCookedSource source(CookedRoot(),
+        LooseCookedSource::OpenMode::kValidateMetadata,
+        oxygen::serio::FileLock {}, InlineDriver());
     },
     std::runtime_error);
 }
@@ -299,8 +330,9 @@ TEST_F(LooseCookedSourceTest, NestedContainersAreNotMembershipExceptions)
   Materialize(LooseCookedRoot { kMount }.Files(), CookedRoot() / "nested");
   EXPECT_THROW(
     {
-      LooseCookedSource source(
-        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+      LooseCookedSource source(CookedRoot(),
+        LooseCookedSource::OpenMode::kValidateMetadata,
+        oxygen::serio::FileLock {}, InlineDriver());
     },
     std::runtime_error);
 }
@@ -312,8 +344,9 @@ TEST_F(LooseCookedSourceTest, GenerationMarkerIsTheOnlyNonContentMember)
     std::ofstream marker(CookedRoot() / ".generation.lock");
   }
   EXPECT_NO_THROW({
-    LooseCookedSource source(
-      CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
+    LooseCookedSource source(CookedRoot(),
+      LooseCookedSource::OpenMode::kVerifyContent, oxygen::serio::FileLock {},
+      InlineDriver());
   });
 }
 
@@ -324,8 +357,9 @@ TEST_F(LooseCookedSourceTest, FullIntegritySupportsLongMemberPaths)
   Write(RootWithMembers({ relative }));
   EXPECT_GT((CookedRoot() / relative).native().size(), 260U);
   EXPECT_NO_THROW({
-    LooseCookedSource source(
-      CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
+    LooseCookedSource source(CookedRoot(),
+      LooseCookedSource::OpenMode::kVerifyContent, oxygen::serio::FileLock {},
+      InlineDriver());
   });
 }
 
@@ -352,8 +386,9 @@ TEST_F(LooseCookedSourceTest, IndexKeepsForgedDescriptorSizeAndDigest)
   // Assert
   EXPECT_EQ(index.FindDescriptorSize(key),
     std::optional<std::uint64_t> { kForgedDescriptorSize });
-  ASSERT_HAS_VALUE(index.FindDescriptorSha256(key));
-  EXPECT_TRUE(std::ranges::equal(*index.FindDescriptorSha256(key), forged_sha));
+  const auto digest = index.FindDescriptorSha256(key);
+  ASSERT_HAS_VALUE(digest);
+  EXPECT_TRUE(std::ranges::equal(*digest, forged_sha));
 }
 
 //! An unsupported index version must be rejected by the reader.
@@ -368,6 +403,41 @@ TEST_F(LooseCookedSourceTest, IndexOfAnUnsupportedVersionIsRejected)
   EXPECT_THROW(
     { static_cast<void>(LooseCookedIndex::LoadFromRoot(CookedRoot())); },
     std::runtime_error);
+}
+
+//! A mode that reads payloads has no way to await them without a driver.
+TEST_F(LooseCookedSourceTest, PayloadReadingModesWithoutADriverThrow)
+{
+  // Arrange
+  Write(RootWithBuffers());
+
+  // Act + Assert
+  EXPECT_THROW(
+    {
+      LooseCookedSource source(
+        CookedRoot(), LooseCookedSource::OpenMode::kValidateMetadata);
+    },
+    std::invalid_argument);
+  EXPECT_THROW(
+    {
+      LooseCookedSource source(
+        CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
+    },
+    std::invalid_argument);
+}
+
+//! An index-only mount reads no payloads, so it needs no driver.
+TEST_F(LooseCookedSourceTest, IndexOnlyModeNeedsNoDriver)
+{
+  // Arrange
+  Write(RootWithBuffers());
+
+  // Act
+  const auto source
+    = LooseCookedSource(CookedRoot(), LooseCookedSource::OpenMode::kIndexOnly);
+
+  // Assert
+  EXPECT_EQ(source.CookedRoot(), CookedRoot());
 }
 
 } // namespace

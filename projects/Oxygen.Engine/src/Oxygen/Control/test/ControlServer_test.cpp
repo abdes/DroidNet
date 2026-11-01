@@ -426,6 +426,16 @@ NOLINT_TEST(ControlServerDiscovery, RemovesStaleFilesAndNamesTheInstance)
       const auto discovery = json::parse(file);
       EXPECT_EQ(discovery.at("name"), "left");
       EXPECT_FALSE(discovery.at("started").get<std::string>().empty());
+      // The file is published whole: every key is there and no pending
+      // sibling remains.
+      for (const auto* key :
+        { "protocol", "pid", "application", "command_line", "port", "token" }) {
+        EXPECT_TRUE(discovery.contains(key)) << key;
+      }
+      EXPECT_EQ(discovery.at("application"), "ControlServerTest");
+      for (const auto& entry : std::filesystem::directory_iterator(folder)) {
+        EXPECT_NE(entry.path().extension(), ".tmp") << entry.path();
+      }
       co_return oxygen::co::kCancel;
     };
   });

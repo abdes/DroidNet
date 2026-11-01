@@ -88,6 +88,7 @@ target_link_libraries(
     oxygen::console
     oxygen::core
     oxygen::oxco
+    oxygen::serio
     nlohmann_json::nlohmann_json
   PRIVATE
     oxygen::engine

@@ -9,7 +9,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -51,8 +50,6 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -74,6 +71,7 @@
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 #include <Oxygen/Vortex/Upload/TransientConstantBuffer.h>
 // Completes the traversal returned by Scene::Traverse().
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Testing/GTest.h>
@@ -228,65 +226,36 @@ auto MakeResolvedView(const float width, const float height,
   return ResolvedView(params);
 }
 
+//! A 1x1 texture of `array_layers` layers. RGBA32Float layers take
+//! `layer_colors` in order, then opaque black; other formats hold zeros.
 auto MakeTestTextureResource(const TextureType texture_type,
   const Format format, const std::uint16_t array_layers,
   const std::span<const glm::vec4> layer_colors = {})
   -> std::shared_ptr<oxygen::data::TextureResource>
 {
-  using oxygen::data::pak::core::TextureResourceDesc;
-  using oxygen::data::pak::render::SubresourceLayout;
-
-  auto bytes_per_pixel = std::size_t {
-    4U,
+  const auto shape = oxygen::vortex::testing::SyntheticTextureShape {
+    .type = texture_type,
+    .width = 1U,
+    .height = 1U,
+    .layers = array_layers,
+    .format = format,
+    .content_hash = 0x12345678U,
   };
-  if (format == Format::kRGBA16Float) {
-    bytes_per_pixel = 8U;
-  } else if (format == Format::kRGBA32Float) {
-    bytes_per_pixel = 16U;
+  if (format != Format::kRGBA32Float) {
+    const auto texel_bytes
+      = oxygen::graphics::detail::GetFormatInfo(format).bytes_per_block;
+    const auto zeros
+      = std::vector<std::uint8_t>(std::size_t { texel_bytes } * array_layers);
+    return oxygen::vortex::testing::MakeSyntheticTexture(shape, zeros);
   }
-
-  TextureResourceDesc desc {};
-  desc.texture_type = static_cast<std::uint8_t>(texture_type);
-  desc.width = 1U;
-  desc.height = 1U;
-  desc.depth = 1U;
-  desc.array_layers = array_layers;
-  desc.mip_levels = 1U;
-  desc.format = static_cast<std::uint8_t>(format);
-  desc.alignment = 256U;
-  desc.content_hash = 0x12345678U;
-
-  std::vector<std::uint8_t> data_region(bytes_per_pixel * array_layers, 0U);
-  if (format == Format::kRGBA32Float) {
-    auto next_color = layer_colors.begin();
-    for (std::uint16_t layer = 0U; layer < array_layers; ++layer) {
-      auto color = glm::vec4(0.0F, 0.0F, 0.0F, 1.0F);
-      if (next_color != layer_colors.end()) {
-        color = *next_color;
-        ++next_color;
-      }
-      const auto destination
-        = std::span(data_region)
-            .subspan(layer * bytes_per_pixel, sizeof(color));
-      std::memcpy(destination.data(), &color, sizeof(color));
-    }
-  }
-
-  std::vector<SubresourceLayout> layouts;
-  layouts.reserve(array_layers);
-  for (std::uint16_t layer = 0U; layer < array_layers; ++layer) {
-    layouts.push_back(SubresourceLayout {
-      .offset_bytes = static_cast<std::uint32_t>(layer * bytes_per_pixel),
-      .row_pitch_bytes = static_cast<std::uint32_t>(bytes_per_pixel),
-      .size_bytes = static_cast<std::uint32_t>(bytes_per_pixel),
+  return oxygen::vortex::testing::MakeSyntheticTexture(shape,
+    [layer_colors](const std::uint32_t layer, std::uint32_t /*x*/,
+      std::uint32_t /*y*/) -> std::array<float, 4> {
+      const auto color = layer < layer_colors.size()
+        ? layer_colors[layer]
+        : glm::vec4(0.0F, 0.0F, 0.0F, 1.0F);
+      return { color.r, color.g, color.b, color.a };
     });
-  }
-
-  auto payload = oxygen::vortex::testing::detail::BuildV4TexturePayload(
-    desc, layouts, data_region);
-  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
-  return std::make_shared<oxygen::data::TextureResource>(
-    desc, std::move(payload));
 }
 
 auto MakeRenderContext(const ViewId view_id, const ResolvedView& resolved_view,

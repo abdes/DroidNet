@@ -6,6 +6,7 @@
 
 // Covers: Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp
 
+#include <array>
 #include <cstddef>
 
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
@@ -13,6 +14,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -42,7 +44,8 @@ namespace {
         pipeline.Start(n);
         co_await pipeline.Submit(PhysicsSidecarImportPipeline::WorkItem {
           .source_id = "null-session-physics-sidecar",
-          .source_bytes = { std::byte { 0x1 } },
+          .source_bytes
+          = serio::ByteBuffer::CopyOf(std::array { std::byte { 0x1 } }).value(),
           .session = {},
           .stop_token = {},
         });

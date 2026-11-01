@@ -47,6 +47,7 @@ enum class Error : uint8_t {
   kSharingViolation, //!< Another handle's sharing mode refuses the open.
   kNoSpace, //!< The volume or the caller's quota is full.
   kIo, //!< The device failed to read or write.
+  kIsDirectory, //!< The path names a folder where a file is needed.
 };
 
 //! The category of `serio::Error` codes and conditions.

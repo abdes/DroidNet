@@ -24,6 +24,7 @@
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Console/StartupPlan.h>
+#include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -310,6 +311,31 @@ NOLINT_TEST(ConsolePersistence, ExplicitSaveDoesNotPromoteAppForcedValue)
       .status,
     ExecutionStatus::kOk);
   EXPECT_EQ(ReadArchivedInt(env.path_finder, "r.quality"), 2);
+}
+
+//! A save replaces the archive while a reader holds the old one open, sharing
+//! deletion; the reader keeps the bytes it opened.
+NOLINT_TEST(ConsolePersistence, SaveReplacesAnArchiveAReaderHasOpen)
+{
+  auto env = MakeTestEnvironment();
+  WriteArchivedInt(env.path_finder, "r.quality", 2);
+
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
+  RegisterArchivedInt(console, "r.quality", 1);
+  ASSERT_EQ(
+    console.LoadArchiveCVars(env.path_finder).status, ExecutionStatus::kOk);
+  ASSERT_EQ(console.Execute("r.quality 9").status, ExecutionStatus::kOk);
+
+  const auto reader
+    = oxygen::serio::OpenPublishedFile(env.path_finder.CVarsArchivePath());
+  ASSERT_TRUE(reader.has_value());
+
+  EXPECT_EQ(
+    console.SaveArchiveCVars(env.path_finder, ArchiveSaveMode::kAutomatic)
+      .status,
+    ExecutionStatus::kOk);
+  EXPECT_EQ(ReadArchivedInt(env.path_finder, "r.quality"), 9);
 }
 
 } // namespace

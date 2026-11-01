@@ -10,12 +10,12 @@
 #include <filesystem>
 #include <map>
 #include <span>
-#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::pak::internal {
@@ -51,7 +51,7 @@ public:
 
   //! The bytes `range` of the file `path`.
   [[nodiscard]] auto Read(const std::filesystem::path& path,
-    serio::ByteRange range) -> Result<std::vector<std::byte>>;
+    serio::ByteRange range) -> Result<serio::ByteBuffer>;
 
 private:
   [[nodiscard]] auto Device(const std::filesystem::path& path)

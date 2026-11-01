@@ -165,9 +165,8 @@ namespace {
     const ExpandedShaderRequest& request, const ModuleArtifact& artifact,
     std::span<const std::byte> pdb_bytes, const bool force_write) -> void
   {
-    const auto dxil_path = GetRequestDxilPath(options.final_archive_path,
-      request.request.source_path, request.request.entry_point,
-      request.request_key);
+    const auto dxil_path
+      = GetRequestDxilPath(options.final_archive_path, request);
 
     std::error_code ec;
     const auto dxil_exists = std::filesystem::is_regular_file(dxil_path, ec);
@@ -175,9 +174,8 @@ namespace {
       WriteBinaryFileAtomically(dxil_path, artifact.dxil);
     }
 
-    const auto pdb_path = GetRequestPdbPath(options.final_archive_path,
-      request.request.source_path, request.request.entry_point,
-      request.request_key);
+    const auto pdb_path
+      = GetRequestPdbPath(options.final_archive_path, request);
     if (!options.profile.WritesPdbSidecars()) {
       // A sidecar left by another profile no longer matches this DXIL.
       if (RemovePathIfPresent(pdb_path)) {

@@ -32,6 +32,8 @@ auto IsSystemErrorCondition(const int value, const Error condition) noexcept
   case EIO:
   case ENXIO:
     return condition == Error::kIo;
+  case EISDIR:
+    return condition == Error::kIsDirectory;
   default:
     return false;
   }

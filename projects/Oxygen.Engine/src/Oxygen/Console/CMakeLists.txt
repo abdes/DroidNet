@@ -98,6 +98,7 @@ target_link_libraries(
     oxygen::base
     oxygen::commands
     oxygen::config
+    oxygen::serio
     nlohmann_json::nlohmann_json
 )
 

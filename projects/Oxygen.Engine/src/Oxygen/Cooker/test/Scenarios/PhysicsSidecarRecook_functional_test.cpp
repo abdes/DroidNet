@@ -47,9 +47,11 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -77,19 +79,6 @@ namespace {
     phys::PhysicsSceneAssetDesc descriptor {};
     std::vector<phys::PhysicsComponentTableDesc> directory;
   };
-
-  template <typename T>
-  auto ReadStructAt(const std::vector<std::byte>& bytes, const size_t offset)
-    -> std::optional<T>
-  {
-    if (offset + sizeof(T) > bytes.size()) {
-      return std::nullopt;
-    }
-    auto value = T {};
-    std::memcpy(
-      &value, std::span(bytes).subspan(offset, sizeof(T)).data(), sizeof(T));
-    return value;
-  }
 
   //! Where an array of records sits in a descriptor.
   struct ArrayRange final {
@@ -120,7 +109,8 @@ namespace {
   auto ParsePhysicsSidecarFile(const std::vector<std::byte>& bytes)
     -> std::optional<ParsedPhysicsSidecarFile>
   {
-    const auto descriptor = ReadStructAt<phys::PhysicsSceneAssetDesc>(bytes, 0);
+    const auto descriptor
+      = oxygen::serio::CopyAt<phys::PhysicsSceneAssetDesc>(std::span { bytes });
     if (!descriptor.has_value()) {
       return std::nullopt;
     }
@@ -297,9 +287,11 @@ namespace {
     const auto descriptor = json {
       { "name", "chassis_compound" },
       { "shape_type", "compound" },
-      { "material_ref",
+      {
+        "material_ref",
         oxygen::cooker::test::SpellReference(
-          kShapeVirtualPath, kMaterialVirtualPath) },
+          kShapeVirtualPath, kMaterialVirtualPath),
+      },
       {
         "children",
         json::array({
@@ -362,12 +354,16 @@ namespace {
             json::array({
               json {
                 { "node_index", 1U },
-                { "shape_ref",
+                {
+                  "shape_ref",
                   oxygen::cooker::test::SpellReference(
-                    kSceneVirtualPath, kShapeVirtualPath) },
-                { "material_ref",
+                    kSceneVirtualPath, kShapeVirtualPath),
+                },
+                {
+                  "material_ref",
                   oxygen::cooker::test::SpellReference(
-                    kSceneVirtualPath, kMaterialVirtualPath) },
+                    kSceneVirtualPath, kMaterialVirtualPath),
+                },
                 { "body_type", "dynamic" },
                 { "motion_quality", "linear_cast" },
                 { "mass", 1350.0F },
@@ -387,9 +383,11 @@ namespace {
             json::array({
               json {
                 { "node_index", 2U },
-                { "source_mesh_ref",
+                {
+                  "source_mesh_ref",
                   oxygen::cooker::test::SpellReference(
-                    kSceneVirtualPath, kGeometryVirtualPath) },
+                    kSceneVirtualPath, kGeometryVirtualPath),
+                },
                 { "collision_layer", 2U },
                 { "collision_mask", 0xFFFFFFFFU },
                 { "edge_compliance", 0.0002F },
@@ -919,7 +917,12 @@ namespace {
       if (record_offset != nullptr) {
         *record_offset = offset;
       }
-      return ReadStructAt<Record>(sidecar_bytes_, offset);
+      const auto record = oxygen::serio::CopyAt<Record>(
+        std::span { sidecar_bytes_ }, oxygen::serio::ByteOffset { offset });
+      if (!record) {
+        return std::nullopt;
+      }
+      return *record;
     }
 
     static auto LoadConstraintResources(ConstraintResources& resources) -> void
@@ -1039,17 +1042,21 @@ NOLINT_TEST_F(
 
   const auto shape_bytes = oxygen::cooker::test::ReadBytes(
     Path("Physics/Shapes/chassis_compound.ocshape"));
-  const auto shape_desc
-    = ReadStructAt<phys::CollisionShapeAssetDesc>(shape_bytes, 0);
+  const auto shape_desc = oxygen::serio::CopyAt<phys::CollisionShapeAssetDesc>(
+    std::span { shape_bytes });
   ASSERT_HAS_VALUE(shape_desc) << "Expected shape_desc to contain a value";
   EXPECT_EQ(shape_desc->shape_type, phys::ShapeType::kCompound);
   EXPECT_EQ(shape_desc->shape_params.compound.child_count, 2U);
 
-  const auto child0 = ReadStructAt<phys::CompoundShapeChildDesc>(
-    shape_bytes, shape_desc->shape_params.compound.child_byte_offset);
-  const auto child1 = ReadStructAt<phys::CompoundShapeChildDesc>(shape_bytes,
-    static_cast<size_t>(shape_desc->shape_params.compound.child_byte_offset)
-      + sizeof(phys::CompoundShapeChildDesc));
+  const auto child0 = oxygen::serio::CopyAt<phys::CompoundShapeChildDesc>(
+    std::span { shape_bytes },
+    oxygen::serio::ByteOffset {
+      shape_desc->shape_params.compound.child_byte_offset });
+  const auto child1 = oxygen::serio::CopyAt<phys::CompoundShapeChildDesc>(
+    std::span { shape_bytes },
+    oxygen::serio::ByteOffset {
+      static_cast<size_t>(shape_desc->shape_params.compound.child_byte_offset)
+      + sizeof(phys::CompoundShapeChildDesc) });
   ASSERT_HAS_VALUE(child0) << "Expected child0 to contain a value";
   ASSERT_HAS_VALUE(child1) << "Expected child1 to contain a value";
   EXPECT_EQ(

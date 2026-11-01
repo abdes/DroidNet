@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -21,7 +20,6 @@
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/Internal/BlockingReads.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -33,11 +31,9 @@
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Integrity.h>
-#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/MappedFile.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Serio/Region.h>
 #include <Oxygen/Serio/Types.h>
 
 using oxygen::content::PakFile;
@@ -65,35 +61,6 @@ auto MapPakFile(const std::filesystem::path& path) -> oxygen::serio::MappedFile
     throw std::system_error(file.error(), "open '" + path.string() + "'");
   }
   return std::move(file).value();
-}
-
-// Opens the pak file through `driver` for its payloads, when there is one.
-auto OpenPayloads(
-  const std::filesystem::path& path, oxygen::serio::IoDriver* driver)
-  -> std::optional<oxygen::serio::AnyAsyncDevice>
-{
-  if (driver == nullptr) {
-    return std::nullopt;
-  }
-  auto file = driver->Open(path, {});
-  if (!file) {
-    LOG_F(ERROR, "Failed to open pak file '{}' for payloads: {}", path.string(),
-      file.error().message());
-    throw std::system_error(file.error(), "open '" + path.string() + "'");
-  }
-  return oxygen::serio::AnyAsyncDevice(std::move(file).value());
-}
-
-// Payload reads of `device` itself, which complete at once.
-auto ReadsOf(const oxygen::serio::AnyDevice& device)
-  -> oxygen::serio::AnyAsyncDevice
-{
-  auto whole = oxygen::serio::AnyRegion::Whole(device);
-  if (!whole) {
-    throw std::system_error(whole.error(), "size of the pak device");
-  }
-  return oxygen::serio::AnyAsyncDevice(
-    oxygen::content::internal::BlockingReads(*whole));
 }
 
 // The `size` bytes of `bytes` at `offset`; `what` names them when they lie
@@ -299,12 +266,17 @@ enum class MissingCrc : uint8_t {
 };
 
 // Checks the CRC32 `footer` names against all of `device`, read once in
-// order, except the CRC field itself, which writers do not hash (that is not
-// the same as hashing it as zeros). A zero CRC means the pak holds none.
-auto CheckCrc32(const oxygen::serio::AnyDevice& device, const PakFooter& footer,
-  const std::filesystem::path& path, const MissingCrc missing) -> void
+// order. A zero CRC means the pak holds none.
+auto VerifyDeviceCrc32(const oxygen::serio::AnyDevice& device,
+  const PakFooter& footer, const std::filesystem::path& path,
+  const MissingCrc missing) -> void
 {
-  if (footer.pak_crc32 == 0) {
+  const auto size = device.Size();
+  if (!size) {
+    throw std::system_error(size.error(), "size of '" + path.string() + "'");
+  }
+  const auto check = oxygen::content::PakFile::CrcCheckOf(footer, size->get());
+  if (!check) {
     if (missing == MissingCrc::kRefuse) {
       LOG_F(
         ERROR, "Verified open of a pak without CRC32 path={}", path.string());
@@ -315,27 +287,13 @@ auto CheckCrc32(const oxygen::serio::AnyDevice& device, const PakFooter& footer,
       INFO, "CRC32 validation skipped (pak_crc32=0) path={}", path.string());
     return;
   }
-  const auto size = device.Size();
-  if (!size) {
-    throw std::system_error(size.error(), "size of '" + path.string() + "'");
-  }
-  const auto crc_field = oxygen::serio::ByteRange {
-    .offset = oxygen::serio::ByteOffset { size->get() - sizeof(PakFooter)
-      + offsetof(PakFooter, pak_crc32) },
-    .count = oxygen::serio::CountOf(sizeof(footer.pak_crc32)),
-  };
   const auto crc
-    = oxygen::serio::ComputeCrc32(device, std::span { &crc_field, 1 });
+    = oxygen::serio::ComputeCrc32(device, std::span { &check->crc_field, 1 });
   if (!crc) {
     throw std::system_error(
       crc.error(), "read '" + path.string() + "' for CRC32");
   }
-  if (*crc != footer.pak_crc32) {
-    LOG_F(ERROR, "CRC32 mismatch path={} expected=0x{:08x} actual=0x{:08x}",
-      path.string(), footer.pak_crc32, *crc);
-    throw CookedOpenError(CookedOpenFailure::kCorrupt, "Pak CRC32 mismatch");
-  }
-  LOG_F(INFO, "CRC32 OK path={} crc32=0x{:08x}", path.string(), *crc);
+  oxygen::content::PakFile::CheckCrc32(*check, *crc, path);
 }
 
 // Parses the header, the footer and the directory; `verify` checks the CRC32
@@ -483,27 +441,16 @@ auto PakFile::InitializeResourceTablesFromFooter() const -> void
   }
 }
 
-PakFile::PakFile(const std::filesystem::path& path,
-  const Verification verification, std::shared_ptr<serio::IoDriver> driver)
-  : PakFile(serio::AnyDevice(MapPakFile(path)), path, verification, driver,
-      OpenPayloads(path, driver.get()))
+PakFile::PakFile(
+  const std::filesystem::path& path, const Verification verification)
+  : PakFile(serio::AnyDevice(MapPakFile(path)), path, verification)
 {
 }
 
 PakFile::PakFile(serio::AnyDevice device, std::filesystem::path name,
   const Verification verification)
-  : PakFile(
-      std::move(device), std::move(name), verification, nullptr, std::nullopt)
-{
-}
-
-PakFile::PakFile(serio::AnyDevice device, std::filesystem::path name,
-  const Verification verification, std::shared_ptr<serio::IoDriver> driver,
-  std::optional<serio::AnyAsyncDevice> payloads)
   : path_(std::move(name))
-  , driver_(std::move(driver))
   , device_(std::move(device))
-  , payloads_(payloads ? std::move(*payloads) : ReadsOf(device_))
 {
   LOG_SCOPE_FUNCTION(1);
   LOG_F(INFO, "file : {}", path_.string());
@@ -521,7 +468,7 @@ PakFile::PakFile(serio::AnyDevice device, std::filesystem::path name,
     auto metadata
       = LoadPakMetadata(bytes, [&](const PakFooter& footer) -> void {
           if (verification == Verification::kCrc32) {
-            CheckCrc32(device_, footer, path_, MissingCrc::kRefuse);
+            VerifyDeviceCrc32(device_, footer, path_, MissingCrc::kRefuse);
           }
         });
     catalog_ = LoadPakCatalog(bytes, metadata);
@@ -600,9 +547,36 @@ auto PakFile::CheckFooter(const PakFooter& footer, const uint64_t file_size)
   }
 }
 
+auto PakFile::CrcCheckOf(const PakFooter& footer,
+  const uint64_t file_size) noexcept -> std::optional<CrcCheck>
+{
+  if (footer.pak_crc32 == 0 || file_size < sizeof(PakFooter)) {
+    return std::nullopt;
+  }
+  return CrcCheck {
+    .expected = footer.pak_crc32,
+    .crc_field = serio::ByteRange {
+      .offset = serio::ByteOffset { file_size - sizeof(PakFooter)
+        + offsetof(PakFooter, pak_crc32) },
+      .count = serio::CountOf(sizeof(footer.pak_crc32)),
+    },
+  };
+}
+
+auto PakFile::CheckCrc32(const CrcCheck& check, const uint32_t actual,
+  const std::filesystem::path& path) -> void
+{
+  if (actual != check.expected) {
+    LOG_F(ERROR, "CRC32 mismatch path={} expected=0x{:08x} actual=0x{:08x}",
+      path.string(), check.expected, actual);
+    throw CookedOpenError(CookedOpenFailure::kCorrupt, "Pak CRC32 mismatch");
+  }
+  LOG_F(INFO, "CRC32 OK path={} crc32=0x{:08x}", path.string(), actual);
+}
+
 auto PakFile::ValidateCrc32Integrity() const -> void
 {
-  CheckCrc32(device_, footer_, path_, MissingCrc::kSkip);
+  VerifyDeviceCrc32(device_, footer_, path_, MissingCrc::kSkip);
 }
 
 auto PakFile::BrowseIndex() const noexcept -> std::span<const BrowseEntry>

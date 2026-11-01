@@ -17,7 +17,9 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::cooked {
@@ -58,6 +60,16 @@ public:
   [[nodiscard]] virtual auto Commit() noexcept -> Result<void> = 0;
 };
 
+//! A lock a storage holds on a file for as long as it lives.
+class StorageLock {
+public:
+  StorageLock() = default;
+  virtual ~StorageLock() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(StorageLock)
+  OXYGEN_MAKE_NON_MOVABLE(StorageLock)
+};
+
 //! Reads the files of cooked sources: what paths name, and files as devices.
 /*!
  The part of the Cooker file system that every reader needs, a mount table
@@ -75,7 +87,8 @@ public:
   [[nodiscard]] virtual auto KindOf(const std::filesystem::path& path) const
     -> PathKind = 0;
 
-  //! Opens the file `path` to read, as a contiguous device.
+  //! Opens the file `path` to read, as a contiguous device, while other
+  //! handles may write it (an import's resource data files).
   [[nodiscard]] virtual auto Open(const std::filesystem::path& path) const
     -> Result<serio::AnyDevice> = 0;
 };
@@ -110,15 +123,22 @@ public:
 
   //! Moves the file `from` to `to`, replacing the file `to` names, if any.
   /*!
-   One step on one volume: a reader of `to` finds the file it named before or
-   the moved one, never neither. Fails, changing nothing, when `from` names no
-   file (`no_such_file_or_directory`), when `to` names a folder
-   (`is_a_directory`), or when the parent folder of `to` does not exist. The
+   One step on one volume (`serio::MoveFileOver`): a reader of `to` finds the
+   file it named before or the moved one, never neither. Fails, changing
+   nothing, when `from` names no file or the parent folder of `to` does not
+   exist (`serio::Error::kNotFound`), or when either names a folder
+   (`serio::Error::kIsDirectory`). The
    two paths are siblings in practice: a staged artifact and its destination,
    or a destination and its backup.
   */
   [[nodiscard]] virtual auto Move(const std::filesystem::path& from,
     const std::filesystem::path& to) -> Result<void> = 0;
+
+  //! Locks the file `path` exclusively, waiting for its other holders, in
+  //! this process and in others; the file and its parent folders are created
+  //! when missing. The lock file stays when the lock is released.
+  [[nodiscard]] virtual auto LockExclusive(const std::filesystem::path& path)
+    -> Result<std::unique_ptr<StorageLock>> = 0;
 
   //! The size of the file `path`; nothing when `path` names no file.
   /*!
@@ -130,9 +150,43 @@ public:
     -> std::optional<serio::ByteCount> = 0;
 };
 
+//! The storage an import writes a cooked root through: a `CookerStorage` that
+//! also awaits its writes.
+/*!
+ Only the import awaits cooked writes, from its event loop, so only the
+ storages an import runs on implement them: the real file system and the
+ in-memory one of tests. A pak build or script sealing publishes through
+ `CookerStorage` alone.
+*/
+class ImportStorage : public CookerStorage {
+public:
+  //! Publishes `bytes` as the whole file `path` (parent folders created),
+  //! replacing it atomically; the write is awaited through `driver`.
+  /*!
+   Buffered durability: the loose index, published stably, holds the digests
+   of the files published this way. A cancelled or failed publication leaves
+   the destination as it was. `bytes` stays valid until the coroutine
+   completes.
+  */
+  [[nodiscard]] virtual auto PublishAsync(serio::IoDriver& driver,
+    std::filesystem::path path, std::span<const std::byte> bytes)
+    -> co::Co<Result<void>> = 0;
+
+  //! Opens the data file `path` for writes at reserved offsets: created when
+  //! missing (parent folders created), never truncated, sharing reads and
+  //! writes, awaitable through `driver`.
+  /*!
+   The device writes the file that `Open`, `SizeOf` and `KindOf` see, so a
+   reader finds the bytes written through it once the awaited write
+   completes. It must not outlive `driver`.
+  */
+  [[nodiscard]] virtual auto OpenData(serio::IoDriver& driver,
+    const std::filesystem::path& path) -> Result<serio::AnyAsyncDevice> = 0;
+};
+
 //! The real file system: files are mapped to read and published through
 //! `serio::AtomicFileWriter`.
-OXGN_COOK_NDAPI auto RealCookerStorage() -> CookerStorage&;
+OXGN_COOK_NDAPI auto RealCookerStorage() -> ImportStorage&;
 
 //! The whole file `path`, read through `storage`.
 OXGN_COOK_NDAPI auto ReadWholeFile(const CookerStorageReader& storage,

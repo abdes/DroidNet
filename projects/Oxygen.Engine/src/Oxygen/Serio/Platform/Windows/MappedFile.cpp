@@ -34,6 +34,24 @@
 
 namespace oxygen::serio {
 
+namespace {
+  //! The share mode of an open that lets others do `sharing`.
+  auto ShareModeOf(const Sharing sharing) noexcept -> DWORD
+  {
+    switch (sharing) {
+    case Sharing::kNone:
+      return 0;
+    case Sharing::kRead:
+      return FILE_SHARE_READ;
+    case Sharing::kReadDelete:
+      return FILE_SHARE_READ | FILE_SHARE_DELETE;
+    case Sharing::kReadWriteDelete:
+      return FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+    }
+    return FILE_SHARE_READ | FILE_SHARE_DELETE;
+  }
+} // namespace
+
 namespace detail {
 
   // Structured exception handling cannot share a frame with objects that need
@@ -53,15 +71,15 @@ namespace detail {
 
 } // namespace detail
 
-auto MappedFile::Open(const std::filesystem::path& path) noexcept
-  -> Result<MappedFile>
+auto MappedFile::Open(const std::filesystem::path& path,
+  const Sharing sharing) noexcept -> Result<MappedFile>
 {
   try {
     auto logical = path;
     const auto native = base::ToNativePath(path);
-    auto* const file = CreateFileW(native.c_str(), GENERIC_READ,
-      FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
-      FILE_ATTRIBUTE_NORMAL, nullptr);
+    auto* const file
+      = CreateFileW(native.c_str(), GENERIC_READ, ShareModeOf(sharing), nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
       return ::oxygen::Err(base::LastSystemError());
     }

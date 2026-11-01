@@ -113,12 +113,7 @@ m_gtest_program(
 
 m_gtest_program(PayloadBudget SOURCES "PayloadBudget_test.cpp")
 
-m_gtest_program(
-  ContentSources
-  SOURCES
-    "PakFileSource_test.cpp"
-    "RegionReader_test.cpp"
-)
+m_gtest_program(ContentSources SOURCES "PakFileSource_test.cpp")
 target_link_libraries(
   "${META_MODULE_NAME}.ContentSources.Tests"
   PRIVATE
@@ -138,6 +133,20 @@ target_link_libraries(
   PRIVATE
     oxygen::cooker::testing
     oxygen::serio::testing
+)
+
+m_gtest_program(PakVerification SOURCES "PakVerification_test.cpp")
+target_link_libraries(
+  "${META_MODULE_NAME}.PakVerification.Tests"
+  PRIVATE
+    oxygen::cooker::testing
+    oxygen::serio::testing
+)
+# The verification is internal to the library.
+target_sources(
+  "${META_MODULE_NAME}.PakVerification.Tests"
+  PRIVATE
+    "../Internal/PakVerification.cpp"
 )
 
 find_package(nlohmann_json CONFIG REQUIRED)

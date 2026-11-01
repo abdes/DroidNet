@@ -96,6 +96,7 @@
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -2082,18 +2083,6 @@ namespace {
     std::vector<data::pak::geometry::MeshViewDesc> mesh_views;
   };
 
-  template <typename T>
-  auto ReadPodAt(std::span<const std::byte> bytes, const size_t offset, T& out)
-    -> bool
-  {
-    static_assert(std::is_trivially_copyable_v<T>);
-    if (offset > bytes.size() || bytes.size() - offset < sizeof(T)) {
-      return false;
-    }
-    std::memcpy(&out, bytes.subspan(offset).data(), sizeof(T));
-    return true;
-  }
-
   auto ParseGeometryTopologyInput(std::span<const std::byte> descriptor_bytes,
     const data::AssetReferences& references, SoftBodyGeometryTopologyInput& out,
     std::string& error) -> bool
@@ -2104,22 +2093,26 @@ namespace {
     using data::pak::geometry::MeshViewDesc;
     using data::pak::geometry::SubMeshDesc;
 
-    auto asset_desc = GeometryAssetDesc {};
-    if (!ReadPodAt(descriptor_bytes, 0U, asset_desc)) {
+    const auto asset_desc_read
+      = serio::CopyAt<GeometryAssetDesc>(descriptor_bytes);
+    if (!asset_desc_read) {
       error = "geometry descriptor is too small for GeometryAssetDesc";
       return false;
     }
+    const auto& asset_desc = *asset_desc_read;
     if (asset_desc.lod_count == 0U) {
       error = "geometry descriptor has lod_count=0";
       return false;
     }
 
     auto offset = sizeof(GeometryAssetDesc);
-    auto mesh_desc = MeshDesc {};
-    if (!ReadPodAt(descriptor_bytes, offset, mesh_desc)) {
+    const auto mesh_desc_read
+      = serio::CopyAt<MeshDesc>(descriptor_bytes, serio::ByteOffset { offset });
+    if (!mesh_desc_read) {
       error = "geometry descriptor is too small for MeshDesc";
       return false;
     }
+    const auto& mesh_desc = *mesh_desc_read;
     offset += sizeof(MeshDesc);
 
     const auto mesh_type = static_cast<MeshType>(mesh_desc.mesh_type);
@@ -2165,22 +2158,25 @@ namespace {
     out.mesh_views.clear();
     for (uint32_t submesh_index = 0; submesh_index < mesh_desc.submesh_count;
       ++submesh_index) {
-      auto submesh_desc = SubMeshDesc {};
-      if (!ReadPodAt(descriptor_bytes, offset, submesh_desc)) {
+      const auto submesh_desc_read = serio::CopyAt<SubMeshDesc>(
+        descriptor_bytes, serio::ByteOffset { offset });
+      if (!submesh_desc_read) {
         error = "geometry descriptor submesh table exceeds descriptor size";
         return false;
       }
+      const auto& submesh_desc = *submesh_desc_read;
       offset += sizeof(SubMeshDesc);
 
       for (uint32_t view_index = 0; view_index < submesh_desc.mesh_view_count;
         ++view_index) {
-        auto view_desc = MeshViewDesc {};
-        if (!ReadPodAt(descriptor_bytes, offset, view_desc)) {
+        const auto view_desc = serio::CopyAt<MeshViewDesc>(
+          descriptor_bytes, serio::ByteOffset { offset });
+        if (!view_desc) {
           error = "geometry descriptor mesh view table exceeds descriptor size";
           return false;
         }
         offset += sizeof(MeshViewDesc);
-        out.mesh_views.push_back(view_desc);
+        out.mesh_views.push_back(*view_desc);
       }
     }
 
@@ -2242,21 +2238,19 @@ namespace {
     vertices.clear();
     vertices.reserve(count);
     for (size_t i = 0; i < count; ++i) {
-      auto x = 0.0F;
-      auto y = 0.0F;
-      auto z = 0.0F;
-      const auto record = payload.subspan(i * stride, stride);
-      std::memcpy(&x, record.subspan(0U * sizeof(float), sizeof(float)).data(),
-        sizeof(float));
-      std::memcpy(&y, record.subspan(1U * sizeof(float), sizeof(float)).data(),
-        sizeof(float));
-      std::memcpy(&z, record.subspan(2U * sizeof(float), sizeof(float)).data(),
-        sizeof(float));
-      if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+      auto record = serio::ByteReader { payload.subspan(i * stride, stride) };
+      const auto x = record.Read<float>();
+      const auto y = record.Read<float>();
+      const auto z = record.Read<float>();
+      if (!x || !y || !z) {
+        error = "vertex buffer element_stride is too small for position xyz";
+        return false;
+      }
+      if (!std::isfinite(*x) || !std::isfinite(*y) || !std::isfinite(*z)) {
         error = "vertex buffer contains non-finite positions";
         return false;
       }
-      vertices.emplace_back(x, y, z);
+      vertices.emplace_back(*x, *y, *z);
     }
 
     if (vertices.empty()) {
@@ -2293,19 +2287,22 @@ namespace {
     const auto count = payload.size() / element_size;
     indices.clear();
     indices.reserve(count);
-    if (element_size == sizeof(uint32_t)) {
-      for (size_t i = 0; i < count; ++i) {
-        auto value = uint32_t { 0 };
-        std::memcpy(&value, payload.subspan(i * sizeof(uint32_t)).data(),
-          sizeof(uint32_t));
-        indices.push_back(value);
-      }
-    } else {
-      for (size_t i = 0; i < count; ++i) {
-        auto value = uint16_t { 0 };
-        std::memcpy(&value, payload.subspan(i * sizeof(uint16_t)).data(),
-          sizeof(uint16_t));
-        indices.push_back(static_cast<uint32_t>(value));
+    auto reader = serio::ByteReader { payload };
+    for (size_t i = 0; i < count; ++i) {
+      if (element_size == sizeof(uint32_t)) {
+        const auto value = reader.Read<uint32_t>();
+        if (!value) {
+          error = "index buffer payload size is not aligned to element size";
+          return false;
+        }
+        indices.push_back(*value);
+      } else {
+        const auto value = reader.Read<uint16_t>();
+        if (!value) {
+          error = "index buffer payload size is not aligned to element size";
+          return false;
+        }
+        indices.push_back(static_cast<uint32_t>(*value));
       }
     }
 
@@ -3878,7 +3875,8 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   }
 
   const auto& physics = *request.physics;
-  auto parsed = ParseSidecarDocument(item.source_bytes, *session, request);
+  auto parsed
+    = ParseSidecarDocument(item.source_bytes.Bytes(), *session, request);
   if (!parsed.has_value()) {
     co_return false;
   }

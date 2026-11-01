@@ -18,6 +18,7 @@
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import {
 
@@ -40,6 +41,14 @@ struct ImageDecodeResult final {
     return image.has_value();
   }
 };
+
+//! Reads the whole image file `path` into a buffer.
+/*!
+ @return The bytes; `kFileNotFound` when no file is there, `kFileReadFailed`
+         when it is empty or cannot be read.
+*/
+OXGN_COOK_NDAPI auto ReadImageFile(const std::filesystem::path& path)
+  -> Result<serio::ByteBuffer, TextureImportError>;
 
 //! Decode an image blob into RGBA8.
 OXGN_COOK_NDAPI auto DecodeImageRgba8FromMemory(

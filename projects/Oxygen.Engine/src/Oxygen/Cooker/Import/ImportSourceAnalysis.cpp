@@ -38,7 +38,6 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -69,6 +68,9 @@
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/ByteReader.h>
+#include <Oxygen/Serio/Error.h>
 
 namespace oxygen::content::import {
 namespace {
@@ -180,7 +182,7 @@ namespace {
     }
 
     auto Read(const std::filesystem::path& path, const ReadOptions options = {})
-      -> co::Co<std::vector<std::byte>>
+      -> co::Co<serio::ByteBuffer>
     {
       if (stop.stop_requested()) {
         throw std::runtime_error("Source analysis canceled");
@@ -188,14 +190,16 @@ namespace {
       AddFile(path);
       auto bytes = co_await reader->ReadFile(path, options);
       if (!bytes) {
-        throw std::runtime_error(bytes.error().ToString());
+        throw std::runtime_error(
+          "Cannot read '" + path.string() + "': " + bytes.error().message());
       }
       co_return std::move(bytes).value();
     }
 
     auto ReadText(const std::filesystem::path& path) -> co::Co<std::string>
     {
-      const auto bytes = co_await Read(path);
+      const auto buffer = co_await Read(path);
+      const auto bytes = buffer.Bytes();
       auto text = std::string(bytes.size(), '\0');
       if (!bytes.empty()) {
         std::memcpy(text.data(), bytes.data(), bytes.size());
@@ -254,7 +258,7 @@ namespace {
   };
 
   template <typename Adapter>
-  auto PrepareModel(ImportRequest request, const std::vector<std::byte>& bytes,
+  auto PrepareModel(ImportRequest request, const serio::ByteBuffer& bytes,
     const std::stop_token& stop) -> ImportSourceJobAnalysis
   {
     auto report = ImportSourceJobAnalysis {};
@@ -271,8 +275,8 @@ namespace {
     input.naming_service = observer_ptr { &naming };
     input.stop_token = stop;
     auto adapter = Adapter {};
-    auto parsed = adapter.Parse(std::span<const std::byte>(bytes), input,
-      adapters::ModelParseMode::kMetadata);
+    auto parsed = adapter.Parse(
+      bytes.Bytes(), input, adapters::ModelParseMode::kMetadata);
     AppendDiagnostics(report.diagnostics, std::move(parsed.diagnostics));
     if (!parsed.success) {
       return report;
@@ -353,7 +357,7 @@ namespace {
 
   //! The bytes the metadata parse of a glTF source needs.
   struct GltfMetadata final {
-    std::vector<std::byte> bytes;
+    serio::ByteBuffer bytes;
     //! Whether the source is a binary glTF container.
     bool glb = false;
   };
@@ -372,18 +376,14 @@ namespace {
       ReadOptions {
         .offset = 0U,
         .max_bytes = kHeadersSize,
-        .size_hint = kHeadersSize,
-        .alignment = 0U,
       });
     // GLB words are little-endian, as on every platform the cooker runs on.
     const auto word = [&headers](const size_t offset) -> uint32_t {
-      auto value = uint32_t { 0 };
-      std::memcpy(&value,
-        std::span(headers).subspan(offset, sizeof(value)).data(),
-        sizeof(value));
-      return value;
+      const auto value = serio::CopyAt<uint32_t>(
+        headers.Bytes(), serio::ByteOffset { offset });
+      return value ? *value : uint32_t { 0 };
     };
-    if (headers.size() < kHeadersSize || word(0) != kGlbMagic
+    if (headers.Size().get() < kHeadersSize || word(0) != kGlbMagic
       || word(kChunkTypeOffset) != kJsonChunk
       || word(kChunkLengthOffset) == 0U) {
       co_return GltfMetadata {
@@ -397,8 +397,6 @@ namespace {
         ReadOptions {
           .offset = kHeadersSize,
           .max_bytes = json_size,
-          .size_hint = json_size,
-          .alignment = 0U,
         }),
       .glb = true,
     };
@@ -713,7 +711,8 @@ namespace {
         const auto faces = co_await detail::DiscoverCubeFacePaths(
           request->source_path, *context.reader);
         if (!faces.has_value()) {
-          throw std::runtime_error(faces.error().ToString());
+          throw std::runtime_error("Cannot find the cubemap faces of '"
+            + request->source_path.string() + "': " + faces.error().message());
         }
         for (const auto& face : faces.value()) {
           context.AddFile(face);
@@ -737,7 +736,7 @@ namespace {
       if (!request) {
         throw std::invalid_argument(errors.str());
       }
-      auto bytes = std::vector<std::byte> {};
+      auto bytes = serio::ByteBuffer {};
       auto glb = false;
       if (request->GetFormat() == ImportFormat::kGltf) {
         auto metadata = co_await ReadGltfMetadata(context, report.source_path);
@@ -798,8 +797,9 @@ namespace {
           throw std::runtime_error("Source analysis canceled");
         }
         const auto info = co_await snapshot.GetFileInfo(file.path);
-        if (!info && info.error().code != FileError::kNotFound) {
-          throw std::runtime_error(info.error().ToString());
+        if (!info && info.error() != serio::Error::kNotFound) {
+          throw std::runtime_error("Cannot stat '" + file.path.string()
+            + "': " + info.error().message());
         }
         if (!info && file.required) {
           AddError(report, "analysis.source_missing",
@@ -930,7 +930,7 @@ auto ImportManifest::AnalyzeSources(const std::stop_token& stop_token,
   -> ImportSourceAnalysis
 {
   auto loop = ImportEventLoop {};
-  auto reader = CreateAsyncFileReader(loop);
+  auto reader = CreateAsyncFileReader(loop.Driver());
   auto pool = co::ThreadPool(loop, 1U);
   return detail::RunSourceAnalysis(
     *this, loop, *reader, pool, stop_token, std::move(captured_inputs));

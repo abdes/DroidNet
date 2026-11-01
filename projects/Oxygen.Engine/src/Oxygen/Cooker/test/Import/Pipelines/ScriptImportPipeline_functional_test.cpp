@@ -7,6 +7,7 @@
 // Covers: Import/Internal/Pipelines/ScriptAssetImportPipeline.cpp,
 //   Import/Internal/Pipelines/ScriptingSidecarImportPipeline.cpp
 
+#include <array>
 #include <cstddef>
 #include <string>
 
@@ -16,6 +17,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -45,7 +47,8 @@ namespace {
         pipeline.Start(n);
         co_await pipeline.Submit(ScriptAssetImportPipeline::WorkItem {
           .source_id = "null-session-asset",
-          .source_bytes = { std::byte { 0x1 } },
+          .source_bytes
+          = serio::ByteBuffer::CopyOf(std::array { std::byte { 0x1 } }).value(),
           .session = {},
           .index_registry = {},
           .on_started = {},
@@ -79,7 +82,8 @@ namespace {
         pipeline.Start(n);
         co_await pipeline.Submit(ScriptingSidecarImportPipeline::WorkItem {
           .source_id = "null-session-sidecar",
-          .source_bytes = { std::byte { 0x1 } },
+          .source_bytes
+          = serio::ByteBuffer::CopyOf(std::array { std::byte { 0x1 } }).value(),
           .session = {},
           .index_registry = {},
           .on_started = {},

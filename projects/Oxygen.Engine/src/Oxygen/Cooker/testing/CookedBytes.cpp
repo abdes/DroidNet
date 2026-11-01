@@ -4,15 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
+#include <bit>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <span>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::cooker::testing {
 
@@ -27,13 +35,14 @@ namespace {
   auto EditRecord(std::vector<std::byte>& bytes, const size_t offset,
     const Edit& edit) -> void
   {
-    if (offset > bytes.size() || sizeof(T) > bytes.size() - offset) {
+    const auto read = serio::CopyAt<T>(bytes, serio::ByteOffset { offset });
+    if (!read) {
       throw std::invalid_argument("the artifact is too small for its record");
     }
-    auto record = T {};
-    std::memcpy(&record, bytes.data() + offset, sizeof(T));
+    auto record = *read;
     edit(record);
-    std::memcpy(bytes.data() + offset, &record, sizeof(T));
+    std::ranges::copy(std::bit_cast<std::array<std::byte, sizeof(T)>>(record),
+      std::span { bytes }.subspan(offset).begin());
   }
 
   template <class Edit>

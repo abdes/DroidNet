@@ -7,7 +7,7 @@
 #pragma once
 
 #include <array>
-#include <cstring>
+#include <cstddef>
 #include <memory>
 #include <span>
 #include <vector>
@@ -25,6 +25,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::loaders {
 
@@ -84,8 +85,10 @@ inline auto LoadScriptAsset(const LoaderContext& context)
   auto desc_blob
     = reader.ReadBlob(sizeof(data::pak::scripting::ScriptAssetDesc));
   CheckLoaderResult(desc_blob, "script asset", "ScriptAssetDesc");
-  data::pak::scripting::ScriptAssetDesc desc {};
-  std::memcpy(&desc, desc_blob->data(), sizeof(desc));
+  const auto parsed_desc
+    = serio::CopyAt<data::pak::scripting::ScriptAssetDesc>(*desc_blob);
+  CheckLoaderResult(parsed_desc, "script asset", "ScriptAssetDesc");
+  const auto desc = *parsed_desc;
 
   if (static_cast<data::AssetType>(desc.header.asset_type)
     != data::AssetType::kScript) {
@@ -154,14 +157,17 @@ inline auto LoadScriptAsset(const LoaderContext& context)
     desc, std::move(params),
     ResolveDescriptorString(
       strings, desc.external_source_path_offset, "external source path"),
-    data::SourceOrigin { context.source_key, context.source_instance });
+    data::SourceOrigin {
+      .key = context.source_key,
+      .instance = context.source_instance,
+    });
   script->SetAssetName(
     ResolveDescriptorString(strings, desc.header.name_offset, "asset name"));
   return script;
 }
 
 //! Loader for script resources (bytecode or source blobs).
-inline auto LoadScriptResource(LoaderContext context)
+inline auto LoadScriptResource(const LoaderContext& context)
   -> std::unique_ptr<data::ScriptResource>
 {
   LOG_SCOPE_FUNCTION(1);
@@ -173,22 +179,17 @@ inline auto LoadScriptResource(LoaderContext context)
   auto desc_blob
     = reader.ReadBlob(sizeof(data::pak::scripting::ScriptResourceDesc));
   CheckLoaderResult(desc_blob, "script resource", "ScriptResourceDesc");
-  data::pak::scripting::ScriptResourceDesc desc {};
-  std::memcpy(&desc, desc_blob->data(), sizeof(desc));
+  const auto parsed_desc
+    = serio::CopyAt<data::pak::scripting::ScriptResourceDesc>(*desc_blob);
+  CheckLoaderResult(parsed_desc, "script resource", "ScriptResourceDesc");
+  const auto desc = *parsed_desc;
 
-  const auto payload = TakePayload(context, desc.size_bytes, "script resource");
-  const auto payload_bytes = payload.Bytes();
-  // ScriptResource owns a vector: the payload is copied into it.
-  std::vector<uint8_t> data_buffer(desc.size_bytes);
-  if (!payload_bytes.empty()) {
-    std::memcpy(data_buffer.data(), payload_bytes.data(), payload_bytes.size());
-  }
+  auto data_buffer = TakePayload(context, desc.size_bytes, "script resource");
 
   if (desc.content_hash != 0) {
     constexpr size_t kScriptContentHashBytes = 8;
     constexpr size_t kByteShiftBits = 8;
-    const auto byte_span = std::span(data_buffer);
-    const auto digest = base::ComputeSha256(std::as_bytes(byte_span));
+    const auto digest = base::ComputeSha256(data_buffer.Bytes());
     uint64_t computed_hash = 0;
     for (size_t i = 0; i < kScriptContentHashBytes; ++i) {
       computed_hash |= static_cast<uint64_t>(digest.at(i))

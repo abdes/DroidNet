@@ -18,7 +18,6 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -42,6 +41,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Serio/Error.h>
 
 namespace {
 
@@ -396,11 +396,11 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       AddDuration(io_duration, read_start, read_end);
 
       if (!read_result.has_value()) {
-        const auto& error = read_result.error();
+        const auto error = read_result.error();
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
           .code = "texture.read_failed",
-          .message = error.ToString(),
+          .message = error.message(),
           .source_path = mapping.path.string(),
           .object_path = {},
         });
@@ -410,7 +410,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       auto bytes = std::move(read_result.value());
       if (!source.is_hdr_input.has_value()) {
         source.is_hdr_input
-          = IsHdrFormat(bytes, mapping.path.extension().string());
+          = IsHdrFormat(bytes.Bytes(), mapping.path.extension().string());
       }
       sources.Add({
         .bytes = std::move(bytes),
@@ -460,20 +460,21 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       const auto read_end = std::chrono::steady_clock::now();
       AddDuration(io_duration, read_start, read_end);
       if (!read_result.has_value()) {
-        const auto& error = read_result.error();
+        const auto error = read_result.error();
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
           .code = "texture.read_failed",
-          .message = error.ToString(),
+          .message = error.message(),
           .source_path = Request().source_path.string(),
           .object_path = {},
         });
         co_return StampDurations(source);
       }
 
-      auto bytes = std::move(read_result.value());
-      if (const auto error
-        = ValidatePreflight(tuning, bytes, options.extension_hint, true)) {
+      auto bytes
+        = std::make_shared<serio::ByteBuffer>(std::move(read_result.value()));
+      if (const auto error = ValidatePreflight(
+            tuning, bytes->Bytes(), options.extension_hint, true)) {
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
           .code = "texture.desc_invalid",
@@ -485,8 +486,8 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         co_return StampDurations(source);
       }
       source.prevalidated = true;
-      source.is_hdr_input = IsHdrFormat(bytes, options.extension_hint);
-      source.bytes = std::make_shared<std::vector<std::byte>>(std::move(bytes));
+      source.is_hdr_input = IsHdrFormat(bytes->Bytes(), options.extension_hint);
+      source.bytes = std::move(bytes);
       source.success = true;
       co_return StampDurations(source);
     }
@@ -501,20 +502,21 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       const auto read_end = std::chrono::steady_clock::now();
       AddDuration(io_duration, read_start, read_end);
       if (!read_result.has_value()) {
-        const auto& error = read_result.error();
+        const auto error = read_result.error();
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
           .code = "texture.read_failed",
-          .message = error.ToString(),
+          .message = error.message(),
           .source_path = Request().source_path.string(),
           .object_path = {},
         });
         co_return StampDurations(source);
       }
 
-      auto bytes = std::move(read_result.value());
-      if (const auto error
-        = ValidatePreflight(tuning, bytes, options.extension_hint, true)) {
+      auto bytes
+        = std::make_shared<serio::ByteBuffer>(std::move(read_result.value()));
+      if (const auto error = ValidatePreflight(
+            tuning, bytes->Bytes(), options.extension_hint, true)) {
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
           .code = "texture.desc_invalid",
@@ -526,8 +528,8 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         co_return StampDurations(source);
       }
       source.prevalidated = true;
-      source.is_hdr_input = IsHdrFormat(bytes, options.extension_hint);
-      source.bytes = std::make_shared<std::vector<std::byte>>(std::move(bytes));
+      source.is_hdr_input = IsHdrFormat(bytes->Bytes(), options.extension_hint);
+      source.bytes = std::move(bytes);
       source.success = true;
       co_return StampDurations(source);
     }
@@ -537,10 +539,10 @@ auto TextureImportJob::LoadSource(ImportSession& session)
     if (!discovered.has_value()) {
       session.AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = discovered.error().code == FileError::kNotFound
+        .code = discovered.error() == serio::Error::kNotFound
           ? "texture.cubemap_faces_missing"
           : "texture.read_failed",
-        .message = discovered.error().ToString(),
+        .message = discovered.error().message(),
         .source_path = Request().source_path.string(),
         .object_path = {},
       });
@@ -556,11 +558,11 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       const auto read_end = std::chrono::steady_clock::now();
       AddDuration(io_duration, read_start, read_end);
       if (!read_result.has_value()) {
-        const auto& error = read_result.error();
+        const auto error = read_result.error();
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
           .code = "texture.read_failed",
-          .message = error.ToString(),
+          .message = error.message(),
           .source_path = face_path.string(),
           .object_path = {},
         });
@@ -569,7 +571,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
 
       auto bytes = std::move(read_result.value());
       if (const auto error = ValidatePreflight(
-            tuning, bytes, face_path.extension().string(), true)) {
+            tuning, bytes.Bytes(), face_path.extension().string(), true)) {
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
           .code = "texture.desc_invalid",
@@ -583,7 +585,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       source.prevalidated = true;
       if (!source.is_hdr_input.has_value()) {
         source.is_hdr_input
-          = IsHdrFormat(bytes, face_path.extension().string());
+          = IsHdrFormat(bytes.Bytes(), face_path.extension().string());
       }
 
       sources.AddCubeFace(
@@ -600,21 +602,22 @@ auto TextureImportJob::LoadSource(ImportSession& session)
   const auto read_end = std::chrono::steady_clock::now();
   AddDuration(io_duration, read_start, read_end);
   if (!read_result.has_value()) {
-    const auto& error = read_result.error();
+    const auto error = read_result.error();
     session.AddDiagnostic({
       .severity = ImportSeverity::kError,
       .code = "texture.read_failed",
-      .message = error.ToString(),
+      .message = error.message(),
       .source_path = Request().source_path.string(),
       .object_path = {},
     });
     co_return StampDurations(source);
   }
 
-  auto bytes = std::move(read_result.value());
+  auto bytes
+    = std::make_shared<serio::ByteBuffer>(std::move(read_result.value()));
   options.extension_hint = Request().source_path.extension().string();
-  if (const auto error
-    = ValidatePreflight(tuning, bytes, options.extension_hint, false)) {
+  if (const auto error = ValidatePreflight(
+        tuning, bytes->Bytes(), options.extension_hint, false)) {
     session.AddDiagnostic({
       .severity = ImportSeverity::kError,
       .code = "texture.desc_invalid",
@@ -626,8 +629,8 @@ auto TextureImportJob::LoadSource(ImportSession& session)
     co_return StampDurations(source);
   }
   source.prevalidated = true;
-  source.is_hdr_input = IsHdrFormat(bytes, options.extension_hint);
-  source.bytes = std::make_shared<std::vector<std::byte>>(std::move(bytes));
+  source.is_hdr_input = IsHdrFormat(bytes->Bytes(), options.extension_hint);
+  source.bytes = std::move(bytes);
   source.success = true;
   co_return StampDurations(source);
 }
@@ -746,7 +749,7 @@ auto TextureImportJob::CookTexture(
     item.source = std::move(source.source_set.value());
   } else if (source.bytes != nullptr) {
     TexturePipeline::SourceBytes raw_source {
-      .bytes = std::span<const std::byte>(*source.bytes),
+      .bytes = source.bytes->Bytes(),
       .owner = std::static_pointer_cast<const void>(source.bytes),
     };
     item.source = std::move(raw_source);

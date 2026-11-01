@@ -316,4 +316,38 @@ NOLINT_TEST_F(RegionWriteStreamTest, DestructionLogsLostBytes)
   EXPECT_TRUE(Content().empty());
 }
 
+//! The stream's buffer never exceeds its region: one small read of a 100-byte
+//! region of a larger device costs one device read, and the rest of the region
+//! is served from that buffer.
+NOLINT_TEST(RegionReadStreamBufferTest, BufferNeverExceedsTheRegion)
+{
+  const auto bytes = PatternBytes(10'000);
+  const auto device = CountedDevice(MemoryFile::FromBytes(bytes).value());
+  const auto region = Region<CountedDevice>::Make(device,
+    oxygen::serio::ByteRange {
+      .offset = ByteOffset { 200 },
+      .count = ByteCount { 100 },
+    });
+  ASSERT_TRUE(region);
+  auto stream = RegionReadStream<CountedDevice>(*region);
+  auto first = std::vector<std::byte>(1);
+  auto rest = std::vector<std::byte>(99);
+  auto past = std::vector<std::byte>(10);
+
+  const auto read_first = stream.ReadSome(first);
+  const auto reads_after_first = device.CallCount(FaultOperation::kRead);
+  const auto read_rest = ReadExactly(stream, rest);
+  const auto read_past = stream.ReadSome(past);
+
+  ASSERT_TRUE(read_first);
+  EXPECT_EQ(read_first->get(), 1U);
+  EXPECT_EQ(reads_after_first, 1U);
+  EXPECT_TRUE(read_rest);
+  EXPECT_EQ(device.CallCount(FaultOperation::kRead), 1U);
+  EXPECT_THAT(first, BytesEqual(std::span(bytes).subspan(200, 1)));
+  EXPECT_THAT(rest, BytesEqual(std::span(bytes).subspan(201, 99)));
+  ASSERT_TRUE(read_past);
+  EXPECT_EQ(read_past->get(), 0U);
+}
+
 } // namespace

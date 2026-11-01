@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/TextureImportError.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import {
 
@@ -71,7 +72,7 @@ struct SubresourceId {
   into a specific subresource location in the final assembled texture.
 */
 struct TextureSource {
-  std::vector<std::byte> bytes; //!< Source file contents (encoded image data)
+  serio::ByteBuffer bytes; //!< Source file contents (encoded image data)
   SubresourceId subresource; //!< Target subresource location
   std::string source_id; //!< Diagnostic identifier (filename, path)
 };
@@ -123,7 +124,7 @@ public:
     @param source_id   Diagnostic identifier for error messages
   */
   OXGN_COOK_API void AddArrayLayer(
-    uint16_t array_layer, std::vector<std::byte> bytes, std::string source_id);
+    uint16_t array_layer, serio::ByteBuffer bytes, std::string source_id);
 
   //! Add a source file for a specific cube face.
   /*!
@@ -135,7 +136,7 @@ public:
     @param source_id Diagnostic identifier for error messages
   */
   OXGN_COOK_API void AddCubeFace(
-    CubeFace face, std::vector<std::byte> bytes, std::string source_id);
+    CubeFace face, serio::ByteBuffer bytes, std::string source_id);
 
   //! Add a source file for a specific depth slice (3D textures).
   /*!
@@ -147,7 +148,7 @@ public:
     @param source_id   Diagnostic identifier for error messages
   */
   OXGN_COOK_API void AddDepthSlice(
-    uint16_t slice_index, std::vector<std::byte> bytes, std::string source_id);
+    uint16_t slice_index, serio::ByteBuffer bytes, std::string source_id);
 
   //! Add a source file for a specific mip level.
   /*!
@@ -159,7 +160,7 @@ public:
     @param source_id   Diagnostic identifier for error messages
   */
   OXGN_COOK_API void AddMipLevel(uint16_t array_layer, uint16_t mip_level,
-    std::vector<std::byte> bytes, std::string source_id);
+    serio::ByteBuffer bytes, std::string source_id);
 
   //! Get all sources in the set.
   [[nodiscard]] auto Sources() const noexcept -> std::span<const TextureSource>
@@ -241,17 +242,17 @@ struct CubeFaceBasis {
 // clang-format off
 inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kGpuCubeFaceBases = {{
   // +X: center (+1, 0, 0), right (0, 0, -1), up (0, +1, 0)
-  { {+1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -1.0F}, {0.0F, +1.0F, 0.0F} },
+  { .center={.x=+1.0F, .y=0.0F, .z=0.0F}, .right={.x=0.0F, .y=0.0F, .z=-1.0F}, .up={.x=0.0F, .y=+1.0F, .z=0.0F} },
   // -X: center (-1, 0, 0), right (0, 0, +1), up (0, +1, 0)
-  { {-1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, +1.0F}, {0.0F, +1.0F, 0.0F} },
+  { .center={.x=-1.0F, .y=0.0F, .z=0.0F}, .right={.x=0.0F, .y=0.0F, .z=+1.0F}, .up={.x=0.0F, .y=+1.0F, .z=0.0F} },
   // +Y (top): center (0, +1, 0), right (+1, 0, 0), up (0, 0, -1)
-  { {0.0F, +1.0F, 0.0F}, {+1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -1.0F} },
+  { .center={.x=0.0F, .y=+1.0F, .z=0.0F}, .right={.x=+1.0F, .y=0.0F, .z=0.0F}, .up={.x=0.0F, .y=0.0F, .z=-1.0F} },
   // -Y (bottom): center (0, -1, 0), right (+1, 0, 0), up (0, 0, +1)
-  { {0.0F, -1.0F, 0.0F}, {+1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, +1.0F} },
+  { .center={.x=0.0F, .y=-1.0F, .z=0.0F}, .right={.x=+1.0F, .y=0.0F, .z=0.0F}, .up={.x=0.0F, .y=0.0F, .z=+1.0F} },
   // +Z: center (0, 0, +1), right (+1, 0, 0), up (0, +1, 0)
-  { {0.0F, 0.0F, +1.0F}, {+1.0F, 0.0F, 0.0F}, {0.0F, +1.0F, 0.0F} },
+  { .center={.x=0.0F, .y=0.0F, .z=+1.0F}, .right={.x=+1.0F, .y=0.0F, .z=0.0F}, .up={.x=0.0F, .y=+1.0F, .z=0.0F} },
   // -Z: center (0, 0, -1), right (-1, 0, 0), up (0, +1, 0)
-  { {0.0F, 0.0F, -1.0F}, {-1.0F, 0.0F, 0.0F}, {0.0F, +1.0F, 0.0F} },
+  { .center={.x=0.0F, .y=0.0F, .z=-1.0F}, .right={.x=-1.0F, .y=0.0F, .z=0.0F}, .up={.x=0.0F, .y=+1.0F, .z=0.0F} },
 },};
 // clang-format on
 

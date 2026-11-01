@@ -149,4 +149,22 @@ private:
   size_t position_ { 0 };
 };
 
+//! Copies the record or arithmetic value at `at` in `bytes`.
+/*!
+ The one-read form of `ByteReader`, for a value whose offset is known.
+
+ @return The value; `kOutOfBounds` when `at` is past the end, `kEndOfData`
+   when the value does not fit before it.
+*/
+template <BulkElement T>
+[[nodiscard]] auto CopyAt(const std::span<const std::byte> bytes,
+  const ByteOffset at = ByteOffset { 0 }) noexcept -> Result<T>
+{
+  auto reader = ByteReader { bytes };
+  if (const auto seek = reader.Seek(at); !seek) {
+    return ::oxygen::Err(seek.error());
+  }
+  return reader.Read<T>();
+}
+
 } // namespace oxygen::serio

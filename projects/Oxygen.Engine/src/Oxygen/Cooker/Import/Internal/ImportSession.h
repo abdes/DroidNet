@@ -29,13 +29,17 @@
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::co {
+class Nursery;
 class ThreadPool;
 } // namespace oxygen::co
+
+namespace oxygen::serio {
+class IoDriver;
+} // namespace oxygen::serio
 
 namespace oxygen::content::import {
 
 class IAsyncFileReader;
-class IAsyncFileWriter;
 class ResourceTableRegistry;
 class TextureEmitter;
 class BufferEmitter;
@@ -51,7 +55,9 @@ class LooseCookedIndexRegistry;
  - Per-job output state (diagnostics, LooseCookedWriter)
 
  The session owns the `LooseCookedWriter` and collects diagnostics during
- import. Call `Finalize()` to wait for all I/O and write the index file.
+ import. Its emitters start their cooked writes in the nursery the session is
+ given (the job's producer nursery), so cancelling the job cancels the writes.
+ Call `Finalize()` to wait for all I/O and write the index file.
 
  ### Key Features
 
@@ -70,7 +76,7 @@ class LooseCookedIndexRegistry;
  ### Usage Patterns
 
  ```cpp
- ImportSession session(request, file_reader, file_writer, thread_pool);
+ ImportSession session(request, file_reader, driver, writes, thread_pool, ...);
 
  // During import (from ThreadPool workers):
  session.AddDiagnostic({
@@ -88,9 +94,15 @@ class LooseCookedIndexRegistry;
 class ImportSession final {
 public:
   //! Create a session for the given import request.
+  /*!
+   @param driver The driver of the import loop, which awaits cooked writes.
+   @param writes The nursery the emitters start their writes in. It outlives
+          the session's emitters; the session never closes it. A session that
+          emits nothing may pass none.
+  */
   OXGN_COOK_API ImportSession(const ImportRequest& request,
     observer_ptr<IAsyncFileReader> file_reader,
-    observer_ptr<IAsyncFileWriter> file_writer,
+    observer_ptr<serio::IoDriver> driver, observer_ptr<co::Nursery> writes,
     observer_ptr<co::ThreadPool> thread_pool,
     observer_ptr<ResourceTableRegistry> table_registry,
     observer_ptr<LooseCookedIndexRegistry> index_registry,
@@ -128,9 +140,12 @@ public:
     return cooked_reader_;
   }
 
-  //! Get the async file writer (non-owning).
-  OXGN_COOK_NDAPI auto FileWriter() const noexcept
-    -> observer_ptr<IAsyncFileWriter>;
+  //! The driver cooked writes are awaited on (non-owning).
+  OXGN_COOK_NDAPI auto Driver() const noexcept -> observer_ptr<serio::IoDriver>;
+
+  //! The storage the session publishes cooked files to (non-owning).
+  OXGN_COOK_NDAPI auto Storage() const noexcept
+    -> observer_ptr<cooked::ImportStorage>;
 
   //! Get the thread pool for CPU-bound work (non-owning).
   OXGN_COOK_NDAPI auto ThreadPool() const noexcept
@@ -260,7 +275,7 @@ public:
   /*!
    This method:
     1. Finalizes any lazily-created emitters (if created)
-    2. Waits for any pending async writes to complete
+    2. Waits for the emitters' pending async writes to complete
     3. Registers externally-written outputs with `LooseCookedWriter`
     4. Calls `LooseCookedWriter::Finish()` to write `container.index.bin` (last)
     5. Builds and returns an `ImportReport`
@@ -268,7 +283,8 @@ public:
    @return Import report with success flag, diagnostics, and asset counts.
   */
   OXGN_COOK_NDAPI auto Finalize() -> co::Co<ImportReport>;
-  //! Called after producers join; retain emitters through callback-write drain.
+  //! Called after producers join: retires the registry participations. The
+  //! writes ended with the producers' nursery.
   OXGN_COOK_NDAPI auto DrainAndRetire() -> co::Co<>;
 
 private:
@@ -277,12 +293,13 @@ private:
   ImportRequest request_;
   observer_ptr<IAsyncFileReader> file_reader_;
   observer_ptr<IAsyncFileReader> cooked_reader_;
-  observer_ptr<IAsyncFileWriter> file_writer_;
+  observer_ptr<serio::IoDriver> driver_;
+  observer_ptr<co::Nursery> writes_;
   observer_ptr<co::ThreadPool> thread_pool_;
   observer_ptr<ResourceTableRegistry> table_registry_;
   observer_ptr<LooseCookedIndexRegistry> index_registry_;
   //! The file system of the index registry, which the service shares.
-  observer_ptr<cooked::CookerStorage> storage_;
+  observer_ptr<cooked::ImportStorage> storage_;
   std::filesystem::path cooked_root_;
   LooseCookedWriter cooked_writer_;
 

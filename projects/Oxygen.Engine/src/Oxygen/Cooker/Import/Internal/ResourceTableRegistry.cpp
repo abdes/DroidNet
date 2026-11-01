@@ -15,14 +15,17 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Semaphore.h>
+#include <Oxygen/Serio/IoDriver.h>
 
 namespace oxygen::content::import {
 
@@ -37,8 +40,8 @@ struct ResourceTableRegistry::SharedTableLockState final {
 };
 
 ResourceTableRegistry::ResourceTableRegistry(
-  IAsyncFileWriter& file_writer, observer_ptr<cooked::CookerStorage> storage)
-  : file_writer_(file_writer)
+  serio::IoDriver& driver, observer_ptr<cooked::ImportStorage> storage)
+  : driver_(make_observer(&driver))
   , storage_(storage)
 {
   CHECK_NOTNULL_F(storage_, "ResourceTableRegistry requires a file system");
@@ -58,7 +61,7 @@ auto ResourceTableRegistry::TextureAggregator(
   auto it = texture_tables_.find(key);
   if (it == texture_tables_.end()) {
     auto created = std::make_unique<TextureTableAggregator>(
-      file_writer_, *storage_, cooked_root);
+      *driver_, *storage_, cooked_root);
     it = texture_tables_.emplace(key, std::move(created)).first;
     DLOG_F(INFO, "Created texture table for '{}'", key);
   }
@@ -73,7 +76,7 @@ auto ResourceTableRegistry::BufferAggregator(
   auto it = buffer_tables_.find(key);
   if (it == buffer_tables_.end()) {
     auto created = std::make_unique<BufferTableAggregator>(
-      file_writer_, *storage_, cooked_root);
+      *driver_, *storage_, cooked_root);
     it = buffer_tables_.emplace(key, std::move(created)).first;
     DLOG_F(INFO, "Created buffer table for '{}'", key);
   }
@@ -88,7 +91,7 @@ auto ResourceTableRegistry::PhysicsAggregator(
   auto it = physics_tables_.find(key);
   if (it == physics_tables_.end()) {
     auto created = std::make_unique<PhysicsTableAggregator>(
-      file_writer_, *storage_, cooked_root);
+      *driver_, *storage_, cooked_root);
     it = physics_tables_.emplace(key, std::move(created)).first;
     DLOG_F(INFO, "Created physics table for '{}'", key);
   }
@@ -212,7 +215,7 @@ auto ResourceTableRegistry::EndSession(ImportSessionToken& participation)
       physics = std::move(node.mapped());
     }
   }
-  const auto release_admission = ScopeGuard([&]() noexcept -> void {
+  const auto release_admission = ScopeGuard([&] noexcept -> void {
     {
       std::scoped_lock lock(mutex_);
       finalizing_.erase(key);

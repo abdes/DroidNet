@@ -44,6 +44,8 @@
 #include <Oxygen/Console/Parser.h>
 #include <Oxygen/Console/Registry.h>
 #include <Oxygen/Console/StartupPlan.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/Error.h>
 
 namespace oxygen::console {
 
@@ -334,6 +336,15 @@ namespace {
     return invocation.name;
   }
 
+  //! Publishes `text` at `path` atomically; empty on success.
+  auto PublishText(const std::filesystem::path& path, const std::string& text)
+    -> std::error_code
+  {
+    const auto written
+      = serio::WriteFileAtomically(path, std::as_bytes(std::span(text)));
+    return written.has_value() ? std::error_code {} : written.error();
+  }
+
 } // namespace
 
 Registry::Registry(const observer_ptr<commands::CommandRegistry> commands,
@@ -562,25 +573,15 @@ auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder,
     };
   }
 
-  std::ofstream stream(archive_path);
-  if (!stream.is_open()) {
+  if (const auto write_error
+    = PublishText(archive_path, payload.dump(kJsonIndentSpaces))) {
     LOG_F(ERROR,
-      "Console CVar persistence save failed: unable to open '{}' for write",
-      archive_path.generic_string());
+      "Console CVar persistence save failed: unable to write '{}': {}",
+      archive_path.generic_string(), write_error.message());
     return {
       .status = ExecutionStatus::kError,
       .output = {},
-      .error = "unable to open cvar archive file for write",
-    };
-  }
-  stream << payload.dump(kJsonIndentSpaces);
-  if (!stream.good()) {
-    LOG_F(ERROR, "Console CVar persistence save failed: write error for '{}'",
-      archive_path.generic_string());
-    return {
-      .status = ExecutionStatus::kError,
-      .output = {},
-      .error = "failed to write cvar archive file",
+      .error = "failed to write cvar archive file: " + write_error.message(),
     };
   }
 
@@ -606,16 +607,15 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
   [[maybe_unused]] const CommandContext& context) -> CommandResult
 {
   const auto archive_path = path_finder.CVarsArchivePath();
-  std::ifstream stream(archive_path);
-  if (!stream.is_open()) {
+  const auto bytes = serio::ReadPublishedFile(archive_path);
+  if (!bytes.has_value()) {
     // No archive is the normal state until the application first saves one.
-    std::error_code error;
-    if (std::filesystem::exists(archive_path, error)) {
-      LOG_F(WARNING, "Console CVar archive '{}' exists but cannot be opened",
-        archive_path.generic_string());
-    } else {
+    if (bytes.error() == serio::Error::kNotFound) {
       LOG_F(INFO, "No saved console variables yet at '{}'; using defaults",
         archive_path.generic_string());
+    } else {
+      LOG_F(WARNING, "Console CVar archive '{}' exists but cannot be read: {}",
+        archive_path.generic_string(), bytes.error().message());
     }
     return {
       .status = ExecutionStatus::kNotFound,
@@ -626,7 +626,8 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
 
   json payload;
   try {
-    stream >> payload;
+    const auto text = bytes->Unsigned();
+    payload = json::parse(text.begin(), text.end());
   } catch (const std::exception& e) {
     LOG_F(ERROR,
       "Console CVar persistence load failed: json parse error in '{}': {}",
@@ -795,26 +796,15 @@ auto Registry::SaveHistory(const oxygen::PathFinder& path_finder) const
     };
   }
 
-  std::ofstream stream(history_path);
-  if (!stream.is_open()) {
+  if (const auto write_error
+    = PublishText(history_path, payload.dump(kJsonIndentSpaces))) {
     LOG_F(ERROR,
-      "Console history persistence save failed: unable to open '{}' for write",
-      history_path.generic_string());
+      "Console history persistence save failed: unable to write '{}': {}",
+      history_path.generic_string(), write_error.message());
     return {
       .status = ExecutionStatus::kError,
       .output = {},
-      .error = "unable to open history file for write",
-    };
-  }
-  stream << payload.dump(kJsonIndentSpaces);
-  if (!stream.good()) {
-    LOG_F(ERROR,
-      "Console history persistence save failed: write error for '{}'",
-      history_path.generic_string());
-    return {
-      .status = ExecutionStatus::kError,
-      .output = {},
-      .error = "failed to write history file",
+      .error = "failed to write history file: " + write_error.message(),
     };
   }
 
@@ -831,16 +821,15 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
   -> CommandResult
 {
   const auto history_path = HistoryPathFor(path_finder);
-  std::ifstream stream(history_path);
-  if (!stream.is_open()) {
+  const auto bytes = serio::ReadPublishedFile(history_path);
+  if (!bytes.has_value()) {
     // No history is the normal state until the console first saves one.
-    std::error_code error;
-    if (std::filesystem::exists(history_path, error)) {
-      LOG_F(WARNING, "Console history '{}' exists but cannot be opened",
-        history_path.generic_string());
-    } else {
+    if (bytes.error() == serio::Error::kNotFound) {
       LOG_F(INFO, "No saved console history yet at '{}'",
         history_path.generic_string());
+    } else {
+      LOG_F(WARNING, "Console history '{}' exists but cannot be read: {}",
+        history_path.generic_string(), bytes.error().message());
     }
     return {
       .status = ExecutionStatus::kNotFound,
@@ -851,7 +840,8 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
 
   json payload;
   try {
-    stream >> payload;
+    const auto text = bytes->Unsigned();
+    payload = json::parse(text.begin(), text.end());
   } catch (const std::exception& e) {
     LOG_F(ERROR,
       "Console history persistence load failed: json parse error in '{}': {}",

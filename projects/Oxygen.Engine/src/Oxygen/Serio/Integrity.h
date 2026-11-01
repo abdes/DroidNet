@@ -22,6 +22,9 @@
 #include <Oxygen/Base/Crc32.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Serio/AsyncDevice.h>
 #include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/Error.h>
@@ -335,6 +338,104 @@ template <ReadableDevice D>
     return ::oxygen::Err(digests.error());
   }
   return ::oxygen::Ok(std::get<0>(*digests));
+}
+
+namespace detail {
+  //! Hashes `piece`, which lies at `at`, as a coroutine `AsyncHash` runs
+  //! beside its next read.
+  template <IncrementalHash... H>
+  auto HashPiece(HashSet<H...>& hashes, const ByteOffset at,
+    const std::span<const std::byte> piece,
+    const std::span<const ByteRange> skips) -> co::Co<>
+  {
+    UpdateExcept(hashes, at, piece, skips);
+    co_return;
+  }
+} // namespace detail
+
+//! `Hash`, awaiting the reads of an awaitable `source`, a device or a region.
+/*!
+ Reads go through two buffers of at most `kHashBufferSize`: the next piece is
+ read while the current one is hashed, so the hash keeps one read in flight.
+ Over an inline driver every read completes at once and this is `Hash` with
+ one more buffer.
+*/
+template <IncrementalHash... H, AsyncReadableDevice D>
+  requires(sizeof...(H) > 0)
+[[nodiscard]] auto AsyncHash(const D& source, std::vector<ByteRange> skips = {})
+  -> co::Co<Result<std::tuple<DigestOf<H>...>>>
+{
+  auto hashes = detail::HashSet<H...> {};
+  const auto size = source.Size();
+  if (!size) {
+    co_return ::oxygen::Err(size.error());
+  }
+  const auto total = size->get();
+  if (total == 0) {
+    co_return ::oxygen::Ok(hashes.Digests());
+  }
+  const auto chunk
+    = static_cast<size_t>((std::min)(*size, kHashBufferSize).get());
+  auto scratch = ByteBuffer::Allocate(CountOf(chunk * 2));
+  if (!scratch) {
+    co_return ::oxygen::Err(scratch.error());
+  }
+  const auto length_at = [total, chunk](const uint64_t offset) -> size_t {
+    return static_cast<size_t>((std::min)(uint64_t { chunk }, total - offset));
+  };
+  auto current = scratch->Bytes().first(chunk);
+  auto next = scratch->Bytes().subspan(chunk, chunk);
+  auto offset = uint64_t { 0 };
+  auto length = length_at(offset);
+  if (const auto read = co_await AsyncReadExactlyAt(
+        source, ByteOffset { 0 }, current.first(length));
+    !read) {
+    co_return ::oxygen::Err(read.error());
+  }
+  while (true) {
+    const auto next_offset = offset + length;
+    if (next_offset == total) {
+      detail::UpdateExcept(
+        hashes, ByteOffset { offset }, current.first(length), skips);
+      co_return ::oxygen::Ok(hashes.Digests());
+    }
+    const auto next_length = length_at(next_offset);
+    const auto results = co_await co::AllOf(
+      AsyncReadExactlyAt(
+        source, ByteOffset { next_offset }, next.first(next_length)),
+      detail::HashPiece<H...>(hashes, ByteOffset { offset },
+        current.first(length), std::span<const ByteRange>(skips)));
+    if (const auto& read = std::get<0>(results); !read) {
+      co_return ::oxygen::Err(read.error());
+    }
+    offset = next_offset;
+    length = next_length;
+    std::swap(current, next);
+  }
+}
+
+//! The CRC32 of all of an awaitable `source`, except `skips`.
+template <AsyncReadableDevice D>
+[[nodiscard]] auto AsyncComputeCrc32(const D& source,
+  std::vector<ByteRange> skips = {}) -> co::Co<Result<uint32_t>>
+{
+  auto digests = co_await AsyncHash<base::Crc32>(source, std::move(skips));
+  if (!digests) {
+    co_return ::oxygen::Err(digests.error());
+  }
+  co_return ::oxygen::Ok(std::get<0>(*digests));
+}
+
+//! The SHA-256 of all of an awaitable `source`, except `skips`.
+template <AsyncReadableDevice D>
+[[nodiscard]] auto AsyncComputeSha256(const D& source,
+  std::vector<ByteRange> skips = {}) -> co::Co<Result<base::Sha256Digest>>
+{
+  auto digests = co_await AsyncHash<base::Sha256>(source, std::move(skips));
+  if (!digests) {
+    co_return ::oxygen::Err(digests.error());
+  }
+  co_return ::oxygen::Ok(std::get<0>(*digests));
 }
 
 //! The SHA-256 of the file at `path`, read once sequentially.

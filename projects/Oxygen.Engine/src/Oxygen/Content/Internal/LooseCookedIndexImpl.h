@@ -10,9 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <mutex>
 #include <optional>
-#include <shared_mutex>
 #include <span>
 #include <string>
 #include <string_view>
@@ -57,10 +55,6 @@ public:
   OXGN_CNTT_NDAPI static auto LoadFromFile(
     const std::filesystem::path& index_path) -> LooseCookedIndexImpl;
 
-  //! Load and validate an index file whose file lock the caller holds.
-  OXGN_CNTT_NDAPI static auto LoadFromLockedFile(
-    const std::filesystem::path& index_path) -> LooseCookedIndexImpl;
-
   //! Load and validate the bytes of an index file, which the index copies.
   /*!
    @throw data::CookedOpenError `kWrongFormat` for bytes that are not an
@@ -74,23 +68,14 @@ public:
   OXGN_CNTT_NDAPI static auto LoadFromBytes(std::vector<std::byte>&& bytes)
     -> LooseCookedIndexImpl;
 
-  //! Hold off in-process index publication while reading `index_path`.
+  //! The lock file that serializes the writers of the index `index_path`.
   /*!
-   The lock is process-wide and keyed by path identity. Readers in other
-   processes are not coordinated.
+   A writer holds an exclusive lock on it across its read, merge and publish
+   cycle. Readers take no lock: the published index is replaced atomically, so
+   a reader maps one whole index, the old or the new.
   */
-  OXGN_CNTT_NDAPI static auto LockFileShared(
-    const std::filesystem::path& index_path)
-    -> std::shared_lock<std::shared_mutex>;
-
-  //! Exclude in-process index readers while publishing `index_path`.
-  /*!
-   Hold it across the whole read/merge/replace cycle. Reads made while holding
-   it must use LoadFromLockedFile().
-  */
-  OXGN_CNTT_NDAPI static auto LockFileExclusive(
-    const std::filesystem::path& index_path)
-    -> std::unique_lock<std::shared_mutex>;
+  OXGN_CNTT_NDAPI static auto LockPathOf(
+    const std::filesystem::path& index_path) -> std::filesystem::path;
 
   OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;
 

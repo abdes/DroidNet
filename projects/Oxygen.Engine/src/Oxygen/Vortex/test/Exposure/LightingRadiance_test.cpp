@@ -7,29 +7,21 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
-#include <limits>
 #include <memory>
 #include <numbers>
-#include <span>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
-#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Data/SurfaceId.h>
-#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -66,9 +58,9 @@ namespace {
   {
     constexpr double energy = 0.3068528194400547;
     constexpr double bias = 3.3614294725518486e-5;
-    const double compensation = 1.0 + f0 * (1.0 / energy - 1.0);
+    const double compensation = 1.0 + (f0 * ((1.0 / energy) - 1.0));
     const double transmission
-      = 1.0 - compensation * ((f0 * energy) + ((1.0 - f0) * bias));
+      = 1.0 - (compensation * ((f0 * energy) + ((1.0 - f0) * bias)));
     return {
       .direct = ((0.25 * f0 * compensation) + transmission) / std::numbers::pi,
       .diffuse_environment = transmission,
@@ -554,38 +546,10 @@ NOLINT_TEST_F(ExposureLightingGpuTest, StaticSkyDiffusePreservesSupportedRange)
            1,
          },
        }) {
-    data::pak::core::TextureResourceDesc desc {};
-    desc.texture_type = static_cast<std::uint8_t>(TextureType::kTextureCube);
-    desc.width = desc.height = desc.depth = desc.mip_levels = 1;
-    desc.array_layers = 6;
-    desc.format = static_cast<std::uint8_t>(Format::kRGBA32Float);
-    desc.alignment = 256;
-    const auto key = owned_asset_loader_->MintSyntheticTextureKey();
-    desc.content_hash = key.get();
-    static_assert(
-      6U * sizeof(Pixel) <= std::numeric_limits<std::uint32_t>::max());
-    std::vector<std::uint8_t> data_region(6 * sizeof(Pixel));
-    std::vector<data::pak::render::SubresourceLayout> layouts;
-    for (unsigned face = 0; face < 6; ++face) {
-      std::memcpy(
-        std::span {
-          data_region,
-        }
-          .subspan(face * sizeof(Pixel), sizeof(Pixel))
-          .data(),
-        source_color.data(), sizeof(Pixel));
-      layouts.push_back({
-        .offset_bytes = static_cast<std::uint32_t>(face * sizeof(Pixel)),
-        .row_pitch_bytes = sizeof(Pixel),
-        .size_bytes = sizeof(Pixel),
-      });
-    }
-    auto payload = vortex::testing::detail::BuildV4TexturePayload(
-      desc, layouts, data_region);
-    desc.size_bytes = static_cast<std::uint32_t>(payload.size());
-    owned_asset_loader_->SetTexture(
-      key, std::make_shared<data::TextureResource>(desc, std::move(payload)));
-    sky.SetCubemapResource(key);
+    sky.SetCubemapResource(
+      owned_asset_loader_->AddSyntheticTexture(vortex::testing::CubeShape(1U),
+        [source_color](std::uint32_t /*layer*/, std::uint32_t /*x*/,
+          std::uint32_t /*y*/) -> Pixel { return source_color; }));
     for (const bool forward : {
            false,
            true,
@@ -675,8 +639,9 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
       material.flags = data::pak::render::kMaterialFlag_NoTextureSampling
         | data::pak::render::kMaterialFlag_DoubleSided
         | (unlit ? data::pak::render::kMaterialFlag_Unlit : 0U);
-      for (unsigned c = 0U; c < 4U; ++c)
+      for (unsigned c = 0U; c < 4U; ++c) {
         material.base_color[c] = expected[c];
+      }
       material.roughness = data::Unorm16 { 1.0F };
       material.ambient_occlusion = data::Unorm16 { 1.0F };
       material.normal_scale = 1.0F;
@@ -696,10 +661,11 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F));
       const auto pixel = ReadFloatTexture(*probe->color).at(0);
       for (unsigned c = 0U; c < 3U; ++c) {
-        if (unlit)
+        if (unlit) {
           EXPECT_NEAR(pixel[c], baseline[c], 1.0e-5F);
-        else
+        } else {
           EXPECT_GT(pixel[c], expected[c] * 2.0F);
+        }
       }
     }
   }

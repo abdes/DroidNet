@@ -8,6 +8,7 @@
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/Record.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
@@ -23,13 +24,13 @@ namespace oxygen::data::pak::audio {
 //! Audio resource table entry.
 #pragma pack(push, 1)
 struct AudioResourceDesc {
-  core::OffsetT data_offset; // Absolute offset to audio data
-  core::DataBlobSizeT size_bytes; // Size of audio data
-  uint32_t sample_rate; // Audio sample rate
-  uint32_t channels; // Number of channels
-  uint32_t audio_format; // PCM, Vorbis, etc.
-  uint16_t bits_per_sample; // Bits per sample
-  uint16_t alignment; // Required alignment
+  core::OffsetT data_offset {}; // Absolute offset to audio data
+  core::DataBlobSizeT size_bytes {}; // Size of audio data
+  uint32_t sample_rate {}; // Audio sample rate
+  uint32_t channels {}; // Number of channels
+  uint32_t audio_format {}; // PCM, Vorbis, etc.
+  uint16_t bits_per_sample {}; // Bits per sample
+  uint16_t alignment {}; // Required alignment
 
   // Tail reserve to keep fixed-size 32-byte record contract.
   uint8_t _reserved[4] = {}; // Tail reserve to keep fixed 32-byte record size
@@ -38,6 +39,12 @@ struct AudioResourceDesc {
 static_assert(sizeof(AudioResourceDesc) == 32);
 
 } // namespace oxygen::data::pak::audio
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<data::pak::audio::AudioResourceDesc> = true;
+} // namespace oxygen::serio
+// clang-format on
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

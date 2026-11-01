@@ -9,13 +9,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <iterator>
 #include <set>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -32,6 +33,7 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SurfaceInventory.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/RegionStream.h>
@@ -182,7 +184,14 @@ protected:
         std::ifstream bytes(path, std::ios::binary);
         auto raw = std::array<char, sizeof(header)> {};
         bytes.read(raw.data(), static_cast<std::streamsize>(raw.size()));
-        std::memcpy(&header, raw.data(), raw.size());
+        const auto read
+          = oxygen::serio::CopyAt<data::pak::geometry::GeometryAssetDesc>(
+            std::as_bytes(std::span { raw }));
+        if (!read) {
+          ADD_FAILURE() << read.error().message();
+          return result;
+        }
+        header = *read;
       }
       auto file = oxygen::serio::NativeFile::Open(path, {});
       if (!file) {

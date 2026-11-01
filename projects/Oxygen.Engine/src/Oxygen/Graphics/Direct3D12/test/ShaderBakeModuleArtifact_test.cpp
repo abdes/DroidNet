@@ -23,6 +23,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
+#include <Oxygen/Serio/Testing/AtomicFiles.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
@@ -134,7 +135,8 @@ NOLINT_TEST_F(ShaderBakeModuleArtifactTest, RoundTripsModuleArtifact)
   const auto reloaded = ReadModuleArtifactFile(artifact_path);
 
   EXPECT_EQ(reloaded, artifact);
-  EXPECT_FALSE(std::filesystem::exists(artifact_path.string() + ".tmp"));
+  EXPECT_FALSE(
+    oxygen::serio::testing::HasTemporarySibling(artifact_path.parent_path()));
 }
 
 NOLINT_TEST_F(ShaderBakeModuleArtifactTest, CorruptArtifactBecomesCacheMiss)

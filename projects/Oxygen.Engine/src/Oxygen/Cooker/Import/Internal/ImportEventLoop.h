@@ -15,6 +15,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/OxCo/EventLoop.h>
+#include <Oxygen/Serio/IoDriver.h>
 
 namespace oxygen::content::import {
 
@@ -30,6 +31,8 @@ namespace oxygen::content::import {
  - **ASIO integration**: Uses asio::io_context for async operations.
  - **Work guard**: Prevents premature exit when no work is pending.
  - **Thread-safe stop**: Can be stopped from any thread.
+ - **One IO driver**: Owns the `serio::IoDriver` over its io_context; every
+   import read and cooked write goes through it.
 
  ### Usage Patterns
 
@@ -40,7 +43,10 @@ namespace oxygen::content::import {
 */
 class ImportEventLoop {
 public:
-  //! Construct the event loop. Does not start running.
+  //! Construct the event loop and its IO driver. Does not start running.
+  /*!
+   @throw std::system_error when the platform's IO backend cannot be created.
+  */
   OXGN_COOK_API ImportEventLoop();
 
   //! Destructor. Stops the event loop if running.
@@ -54,6 +60,14 @@ public:
 
   //! Get the underlying ASIO io_context (const).
   OXGN_COOK_NDAPI auto IoContext() const noexcept -> const asio::io_context&;
+
+  //! The IO driver of this loop's io_context.
+  /*!
+   Files opened through it are awaited by coroutines running on this loop.
+   The loop destroys it, so every file and reader bound to it must be gone
+   by then.
+  */
+  OXGN_COOK_NDAPI auto Driver() noexcept -> serio::IoDriver&;
 
   //! Run the event loop. Blocks until Stop() is called.
   /*!
@@ -86,6 +100,8 @@ public:
 
 private:
   asio::io_context io_context_;
+  // Declared after the context: the loop outlives its driver.
+  serio::IoDriver driver_;
   std::atomic<bool> running_ { false };
   std::thread::id running_thread_id_ {};
 };
@@ -123,7 +139,7 @@ template <> class ThreadNotification<content::import::ImportEventLoop> {
 public:
   //! Construct the notification. The fn/arg are stored for later use.
   ThreadNotification(content::import::ImportEventLoop& /*loop*/,
-    void (*)(void*) /*fn*/, void* /*arg*/)
+    void (* /*unused*/)(void*) /*fn*/, void* /*arg*/)
   {
     // Stateless implementation - we capture fn/arg at Post time
   }
@@ -132,7 +148,7 @@ public:
   void Post(content::import::ImportEventLoop& loop, void (*fn)(void*),
     void* arg) noexcept
   {
-    loop.Post([fn, arg]() -> void { fn(arg); });
+    loop.Post([fn, arg] -> void { fn(arg); });
   }
 };
 

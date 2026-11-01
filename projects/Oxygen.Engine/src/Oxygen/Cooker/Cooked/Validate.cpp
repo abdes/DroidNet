@@ -6,9 +6,9 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <exception>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -36,6 +36,7 @@
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryFile.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/RegionStream.h>
@@ -98,8 +99,12 @@ auto Validate(const CookedContent& content, const lc::IntegrityCheck check)
       throw std::runtime_error("failed to read descriptor header");
     }
 
-    AssetHeader header {};
-    std::memcpy(&header, blob->data(), sizeof(header));
+    const auto header_read
+      = serio::CopyAt<AssetHeader>(std::as_bytes(std::span { *blob }));
+    if (!header_read) {
+      throw std::runtime_error("failed to read descriptor header");
+    }
+    const auto& header = *header_read;
 
     if (static_cast<AssetType>(header.asset_type) != asset.type) {
       throw std::runtime_error(

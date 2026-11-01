@@ -20,5 +20,6 @@ target_link_libraries(
   PRIVATE
     oxygen::console
     oxygen::engine
+    oxygen::serio
     asio::asio
 )

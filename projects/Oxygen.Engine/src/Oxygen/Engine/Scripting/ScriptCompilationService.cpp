@@ -4,35 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Commands/Params.h>
-#ifdef _WIN32
-#  include <Windows.h> // IWYU pragma: keep
-
-#  include <errhandlingapi.h>
-#  include <minwindef.h>
-#  include <winbase.h>
-#endif
-
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <bit>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
-#include <ios>
-#include <istream>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <ostream>
 #include <span>
 #include <string>
 #include <system_error>
-#include <type_traits>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -42,9 +28,9 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
@@ -61,6 +47,13 @@
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/Record.h>
+#include <Oxygen/Serio/RegionStream.h>
+#include <Oxygen/Serio/Types.h>
+#include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::scripting {
 namespace {
@@ -117,6 +110,18 @@ namespace {
 #pragma pack(pop)
   static_assert(sizeof(PersistentCacheHeader) == kPersistentCacheHeaderSize);
   static_assert(sizeof(PersistentCacheEntry) == kPersistentCacheEntrySize);
+} // namespace
+} // namespace oxygen::scripting
+
+// clang-format off
+namespace oxygen::serio {
+template <> inline constexpr bool kIsRecord<scripting::PersistentCacheHeader> = true;
+template <> inline constexpr bool kIsRecord<scripting::PersistentCacheEntry> = true;
+} // namespace oxygen::serio
+// clang-format on
+
+namespace oxygen::scripting {
+namespace {
 
   auto MakePersistentBytecodeBlob(std::vector<uint8_t> payload,
     const uint32_t language, const uint32_t compression,
@@ -141,63 +146,145 @@ namespace {
 
   constexpr size_t kBytesPerMebibyte = size_t { 1024 } * 1024;
 
-  //! Reads one trivially copyable record; returns false on a short read.
-  template <typename T>
-    requires std::is_trivially_copyable_v<T>
-  auto ReadRecord(std::istream& input, T& record) -> bool
+  //! Reads one record at `offset`; false on a short read or a device error.
+  template <serio::Record T>
+  auto ReadRecordAt(
+    const serio::NativeFile& file, const uint64_t offset, T& record) -> bool
   {
-    auto bytes = std::array<char, sizeof(T)> {};
-    input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    if (!input) {
-      return false;
-    }
-    record = std::bit_cast<T>(bytes);
-    return true;
+    return serio::ReadExactlyAt(file, serio::ByteOffset { offset },
+      std::as_writable_bytes(std::span<T, 1> { &record, 1 }))
+      .has_value();
   }
 
-  template <typename T>
-    requires std::is_trivially_copyable_v<T>
-  auto WriteRecord(std::ostream& output, const T& record) -> void
+  //! Reads and validates the cache file's header and index; nothing when any
+  //! rule is violated.
+  auto ReadPersistentIndex(const serio::NativeFile& file)
+    -> std::optional<std::vector<PersistentCacheEntry>>
   {
-    const auto bytes = std::bit_cast<std::array<char, sizeof(T)>>(record);
-    output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    PersistentCacheHeader header {};
+    if (!ReadRecordAt(file, 0, header) || header.magic != kPersistentCacheMagic
+      || header.version != kPersistentCacheVersion) {
+      return std::nullopt;
+    }
+    const auto size = file.Size();
+    if (!size) {
+      return std::nullopt;
+    }
+    const auto file_size = size->get();
+    const auto index_size = static_cast<uint64_t>(header.entry_count)
+      * sizeof(PersistentCacheEntry);
+    if (header.reserved != 0 || header.reserved2 != 0
+      || header.index_offset < sizeof(PersistentCacheHeader)
+      || header.index_offset > file_size
+      || index_size != file_size - header.index_offset) {
+      return std::nullopt;
+    }
+
+    auto entries = std::vector<PersistentCacheEntry> {};
+    entries.reserve(header.entry_count);
+    auto keys = std::unordered_set<uint64_t> {};
+    auto expected_payload_offset = uint64_t { sizeof(PersistentCacheHeader) };
+    for (uint32_t i = 0; i < header.entry_count; ++i) {
+      PersistentCacheEntry entry {};
+      if (!ReadRecordAt(file,
+            header.index_offset
+              + (static_cast<uint64_t>(i) * sizeof(PersistentCacheEntry)),
+            entry)) {
+        return std::nullopt;
+      }
+      if (entry.data_offset != expected_payload_offset
+        || entry.data_offset > header.index_offset || entry.data_size == 0
+        || entry.data_size > header.index_offset - entry.data_offset
+        || entry.language
+          != static_cast<uint32_t>(data::pak::scripting::ScriptLanguage::kLuau)
+        || entry.compression > static_cast<uint32_t>(
+             data::pak::scripting::ScriptCompression::kZstd)
+        || entry.origin > static_cast<uint32_t>(ScriptBlobOrigin::kExternalFile)
+        || entry.reserved != 0 || !keys.insert(entry.key).second) {
+        return std::nullopt;
+      }
+      entries.push_back(entry);
+      expected_payload_offset += entry.data_size;
+    }
+    if (expected_payload_offset != header.index_offset) {
+      return std::nullopt;
+    }
+    return entries;
   }
 
-  auto ReadPayload(std::ifstream& input, const uint64_t key, const auto& entry)
-    -> std::optional<std::vector<uint8_t>>
+  //! Reads and validates a payload; nothing on a short read or when the
+  //! key-bound checksum does not match (a replaced file's shifted offsets).
+  auto ReadPayload(const serio::NativeFile& file, const uint64_t key,
+    const auto& entry) -> std::optional<std::vector<uint8_t>>
   {
-    input.clear();
-    input.seekg(static_cast<std::streamoff>(entry.data_offset), std::ios::beg);
-    if (!input) {
+    auto payload = std::vector<uint8_t>(entry.data_size);
+    if (!serio::ReadExactlyAt(file, serio::ByteOffset { entry.data_offset },
+          std::as_writable_bytes(std::span(payload)))) {
       return std::nullopt;
     }
-    auto buffer = std::vector<char>(entry.data_size);
-    input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-    if (!input) {
-      return std::nullopt;
-    }
-    auto payload = std::vector<uint8_t>(buffer.size());
-    std::ranges::transform(buffer, payload.begin(),
-      [](const char byte) -> uint8_t { return static_cast<uint8_t>(byte); });
     if (PayloadChecksum(key, payload) != entry.payload_checksum) {
       return std::nullopt;
     }
     return payload;
   }
 
-  auto PublishCacheFile(const std::filesystem::path& temporary,
-    const std::filesystem::path& destination, std::error_code& error) -> void
+  //! Writes the placeholder header, the payloads and the index, then patches
+  //! the header. Fills `index_entries`; false (logged) on any failure.
+  auto WritePersistentCache(serio::RegionWriteStream<serio::NativeFile>& stream,
+    const auto& sorted_snapshot,
+    std::vector<PersistentCacheEntry>& index_entries) -> bool
   {
-#ifdef _WIN32
-    if (MoveFileExW(temporary.c_str(), destination.c_str(),
-          MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)
-      == FALSE) {
-      error = std::error_code(
-        static_cast<int>(GetLastError()), std::system_category());
+    auto header = PersistentCacheHeader {};
+    header.magic = kPersistentCacheMagic;
+    header.version = kPersistentCacheVersion;
+    auto writer = serio::Writer(stream);
+    if (!writer.Write(header)) {
+      LOG_F(WARNING, "failed to write persistent cache snapshot");
+      return false;
     }
-#else
-    std::filesystem::rename(temporary, destination, error);
-#endif
+
+    index_entries.reserve(sorted_snapshot.size());
+    for (const auto& [key, payload] : sorted_snapshot) {
+      if (payload == nullptr || payload->IsEmpty()) {
+        continue;
+      }
+      const auto payload_bytes = payload->BytesView();
+      if (payload_bytes.size() > std::numeric_limits<uint32_t>::max()) {
+        LOG_F(WARNING, "persistent cache payload is too large (key={})", key);
+        return false;
+      }
+      const auto data_offset = stream.Position().get();
+      if (!stream.Write(std::as_bytes(payload_bytes))) {
+        LOG_F(WARNING, "failed to write persistent cache snapshot");
+        return false;
+      }
+      index_entries.push_back(PersistentCacheEntry {
+        .key = key.get(),
+        .data_offset = data_offset,
+        .data_size = static_cast<uint32_t>(payload_bytes.size()),
+        .language = static_cast<uint32_t>(payload->Language()),
+        .compression = static_cast<uint32_t>(payload->Compression()),
+        .origin = static_cast<uint32_t>(payload->GetOrigin()),
+        .reserved = 0U,
+        .content_hash = payload->ContentHash(),
+        .payload_checksum = PayloadChecksum(key.get(), payload_bytes),
+      });
+    }
+
+    header.index_offset = stream.Position().get();
+    header.entry_count = static_cast<uint32_t>(index_entries.size());
+    for (const auto& entry : index_entries) {
+      if (!writer.Write(entry)) {
+        LOG_F(WARNING, "failed to write persistent cache snapshot");
+        return false;
+      }
+    }
+    if (!stream.PatchAt(
+          serio::ByteOffset { 0 }, std::as_bytes(std::span { &header, 1 }))) {
+      LOG_F(WARNING, "failed to write persistent cache snapshot");
+      return false;
+    }
+    return true;
   }
 } // namespace
 
@@ -225,79 +312,29 @@ ScriptCompilationService::ScriptCompilationService(
     auto load_failed = false;
     {
       std::error_code ec {};
-      if (!std::filesystem::exists(persistent_cache_path_, ec)) {
-        ec.clear();
-      } else if (ec) {
+      const auto exists = std::filesystem::exists(persistent_cache_path_, ec);
+      if (ec) {
         load_failed = true;
-      } else {
-        std::ifstream input(persistent_cache_path_, std::ios::binary);
-        if (!input) {
-          load_failed = true;
-        } else {
-          PersistentCacheHeader header {};
-          if (!ReadRecord(input, header)
-            || header.magic != kPersistentCacheMagic
-            || header.version != kPersistentCacheVersion) {
-            load_failed = true;
-          } else {
-            input.seekg(0, std::ios::end);
-            const auto file_end = input.tellg();
-            const auto file_size = static_cast<uint64_t>(file_end);
-            const auto index_size = static_cast<uint64_t>(header.entry_count)
-              * sizeof(PersistentCacheEntry);
-            if (file_end < 0 || header.reserved != 0 || header.reserved2 != 0
-              || header.index_offset < sizeof(PersistentCacheHeader)
-              || header.index_offset > file_size
-              || index_size != file_size - header.index_offset) {
-              load_failed = true;
-            } else {
-              input.seekg(static_cast<std::streamoff>(header.index_offset),
-                std::ios::beg);
-              auto expected_payload_offset
-                = uint64_t { sizeof(PersistentCacheHeader) };
-              for (uint32_t i = 0; i < header.entry_count; ++i) {
-                PersistentCacheEntry entry {};
-                if (!ReadRecord(input, entry)) {
-                  load_failed = true;
-                  break;
-                }
-                if (entry.data_offset != expected_payload_offset
-                  || entry.data_offset > header.index_offset
-                  || entry.data_size == 0
-                  || entry.data_size > header.index_offset - entry.data_offset
-                  || entry.language
-                    != static_cast<uint32_t>(
-                      data::pak::scripting::ScriptLanguage::kLuau)
-                  || entry.compression > static_cast<uint32_t>(
-                       data::pak::scripting::ScriptCompression::kZstd)
-                  || entry.origin
-                    > static_cast<uint32_t>(ScriptBlobOrigin::kExternalFile)
-                  || entry.reserved != 0
-                  || persistent_index_.contains(CompileKey { entry.key })) {
-                  load_failed = true;
-                  break;
-                }
-                persistent_index_.insert_or_assign(CompileKey { entry.key },
-                  PersistentIndexEntry {
-                    .data_offset = entry.data_offset,
-                    .data_size = entry.data_size,
-                    .language = entry.language,
-                    .compression = entry.compression,
-                    .origin = entry.origin,
-                    .content_hash = entry.content_hash,
-                    .payload_checksum = entry.payload_checksum,
-                  });
-                expected_payload_offset += entry.data_size;
-                input.seekg(static_cast<std::streamoff>(header.index_offset
-                              + (static_cast<uint64_t>(i + 1)
-                                * sizeof(PersistentCacheEntry))),
-                  std::ios::beg);
-              }
-              if (expected_payload_offset != header.index_offset) {
-                load_failed = true;
-              }
+      } else if (exists) {
+        if (auto file = serio::OpenPublishedFile(persistent_cache_path_)) {
+          if (const auto entries = ReadPersistentIndex(*file)) {
+            for (const auto& entry : *entries) {
+              persistent_index_.insert_or_assign(CompileKey { entry.key },
+                PersistentIndexEntry {
+                  .data_offset = entry.data_offset,
+                  .data_size = entry.data_size,
+                  .language = entry.language,
+                  .compression = entry.compression,
+                  .origin = entry.origin,
+                  .content_hash = entry.content_hash,
+                  .payload_checksum = entry.payload_checksum,
+                });
             }
+          } else {
+            load_failed = true;
           }
+        } else {
+          load_failed = true;
         }
       }
     }
@@ -839,12 +876,12 @@ auto ScriptCompilationService::TryGetPersistentBytecode(
   }
   const auto entry = it->second;
 
-  std::ifstream input(persistent_cache_path_, std::ios::binary);
-  if (!input) {
+  const auto file = serio::OpenPublishedFile(persistent_cache_path_);
+  if (!file) {
     LOG_F(WARNING, "persistent cache unavailable on read");
     return nullptr;
   }
-  auto payload = ReadPayload(input, compile_key.get(), entry);
+  auto payload = ReadPayload(*file, compile_key.get(), entry);
   if (!payload.has_value()) {
     LOG_F(WARNING, "persistent cache entry invalidated (key={})", compile_key);
     persistent_index_.erase(compile_key);
@@ -893,16 +930,16 @@ auto ScriptCompilationService::FlushPersistentCache() -> void
     std::scoped_lock lock(persistent_cache_mutex_);
     snapshot.reserve(persistent_index_.size() + pending_persistence_.size());
 
-    std::ifstream input(persistent_cache_path_, std::ios::binary);
+    const auto file = serio::OpenPublishedFile(persistent_cache_path_);
     // Load all current entries that aren't being overridden by pending ones
     for (const auto& [key, entry] : persistent_index_) {
       if (pending_persistence_.contains(key)) {
         continue;
       }
-      if (!input) {
+      if (!file) {
         break;
       }
-      auto payload = ReadPayload(input, key.get(), entry);
+      auto payload = ReadPayload(*file, key.get(), entry);
       if (!payload.has_value()) {
         continue;
       }
@@ -943,15 +980,6 @@ auto ScriptCompilationService::PersistCacheSnapshot(const std::vector<
   }
 
   std::scoped_lock lock(persistent_cache_mutex_);
-  // Each publisher owns its temporary file, including publishers in other
-  // processes that share the same engine cache path.
-  const auto temp_path = std::filesystem::path { persistent_cache_path_.string()
-    + ".tmp." + Uuid::Generate().ToString() };
-  const auto cleanup = ScopeGuard([&temp_path] noexcept -> void {
-    std::error_code ignored;
-    std::filesystem::remove(temp_path, ignored);
-  });
-
   auto sorted_snapshot = snapshot;
   if (sorted_snapshot.size() > std::numeric_limits<uint32_t>::max()) {
     LOG_F(WARNING, "persistent cache snapshot has too many entries");
@@ -973,66 +1001,28 @@ auto ScriptCompilationService::PersistCacheSnapshot(const std::vector<
     }
   }
 
-  // Opening for output truncates the file.
-  std::ofstream output(temp_path, std::ios::binary);
-  if (!output) {
+  // The writer owns a unique sibling, including against publishers in other
+  // processes that share the same engine cache path; dropping it removes it.
+  auto writer = serio::AtomicFileWriter::Create(persistent_cache_path_);
+  if (!writer) {
     LOG_F(WARNING, "failed to open temporary persistent cache file");
     return false;
   }
 
-  PersistentCacheHeader header {};
-  header.magic = kPersistentCacheMagic;
-  header.version = kPersistentCacheVersion;
-  WriteRecord(output, header);
-
   std::vector<PersistentCacheEntry> index_entries;
-  index_entries.reserve(sorted_snapshot.size());
-  for (const auto& [key, payload] : sorted_snapshot) {
-    if (payload == nullptr || payload->IsEmpty()) {
-      continue;
-    }
-    const auto payload_bytes = payload->BytesView();
-    if (payload_bytes.size() > std::numeric_limits<uint32_t>::max()) {
-      LOG_F(WARNING, "persistent cache payload is too large (key={})", key);
-      return false;
-    }
-    const auto data_offset = static_cast<uint64_t>(output.tellp());
-    for (const auto byte : payload_bytes) {
-      output.put(static_cast<char>(byte));
-    }
-    index_entries.push_back(PersistentCacheEntry {
-      .key = key.get(),
-      .data_offset = data_offset,
-      .data_size = static_cast<uint32_t>(payload_bytes.size()),
-      .language = static_cast<uint32_t>(payload->Language()),
-      .compression = static_cast<uint32_t>(payload->Compression()),
-      .origin = static_cast<uint32_t>(payload->GetOrigin()),
-      .reserved = 0U,
-      .content_hash = payload->ContentHash(),
-      .payload_checksum = PayloadChecksum(key.get(), payload_bytes),
-    });
-  }
-
-  header.index_offset = static_cast<uint64_t>(output.tellp());
-  header.entry_count = static_cast<uint32_t>(index_entries.size());
-  for (const auto& entry : index_entries) {
-    WriteRecord(output, entry);
-  }
-
-  output.seekp(0, std::ios::beg);
-  WriteRecord(output, header);
-  output.flush();
-  output.close();
-  if (!output) {
-    LOG_F(WARNING, "failed to write persistent cache snapshot");
+  if (!WritePersistentCache(writer->Stream(), sorted_snapshot, index_entries)) {
     return false;
   }
 
-  ec.clear();
-  PublishCacheFile(temp_path, persistent_cache_path_, ec);
-  if (ec) {
-    LOG_F(WARNING, "failed to publish persistent cache file: {}", ec.value());
+  const auto commit = std::move(*writer).Commit();
+  if (!commit) {
+    LOG_F(WARNING, "failed to publish persistent cache file: {}",
+      commit.error().message());
     return false;
+  }
+  if (commit->durability_error) {
+    LOG_F(WARNING, "persistent cache file published but not made durable: {}",
+      commit->durability_error.message());
   }
 
   persistent_index_.clear();

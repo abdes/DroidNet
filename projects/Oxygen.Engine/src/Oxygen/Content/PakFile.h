@@ -31,10 +31,6 @@
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/AnyDevice.h>
 
-namespace oxygen::serio {
-class IoDriver;
-} // namespace oxygen::serio
-
 namespace oxygen::content {
 
 //! Reader and accessor for Oxygen .pak asset containers
@@ -46,12 +42,9 @@ namespace oxygen::content {
  need no lock. Descriptors and reference inventories are views or decodes of
  the mapped bytes.
 
- Payloads are not read through the mapping: `Payloads()` is the device a
- loader awaits them from. A pak opened with an IO driver opens its file a
- second time through the driver, so payload reads complete on the driver's
- loop without blocking it; any other pak serves its payloads from its one
- device, with awaited reads that complete at once (memory is ready at once; a
- mapped pak without a driver blocks the awaiting thread for each read).
+ Payloads are not read through the mapping, which is never awaited: the
+ loader's `PakFileSource` opens the pak a second time through its IO driver
+ and awaits them from that file.
 
  ```cpp
  PakFile pak{"assets.pak"};
@@ -85,18 +78,14 @@ public:
     kCrc32,
   };
 
-  //! Opens the pak at `path`, mapping it for its metadata; with `driver`, it
-  //! also opens it through `driver` for its payloads.
+  //! Opens the pak at `path`, mapping it for its metadata.
   /*!
-   The pak holds `driver`, which outlives the payload file it opened.
-
    @throw data::CookedOpenError When the file is not a pak, has a format
      version this build cannot read, is malformed, or fails `verification`.
    @throw std::system_error When the file cannot be opened.
   */
   OXGN_CNTT_API explicit PakFile(const std::filesystem::path& path,
-    Verification verification = Verification::kNone,
-    std::shared_ptr<serio::IoDriver> driver = {});
+    Verification verification = Verification::kNone);
 
   //! Reads the pak `device` holds; `name` stands for its path in logs.
   /*!
@@ -126,6 +115,29 @@ public:
   OXGN_CNTT_API static auto CheckFooter(
     const data::pak::core::PakFooter& footer, uint64_t file_size) -> void;
 
+  //! What a CRC32 check of a pak hashes and expects.
+  struct CrcCheck {
+    //! The CRC32 the footer holds.
+    uint32_t expected { 0 };
+    //! The footer's CRC field, which writers do not hash (that is not the
+    //! same as hashing it as zeros).
+    serio::ByteRange crc_field {};
+  };
+
+  //! The check `footer` of a pak of `file_size` bytes asks for; empty when
+  //! the pak holds no CRC32 (zero).
+  OXGN_CNTT_NDAPI static auto CrcCheckOf(
+    const data::pak::core::PakFooter& footer, uint64_t file_size) noexcept
+    -> std::optional<CrcCheck>;
+
+  //! Checks the CRC32 `actual` of the pak at `path` against `check`, and
+  //! logs the outcome.
+  /*!
+   @throw data::CookedOpenError `kCorrupt` when they differ.
+  */
+  OXGN_CNTT_API static auto CheckCrc32(const CrcCheck& check, uint32_t actual,
+    const std::filesystem::path& path) -> void;
+
   ~PakFile() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(PakFile)
@@ -142,12 +154,6 @@ public:
   //! The contiguous device that holds the pak's metadata: its mapping, or
   //! the bytes it was opened from.
   auto Device() const noexcept -> const serio::AnyDevice& { return device_; }
-
-  //! The device payloads are awaited from, with the offsets of `Device()`.
-  auto Payloads() const noexcept -> const serio::AnyAsyncDevice&
-  {
-    return payloads_;
-  }
 
   //! The validated footer.
   auto Footer() const noexcept -> const data::pak::core::PakFooter&
@@ -306,22 +312,14 @@ public:
   }
 
 private:
-  PakFile(serio::AnyDevice device, std::filesystem::path name,
-    Verification verification, std::shared_ptr<serio::IoDriver> driver,
-    std::optional<serio::AnyAsyncDevice> payloads);
-
   auto InitializeResourceTablesFromFooter() const -> void;
 
   std::filesystem::path path_;
 
-  //! Declared before the devices: the driver outlives the file it opened.
-  std::shared_ptr<serio::IoDriver> driver_;
-
   //! The device and its bytes, which the descriptor views handed out alias.
-  //! Keep `bytes_` and `payloads_` after `device_`: they may view it.
+  //! Keep `bytes_` after `device_`: it views it.
   serio::AnyDevice device_;
   std::span<const std::byte> bytes_;
-  serio::AnyAsyncDevice payloads_;
 
   data::pak::core::PakHeader header_ {};
   data::SourceKey source_key_ {};

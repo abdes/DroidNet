@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -33,6 +34,26 @@ namespace detail {
     }
   };
 } // namespace detail
+
+//! `bytes` as unsigned bytes, for APIs that take `uint8_t`.
+/*!
+ The one place Oxygen views `std::byte` storage as `uint8_t`. Reading or
+ writing `std::byte` storage through `unsigned char` is allowed aliasing.
+*/
+[[nodiscard]] inline auto AsUnsigned(
+  const std::span<const std::byte> bytes) noexcept -> std::span<const uint8_t>
+{
+  // NOLINTNEXTLINE(*-reinterpret-cast) - unsigned char may alias any bytes
+  return { reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size() };
+}
+
+//! `bytes` as writable unsigned bytes, for APIs that take `uint8_t`.
+[[nodiscard]] inline auto AsUnsigned(const std::span<std::byte> bytes) noexcept
+  -> std::span<uint8_t>
+{
+  // NOLINTNEXTLINE(*-reinterpret-cast) - unsigned char may alias any bytes
+  return { reinterpret_cast<uint8_t*>(bytes.data()), bytes.size() };
+}
 
 //! An owned, uninitialized, aligned allocation of bytes.
 /*!
@@ -103,6 +124,22 @@ public:
       Storage(static_cast<std::byte*>(memory), Deleter { alignment }), bytes));
   }
 
+  //! A buffer holding a copy of `bytes`.
+  /*!
+   @param bytes The bytes to copy; empty allocates nothing.
+   @param alignment A power of two.
+   @return The buffer; the errors of `Allocate`.
+  */
+  [[nodiscard]] static auto CopyOf(const std::span<const std::byte> bytes,
+    const size_t alignment = kIoAlignment) noexcept -> Result<ByteBuffer>
+  {
+    auto buffer = Allocate(CountOf(bytes.size()), alignment);
+    if (buffer) {
+      std::ranges::copy(bytes, buffer->Bytes().begin());
+    }
+    return buffer;
+  }
+
   //! The buffer's bytes.
   [[nodiscard]] auto Bytes() noexcept -> std::span<std::byte>
   {
@@ -113,6 +150,12 @@ public:
   [[nodiscard]] auto Bytes() const noexcept -> std::span<const std::byte>
   {
     return { storage_.get(), size_ };
+  }
+
+  //! The buffer's bytes as unsigned bytes, read-only (`AsUnsigned`).
+  [[nodiscard]] auto Unsigned() const noexcept -> std::span<const uint8_t>
+  {
+    return AsUnsigned(Bytes());
   }
 
   //! The number of bytes the buffer holds.

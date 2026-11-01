@@ -74,6 +74,22 @@ auto FileLock::operator=(FileLock&&) noexcept -> FileLock& = default;
 auto FileLock::TryAcquire(const std::filesystem::path& path,
   const FileLockMode mode, const FileLockOpenMode open_mode) -> Result<FileLock>
 {
+  return Lock(path, mode, open_mode, Contention::kFail);
+}
+
+auto FileLock::Acquire(const std::filesystem::path& path,
+  const FileLockMode mode, const FileLockOpenMode open_mode) -> Result<FileLock>
+{
+  if (open_mode == FileLockOpenMode::kTemporary) {
+    return Err(std::errc::invalid_argument);
+  }
+  return Lock(path, mode, open_mode, Contention::kWait);
+}
+
+auto FileLock::Lock(const std::filesystem::path& path, const FileLockMode mode,
+  const FileLockOpenMode open_mode, const Contention contention)
+  -> Result<FileLock>
+{
   if (path.empty()
     || (mode != FileLockMode::kShared && mode != FileLockMode::kExclusive)
     || (open_mode != FileLockOpenMode::kExisting
@@ -108,7 +124,9 @@ auto FileLock::TryAcquire(const std::filesystem::path& path,
     return contended ? Err(std::errc::device_or_resource_busy) : Err(error);
   }
   OVERLAPPED overlapped {};
-  const DWORD flags = static_cast<DWORD>(LOCKFILE_FAIL_IMMEDIATELY)
+  const DWORD flags = (contention == Contention::kFail
+                          ? static_cast<DWORD>(LOCKFILE_FAIL_IMMEDIATELY)
+                          : 0U)
     | (mode == FileLockMode::kExclusive
         ? static_cast<DWORD>(LOCKFILE_EXCLUSIVE_LOCK)
         : 0U);
@@ -132,7 +150,7 @@ auto FileLock::TryAcquire(const std::filesystem::path& path,
   }
   const auto operation = static_cast<unsigned>(
                            mode == FileLockMode::kExclusive ? LOCK_EX : LOCK_SH)
-    | static_cast<unsigned>(LOCK_NB);
+    | static_cast<unsigned>(contention == Contention::kFail ? LOCK_NB : 0);
   if (flock(owner->handle, static_cast<int>(operation)) != 0) {
     const auto error = base::LastSystemError();
     return error.value() == EWOULDBLOCK || error.value() == EAGAIN

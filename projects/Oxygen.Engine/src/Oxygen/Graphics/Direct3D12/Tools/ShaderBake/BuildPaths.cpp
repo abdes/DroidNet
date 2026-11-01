@@ -7,8 +7,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -19,6 +17,9 @@
 
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
@@ -47,48 +48,30 @@ namespace {
     }
   }
 
-  auto AtomicWriteTempPath(const std::filesystem::path& final_path)
-    -> std::filesystem::path
-  {
-    auto temp_path = final_path;
-    temp_path += ".tmp";
-    return temp_path;
-  }
+  //! A kind of published artifact: its folder beside the archive and its
+  //! file extension.
+  struct ArtifactKind {
+    std::string_view folder;
+    std::string_view extension;
+  };
 
-  auto FinalizeAtomicWrite(const std::filesystem::path& temp_path,
-    const std::filesystem::path& final_path) -> void
-  {
-    std::error_code ec;
-    if (std::filesystem::exists(final_path, ec)) {
-      ec.clear();
-      std::filesystem::remove(final_path, ec);
-      if (ec) {
-        ThrowFilesystemError("failed to replace existing file", final_path, ec);
-      }
-    } else if (ec) {
-      ThrowFilesystemError("failed to probe file", final_path, ec);
-    }
-
-    ec.clear();
-    std::filesystem::rename(temp_path, final_path, ec);
-    if (ec) {
-      ThrowFilesystemError("failed to publish file", final_path, ec);
-    }
-  }
+  constexpr auto kDxilArtifact
+    = ArtifactKind { .folder = "dxil", .extension = ".dxil" };
+  constexpr auto kPdbArtifact
+    = ArtifactKind { .folder = "pdb", .extension = ".pdb" };
 
   auto GetRequestPublishedArtifactPath(
-    const std::filesystem::path& final_archive_path, std::string_view category,
-    std::string_view source_path, std::string_view entry_point,
-    const uint64_t request_key, std::string_view extension)
-    -> std::filesystem::path
+    const std::filesystem::path& final_archive_path, const ArtifactKind& kind,
+    const ExpandedShaderRequest& request) -> std::filesystem::path
   {
-    auto request_path = std::filesystem::path(std::string(source_path));
+    auto request_path
+      = std::filesystem::path(std::string(request.request.source_path));
     request_path = request_path.lexically_normal();
 
-    return final_archive_path.parent_path() / std::string(category)
+    return final_archive_path.parent_path() / std::string(kind.folder)
       / request_path
       / GetRequestPublishedArtifactFileName(
-        entry_point, request_key, extension);
+        request.request.entry_point, request.request_key, kind.extension);
   }
 
 } // namespace
@@ -141,19 +124,17 @@ auto GetRequestLogPath(const BuildRootLayout& layout,
 }
 
 auto GetRequestDxilPath(const std::filesystem::path& final_archive_path,
-  const std::string_view source_path, const std::string_view entry_point,
-  const uint64_t request_key) -> std::filesystem::path
+  const ExpandedShaderRequest& request) -> std::filesystem::path
 {
   return GetRequestPublishedArtifactPath(
-    final_archive_path, "dxil", source_path, entry_point, request_key, ".dxil");
+    final_archive_path, kDxilArtifact, request);
 }
 
 auto GetRequestPdbPath(const std::filesystem::path& final_archive_path,
-  const std::string_view source_path, const std::string_view entry_point,
-  const uint64_t request_key) -> std::filesystem::path
+  const ExpandedShaderRequest& request) -> std::filesystem::path
 {
   return GetRequestPublishedArtifactPath(
-    final_archive_path, "pdb", source_path, entry_point, request_key, ".pdb");
+    final_archive_path, kPdbArtifact, request);
 }
 
 auto EnsureBuildRootLayout(const BuildRootLayout& layout) -> void
@@ -193,38 +174,14 @@ auto ToUtf8PathString(const std::filesystem::path& path) -> std::string
 auto WriteBinaryFileAtomically(const std::filesystem::path& final_path,
   std::span<const std::byte> contents) -> void
 {
-  const auto temp_path = AtomicWriteTempPath(final_path);
   std::filesystem::create_directories(final_path.parent_path());
-
-  std::error_code ec;
-  if (std::filesystem::exists(temp_path, ec)) {
-    ec.clear();
-    std::filesystem::remove(temp_path, ec);
-    if (ec) {
-      ThrowFilesystemError("failed to clear temp file", temp_path, ec);
-    }
-  } else if (ec) {
-    ThrowFilesystemError("failed to probe temp file", temp_path, ec);
+  // A rebuild regenerates every artifact, so the OS cache is durable enough.
+  const auto published = serio::WriteFileAtomically(
+    final_path, contents, serio::Durability::kBuffered);
+  if (!published) {
+    ThrowFilesystemError(
+      "failed to publish file", final_path, published.error());
   }
-
-  {
-    std::ofstream out(temp_path, std::ios::binary | std::ios::trunc);
-    if (!out.is_open()) {
-      throw std::runtime_error(
-        "failed to open temp file `" + ToUtf8PathString(temp_path) + "`");
-    }
-
-    if (!contents.empty()) {
-      out.write(reinterpret_cast<const char*>(contents.data()),
-        static_cast<std::streamsize>(contents.size()));
-      if (!out) {
-        throw std::runtime_error(
-          "failed to write temp file `" + ToUtf8PathString(temp_path) + "`");
-      }
-    }
-  }
-
-  FinalizeAtomicWrite(temp_path, final_path);
 }
 
 auto WriteTextFileAtomically(

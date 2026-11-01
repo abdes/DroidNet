@@ -10,21 +10,16 @@
 #include <cstdint>
 #include <filesystem>
 #include <iterator>
-#include <memory>
-#include <mutex>
 #include <optional>
-#include <shared_mutex>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
@@ -219,48 +214,15 @@ struct LooseCookedIndexImpl::IndexLoadContext {
   std::unordered_set<std::string_view> unique_file_paths {}; // NOLINT
 };
 
-namespace {
-  auto IndexFileMutex(const std::filesystem::path& index_path)
-    -> std::shared_mutex&
-  {
-    static std::mutex map_mutex;
-    // Entries are never erased, so returned references stay valid.
-    static std::unordered_map<std::string, std::unique_ptr<std::shared_mutex>>
-      mutexes;
-
-    const auto key = base::PathIdentityKey(index_path);
-    const std::scoped_lock lock(map_mutex);
-    auto& slot = mutexes[key];
-    if (!slot) {
-      slot = std::make_unique<std::shared_mutex>();
-    }
-    return *slot;
-  }
-} // namespace
-
-auto LooseCookedIndexImpl::LockFileShared(
-  const std::filesystem::path& index_path)
-  -> std::shared_lock<std::shared_mutex>
+auto LooseCookedIndexImpl::LockPathOf(const std::filesystem::path& index_path)
+  -> std::filesystem::path
 {
-  return std::shared_lock(IndexFileMutex(index_path));
-}
-
-auto LooseCookedIndexImpl::LockFileExclusive(
-  const std::filesystem::path& index_path)
-  -> std::unique_lock<std::shared_mutex>
-{
-  return std::unique_lock(IndexFileMutex(index_path));
+  return index_path.parent_path()
+    / std::string(data::loose_cooked::kIndexLockFileName);
 }
 
 auto LooseCookedIndexImpl::LoadFromFile(const std::filesystem::path& index_path)
   -> LooseCookedIndexImpl
-{
-  const auto lock = LockFileShared(index_path);
-  return LoadFromLockedFile(index_path);
-}
-
-auto LooseCookedIndexImpl::LoadFromLockedFile(
-  const std::filesystem::path& index_path) -> LooseCookedIndexImpl
 {
   // The mapping shares deletion, so it never blocks the cooker replacing the
   // published index, and keeps showing the version it mapped.

@@ -46,6 +46,7 @@ target_link_libraries(
     oxygen::data
   PRIVATE
     nlohmann_json_schema_validator
+    oxygen::serio
 )
 include(JsonSchemaHelpers)
 oxygen_embed_json_schemas(

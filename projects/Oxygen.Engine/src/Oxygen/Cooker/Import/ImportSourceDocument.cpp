@@ -4,11 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cerrno>
 #include <cstddef>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <optional>
 #include <ostream>
 #include <span>
@@ -17,11 +14,13 @@
 #include <system_error>
 #include <utility>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/ImportSourceObservation.h>
+#include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/NativeFile.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import {
 
@@ -42,30 +41,31 @@ auto ImportSourceDocument::Load(const std::filesystem::path& path,
     captured_file = &captured->file.value();
   }
   const auto physical_path = captured_file ? captured_file->path : path;
-  auto input = std::ifstream(
-    base::ToNativePath(physical_path), std::ios::binary | std::ios::ate);
-  if (!input) {
-    const auto error = std::error_code(errno, std::generic_category());
+  const auto file = serio::NativeFile::Open(physical_path,
+    serio::OpenSpec {
+      .sharing = serio::Sharing::kReadDelete,
+      .hint = serio::AccessHint::kSequential,
+    });
+  if (!file) {
     errors << "ERROR: failed to open " << kind
-           << " descriptor: " << path.string() << ": " << error.message()
+           << " descriptor: " << path.string() << ": " << file.error().message()
            << '\n';
     return std::nullopt;
   }
-  const auto length = static_cast<std::streamoff>(input.tellg());
-  if (!std::in_range<size_t>(length)
-    || !std::in_range<std::streamsize>(length)) {
+  const auto length = file->Size();
+  if (!length || !std::in_range<size_t>(length->get())) {
     errors << "ERROR: invalid " << kind << " descriptor size: " << path.string()
            << '\n';
     return std::nullopt;
   }
-  if (captured_file && captured_file->size != static_cast<size_t>(length)) {
+  if (captured_file && captured_file->size != length->get()) {
     errors << "ERROR: captured " << kind
            << " descriptor size or digest mismatch: " << path.string() << '\n';
     return std::nullopt;
   }
-  auto text = std::string(static_cast<size_t>(length), '\0');
-  input.seekg(0);
-  if (!input.read(text.data(), static_cast<std::streamsize>(length))) {
+  auto text = std::string(static_cast<size_t>(length->get()), '\0');
+  if (!serio::ReadExactlyAt(*file, serio::ByteOffset { 0 },
+        std::as_writable_bytes(std::span(text)))) {
     errors << "ERROR: failed to read " << kind
            << " descriptor completely: " << path.string() << '\n';
     return std::nullopt;

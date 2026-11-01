@@ -9,7 +9,6 @@
 #include <barrier>
 #include <chrono>
 #include <cstddef>
-#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -34,6 +33,8 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -94,8 +95,9 @@ NOLINT_TEST(ContentReleaseQueueTest, OffThreadDropDefersPayloadAndCacheRelease)
   Cache cache;
   auto queue = std::make_shared<ContentReleaseQueue>();
   auto value = queue->Own(cache, std::make_shared<TrackedValue>(destroyed));
-  std::jthread worker(
-    [owned = std::move(value)]() mutable -> void { owned.reset(); });
+  std::jthread worker {
+    [owned = std::move(value)] mutable -> void { owned.reset(); },
+  };
   worker.join();
   EXPECT_EQ(destroyed.load(), 0U);
   EXPECT_TRUE(queue->HasPending());
@@ -160,8 +162,9 @@ NOLINT_TEST(ContentReleaseQueueTest, LateDropDoesNotRetainOrAccessClosedQueue)
   EXPECT_EQ(queue->Drain(cache, kDrainAll), 0U);
   queue.reset();
   EXPECT_TRUE(observed.expired());
-  std::jthread worker(
-    [owned = std::move(value)]() mutable -> void { owned.reset(); });
+  std::jthread worker {
+    [owned = std::move(value)] mutable -> void { owned.reset(); },
+  };
   worker.join();
   EXPECT_EQ(destroyed.load(), 1U);
 }
@@ -275,11 +278,10 @@ NOLINT_TEST(ContentReleaseQueueTest, CloseRacesWithConcurrentReturns)
         values.push_back(
           queue->Own(cache, std::make_shared<TrackedValue>(destroyed)));
       }
-      workers.emplace_back(
-        [&start, owned = std::move(values)]() mutable -> void {
-          start.arrive_and_wait();
-          owned.clear();
-        });
+      workers.emplace_back([&start, owned = std::move(values)] mutable -> void {
+        start.arrive_and_wait();
+        owned.clear();
+      });
     }
     start.arrive_and_wait();
     queue->Close();
@@ -501,7 +503,7 @@ NOLINT_TEST(ContentOwnershipBenchmark, DISABLED_AcquisitionAndReleaseCost)
   using Nanoseconds = std::chrono::duration<double, std::nano>;
   constexpr std::size_t kRecordsPerBatch = 128;
   constexpr std::size_t kBatches = 512;
-  constexpr std::size_t kLargePayloadBytes = 64U * 1024U * 1024U;
+  constexpr std::size_t kLargePayloadBytes = std::size_t { 64 } * 1024U * 1024U;
   constexpr std::size_t kPayloadSamples = 32;
   std::atomic<unsigned int> destroyed { 0 };
   Cache cache;
@@ -535,9 +537,13 @@ NOLINT_TEST(ContentOwnershipBenchmark, DISABLED_AcquisitionAndReleaseCost)
     descriptor.size_bytes
       = static_cast<oxygen::data::pak::core::DataBlobSizeT>(kLargePayloadBytes);
     descriptor.element_stride = 1U;
+    auto payload = oxygen::serio::ByteBuffer::Allocate(
+      oxygen::serio::CountOf(kLargePayloadBytes));
+    ASSERT_TRUE(payload);
+    std::ranges::fill(payload->Bytes(), std::byte { 1 });
     auto owned = queue->Own(cache,
       std::make_shared<oxygen::data::BufferResource>(
-        descriptor, std::vector<uint8_t>(kLargePayloadBytes, 1U)));
+        descriptor, std::move(payload).value()));
     ASSERT_EQ(owned->GetDataSize(), kLargePayloadBytes);
     owned.reset();
     const auto start = Clock::now();

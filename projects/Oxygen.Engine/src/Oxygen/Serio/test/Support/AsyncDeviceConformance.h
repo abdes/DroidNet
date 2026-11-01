@@ -201,9 +201,52 @@ TYPED_TEST_P(AsyncDeviceConformance, RegionBoundsAsyncReads) // NOLINT
   EXPECT_EQ(past->get(), 0U);
 }
 
+//! AsyncReadAll returns every byte of the device, as ReadAll does.
+TYPED_TEST_P(AsyncDeviceConformance, AsyncReadAllReadsTheWholeDevice) // NOLINT
+{
+  const auto bytes = PatternBytes(TestFixture::kSize);
+  const auto device = this->MakeDevice(bytes);
+
+  const auto all = this->Run(AsyncReadAll(device));
+
+  ASSERT_TRUE(all);
+  EXPECT_THAT(all->Bytes(), BytesEqual(bytes));
+}
+
+//! AsyncReadAll of a region reads only the region's range.
+TYPED_TEST_P(
+  AsyncDeviceConformance, AsyncReadAllOfARegionReadsItsRange) // NOLINT
+{
+  using Device = TestFixture::Device;
+  const auto bytes = PatternBytes(TestFixture::kSize);
+  const auto device = this->MakeDevice(bytes);
+  const auto region = Region<Device>::Make(device,
+    ByteRange { .offset = ByteOffset { 100 }, .count = ByteCount { 500 } });
+  ASSERT_TRUE(region);
+
+  const auto all = this->Run(AsyncReadAll(*region));
+
+  ASSERT_TRUE(all);
+  EXPECT_THAT(all->Bytes(), BytesEqual(std::span(bytes).subspan(100, 500)));
+}
+
+//! AsyncReadAll of an empty device is an empty buffer.
+TYPED_TEST_P(
+  AsyncDeviceConformance, AsyncReadAllOfAnEmptyDeviceIsEmpty) // NOLINT
+{
+  const auto device = this->MakeDevice({});
+
+  const auto all = this->Run(AsyncReadAll(device));
+
+  ASSERT_TRUE(all);
+  EXPECT_TRUE(all->Empty());
+}
+
 REGISTER_TYPED_TEST_SUITE_P(AsyncDeviceConformance, AsyncReadMatchesReadAt,
   ZeroLengthAsyncReadSucceeds, AsyncReadExactlyAcrossEndIsEndOfData,
-  ConcurrentAsyncReadsAreIndependent, RegionBoundsAsyncReads);
+  ConcurrentAsyncReadsAreIndependent, RegionBoundsAsyncReads,
+  AsyncReadAllReadsTheWholeDevice, AsyncReadAllOfARegionReadsItsRange,
+  AsyncReadAllOfAnEmptyDeviceIsEmpty);
 
 //! The cases of devices whose writes are awaited: `AsyncDeviceConformance`'s
 //! fixture, for factories whose devices satisfy `AsyncWritableDevice` and

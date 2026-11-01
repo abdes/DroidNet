@@ -10,7 +10,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -40,6 +39,7 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -115,9 +115,12 @@ protected:
       throw std::runtime_error(
         "cannot read script descriptor " + path.string());
     }
-    auto descriptor = ScriptAssetDesc {};
-    std::memcpy(&descriptor, bytes.data(), sizeof(descriptor));
-    return descriptor;
+    const auto descriptor = oxygen::serio::CopyAt<ScriptAssetDesc>(
+      std::as_bytes(std::span { bytes }));
+    if (!descriptor) {
+      throw std::runtime_error("short script descriptor " + path.string());
+    }
+    return *descriptor;
   }
 
   //! Seals a loose-cooked source whose script descriptor stores `stored` as
@@ -261,8 +264,14 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     ASSERT_EQ(table_size, sizeof(ScriptResourceDesc) * 2U);
     auto table_bytes = std::vector<char>(table_size);
     table_in.read(table_bytes.data(), static_cast<std::streamsize>(table_size));
-    auto table_entries = std::vector<ScriptResourceDesc>(2U);
-    std::memcpy(table_entries.data(), table_bytes.data(), table_size);
+    auto table_entries = std::vector<ScriptResourceDesc> {};
+    for (size_t row = 0; row < 2U; ++row) {
+      const auto entry = oxygen::serio::CopyAt<ScriptResourceDesc>(
+        std::as_bytes(std::span { table_bytes }),
+        oxygen::serio::ByteOffset { row * sizeof(ScriptResourceDesc) });
+      ASSERT_HAS_VALUE(entry);
+      table_entries.push_back(*entry);
+    }
 
     const auto index
       = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(staged_root);

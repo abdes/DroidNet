@@ -39,8 +39,11 @@ namespace oxygen::serio {
  - **buffers:** `AllocateBuffer` serves memory the backend reads into best.
 
  No public type names a backend; `Create` picks the platform's (IOCP on
- Windows). The driver outlives the files it opens, and the loop outlives the
- driver.
+ Windows, io_uring on Linux), and `CreateInline` the inline one, for code
+ that has no loop. Only a driver makes a file awaitable: a consumer that
+ awaits reads always holds one, and never wraps a blocking device to make it
+ look awaitable. The driver outlives the files it opens, and the loop
+ outlives the driver.
 
  ```cpp
  asio::io_context loop;
@@ -57,6 +60,18 @@ public:
   //! created.
   OXGN_SERIO_NDAPI static auto Create(asio::io_context& loop) noexcept
     -> Result<IoDriver>;
+
+  //! A driver without a loop, for tools and tests: each awaited operation
+  //! completes on the awaiting thread, which blocks for it.
+  /*!
+   Its files are `AsyncFile`s like any other driver's: they read and write,
+   erase into an `AnyAsyncDevice` and have regions. The awaiter never
+   suspends, so there is nothing to cancel.
+  */
+  OXGN_SERIO_NDAPI static auto CreateInline() noexcept -> Result<IoDriver>;
+
+  //! Whether this driver completes operations on the awaiting thread.
+  OXGN_SERIO_NDAPI auto Inline() const noexcept -> bool;
 
   OXGN_SERIO_API ~IoDriver() noexcept;
 

@@ -27,6 +27,7 @@
 #include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
 #include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::scripting::test {
 
@@ -81,13 +82,15 @@ inline auto CompileSlotBytecode(const std::string_view source,
   const uint64_t content_hash) -> std::shared_ptr<const ScriptBytecodeBlob>
 {
   LuauScriptCompiler compiler;
-  auto compile_result
-    = compiler.Compile(ScriptSourceBlob::FromOwned(ToBytes(source),
-                         data::pak::scripting::ScriptLanguage::kLuau,
-                         data::pak::scripting::ScriptCompression::kNone,
-                         content_hash, ScriptBlobOrigin::kEmbeddedResource,
-                         ScriptBlobCanonicalName { "scene_slot_local_state" }),
-      core::meta::scripting::ScriptCompileMode::kDebug);
+  const auto source_bytes = ToBytes(source);
+  auto compile_result = compiler.Compile(
+    ScriptSourceBlob::FromOwned(
+      serio::ByteBuffer::CopyOf(std::as_bytes(std::span(source_bytes))).value(),
+      data::pak::scripting::ScriptLanguage::kLuau,
+      data::pak::scripting::ScriptCompression::kNone, content_hash,
+      ScriptBlobOrigin::kEmbeddedResource,
+      ScriptBlobCanonicalName { "scene_slot_local_state" }),
+    core::meta::scripting::ScriptCompileMode::kDebug);
   if (!compile_result.success || !compile_result.HasBytecode()) {
     return {};
   }

@@ -43,12 +43,18 @@ class MappedFile {
 public:
   //! Maps the whole file at `path`, read-only.
   /*!
+   `sharing` is what other handles may do while the file is open; by default
+   they read and may replace or delete it. `kReadWriteDelete` maps a file
+   that another handle holds open for writing, such as a resource data file
+   writers append to; the view shows the bytes the file held when it was
+   mapped.
+
    @return The mapped file, or the OS error (`kNotFound`, `kAccessDenied`,
            `kSharingViolation` compare equal to it). An empty file maps to an
            empty view.
   */
-  OXGN_SERIO_NDAPI static auto Open(const std::filesystem::path& path) noexcept
-    -> Result<MappedFile>;
+  OXGN_SERIO_NDAPI static auto Open(const std::filesystem::path& path,
+    Sharing sharing = Sharing::kReadDelete) noexcept -> Result<MappedFile>;
 
   OXGN_SERIO_API ~MappedFile() noexcept;
 

@@ -243,7 +243,8 @@ namespace {
       if (!read_result.has_value()) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "geometry.buffer.sidecar_read_failed",
-          "Failed reading buffer descriptor: " + read_result.error().ToString(),
+          "Failed reading buffer descriptor '" + descriptor_path.string()
+            + "': " + read_result.error().message(),
           object_path);
         co_return std::nullopt;
       }
@@ -251,7 +252,7 @@ namespace {
       auto parsed = internal::ParsedBufferDescriptorSidecar {};
       auto parse_error = std::string {};
       if (!internal::ParseBufferDescriptorSidecar(
-            read_result.value(), parsed, parse_error)) {
+            read_result.value().Bytes(), parsed, parse_error)) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "geometry.buffer.sidecar_invalid", parse_error, object_path);
         co_return std::nullopt;

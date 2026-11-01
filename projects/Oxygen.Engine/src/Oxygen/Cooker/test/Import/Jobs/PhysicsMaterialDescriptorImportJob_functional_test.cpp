@@ -9,8 +9,8 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,6 +26,7 @@
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -40,12 +41,9 @@ namespace {
   auto ReadPhysicsMaterialDesc(const std::vector<std::byte>& bytes)
     -> data::pak::physics::PhysicsMaterialAssetDesc
   {
-    auto desc = data::pak::physics::PhysicsMaterialAssetDesc {};
-    if (bytes.size() < sizeof(desc)) {
-      return desc;
-    }
-    std::memcpy(&desc, bytes.data(), sizeof(desc));
-    return desc;
+    return oxygen::serio::CopyAt<data::pak::physics::PhysicsMaterialAssetDesc>(
+      std::span { bytes })
+      .value_or(data::pak::physics::PhysicsMaterialAssetDesc {});
   }
 
   class PhysicsMaterialDescriptorImportJobTest : public ImportServiceTest { };

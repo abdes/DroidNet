@@ -34,6 +34,7 @@
 #include <Oxygen/Scripting/Attachment/SceneScriptAttachment.h>
 #include <Oxygen/Scripting/IScriptSourceResolver.h>
 #include <Oxygen/Scripting/test/Fakes/FakeScriptCompilationService.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::scripting::test {
@@ -117,7 +118,8 @@ namespace {
         const std::string text = "return 1";
         return {
           .ok = true,
-          .blob = ScriptSourceBlob::FromOwned({ text.begin(), text.end() },
+          .blob = ScriptSourceBlob::FromOwned(
+            serio::ByteBuffer::CopyOf(std::as_bytes(std::span(text))).value(),
             ScriptLanguage::kLuau, {}, 0, ScriptBlobOrigin::kExternalFile,
             ScriptBlobCanonicalName { "source.luau" }),
           .error_message = {},

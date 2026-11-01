@@ -19,6 +19,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
+#include <Oxygen/Serio/Testing/AtomicFiles.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
@@ -111,7 +112,8 @@ NOLINT_TEST_F(ShaderBakeManifestTest, RewritePublishesNewSnapshot)
 
   const auto reloaded = ReadManifestFile(layout.manifest_file);
   EXPECT_EQ(reloaded, second);
-  EXPECT_FALSE(std::filesystem::exists(layout.manifest_file.string() + ".tmp"));
+  EXPECT_FALSE(oxygen::serio::testing::HasTemporarySibling(
+    layout.manifest_file.parent_path()));
 }
 
 NOLINT_TEST_F(ShaderBakeManifestTest, RejectsCorruptManifestJson)
@@ -120,7 +122,8 @@ NOLINT_TEST_F(ShaderBakeManifestTest, RejectsCorruptManifestJson)
   EnsureBuildRootLayout(layout);
 
   {
-    std::ofstream out(layout.manifest_file, std::ios::binary | std::ios::trunc);
+    // Opening for output truncates.
+    std::ofstream out(layout.manifest_file, std::ios::binary);
     out << "{ not-json";
   }
 

@@ -23,9 +23,9 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -35,6 +35,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
@@ -220,12 +221,14 @@ namespace {
     -> co::Co<bool>
   {
     auto* const reader = session.CookedReader().get();
-    auto* const writer = session.FileWriter().get();
+    auto* const storage = session.Storage().get();
+    auto* const driver = session.Driver().get();
     auto* const registry = index_registry.get();
-    if (reader == nullptr || writer == nullptr || registry == nullptr) {
+    if (reader == nullptr || storage == nullptr || driver == nullptr
+      || registry == nullptr) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.io_unavailable",
-        "Script embedded emission requires file reader/writer/index registry");
+        "Script embedded emission requires file reader/storage/index registry");
       co_return false;
     }
     auto* const table_registry = session.TableRegistry().get();
@@ -248,16 +251,16 @@ namespace {
     if (!table_exists_result.has_value()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.scripts_table_exists_check_failed",
-        "Failed checking scripts.table existence: "
-          + table_exists_result.error().ToString());
+        "Failed checking scripts.table existence '" + table_path.string()
+          + "': " + table_exists_result.error().message());
       co_return false;
     }
     const auto data_exists_result = co_await reader->Exists(data_path);
     if (!data_exists_result.has_value()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.scripts_data_exists_check_failed",
-        "Failed checking scripts.data existence: "
-          + data_exists_result.error().ToString());
+        "Failed checking scripts.data existence '" + data_path.string()
+          + "': " + data_exists_result.error().message());
       co_return false;
     }
 
@@ -278,20 +281,20 @@ namespace {
       if (!table_read.has_value()) {
         script_import::AddDiagnostic(session, request, ImportSeverity::kError,
           "script.asset.scripts_table_read_failed",
-          "Failed to read existing scripts.table: "
-            + table_read.error().ToString());
+          "Failed to read existing scripts.table '" + table_path.string()
+            + "': " + table_read.error().message());
         co_return false;
       }
       const auto data_read = co_await reader->ReadFile(data_path);
       if (!data_read.has_value()) {
         script_import::AddDiagnostic(session, request, ImportSeverity::kError,
           "script.asset.scripts_data_read_failed",
-          "Failed to read existing scripts.data: "
-            + data_read.error().ToString());
+          "Failed to read existing scripts.data '" + data_path.string()
+            + "': " + data_read.error().message());
         co_return false;
       }
 
-      const auto& table_bytes = table_read.value();
+      const auto table_bytes = table_read.value().Bytes();
       if ((table_bytes.size() % sizeof(ScriptResourceDesc)) != 0U) {
         script_import::AddDiagnostic(session, request, ImportSeverity::kError,
           "script.asset.scripts_table_size_invalid",
@@ -306,7 +309,10 @@ namespace {
         std::memcpy(
           table_entries.data(), table_bytes.data(), table_bytes.size());
       }
-      data_blob = data_read.value();
+      // The pipeline appends to the existing blob and republishes it whole, so
+      // it owns a growable vector.
+      const auto existing = data_read.value().Bytes();
+      data_blob = std::vector<std::byte>(existing.begin(), existing.end());
     } else {
       table_entries.push_back(ScriptResourceDesc {});
     }
@@ -351,23 +357,23 @@ namespace {
 
     data_blob.insert(data_blob.end(), source_bytes.begin(), source_bytes.end());
 
-    const auto table_write = co_await writer->Write(table_path,
-      std::as_bytes(std::span(table_entries)),
-      WriteOptions { .create_directories = true, .overwrite = true });
+    const auto table_write = co_await storage->PublishAsync(
+      *driver, table_path, std::as_bytes(std::span(table_entries)));
     if (!table_write.has_value()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.scripts_table_write_failed",
-        "Failed to write scripts.table: " + table_write.error().ToString());
+        "Failed to write scripts.table '" + table_path.string()
+          + "': " + table_write.error().message());
       co_return false;
     }
 
-    const auto data_write
-      = co_await writer->Write(data_path, std::span<const std::byte>(data_blob),
-        WriteOptions { .create_directories = true, .overwrite = true });
+    const auto data_write = co_await storage->PublishAsync(
+      *driver, data_path, std::span<const std::byte>(data_blob));
     if (!data_write.has_value()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.scripts_data_write_failed",
-        "Failed to write scripts.data: " + data_write.error().ToString());
+        "Failed to write scripts.data '" + data_path.string()
+          + "': " + data_write.error().message());
       co_return false;
     }
 
@@ -673,14 +679,14 @@ auto ScriptAssetImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   auto descriptor_context = ScriptDescriptorContext {};
   if (!InitScriptDescriptorContext(*session, req, descriptor_context)
     || !AnalyzeDeclarations(
-      *session, req, item.source_bytes, descriptor_context)) {
+      *session, req, item.source_bytes.Bytes(), descriptor_context)) {
     co_return false;
   }
 
   auto bytecode_bytes = std::optional<std::vector<std::byte>> {};
   if (req.options.scripting.compile_scripts) {
     bytecode_bytes = CompileSourceToBytecode(
-      *session, req, item.source_bytes, item.script_compile_callback);
+      *session, req, item.source_bytes.Bytes(), item.script_compile_callback);
     if (!bytecode_bytes.has_value()) {
       co_return false;
     }
@@ -690,9 +696,9 @@ auto ScriptAssetImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   // Compiled bytecode is embedded either way, so external scripts run from
   // the source when a source root has it and from the bytecode otherwise.
   if (req.options.scripting.script_storage == ScriptStorageMode::kEmbedded) {
-    const auto appended
-      = co_await AppendEmbeddedScriptResource(*session, req, item.source_bytes,
-        item.index_registry, descriptor_context, EmbeddedResourceKind::kSource);
+    const auto appended = co_await AppendEmbeddedScriptResource(*session, req,
+      item.source_bytes.Bytes(), item.index_registry, descriptor_context,
+      EmbeddedResourceKind::kSource);
     if (!appended) {
       co_return false;
     }

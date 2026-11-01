@@ -40,6 +40,7 @@
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
@@ -49,6 +50,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -388,20 +390,26 @@ namespace {
     const auto unrelated_key
       = data::AssetKey::FromVirtualPath("/Other/material.omat");
     const auto old_source = WriteGeneration(old_root,
-      { .material = material_key,
+      {
+        .material = material_key,
         .emission = 1.0F,
         .payload = 1U,
-        .seed = kFirstSeed });
+        .seed = kFirstSeed,
+      });
     const auto new_source = WriteGeneration(new_root,
-      { .material = material_key,
+      {
+        .material = material_key,
         .emission = 2.0F,
         .payload = 2U,
-        .seed = kSecondSeed });
+        .seed = kSecondSeed,
+      });
     static_cast<void>(WriteGeneration(unrelated_root,
-      { .material = unrelated_key,
+      {
+        .material = unrelated_key,
         .emission = 3.0F,
         .payload = 3U,
-        .seed = kThirdSeed }));
+        .seed = kThirdSeed,
+      }));
     co::ThreadPool pool(*loop, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr { &pool };
@@ -660,15 +668,19 @@ namespace {
     const auto owner_source = WriteGeneration(
       owner_root, { .scene_material = material_key, .seed = kThirdSeed });
     const auto first_source = WriteGeneration(first_root,
-      { .material = material_key,
+      {
+        .material = material_key,
         .emission = 1.0F,
         .payload = 1U,
-        .seed = kFirstSeed });
+        .seed = kFirstSeed,
+      });
     const auto second_source = WriteGeneration(second_root,
-      { .material = material_key,
+      {
+        .material = material_key,
         .emission = 2.0F,
         .payload = 2U,
-        .seed = kSecondSeed });
+        .seed = kSecondSeed,
+      });
     co::ThreadPool pool(*loop, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr { &pool };
@@ -818,15 +830,19 @@ namespace {
     const auto new_root = root / "new";
     const auto material_key = MaterialKey();
     const auto old_source = WriteGeneration(old_root,
-      { .material = material_key,
+      {
+        .material = material_key,
         .emission = 1.0F,
         .payload = 1U,
-        .seed = kFirstSeed });
+        .seed = kFirstSeed,
+      });
     const auto new_source = WriteGeneration(new_root,
-      { .material = material_key,
+      {
+        .material = material_key,
         .emission = 2.0F,
         .payload = 2U,
-        .seed = kSecondSeed });
+        .seed = kSecondSeed,
+      });
     co::ThreadPool pool(*loop, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr { &pool };
@@ -1215,6 +1231,46 @@ namespace {
     NOLINT_EXPECT_THROW(static_cast<void>(co::Run(
                           loop, without_engine.PrepareMountsAsync(mounts))),
       DependencyRequirementError);
+  }
+
+  //! A verified mount set checks each pak's CRC32 while it opens it: an intact
+  //! pak mounts, and one whose bytes changed after the cook is refused before
+  //! anything is mounted.
+  NOLINT_TEST_F(AssetLoaderBasicTest, VerifiedMountSetChecksEachPakCrc)
+  {
+    // Arrange
+    const auto good_pak = TempDir() / "good.pak";
+    cooker::testing::Materialize(EnginePak().Encode(), good_pak);
+    const auto corrupt_pak = TempDir() / "corrupt.pak";
+    auto corrupt_bytes = EnginePak().Encode();
+    cooker::testing::CookedBytes::CorruptCrc(corrupt_bytes);
+    cooker::testing::Materialize(corrupt_bytes, corrupt_pak);
+    TestEventLoop loop;
+    co::ThreadPool pool(loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    config.verify_content_hashes = true;
+    AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
+
+    // Act
+    auto prepared = co::Run(loop,
+      loader.PrepareMountsAsync(
+        { { .kind = ContentMount::Kind::kPakFile, .path = good_pak } }));
+    auto failure = std::optional<data::CookedOpenFailure> {};
+    try {
+      static_cast<void>(co::Run(loop,
+        loader.PrepareMountsAsync(
+          { { .kind = ContentMount::Kind::kPakFile, .path = corrupt_pak } })));
+    } catch (const data::CookedOpenError& error) {
+      failure = error.Failure();
+    }
+
+    // Assert
+    auto retirement = loader.CommitPreparedMounts(std::move(prepared));
+    retirement.Finish();
+    EXPECT_EQ(loader.EnumerateMountedSources().size(), 1U);
+    ASSERT_HAS_VALUE(failure);
+    EXPECT_EQ(*failure, data::CookedOpenFailure::kCorrupt);
   }
 
   //! A pak that requires an engine asset mounts above other layers that sit on

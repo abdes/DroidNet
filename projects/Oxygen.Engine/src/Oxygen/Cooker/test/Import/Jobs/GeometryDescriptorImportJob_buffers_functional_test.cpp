@@ -29,6 +29,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -469,8 +470,12 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    }));
   ASSERT_HAS_VALUE(report);
   ASSERT_TRUE(report->success)
     << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
@@ -505,8 +510,11 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
       + sizeof(data::pak::geometry::MeshViewDesc));
 
   auto offset = sizeof(data::pak::geometry::GeometryAssetDesc);
-  const auto mesh_desc
-    = ReadStructAt<data::pak::geometry::MeshDesc>(descriptor_bytes, offset);
+  const auto mesh_desc_read
+    = oxygen::serio::CopyAt<data::pak::geometry::MeshDesc>(
+      std::span { descriptor_bytes }, oxygen::serio::ByteOffset { offset });
+  ASSERT_HAS_VALUE(mesh_desc_read);
+  const auto& mesh_desc = *mesh_desc_read;
   EXPECT_EQ(
     mesh_desc.mesh_type, static_cast<uint8_t>(data::MeshType::kStandard));
   EXPECT_NE(mesh_desc.info.standard.vertex_buffer, data::kNoResourceReference);
@@ -515,8 +523,11 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   EXPECT_EQ(mesh_desc.mesh_view_count, 1U);
 
   offset += sizeof(data::pak::geometry::MeshDesc);
-  const auto submesh_desc
-    = ReadStructAt<data::pak::geometry::SubMeshDesc>(descriptor_bytes, offset);
+  const auto submesh_desc_read
+    = oxygen::serio::CopyAt<data::pak::geometry::SubMeshDesc>(
+      std::span { descriptor_bytes }, oxygen::serio::ByteOffset { offset });
+  ASSERT_HAS_VALUE(submesh_desc_read);
+  const auto& submesh_desc = *submesh_desc_read;
   EXPECT_EQ(submesh_desc.material_asset_key,
     oxygen::data::AssetKey::FromVirtualPath("/.cooked/Materials/default.omat"));
   EXPECT_TRUE(CanParseGeometryDescriptor(descriptor_bytes));
@@ -542,7 +553,11 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, ResolvesLocalBufferSidecars)
   ASSERT_TRUE(buffer_report.success);
 
   const auto geometry_report = SubmitAndWait(service,
-    MakeGeometryRequest(geometry_path, cooked_root, geometry_descriptor));
+    MakeGeometryRequest({
+      .source_path = geometry_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = geometry_descriptor,
+    }));
   ASSERT_HAS_VALUE(geometry_report);
   ASSERT_TRUE(geometry_report->success)
     << oxygen::cooker::test::DiagnosticSummary(geometry_report->diagnostics);
@@ -597,8 +612,12 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   // Both roots have populated buffer tables, but only the foreign root owns
   // the requested sidecars. Its numeric indices cannot identify local bytes.
   const auto rejected = SubmitAndWait(service,
-    MakeGeometryRequest(
-      geometry_path, other_root, geometry_descriptor, { cooked_root }));
+    MakeGeometryRequest({
+      .source_path = geometry_path,
+      .cooked_root = other_root,
+      .descriptor_doc = geometry_descriptor,
+      .cooked_context_roots = { cooked_root },
+    }));
   ASSERT_HAS_VALUE(rejected);
   EXPECT_FALSE(rejected->success);
   EXPECT_EQ(rejected->geometry_written, 0U);
@@ -701,8 +720,12 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   ASSERT_TRUE(buffer_report->success);
 
   const auto geometry_report = SubmitAndWait(service,
-    MakeGeometryRequest(geometry_path, cooked_root, geometry_descriptor,
-      { context_cooked_root }));
+    MakeGeometryRequest({
+      .source_path = geometry_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = geometry_descriptor,
+      .cooked_context_roots = { context_cooked_root },
+    }));
   ASSERT_HAS_VALUE(geometry_report);
   EXPECT_FALSE(geometry_report->success);
   EXPECT_EQ(geometry_report->geometry_written, 0U);
@@ -813,8 +836,12 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   ASSERT_TRUE(context_report->success);
 
   const auto geometry_report = SubmitAndWait(service,
-    MakeGeometryRequest(geometry_path, cooked_root, geometry_descriptor,
-      { context_cooked_root }));
+    MakeGeometryRequest({
+      .source_path = geometry_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = geometry_descriptor,
+      .cooked_context_roots = { context_cooked_root },
+    }));
   ASSERT_HAS_VALUE(geometry_report);
   EXPECT_FALSE(geometry_report->success);
   EXPECT_TRUE(HasDiagnosticCode(
@@ -846,8 +873,12 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    }));
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
   EXPECT_TRUE(
@@ -925,8 +956,12 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    }));
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
   EXPECT_TRUE(
@@ -1063,13 +1098,21 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report_a = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_a_path, cooked_root, descriptor_a));
+  const auto report_a = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_a_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_a,
+    }));
   ASSERT_HAS_VALUE(report_a);
   ASSERT_TRUE(report_a->success);
 
-  const auto report_b = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_b_path, cooked_root, descriptor_b));
+  const auto report_b = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_b_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_b,
+    }));
   ASSERT_HAS_VALUE(report_b);
   EXPECT_FALSE(report_b->success);
   EXPECT_TRUE(HasDiagnosticCode(
@@ -1157,8 +1200,12 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    }));
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
   EXPECT_TRUE(HasDiagnosticCode(

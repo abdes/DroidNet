@@ -42,6 +42,14 @@ public:
     FileLockMode mode, FileLockOpenMode open_mode = FileLockOpenMode::kExisting)
     -> Result<FileLock>;
 
+  //! Waits until the lock is granted. Each acquisition opens its own handle,
+  //! so threads of one process exclude each other as processes do. A
+  //! temporary lock file cannot be waited for (`invalid_argument`): its
+  //! holder removes it.
+  OXGN_SERIO_NDAPI static auto Acquire(const std::filesystem::path& path,
+    FileLockMode mode, FileLockOpenMode open_mode = FileLockOpenMode::kExisting)
+    -> Result<FileLock>;
+
   [[nodiscard]] auto IsLocked() const noexcept -> bool
   {
     return impl_ != nullptr;
@@ -49,6 +57,13 @@ public:
 
 private:
   struct Impl;
+
+  //! Whether an acquisition fails on contention or waits it out.
+  enum class Contention : uint8_t { kFail, kWait };
+
+  static auto Lock(const std::filesystem::path& path, FileLockMode mode,
+    FileLockOpenMode open_mode, Contention contention) -> Result<FileLock>;
+
   std::unique_ptr<Impl> impl_;
 };
 

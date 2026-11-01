@@ -22,7 +22,6 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
@@ -33,6 +32,8 @@
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Error.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -56,22 +57,16 @@ namespace {
     co::Event operation_started;
 
     auto ReadFile(const std::filesystem::path& path, const ReadOptions options)
-      -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>> override
+      -> co::Co<Result<serio::ByteBuffer>> override
     {
       last_read_path = path;
       ++content_reads;
       co_await WaitIfBlocked();
       if (denied || content_reads == deny_read_number) {
-        co_return Err(FileErrorInfo {
-          .code = FileError::kAccessDenied,
-          .path = path,
-          .system_error = std::make_error_code(std::errc::permission_denied),
-          .message = "Read denied",
-        });
+        co_return Err(std::errc::permission_denied);
       }
       if (!present) {
-        co_return Err(MakeFileError(
-          path, std::make_error_code(std::errc::no_such_file_or_directory)));
+        co_return Err(std::errc::no_such_file_or_directory);
       }
       const auto bytes = std::as_bytes(std::span(content));
       const auto offset = std::min<std::size_t>(options.offset, bytes.size());
@@ -79,36 +74,33 @@ namespace {
         ? bytes.size() - offset
         : std::min<std::size_t>(options.max_bytes, bytes.size() - offset);
       const auto selected = bytes.subspan(offset, count);
-      co_return Ok(std::vector<std::byte>(selected.begin(), selected.end()));
+      co_return serio::ByteBuffer::CopyOf(selected);
     }
 
     auto GetFileInfo(const std::filesystem::path& path)
-      -> co::Co<Result<FileInfo, FileErrorInfo>> override
+      -> co::Co<Result<FileInfo>> override
     {
       last_info_path = path;
       ++metadata_reads;
       co_await WaitIfBlocked();
       if (denied || metadata_denied) {
-        co_return Err(
-          MakeFileError(path, FileError::kAccessDenied, "Metadata denied"));
+        co_return Err(std::errc::permission_denied);
       }
       if (!present) {
-        co_return Err(MakeFileError(
-          path, std::make_error_code(std::errc::no_such_file_or_directory)));
+        co_return Err(std::errc::no_such_file_or_directory);
       }
       auto info = metadata;
       info.size = content.size();
       co_return Ok(info);
     }
 
-    auto Exists(const std::filesystem::path& path)
-      -> co::Co<Result<bool, FileErrorInfo>> override
+    auto Exists(const std::filesystem::path& /*path*/)
+      -> co::Co<Result<bool>> override
     {
       ++presence_reads;
       co_await WaitIfBlocked();
       if (denied) {
-        co_return Err(
-          MakeFileError(path, FileError::kAccessDenied, "Presence denied"));
+        co_return Err(std::errc::permission_denied);
       }
       co_return Ok(present);
     }
@@ -126,7 +118,7 @@ namespace {
 
   class ImportSourceSnapshotTest : public ::testing::Test {
   protected:
-    ImportEventLoop loop_ {};
+    ImportEventLoop loop_;
     co::ThreadPool pool_ { loop_, 1U };
     MutableSourceReader reader_ {};
     detail::ImportSourceSnapshot snapshot_ { reader_, pool_ };
@@ -193,8 +185,6 @@ namespace {
         ReadOptions {
           .offset = 1U,
           .max_bytes = 3U,
-          .size_hint = 0U,
-          .alignment = 0U,
         });
       EXPECT_TRUE(bytes);
       reader_.content.at(0) = 'z';
@@ -213,8 +203,6 @@ namespace {
       ReadOptions {
         .offset = 1U,
         .max_bytes = 3U,
-        .size_hint = 0U,
-        .alignment = 0U,
       });
     reader_.content.at(2) = 'z';
     EXPECT_THROW(co::Run(loop_, snapshot_.Verify()), std::runtime_error);
@@ -252,9 +240,8 @@ namespace {
         ADD_FAILURE() << "A failed source read cannot supply bytes";
         co_return;
       }
-      EXPECT_EQ(result.error().code, FileError::kAccessDenied);
-      EXPECT_EQ(result.error().system_error, std::errc::permission_denied);
-      EXPECT_EQ(result.error().message, "Read denied");
+      EXPECT_EQ(result.error(), serio::Error::kAccessDenied);
+      EXPECT_EQ(result.error(), std::errc::permission_denied);
     });
   }
   NOLINT_TEST_F(ImportSourceSnapshotTest, EmptyPathsPreserveInvalidPathErrors)
@@ -268,9 +255,9 @@ namespace {
         ADD_FAILURE() << "Empty paths cannot supply source observations";
         co_return;
       }
-      EXPECT_EQ(bytes.error().code, FileError::kInvalidPath);
-      EXPECT_EQ(info.error().code, FileError::kInvalidPath);
-      EXPECT_EQ(exists.error().code, FileError::kInvalidPath);
+      EXPECT_EQ(bytes.error(), std::errc::invalid_argument);
+      EXPECT_EQ(info.error(), std::errc::invalid_argument);
+      EXPECT_EQ(exists.error(), std::errc::invalid_argument);
       EXPECT_EQ(reader_.content_reads, 0U);
       EXPECT_EQ(reader_.metadata_reads, 0U);
       EXPECT_EQ(reader_.presence_reads, 0U);
@@ -295,7 +282,7 @@ namespace {
       reader_.present = false;
       const auto read = co_await snapshot_.ReadFile(source_);
       EXPECT_FALSE(read);
-      EXPECT_EQ(read.error().code, FileError::kNotFound);
+      EXPECT_EQ(read.error(), serio::Error::kNotFound);
       reader_.present = true;
       EXPECT_THROW(co_await snapshot_.Verify(), std::runtime_error);
     });
@@ -307,7 +294,7 @@ namespace {
       reader_.present = false;
       const auto info = co_await snapshot_.GetFileInfo(source_);
       EXPECT_FALSE(info);
-      EXPECT_EQ(info.error().code, FileError::kNotFound);
+      EXPECT_EQ(info.error(), serio::Error::kNotFound);
       reader_.present = true;
       EXPECT_THROW(co_await snapshot_.Verify(), std::runtime_error);
     });
@@ -412,9 +399,8 @@ namespace {
       reader_.present = false;
       const auto result = co_await snapshot_.ReadFile(source_);
       EXPECT_FALSE(result);
-      EXPECT_EQ(result.error().code, FileError::kNotFound);
-      EXPECT_EQ(
-        result.error().system_error, std::errc::no_such_file_or_directory);
+      EXPECT_EQ(result.error(), serio::Error::kNotFound);
+      EXPECT_EQ(result.error(), std::errc::no_such_file_or_directory);
       reader_.present = true;
       EXPECT_THROW(co_await snapshot_.Verify(), std::runtime_error);
     });
@@ -498,8 +484,8 @@ namespace {
       const auto info = co_await snapshot_.GetFileInfo(source_);
       EXPECT_FALSE(exists);
       EXPECT_FALSE(info);
-      EXPECT_EQ(exists.error().code, FileError::kAccessDenied);
-      EXPECT_EQ(info.error().code, FileError::kAccessDenied);
+      EXPECT_EQ(exists.error(), serio::Error::kAccessDenied);
+      EXPECT_EQ(info.error(), serio::Error::kAccessDenied);
     });
   }
 
@@ -515,7 +501,8 @@ namespace {
           << "A failed verification probe cannot permit publication";
       } catch (const std::runtime_error& error) {
         EXPECT_THAT(std::string_view(error.what()),
-          ::testing::HasSubstr("Presence denied"));
+          ::testing::HasSubstr(
+            std::make_error_code(std::errc::permission_denied).message()));
       }
     });
   }
@@ -527,8 +514,6 @@ namespace {
         ReadOptions {
           .offset = 1,
           .max_bytes = 3,
-          .size_hint = 0,
-          .alignment = 0,
         }));
       EXPECT_THROW(
         static_cast<void>(snapshot_.Observations()), std::logic_error);
@@ -648,7 +633,7 @@ namespace {
       EXPECT_FALSE(exists.value());
       const auto bytes = co_await mapped.ReadFile(source_);
       EXPECT_FALSE(bytes.has_value());
-      EXPECT_EQ(bytes.error().code, FileError::kNotFound);
+      EXPECT_EQ(bytes.error(), serio::Error::kNotFound);
       co_await mapped.Verify();
     });
     EXPECT_EQ(reader_.content_reads, 0U);
@@ -666,7 +651,7 @@ namespace {
     co::Run(loop_, [&] -> co::Co<> {
       const auto bytes = co_await mapped.ReadFile("not-captured.bin");
       EXPECT_FALSE(bytes.has_value());
-      EXPECT_EQ(bytes.error().code, FileError::kNotFound);
+      EXPECT_EQ(bytes.error(), serio::Error::kNotFound);
       const auto present = co_await mapped.Exists("not-captured.bin");
       EXPECT_TRUE(present.has_value());
       EXPECT_FALSE(present.has_value() && present.value());
@@ -715,8 +700,6 @@ namespace {
         ReadOptions {
           .offset = 1U,
           .max_bytes = 2U,
-          .size_hint = 0U,
-          .alignment = 0U,
         }));
       EXPECT_THROW(co_await mapped.Verify(), std::runtime_error);
     });
@@ -734,8 +717,6 @@ namespace {
         ReadOptions {
           .offset = 0U,
           .max_bytes = input.file.value().size,
-          .size_hint = 0U,
-          .alignment = 0U,
         }));
       reader_.content += "tail";
       EXPECT_THROW(co_await mapped.Verify(), std::runtime_error);
@@ -802,7 +783,7 @@ namespace {
         ADD_FAILURE() << "A captured directory must not provide file bytes";
         co_return;
       }
-      EXPECT_EQ(read.error().code, FileError::kIsDirectory);
+      EXPECT_EQ(read.error(), serio::Error::kIsDirectory);
       co_await mapped.Verify();
     });
     EXPECT_EQ(reader_.metadata_reads, 0U);
@@ -820,7 +801,9 @@ namespace {
         co_await mapped.Verify();
         ADD_FAILURE() << "Expected metadata verification failure";
       } catch (const std::runtime_error& error) {
-        EXPECT_THAT(error.what(), ::testing::HasSubstr("Metadata denied"));
+        EXPECT_THAT(error.what(),
+          ::testing::HasSubstr(
+            std::make_error_code(std::errc::permission_denied).message()));
       }
     });
   }
@@ -831,9 +814,8 @@ namespace {
     auto mapped
       = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
     co::Run(loop_, [&] -> co::Co<> {
-      EXPECT_TRUE(co_await mapped.ReadFile(source_,
-        ReadOptions {
-          .offset = 1U, .max_bytes = 2U, .size_hint = 0U, .alignment = 0U }));
+      EXPECT_TRUE(co_await mapped.ReadFile(
+        source_, ReadOptions { .offset = 1U, .max_bytes = 2U }));
       // The range is rechecked first; the third read qualifies the whole
       // capture.
       reader_.deny_read_number = 3U;
@@ -841,7 +823,9 @@ namespace {
         co_await mapped.Verify();
         ADD_FAILURE() << "Expected captured-file verification failure";
       } catch (const std::runtime_error& error) {
-        EXPECT_THAT(error.what(), ::testing::HasSubstr("Read denied"));
+        EXPECT_THAT(error.what(),
+          ::testing::HasSubstr(
+            std::make_error_code(std::errc::permission_denied).message()));
       }
       EXPECT_EQ(reader_.content_reads, 3U);
     });

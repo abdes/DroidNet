@@ -11,8 +11,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -31,6 +29,8 @@
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Types.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_THREAD_LOCALS
@@ -39,8 +39,10 @@
 #include <tinyexr.h>
 #include <webp/decode.h>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Cooker/Import/Internal/stb/stb_image.h>
+#include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/NativeFile.h>
 
 namespace oxygen::content::import {
 
@@ -63,13 +65,6 @@ namespace {
   {
     // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
     return reinterpret_cast<unsigned char*>(bytes.data());
-  }
-
-  //! The bytes as the `char` buffer `std::istream::read` writes.
-  [[nodiscard]] auto AsChars(std::span<std::byte> bytes) noexcept -> char*
-  {
-    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
-    return reinterpret_cast<char*>(bytes.data());
   }
 
   //! Whether the bytes start with the ASCII text.
@@ -879,30 +874,6 @@ namespace {
 
   //=== File Reading Utility ===----------------------------------------------//
 
-  [[nodiscard]] auto ReadFileBytes(const std::filesystem::path& path)
-    -> Result<std::vector<std::byte>, TextureImportError>
-  {
-    std::ifstream file(base::ToNativePath(path), std::ios::binary);
-    if (!file) {
-      return Err(TextureImportError::kFileNotFound);
-    }
-
-    file.seekg(0, std::ios::end);
-    const auto size = file.tellg();
-    if (size <= 0) {
-      return Err(TextureImportError::kFileReadFailed);
-    }
-
-    auto bytes = std::vector<std::byte>(static_cast<std::size_t>(size));
-    file.seekg(0, std::ios::beg);
-    file.read(AsChars(bytes), static_cast<std::streamsize>(bytes.size()));
-    if (!file) {
-      return Err(TextureImportError::kFileReadFailed);
-    }
-
-    return Ok(std::move(bytes));
-  }
-
   [[nodiscard]] auto FitsStb(std::span<const std::byte> bytes) noexcept -> bool
   {
     return bytes.size()
@@ -933,10 +904,30 @@ auto DecodeImageRgba8FromMemory(std::span<const std::byte> bytes)
   return DecodeWithStb(bytes);
 }
 
+auto ReadImageFile(const std::filesystem::path& path)
+  -> Result<serio::ByteBuffer, TextureImportError>
+{
+  const auto file = serio::NativeFile::Open(path,
+    serio::OpenSpec {
+      .sharing = serio::Sharing::kReadDelete,
+      .hint = serio::AccessHint::kSequential,
+    });
+  if (!file) {
+    return Err(file.error() == serio::Error::kNotFound
+        ? TextureImportError::kFileNotFound
+        : TextureImportError::kFileReadFailed);
+  }
+  auto bytes = serio::ReadAll(*file);
+  if (!bytes || bytes->Empty()) {
+    return Err(TextureImportError::kFileReadFailed);
+  }
+  return Ok(std::move(bytes).value());
+}
+
 auto DecodeImageRgba8FromFile(const std::filesystem::path& path)
   -> ImageDecodeResult
 {
-  auto bytes = ReadFileBytes(path);
+  auto bytes = ReadImageFile(path);
   if (!bytes) {
     return ImageDecodeResult {
       .image = std::nullopt,
@@ -945,7 +936,7 @@ auto DecodeImageRgba8FromFile(const std::filesystem::path& path)
         : "failed to read file",
     };
   }
-  return DecodeImageRgba8FromMemory(bytes.value());
+  return DecodeImageRgba8FromMemory(bytes->Bytes());
 }
 
 //=== Format Detection ===----------------------------------------------------//
@@ -1035,7 +1026,7 @@ auto DecodeToScratchImage(const std::filesystem::path& path,
   const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
 {
   // Read file
-  auto bytes_result = ReadFileBytes(path);
+  auto bytes_result = ReadImageFile(path);
   if (!bytes_result) {
     return Err(bytes_result.error());
   }
@@ -1046,7 +1037,7 @@ auto DecodeToScratchImage(const std::filesystem::path& path,
     opts_with_ext.extension_hint = path.extension().string();
   }
 
-  return DecodeToScratchImage(bytes_result.value(), opts_with_ext);
+  return DecodeToScratchImage(bytes_result->Bytes(), opts_with_ext);
 }
 
 } // namespace oxygen::content::import

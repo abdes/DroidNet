@@ -18,18 +18,20 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Cooker/Import/FileError.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/IoDriver.h>
 
 namespace oxygen::content::import {
-
-class IAsyncFileWriter;
 
 //! Record of an emitted asset descriptor.
 /*!
@@ -38,7 +40,7 @@ class IAsyncFileWriter;
 */
 struct EmittedAssetRecord {
   //! Stable identity of the asset.
-  data::AssetKey key {};
+  data::AssetKey key;
 
   //! Asset type for loader dispatch.
   data::AssetType asset_type = data::AssetType::kUnknown;
@@ -68,8 +70,11 @@ struct EmittedAssetRecord {
  1. **Per-Asset Files**: Each `Emit()` writes a separate descriptor file
     (e.g., `Materials/Wood.omat`).
 
- 2. **Async I/O**: Writes are queued via `IAsyncFileWriter` without blocking
-    the import thread.
+ 2. **Async I/O**: Each descriptor is published through
+    `ImportStorage::PublishAsync` by a task of the import session's nursery,
+    without blocking the import thread. A publication replaces the file
+    atomically, so a cancelled or failed import never leaves a torn
+    descriptor.
 
  3. **No Index Assignment**: Unlike resource emitters, asset descriptors
     don't have numeric indices. Identity is via `AssetKey`.
@@ -80,7 +85,7 @@ struct EmittedAssetRecord {
  ### Usage Pattern
 
  ```cpp
- AssetEmitter emitter(file_writer, cooked_root);
+ AssetEmitter emitter(storage, driver, session_nursery, cooked_root);
 
  // During import
  emitter.Emit(material_key, AssetType::kMaterial,
@@ -97,21 +102,25 @@ struct EmittedAssetRecord {
 
  ### Thread Safety
 
- - `Emit()` must be called from the import thread only.
- - `PendingCount()` and `ErrorCount()` are thread-safe (atomic reads).
+ - `Emit()` must be called from the import thread only, inside the coroutine
+   scope of the nursery the emitter was given.
  - `Finalize()` must be called from the import thread.
 
- @see IAsyncFileWriter, LooseCookedWriter
+ @see ImportStorage, LooseCookedWriter
 */
 class AssetEmitter final {
 public:
   //! Create an asset emitter writing under a cooked root.
   /*!
-   @param file_writer Async file writer for output operations.
+   @param storage     Where descriptors are published.
+   @param driver      The driver of the import loop, which awaits the writes.
+   @param writes      The nursery the writes run in; it outlives the emitter's
+                      writes (the session's job nursery).
    @param cooked_root Root directory for cooked output.
   */
-  OXGN_COOK_API AssetEmitter(
-    IAsyncFileWriter& file_writer, const std::filesystem::path& cooked_root);
+  OXGN_COOK_API AssetEmitter(cooked::ImportStorage& storage,
+    serio::IoDriver& driver, co::Nursery& writes,
+    std::filesystem::path cooked_root);
 
   OXGN_COOK_API ~AssetEmitter();
 
@@ -122,8 +131,10 @@ public:
 
   //! Emit an asset descriptor file.
   /*!
-   Queues an async write for the descriptor file. The file path is
-   determined by `descriptor_relpath` relative to the cooked root.
+   Starts publishing the descriptor file in the nursery. The file path is
+   determined by `descriptor_relpath` relative to the cooked root. A second
+   emission of the same path while its write is in flight is queued: one
+   write per path is in flight, and the latest bytes win.
 
    @param key              Stable identity of the asset.
    @param asset_type       Asset type for loader dispatch.
@@ -140,8 +151,7 @@ public:
 
    ### Error Handling
 
-   I/O errors are tracked via `ErrorCount()`. The caller should check
-   this during finalization.
+   I/O errors are tracked via `ErrorCount()` and returned by `Finalize()`.
 
    @throw std::runtime_error on invalid paths.
   */
@@ -161,9 +171,6 @@ public:
   //! Get the number of assets emitted so far.
   OXGN_COOK_NDAPI auto Count() const noexcept -> size_t;
 
-  //! Get the number of pending async write operations.
-  OXGN_COOK_NDAPI auto PendingCount() const noexcept -> size_t;
-
   //! Get the number of I/O errors encountered.
   OXGN_COOK_NDAPI auto ErrorCount() const noexcept -> size_t;
 
@@ -175,25 +182,24 @@ public:
 
   //! Wait for all pending I/O to complete.
   /*!
-   This method waits for all pending async writes to complete.
+   This method waits for the started writes to complete.
 
-   @return Success or the first I/O failure, including its path and system
-   error.
+   @return Success or the first I/O error.
 
    ### Errors
 
    If any I/O errors occurred during `Emit()` calls, this method returns
-   the first failure. The caller should check `ErrorCount()` for details.
+   the first one; each is logged with its path as it happens.
 
    @note Must be called from the import thread.
   */
-  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
+  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, WriteFailure>>;
 
 private:
   struct DescriptorWriteState {
     std::filesystem::path descriptor_path;
     bool write_in_flight = false;
-    std::shared_ptr<std::vector<std::byte>> queued_bytes;
+    std::optional<std::vector<std::byte>> queued_bytes;
   };
 
   auto RecordAsset(const data::AssetKey& key, data::AssetType asset_type,
@@ -205,10 +211,13 @@ private:
     std::string_view descriptor_relpath, std::span<const std::byte> bytes)
     -> void;
 
-  auto OnWriteComplete(
-    std::string_view descriptor_relpath, const FileErrorInfo& error) -> void;
+  //! Publishes `bytes`, then the bytes queued behind them, one at a time.
+  auto WriteDescriptor(std::string descriptor_relpath,
+    std::vector<std::byte> bytes) -> co::Co<Result<void>>;
 
-  IAsyncFileWriter& file_writer_;
+  observer_ptr<cooked::ImportStorage> storage_;
+  observer_ptr<serio::IoDriver> driver_;
+  WriteGroup writes_;
   std::filesystem::path cooked_root_;
 
   std::atomic<bool> finalize_started_ { false };
@@ -219,9 +228,6 @@ private:
   std::unordered_map<std::string, DescriptorWriteState> write_state_by_relpath_;
 
   std::vector<EmittedAssetRecord> records_;
-  std::atomic<size_t> pending_count_ { 0 };
-  std::atomic<size_t> error_count_ { 0 };
-  std::optional<FileErrorInfo> first_error_ {}; // Import-thread callbacks.
 };
 
 } // namespace oxygen::content::import

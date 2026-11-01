@@ -22,6 +22,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
+#include <Oxygen/Serio/Testing/AtomicFiles.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
@@ -99,8 +100,8 @@ NOLINT_TEST_F(ShaderBakeBuildStateTest, RoundTripsBuildStateSnapshot)
 
   const auto reloaded = ReadBuildStateFile(layout.build_state_file);
   EXPECT_EQ(reloaded, snapshot);
-  EXPECT_FALSE(
-    std::filesystem::exists(layout.build_state_file.string() + ".tmp"));
+  EXPECT_FALSE(oxygen::serio::testing::HasTemporarySibling(
+    layout.build_state_file.parent_path()));
 }
 
 NOLINT_TEST_F(
@@ -142,8 +143,8 @@ NOLINT_TEST_F(
     GetModuleArtifactPath(layout, artifact.request_key), artifact);
 
   {
-    std::ofstream out(
-      layout.build_state_file, std::ios::binary | std::ios::trunc);
+    // Opening for output truncates.
+    std::ofstream out(layout.build_state_file, std::ios::binary);
     out << "{ not-json";
   }
 

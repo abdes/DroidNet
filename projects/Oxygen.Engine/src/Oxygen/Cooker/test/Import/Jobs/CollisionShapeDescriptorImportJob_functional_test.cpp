@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <optional>
 #include <span>
@@ -32,6 +31,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
@@ -84,10 +84,12 @@ namespace {
     if (offset + sizeof(phys::CompoundShapeChildDesc) > bytes.size()) {
       return std::nullopt;
     }
-    auto child = phys::CompoundShapeChildDesc {};
-    const auto child_bytes = std::span(bytes).subspan(offset, sizeof(child));
-    std::memcpy(&child, child_bytes.data(), sizeof(child));
-    return child;
+    const auto child = serio::CopyAt<phys::CompoundShapeChildDesc>(
+      std::span { bytes }, serio::ByteOffset { offset });
+    if (!child) {
+      return std::nullopt;
+    }
+    return *child;
   }
 
   auto AssetTypeForKey(const std::filesystem::path& cooked_root,

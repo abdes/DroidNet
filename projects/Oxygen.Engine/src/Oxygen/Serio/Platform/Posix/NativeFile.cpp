@@ -19,6 +19,7 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/SystemError.h>
+#include <Oxygen/Serio/Detail/BlockingIo.h>
 #include <Oxygen/Serio/NativeFile.h>
 
 namespace oxygen::serio {
@@ -85,6 +86,12 @@ namespace {
         = ::open(native.c_str(), OpenFlags(spec), S_IRUSR | S_IWUSR | S_IRGRP);
       if (descriptor < 0) {
         return ::oxygen::Err(base::LastSystemError());
+      }
+      // A folder opens read-only on POSIX; it is not a file to read.
+      struct stat opened {};
+      if (::fstat(descriptor, &opened) == 0 && S_ISDIR(opened.st_mode)) {
+        static_cast<void>(::close(descriptor));
+        return ::oxygen::Err(std::make_error_code(std::errc::is_a_directory));
       }
       ApplyHint(descriptor, spec);
       return ::oxygen::Ok(static_cast<NativeHandle>(descriptor));
@@ -165,49 +172,65 @@ auto NativeFile::Size() const noexcept -> Result<ByteCount>
   return ::oxygen::Ok(ByteCount { static_cast<uint64_t>(info.st_size) });
 }
 
+namespace detail {
+
+  auto ReadAtHandle(const NativeHandle file, ByteOffset at,
+    std::span<std::byte> out) noexcept -> Result<ByteCount>
+  {
+    auto total = ByteCount { 0 };
+    while (!out.empty()) {
+      const auto read = ::pread(ToDescriptor(file), out.data(), out.size(),
+        static_cast<off_t>(at.get()));
+      if (read < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
+        return ::oxygen::Err(base::LastSystemError());
+      }
+      if (read == 0) {
+        break;
+      }
+      const auto count = ByteCount { static_cast<uint64_t>(read) };
+      total += count;
+      at += count;
+      out = out.subspan(static_cast<size_t>(read));
+    }
+    return ::oxygen::Ok(total);
+  }
+
+  auto WriteAtHandle(const NativeHandle file, ByteOffset at,
+    std::span<const std::byte> in) noexcept -> Result<void>
+  {
+    while (!in.empty()) {
+      const auto written = ::pwrite(
+        ToDescriptor(file), in.data(), in.size(), static_cast<off_t>(at.get()));
+      if (written < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
+        return ::oxygen::Err(base::LastSystemError());
+      }
+      if (written == 0) {
+        return ::oxygen::Err(std::make_error_code(std::errc::io_error));
+      }
+      at += ByteCount { static_cast<uint64_t>(written) };
+      in = in.subspan(static_cast<size_t>(written));
+    }
+    return {};
+  }
+
+} // namespace detail
+
 auto NativeFile::ReadAt(ByteOffset at, std::span<std::byte> out) const noexcept
   -> Result<ByteCount>
 {
-  auto total = ByteCount { 0 };
-  while (!out.empty()) {
-    const auto read = ::pread(ToDescriptor(handle_), out.data(), out.size(),
-      static_cast<off_t>(at.get()));
-    if (read < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      return ::oxygen::Err(base::LastSystemError());
-    }
-    if (read == 0) {
-      break;
-    }
-    const auto count = ByteCount { static_cast<uint64_t>(read) };
-    total += count;
-    at += count;
-    out = out.subspan(static_cast<size_t>(read));
-  }
-  return ::oxygen::Ok(total);
+  return detail::ReadAtHandle(handle_, at, out);
 }
 
 auto NativeFile::WriteAt(ByteOffset at, std::span<const std::byte> in) noexcept
   -> Result<void>
 {
-  while (!in.empty()) {
-    const auto written = ::pwrite(ToDescriptor(handle_), in.data(), in.size(),
-      static_cast<off_t>(at.get()));
-    if (written < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      return ::oxygen::Err(base::LastSystemError());
-    }
-    if (written == 0) {
-      return ::oxygen::Err(std::make_error_code(std::errc::io_error));
-    }
-    at += ByteCount { static_cast<uint64_t>(written) };
-    in = in.subspan(static_cast<size_t>(written));
-  }
-  return {};
+  return detail::WriteAtHandle(handle_, at, in);
 }
 
 auto NativeFile::Reserve(const ByteCount size) noexcept -> Result<void>

@@ -28,7 +28,6 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -54,6 +53,8 @@
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/IoDriver.h>
 
 namespace oxygen::content::import {
 
@@ -198,7 +199,7 @@ namespace {
 
   //! The file system of `registry`, which every session of a service shares.
   auto StorageOf(const observer_ptr<LooseCookedIndexRegistry> registry)
-    -> observer_ptr<cooked::CookerStorage>
+    -> observer_ptr<cooked::ImportStorage>
   {
     CHECK_NOTNULL_F(
       registry, "ImportSession requires a LooseCookedIndexRegistry");
@@ -226,7 +227,7 @@ namespace {
 
 ImportSession::ImportSession(const ImportRequest& request,
   observer_ptr<IAsyncFileReader> file_reader,
-  observer_ptr<IAsyncFileWriter> file_writer,
+  observer_ptr<serio::IoDriver> driver, observer_ptr<co::Nursery> writes,
   observer_ptr<co::ThreadPool> thread_pool,
   observer_ptr<ResourceTableRegistry> table_registry,
   observer_ptr<LooseCookedIndexRegistry> index_registry,
@@ -234,7 +235,8 @@ ImportSession::ImportSession(const ImportRequest& request,
   : request_(request)
   , file_reader_(file_reader)
   , cooked_reader_(cooked_reader ? cooked_reader : file_reader)
-  , file_writer_(file_writer)
+  , driver_(driver)
+  , writes_(writes)
   , thread_pool_(thread_pool)
   , table_registry_(table_registry)
   , index_registry_(index_registry)
@@ -251,8 +253,7 @@ ImportSession::ImportSession(const ImportRequest& request,
     EffectiveContentHashingEnabled(request_.options.with_content_hashing),
     to_string(request_.options.dedup_collision_policy));
 
-  DCHECK_F(file_writer_ != nullptr,
-    "ImportSession requires a valid async file writer");
+  DCHECK_F(driver_ != nullptr, "ImportSession requires an IO driver");
   DCHECK_F(index_registry_ != nullptr,
     "ImportSession requires a LooseCookedIndexRegistry");
   DCHECK_F(table_registry_ != nullptr,
@@ -284,15 +285,6 @@ auto ImportSession::DrainAndRetire() -> co::Co<>
   });
   std::exception_ptr failure;
   try {
-    const auto flushed = co_await co::NonCancellable(file_writer_->Flush());
-    if (!flushed) {
-      throw std::runtime_error(
-        "Import write drain failed: " + flushed.error().message);
-    }
-  } catch (...) {
-    failure = std::current_exception();
-  }
-  try {
     if (index_participation_ && index_participation_->IsActive()) {
       index_registry_->AbortSession(*index_participation_);
     }
@@ -313,6 +305,7 @@ auto ImportSession::DrainAndRetire() -> co::Co<>
   if (failure) {
     std::rethrow_exception(failure);
   }
+  co_return;
 }
 
 auto ImportSession::Request() const noexcept -> const ImportRequest&
@@ -336,10 +329,15 @@ auto ImportSession::FileReader() const noexcept
   return file_reader_;
 }
 
-auto ImportSession::FileWriter() const noexcept
-  -> observer_ptr<IAsyncFileWriter>
+auto ImportSession::Driver() const noexcept -> observer_ptr<serio::IoDriver>
 {
-  return file_writer_;
+  return driver_;
+}
+
+auto ImportSession::Storage() const noexcept
+  -> observer_ptr<cooked::ImportStorage>
+{
+  return storage_;
 }
 
 auto ImportSession::ThreadPool() const noexcept -> observer_ptr<co::ThreadPool>
@@ -362,6 +360,7 @@ auto ImportSession::TableRegistry() const noexcept
 auto ImportSession::TextureEmitter() -> import::TextureEmitter&
 {
   if (!texture_emitter_.has_value()) {
+    CHECK_NOTNULL_F(writes_, "ImportSession needs a nursery to emit");
     DCHECK_F(table_registry_ != nullptr,
       "ImportSession requires a ResourceTableRegistry for texture emission");
     auto& aggregator = table_registry_->TextureAggregator(cooked_root_);
@@ -374,7 +373,7 @@ auto ImportSession::TextureEmitter() -> import::TextureEmitter&
       AddDiagnostic(std::move(diagnostic));
     };
     texture_emitter_.emplace(std::make_unique<import::TextureEmitter>(
-      *file_writer_, aggregator, std::move(config)));
+      *writes_, aggregator, std::move(config)));
   }
   return **texture_emitter_;
 }
@@ -388,6 +387,7 @@ auto ImportSession::TextureEmitter() -> import::TextureEmitter&
 auto ImportSession::BufferEmitter() -> import::BufferEmitter&
 {
   if (!buffer_emitter_.has_value()) {
+    CHECK_NOTNULL_F(writes_, "ImportSession needs a nursery to emit");
     DCHECK_F(table_registry_ != nullptr,
       "ImportSession requires a ResourceTableRegistry for buffer emission");
     auto& aggregator = table_registry_->BufferAggregator(cooked_root_);
@@ -397,7 +397,7 @@ auto ImportSession::BufferEmitter() -> import::BufferEmitter&
       AddDiagnostic(std::move(diagnostic));
     };
     buffer_emitter_.emplace(std::make_unique<import::BufferEmitter>(
-      *file_writer_, aggregator, cooked_root_, std::move(config)));
+      *writes_, aggregator, cooked_root_, std::move(config)));
   }
   return **buffer_emitter_;
 }
@@ -411,6 +411,7 @@ auto ImportSession::BufferEmitter() -> import::BufferEmitter&
 auto ImportSession::PhysicsResourceEmitter() -> import::PhysicsResourceEmitter&
 {
   if (!physics_resource_emitter_.has_value()) {
+    CHECK_NOTNULL_F(writes_, "ImportSession needs a nursery to emit");
     DCHECK_F(table_registry_ != nullptr,
       "ImportSession requires a ResourceTableRegistry for physics resource "
       "emission");
@@ -422,7 +423,7 @@ auto ImportSession::PhysicsResourceEmitter() -> import::PhysicsResourceEmitter&
     };
     physics_resource_emitter_.emplace(
       std::make_unique<import::PhysicsResourceEmitter>(
-        *file_writer_, aggregator, cooked_root_, std::move(config)));
+        *writes_, aggregator, cooked_root_, std::move(config)));
   }
   return **physics_resource_emitter_;
 }
@@ -436,8 +437,9 @@ auto ImportSession::PhysicsResourceEmitter() -> import::PhysicsResourceEmitter&
 auto ImportSession::AssetEmitter() -> import::AssetEmitter&
 {
   if (!asset_emitter_.has_value()) {
-    asset_emitter_.emplace(
-      std::make_unique<import::AssetEmitter>(*file_writer_, cooked_root_));
+    CHECK_NOTNULL_F(writes_, "ImportSession needs a nursery to emit");
+    asset_emitter_.emplace(std::make_unique<import::AssetEmitter>(
+      *storage_, *driver_, *writes_, cooked_root_));
   }
   return **asset_emitter_;
 }
@@ -454,9 +456,10 @@ auto ImportSession::ResourceDescriptorEmitter()
   -> import::ResourceDescriptorEmitter&
 {
   if (!resource_descriptor_emitter_.has_value()) {
+    CHECK_NOTNULL_F(writes_, "ImportSession needs a nursery to emit");
     resource_descriptor_emitter_.emplace(
       std::make_unique<import::ResourceDescriptorEmitter>(
-        *file_writer_, cooked_root_));
+        *storage_, *driver_, *writes_, cooked_root_));
   }
   return **resource_descriptor_emitter_;
 }
@@ -663,7 +666,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       AddDiagnostic({
         .severity = ImportSeverity::kError,
         .code = "import.texture_emitter_finalize_failed",
-        .message = ok.error().ToString(),
+        .message = ok.error().Message(),
         .source_path = request_.source_path.string(),
         .object_path = {},
       });
@@ -676,7 +679,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       AddDiagnostic({
         .severity = ImportSeverity::kError,
         .code = "import.buffer_emitter_finalize_failed",
-        .message = ok.error().ToString(),
+        .message = ok.error().Message(),
         .source_path = request_.source_path.string(),
         .object_path = {},
       });
@@ -689,7 +692,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       AddDiagnostic({
         .severity = ImportSeverity::kError,
         .code = "import.physics_resource_emitter_finalize_failed",
-        .message = ok.error().ToString(),
+        .message = ok.error().Message(),
         .source_path = request_.source_path.string(),
         .object_path = {},
       });
@@ -702,7 +705,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       AddDiagnostic({
         .severity = ImportSeverity::kError,
         .code = "import.asset_emitter_finalize_failed",
-        .message = ok.error().ToString(),
+        .message = ok.error().Message(),
         .source_path = request_.source_path.string(),
         .object_path = {},
       });
@@ -719,7 +722,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       AddDiagnostic({
         .severity = ImportSeverity::kError,
         .code = "import.resource_descriptor_emitter_finalize_failed",
-        .message = ok.error().ToString(),
+        .message = ok.error().Message(),
         .source_path = request_.source_path.string(),
         .object_path = {},
       });
@@ -744,18 +747,6 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       .severity = ImportSeverity::kError,
       .code = "import.resource_table_finalize_failed",
       .message = "Resource table finalization failed",
-      .source_path = request_.source_path.string(),
-      .object_path = {},
-    });
-  }
-
-  // Wait for any pending async writes
-  auto flush_result = co_await file_writer_->Flush();
-  if (!flush_result.has_value()) {
-    AddDiagnostic({
-      .severity = ImportSeverity::kError,
-      .code = "import.flush_failed",
-      .message = flush_result.error().message,
       .source_path = request_.source_path.string(),
       .object_path = {},
     });

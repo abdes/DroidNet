@@ -29,6 +29,7 @@
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/SystemError.h>
+#include <Oxygen/Serio/Detail/BlockingIo.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Platform/Windows/Handles.h>
 #include <Oxygen/Serio/Types.h>
@@ -176,7 +177,14 @@ namespace {
           ShareMode(spec.sharing), nullptr, CreationDisposition(spec.creation),
           FlagsAndAttributes(spec, overlapped), nullptr);
       if (handle == INVALID_HANDLE_VALUE) {
-        return ::oxygen::Err(base::LastSystemError());
+        const auto error = base::LastSystemError();
+        // Windows refuses to open a folder as a file with a denied access.
+        auto ignored = std::error_code {};
+        if (static_cast<DWORD>(error.value()) == ERROR_ACCESS_DENIED
+          && std::filesystem::is_directory(native, ignored)) {
+          return ::oxygen::Err(std::make_error_code(std::errc::is_a_directory));
+        }
+        return ::oxygen::Err(error);
       }
       return ::oxygen::Ok(windows::ToNativeHandle(handle));
     } catch (const std::bad_alloc&) {
@@ -255,67 +263,83 @@ auto NativeFile::Size() const noexcept -> Result<ByteCount>
   return ::oxygen::Ok(ByteCount { static_cast<uint64_t>(size.QuadPart) });
 }
 
+namespace detail {
+
+  auto ReadAtHandle(const NativeHandle file, ByteOffset at,
+    std::span<std::byte> out) noexcept -> Result<ByteCount>
+  {
+    auto total = ByteCount { 0 };
+    while (!out.empty()) {
+      const auto request
+        = static_cast<DWORD>((std::min)(out.size(), kMaxTransfer));
+      auto overlapped = BlockingOverlapped(at);
+      if (!overlapped) {
+        return ::oxygen::Err(overlapped.error());
+      }
+      auto* const handle = windows::ToHandle(file);
+      DWORD immediate = 0;
+      const auto finished = Finish(handle, *overlapped,
+        ReadFile(handle, out.data(), request, &immediate, &*overlapped) != FALSE
+          ? std::optional { immediate }
+          : std::nullopt);
+      if (!finished) {
+        if (finished.error().value() == ERROR_HANDLE_EOF) {
+          break;
+        }
+        return ::oxygen::Err(finished.error());
+      }
+      const auto read = *finished;
+      if (read == 0) {
+        break;
+      }
+      total += ByteCount { read };
+      at += ByteCount { read };
+      out = out.subspan(read);
+    }
+    return ::oxygen::Ok(total);
+  }
+
+  auto WriteAtHandle(const NativeHandle file, ByteOffset at,
+    std::span<const std::byte> in) noexcept -> Result<void>
+  {
+    while (!in.empty()) {
+      const auto request
+        = static_cast<DWORD>((std::min)(in.size(), kMaxTransfer));
+      auto overlapped = BlockingOverlapped(at);
+      if (!overlapped) {
+        return ::oxygen::Err(overlapped.error());
+      }
+      auto* const handle = windows::ToHandle(file);
+      DWORD immediate = 0;
+      const auto finished = Finish(handle, *overlapped,
+        WriteFile(handle, in.data(), request, &immediate, &*overlapped) != FALSE
+          ? std::optional { immediate }
+          : std::nullopt);
+      if (!finished) {
+        return ::oxygen::Err(finished.error());
+      }
+      const auto written = *finished;
+      if (written == 0) {
+        return ::oxygen::Err(std::make_error_code(std::errc::io_error));
+      }
+      at += ByteCount { written };
+      in = in.subspan(written);
+    }
+    return {};
+  }
+
+} // namespace detail
+
 auto NativeFile::ReadAt(ByteOffset at, std::span<std::byte> out) const noexcept
   -> Result<ByteCount>
 {
-  auto total = ByteCount { 0 };
-  while (!out.empty()) {
-    const auto request
-      = static_cast<DWORD>((std::min)(out.size(), kMaxTransfer));
-    auto overlapped = BlockingOverlapped(at);
-    if (!overlapped) {
-      return ::oxygen::Err(overlapped.error());
-    }
-    auto* const handle = windows::ToHandle(handle_);
-    DWORD immediate = 0;
-    const auto finished = Finish(handle, *overlapped,
-      ReadFile(handle, out.data(), request, &immediate, &*overlapped) != FALSE
-        ? std::optional { immediate }
-        : std::nullopt);
-    if (!finished) {
-      if (finished.error().value() == ERROR_HANDLE_EOF) {
-        break;
-      }
-      return ::oxygen::Err(finished.error());
-    }
-    const auto read = *finished;
-    if (read == 0) {
-      break;
-    }
-    total += ByteCount { read };
-    at += ByteCount { read };
-    out = out.subspan(read);
-  }
-  return ::oxygen::Ok(total);
+  return detail::ReadAtHandle(handle_, at, out);
 }
 
 auto NativeFile::WriteAt(ByteOffset at, std::span<const std::byte> in) noexcept
   -> Result<void>
 {
-  while (!in.empty()) {
-    const auto request
-      = static_cast<DWORD>((std::min)(in.size(), kMaxTransfer));
-    auto overlapped = BlockingOverlapped(at);
-    if (!overlapped) {
-      return ::oxygen::Err(overlapped.error());
-    }
-    auto* const handle = windows::ToHandle(handle_);
-    DWORD immediate = 0;
-    const auto finished = Finish(handle, *overlapped,
-      WriteFile(handle, in.data(), request, &immediate, &*overlapped) != FALSE
-        ? std::optional { immediate }
-        : std::nullopt);
-    if (!finished) {
-      return ::oxygen::Err(finished.error());
-    }
-    const auto written = *finished;
-    if (written == 0) {
-      return ::oxygen::Err(std::make_error_code(std::errc::io_error));
-    }
-    at += ByteCount { written };
-    in = in.subspan(written);
-  }
-  return {};
+  return detail::WriteAtHandle(handle_, at, in);
 }
 
 auto NativeFile::Reserve(const ByteCount size) noexcept -> Result<void>

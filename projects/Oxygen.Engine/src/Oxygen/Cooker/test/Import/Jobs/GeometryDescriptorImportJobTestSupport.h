@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstring>
 #include <filesystem>
 #include <latch>
 #include <optional>
@@ -32,6 +31,7 @@
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
@@ -46,17 +46,6 @@ using oxygen::cooker::test::SubmitAndWait;
 using oxygen::cooker::test::WriteBytes;
 using oxygen::cooker::test::WriteText;
 using oxygen::testing::ScopedTempDir;
-
-template <typename T>
-auto ReadStructAt(const std::vector<std::byte>& bytes, const size_t offset) -> T
-{
-  auto out = T {};
-  if (bytes.size() < offset + sizeof(T)) {
-    return out;
-  }
-  std::memcpy(&out, bytes.data() + offset, sizeof(T));
-  return out;
-}
 
 inline auto DiagnosticSummary(const std::vector<ImportDiagnostic>& diagnostics)
   -> std::string
@@ -83,22 +72,31 @@ inline auto MakeBounds() -> json
 inline constexpr std::string_view kAuthoredSurfaceId
   = "018f8f8f-1111-7111-8111-111111111111";
 
-inline auto MakeGeometryRequest(const std::filesystem::path& source_path,
-  const std::filesystem::path& cooked_root, const json& descriptor_doc,
-  std::vector<std::filesystem::path> cooked_context_roots = {},
-  std::string asset_virtual_path = {}) -> ImportRequest
+//! What a geometry descriptor import request is made from.
+struct GeometryRequestInput {
+  std::filesystem::path source_path;
+  std::filesystem::path cooked_root;
+  json descriptor_doc;
+  std::vector<std::filesystem::path> cooked_context_roots;
+  //! Defaults to `/.cooked/Geometry/<name>.ogeo`.
+  std::string asset_virtual_path;
+};
+
+inline auto MakeGeometryRequest(GeometryRequestInput input) -> ImportRequest
 {
+  auto& asset_virtual_path = input.asset_virtual_path;
+  const auto& descriptor_doc = input.descriptor_doc;
   if (asset_virtual_path.empty()) {
     asset_virtual_path = "/.cooked/Geometry/"
       + descriptor_doc.at("name").get<std::string>() + ".ogeo";
   }
   auto request = ImportRequest {};
   request.asset_virtual_path = std::move(asset_virtual_path);
-  request.source_path = source_path.lexically_normal();
+  request.source_path = input.source_path.lexically_normal();
   request.source_mount_path
     = oxygen::cooker::test::SourceMountPath(request.source_path);
-  request.cooked_root = cooked_root;
-  request.cooked_context_roots = std::move(cooked_context_roots);
+  request.cooked_root = input.cooked_root;
+  request.cooked_context_roots = std::move(input.cooked_context_roots);
   request.source_mounts = oxygen::cooker::test::ContentMountTable(
     request.source_path.parent_path());
   request.geometry_descriptor = ImportRequest::GeometryDescriptorPayload {
@@ -181,8 +179,7 @@ inline auto CanParseGeometryDescriptor(std::vector<std::byte> bytes) -> bool
   context.parse_only = true;
 
   try {
-    const auto geometry
-      = content::loaders::LoadGeometryAsset(std::move(context));
+    const auto geometry = content::loaders::LoadGeometryAsset(context);
     return geometry != nullptr;
   } catch (...) {
     return false;

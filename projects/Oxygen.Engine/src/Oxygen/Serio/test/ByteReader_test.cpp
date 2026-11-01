@@ -44,6 +44,7 @@ using byte_reader_test::Header;
 using oxygen::serio::ByteCount;
 using oxygen::serio::ByteOffset;
 using oxygen::serio::ByteReader;
+using oxygen::serio::CopyAt;
 using oxygen::serio::Error;
 
 //! Parses a header, a name and a trailing value out of one buffer.
@@ -149,6 +150,28 @@ NOLINT_TEST_F(ByteReaderTest, AlignTo_IsRelativeToStart)
   EXPECT_EQ(reader.Position().get(), 4U);
   ASSERT_FALSE(invalid);
   EXPECT_EQ(invalid.error(), std::errc::invalid_argument);
+}
+
+//! CopyAt reads one value at an offset, and refuses one that does not fit.
+NOLINT_TEST_F(ByteReaderTest, CopyAt_ReadsOneValueWithinBounds)
+{
+  const auto trailer_at = ByteOffset { sizeof(Header) + kName.size() };
+
+  const auto header = CopyAt<Header>(Bytes());
+  const auto trailer = CopyAt<uint32_t>(Bytes(), trailer_at);
+  const auto truncated
+    = CopyAt<uint32_t>(Bytes(), ByteOffset { Bytes().size() - 2 });
+  const auto past_end
+    = CopyAt<uint32_t>(Bytes(), ByteOffset { Bytes().size() + 1 });
+
+  ASSERT_HAS_VALUE(header);
+  EXPECT_EQ(header->name_size, kName.size());
+  ASSERT_HAS_VALUE(trailer);
+  EXPECT_EQ(*trailer, kTrailer);
+  ASSERT_FALSE(truncated);
+  EXPECT_EQ(truncated.error(), Error::kEndOfData);
+  ASSERT_FALSE(past_end);
+  EXPECT_EQ(past_end.error(), Error::kOutOfBounds);
 }
 
 } // namespace

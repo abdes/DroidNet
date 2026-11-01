@@ -7,12 +7,10 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
-#include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -46,80 +44,64 @@ namespace {
 
   //=== String Utilities ===--------------------------------------------------//
 
-  [[nodiscard]] auto ToLower(std::string_view str) -> std::string
-  {
-    std::string result;
-    result.reserve(str.size());
-    for (const char ch : str) {
-      result.push_back(
-        static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
-    }
-    return result;
-  }
+  using NativePathView
+    = std::basic_string_view<std::filesystem::path::value_type>;
 
-  //! Check if string ends with suffix (case-insensitive).
+  //! Compare an ASCII suffix against native path characters without conversion.
   [[nodiscard]] auto EndsWithI(
-    std::string_view str, std::string_view suffix) noexcept -> bool
+    NativePathView str, std::string_view suffix) noexcept -> bool
   {
     if (suffix.size() > str.size()) {
       return false;
     }
     const auto start = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); ++i) {
-      const auto ch_str = static_cast<char>(
-        std::tolower(static_cast<unsigned char>(str.at(start + i))));
-      const auto ch_suf = static_cast<char>(
-        std::tolower(static_cast<unsigned char>(suffix.at(i))));
-      if (ch_str != ch_suf) {
+      auto ch = str[start + i];
+      if (ch >= 'A' && ch <= 'Z') {
+        ch = static_cast<NativePathView::value_type>(ch + ('a' - 'A'));
+      }
+      if (static_cast<std::uint32_t>(ch)
+        != static_cast<unsigned char>(suffix[i])) {
         return false;
       }
     }
     return true;
   }
 
-  //! Check if stem ends with a suffix pattern (e.g., "_albedo").
-  [[nodiscard]] auto StemEndsWithI(
-    const std::filesystem::path& path, std::string_view suffix) noexcept -> bool
+  //! View the filename without allocating or converting its native encoding.
+  [[nodiscard]] auto FilenameView(const std::filesystem::path& path) noexcept
+    -> NativePathView
   {
-    const auto stem = path.stem().string();
-    return EndsWithI(stem, suffix);
+    auto name = NativePathView(path.native());
+    const auto separator = name.find_last_of(
+#ifdef _WIN32
+      L"/\\"
+#else
+      "/"
+#endif
+    );
+#ifdef _WIN32
+    // A UNC server with no following separator is a root-name, not a filename.
+    if (name.size() >= 3 && separator == 1
+      && (name[0] == '/' || name[0] == '\\')
+      && (name[1] == '/' || name[1] == '\\')) {
+      return {};
+    }
+#endif
+    if (separator != NativePathView::npos) {
+      name.remove_prefix(separator + 1);
+    }
+#ifdef _WIN32
+    else if (name.size() >= 2 && name[1] == ':'
+      && ((name[0] >= 'A' && name[0] <= 'Z')
+        || (name[0] >= 'a' && name[0] <= 'z'))) {
+      name.remove_prefix(2);
+    }
+#endif
+    return name;
   }
 
   //=== File I/O Utilities ===------------------------------------------------//
-
-  [[nodiscard]] auto ReadFileBytes(const std::filesystem::path& path)
-    -> Result<std::vector<std::byte>, TextureImportError>
-  {
-    std::error_code ec;
-    if (!std::filesystem::exists(base::ToNativePath(path), ec)) {
-      LOG_F(WARNING, "File not found: {}", path.string());
-      return Err(TextureImportError::kFileNotFound);
-    }
-
-    std::ifstream file(
-      base::ToNativePath(path), std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-      LOG_F(WARNING, "Failed to open file: {}", path.string());
-      return Err(TextureImportError::kFileReadFailed);
-    }
-
-    const auto size = file.tellg();
-    if (size <= 0) {
-      LOG_F(WARNING, "File is empty or unreadable: {}", path.string());
-      return Err(TextureImportError::kFileReadFailed);
-    }
-
-    file.seekg(0, std::ios::beg);
-
-    std::vector<std::byte> buffer(static_cast<size_t>(size));
-    if (!file.read(reinterpret_cast<char*>(buffer.data()),
-          static_cast<std::streamsize>(size))) {
-      LOG_F(WARNING, "Failed to read file contents: {}", path.string());
-      return Err(TextureImportError::kFileReadFailed);
-    }
-
-    return Ok(std::move(buffer));
-  }
 
   //=== Validation Helpers ===------------------------------------------------//
 
@@ -200,53 +182,53 @@ auto DetectPresetFromFilename(const std::filesystem::path& filename) noexcept
   -> TexturePreset
 {
   // Check extension first for HDR formats
-  const auto ext = ToLower(filename.extension().string());
-  if (ext == ".hdr" || ext == ".exr") {
+  const auto name = FilenameView(filename);
+  const auto dot = name.find_last_of('.');
+  const bool has_extension = dot != NativePathView::npos && dot != 0
+    && (name.size() != 2 || name[0] != '.' || name[1] != '.');
+  const auto extension = has_extension ? name.substr(dot) : NativePathView {};
+  const auto stem = has_extension ? name.substr(0, dot) : name;
+  if (extension.size() == 4
+    && (EndsWithI(extension, ".hdr") || EndsWithI(extension, ".exr"))) {
     return TexturePreset::kHdrEnvironment;
   }
 
   // Check stem suffixes
-  if (StemEndsWithI(filename, "_albedo")
-    || StemEndsWithI(filename, "_basecolor")
-    || StemEndsWithI(filename, "_diffuse")
-    || StemEndsWithI(filename, "_color")) {
+  if (EndsWithI(stem, "_albedo") || EndsWithI(stem, "_basecolor")
+    || EndsWithI(stem, "_diffuse") || EndsWithI(stem, "_color")) {
     return TexturePreset::kAlbedo;
   }
 
-  if (StemEndsWithI(filename, "_normal") || StemEndsWithI(filename, "_nrm")) {
+  if (EndsWithI(stem, "_normal") || EndsWithI(stem, "_nrm")) {
     return TexturePreset::kNormal;
   }
 
-  if (StemEndsWithI(filename, "_roughness")
-    || StemEndsWithI(filename, "_rough")) {
+  if (EndsWithI(stem, "_roughness") || EndsWithI(stem, "_rough")) {
     return TexturePreset::kRoughness;
   }
 
-  if (StemEndsWithI(filename, "_metallic")
-    || StemEndsWithI(filename, "_metal")) {
+  if (EndsWithI(stem, "_metallic") || EndsWithI(stem, "_metal")) {
     return TexturePreset::kMetallic;
   }
 
-  if (StemEndsWithI(filename, "_ao") || StemEndsWithI(filename, "_occlusion")) {
+  if (EndsWithI(stem, "_ao") || EndsWithI(stem, "_occlusion")) {
     return TexturePreset::kAO;
   }
 
-  if (StemEndsWithI(filename, "_orm")) {
+  if (EndsWithI(stem, "_orm")) {
     return TexturePreset::kORMPacked;
   }
 
-  if (StemEndsWithI(filename, "_emissive")
-    || StemEndsWithI(filename, "_emission")) {
+  if (EndsWithI(stem, "_emissive") || EndsWithI(stem, "_emission")) {
     return TexturePreset::kEmissive;
   }
 
-  if (StemEndsWithI(filename, "_height")
-    || StemEndsWithI(filename, "_displacement")
-    || StemEndsWithI(filename, "_disp") || StemEndsWithI(filename, "_bump")) {
+  if (EndsWithI(stem, "_height") || EndsWithI(stem, "_displacement")
+    || EndsWithI(stem, "_disp") || EndsWithI(stem, "_bump")) {
     return TexturePreset::kHeightMap;
   }
 
-  if (StemEndsWithI(filename, "_env") || StemEndsWithI(filename, "_hdri")) {
+  if (EndsWithI(stem, "_env") || EndsWithI(stem, "_hdri")) {
     return TexturePreset::kHdrEnvironment;
   }
 
@@ -266,12 +248,12 @@ namespace {
   {
     DCHECK_F(!path.empty(), "LoadTextureWithFlip: path must not be empty");
 
-    auto bytes = ReadFileBytes(path);
+    auto bytes = ReadImageFile(path);
     if (!bytes) {
       return Err(bytes.error());
     }
 
-    if (bytes->empty()) {
+    if (bytes->Empty()) {
       LOG_F(WARNING, "File contains no data: {}", path.string());
       return Err(TextureImportError::kCorruptedData);
     }
@@ -282,7 +264,7 @@ namespace {
       .extension_hint = path.extension().string(),
     };
 
-    auto result = DecodeToScratchImage(*bytes, options);
+    auto result = DecodeToScratchImage(bytes->Bytes(), options);
     if (!result) {
       LOG_F(WARNING, "Failed to decode image: {} (error: {})", path.string(),
         to_string(result.error()));
@@ -507,7 +489,7 @@ auto ImportTexture(const std::filesystem::path& path, TexturePreset preset,
   LogPresetSelection(path, detected, preset);
 
   // Read file
-  auto bytes = ReadFileBytes(path);
+  auto bytes = ReadImageFile(path);
   if (!bytes) {
     return Err(bytes.error());
   }
@@ -517,7 +499,7 @@ auto ImportTexture(const std::filesystem::path& path, TexturePreset preset,
   desc.source_id = path.string();
 
   // Cook the texture
-  auto cooked = CookTexture(*bytes, desc, policy);
+  auto cooked = CookTexture(bytes->Bytes(), desc, policy);
   if (!cooked) {
     LOG_F(WARNING, "Import failed for '{}' (error: {})", path.string(),
       to_string(cooked.error()));
@@ -540,7 +522,7 @@ auto ImportTexture(const std::filesystem::path& path,
   DCHECK_F(!path.empty(), "ImportTexture: path must not be empty");
 
   // Read file
-  auto bytes = ReadFileBytes(path);
+  auto bytes = ReadImageFile(path);
   if (!bytes) {
     return Err(bytes.error());
   }
@@ -555,7 +537,7 @@ auto ImportTexture(const std::filesystem::path& path,
   WarnOnUnusualDescriptor(resolved_desc);
 
   // Cook the texture
-  auto cooked = CookTexture(*bytes, resolved_desc, policy);
+  auto cooked = CookTexture(bytes->Bytes(), resolved_desc, policy);
   if (!cooked) {
     LOG_F(WARNING, "Import failed for '{}' (error: {})", path.string(),
       to_string(cooked.error()));
@@ -636,7 +618,7 @@ namespace {
 
   //! Common implementation for cube map import from loaded faces.
   [[nodiscard]] auto ImportCubeMapFromFacesImpl(
-    std::array<ScratchImage, kCubeFaceCount>&& faces,
+    const std::array<ScratchImage, kCubeFaceCount>& faces,
     const TextureImportDesc& base_desc,
     const std::filesystem::path& first_face_path,
     const ITexturePackingPolicy& policy)
@@ -723,7 +705,7 @@ auto ImportCubeMap(
   TextureImportDesc desc = MakeDescFromPreset(preset);
 
   auto import_result = ImportCubeMapFromFacesImpl(
-    std::move(faces), desc, oxygen::base::CheckedAt(face_paths, 0), policy);
+    faces, desc, oxygen::base::CheckedAt(face_paths, 0), policy);
   if (import_result) {
     import_result->applied_preset = preset;
   }
@@ -748,7 +730,7 @@ auto ImportCubeMap(
   }
 
   return ImportCubeMapFromFacesImpl(
-    std::move(faces), desc, oxygen::base::CheckedAt(face_paths, 0), policy);
+    faces, desc, oxygen::base::CheckedAt(face_paths, 0), policy);
 }
 
 auto ImportCubeMap(const std::filesystem::path& base_path, TexturePreset preset,
@@ -822,14 +804,15 @@ auto ImportCubeMapFromEquirect(const std::filesystem::path& equirect_path,
 
     const auto src_view = equirect->GetImage(0, 0);
     auto dst_pixels = float_scratch.GetMutablePixels(0, 0);
-    const auto* src_ptr = src_view.pixels.data();
-    auto* dst_ptr = reinterpret_cast<float*>(dst_pixels.data());
-
-    const size_t pixel_count = meta.width * meta.height;
+    const size_t pixel_count = static_cast<size_t>(meta.width) * meta.height;
     for (size_t i = 0; i < pixel_count; ++i) {
       for (size_t c = 0; c < 4; ++c) {
-        const uint8_t byte_val = static_cast<uint8_t>(src_ptr[(i * 4) + c]);
-        dst_ptr[(i * 4) + c] = static_cast<float>(byte_val) / 255.0F;
+        const auto index = (i * 4) + c;
+        const auto byte_val = static_cast<uint8_t>(src_view.pixels[index]);
+        const float converted = static_cast<float>(byte_val) / 255.0F;
+        std::memcpy(
+          dst_pixels.subspan(index * sizeof(float), sizeof(float)).data(),
+          &converted, sizeof(converted));
       }
     }
 
@@ -1139,8 +1122,8 @@ auto ImportCubeMapFromLayoutImage(const std::filesystem::path& path,
 namespace {
 
   //! Common implementation for texture array import from loaded layers.
-  [[nodiscard]] auto ImportTextureArrayImpl(std::vector<ScratchImage>&& layers,
-    const TextureImportDesc& base_desc,
+  [[nodiscard]] auto ImportTextureArrayImpl(
+    const std::vector<ScratchImage>& layers, const TextureImportDesc& base_desc,
     const std::filesystem::path& first_layer_path,
     const ITexturePackingPolicy& policy)
     -> Result<TextureImportResult, TextureImportError>
@@ -1259,7 +1242,7 @@ auto ImportTextureArray(std::span<const std::filesystem::path> layer_paths,
   TextureImportDesc desc = MakeDescFromPreset(preset);
 
   auto import_result = ImportTextureArrayImpl(
-    std::move(layers), desc, oxygen::base::CheckedAt(layer_paths, 0), policy);
+    layers, desc, oxygen::base::CheckedAt(layer_paths, 0), policy);
   if (import_result) {
     import_result->applied_preset = preset;
   }
@@ -1290,7 +1273,7 @@ auto ImportTextureArray(std::span<const std::filesystem::path> layer_paths,
   }
 
   return ImportTextureArrayImpl(
-    std::move(layers), desc, oxygen::base::CheckedAt(layer_paths, 0), policy);
+    layers, desc, oxygen::base::CheckedAt(layer_paths, 0), policy);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1300,8 +1283,8 @@ auto ImportTextureArray(std::span<const std::filesystem::path> layer_paths,
 namespace {
 
   //! Common implementation for 3D texture import from loaded slices.
-  [[nodiscard]] auto ImportTexture3DImpl(std::vector<ScratchImage>&& slices,
-    const TextureImportDesc& base_desc,
+  [[nodiscard]] auto ImportTexture3DImpl(
+    const std::vector<ScratchImage>& slices, const TextureImportDesc& base_desc,
     const std::filesystem::path& first_slice_path,
     const ITexturePackingPolicy& policy)
     -> Result<TextureImportResult, TextureImportError>
@@ -1349,7 +1332,8 @@ namespace {
     // For 3D textures, all slices are stored in layer 0, mip 0
     // The storage is contiguous: slice 0, slice 1, ..., slice N-1
     auto dst_pixels = volume_image.GetMutablePixels(0, 0);
-    const size_t slice_size = first_meta.width * first_meta.height
+    const size_t slice_size = static_cast<size_t>(first_meta.width)
+      * first_meta.height
       * (first_meta.format == Format::kRGBA32Float ? 16 : 4);
 
     for (size_t i = 0; i < slices.size(); ++i) {
@@ -1359,7 +1343,8 @@ namespace {
         return Err(TextureImportError::kDimensionMismatch);
       }
 
-      std::ranges::copy(src_view.pixels, dst_pixels.data() + (i * slice_size));
+      std::ranges::copy(
+        src_view.pixels, dst_pixels.subspan(i * slice_size).begin());
     }
 
     // Create resolved descriptor
@@ -1421,7 +1406,7 @@ auto ImportTexture3D(std::span<const std::filesystem::path> slice_paths,
   TextureImportDesc desc = MakeDescFromPreset(preset);
 
   auto import_result = ImportTexture3DImpl(
-    std::move(slices), desc, oxygen::base::CheckedAt(slice_paths, 0), policy);
+    slices, desc, oxygen::base::CheckedAt(slice_paths, 0), policy);
   if (import_result) {
     import_result->applied_preset = preset;
   }
@@ -1452,7 +1437,7 @@ auto ImportTexture3D(std::span<const std::filesystem::path> slice_paths,
   }
 
   return ImportTexture3DImpl(
-    std::move(slices), desc, oxygen::base::CheckedAt(slice_paths, 0), policy);
+    slices, desc, oxygen::base::CheckedAt(slice_paths, 0), policy);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1920,14 +1905,14 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
 
   // Single source (2D texture)
   if (impl_->source_path) {
-    auto bytes = ReadFileBytes(*impl_->source_path);
+    auto bytes = ReadImageFile(*impl_->source_path);
     if (!bytes) {
       return Err(bytes.error());
     }
 
     desc.source_id = impl_->source_path->string();
 
-    auto cooked = CookTexture(*bytes, desc, policy);
+    auto cooked = CookTexture(bytes->Bytes(), desc, policy);
     if (!cooked) {
       LOG_F(WARNING, "Cooking failed for '{}': {}",
         impl_->source_path->string(), to_string(cooked.error()));

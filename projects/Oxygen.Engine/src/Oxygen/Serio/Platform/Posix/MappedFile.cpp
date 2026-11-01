@@ -90,9 +90,10 @@ namespace detail {
 
 } // namespace detail
 
-auto MappedFile::Open(const std::filesystem::path& path) noexcept
-  -> Result<MappedFile>
+auto MappedFile::Open(const std::filesystem::path& path,
+  [[maybe_unused]] const Sharing sharing) noexcept -> Result<MappedFile>
 {
+  // POSIX opens never refuse each other: every sharing is honoured.
   try {
     auto logical = path;
     const auto native = base::ToNativePath(path);

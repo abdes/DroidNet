@@ -21,6 +21,7 @@
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import {
 
@@ -39,8 +40,8 @@ public:
 
   struct WorkItem final {
     std::string source_id;
-    std::vector<std::byte> source_bytes;
-    observer_ptr<ImportSession> session {};
+    serio::ByteBuffer source_bytes;
+    observer_ptr<ImportSession> session;
     std::stop_token stop_token;
   };
 

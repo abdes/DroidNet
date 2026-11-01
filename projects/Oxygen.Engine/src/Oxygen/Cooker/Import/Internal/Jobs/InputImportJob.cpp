@@ -138,11 +138,12 @@ auto InputImportJob::LoadSource(ImportSession& session) -> co::Co<LoadedSource>
     };
   }
 
-  const auto read = co_await reader->ReadFile(request.source_path);
+  auto read = co_await reader->ReadFile(request.source_path);
   if (!read.has_value()) {
     AddDiagnostic(session, request, ImportSeverity::kError,
       "input.import.source_read_failed",
-      "Failed to read source file: " + read.error().ToString());
+      "Failed to read source file '" + request.source_path.string()
+        + "': " + read.error().message());
     co_return LoadedSource {
       .success = false,
       .bytes = {},
@@ -151,7 +152,7 @@ auto InputImportJob::LoadSource(ImportSession& session) -> co::Co<LoadedSource>
 
   co_return LoadedSource {
     .success = true,
-    .bytes = read.value(),
+    .bytes = std::move(read.value()),
   };
 }
 

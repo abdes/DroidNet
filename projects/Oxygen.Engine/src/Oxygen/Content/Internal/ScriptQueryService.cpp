@@ -4,13 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstdint>
-#include <cstring>
 #include <memory>
 #include <optional>
 #include <span>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Content/Internal/ScriptQueryService.h>
 #include <Oxygen/Content/ResourceKey.h>
@@ -18,8 +15,9 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Device.h>
-#include <Oxygen/Serio/Region.h>
 
 namespace oxygen::content::internal {
 
@@ -62,22 +60,29 @@ auto ScriptQueryService::ReadScriptResourceForAsset(
   if (!row || row->size() != sizeof(data::pak::scripting::ScriptResourceDesc)) {
     return nullptr;
   }
-  data::pak::scripting::ScriptResourceDesc desc {};
-  std::memcpy(&desc, row->data(), sizeof(desc));
+  const auto parsed_desc
+    = serio::CopyAt<data::pak::scripting::ScriptResourceDesc>(*row);
+  if (!parsed_desc) {
+    return nullptr;
+  }
+  const auto desc = *parsed_desc;
 
   // A synchronous query: the payload is read with the device's blocking read.
-  std::vector<uint8_t> data_buffer(desc.size_bytes);
+  serio::ByteBuffer data_buffer;
   if (desc.size_bytes > 0) {
     const auto region = source->PayloadOf(data::ScriptResource::ClassTypeId(),
       {
         .offset = serio::ByteOffset { desc.data_offset },
         .count = serio::ByteCount { desc.size_bytes },
       });
-    if (!region
-      || !serio::ReadExactlyAt(*region, serio::ByteOffset { 0 },
-        std::as_writable_bytes(std::span(data_buffer)))) {
+    if (!region) {
       return nullptr;
     }
+    auto payload = serio::ReadAll(*region);
+    if (!payload) {
+      return nullptr;
+    }
+    data_buffer = std::move(payload).value();
   }
 
   auto resource

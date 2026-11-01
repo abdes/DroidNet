@@ -12,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -30,9 +31,9 @@
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -44,12 +45,9 @@ namespace {
   {
     using data::pak::scripting::ScriptAssetDesc;
 
-    ScriptAssetDesc desc {};
     const auto bytes = ReadBytes(descriptor_path);
-    if (bytes.size() >= sizeof(desc)) {
-      std::memcpy(&desc, bytes.data(), sizeof(desc));
-    }
-    return desc;
+    return oxygen::serio::CopyAt<ScriptAssetDesc>(std::span { bytes })
+      .value_or(ScriptAssetDesc {});
   }
 
   //! The external source path a cooked script descriptor records.
@@ -474,9 +472,10 @@ return Orbit
     // Assert
     ASSERT_TRUE(report.success);
     const auto bytes = ReadBytes(cooked_root / "orbit.oscript");
-    ASSERT_GE(bytes.size(), sizeof(ScriptAssetDesc));
-    auto desc = ScriptAssetDesc {};
-    std::memcpy(&desc, bytes.data(), sizeof(desc));
+    const auto desc_read
+      = oxygen::serio::CopyAt<ScriptAssetDesc>(std::span { bytes });
+    ASSERT_HAS_VALUE(desc_read);
+    const auto& desc = *desc_read;
     ASSERT_EQ(desc.params.count, 3U);
     EXPECT_EQ(desc.params.offset, sizeof(ScriptAssetDesc));
     EXPECT_EQ(desc.params.entry_size, sizeof(ScriptParamRecord));

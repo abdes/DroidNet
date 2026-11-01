@@ -15,6 +15,8 @@
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
+struct ExpandedShaderRequest;
+
 struct BuildRootLayout {
   std::filesystem::path root;
   std::filesystem::path state_dir;
@@ -39,12 +41,14 @@ struct BuildRootLayout {
   const BuildRootLayout& layout, uint64_t request_key) -> std::filesystem::path;
 [[nodiscard]] auto GetRequestLogPath(
   const BuildRootLayout& layout, uint64_t request_key) -> std::filesystem::path;
+//! Where `request`'s DXIL is published beside `final_archive_path`.
 [[nodiscard]] auto GetRequestDxilPath(
-  const std::filesystem::path& final_archive_path, std::string_view source_path,
-  std::string_view entry_point, uint64_t request_key) -> std::filesystem::path;
+  const std::filesystem::path& final_archive_path,
+  const ExpandedShaderRequest& request) -> std::filesystem::path;
+//! Where `request`'s PDB sidecar is published beside `final_archive_path`.
 [[nodiscard]] auto GetRequestPdbPath(
-  const std::filesystem::path& final_archive_path, std::string_view source_path,
-  std::string_view entry_point, uint64_t request_key) -> std::filesystem::path;
+  const std::filesystem::path& final_archive_path,
+  const ExpandedShaderRequest& request) -> std::filesystem::path;
 
 auto EnsureBuildRootLayout(const BuildRootLayout& layout) -> void;
 auto ResetTempDirectory(const BuildRootLayout& layout) -> void;

@@ -46,7 +46,6 @@ oxygen_cooker_test(
     "Import/CompressedImageDecode_test.cpp"
     "Import/DroppedSourceFeatures_test.cpp"
     "Import/EngineContent_test.cpp"
-    "Import/FileError_test.cpp"
     "Import/GeometrySource_test.cpp"
     "Import/LodGeneration_test.cpp"
     "Import/MeshOptimization_test.cpp"
@@ -175,8 +174,7 @@ oxygen_cooker_test(
     "Import/SourceLayoutHash_functional_test.cpp"
     "Import/TextureDescriptorImportRequestBuilder_functional_test.cpp"
     "Import/TextureDescriptorImportRequestBuilder_preparation_functional_test.cpp"
-    $<$<BOOL:${WIN32}>:Import/WindowsFileReader_functional_test.cpp>
-    $<$<BOOL:${WIN32}>:Import/WindowsFileWriter_functional_test.cpp>
+    "Import/SerioFileReader_functional_test.cpp"
 )
 if(TARGET oxygen-cooker-test-visible-internals)
   target_link_libraries(
@@ -240,7 +238,8 @@ oxygen_cooker_test(
   SOURCES
     "Import/Emitters/AssetEmitter_functional_test.cpp"
     "Import/Emitters/BufferEmitter_functional_test.cpp"
-    $<$<BOOL:${WIN32}>:Import/Emitters/ResourceDescriptorEmitter_functional_test.cpp>
+    "Import/Emitters/EmitterWrites_functional_test.cpp"
+    "Import/Emitters/ResourceDescriptorEmitter_functional_test.cpp"
     "Import/Emitters/TextureEmitter_functional_test.cpp"
 )
 
@@ -313,8 +312,7 @@ endif()
 oxygen_cooker_test(
   Scenarios
   FUNCTIONAL
-  TIMEOUT
-    900
+  TIMEOUT 900
   DEPS
     oxygen::content
     nlohmann_json::nlohmann_json

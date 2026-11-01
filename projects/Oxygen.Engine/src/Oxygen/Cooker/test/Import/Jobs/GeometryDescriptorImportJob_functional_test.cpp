@@ -23,12 +23,12 @@
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -101,8 +101,12 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    }));
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
   EXPECT_TRUE(
@@ -195,8 +199,11 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   static_cast<void>(writer.Finish());
   WriteText(cooked_root / "Materials/new.omat", "new material");
   for (const auto own_wins : { true, false }) {
-    auto request
-      = MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc);
+    auto request = MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    });
     request.cooked_context_roots = own_wins
       ? std::vector<std::filesystem::path> { library, cooked_root }
       : std::vector<std::filesystem::path> { cooked_root, library };
@@ -207,9 +214,11 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
       = ReadBytes(cooked_root / "Geometry/NewMaterialPriority.ogeo");
     const auto offset = sizeof(data::pak::geometry::GeometryAssetDesc)
       + sizeof(data::pak::geometry::MeshDesc);
-    const auto submesh = ReadStructAt<data::pak::geometry::SubMeshDesc>(
-      descriptor_bytes, offset);
-    EXPECT_EQ(submesh.material_asset_key,
+    const auto submesh
+      = oxygen::serio::CopyAt<data::pak::geometry::SubMeshDesc>(
+        std::span { descriptor_bytes }, oxygen::serio::ByteOffset { offset });
+    ASSERT_HAS_VALUE(submesh);
+    EXPECT_EQ(submesh->material_asset_key,
       own_wins ? data::AssetKey::FromVirtualPath("/.cooked/Materials/new.omat")
                : library_key);
   }
@@ -424,8 +433,12 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report = SubmitAndWait(
-    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = descriptor_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = descriptor_doc,
+    }));
   ASSERT_HAS_VALUE(report);
   ASSERT_TRUE(report->success)
     << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);

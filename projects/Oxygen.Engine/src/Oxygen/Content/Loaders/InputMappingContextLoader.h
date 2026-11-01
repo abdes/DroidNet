@@ -6,9 +6,7 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstddef>
-#include <cstring>
 #include <memory>
 #include <span>
 #include <vector>
@@ -21,6 +19,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::loaders {
 
@@ -67,8 +66,11 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
     = reader.ReadBlob(sizeof(data::pak::input::InputMappingContextAssetDesc));
   CheckLoaderResult(
     desc_blob, "input mapping context asset", "InputMappingContextAssetDesc");
-  data::pak::input::InputMappingContextAssetDesc desc {};
-  std::memcpy(&desc, desc_blob->data(), sizeof(desc));
+  const auto parsed_desc
+    = serio::CopyAt<data::pak::input::InputMappingContextAssetDesc>(*desc_blob);
+  CheckLoaderResult(
+    parsed_desc, "input mapping context asset", "InputMappingContextAssetDesc");
+  const auto desc = *parsed_desc;
 
   if (desc.header.version
     != data::pak::input::kInputMappingContextAssetVersion) {
@@ -131,41 +133,41 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   std::vector<data::pak::input::InputActionMappingRecord> mappings(
     desc.mappings.count);
   for (uint32_t i = 0; i < desc.mappings.count; ++i) {
-    std::memcpy(&mappings.at(i),
-      payload
-        .subspan(desc.mappings.offset
-            + (static_cast<size_t>(i)
-              * sizeof(data::pak::input::InputActionMappingRecord)),
-          sizeof(data::pak::input::InputActionMappingRecord))
-        .data(),
-      sizeof(data::pak::input::InputActionMappingRecord));
+    const auto record
+      = serio::CopyAt<data::pak::input::InputActionMappingRecord>(payload,
+        serio::ByteOffset { desc.mappings.offset
+          + (static_cast<size_t>(i)
+            * sizeof(data::pak::input::InputActionMappingRecord)) });
+    CheckLoaderResult(
+      record, "input mapping context asset", "InputActionMappingRecord");
+    mappings.at(i) = *record;
   }
 
   std::vector<data::pak::input::InputTriggerRecord> triggers(
     desc.triggers.count);
   for (uint32_t i = 0; i < desc.triggers.count; ++i) {
-    std::memcpy(&triggers.at(i),
-      payload
-        .subspan(desc.triggers.offset
-            + (static_cast<size_t>(i)
-              * sizeof(data::pak::input::InputTriggerRecord)),
-          sizeof(data::pak::input::InputTriggerRecord))
-        .data(),
-      sizeof(data::pak::input::InputTriggerRecord));
+    const auto record
+      = serio::CopyAt<data::pak::input::InputTriggerRecord>(payload,
+        serio::ByteOffset { desc.triggers.offset
+          + (static_cast<size_t>(i)
+            * sizeof(data::pak::input::InputTriggerRecord)) });
+    CheckLoaderResult(
+      record, "input mapping context asset", "InputTriggerRecord");
+    triggers.at(i) = *record;
     detail::ValidateTriggerType(triggers.at(i).type);
   }
 
   std::vector<data::pak::input::InputTriggerAuxRecord> trigger_aux(
     desc.trigger_aux.count);
   for (uint32_t i = 0; i < desc.trigger_aux.count; ++i) {
-    std::memcpy(&trigger_aux.at(i),
-      payload
-        .subspan(desc.trigger_aux.offset
-            + (static_cast<size_t>(i)
-              * sizeof(data::pak::input::InputTriggerAuxRecord)),
-          sizeof(data::pak::input::InputTriggerAuxRecord))
-        .data(),
-      sizeof(data::pak::input::InputTriggerAuxRecord));
+    const auto record
+      = serio::CopyAt<data::pak::input::InputTriggerAuxRecord>(payload,
+        serio::ByteOffset { desc.trigger_aux.offset
+          + (static_cast<size_t>(i)
+            * sizeof(data::pak::input::InputTriggerAuxRecord)) });
+    CheckLoaderResult(
+      record, "input mapping context asset", "InputTriggerAuxRecord");
+    trigger_aux.at(i) = *record;
   }
 
   auto strings = data::DescriptorStrings {};
@@ -252,7 +254,10 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   auto asset = std::make_unique<data::InputMappingContextAsset>(
     context.current_asset_key, desc, std::move(mappings), std::move(triggers),
     std::move(trigger_aux), std::move(strings),
-    data::SourceOrigin { context.source_key, context.source_instance });
+    data::SourceOrigin {
+      .key = context.source_key,
+      .instance = context.source_instance,
+    });
   asset->SetAssetName(std::move(name));
   return asset;
 }

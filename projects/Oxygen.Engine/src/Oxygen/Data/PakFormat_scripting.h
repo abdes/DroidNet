@@ -226,6 +226,8 @@ static_assert(sizeof(ScriptAssetDesc) == 83);
 namespace oxygen::serio {
 template <> inline constexpr bool kIsRecord<data::pak::scripting::ScriptingComponentRecord> = true;
 template <> inline constexpr bool kIsRecord<data::pak::scripting::ScriptSlotRecord> = true;
+template <> inline constexpr bool kIsRecord<data::pak::scripting::ScriptResourceDesc> = true;
+template <> inline constexpr bool kIsRecord<data::pak::scripting::ScriptAssetDesc> = true;
 } // namespace oxygen::serio
 // clang-format on
 

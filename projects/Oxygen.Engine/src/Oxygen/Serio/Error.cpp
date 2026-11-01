@@ -27,6 +27,8 @@ namespace {
       return condition == Error::kNoSpace;
     case std::errc::io_error:
       return condition == Error::kIo;
+    case std::errc::is_a_directory:
+      return condition == Error::kIsDirectory;
     default:
       return false;
     }
@@ -60,6 +62,8 @@ namespace {
         return "no space";
       case Error::kIo:
         return "device error";
+      case Error::kIsDirectory:
+        return "is a directory";
       }
       return "unknown serio error";
     }

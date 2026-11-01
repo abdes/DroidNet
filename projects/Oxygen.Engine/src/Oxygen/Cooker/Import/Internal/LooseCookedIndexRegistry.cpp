@@ -17,7 +17,8 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
@@ -32,14 +33,14 @@
 namespace oxygen::content::import {
 
 LooseCookedIndexRegistry::LooseCookedIndexRegistry(
-  observer_ptr<cooked::CookerStorage> storage)
+  observer_ptr<cooked::ImportStorage> storage)
   : storage_(storage)
 {
   CHECK_NOTNULL_F(storage_, "LooseCookedIndexRegistry requires a file system");
 }
 
 auto LooseCookedIndexRegistry::Storage() const noexcept
-  -> observer_ptr<cooked::CookerStorage>
+  -> observer_ptr<cooked::ImportStorage>
 {
   return storage_;
 }

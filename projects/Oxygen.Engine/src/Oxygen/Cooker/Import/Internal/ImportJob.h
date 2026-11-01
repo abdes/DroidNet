@@ -34,10 +34,13 @@ class Event;
 class ThreadPool;
 } // namespace oxygen::co
 
+namespace oxygen::serio {
+class IoDriver;
+} // namespace oxygen::serio
+
 namespace oxygen::content::import {
 class ImportSession;
 class IAsyncFileReader;
-class IAsyncFileWriter;
 class ResourceTableRegistry;
 class LooseCookedIndexRegistry;
 } // namespace oxygen::content::import
@@ -95,7 +98,7 @@ public:
   OXGN_COOK_API void SetName(std::string_view name) noexcept override;
 
 protected:
-  //! One session owned through producer shutdown and callback-write drain.
+  //! One session owned through producer shutdown and registry retirement.
   OXGN_COOK_NDAPI auto Session() -> ImportSession&;
 
   //! Execute the job-specific import work.
@@ -132,9 +135,8 @@ protected:
     return source_snapshot_;
   }
 
-  //! Access the async file writer.
-  OXGN_COOK_NDAPI auto FileWriter() const noexcept
-    -> observer_ptr<IAsyncFileWriter>;
+  //! The driver cooked writes are awaited on.
+  OXGN_COOK_NDAPI auto Driver() const noexcept -> observer_ptr<serio::IoDriver>;
 
   //! Access the shared thread pool.
   OXGN_COOK_NDAPI auto ThreadPool() const noexcept
@@ -233,9 +235,6 @@ private:
   [[nodiscard]] auto MakeCancelledReport(const ImportRequest& request) const
     -> ImportReport;
 
-  [[nodiscard]] auto MakeNoFileWriterReport(const ImportRequest& request) const
-    -> ImportReport;
-
   ImportJobId job_id_ = kInvalidJobId;
   ImportRequest request_;
   ImportCompletionCallback on_complete_;
@@ -243,7 +242,7 @@ private:
   std::shared_ptr<co::Event> cancel_event_;
   observer_ptr<IAsyncFileReader> file_reader_;
   observer_ptr<IAsyncFileReader> cooked_reader_;
-  observer_ptr<IAsyncFileWriter> file_writer_;
+  observer_ptr<serio::IoDriver> driver_;
   observer_ptr<co::ThreadPool> thread_pool_;
   observer_ptr<ResourceTableRegistry> table_registry_;
   observer_ptr<LooseCookedIndexRegistry> index_registry_;
@@ -252,7 +251,6 @@ private:
   std::stop_token stop_token_;
   std::shared_ptr<ModelImportRecord> model_import_record_;
   std::shared_ptr<ImportSourceSnapshot> source_snapshot_;
-  std::unique_ptr<IAsyncFileWriter> generation_writer_;
   std::unique_ptr<ResourceTableRegistry> generation_tables_;
   std::unique_ptr<LooseCookedIndexRegistry> generation_index_;
 

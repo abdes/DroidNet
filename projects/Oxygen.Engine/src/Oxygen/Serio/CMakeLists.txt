@@ -71,7 +71,9 @@ set(
   "Reader.h"
   "Record.h"
   "Region.h"
+  "RegionReader.h"
   "RegionStream.h"
+  "RegionWriter.h"
   "Stream.h"
   "Types.h"
   "Writer.h"
@@ -80,7 +82,10 @@ set(
 )
 set(
   OXYGEN_SERIO_PRIVATE_HEADERS
+  "Detail/BlockingIo.h"
+  "Detail/InlineBackend.h"
   "Detail/IoBackend.h"
+  "Detail/Publication.h"
   "Detail/SystemErrors.h"
 )
 set(
@@ -109,6 +114,7 @@ if(WIN32)
     "Platform/Windows/IocpBackend.cpp"
     "Platform/Windows/MappedFile.cpp"
     "Platform/Windows/NativeFile.cpp"
+    "Platform/Windows/MoveFileOver.cpp"
     "Platform/Windows/SystemErrors.cpp"
   )
 else()
@@ -120,6 +126,7 @@ else()
     "Platform/Posix/UringBackend.cpp"
     "Platform/Posix/MappedFile.cpp"
     "Platform/Posix/NativeFile.cpp"
+    "Platform/Posix/MoveFileOver.cpp"
     "Platform/Posix/SystemErrors.cpp"
   )
 endif()
@@ -173,7 +180,10 @@ if(OXYGEN_BUILD_TESTS)
     INTERFACE
       FILE_SET HEADERS
       BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-      FILES "Testing/FaultInjectingDevice.h" "Testing/TestBytes.h"
+      FILES
+        "Testing/AtomicFiles.h"
+        "Testing/FaultInjectingDevice.h"
+        "Testing/TestBytes.h"
   )
   target_link_libraries(
     Oxygen.Serio.Testing

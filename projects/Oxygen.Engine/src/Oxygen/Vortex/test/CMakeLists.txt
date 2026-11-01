@@ -138,6 +138,11 @@ m_gtest_program(
   SOURCES
     "EnvironmentLightingService_test.cpp"
 )
+target_link_libraries(
+  Oxygen.Vortex.EnvironmentLightingService.Tests
+  PRIVATE
+    oxygen::serio::testing
+)
 target_compile_definitions(
   Oxygen.Vortex.EnvironmentLightingService.Tests
   PRIVATE
@@ -394,6 +399,11 @@ m_gtest_program(
     "Resources/TextureBinder_failures_test.cpp"
     "Resources/CubeIlluminance_test.cpp"
 )
+target_link_libraries(
+  Oxygen.Vortex.TextureBinder.Tests
+  PRIVATE
+    oxygen::serio::testing
+)
 
 m_gtest_program(
   MaterialBinder
@@ -492,6 +502,7 @@ if(WIN32)
       oxygen::cooker
       oxygen::vortex
       oxygen::graphics-direct3d12
+      oxygen::serio::testing
       oxygen::testing
       nlohmann_json::nlohmann_json
   )

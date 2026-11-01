@@ -71,6 +71,7 @@ target_link_libraries(
     oxygen::profiling
     oxygen::scene
     oxygen::data
+    oxygen::serio::testing
     nlohmann_json::nlohmann_json
 )
 

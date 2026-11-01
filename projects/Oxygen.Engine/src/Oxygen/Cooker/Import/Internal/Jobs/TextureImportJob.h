@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import {
 class ImportSession;
@@ -43,7 +44,7 @@ private:
   struct TextureSource {
     bool success = false;
     std::string source_id;
-    std::shared_ptr<std::vector<std::byte>> bytes;
+    std::shared_ptr<serio::ByteBuffer> bytes;
     std::optional<ScratchImage> image;
     std::optional<TextureSourceSet> source_set;
     std::optional<ScratchImageMeta> meta;

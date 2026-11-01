@@ -96,8 +96,9 @@ public:
     on_complete(nullptr);
   }
 
-  void StartLoadMaterialAsset(const data::AssetKey&, data::SourceKey,
-    const content::LoadRequest&, MaterialCallback on_complete) override
+  void StartLoadMaterialAsset(const data::AssetKey& /*key*/,
+    data::SourceKey /*source_key*/, const content::LoadRequest& /*request*/,
+    MaterialCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -108,8 +109,9 @@ public:
     on_complete(nullptr);
   }
 
-  void StartLoadGeometryAsset(const data::AssetKey&, data::SourceKey,
-    const content::LoadRequest&, GeometryCallback on_complete) override
+  void StartLoadGeometryAsset(const data::AssetKey& /*key*/,
+    data::SourceKey /*source_key*/, const content::LoadRequest& /*request*/,
+    GeometryCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -120,8 +122,9 @@ public:
     on_complete(nullptr);
   }
 
-  void StartLoadScene(const data::AssetKey&, data::SourceKey,
-    const content::LoadRequest&, SceneCallback on_complete) override
+  void StartLoadScene(const data::AssetKey& /*key*/,
+    data::SourceKey /*source_key*/, const content::LoadRequest& /*request*/,
+    SceneCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -132,8 +135,9 @@ public:
     on_complete(nullptr);
   }
 
-  void StartLoadScriptAsset(const data::AssetKey&, data::SourceKey,
-    const content::LoadRequest&, ScriptCallback on_complete) override
+  void StartLoadScriptAsset(const data::AssetKey& /*key*/,
+    data::SourceKey /*source_key*/, const content::LoadRequest& /*request*/,
+    ScriptCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -150,8 +154,9 @@ public:
     on_complete(nullptr);
   }
 
-  void StartLoadPhysicsSceneAsset(const data::AssetKey&, data::SourceKey,
-    const content::LoadRequest&, PhysicsSceneCallback on_complete) override
+  void StartLoadPhysicsSceneAsset(const data::AssetKey& /*key*/,
+    data::SourceKey /*source_key*/, const content::LoadRequest& /*request*/,
+    PhysicsSceneCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -175,26 +180,28 @@ public:
   {
   }
 
-  auto DoMountLooseCookedGeneration(const std::filesystem::path&,
-    std::optional<data::SourceKey>) -> data::SourceKey override
+  auto DoMountLooseCookedGeneration(const std::filesystem::path& /*path*/,
+    std::optional<data::SourceKey> /*replaces*/) -> data::SourceKey override
   {
     throw std::logic_error("GPU test loader does not mount disk generations");
   }
-  auto RetireLooseCookedGeneration(data::SourceKey) -> bool override
+  auto RetireLooseCookedGeneration(data::SourceKey /*source_key*/)
+    -> bool override
   {
     return false;
   }
 
   auto ClearMounts() -> void override { }
   auto WaitForPendingLoadsAsync() -> co::Co<> override { co_return; }
-  auto PrepareMountsAsync(std::vector<content::ContentMount>)
+  auto PrepareMountsAsync(std::vector<content::ContentMount> /*mounts*/)
     -> co::Co<content::PreparedMountSet> override
   {
     throw std::logic_error("Renderer test loader does not prepare disk mounts");
   }
-  auto CommitPreparedMounts(content::PreparedMountSet&&)
+  auto CommitPreparedMounts(content::PreparedMountSet&& prepared)
     -> content::MountRetirement override
   {
+    static_cast<void>(std::move(prepared));
     throw std::logic_error("Renderer test loader does not commit disk mounts");
   }
 
@@ -284,7 +291,8 @@ public:
     return nullptr;
   }
 
-  [[nodiscard]] auto GetMaterialAsset(const data::AssetKey&, const data::Asset&)
+  [[nodiscard]] auto GetMaterialAsset(
+    const data::AssetKey& /*key*/, const data::Asset& /*context*/)
     -> std::shared_ptr<data::MaterialAsset> override
   {
     return nullptr;
@@ -296,7 +304,8 @@ public:
     return nullptr;
   }
 
-  [[nodiscard]] auto GetGeometryAsset(const data::AssetKey&, const data::Asset&)
+  [[nodiscard]] auto GetGeometryAsset(
+    const data::AssetKey& /*key*/, const data::Asset& /*context*/)
     -> std::shared_ptr<data::GeometryAsset> override
   {
     return nullptr;
@@ -308,7 +317,8 @@ public:
     return nullptr;
   }
 
-  [[nodiscard]] auto GetScriptAsset(const data::AssetKey&, const data::Asset&)
+  [[nodiscard]] auto GetScriptAsset(
+    const data::AssetKey& /*key*/, const data::Asset& /*context*/)
     -> std::shared_ptr<data::ScriptAsset> override
   {
     return nullptr;
@@ -339,8 +349,8 @@ public:
     return std::nullopt;
   }
 
-  auto MakeTextureResourceKey(
-    oxygen::data::SourceKey, oxygen::data::pak::core::ResourceIndexT)
+  auto MakeTextureResourceKey(oxygen::data::SourceKey /*source_key*/,
+    oxygen::data::pak::core::ResourceIndexT /*resource_index*/)
     -> std::optional<oxygen::content::ResourceKey> override
   {
     return std::nullopt;
@@ -427,8 +437,9 @@ public:
     return std::nullopt;
   }
 
-  [[nodiscard]] auto GetInputActionAsset(const data::AssetKey&,
-    const data::Asset&) -> std::shared_ptr<data::InputActionAsset> override
+  [[nodiscard]] auto GetInputActionAsset(
+    const data::AssetKey& /*key*/, const data::Asset& /*context*/)
+    -> std::shared_ptr<data::InputActionAsset> override
   {
     return nullptr;
   }
@@ -557,6 +568,19 @@ public:
     std::shared_ptr<data::TextureResource> texture) -> void
   {
     textures_.insert_or_assign(key, std::move(texture));
+  }
+
+  //! Registers a synthetic texture of `shape` whose texels come from `texel`.
+  /*!
+   @return The texture's key, which is also its content hash.
+  */
+  [[nodiscard]] auto AddSyntheticTexture(SyntheticTextureShape shape,
+    const SyntheticTexel& texel) -> content::ResourceKey
+  {
+    const auto key = MintSyntheticTextureKey();
+    shape.content_hash = key.get();
+    SetTexture(key, MakeSyntheticTexture(shape, texel));
+    return key;
   }
 
   auto SetCookedTexturePayload(

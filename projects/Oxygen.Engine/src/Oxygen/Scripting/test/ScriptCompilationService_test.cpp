@@ -18,7 +18,6 @@
 #include <memory>
 #include <span>
 #include <string>
-#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -49,6 +48,8 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -78,7 +79,9 @@ using oxygen::scripting::ScriptSourceBlob;
 
 auto MakeSourceBlob(std::vector<uint8_t> bytes) -> ScriptSourceBlob
 {
-  return ScriptSourceBlob::FromOwned(std::move(bytes), ScriptLanguage::kLuau,
+  return ScriptSourceBlob::FromOwned(
+    oxygen::serio::ByteBuffer::CopyOf(std::as_bytes(std::span(bytes))).value(),
+    ScriptLanguage::kLuau,
     oxygen::data::pak::scripting::ScriptCompression::kNone, 0,
     oxygen::scripting::ScriptBlobOrigin::kEmbeddedResource,
     oxygen::scripting::ScriptBlobCanonicalName { "test-script" });
@@ -452,6 +455,34 @@ NOLINT_TEST(ScriptCompilationServiceTest,
   }
 }
 #endif
+
+NOLINT_TEST(ScriptCompilationServiceTest,
+  PersistentCachePublishesWhileAReaderHoldsThePreviousFile)
+{
+  const oxygen::testing::ScopedTempDir temp_dir;
+  const auto path = temp_dir.File("script_cache.bin");
+  std::atomic<int> calls = 0;
+  ASSERT_TRUE(CompileIntoPersistentCache(path, 100U, { 1 }, calls).success);
+
+  // The reader shares deletion, so the publication replaces the file it holds.
+  const auto held = oxygen::serio::OpenPublishedFile(path);
+  ASSERT_TRUE(held.has_value());
+  ASSERT_TRUE(CompileIntoPersistentCache(path, 200U, { 2 }, calls).success);
+  EXPECT_EQ(calls.load(), 2);
+
+  // No compiler is registered: both entries must come from the new file.
+  for (const auto key : { 100U, 200U }) {
+    TestEventLoop replay_loop;
+    ScriptCompilationService reader(observer_ptr<ThreadPool> {}, path);
+    const auto result = CompileAndStop(reader, replay_loop, key, { 0 });
+    ASSERT_TRUE(result.success);
+    ASSERT_NE(result.bytecode, nullptr);
+    EXPECT_TRUE(std::ranges::equal(result.bytecode->BytesView(),
+      std::array<uint8_t, 2> { static_cast<uint8_t>(key / 100U), 0xEE }));
+    EXPECT_EQ(reader.GetCounters().l2_hits, 1U);
+    EXPECT_EQ(reader.GetCounters().compile_started, 0U);
+  }
+}
 
 NOLINT_TEST(ScriptCompilationServiceTest,
   PersistentCacheRejectsPayloadAndChecksumCorruption)

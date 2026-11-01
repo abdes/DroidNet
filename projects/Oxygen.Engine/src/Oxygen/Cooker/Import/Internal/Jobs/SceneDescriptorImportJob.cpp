@@ -291,32 +291,38 @@ namespace {
       if (context.geometries.contains(resolved->key)) {
         continue;
       }
-      auto bytes = ReadListedDescriptor(context, resolved->key).bytes;
-      if (!bytes) {
+      auto listed_bytes = ReadListedDescriptor(context, resolved->key).bytes;
+      auto file_bytes = serio::ByteBuffer {};
+      auto found = listed_bytes.has_value();
+      if (!found) {
         // A descriptor this cook writes is not listed in an index yet.
         std::string relative;
         if (internal::TryVirtualPathToRelPath(
               context.request, resolved->resolved, relative)) {
           for (auto mount = context.mounts.rbegin();
-            mount != context.mounts.rend() && !bytes; ++mount) {
+            mount != context.mounts.rend() && !found; ++mount) {
             const auto candidate = mount->root / relative;
             const auto exists = co_await file_reader.Exists(candidate);
             if (exists && exists.value()) {
               if (auto read = co_await file_reader.ReadFile(candidate)) {
-                bytes = std::move(read.value());
+                file_bytes = std::move(read.value());
+                found = true;
               }
             }
           }
         }
       }
-      if (!bytes) {
+      if (!found) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.geometry_inventory_unavailable",
           "Cannot read geometry for surface validation", path);
         co_return false;
       }
       try {
-        serio::ReadOnlyMemoryStream stream(bytes.value());
+        const auto descriptor_bytes = listed_bytes.has_value()
+          ? std::span<const std::byte>(*listed_bytes)
+          : file_bytes.Bytes();
+        serio::ReadOnlyMemoryStream stream(descriptor_bytes);
         serio::Reader reader(stream);
         const LoaderContext loader_context {
           .current_asset_key = resolved->key,

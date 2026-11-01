@@ -193,9 +193,8 @@ namespace {
 
     if (profile.WritesPdbSidecars()) {
       std::error_code debug_ec;
-      const auto pdb_path = GetRequestPdbPath(final_archive_path,
-        expanded_request.request.source_path,
-        expanded_request.request.entry_point, expanded_request.request_key);
+      const auto pdb_path
+        = GetRequestPdbPath(final_archive_path, expanded_request);
       if (!std::filesystem::is_regular_file(pdb_path, debug_ec) || debug_ec) {
         analysis.dirty_reasons.push_back(DirtyReason::kMissingDebugArtifact);
       }

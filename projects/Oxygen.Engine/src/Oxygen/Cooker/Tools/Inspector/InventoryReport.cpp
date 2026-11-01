@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -37,6 +36,7 @@
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Reader.h>
@@ -77,11 +77,15 @@ namespace {
         throw std::runtime_error(
           "failed to read descriptor header: " + std::string(*relpath));
       }
-      data::pak::core::AssetHeader header {};
-      std::memcpy(&header, blob->data(), sizeof(header));
+      const auto header = serio::CopyAt<data::pak::core::AssetHeader>(
+        std::as_bytes(std::span { *blob }));
+      if (!header) {
+        throw std::runtime_error(
+          "failed to read descriptor header: " + std::string(*relpath));
+      }
       const auto current
         = data::pak::CurrentAssetVersion(static_cast<data::AssetType>(*type));
-      if (!current.has_value() || header.version != *current) {
+      if (!current.has_value() || header->version != *current) {
         stale.emplace_back(*relpath);
       }
     }

@@ -18,7 +18,6 @@
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -35,11 +34,18 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::content::import;
-using namespace oxygen::content::import::detail;
 using oxygen::co::Co;
 using oxygen::co::Event;
 using oxygen::co::kJoin;
+using oxygen::content::import::IAsyncFileReader;
+using oxygen::content::import::ImportConcurrency;
+using oxygen::content::import::ImportEventLoop;
+using oxygen::content::import::ImportJobId;
+using oxygen::content::import::ImportReport;
+using oxygen::content::import::ImportRequest;
+using oxygen::content::import::ResourceTableRegistry;
+using oxygen::content::import::detail::ImportJob;
+using oxygen::content::import::detail::ImportJobParams;
 
 namespace {
 
@@ -55,15 +61,14 @@ class ImportJobTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
   std::unique_ptr<IAsyncFileReader> file_reader_;
-  std::unique_ptr<IAsyncFileWriter> file_writer_;
   std::unique_ptr<oxygen::co::ThreadPool> thread_pool_;
   std::unique_ptr<ResourceTableRegistry> table_registry_;
 
   void SetUp() override
   {
-    file_reader_ = CreateAsyncFileReader(loop_);
-    file_writer_ = CreateAsyncFileWriter(loop_);
-    table_registry_ = std::make_unique<ResourceTableRegistry>(*file_writer_,
+    file_reader_
+      = oxygen::content::import::CreateAsyncFileReader(loop_.Driver());
+    table_registry_ = std::make_unique<ResourceTableRegistry>(loop_.Driver(),
       oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
     thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
   }
@@ -192,7 +197,7 @@ NOLINT_TEST_F(ImportJobTest, RunCompletesAndCallsOnCompleteOnce)
     .on_progress = nullptr,
     .cancel_event = cancel_event,
     .reader = oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
-    .writer = oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+    .driver = oxygen::observer_ptr<oxygen::serio::IoDriver>(&loop_.Driver()),
     .thread_pool
     = oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
     .registry
@@ -243,7 +248,7 @@ NOLINT_TEST_F(ImportJobTest, StopCompletesWithCancelledDiagnostic)
     .on_progress = nullptr,
     .cancel_event = cancel_event,
     .reader = oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
-    .writer = oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+    .driver = oxygen::observer_ptr<oxygen::serio::IoDriver>(&loop_.Driver()),
     .thread_pool
     = oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
     .registry
@@ -301,7 +306,7 @@ NOLINT_TEST_F(ImportJobTest, CancelEventPreTriggeredAvoidsExecution)
     .on_progress = nullptr,
     .cancel_event = cancel_event,
     .reader = oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
-    .writer = oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+    .driver = oxygen::observer_ptr<oxygen::serio::IoDriver>(&loop_.Driver()),
     .thread_pool
     = oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
     .registry
@@ -349,7 +354,7 @@ NOLINT_TEST_F(ImportJobTest, StartTaskExecutesTask)
     .on_progress = nullptr,
     .cancel_event = cancel_event,
     .reader = oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
-    .writer = oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+    .driver = oxygen::observer_ptr<oxygen::serio::IoDriver>(&loop_.Driver()),
     .thread_pool
     = oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
     .registry
@@ -395,7 +400,7 @@ NOLINT_TEST_F(ImportJobTest, StartPipelineStartsWorkers)
     .on_progress = nullptr,
     .cancel_event = cancel_event,
     .reader = oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
-    .writer = oxygen::observer_ptr<IAsyncFileWriter>(file_writer_.get()),
+    .driver = oxygen::observer_ptr<oxygen::serio::IoDriver>(&loop_.Driver()),
     .thread_pool
     = oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
     .registry

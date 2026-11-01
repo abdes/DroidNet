@@ -17,17 +17,19 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportSourceObservation.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/TaskCancelledException.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/Error.h>
 
 namespace oxygen::content::import::detail {
 
@@ -253,21 +255,19 @@ auto ImportSourceSnapshot::CaptureFor(const std::filesystem::path& path)
   }
 }
 
-auto ImportSourceSnapshot::ReadSource(
-  const std::filesystem::path& path, const ReadOptions options)
-  -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>>
+auto ImportSourceSnapshot::ReadSource(const std::filesystem::path& path,
+  const ReadOptions options) -> co::Co<Result<serio::ByteBuffer>>
 {
   const auto* input = CaptureFor(path);
   if (input == nullptr) {
     co_return co_await reader_->ReadFile(path, options);
   }
+  // A source absent or a folder when captured.
   if (!input->exists) {
-    co_return Err(MakeFileError(
-      path, FileError::kNotFound, "Source was absent when captured"));
+    co_return Err(serio::make_error_code(serio::Error::kNotFound));
   }
   if (input->metadata.has_value() && input->metadata->is_directory) {
-    co_return Err(MakeFileError(
-      path, FileError::kIsDirectory, "Source was a directory when captured"));
+    co_return Err(serio::make_error_code(serio::Error::kIsDirectory));
   }
   if (!input->file.has_value()) {
     Invalidate();
@@ -275,27 +275,22 @@ auto ImportSourceSnapshot::ReadSource(
       "Read was not captured for source: " + path.string());
   }
   auto bytes = co_await reader_->ReadFile(input->file->path, options);
-  if (!bytes && bytes.error().code != FileError::kCancelled) {
+  if (!bytes && bytes.error() != std::errc::operation_canceled) {
+    // The captured bytes are unavailable.
     Invalidate();
-    auto failure = bytes.error();
-    failure.path = path;
-    failure.message
-      = "Captured source bytes are unavailable: " + failure.message;
-    co_return Err(std::move(failure));
   }
   co_return bytes;
 }
 
 auto ImportSourceSnapshot::SourceInfo(const std::filesystem::path& path)
-  -> co::Co<Result<FileInfo, FileErrorInfo>>
+  -> co::Co<Result<FileInfo>>
 {
   const auto* input = CaptureFor(path);
   if (input == nullptr) {
     co_return co_await reader_->GetFileInfo(path);
   }
   if (!input->exists) {
-    co_return Err(MakeFileError(
-      path, FileError::kNotFound, "Source was absent when captured"));
+    co_return Err(serio::make_error_code(serio::Error::kNotFound));
   }
   if (!input->metadata.has_value()) {
     Invalidate();
@@ -306,7 +301,7 @@ auto ImportSourceSnapshot::SourceInfo(const std::filesystem::path& path)
 }
 
 auto ImportSourceSnapshot::SourceExists(const std::filesystem::path& path)
-  -> co::Co<Result<bool, FileErrorInfo>>
+  -> co::Co<Result<bool>>
 {
   const auto* input = CaptureFor(path);
   if (input == nullptr) {
@@ -315,15 +310,14 @@ auto ImportSourceSnapshot::SourceExists(const std::filesystem::path& path)
   co_return Ok(input->exists);
 }
 
-auto ImportSourceSnapshot::ReadFile(
-  const std::filesystem::path& path, const ReadOptions options)
-  -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>>
+auto ImportSourceSnapshot::ReadFile(const std::filesystem::path& path,
+  const ReadOptions options) -> co::Co<Result<serio::ByteBuffer>>
 {
   if (path.empty()) {
     if (captured_inputs_) {
       Invalidate();
     }
-    co_return Err(MakeFileError(path, FileError::kInvalidPath, "Empty path"));
+    co_return Err(std::errc::invalid_argument);
   }
   try {
     auto key = MakeReadKey(path, options);
@@ -331,7 +325,7 @@ auto ImportSourceSnapshot::ReadFile(
     const auto read_guard = ScopeGuard([this] noexcept -> void { EndRead(); });
     auto result = co_await ReadSource(std::get<0>(key), options);
     if (!result) {
-      if (result.error().code == FileError::kNotFound) {
+      if (result.error() == serio::Error::kNotFound) {
         // Keep the underlying error even when this contradicts an earlier
         // probe.
         static_cast<void>(RecordObservation(std::get<0>(key),
@@ -345,29 +339,19 @@ auto ImportSourceSnapshot::ReadFile(
     }
     auto hashed = co_await pool_->Run(
       [bytes = std::move(result).value()](co::ThreadPool::CancelToken) mutable
-        -> std::pair<std::vector<std::byte>, base::Sha256Digest> {
-        const auto digest = base::ComputeSha256(bytes);
+        -> std::pair<serio::ByteBuffer, base::Sha256Digest> {
+        const auto digest = base::ComputeSha256(bytes.Bytes());
         return std::pair { std::move(bytes), digest };
       });
     RecordDigest(std::move(key), hashed.second);
-    co_return Result<std::vector<std::byte>, FileErrorInfo>::Ok(
-      std::move(hashed.first));
+    co_return Result<serio::ByteBuffer>::Ok(std::move(hashed.first));
   } catch (const co::TaskCancelledException&) {
-    co_return Result<std::vector<std::byte>, FileErrorInfo>::Err(FileErrorInfo {
-      .code = FileError::kCancelled,
-      .path = path,
-      .system_error = std::make_error_code(std::errc::operation_canceled),
-      .message = "Source read cancelled",
-    });
+    co_return Err(std::errc::operation_canceled);
   } catch (const std::filesystem::filesystem_error& error) {
-    co_return Err(MakeFileError(path, error.code()));
+    co_return Err(error.code());
   } catch (const std::exception& error) {
-    co_return Result<std::vector<std::byte>, FileErrorInfo>::Err(FileErrorInfo {
-      .code = FileError::kIOError,
-      .path = path,
-      .system_error = std::make_error_code(std::errc::state_not_recoverable),
-      .message = error.what(),
-    });
+    LOG_F(ERROR, "Source read of '{}' failed: {}", path.string(), error.what());
+    co_return Err(serio::make_error_code(serio::Error::kIo));
   }
 }
 
@@ -381,13 +365,13 @@ auto ImportSourceSnapshot::RecordConsumed(const std::filesystem::path& path,
 }
 
 auto ImportSourceSnapshot::GetFileInfo(const std::filesystem::path& path)
-  -> co::Co<Result<FileInfo, FileErrorInfo>>
+  -> co::Co<Result<FileInfo>>
 {
   if (path.empty()) {
     if (captured_inputs_) {
       Invalidate();
     }
-    co_return Err(MakeFileError(path, FileError::kInvalidPath, "Empty path"));
+    co_return Err(std::errc::invalid_argument);
   }
   try {
     const auto normalized = NormalizePath(path);
@@ -395,7 +379,7 @@ auto ImportSourceSnapshot::GetFileInfo(const std::filesystem::path& path)
     const auto guard = ScopeGuard([this] noexcept -> void { EndRead(); });
     auto result = co_await SourceInfo(normalized);
     if (!result) {
-      if (result.error().code == FileError::kNotFound) {
+      if (result.error() == serio::Error::kNotFound) {
         static_cast<void>(RecordObservation(normalized,
           Observation {
             .exists = false,
@@ -416,32 +400,24 @@ auto ImportSourceSnapshot::GetFileInfo(const std::filesystem::path& path)
     }
     co_return result;
   } catch (const co::TaskCancelledException&) {
-    co_return Err(FileErrorInfo {
-      .code = FileError::kCancelled,
-      .path = path,
-      .system_error = std::make_error_code(std::errc::operation_canceled),
-      .message = "Source metadata read cancelled",
-    });
+    co_return Err(std::errc::operation_canceled);
   } catch (const std::filesystem::filesystem_error& error) {
-    co_return Err(MakeFileError(path, error.code()));
+    co_return Err(error.code());
   } catch (const std::exception& error) {
-    co_return Err(FileErrorInfo {
-      .code = FileError::kIOError,
-      .path = path,
-      .system_error = std::make_error_code(std::errc::state_not_recoverable),
-      .message = error.what(),
-    });
+    LOG_F(ERROR, "Source metadata read of '{}' failed: {}", path.string(),
+      error.what());
+    co_return Err(serio::make_error_code(serio::Error::kIo));
   }
 }
 
 auto ImportSourceSnapshot::Exists(const std::filesystem::path& path)
-  -> co::Co<Result<bool, FileErrorInfo>>
+  -> co::Co<Result<bool>>
 {
   if (path.empty()) {
     if (captured_inputs_) {
       Invalidate();
     }
-    co_return Err(MakeFileError(path, FileError::kInvalidPath, "Empty path"));
+    co_return Err(std::errc::invalid_argument);
   }
   try {
     const auto normalized = NormalizePath(path);
@@ -449,7 +425,7 @@ auto ImportSourceSnapshot::Exists(const std::filesystem::path& path)
     const auto guard = ScopeGuard([this] noexcept -> void { EndRead(); });
     auto result = co_await SourceExists(normalized);
     if (!result) {
-      if (result.error().code == FileError::kNotFound) {
+      if (result.error() == serio::Error::kNotFound) {
         static_cast<void>(RecordObservation(normalized,
           Observation {
             .exists = false,
@@ -470,21 +446,13 @@ auto ImportSourceSnapshot::Exists(const std::filesystem::path& path)
     }
     co_return result;
   } catch (const co::TaskCancelledException&) {
-    co_return Err(FileErrorInfo {
-      .code = FileError::kCancelled,
-      .path = path,
-      .system_error = std::make_error_code(std::errc::operation_canceled),
-      .message = "Source presence check cancelled",
-    });
+    co_return Err(std::errc::operation_canceled);
   } catch (const std::filesystem::filesystem_error& error) {
-    co_return Err(MakeFileError(path, error.code()));
+    co_return Err(error.code());
   } catch (const std::exception& error) {
-    co_return Err(FileErrorInfo {
-      .code = FileError::kIOError,
-      .path = path,
-      .system_error = std::make_error_code(std::errc::state_not_recoverable),
-      .message = error.what(),
-    });
+    LOG_F(ERROR, "Source presence check of '{}' failed: {}", path.string(),
+      error.what());
+    co_return Err(serio::make_error_code(serio::Error::kIo));
   }
 }
 
@@ -507,8 +475,8 @@ auto ImportSourceSnapshot::VerifyCapturedFiles() -> co::Co<>
     const auto& file = *input->file;
     const auto info = co_await reader_->GetFileInfo(file.path);
     if (!info) {
-      throw std::runtime_error(
-        "Cannot verify captured source metadata: " + info.error().ToString());
+      throw std::runtime_error("Cannot verify captured source metadata '"
+        + file.path.string() + "': " + info.error().message());
     }
     if (info.value().is_directory || info.value().size != file.size) {
       throw std::runtime_error(
@@ -536,18 +504,16 @@ auto ImportSourceSnapshot::VerifyCapturedFiles() -> co::Co<>
         ReadOptions {
           .offset = offset,
           .max_bytes = count,
-          .size_hint = count,
-          .alignment = 0U,
         });
       if (!bytes) {
-        throw std::runtime_error(
-          "Cannot verify captured source: " + bytes.error().ToString());
+        throw std::runtime_error("Cannot verify captured source '"
+          + file.path.string() + "': " + bytes.error().message());
       }
-      if (bytes.value().size() != count) {
+      if (bytes.value().Size().get() != count) {
         throw std::runtime_error(
           "Captured source returned a short read: " + path.string());
       }
-      hash.Update(bytes.value());
+      hash.Update(bytes.value().Bytes());
       offset += count;
     }
     if (hash.Finalize() != file.digest) {
@@ -579,8 +545,8 @@ auto ImportSourceSnapshot::Verify() -> co::Co<>
     if (observation.metadata) {
       const auto actual = co_await SourceInfo(path);
       if (!actual) {
-        throw std::runtime_error(
-          "Cannot verify source metadata: " + actual.error().ToString());
+        throw std::runtime_error("Cannot verify source metadata '"
+          + path.string() + "': " + actual.error().message());
       }
       if (actual.value() != *observation.metadata) {
         throw std::runtime_error(
@@ -589,8 +555,8 @@ auto ImportSourceSnapshot::Verify() -> co::Co<>
     } else if (!observation.content_read) {
       const auto actual = co_await SourceExists(path);
       if (!actual) {
-        throw std::runtime_error(
-          "Cannot verify source presence: " + actual.error().ToString());
+        throw std::runtime_error("Cannot verify source presence '"
+          + path.string() + "': " + actual.error().message());
       }
       if (actual.value() != observation.exists) {
         throw std::runtime_error(
@@ -604,18 +570,16 @@ auto ImportSourceSnapshot::Verify() -> co::Co<>
       ReadOptions {
         .offset = offset,
         .max_bytes = maximum,
-        .size_hint = 0U,
-        .alignment = 0U,
       });
     if (!bytes) {
-      throw std::runtime_error("Source became unavailable before publication: "
-        + bytes.error().ToString());
+      throw std::runtime_error("Source became unavailable before publication '"
+        + path.string() + "': " + bytes.error().message());
     }
-    const auto size = static_cast<uint64_t>(bytes.value().size());
+    const auto size = bytes.value().Size().get();
     const auto actual = co_await pool_->Run(
       [data = std::move(bytes).value()](
         co::ThreadPool::CancelToken) -> base::Sha256Digest {
-        return base::ComputeSha256(data);
+        return base::ComputeSha256(data.Bytes());
       });
     if (actual != expected) {
       throw std::runtime_error(

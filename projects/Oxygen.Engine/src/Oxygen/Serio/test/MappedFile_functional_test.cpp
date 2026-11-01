@@ -22,6 +22,7 @@
 #include <Oxygen/Serio/Detail/GuardedCopy.h>
 #include <Oxygen/Serio/Error.h>
 #include <Oxygen/Serio/MappedFile.h>
+#include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Serio/Types.h>
 #include <Oxygen/Testing/GTest.h>
@@ -91,6 +92,47 @@ NOLINT_TEST_F(MappedFileTest, ReplacementKeepsMappedVersion)
   EXPECT_THAT(
     Required(MappedFile::Open(path), "remap").Bytes(), BytesEqual(replacement));
 }
+
+//! A file another handle holds open for writing maps when the mapping
+//! shares writes, and shows the bytes the file held when it was mapped.
+NOLINT_TEST_F(MappedFileTest, MapsAFileAWriterHoldsWhenSharingWrites)
+{
+  const auto path = files_.Write(bytes_);
+  auto writer
+    = Required(oxygen::serio::NativeFile::Open(path,
+                 {
+                   .access = oxygen::serio::Access::kReadWrite,
+                   .sharing = oxygen::serio::Sharing::kReadWriteDelete,
+                 }),
+      "open the writer");
+
+  const auto mapped
+    = MappedFile::Open(path, oxygen::serio::Sharing::kReadWriteDelete);
+
+  ASSERT_TRUE(mapped) << mapped.error().message();
+  EXPECT_THAT(mapped->Bytes(), BytesEqual(bytes_));
+}
+
+#ifdef OXYGEN_WINDOWS
+//! By default a mapping refuses a file another handle writes: on Windows the
+//! open fails with a sharing violation.
+NOLINT_TEST_F(MappedFileTest, DefaultSharingRefusesAFileAWriterHolds)
+{
+  const auto path = files_.Write(bytes_);
+  auto writer
+    = Required(oxygen::serio::NativeFile::Open(path,
+                 {
+                   .access = oxygen::serio::Access::kReadWrite,
+                   .sharing = oxygen::serio::Sharing::kReadWriteDelete,
+                 }),
+      "open the writer");
+
+  const auto mapped = MappedFile::Open(path);
+
+  ASSERT_FALSE(mapped);
+  EXPECT_EQ(mapped.error(), Error::kSharingViolation);
+}
+#endif
 
 //! Prefetch hints, including ranges past the end, leave reads unchanged.
 NOLINT_TEST_F(MappedFileTest, PrefetchLeavesReadsUnchanged)

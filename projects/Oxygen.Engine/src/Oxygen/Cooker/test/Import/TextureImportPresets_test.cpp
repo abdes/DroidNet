@@ -4,11 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Import/TextureImportPresets.cpp
+// Covers: Import/TextureImportPresets.cpp, Import/TextureImporter.cpp
+
+#include <array>
+#include <filesystem>
 
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/Import/TextureImporter.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -21,6 +25,7 @@ using oxygen::Format;
 using oxygen::TextureType;
 using oxygen::content::import::ApplyPreset;
 using oxygen::content::import::Bc7Quality;
+using oxygen::content::import::DetectPresetFromFilename;
 using oxygen::content::import::GetPresetMetadata;
 using oxygen::content::import::MakeDescFromPreset;
 using oxygen::content::import::MipFilter;
@@ -29,6 +34,53 @@ using oxygen::content::import::TextureImportDesc;
 using oxygen::content::import::TextureIntent;
 using oxygen::content::import::TexturePreset;
 using oxygen::content::import::to_string;
+
+//! Preset detection considers the filename, handles case and preserves
+//! filesystem stem/extension rules without converting native path characters.
+NOLINT_TEST(TextureImportPresetsTest, DetectPresetFromFilename)
+{
+  struct Case {
+    std::filesystem::path path;
+    TexturePreset expected;
+  };
+  const auto cases = std::array {
+    Case {
+      .path = "textures/stone_NORMAL.png",
+      .expected = TexturePreset::kNormal,
+    },
+    Case {
+      .path = "textures/stone_albedo.EXR",
+      .expected = TexturePreset::kHdrEnvironment,
+    },
+    Case {
+      .path = "textures/stone_roughness",
+      .expected = TexturePreset::kRoughness,
+    },
+    Case {
+      .path = "textures/.hidden_albedo",
+      .expected = TexturePreset::kAlbedo,
+    },
+    Case {
+      .path = "textures_albedo/other.png",
+      .expected = TexturePreset::kData,
+    },
+    Case { .path = "textures/", .expected = TexturePreset::kData },
+    Case { .path = ".", .expected = TexturePreset::kData },
+    Case { .path = "..", .expected = TexturePreset::kData },
+#ifdef _WIN32
+    Case { .path = L"C:stone_NRM.png", .expected = TexturePreset::kNormal },
+    Case {
+      .path = L"textures/\u96ea_NORMAL.png",
+      .expected = TexturePreset::kNormal,
+    },
+    Case { .path = L"\\\\server_albedo", .expected = TexturePreset::kData },
+#endif
+  };
+  for (const auto& test_case : cases) {
+    EXPECT_EQ(DetectPresetFromFilename(test_case.path), test_case.expected)
+      << test_case.path;
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // to_string Tests

@@ -65,12 +65,12 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
       const auto read_result = co_await reader->ReadFile(descriptor_path);
       if (!read_result.has_value()) {
         report_error("texture_descriptor_read_failed",
-          "Failed reading texture descriptor: "
-            + read_result.error().ToString());
+          "Failed reading texture descriptor '" + descriptor_path.string()
+            + "': " + read_result.error().message());
         co_return std::nullopt;
       }
       const auto decoded
-        = data::DecodeTextureResourceDescriptor(read_result.value());
+        = data::DecodeTextureResourceDescriptor(read_result.value().Bytes());
       if (!decoded) {
         report_error("texture_descriptor_invalid", decoded.error());
         co_return std::nullopt;

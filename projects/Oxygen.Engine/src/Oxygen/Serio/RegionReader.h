@@ -6,11 +6,10 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <optional>
+#include <new>
 #include <span>
 #include <system_error>
 #include <utility>
@@ -25,38 +24,61 @@
 #include <Oxygen/Serio/RegionStream.h>
 #include <Oxygen/Serio/Types.h>
 
-namespace oxygen::content::internal {
+namespace oxygen::serio {
 
-//! The erased reader a loader is handed for one region of a device: an asset
-//! descriptor, a resource table row, a payload region.
+//! An `AnyReader` of a region of a device.
 /*!
  Positions are relative to the region's start, and every read is bounded by
- the region. A region of a contiguous device (a mapped pak, memory) is read
- by copies from its view, with no stream buffer; any other gets a buffer no
- larger than the region.
+ the region. A region of a contiguous device (a mapped file, memory) is read
+ by copies from its view, with no stream buffer; any other is read through a
+ buffer no larger than the region.
 
  The reader either views a region of a device that outlives it, or owns a
- device and reads all of it (a loose descriptor file, cooked bytes).
+ device and reads all of it (a descriptor file, bytes held in memory):
+
+ ```cpp
+ auto file = NativeFile::Open(path, {});
+ if (!file) { return Err(file.error()); }
+ auto reader = RegionReader<NativeFile>::Owning(std::move(*file));
+ if (!reader) { return Err(reader.error()); }
+ CHECK_RESULT(Load(**reader, header));
+ ```
+
+ It is neither copyable nor movable: its reader refers to the stream beside
+ it.
 
  @tparam D The device type.
 */
-template <serio::ReadableDevice D>
-class RegionReader final : public serio::AnyReader {
+template <ReadableDevice D> class RegionReader final : public AnyReader {
 public:
   //! Reads `region`; its device outlives the reader.
-  explicit RegionReader(const serio::Region<D> region) noexcept
-    : stream_(region, BufferSize(region))
+  explicit RegionReader(const Region<D> region) noexcept
+    : stream_(region)
     , reader_(stream_)
   {
   }
 
   //! Reads all of `device`, which the reader owns.
   /*!
-   @throw std::system_error When the size of `device` cannot be read.
+   @return The reader; the device's size error, or `not_enough_memory`.
   */
-  [[nodiscard]] static auto Owning(D device) -> std::unique_ptr<RegionReader>
+  [[nodiscard]] static auto Owning(D device) noexcept
+    -> Result<std::unique_ptr<RegionReader>>
   {
-    return std::unique_ptr<RegionReader>(new RegionReader(std::move(device)));
+    auto owned = std::unique_ptr<D>(new (std::nothrow) D(std::move(device)));
+    if (!owned) {
+      return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
+    }
+    const auto whole = Region<D>::Whole(*owned);
+    if (!whole) {
+      return ::oxygen::Err(whole.error());
+    }
+    auto reader = std::unique_ptr<RegionReader>(
+      new (std::nothrow) RegionReader(std::move(owned), *whole));
+    if (!reader) {
+      return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
+    }
+    return ::oxygen::Ok(std::move(reader));
   }
 
   ~RegionReader() override = default;
@@ -81,7 +103,7 @@ public:
     return reader_.Position();
   }
 
-  [[nodiscard]] auto Remaining() noexcept -> serio::ByteCount override
+  [[nodiscard]] auto Remaining() noexcept -> ByteCount override
   {
     return reader_.Remaining();
   }
@@ -93,7 +115,7 @@ public:
   }
 
   [[nodiscard]] auto ScopedAlignment(const uint16_t alignment)
-    -> serio::AlignmentGuard override
+    -> AlignmentGuard override
   {
     return reader_.ScopedAlignment(alignment);
   }
@@ -111,34 +133,19 @@ public:
   }
 
 private:
-  using Stream = serio::RegionReadStream<D>;
+  using Stream = RegionReadStream<D>;
 
-  explicit RegionReader(D device)
-    : owned_(std::move(device))
-    , stream_(WholeOf(*owned_), BufferSize(WholeOf(*owned_)))
+  RegionReader(std::unique_ptr<D> owned, const Region<D> whole) noexcept
+    : owned_(std::move(owned))
+    , stream_(whole)
     , reader_(stream_)
   {
   }
 
-  static auto WholeOf(const D& device) -> serio::Region<D>
-  {
-    auto whole = serio::Region<D>::Whole(device);
-    if (!whole) {
-      throw std::system_error(whole.error(), "size of a content region");
-    }
-    return *whole;
-  }
-
-  static auto BufferSize(const serio::Region<D>& region) noexcept
-    -> serio::ByteCount
-  {
-    return (std::min)(region.Range().count, Stream::kDefaultBufferSize);
-  }
-
-  //! Declared first: the stream views it.
-  std::optional<D> owned_;
+  //! Declared first, so it is destroyed last: the stream views it.
+  std::unique_ptr<D> owned_;
   Stream stream_;
-  serio::Reader<Stream> reader_;
+  Reader<Stream> reader_;
 };
 
-} // namespace oxygen::content::internal
+} // namespace oxygen::serio

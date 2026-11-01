@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
-#include <cstddef>
 #include <memory>
 #include <optional>
 #include <span>
@@ -43,6 +42,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import::detail {
 
@@ -233,7 +233,7 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
   };
   auto reader = FileReader();
   const auto source_snapshot = SourceSnapshot();
-  std::shared_ptr<std::vector<std::byte>> source_bytes;
+  std::shared_ptr<serio::ByteBuffer> source_bytes;
 
   if (reader != nullptr) {
     const auto read_start = std::chrono::steady_clock::now();
@@ -242,8 +242,8 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
     const auto read_end = std::chrono::steady_clock::now();
     session.AddIoDuration(MakeDuration(read_start, read_end));
     if (read_result.has_value()) {
-      source_bytes = std::make_shared<std::vector<std::byte>>(
-        std::move(read_result.value()));
+      source_bytes
+        = std::make_shared<serio::ByteBuffer>(std::move(read_result.value()));
     } else {
       session.AddDiagnostic(MakeErrorDiagnostic("gltf.read_failed",
         "Failed to read glTF source bytes", request_copy.source_path.string(),
@@ -279,9 +279,7 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
 
       auto adapter = std::make_shared<adapters::GltfAdapter>();
       const auto parse_result = source_bytes
-        ? adapter->Parse(std::span<const std::byte>(
-                           source_bytes->data(), source_bytes->size()),
-            input)
+        ? adapter->Parse(std::as_const(*source_bytes).Bytes(), input)
         : adapter->Parse(request_copy.source_path, input);
       out.adapter = std::move(adapter);
       out.source_bytes = source_bytes;

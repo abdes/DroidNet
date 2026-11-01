@@ -58,6 +58,9 @@
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/ByteBuffer.h>
+#include <Oxygen/Serio/ByteReader.h>
+#include <Oxygen/Serio/Record.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace {
@@ -241,8 +244,10 @@ struct SourceFileSlice final {
 
   [[nodiscard]] auto Range() const noexcept -> serio::ByteRange
   {
-    return { .offset = serio::ByteOffset { offset },
-      .count = serio::ByteCount { size } };
+    return {
+      .offset = serio::ByteOffset { offset },
+      .count = serio::ByteCount { size },
+    };
   }
 };
 
@@ -297,11 +302,28 @@ auto ReadFixedRecordFile(PakSourceDevices& sources, const SourceFileSlice& file,
     return false;
   }
 
-  const auto blob = std::span<const std::byte>(*blob_result);
+  const auto blob = blob_result->Bytes();
   records.resize(static_cast<size_t>(record_count));
-  for (size_t i = 0; i < records.size(); ++i) {
-    std::memcpy(std::addressof(records.at(i)),
-      blob.subspan(i * sizeof(Record), sizeof(Record)).data(), sizeof(Record));
+  if constexpr (serio::Record<Record>) {
+    auto reader = serio::ByteReader(blob);
+    for (auto& record : records) {
+      const auto read = reader.template Read<Record>();
+      if (!read) {
+        AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+          pak::PakBuildPhase::kPlanning, errors.read_failed,
+          std::string("Failed to read ") + std::string(errors.label)
+            + " content: " + read.error().message(),
+          path);
+        return false;
+      }
+      record = *read;
+    }
+  } else {
+    for (size_t i = 0; i < records.size(); ++i) {
+      std::memcpy(std::addressof(records.at(i)),
+        blob.subspan(i * sizeof(Record), sizeof(Record)).data(),
+        sizeof(Record));
+    }
   }
 
   return true;
@@ -626,8 +648,7 @@ auto RegionOrder(const std::string_view region_name) -> int
 
 auto ReadFileSliceBytes(PakSourceDevices& sources, const SourceFileSlice& file,
   std::vector<pak::PakDiagnostic>& diagnostics, const std::string_view code,
-  const std::string_view message_prefix)
-  -> std::optional<std::vector<std::byte>>
+  const std::string_view message_prefix) -> std::optional<serio::ByteBuffer>
 {
   auto bytes = sources.Read(file.path, file.Range());
   if (!bytes) {
@@ -663,16 +684,13 @@ auto ComputeNormalizedResourceDigest(PakSourceDevices& sources,
 
   auto hasher = oxygen::base::Sha256 {};
   hasher.Update(std::as_bytes(std::span(&normalized, 1)));
-  if (!payload_bytes->empty()) {
-    hasher.Update(
-      std::span<const std::byte>(payload_bytes->data(), payload_bytes->size()));
-  }
+  hasher.Update(payload_bytes->Bytes());
   return hasher.Finalize();
 }
 
 auto ReadSourceDescriptorBytes(PakSourceDevices& sources,
   const AggregatedAsset& asset, std::vector<pak::PakDiagnostic>& diagnostics)
-  -> std::optional<std::vector<std::byte>>
+  -> std::optional<serio::ByteBuffer>
 {
   if (sources.Storage().KindOf(asset.descriptor_path)
     != cooked::PathKind::kFile) {
@@ -954,7 +972,7 @@ struct SourceCollection final {
   data::CookedSourceKind kind { data::CookedSourceKind::kLooseCooked };
   std::filesystem::path root;
   size_t order { 0 };
-  std::optional<cooked::CookedContent> content;
+  cooked::CookedContent content;
   SourceResourceDigestState digests;
 };
 
@@ -1004,7 +1022,7 @@ auto CollectBufferSidecar(PlanningState& state, const SourceCollection& context,
   auto parsed = content::import::internal::ParsedBufferDescriptorSidecar {};
   auto error = std::string {};
   if (!content::import::internal::ParseBufferDescriptorSidecar(
-        *bytes, parsed, error)) {
+        bytes->Bytes(), parsed, error)) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       pak::PakBuildPhase::kPlanning, "pak.plan.buffer_sidecar_invalid",
       "Buffer sidecar is invalid: " + error, path);
@@ -1014,13 +1032,11 @@ auto CollectBufferSidecar(PlanningState& state, const SourceCollection& context,
     parsed.resource_index.get(), sidecar.name);
 }
 
-//! Opens the source and records its layer identity, deletions, named textures
-//! and buffer sidecars.
+//! Records the source's layer identity, deletions, named textures and buffer
+//! sidecars.
 auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
 {
-  const auto& cooked_content = context.content.emplace(
-    cooked::CookedContent::Open(state.sources.Storage(),
-      data::CookedSource { .kind = context.kind, .path = context.root }));
+  const auto& cooked_content = context.content;
 
   if (const auto* catalog = cooked_content.Catalog(); catalog != nullptr) {
     if (const auto valid = catalog->ValidateBaseLayers(state.layers); !valid) {
@@ -1083,7 +1099,7 @@ auto CollectSourceAssets(PlanningState& state, SourceCollection& context)
   using pak::PakDiagnosticSeverity;
   const auto& source_root = context.root;
   const auto source_order = context.order;
-  const auto& cooked_content = *context.content;
+  const auto& cooked_content = context.content;
   auto& diagnostics = state.output.diagnostics;
   // A pak's catalog records its descriptor digests; the bytes are measured so
   // that `ValidatePhysicalCatalog` checks the record against them.
@@ -1150,7 +1166,7 @@ auto CollectPakAudioResources(PlanningState& state, SourceCollection& context)
   -> void
 {
   const auto slices
-    = FindTableSlices(*context.content, cooked::TableKind::kAudio);
+    = FindTableSlices(context.content, cooked::TableKind::kAudio);
   if (!slices) {
     return;
   }
@@ -1176,7 +1192,7 @@ auto CollectTextureResources(PlanningState& state, SourceCollection& context)
   auto& diagnostics = state.output.diagnostics;
 
   if (const auto slices
-    = FindTableSlices(*context.content, cooked::TableKind::kTexture)) {
+    = FindTableSlices(context.content, cooked::TableKind::kTexture)) {
     AppendResourcesFromTable<core::TextureResourceDesc>(
       state.sources, slices->rows, slices->payloads, "texture_region",
       "texture", source_order, state.pending_resources, diagnostics,
@@ -1214,7 +1230,7 @@ auto CollectBufferResources(PlanningState& state, SourceCollection& context)
   auto& diagnostics = state.output.diagnostics;
 
   if (const auto slices
-    = FindTableSlices(*context.content, cooked::TableKind::kBuffer)) {
+    = FindTableSlices(context.content, cooked::TableKind::kBuffer)) {
     AppendResourcesFromTable<core::BufferResourceDesc>(
       state.sources, slices->rows, slices->payloads, "buffer_region", "buffer",
       source_order, state.pending_resources, diagnostics, "buffer_table",
@@ -1248,7 +1264,7 @@ auto CollectScriptResources(PlanningState& state, SourceCollection& context)
   auto& diagnostics = state.output.diagnostics;
 
   if (const auto slices
-    = FindTableSlices(*context.content, cooked::TableKind::kScript)) {
+    = FindTableSlices(context.content, cooked::TableKind::kScript)) {
     AppendResourcesFromTable<script::ScriptResourceDesc>(
       state.sources, slices->rows, slices->payloads, "script_region", "script",
       source_order, state.pending_resources, diagnostics,
@@ -1283,7 +1299,7 @@ auto CollectPhysicsResources(PlanningState& state, SourceCollection& context)
   auto& diagnostics = state.output.diagnostics;
 
   if (const auto slices
-    = FindTableSlices(*context.content, cooked::TableKind::kPhysics)) {
+    = FindTableSlices(context.content, cooked::TableKind::kPhysics)) {
     AppendResourcesFromTable<physics::PhysicsResourceDesc>(
       state.sources, slices->rows, slices->payloads, "physics_region",
       "physics", source_order, state.pending_resources, diagnostics,
@@ -1478,7 +1494,7 @@ auto ComputeAssetDependencyDigest(std::vector<pak::PakDiagnostic>& diagnostics,
 auto ValidatePhysicalCatalog(
   PlanningState& state, const SourceCollection& context) -> void
 {
-  const auto* catalog = context.content->Catalog();
+  const auto* catalog = context.content.Catalog();
   if (catalog == nullptr) {
     return;
   }
@@ -1505,8 +1521,22 @@ auto ValidatePhysicalCatalog(
   }
 }
 
-auto CollectOneSource(PlanningState& state, SourceCollection& context) -> void
+//! Opens and collects the source at `root`, of `kind` and priority `order`.
+/*!
+ @return The source's resource digests.
+*/
+auto CollectOneSource(PlanningState& state, const data::CookedSourceKind kind,
+  const std::filesystem::path& root, const size_t order)
+  -> SourceResourceDigestState
 {
+  auto context = SourceCollection {
+    .kind = kind,
+    .root = root,
+    .order = order,
+    .content = cooked::CookedContent::Open(state.sources.Storage(),
+      data::CookedSource { .kind = kind, .path = root }),
+    .digests = {},
+  };
   LoadSourceMetadata(state, context);
   CollectSourceAssets(state, context);
   CollectPakAudioResources(state, context);
@@ -1515,6 +1545,7 @@ auto CollectOneSource(PlanningState& state, SourceCollection& context) -> void
   CollectScriptResources(state, context);
   CollectPhysicsResources(state, context);
   ValidatePhysicalCatalog(state, context);
+  return std::move(context.digests);
 }
 
 auto CollectSourceData(PlanningState& state) -> void
@@ -1524,27 +1555,24 @@ auto CollectSourceData(PlanningState& state) -> void
   std::vector<SourceResourceDigestState> resource_states(sources.size());
   for (size_t order = 0; order < sources.size(); ++order) {
     const auto& source = sources.at(order);
-    auto context = SourceCollection {};
-    context.kind = source.kind;
-    context.root = ToCanonicalSourcePath(source.path);
-    context.order = order;
+    const auto root = ToCanonicalSourcePath(source.path);
     if (source.kind != data::CookedSourceKind::kLooseCooked
       && source.kind != data::CookedSourceKind::kPak) {
       AddDiagnostic(state.output.diagnostics,
         pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
         "pak.plan.source_kind_unsupported",
-        "Cooked source kind is not supported by planner.", context.root);
+        "Cooked source kind is not supported by planner.", root);
       continue;
     }
     try {
-      CollectOneSource(state, context);
-      resource_states.at(order) = std::move(context.digests);
+      resource_states.at(order)
+        = CollectOneSource(state, source.kind, root, order);
     } catch (const std::exception& error) {
       AddDiagnostic(state.output.diagnostics,
         pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
         "pak.plan.source_load_failed",
         std::string("Failed to load current cooked source: ") + error.what(),
-        context.root);
+        root);
     }
   }
   // Resolve dependencies after every layer is known. Overridden descriptors
@@ -1921,8 +1949,8 @@ auto ValidatePhysicsScenePairs(PlanningState& state) -> void
       if (!sidecar_bytes) {
         continue;
       }
-      const auto sidecar = data::PhysicsSceneAsset(
-        asset.key, std::span<const std::byte>(*sidecar_bytes));
+      const auto sidecar
+        = data::PhysicsSceneAsset(asset.key, sidecar_bytes->Bytes());
       if (!paired_scene_keys.insert(sidecar.GetTargetSceneKey()).second) {
         throw std::runtime_error(
           "Multiple physics sidecars target the same scene");
@@ -1936,11 +1964,10 @@ auto ValidatePhysicsScenePairs(PlanningState& state) -> void
       if (!scene_bytes) {
         continue;
       }
-      const auto scene = data::SceneAsset(
-        found->first, std::span<const std::byte>(*scene_bytes));
+      const auto scene = data::SceneAsset(found->first, scene_bytes->Bytes());
       if (scene.GetNodes().size() != sidecar.GetTargetNodeCount()
         || !std::ranges::equal(sidecar.GetTargetSceneContentHash(),
-          oxygen::base::ComputeSha256(*scene_bytes))) {
+          oxygen::base::ComputeSha256(scene_bytes->Bytes()))) {
         throw std::runtime_error(
           "Physics sidecar does not match its target scene");
       }

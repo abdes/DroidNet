@@ -6,17 +6,16 @@
 
 #include <cstddef>
 #include <filesystem>
-#include <limits>
 #include <span>
-#include <system_error>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Pak/Internal/PakSourceDevices.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/Region.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::pak::internal {
@@ -57,14 +56,17 @@ auto PakSourceDevices::ReadInto(const std::filesystem::path& path,
 }
 
 auto PakSourceDevices::Read(const std::filesystem::path& path,
-  const serio::ByteRange range) -> Result<std::vector<std::byte>>
+  const serio::ByteRange range) -> Result<serio::ByteBuffer>
 {
-  if (range.count.get() > std::numeric_limits<size_t>::max()) {
-    return ::oxygen::Err(std::make_error_code(std::errc::value_too_large));
+  const auto device = Device(path);
+  if (!device) {
+    return ::oxygen::Err(device.error());
   }
-  auto bytes = std::vector<std::byte>(static_cast<size_t>(range.count.get()));
-  CHECK_RESULT(ReadInto(path, range.offset, bytes));
-  return ::oxygen::Ok(std::move(bytes));
+  const auto region = serio::Region<serio::AnyDevice>::Make(**device, range);
+  if (!region) {
+    return ::oxygen::Err(region.error());
+  }
+  return serio::ReadAll(*region);
 }
 
 } // namespace oxygen::content::pak::internal

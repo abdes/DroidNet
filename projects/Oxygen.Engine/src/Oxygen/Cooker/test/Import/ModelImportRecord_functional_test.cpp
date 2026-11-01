@@ -16,7 +16,6 @@
 #include <iterator>
 #include <memory>
 #include <optional>
-#include <span>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
@@ -32,12 +31,10 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
@@ -48,8 +45,6 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SceneIds.h>
-#include <Oxygen/OxCo/Algorithms.h>
-#include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Testing/GTest.h>
@@ -380,9 +375,11 @@ NOLINT_TEST_F(ModelImportRecordTest, NoLockFileOutlivesItsLock)
   for (const auto& entry :
     std::filesystem::recursive_directory_iterator(TempDir())) {
     if (entry.is_regular_file() && entry.path().extension() == ".lock") {
-      EXPECT_EQ(entry.path().filename().string(),
-        std::string(oxygen::data::loose_cooked::kGenerationLeaseFileName))
-        << "only a generation's lease marker may remain: " << entry.path();
+      const auto name = entry.path().filename().string();
+      EXPECT_TRUE(name == oxygen::data::loose_cooked::kGenerationLeaseFileName
+        || name == oxygen::data::loose_cooked::kIndexLockFileName)
+        << "only a generation's lease marker and index lock may remain: "
+        << entry.path();
     }
   }
   for (const auto& entry :
@@ -848,31 +845,6 @@ NOLINT_TEST_F(ModelImportRecordTest, CancellingOneImportDoesNotCancelAnother)
   EXPECT_FALSE(ModelImportRecord::SelectedGeneration(record_, Generations()));
   EXPECT_TRUE(
     ModelImportRecord::SelectedGeneration(other_record, Generations()));
-}
-
-NOLINT_TEST_F(
-  ModelImportRecordTest, NativeGenerationWritersIsolatePendingIoAndCancellation)
-{
-  namespace co = oxygen::co;
-  oxygen::content::import::ImportEventLoop loop;
-  auto first = oxygen::content::import::CreateAsyncFileWriter(loop);
-  auto second = oxygen::content::import::CreateAsyncFileWriter(loop);
-  const std::string data = "generation-bytes";
-  const auto bytes = std::as_bytes(std::span(data.data(), data.size()));
-  first->WriteAsync(TempDir() / "first.bin", bytes, {}, nullptr);
-  ASSERT_GT(first->PendingCount(), 0U);
-  first->CancelAll();
-  bool other_succeeded = false;
-  second->WriteAsync(TempDir() / "second.bin", bytes, {},
-    [&other_succeeded](
-      const auto& error, auto) -> auto { other_succeeded = !error.IsError(); });
-  const auto results
-    = co::Run(loop, co::AllOf(first->Flush(), second->Flush()));
-  EXPECT_TRUE(std::get<0>(results));
-  EXPECT_TRUE(std::get<1>(results));
-  EXPECT_TRUE(other_succeeded);
-  EXPECT_EQ(first->PendingCount(), 0U);
-  EXPECT_EQ(second->PendingCount(), 0U);
 }
 
 //=== LocateRecord ===--------------------------------------------------------//

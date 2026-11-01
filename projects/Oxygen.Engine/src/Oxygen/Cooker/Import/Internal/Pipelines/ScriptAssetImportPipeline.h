@@ -24,6 +24,7 @@
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import {
 
@@ -43,7 +44,7 @@ public:
 
   struct WorkItem {
     std::string source_id;
-    std::vector<std::byte> source_bytes;
+    serio::ByteBuffer source_bytes;
     observer_ptr<ImportSession> session;
     observer_ptr<LooseCookedIndexRegistry> index_registry;
     AsyncImportService::ScriptCompileCallback script_compile_callback;
@@ -63,7 +64,7 @@ public:
 
   OXGN_COOK_API explicit ScriptAssetImportPipeline(Config config);
 
-  OXGN_COOK_API ~ScriptAssetImportPipeline();
+  OXGN_COOK_API ~ScriptAssetImportPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(ScriptAssetImportPipeline)
   OXYGEN_MAKE_NON_MOVABLE(ScriptAssetImportPipeline)

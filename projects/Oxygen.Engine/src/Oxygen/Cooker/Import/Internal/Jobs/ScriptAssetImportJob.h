@@ -10,6 +10,7 @@
 
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJob.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import {
 class ImportSession;
@@ -29,7 +30,7 @@ public:
 private:
   struct LoadedSource final {
     bool success = false;
-    std::vector<std::byte> bytes;
+    serio::ByteBuffer bytes;
   };
 
   [[nodiscard]] auto ExecuteAsync() -> co::Co<ImportReport> override;

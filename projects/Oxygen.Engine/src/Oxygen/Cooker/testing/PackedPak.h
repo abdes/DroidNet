@@ -7,7 +7,6 @@
 #pragma once
 
 #include <cstddef>
-#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -20,6 +19,7 @@
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::cooker::testing {
 
@@ -97,12 +97,11 @@ public:
   [[nodiscard]] static auto RecordAt(
     const std::span<const std::byte> bytes, const size_t offset) -> T
   {
-    if (offset > bytes.size() || sizeof(T) > bytes.size() - offset) {
+    const auto record = serio::CopyAt<T>(bytes, serio::ByteOffset { offset });
+    if (!record) {
       throw std::out_of_range("the record lies outside its bytes");
     }
-    auto record = T {};
-    std::memcpy(&record, bytes.subspan(offset).data(), sizeof(T));
-    return record;
+    return *record;
   }
 
 private:

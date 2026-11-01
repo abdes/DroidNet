@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
-#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -44,6 +43,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import::detail {
 
@@ -235,7 +235,7 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
   const auto stop_token = StopToken();
   const auto naming_service = observer_ptr { &GetNamingService() };
   auto reader = FileReader();
-  std::shared_ptr<std::vector<std::byte>> source_bytes;
+  std::shared_ptr<serio::ByteBuffer> source_bytes;
 
   if (reader != nullptr) {
     const auto read_start = std::chrono::steady_clock::now();
@@ -244,8 +244,8 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
     const auto read_end = std::chrono::steady_clock::now();
     session.AddIoDuration(MakeDuration(read_start, read_end));
     if (read_result.has_value()) {
-      source_bytes = std::make_shared<std::vector<std::byte>>(
-        std::move(read_result.value()));
+      source_bytes
+        = std::make_shared<serio::ByteBuffer>(std::move(read_result.value()));
     } else {
       session.AddDiagnostic(MakeErrorDiagnostic("fbx.read_failed",
         "Failed to read FBX source bytes", request_copy.source_path.string(),
@@ -280,9 +280,7 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
 
       auto adapter = std::make_shared<adapters::FbxAdapter>();
       const auto parse_result = source_bytes
-        ? adapter->Parse(std::span<const std::byte>(
-                           source_bytes->data(), source_bytes->size()),
-            input)
+        ? adapter->Parse(std::as_const(*source_bytes).Bytes(), input)
         : adapter->Parse(request_copy.source_path, input);
       out.adapter = std::move(adapter);
       out.source_bytes = source_bytes;

@@ -10,6 +10,7 @@
 
 #include <bit>
 #include <chrono>
+#include <coroutine>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -31,6 +32,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/asio.h> // IWYU pragma: keep (EventLoopTraits)
+#include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/AsyncFile.h>
 #include <Oxygen/Serio/CopyRegion.h>
 #include <Oxygen/Serio/Device.h>
@@ -50,6 +52,7 @@ namespace {
 using namespace std::chrono_literals;
 using oxygen::Result;
 using oxygen::serio::Access;
+using oxygen::serio::AnyAsyncDevice;
 using oxygen::serio::AsyncFile;
 using oxygen::serio::ByteCount;
 using oxygen::serio::ByteOffset;
@@ -66,10 +69,19 @@ using oxygen::serio::testing::BytesEqual;
 using oxygen::serio::testing::PatternBytes;
 namespace co = oxygen::co;
 
-//! Awaited IO is in the async device conformance suite; these cases cover
-//! what only a driver adds: opening, OS errors, buffers, large transfers,
-//! copies between files and cancellation.
-class AsyncFileTest : public ::testing::Test {
+//! The completion mechanism of the driver a case runs under.
+enum class DriverKind : uint8_t { kLoop, kInline };
+
+//! A driver of the given kind with its loop and temporary files.
+class DriverHarness {
+public:
+  explicit DriverHarness(const DriverKind kind)
+    : driver_(kind == DriverKind::kInline
+          ? Required(IoDriver::CreateInline(), "IoDriver::CreateInline")
+          : Required(IoDriver::Create(loop_), "IoDriver::Create"))
+  {
+  }
+
 protected:
   auto Loop() -> asio::io_context& { return loop_; }
   auto Driver() -> IoDriver& { return driver_; }
@@ -92,8 +104,37 @@ protected:
 
 private:
   asio::io_context loop_;
-  IoDriver driver_ = Required(IoDriver::Create(loop_), "IoDriver::Create");
+  IoDriver driver_;
   TempFiles files_;
+};
+
+//! Awaited IO is in the async device conformance suite; these cases cover
+//! what only a driver adds: opening, OS errors, buffers, large transfers,
+//! copies between files and cancellation. Each case runs under a loop driver
+//! and under an inline driver.
+class AsyncFileTest : public ::testing::TestWithParam<DriverKind>,
+                      protected DriverHarness {
+protected:
+  AsyncFileTest()
+    : DriverHarness(GetParam())
+  {
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(Serio, AsyncFileTest,
+  ::testing::Values(DriverKind::kLoop, DriverKind::kInline),
+  [](const ::testing::TestParamInfo<DriverKind>& info) {
+    return info.param == DriverKind::kInline ? std::string("Inline")
+                                             : std::string("Loop");
+  });
+
+//! The cases only an inline driver has.
+class InlineDriverTest : public ::testing::Test, protected DriverHarness {
+protected:
+  InlineDriverTest()
+    : DriverHarness(DriverKind::kInline)
+  {
+  }
 };
 
 //! Reads `into.size()` bytes at `at` of `file`, expecting them all.
@@ -128,7 +169,7 @@ auto ReadConcurrently(AsyncFile& file, std::span<std::byte> out,
 }
 
 //! Opening a missing file through the driver fails with kNotFound.
-NOLINT_TEST_F(AsyncFileTest, OpenMissingIsNotFound)
+NOLINT_TEST_P(AsyncFileTest, OpenMissingIsNotFound)
 {
   const auto file = Driver().Open(Files().Path("missing.bin"), {});
 
@@ -137,7 +178,7 @@ NOLINT_TEST_F(AsyncFileTest, OpenMissingIsNotFound)
 }
 
 //! An awaited write to a file opened for reading fails with kAccessDenied.
-NOLINT_TEST_F(AsyncFileTest, AwaitedWriteToReadOnlyFileIsAccessDenied)
+NOLINT_TEST_P(AsyncFileTest, AwaitedWriteToReadOnlyFileIsAccessDenied)
 {
   const auto bytes = PatternBytes(64);
   auto file = OpenWritten(bytes);
@@ -151,7 +192,7 @@ NOLINT_TEST_F(AsyncFileTest, AwaitedWriteToReadOnlyFileIsAccessDenied)
 }
 
 //! The driver's buffers have the size asked for and serve unbuffered IO.
-NOLINT_TEST_F(AsyncFileTest, AllocatedBufferIsAligned)
+NOLINT_TEST_P(AsyncFileTest, AllocatedBufferIsAligned)
 {
   const auto buffer = Driver().AllocateBuffer(ByteCount { 10000 });
 
@@ -163,7 +204,7 @@ NOLINT_TEST_F(AsyncFileTest, AllocatedBufferIsAligned)
 
 //! A large awaited read and write each complete whole, and the coroutine
 //! resumes on the loop thread.
-NOLINT_TEST_F(AsyncFileTest, LargeTransfersCompleteOnTheLoopThread)
+NOLINT_TEST_P(AsyncFileTest, LargeTransfersCompleteOnTheLoopThread)
 {
   constexpr size_t kSize = (3U << 20U) + 517;
   const auto bytes = PatternBytes(kSize);
@@ -190,7 +231,7 @@ NOLINT_TEST_F(AsyncFileTest, LargeTransfersCompleteOnTheLoopThread)
 }
 
 //! Many concurrent reads of one file all complete, each with its own bytes.
-NOLINT_TEST_F(AsyncFileTest, ManyConcurrentReadsComplete)
+NOLINT_TEST_P(AsyncFileTest, ManyConcurrentReadsComplete)
 {
   constexpr size_t kReads = 1500;
   constexpr size_t kReadSize = 64;
@@ -206,7 +247,7 @@ NOLINT_TEST_F(AsyncFileTest, ManyConcurrentReadsComplete)
 }
 
 //! A copy between files overlaps chunks and writes every byte at its offset.
-NOLINT_TEST_F(AsyncFileTest, CopyRegionCopiesBetweenFiles)
+NOLINT_TEST_P(AsyncFileTest, CopyRegionCopiesBetweenFiles)
 {
   constexpr size_t kSourceSize = (5U << 19U) + 1001;
   const auto bytes = PatternBytes(kSourceSize);
@@ -229,12 +270,102 @@ NOLINT_TEST_F(AsyncFileTest, CopyRegionCopiesBetweenFiles)
     BytesEqual(std::span(bytes).subspan(333, range.count.get())));
 }
 
+//! A loop driver is not inline; the inline one is.
+NOLINT_TEST(IoDriverKindTest, InlineIsTrueOnlyForTheInlineDriver)
+{
+  asio::io_context loop;
+  const auto looped = Required(IoDriver::Create(loop), "IoDriver::Create");
+  const auto inlined
+    = Required(IoDriver::CreateInline(), "IoDriver::CreateInline");
+
+  EXPECT_FALSE(looped.Inline());
+  EXPECT_TRUE(inlined.Inline());
+}
+
+//! An inline driver's awaited operations complete when submitted: the awaiter
+//! is told not to suspend, and the result is ready.
+NOLINT_TEST_F(InlineDriverTest, AwaitedOperationsCompleteWithoutSuspending)
+{
+  const auto bytes = PatternBytes(256);
+  auto file = OpenWritten(bytes, Access::kReadWrite);
+  auto out = std::vector<std::byte>(64);
+  const auto patch
+    = PatternBytes(16, oxygen::serio::testing::PatternSeed::kSecond);
+
+  auto read = file.AsyncReadAt(ByteOffset { 10 }, out);
+  const auto read_suspends = read.await_suspend(std::noop_coroutine());
+  const auto read_result = read.await_resume();
+  auto write = file.AsyncWriteAt(ByteOffset { 0 }, patch);
+  const auto write_suspends = write.await_suspend(std::noop_coroutine());
+  const auto write_result = write.await_resume();
+
+  EXPECT_FALSE(read_suspends);
+  ASSERT_TRUE(read_result);
+  EXPECT_EQ(read_result->get(), out.size());
+  EXPECT_THAT(out, BytesEqual(std::span(bytes).subspan(10, out.size())));
+  EXPECT_FALSE(write_suspends);
+  ASSERT_TRUE(write_result);
+  const auto written = ReadAll(file);
+  EXPECT_THAT(std::span(written).first(patch.size()), BytesEqual(patch));
+}
+
+//! A file of an inline driver erases into an AnyAsyncDevice, which awaits
+//! reads and writes through it.
+NOLINT_TEST_F(InlineDriverTest, FileErasesIntoAnAsyncDevice)
+{
+  const auto bytes = PatternBytes(512);
+  auto device = AnyAsyncDevice(OpenWritten(bytes, Access::kReadWrite));
+  auto out = std::vector<std::byte>(100);
+  const auto patch
+    = PatternBytes(8, oxygen::serio::testing::PatternSeed::kSecond);
+
+  const auto read = co::Run(Loop(), [&] -> co::Co<Result<ByteCount>> {
+    co_return co_await device.AsyncReadAt(ByteOffset { 200 }, out);
+  }());
+  const auto written = co::Run(Loop(), [&] -> co::Co<Result<void>> {
+    co_return co_await device.AsyncWriteAt(ByteOffset { 0 }, patch);
+  }());
+
+  ASSERT_TRUE(read);
+  EXPECT_THAT(out, BytesEqual(std::span(bytes).subspan(200, out.size())));
+  ASSERT_TRUE(written);
+  auto head = std::vector<std::byte>(patch.size());
+  ASSERT_TRUE(ReadExactlyAt(device, ByteOffset { 0 }, head));
+  EXPECT_THAT(head, BytesEqual(patch));
+}
+
+//! A file of an inline driver has regions, whose reads stay inside them.
+NOLINT_TEST_F(InlineDriverTest, FileHasRegions)
+{
+  const auto bytes = PatternBytes(512);
+  const auto file = OpenWritten(bytes);
+  const auto region = Required(
+    Region<AsyncFile>::Make(file,
+      ByteRange { .offset = ByteOffset { 100 }, .count = ByteCount { 50 } }),
+    "region");
+  auto out = std::vector<std::byte>(80);
+
+  const auto read = co::Run(Loop(), [&] -> co::Co<Result<ByteCount>> {
+    co_return co_await region.AsyncReadAt(ByteOffset { 0 }, out);
+  }());
+
+  ASSERT_TRUE(read);
+  ASSERT_EQ(read->get(), 50U);
+  EXPECT_THAT(
+    std::span(out).first(50), BytesEqual(std::span(bytes).subspan(100, 50)));
+}
+
 #ifdef OXYGEN_WINDOWS
 
 //! A named pipe opened through the driver: its reads stay pending in the
 //! kernel until the server end writes, so a test can cancel one.
-class AsyncPipeTest : public AsyncFileTest {
+class AsyncPipeTest : public ::testing::Test, protected DriverHarness {
 protected:
+  AsyncPipeTest()
+    : DriverHarness(DriverKind::kLoop)
+  {
+  }
+
   auto SetUp() -> void override
   {
     const auto* const info

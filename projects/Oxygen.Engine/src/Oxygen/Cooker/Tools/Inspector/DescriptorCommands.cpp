@@ -6,7 +6,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <ios>
 #include <memory>
@@ -31,6 +30,7 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::inspection {
 
@@ -101,18 +101,6 @@ namespace {
     }
   }
 
-  template <typename T>
-  auto ReadStructAt(const std::vector<std::byte>& bytes, const size_t offset)
-    -> std::optional<T>
-  {
-    if (offset > bytes.size() || sizeof(T) > (bytes.size() - offset)) {
-      return std::nullopt;
-    }
-    T value {};
-    std::memcpy(&value, std::span(bytes).subspan(offset).data(), sizeof(T));
-    return value;
-  }
-
   auto RunDumpInputActions(std::ostream& out,
     const std::string& cooked_root_path) -> toolkit::ToolResult
   {
@@ -139,7 +127,7 @@ namespace {
         continue;
       }
 
-      const auto desc = ReadStructAt<InputActionAssetDesc>(descriptor, 0);
+      const auto desc = serio::CopyAt<InputActionAssetDesc>(descriptor);
       if (!desc) {
         out << "  ! failed to decode descriptor\n";
         continue;
@@ -187,8 +175,7 @@ namespace {
         continue;
       }
 
-      const auto desc
-        = ReadStructAt<InputMappingContextAssetDesc>(descriptor, 0);
+      const auto desc = serio::CopyAt<InputMappingContextAssetDesc>(descriptor);
       if (!desc) {
         out << "  ! failed to decode descriptor\n";
         continue;
@@ -207,8 +194,8 @@ namespace {
       const auto mapping_start = static_cast<size_t>(desc->mappings.offset);
       const auto mapping_size = sizeof(InputActionMappingRecord);
       for (size_t i = 0; i < mapping_count; ++i) {
-        const auto rec = ReadStructAt<InputActionMappingRecord>(
-          descriptor, mapping_start + (i * mapping_size));
+        const auto rec = serio::CopyAt<InputActionMappingRecord>(
+          descriptor, serio::ByteOffset { mapping_start + (i * mapping_size) });
         if (!rec) {
           out << "    ! mapping[" << i << "] decode failed\n";
           continue;
@@ -228,8 +215,8 @@ namespace {
       const auto trigger_start = static_cast<size_t>(desc->triggers.offset);
       const auto trigger_size = sizeof(InputTriggerRecord);
       for (size_t i = 0; i < trigger_count; ++i) {
-        const auto rec = ReadStructAt<InputTriggerRecord>(
-          descriptor, trigger_start + (i * trigger_size));
+        const auto rec = serio::CopyAt<InputTriggerRecord>(
+          descriptor, serio::ByteOffset { trigger_start + (i * trigger_size) });
         if (!rec) {
           out << "    ! trigger[" << i << "] decode failed\n";
           continue;
@@ -245,8 +232,8 @@ namespace {
       const auto aux_start = static_cast<size_t>(desc->trigger_aux.offset);
       const auto aux_size = sizeof(InputTriggerAuxRecord);
       for (size_t i = 0; i < aux_count; ++i) {
-        const auto rec = ReadStructAt<InputTriggerAuxRecord>(
-          descriptor, aux_start + (i * aux_size));
+        const auto rec = serio::CopyAt<InputTriggerAuxRecord>(
+          descriptor, serio::ByteOffset { aux_start + (i * aux_size) });
         if (!rec) {
           out << "    ! trigger_aux[" << i << "] decode failed\n";
           continue;
@@ -296,7 +283,7 @@ namespace {
           out << "  ! descriptor too small\n";
           continue;
         }
-        const auto desc = ReadStructAt<PhysicsMaterialAssetDesc>(descriptor, 0);
+        const auto desc = serio::CopyAt<PhysicsMaterialAssetDesc>(descriptor);
         if (!desc) {
           out << "  ! failed to decode descriptor\n";
           continue;
@@ -318,7 +305,7 @@ namespace {
           out << "  ! descriptor too small\n";
           continue;
         }
-        const auto desc = ReadStructAt<CollisionShapeAssetDesc>(descriptor, 0);
+        const auto desc = serio::CopyAt<CollisionShapeAssetDesc>(descriptor);
         if (!desc) {
           out << "  ! failed to decode descriptor\n";
           continue;
@@ -347,7 +334,7 @@ namespace {
         out << "  ! descriptor too small\n";
         continue;
       }
-      const auto desc = ReadStructAt<PhysicsSceneAssetDesc>(descriptor, 0);
+      const auto desc = serio::CopyAt<PhysicsSceneAssetDesc>(descriptor);
       if (!desc) {
         out << "  ! failed to decode descriptor\n";
         continue;
@@ -377,8 +364,9 @@ namespace {
 
       uint64_t total_bindings = 0;
       for (size_t i = 0; i < dir_count; ++i) {
-        const auto entry = ReadStructAt<PhysicsComponentTableDesc>(
-          descriptor, dir_offset + (i * sizeof(PhysicsComponentTableDesc)));
+        const auto entry = serio::CopyAt<PhysicsComponentTableDesc>(descriptor,
+          serio::ByteOffset {
+            dir_offset + (i * sizeof(PhysicsComponentTableDesc)) });
         if (!entry) {
           out << "    ! table[" << i << "] decode failed\n";
           continue;

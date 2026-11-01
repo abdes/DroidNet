@@ -125,7 +125,7 @@ namespace {
       auto parsed = internal::ParsedBufferDescriptorSidecar {};
       auto parse_error = std::string {};
       if (!internal::ParseBufferDescriptorSidecar(
-            *bytes, parsed, parse_error)) {
+            bytes->Bytes(), parsed, parse_error)) {
         continue;
       }
 
@@ -207,12 +207,13 @@ auto BufferImportSubmitter::SubmitBuffers(
     if (!read_result.has_value()) {
       AddDiagnostic(session_, request_, ImportSeverity::kError,
         "buffer.container.source_read_failed",
-        "Failed reading buffer source: " + read_result.error().ToString(),
+        "Failed reading buffer source '" + entry.source_path.string()
+          + "': " + read_result.error().message(),
         entry.source_id);
       continue;
     }
 
-    const auto source_size = read_result.value().size();
+    const auto source_size = read_result.value().Size().get();
     if (source_size > std::numeric_limits<uint32_t>::max()) {
       AddDiagnostic(session_, request_, ImportSeverity::kError,
         "buffer.container.source_too_large",
@@ -239,10 +240,12 @@ auto BufferImportSubmitter::SubmitBuffers(
     submission.descriptor_views_by_source_id.emplace(
       entry.source_id, std::move(normalized_views));
 
+    // The payload type is shared with cookers that build their bytes.
+    const auto source_bytes = read_result.value().Bytes();
     auto item = BufferPipeline::WorkItem {};
     item.source_id = entry.source_id;
     item.cooked = CookedBufferPayload {
-      .data = std::move(read_result.value()),
+      .data = std::vector<std::byte>(source_bytes.begin(), source_bytes.end()),
       .alignment = entry.alignment,
       .usage_flags = entry.usage_flags,
       .element_stride = entry.element_stride,

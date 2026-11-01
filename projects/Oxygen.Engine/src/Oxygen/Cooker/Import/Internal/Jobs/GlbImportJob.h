@@ -15,6 +15,7 @@
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/ModelSettings.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import {
 class ImportSession;
@@ -46,7 +47,7 @@ private:
   //! Placeholder for parsed GLB asset state.
   struct ParsedGlbAsset {
     std::shared_ptr<adapters::GltfAdapter> adapter;
-    std::shared_ptr<std::vector<std::byte>> source_bytes;
+    std::shared_ptr<serio::ByteBuffer> source_bytes;
     std::vector<ImportDiagnostic> diagnostics;
     bool success = true;
     bool canceled = false;

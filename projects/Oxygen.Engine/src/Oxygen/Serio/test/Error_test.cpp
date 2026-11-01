@@ -28,6 +28,7 @@ constexpr auto kAllErrors = std::array {
   Error::kSharingViolation,
   Error::kNoSpace,
   Error::kIo,
+  Error::kIsDirectory,
 };
 
 //! One Serio error value per test.
@@ -75,6 +76,17 @@ NOLINT_TEST(SerioErrorTest, GenericCodesMatchTheirConditions)
   EXPECT_EQ(
     std::make_error_code(std::errc::no_space_on_device), Error::kNoSpace);
   EXPECT_EQ(std::make_error_code(std::errc::io_error), Error::kIo);
+}
+
+//! A folder where a file is needed is kIsDirectory, with its own message.
+NOLINT_TEST(SerioErrorTest, IsDirectoryMatchesTheGenericCode)
+{
+  const auto code = make_error_code(Error::kIsDirectory);
+
+  EXPECT_EQ(
+    std::make_error_code(std::errc::is_a_directory), Error::kIsDirectory);
+  EXPECT_EQ(code.message(), "is a directory");
+  EXPECT_NE(std::make_error_code(std::errc::is_a_directory), Error::kIo);
 }
 
 } // namespace

@@ -13,6 +13,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::pakdump {
 
@@ -32,19 +33,18 @@ public:
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
     asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
-    const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
+    const auto data = asset_dump_helpers::TryDescriptorBytes(pak, entry);
     if (!data) {
       ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
-    if (data->size() < sizeof(PhysicsMaterialAssetDesc)) {
+    const auto mat_read = serio::CopyAt<PhysicsMaterialAssetDesc>(*data);
+    if (!mat_read) {
       ctx.Out() << "    PhysicsMaterialAssetDesc: (insufficient data)\n\n";
       co_return;
     }
-
-    PhysicsMaterialAssetDesc mat {};
-    std::memcpy(&mat, data->data(), sizeof(mat));
+    const auto& mat = *mat_read;
 
     asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), mat.header,
       asset_dump_helpers::DescriptorString(

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -19,7 +20,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -30,6 +30,9 @@
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/CookedSource.h>
@@ -40,9 +43,9 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/Integrity.h>
-#include <Oxygen/Serio/Region.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::cooked {
@@ -53,7 +56,7 @@ namespace {
   namespace core = data::pak::core;
   using data::CookedOpenError;
   using data::CookedOpenFailure;
-  using FileKind = data::loose_cooked::FileKind;
+  using data::loose_cooked::FileKind;
   using lc::FileIntegrity;
   using lc::LooseCookedIndex;
   using oxygen::data::loose_cooked::kIndexFileName;
@@ -146,10 +149,12 @@ namespace {
   auto PayloadRange(const TableKind kind, const std::span<const std::byte> row)
     -> std::pair<uint64_t, uint64_t>
   {
-    const auto read = [&]<class Desc>() -> std::pair<uint64_t, uint64_t> {
-      auto desc = Desc {};
-      std::memcpy(&desc, row.data(), sizeof(Desc));
-      return { desc.data_offset, desc.size_bytes };
+    const auto read = [&]<class Desc> -> std::pair<uint64_t, uint64_t> {
+      const auto desc = serio::CopyAt<Desc>(row);
+      if (!desc) {
+        throw std::invalid_argument("the row is shorter than its descriptor");
+      }
+      return { desc->data_offset, desc->size_bytes };
     };
     switch (kind) {
     case TableKind::kTexture:
@@ -377,7 +382,7 @@ auto CookedResourceTable::PayloadStored(const ResourceIndexT row) const
   return {
     .file = data_.file,
     .range = { .offset = serio::ByteOffset { offset },
-      .count = serio::ByteCount { size } },
+      .count = serio::ByteCount { size }, },
   };
 }
 
@@ -476,7 +481,7 @@ auto CookedContent::Impl::LoadLoose() -> void
     descriptors.push_back({
       .file = file,
       .range = { .offset = serio::ByteOffset { 0 },
-        .count = serio::ByteCount { size } },
+        .count = serio::ByteCount { size }, },
     });
   }
 
@@ -503,14 +508,16 @@ auto CookedContent::Impl::LoadLoose() -> void
     auto rows = StoredBytes {
       .file = table_file,
       .range = { .offset = serio::ByteOffset { 0 },
-        .count = serio::ByteCount { FileSize(*storage, table_file) } },
+        .count = serio::ByteCount { FileSize(*storage, table_file) }, },
     };
     auto data = StoredBytes {};
     if (const auto data_relpath
       = index.FindFileRelPath(table_files.at(slot).second)) {
       data.file = root / fs::path(std::string(*data_relpath));
-      data.range = { .offset = serio::ByteOffset { 0 },
-        .count = serio::ByteCount { FileSize(*storage, data.file) } };
+      data.range = {
+        .offset = serio::ByteOffset { 0 },
+        .count = serio::ByteCount { FileSize(*storage, data.file) },
+      };
     }
     tables.emplace_back(kind, *storage, observer_ptr<const serio::AnyDevice> {},
       std::move(rows), std::move(data));
@@ -550,7 +557,7 @@ auto CookedContent::Impl::LoadLoose() -> void
         .source_path = file.source_path,
         .stored = { .file = path,
           .range = { .offset = serio::ByteOffset { 0 },
-            .count = serio::ByteCount { file.size } } },
+            .count = serio::ByteCount { file.size }, }, },
       });
     }
   }
@@ -585,7 +592,7 @@ auto CookedContent::Impl::LoadPak() -> void
     descriptors.push_back({
       .file = source.path,
       .range = { .offset = serio::ByteOffset { entry.desc_offset },
-        .count = serio::ByteCount { entry.desc_size } },
+        .count = serio::ByteCount { entry.desc_size }, },
     });
   }
 
@@ -612,12 +619,12 @@ auto CookedContent::Impl::LoadPak() -> void
         .file = source.path,
         .range = { .offset = serio::ByteOffset { table->offset },
           .count = serio::ByteCount { static_cast<uint64_t>(table->count)
-            * table->entry_size } },
+            * table->entry_size }, },
       },
       StoredBytes {
         .file = source.path,
         .range = { .offset = serio::ByteOffset { region->offset },
-          .count = serio::ByteCount { region->size } },
+          .count = serio::ByteCount { region->size }, },
       });
   }
   for (const auto& texture : pak->BrowseTextures()) {

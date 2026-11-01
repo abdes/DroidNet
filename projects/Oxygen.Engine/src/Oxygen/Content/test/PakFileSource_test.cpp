@@ -5,9 +5,9 @@
 //===----------------------------------------------------------------------===//
 // Covers: Content/Internal/PakFileSource.h, Content/PakFile.h (payloads)
 
+#include <coroutine>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <span>
 #include <tuple>
@@ -16,6 +16,7 @@
 
 #include <asio/io_context.hpp>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
@@ -23,21 +24,24 @@
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/asio.h>
+#include <Oxygen/OxCo/asio.h> // IWYU pragma: keep (EventLoopTraits)
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/AsyncDevice.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/MemoryFile.h>
 #include <Oxygen/Serio/Region.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Testing/ScopedTempDir.h>
+#include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
 
@@ -61,6 +65,13 @@ constexpr auto kTexturePayloadSize = size_t { 256U };
 //! The row of the first texture a root adds: row zero is reserved.
 constexpr auto kTextureRow = ResourceIndexT { 1U };
 
+//! The driver payloads are awaited through.
+auto InlineDriver() -> std::shared_ptr<oxygen::serio::IoDriver>
+{
+  return std::make_shared<oxygen::serio::IoDriver>(
+    oxygen::serio::IoDriver::CreateInline().value());
+}
+
 //! A pak whose material references one texture of `payload`, the pak's
 //! texture row `kTextureRow`.
 auto TexturePak(const std::span<const std::byte> payload)
@@ -80,12 +91,19 @@ auto InMemory(const std::vector<std::byte>& bytes) -> oxygen::serio::AnyDevice
     oxygen::serio::MemoryFile::FromBytes(bytes).value());
 }
 
-//! The pak `bytes` hold, mounted from memory.
-auto Mount(const std::vector<std::byte>& bytes, const bool verify = false)
-  -> PakFileSource
-{
-  return { InMemory(bytes), "test.pak", verify };
-}
+//! Mounts paks of a temp folder, awaiting their payloads through an inline
+//! driver, which completes every read on the awaiting thread.
+class PakFileSourceTest : public oxygen::testing::TempDirTest {
+protected:
+  //! The pak `bytes` hold, written to a file and mounted from it.
+  auto Mount(const std::vector<std::byte>& bytes, const bool verify = false)
+    -> PakFileSource
+  {
+    const auto path = TempPath("test.pak");
+    Materialize(bytes, path);
+    return { path, verify, InlineDriver() };
+  }
+};
 
 //! The descriptor of texture `index` of `source`.
 auto TextureRow(const PakFileSource& source, const ResourceIndexT index)
@@ -97,24 +115,31 @@ auto TextureRow(const PakFileSource& source, const ResourceIndexT index)
   auto desc = TextureResourceDesc {};
   if (row) {
     EXPECT_EQ(row->size(), sizeof(desc));
-    std::memcpy(&desc, row->data(), sizeof(desc));
+    if (const auto copied = oxygen::serio::CopyAt<TextureResourceDesc>(
+          std::as_bytes(std::span { *row }));
+      copied) {
+      desc = *copied;
+    }
   }
   return desc;
 }
 
 //! Reads `out.size()` bytes at `at` of `device`, whose awaited reads must
-//! complete at once.
+//! complete at once: an inline driver's read completes as it is submitted,
+//! without suspending.
 template <class D>
 auto ReadAtOnce(const D& device, const ByteOffset at,
   const std::span<std::byte> out) -> oxygen::Result<ByteCount>
 {
   auto read = device.AsyncReadAt(at, out);
-  EXPECT_TRUE(read.await_ready());
+  if (!read.await_ready()) {
+    EXPECT_FALSE(read.await_suspend(std::noop_coroutine()));
+  }
   return read.await_resume();
 }
 
 //! The pak's descriptor reader reads the entry's bytes, from its start.
-NOLINT_TEST(PakFileSourceTest, DescriptorReaderReadsTheEntry)
+NOLINT_TEST_F(PakFileSourceTest, DescriptorReaderReadsTheEntry)
 {
   const auto bytes = TexturePak(SeedBytes(kTextureSeed));
   const auto source = Mount(bytes);
@@ -133,7 +158,7 @@ NOLINT_TEST(PakFileSourceTest, DescriptorReaderReadsTheEntry)
 }
 
 //! A resource descriptor is the table row it names, a view of the pak.
-NOLINT_TEST(PakFileSourceTest, ResourceDescriptorIsItsTableRow)
+NOLINT_TEST_F(PakFileSourceTest, ResourceDescriptorIsItsTableRow)
 {
   const auto bytes = TexturePak(SeedBytes(kTextureSeed));
   const auto source = Mount(bytes);
@@ -143,15 +168,16 @@ NOLINT_TEST(PakFileSourceTest, ResourceDescriptorIsItsTableRow)
   const auto row
     = source.ResourceDescriptorBytes(TextureResource::ClassTypeId(), index);
 
-  ASSERT_TRUE(row.has_value());
+  ASSERT_HAS_VALUE(row);
   EXPECT_THAT(*row,
     BytesEqual(std::span(bytes).subspan(
-      static_cast<size_t>(table.offset + (index.get() * table.entry_size)),
+      static_cast<size_t>(
+        table.offset + (uint64_t { index.get() } * table.entry_size)),
       table.entry_size)));
 }
 
 //! A row past the table is not a descriptor.
-NOLINT_TEST(PakFileSourceTest, RefusesARowPastTheTable)
+NOLINT_TEST_F(PakFileSourceTest, RefusesARowPastTheTable)
 {
   const auto source = Mount(TexturePak(SeedBytes(kTextureSeed)));
   const auto count = source.Pak().Footer().texture_table.count;
@@ -164,7 +190,7 @@ NOLINT_TEST(PakFileSourceTest, RefusesARowPastTheTable)
 
 //! The payload region is the footer's texture region, and a descriptor's
 //! data offset finds its payload in it.
-NOLINT_TEST(PakFileSourceTest, PayloadRegionHoldsTheTexturePayload)
+NOLINT_TEST_F(PakFileSourceTest, PayloadRegionHoldsTheTexturePayload)
 {
   const auto payload = SeedBytes(kTextureSeed, kTexturePayloadSize);
   const auto source = Mount(TexturePak(payload));
@@ -172,7 +198,7 @@ NOLINT_TEST(PakFileSourceTest, PayloadRegionHoldsTheTexturePayload)
 
   const auto region = source.PayloadRegion(TextureResource::ClassTypeId());
 
-  ASSERT_TRUE(region.has_value());
+  ASSERT_HAS_VALUE(region);
   const auto footer = source.Pak().Footer().texture_region;
   EXPECT_EQ(region->Range().offset, ByteOffset { footer.offset });
   EXPECT_EQ(region->Range().count, ByteCount { footer.size });
@@ -185,7 +211,7 @@ NOLINT_TEST(PakFileSourceTest, PayloadRegionHoldsTheTexturePayload)
 }
 
 //! A pak holds no payloads of a kind it has no table of.
-NOLINT_TEST(PakFileSourceTest, HoldsNoPayloadsWithoutATable)
+NOLINT_TEST_F(PakFileSourceTest, HoldsNoPayloadsWithoutATable)
 {
   const auto source = Mount(TexturePak(SeedBytes(kTextureSeed)));
 
@@ -198,7 +224,7 @@ NOLINT_TEST(PakFileSourceTest, HoldsNoPayloadsWithoutATable)
 }
 
 //! A verified mount refuses a pak whose bytes changed after it was cooked.
-NOLINT_TEST(PakFileSourceTest, VerifiedMountRefusesACorruptPak)
+NOLINT_TEST_F(PakFileSourceTest, VerifiedMountRefusesACorruptPak)
 {
   auto bytes = TexturePak(SeedBytes(kTextureSeed));
   CookedBytes::CorruptCrc(bytes);
@@ -208,7 +234,7 @@ NOLINT_TEST(PakFileSourceTest, VerifiedMountRefusesACorruptPak)
 }
 
 //! A verified mount of an intact pak opens it, as an unverified one does.
-NOLINT_TEST(PakFileSourceTest, VerifiedMountAcceptsAnIntactPak)
+NOLINT_TEST_F(PakFileSourceTest, VerifiedMountAcceptsAnIntactPak)
 {
   const auto bytes = TexturePak(SeedBytes(kTextureSeed));
 
@@ -268,61 +294,65 @@ NOLINT_TEST(PakFilePayloadsTest, VerifiedOpenRefusesAPakWithoutCrc)
   EXPECT_NO_THROW(std::ignore = PakFile(InMemory(bytes), "test.pak"));
 }
 
-//! A pak in memory awaits its payloads from the bytes it is read from.
-NOLINT_TEST(PakFilePayloadsTest, PakInMemoryServesPayloadsFromItsBytes)
+//! A pak file's payloads are awaited from the file the source opened through
+//! its driver, not from the mapping.
+NOLINT_TEST_F(PakFileSourceTest, PayloadsAreReadThroughTheDriverOpenedFile)
 {
   const auto bytes = TexturePak(SeedBytes(kTextureSeed));
-  const auto pak = PakFile(InMemory(bytes), "test.pak");
+  const auto source = Mount(bytes);
   auto out = std::vector<std::byte>(64);
 
-  const auto read = ReadAtOnce(pak.Payloads(), ByteOffset { 16 }, out);
+  const auto read = ReadAtOnce(source.Payloads(), ByteOffset { 16 }, out);
 
   ASSERT_HAS_VALUE(read);
   EXPECT_THAT(out, BytesEqual(std::span(bytes).subspan(16, out.size())));
 }
 
-//! A pak file opened without a driver serves its payloads from its mapping,
-//! with awaited reads that complete at once.
-NOLINT_TEST(PakFilePayloadsTest, PakFileWithoutADriverReadsItsMapping)
-{
-  const auto dir = oxygen::testing::ScopedTempDir {};
-  const auto path = dir.Path() / "test.pak";
-  const auto bytes = TexturePak(SeedBytes(kTextureSeed));
-  Materialize(bytes, path);
-  const auto pak = PakFile(path);
-  auto out = std::vector<std::byte>(64);
-
-  const auto read = ReadAtOnce(pak.Payloads(), ByteOffset { 16 }, out);
-
-  ASSERT_HAS_VALUE(read);
-  EXPECT_THAT(out, BytesEqual(std::span(bytes).subspan(16, out.size())));
-}
-
-//! A pak file opened with a driver awaits its payloads through it: the read
+//! A source mounted over a loop awaits its payloads through it: the read
 //! suspends and completes on the driver's loop.
-NOLINT_TEST(PakFilePayloadsTest, PakFileWithADriverAwaitsItsPayloads)
+NOLINT_TEST_F(PakFileSourceTest, PayloadsAreAwaitedOnTheDriversLoop)
 {
-  const auto dir = oxygen::testing::ScopedTempDir {};
-  const auto path = dir.Path() / "test.pak";
+  const auto path = TempPath("test.pak");
   const auto bytes = TexturePak(SeedBytes(kTextureSeed));
   Materialize(bytes, path);
   auto loop = asio::io_context {};
   auto driver = oxygen::serio::IoDriver::Create(loop);
   ASSERT_HAS_VALUE(driver);
-  const auto pak = PakFile(path, PakFile::Verification::kNone,
+  const auto source = PakFileSource(path, /*verify_content_hashes=*/false,
     std::make_shared<oxygen::serio::IoDriver>(std::move(*driver)));
   auto out = std::vector<std::byte>(64);
   EXPECT_FALSE(
-    pak.Payloads().AsyncReadAt(ByteOffset { 16 }, out).await_ready());
+    source.Payloads().AsyncReadAt(ByteOffset { 16 }, out).await_ready());
 
   auto read = oxygen::Result<void> {};
-  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
+  oxygen::co::Run(loop, [&] -> oxygen::co::Co<> {
     read = co_await oxygen::serio::AsyncReadExactlyAt(
-      pak.Payloads(), ByteOffset { 16 }, out);
+      source.Payloads(), ByteOffset { 16 }, out);
   });
 
   ASSERT_HAS_VALUE(read);
   EXPECT_THAT(out, BytesEqual(std::span(bytes).subspan(16, out.size())));
+}
+
+//! Every resource type the pak holds a table of has its payload region, and
+//! reads the bytes of the footer's region for it.
+NOLINT_TEST_F(PakFileSourceTest, EveryResourceTypeReadsItsFootersRegion)
+{
+  const auto bytes = TexturePak(SeedBytes(kTextureSeed));
+  const auto source = Mount(bytes);
+  const auto footer = source.Pak().Footer();
+  const auto region = source.PayloadRegion(TextureResource::ClassTypeId());
+  ASSERT_HAS_VALUE(region);
+  auto out = std::vector<std::byte>(16);
+
+  const auto read = ReadAtOnce(*region, ByteOffset { 0 }, out);
+
+  ASSERT_HAS_VALUE(read);
+  EXPECT_THAT(out,
+    BytesEqual(std::span(bytes).subspan(
+      static_cast<size_t>(footer.texture_region.offset), out.size())));
+  EXPECT_FALSE(source.PayloadRegion(oxygen::data::BufferResource::ClassTypeId())
+      .has_value());
 }
 
 } // namespace

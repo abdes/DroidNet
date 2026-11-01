@@ -4,12 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma once
-
-#include <cstdint>
-#include <cstring>
-#include <new>
-#include <span>
 #include <type_traits>
 #include <utility>
 
@@ -17,26 +11,9 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 
 using oxygen::data::BufferResource;
-
-namespace {
-
-//! A buffer holding a copy of `bytes`.
-auto CopyOf(const std::span<const uint8_t> bytes) -> oxygen::serio::ByteBuffer
-{
-  auto buffer
-    = oxygen::serio::ByteBuffer::Allocate(oxygen::serio::CountOf(bytes.size()));
-  if (!buffer) {
-    throw std::bad_alloc();
-  }
-  if (!bytes.empty()) {
-    std::memcpy(buffer->Bytes().data(), bytes.data(), bytes.size());
-  }
-  return std::move(buffer).value();
-}
-
-} // namespace
 
 /*!
  Creates a BufferResource instance from a PAK descriptor and the buffer that
@@ -84,14 +61,8 @@ auto CopyOf(const std::span<const uint8_t> bytes) -> oxygen::serio::ByteBuffer
  @see pak::core::BufferResourceDesc, to_string(BufferResource::UsageFlags)
 */
 BufferResource::BufferResource(
-  pak::core::BufferResourceDesc desc, const std::span<const uint8_t> data)
-  : BufferResource(std::move(desc), CopyOf(data))
-{
-}
-
-BufferResource::BufferResource(
   pak::core::BufferResourceDesc desc, serio::ByteBuffer data)
-  : desc_(std::move(desc))
+  : desc_(desc)
   , data_(std::move(data))
 {
   // Invariants (validated eagerly so mis-authored PAK data fails fast):

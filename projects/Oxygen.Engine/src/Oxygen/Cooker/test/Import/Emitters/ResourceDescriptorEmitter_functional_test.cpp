@@ -8,106 +8,164 @@
 
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
+#include <string>
 
-#include <Oxygen/Base/Filesystem.h>
-#include <Oxygen/Cooker/Import/FileError.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
-#include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
+#include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
 using oxygen::co::Co;
 using oxygen::content::import::ImportEventLoop;
 using oxygen::content::import::ResourceDescriptorEmitter;
-using oxygen::content::import::WindowsFileWriter;
 namespace co = oxygen::co;
 
 namespace {
 
-//! Fixture owning an event loop, a file writer and a temporary directory.
-class WindowsFileWriterTest : public oxygen::testing::TempDirTest {
+//! Fixture owning an event loop and a temporary directory, for the one test
+//! that publishes real files.
+class ResourceDescriptorEmitterRealFileTest
+  : public oxygen::testing::TempDirTest {
+protected:
+  auto SetUp() -> void override { loop_ = std::make_unique<ImportEventLoop>(); }
+
+  auto TearDown() -> void override
+  {
+    emitter_.reset();
+    loop_.reset();
+  }
+
+  //! Runs `body(emitter)` in a coroutine whose nursery receives the emitter's
+  //! writes; the emitter publishes real files under `TempDir()` and stays for
+  //! inspection afterwards.
+  template <typename Body> auto RunEmitter(Body body) -> void
+  {
+    co::Run(*loop_, [&] -> Co<> {
+      OXCO_WITH_NURSERY(writes)
+      {
+        auto& emitter
+          = emitter_.emplace(oxygen::content::cooked::RealCookerStorage(),
+            loop_->Driver(), writes, TempDir());
+        co_await body(emitter);
+        co_return co::kJoin;
+      };
+    });
+  }
+
+  std::unique_ptr<ImportEventLoop> loop_;
+  std::optional<ResourceDescriptorEmitter> emitter_;
+};
+
+//! Fixture owning an event loop and a file system held in memory, with an
+//! inline driver.
+class ResourceDescriptorEmitterTest : public ::testing::Test {
 protected:
   auto SetUp() -> void override
   {
     loop_ = std::make_unique<ImportEventLoop>();
-    writer_ = std::make_unique<WindowsFileWriter>(*loop_);
+    driver_ = std::make_unique<oxygen::serio::IoDriver>(
+      oxygen::serio::IoDriver::CreateInline().value());
   }
 
   auto TearDown() -> void override
   {
-    writer_.reset();
+    emitter_.reset();
+    driver_.reset();
     loop_.reset();
   }
 
+  //! Runs `body(emitter)` in a coroutine whose nursery receives the emitter's
+  //! writes; the emitter publishes to the in-memory file system and stays for
+  //! inspection afterwards.
+  template <typename Body> auto RunEmitter(Body body) -> void
+  {
+    co::Run(*loop_, [&] -> Co<> {
+      OXCO_WITH_NURSERY(writes)
+      {
+        auto& emitter = emitter_.emplace(files_, *driver_, writes, "/cooked");
+        co_await body(emitter);
+        co_return co::kJoin;
+      };
+    });
+  }
+
+  oxygen::cooker::testing::MemoryFileSystem files_;
   std::unique_ptr<ImportEventLoop> loop_;
-  std::unique_ptr<WindowsFileWriter> writer_;
+  std::unique_ptr<oxygen::serio::IoDriver> driver_;
+  std::optional<ResourceDescriptorEmitter> emitter_;
 };
 
-NOLINT_TEST_F(WindowsFileWriterTest, EmitterRetainsErrorAfterSharedWriterFlush)
+//! On the real file system: a write the storage refuses is the error
+//! `Finalize` returns, and the emitter keeps it.
+NOLINT_TEST_F(
+  ResourceDescriptorEmitterRealFileTest, FinalizeReturnsTheWriteFailure)
 {
   {
     std::ofstream blocked_directory(TempDir() / "Resources");
     blocked_directory << "not a directory";
   }
-  ResourceDescriptorEmitter emitter(*writer_, TempDir());
-  const oxygen::data::pak::core::TextureResourceDesc descriptor {};
-  static_cast<void>(
-    emitter.EmitTexture("/.cooked/Resources/Ship.glb/Paint.base_color.otex",
-      oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
-  co::Run(*loop_, [&] -> Co<> {
-    const auto first_flush = co_await writer_->Flush();
-    EXPECT_FALSE(first_flush.has_value());
+  RunEmitter([&](ResourceDescriptorEmitter& emitter) -> Co<> {
+    const oxygen::data::pak::core::TextureResourceDesc descriptor {};
+    static_cast<void>(
+      emitter.EmitTexture("/.cooked/Resources/Ship.glb/Paint.base_color.otex",
+        oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
     const auto result = co_await emitter.Finalize();
     if (result) {
       ADD_FAILURE() << "Emitter discarded its write failure";
       co_return;
     }
-    EXPECT_FALSE(result.error().path.empty());
-    EXPECT_NE(result.error().system_error.value(), 0);
-    EXPECT_EQ(
-      result.error().path, oxygen::base::ToLogicalPath(result.error().path));
+    EXPECT_NE(result.error().error.value(), 0);
+    EXPECT_EQ(result.error().path.filename(), "Paint.base_color.otex");
   });
 }
 
 //! Emitting an equal texture descriptor again records it once: the cook is
 //! deterministic, so the second emit has nothing to write.
-NOLINT_TEST_F(WindowsFileWriterTest, EqualDescriptorEmittedTwiceIsRecordedOnce)
+NOLINT_TEST_F(
+  ResourceDescriptorEmitterTest, EqualDescriptorEmittedTwiceIsRecordedOnce)
 {
-  ResourceDescriptorEmitter emitter(*writer_, TempDir());
-  const oxygen::data::pak::core::TextureResourceDesc descriptor {};
-  const auto index = oxygen::data::pak::core::ResourceIndexT { 1U };
-  const auto first
-    = emitter.EmitTexture("/.cooked/Textures/Sky.otex", index, descriptor);
-  const auto second
-    = emitter.EmitTexture("/.cooked/Textures/Sky.otex", index, descriptor);
+  std::string first;
+  std::string second;
+  RunEmitter([&](ResourceDescriptorEmitter& emitter) -> Co<> {
+    const oxygen::data::pak::core::TextureResourceDesc descriptor {};
+    const auto index = oxygen::data::pak::core::ResourceIndexT { 1U };
+    first
+      = emitter.EmitTexture("/.cooked/Textures/Sky.otex", index, descriptor);
+    second
+      = emitter.EmitTexture("/.cooked/Textures/Sky.otex", index, descriptor);
 
-  co::Run(*loop_,
-    [&] -> Co<> { EXPECT_TRUE((co_await emitter.Finalize()).has_value()); });
+    EXPECT_TRUE(co_await emitter.Finalize());
+  });
   EXPECT_EQ(first, second);
-  EXPECT_EQ(emitter.Records().size(), 1U);
+  ASSERT_HAS_VALUE(emitter_);
+  EXPECT_EQ(emitter_->Records().size(), 1U);
 }
 
 //! Emitting other bytes at a path already emitted is refused: two writes
 //! could finish in either order, leaving bytes the record does not describe.
-NOLINT_TEST_F(WindowsFileWriterTest, OtherDescriptorAtAnEmittedPathIsRefused)
+NOLINT_TEST_F(
+  ResourceDescriptorEmitterTest, OtherDescriptorAtAnEmittedPathIsRefused)
 {
-  ResourceDescriptorEmitter emitter(*writer_, TempDir());
-  const oxygen::data::pak::core::TextureResourceDesc descriptor {};
-  static_cast<void>(emitter.EmitTexture("/.cooked/Textures/Sky.otex",
-    oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
-
-  EXPECT_THROW(
+  RunEmitter([&](ResourceDescriptorEmitter& emitter) -> Co<> {
+    const oxygen::data::pak::core::TextureResourceDesc descriptor {};
     static_cast<void>(emitter.EmitTexture("/.cooked/Textures/Sky.otex",
-      oxygen::data::pak::core::ResourceIndexT { 2U }, descriptor)),
-    std::runtime_error);
-  co::Run(*loop_,
-    [&] -> Co<> { EXPECT_TRUE((co_await emitter.Finalize()).has_value()); });
+      oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
+
+    EXPECT_THROW(
+      static_cast<void>(emitter.EmitTexture("/.cooked/Textures/Sky.otex",
+        oxygen::data::pak::core::ResourceIndexT { 2U }, descriptor)),
+      std::runtime_error);
+    EXPECT_TRUE(co_await emitter.Finalize());
+  });
 }
 
 } // namespace

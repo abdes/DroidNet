@@ -10,7 +10,6 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -45,7 +44,6 @@
 #include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/Integrity.h>
-#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::import {
@@ -143,8 +141,6 @@ struct LooseCookedWriter::Impl final {
     : storage_(make_observer(&storage))
     , cooked_root_(std::move(cooked_root))
   {
-    const auto lock = content::internal::LooseCookedIndexImpl::LockFileShared(
-      IndexPath(cooked_root_));
     LoadExistingIndexIfPresent_();
   }
 
@@ -477,9 +473,13 @@ struct LooseCookedWriter::Impl final {
   {
     const auto index_path = IndexPath(cooked_root_);
     // Merge with the latest published index and replace it as one step for
-    // every in-process writer and reader of this cooked root.
-    const auto lock
-      = content::internal::LooseCookedIndexImpl::LockFileExclusive(index_path);
+    // every writer of this cooked root; readers map whole published indexes.
+    const auto lock = storage_->LockExclusive(
+      content::internal::LooseCookedIndexImpl::LockPathOf(index_path));
+    if (!lock) {
+      throw std::system_error(lock.error(),
+        "cannot lock the index of '" + cooked_root_.string() + "'");
+    }
 
     auto current_assets = assets_;
     auto current_files = files_;

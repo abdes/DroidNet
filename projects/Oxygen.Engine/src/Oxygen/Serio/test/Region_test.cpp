@@ -6,6 +6,7 @@
 
 // Covers: Serio/Region.h
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -15,6 +16,7 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/ByteView.h>
+#include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/Error.h>
 #include <Oxygen/Serio/MemoryFile.h>
 #include <Oxygen/Serio/Region.h>
@@ -32,9 +34,11 @@ using oxygen::serio::ByteRange;
 using oxygen::serio::ByteView;
 using oxygen::serio::Error;
 using oxygen::serio::MemoryFile;
+using oxygen::serio::ReadAll;
 using oxygen::serio::Region;
 using oxygen::serio::testing::BytesEqual;
 using oxygen::serio::testing::FaultInjectingDevice;
+using oxygen::serio::testing::FaultOperation;
 using oxygen::serio::testing::PatternBytes;
 
 auto Range(const uint64_t offset, const uint64_t count) -> ByteRange
@@ -143,6 +147,87 @@ NOLINT_TEST_F(RegionTest, DeviceErrorsPropagate)
 
   ASSERT_FALSE(region);
   EXPECT_EQ(region.error(), Error::kIo);
+}
+
+//! ReadAll of a whole device returns every byte it holds.
+NOLINT_TEST_F(RegionTest, ReadAllReadsTheWholeDevice)
+{
+  const auto file = MemoryFile::FromBytes(bytes_);
+  ASSERT_TRUE(file);
+
+  const auto all = ReadAll(*file);
+
+  ASSERT_TRUE(all);
+  EXPECT_THAT(all->Bytes(), BytesEqual(bytes_));
+}
+
+//! ReadAll of a region reads only the region's range.
+NOLINT_TEST_F(RegionTest, ReadAllOfARegionReadsItsRange)
+{
+  const auto region = Region<ByteView>::Make(device_, Range(100, 250));
+  ASSERT_TRUE(region);
+
+  const auto all = ReadAll(*region);
+
+  ASSERT_TRUE(all);
+  EXPECT_THAT(all->Bytes(), BytesEqual(std::span(bytes_).subspan(100, 250)));
+}
+
+//! ReadAll of a device that ends before its reported size fails with
+//! kEndOfData.
+NOLINT_TEST(RegionReadAllTest, DeviceEndingBeforeItsSizeIsEndOfData)
+{
+  //! Reports 100 bytes but holds 40, as a file truncated under its reader.
+  struct TruncatedDevice {
+    [[nodiscard]] auto Size() const noexcept -> oxygen::Result<ByteCount>
+    {
+      return ::oxygen::Ok(ByteCount { 100 });
+    }
+    [[nodiscard]] auto ReadAt(
+      const ByteOffset at, const std::span<std::byte> out) const noexcept
+      -> oxygen::Result<ByteCount>
+    {
+      constexpr uint64_t kHeld = 40;
+      if (at.get() >= kHeld) {
+        return ::oxygen::Ok(ByteCount { 0 });
+      }
+      const auto count = (std::min)(uint64_t { out.size() }, kHeld - at.get());
+      std::ranges::fill(out.first(static_cast<size_t>(count)), std::byte { 1 });
+      return ::oxygen::Ok(ByteCount { count });
+    }
+  };
+  const auto device = TruncatedDevice {};
+
+  const auto all = ReadAll(device);
+
+  ASSERT_FALSE(all);
+  EXPECT_EQ(all.error(), Error::kEndOfData);
+}
+
+//! A device error during ReadAll is the call's error.
+NOLINT_TEST_F(RegionTest, ReadAllPropagatesDeviceErrors)
+{
+  auto device
+    = FaultInjectingDevice<MemoryFile>(MemoryFile::FromBytes(bytes_).value());
+  device.FailOn(FaultOperation::kRead, 0, make_error_code(Error::kIo));
+
+  const auto all = ReadAll(device);
+
+  ASSERT_FALSE(all);
+  EXPECT_EQ(all.error(), Error::kIo);
+}
+
+//! ReadAll over a device that reads a few bytes at a time still returns all.
+NOLINT_TEST_F(RegionTest, ReadAllSurvivesShortReads)
+{
+  auto device
+    = FaultInjectingDevice<MemoryFile>(MemoryFile::FromBytes(bytes_).value());
+  device.LimitReads(ByteCount { 7 });
+
+  const auto all = ReadAll(device);
+
+  ASSERT_TRUE(all);
+  EXPECT_THAT(all->Bytes(), BytesEqual(bytes_));
 }
 
 } // namespace
