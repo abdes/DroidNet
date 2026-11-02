@@ -26,9 +26,11 @@
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h> // IWYU pragma: keep
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/SurfaceId.h>
@@ -394,6 +396,47 @@ NOLINT_TEST(
   EXPECT_TRUE(collector->AssetDependencies().empty());
   EXPECT_TRUE(collector->ResourceRefDependencies().empty());
   EXPECT_TRUE(collector->ResourceKeyDependencies().empty());
+}
+
+//! A scene with no scripts of its own still depends on the assets its changes
+//! of instanced slots' parameters name (R3 review).
+NOLINT_TEST(SceneLoaderDependencyTest,
+  ParameterChangesWithoutOwnScriptsCollectTheirAssets)
+{
+  const auto material
+    = oxygen::data::AssetKey::FromVirtualPath("/test/Surface.omat");
+  auto part = SceneBuilder { "Part" };
+  const auto wheel = part.Node("Wheel");
+  auto level = SceneBuilder { "Level" };
+  const auto root = level.Node("Level");
+  const auto holder = level.Node("Part", root);
+  level.Instance(
+    holder, oxygen::data::AssetKey::FromVirtualPath("/test/Part.oscene"));
+  level.ScriptChange(holder, { part.IdOf(wheel) },
+    oxygen::data::ScriptSlotId::FromStableIdentity("/test/slot"),
+    {
+      .key = "skin",
+      .value = oxygen::cooker::testing::ScriptAssetValue {
+        .key = material,
+        .type = oxygen::data::AssetType::kMaterial,
+      },
+    });
+  auto bytes = level.Bytes();
+  oxygen::serio::ReadOnlyMemoryStream stream { std::span<const std::byte>(
+    bytes) };
+  oxygen::serio::Reader reader(stream);
+  auto context = oxygen::content::LoaderContext {};
+  context.desc_reader = &reader;
+  context.parse_only = true;
+  const auto collector
+    = std::make_shared<oxygen::content::internal::DependencyCollector>();
+  context.dependency_collector = collector;
+
+  const auto scene = LoadSceneAsset(context);
+
+  ASSERT_NE(scene, nullptr);
+  EXPECT_THAT(
+    collector->AssetDependencies(), ::testing::UnorderedElementsAre(material));
 }
 
 } // namespace

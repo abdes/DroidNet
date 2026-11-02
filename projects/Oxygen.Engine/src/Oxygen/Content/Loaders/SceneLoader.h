@@ -67,7 +67,6 @@ namespace detail {
     std::unordered_map<data::AssetKey, data::AssetType> override_assets;
     std::unordered_set<data::AssetKey> scripts;
     std::unordered_map<data::AssetKey, data::AssetType> parameter_assets;
-    bool has_scripting = false;
     //! What instantiation loads: a missing one is an issue on its instance or
     //! context rather than a failed scene load.
     std::unordered_set<data::AssetKey> instances;
@@ -109,7 +108,6 @@ namespace detail {
     }
     for (const auto& component :
       asset.GetComponents<scripting::ScriptingComponentRecord>()) {
-      references.has_scripting = true;
       for (const auto& slot : asset.ReadScriptSlots(
              component.slot_start_index, component.slot_count)) {
         references.scripts.insert(slot.script_asset_key);
@@ -171,13 +169,13 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     for (const auto& dep : references.override_assets | std::views::keys) {
       collector.AddAssetDependency(dep);
     }
-    if (references.has_scripting) {
-      for (const auto& dep : references.scripts) {
-        collector.AddAssetDependency(dep);
-      }
-      for (const auto& dep : references.parameter_assets | std::views::keys) {
-        collector.AddAssetDependency(dep);
-      }
+    for (const auto& dep : references.scripts) {
+      collector.AddAssetDependency(dep);
+    }
+    // Changes of instanced slots name assets whether or not the scene has
+    // scripts of its own.
+    for (const auto& dep : references.parameter_assets | std::views::keys) {
+      collector.AddAssetDependency(dep);
     }
   }
 
