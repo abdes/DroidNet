@@ -4,50 +4,47 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <ios>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Pak/Internal/PakResourceRows.h>
+#include <Oxygen/Cooker/Pak/Internal/PakSourceDevices.h>
 #include <Oxygen/Cooker/Pak/PakMeasureStore.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Data/PakFormat_audio.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_render.h> // IWYU pragma: keep
-#include <Oxygen/Data/PakFormat_scripting.h>
-#include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace {
 namespace audio = oxygen::data::pak::audio;
 namespace core = oxygen::data::pak::core;
 namespace pak = oxygen::content::pak;
-namespace physics = oxygen::data::pak::physics;
-namespace render = oxygen::data::pak::render;
-namespace serio = oxygen::serio;
-namespace script = oxygen::data::pak::scripting;
-
-constexpr auto kBufferElementStride = uint32_t { 1U };
 
 struct MeasureSink final {
   uint64_t total_bytes = 0;
 
-  auto WriteBytes(const std::span<const std::byte> bytes) -> bool
+  [[nodiscard]] auto WriteBytes(const std::span<const std::byte> bytes) -> bool
   {
     const auto byte_count = static_cast<uint64_t>(bytes.size_bytes());
-    if (byte_count > (std::numeric_limits<uint64_t>::max)() - total_bytes) {
+    if (byte_count > std::numeric_limits<uint64_t>::max() - total_bytes) {
       return false;
     }
     total_bytes += byte_count;
     return true;
   }
 
-  template <typename T> auto WriteObject(const T& value) -> bool
+  template <typename T> [[nodiscard]] auto WriteObject(const T& value) -> bool
   {
     return WriteBytes(
       std::as_bytes(std::span { std::addressof(value), size_t { 1 } }));
@@ -56,35 +53,28 @@ struct MeasureSink final {
 
 struct BufferSink final {
   explicit BufferSink(std::vector<std::byte>& out_bytes_in)
-    : out_bytes(out_bytes_in)
+    : out_bytes(&out_bytes_in)
   {
   }
 
-  auto WriteBytes(const std::span<const std::byte> bytes) -> bool
+  [[nodiscard]] auto WriteBytes(const std::span<const std::byte> bytes) const
+    -> bool
   {
-    if (bytes.size() > out_bytes.max_size() - out_bytes.size()) {
+    if (bytes.size() > out_bytes->max_size() - out_bytes->size()) {
       return false;
     }
-    out_bytes.insert(out_bytes.end(), bytes.begin(), bytes.end());
+    out_bytes->insert(out_bytes->end(), bytes.begin(), bytes.end());
     return true;
   }
 
-  template <typename T> auto WriteObject(const T& value) -> bool
+  template <typename T> [[nodiscard]] auto WriteObject(const T& value) -> bool
   {
     return WriteBytes(
       std::as_bytes(std::span { std::addressof(value), size_t { 1 } }));
   }
 
-  std::vector<std::byte>& out_bytes;
+  oxygen::observer_ptr<std::vector<std::byte>> out_bytes;
 };
-
-template <typename T> auto NarrowTo(const uint64_t value) -> std::optional<T>
-{
-  if (value > static_cast<uint64_t>((std::numeric_limits<T>::max)())) {
-    return std::nullopt;
-  }
-  return static_cast<T>(value);
-}
 
 template <typename Emitter>
 auto MeasurePayload(const Emitter& emitter) -> std::optional<uint64_t>
@@ -103,7 +93,7 @@ auto StorePayload(const Emitter& emitter, std::vector<std::byte>& out_bytes)
   const auto measured_size = MeasurePayload(emitter);
   if (!measured_size.has_value()
     || *measured_size
-      > static_cast<uint64_t>((std::numeric_limits<size_t>::max)())) {
+      > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
     out_bytes.clear();
     return false;
   }
@@ -121,8 +111,8 @@ auto StorePayload(const Emitter& emitter, std::vector<std::byte>& out_bytes)
 }
 
 template <typename Record, typename Sink, typename FillRecordFn>
-auto EmitFixedRecordPayload(
-  const uint32_t entry_count, FillRecordFn&& fill_record, Sink& sink) -> bool
+auto EmitFixedRecordPayload(const uint32_t entry_count,
+  const FillRecordFn& fill_record, Sink& sink) -> bool
 {
   for (uint32_t i = 0; i < entry_count; ++i) {
     auto record = Record {};
@@ -139,7 +129,7 @@ auto EmitFixedRecordPayload(
 template <typename Record, typename Sink, typename AssignResourceFn>
 auto EmitResourceTablePayload(
   const pak::PakResourceTableSerializationInput& input,
-  AssignResourceFn&& assign_resource, Sink& sink) -> bool
+  const AssignResourceFn& assign_resource, Sink& sink) -> bool
 {
   size_t resource_cursor = 0;
   const auto write_ok = EmitFixedRecordPayload<Record>(
@@ -169,108 +159,11 @@ auto EmitResourceTablePayload(
 }
 
 template <typename Sink>
-auto EmitTextureTablePayload(
-  const pak::PakResourceTableSerializationInput& input, Sink& sink) -> bool
-{
-  return EmitResourceTablePayload<core::TextureResourceDesc>(
-    input,
-    [](const pak::PakResourcePlacementPlan& resource,
-      core::TextureResourceDesc& record) -> bool {
-      const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
-      const auto alignment = NarrowTo<uint16_t>(resource.alignment);
-      if (!size_bytes.has_value() || !alignment.has_value()) {
-        return false;
-      }
-
-      record.data_offset = resource.offset;
-      record.size_bytes = *size_bytes;
-      record.alignment = *alignment;
-      return true;
-    },
-    sink);
-}
-
-template <typename Sink>
-auto EmitBufferTablePayload(
-  const pak::PakResourceTableSerializationInput& input, Sink& sink) -> bool
-{
-  return EmitResourceTablePayload<core::BufferResourceDesc>(
-    input,
-    [](const pak::PakResourcePlacementPlan& resource,
-      core::BufferResourceDesc& record) -> bool {
-      const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
-      if (!size_bytes.has_value()) {
-        return false;
-      }
-
-      record.data_offset = resource.offset;
-      record.size_bytes = *size_bytes;
-      record.element_stride = kBufferElementStride;
-      return true;
-    },
-    sink);
-}
-
-template <typename Sink>
 auto EmitAudioTablePayload(
   const pak::PakResourceTableSerializationInput& input, Sink& sink) -> bool
 {
   return EmitResourceTablePayload<audio::AudioResourceDesc>(
-    input,
-    [](const pak::PakResourcePlacementPlan& resource,
-      audio::AudioResourceDesc& record) -> bool {
-      const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
-      const auto alignment = NarrowTo<uint16_t>(resource.alignment);
-      if (!size_bytes.has_value() || !alignment.has_value()) {
-        return false;
-      }
-
-      record.data_offset = resource.offset;
-      record.size_bytes = *size_bytes;
-      record.alignment = *alignment;
-      return true;
-    },
-    sink);
-}
-
-template <typename Sink>
-auto EmitScriptResourceTablePayload(
-  const pak::PakResourceTableSerializationInput& input, Sink& sink) -> bool
-{
-  return EmitResourceTablePayload<script::ScriptResourceDesc>(
-    input,
-    [](const pak::PakResourcePlacementPlan& resource,
-      script::ScriptResourceDesc& record) -> bool {
-      const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
-      if (!size_bytes.has_value()) {
-        return false;
-      }
-
-      record.data_offset = resource.offset;
-      record.size_bytes = *size_bytes;
-      return true;
-    },
-    sink);
-}
-
-template <typename Sink>
-auto EmitPhysicsTablePayload(
-  const pak::PakResourceTableSerializationInput& input, Sink& sink) -> bool
-{
-  return EmitResourceTablePayload<physics::PhysicsResourceDesc>(
-    input,
-    [](const pak::PakResourcePlacementPlan& resource,
-      physics::PhysicsResourceDesc& record) -> bool {
-      const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
-      if (!size_bytes.has_value()) {
-        return false;
-      }
-
-      record.data_offset = resource.offset;
-      record.size_bytes = *size_bytes;
-      return true;
-    },
-    sink);
+    input, pak::internal::PlaceResourceRow<audio::AudioResourceDesc>, sink);
 }
 
 template <typename Sink>
@@ -299,7 +192,7 @@ auto EmitBrowseIndexPayload(const pak::PakBrowseIndexPlan& browse, Sink& sink)
   -> bool
 {
   constexpr auto kMaxU32AsU64
-    = static_cast<uint64_t>((std::numeric_limits<uint32_t>::max)());
+    = static_cast<uint64_t>(std::numeric_limits<uint32_t>::max());
 
   auto paths = std::vector<std::string_view> {};
   paths.reserve(browse.entries.size() + browse.textures.size());
@@ -364,61 +257,15 @@ auto EmitBrowseIndexPayload(const pak::PakBrowseIndexPlan& browse, Sink& sink)
     }
   }
 
-  for (const auto path : paths) {
-    if (!sink.WriteBytes(
-          std::as_bytes(std::span { path.data(), path.size() }))) {
-      return false;
-    }
-  }
-
-  return true;
+  return std::ranges::all_of(paths, [&sink](const auto path) -> bool {
+    return sink.WriteBytes(
+      std::as_bytes(std::span { path.data(), path.size() }));
+  });
 }
 
 } // namespace
 
 namespace oxygen::content::pak {
-
-auto MeasureTextureTablePayload(const PakResourceTableSerializationInput& input)
-  -> std::optional<uint64_t>
-{
-  return MeasurePayload([&input](auto& sink) -> auto {
-    return EmitTextureTablePayload(input, sink);
-  });
-}
-
-auto StoreTextureTablePayload(const PakResourceTableSerializationInput& input,
-  std::vector<std::byte>& out_bytes) -> bool
-{
-  return StorePayload(
-    [&input](
-      auto& sink) -> auto { return EmitTextureTablePayload(input, sink); },
-    out_bytes);
-}
-
-auto MeasureBufferTablePayload(const PakResourceTableSerializationInput& input)
-  -> std::optional<uint64_t>
-{
-  return MeasurePayload([&input](auto& sink) -> auto {
-    return EmitBufferTablePayload(input, sink);
-  });
-}
-
-auto StoreBufferTablePayload(const PakResourceTableSerializationInput& input,
-  std::vector<std::byte>& out_bytes) -> bool
-{
-  return StorePayload(
-    [&input](
-      auto& sink) -> auto { return EmitBufferTablePayload(input, sink); },
-    out_bytes);
-}
-
-auto MeasureAudioTablePayload(const PakResourceTableSerializationInput& input)
-  -> std::optional<uint64_t>
-{
-  return MeasurePayload([&input](auto& sink) -> auto {
-    return EmitAudioTablePayload(input, sink);
-  });
-}
 
 auto StoreAudioTablePayload(const PakResourceTableSerializationInput& input,
   std::vector<std::byte>& out_bytes) -> bool
@@ -426,51 +273,6 @@ auto StoreAudioTablePayload(const PakResourceTableSerializationInput& input,
   return StorePayload(
     [&input](auto& sink) -> auto { return EmitAudioTablePayload(input, sink); },
     out_bytes);
-}
-
-auto MeasureScriptResourceTablePayload(
-  const PakResourceTableSerializationInput& input) -> std::optional<uint64_t>
-{
-  return MeasurePayload([&input](auto& sink) -> auto {
-    return EmitScriptResourceTablePayload(input, sink);
-  });
-}
-
-auto StoreScriptResourceTablePayload(
-  const PakResourceTableSerializationInput& input,
-  std::vector<std::byte>& out_bytes) -> bool
-{
-  return StorePayload(
-    [&input](auto& sink) -> auto {
-      return EmitScriptResourceTablePayload(input, sink);
-    },
-    out_bytes);
-}
-
-auto MeasurePhysicsTablePayload(const PakResourceTableSerializationInput& input)
-  -> std::optional<uint64_t>
-{
-  return MeasurePayload([&input](auto& sink) -> auto {
-    return EmitPhysicsTablePayload(input, sink);
-  });
-}
-
-auto StorePhysicsTablePayload(const PakResourceTableSerializationInput& input,
-  std::vector<std::byte>& out_bytes) -> bool
-{
-  return StorePayload(
-    [&input](
-      auto& sink) -> auto { return EmitPhysicsTablePayload(input, sink); },
-    out_bytes);
-}
-
-auto MeasureAssetDirectoryPayload(
-  const std::span<const PakAssetDirectoryEntryPlan> entries)
-  -> std::optional<uint64_t>
-{
-  return MeasurePayload([entries](auto& sink) -> auto {
-    return EmitAssetDirectoryPayload(entries, sink);
-  });
 }
 
 auto StoreAssetDirectoryPayload(
@@ -546,12 +348,12 @@ auto StorePayloadSourceSlice(internal::PakSourceDevices& sources,
     return false;
   }
 
-  if (*measured > static_cast<uint64_t>((std::numeric_limits<size_t>::max)())) {
+  if (*measured > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
     out_bytes.clear();
     return false;
   }
   if (input.source_offset
-    > static_cast<uint64_t>((std::numeric_limits<size_t>::max)())) {
+    > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
     out_bytes.clear();
     return false;
   }

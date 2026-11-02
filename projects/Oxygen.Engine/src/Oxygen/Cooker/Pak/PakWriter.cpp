@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Crc32.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Pak/Internal/PakResourceRows.h>
 #include <Oxygen/Cooker/Pak/Internal/PakSourceDevices.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
@@ -50,7 +51,7 @@ namespace serio = oxygen::serio;
 constexpr auto kZeroWriteChunkSize = size_t { 64U } * 1024U;
 constexpr auto kCrcFieldSize = uint64_t { sizeof(uint32_t) };
 
-using Publication = oxygen::content::cooked::Publication;
+using oxygen::content::cooked::Publication;
 
 struct WriterState final {
   oxygen::observer_ptr<const pak::PakBuildRequest> request;
@@ -219,14 +220,6 @@ auto FindTable(const std::span<const pak::PakTablePlan> tables,
     return std::nullopt;
   }
   return *it;
-}
-
-template <typename T> auto NarrowTo(const uint64_t value) -> std::optional<T>
-{
-  if (value > static_cast<uint64_t>(std::numeric_limits<T>::max())) {
-    return std::nullopt;
-  }
-  return static_cast<T>(value);
 }
 
 auto BuildResourceIndexMap(
@@ -587,35 +580,13 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
           state.sources, table.count,
           FindResourceIndicesByKind(resources_by_kind, "texture"), resources,
           descriptor_sources,
-          [](const pak::PakResourcePlacementPlan& resource,
-            core::TextureResourceDesc& record) -> bool {
-            const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
-            const auto alignment = NarrowTo<uint16_t>(resource.alignment);
-            if (!size_bytes.has_value() || !alignment.has_value()) {
-              return false;
-            }
-            record.data_offset = resource.offset;
-            record.size_bytes = *size_bytes;
-            record.alignment = *alignment;
-            return true;
-          },
-          payload);
+          pak::internal::PlaceResourceRow<core::TextureResourceDesc>, payload);
       } else if (table.table_name == "buffer_table") {
         store_ok = BuildPatchedResourceTablePayload<core::BufferResourceDesc>(
           state.sources, table.count,
           FindResourceIndicesByKind(resources_by_kind, "buffer"), resources,
           descriptor_sources,
-          [](const pak::PakResourcePlacementPlan& resource,
-            core::BufferResourceDesc& record) -> bool {
-            const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
-            if (!size_bytes.has_value()) {
-              return false;
-            }
-            record.data_offset = resource.offset;
-            record.size_bytes = *size_bytes;
-            return true;
-          },
-          payload);
+          pak::internal::PlaceResourceRow<core::BufferResourceDesc>, payload);
       } else if (table.table_name == "audio_table") {
         auto audio_resources = std::vector<pak::PakResourcePlacementPlan> {};
         for (const auto resource_index :
@@ -633,33 +604,14 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
           state.sources, table.count,
           FindResourceIndicesByKind(resources_by_kind, "script"), resources,
           descriptor_sources,
-          [](const pak::PakResourcePlacementPlan& resource,
-            script::ScriptResourceDesc& record) -> bool {
-            const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
-            if (!size_bytes.has_value()) {
-              return false;
-            }
-            record.data_offset = resource.offset;
-            record.size_bytes = *size_bytes;
-            return true;
-          },
-          payload);
+          pak::internal::PlaceResourceRow<script::ScriptResourceDesc>, payload);
       } else if (table.table_name == "physics_resource_table") {
         store_ok
           = BuildPatchedResourceTablePayload<physics::PhysicsResourceDesc>(
             state.sources, table.count,
             FindResourceIndicesByKind(resources_by_kind, "physics"), resources,
             descriptor_sources,
-            [](const pak::PakResourcePlacementPlan& resource,
-              physics::PhysicsResourceDesc& record) -> bool {
-              const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
-              if (!size_bytes.has_value()) {
-                return false;
-              }
-              record.data_offset = resource.offset;
-              record.size_bytes = *size_bytes;
-              return true;
-            },
+            pak::internal::PlaceResourceRow<physics::PhysicsResourceDesc>,
             payload);
       } else {
         AddDiagnostic(state, PakDiagnosticSeverity::kError,

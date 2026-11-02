@@ -179,6 +179,7 @@ set(
   "Pak/PakBuildReport.h"
   "Pak/PakCatalogIo.h"
   "Pak/Internal/PakCatalogJson.h"
+  "Pak/Internal/PakResourceRows.h"
   "Pak/Internal/PakSourceDevices.h"
 )
 
