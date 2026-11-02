@@ -81,6 +81,7 @@ m_gtest_program(
     "TextureResource_test.cpp"
     "TextureStructure_test.cpp"
     "ToStringConverters_test.cpp"
+    "Unorm16_test.cpp"
     "Vertex_test.cpp"
 )
 
