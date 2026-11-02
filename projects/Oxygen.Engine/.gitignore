@@ -1,42 +1,28 @@
+# Engine-specific ignores. The repository root .gitignore covers the shared
+# baseline (OS/editor junk, Python caches and virtualenvs, agent workspaces,
+# .env files, ...).
+
+# Conan/CMake generated files
 ConanPresets-*.json
-!.clangd
-!.vscode/
-.vscode/*
-!.vscode/prepare_clangd.py
-!.vscode/tasks.json
-!.vscode/README.md
 CMakeUserPresets.json
-.omx/
+
+# This directory's clangd configuration is tracked; the root .gitignore
+# ignores '.clangd' everywhere as a generated file.
+!.clangd
+
+# .vscode is curated and tracked. The root .gitignore un-ignores this
+# directory and rescues the shared file set (settings.json, tasks.json,
+# launch.json, extensions.json, *.code-snippets, default-profile.ps1); here we
+# add only the engine-specific tracked files. Machine-local state
+# (BROWSE.VC.DB via the nested .vscode/.gitignore, __pycache__ via the root)
+# stays ignored.
+!.vscode/.gitignore
+!.vscode/README.md
+!.vscode/prepare_clangd.py
+
+# Doxygen-generated module configuration (one rule covers all modules)
+Doxyfile
+
+# Agent/tool workspaces local to the engine
 conductor/
 .planning/
-.gsd/
-.bg-shell/
-.codex/
-
-# ── GSD baseline (auto-generated) ──
-.gsd
-.gsd-id
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
-*~
-.idea/
-*.code-workspace
-.env
-.env.*
-!.env.example
-node_modules/
-.next/
-dist/
-build/
-__pycache__/
-*.pyc
-.venv/
-venv/
-target/
-vendor/
-*.log
-coverage/
-.cache/
-tmp/

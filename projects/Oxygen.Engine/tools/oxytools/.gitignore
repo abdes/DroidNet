@@ -1,6 +1,4 @@
-!uv.lock
-.venv/
+# Python packaging outputs. The root .gitignore deliberately has no generic
+# build//dist/ rules; uv.lock is tracked and needs no rescue.
 dist/
 build/
-*.egg-info/
-__pycache__/
