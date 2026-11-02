@@ -6,11 +6,8 @@
 
 #pragma once
 
-#include <algorithm>
-#include <cstddef>
 #include <memory>
-#include <span>
-#include <stdexcept>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -22,49 +19,14 @@
 
 namespace oxygen::content::loaders {
 
-namespace detail {
-
-  //! Refuses a binding of `asset` whose backend scalars hold non-zero
-  //! reserved bytes in the arm of `backend`, the scene's backend.
-  inline auto CheckBackendReserves(const data::PhysicsSceneAsset& asset,
-    const data::pak::physics::PhysicsBackend backend) -> void
-  {
-    namespace physics = data::pak::physics;
-    const auto reserves_zero = [backend](const auto& bindings) -> bool {
-      return std::ranges::all_of(
-        bindings, [backend](const auto& binding) -> bool {
-          return physics::HasZeroReserves(binding.backend_scalars, backend);
-        });
-    };
-    const auto bindings_reserves_zero
-      = reserves_zero(asset.GetBindings<physics::RigidBodyBindingRecord>())
-      && reserves_zero(asset.GetBindings<physics::CharacterBindingRecord>())
-      && reserves_zero(asset.GetBindings<physics::JointBindingRecord>())
-      && reserves_zero(asset.GetBindings<physics::VehicleWheelBindingRecord>());
-    if (!bindings_reserves_zero) {
-      throw std::runtime_error(
-        "physics binding backend scalar reserved bytes are not zero");
-    }
-  }
-
-} // namespace detail
-
 //! Loader function for physics scene sidecar assets.
 /*!
-  Reads a `PhysicsSceneAssetDesc` from the asset descriptor stream and
-  constructs a `data::PhysicsSceneAsset` (zero-copy, owned data blob).
+ Reads the descriptor the context's reader holds, from its position to its
+ end, and admits it as a `data::PhysicsSceneAsset`, which refuses a malformed
+ sidecar with a `data::CookedOpenError`. The loader then checks what the
+ sidecar references.
 
-  ### Constraints
-  - The calling loader context must have `desc_reader` positioned at the start
-    of the asset's descriptor block.
-  - Parse-only mode is respected: in that mode, validation still runs but no
-    dependency edges are registered.
-
-  ### Error Contract
-  Throws `std::runtime_error` on any structural violation. Callers (AssetLoader)
-  catch these and report a null asset to subscribers.
-
-  @see LoadSceneAsset, data::PhysicsSceneAsset
+ @see LoadSceneAsset, data::PhysicsSceneAsset
 */
 inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
   -> std::unique_ptr<data::PhysicsSceneAsset>
@@ -73,119 +35,15 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
+  auto bytes_res = reader.ReadBlob(reader.Remaining().get());
+  CheckLoaderResult(bytes_res, "physics scene asset", "ReadBlob(descriptor)");
 
-  auto packed = reader.ScopedAlignment(1);
-
-  const auto base_pos_res = reader.Position();
-  CheckLoaderResult(base_pos_res, "physics scene asset", "Position(base)");
-  const size_t base_pos = *base_pos_res;
-
-  // Read the fixed descriptor to compute the total payload size.
-  const auto desc_blob
-    = reader.ReadBlob(sizeof(data::pak::physics::PhysicsSceneAssetDesc));
-  CheckLoaderResult(
-    desc_blob, "physics scene asset", "ReadBlob(PhysicsSceneAssetDesc)");
-  const auto parsed_desc
-    = serio::CopyAt<data::pak::physics::PhysicsSceneAssetDesc>(*desc_blob);
-  CheckLoaderResult(
-    parsed_desc, "physics scene asset", "PhysicsSceneAssetDesc");
-  const auto desc = *parsed_desc;
-
-  // Validate asset type.
-  if (static_cast<data::AssetType>(desc.header.asset_type)
-    != data::AssetType::kPhysicsScene) {
-    throw std::runtime_error(
-      "invalid asset_type in PhysicsSceneAssetDesc header");
-  }
-
-  // Validate descriptor version.
-  if (desc.header.version != data::pak::physics::kPhysicsSceneAssetVersion) {
-    throw std::runtime_error(
-      "unsupported PhysicsSceneAssetDesc descriptor version");
-  }
-  // The backend selects the arm of every backend-scalar union of the
-  // bindings, so a scene cooked for none cannot be read.
-  const auto names_a_backend
-    = data::pak::physics::IsCookedBackend(desc.backend);
-  if (!names_a_backend) {
-    throw std::runtime_error("physics scene names no physics backend");
-  }
-
-  // Compute the full payload extent from the component table directory.
-  size_t payload_end = sizeof(data::pak::physics::PhysicsSceneAssetDesc);
-  if (desc.header.strings.size == 0
-    || desc.header.strings.offset
-      < sizeof(data::pak::physics::PhysicsSceneAssetDesc)) {
-    throw std::runtime_error("physics scene string table location is invalid");
-  }
-  AddRangeEnd(
-    payload_end, desc.header.strings.offset, desc.header.strings.size);
-
-  if (desc.component_table_count > 0) {
-    const size_t dir_bytes = static_cast<size_t>(desc.component_table_count)
-      * sizeof(data::pak::physics::PhysicsComponentTableDesc);
-
-    AddRangeEnd(payload_end,
-      static_cast<size_t>(desc.component_table_directory_offset), dir_bytes);
-
-    // Seek and scan the table directory to account for each binding table.
-    auto seek_res = reader.Seek(
-      base_pos + static_cast<size_t>(desc.component_table_directory_offset));
-    CheckLoaderResult(
-      seek_res, "physics scene asset", "Seek(component_table_directory)");
-
-    for (uint32_t i = 0; i < desc.component_table_count; ++i) {
-      auto entry_blob = reader.ReadBlob(
-        sizeof(data::pak::physics::PhysicsComponentTableDesc));
-      CheckLoaderResult(entry_blob, "physics scene asset",
-        "ReadBlob(PhysicsComponentTableDesc)");
-      const auto parsed_entry
-        = serio::CopyAt<data::pak::physics::PhysicsComponentTableDesc>(
-          *entry_blob);
-      CheckLoaderResult(
-        parsed_entry, "physics scene asset", "PhysicsComponentTableDesc");
-      const auto entry = *parsed_entry;
-
-      if (entry.table.count > 0) {
-        const size_t table_bytes
-          = static_cast<size_t>(entry.table.count) * entry.table.entry_size;
-        AddRangeEnd(
-          payload_end, static_cast<size_t>(entry.table.offset), table_bytes);
-      }
-    }
-  }
-
-  // Rewind and read the full payload blob.
-  {
-    auto seek_res = reader.Seek(base_pos);
-    CheckLoaderResult(seek_res, "physics scene asset", "Seek(base)");
-  }
-
-  auto blob_res = reader.ReadBlob(payload_end);
-  CheckLoaderResult(
-    blob_res, "physics scene asset", "ReadBlob(physics_scene_payload)");
-  std::vector<std::byte> bytes = std::move(*blob_res);
-
-  LOG_F(1, "physics scene asset payload: {} bytes", bytes.size());
-  auto name = std::string {};
-  try {
-    name = ResolveDescriptorString(
-      data::DescriptorStrings::FromDescriptor(bytes, desc.header.strings),
-      desc.header.name_offset, "asset name");
-  } catch (const std::invalid_argument& error) {
-    throw std::runtime_error(
-      fmt::format("physics scene string table: {}", error.what()));
-  }
-
-  // Construct the in-memory asset (validates all ranges internally).
   auto asset = std::make_unique<data::PhysicsSceneAsset>(
-    context.current_asset_key, std::move(bytes),
+    context.current_asset_key, *bytes_res,
     data::SourceOrigin {
       .key = context.source_key,
       .instance = context.source_instance,
     });
-  asset->SetAssetName(std::move(name));
-  detail::CheckBackendReserves(*asset, desc.backend);
   if (context.asset_references) {
     namespace physics = data::pak::physics;
     std::vector<data::KeyReference> keys;

@@ -15,9 +15,11 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SurfaceId.h>
 
 namespace oxygen::cooker::testing {
@@ -29,9 +31,9 @@ namespace oxygen::cooker::testing {
  defect records the descriptor's new content hash, except a defect of that
  hash.
 
- A record defect (`SetNode`, `SetComponent`, `SetScriptSlot`) writes a record
- a test read with the matching `*At` and changed in one field; a defect of a
- rule between records, such as their order, writes two.
+ A record defect (`SetNode`, `SetComponent`, `SetScriptSlot`, `SetBinding`)
+ writes a record a test read with the matching `*At` and changed in one field; a
+ defect of a rule between records, such as their order, writes two.
 
  ```cpp
  auto scene = SceneBuilder { "Broken" };
@@ -106,6 +108,7 @@ struct DescriptorDefects final {
   {
     const auto at = RecordOffset(scene, type, index, sizeof(Record));
     std::memcpy(std::span(scene).subspan(at).data(), &record, sizeof(Record));
+    data::StampDescriptorHash(scene);
   }
 
   //! Records `type`, whatever value it holds, as the component type of the
@@ -169,6 +172,34 @@ struct DescriptorDefects final {
   static auto SetBindingEntrySize(std::vector<std::byte>& sidecar,
     data::pak::physics::PhysicsBindingType type, uint32_t size) -> void;
 
+  //! Records `type`, whatever value it holds, as the binding type of the
+  //! sidecar's binding table `table`.
+  static auto SetBindingTableType(std::vector<std::byte>& sidecar,
+    data::pak::physics::PhysicsBindingType table, uint32_t type) -> void;
+
+  //! The record `index` of the sidecar's table of `Record` bindings.
+  template <typename Record>
+  [[nodiscard]] static auto BindingAt(
+    std::span<const std::byte> sidecar, uint32_t index) -> Record
+  {
+    auto record = Record {};
+    const auto at = BindingOffset(
+      sidecar, data::BindingTraits<Record>::kType, index, sizeof(Record));
+    std::memcpy(&record, sidecar.subspan(at).data(), sizeof(Record));
+    return record;
+  }
+
+  //! Replaces the record `index` of the sidecar's table of `Record` bindings.
+  template <typename Record>
+  static auto SetBinding(std::vector<std::byte>& sidecar, uint32_t index,
+    const Record& record) -> void
+  {
+    const auto at = BindingOffset(
+      sidecar, data::BindingTraits<Record>::kType, index, sizeof(Record));
+    std::memcpy(std::span(sidecar).subspan(at).data(), &record, sizeof(Record));
+    data::StampDescriptorHash(sidecar);
+  }
+
 private:
   //! The offset of the record `index`, of `size` bytes, of the component
   //! table `type`.
@@ -184,6 +215,23 @@ private:
   */
   [[nodiscard]] static auto TableEntryOffset(
     std::span<const std::byte> scene, data::ComponentType type) -> size_t;
+
+  //! The offset of the record `index`, of `size` bytes, of the sidecar's
+  //! binding table `type`; a soft body's vertex lists follow its record.
+  /*!
+   @throw std::invalid_argument When the sidecar has no such record.
+  */
+  [[nodiscard]] static auto BindingOffset(std::span<const std::byte> sidecar,
+    data::pak::physics::PhysicsBindingType type, uint32_t index, size_t size)
+    -> size_t;
+
+  //! The offset of the directory entry of the sidecar's binding table `type`.
+  /*!
+   @throw std::invalid_argument When the sidecar has no such table.
+  */
+  [[nodiscard]] static auto BindingEntryOffset(
+    std::span<const std::byte> sidecar,
+    data::pak::physics::PhysicsBindingType type) -> size_t;
 };
 
 } // namespace oxygen::cooker::testing

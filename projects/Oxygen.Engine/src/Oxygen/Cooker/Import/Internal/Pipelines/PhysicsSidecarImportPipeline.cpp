@@ -1197,6 +1197,10 @@ namespace {
         [](const auto& record) -> auto { return record.record.node_index; },
         session, request);
       ValidateSingletonBindings(
+        parsed.colliders, "colliders",
+        [](const auto& record) -> auto { return record.record.node_index; },
+        session, request);
+      ValidateSingletonBindings(
         parsed.characters, "characters",
         [](const auto& record) -> auto { return record.record.node_index; },
         session, request);

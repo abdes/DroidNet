@@ -31,7 +31,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Base/Span.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinder.h>
@@ -1625,32 +1624,10 @@ void SceneLoaderService::HydrateVehicleBindings(
         + " min_required=" + std::to_string(min_wheel_count)
         + " wheel_slice_count=" + std::to_string(wheel_slice_count) + ")");
     }
-    if (wheel_slice_offset > wheel_bindings.size()
-      || (wheel_bindings.size() - wheel_slice_offset) < wheel_slice_count) {
-      throw std::runtime_error(
-        std::string("vehicle wheel slice is out of range ")
-        + "(node_index=" + std::to_string(record.node_index)
-        + " wheel_slice_offset=" + std::to_string(wheel_slice_offset)
-        + " wheel_slice_count=" + std::to_string(wheel_slice_count)
-        + " wheel_table_size=" + std::to_string(wheel_bindings.size()) + ")");
-    }
-
-    auto wheel_records_for_vehicle
-      = std::vector<data::pak::physics::VehicleWheelBindingRecord> {};
-    wheel_records_for_vehicle.reserve(wheel_slice_count);
-    for (size_t i = 0; i < wheel_slice_count; ++i) {
-      const auto& wheel_binding
-        = oxygen::base::CheckedAt(wheel_bindings, wheel_slice_offset + i);
-      if (wheel_binding.vehicle_node_index != record.node_index) {
-        throw std::runtime_error(
-          std::string("vehicle wheel slice references mismatched chassis node ")
-          + "(node_index=" + std::to_string(record.node_index)
-          + " wheel_table_index=" + std::to_string(wheel_slice_offset + i)
-          + " wheel_vehicle_node_index="
-          + std::to_string(wheel_binding.vehicle_node_index) + ")");
-      }
-      wheel_records_for_vehicle.push_back(wheel_binding);
-    }
+    // The sidecar reader admits only slices of the wheel table that hold
+    // their vehicle's wheels.
+    const auto wheel_records_for_vehicle
+      = wheel_bindings.subspan(wheel_slice_offset, wheel_slice_count);
 
     auto wheel_desc_storage
       = std::vector<physics::vehicle::VehicleWheelDesc> {};

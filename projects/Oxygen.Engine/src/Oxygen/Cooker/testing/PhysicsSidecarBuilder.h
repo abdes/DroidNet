@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -16,6 +17,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 
 namespace oxygen::cooker::testing {
 
@@ -48,11 +50,11 @@ public:
     data::pak::physics::CharacterBindingRecord record = {})
     -> PhysicsSidecarBuilder&;
 
-  //! A soft body of `node` with the topology resource `topology` and no
-  //! pinned or kinematic vertices.
+  //! A soft body of `node` with the topology resource `topology` and the
+  //! vertex lists `vertices`, which follow its record.
   auto SoftBody(SceneNode node, const data::AssetKey& topology,
-    data::pak::physics::SoftBodyBindingRecord record = {})
-    -> PhysicsSidecarBuilder&;
+    data::pak::physics::SoftBodyBindingRecord record = {},
+    data::SoftBodyVertexLists vertices = {}) -> PhysicsSidecarBuilder&;
 
   //! A joint between `a` and `b`, or the world without `b`.
   auto Joint(SceneNode a, std::optional<SceneNode> b,
@@ -60,9 +62,24 @@ public:
     data::pak::physics::JointBindingRecord record = {})
     -> PhysicsSidecarBuilder&;
 
-  //! A vehicle rooted at `node`, without wheels.
+  //! A vehicle rooted at `node`; `Wheel` adds its wheels.
   auto Vehicle(SceneNode node, const data::AssetKey& constraint,
     data::pak::physics::VehicleBindingRecord record = {})
+    -> PhysicsSidecarBuilder&;
+
+  //! A wheel of a vehicle: its node, and the side of the axle it is on.
+  struct VehicleWheel final {
+    SceneNode node;
+    uint16_t axle = 0;
+    data::pak::physics::VehicleWheelSide side
+      = data::pak::physics::VehicleWheelSide::kLeft;
+    data::pak::physics::VehicleWheelBindingRecord record = {};
+  };
+
+  //! The wheel `wheel` of the vehicle of `vehicle`. The sidecar holds each
+  //! vehicle's wheels in its slice of the wheel table, in axle and then side
+  //! order.
+  auto Wheel(SceneNode vehicle, const VehicleWheel& wheel)
     -> PhysicsSidecarBuilder&;
 
   auto Aggregate(
@@ -84,7 +101,7 @@ public:
   //! descriptor is `scene_bytes`.
   /*!
    @throw std::invalid_argument When a binding names a node the scene does not
-   hold.
+   hold, or a wheel names a node without a vehicle.
    @throw std::logic_error When the product reader refuses the sidecar.
   */
   [[nodiscard]] auto Bytes(const data::AssetKey& scene_key,
@@ -96,6 +113,12 @@ public:
     -> data::AssetReferences;
 
 private:
+  //! A soft body record and the vertex lists that follow it.
+  struct SoftBodyBinding final {
+    data::pak::physics::SoftBodyBindingRecord record;
+    data::SoftBodyVertexLists vertices;
+  };
+
   auto Claim(SceneNode node) -> data::pak::world::SceneNodeIndexT;
 
   std::optional<SceneBuilderId> owner_;
@@ -105,9 +128,10 @@ private:
   std::vector<data::pak::physics::RigidBodyBindingRecord> rigid_bodies_;
   std::vector<data::pak::physics::ColliderBindingRecord> colliders_;
   std::vector<data::pak::physics::CharacterBindingRecord> characters_;
-  std::vector<data::pak::physics::SoftBodyBindingRecord> soft_bodies_;
+  std::vector<SoftBodyBinding> soft_bodies_;
   std::vector<data::pak::physics::JointBindingRecord> joints_;
   std::vector<data::pak::physics::VehicleBindingRecord> vehicles_;
+  std::vector<data::pak::physics::VehicleWheelBindingRecord> wheels_;
   std::vector<data::pak::physics::AggregateBindingRecord> aggregates_;
 };
 

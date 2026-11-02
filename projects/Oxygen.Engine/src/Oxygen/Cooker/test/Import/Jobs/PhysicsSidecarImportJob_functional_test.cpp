@@ -130,6 +130,29 @@ namespace {
       report->diagnostics, "physics.sidecar.payload_parse_failed"));
   }
 
+  //! A node holds at most one collider, as the sidecar reader requires.
+  NOLINT_TEST_F(PhysicsImportJobTest, TwoCollidersOnANodeFailTheRequest)
+  {
+    const auto cooked_root = TempDir() / "duplicate_collider";
+    std::filesystem::create_directories(cooked_root);
+    const auto scene_report = Import(MakeSceneDescriptorRequest(cooked_root));
+    ASSERT_HAS_VALUE(scene_report);
+    ASSERT_TRUE(scene_report->success);
+    auto request = MakePhysicsSidecarRequest(cooked_root);
+    ASSERT_HAS_VALUE(request.physics);
+    request.physics->inline_bindings_json
+      = R"({"bindings":{"colliders":[)"
+        R"({"node_index":0,"shape_ref":"/Shapes/Box.ocshape","material_ref":"/Materials/Wood.opmat"},)"
+        R"({"node_index":0,"shape_ref":"/Shapes/Box.ocshape","material_ref":"/Materials/Wood.opmat"}]}})";
+
+    const auto report = Import(std::move(request));
+
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report->diagnostics, "physics.sidecar.payload_invalid"));
+  }
+
 } // namespace
 
 } // namespace oxygen::content::import::test

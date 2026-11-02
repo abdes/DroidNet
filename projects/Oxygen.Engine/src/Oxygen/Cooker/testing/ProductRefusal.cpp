@@ -13,10 +13,12 @@
 #include <string_view>
 
 #include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -61,6 +63,29 @@ auto SceneRefusal(const std::span<const std::byte> bytes)
   if (by_reader != by_loader) {
     throw std::logic_error(
       "the scene reader and the scene loader refuse the scene differently");
+  }
+  return by_reader;
+}
+
+auto SidecarRefusal(const std::span<const std::byte> bytes)
+  -> std::optional<data::CookedDefect>
+{
+  const auto by_reader = RefusalOf("the sidecar reader", [bytes] -> void {
+    static_cast<void>(data::PhysicsSceneAsset(data::AssetKey {}, bytes));
+  });
+  const auto by_loader = RefusalOf("the sidecar loader", [bytes] -> void {
+    auto stream = serio::ReadOnlyMemoryStream { bytes };
+    auto reader = serio::Reader<serio::ReadOnlyMemoryStream> { stream };
+    static_cast<void>(
+      content::loaders::LoadPhysicsSceneAsset(content::LoaderContext {
+        .desc_reader = &reader,
+        .work_offline = true,
+        .parse_only = true,
+      }));
+  });
+  if (by_reader != by_loader) {
+    throw std::logic_error("the sidecar reader and the sidecar loader refuse "
+                           "the sidecar differently");
   }
   return by_reader;
 }

@@ -32,4 +32,17 @@ namespace oxygen::cooker::testing {
 [[nodiscard]] auto SceneRefusal(std::span<const std::byte> bytes)
   -> std::optional<data::CookedDefect>;
 
+//! The defect the product refuses the physics sidecar descriptor `bytes`
+//! with.
+/*!
+ Reads `bytes` with the sidecar reader (`data::PhysicsSceneAsset`) and with
+ the sidecar loader, which a mount uses, so a test of a rule covers both.
+
+ @return No defect when both accept the sidecar.
+ @throw std::logic_error When one refuses without a defect, or the two
+   disagree.
+*/
+[[nodiscard]] auto SidecarRefusal(std::span<const std::byte> bytes)
+  -> std::optional<data::CookedDefect>;
+
 } // namespace oxygen::cooker::testing

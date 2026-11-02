@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -64,6 +65,81 @@ namespace {
     });
   }
 
+  //! Appends the bytes of `values` to `bytes`.
+  template <typename T>
+  auto Append(std::vector<std::byte>& bytes, const std::span<T> values) -> void
+  {
+    const auto part = std::as_bytes(values);
+    bytes.insert(bytes.end(), part.begin(), part.end());
+  }
+
+  //! The wheels in vehicle, axle and then side order, as the cooker writes
+  //! them; `vehicles`, in node order, record the slice of each.
+  auto SliceWheels(std::vector<physics::VehicleBindingRecord>& vehicles,
+    std::vector<physics::VehicleWheelBindingRecord> wheels)
+    -> std::vector<physics::VehicleWheelBindingRecord>
+  {
+    std::ranges::stable_sort(
+      vehicles, {}, &physics::VehicleBindingRecord::node_index);
+    std::ranges::stable_sort(
+      wheels, {}, [](const physics::VehicleWheelBindingRecord& wheel) -> auto {
+        return std::tuple { wheel.vehicle_node_index, wheel.axle_index,
+          std::to_underlying(wheel.side) };
+      });
+    auto sliced = std::size_t { 0U };
+    for (auto& vehicle : vehicles) {
+      const auto [first, last]
+        = std::ranges::equal_range(wheels, vehicle.node_index, {},
+          &physics::VehicleWheelBindingRecord::vehicle_node_index);
+      vehicle.wheel_slice_offset
+        = static_cast<uint32_t>(std::distance(wheels.begin(), first));
+      vehicle.wheel_slice_count
+        = static_cast<uint32_t>(std::distance(first, last));
+      sliced += vehicle.wheel_slice_count;
+    }
+    if (sliced != wheels.size()) {
+      throw std::invalid_argument("a wheel names a node without a vehicle");
+    }
+    return wheels;
+  }
+
+  //! The table of the soft bodies `bodies` in node order, each record
+  //! followed by its vertex lists, as the cooker writes them.
+  template <typename SoftBody>
+  auto SoftBodyTable(std::vector<SoftBody> bodies) -> Table
+  {
+    std::ranges::stable_sort(bodies, {},
+      [](const SoftBody& body) -> auto { return body.record.node_index; });
+    auto table = Table {
+      .type = physics::PhysicsBindingType::kSoftBody,
+      .entry_size = sizeof(physics::SoftBodyBindingRecord),
+      .count = static_cast<uint32_t>(bodies.size()),
+      .bytes = {},
+    };
+    for (const auto& [record, vertices] : bodies) {
+      // Each list follows the record, pinned first, at an offset from the
+      // record's start; an empty list has no offset.
+      auto unit = record;
+      auto end = static_cast<uint32_t>(sizeof(unit));
+      const auto place = [&end](const std::vector<uint32_t>& list) -> uint32_t {
+        if (list.empty()) {
+          return 0U;
+        }
+        return std::exchange(
+          end, end + static_cast<uint32_t>(list.size() * sizeof(uint32_t)));
+      };
+      unit.pinned_vertex_count = static_cast<uint32_t>(vertices.pinned.size());
+      unit.pinned_vertex_byte_offset = place(vertices.pinned);
+      unit.kinematic_vertex_count
+        = static_cast<uint32_t>(vertices.kinematic.size());
+      unit.kinematic_vertex_byte_offset = place(vertices.kinematic);
+      Append(table.bytes, std::span(&unit, 1U));
+      Append(table.bytes, std::span(vertices.pinned));
+      Append(table.bytes, std::span(vertices.kinematic));
+    }
+    return table;
+  }
+
 } // namespace
 
 auto PhysicsSidecarBuilder::Claim(const SceneNode node)
@@ -111,16 +187,12 @@ auto PhysicsSidecarBuilder::Character(const SceneNode node,
 }
 
 auto PhysicsSidecarBuilder::SoftBody(const SceneNode node,
-  const data::AssetKey& topology, physics::SoftBodyBindingRecord record)
-  -> PhysicsSidecarBuilder&
+  const data::AssetKey& topology, physics::SoftBodyBindingRecord record,
+  data::SoftBodyVertexLists vertices) -> PhysicsSidecarBuilder&
 {
   record.node_index = Claim(node);
   record.topology_asset_key = topology;
-  record.pinned_vertex_count = 0U;
-  record.pinned_vertex_byte_offset = 0U;
-  record.kinematic_vertex_count = 0U;
-  record.kinematic_vertex_byte_offset = 0U;
-  soft_bodies_.push_back(record);
+  soft_bodies_.push_back({ .record = record, .vertices = std::move(vertices) });
   return *this;
 }
 
@@ -145,6 +217,18 @@ auto PhysicsSidecarBuilder::Vehicle(const SceneNode node,
   record.wheel_slice_offset = 0U;
   record.wheel_slice_count = 0U;
   vehicles_.push_back(record);
+  return *this;
+}
+
+auto PhysicsSidecarBuilder::Wheel(
+  const SceneNode vehicle, const VehicleWheel& wheel) -> PhysicsSidecarBuilder&
+{
+  auto record = wheel.record;
+  record.vehicle_node_index = Claim(vehicle);
+  record.wheel_node_index = Claim(wheel.node);
+  record.axle_index = wheel.axle;
+  record.side = wheel.side;
+  wheels_.push_back(record);
   return *this;
 }
 
@@ -182,12 +266,19 @@ auto PhysicsSidecarBuilder::Bytes(const data::AssetKey& scene_key,
     &physics::ColliderBindingRecord::node_index);
   AddTable(tables, PhysicsBindingType::kCharacter, characters_,
     &physics::CharacterBindingRecord::node_index);
-  AddTable(tables, PhysicsBindingType::kSoftBody, soft_bodies_,
-    &physics::SoftBodyBindingRecord::node_index);
+  if (!soft_bodies_.empty()) {
+    tables.push_back(SoftBodyTable(soft_bodies_));
+  }
   AddTable(tables, PhysicsBindingType::kJoint, joints_,
-    &physics::JointBindingRecord::node_index_a);
-  AddTable(tables, PhysicsBindingType::kVehicle, vehicles_,
+    [](const physics::JointBindingRecord& joint) -> auto {
+      return std::pair { joint.node_index_a, joint.node_index_b };
+    });
+  auto vehicles = vehicles_;
+  const auto wheels = SliceWheels(vehicles, wheels_);
+  AddTable(tables, PhysicsBindingType::kVehicle, vehicles,
     &physics::VehicleBindingRecord::node_index);
+  AddTable(tables, PhysicsBindingType::kVehicleWheel, wheels,
+    &physics::VehicleWheelBindingRecord::vehicle_node_index);
   AddTable(tables, PhysicsBindingType::kAggregate, aggregates_,
     &physics::AggregateBindingRecord::node_index);
   std::ranges::stable_sort(tables, {}, [](const Table& table) -> uint32_t {
@@ -269,8 +360,8 @@ auto PhysicsSidecarBuilder::References(const data::AssetKey& scene_key) const
     references.AddAsset(
       record.inner_shape_asset_key, data::AssetType::kCollisionShape);
   }
-  for (const auto& record : soft_bodies_) {
-    references.AddPhysicsResource(record.topology_asset_key);
+  for (const auto& body : soft_bodies_) {
+    references.AddPhysicsResource(body.record.topology_asset_key);
   }
   for (const auto& record : joints_) {
     references.AddPhysicsResource(record.constraint_asset_key);

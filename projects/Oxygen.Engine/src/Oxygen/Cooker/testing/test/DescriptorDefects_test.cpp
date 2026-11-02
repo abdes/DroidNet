@@ -179,7 +179,8 @@ NOLINT_TEST(DescriptorDefectsTest, RecordsReadBackWhereTheyAreWritten)
 }
 
 //! The sidecar defects break its pairing with its scene, which the sidecar
-//! reports, or a rule the sidecar reader checks: its type or a table.
+//! reports, or a rule the sidecar reader checks: its type, its backend or a
+//! table.
 NOLINT_TEST(DescriptorDefectsTest, SidecarDefectsBreakOneRule)
 {
   auto main = SceneBuilder { "Main" };
@@ -213,11 +214,47 @@ NOLINT_TEST(DescriptorDefectsTest, SidecarDefectsBreakOneRule)
   EXPECT_EQ(read(moved).GetTargetSceneKey(), Key("/Game/Other.oscene"));
   EXPECT_EQ(read(counted).GetTargetNodeCount(), 2U);
   EXPECT_EQ(read(valid).GetBackend(), physics::PhysicsBackend::kJolt);
-  EXPECT_EQ(read(unbacked).GetBackend(), physics::PhysicsBackend::kNone);
   EXPECT_FALSE(std::ranges::equal(read(hashed).GetTargetSceneContentHash(),
     read(valid).GetTargetSceneContentHash()));
+  EXPECT_THROW(static_cast<void>(read(unbacked)), std::runtime_error);
   EXPECT_THROW(static_cast<void>(read(typed)), std::runtime_error);
   EXPECT_THROW(static_cast<void>(read(sized)), std::runtime_error);
+}
+
+//! A binding edit replaces the record it names, past the vertex lists of the
+//! soft bodies before it, and a table type edit retypes its table.
+NOLINT_TEST(DescriptorDefectsTest, BindingEditsChangeTheRecordTheyName)
+{
+  auto main = SceneBuilder { "Main" };
+  const auto cloth = main.Node("Cloth");
+  const auto flag = main.Node("Flag");
+  const auto scene = main.Bytes();
+  auto bindings = PhysicsSidecarBuilder {};
+  bindings
+    .SoftBody(cloth, Key("/Game/Cloth.opres"), {}, { .pinned = { 0U, 1U } })
+    .SoftBody(flag, Key("/Game/Flag.opres"), {}, { .kinematic = { 2U } });
+  const auto valid
+    = bindings.Bytes(Key("/Game/Main.oscene"), scene, "PhysicsScene");
+  const auto read
+    = [](const std::vector<std::byte>& bytes) -> data::PhysicsSceneAsset {
+    return { Key("/Game/Main.opscene"), std::span<const std::byte>(bytes) };
+  };
+
+  auto stiffened = valid;
+  auto body
+    = DescriptorDefects::BindingAt<physics::SoftBodyBindingRecord>(valid, 1U);
+  body.solver_iteration_count = 7U;
+  DescriptorDefects::SetBinding(stiffened, 1U, body);
+  auto retyped = valid;
+  DescriptorDefects::SetBindingTableType(
+    retyped, physics::PhysicsBindingType::kSoftBody, 0xFFFFU);
+
+  EXPECT_EQ(body.topology_asset_key, Key("/Game/Flag.opres"));
+  const auto asset = read(stiffened);
+  const auto bodies = asset.GetBindings<physics::SoftBodyBindingRecord>();
+  ASSERT_EQ(bodies.size(), 2U);
+  EXPECT_EQ(bodies[1].solver_iteration_count, 7U);
+  EXPECT_THROW(static_cast<void>(read(retyped)), std::runtime_error);
 }
 
 //! A cleared surface leaves a geometry the product loader refuses, and only

@@ -172,6 +172,7 @@ m_gtest_program(
   SOURCES
     "PhysicsResourceLoader_test.cpp"
     "PhysicsSceneLoader_test.cpp"
+    "PhysicsSidecarStructure_test.cpp"
 )
 target_link_libraries(
   "${META_MODULE_NAME}.LoadersPhysics.Tests"

@@ -6,22 +6,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
-#include <optional>
-#include <span>
-#include <stdexcept>
-#include <vector>
 
 #include "Fixtures/PhysicsLoaderTestFixtures.h"
 
 #include <Oxygen/Base/Span.h>
-#include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
-#include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -30,7 +22,6 @@ using oxygen::content::loaders::LoadPhysicsSceneAsset;
 namespace {
 
 namespace pak7 = oxygen::data::pak::physics;
-using oxygen::cooker::testing::DescriptorDefects;
 using oxygen::cooker::testing::PhysicsSidecarBuilder;
 
 auto ShapeKey() -> oxygen::data::AssetKey
@@ -49,9 +40,6 @@ auto ConstraintKey() -> oxygen::data::AssetKey
 }
 
 class PhysicsSceneLoaderHappyPathTest
-  : public oxygen::content::testing::PhysicsSceneFixtureBase { };
-
-class PhysicsSceneLoaderValidationTest
   : public oxygen::content::testing::PhysicsSceneFixtureBase { };
 
 class PhysicsSceneLoaderTypeTest
@@ -216,187 +204,6 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
               asset->GetBindings<pak7::AggregateBindingRecord>(), 0)
               .node_index,
     node(7U).Index());
-}
-
-// ============================================================================
-// Tests — validation / error paths
-// ============================================================================
-
-NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadWrongAssetTypeThrows)
-{
-  auto bytes = SidecarBytes();
-  DescriptorDefects::SetAssetType(bytes, oxygen::data::AssetType::kScene);
-  WriteBytes(bytes);
-
-  EXPECT_THROW(
-    { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
-}
-
-NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadWrongVersionThrows)
-{
-  auto bytes = SidecarBytes();
-  DescriptorDefects::SetVersion(bytes, 0xFF); // unsupported
-  WriteBytes(bytes);
-
-  EXPECT_THROW(
-    { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
-}
-
-//! A sidecar that names no backend has no arm to read in its backend
-//! scalars, and is refused.
-NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadWithoutABackendThrows)
-{
-  auto bytes = SidecarBytes();
-  DescriptorDefects::SetSidecarBackend(bytes, pak7::PhysicsBackend::kNone);
-  WriteBytes(bytes);
-
-  EXPECT_THROW(
-    { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
-}
-
-//! A rigid body's reserve in the Jolt arm is refused for a Jolt sidecar; the
-//! same bytes are PhysX scalars, and load, for a PhysX one.
-NOLINT_TEST_F(
-  PhysicsSceneLoaderValidationTest, RigidBodyReservesFollowTheSidecarBackend)
-{
-  AddNodes(1U);
-  auto record = pak7::RigidBodyBindingRecord {};
-  record.backend_scalars.jolt._reserved[0] = 1U;
-  const auto bytes_for
-    = [&](const pak7::PhysicsBackend backend) -> std::vector<std::byte> {
-    auto bindings = PhysicsSidecarBuilder {};
-    bindings.RigidBody(NodeAt(0U), ShapeKey(), MaterialKey(), record)
-      .Backend(backend);
-    return SidecarBytes(bindings);
-  };
-
-  WriteBytes(bytes_for(pak7::PhysicsBackend::kJolt));
-  EXPECT_THROW(
-    { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
-  WriteBytes(bytes_for(pak7::PhysicsBackend::kPhysX));
-  EXPECT_NE(LoadPhysicsSceneAsset(MakeContext()), nullptr);
-}
-
-//! A character's reserve in the PhysX arm is refused for a PhysX sidecar; the
-//! same bytes are Jolt scalars, and load, for a Jolt one.
-NOLINT_TEST_F(
-  PhysicsSceneLoaderValidationTest, CharacterReservesFollowTheSidecarBackend)
-{
-  AddNodes(1U);
-  auto record = pak7::CharacterBindingRecord {};
-  record.backend_scalars.physx._reserved[0] = 1U;
-  const auto bytes_for
-    = [&](const pak7::PhysicsBackend backend) -> std::vector<std::byte> {
-    auto bindings = PhysicsSidecarBuilder {};
-    bindings.Character(NodeAt(0U), ShapeKey(), record).Backend(backend);
-    return SidecarBytes(bindings);
-  };
-
-  WriteBytes(bytes_for(pak7::PhysicsBackend::kPhysX));
-  EXPECT_THROW(
-    { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
-  WriteBytes(bytes_for(pak7::PhysicsBackend::kJolt));
-  EXPECT_NE(LoadPhysicsSceneAsset(MakeContext()), nullptr);
-}
-
-//! A joint's reserve in the Jolt arm is refused for a Jolt sidecar.
-NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, JointJoltReserveIsRefused)
-{
-  AddNodes(1U);
-  auto record = pak7::JointBindingRecord {};
-  record.backend_scalars.jolt._reserved[0] = 1U;
-  auto bindings = PhysicsSidecarBuilder {};
-  bindings.Joint(NodeAt(0U), std::nullopt, ConstraintKey(), record);
-  WriteBytes(SidecarBytes(bindings));
-
-  EXPECT_THROW(
-    { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
-}
-
-NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadTruncatedDescriptorThrows)
-{
-  // Keep only half of the descriptor (stream too short).
-  auto bytes = SidecarBytes();
-  bytes.resize(bytes.size() / 2);
-  WriteBytes(bytes);
-
-  EXPECT_THROW(
-    { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
-}
-
-NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadEntrySizeMismatchThrows)
-{
-  struct Case {
-    pak7::PhysicsBindingType type;
-    uint32_t expected_size;
-  };
-
-  const std::array<Case, 7> cases {
-    {
-      {
-        .type = pak7::PhysicsBindingType::kRigidBody,
-        .expected_size = sizeof(pak7::RigidBodyBindingRecord),
-      },
-      {
-        .type = pak7::PhysicsBindingType::kCollider,
-        .expected_size = sizeof(pak7::ColliderBindingRecord),
-      },
-      {
-        .type = pak7::PhysicsBindingType::kCharacter,
-        .expected_size = sizeof(pak7::CharacterBindingRecord),
-      },
-      {
-        .type = pak7::PhysicsBindingType::kSoftBody,
-        .expected_size = sizeof(pak7::SoftBodyBindingRecord),
-      },
-      {
-        .type = pak7::PhysicsBindingType::kJoint,
-        .expected_size = sizeof(pak7::JointBindingRecord),
-      },
-      {
-        .type = pak7::PhysicsBindingType::kVehicle,
-        .expected_size = sizeof(pak7::VehicleBindingRecord),
-      },
-      {
-        .type = pak7::PhysicsBindingType::kAggregate,
-        .expected_size = sizeof(pak7::AggregateBindingRecord),
-      },
-    },
-  };
-
-  // A sidecar holding one binding of every type.
-  AddNodes(8U);
-  auto bindings = PhysicsSidecarBuilder {};
-  bindings.RigidBody(NodeAt(0U), ShapeKey(), MaterialKey())
-    .Collider(NodeAt(1U), ShapeKey(), MaterialKey())
-    .Character(NodeAt(2U), ShapeKey())
-    .SoftBody(NodeAt(3U), ShapeKey())
-    .Joint(NodeAt(4U), NodeAt(5U), ConstraintKey())
-    .Vehicle(NodeAt(6U), ConstraintKey())
-    .Aggregate(NodeAt(7U));
-  const auto valid = SidecarBytes(bindings);
-
-  for (const auto& tc : cases) {
-    auto bytes = valid;
-    DescriptorDefects::SetBindingEntrySize(
-      bytes, tc.type, tc.expected_size + 1); // force mismatch
-
-    MemoryStream local_stream {};
-    Writer local_writer(local_stream);
-    Reader local_reader(local_stream);
-    ASSERT_TRUE(local_writer.WriteBlob(std::span<const std::byte>(bytes)));
-    ASSERT_TRUE(local_writer.Flush());
-
-    ASSERT_TRUE(local_stream.Seek(oxygen::serio::ByteOffset { 0 }));
-    const auto context = oxygen::content::LoaderContext {
-      .current_asset_key = oxygen::data::AssetKey {},
-      .desc_reader = &local_reader,
-      .work_offline = true,
-      .parse_only = true,
-    };
-
-    EXPECT_THROW({ (void)LoadPhysicsSceneAsset(context); }, std::runtime_error);
-  }
 }
 
 NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,

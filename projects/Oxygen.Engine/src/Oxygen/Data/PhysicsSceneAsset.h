@@ -6,17 +6,14 @@
 
 #pragma once
 
-#include <any>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <functional>
-#include <memory>
 #include <span>
-#include <unordered_map>
+#include <tuple>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Data/Asset.h>
@@ -25,24 +22,83 @@
 
 namespace oxygen::data {
 
-// Forward declaration of BindingTraits (specializations follow after the class)
-template <typename T> struct BindingTraits;
-
 class SceneAsset;
 
-// Hash functor for PhysicsBindingType (scoped enum over uint32_t)
-struct PhysicsBindingTypeHash {
-  auto operator()(pak::physics::PhysicsBindingType bt) const noexcept -> size_t
-  {
-    return std::hash<uint32_t> {}(static_cast<uint32_t>(bt));
-  }
+//! Maps a binding record type to the binding type of its table.
+template <typename T> struct BindingTraits;
+
+template <> struct BindingTraits<pak::physics::RigidBodyBindingRecord> {
+  static constexpr auto kType = pak::physics::PhysicsBindingType::kRigidBody;
 };
+
+template <> struct BindingTraits<pak::physics::ColliderBindingRecord> {
+  static constexpr auto kType = pak::physics::PhysicsBindingType::kCollider;
+};
+
+template <> struct BindingTraits<pak::physics::CharacterBindingRecord> {
+  static constexpr auto kType = pak::physics::PhysicsBindingType::kCharacter;
+};
+
+template <> struct BindingTraits<pak::physics::SoftBodyBindingRecord> {
+  static constexpr auto kType = pak::physics::PhysicsBindingType::kSoftBody;
+};
+
+template <> struct BindingTraits<pak::physics::JointBindingRecord> {
+  static constexpr auto kType = pak::physics::PhysicsBindingType::kJoint;
+};
+
+template <> struct BindingTraits<pak::physics::VehicleBindingRecord> {
+  static constexpr auto kType = pak::physics::PhysicsBindingType::kVehicle;
+};
+
+template <> struct BindingTraits<pak::physics::VehicleWheelBindingRecord> {
+  static constexpr auto kType = pak::physics::PhysicsBindingType::kVehicleWheel;
+};
+
+template <> struct BindingTraits<pak::physics::AggregateBindingRecord> {
+  static constexpr auto kType = pak::physics::PhysicsBindingType::kAggregate;
+};
+
+//! The record types of the binding tables a physics sidecar holds, one table
+//! per type; the reader refuses a table of any other type.
+using PhysicsBindingRecords = std::tuple<pak::physics::RigidBodyBindingRecord,
+  pak::physics::ColliderBindingRecord, pak::physics::CharacterBindingRecord,
+  pak::physics::SoftBodyBindingRecord, pak::physics::JointBindingRecord,
+  pak::physics::VehicleBindingRecord, pak::physics::VehicleWheelBindingRecord,
+  pak::physics::AggregateBindingRecord>;
+
+//! A binding of one node: tables of them hold one record per node, sorted by
+//! node.
+template <typename T>
+concept NodeBindingRecord = requires(const T& record) { record.node_index; };
+
+//! The vertex lists of a soft body binding, which follow its record.
+struct SoftBodyVertexLists {
+  //! The particles the soft body pins in place.
+  std::vector<uint32_t> pinned;
+  //! The particles its animation drives.
+  std::vector<uint32_t> kinematic;
+};
+
+namespace detail {
+
+  template <typename Records> struct BindingTables;
+
+  template <typename... Records> struct BindingTables<std::tuple<Records...>> {
+    using Type = std::tuple<std::vector<Records>...>;
+  };
+
+} // namespace detail
 
 //! Represents a loaded Physics Scene sidecar asset.
 /*!
-  PhysicsSceneAsset provides a read-only view over the raw binary data of a
-  cooked physics sidecar asset (PhysicsSceneAssetDesc). It handles the details
-  of navigating the binding table directory without copying the data.
+  PhysicsSceneAsset is the validating reader of a cooked physics sidecar
+  descriptor (PhysicsSceneAssetDesc) and the read-only model of the bindings
+  it holds. Construction decodes every binding table and refuses a malformed
+  descriptor with a `CookedOpenError`: an unknown or repeated table type, a
+  binding of a node its scene does not hold, a node table out of node order,
+  wheel slices that do not partition the wheel table, soft body vertex lists
+  off their records, and non-zero reserves in the arm of its backend.
 
   ### Domain Separation
   Physics binding records are NOT scene node components. They are sidecar
@@ -50,14 +106,8 @@ struct PhysicsBindingTypeHash {
   the Scene's composition architecture. This asset is always loaded as a
   companion to a SceneAsset but is owned and managed independently.
 
-  ### Zero-Copy Design
-  This class is a lightweight wrapper around the raw data blob. It does not
-  copy the data; it provides views (std::span) into it. The raw data must
-  remain valid for the lifetime of this object.
-
   ### Usage
   ```cpp
-  // Constructed by PhysicsSceneLoader; held by AssetLoader cache.
   auto rigid_bodies = asset.GetBindings<pak::physics::RigidBodyBindingRecord>();
   for (const auto& rec : rigid_bodies) {
       // rec.node_index -> paired SceneAsset node
@@ -68,14 +118,12 @@ struct PhysicsBindingTypeHash {
 class PhysicsSceneAsset final : public Asset {
   OXYGEN_TYPED(PhysicsSceneAsset)
 public:
-  //! Constructs a PhysicsSceneAsset from a borrowed span (non-owning).
+  //! Reads the sidecar descriptor `data`.
+  /*!
+   @throw CookedOpenError When the descriptor breaks a rule of its format.
+  */
   OXGN_DATA_API PhysicsSceneAsset(AssetKey key, std::span<const std::byte> data,
     SourceOrigin source_origin = {});
-
-  //! Constructs a PhysicsSceneAsset that owns the raw data blob.
-  //! This is the preferred path for loaders.
-  OXGN_DATA_API PhysicsSceneAsset(
-    AssetKey key, std::vector<std::byte> data, SourceOrigin source_origin = {});
 
   ~PhysicsSceneAsset() override = default;
 
@@ -129,150 +177,55 @@ public:
 
   //=== Binding Table Access ===----------------------------------------------//
 
-  //! Returns a view of all binding records of the specified physics type.
-  /*!
-    @tparam T  A binding record type (e.g.
-    pak::physics::RigidBodyBindingRecord). The mapping to PhysicsBindingType is
-    via BindingTraits<T>.
-    @return    Span of decoded binding records. Returns empty span if absent.
-  */
+  //! The records of the binding table of type `T`, empty when the sidecar has
+  //! no such table.
   template <typename T>
   [[nodiscard]] auto GetBindings() const noexcept -> std::span<const T>
   {
-    constexpr pak::physics::PhysicsBindingType type = BindingTraits<T>::kType;
-    const BindingTableEntry* entry = FindBindingTableEntry(type);
-    if (entry == nullptr || entry->count == 0) {
-      return {};
-    }
-    if (entry->entry_size != sizeof(T)) {
-      DCHECK_F(false,
-        "PhysicsSceneAsset binding table entry size mismatch (validated by "
-        "loader)");
-      return {};
-    }
-
-    // Binding tables are stored packed (alignment 1).
-    // Decode lazily into an aligned cache to avoid unaligned typed pointers.
-    auto it = binding_cache_.find(type);
-    if (it == binding_cache_.end()) {
-      const size_t bytes_size = entry->count * sizeof(T);
-      const auto bytes = data_.subspan(entry->offset, bytes_size);
-
-      std::vector<T> decoded;
-      decoded.resize(entry->count);
-      for (size_t i = 0; i < entry->count; ++i) {
-        std::memcpy(&decoded.at(i),
-          bytes.subspan(i * sizeof(T), sizeof(T)).data(), sizeof(T));
-      }
-
-      it = binding_cache_.insert_or_assign(type, std::move(decoded)).first;
-    }
-
-    // The cache holds each type's records under that type's key.
-    const auto* cached = std::any_cast<std::vector<T>>(&it->second);
-    if (cached == nullptr) {
-      DCHECK_F(false, "PhysicsSceneAsset binding cache holds another type");
-      return {};
-    }
-    return { cached->data(), cached->size() };
+    return std::get<std::vector<T>>(binding_tables_);
   }
 
-  //! Finds the binding record attached to a specific scene node, if any.
-  /*!
-    Uses binary search (tables are sorted by node_index per spec).
-  */
-  template <typename T>
+  //! The binding of type `T` of the node `node_index`, if it has one.
+  template <NodeBindingRecord T>
   [[nodiscard]] auto FindBinding(
     pak::world::SceneNodeIndexT node_index) const noexcept -> const T*
   {
-    auto bindings = GetBindings<T>();
-    auto it = std::lower_bound(bindings.begin(), bindings.end(), node_index,
-      [](const T& rec, pak::world::SceneNodeIndexT idx) -> auto {
-        return rec.node_index < idx;
-      });
+    // The reader admits node tables only in strict node order.
+    const auto bindings = GetBindings<T>();
+    const auto it
+      = std::ranges::lower_bound(bindings, node_index, std::ranges::less {},
+        [](const T& record) -> auto { return record.node_index; });
     if (it != bindings.end() && it->node_index == node_index) {
       return &(*it);
     }
     return nullptr;
   }
 
+  //! The vertex lists of the soft body binding `binding`, the index of its
+  //! record in `GetBindings<pak::physics::SoftBodyBindingRecord>()`.
+  /*!
+   @throw std::out_of_range When the sidecar has no such soft body.
+  */
+  OXGN_DATA_NDAPI auto GetSoftBodyVertices(std::size_t binding) const
+    -> const SoftBodyVertexLists&;
+
 private:
-  struct BindingTableEntry;
+  //=== Admission, in reading order ===------------------------------------//
 
-  [[nodiscard]] auto FindBindingTableEntry(
-    pak::physics::PhysicsBindingType type) const noexcept
-    -> const BindingTableEntry*
-  {
-    for (const auto& entry : binding_tables_) {
-      if (entry.type == type) {
-        return &entry;
-      }
-    }
-    return nullptr;
-  }
+  //! Runs every step below, each relying on those before it.
+  auto ParseAndValidate(std::span<const std::byte> data) -> void;
+  auto ReadHeader(std::span<const std::byte> data) -> void;
+  auto ReadStrings(std::span<const std::byte> data) -> void;
+  auto ReadBindingTables(std::span<const std::byte> data) -> void;
+  auto ValidateReserves() const -> void;
+  auto ValidateNodeTables() const -> void;
+  auto ValidateJoints() const -> void;
+  auto ValidateWheels() const -> void;
 
-  auto ParseAndValidate() -> void;
-
-  std::shared_ptr<std::vector<std::byte>> owned_data_;
-  std::span<const std::byte> data_;
   pak::physics::PhysicsSceneAssetDesc desc_ {};
-
-  struct BindingTableEntry {
-    pak::physics::PhysicsBindingType type;
-    pak::core::OffsetT offset;
-    size_t count;
-    uint32_t entry_size;
-  };
-  std::vector<BindingTableEntry> binding_tables_;
-
-  mutable std::unordered_map<pak::physics::PhysicsBindingType, std::any,
-    PhysicsBindingTypeHash>
-    binding_cache_;
-};
-
-// ---------------------------------------------------------------------------
-// BindingTraits — maps C++ record type → PhysicsBindingType enum
-// ---------------------------------------------------------------------------
-// (Primary template declared before the class; specializations below.)
-
-template <> struct BindingTraits<pak::physics::RigidBodyBindingRecord> {
-  static constexpr pak::physics::PhysicsBindingType kType
-    = pak::physics::PhysicsBindingType::kRigidBody;
-};
-
-template <> struct BindingTraits<pak::physics::ColliderBindingRecord> {
-  static constexpr pak::physics::PhysicsBindingType kType
-    = pak::physics::PhysicsBindingType::kCollider;
-};
-
-template <> struct BindingTraits<pak::physics::CharacterBindingRecord> {
-  static constexpr pak::physics::PhysicsBindingType kType
-    = pak::physics::PhysicsBindingType::kCharacter;
-};
-
-template <> struct BindingTraits<pak::physics::SoftBodyBindingRecord> {
-  static constexpr pak::physics::PhysicsBindingType kType
-    = pak::physics::PhysicsBindingType::kSoftBody;
-};
-
-template <> struct BindingTraits<pak::physics::JointBindingRecord> {
-  static constexpr pak::physics::PhysicsBindingType kType
-    = pak::physics::PhysicsBindingType::kJoint;
-};
-
-template <> struct BindingTraits<pak::physics::VehicleBindingRecord> {
-  static constexpr pak::physics::PhysicsBindingType kType
-    = pak::physics::PhysicsBindingType::kVehicle;
-};
-
-template <> struct BindingTraits<pak::physics::VehicleWheelBindingRecord> {
-  static constexpr pak::physics::PhysicsBindingType kType
-    = pak::physics::PhysicsBindingType::kVehicleWheel;
-};
-
-template <> struct BindingTraits<pak::physics::AggregateBindingRecord> {
-  static constexpr pak::physics::PhysicsBindingType kType
-    = pak::physics::PhysicsBindingType::kAggregate;
+  detail::BindingTables<PhysicsBindingRecords>::Type binding_tables_;
+  //! The vertex lists of each soft body, in the order of their records.
+  std::vector<SoftBodyVertexLists> soft_body_vertices_;
 };
 
 } // namespace oxygen::data

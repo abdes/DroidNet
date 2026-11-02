@@ -786,9 +786,10 @@ is used internally:
 
     The sidecar records the backend it was cooked for once, in its
     descriptor (`PhysicsSceneAssetDesc::backend`, never `kNone`): every
-    union of its records holds that backend's arm. The loader refuses a
-    sidecar without a backend, and reserved bytes of the arm in use that are
-    not zero (`HasZeroReserves(scalars, backend)`).
+    union of its records holds that backend's arm. The sidecar reader
+    (`PhysicsSceneAsset`) refuses a sidecar without a backend, and reserved
+    bytes of the arm in use that are not zero
+    (`HasZeroReserves(scalars, backend)`).
 
   **Backend-cooked binary artifacts** (one blob per asset, tagged by format):
 
@@ -904,6 +905,21 @@ is used internally:
     (`PhysicsSceneAsset::CheckTarget`: scene key, node count and scene content
     hash) are the runtime guard against index drift caused by partial re-cooks
     or version skew.
+  - **Binding table rules** — the sidecar reader (`PhysicsSceneAsset`) decodes
+    every table when it reads the descriptor, and refuses one that breaks
+    these rules with a typed `CookedOpenError`:
+    - The directory names each binding type the format defines at most once,
+      with that type's record size.
+    - A binding names nodes below `target_node_count`; a joint's second node
+      may instead be the world (`kWorldAttachmentNodeIndex`).
+    - A table of single-node bindings holds at most one binding per node, in
+      node order, which lookup by node relies on. Joints are in the order of
+      their first and then their second node.
+    - The vehicles' wheel slices partition the wheel table in vehicle order.
+      A slice holds its vehicle's wheels, one per axle and side, in axle and
+      then side order.
+    - A soft body's pinned and then kinematic vertex lists follow its record,
+      at the offsets the record names; an empty list has offset 0.
 
 ### Illustrative Scenario
 

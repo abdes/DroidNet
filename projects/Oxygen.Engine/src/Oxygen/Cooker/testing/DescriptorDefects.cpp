@@ -342,18 +342,18 @@ auto DescriptorDefects::CorruptSidecarSceneHash(std::vector<std::byte>& sidecar)
 auto DescriptorDefects::SetBindingEntrySize(std::vector<std::byte>& sidecar,
   const physics::PhysicsBindingType type, const uint32_t size) -> void
 {
-  const auto desc = ReadRecord<physics::PhysicsSceneAssetDesc>(sidecar, 0U);
-  for (auto i = uint32_t { 0U }; i < desc.component_table_count; ++i) {
-    const auto at = static_cast<size_t>(desc.component_table_directory_offset)
-      + (size_t { i } * sizeof(physics::PhysicsComponentTableDesc));
-    if (ReadRecord<physics::PhysicsComponentTableDesc>(sidecar, at).binding_type
-      == type) {
-      EditRecord<physics::PhysicsComponentTableDesc>(sidecar, at,
-        [size](auto& entry) -> void { entry.table.entry_size = size; });
-      return;
-    }
-  }
-  throw std::invalid_argument("the sidecar has no such binding table");
+  EditRecord<physics::PhysicsComponentTableDesc>(sidecar,
+    BindingEntryOffset(sidecar, type),
+    [size](auto& entry) -> void { entry.table.entry_size = size; });
+}
+
+auto DescriptorDefects::SetBindingTableType(std::vector<std::byte>& sidecar,
+  const physics::PhysicsBindingType table, const uint32_t type) -> void
+{
+  EditRecord<physics::PhysicsComponentTableDesc>(
+    sidecar, BindingEntryOffset(sidecar, table), [type](auto& entry) -> void {
+      entry.binding_type = static_cast<physics::PhysicsBindingType>(type);
+    });
 }
 
 auto DescriptorDefects::RecordOffset(const std::span<const std::byte> scene,
@@ -378,6 +378,45 @@ auto DescriptorDefects::TableEntryOffset(const std::span<const std::byte> scene,
     }
   }
   throw std::invalid_argument("the scene has no such component table");
+}
+
+auto DescriptorDefects::BindingOffset(const std::span<const std::byte> sidecar,
+  const physics::PhysicsBindingType type, const uint32_t index,
+  const size_t size) -> size_t
+{
+  const auto entry = ReadRecord<physics::PhysicsComponentTableDesc>(
+    sidecar, BindingEntryOffset(sidecar, type));
+  if (index >= entry.table.count || entry.table.entry_size != size) {
+    throw std::invalid_argument("the sidecar has no such binding");
+  }
+  if (type != physics::PhysicsBindingType::kSoftBody) {
+    return static_cast<size_t>(entry.table.offset)
+      + (static_cast<size_t>(index) * size);
+  }
+  auto at = static_cast<size_t>(entry.table.offset);
+  for (auto i = uint32_t { 0U }; i < index; ++i) {
+    const auto body = ReadRecord<physics::SoftBodyBindingRecord>(sidecar, at);
+    at += sizeof(body)
+      + ((size_t { body.pinned_vertex_count } + body.kinematic_vertex_count)
+        * sizeof(uint32_t));
+  }
+  return at;
+}
+
+auto DescriptorDefects::BindingEntryOffset(
+  const std::span<const std::byte> sidecar,
+  const physics::PhysicsBindingType type) -> size_t
+{
+  const auto desc = ReadRecord<physics::PhysicsSceneAssetDesc>(sidecar, 0U);
+  for (auto i = uint32_t { 0U }; i < desc.component_table_count; ++i) {
+    const auto at = static_cast<size_t>(desc.component_table_directory_offset)
+      + (size_t { i } * sizeof(physics::PhysicsComponentTableDesc));
+    if (ReadRecord<physics::PhysicsComponentTableDesc>(sidecar, at).binding_type
+      == type) {
+      return at;
+    }
+  }
+  throw std::invalid_argument("the sidecar has no such binding table");
 }
 
 } // namespace oxygen::cooker::testing

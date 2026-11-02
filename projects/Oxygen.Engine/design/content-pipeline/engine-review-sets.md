@@ -295,8 +295,9 @@ and the in-memory model the interop hands to the editor.
   unknown values; `ShaderReference` parsing is bounded.
 - `StableId`, `SceneIds`: identity derivation is stable across platforms and
   documented, because the editor keys scene nodes by it.
-- `PhysicsSceneAsset`: bindings name nodes of the scene they ship with and
-  are refused otherwise.
+- `PhysicsSceneAsset`: bindings name nodes of the scene they ship with, in
+  the table order lookups rely on; wheel slices and soft body vertex lists
+  stay within their tables and records. Anything else is refused.
 - `Vertex.h:34` (skinned and morph TODO): confirm the vertex format reserves
   what that work needs, or record the break.
 
