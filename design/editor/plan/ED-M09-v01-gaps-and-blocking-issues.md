@@ -10,8 +10,7 @@ dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
 **Next: item 17.7**, Serio IO: the consumers; then
-item 18, #30: RenderDoc past v1.46 for count-buffer `ExecuteIndirect`
-captures.
+item 19, #109: per-view draw bounds and the viewport Show menu.
 
 | Order | Item                                                                                                                                                                                                                          | Needs          | State | Commit    |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ----- | --------- |
@@ -43,7 +42,7 @@ captures.
 | 17.6  | #75 editor source mounts: one `Mounts` list, `.mounts.json`, outside-tree authoring                                                                                                                                           | 17.1, 17.5     | done  | 974b399fe |
 | 17.7  | Serio IO ([Serio](../../../projects/Oxygen.Engine/src/Oxygen/Serio/README.md)): devices, IO driver (IOCP, io_uring), benchmark, records and integrity done (a3aacc217, 8de90a734, 5f866e378, 16657ae23, ac69b8f94); consumers | -              | open  | -         |
 | 17.8  | Asset loads start their independent dependencies together, so awaited payload reads overlap on the device                                                                                                                     | 17.7           | open  | -         |
-| 18    | #30 RenderDoc past v1.46 for count-buffer `ExecuteIndirect` captures                                                                                                                                                          | -              | open  | -         |
+| 18    | #30 RenderDoc past v1.46 for count-buffer `ExecuteIndirect` captures                                                                                                                                                          | -              | done  | 7ec05f9c0 |
 | 19    | #109 per-view draw bounds and the viewport Show menu                                                                                                                                                                          | -              | open  | -         |
 | 20    | #54 forward-path shader debug modes produce output                                                                                                                                                                            | -              | open  | -         |
 | 21    | #65 useful Light Culling and IBL debug view modes                                                                                                                                                                             | -              | open  | -         |
