@@ -214,11 +214,14 @@ API is the only way the engine reads, writes, hashes and publishes files.
 ## R2. Binary formats
 
 **Files.** `Data/PakFormat*.h`, `Data/PakFormatSerioLoaders.h`,
-`Data/PakFormatSerioWriters.h`, `Data/PakFormatVersions.h`,
+`Data/PakFormatSerioWriters.h`, `Data/PakFormatVersions.{h,inc}`,
 `Data/LooseCooked*`, `Data/ResourceDescriptor.*`, `Data/PakCatalog.*`,
 `Data/PatchManifest.h`, `Data/CookedSource.*`, `Data/CookedOpenError.h`,
 `Data/AssetReferences.*`, `Data/DescriptorStrings.*`, `Data/SourceKey.h`,
-`Data/AssetType.h`; `Data/Docs/binary_packing_discipline.md`,
+`Data/AssetType.h`; the engine readers' refusal paths, read for the format
+checks only: `Content/PakFile.*`, `Content/LooseCookedIndex.*`,
+`Content/Internal/LooseCookedIndex{Impl,Validation}.*`; their tests in
+`Data/test` and `Content/test`; `Data/Docs/binary_packing_discipline.md`,
 `Content/Docs/loose_cooked_content.md`, `Cooker/Docs/Pak/paktool_design.md`.
 
 **Objectives.** The pak, loose index and sidecar formats are fully specified
@@ -230,10 +233,10 @@ them alone, and every engine reader refuses what it cannot read.
 - Every packed struct has `static_assert`s for size, alignment and the offset
   of each field the managed side reads; reserved bytes are written zero and
   checked on read.
-- The versions are consistent everywhere: pak 12, loose index 8, `.otex` 2,
-  `.obuf` 4 (`PakFormatVersions.h`, `CookedVersions`, the docs). A reader
-  refuses any other version with a typed code; no reader of an older version
-  survives.
+- `PakFormatVersions.inc` is the one source of every format, asset and
+  importer version; no header, tool or doc restates a number that can drift
+  from it. A reader refuses any other version with a typed code; no reader
+  of an older version survives.
 - Pak layout: payloads and regions start on `kPakPayloadAlignment` (4096),
   regions are padded to it, tables, assets, directory, browse index and
   footer are aligned to 16; the footer's CRC field offset and the CRC range
@@ -242,8 +245,8 @@ them alone, and every engine reader refuses what it cannot read.
   where the format says so (loose data files), and nothing falls back to a
   truncated or non-SHA fingerprint.
 - `ResourceDescriptor`: the single `.otex`/`.obuf` codec encodes and decodes
-  both sidecars with one row layout (the 63-byte texture row included) and
-  round-trips every field.
+  both sidecars, each embedding its pak table row (`TextureResourceDesc`,
+  `BufferResourceDesc`) unchanged, and round-trips every field.
 - `PakCatalog`, `PatchManifest`: dependency records state requirements of
   other mounts (R10), not exact identities; tombstones and deletions are
   encoded once.
@@ -337,7 +340,7 @@ retire, clear, load during a swap.
 - Open failures of paks and loose indices are typed (`CookedOpenError`), not
   logged and swallowed.
 - `PlayerModule.cpp`: `DependencyRequirementError` at launch becomes
-  `player.launch.dependency_missing`, and the launch file (version 3) is
+  `player.launch.dependency_missing`, and the launch file is
   validated against its installed schema.
 - `AssetLoader.cpp` (3 300 lines) and `AssetLoader.h` (1 700 lines): flag
   responsibilities that belong in the internal services already split out.
@@ -593,7 +596,7 @@ same engine model for the same scene.
 - `FbxAdapter.cpp` (3 800 lines) and `GltfAdapter.cpp` (3 400 lines): source
   data is bounds-checked before use, since `ufbx` and `cgltf` hand back
   file-controlled indices.
-- Importer revisions (glTF 7, FBX 7) are bumped by every output change.
+- The glTF and FBX importer revisions (`PakFormatVersions.inc`) are bumped by every output change.
 
 ## R12. Geometry, buffers and materials
 
@@ -664,7 +667,7 @@ explicit.
 
 - `ScriptingSidecarImportPipeline.cpp` (2 300 lines): script slots bind by
   node path; parameter types and defaults are checked against the script's
-  declared parameters; the script cache version (3) is bumped with its
+  declared parameters; the script cache version is bumped with its
   format.
 - Input references end with `.oiact`; local action names and relative
   references are unambiguous (`InputImportPipeline.cpp`).
