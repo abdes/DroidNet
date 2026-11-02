@@ -18,6 +18,7 @@
 
 // Project
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -186,8 +187,8 @@ protected:
   std::shared_ptr<const MaterialAsset> material_;
 };
 
-//! Test fixture for MeshBuilder death / invariant enforcement scenarios
-class MeshBuilderDeathTest : public testing::Test {
+//! Test fixture for MeshBuilder invariant enforcement scenarios
+class MeshBuilderRefusalTest : public testing::Test {
 protected:
   void SetUp() override
   {
@@ -433,7 +434,7 @@ NOLINT_TEST_F(MeshBuilderErrorTest, EndSubMeshWithoutBegin_Throws)
     { builder.EndSubMesh(std::move(orphan)); }, std::logic_error);
 }
 
-//! (6 / 19) Build while a SubMesh is still active should death with message
+//! (6 / 19) Build while a SubMesh is still active is refused
 //! mentioning 'active SubMesh'.
 NOLINT_TEST(MeshBuilderErrorMessageTest, BuildWithActiveSubMesh_MentionsActive)
 {
@@ -469,7 +470,8 @@ NOLINT_TEST(MeshBuilderErrorMessageTest, BuildWithActiveSubMesh_MentionsActive)
   });
 
   // Act & Assert
-  EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(), "active SubMesh");
+  NOLINT_EXPECT_THROW(
+    [[maybe_unused]] auto _ = builder.Build(), std::logic_error);
 }
 
 //! (16) Reusing SubMeshBuilder after EndSubMesh should throw logic_error.
@@ -637,57 +639,44 @@ NOLINT_TEST_F(MeshBuilderBasicTest, Build_WithReferencedStorage_Succeeds)
   EXPECT_THAT(mesh->SubMeshes(), SizeIs(1));
 }
 
-//! (33a) Tests that referenced storage mesh can be built without an index
-//! buffer (constructor comment says optional). MeshView still requires at
-//! least one index logically, so we provide index_count=1; resulting Mesh has
-//! zero actual indices (IndexBuffer empty) and IsIndexed()==false.
+//! (33a) A referenced storage mesh needs its index buffer, since every view
+//! draws at least one index.
 NOLINT_TEST_F(
-  MeshBuilderBasicTest, Build_WithReferencedStorage_NoIndexBuffer_Succeeds)
+  MeshBuilderBasicTest, Build_WithReferencedStorage_NoIndexBuffer_IsRefused)
 {
   // Arrange
-  // Create a vertex buffer only; intentionally omit index buffer
   MeshBuilder builder;
-  auto vertex_only_builder = MeshBuilder();
-  // Reuse existing vertex_buffer_ from fixture but pass nullptr for index
-  // buffer
+  builder.WithBufferResources(vertex_buffer_, nullptr)
+    .BeginSubMesh("vertex_only", material_)
+    .WithMeshView({
+      .first_index = 0,
+      .index_count = 1,
+      .first_vertex = 0,
+      .vertex_count = static_cast<uint32_t>(vertices_.size()),
+    })
+    .EndSubMesh();
 
-  // Act
-  auto mesh
-    = builder.WithBufferResources(vertex_buffer_, nullptr)
-        .BeginSubMesh("vertex_only", material_)
-        .WithMeshView({
-          .first_index = 0,
-          .index_count = 1, // Satisfy MeshView invariant although no buffer
-          .first_vertex = 0,
-          .vertex_count = static_cast<uint32_t>(vertices_.size()),
-        })
-        .EndSubMesh()
-        .Build();
-
-  // Assert
-  ASSERT_NE(mesh, nullptr);
-  EXPECT_EQ(mesh->VertexCount(), vertices_.size());
-  EXPECT_EQ(mesh->IndexCount(), 0U);
-  EXPECT_FALSE(mesh->IsIndexed());
-  EXPECT_THAT(mesh->SubMeshes(), SizeIs(1));
+  // Act & Assert
+  NOLINT_EXPECT_THROW(
+    [[maybe_unused]] auto _ = builder.Build(), oxygen::data::CookedOpenError);
 }
 
-//=== Unsuccessful Build Tests (Death) ===------------------------------------//
+//=== Unsuccessful Build Tests ===--------------------------------------------//
 
 //! (1) Ensures Build() fails when no submeshes were added.
-NOLINT_TEST_F(MeshBuilderDeathTest, BuildWithoutSubMesh_Death)
+NOLINT_TEST_F(MeshBuilderRefusalTest, BuildWithoutSubMesh)
 {
   // Arrange
   MeshBuilder builder;
   builder.WithVertices(vertices_).WithIndices(indices_);
 
   // Act & Assert
-  EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(),
-    "Mesh must have at least one submesh");
+  NOLINT_EXPECT_THROW(
+    [[maybe_unused]] auto _ = builder.Build(), std::logic_error);
 }
 
 //! (2) Ensures Build() fails when no storage was set (uninitialized storage).
-NOLINT_TEST_F(MeshBuilderDeathTest, BuildWithoutStorage_Death)
+NOLINT_TEST_F(MeshBuilderRefusalTest, BuildWithoutStorage)
 {
   // Arrange
   MeshBuilder builder;
@@ -701,12 +690,12 @@ NOLINT_TEST_F(MeshBuilderDeathTest, BuildWithoutStorage_Death)
     .EndSubMesh();
 
   // Act & Assert
-  EXPECT_DEATH(
-    [[maybe_unused]] auto _ = builder.Build(), "Mesh must have vertices");
+  NOLINT_EXPECT_THROW(
+    [[maybe_unused]] auto _ = builder.Build(), std::invalid_argument);
 }
 
-//! (3) Clarifies behavior: indices-only then Build should death (no vertices).
-NOLINT_TEST_F(MeshBuilderDeathTest, IndicesOnlyThenBuild_Death)
+//! (3) Clarifies behavior: indices-only then Build is refused (no vertices).
+NOLINT_TEST_F(MeshBuilderRefusalTest, IndicesOnlyThenBuild)
 {
   // Arrange
   MeshBuilder builder;
@@ -721,11 +710,12 @@ NOLINT_TEST_F(MeshBuilderDeathTest, IndicesOnlyThenBuild_Death)
     .EndSubMesh();
 
   // Act & Assert
-  EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(), ".*");
+  NOLINT_EXPECT_THROW(
+    [[maybe_unused]] auto _ = builder.Build(), std::invalid_argument);
 }
 
 //! (4) Vertices-only Build now invalid: must supply indices for owned storage.
-NOLINT_TEST_F(MeshBuilderDeathTest, VerticesOnlyThenBuild_Death)
+NOLINT_TEST_F(MeshBuilderRefusalTest, VerticesOnlyThenBuild)
 {
   // Arrange
   MeshBuilder builder;
@@ -740,11 +730,12 @@ NOLINT_TEST_F(MeshBuilderDeathTest, VerticesOnlyThenBuild_Death)
     .EndSubMesh();
 
   // Act & Assert
-  EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(), ".*");
+  NOLINT_EXPECT_THROW(
+    [[maybe_unused]] auto _ = builder.Build(), std::invalid_argument);
 }
 
 //! (10) Ensures EndSubMesh() without any prior WithMeshView call throws.
-NOLINT_TEST_F(MeshBuilderDeathTest, BuilderAddsSubMeshWithNoViews_Throws)
+NOLINT_TEST_F(MeshBuilderRefusalTest, BuilderAddsSubMeshWithNoViews_Throws)
 {
   // Arrange
   MeshBuilder builder;

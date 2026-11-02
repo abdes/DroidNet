@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/RendererTag.h>
@@ -27,7 +29,7 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RetireKeepsTicketsWhileIncomplete)
 
   BeginFrame(Slot { 0 });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("retire_keeps_incomplete");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
@@ -59,7 +61,7 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RetireRemovesTicketsWhenComplete)
 
   BeginFrame(Slot { 0 });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("retire_removes_complete");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
@@ -90,7 +92,7 @@ NOLINT_TEST_F(
 
   BeginFrame(Slot { 0 });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("delayed_consumer");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
@@ -122,7 +124,7 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RecycledSlotPublishesCompletedBuffers)
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = MakeGeometryAssetKey("completion_at_slot_reuse"),
     .lod_index = oxygen::data::LodIndex {},
-    .mesh = MakeValidTriangleMesh("Recycled slot", true),
+    .mesh = MakeValidTriangleMesh("Recycled slot"),
   };
   const auto handle = geometry_uploader.GetOrAllocate(geometry);
   geometry_uploader.EnsureFrameResources();
@@ -139,7 +141,7 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RecycledSlotPublishesCompletedBuffers)
 
 class GeometryUploaderBudgetTest : public GeometryUploaderTest {
 protected:
-  auto GeometryLimits() const
+  [[nodiscard]] auto GeometryLimits() const
     -> oxygen::vortex::resources::GeometryUploader::MaintenanceLimits override
   {
     return {
@@ -157,20 +159,27 @@ NOLINT_TEST_F(GeometryUploaderBudgetTest, CompletionBudgetCountsUnreadyVisits)
     (void)geometry.GetOrAllocate({
       .asset_key = MakeGeometryAssetKey(name),
       .lod_index = oxygen::data::LodIndex {},
-      .mesh = MakeValidTriangleMesh(name, false),
+      .mesh = MakeValidTriangleMesh(name),
     });
   }
   geometry.EnsureFrameResources();
+  // Each mesh uploads its vertices, then its indices, in allocation order.
   const auto tickets = geometry.GetPendingUploadTickets();
-  ASSERT_EQ(tickets.size(), 2U);
-  ASSERT_TRUE(tickets.back().Cancel());
-  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
-  EXPECT_EQ(geometry.GetPendingUploadCount(), 2U);
-  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
-  EXPECT_EQ(geometry.GetPendingUploadCount(), 1U);
-  Uploader().OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
-  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
-  EXPECT_EQ(geometry.GetPendingUploadCount(), 0U);
+  ASSERT_EQ(tickets.size(), 4U);
+  ASSERT_TRUE(tickets.at(2).Cancel());
+  ASSERT_TRUE(tickets.at(3).Cancel());
+
+  // A frame visits one upload, and an unready one spends the visit.
+  auto frame = std::uint32_t { 1U };
+  for (const auto pending : { 4U, 4U, 3U, 2U }) {
+    geometry.OnFrameStart(RendererTagFactory::Get(), Slot { frame++ % 2U });
+    EXPECT_EQ(geometry.GetPendingUploadCount(), pending);
+  }
+  Uploader().OnFrameStart(RendererTagFactory::Get(), Slot { frame % 2U });
+  for (const auto pending : { 1U, 0U }) {
+    geometry.OnFrameStart(RendererTagFactory::Get(), Slot { frame++ % 2U });
+    EXPECT_EQ(geometry.GetPendingUploadCount(), pending);
+  }
   EXPECT_TRUE(tickets.front().Await().success);
 }
 
@@ -181,23 +190,29 @@ NOLINT_TEST_F(GeometryUploaderBudgetTest, StaleWorkCannotClearReplacementTicket)
   auto reference = oxygen::vortex::sceneprep::GeometryRef {
     .asset_key = MakeGeometryAssetKey("budgeted replacement"),
     .lod_index = oxygen::data::LodIndex {},
-    .mesh = MakeValidTriangleMesh("Old", false),
+    .mesh = MakeValidTriangleMesh("Old"),
   };
   const auto handle = geometry.GetOrAllocate(reference);
   geometry.EnsureFrameResources();
-  reference.mesh = MakeValidTriangleMesh("New", false);
+  reference.mesh = MakeValidTriangleMesh("New");
   geometry.Update(handle, reference);
   geometry.EnsureFrameResources();
-  ASSERT_EQ(geometry.GetPendingUploadCount(), 1U);
+  ASSERT_EQ(geometry.GetPendingUploadCount(), 2U);
   Uploader().OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+
+  // The old mesh's two stale uploads spend the first visits.
+  for (const auto slot : { 1U, 0U }) {
+    geometry.OnFrameStart(RendererTagFactory::Get(), Slot { slot });
+    EXPECT_EQ(geometry.GetPendingUploadCount(), 2U);
+    EXPECT_FALSE(
+      geometry.GetShaderVisibleIndices(handle).vertex_srv_index.IsValid());
+  }
   geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
   EXPECT_EQ(geometry.GetPendingUploadCount(), 1U);
-  EXPECT_FALSE(
+  EXPECT_TRUE(
     geometry.GetShaderVisibleIndices(handle).vertex_srv_index.IsValid());
   geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
   EXPECT_EQ(geometry.GetPendingUploadCount(), 0U);
-  EXPECT_TRUE(
-    geometry.GetShaderVisibleIndices(handle).vertex_srv_index.IsValid());
 }
 
 } // namespace

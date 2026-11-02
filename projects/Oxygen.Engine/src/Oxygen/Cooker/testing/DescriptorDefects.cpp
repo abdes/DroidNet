@@ -20,6 +20,7 @@
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -32,6 +33,7 @@ namespace oxygen::cooker::testing {
 namespace {
 
   namespace core = data::pak::core;
+  namespace mesh = data::pak::geometry;
   namespace world = data::pak::world;
   namespace script = data::pak::scripting;
   namespace physics = data::pak::physics;
@@ -179,6 +181,19 @@ auto DescriptorDefects::ClearSurface(
       "the geometry names no surface " + data::to_string(surface));
   }
   data::StampDescriptorHash(geometry);
+}
+
+auto DescriptorDefects::MeshViewAt(const std::span<const std::byte> geometry,
+  const uint32_t index) -> mesh::MeshViewDesc
+{
+  return ReadRecord<mesh::MeshViewDesc>(
+    geometry, MeshViewOffset(geometry, index));
+}
+
+auto DescriptorDefects::SetMeshView(std::vector<std::byte>& geometry,
+  const uint32_t index, const mesh::MeshViewDesc& view) -> void
+{
+  WriteRecord(geometry, MeshViewOffset(geometry, index), view);
 }
 
 auto DescriptorDefects::PointNodeTablePastTheEnd(std::vector<std::byte>& scene)
@@ -354,6 +369,33 @@ auto DescriptorDefects::SetBindingTableType(std::vector<std::byte>& sidecar,
     sidecar, BindingEntryOffset(sidecar, table), [type](auto& entry) -> void {
       entry.binding_type = static_cast<physics::PhysicsBindingType>(type);
     });
+}
+
+auto DescriptorDefects::MeshViewOffset(
+  const std::span<const std::byte> geometry, const uint32_t index) -> size_t
+{
+  // Each LOD's mesh is followed by its procedural parameters, if any, then
+  // by its submeshes, each followed by its views.
+  const auto desc = ReadRecord<mesh::GeometryAssetDesc>(geometry, 0U);
+  auto at = sizeof(desc);
+  auto remaining = index;
+  for (auto lod = uint32_t { 0U }; lod < desc.lod_count; ++lod) {
+    const auto lod_mesh = ReadRecord<mesh::MeshDesc>(geometry, at);
+    at += sizeof(lod_mesh);
+    if (lod_mesh.IsProcedural()) {
+      at += lod_mesh.info.procedural.params_size;
+    }
+    for (auto i = uint32_t { 0U }; i < lod_mesh.submesh_count; ++i) {
+      const auto submesh = ReadRecord<mesh::SubMeshDesc>(geometry, at);
+      at += sizeof(submesh);
+      if (remaining < submesh.mesh_view_count) {
+        return at + (size_t { remaining } * sizeof(mesh::MeshViewDesc));
+      }
+      remaining -= submesh.mesh_view_count;
+      at += size_t { submesh.mesh_view_count } * sizeof(mesh::MeshViewDesc);
+    }
+  }
+  throw std::invalid_argument("the geometry has no such mesh view");
 }
 
 auto DescriptorDefects::RecordOffset(const std::span<const std::byte> scene,

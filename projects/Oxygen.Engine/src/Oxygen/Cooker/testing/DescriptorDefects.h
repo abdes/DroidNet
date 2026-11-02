@@ -16,6 +16,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/DescriptorHash.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -68,6 +69,18 @@ struct DescriptorDefects final {
   */
   static auto ClearSurface(
     std::vector<std::byte>& geometry, const data::SurfaceId& surface) -> void;
+
+  //! The mesh view `index` of the geometry, counting the views of every LOD
+  //! in the order the descriptor lists them.
+  /*!
+   @throw std::invalid_argument When the geometry has no such view.
+  */
+  [[nodiscard]] static auto MeshViewAt(std::span<const std::byte> geometry,
+    uint32_t index) -> data::pak::geometry::MeshViewDesc;
+
+  //! Sets the mesh view `index` of the geometry.
+  static auto SetMeshView(std::vector<std::byte>& geometry, uint32_t index,
+    const data::pak::geometry::MeshViewDesc& view) -> void;
 
   //=== Scenes ===----------------------------------------------------------//
 
@@ -201,6 +214,13 @@ struct DescriptorDefects final {
   }
 
 private:
+  //! The offset of the mesh view `index` of the geometry.
+  /*!
+   @throw std::invalid_argument When the geometry has no such view.
+  */
+  [[nodiscard]] static auto MeshViewOffset(
+    std::span<const std::byte> geometry, uint32_t index) -> size_t;
+
   //! The offset of the record `index`, of `size` bytes, of the component
   //! table `type`.
   /*!

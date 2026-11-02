@@ -25,7 +25,7 @@ NOLINT_TEST_F(
   auto& uploader = GeoUploader();
   BeginFrame(Slot { 0 });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("lifecycle_idempotent_within");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
@@ -52,7 +52,7 @@ NOLINT_TEST_F(
   auto& uploader = GeoUploader();
   BeginFrame(Slot { 0 });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("lifecycle_auto_ensure_once");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
@@ -79,7 +79,7 @@ NOLINT_TEST_F(
   // Arrange
   auto& uploader = GeoUploader();
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("lifecycle_stable_no_reupload");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,

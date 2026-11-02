@@ -5,26 +5,30 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
 #include <glm/common.hpp>
 #include <glm/geometric.hpp>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/Asset.h>
+#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/LodPolicyValidation.h>
@@ -35,97 +39,121 @@
 #include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Data/Vertex.h>
 
+using oxygen::data::BufferResource;
+using oxygen::data::CookedDefect;
+using oxygen::data::CookedOpenError;
 using oxygen::data::Mesh;
 using oxygen::data::MeshView;
 using oxygen::data::SubMesh;
 using oxygen::data::Vertex;
+using oxygen::data::detail::IndexBufferView;
 using oxygen::data::detail::IndexType;
 using oxygen::data::detail::ReferencedBufferStorage;
 
-namespace oxygen::data::detail {
+namespace {
 
-void ReferencedBufferStorage::InitializeIndexInfo() const noexcept
+//! The type of the indices `buffer` holds, which its format names, or its
+//! stride for a buffer without one.
+auto IndexTypeOf(const BufferResource& buffer) -> IndexType
 {
-  if (initialized) {
-    return;
+  const auto format = buffer.GetElementFormat();
+  const auto unformatted = format == oxygen::Format::kUnknown;
+  const auto stride = buffer.GetElementStride();
+  const auto narrow
+    = format == oxygen::Format::kR16UInt || (unformatted && stride == 2U);
+  const auto wide
+    = format == oxygen::Format::kR32UInt || (unformatted && stride == 4U);
+  if (!narrow && !wide) {
+    throw CookedOpenError(CookedDefect::kInvalidValue,
+      "The index buffer does not hold 16-bit or 32-bit indices");
   }
-  initialized = true;
-  if (!index_buffer_resource) {
-    cached_index_type = IndexType::kNone;
-    return;
+  const auto element_size
+    = narrow ? sizeof(std::uint16_t) : sizeof(std::uint32_t);
+  if (buffer.GetData().size() % element_size != 0) {
+    throw CookedOpenError(CookedDefect::kWrongRowSize,
+      "The index buffer does not hold whole indices");
   }
-  auto fmt = index_buffer_resource->GetElementFormat();
-  if (fmt == Format::kR16UInt) {
-    cached_index_type = IndexType::kUInt16;
-  } else if (fmt == Format::kR32UInt) {
-    cached_index_type = IndexType::kUInt32;
-  } else if (fmt == Format::kUnknown) {
-    // Fall back to element stride
-    auto stride = index_buffer_resource->GetElementStride();
-    if (stride == 2) {
-      cached_index_type = IndexType::kUInt16;
-    } else if (stride == 4) {
-      cached_index_type = IndexType::kUInt32;
-    } else {
-      LOG_F(ERROR, "Unsupported raw index stride (must be 2 or 4)");
-      cached_index_type = IndexType::kNone;
-    }
-  } else {
-    LOG_F(ERROR, "Unsupported index format (only R16UInt/R32UInt)");
-    cached_index_type = IndexType::kNone;
+  return narrow ? IndexType::kUInt16 : IndexType::kUInt32;
+}
+
+//! Checks that `buffer` holds whole vertices, aligned for them.
+auto CheckVertexBuffer(const BufferResource& buffer) -> void
+{
+  const auto bytes = buffer.GetData();
+  if (bytes.size() % sizeof(Vertex) != 0) {
+    throw CookedOpenError(CookedDefect::kWrongRowSize,
+      "The vertex buffer does not hold whole vertices");
   }
-  // Validate size alignment
-  auto bytes = index_buffer_resource->GetData().size();
-  auto es = 1;
-  if (cached_index_type == IndexType::kUInt16) {
-    es = 2;
-  } else if (cached_index_type == IndexType::kUInt32) {
-    es = 4;
-  }
-  if (cached_index_type != IndexType::kNone && bytes % es != 0) {
-    LOG_F(ERROR, "Index buffer byte size not multiple of element size");
-    cached_index_type = IndexType::kNone;
+  if (std::bit_cast<std::uintptr_t>(bytes.data()) % alignof(Vertex) != 0) {
+    throw CookedOpenError(CookedDefect::kMisaligned,
+      "The vertex buffer is not aligned for its vertices");
   }
 }
 
-} // namespace oxygen::data::detail
+//! Checks that buffers of `vertex_count` vertices and of `indices` hold the
+//! ranges of `view`, and that each of its indices, which count from its
+//! first vertex, names one of its vertices.
+auto CheckView(const MeshView& view, const std::size_t vertex_count,
+  const IndexBufferView& indices) -> void
+{
+  // Subtracting from the buffer sizes, which a range cannot exceed, does not
+  // wrap as adding a range's start and count can.
+  const auto holds_vertices = view.FirstVertex() <= vertex_count
+    && view.VertexCount() <= vertex_count - view.FirstVertex();
+  const auto holds_indices = view.FirstIndex() <= indices.Count()
+    && view.IndexCount() <= indices.Count() - view.FirstIndex();
+  if (!holds_vertices || !holds_indices) {
+    throw CookedOpenError(CookedDefect::kOutOfBounds,
+      fmt::format("The mesh view of {} vertices from {} and {} indices from {} "
+                  "is past its buffers of {} vertices and {} indices",
+        view.VertexCount(), view.FirstVertex(), view.IndexCount(),
+        view.FirstIndex(), vertex_count, indices.Count()));
+  }
+  const auto drawn
+    = indices.SliceElements(view.FirstIndex(), view.IndexCount());
+  const auto in_view = std::ranges::all_of(
+    drawn.Widened(), [&view](const std::uint32_t index) -> bool {
+      return index < view.VertexCount();
+    });
+  if (!in_view) {
+    throw CookedOpenError(CookedDefect::kOutOfBounds,
+      fmt::format("An index of the mesh view is past its {} vertices",
+        view.VertexCount()));
+  }
+}
 
-MeshView::MeshView(const Mesh& mesh, pak::geometry::MeshViewDesc desc) noexcept
+} // namespace
+
+MeshView::MeshView(const Mesh& mesh, pak::geometry::MeshViewDesc desc)
   : mesh_(mesh)
   , desc_(desc)
 {
-  // Enforce design constraints
-  CHECK_F(desc_.vertex_count > 0, "MeshView must have at least one vertex");
-  CHECK_F(desc_.index_count > 0, "MeshView must have at least one index");
-
-  // Truly-async decode may construct meshes before buffer resources are bound.
-  // In that case, defer range validation until publish-time binding.
-  const auto vertices = mesh.Vertices();
-  const bool defer_validation
-    = mesh.Descriptor().has_value() && vertices.empty();
-  if (!defer_validation) {
-    CHECK_F(desc_.first_vertex + desc_.vertex_count <= vertices.size(),
-      "MeshView vertex range exceeds mesh vertex count");
-    const auto ib = mesh.IndexBuffer();
-    if (!ib.Empty()) {
-      CHECK_F(desc_.first_index + desc_.index_count <= ib.Count(),
-        "MeshView index range exceeds mesh index count");
-    }
+  if (desc_.vertex_count == 0 || desc_.index_count == 0) {
+    throw std::invalid_argument(
+      "MeshView must draw at least one vertex and one index");
+  }
+  // A mesh read from its descriptor checks its views when its buffers are
+  // bound.
+  if (mesh.HasBuffers()) {
+    CheckView(*this, mesh.Vertices().size(), mesh.IndexBuffer());
   }
 }
 
 auto MeshView::Vertices() const noexcept -> std::span<const Vertex>
 {
+  if (!mesh_.get().HasBuffers()) {
+    return {};
+  }
   return mesh_.get().Vertices().subspan(desc_.first_vertex, desc_.vertex_count);
 }
 
 auto MeshView::IndexBuffer() const noexcept -> detail::IndexBufferView
 {
-  auto full = mesh_.get().IndexBuffer();
-  if (full.Empty()) {
+  if (!mesh_.get().HasBuffers()) {
     return {};
   }
-  return full.SliceElements(desc_.first_index, desc_.index_count);
+  return mesh_.get().IndexBuffer().SliceElements(
+    desc_.first_index, desc_.index_count);
 }
 
 auto MeshView::TakeBoundsOf(const SubMesh& submesh) noexcept -> void
@@ -144,9 +172,9 @@ SubMesh::SubMesh(const Mesh& mesh, std::string name,
   , name_(std::move(name))
   , material_(std::move(material))
 {
-  // Enforce design constraints
-  CHECK_NOTNULL_F(
-    material_, "SubMesh must have exactly one Material (1:1 constraint)");
+  if (!material_) {
+    throw std::logic_error("SubMesh material must not be null");
+  }
 }
 
 Mesh::Mesh(const LodIndex lod, std::vector<Vertex> vertices,
@@ -157,30 +185,52 @@ Mesh::Mesh(const LodIndex lod, std::vector<Vertex> vertices,
       .indices = std::move(indices),
     })
 {
-  auto& owned_storage = std::get<detail::OwnedBufferStorage>(buffer_storage_);
-  CHECK_F(
-    !owned_storage.vertices.empty(), "Mesh must have at least one vertex");
+  if (std::get<detail::OwnedBufferStorage>(buffer_storage_).vertices.empty()) {
+    throw std::invalid_argument("Mesh must have at least one vertex");
+  }
   ComputeBounds();
 }
 
 Mesh::Mesh(const LodIndex lod, std::shared_ptr<BufferResource> vertex_buffer,
   std::shared_ptr<BufferResource> index_buffer)
   : name_(fmt::format("LOD_{}", lod))
-  , buffer_storage_(detail::ReferencedBufferStorage {
-      .vertex_buffer_resource = std::move(vertex_buffer),
-      .index_buffer_resource = std::move(index_buffer),
-    })
+  , buffer_storage_(detail::ReferencedBufferStorage {})
 {
-  auto& referenced_storage
-    = std::get<detail::ReferencedBufferStorage>(buffer_storage_);
-  // Allow deferred binding for truly-async loads: during decode we may create
-  // a referenced mesh without its buffer resources bound yet. Bounds will be
-  // computed when the descriptor is set or when buffers are later bound.
-  if (referenced_storage.vertex_buffer_resource) {
-    auto vertices = referenced_storage.GetVertices();
-    CHECK_F(!vertices.empty(), "Mesh must have at least one vertex");
+  // A mesh read from its descriptor is built before its buffers load, and
+  // they are bound to it then.
+  if (vertex_buffer || index_buffer) {
+    SetBufferResources(std::move(vertex_buffer), std::move(index_buffer));
     ComputeBounds();
   }
+}
+
+auto Mesh::SetBufferResources(std::shared_ptr<BufferResource> vertex_buffer,
+  std::shared_ptr<BufferResource> index_buffer) -> void
+{
+  auto* referenced
+    = std::get_if<detail::ReferencedBufferStorage>(&buffer_storage_);
+  if (referenced == nullptr) {
+    throw std::logic_error("A mesh that owns its vertices binds no buffers");
+  }
+  if (!vertex_buffer || !index_buffer) {
+    throw CookedOpenError(CookedDefect::kMissingPart,
+      "The mesh is bound without its vertex or its index buffer");
+  }
+  CheckVertexBuffer(*vertex_buffer);
+  const auto index_type = IndexTypeOf(*index_buffer);
+  const auto vertex_count = vertex_buffer->GetData().size() / sizeof(Vertex);
+  const auto indices = IndexBufferView {
+    .bytes = std::as_bytes(index_buffer->GetData()),
+    .type = index_type,
+  };
+  for (const auto& submesh : submeshes_) {
+    for (const auto& view : submesh.MeshViews()) {
+      CheckView(view, vertex_count, indices);
+    }
+  }
+  referenced->vertex_buffer_resource = std::move(vertex_buffer);
+  referenced->index_buffer_resource = std::move(index_buffer);
+  referenced->index_type = index_type;
 }
 
 //! Computes bounding box and sphere - the single source of truth.
@@ -387,34 +437,23 @@ auto oxygen::data::GeometryAsset::FindSurface(const SurfaceId id) const noexcept
 auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
 {
   if (submesh_in_progress_) {
-    CHECK_F(false,
+    throw std::logic_error(
       "Cannot build Mesh while a SubMesh is in progress (active SubMesh not "
       "ended)");
   }
-  CHECK_F(!submeshes_.empty(), "Mesh must have at least one submesh");
+  if (submeshes_.empty()) {
+    throw std::logic_error("Mesh must have at least one submesh");
+  }
 
   // Create the Mesh object using the appropriate constructor
   std::unique_ptr<Mesh> mesh;
   if (using_owned_storage_) {
     // Use owned storage constructor (procedural meshes)
-    CHECK_F(!vertices_.empty(), "Mesh must have vertices");
     mesh = std::unique_ptr<Mesh>(
       new Mesh(lod_, std::move(vertices_), std::move(indices_)));
   } else {
-    // Use referenced storage constructor (asset meshes)
-    // Allow deferred binding for truly-async loads (buffers may be attached at
-    // publish time).
-    // If an index buffer is present, validate element stride alignment.
-    if (index_buffer_resource_) {
-      const auto stride = index_buffer_resource_->GetElementStride();
-      if (stride > 1) {
-        const auto size = index_buffer_resource_->GetDataSize();
-        CHECK_F(size % stride == 0,
-          "Index buffer size must be a multiple of element stride (size=%zu "
-          "stride=%u)",
-          static_cast<size_t>(size), static_cast<unsigned>(stride));
-      }
-    }
+    // Use referenced storage constructor (asset meshes); a mesh read from
+    // its descriptor has its buffers bound after it loads.
     mesh = std::unique_ptr<Mesh>(
       new Mesh(lod_, vertex_buffer_resource_, index_buffer_resource_));
   }
@@ -436,9 +475,9 @@ auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
   for (const auto& spec : submeshes_) {
     SubMesh submesh(*mesh, spec.name, spec.material);
 
-    // Enforce design constraint: SubMesh must have at least one MeshView
-    CHECK_F(!spec.mesh_views.empty(),
-      "SubMesh must have at least one MeshView (1:N constraint)");
+    if (spec.mesh_views.empty()) {
+      throw std::logic_error("SubMesh must have at least one MeshView");
+    }
 
     // Set submesh descriptor if provided
     if (spec.desc.has_value()) {

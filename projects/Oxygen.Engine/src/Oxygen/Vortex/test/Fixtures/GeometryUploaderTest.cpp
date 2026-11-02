@@ -147,8 +147,8 @@ auto GeometryUploaderTest::DefaultMaterial() const
   return std::make_shared<const data::MaterialAsset>(data::AssetKey {}, desc);
 }
 
-auto GeometryUploaderTest::MakeValidTriangleMesh(std::string_view name,
-  const bool indexed) const -> std::shared_ptr<const data::Mesh>
+auto GeometryUploaderTest::MakeValidTriangleMesh(std::string_view name) const
+  -> std::shared_ptr<const data::Mesh>
 {
   const auto vertices = std::vector<data::Vertex> {
     data::Vertex {
@@ -183,17 +183,12 @@ auto GeometryUploaderTest::MakeValidTriangleMesh(std::string_view name,
     2U,
   };
 
-  auto builder
-    = data::MeshBuilder(oxygen::data::LodIndex {}, name).WithVertices(vertices);
-  if (indexed) {
-    builder.WithIndices(indices);
-  }
+  auto builder = data::MeshBuilder(oxygen::data::LodIndex {}, name)
+                   .WithVertices(vertices)
+                   .WithIndices(indices);
 
   data::pak::geometry::MeshViewDesc view_desc {
     .first_index = 0,
-    // MeshView enforces index_count > 0 even if the mesh has no index buffer.
-    // For non-indexed meshes (no indices provided), keep a non-zero draw range
-    // so MeshView construction succeeds; IndexBufferView will be empty.
     .index_count = 3U,
     .first_vertex = 0,
     .vertex_count = 3U,

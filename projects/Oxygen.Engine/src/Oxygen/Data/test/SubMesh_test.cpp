@@ -117,7 +117,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, MultipleMeshViews)
     { .position = { 1, 1, 0 }, .normal = { 0, 1, 0 }, .texcoord = { 1, 1 }, .tangent = { 1, 0, 0 }, .bitangent = {}, .color = {} },
     // clang-format on
   };
-  std::vector<std::uint32_t> indices = { 0, 1, 2, 0, 2, 3 };
+  std::vector<std::uint32_t> indices = { 0, 1, 2, 0, 1, 2 };
   auto material = MakeMaterial();
 
   // Act
@@ -190,7 +190,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, MultipleMeshViews_AggregatedCorrectly)
       .color = {},
     },
   };
-  std::vector<std::uint32_t> indices = { 0, 1, 2, 1, 3, 2 };
+  std::vector<std::uint32_t> indices = { 0, 1, 2, 0, 2, 1 };
   auto material = MakeMaterial();
 
   // Act

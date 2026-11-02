@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -32,6 +33,9 @@ using oxygen::vortex::internal::RendererTagFactory;
 using oxygen::vortex::testing::GeometryUploaderTest;
 using oxygen::vortex::testing::MakeGeometryAssetKey;
 
+//! The buffers a resident LOD registers: its vertices and its indices.
+constexpr std::size_t kBuffersPerLod = 2U;
+
 class GeometryUploaderEvictionTest : public GeometryUploaderTest { };
 
 //! Asset eviction invalidates handles and drops pending uploads.
@@ -42,7 +46,7 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, AssetEvictionInvalidatesHandles)
 
   BeginFrame(Slot { 0 });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("eviction_invalidates_handles");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
@@ -76,7 +80,7 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, EvictionSuppressesLateCompletion)
 
   BeginFrame(Slot { 0 });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("eviction_suppresses_completion");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
@@ -112,8 +116,8 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, AssetEvictionInvalidatesAllLods)
   BeginFrame(Slot { 0 });
 
   const auto asset_key = MakeGeometryAssetKey("eviction_invalidates_all_lods");
-  const auto mesh_lod0 = MakeValidTriangleMesh("TriLod0", true);
-  const auto mesh_lod1 = MakeValidTriangleMesh("TriLod1", true);
+  const auto mesh_lod0 = MakeValidTriangleMesh("TriLod0");
+  const auto mesh_lod1 = MakeValidTriangleMesh("TriLod1");
 
   const oxygen::vortex::sceneprep::GeometryRef geometry_lod0 {
     .asset_key = asset_key,
@@ -155,7 +159,7 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, EvictionThenReloadPublishes)
 
   BeginFrame(Slot { 0 });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("eviction_then_reload");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
@@ -202,7 +206,7 @@ NOLINT_TEST_F(
   BeginFrame(Slot { 0 });
   auto& geometry = GeoUploader();
   const auto key = MakeGeometryAssetKey("budgeted multi-lod eviction");
-  const auto mesh = MakeValidTriangleMesh("Resident", false);
+  const auto mesh = MakeValidTriangleMesh("Resident");
   constexpr std::uint32_t kLodCount = 6U;
   std::vector<oxygen::vortex::sceneprep::GeometryHandle> old_handles;
   old_handles.reserve(kLodCount);
@@ -224,25 +228,27 @@ NOLINT_TEST_F(
   // In-flight frames may still read the reclaimed views.
   EXPECT_EQ(registry.GetRegisteredResourceCount(), before);
   RetireCompletedFrames();
-  EXPECT_EQ(registry.GetRegisteredResourceCount(), before - 1U);
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), before - kBuffersPerLod);
   EXPECT_EQ(geometry.GetPendingUploadCount(), 0U);
 
   const auto replacement = geometry.GetOrAllocate({
     .asset_key = key,
     .lod_index = oxygen::data::LodIndex {},
-    .mesh = MakeValidTriangleMesh("Reloaded", false),
+    .mesh = MakeValidTriangleMesh("Reloaded"),
   });
   geometry.EnsureFrameResources();
   EXPECT_EQ(registry.GetRegisteredResourceCount(), before);
   for (std::uint32_t frame = 0U; frame < kLodCount - 1U; ++frame) {
     BeginFrame(Slot { frame % 2U });
     RetireCompletedFrames();
-    EXPECT_EQ(registry.GetRegisteredResourceCount(), before - frame - 1U);
+    EXPECT_EQ(registry.GetRegisteredResourceCount(),
+      before - ((frame + 1U) * kBuffersPerLod));
     EXPECT_TRUE(geometry.IsHandleValid(replacement));
   }
   EXPECT_TRUE(
     geometry.GetShaderVisibleIndices(replacement).vertex_srv_index.IsValid());
-  EXPECT_EQ(registry.GetRegisteredResourceCount(), before - kLodCount + 1U);
+  EXPECT_EQ(registry.GetRegisteredResourceCount(),
+    before - ((kLodCount - 1U) * kBuffersPerLod));
 }
 
 NOLINT_TEST_F(
@@ -251,7 +257,7 @@ NOLINT_TEST_F(
   BeginFrame(Slot { 0 });
   auto& geometry = GeoUploader();
   const auto key = MakeGeometryAssetKey("eviction before admission");
-  const auto mesh = MakeValidTriangleMesh("Resident", false);
+  const auto mesh = MakeValidTriangleMesh("Resident");
   const auto original = geometry.GetOrAllocate(
     { .asset_key = key, .lod_index = oxygen::data::LodIndex {}, .mesh = mesh });
   geometry.EnsureFrameResources();
@@ -274,7 +280,7 @@ NOLINT_TEST_F(GeometryUploaderReclaimTest,
   const auto handle = geometry.GetOrAllocate({
     .asset_key = key,
     .lod_index = oxygen::data::LodIndex {},
-    .mesh = MakeValidTriangleMesh("Resident", false),
+    .mesh = MakeValidTriangleMesh("Resident"),
   });
   geometry.EnsureFrameResources();
   const auto before
@@ -295,8 +301,8 @@ NOLINT_TEST_F(GeometryUploaderReclaimTest,
     GfxPtr()->GetResourceRegistry().GetRegisteredResourceCount(), before);
   geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
   RetireCompletedFrames();
-  EXPECT_EQ(
-    GfxPtr()->GetResourceRegistry().GetRegisteredResourceCount(), before - 1U);
+  EXPECT_EQ(GfxPtr()->GetResourceRegistry().GetRegisteredResourceCount(),
+    before - kBuffersPerLod);
 }
 #endif
 

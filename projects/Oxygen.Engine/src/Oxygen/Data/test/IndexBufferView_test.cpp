@@ -5,7 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 // Standard library
+#include <array>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <vector>
 
@@ -31,7 +34,7 @@ NOLINT_TEST_F(IndexBufferViewSliceTest, SliceElements_ValidProducesCorrectCount)
   std::vector<std::uint32_t> indices { 0, 2, 4, 6, 8, 10, 12, 14 };
   auto bytes = std::as_bytes(
     std::span<const std::uint32_t>(indices.data(), indices.size()));
-  IndexBufferView full { bytes, IndexType::kUInt32 };
+  IndexBufferView full { .bytes = bytes, .type = IndexType::kUInt32 };
   ASSERT_FALSE(full.Empty());
   ASSERT_EQ(full.Count(), indices.size());
 
@@ -43,11 +46,7 @@ NOLINT_TEST_F(IndexBufferViewSliceTest, SliceElements_ValidProducesCorrectCount)
   EXPECT_EQ(slice.type, IndexType::kUInt32);
   EXPECT_EQ(slice.Count(), 3U);
   EXPECT_EQ(slice.bytes.size(), 3U * sizeof(std::uint32_t));
-  auto as_u32 = slice.AsU32();
-  ASSERT_EQ(as_u32.size(), 3U);
-  EXPECT_EQ(as_u32[0], 4U);
-  EXPECT_EQ(as_u32[1], 6U);
-  EXPECT_EQ(as_u32[2], 8U);
+  EXPECT_THAT(slice.Widened(), testing::ElementsAre(4U, 6U, 8U));
 }
 
 //! (21) SliceElements: Invalid (out-of-range) slice returns empty view.
@@ -57,7 +56,7 @@ NOLINT_TEST_F(IndexBufferViewSliceTest, SliceElements_InvalidReturnsEmpty)
   std::vector<std::uint32_t> indices { 0, 1, 2, 3 };
   auto bytes = std::as_bytes(
     std::span<const std::uint32_t>(indices.data(), indices.size()));
-  IndexBufferView full { bytes, IndexType::kUInt32 };
+  IndexBufferView full { .bytes = bytes, .type = IndexType::kUInt32 };
   ASSERT_EQ(full.Count(), 4U);
 
   // Act
@@ -84,7 +83,7 @@ NOLINT_TEST_F(
   std::vector<std::uint16_t> indices16 { 10, 11, 12, 13, 14, 15 };
   auto bytes = std::as_bytes(
     std::span<const std::uint16_t>(indices16.data(), indices16.size()));
-  IndexBufferView full { bytes, IndexType::kUInt16 };
+  IndexBufferView full { .bytes = bytes, .type = IndexType::kUInt16 };
   ASSERT_EQ(full.Count(), indices16.size());
 
   auto slice = full.SliceElements(1, 4); // values 11,12,13,14
@@ -104,6 +103,28 @@ NOLINT_TEST_F(
   EXPECT_EQ(widened[3], 14U);
 }
 
+//! Indices are read from bytes at any address, such as a view of bytes
+//! that a caller lays out without the alignment of the index type.
+NOLINT_TEST_F(IndexBufferViewWidenedTest, ReadsIndicesAtAnyAddress)
+{
+  constexpr std::array<std::uint32_t, 2> kWide { 70000U, 9U };
+  constexpr std::array<std::uint16_t, 2> kNarrow { 7U, 9U };
+  alignas(std::uint32_t) std::array<std::byte, 1 + sizeof(kWide)> storage {};
+  const auto odd = std::span(storage).subspan(1);
+
+  std::memcpy(odd.data(), kWide.data(), sizeof(kWide));
+  const auto wide
+    = IndexBufferView { .bytes = odd, .type = IndexType::kUInt32 };
+  EXPECT_THAT(wide.Widened(), testing::ElementsAre(70000U, 9U));
+
+  std::memcpy(odd.data(), kNarrow.data(), sizeof(kNarrow));
+  const auto narrow = IndexBufferView {
+    .bytes = odd.first(sizeof(kNarrow)),
+    .type = IndexType::kUInt16,
+  };
+  EXPECT_THAT(narrow.Widened(), testing::ElementsAre(7U, 9U));
+}
+
 //! Fixture for invariant-related IndexBufferView tests.
 class IndexBufferViewInvariantsTest : public testing::Test { };
 
@@ -116,7 +137,7 @@ NOLINT_TEST_F(IndexBufferViewInvariantsTest, EmptyWhenTypeNone)
     std::span<const std::uint32_t>(indices.data(), indices.size()));
 
   // Act
-  IndexBufferView with_type_none { bytes, IndexType::kNone };
+  IndexBufferView with_type_none { .bytes = bytes, .type = IndexType::kNone };
 
   // Assert
   EXPECT_TRUE(with_type_none.Empty())

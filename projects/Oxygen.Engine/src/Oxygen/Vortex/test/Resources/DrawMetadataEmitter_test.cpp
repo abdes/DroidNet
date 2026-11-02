@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -228,13 +227,14 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
     0.0F,
   };
 
+  // Each view's indices count from its first vertex.
   const std::vector<std::uint32_t> indices {
     0U,
     1U,
     2U,
-    3U,
-    4U,
-    5U,
+    0U,
+    1U,
+    2U,
   };
   const auto material = d::MaterialAsset::CreateDefault();
 
@@ -1527,7 +1527,7 @@ NOLINT_TEST(DrawMetadataEmitterStandaloneTest,
   vertices.at(3).position = { -1.0F, -1.0F, 0.0F };
   vertices.at(4).position = { 0.0F, 0.0F, 0.0F };
   vertices.at(5).position = { 1.0F, -1.0F, 0.0F };
-  const auto indices = std::vector<std::uint32_t> { 0U, 1U, 2U, 3U, 4U, 5U };
+  const auto indices = std::vector<std::uint32_t> { 0U, 1U, 2U, 0U, 1U, 2U };
 
   auto submesh = d::pak::geometry::SubMeshDesc {};
   submesh.mesh_view_count = 2U;

@@ -45,7 +45,7 @@ using oxygen::vortex::testing::MakeGeometryAssetKey;
 using oxygen::vortex::upload::StagingProvider;
 using oxygen::vortex::upload::UploadError;
 
-[[nodiscard]] auto MakeValidTriangleMesh(std::string_view name, bool indexed)
+[[nodiscard]] auto MakeValidTriangleMesh(std::string_view name)
   -> std::shared_ptr<const oxygen::data::Mesh>
 {
   const auto vertices = std::vector<oxygen::data::Vertex> {
@@ -81,16 +81,11 @@ using oxygen::vortex::upload::UploadError;
     2U,
   };
   auto builder = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, name)
-                   .WithVertices(vertices);
-  if (indexed) {
-    builder.WithIndices(indices);
-  }
+                   .WithVertices(vertices)
+                   .WithIndices(indices);
 
   oxygen::data::pak::geometry::MeshViewDesc view_desc {
     .first_index = 0,
-    // MeshView enforces index_count > 0 even if the mesh has no index buffer.
-    // For non-indexed meshes (no indices provided), keep a non-zero draw range
-    // so MeshView construction succeeds; IndexBufferView will be empty.
     .index_count = 3U,
     .first_vertex = 0,
     .vertex_count = 3U,
@@ -118,7 +113,7 @@ NOLINT_TEST_F(
     0,
   });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("failures_not_resident_indices");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
@@ -202,7 +197,7 @@ NOLINT_TEST(GeometryUploaderFailuresStandaloneTest,
       0,
     });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
 
   const auto asset_key
     = MakeGeometryAssetKey("failures_submission_failure_indices");
@@ -235,7 +230,7 @@ NOLINT_TEST_F(
     0,
   });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key
     = MakeGeometryAssetKey("failures_completion_failure_indices");
   const oxygen::vortex::sceneprep::GeometryRef geometry {

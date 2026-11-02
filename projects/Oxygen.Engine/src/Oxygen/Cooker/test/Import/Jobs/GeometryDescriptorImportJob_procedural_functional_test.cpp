@@ -445,11 +445,8 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
       EXPECT_EQ(actual_vertex.bitangent, expected_vertex.bitangent);
       EXPECT_EQ(actual_vertex.color, expected_vertex.color);
     }
-    const auto loaded_indices = mesh->IndexBuffer().AsU32();
-    ASSERT_EQ(loaded_indices.size(), expected->second.size());
-    for (size_t index = 0; index < expected->second.size(); ++index) {
-      EXPECT_EQ(CheckedAt(loaded_indices, index), expected->second.at(index));
-    }
+    EXPECT_THAT(mesh->IndexBuffer().Widened(),
+      ::testing::ElementsAreArray(expected->second));
     const auto minimum = mesh->BoundingBoxMin();
     const auto maximum = mesh->BoundingBoxMax();
     EXPECT_FLOAT_EQ(minimum.x, -test_case.radius);
@@ -704,11 +701,8 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     EXPECT_EQ(
       CheckedAt(vertices, index).normal, expected->first.at(index).normal);
   }
-  const auto indices = mesh->IndexBuffer().AsU32();
-  ASSERT_EQ(indices.size(), expected->second.size());
-  for (size_t index = 0; index < indices.size(); ++index) {
-    EXPECT_EQ(CheckedAt(indices, index), expected->second.at(index));
-  }
+  EXPECT_THAT(mesh->IndexBuffer().Widened(),
+    ::testing::ElementsAreArray(expected->second));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,

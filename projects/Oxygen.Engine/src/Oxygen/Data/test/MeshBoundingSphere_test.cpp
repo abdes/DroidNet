@@ -186,7 +186,7 @@ NOLINT_TEST_F(
 
   // Create buffer resources from temporary mesh raw data
   const auto vb_view = temp_mesh->Vertices();
-  const auto ib_view = temp_mesh->IndexBuffer().AsU32();
+  const auto ib_view = temp_mesh->IndexBuffer().bytes;
 
   oxygen::data::pak::core::BufferResourceDesc vdesc {
     .data_offset = 0,
@@ -202,14 +202,14 @@ NOLINT_TEST_F(
 
   oxygen::data::pak::core::BufferResourceDesc idesc {
     .data_offset = 0,
-    .size_bytes = static_cast<oxygen::data::pak::core::DataBlobSizeT>(
-      ib_view.size() * sizeof(uint32_t)),
+    .size_bytes
+    = static_cast<oxygen::data::pak::core::DataBlobSizeT>(ib_view.size()),
     .usage_flags = static_cast<uint32_t>(
       oxygen::data::BufferResource::UsageFlags::kIndexBuffer),
     .element_stride = sizeof(uint32_t),
     .element_format = 0,
   };
-  std::vector<uint8_t> ibytes(ib_view.size() * sizeof(uint32_t));
+  std::vector<uint8_t> ibytes(ib_view.size());
   std::memcpy(ibytes.data(), ib_view.data(), ibytes.size());
 
   auto vertex_buffer = std::make_shared<oxygen::data::BufferResource>(

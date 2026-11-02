@@ -29,7 +29,7 @@ NOLINT_TEST_F(GeometryUploaderResidencyTest,
 
   BeginFrame(Slot { 0 });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("residency_publish_after_upload");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,

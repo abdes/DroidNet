@@ -6,8 +6,11 @@
 
 #pragma once
 
+#include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <span>
@@ -74,8 +77,13 @@ namespace detail {
 
 class MeshView {
 public:
-  OXGN_DATA_API MeshView(
-    const Mesh& mesh, pak::geometry::MeshViewDesc desc) noexcept;
+  //! A view of `desc`'s ranges of the buffers of `mesh`.
+  /*!
+   @throw std::invalid_argument When the view draws no vertex or no index.
+   @throw CookedOpenError `kOutOfBounds` when the mesh holds its buffers and
+     they do not hold the view, or an index is past the view's vertices.
+  */
+  OXGN_DATA_API MeshView(const Mesh& mesh, pak::geometry::MeshViewDesc desc);
 
   ~MeshView() = default;
 
@@ -338,14 +346,17 @@ namespace detail {
 
   //! The elements of type `T` that `bytes` holds.
   /*!
-   `bytes` were written as an array of `T`, aligned for `T`, by the cooker
-   or a buffer loader; a trailing partial element is not part of the view.
+   `bytes` hold whole elements of `T` and start at an address aligned for
+   `T`, which a mesh checks of its vertex buffer before it holds it.
   */
   template <typename T>
     requires std::is_trivially_copyable_v<T>
   [[nodiscard]] auto ElementsOf(const std::span<const std::byte> bytes) noexcept
     -> std::span<const T>
   {
+    DCHECK_F(std::bit_cast<std::uintptr_t>(bytes.data()) % alignof(T) == 0
+        && bytes.size() % sizeof(T) == 0,
+      "bytes do not hold whole aligned elements");
     // The bytes hold `T` objects. C++20, which the editor interop builds
     // this header with, has no std::start_lifetime_as_array to say so.
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
@@ -364,10 +375,9 @@ namespace detail {
 
   //! Lightweight, zero-copy view of an index buffer.
   /*!
-   Provides typed and generic access to index data without allocations.
    The underlying storage is exposed as bytes plus an explicit IndexType.
-   Helper methods allow accessing as the native span or iterating widened to
-   32-bit values (on-the-fly promotion for 16-bit indices, no buffering).
+   Indices are read widened to 32-bit values, one at a time, so the bytes
+   can start at any address.
   */
   struct IndexBufferView {
     std::span<const std::byte> bytes; //!< Raw byte span of indices
@@ -396,37 +406,46 @@ namespace detail {
       return es == 0 ? 0 : bytes.size() / es;
     }
 
-    [[nodiscard]] auto AsU16() const noexcept -> std::span<const std::uint16_t>
+    //! The index `i`, widened to 32 bits.
+    [[nodiscard]] auto At(const std::size_t i) const noexcept -> std::uint32_t
     {
-      if (type != IndexType::kUInt16) {
-        return {};
+      DCHECK_F(i < Count(), "index {} is past the {} indices", i, Count());
+      if (type == IndexType::kUInt16) {
+        auto value = std::uint16_t { 0 };
+        std::memcpy(
+          &value, bytes.subspan(i * sizeof(value)).data(), sizeof(value));
+        return value;
       }
-      return ElementsOf<std::uint16_t>(bytes);
+      auto value = std::uint32_t { 0 };
+      std::memcpy(
+        &value, bytes.subspan(i * sizeof(value)).data(), sizeof(value));
+      return value;
     }
 
-    [[nodiscard]] auto AsU32() const noexcept -> std::span<const std::uint32_t>
-    {
-      if (type != IndexType::kUInt32) {
-        return {};
-      }
-      return ElementsOf<std::uint32_t>(bytes);
-    }
-
-    // Widened iteration (always yields uint32_t)
-    // --------------------------------
+    //! Reads the indices of a view in order, widened to 32 bits.
     struct WidenedIterator {
-      std::span<const std::uint16_t> u16;
-      std::span<const std::uint32_t> u32;
+      using iterator_concept = std::forward_iterator_tag;
+      using value_type = std::uint32_t;
+      using difference_type = std::ptrdiff_t;
+
+      std::span<const std::byte> bytes;
+      IndexType type { IndexType::kNone };
       std::size_t index { 0 };
+
       [[nodiscard]] auto operator*() const noexcept -> std::uint32_t
       {
-        return u16.empty() ? u32[index]
-                           : static_cast<std::uint32_t>(u16[index]);
+        return IndexBufferView { .bytes = bytes, .type = type }.At(index);
       }
       auto operator++() noexcept -> WidenedIterator&
       {
         ++index;
         return *this;
+      }
+      auto operator++(int) noexcept -> WidenedIterator
+      {
+        auto previous = *this;
+        ++index;
+        return previous;
       }
       [[nodiscard]] friend auto operator==(
         const WidenedIterator& a, const WidenedIterator& b) noexcept -> bool
@@ -435,31 +454,32 @@ namespace detail {
       }
     };
 
-    //! The indices of one element type: `u16` for 16-bit indices, `u32`
-    //! otherwise; the other span is empty.
+    //! The indices of a view, widened to 32 bits.
     struct WidenedRange {
-      std::span<const std::uint16_t> u16;
-      std::span<const std::uint32_t> u32;
+      using value_type = std::uint32_t;
+      using const_iterator = WidenedIterator;
+
+      std::span<const std::byte> bytes;
+      IndexType type { IndexType::kNone };
+
       [[nodiscard]] auto begin() const noexcept -> WidenedIterator
       {
-        return { .u16 = u16, .u32 = u32, .index = 0 };
+        return { .bytes = bytes, .type = type, .index = 0 };
       }
       [[nodiscard]] auto end() const noexcept -> WidenedIterator
       {
-        return {
-          .u16 = u16,
-          .u32 = u32,
-          .index = u16.empty() ? u32.size() : u16.size(),
-        };
+        return { .bytes = bytes, .type = type, .index = size() };
+      }
+      [[nodiscard]] auto size() const noexcept -> std::size_t
+      {
+        return IndexBufferView { .bytes = bytes, .type = type }.Count();
       }
     };
 
+    //! The indices, valid while the buffer that holds them is.
     [[nodiscard]] auto Widened() const noexcept -> WidenedRange
     {
-      return WidenedRange {
-        .u16 = AsU16(),
-        .u32 = AsU32(),
-      };
+      return WidenedRange { .bytes = bytes, .type = type };
     }
 
     // Slice without copying (byte-range must align with element size).
@@ -500,13 +520,12 @@ namespace detail {
     }
   };
 
-  //! Storage for meshes that reference external buffer resources (asset meshes)
+  //! Storage for meshes that reference external buffer resources (asset
+  //! meshes); the mesh checks the buffers before it holds them.
   struct ReferencedBufferStorage {
     std::shared_ptr<BufferResource> vertex_buffer_resource;
     std::shared_ptr<BufferResource> index_buffer_resource;
-
-    mutable IndexType cached_index_type { IndexType::kNone };
-    mutable bool initialized { false };
+    IndexType index_type { IndexType::kNone };
 
     [[nodiscard]] auto GetVertices() const noexcept -> std::span<const Vertex>
     {
@@ -517,17 +536,14 @@ namespace detail {
         std::as_bytes(vertex_buffer_resource->GetData()));
     }
 
-    OXGN_DATA_API void InitializeIndexInfo() const noexcept;
-
     [[nodiscard]] auto BuildIndexBufferView() const noexcept -> IndexBufferView
     {
-      InitializeIndexInfo();
-      if (cached_index_type == IndexType::kNone || !index_buffer_resource) {
+      if (!index_buffer_resource) {
         return {};
       }
       return IndexBufferView {
         .bytes = std::as_bytes(index_buffer_resource->GetData()),
-        .type = cached_index_type,
+        .type = index_type,
       };
     }
   };
@@ -604,21 +620,30 @@ public:
     return submeshes_;
   }
 
-  //! Set runtime-only buffer resources after async publish.
-  void SetBufferResources(std::shared_ptr<BufferResource> vertex_buffer,
-    std::shared_ptr<BufferResource> index_buffer) noexcept
+  //! True when the mesh holds its vertices and indices: always for a mesh
+  //! that owns them, once they are bound for one read from a descriptor.
+  [[nodiscard]] auto HasBuffers() const noexcept -> bool
   {
-    auto* referenced
+    const auto* referenced
       = std::get_if<detail::ReferencedBufferStorage>(&buffer_storage_);
-    if (!referenced) {
-      return;
-    }
-
-    referenced->vertex_buffer_resource = std::move(vertex_buffer);
-    referenced->index_buffer_resource = std::move(index_buffer);
-    referenced->initialized = false;
-    referenced->cached_index_type = detail::IndexType::kNone;
+    return referenced == nullptr || referenced->vertex_buffer_resource;
   }
+
+  //! Binds the buffers of a mesh read from its descriptor, which it loads
+  //! after the mesh.
+  /*!
+   The buffers are bound only when they hold every view of the mesh.
+
+   @throw CookedOpenError `kMissingPart` for an absent buffer,
+     `kWrongRowSize` for a buffer that does not hold whole elements,
+     `kMisaligned` for a vertex buffer not aligned for its vertices,
+     `kInvalidValue` for an index buffer not of 16-bit or 32-bit indices,
+     and `kOutOfBounds` for a view past its buffer or an index past the
+     vertices of its view.
+  */
+  OXGN_DATA_API auto SetBufferResources(
+    std::shared_ptr<BufferResource> vertex_buffer,
+    std::shared_ptr<BufferResource> index_buffer) -> void;
 
   //! Set runtime-only skinning buffer resources after async publish.
   void SetSkiningBufferResources(

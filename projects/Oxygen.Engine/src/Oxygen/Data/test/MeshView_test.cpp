@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 // GTest
@@ -21,6 +22,7 @@
 // Project
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 
@@ -57,7 +59,7 @@ private:
 };
 
 //! Fixture for death/error boundary validation scenarios (real Mesh)
-class MeshViewDeathTest : public ::testing::Test {
+class MeshViewRefusalTest : public ::testing::Test {
 protected:
   void SetupMesh(const std::vector<Vertex>& vertices,
     const std::vector<std::uint32_t>& indices)
@@ -74,6 +76,7 @@ private:
 //! Fixture for index type widening / promotion behavior (edge / format cases)
 class MeshViewIndexTypeTest : public ::testing::Test { };
 
+using oxygen::data::CookedOpenError;
 using ::testing::SizeIs;
 
 //! Tests MeshView construction with valid data and accessor methods.
@@ -132,9 +135,8 @@ NOLINT_TEST_F(MeshViewBasicTest, ConstructAndAccess)
   // Verify all vertex attributes (operator== performs epsilon-based compare).
   EXPECT_THAT(view.Vertices(), ::testing::ElementsAreArray(vertices));
   {
-    auto view_indices = view.IndexBuffer().AsU32();
-    ASSERT_EQ(view_indices.size(), indices.size());
-    EXPECT_THAT(view_indices, ::testing::ElementsAreArray(indices));
+    EXPECT_THAT(
+      view.IndexBuffer().Widened(), ::testing::ElementsAreArray(indices));
   }
 }
 
@@ -199,11 +201,11 @@ NOLINT_TEST(MeshViewBasicRealMeshTest, RealMesh_ViewValidity)
   EXPECT_THAT(
     mesh_view.Vertices(), ::testing::ElementsAreArray(mesh->Vertices()));
   EXPECT_EQ(
-    mesh_view.IndexBuffer().AsU32().data(), mesh->IndexBuffer().AsU32().data());
+    mesh_view.IndexBuffer().bytes.data(), mesh->IndexBuffer().bytes.data());
 }
 
-//! Out-of-bounds view creation (death scenarios consolidated from old file).
-NOLINT_TEST_F(MeshViewDeathTest, OutOfBoundsCreation_Death)
+//! Out-of-bounds view creation is refused.
+NOLINT_TEST_F(MeshViewRefusalTest, RefusesViewsPastTheBuffers)
 {
   // Arrange
   auto material = oxygen::data::MaterialAsset::CreateDefault();
@@ -252,52 +254,49 @@ NOLINT_TEST_F(MeshViewDeathTest, OutOfBoundsCreation_Death)
   // (Construction attempts below are the act steps.)
 
   // Assert
-  EXPECT_DEATH((MeshView { *mesh,
+  EXPECT_THROW((MeshView { *mesh,
                  oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
                    .index_count = 3,
                    .first_vertex = 10,
                    .vertex_count = 3 } }),
-    "");
-  EXPECT_DEATH((MeshView { *mesh,
+    CookedOpenError);
+  EXPECT_THROW((MeshView { *mesh,
                  oxygen::data::pak::geometry::MeshViewDesc { .first_index = 10,
                    .index_count = 3,
                    .first_vertex = 0,
                    .vertex_count = 3 } }),
-    "");
-  EXPECT_DEATH((MeshView { *mesh,
+    CookedOpenError);
+  EXPECT_THROW((MeshView { *mesh,
                  oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
                    .index_count = 3,
                    .first_vertex = 5,
                    .vertex_count = 1 } }),
-    "");
-  EXPECT_DEATH((MeshView { *mesh,
+    CookedOpenError);
+  EXPECT_THROW((MeshView { *mesh,
                  oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
                    .index_count = 1,
                    .first_vertex = 3,
                    .vertex_count = 5 } }),
-    "");
+    CookedOpenError);
 }
 
-//! Tests MeshView handles empty vertex and index data (should be a death test).
-NOLINT_TEST_F(MeshViewDeathTest, Empty)
+//! A view of no vertex and no index is refused.
+NOLINT_TEST_F(MeshViewRefusalTest, RefusesAnEmptyView)
 {
   // Arrange
   std::vector<Vertex> vertices(2);
   std::vector<std::uint32_t> indices;
   SetupMesh(vertices, indices);
 
-  // Act
-  // (Construction within EXPECT_DEATH)
-
-  // Assert
-  EXPECT_DEATH(MeshView mesh_view(GetMesh(),
+  // Act & Assert
+  EXPECT_THROW(MeshView mesh_view(GetMesh(),
                  oxygen::data::pak::geometry::MeshViewDesc {
                    .first_index = 0,
                    .index_count = 0,
                    .first_vertex = 0,
                    .vertex_count = 0,
                  }),
-    "");
+    std::invalid_argument);
 }
 
 //! Tests MeshView copy and move semantics work correctly.
@@ -327,52 +326,46 @@ NOLINT_TEST_F(MeshViewBasicTest, CopyMove)
   EXPECT_EQ(mesh_view3.IndexBuffer().Count(), 2U);
 }
 
-//! (6) Death: zero index_count but positive vertex_count should fail
-NOLINT_TEST_F(MeshViewDeathTest, ZeroIndexCountPositiveVertexCount_Death)
+//! (6) Zero index_count but positive vertex_count is refused
+NOLINT_TEST_F(MeshViewRefusalTest, RefusesZeroIndexCount)
 {
   // Arrange
   std::vector<Vertex> vertices(3);
   std::vector<std::uint32_t> indices { 0, 1, 2 };
   SetupMesh(vertices, indices);
 
-  // Act
-  // (Construction under EXPECT_DEATH)
-
-  // Assert
-  EXPECT_DEATH((MeshView { GetMesh(),
+  // Act & Assert
+  EXPECT_THROW((MeshView { GetMesh(),
                  oxygen::data::pak::geometry::MeshViewDesc {
                    .first_index = 0,
                    .index_count = 0, // invalid
                    .first_vertex = 0,
                    .vertex_count = 3, // valid
                  } }),
-    "at least one index");
+    std::invalid_argument);
 }
 
-//! (7) Death: zero vertex_count but positive index_count should fail
-NOLINT_TEST_F(MeshViewDeathTest, ZeroVertexCountPositiveIndexCount_Death)
+//! (7) Zero vertex_count but positive index_count is refused
+NOLINT_TEST_F(MeshViewRefusalTest, RefusesZeroVertexCount)
 {
   // Arrange
   std::vector<Vertex> vertices(3);
   std::vector<std::uint32_t> indices { 0, 1, 2 };
   SetupMesh(vertices, indices);
 
-  // Act
-  // (Construction under EXPECT_DEATH)
-
-  // Assert
-  EXPECT_DEATH((MeshView { GetMesh(),
+  // Act & Assert
+  EXPECT_THROW((MeshView { GetMesh(),
                  oxygen::data::pak::geometry::MeshViewDesc {
                    .first_index = 0,
                    .index_count = 3, // valid
                    .first_vertex = 0,
                    .vertex_count = 0, // invalid
                  } }),
-    "at least one vertex");
+    std::invalid_argument);
 }
 
-//! (8) Death: last index past end (off-by-one) should fail (boundary)
-NOLINT_TEST_F(MeshViewDeathTest, EdgeOutOfRange_LastIndexPastEnd_Death)
+//! (8) Last index past end (off-by-one) is refused (boundary)
+NOLINT_TEST_F(MeshViewRefusalTest, RefusesLastIndexPastEnd)
 {
   // Arrange
   std::vector<Vertex> vertices(4);
@@ -391,8 +384,8 @@ NOLINT_TEST_F(MeshViewDeathTest, EdgeOutOfRange_LastIndexPastEnd_Death)
   // Act
   // (Construction below attempts invalid slice.)
 
-  // Assert: one past end should death
-  EXPECT_DEATH(
+  // Assert: one past end is refused
+  EXPECT_THROW(
     (MeshView { GetMesh(),
       oxygen::data::pak::geometry::MeshViewDesc {
         .first_index = 1, // shift by 1
@@ -400,7 +393,7 @@ NOLINT_TEST_F(MeshViewDeathTest, EdgeOutOfRange_LastIndexPastEnd_Death)
         .first_vertex = 0,
         .vertex_count = static_cast<uint32_t>(vertices.size()),
       } }),
-    "index range exceeds");
+    CookedOpenError);
 }
 
 //! (9) 16-bit indices: Widened() iteration yields same sequence as source
@@ -475,8 +468,8 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_WidenedIterationMatches)
   EXPECT_THAT(widened, ::testing::ElementsAreArray(u16_indices));
 }
 
-//! (11) Referenced storage: 16-bit index buffer detection caches kUInt16.
-NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_IndexTypeCached)
+//! (11) Referenced storage: a 16-bit index buffer reads as kUInt16.
+NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_IndexTypeDetected)
 {
   // Arrange
   using oxygen::data::BufferResource;
@@ -531,93 +524,6 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_IndexTypeCached)
   // Assert
   EXPECT_EQ(ib_view.type, oxygen::data::detail::IndexType::kUInt16);
   EXPECT_EQ(ib_view.Count(), indices16.size());
-}
-
-//! (12) Vertex-only mesh: MeshView should expose empty index buffer view.
-NOLINT_TEST_F(MeshViewBasicTest, VertexOnlyMesh_IndexBufferEmpty)
-{
-  // Arrange
-  using oxygen::data::BufferResource;
-  using oxygen::data::MaterialAsset;
-  using oxygen::data::MeshBuilder;
-  namespace pak = oxygen::data::pak;
-
-  std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {} };
-  pak::core::BufferResourceDesc vdesc {
-    .data_offset = 0,
-    .size_bytes
-    = static_cast<pak::core::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
-    .usage_flags = 0x01,
-    .element_stride = sizeof(Vertex),
-    .element_format = 0,
-
-  };
-  std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
-  std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
-  auto vbuf = std::make_shared<BufferResource>(
-    vdesc, oxygen::serio::testing::OwnedBytes(vbytes));
-  auto material = MaterialAsset::CreateDefault();
-  auto mesh = MeshBuilder()
-                .WithBufferResources(vbuf, nullptr)
-                .BeginSubMesh("sm", material)
-                .WithMeshView({
-                  .first_index = 0,
-                  .index_count = 1, // placeholder to satisfy invariant
-                  .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()),
-                })
-                .EndSubMesh()
-                .Build();
-  ASSERT_NE(mesh, nullptr);
-  auto view = mesh->SubMeshes().front().MeshViews().front();
-
-  // Act
-  auto ib = view.IndexBuffer();
-
-  // Assert
-  EXPECT_EQ(ib.Count(), 0U);
-  EXPECT_EQ(ib.type, oxygen::data::detail::IndexType::kNone);
-}
-
-//! (13) Vertex-only mesh: Mesh IsIndexed()==false and IndexCount()==0.
-NOLINT_TEST(MeshBasicTest, VertexOnlyMesh_IsIndexedFalse)
-{
-  // Arrange
-  using oxygen::data::BufferResource;
-  using oxygen::data::MaterialAsset;
-  using oxygen::data::MeshBuilder;
-  namespace pak = oxygen::data::pak;
-  std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {}, Vertex {} };
-  pak::core::BufferResourceDesc vdesc {
-    .data_offset = 0,
-    .size_bytes
-    = static_cast<pak::core::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
-    .usage_flags = 0x01,
-    .element_stride = sizeof(Vertex),
-    .element_format = 0,
-
-  };
-  std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
-  std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
-  auto vbuf = std::make_shared<BufferResource>(
-    vdesc, oxygen::serio::testing::OwnedBytes(vbytes));
-  auto material = MaterialAsset::CreateDefault();
-  auto mesh = MeshBuilder()
-                .WithBufferResources(vbuf, nullptr)
-                .BeginSubMesh("sm", material)
-                .WithMeshView({
-                  .first_index = 0,
-                  .index_count = 1,
-                  .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()),
-                })
-                .EndSubMesh()
-                .Build();
-  ASSERT_NE(mesh, nullptr);
-
-  // Act & Assert
-  EXPECT_FALSE(mesh->IsIndexed());
-  EXPECT_EQ(mesh->IndexCount(), 0U);
 }
 
 //! (14) Zero-copy guarantee: MeshView vertex span shares underlying storage.
@@ -701,9 +607,8 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, IndexBufferView_NoCopySizeMatches)
   EXPECT_EQ(ib_view.Count(), indices.size());
 }
 
-//! (30) 32-bit indices: Widened() iteration yields identical sequence & count
-//! to direct 32-bit view (should be zero-copy / direct for 32-bit path).
-NOLINT_TEST_F(MeshViewIndexTypeTest, ThirtyTwoBitIndices_WidenedMatchesAsU32)
+//! (30) 32-bit indices: Widened() iteration yields the stored sequence.
+NOLINT_TEST_F(MeshViewIndexTypeTest, ThirtyTwoBitIndices_WidenedMatchesStored)
 {
   // Arrange
   using oxygen::data::MaterialAsset;
@@ -726,17 +631,9 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, ThirtyTwoBitIndices_WidenedMatchesAsU32)
   ASSERT_NE(mesh, nullptr);
   auto view = mesh->SubMeshes().front().MeshViews().front();
 
-  // Act
-  std::vector<uint32_t> widened;
-  widened.reserve(view.IndexBuffer().Count());
-  for (auto v : view.IndexBuffer().Widened()) {
-    widened.push_back(v);
-  }
-  auto direct = view.IndexBuffer().AsU32();
-
-  // Assert
-  ASSERT_EQ(widened.size(), direct.size());
-  EXPECT_THAT(widened, ::testing::ElementsAreArray(direct));
+  // Act & Assert
+  EXPECT_THAT(
+    view.IndexBuffer().Widened(), ::testing::ElementsAreArray(indices));
 }
 
 //! Views built without a cooked submesh descriptor take the submesh bounds, and

@@ -288,9 +288,11 @@ and the in-memory model the interop hands to the editor.
   `Generated.SceneComponents.h` and `Generated.SceneChanges.h` is
   deterministic, and stale checked-in headers cannot go unnoticed;
   `PropertyRange` limits match the schema.
-- `GeometryAsset.h` (1 300 lines in a header): LOD, submesh and index ranges
-  are validated against the referenced buffers; 16- and 32-bit indices are
-  handled; the remaining `reinterpret_cast` is justified.
+- `GeometryAsset.h` (1 300 lines in a header): views are refused with typed
+  errors, never aborts, when they draw nothing, leave their buffers or name
+  vertices outside the view, including buffers bound after the load; 16- and
+  32-bit indices are read without assuming alignment; the remaining vertex
+  `reinterpret_cast` rests on the alignment the binding checks.
 - `MaterialAsset`: texture slots, domains and shader references refuse
   unknown values; `ShaderReference` parsing is bounded.
 - `StableId`, `SceneIds`: identity derivation is stable across platforms and

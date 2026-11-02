@@ -45,4 +45,14 @@ namespace oxygen::cooker::testing {
 [[nodiscard]] auto SidecarRefusal(std::span<const std::byte> bytes)
   -> std::optional<data::CookedDefect>;
 
+/*!
+ Reads the geometry descriptor `bytes` with the geometry loader, which a
+ mount uses; the meshes' buffers are bound after it, and checked then.
+
+ @return No defect when the loader accepts the geometry.
+ @throw std::logic_error When the loader refuses without a defect.
+*/
+[[nodiscard]] auto GeometryRefusal(std::span<const std::byte> bytes)
+  -> std::optional<data::CookedDefect>;
+
 } // namespace oxygen::cooker::testing

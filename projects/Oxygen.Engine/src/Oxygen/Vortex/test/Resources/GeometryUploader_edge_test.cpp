@@ -36,7 +36,7 @@ NOLINT_TEST_F(
     0,
   });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
 
   constexpr std::size_t kCount = 256;
   std::vector<oxygen::vortex::sceneprep::GeometryHandle> handles;
@@ -48,7 +48,7 @@ NOLINT_TEST_F(
       = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
 
     key_bytes.at(0) = static_cast<std::uint8_t>(i & 0xFFU);
-    key_bytes.at(1) = static_cast<std::uint8_t>((i >> 8) & 0xFFU);
+    key_bytes.at(1) = static_cast<std::uint8_t>((i >> 8U) & 0xFFU);
 
     const auto key = oxygen::data::AssetKey::FromBytes(key_bytes);
 
@@ -83,7 +83,7 @@ NOLINT_TEST_F(GeometryUploaderEdgeTest, RepeatedEnsureNoUnboundedTicketGrowth)
   BeginFrame(Slot {
     0,
   });
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("edge_repeated_ensure");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,

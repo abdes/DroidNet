@@ -13,6 +13,7 @@
 #include <string_view>
 
 #include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Cooker/testing/ProductRefusal.h>
@@ -88,6 +89,21 @@ auto SidecarRefusal(const std::span<const std::byte> bytes)
                            "the sidecar differently");
   }
   return by_reader;
+}
+
+auto GeometryRefusal(const std::span<const std::byte> bytes)
+  -> std::optional<data::CookedDefect>
+{
+  return RefusalOf("the geometry loader", [bytes] -> void {
+    auto stream = serio::ReadOnlyMemoryStream { bytes };
+    auto reader = serio::Reader<serio::ReadOnlyMemoryStream> { stream };
+    static_cast<void>(
+      content::loaders::LoadGeometryAsset(content::LoaderContext {
+        .desc_reader = &reader,
+        .work_offline = true,
+        .parse_only = true,
+      }));
+  });
 }
 
 } // namespace oxygen::cooker::testing

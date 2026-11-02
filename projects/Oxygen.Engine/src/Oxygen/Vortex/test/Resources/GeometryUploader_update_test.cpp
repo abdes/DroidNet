@@ -32,7 +32,7 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest,
   auto& uploader = GeoUploader();
 
   BeginFrame(Slot { 0 });
-  const auto mesh_v1 = MakeValidTriangleMesh("Tri", true);
+  const auto mesh_v1 = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("update_dirty_reschedules");
   const oxygen::vortex::sceneprep::GeometryRef geometry_v1 {
     .asset_key = asset_key,
@@ -51,7 +51,7 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest,
   BeginFrame(Slot { 1 });
 
   // Act: hot-reload with a new mesh object (same identity by name here).
-  const auto mesh_v2 = MakeValidTriangleMesh("Tri", true);
+  const auto mesh_v2 = MakeValidTriangleMesh("Tri");
   const oxygen::vortex::sceneprep::GeometryRef geometry_v2 {
     .asset_key = asset_key,
     .lod_index = oxygen::data::LodIndex {},
@@ -81,7 +81,7 @@ NOLINT_TEST_F(
   auto geometry = oxygen::vortex::sceneprep::GeometryRef {
     .asset_key = MakeGeometryAssetKey("content_revision"),
     .lod_index = oxygen::data::LodIndex {},
-    .mesh = MakeValidTriangleMesh("Original", true),
+    .mesh = MakeValidTriangleMesh("Original"),
   };
   const auto handle = uploader.GetOrAllocate(geometry);
   EXPECT_EQ(uploader.GetShaderVisibleIndices(handle).content_revision, 0U);
@@ -139,8 +139,8 @@ NOLINT_TEST_F(
   auto& uploader = GeoUploader();
 
   BeginFrame(Slot { 0 });
-  const auto mesh_a = MakeValidTriangleMesh("MeshA", true);
-  const auto mesh_b = MakeValidTriangleMesh("MeshB", true);
+  const auto mesh_a = MakeValidTriangleMesh("MeshA");
+  const auto mesh_b = MakeValidTriangleMesh("MeshB");
   const auto asset_key_a = MakeGeometryAssetKey("update_debug_assert_a");
   const auto asset_key_b = MakeGeometryAssetKey("update_debug_assert_b");
   const oxygen::vortex::sceneprep::GeometryRef geometry_a {
@@ -171,7 +171,7 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest, UpdateStaleHandleIsRejected)
   auto& uploader = GeoUploader();
 
   BeginFrame(Slot { 0 });
-  const auto mesh_v1 = MakeValidTriangleMesh("TriV1", true);
+  const auto mesh_v1 = MakeValidTriangleMesh("TriV1");
   const auto asset_key = MakeGeometryAssetKey("update_stale_handle_rejected");
   const oxygen::vortex::sceneprep::GeometryRef geometry_v1 {
     .asset_key = asset_key,
@@ -185,7 +185,7 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest, UpdateStaleHandleIsRejected)
     asset_key, oxygen::content::EvictionReason::kRefCountZero);
   BeginFrame(Slot { 1 });
 
-  const auto mesh_v2 = MakeValidTriangleMesh("TriV2", true);
+  const auto mesh_v2 = MakeValidTriangleMesh("TriV2");
   const oxygen::vortex::sceneprep::GeometryRef geometry_v2 {
     .asset_key = asset_key,
     .lod_index = oxygen::data::LodIndex {},
@@ -215,7 +215,7 @@ NOLINT_TEST_F(
     = uploader.GetOrAllocate(oxygen::vortex::sceneprep::GeometryRef {
       .asset_key = MakeGeometryAssetKey("resident_revision"),
       .lod_index = oxygen::data::LodIndex {},
-      .mesh = MakeValidTriangleMesh("Resident", true),
+      .mesh = MakeValidTriangleMesh("Resident"),
     });
   // Requesting the indices schedules the upload, as drawing would.
   EXPECT_EQ(uploader.GetShaderVisibleIndices(handle).content_revision, 0U);

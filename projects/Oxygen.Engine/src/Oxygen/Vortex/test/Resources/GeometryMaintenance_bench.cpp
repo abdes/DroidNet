@@ -40,7 +40,7 @@ NOLINT_TEST_F(GeometryMaintenanceBenchmark, DISABLED_LargeUnloadCpuBaseline)
   constexpr auto kAssetCount = std::uint32_t { 4096U };
   BeginFrame(Slot { 0 });
   auto& geometry = GeoUploader();
-  const auto mesh = MakeValidTriangleMesh("Maintenance baseline", false);
+  const auto mesh = MakeValidTriangleMesh("Maintenance baseline");
   std::vector<oxygen::data::AssetKey> keys;
   keys.reserve(kAssetCount);
   for (std::uint32_t index = 0U; index < kAssetCount; ++index) {
@@ -77,7 +77,7 @@ NOLINT_TEST_F(GeometryMaintenanceBenchmark, DISABLED_LargeUnloadCpuBaseline)
   ASSERT_EQ(geometry.GetPendingUploadCount(), 0U);
   const auto first = samples.front();
   std::ranges::sort(samples);
-  const auto p95 = samples.at((samples.size() * 95U + 99U) / 100U - 1U);
+  const auto p95 = samples.at((((samples.size() * 95U) + 99U) / 100U) - 1U);
   std::cout << "maintenance_cpu assets=" << kAssetCount
             << " lod_budget=" << limits.max_reclaimed_lods_per_frame
             << " first_us=" << first << " p95_us=" << p95

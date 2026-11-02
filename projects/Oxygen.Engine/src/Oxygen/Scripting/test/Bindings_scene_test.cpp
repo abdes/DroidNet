@@ -14,7 +14,6 @@
 
 #include "ScriptingModule_test_fixture.h"
 #include <glm/ext/quaternion_geometric.hpp>
-#include <gtest/gtest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Span.h>
@@ -27,6 +26,7 @@
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::base::CheckedAt;
 
@@ -57,12 +57,8 @@ namespace {
         CheckedAt(vertices, index), expected.first.at(index)))
         << "vertex " << index;
     }
-    const auto indices = mesh->IndexBuffer().AsU32();
-    ASSERT_EQ(indices.size(), expected.second.size());
-    for (size_t index = 0; index < indices.size(); ++index) {
-      EXPECT_EQ(CheckedAt(indices, index), expected.second.at(index))
-        << "index " << index;
-    }
+    EXPECT_THAT(mesh->IndexBuffer().Widened(),
+      ::testing::ElementsAreArray(expected.second));
   }
 
 } // namespace

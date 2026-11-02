@@ -109,7 +109,7 @@ inline auto MakeSimpleMesh(const data::LodIndex lod,
 
 struct MeshLayout {
   data::LodIndex lod;
-  std::size_t submesh_count;
+  std::size_t submesh_count {};
 };
 
 //! Create a mesh with the requested LOD index and submesh count.
@@ -207,12 +207,13 @@ inline auto MakeSpreadMesh(const data::LodIndex lod,
     vertices.push_back(v2);
     vertices.push_back(v3);
     const auto base_i = static_cast<uint32_t>(idx.size());
-    idx.push_back(base_v + 0);
-    idx.push_back(base_v + 1);
-    idx.push_back(base_v + 2);
-    idx.push_back(base_v + 2);
-    idx.push_back(base_v + 3);
-    idx.push_back(base_v + 0);
+    // Each view's indices count from its first vertex.
+    idx.push_back(0);
+    idx.push_back(1);
+    idx.push_back(2);
+    idx.push_back(2);
+    idx.push_back(3);
+    idx.push_back(0);
 
     b.WithVertices(vertices).WithIndices(idx);
     b.BeginSubMesh("SMs", mat)

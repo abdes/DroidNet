@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -24,6 +25,7 @@
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -36,14 +38,12 @@ namespace oxygen::content::loaders {
 
 namespace detail {
 
-  // Accepts any Result<T> and checks for error, logs and throws if needed
+  //! Refuses a descriptor that ends before the field `field_name`.
   template <typename ResultT>
   auto CheckResult(const ResultT& result, const char* field_name) -> void
   {
     if (!result) {
-      LOG_F(ERROR, "-failed- on {}: {}", field_name,
-        result.error().message().c_str());
-      throw std::runtime_error(
+      throw data::CookedOpenError(data::CookedDefect::kTruncated,
         fmt::format("error reading geometry asset ({}): {}", field_name,
           result.error().message()));
     }
@@ -104,7 +104,8 @@ namespace detail {
     CheckResult(reserved_result, "m.standard.reserved");
     const auto reserves_zero = data::pak::geometry::HasZeroReserves(info);
     if (!reserves_zero) {
-      throw std::runtime_error("Standard mesh reserved bytes are not zero");
+      throw data::CookedOpenError(data::CookedDefect::kReservedNotZero,
+        "Standard mesh reserved bytes are not zero");
     }
 
     if (context.parse_only) {
@@ -159,7 +160,8 @@ namespace detail {
     CheckResult(reserved_result, "m.procedural.reserved");
     const auto reserves_zero = data::pak::geometry::HasZeroReserves(info);
     if (!reserves_zero) {
-      throw std::runtime_error("Procedural mesh reserved bytes are not zero");
+      throw data::CookedOpenError(data::CookedDefect::kReservedNotZero,
+        "Procedural mesh reserved bytes are not zero");
     }
 
     std::vector<std::byte> param_blob;
@@ -173,10 +175,10 @@ namespace detail {
     auto mesh_opt
       = data::GenerateMeshBuffers(name, std::span<const std::byte>(param_blob));
     if (!mesh_opt || mesh_opt->first.empty() || mesh_opt->second.empty()) {
-      throw std::runtime_error(fmt::format(
-        "Failed to generate procedural mesh '{}': unsupported generator or "
-        "invalid parameters",
-        name));
+      throw data::CookedOpenError(data::CookedDefect::kInvalidValue,
+        fmt::format("Failed to generate procedural mesh '{}': unsupported "
+                    "generator or invalid parameters",
+          name));
     }
     std::tie(vertices, indices) = std::move(*mesh_opt);
   }
@@ -323,38 +325,35 @@ namespace detail {
       const auto max = view.bounding_box_max[axis];
       if (!(min <= max) || !(min >= submesh.bounding_box_min[axis])
         || !(max <= submesh.bounding_box_max[axis])) {
-        throw std::runtime_error(fmt::format(
-          "submesh {} mesh view {} bounds are outside the submesh bounds",
-          submesh_index, view_index));
+        throw data::CookedOpenError(data::CookedDefect::kInconsistent,
+          fmt::format(
+            "submesh {} mesh view {} bounds are outside the submesh bounds",
+            submesh_index, view_index));
       }
     }
   }
 
-  //! A procedural mesh's buffers are generated at load time from its
-  //! parameters, so a view cooked against another generator revision can
-  //! point past them; such a record fails the load instead of aborting.
-  struct GeneratedBufferCounts final {
-    std::size_t vertices;
-    std::size_t indices;
-  };
-
-  inline auto ValidateGeneratedMeshViewRange(
-    const data::pak::geometry::MeshViewDesc& view,
-    const GeneratedBufferCounts& generated, const uint32_t submesh_index,
+  //! Rejects a view that draws nothing, or whose ranges end past the 32-bit
+  //! element range of its buffers. The mesh checks the ranges against its
+  //! buffers when they are bound.
+  inline auto ValidateMeshViewRanges(
+    const data::pak::geometry::MeshViewDesc& view, const uint32_t submesh_index,
     const std::size_t view_index) -> void
   {
-    const auto vertex_end
-      = static_cast<std::uint64_t>(view.first_vertex) + view.vertex_count;
-    const auto index_end
-      = static_cast<std::uint64_t>(view.first_index) + view.index_count;
-    if (vertex_end > generated.vertices || index_end > generated.indices) {
-      throw std::runtime_error(fmt::format(
-        "submesh {} mesh view {} spans vertices [{}, {}) and indices [{}, {}) "
-        "but the procedural generator produced {} vertices and {} indices; "
-        "the geometry was cooked by another generator revision and must be "
-        "recooked",
-        submesh_index, view_index, view.first_vertex, vertex_end,
-        view.first_index, index_end, generated.vertices, generated.indices));
+    constexpr auto kLast = std::numeric_limits<uint32_t>::max();
+    const auto draws = view.vertex_count != 0U && view.index_count != 0U;
+    if (!draws) {
+      throw data::CookedOpenError(data::CookedDefect::kInvalidValue,
+        fmt::format("submesh {} mesh view {} draws no vertex or no index",
+          submesh_index, view_index));
+    }
+    const auto in_range = view.vertex_count <= kLast - view.first_vertex
+      && view.index_count <= kLast - view.first_index;
+    if (!in_range) {
+      throw data::CookedOpenError(data::CookedDefect::kOutOfBounds,
+        fmt::format(
+          "submesh {} mesh view {} ends past the element range of its buffers",
+          submesh_index, view_index));
     }
   }
 
@@ -385,7 +384,8 @@ namespace detail {
       "sm.surface_id");
     desc.surface_id = data::SurfaceId::FromBytes(surface_bytes);
     if (desc.surface_id.IsNil()) {
-      throw std::runtime_error("Geometry surface identity is nil");
+      throw data::CookedOpenError(
+        data::CookedDefect::kInvalidValue, "Geometry surface identity is nil");
     }
 
     // mesh_view_count
@@ -478,17 +478,14 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod,
     // For procedural meshes, generate vertex/index data (owned data)
     detail::LoadProceduralMeshBuffers(reader, desc, name, vertices, indices);
   } else {
-    throw std::runtime_error(fmt::format(
-      "unsupported mesh type: {}", static_cast<int>(desc.mesh_type)));
+    throw data::CookedOpenError(data::CookedDefect::kInvalidValue,
+      fmt::format(
+        "unsupported mesh type: {}", static_cast<int>(desc.mesh_type)));
   }
 
   MeshBuilder builder(lod, name);
   builder.WithDescriptor(desc);
 
-  const auto generated = detail::GeneratedBufferCounts {
-    .vertices = vertices.size(),
-    .indices = indices.size(),
-  };
   if (desc.IsProcedural()) {
     builder.WithVertices(std::move(vertices)).WithIndices(std::move(indices));
   } else {
@@ -499,17 +496,9 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod,
   for (uint32_t i = 0; i < desc.submesh_count; ++i) {
     auto sm_desc = detail::LoadSubMeshDesc(reader);
     auto mesh_views = detail::LoadSubMeshViews(reader, sm_desc.mesh_view_count);
-    if (sm_desc.mesh_view_count != mesh_views.size()) {
-      throw std::runtime_error(
-        fmt::format("submesh {} has {} mesh views, expected {}", i,
-          mesh_views.size(), sm_desc.mesh_view_count));
-    }
     for (std::size_t view = 0; view < mesh_views.size(); ++view) {
+      detail::ValidateMeshViewRanges(mesh_views[view], i, view);
       detail::ValidateMeshViewBounds(sm_desc, mesh_views[view], i, view);
-      if (desc.IsProcedural()) {
-        detail::ValidateGeneratedMeshViewRange(
-          mesh_views[view], generated, i, view);
-      }
     }
     total_read_views += sm_desc.mesh_view_count;
 
@@ -542,7 +531,7 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod,
   }
 
   if (total_read_views != desc.mesh_view_count) {
-    throw std::runtime_error(
+    throw data::CookedOpenError(data::CookedDefect::kInconsistent,
       fmt::format("total read mesh views ({}) != expected ({})",
         total_read_views, desc.mesh_view_count));
   }
@@ -571,9 +560,14 @@ inline auto LoadGeometryAsset(const LoaderContext& context)
   // header (use header loader from Helpers.h)
   LoadAssetHeader(reader, desc.header);
 
-  if (desc.header.asset_type != static_cast<uint8_t>(data::AssetType::kGeometry)
-    || desc.header.version != data::pak::geometry::kGeometryAssetVersion) {
-    throw std::runtime_error("Geometry version requires recooking");
+  if (desc.header.asset_type
+    != static_cast<uint8_t>(data::AssetType::kGeometry)) {
+    throw data::CookedOpenError(
+      data::CookedDefect::kWrongMagic, "Not a geometry descriptor");
+  }
+  if (desc.header.version != data::pak::geometry::kGeometryAssetVersion) {
+    throw data::CookedOpenError(data::CookedDefect::kUnsupportedVersion,
+      "Geometry version requires recooking");
   }
   const auto strings
     = ReadDescriptorStrings(reader, *descriptor_start, desc.header);
@@ -592,7 +586,7 @@ inline auto LoadGeometryAsset(const LoaderContext& context)
 
   if (desc.lod_count == 0
     || desc.lod_count > data::pak::geometry::kMaxLodCount) {
-    throw std::runtime_error(
+    throw data::CookedOpenError(data::CookedDefect::kInvalidValue,
       fmt::format("geometry has {} LODs, expected 1 to {}", desc.lod_count,
         data::pak::geometry::kMaxLodCount));
   }
@@ -619,7 +613,7 @@ inline auto LoadGeometryAsset(const LoaderContext& context)
     submesh_count += mesh->SubMeshes().size();
   }
   if (desc.surface_count > submesh_count) {
-    throw std::runtime_error(
+    throw data::CookedOpenError(data::CookedDefect::kInconsistent,
       fmt::format("geometry has {} surface defaults for {} submeshes",
         desc.surface_count, submesh_count));
   }
@@ -658,7 +652,7 @@ inline auto LoadGeometryAsset(const LoaderContext& context)
             const data::ResourceReferenceIndex index) -> void {
         if ((needs_vertices && vertex == data::kNoResourceReference)
           || (needs_indices && index == data::kNoResourceReference)) {
-          throw std::runtime_error(
+          throw data::CookedOpenError(data::CookedDefect::kMissingPart,
             "Geometry draw requires an absent buffer binding");
         }
       };

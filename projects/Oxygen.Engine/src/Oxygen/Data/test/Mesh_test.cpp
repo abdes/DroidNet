@@ -7,6 +7,7 @@
 // Standard library
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <type_traits>
 #include <vector>
 
@@ -25,12 +26,9 @@
 using oxygen::data::MaterialAsset;
 using oxygen::data::Mesh;
 using oxygen::data::MeshBuilder;
-using oxygen::data::SubMesh;
 using oxygen::data::Vertex;
 
 namespace {
-
-using ::testing::SizeIs;
 
 // MeshAssetBasicTest: immutability, bounding box correctness, shared ownership
 class MeshAssetBasicTest : public testing::Test {
@@ -212,7 +210,7 @@ NOLINT_TEST_F(MeshAssetBasicTest, SharedOwnership)
 }
 
 //! Checks that Mesh constructor rejects empty vertex or index arrays
-//! (death test).
+//! as invalid arguments.
 NOLINT_TEST_F(MeshAssetBasicTest, ConstructorRejectsEmpty)
 {
   // Arrange
@@ -231,12 +229,15 @@ NOLINT_TEST_F(MeshAssetBasicTest, ConstructorRejectsEmpty)
   std::vector<std::uint32_t> one_index = { 0 };
 
   // Act & Assert
-  EXPECT_DEATH(
-    [[maybe_unused]] auto _ = MakeMeshFrom(empty_vertices, one_index), "");
-  EXPECT_DEATH(
-    [[maybe_unused]] auto _ = MakeMeshFrom(one_vertex, empty_indices), "");
-  EXPECT_DEATH(
-    [[maybe_unused]] auto _ = MakeMeshFrom(empty_vertices, empty_indices), "");
+  EXPECT_THROW(
+    [[maybe_unused]] auto _ = MakeMeshFrom(empty_vertices, one_index),
+    std::invalid_argument);
+  EXPECT_THROW(
+    [[maybe_unused]] auto _ = MakeMeshFrom(one_vertex, empty_indices),
+    std::invalid_argument);
+  EXPECT_THROW(
+    [[maybe_unused]] auto _ = MakeMeshFrom(empty_vertices, empty_indices),
+    std::invalid_argument);
 }
 
 // MeshAssetSubMeshTest: submesh creation, validity, material association

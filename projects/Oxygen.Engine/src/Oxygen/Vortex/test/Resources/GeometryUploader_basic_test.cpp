@@ -44,7 +44,7 @@ NOLINT_TEST_F(
     0,
   });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("basic_valid_handle");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
@@ -69,7 +69,7 @@ NOLINT_TEST_F(
     0,
   });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("basic_same_identity");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
@@ -96,8 +96,8 @@ NOLINT_TEST_F(GeometryUploaderBasicTest,
     0,
   });
 
-  const auto mesh_a = MakeValidTriangleMesh("TriA", true);
-  const auto mesh_b = MakeValidTriangleMesh("TriB", true);
+  const auto mesh_a = MakeValidTriangleMesh("TriA");
+  const auto mesh_b = MakeValidTriangleMesh("TriB");
   const auto asset_key_a = MakeGeometryAssetKey("basic_different_identity_a");
   const auto asset_key_b = MakeGeometryAssetKey("basic_different_identity_b");
   const oxygen::vortex::sceneprep::GeometryRef geometry_a {
@@ -129,7 +129,7 @@ NOLINT_TEST_F(
     0,
   });
 
-  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto mesh = MakeValidTriangleMesh("Tri");
   const auto asset_key = MakeGeometryAssetKey("basic_criticality_upgrade");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,

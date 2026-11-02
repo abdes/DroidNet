@@ -101,38 +101,13 @@ constexpr oxygen::vortex::upload::Priority kCriticalUploadPriority { 1 };
     }
   }
 
-  // Validate indices if present
+  // The mesh checked that each index names a vertex of its view.
   const auto& index_buffer = mesh.IndexBuffer();
   if (index_buffer.Count() > 0) {
     constexpr std::uint32_t kMaxIndexCount = 30'000'000; // 30M indices
     if (index_buffer.Count() > kMaxIndexCount) {
       error_msg = "Mesh index count exceeds maximum limit";
       return false;
-    }
-
-    const auto max_vertex_index = static_cast<std::uint32_t>(vertex_count - 1U);
-
-    // Check indices based on type
-    if (index_buffer.type == oxygen::data::detail::IndexType::kUInt16) {
-      const auto indices = index_buffer.AsU16();
-      for (std::size_t i = 0; i < indices.size(); ++i) {
-        if (indices.subspan(i, 1U).front() > max_vertex_index) {
-          error_msg = "Index " + std::to_string(i) + " ("
-            + std::to_string(indices.subspan(i, 1U).front())
-            + ") exceeds vertex count (" + std::to_string(vertex_count) + ")";
-          return false;
-        }
-      }
-    } else if (index_buffer.type == oxygen::data::detail::IndexType::kUInt32) {
-      const auto indices = index_buffer.AsU32();
-      for (std::size_t i = 0; i < indices.size(); ++i) {
-        if (indices.subspan(i, 1U).front() > max_vertex_index) {
-          error_msg = "Index " + std::to_string(i) + " ("
-            + std::to_string(indices.subspan(i, 1U).front())
-            + ") exceeds vertex count (" + std::to_string(vertex_count) + ")";
-          return false;
-        }
-      }
     }
 
     if (index_buffer.Count() % 3 != 0) {

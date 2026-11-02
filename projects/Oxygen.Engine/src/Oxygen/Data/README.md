@@ -104,21 +104,22 @@ Physics, before authored local transforms.
 
 ## 5. Invariants & Validation (Read First)
 
-| Invariant                                                                           | Enforced Where                        |
-| ----------------------------------------------------------------------------------- | ------------------------------------- |
-| Mesh has ≥1 vertex (owned storage)                                                  | Mesh ctor (CHECK_F)                   |
-| Mesh has ≥1 submesh                                                                 | `MeshBuilder::Build`                  |
-| SubMesh has ≥1 MeshView                                                             | Builder + death tests                 |
-| SubMesh has exactly 1 material (non-null)                                           | SubMesh ctor                          |
-| MeshView ranges in-bounds & counts > 0                                              | MeshView ctor                         |
-| Single storage mode per MeshBuilder                                                 | `ValidateStorageType` (logic_error)   |
-| Index buffer element count aligns with size                                         | Referenced storage init               |
-| Referenced mesh may omit index buffer (vertex-only allowed)                         | Builder + tests (IndexCount==0 path)  |
-| Owned-storage mesh must provide indices when vertices supplied (enforced via tests) | MeshBuilder death tests               |
-| Procedural params in valid range                                                    | Each generator (returns std::nullopt) |
+| Invariant                                                     | Enforced Where                                       |
+| ------------------------------------------------------------- | ---------------------------------------------------- |
+| Mesh has ≥1 vertex (owned storage)                            | Mesh ctor (`invalid_argument`)                       |
+| Mesh has ≥1 submesh; SubMesh has ≥1 MeshView                  | `MeshBuilder::Build` (`logic_error`)                 |
+| SubMesh has exactly 1 material (non-null)                     | SubMesh ctor (`logic_error`)                         |
+| MeshView draws ≥1 vertex and ≥1 index                         | MeshView ctor (`invalid_argument`)                   |
+| Single storage mode per MeshBuilder                           | `ValidateStorageType` (`logic_error`)                |
+| Buffers hold whole vertices and 16-bit or 32-bit indices      | Mesh buffer binding (`CookedOpenError`)              |
+| Every view lies in its buffers; its indices name its vertices | MeshView ctor and buffer binding (`CookedOpenError`) |
+| Procedural params in valid range                              | Each generator (returns std::nullopt)                |
 
-Failing invariants: debug builds abort (tests assert). Production loaders must
-ensure descriptors are sanitized before constructing objects.
+A mesh read from its descriptor is built before its buffers load; it shows no
+vertices until `Mesh::SetBufferResources` binds buffers that hold every view.
+A view's indices count from its first vertex, the draw's base vertex. Indices
+are read one at a time (`IndexBufferView::Widened`, `At`), so index bytes can
+start at any address.
 
 ---
 
