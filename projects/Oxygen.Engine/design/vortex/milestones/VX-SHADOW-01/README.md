@@ -86,9 +86,10 @@ starts.
 - **Issues.** Work deferred out of a slice becomes an abdes/DroidNet issue
   and an `OPEN_ITEMS` row in the same change. An issue this plan resolves is
   closed with its evidence when the resolving slice lands.
-- **Captures.** RenderDoc up to v1.46 crashes replaying count-buffer
-  `ExecuteIndirect` ([#30](https://github.com/abdes/DroidNet/issues/30)), which the VSM raster uses; capture VSM
-  passes with PIX until that issue is closed.
+- **Captures.** Use RenderDoc v1.47 or later; earlier releases crash
+  replaying count-buffer `ExecuteIndirect`
+  ([#30](https://github.com/abdes/DroidNet/issues/30)), which the VSM raster
+  uses.
 - **Docs.** Update owner docs in the slice that changes the behavior they
   describe.
 

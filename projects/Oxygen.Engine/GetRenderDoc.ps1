@@ -3,13 +3,13 @@
 #
 # -- Usage --
 # `powershell -ExecutionPolicy Bypass -File GetRenderDoc.ps1`
-# `powershell -ExecutionPolicy Bypass -File GetRenderDoc.ps1 -Tag v1.43`
+# `powershell -ExecutionPolicy Bypass -File GetRenderDoc.ps1 -Tag v1.47`
 # `powershell -ExecutionPolicy Bypass -File GetRenderDoc.ps1 -Latest`
 
 param(
   [Parameter(Position = 0)]
   [string]$SaveFolder = "",
-  [string]$Tag = "v1.43",
+  [string]$Tag = "v1.47",
   [switch]$Latest
 )
 

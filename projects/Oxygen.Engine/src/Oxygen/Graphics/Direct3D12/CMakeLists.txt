@@ -835,14 +835,42 @@ if(WIN32)
     )
 
     if(OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE)
+      if(CMAKE_CONFIGURATION_TYPES)
+        set(
+          _oxygen_renderdoc_runtime_bin_dir
+          "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>"
+        )
+      else()
+        set(
+          _oxygen_renderdoc_runtime_bin_dir
+          "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+        )
+      endif()
+
       # Ensure the RenderDoc runtime DLL is available next to built binaries.
+      # The copy depends on the installed DLL, not on the module relinking, so
+      # upgrading RenderDoc refreshes it; capture and replay builds must match.
       add_custom_command(
-        TARGET ${META_MODULE_TARGET}
-        POST_BUILD
+        OUTPUT
+          "${_oxygen_renderdoc_runtime_bin_dir}/renderdoc.dll"
         COMMAND
-          ${CMAKE_COMMAND} -E copy_if_different "${OXYGEN_RENDERDOC_DLL}"
-          "$<TARGET_FILE_DIR:${META_MODULE_TARGET}>"
+          ${CMAKE_COMMAND} -E make_directory
+          "${_oxygen_renderdoc_runtime_bin_dir}"
+        COMMAND
+          ${CMAKE_COMMAND} -E copy "${OXYGEN_RENDERDOC_DLL}"
+          "${_oxygen_renderdoc_runtime_bin_dir}/renderdoc.dll"
+        DEPENDS
+          "${OXYGEN_RENDERDOC_DLL}"
         VERBATIM
+      )
+      add_custom_target(
+        ${META_MODULE_TARGET}.RenderDocRuntime
+        DEPENDS
+          "${_oxygen_renderdoc_runtime_bin_dir}/renderdoc.dll"
+      )
+      add_dependencies(
+        ${META_MODULE_TARGET}
+        ${META_MODULE_TARGET}.RenderDocRuntime
       )
 
       # Install the RenderDoc runtime DLL alongside executables.

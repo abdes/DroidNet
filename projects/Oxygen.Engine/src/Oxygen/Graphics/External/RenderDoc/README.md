@@ -13,6 +13,12 @@ supported runtime initialization modes:
 - DLL search path
 - explicit DLL path
 
+Use RenderDoc v1.47 or later. Earlier releases crash when loading captures
+with count-buffer `ExecuteIndirect` calls, which Vortex issues every frame
+([#30](https://github.com/abdes/DroidNet/issues/30)). The build copies the
+installed `renderdoc.dll` next to its binaries whenever that DLL changes, so
+capture and replay use the same RenderDoc build.
+
 ## Acquisition
 
 Use the repo-root fetch helper:
@@ -26,7 +32,7 @@ Default installation target:
 
 Default pinned upstream release:
 
-- `v1.43`
+- `v1.47`
 
 Latest-release fetch is supported via:
 
@@ -35,7 +41,7 @@ Latest-release fetch is supported via:
 ## Upstream
 
 - Repository: <https://github.com/baldurk/renderdoc>
-- Header source: <https://raw.githubusercontent.com/baldurk/renderdoc/v1.43/renderdoc/api/app/renderdoc_app.h>
+- Header source: <https://raw.githubusercontent.com/baldurk/renderdoc/v1.47/renderdoc/api/app/renderdoc_app.h>
 
 ## Footprint Policy
 
