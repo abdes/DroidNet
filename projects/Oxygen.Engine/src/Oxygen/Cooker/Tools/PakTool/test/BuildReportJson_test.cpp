@@ -185,6 +185,7 @@ protected:
       .patch_replaced = 2,
       .patch_deleted = 1,
       .patch_unchanged = 0,
+      .patch_deleted_textures = 0,
       .crc_computed = true,
     };
     build_result.telemetry = PakBuildTelemetry {

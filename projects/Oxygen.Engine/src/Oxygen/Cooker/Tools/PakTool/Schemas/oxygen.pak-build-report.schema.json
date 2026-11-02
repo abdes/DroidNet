@@ -10,7 +10,7 @@
     },
     "schema_version": {
       "type": "integer",
-      "const": 4
+      "const": 5
     },
     "tool_name": {
       "type": "string",
@@ -347,6 +347,11 @@
           "type": "integer",
           "minimum": 0
         },
+        "patch_deleted_textures": {
+          "description": "Base textures a patch deletes because its sources no longer hold or reference them.",
+          "type": "integer",
+          "minimum": 0
+        },
         "crc_computed": {
           "type": "boolean"
         }
@@ -361,6 +366,7 @@
         "patch_replaced",
         "patch_deleted",
         "patch_unchanged",
+        "patch_deleted_textures",
         "crc_computed"
       ]
     },

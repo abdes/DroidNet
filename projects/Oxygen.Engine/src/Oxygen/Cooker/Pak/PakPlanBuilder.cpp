@@ -717,6 +717,7 @@ auto BuildOutputCatalog(const pak::PakBuildRequest& request, std::string mount,
   const MountRequirements& requirements,
   std::span<const AggregatedAsset> assets,
   std::span<const pak::PakPatchActionRecord> actions,
+  std::span<const data::AssetKey> deleted_textures,
   const std::unordered_set<data::AssetKey>& tombstones) -> data::PakCatalog
 {
   auto entries = std::vector<data::PakCatalogEntry> {};
@@ -758,6 +759,8 @@ auto BuildOutputCatalog(const pak::PakBuildRequest& request, std::string mount,
         catalog.deleted.push_back(action.asset_key);
       }
     }
+    catalog.deleted.insert(
+      catalog.deleted.end(), deleted_textures.begin(), deleted_textures.end());
   } else {
     catalog.deleted.assign(tombstones.begin(), tombstones.end());
   }
@@ -815,6 +818,11 @@ struct PlanningState final {
   std::unordered_map<data::AssetKey, data::PakCatalogEntry> base_entries;
   //! Every asset type a base layer declares, deleted assets included.
   std::unordered_map<data::AssetKey, data::AssetType> base_asset_types;
+  //! Keys of the textures the patch base layers hold, after their deletions.
+  std::unordered_set<data::AssetKey> base_textures;
+  //! Base textures the planned assets reference by key without a source of
+  //! the patch holding them; a patch keeps them.
+  std::unordered_set<data::AssetKey> referenced_base_textures;
   //! The dependency paks, lowest first.
   std::vector<DependencyLayer> dependencies;
   //! What the planned assets require of each dependency's mount.
@@ -920,6 +928,13 @@ auto ValidatePlanningRequest(PlanningState& state) -> void
     AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
       PakBuildPhase::kPlanning, "pak.plan.patch_requires_base_catalogs",
       "Patch planning requires at least one base catalog.");
+  }
+
+  if (!request.base_texture_keys.empty()
+    && request.base_texture_keys.size() != request.base_catalogs.size()) {
+    AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+      PakBuildPhase::kPlanning, "pak.plan.base_texture_keys_mismatch",
+      "Planning requires the texture keys of every base catalog, or none.");
   }
 
   if (policy.mode == pak::PakPlanMode::kPatch
@@ -1717,9 +1732,11 @@ auto CollectBaseLayers(PlanningState& state) -> void
   using pak::PakDiagnosticSeverity;
 
   auto& diagnostics = state.output.diagnostics;
+  const auto& request = *state.request;
   std::unordered_set<data::SourceKey> base_sources;
   std::vector<data::PakCatalogBase> base_layers;
-  for (const auto& catalog : state.request->base_catalogs) {
+  for (size_t index = 0; index < request.base_catalogs.size(); ++index) {
+    const auto& catalog = request.base_catalogs.at(index);
     if (const auto valid = catalog.Validate(); !valid) {
       AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
         PakBuildPhase::kPlanning, "pak.plan.base_catalog_invalid",
@@ -1757,6 +1774,11 @@ auto CollectBaseLayers(PlanningState& state) -> void
     }
     for (const auto& key : catalog.deleted) {
       state.base_entries.erase(key);
+      state.base_textures.erase(key);
+    }
+    if (index < request.base_texture_keys.size()) {
+      const auto& textures = request.base_texture_keys.at(index);
+      state.base_textures.insert(textures.begin(), textures.end());
     }
   }
 }
@@ -1787,11 +1809,22 @@ auto Require(PlanningState& state, const std::string& mount,
   }
 }
 
+//! Keys of the textures the sources of this pak hold.
+auto SourceTextureKeys(const PlanningState& state)
+  -> std::unordered_set<data::AssetKey>
+{
+  auto keys = std::unordered_set<data::AssetKey> {};
+  for (const auto& path : state.browse_textures | std::views::keys) {
+    keys.insert(data::TextureKeyFromVirtualPath(path));
+  }
+  return keys;
+}
+
 //! Whether a base or dependency pak holds the texture `key`.
 auto LowerLayerHoldsTexture(
   const PlanningState& state, const data::AssetKey& key) -> bool
 {
-  return state.request->base_texture_keys.contains(key)
+  return state.base_textures.contains(key)
     || std::ranges::any_of(
       state.dependencies, [&key](const DependencyLayer& layer) -> bool {
         return layer.textures.contains(key);
@@ -1804,8 +1837,11 @@ auto ValidateTextureReference(PlanningState& state,
   const std::unordered_set<data::AssetKey>& source_textures,
   const AggregatedAsset& asset, const data::AssetKey& key) -> void
 {
-  if (source_textures.contains(key)
-    || state.request->base_texture_keys.contains(key)) {
+  if (source_textures.contains(key)) {
+    return;
+  }
+  if (state.base_textures.contains(key)) {
+    state.referenced_base_textures.insert(key);
     return;
   }
   for (const auto& layer : std::views::reverse(state.dependencies)) {
@@ -1852,10 +1888,7 @@ auto ValidateAssetReferences(PlanningState& state) -> void
     }
     return std::nullopt;
   };
-  auto source_textures = std::unordered_set<data::AssetKey> {};
-  for (const auto& path : state.browse_textures | std::views::keys) {
-    source_textures.insert(data::TextureKeyFromVirtualPath(path));
-  }
+  const auto source_textures = SourceTextureKeys(state);
 
   std::vector<size_t> dependency_counts(state.assets.size(), 0U);
   std::vector<std::vector<size_t>> dependents(state.assets.size());
@@ -2015,6 +2048,7 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
   const auto& base_catalog_entries = state.base_entries;
 
   state.data_plan.patch_actions.clear();
+  state.data_plan.deleted_textures.clear();
   std::unordered_set<data::AssetKey> emitted_patch_keys;
   if (state.policy.mode == pak::PakPlanMode::kPatch) {
     std::vector<data::AssetKey> patch_keys;
@@ -2071,6 +2105,17 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
         emitted_patch_keys.insert(asset_key);
       }
     }
+
+    // A patch deletes the base textures its sources dropped: those they
+    // neither hold nor reference by key, as it deletes the dropped assets.
+    const auto source_textures = SourceTextureKeys(state);
+    for (const auto& key : state.base_textures) {
+      if (!source_textures.contains(key)
+        && !state.referenced_base_textures.contains(key)) {
+        state.data_plan.deleted_textures.push_back(key);
+      }
+    }
+    std::ranges::sort(state.data_plan.deleted_textures, IsAssetKeyLess);
 
     IncludePhysicsScenePatchPartners(state, emitted_patch_keys);
 
@@ -2664,7 +2709,8 @@ auto PlanFileLayout(PlanningState& state) -> void
   if (state.mount.has_value()) {
     state.output.output_catalog
       = BuildOutputCatalog(*state.request, *state.mount, state.requirements,
-        state.assets, state.data_plan.patch_actions, state.tombstones);
+        state.assets, state.data_plan.patch_actions,
+        state.data_plan.deleted_textures, state.tombstones);
     auto catalog_bytes = state.output.output_catalog.Encode();
     if (!catalog_bytes) {
       throw std::runtime_error(catalog_bytes.error());
@@ -2926,6 +2972,8 @@ auto ValidateAndFinalizeResult(PlanningState& state) -> void
       break;
     }
   }
+  state.output.summary.patch_deleted_textures
+    = static_cast<uint32_t>(state.output.plan->DeletedTextures().size());
 }
 
 auto ValidateFinalizeInvariants(PlanningState& state) -> void

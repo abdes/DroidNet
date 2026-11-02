@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -34,8 +35,10 @@
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Cooker/testing/TextureBuilder.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakCatalog.h>
@@ -447,6 +450,140 @@ NOLINT_TEST(PakPlanBuilderPatchTest, UnchangedPatchEmitsNoAssets)
   ASSERT_THAT(unchanged.diagnostics, HasNoErrors());
   ASSERT_HAS_VALUE(unchanged.plan);
   EXPECT_TRUE(unchanged.plan->Assets().empty());
+}
+
+//=== Base textures a patch drops ===-----------------------------------------//
+
+//! The key of the texture `Textures/<name>.otex` of the `Game` mount.
+auto GameTextureKey(const std::string_view name) -> data::AssetKey
+{
+  return data::TextureKeyFromVirtualPath(
+    "/Game/Textures/" + std::string(name) + ".otex");
+}
+
+//! A `Game` root with the material `Wood.omat` and the textures
+//! `Textures/<name>.otex` of `textures`; the material's base color names
+//! `external`, a texture of another layer, when it is set.
+auto TexturedRoot(const uint8_t seed,
+  const std::vector<std::string_view>& textures,
+  const std::optional<data::AssetKey>& external = std::nullopt)
+  -> LooseCookedRoot
+{
+  auto root = LooseCookedRoot { "Game", seed };
+  const auto texture = fixtures::TextureBuilder {};
+  const auto payload = texture.Payload();
+  for (const auto name : textures) {
+    root.DescribeTexture("Textures/" + std::string(name) + ".otex",
+      root.AddTexture(payload, texture.Record(payload)));
+  }
+  auto material = fixtures::MaterialBuilder { "Wood" };
+  if (external.has_value()) {
+    material.ExternalTexture(
+      &render::MaterialAssetDesc::base_color_texture, *external);
+  }
+  static_cast<void>(root.Material("Wood.omat", material));
+  return root;
+}
+
+//! Plans a patch of `patched` over the full pak of `base`, which holds the
+//! textures `base_textures`.
+auto PlanTexturePatch(const LooseCookedRoot& base,
+  const LooseCookedRoot& patched,
+  const std::vector<std::string_view>& base_textures)
+  -> pak::PakPlanBuilder::BuildResult
+{
+  auto workspace = PakWorkspace {};
+  const auto full = workspace.FullRequest({ workspace.Add(base) }, "base.pak");
+  const auto packed = PakWorkspace::Pack(full);
+  EXPECT_THAT(packed.Diagnostics(), HasNoErrors());
+  auto request = workspace.PatchRequest(
+    { workspace.Add(patched) }, { packed.planned.output_catalog }, "patch.pak");
+  auto keys = std::unordered_set<data::AssetKey> {};
+  for (const auto name : base_textures) {
+    keys.insert(GameTextureKey(name));
+  }
+  request.base_texture_keys = { std::move(keys) };
+  return pak::PakPlanBuilder {}.Build(request);
+}
+
+//! A base texture the patch's sources no longer hold is deleted, as a
+//! dropped asset is.
+NOLINT_TEST(PakPlanBuilderPatchTest, DroppedBaseTextureIsDeleted)
+{
+  const auto result = PlanTexturePatch(TexturedRoot(1U, { "Sky", "Moon" }),
+    TexturedRoot(2U, { "Moon" }), { "Sky", "Moon" });
+
+  ASSERT_THAT(result.diagnostics, HasNoErrors());
+  ASSERT_HAS_VALUE(result.plan);
+  EXPECT_THAT(result.plan->DeletedTextures(),
+    ::testing::ElementsAre(GameTextureKey("Sky")));
+  EXPECT_THAT(
+    result.output_catalog.deleted, ::testing::Contains(GameTextureKey("Sky")));
+  EXPECT_EQ(result.summary.patch_deleted_textures, 1U);
+}
+
+//! A base texture the patch still holds, or references by key without
+//! holding it, stays.
+NOLINT_TEST(PakPlanBuilderPatchTest, HeldOrReferencedBaseTextureStays)
+{
+  const auto result = PlanTexturePatch(TexturedRoot(1U, { "Sky", "Moon" }),
+    TexturedRoot(2U, { "Sky" }, GameTextureKey("Moon")), { "Sky", "Moon" });
+
+  ASSERT_THAT(result.diagnostics, HasNoErrors());
+  ASSERT_HAS_VALUE(result.plan);
+  EXPECT_TRUE(result.plan->DeletedTextures().empty());
+  EXPECT_TRUE(result.output_catalog.deleted.empty());
+  EXPECT_EQ(result.summary.patch_deleted_textures, 0U);
+}
+
+//! A texture an earlier patch of the base chain deleted is not deleted
+//! again, and a texture it added is deleted when dropped.
+NOLINT_TEST(PakPlanBuilderPatchTest, BaseChainDeletionsApplyInOrder)
+{
+  auto workspace = PakWorkspace {};
+  const auto full = workspace.FullRequest(
+    { workspace.Add(TexturedRoot(1U, { "Sky" })) }, "base.pak");
+  const auto base = PakWorkspace::Pack(full);
+  ASSERT_THAT(base.Diagnostics(), HasNoErrors());
+  auto first_request
+    = workspace.PatchRequest({ workspace.Add(TexturedRoot(2U, { "Moon" })) },
+      { base.planned.output_catalog }, "p1.pak");
+  first_request.base_texture_keys = { { GameTextureKey("Sky") } };
+  const auto first = PakWorkspace::Pack(first_request);
+  ASSERT_THAT(first.Diagnostics(), HasNoErrors());
+  auto second_request
+    = workspace.PatchRequest({ workspace.Add(TexturedRoot(3U, {})) },
+      { base.planned.output_catalog, first.planned.output_catalog }, "p2.pak");
+  second_request.base_texture_keys
+    = { { GameTextureKey("Sky") }, { GameTextureKey("Moon") } };
+
+  const auto second = pak::PakPlanBuilder {}.Build(second_request);
+
+  ASSERT_THAT(second.diagnostics, HasNoErrors());
+  ASSERT_HAS_VALUE(second.plan);
+  EXPECT_THAT(first.planned.output_catalog.deleted,
+    ::testing::Contains(GameTextureKey("Sky")));
+  EXPECT_THAT(second.plan->DeletedTextures(),
+    ::testing::ElementsAre(GameTextureKey("Moon")));
+}
+
+//! Texture keys for some base catalogs only are refused.
+NOLINT_TEST(PakPlanBuilderPatchTest, BaseTextureKeysCoverEveryBase)
+{
+  auto workspace = PakWorkspace {};
+  const auto full = workspace.FullRequest(
+    { workspace.Add(TexturedRoot(1U, { "Sky" })) }, "base.pak");
+  const auto base = PakWorkspace::Pack(full);
+  ASSERT_THAT(base.Diagnostics(), HasNoErrors());
+  auto request
+    = workspace.PatchRequest({ workspace.Add(TexturedRoot(2U, { "Sky" })) },
+      { base.planned.output_catalog }, "patch.pak");
+  request.base_texture_keys = { { GameTextureKey("Sky") }, {} };
+
+  const auto result = pak::PakPlanBuilder {}.Build(request);
+
+  EXPECT_THAT(
+    result.diagnostics, HasDiagnostic("pak.plan.base_texture_keys_mismatch"));
 }
 
 //=== Incremental patches mounted by the resolver ===-------------------------//

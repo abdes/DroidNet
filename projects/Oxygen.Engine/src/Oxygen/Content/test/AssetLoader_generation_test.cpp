@@ -1508,6 +1508,57 @@ namespace {
     EXPECT_EQ(failures.front().requirement.key, EngineMaterialKey());
   }
 
+  //! A patch of the engine pak that drops its texture deletes it: the texture
+  //! no longer resolves above the patch, and a pak requiring it of `Engine`
+  //! is refused there.
+  NOLINT_TEST_F(AssetLoaderBasicTest, DroppedTextureIsTombstonedByAPatch)
+  {
+    // Arrange
+    constexpr auto kMeter = std::string_view { "/Engine/Meter.otex" };
+    const auto texture = cooker::testing::TextureBuilder {};
+    const auto payload = texture.Payload();
+    auto textured = LooseCookedRoot { "Engine" };
+    static_cast<void>(textured.Material("Default.omat"));
+    textured.DescribeTexture(
+      "Meter.otex", textured.AddTexture(payload, texture.Record(payload)));
+    auto engine = CookedPak { std::move(textured) };
+    engine.Identity(SourceKeyOf(kEngineSeed));
+    auto dropped = LooseCookedRoot { "Engine" };
+    static_cast<void>(dropped.Material("Default.omat"));
+    auto patch = CookedPak { std::move(dropped) };
+    patch.PatchOf(engine);
+    auto user = LooseCookedRoot { "Content" };
+    auto material = cooker::testing::MaterialBuilder { "Gauge" };
+    material.ExternalTexture(
+      &data::pak::render::MaterialAssetDesc::base_color_texture,
+      data::TextureKeyFromVirtualPath(kMeter));
+    static_cast<void>(user.Material("Gauge.omat", material));
+    auto content = CookedPak { std::move(user) };
+    content.DependsOn(engine).Identity(SourceKeyOf(kContentSeed));
+    const auto engine_pak = TempDir() / "engine.pak";
+    const auto patch_pak = TempDir() / "patch.pak";
+    const auto content_pak = TempDir() / "content.pak";
+    cooker::testing::Materialize(engine.Encode(), engine_pak);
+    cooker::testing::Materialize(patch.Encode(), patch_pak);
+    cooker::testing::Materialize(content.Encode(), content_pak);
+    AssetLoader loader(
+      engine::internal::EngineTagFactory::Get(), EngineConfig(engine_pak));
+    const auto held = loader.ResolveTextureResourceKey(kMeter);
+
+    // Act
+    loader.AddPakFile(patch_pak);
+    const auto deleted = loader.ResolveTextureResourceKey(kMeter);
+    const auto failures = RefusalOf(loader, content_pak);
+
+    // Assert
+    EXPECT_TRUE(held.has_value());
+    EXPECT_FALSE(deleted.has_value());
+    ASSERT_EQ(failures.size(), 1U);
+    EXPECT_EQ(
+      failures.front().requirement.kind, data::KeyReferenceKind::kTexture);
+    EXPECT_EQ(failures.front().failure, RequirementFailure::kTombstoned);
+  }
+
   //! An `Engine` whose default material key holds a geometry refuses a pak
   //! that requires a material there, naming the type it found.
   NOLINT_TEST_F(AssetLoaderBasicTest, DependencyOfAnotherTypeRefusesThePak)

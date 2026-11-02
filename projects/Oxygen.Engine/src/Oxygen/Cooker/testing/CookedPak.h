@@ -74,7 +74,8 @@ private:
   std::vector<LooseCookedRoot> roots_;
   std::vector<content::pak::PakDependency> dependencies_;
   std::vector<data::PakCatalog> bases_;
-  std::unordered_set<data::AssetKey> base_texture_keys_;
+  //! The texture keys of each of `bases_`, in its order.
+  std::vector<std::unordered_set<data::AssetKey>> base_texture_keys_;
   uint16_t content_version_ = 1U;
   std::optional<data::SourceKey> identity_;
 };

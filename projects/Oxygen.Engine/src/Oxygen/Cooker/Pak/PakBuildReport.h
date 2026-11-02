@@ -52,6 +52,8 @@ struct PakBuildSummary {
   uint32_t patch_replaced = 0;
   uint32_t patch_deleted = 0;
   uint32_t patch_unchanged = 0;
+  //! Base textures a patch deletes, which its sources no longer hold.
+  uint32_t patch_deleted_textures = 0;
 
   bool crc_computed = true;
 };

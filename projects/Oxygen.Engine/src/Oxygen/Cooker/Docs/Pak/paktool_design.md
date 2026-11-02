@@ -803,6 +803,13 @@ incremental P2 therefore compares against B + P1; a cumulative P2 compares
 against B and replaces earlier cumulative patches at deployment. A change back
 to B's bytes must still be emitted when P1 supplied different bytes.
 
+Textures named by virtual path compose the same way: each base layer adds the
+textures its browse index lists, after its deletions remove earlier ones. A
+patch deletes every effective base texture its sources neither hold nor
+reference by key, so the catalog's deletions hold texture keys beside asset
+keys, and the build report counts them as `patch_deleted_textures`. A texture
+reached only by a row of its own pak's table is never deleted.
+
 Validate base identities, content versions, catalog digests and order before
 patch activation. Declared bases must form the contiguous suffix immediately
 below the patch. Additional lower-priority layers are allowed: Engine → Game →

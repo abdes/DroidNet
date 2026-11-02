@@ -157,6 +157,8 @@ public:
     PakCatalogPlan catalog {};
     PakFooterPlan footer {};
     std::vector<PakPatchActionRecord> patch_actions;
+    //! Keys of the base textures a patch deletes, sorted.
+    std::vector<data::AssetKey> deleted_textures;
     std::vector<PakPatchClosureRecord> patch_closure;
     uint64_t planned_file_size = 0;
   };
@@ -184,6 +186,8 @@ public:
   OXGN_COOK_NDAPI auto Catalog() const noexcept -> const PakCatalogPlan&;
   OXGN_COOK_NDAPI auto PatchActions() const noexcept
     -> std::span<const PakPatchActionRecord>;
+  OXGN_COOK_NDAPI auto DeletedTextures() const noexcept
+    -> std::span<const data::AssetKey>;
   OXGN_COOK_NDAPI auto PatchClosure() const noexcept
     -> std::span<const PakPatchClosureRecord>;
   OXGN_COOK_NDAPI auto PlannedFileSize() const noexcept -> uint64_t;

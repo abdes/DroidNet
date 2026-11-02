@@ -55,9 +55,11 @@ struct PakBuildRequest {
   data::SourceKey source_key {};
 
   std::vector<data::PakCatalog> base_catalogs;
-  //! Keys of the textures the base paks hold, which assets of a patch may
-  //! reference by key without containing them.
-  std::unordered_set<data::AssetKey> base_texture_keys;
+  //! Keys of the textures each base pak's browse index lists, in the order of
+  //! `base_catalogs`; empty when no base pak holds a texture. Assets of a
+  //! patch may reference these by key without containing them, and a patch
+  //! deletes those its sources no longer hold.
+  std::vector<std::unordered_set<data::AssetKey>> base_texture_keys;
   //! The paks this pak references without containing them, lowest first;
   //! full builds and patches alike.
   std::vector<PakDependency> dependencies;

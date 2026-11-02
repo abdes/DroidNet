@@ -19,6 +19,7 @@
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
@@ -547,7 +548,7 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
   build_request.source_key = source_key.value();
   for (auto& base : *base_paks) {
     build_request.base_catalogs.push_back(std::move(base.catalog));
-    build_request.base_texture_keys.merge(base.texture_keys);
+    build_request.base_texture_keys.push_back(std::move(base.texture_keys));
   }
   build_request.dependencies = std::move(*dependency_paks);
   build_request.options.deterministic = options.request.deterministic;

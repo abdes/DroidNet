@@ -22,12 +22,12 @@
 
 #include "ArtifactPublication.h"
 #include "PakToolOptions.h"
-#include "RequestPreparation.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
@@ -241,7 +241,8 @@ namespace {
         << " patch_created=" << summary.patch_created
         << " patch_replaced=" << summary.patch_replaced
         << " patch_deleted=" << summary.patch_deleted
-        << " patch_unchanged=" << summary.patch_unchanged;
+        << " patch_unchanged=" << summary.patch_unchanged
+        << " patch_deleted_textures=" << summary.patch_deleted_textures;
     return out.str();
   }
 

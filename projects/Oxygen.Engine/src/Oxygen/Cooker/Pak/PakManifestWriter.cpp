@@ -228,6 +228,8 @@ auto BuildManifestModel(const pak::PakBuildRequest& request,
         break;
       }
     }
+    manifest.deleted.insert(manifest.deleted.end(),
+      plan.DeletedTextures().begin(), plan.DeletedTextures().end());
   } else {
     manifest.created.reserve(plan.Assets().size());
     for (const auto& asset : plan.Assets()) {

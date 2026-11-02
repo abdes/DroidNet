@@ -274,7 +274,7 @@ NOLINT_TEST(PakCompactionTest, PatchOverCompactedBasePacksOnlyChangedResources)
   const auto wood = AddWood(recooked, recooked.AddTexture(Payload(5U)));
   auto request = workspace.PatchRequest({ workspace.Add(recooked) },
     { workspace.Open(base_request.output_pak_path).Pak().Catalog() });
-  request.base_texture_keys = { data::TextureKeyFromVirtualPath(sky) };
+  request.base_texture_keys = { { data::TextureKeyFromVirtualPath(sky) } };
 
   // Act
   const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);

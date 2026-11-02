@@ -10,6 +10,7 @@
 #include <utility>
 
 #include <Oxygen/Cooker/Pak/PakPlan.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 
 namespace oxygen::content::pak {
 
@@ -102,6 +103,12 @@ auto PakPlan::PatchActions() const noexcept
   -> std::span<const PakPatchActionRecord>
 {
   return data_.patch_actions;
+}
+
+auto PakPlan::DeletedTextures() const noexcept
+  -> std::span<const data::AssetKey>
+{
+  return data_.deleted_textures;
 }
 
 auto PakPlan::PatchClosure() const noexcept

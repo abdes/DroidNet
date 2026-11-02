@@ -161,6 +161,8 @@ auto PakBuilder::Build(const PakBuildRequest& request) noexcept
   result.summary.patch_replaced = plan_result.summary.patch_replaced;
   result.summary.patch_deleted = plan_result.summary.patch_deleted;
   result.summary.patch_unchanged = plan_result.summary.patch_unchanged;
+  result.summary.patch_deleted_textures
+    = plan_result.summary.patch_deleted_textures;
 
   for (const auto& diagnostic : plan_result.diagnostics) {
     AddDiagnosticRecord(result, diagnostic);

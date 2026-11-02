@@ -104,7 +104,8 @@ A pak can rely on paks mounted beneath it in two ways:
   the pak.
 - A **patch base** is the exact stack a patch's deltas apply to: the patch
   classifies every asset as created, replaced, deleted or unchanged against its
-  bases, and its deletions hide base assets. A full build has no bases.
+  bases, and its deletions hide base assets. It also deletes the named base
+  textures its sources neither hold nor reference. A full build has no bases.
 
 ```powershell
 Oxygen.Cooker.PakTool.exe build --loose-source .cooked/Content `

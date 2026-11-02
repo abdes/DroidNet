@@ -276,6 +276,7 @@ namespace {
       { "patch_replaced", summary.patch_replaced },
       { "patch_deleted", summary.patch_deleted },
       { "patch_unchanged", summary.patch_unchanged },
+      { "patch_deleted_textures", summary.patch_deleted_textures },
       { "crc_computed", summary.crc_computed },
     };
   }
@@ -344,7 +345,7 @@ auto ToReportJson(const PakToolBuildReportInput& input) -> ordered_json
 {
   return ordered_json {
     { "$schema", std::string(kBuildReportSchemaRef) },
-    { "schema_version", 4 },
+    { "schema_version", 5 },
     { "tool_name", std::string(kToolName) },
     { "tool_version", input.tool_version },
     { "command", input.command },

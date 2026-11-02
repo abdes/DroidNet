@@ -67,7 +67,7 @@ auto CookedPak::PatchOf(const CookedPak& base) -> CookedPak&
 {
   const auto pak = base.Open();
   bases_.push_back(pak.Pak().Catalog());
-  base_texture_keys_.merge(TextureKeysOf(pak));
+  base_texture_keys_.push_back(TextureKeysOf(pak));
   return *this;
 }
 

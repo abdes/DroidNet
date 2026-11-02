@@ -43,7 +43,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       "AcceptsCanonicalPatchReportDocument",
       R"({
     "$schema": "https://oxygen-engine.dev/schemas/oxygen.pak-build-report.schema.json",
-    "schema_version": 4,
+    "schema_version": 5,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "patch",
@@ -111,6 +111,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       "patch_replaced": 2,
       "patch_deleted": 1,
       "patch_unchanged": 0,
+      "patch_deleted_textures": 0,
       "crc_computed": true
     },
     "telemetry": {
@@ -140,7 +141,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
     SchemaCase {
       "AcceptsFailureReportWithSuppressedManifestPublication",
       R"({
-    "schema_version": 4,
+    "schema_version": 5,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "build",
@@ -197,6 +198,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       "patch_replaced": 0,
       "patch_deleted": 0,
       "patch_unchanged": 0,
+      "patch_deleted_textures": 0,
       "crc_computed": false
     },
     "telemetry": {
@@ -232,7 +234,7 @@ NOLINT_TEST(PakBuildReportSchemaTest,
   RejectsNonCanonicalRequestFieldsAndUnexpectedProperties)
 {
   const auto doc = json::parse(R"({
-    "schema_version": 4,
+    "schema_version": 5,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "patch",
@@ -295,6 +297,7 @@ NOLINT_TEST(PakBuildReportSchemaTest,
       "patch_replaced": 0,
       "patch_deleted": 0,
       "patch_unchanged": 0,
+      "patch_deleted_textures": 0,
       "crc_computed": true
     },
     "telemetry": {

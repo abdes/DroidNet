@@ -711,7 +711,7 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   const auto& catalog = pak.Catalog();
   Field(ctx_.Out(), "Mount", catalog.mount);
   Field(ctx_.Out(), "Catalog Assets", std::to_string(catalog.entries.size()));
-  Field(ctx_.Out(), "Deleted Assets", std::to_string(catalog.deleted.size()));
+  Field(ctx_.Out(), "Deleted Keys", std::to_string(catalog.deleted.size()));
   Field(
     ctx_.Out(), "Required Base Layers", std::to_string(catalog.bases.size()));
   for (const auto& base : catalog.bases) {
