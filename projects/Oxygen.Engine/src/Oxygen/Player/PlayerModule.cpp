@@ -31,7 +31,6 @@
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Content/ContentMounts.h>
-#include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Control/EventLog.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -173,6 +172,9 @@ struct Remount {
   std::string failure;
   //! Why the remount failed, when a code names it.
   std::string_view failure_code;
+  //! The refused source and why, when the failure records more than its
+  //! message; null otherwise.
+  nlohmann::json refusal;
   std::string scene;
 };
 
@@ -269,13 +271,11 @@ namespace {
       co_await loader->WaitForPendingLoadsAsync();
       auto retirement = loader->CommitPreparedMounts(std::move(prepared));
       retirement.Finish();
-    } catch (const content::DependencyRequirementError& ex) {
-      remount->failure = fmt::format(
-        "the cooked content could not be remounted: {}", ex.what());
-      remount->failure_code = kDependencyMissingCode;
     } catch (const std::exception& ex) {
-      remount->failure = fmt::format(
-        "the cooked content could not be remounted: {}", ex.what());
+      remount->failure
+        = fmt::format("the cooked content could not be mounted: {}", ex.what());
+      remount->failure_code = MountFailureCode(std::current_exception());
+      remount->refusal = MountRefusalData(std::current_exception());
     }
     remount->finished = true;
   }
@@ -320,28 +320,11 @@ auto PlayerModule::OnHostAttached(const observer_ptr<IAsyncEngine> engine)
     LOG_F(ERROR, "{}: the engine has no asset loader", GetName());
     return false;
   }
-  auto mounted = true;
-  for (const auto& mount : launch_.mounts) {
-    try {
-      if (mount.kind == LaunchMount::Kind::kPakFile) {
-        loader->AddPakFile(mount.path);
-      } else {
-        loader->AddLooseCookedRoot(mount.path);
-      }
-    } catch (const content::DependencyRequirementError& error) {
-      // The process stays up, showing why, so the launcher can fix the
-      // mounts and play again.
-      LOG_F(
-        ERROR, "{}: {}: {}", GetName(), kDependencyMissingCode, error.what());
-      status_ = error.what();
-      session_scene_ = next_scene_;
-      Publish(
-        LifecycleState::kSceneFailed, error.what(), {}, kDependencyMissingCode);
-      mounted = false;
-      break;
-    }
-    LOG_F(INFO, "{}: mounted '{}'", GetName(), mount.path.string());
-  }
+  // The launch file's content mounts on the first frame, as a Play remounts
+  // it: prepared on the loop, verified with awaited reads, committed whole.
+  // A refusal keeps the process up, showing why, so the launcher can fix the
+  // mounts and play again.
+  mount_on_first_frame_ = true;
 
   main_view_id_ = Publisher().GetOrCreateViewId("MainView");
   main_view_state_ = vortex::CompositionView::ViewStateHandle { 1U };
@@ -356,11 +339,7 @@ auto PlayerModule::OnHostAttached(const observer_ptr<IAsyncEngine> engine)
       });
   }
 
-  // The player plays as soon as the engine runs and its content mounted.
-  if (mounted) {
-    status_ = fmt::format("Loading {}", next_scene_);
-    static_cast<void>(engine->BeginSession());
-  }
+  status_ = fmt::format("Loading {}", next_scene_);
   return true;
 }
 
@@ -515,6 +494,9 @@ auto PlayerModule::OnFrameStart(
     LogSessionLeftovers();
   }
   ReportUnknownStartupCVars();
+  if (std::exchange(mount_on_first_frame_, false)) {
+    StartRemount();
+  }
   FinishRemount();
   FinishLoad();
   ReportPauseChanges();
@@ -553,7 +535,7 @@ auto PlayerModule::HandlePlay(const std::optional<std::string>& scene)
   -> commands::CommandResult
 {
   if (Host().engine->GetSessionState() != IAsyncEngine::SessionState::kNone
-    || remount_) {
+    || remount_ || mount_on_first_frame_) {
     return commands::CommandResult::Failure(
       commands::ExecutionStatus::kError, "a play session is already running");
   }
@@ -595,16 +577,20 @@ auto PlayerModule::FinishRemount() -> void
     LOG_F(ERROR, "{}: {}", GetName(), remount->failure);
     status_ = remount->failure;
     session_scene_ = remount->scene;
-    Publish(LifecycleState::kSceneFailed, remount->failure, {},
-      remount->failure_code);
+    auto failed = LifecycleData(LifecycleState::kSceneFailed, session_scene_,
+      remount->failure, {}, remount->failure_code);
+    if (!remount->refusal.is_null()) {
+      failed["refusal"] = remount->refusal;
+    }
+    events_->Publish("lifecycle", failed);
     Publish(LifecycleState::kSessionEnded);
     auto failure = commands::CommandResult::Failure(
       commands::ExecutionStatus::kError, remount->failure);
-    failure.data = { { "scene", remount->scene } };
+    failure.data = std::move(failed);
     ResolvePlay(failure);
     return;
   }
-  LOG_F(INFO, "{}: remounted the cooked content", GetName());
+  LOG_F(INFO, "{}: mounted the cooked content", GetName());
   static_cast<void>(Host().engine->BeginSession());
 }
 

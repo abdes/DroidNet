@@ -19,6 +19,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Content/Internal/CookedOpenFailure.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/ResourceTypes.h>
 #include <Oxygen/Serio/AnyDevice.h>
@@ -283,7 +284,7 @@ private:
     if (!file) {
       LOG_F(ERROR, "Failed to open pak file '{}' for payloads: {}",
         pak_path.string(), file.error().message());
-      throw std::system_error(file.error(), "open '" + pak_path.string() + "'");
+      ThrowOpenFailure(file.error(), pak_path);
     }
     return std::move(file).value();
   }

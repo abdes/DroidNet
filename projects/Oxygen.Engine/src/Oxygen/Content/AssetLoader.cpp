@@ -57,6 +57,7 @@
 #include <Oxygen/Content/Internal/ContentReleaseQueue.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/ContentSourceView.h>
+#include <Oxygen/Content/Internal/CookedOpenFailure.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/EvictionRegistry.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
@@ -1096,13 +1097,12 @@ auto AssetLoader::MountPakFile(const std::filesystem::path& path)
 
   auto new_source = std::make_unique<internal::PakFileSource>(
     normalized, verify_content_hashes_, io_driver_);
-  const auto source_key = new_source->GetSourceKey();
   const bool was_already_mounted
     = std::ranges::find(impl_->source_registry.PakPaths(), normalized)
     != impl_->source_registry.PakPaths().end();
 #ifndef NDEBUG
   {
-    if (source_key.IsNil()) {
+    if (new_source->GetSourceKey().IsNil()) {
       LOG_F(WARNING,
         "Mounted PAK has zero SourceKey (PakHeader.source_identity); cache "
         "aliasing risk: "
@@ -1168,7 +1168,6 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
       ? internal::LooseCookedSource::OpenMode::kVerifyContent
       : internal::LooseCookedSource::OpenMode::kValidateMetadata,
     serio::FileLock {}, io_driver_);
-  const auto source_key = new_source->GetSourceKey();
 
   auto clear_content_caches = [this] -> void {
     const OperationLifetime operation(*this);
@@ -1196,7 +1195,7 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
     [&](const auto& s) -> auto { return s && s->DebugName() == normalized_s; });
 #ifndef NDEBUG
   {
-    if (source_key.IsNil()) {
+    if (new_source->GetSourceKey().IsNil()) {
       LOG_F(WARNING,
         "Mounted loose cooked root has zero SourceKey "
         "(IndexHeader.source_identity); "
@@ -1302,7 +1301,7 @@ auto AssetLoader::PrepareMountSetAsync(
         const std::filesystem::path& path) -> co::Co<serio::AsyncFile> {
     auto file = driver->Open(path, {});
     if (!file) {
-      throw std::system_error(file.error(), "open '" + path.string() + "'");
+      internal::ThrowOpenFailure(file.error(), path);
     }
     if (verify_content) {
       co_await VerifyPakAsync(*file, path);

@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <filesystem>
 #include <span>
 #include <string_view>
-#include <system_error>
 
 #include "./AssetLoader_test.h"
 
@@ -44,8 +44,24 @@ NOLINT_TEST_F(AssetLoaderBasicTest, MissingPakLeavesMountsUnchanged)
   try {
     asset_loader_->AddPakFile(TempDir() / "missing.pak");
     FAIL() << "Missing source was mounted";
-  } catch (const std::system_error& error) {
-    EXPECT_EQ(error.code(), std::errc::no_such_file_or_directory);
+  } catch (const oxygen::data::CookedOpenError& error) {
+    EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kAbsent);
+  }
+  EXPECT_TRUE(asset_loader_->EnumerateMountedSources().empty());
+}
+
+//! A folder that holds no loose cooked index is refused as absent, as a
+//! missing pak is.
+NOLINT_TEST_F(AssetLoaderBasicTest, MissingLooseRootLeavesMountsUnchanged)
+{
+  const auto empty = TempDir() / "empty";
+  std::filesystem::create_directories(empty);
+
+  try {
+    asset_loader_->AddLooseCookedRoot(empty);
+    FAIL() << "A folder without an index was mounted";
+  } catch (const oxygen::data::CookedOpenError& error) {
+    EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kAbsent);
   }
   EXPECT_TRUE(asset_loader_->EnumerateMountedSources().empty());
 }

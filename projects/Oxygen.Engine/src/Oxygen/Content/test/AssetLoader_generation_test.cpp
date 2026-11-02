@@ -1691,7 +1691,7 @@ namespace {
     std::filesystem::rename(engine_pak, TempDir() / "moved.pak");
 
     // Act and Assert
-    NOLINT_EXPECT_THROW(loader.ClearMounts(), std::system_error);
+    NOLINT_EXPECT_THROW(loader.ClearMounts(), data::CookedOpenError);
     EXPECT_EQ(loader.EnumerateMountedSources().size(), 2U);
   }
 

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <exception>
 #include <span>
 #include <string_view>
 
@@ -46,6 +47,38 @@ inline constexpr std::string_view kModelSceneCode = "player.model_scene";
 //! roots and paks mounted below it do not meet.
 inline constexpr std::string_view kDependencyMissingCode
   = "player.launch.dependency_missing";
+
+//! The code of a `scene_failed` event for a launch mount that does not exist.
+inline constexpr std::string_view kContentMissingCode
+  = "player.launch.content_missing";
+//! The code of a `scene_failed` event for a launch mount whose cooked bytes
+//! are refused: another format or version, corrupt or unverifiable.
+inline constexpr std::string_view kContentRefusedCode
+  = "player.launch.content_refused";
+//! The code of a `scene_failed` event for a launch mount that has the
+//! SourceKey of another mounted source.
+inline constexpr std::string_view kSourceKeyConflictCode
+  = "player.launch.source_key_conflict";
+//! The code of a `scene_failed` event for a launch mount the system could not
+//! read, such as one another process holds or one access is denied to.
+inline constexpr std::string_view kContentUnreadableCode
+  = "player.launch.content_unreadable";
+//! The code of a `scene_failed` event for any other failure to mount the
+//! launch file's content.
+inline constexpr std::string_view kMountFailedCode
+  = "player.launch.mount_failed";
+
+//! The code of the `scene_failed` event for `error`, thrown while mounting
+//! the launch file's content.
+[[nodiscard]] auto MountFailureCode(const std::exception_ptr& error) noexcept
+  -> std::string_view;
+
+//! The `refusal` of the `scene_failed` event for `error`, thrown while
+//! mounting the launch file's content: the refused source with each failed
+//! requirement, or the source whose SourceKey conflicts and the one that has
+//! it. Null when `error` carries nothing beyond its message.
+[[nodiscard]] auto MountRefusalData(const std::exception_ptr& error)
+  -> nlohmann::json;
 
 //! Data of a `lifecycle` event; `code` names why a scene was refused.
 [[nodiscard]] auto LifecycleData(LifecycleState state,

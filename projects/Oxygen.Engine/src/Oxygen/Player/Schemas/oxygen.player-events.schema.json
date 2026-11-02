@@ -50,8 +50,11 @@
                 "type": "string"
               },
               "code": {
-                "description": "The code of a refused scene, such as player.model_scene.",
+                "description": "The code of a refused scene, such as player.model_scene, or of launch content that could not be mounted: player.launch.dependency_missing, content_missing, content_refused, source_key_conflict, content_unreadable or mount_failed.",
                 "type": "string"
+              },
+              "refusal": {
+                "$ref": "#/definitions/refusal"
               },
               "issues": {
                 "description": "Records of the scene that could not be applied.",
@@ -129,6 +132,63 @@
     }
   ],
   "definitions": {
+    "refusal": {
+      "description": "The launch mount that was refused: with player.launch.dependency_missing, the pak and each requirement the layers below it do not meet; with player.launch.source_key_conflict, the source and the mounted one that already has its SourceKey.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": {
+          "description": "The refused pak or loose cooked root.",
+          "type": "string"
+        },
+        "requirements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/failed_requirement"
+          }
+        },
+        "source_key": {
+          "type": "string"
+        },
+        "existing_source": {
+          "description": "The mounted source that already has the SourceKey.",
+          "type": "string"
+        }
+      }
+    },
+    "failed_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mount", "kind", "key", "failure"],
+      "properties": {
+        "mount": {
+          "description": "The mount the pak requires it of.",
+          "type": "string"
+        },
+        "kind": {
+          "enum": ["asset", "texture"]
+        },
+        "key": {
+          "type": "string"
+        },
+        "type": {
+          "description": "The asset type required, for an asset.",
+          "type": "string"
+        },
+        "failure": {
+          "enum": ["missing", "tombstoned", "type_mismatch", "mount_mismatch"]
+        },
+        "found_type": {
+          "description": "The type found, for type_mismatch.",
+          "type": "string"
+        },
+        "found_mount": {
+          "description": "The mount found, for mount_mismatch.",
+          "type": "string"
+        }
+      }
+    },
     "issue": {
       "type": "object",
       "additionalProperties": false,

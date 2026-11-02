@@ -463,8 +463,12 @@ public:
   virtual void StartLoadInputMappingContextAsset(
     const data::AssetKey& key, InputMappingContextCallback on_complete) = 0;
 
-  //! Mount a pak file for asset loading.
+  //! Mount a pak file for asset loading, on the calling thread: a verified
+  //! mount computes the pak's CRC32 there. `PrepareMountsAsync` awaits it.
   /*!
+   @throw data::CookedOpenError When the pak does not exist (`kAbsent`) or its
+     bytes are refused.
+   @throw std::system_error When it cannot be read otherwise.
    @throw DependencyRequirementError When the layers below it do not meet its
      requirements.
    @throw SourceKeyConflictError When another mounted source has its
@@ -474,6 +478,8 @@ public:
 
   //! Mount a loose cooked content root for asset loading.
   /*!
+   @throw data::CookedOpenError When the root holds no index (`kAbsent`) or
+     its index is refused.
    @throw SourceKeyConflictError When another mounted source has its
      SourceKey.
   */

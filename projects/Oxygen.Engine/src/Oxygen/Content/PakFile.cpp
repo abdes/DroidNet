@@ -24,6 +24,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/Internal/CookedOpenFailure.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -67,7 +68,7 @@ auto MapPakFile(const std::filesystem::path& path) -> oxygen::serio::MappedFile
   if (!file) {
     LOG_F(ERROR, "Failed to open pak file '{}': {}", path.string(),
       file.error().message());
-    throw std::system_error(file.error(), "open '" + path.string() + "'");
+    oxygen::content::internal::ThrowOpenFailure(file.error(), path);
   }
   return std::move(file).value();
 }

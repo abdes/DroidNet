@@ -25,6 +25,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/Internal/CookedOpenFailure.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -280,7 +281,7 @@ auto LooseCookedIndexImpl::LoadFromFile(const std::filesystem::path& index_path)
   // published index, and keeps showing the version it mapped.
   auto mapped = serio::MappedFile::Open(index_path);
   if (!mapped) {
-    throw std::system_error(mapped.error(), "Failed to map index file");
+    ThrowOpenFailure(mapped.error(), index_path);
   }
   return Load(std::move(*mapped));
 }

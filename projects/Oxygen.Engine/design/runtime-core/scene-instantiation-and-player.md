@@ -167,7 +167,10 @@ launch file for a cooked example scene and runs the player with it.
 
 ### Behavior
 
-- Mounts the roots in order, loads the scene, instantiates it with scripts, and
+- Mounts the roots in order on its first frame, as a Play remounts them:
+  prepared on the loop, a verified pak checked with awaited reads, the whole
+  set committed or none of it. It then loads the scene, instantiates it with
+  scripts, and
   renders through the scene's active camera every frame, so a script that moves
   or switches the camera moves the view. Aspect follows the window according to
   the camera's Auto/Fixed policy.
@@ -177,8 +180,14 @@ launch file for a cooked example scene and runs the player with it.
 - A pak whose requirements the roots and paks mounted below it do not meet
   ([patch admission](../../src/Oxygen/Content/Docs/patch_resolution_contract.md#compatibility-validation))
   is refused the same way, at launch or at a Play's remount: `scene_failed`
-  with code `player.launch.dependency_missing` and a message naming the pak and
-  each failed requirement. A refused launch begins no session.
+  with code `player.launch.dependency_missing`, a message naming the pak, and a
+  `refusal` holding the pak and each failed requirement (mount, asset or
+  texture, key, type, failure, and the type or mount found). Every other
+  refusal of the mounts has its code too: `content_missing` (no such pak or
+  index), `content_refused` (another format or version, corrupt or
+  unverifiable), `source_key_conflict` (with a `refusal` naming both sources),
+  `content_unreadable` (an I/O failure) or `mount_failed`, each under
+  `player.launch.`. A refused launch begins no session.
 - Input reaches the scene's mapping contexts. Closing the window, `ngin.quit`,
   or `oxygen.app.request_stop()` ends the process. The toolbar's Stop and
   `ngin.session.end` end only the play session

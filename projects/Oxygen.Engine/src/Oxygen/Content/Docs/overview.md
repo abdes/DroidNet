@@ -235,6 +235,13 @@ caller acts on:
 | `kUnverifiable`       | Verification asked, no integrity data   | Recook it with integrity data |
 | `kCorrupt`            | That format and version, but malformed  | Recook or replace the file    |
 
+A pak or loose cooked index that does not exist is refused the same way, as
+`kAbsent` of `kWrongFormat`, as `CookedContent` refuses it. Any other failure
+to read it, such as a sharing violation or a denied access, is a
+`std::system_error`. `AddPakFile` and `AddLooseCookedRoot` mount on the calling
+thread, a verified pak's CRC32 included; `PrepareMountsAsync` awaits those
+reads on the loop.
+
 Asset descriptors are checked when they load, not when they mount. A loader
 refuses a descriptor that breaks its format, such as a physics sidecar with a
 non-zero reserve in the arm its backend selects, and the load fails.

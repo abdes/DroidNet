@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <filesystem>
 #include <utility>
 
@@ -17,11 +18,12 @@
 
 namespace oxygen::examples::testing {
 
-auto WriteShowcaseRoot(const std::filesystem::path& folder) -> ShowcaseRoot
+auto WriteShowcaseRoot(
+  const std::filesystem::path& folder, const std::uint8_t seed) -> ShowcaseRoot
 {
   constexpr auto kBottle = "Scenes/BottleOnBox/BottleOnBox.oscene";
   constexpr auto kLantern = "Scenes/Lantern/Lantern.oscene";
-  auto showcase = cooker::testing::LooseCookedRoot { "Showcase" };
+  auto showcase = cooker::testing::LooseCookedRoot { "Showcase", seed };
   auto root = ShowcaseRoot {
     .root = folder,
     .bottle = showcase.Scene(kBottle),

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 
@@ -24,8 +25,10 @@ struct ShowcaseRoot final {
 
 //! Writes the `Showcase` root into `folder` with the cooked content
 //! builders: `Scenes/BottleOnBox/BottleOnBox.oscene` and
-//! `Scenes/Lantern/Lantern.oscene`.
-auto WriteShowcaseRoot(const std::filesystem::path& folder) -> ShowcaseRoot;
+//! `Scenes/Lantern/Lantern.oscene`. Roots mounted together take distinct
+//! `seed`s, the identities of their SourceKeys.
+auto WriteShowcaseRoot(
+  const std::filesystem::path& folder, std::uint8_t seed = 1U) -> ShowcaseRoot;
 
 //! A pak of the `Props` mount whose material references the default
 //! material of the `Base` mount, which it requires.

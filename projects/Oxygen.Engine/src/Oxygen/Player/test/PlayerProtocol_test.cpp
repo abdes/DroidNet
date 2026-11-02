@@ -4,15 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
 #include <optional>
+#include <stdexcept>
 #include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Content/DependencyRequirementError.h>
+#include <Oxygen/Content/SourceKeyConflictError.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/SceneIds.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Player/PlayerProtocol.h>
 #include <Oxygen/Player/SchemaCheck.h>
 #include <Oxygen/SceneInstantiation/SceneInstantiation.h>
@@ -96,6 +108,116 @@ NOLINT_TEST(PlayerProtocolTest, LifecycleEventsMatchTheSchema)
          LifecycleState::kStopping,
        }) {
     static_cast<void>(CheckEvent("lifecycle", LifecycleData(state)));
+  }
+}
+
+//! The `scene_failed` event of a launch mount refused with `error`.
+auto MountFailedEvent(const std::exception_ptr& error) -> json
+{
+  auto data = LifecycleData(LifecycleState::kSceneFailed, "/Scenes/A.oscene",
+    "the cooked content could not be mounted", {},
+    oxygen::player::MountFailureCode(error));
+  if (auto refusal = oxygen::player::MountRefusalData(error);
+    !refusal.is_null()) {
+    data["refusal"] = std::move(refusal);
+  }
+  return CheckEvent("lifecycle", data);
+}
+
+//! A pak whose requirements fail names each one in the refusal.
+NOLINT_TEST(PlayerProtocolTest, UnmetRequirementsAreListedInTheRefusal)
+{
+  const auto material
+    = oxygen::data::AssetKey::FromVirtualPath("/Engine/Default.omat");
+  const auto texture
+    = oxygen::data::TextureKeyFromVirtualPath("/Engine/Meter.otex");
+  const auto error = std::make_exception_ptr(
+    oxygen::content::DependencyRequirementError("Content.pak",
+      {
+        {
+          .mount = "Engine",
+          .requirement = { .kind = oxygen::data::KeyReferenceKind::kAsset,
+            .key = material,
+            .type = oxygen::data::AssetType::kMaterial, },
+          .failure = oxygen::content::RequirementFailure::kTypeMismatch,
+          .found_type = oxygen::data::AssetType::kGeometry,
+          .found_mount = {},
+        },
+        {
+          .mount = "Engine",
+          .requirement = { .kind = oxygen::data::KeyReferenceKind::kTexture,
+            .key = texture,
+            .type = oxygen::data::AssetType::kUnknown, },
+          .failure = oxygen::content::RequirementFailure::kMissing,
+          .found_type = std::nullopt,
+          .found_mount = {},
+        },
+      }));
+
+  const auto event = MountFailedEvent(error);
+
+  EXPECT_EQ(
+    event["code"].get<std::string>(), oxygen::player::kDependencyMissingCode);
+  EXPECT_EQ(event["refusal"]["source"], "Content.pak");
+  const auto& requirements = event["refusal"]["requirements"];
+  ASSERT_EQ(requirements.size(), 2U);
+  EXPECT_EQ(requirements[0]["kind"], "asset");
+  EXPECT_EQ(requirements[0]["key"], oxygen::data::to_string(material));
+  EXPECT_EQ(requirements[0]["failure"], "type_mismatch");
+  EXPECT_EQ(requirements[0]["found_type"],
+    oxygen::data::to_string(oxygen::data::AssetType::kGeometry));
+  EXPECT_EQ(requirements[1]["kind"], "texture");
+  EXPECT_EQ(requirements[1]["failure"], "missing");
+  EXPECT_FALSE(requirements[1].contains("type"));
+}
+
+//! A source whose SourceKey is taken names both sources in the refusal.
+NOLINT_TEST(PlayerProtocolTest, SourceKeyConflictNamesBothSources)
+{
+  const auto error
+    = std::make_exception_ptr(oxygen::content::SourceKeyConflictError(
+      oxygen::data::SourceKey {}, "B.pak", "A.pak"));
+
+  const auto event = MountFailedEvent(error);
+
+  EXPECT_EQ(
+    event["code"].get<std::string>(), oxygen::player::kSourceKeyConflictCode);
+  EXPECT_EQ(event["refusal"]["source"], "B.pak");
+  EXPECT_EQ(event["refusal"]["existing_source"], "A.pak");
+}
+
+//! Every other mount failure has its own code and no refusal.
+NOLINT_TEST(PlayerProtocolTest, EveryMountFailureHasACode)
+{
+  using oxygen::data::CookedDefect;
+  using oxygen::data::CookedOpenError;
+  const auto cases
+    = std::vector<std::pair<std::exception_ptr, std::string_view>> {
+        {
+          std::make_exception_ptr(
+            CookedOpenError(CookedDefect::kAbsent, "gone")),
+          oxygen::player::kContentMissingCode,
+        },
+        {
+          std::make_exception_ptr(
+            CookedOpenError(CookedDefect::kDigestMismatch, "corrupt")),
+          oxygen::player::kContentRefusedCode,
+        },
+        {
+          std::make_exception_ptr(std::system_error(
+            std::make_error_code(std::errc::permission_denied), "denied")),
+          oxygen::player::kContentUnreadableCode,
+        },
+        {
+          std::make_exception_ptr(std::runtime_error("other")),
+          oxygen::player::kMountFailedCode,
+        },
+      };
+
+  for (const auto& [error, code] : cases) {
+    const auto event = MountFailedEvent(error);
+    EXPECT_EQ(event["code"].get<std::string>(), code);
+    EXPECT_FALSE(event.contains("refusal"));
   }
 }
 

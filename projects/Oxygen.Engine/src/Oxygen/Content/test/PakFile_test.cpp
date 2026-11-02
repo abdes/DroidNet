@@ -13,7 +13,6 @@
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <system_error>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -201,7 +200,12 @@ NOLINT_TEST(PakFileTest, MissingFileThrows)
 {
   const auto dir = oxygen::testing::ScopedTempDir {};
 
-  NOLINT_EXPECT_THROW(PakFile(dir.Path() / "missing.pak"), std::system_error);
+  try {
+    static_cast<void>(PakFile(dir.Path() / "missing.pak"));
+    FAIL() << "A missing pak was opened";
+  } catch (const oxygen::data::CookedOpenError& error) {
+    EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kAbsent);
+  }
 }
 
 NOLINT_TEST(PakFileTest, RefusesADeviceWithoutAView)

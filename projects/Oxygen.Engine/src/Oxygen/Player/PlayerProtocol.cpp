@@ -5,14 +5,22 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdint>
+#include <exception>
 #include <span>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Content/DependencyRequirementError.h>
+#include <Oxygen/Content/SourceKeyConflictError.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Player/PlayerProtocol.h>
 #include <Oxygen/SceneInstantiation/SceneInstantiation.h>
@@ -57,7 +65,74 @@ namespace {
     return result;
   }
 
+  auto ToJson(const content::FailedRequirement& failed) -> json
+  {
+    const auto& requirement = failed.requirement;
+    const auto is_texture
+      = requirement.kind == data::KeyReferenceKind::kTexture;
+    auto entry = json {
+      { "mount", failed.mount },
+      { "kind", is_texture ? "texture" : "asset" },
+      { "key", data::to_string(requirement.key) },
+      { "failure", content::to_string(failed.failure) },
+    };
+    if (!is_texture) {
+      entry["type"] = data::to_string(requirement.type);
+    }
+    if (failed.found_type.has_value()) {
+      entry["found_type"] = data::to_string(*failed.found_type);
+    }
+    if (!failed.found_mount.empty()) {
+      entry["found_mount"] = failed.found_mount;
+    }
+    return entry;
+  }
+
 } // namespace
+
+auto MountFailureCode(const std::exception_ptr& error) noexcept
+  -> std::string_view
+{
+  try {
+    std::rethrow_exception(error);
+  } catch (const content::DependencyRequirementError&) {
+    return kDependencyMissingCode;
+  } catch (const content::SourceKeyConflictError&) {
+    return kSourceKeyConflictCode;
+  } catch (const data::CookedOpenError& refused) {
+    return refused.Defect() == data::CookedDefect::kAbsent
+      ? kContentMissingCode
+      : kContentRefusedCode;
+  } catch (const std::system_error&) {
+    return kContentUnreadableCode;
+  } catch (...) {
+    return kMountFailedCode;
+  }
+}
+
+auto MountRefusalData(const std::exception_ptr& error) -> json
+{
+  try {
+    std::rethrow_exception(error);
+  } catch (const content::DependencyRequirementError& refused) {
+    auto requirements = json::array();
+    for (const auto& failed : refused.Failures()) {
+      requirements.push_back(ToJson(failed));
+    }
+    return json {
+      { "source", refused.Pak().generic_string() },
+      { "requirements", std::move(requirements) },
+    };
+  } catch (const content::SourceKeyConflictError& refused) {
+    return json {
+      { "source", refused.Mount() },
+      { "source_key", data::to_string(refused.GetSourceKey()) },
+      { "existing_source", refused.ExistingMount() },
+    };
+  } catch (...) {
+    return nullptr;
+  }
+}
 
 auto to_string(const LifecycleState state) noexcept -> std::string_view
 {

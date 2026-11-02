@@ -233,7 +233,7 @@ namespace {
   {
     // Arrange
     const auto lower = WriteShowcaseRoot(Root() / "lower");
-    const auto upper = WriteShowcaseRoot(Root() / "upper");
+    const auto upper = WriteShowcaseRoot(Root() / "upper", 2U);
     auto vm = MakeVm();
 
     // Act
@@ -258,7 +258,7 @@ namespace {
   {
     // Arrange
     const auto first = WriteShowcaseRoot(Root() / "first");
-    const auto second = WriteShowcaseRoot(Root() / "second");
+    const auto second = WriteShowcaseRoot(Root() / "second", 2U);
     auto vm = MakeVm();
     vm->AddSource(Dir(first.root));
     vm->AddSource(Dir(second.root));
@@ -383,7 +383,7 @@ namespace {
   {
     // Arrange
     const auto lower = WriteShowcaseRoot(Root() / "lower");
-    const auto upper = WriteShowcaseRoot(Root() / "upper");
+    const auto upper = WriteShowcaseRoot(Root() / "upper", 2U);
     auto vm = MakeVm();
 
     // Act

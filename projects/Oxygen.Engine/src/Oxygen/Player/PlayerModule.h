@@ -158,6 +158,9 @@ private:
   std::string session_scene_;
   std::shared_ptr<SessionLoad> load_;
   std::shared_ptr<Remount> remount_;
+  //! The launch file's content mounts on the first frame, once the loader
+  //! runs.
+  bool mount_on_first_frame_ { false };
   //! The scene of the session, once instantiated.
   std::shared_ptr<scene::Scene> scene_;
   bool with_height_fog_ { false };
