@@ -17,6 +17,8 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -45,6 +47,8 @@ namespace {
     = sizeof(uint8_t) + AssetKey::kSizeBytes + sizeof(uint8_t);
   //! A mount name is stored with a one-byte size.
   constexpr size_t kMaxMountSize = std::numeric_limits<uint8_t>::max();
+  //! A record count is stored in four bytes.
+  constexpr size_t kMaxRecordCount = std::numeric_limits<uint32_t>::max();
 
   //! A catalog names only mounts a virtual path can name.
   auto IsValidMount(const std::string_view mount) noexcept -> bool
@@ -97,27 +101,9 @@ namespace {
     return Err(CookedOpenError(defect, message));
   }
 
-  //! Why `catalog` breaks a rule of the format, or nothing when it does not.
-  auto ValidateStructure(const PakCatalog& catalog)
+  auto ValidateEntries(const PakCatalog& catalog)
     -> Result<void, CookedOpenError>
   {
-    constexpr auto kMaxCount = std::numeric_limits<uint32_t>::max();
-    if (catalog.source_key.IsNil()) {
-      return Refusal(
-        CookedDefect::kInvalidIdentity, "Invalid PAK catalog identity");
-    }
-    const auto counts_fit = catalog.entries.size() <= kMaxCount
-      && catalog.deleted.size() <= kMaxCount
-      && catalog.bases.size() <= kMaxCount
-      && catalog.dependencies.size() <= kMaxCount;
-    if (!counts_fit) {
-      return Refusal(
-        CookedDefect::kSizeMismatch, "PAK catalog holds too many records");
-    }
-    if (!IsValidMount(catalog.mount)) {
-      return Refusal(
-        CookedDefect::kInvalidPath, "Invalid PAK catalog mount name");
-    }
     std::unordered_set<AssetKey> keys;
     for (const auto& entry : catalog.entries) {
       const auto names_an_asset = !entry.asset_key.IsNil()
@@ -140,6 +126,11 @@ namespace {
           CookedDefect::kDuplicate, "Duplicate or conflicting PAK deletion");
       }
     }
+    return Result<void, CookedOpenError>::Ok();
+  }
+
+  auto ValidateBases(const PakCatalog& catalog) -> Result<void, CookedOpenError>
+  {
     std::unordered_set<SourceKey> bases;
     for (const auto& base : catalog.bases) {
       if (base.source_key.IsNil()) {
@@ -152,6 +143,12 @@ namespace {
         return Refusal(CookedDefect::kDuplicate, "Repeated PAK base");
       }
     }
+    return Result<void, CookedOpenError>::Ok();
+  }
+
+  auto ValidateDependencies(const PakCatalog& catalog)
+    -> Result<void, CookedOpenError>
+  {
     // A mount is required once, never the pak's own, and for something.
     std::unordered_set<std::string_view> mounts;
     for (const auto& dependency : catalog.dependencies) {
@@ -169,7 +166,7 @@ namespace {
         return Refusal(
           CookedDefect::kMissingPart, "PAK dependency requires nothing");
       }
-      if (dependency.requirements.size() > kMaxCount) {
+      if (dependency.requirements.size() > kMaxRecordCount) {
         return Refusal(
           CookedDefect::kSizeMismatch, "PAK dependency holds too many records");
       }
@@ -185,6 +182,31 @@ namespace {
       }
     }
     return Result<void, CookedOpenError>::Ok();
+  }
+
+  //! Why `catalog` breaks a rule of the format, or nothing when it does not.
+  auto ValidateStructure(const PakCatalog& catalog)
+    -> Result<void, CookedOpenError>
+  {
+    if (catalog.source_key.IsNil()) {
+      return Refusal(
+        CookedDefect::kInvalidIdentity, "Invalid PAK catalog identity");
+    }
+    const auto counts_fit = catalog.entries.size() <= kMaxRecordCount
+      && catalog.deleted.size() <= kMaxRecordCount
+      && catalog.bases.size() <= kMaxRecordCount
+      && catalog.dependencies.size() <= kMaxRecordCount;
+    if (!counts_fit) {
+      return Refusal(
+        CookedDefect::kSizeMismatch, "PAK catalog holds too many records");
+    }
+    if (!IsValidMount(catalog.mount)) {
+      return Refusal(
+        CookedDefect::kInvalidPath, "Invalid PAK catalog mount name");
+    }
+    CHECK_RESULT(ValidateEntries(catalog));
+    CHECK_RESULT(ValidateBases(catalog));
+    return ValidateDependencies(catalog);
   }
 
   //! Whether every record whose order is not semantic is in the order the
@@ -343,6 +365,211 @@ auto PakCatalog::ValidateBaseLayers(
   return Result<void, std::string>::Ok();
 }
 
+namespace {
+  struct CatalogReader {
+    std::span<const std::byte> bytes;
+    observer_ptr<serio::ReadOnlyMemoryStream> stream;
+    observer_ptr<serio::Reader<serio::ReadOnlyMemoryStream>> reader;
+
+    [[nodiscard]] auto Remaining() const -> uint64_t
+    {
+      DCHECK_NOTNULL_F(stream);
+      const auto position = stream->Position().get();
+      return position + kDigestSize <= bytes.size()
+        ? bytes.size() - kDigestSize - position
+        : 0U;
+    }
+
+    auto ReadMount(std::string& mount) const -> bool
+    {
+      DCHECK_NOTNULL_F(reader);
+      uint8_t size = 0;
+      if (!reader->ReadInto(size)) {
+        return false;
+      }
+      mount.resize(size);
+      return reader->ReadBlobInto(std::as_writable_bytes(std::span(mount)))
+        .has_value();
+    }
+
+    auto ReadHeader() const -> Result<PakCatalog, CookedOpenError>;
+    auto ReadEntries(PakCatalog& catalog) const
+      -> Result<void, CookedOpenError>;
+    auto ReadDeletions(PakCatalog& catalog) const
+      -> Result<void, CookedOpenError>;
+    auto ReadBases(PakCatalog& catalog) const -> Result<void, CookedOpenError>;
+    auto ReadDependencies(PakCatalog& catalog) const
+      -> Result<void, CookedOpenError>;
+    auto ReadDigest(PakCatalog& catalog) const -> Result<void, CookedOpenError>;
+  };
+
+  auto CatalogReader::ReadHeader() const -> Result<PakCatalog, CookedOpenError>
+  {
+    DCHECK_NOTNULL_F(reader);
+    uint32_t version = 0;
+    if (!reader->ReadInto(version)) {
+      return Err(Corrupt(
+        CookedDefect::kTruncated, "Could not decode PAK catalog header"));
+    }
+    if (version != pak::version::kPakCatalogVersion) {
+      return Err(CookedOpenError(CookedDefect::kUnsupportedVersion,
+        "Unsupported PAK catalog version; recook content"));
+    }
+    std::array<uint8_t, SourceKey::kSizeBytes> source_bytes {};
+    uint16_t content_version = 0;
+    uint32_t entry_count = 0;
+    uint32_t deleted_count = 0;
+    uint32_t base_count = 0;
+    uint32_t dependency_count = 0;
+    auto mount = std::string {};
+    if (!reader->ReadBlobInto(std::as_writable_bytes(std::span(source_bytes)))
+      || !reader->ReadInto(content_version) || !reader->ReadInto(entry_count)
+      || !reader->ReadInto(deleted_count) || !reader->ReadInto(base_count)
+      || !reader->ReadInto(dependency_count) || !ReadMount(mount)) {
+      return Err(Corrupt(
+        CookedDefect::kTruncated, "Could not decode PAK catalog header"));
+    }
+    if ((uint64_t { entry_count } * kEntrySize)
+        + (uint64_t { deleted_count } * AssetKey::kSizeBytes)
+        + (uint64_t { base_count } * kBaseSize)
+        + (uint64_t { dependency_count } * (sizeof(uint8_t) + sizeof(uint32_t)))
+      > Remaining()) {
+      return Err(Corrupt(CookedDefect::kSizeMismatch,
+        "PAK catalog size does not match record counts"));
+    }
+    const auto source = SourceKey::FromBytes(source_bytes);
+    if (!source) {
+      return Err(Corrupt(
+        CookedDefect::kInvalidIdentity, "Invalid PAK catalog source identity"));
+    }
+    return Ok(PakCatalog {
+      .source_key = *source,
+      .content_version = content_version,
+      .catalog_digest = {},
+      .mount = std::move(mount),
+      .entries = std::vector<PakCatalogEntry>(entry_count),
+      .deleted = std::vector<AssetKey>(deleted_count),
+      .bases = std::vector<PakCatalogBase>(base_count),
+      .dependencies = std::vector<PakCatalogDependency>(dependency_count),
+    });
+  }
+
+  auto CatalogReader::ReadEntries(PakCatalog& catalog) const
+    -> Result<void, CookedOpenError>
+  {
+    DCHECK_NOTNULL_F(reader);
+    for (auto& entry : catalog.entries) {
+      std::array<uint8_t, AssetKey::kSizeBytes> key_bytes {};
+      uint8_t type = 0;
+      if (!reader->ReadBlobInto(std::as_writable_bytes(std::span(key_bytes)))
+        || !reader->ReadInto(type)
+        || !reader->ReadBlobInto(
+          std::as_writable_bytes(std::span(entry.descriptor_digest)))
+        || !reader->ReadBlobInto(std::as_writable_bytes(
+          std::span(entry.transitive_resource_digest)))) {
+        return Err(Corrupt(
+          CookedDefect::kTruncated, "Could not decode PAK catalog entry"));
+      }
+      entry.asset_key = AssetKey::FromBytes(key_bytes);
+      entry.asset_type = static_cast<AssetType>(type);
+    }
+    return Result<void, CookedOpenError>::Ok();
+  }
+
+  auto CatalogReader::ReadDeletions(PakCatalog& catalog) const
+    -> Result<void, CookedOpenError>
+  {
+    DCHECK_NOTNULL_F(reader);
+    for (auto& key : catalog.deleted) {
+      std::array<uint8_t, AssetKey::kSizeBytes> key_bytes {};
+      if (!reader->ReadBlobInto(std::as_writable_bytes(std::span(key_bytes)))) {
+        return Err(Corrupt(
+          CookedDefect::kTruncated, "Could not decode PAK catalog deletion"));
+      }
+      key = AssetKey::FromBytes(key_bytes);
+    }
+    return Result<void, CookedOpenError>::Ok();
+  }
+
+  auto CatalogReader::ReadBases(PakCatalog& catalog) const
+    -> Result<void, CookedOpenError>
+  {
+    DCHECK_NOTNULL_F(reader);
+    std::array<uint8_t, SourceKey::kSizeBytes> source_bytes {};
+    for (auto& base : catalog.bases) {
+      if (!reader->ReadBlobInto(std::as_writable_bytes(std::span(source_bytes)))
+        || !reader->ReadInto(base.content_version)
+        || !reader->ReadBlobInto(
+          std::as_writable_bytes(std::span(base.catalog_digest)))) {
+        return Err(Corrupt(
+          CookedDefect::kTruncated, "Could not decode PAK catalog base"));
+      }
+      const auto base_key = SourceKey::FromBytes(source_bytes);
+      if (!base_key) {
+        return Err(Corrupt(
+          CookedDefect::kInvalidIdentity, "Invalid PAK catalog base identity"));
+      }
+      base.source_key = *base_key;
+    }
+    return Result<void, CookedOpenError>::Ok();
+  }
+
+  auto CatalogReader::ReadDependencies(PakCatalog& catalog) const
+    -> Result<void, CookedOpenError>
+  {
+    DCHECK_NOTNULL_F(reader);
+    for (auto& dependency : catalog.dependencies) {
+      uint32_t requirement_count = 0;
+      if (!ReadMount(dependency.mount) || !reader->ReadInto(requirement_count)
+        || uint64_t { requirement_count } * kRequirementSize > Remaining()) {
+        return Err(Corrupt(
+          CookedDefect::kTruncated, "Could not decode PAK catalog dependency"));
+      }
+      dependency.requirements.resize(requirement_count);
+      for (auto& requirement : dependency.requirements) {
+        uint8_t kind = 0;
+        std::array<uint8_t, AssetKey::kSizeBytes> key_bytes {};
+        uint8_t type = 0;
+        if (!reader->ReadInto(kind)
+          || !reader->ReadBlobInto(std::as_writable_bytes(std::span(key_bytes)))
+          || !reader->ReadInto(type)) {
+          return Err(Corrupt(CookedDefect::kTruncated,
+            "Could not decode PAK catalog requirement"));
+        }
+        requirement = {
+          .kind = static_cast<KeyReferenceKind>(kind),
+          .key = AssetKey::FromBytes(key_bytes),
+          .type = static_cast<AssetType>(type),
+        };
+      }
+    }
+    return Result<void, CookedOpenError>::Ok();
+  }
+
+  auto CatalogReader::ReadDigest(PakCatalog& catalog) const
+    -> Result<void, CookedOpenError>
+  {
+    DCHECK_NOTNULL_F(reader);
+    if (Remaining() != 0U) {
+      return Err(Corrupt(CookedDefect::kSizeMismatch,
+        "PAK catalog size does not match record counts"));
+    }
+    if (!reader->ReadBlobInto(
+          std::as_writable_bytes(std::span(catalog.catalog_digest)))) {
+      return Err(Corrupt(
+        CookedDefect::kTruncated, "Could not decode PAK catalog digest"));
+    }
+    // The digest authenticates the bytes as received; canonical order makes
+    // them the only encoding of the catalog they hold.
+    if (base::ComputeSha256(bytes.first(bytes.size() - kDigestSize))
+      != catalog.catalog_digest) {
+      return Err(
+        Corrupt(CookedDefect::kDigestMismatch, "PAK catalog digest mismatch"));
+    }
+    return Result<void, CookedOpenError>::Ok();
+  }
+} // namespace
+
 auto PakCatalog::Decode(const std::span<const std::byte> bytes)
   -> Result<PakCatalog, CookedOpenError>
 {
@@ -352,156 +579,26 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
   serio::ReadOnlyMemoryStream stream(bytes);
   serio::Reader reader(stream);
   const auto packed = reader.ScopedAlignment(1);
-  // The bytes left before the digest, so that no record count allocates more
-  // records than the catalog can hold.
-  const auto remaining = [&stream, &bytes] -> uint64_t {
-    const auto position = stream.Position().get();
-    return position + kDigestSize <= bytes.size()
-      ? bytes.size() - kDigestSize - position
-      : 0U;
+  auto decoder = CatalogReader {
+    .bytes = bytes,
+    .stream = make_observer(&stream),
+    .reader = make_observer(&reader),
   };
-  const auto read_mount = [&reader](std::string& mount) -> bool {
-    uint8_t size = 0;
-    if (!reader.ReadInto(size)) {
-      return false;
-    }
-    mount.resize(size);
-    return reader.ReadBlobInto(std::as_writable_bytes(std::span(mount)))
-      .has_value();
-  };
-  uint32_t version = 0;
-  if (!reader.ReadInto(version)) {
-    return Err(
-      Corrupt(CookedDefect::kTruncated, "Could not decode PAK catalog header"));
+  auto catalog = decoder.ReadHeader();
+  if (!catalog) {
+    return Err(std::move(catalog.error()));
   }
-  if (version != pak::version::kPakCatalogVersion) {
-    return Err(CookedOpenError(CookedDefect::kUnsupportedVersion,
-      "Unsupported PAK catalog version; recook content"));
-  }
-  std::array<uint8_t, SourceKey::kSizeBytes> source_bytes {};
-  uint16_t content_version = 0;
-  uint32_t entry_count = 0;
-  uint32_t deleted_count = 0;
-  uint32_t base_count = 0;
-  uint32_t dependency_count = 0;
-  auto mount = std::string {};
-  if (!reader.ReadBlobInto(std::as_writable_bytes(std::span(source_bytes)))
-    || !reader.ReadInto(content_version) || !reader.ReadInto(entry_count)
-    || !reader.ReadInto(deleted_count) || !reader.ReadInto(base_count)
-    || !reader.ReadInto(dependency_count) || !read_mount(mount)) {
-    return Err(
-      Corrupt(CookedDefect::kTruncated, "Could not decode PAK catalog header"));
-  }
-  if ((uint64_t { entry_count } * kEntrySize)
-      + (uint64_t { deleted_count } * AssetKey::kSizeBytes)
-      + (uint64_t { base_count } * kBaseSize)
-      + (uint64_t { dependency_count } * (sizeof(uint8_t) + sizeof(uint32_t)))
-    > remaining()) {
-    return Err(Corrupt(CookedDefect::kSizeMismatch,
-      "PAK catalog size does not match record counts"));
-  }
-  const auto source = SourceKey::FromBytes(source_bytes);
-  if (!source) {
-    return Err(Corrupt(
-      CookedDefect::kInvalidIdentity, "Invalid PAK catalog source identity"));
-  }
-  PakCatalog catalog {
-    .source_key = *source,
-    .content_version = content_version,
-    .catalog_digest = {},
-    .mount = std::move(mount),
-    .entries = std::vector<PakCatalogEntry>(entry_count),
-    .deleted = std::vector<AssetKey>(deleted_count),
-    .bases = std::vector<PakCatalogBase>(base_count),
-    .dependencies = std::vector<PakCatalogDependency>(dependency_count),
-  };
-  for (auto& entry : catalog.entries) {
-    std::array<uint8_t, AssetKey::kSizeBytes> key_bytes {};
-    uint8_t type = 0;
-    if (!reader.ReadBlobInto(std::as_writable_bytes(std::span(key_bytes)))
-      || !reader.ReadInto(type)
-      || !reader.ReadBlobInto(
-        std::as_writable_bytes(std::span(entry.descriptor_digest)))
-      || !reader.ReadBlobInto(
-        std::as_writable_bytes(std::span(entry.transitive_resource_digest)))) {
-      return Err(Corrupt(
-        CookedDefect::kTruncated, "Could not decode PAK catalog entry"));
-    }
-    entry.asset_key = AssetKey::FromBytes(key_bytes);
-    entry.asset_type = static_cast<AssetType>(type);
-  }
-  for (auto& key : catalog.deleted) {
-    std::array<uint8_t, AssetKey::kSizeBytes> key_bytes {};
-    if (!reader.ReadBlobInto(std::as_writable_bytes(std::span(key_bytes)))) {
-      return Err(Corrupt(
-        CookedDefect::kTruncated, "Could not decode PAK catalog deletion"));
-    }
-    key = AssetKey::FromBytes(key_bytes);
-  }
-  for (auto& base : catalog.bases) {
-    if (!reader.ReadBlobInto(std::as_writable_bytes(std::span(source_bytes)))
-      || !reader.ReadInto(base.content_version)
-      || !reader.ReadBlobInto(
-        std::as_writable_bytes(std::span(base.catalog_digest)))) {
-      return Err(
-        Corrupt(CookedDefect::kTruncated, "Could not decode PAK catalog base"));
-    }
-    const auto base_key = SourceKey::FromBytes(source_bytes);
-    if (!base_key) {
-      return Err(Corrupt(
-        CookedDefect::kInvalidIdentity, "Invalid PAK catalog base identity"));
-    }
-    base.source_key = *base_key;
-  }
-  for (auto& dependency : catalog.dependencies) {
-    uint32_t requirement_count = 0;
-    if (!read_mount(dependency.mount) || !reader.ReadInto(requirement_count)
-      || uint64_t { requirement_count } * kRequirementSize > remaining()) {
-      return Err(Corrupt(
-        CookedDefect::kTruncated, "Could not decode PAK catalog dependency"));
-    }
-    dependency.requirements.resize(requirement_count);
-    for (auto& requirement : dependency.requirements) {
-      uint8_t kind = 0;
-      std::array<uint8_t, AssetKey::kSizeBytes> key_bytes {};
-      uint8_t type = 0;
-      if (!reader.ReadInto(kind)
-        || !reader.ReadBlobInto(std::as_writable_bytes(std::span(key_bytes)))
-        || !reader.ReadInto(type)) {
-        return Err(Corrupt(CookedDefect::kTruncated,
-          "Could not decode PAK catalog requirement"));
-      }
-      requirement = {
-        .kind = static_cast<KeyReferenceKind>(kind),
-        .key = AssetKey::FromBytes(key_bytes),
-        .type = static_cast<AssetType>(type),
-      };
-    }
-  }
-  if (remaining() != 0U) {
-    return Err(Corrupt(CookedDefect::kSizeMismatch,
-      "PAK catalog size does not match record counts"));
-  }
-  if (!reader.ReadBlobInto(
-        std::as_writable_bytes(std::span(catalog.catalog_digest)))) {
-    return Err(
-      Corrupt(CookedDefect::kTruncated, "Could not decode PAK catalog digest"));
-  }
-  // The digest authenticates the bytes as received; canonical order makes
-  // them the only encoding of the catalog they hold.
-  if (base::ComputeSha256(bytes.first(bytes.size() - kDigestSize))
-    != catalog.catalog_digest) {
-    return Err(
-      Corrupt(CookedDefect::kDigestMismatch, "PAK catalog digest mismatch"));
-  }
-  if (auto valid = ValidateStructure(catalog); !valid) {
-    return Err(std::move(valid.error()));
-  }
-  if (!IsCanonical(catalog)) {
+  CHECK_RESULT(decoder.ReadEntries(*catalog));
+  CHECK_RESULT(decoder.ReadDeletions(*catalog));
+  CHECK_RESULT(decoder.ReadBases(*catalog));
+  CHECK_RESULT(decoder.ReadDependencies(*catalog));
+  CHECK_RESULT(decoder.ReadDigest(*catalog));
+  CHECK_RESULT(ValidateStructure(*catalog));
+  if (!IsCanonical(*catalog)) {
     return Err(Corrupt(CookedDefect::kNotCanonical,
       "PAK catalog records are not in canonical order"));
   }
-  return Ok(std::move(catalog));
+  return Ok(std::move(*catalog));
 }
 
 } // namespace oxygen::data

@@ -415,4 +415,65 @@ NOLINT_TEST(PakCatalogTest, DecodeRefusesAMisspelledMount)
   EXPECT_EQ(DecodeDefect(bytes), CookedDefect::kInvalidPath);
 }
 
+//! The received bytes' digest is checked before their record values.
+NOLINT_TEST(PakCatalogTest, DigestMismatchPrecedesInvalidEntry)
+{
+  // Arrange
+  auto bytes = Catalog().Encode().value();
+  const auto entry_type
+    = kHeaderSize + 1U + Catalog().mount.size() + AssetKey::kSizeBytes;
+  bytes.at(entry_type) = std::byte { 0U };
+
+  // Act / Assert
+  EXPECT_EQ(DecodeDefect(bytes), CookedDefect::kDigestMismatch);
+  Reseal(bytes);
+  EXPECT_EQ(DecodeDefect(bytes), CookedDefect::kInvalidValue);
+}
+
+//! Structural validation precedes canonical-order validation.
+NOLINT_TEST(PakCatalogTest, InvalidEntryPrecedesNoncanonicalOrder)
+{
+  // Arrange
+  const auto catalog = Catalog();
+  auto bytes = WithSwappedEntries(catalog.Encode().value(), catalog.mount);
+  const auto entry_type
+    = kHeaderSize + 1U + catalog.mount.size() + AssetKey::kSizeBytes;
+  bytes.at(entry_type) = std::byte { 0U };
+  Reseal(bytes);
+
+  // Act / Assert
+  EXPECT_EQ(DecodeDefect(bytes), CookedDefect::kInvalidValue);
+}
+
+//! Entries are validated before deletions, bases, and dependencies.
+NOLINT_TEST(PakCatalogTest, StructuralFailuresFollowRecordOrder)
+{
+  // Arrange
+  auto catalog = Catalog();
+  catalog.entries.at(0).asset_type = AssetType::kUnknown;
+  catalog.deleted.at(0) = {};
+  catalog.bases.at(0).source_key = catalog.source_key;
+  catalog.dependencies.at(0).mount = catalog.mount;
+
+  // Act / Assert
+  auto result = catalog.ComputeDigest();
+  ASSERT_FALSE(result);
+  EXPECT_EQ(result.error(), "Invalid PAK catalog entry");
+
+  catalog.entries.at(0).asset_type = AssetType::kMaterial;
+  result = catalog.ComputeDigest();
+  ASSERT_FALSE(result);
+  EXPECT_EQ(result.error(), "Invalid PAK deletion");
+
+  catalog.deleted.at(0) = Key(4U);
+  result = catalog.ComputeDigest();
+  ASSERT_FALSE(result);
+  EXPECT_EQ(result.error(), "PAK is its own base");
+
+  catalog.bases.at(0).source_key = Source(1U);
+  result = catalog.ComputeDigest();
+  ASSERT_FALSE(result);
+  EXPECT_EQ(result.error(), "PAK depends on its mount");
+}
+
 } // namespace
