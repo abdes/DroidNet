@@ -144,7 +144,10 @@ Texture::Texture(TextureDesc desc, const Graphics* gfx)
     const auto texture_resource_desc = MakeTextureResourceDesc(desc_);
     readback_surface_layout_ = ComputeReadbackSurfaceLayout(
       *gfx_->GetCurrentDevice(), texture_resource_desc,
-      GetD3D12SubresourceCount(desc_, plane_count_), plane_count_);
+      {
+        .subresources = GetD3D12SubresourceCount(desc_, plane_count_),
+        .planes = plane_count_,
+      });
 
     const D3D12MA::ALLOCATION_DESC alloc_desc {
       .Flags = D3D12MA::ALLOCATION_FLAG_COMMITTED,
@@ -167,7 +170,6 @@ Texture::Texture(TextureDesc desc, const Graphics* gfx)
     reservation = gfx_->AllocateResource(desc_.allocation_budget, alloc_desc,
       readback_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, &d3dmaAllocation,
       &resource);
-    is_readback_surface_ = true;
   } else {
     auto allocation = CreateTextureResource(desc_, gfx_);
     resource = allocation.resource;
@@ -218,9 +220,6 @@ Texture::Texture(Texture&& other) noexcept
   , gfx_(std::exchange(other.gfx_, nullptr))
   , desc_(std::move(other.desc_))
   , resource_desc_(std::exchange(other.resource_desc_, {})) // Reset to default
-  , is_readback_surface_(std::exchange(other.is_readback_surface_, false))
-  , is_readback_surface_mapped_(
-      std::exchange(other.is_readback_surface_mapped_, false))
   , readback_surface_layout_(std::move(other.readback_surface_layout_))
   , plane_count_(std::exchange(other.plane_count_, 1)) // Reset to default
 {
@@ -234,9 +233,6 @@ auto Texture::operator=(Texture&& other) noexcept -> Texture&
     desc_ = std::move(other.desc_);
     resource_desc_
       = std::exchange(other.resource_desc_, {}); // Reset to default
-    is_readback_surface_ = std::exchange(other.is_readback_surface_, false);
-    is_readback_surface_mapped_
-      = std::exchange(other.is_readback_surface_mapped_, false);
     readback_surface_layout_ = std::move(other.readback_surface_layout_);
     plane_count_ = std::exchange(other.plane_count_, 1); // Reset to default
   }
@@ -264,7 +260,7 @@ auto Texture::CreateShaderResourceView(
   const TextureType dimension, const TextureSubResourceSet sub_resources) const
   -> NativeView
 {
-  if (is_readback_surface_) {
+  if (IsReadbackSurface()) {
     throw std::runtime_error(
       "D3D12 readback surfaces cannot create shader resource views");
   }
@@ -284,7 +280,7 @@ auto Texture::CreateUnorderedAccessView(
   const TextureType dimension, const TextureSubResourceSet sub_resources) const
   -> NativeView
 {
-  if (is_readback_surface_) {
+  if (IsReadbackSurface()) {
     throw std::runtime_error(
       "D3D12 readback surfaces cannot create unordered access views");
   }
@@ -303,7 +299,7 @@ auto Texture::CreateRenderTargetView(
   const DescriptorAllocationHandle& view_handle, const Format format,
   const TextureSubResourceSet sub_resources) const -> NativeView
 {
-  if (is_readback_surface_) {
+  if (IsReadbackSurface()) {
     throw std::runtime_error(
       "D3D12 readback surfaces cannot create render target views");
   }
@@ -322,7 +318,7 @@ auto Texture::CreateDepthStencilView(
   const TextureSubResourceSet sub_resources, const bool is_read_only) const
   -> NativeView
 {
-  if (is_readback_surface_) {
+  if (IsReadbackSurface()) {
     throw std::runtime_error(
       "D3D12 readback surfaces cannot create depth stencil views");
   }

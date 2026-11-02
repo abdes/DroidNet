@@ -29,6 +29,7 @@
 namespace oxygen::graphics {
 
 class DescriptorAllocationHandle;
+class StagedReadbackManager;
 
 OXGN_GFX_API auto to_string(TextureType value) -> const char*;
 
@@ -60,7 +61,7 @@ struct TextureDesc {
   // created at the time of memory binding. bool is_virtual = false; bool
   // is_tiled = false;
 
-  Color clear_value {}; //!< Optional clear value for RTV/DSV.
+  Color clear_value; //!< Optional clear value for RTV/DSV.
   bool use_clear_value = false;
 
   ResourceStates initial_state = ResourceStates::kUndefined;
@@ -420,6 +421,19 @@ public:
     GetComponent<ObjectMetadata>().SetName(name);
   }
 
+  //! Whether this texture is a readback surface: CPU-readable memory the
+  //! readback manager maps.
+  [[nodiscard]] auto IsReadbackSurface() const -> bool
+  {
+    return GetDescriptor().cpu_access == ResourceAccessMode::kReadBack;
+  }
+
+  //! Whether the readback manager holds this readback surface mapped.
+  [[nodiscard]] auto IsReadbackSurfaceMapped() const noexcept -> bool
+  {
+    return readback_surface_mapped_;
+  }
+
 protected:
   //! Gets a shader resource view for the texture.
   OXGN_GFX_NDAPI virtual auto CreateShaderResourceView(
@@ -443,6 +457,12 @@ protected:
     const DescriptorAllocationHandle& view_handle, Format format,
     TextureSubResourceSet sub_resources, bool is_read_only) const -> NativeView
     = 0;
+
+private:
+  //! The readback manager maps and unmaps readback surfaces.
+  friend class StagedReadbackManager;
+
+  bool readback_surface_mapped_ { false };
 };
 
 // Ensure Texture satisfies ResourceWithViews

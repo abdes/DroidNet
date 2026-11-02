@@ -21,7 +21,6 @@
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
 
 namespace oxygen::graphics::headless {
@@ -29,30 +28,18 @@ namespace oxygen::graphics::headless {
 Texture::Texture(TextureDesc desc)
   : graphics::Texture("HeadlessTexture")
   , desc_(std::move(desc))
-  , is_readback_surface_(desc_.cpu_access == ResourceAccessMode::kReadBack)
 {
   // Determine backing size using the layout strategy so that all mip/data
   // ranges computed by the strategy are addressable via Read/WriteBacking.
   struct ContiguousLayout : TextureLayoutStrategy {
 
-    static auto MipDim(uint32_t base, uint32_t mip)
-    {
-      // shifting by >= width of type is undefined; guard against large mip
-      if (mip >= 32) {
-        LOG_F(WARNING,
-          "ContiguousLayout::MipDim: mip ({}) >= 32, clamping to 31", mip);
-        mip = 31;
-      }
-      return (std::max)(1U, base >> mip);
-    }
-
     [[nodiscard]] auto ComputeMipSizeBytes(
       const TextureDesc& desc, uint32_t mip) const -> uint32_t override
     {
       const auto finfo = detail::GetFormatInfo(desc.format);
-      const uint32_t w = MipDim(desc.width, mip);
-      const uint32_t h = MipDim(desc.height, mip);
-      const uint32_t d = MipDim(desc.depth, mip);
+      const uint32_t w = MipExtent(desc.width, mip);
+      const uint32_t h = MipExtent(desc.height, mip);
+      const uint32_t d = MipExtent(desc.depth, mip);
       if (finfo.block_size > 1) {
         const uint32_t blocks_x = (w + finfo.block_size - 1) / finfo.block_size;
         const uint32_t blocks_y = (h + finfo.block_size - 1) / finfo.block_size;

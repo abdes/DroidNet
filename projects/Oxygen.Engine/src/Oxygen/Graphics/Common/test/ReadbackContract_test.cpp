@@ -54,8 +54,8 @@ public:
   {
   }
 
-  auto EnqueueCopy(CommandRecorder& /*recorder*/, const Buffer& /*source*/,
-    BufferRange /*range*/ = {})
+  auto DoEnqueueCopy(CommandRecorder& /*recorder*/, const Buffer& /*source*/,
+    BufferRange /*range*/)
     -> std::expected<ReadbackTicket, ReadbackError> override
   {
     return std::unexpected(ReadbackError::kUnsupportedResource);
@@ -114,7 +114,7 @@ private:
       std::span<const std::byte> { bytes_.data(), bytes_.size() } };
   }
 
-  std::weak_ptr<void> active_map_ {};
+  std::weak_ptr<void> active_map_;
   std::vector<std::byte> bytes_;
 };
 
@@ -161,12 +161,12 @@ public:
   ContractTextureReadback(
     std::vector<std::byte> bytes, TextureReadbackLayout layout)
     : bytes_(std::move(bytes))
-    , layout_(std::move(layout))
+    , layout_(layout)
   {
   }
 
-  auto EnqueueCopy(CommandRecorder& /*recorder*/, const Texture& /*source*/,
-    TextureReadbackRequest /*request*/ = {})
+  auto DoEnqueueCopy(CommandRecorder& /*recorder*/, const Texture& /*source*/,
+    const TextureReadbackRequest& /*request*/)
     -> std::expected<ReadbackTicket, ReadbackError> override
   {
     return std::unexpected(ReadbackError::kUnsupportedResource);
@@ -217,7 +217,7 @@ private:
       bytes_.data(), layout_ };
   }
 
-  std::weak_ptr<void> active_map_ {};
+  std::weak_ptr<void> active_map_;
   std::vector<std::byte> bytes_;
   TextureReadbackLayout layout_ {};
 };

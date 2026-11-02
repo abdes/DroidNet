@@ -42,10 +42,7 @@ using TestGraphics
 
 class CountingReadbackManager final : public ReadbackManager {
 public:
-  CountingReadbackManager()
-    : ReadbackManager()
-  {
-  }
+  CountingReadbackManager() = default;
 
   auto CreateBufferReadback(std::string_view /*debug_name*/)
     -> std::shared_ptr<oxygen::graphics::GpuBufferReadback> override
@@ -76,15 +73,16 @@ public:
     return false;
   }
 
-  auto ReadBufferNow(
-    const oxygen::graphics::Buffer& /*source*/, oxygen::graphics::BufferRange)
+  auto DoReadBufferNow(const oxygen::graphics::Buffer& /*source*/,
+    oxygen::graphics::BufferRange /*range*/)
     -> std::expected<std::vector<std::byte>, ReadbackError> override
   {
     return std::unexpected(ReadbackError::kUnsupportedResource);
   }
 
-  auto ReadTextureNow(const oxygen::graphics::Texture& /*source*/,
-    oxygen::graphics::TextureReadbackRequest /*request*/, bool /*tightly_pack*/)
+  auto DoReadTextureNow(const oxygen::graphics::Texture& /*source*/,
+    const oxygen::graphics::TextureReadbackRequest& /*request*/,
+    bool /*tightly_pack*/)
     -> std::expected<oxygen::graphics::OwnedTextureReadbackData,
       ReadbackError> override
   {
@@ -127,7 +125,7 @@ public:
 
   int on_frame_start_calls { 0 };
   int shutdown_calls { 0 };
-  uint32_t last_slot { (std::numeric_limits<uint32_t>::max)() };
+  uint32_t last_slot { std::numeric_limits<uint32_t>::max() };
 };
 
 NOLINT_TEST(GraphicsLifecycleTest, BeginFrame_ForwardsSlotToReadbackManager)
@@ -220,7 +218,7 @@ NOLINT_TEST(GraphicsLifecycleTest,
     ++slot) {
     auto& reclaimer = gfx->GetDeferredReclaimer();
     reclaimer.OnBeginFrame(oxygen::frame::Slot { slot });
-    reclaimer.RegisterDeferredAction([owner, registry, &completed]() -> void {
+    reclaimer.RegisterDeferredAction([owner, registry, &completed] -> void {
       EXPECT_EQ(&owner->GetResourceRegistry(), registry);
       EXPECT_EQ(owner->GetResourceRegistry().GetRegisteredResourceCount(), 0U);
       EXPECT_EQ(owner->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics),

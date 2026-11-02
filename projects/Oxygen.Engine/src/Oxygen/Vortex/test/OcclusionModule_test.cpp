@@ -82,7 +82,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(FakeBufferReadback)
   OXYGEN_MAKE_NON_MOVABLE(FakeBufferReadback)
 
-  auto EnqueueCopy(oxygen::graphics::CommandRecorder& /*recorder*/,
+  auto DoEnqueueCopy(oxygen::graphics::CommandRecorder& /*recorder*/,
     const oxygen::graphics::Buffer& /*source*/,
     oxygen::graphics::BufferRange /*range*/)
     -> std::expected<ReadbackTicket, ReadbackError> override
@@ -187,15 +187,16 @@ public:
     return false;
   }
 
-  auto ReadBufferNow(const oxygen::graphics::Buffer& /*source*/,
+  auto DoReadBufferNow(const oxygen::graphics::Buffer& /*source*/,
     oxygen::graphics::BufferRange /*range*/)
     -> std::expected<std::vector<std::byte>, ReadbackError> override
   {
     return std::unexpected(ReadbackError::kUnsupportedResource);
   }
 
-  auto ReadTextureNow(const oxygen::graphics::Texture& /*source*/,
-    oxygen::graphics::TextureReadbackRequest /*request*/, bool /*tightly_pack*/)
+  auto DoReadTextureNow(const oxygen::graphics::Texture& /*source*/,
+    const oxygen::graphics::TextureReadbackRequest& /*request*/,
+    bool /*tightly_pack*/)
     -> std::expected<oxygen::graphics::OwnedTextureReadbackData,
       ReadbackError> override
   {

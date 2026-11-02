@@ -95,6 +95,14 @@ Implement concrete, backend-specific subclasses for at least the following
     `Framebuffer` comments is respected (create swapchain views only when a
     renderer attaches).
 
+- `StagedReadbackManager` (`StagedReadbackManager.h`)
+  - Derive the backend's `ReadbackManager` from it. It copies buffers and
+    textures into staging buffers, tracks the copies by the fence of the one
+    queue it reads back on, and owns readback surfaces and their mapped state.
+  - Implement three hooks: `PrepareTextureReadbackCopy` (the texture a copy
+    reads, after any resolve of a multisampled source, and its staging
+    layout), `MapReadbackSurfaceBytes` and `UnmapReadbackSurfaceBytes`.
+
 ## Descriptor Allocation Strategy
 
 Descriptor allocation is critical for bindless resource usage and stable

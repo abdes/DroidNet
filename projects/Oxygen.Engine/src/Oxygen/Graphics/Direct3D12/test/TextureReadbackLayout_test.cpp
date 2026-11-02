@@ -4,6 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <span>
+
+#include <d3d12.h>
+#include <dxgiformat.h>
+
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/TextureReadback.h>
@@ -22,24 +27,31 @@ using oxygen::graphics::d3d12::testing::MockDevice;
 
 class FootprintDevice final : public MockDevice {
 public:
+  // ID3D12Device fixes this signature.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   void STDMETHODCALLTYPE GetCopyableFootprints(
     const D3D12_RESOURCE_DESC* /*desc*/, UINT first_subresource,
     UINT num_subresources, UINT64 base_offset,
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT* layouts, UINT* row_counts,
     UINT64* row_sizes, UINT64* total_bytes) override
   {
+    const auto out_layouts = std::span(layouts, num_subresources);
+    const auto out_row_counts = std::span(row_counts, num_subresources);
+    const auto out_row_sizes = std::span(row_sizes, num_subresources);
     for (UINT index = 0; index < num_subresources; ++index) {
-      layouts[index].Offset = base_offset + static_cast<UINT64>(index) * 512;
-      layouts[index].Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-      layouts[index].Footprint.Width = 8;
-      layouts[index].Footprint.Height = 4;
-      layouts[index].Footprint.Depth = 1;
-      layouts[index].Footprint.RowPitch = 256;
-      row_counts[index] = 4;
-      row_sizes[index] = 32;
+      auto& layout = out_layouts[index];
+      layout.Offset = base_offset + (static_cast<UINT64>(index) * 512);
+      layout.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+      layout.Footprint.Width = 8;
+      layout.Footprint.Height = 4;
+      layout.Footprint.Depth = 1;
+      layout.Footprint.RowPitch = 256;
+      out_row_counts[index] = 4;
+      out_row_sizes[index] = 32;
     }
     if (total_bytes != nullptr) {
-      *total_bytes = base_offset + static_cast<UINT64>(num_subresources) * 512;
+      *total_bytes
+        = base_offset + (static_cast<UINT64>(num_subresources) * 512);
     }
     observed_first_subresource_ = first_subresource;
     observed_num_subresources_ = num_subresources;
@@ -124,8 +136,8 @@ NOLINT_TEST(
   desc.mip_levels = 3;
   desc.format = oxygen::Format::kRGBA8UNorm;
 
-  const auto layout
-    = ComputeReadbackSurfaceLayout(device, MakeTextureResourceDesc(desc), 6, 1);
+  const auto layout = ComputeReadbackSurfaceLayout(device,
+    MakeTextureResourceDesc(desc), { .subresources = 6U, .planes = 1U });
 
   EXPECT_EQ(device.observed_first_subresource_, 0U);
   EXPECT_EQ(device.observed_num_subresources_, 6U);

@@ -36,7 +36,6 @@ oxyrun headall
 | ⬜️     | Implement depth/stencil backing and update `ClearDepthStencilCommand` to mutate DSV backing.                 |
 | ⬜️     | Add headless `QueryPool` with timestamp/occlusion support.                                                   |
 | ⬜️     | Implement Present/Acquire semantics for `HeadlessSurface` and expose last-presented image for tests.         |
-| ⬜️     | Add ReadbackManager for async/synchronous CPU readback flows and tests.                                      |
 | ⬜️     | Add submission trace serialization using `Command::Serialize()` and a small JSON schema.                     |
 
 ## Work planning
@@ -127,9 +126,9 @@ on presentation order and read back the last-presented image.
 
 ### Readback and staging helpers
 
-Provide synchronous readback helpers (already present) and optionally an
-asynchronous `ReadbackManager` for non-blocking readback flows and simulated
-transfer timings.
+`HeadlessReadbackManager` is a `StagedReadbackManager`: copies land in
+CPU-backed staging buffers, and readback surfaces map their CPU backing.
+Simulated transfer timings are not modelled.
 
 Readback contract notes:
 

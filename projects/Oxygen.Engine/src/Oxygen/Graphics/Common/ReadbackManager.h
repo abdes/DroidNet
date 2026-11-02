@@ -32,8 +32,13 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(GpuBufferReadback)
   OXYGEN_MAKE_NON_MOVABLE(GpuBufferReadback)
 
-  virtual auto EnqueueCopy(CommandRecorder& recorder, const Buffer& source,
-    BufferRange range = {}) -> std::expected<ReadbackTicket, ReadbackError> = 0;
+  //! Records a copy of `range` of `source` into this readback's staging.
+  auto EnqueueCopy(CommandRecorder& recorder, const Buffer& source,
+    const BufferRange range = {})
+    -> std::expected<ReadbackTicket, ReadbackError>
+  {
+    return DoEnqueueCopy(recorder, source, range);
+  }
 
   [[nodiscard]] virtual auto GetState() const noexcept -> ReadbackState = 0;
   [[nodiscard]] virtual auto Ticket() const noexcept
@@ -62,6 +67,10 @@ public:
     release behavior; owners opt into capacity reuse explicitly.
   */
   virtual auto ResetForReuse() -> std::expected<void, ReadbackError> = 0;
+
+protected:
+  virtual auto DoEnqueueCopy(CommandRecorder& recorder, const Buffer& source,
+    BufferRange range) -> std::expected<ReadbackTicket, ReadbackError> = 0;
 };
 
 class GpuTextureReadback
@@ -73,9 +82,14 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(GpuTextureReadback)
   OXYGEN_MAKE_NON_MOVABLE(GpuTextureReadback)
 
-  virtual auto EnqueueCopy(CommandRecorder& recorder, const Texture& source,
-    TextureReadbackRequest request = {})
-    -> std::expected<ReadbackTicket, ReadbackError> = 0;
+  //! Records a copy of the region `request` names of `source` into this
+  //! readback's staging.
+  auto EnqueueCopy(CommandRecorder& recorder, const Texture& source,
+    const TextureReadbackRequest& request = {})
+    -> std::expected<ReadbackTicket, ReadbackError>
+  {
+    return DoEnqueueCopy(recorder, source, request);
+  }
 
   [[nodiscard]] virtual auto GetState() const noexcept -> ReadbackState = 0;
   [[nodiscard]] virtual auto Ticket() const noexcept
@@ -90,12 +104,17 @@ public:
 
   virtual auto Cancel() -> std::expected<bool, ReadbackError> = 0;
   virtual auto Reset() -> void = 0;
+
+protected:
+  virtual auto DoEnqueueCopy(CommandRecorder& recorder, const Texture& source,
+    const TextureReadbackRequest& request)
+    -> std::expected<ReadbackTicket, ReadbackError> = 0;
 };
 
-class OXGN_GFX_API ReadbackManager {
+class ReadbackManager {
 public:
   ReadbackManager() = default;
-  virtual ~ReadbackManager();
+  OXGN_GFX_API virtual ~ReadbackManager();
 
   OXYGEN_MAKE_NON_COPYABLE(ReadbackManager)
   OXYGEN_MAKE_NON_MOVABLE(ReadbackManager)
@@ -111,11 +130,21 @@ public:
   virtual auto Cancel(ReadbackTicket ticket)
     -> std::expected<bool, ReadbackError> = 0;
 
-  virtual auto ReadBufferNow(const Buffer& source, BufferRange range = {})
-    -> std::expected<std::vector<std::byte>, ReadbackError> = 0;
-  virtual auto ReadTextureNow(const Texture& source,
-    TextureReadbackRequest request = {}, bool tightly_pack = true)
-    -> std::expected<OwnedTextureReadbackData, ReadbackError> = 0;
+  //! Reads `range` of `source` back now: records, submits and waits.
+  auto ReadBufferNow(const Buffer& source, const BufferRange range = {})
+    -> std::expected<std::vector<std::byte>, ReadbackError>
+  {
+    return DoReadBufferNow(source, range);
+  }
+
+  //! Reads the region `request` names of `source` back now, its rows tightly
+  //! packed unless `tightly_pack` is false.
+  auto ReadTextureNow(const Texture& source,
+    const TextureReadbackRequest& request = {}, const bool tightly_pack = true)
+    -> std::expected<OwnedTextureReadbackData, ReadbackError>
+  {
+    return DoReadTextureNow(source, request, tightly_pack);
+  }
 
   virtual auto CreateReadbackTextureSurface(const TextureDesc& desc)
     -> std::expected<std::shared_ptr<Texture>, ReadbackError> = 0;
@@ -126,6 +155,13 @@ public:
   virtual auto OnFrameStart(frame::Slot slot) -> void = 0;
   virtual auto Shutdown(std::chrono::milliseconds timeout)
     -> std::expected<void, ReadbackError> = 0;
+
+protected:
+  virtual auto DoReadBufferNow(const Buffer& source, BufferRange range)
+    -> std::expected<std::vector<std::byte>, ReadbackError> = 0;
+  virtual auto DoReadTextureNow(const Texture& source,
+    const TextureReadbackRequest& request, bool tightly_pack)
+    -> std::expected<OwnedTextureReadbackData, ReadbackError> = 0;
 };
 
 } // namespace oxygen::graphics

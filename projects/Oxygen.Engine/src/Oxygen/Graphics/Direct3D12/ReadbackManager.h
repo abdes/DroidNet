@@ -6,85 +6,38 @@
 
 #pragma once
 
-#include <chrono>
 #include <expected>
-#include <functional>
-#include <memory>
-#include <mutex>
-#include <unordered_map>
 
-#include <Oxygen/Graphics/Common/ReadbackManager.h>
-#include <Oxygen/Graphics/Common/ReadbackTracker.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Graphics/Common/StagedReadbackManager.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace oxygen::graphics::d3d12 {
 
 class Graphics;
-class D3D12BufferReadback;
-class D3D12TextureReadback;
 
-class D3D12ReadbackManager final : public graphics::ReadbackManager {
+//! The D3D12 readback manager: multisampled textures resolve before their
+//! copy, planar formats copy every plane, and readback surfaces map their
+//! readback heap resource.
+class D3D12ReadbackManager final : public graphics::StagedReadbackManager {
 public:
   OXGN_D3D12_API explicit D3D12ReadbackManager(Graphics& graphics);
   OXGN_D3D12_API ~D3D12ReadbackManager() override;
 
-  OXGN_D3D12_NDAPI auto CreateBufferReadback(std::string_view debug_name)
-    -> std::shared_ptr<graphics::GpuBufferReadback> override;
-  OXGN_D3D12_NDAPI auto CreateTextureReadback(std::string_view debug_name)
-    -> std::shared_ptr<graphics::GpuTextureReadback> override;
+  OXYGEN_MAKE_NON_COPYABLE(D3D12ReadbackManager)
+  OXYGEN_MAKE_NON_MOVABLE(D3D12ReadbackManager)
 
-  OXGN_D3D12_API auto Await(graphics::ReadbackTicket ticket)
-    -> std::expected<graphics::ReadbackResult,
+protected:
+  auto PrepareTextureReadbackCopy(graphics::CommandRecorder& recorder,
+    const graphics::Texture& source, const graphics::TextureSlice& slice,
+    graphics::TextureReadbackResolveTarget& resolve)
+    -> std::expected<graphics::TextureReadbackCopy,
       graphics::ReadbackError> override;
-  OXGN_D3D12_API auto AwaitAsync(graphics::ReadbackTicket ticket)
-    -> co::Co<void> override;
-  OXGN_D3D12_API auto Cancel(graphics::ReadbackTicket ticket)
-    -> std::expected<bool, graphics::ReadbackError> override;
-
-  OXGN_D3D12_API auto ReadBufferNow(
-    const graphics::Buffer& source, graphics::BufferRange range = {})
-    -> std::expected<std::vector<std::byte>, graphics::ReadbackError> override;
-  OXGN_D3D12_API auto ReadTextureNow(const graphics::Texture& source,
-    graphics::TextureReadbackRequest request = {}, bool tightly_pack = true)
-    -> std::expected<graphics::OwnedTextureReadbackData,
+  auto MapReadbackSurfaceBytes(
+    graphics::Texture& surface, const graphics::TextureSlice& slice)
+    -> std::expected<graphics::ReadbackSurfaceBytes,
       graphics::ReadbackError> override;
-
-  OXGN_D3D12_API auto CreateReadbackTextureSurface(
-    const graphics::TextureDesc& desc)
-    -> std::expected<std::shared_ptr<graphics::Texture>,
-      graphics::ReadbackError> override;
-  OXGN_D3D12_API auto MapReadbackTextureSurface(
-    graphics::Texture& surface, graphics::TextureSlice slice)
-    -> std::expected<graphics::ReadbackSurfaceMapping,
-      graphics::ReadbackError> override;
-  OXGN_D3D12_API auto UnmapReadbackTextureSurface(graphics::Texture& surface)
-    -> void override;
-
-  OXGN_D3D12_API auto OnFrameStart(frame::Slot slot) -> void override;
-  OXGN_D3D12_API auto Shutdown(std::chrono::milliseconds timeout)
-    -> std::expected<void, graphics::ReadbackError> override;
-
-private:
-  friend class D3D12BufferReadback;
-  friend class D3D12TextureReadback;
-
-  auto EnsureTrackedQueue(observer_ptr<graphics::CommandQueue> queue)
-    -> std::expected<void, graphics::ReadbackError>;
-  auto PumpCompletions() -> void;
-  [[nodiscard]] auto TryGetResult(graphics::ReadbackTicketId id) const
-    -> std::optional<graphics::ReadbackResult>;
-  auto TrackCancellationHandler(
-    graphics::ReadbackTicketId id, std::function<void()> handler) -> void;
-  auto UntrackCancellationHandler(graphics::ReadbackTicketId id) -> void;
-  auto ForgetTicket(graphics::ReadbackTicketId id) -> void;
-
-  Graphics& graphics_;
-  mutable std::mutex mutex_;
-  observer_ptr<graphics::CommandQueue> tracked_queue_ {};
-  graphics::ReadbackTracker tracker_ {};
-  bool shutdown_ { false };
-  std::unordered_map<graphics::ReadbackTicketId, std::function<void()>>
-    cancellation_handlers_ {};
+  auto UnmapReadbackSurfaceBytes(graphics::Texture& surface) -> void override;
 };
 
 } // namespace oxygen::graphics::d3d12

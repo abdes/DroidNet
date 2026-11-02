@@ -26,7 +26,7 @@ struct ReadbackSurfaceLayout {
   UINT plane_count = 1;
   UINT subresource_count = 0;
   UINT64 total_bytes = 0;
-  std::vector<ReadbackSubresourceLayout> subresources {};
+  std::vector<ReadbackSubresourceLayout> subresources;
 };
 
 struct TextureToBufferCopyInfo {
@@ -43,9 +43,16 @@ OXGN_D3D12_API auto GetD3D12SubresourceCount(
 OXGN_D3D12_API auto MakeTextureResourceDesc(const TextureDesc& desc)
   -> D3D12_RESOURCE_DESC;
 
+//! The subresources a texture readback covers: every plane of every mip and
+//! array slice.
+struct ReadbackSurfaceCounts {
+  UINT subresources = 0;
+  UINT planes = 1;
+};
+
 OXGN_D3D12_API auto ComputeReadbackSurfaceLayout(dx::IDevice& device,
-  const D3D12_RESOURCE_DESC& texture_desc, UINT subresource_count,
-  UINT plane_count) -> ReadbackSurfaceLayout;
+  const D3D12_RESOURCE_DESC& texture_desc, const ReadbackSurfaceCounts& counts)
+  -> ReadbackSurfaceLayout;
 
 OXGN_D3D12_API auto ComputeTextureToBufferCopyInfo(const TextureDesc& desc,
   DXGI_FORMAT resource_format, uint8_t plane_count,

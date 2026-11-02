@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <d3d12.h>
+#include <dxgiformat.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
@@ -52,10 +53,10 @@ auto GetArrayLayerCount(const oxygen::graphics::TextureDesc& desc) -> UINT
 auto ValidateResolvedSlice(const oxygen::graphics::TextureDesc& desc,
   const oxygen::graphics::TextureSlice& slice) -> void
 {
-  const auto mip_width = (std::max)(1U, desc.width >> slice.mip_level);
-  const auto mip_height = (std::max)(1U, desc.height >> slice.mip_level);
+  const auto mip_width = oxygen::MipExtent(desc.width, slice.mip_level);
+  const auto mip_height = oxygen::MipExtent(desc.height, slice.mip_level);
   const auto mip_depth = desc.texture_type == oxygen::TextureType::kTexture3D
-    ? (std::max)(1U, desc.depth >> slice.mip_level)
+    ? oxygen::MipExtent(desc.depth, slice.mip_level)
     : 1U;
 
   CHECK_LE_F(static_cast<uint64_t>(slice.x) + slice.width,
@@ -158,9 +159,11 @@ auto MakeTextureResourceDesc(const TextureDesc& desc) -> D3D12_RESOURCE_DESC
 }
 
 auto ComputeReadbackSurfaceLayout(dx::IDevice& device,
-  const D3D12_RESOURCE_DESC& texture_desc, const UINT subresource_count,
-  const UINT plane_count) -> ReadbackSurfaceLayout
+  const D3D12_RESOURCE_DESC& texture_desc, const ReadbackSurfaceCounts& counts)
+  -> ReadbackSurfaceLayout
 {
+  const auto subresource_count = counts.subresources;
+  const auto plane_count = counts.planes;
   ReadbackSurfaceLayout layout {};
   layout.plane_count = (std::max)(1U, plane_count);
   layout.subresource_count = subresource_count;

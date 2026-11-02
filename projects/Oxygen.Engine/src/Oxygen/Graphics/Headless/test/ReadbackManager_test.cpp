@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -76,13 +77,18 @@ using oxygen::testing::ScopedLogCapture;
 
 extern "C" auto GetGraphicsModuleApi() -> void*;
 
-auto MakePatternBytes(const size_t size, const uint8_t seed = 0x20)
-  -> std::vector<std::byte>
+//! A run of `size` distinct bytes that starts after `seed`.
+struct BytePattern {
+  size_t size = 0;
+  uint8_t seed = 0x20;
+};
+
+auto MakePatternBytes(const BytePattern& pattern) -> std::vector<std::byte>
 {
-  std::vector<std::byte> bytes(size);
-  for (size_t index = 0; index < size; ++index) {
-    bytes[index] = static_cast<std::byte>(
-      static_cast<uint8_t>(seed + static_cast<uint8_t>(index * 5U + 1U)));
+  std::vector<std::byte> bytes(pattern.size);
+  for (size_t index = 0; index < pattern.size; ++index) {
+    bytes[index] = static_cast<std::byte>(static_cast<uint8_t>(
+      pattern.seed + static_cast<uint8_t>((index * 5U) + 1U)));
   }
   return bytes;
 }
@@ -107,7 +113,8 @@ auto CopyTextureRegionBytes(const std::vector<std::byte>& source,
   const TextureDesc& desc, const TextureSlice& resolved_slice)
   -> std::vector<std::byte>
 {
-  const auto mip_width = (std::max)(1U, desc.width >> resolved_slice.mip_level);
+  const auto mip_width
+    = oxygen::MipExtent(desc.width, resolved_slice.mip_level);
   const auto bytes_per_pixel = 4U;
   const auto row_stride = mip_width * bytes_per_pixel;
   std::vector<std::byte> result(static_cast<size_t>(resolved_slice.width
@@ -118,13 +125,13 @@ auto CopyTextureRegionBytes(const std::vector<std::byte>& source,
     for (uint32_t y = 0; y < resolved_slice.height; ++y) {
       const auto src_offset
         = static_cast<size_t>((resolved_slice.z + z) * row_stride
-            * (std::max)(1U, desc.height >> resolved_slice.mip_level))
-        + static_cast<size_t>(resolved_slice.y + y) * row_stride
-        + static_cast<size_t>(resolved_slice.x) * bytes_per_pixel;
+            * oxygen::MipExtent(desc.height, resolved_slice.mip_level))
+        + (static_cast<size_t>(resolved_slice.y + y) * row_stride)
+        + (static_cast<size_t>(resolved_slice.x) * bytes_per_pixel);
       std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(src_offset),
-        resolved_slice.width * bytes_per_pixel,
+        std::size_t { resolved_slice.width } * bytes_per_pixel,
         result.begin() + static_cast<std::ptrdiff_t>(dst_offset));
-      dst_offset += resolved_slice.width * bytes_per_pixel;
+      dst_offset += std::size_t { resolved_slice.width } * bytes_per_pixel;
     }
   }
   return result;
@@ -175,7 +182,7 @@ protected:
     }
   }
 
-  auto GetReadbackManager() const
+  [[nodiscard]] auto GetReadbackManager() const
     -> oxygen::observer_ptr<oxygen::graphics::ReadbackManager>
   {
     return readback_manager_;
@@ -214,7 +221,7 @@ protected:
 
   auto CreateTexture(TextureDesc desc) -> std::shared_ptr<Texture>
   {
-    return CreateTextureWithBytes(desc, {});
+    return CreateTextureWithBytes(std::move(desc), {});
   }
 
   auto CreateBufferReadback(std::string_view debug_name = "buffer-readback")
@@ -253,7 +260,7 @@ protected:
     graphics_->PollCompletedUses();
   }
 
-  auto EnqueueBufferReadback(std::shared_ptr<GpuBufferReadback> readback,
+  auto EnqueueBufferReadback(const std::shared_ptr<GpuBufferReadback>& readback,
     const std::shared_ptr<Buffer>& source, const BufferRange range,
     std::string_view command_list_name,
     const oxygen::graphics::SubmissionPolicy policy
@@ -272,7 +279,8 @@ protected:
     return *ticket;
   }
 
-  auto EnqueueTextureReadback(std::shared_ptr<GpuTextureReadback> readback,
+  auto EnqueueTextureReadback(
+    const std::shared_ptr<GpuTextureReadback>& readback,
     const std::shared_ptr<Texture>& source, TextureReadbackRequest request,
     std::string_view command_list_name,
     const oxygen::graphics::SubmissionPolicy policy
@@ -315,11 +323,11 @@ private:
   std::vector<oxygen::graphics::CommandRecording> pending_recordings_;
   void* backend_ { nullptr };
   Graphics* graphics_ { nullptr };
-  oxygen::observer_ptr<oxygen::graphics::ReadbackManager> readback_manager_ {};
-  std::vector<std::shared_ptr<oxygen::graphics::Buffer>> buffers_ {};
-  std::vector<std::shared_ptr<oxygen::graphics::Texture>> textures_ {};
-  std::vector<std::shared_ptr<GpuBufferReadback>> buffer_readbacks_ {};
-  std::vector<std::shared_ptr<GpuTextureReadback>> texture_readbacks_ {};
+  oxygen::observer_ptr<oxygen::graphics::ReadbackManager> readback_manager_;
+  std::vector<std::shared_ptr<oxygen::graphics::Buffer>> buffers_;
+  std::vector<std::shared_ptr<oxygen::graphics::Texture>> textures_;
+  std::vector<std::shared_ptr<GpuBufferReadback>> buffer_readbacks_;
+  std::vector<std::shared_ptr<GpuTextureReadback>> texture_readbacks_;
 };
 
 class BufferReadbackCreationTest : public HeadlessReadbackTestBase { };
@@ -344,8 +352,8 @@ NOLINT_TEST_F(BufferReadbackCreationTest, NewBufferReadbackStartsIdle)
 
 NOLINT_TEST_F(BufferReadbackSubmissionTest, EnqueueCopyReturnsPendingTicket)
 {
-  auto source
-    = CreateBufferWithBytes(MakePatternBytes(64, 0x31), "pending-source");
+  auto source = CreateBufferWithBytes(
+    MakePatternBytes({ .size = 64, .seed = 0x31 }), "pending-source");
   auto readback = CreateBufferReadback();
 
   const auto ticket = EnqueueBufferReadback(
@@ -359,8 +367,8 @@ NOLINT_TEST_F(BufferReadbackSubmissionTest, EnqueueCopyReturnsPendingTicket)
 
 NOLINT_TEST_F(BufferReadbackSubmissionTest, SecondEnqueueWhilePendingIsRejected)
 {
-  auto source
-    = CreateBufferWithBytes(MakePatternBytes(64, 0x36), "pending-twice");
+  auto source = CreateBufferWithBytes(
+    MakePatternBytes({ .size = 64, .seed = 0x36 }), "pending-twice");
   auto readback = CreateBufferReadback();
 
   const auto first_ticket
@@ -385,8 +393,8 @@ NOLINT_TEST_F(BufferReadbackSubmissionTest, SecondEnqueueWhilePendingIsRejected)
 
 NOLINT_TEST_F(BufferReadbackSubmissionTest, IsReadyIsFalseBeforeDeferredSubmit)
 {
-  auto source
-    = CreateBufferWithBytes(MakePatternBytes(48, 0x44), "deferred-source");
+  auto source = CreateBufferWithBytes(
+    MakePatternBytes({ .size = 48, .seed = 0x44 }), "deferred-source");
   auto readback = CreateBufferReadback();
 
   EnqueueBufferReadback(readback, source, BufferRange { 4, 20 },
@@ -406,8 +414,8 @@ NOLINT_TEST_F(BufferReadbackSubmissionTest, IsReadyIsFalseBeforeDeferredSubmit)
 
 NOLINT_TEST_F(BufferReadbackValidationTest, InvalidBufferRangeIsRejected)
 {
-  auto source
-    = CreateBufferWithBytes(MakePatternBytes(24, 0x4A), "invalid-range");
+  auto source = CreateBufferWithBytes(
+    MakePatternBytes({ .size = 24, .seed = 0x4A }), "invalid-range");
   auto readback = CreateBufferReadback();
 
   auto recorder = AcquireRecorder("buffer-invalid-range");
@@ -422,7 +430,7 @@ NOLINT_TEST_F(BufferReadbackValidationTest, InvalidBufferRangeIsRejected)
 
 NOLINT_TEST_F(BufferReadbackMappingTest, MapNowReturnsExpectedBytes)
 {
-  const auto source_bytes = MakePatternBytes(72, 0x55);
+  const auto source_bytes = MakePatternBytes({ .size = 72, .seed = 0x55 });
   auto source = CreateBufferWithBytes(source_bytes, "map-now-source");
   auto readback = CreateBufferReadback();
 
@@ -436,8 +444,8 @@ NOLINT_TEST_F(BufferReadbackMappingTest, MapNowReturnsExpectedBytes)
 NOLINT_TEST_F(
   BufferReadbackLifecycleTest, CancelPendingReadbackTransitionsToCancelled)
 {
-  auto source
-    = CreateBufferWithBytes(MakePatternBytes(40, 0x61), "cancel-source");
+  auto source = CreateBufferWithBytes(
+    MakePatternBytes({ .size = 40, .seed = 0x61 }), "cancel-source");
   auto readback = CreateBufferReadback();
 
   EnqueueBufferReadback(readback, source, BufferRange { 0, 16 },
@@ -452,9 +460,10 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   BufferReadbackLifecycleTest, ReusableReadbackSupportsSequentialCycles)
 {
-  auto first = CreateBufferWithBytes(MakePatternBytes(32, 0x71), "reuse-first");
-  auto second
-    = CreateBufferWithBytes(MakePatternBytes(48, 0x82), "reuse-second");
+  auto first = CreateBufferWithBytes(
+    MakePatternBytes({ .size = 32, .seed = 0x71 }), "reuse-first");
+  auto second = CreateBufferWithBytes(
+    MakePatternBytes({ .size = 48, .seed = 0x82 }), "reuse-second");
   auto readback = CreateBufferReadback();
 
   EnqueueBufferReadback(
@@ -476,8 +485,8 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(BufferReadbackLifecycleTest, ResetAfterCancellationReturnsToIdle)
 {
-  auto source
-    = CreateBufferWithBytes(MakePatternBytes(28, 0x84), "reset-cancel");
+  auto source = CreateBufferWithBytes(
+    MakePatternBytes({ .size = 28, .seed = 0x84 }), "reset-cancel");
   auto readback = CreateBufferReadback();
 
   EnqueueBufferReadback(readback, source, BufferRange { 0, 12 },
@@ -494,8 +503,8 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest, ResetAfterCancellationReturnsToIdle)
 NOLINT_TEST_F(BufferReadbackLifecycleTest,
   ResetAfterCompletionReleasesOwnedStagingRegistration)
 {
-  auto source
-    = CreateBufferWithBytes(MakePatternBytes(52, 0x91), "cleanup-source");
+  auto source = CreateBufferWithBytes(
+    MakePatternBytes({ .size = 52, .seed = 0x91 }), "cleanup-source");
   auto readback = CreateBufferReadback("cleanup-readback");
 
   auto& registry = Registry();
@@ -519,9 +528,9 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
 NOLINT_TEST_F(BufferReadbackLifecycleTest,
   ResetForReusePreservesCapacityAndPublishesFreshData)
 {
-  const auto first_bytes = MakePatternBytes(96, 0x21);
-  const auto second_bytes = MakePatternBytes(96, 0x72);
-  const auto larger_bytes = MakePatternBytes(160, 0xB3);
+  const auto first_bytes = MakePatternBytes({ .size = 96, .seed = 0x21 });
+  const auto second_bytes = MakePatternBytes({ .size = 96, .seed = 0x72 });
+  const auto larger_bytes = MakePatternBytes({ .size = 160, .seed = 0xB3 });
   auto first = CreateBufferWithBytes(first_bytes, "reuse-first-source");
   auto second = CreateBufferWithBytes(second_bytes, "reuse-second-source");
   auto larger = CreateBufferWithBytes(larger_bytes, "reuse-larger-source");
@@ -577,7 +586,7 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
 NOLINT_TEST_F(BufferReadbackLifecycleTest,
   ResetForReuseRefusesIdlePendingMappedAndCancelledRequests)
 {
-  const auto bytes = MakePatternBytes(64, 0x42);
+  const auto bytes = MakePatternBytes({ .size = 64, .seed = 0x42 });
   auto source = CreateBufferWithBytes(bytes, "reuse-state-source");
   auto readback = CreateBufferReadback("reuse-state");
   const auto idle = readback->ResetForReuse();
@@ -588,8 +597,9 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
   const auto pending = readback->ResetForReuse();
   ASSERT_FALSE(pending.has_value());
   EXPECT_EQ(pending.error(), ReadbackError::kAlreadyPending);
-  ASSERT_TRUE(readback->Ticket().has_value());
-  EXPECT_EQ(readback->Ticket()->id, ticket.id);
+  const auto pending_ticket = readback->Ticket();
+  ASSERT_HAS_VALUE(pending_ticket);
+  EXPECT_EQ(pending_ticket->id, ticket.id);
   EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
   SubmitPendingRecordings();
   {
@@ -613,8 +623,9 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
   ASSERT_FALSE(cancelled.has_value());
   EXPECT_EQ(cancelled.error(), ReadbackError::kCancelled);
   EXPECT_EQ(readback->GetState(), ReadbackState::kCancelled);
-  ASSERT_TRUE(readback->Ticket().has_value());
-  EXPECT_EQ(readback->Ticket()->id, cancelled_ticket.id);
+  const auto kept_ticket = readback->Ticket();
+  ASSERT_HAS_VALUE(kept_ticket);
+  EXPECT_EQ(kept_ticket->id, cancelled_ticket.id);
   SubmitPendingRecordings();
   WaitForQueueIdle();
 }
@@ -622,7 +633,8 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
 NOLINT_TEST_F(BufferReadbackLifecycleTest,
   ResetForReuseRefreshesCompletedPendingRequestWithoutMapping)
 {
-  auto source = CreateBufferWithBytes(MakePatternBytes(48), "reuse-refresh");
+  auto source
+    = CreateBufferWithBytes(MakePatternBytes({ .size = 48 }), "reuse-refresh");
   auto readback = CreateBufferReadback("reuse-refresh");
   const auto ticket
     = EnqueueBufferReadback(readback, source, { 8, 20 }, "reuse-refresh-copy");
@@ -641,8 +653,8 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
 NOLINT_TEST_F(
   BufferReadbackCoroutineTest, AwaitAsyncCompletesWhenIsReadyPumpsCompletion)
 {
-  auto source
-    = CreateBufferWithBytes(MakePatternBytes(56, 0x91), "await-source");
+  auto source = CreateBufferWithBytes(
+    MakePatternBytes({ .size = 56, .seed = 0x91 }), "await-source");
   auto readback = CreateBufferReadback();
 
   const auto ticket = EnqueueBufferReadback(
@@ -657,7 +669,7 @@ NOLINT_TEST_F(
       ready.has_value() && *ready, "Headless readback should become ready");
   });
 
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     co_await GetReadbackManager()->AwaitAsync(ticket);
     resumed = true;
   });
@@ -674,7 +686,8 @@ NOLINT_TEST_F(TextureReadbackMappingTest, MapNowReturnsExpectedBytesAndLayout)
   desc.format = oxygen::Format::kRGBA8UNorm;
   desc.texture_type = TextureType::kTexture2D;
   desc.debug_name = "texture-map";
-  const auto source_bytes = MakePatternBytes(4 * 4 * 4, 0x11);
+  const auto source_bytes
+    = MakePatternBytes({ .size = std::size_t { 4 } * 4 * 4, .seed = 0x11 });
   auto source = CreateTextureWithBytes(desc, source_bytes);
   auto readback = CreateTextureReadback();
 
@@ -697,9 +710,10 @@ NOLINT_TEST_F(TextureReadbackMappingTest, MapNowReturnsExpectedBytesAndLayout)
   EXPECT_EQ(mapped->Layout().slice_pitch.get(), 16U);
 
   const auto resolved = request.src_slice.Resolve(desc);
-  std::vector<std::byte> actual(mapped->Data(),
-    mapped->Data()
-      + static_cast<std::ptrdiff_t>(mapped->Layout().slice_pitch.get()));
+  const auto mapped_bytes = std::span(mapped->Data(),
+    static_cast<std::size_t>(mapped->Layout().slice_pitch.get()));
+  const auto actual
+    = std::vector<std::byte>(mapped_bytes.begin(), mapped_bytes.end());
   EXPECT_EQ(actual, CopyTextureRegionBytes(source_bytes, desc, resolved));
 }
 
@@ -712,7 +726,8 @@ NOLINT_TEST_F(TextureReadbackMappingTest,
   desc.format = oxygen::Format::kRGBA8UNorm;
   desc.texture_type = TextureType::kTexture2D;
   desc.debug_name = "cleanup-texture";
-  const auto source_bytes = MakePatternBytes(4 * 4 * 4, 0x52);
+  const auto source_bytes
+    = MakePatternBytes({ .size = std::size_t { 4 } * 4 * 4, .seed = 0x52 });
   auto source = CreateTextureWithBytes(desc, source_bytes);
 
   auto& registry = Registry();
@@ -757,7 +772,8 @@ NOLINT_TEST_F(
   auto* headless_texture = source.get();
   ASSERT_NE(headless_texture, nullptr);
 
-  const auto pattern = MakePatternBytes(4 * 4 * 4, 0x67);
+  const auto pattern
+    = MakePatternBytes({ .size = std::size_t { 4 } * 4 * 4, .seed = 0x67 });
   const auto write_offset
     = headless_texture->GetLayoutStrategy().ComputeSliceMipBaseOffset(
       desc, 1, 1);
@@ -784,9 +800,10 @@ NOLINT_TEST_F(
   EXPECT_EQ(mapped->Layout().row_pitch.get(), 16U);
   EXPECT_EQ(mapped->Layout().slice_pitch.get(), 64U);
 
-  std::vector<std::byte> actual(mapped->Data(),
-    mapped->Data()
-      + static_cast<std::ptrdiff_t>(mapped->Layout().slice_pitch.get()));
+  const auto mapped_bytes = std::span(mapped->Data(),
+    static_cast<std::size_t>(mapped->Layout().slice_pitch.get()));
+  const auto actual
+    = std::vector<std::byte>(mapped_bytes.begin(), mapped_bytes.end());
   EXPECT_EQ(actual, pattern);
 }
 
@@ -798,7 +815,8 @@ NOLINT_TEST_F(TextureReadbackValidationTest, MixedAspectMaskIsRejected)
   desc.format = oxygen::Format::kRGBA8UNorm;
   desc.texture_type = TextureType::kTexture2D;
   desc.debug_name = "texture-invalid-aspects";
-  auto source = CreateTextureWithBytes(desc, MakePatternBytes(16, 0x33));
+  auto source = CreateTextureWithBytes(
+    desc, MakePatternBytes({ .size = 16, .seed = 0x33 }));
   auto readback = CreateTextureReadback();
 
   auto recorder = AcquireRecorder("texture-invalid-aspects");
@@ -816,7 +834,7 @@ NOLINT_TEST_F(TextureReadbackValidationTest, MixedAspectMaskIsRejected)
 
 NOLINT_TEST_F(BlockingReadbackTest, ReadBufferNowReturnsRequestedRangeBytes)
 {
-  const auto source_bytes = MakePatternBytes(36, 0xA1);
+  const auto source_bytes = MakePatternBytes({ .size = 36, .seed = 0xA1 });
   auto source = CreateBufferWithBytes(source_bytes, "blocking-buffer");
 
   const auto bytes
@@ -834,7 +852,8 @@ NOLINT_TEST_F(
   desc.format = oxygen::Format::kRGBA8UNorm;
   desc.texture_type = TextureType::kTexture2D;
   desc.debug_name = "blocking-texture";
-  const auto source_bytes = MakePatternBytes(4 * 4 * 4, 0xB1);
+  const auto source_bytes
+    = MakePatternBytes({ .size = std::size_t { 4 } * 4 * 4, .seed = 0xB1 });
   auto source = CreateTextureWithBytes(desc, source_bytes);
 
   const auto data = GetReadbackManager()->ReadTextureNow(*source,
@@ -970,8 +989,8 @@ NOLINT_TEST_F(
 {
   GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
 
-  auto source
-    = CreateBufferWithBytes(MakePatternBytes(40, 0xC1), "shutdown-source");
+  auto source = CreateBufferWithBytes(
+    MakePatternBytes({ .size = 40, .seed = 0xC1 }), "shutdown-source");
   auto readback = CreateBufferReadback();
 
   const auto ticket
@@ -992,7 +1011,7 @@ NOLINT_TEST_F(ReadbackAwaitGuardTest,
   AwaitWarnsAndReturnsWouldDeadlockWhenTicketSignalWasNeverSubmitted)
 {
   auto source = CreateBufferWithBytes(
-    MakePatternBytes(40, 0xD1), "await-deadlock-source");
+    MakePatternBytes({ .size = 40, .seed = 0xD1 }), "await-deadlock-source");
   auto readback = CreateBufferReadback("await-deadlock-readback");
 
   const auto ticket
@@ -1020,7 +1039,7 @@ NOLINT_TEST_F(ReadbackAwaitGuardTest,
   GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
 
   auto source = CreateBufferWithBytes(
-    MakePatternBytes(44, 0xE1), "await-shutdown-source");
+    MakePatternBytes({ .size = 44, .seed = 0xE1 }), "await-shutdown-source");
   auto readback = CreateBufferReadback("await-shutdown-readback");
 
   const auto ticket

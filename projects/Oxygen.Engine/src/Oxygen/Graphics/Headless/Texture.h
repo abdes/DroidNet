@@ -169,28 +169,16 @@ public:
   [[nodiscard]] auto GetNativeResource() const -> NativeResource override;
   OXGN_HDLS_NDAPI auto GetLayoutStrategy() const
     -> const TextureLayoutStrategy&;
-  [[nodiscard]] auto IsReadbackSurface() const noexcept -> bool
+  //! The CPU-side bytes that back the texture's data.
+  [[nodiscard]] auto GetBackingBytes() const noexcept
+    -> std::span<const std::byte>
   {
-    return is_readback_surface_;
-  }
-  [[nodiscard]] auto IsReadbackSurfaceMapped() const noexcept -> bool
-  {
-    return is_readback_surface_mapped_;
-  }
-  auto SetReadbackSurfaceMapped(const bool mapped) noexcept -> void
-  {
-    is_readback_surface_mapped_ = mapped;
-  }
-  [[nodiscard]] auto GetBackingData() const noexcept -> const std::byte*
-  {
-    return data_.empty() ? nullptr : std::as_bytes(std::span(data_)).data();
+    return std::as_bytes(std::span(data_));
   }
 
 private:
   TextureDesc desc_ {};
   AllocationReservation budget_reservation_;
-  bool is_readback_surface_ { false };
-  bool is_readback_surface_mapped_ { false };
 
   // CPU-side backing storage for texture data. Conservatively sized using a
   // 4 bytes-per-pixel estimate when format is unknown.
