@@ -21,6 +21,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -38,6 +39,20 @@ namespace {
 
   constexpr auto kUpdatedSpeed = 9.5F;
   constexpr auto kSceneBSpeed = 7.5F;
+  constexpr auto kFirstPart
+    = std::string_view { "00000000-0000-4000-8000-0000000000a1" };
+  constexpr auto kSecondPart
+    = std::string_view { "00000000-0000-4000-8000-0000000000b2" };
+  //! The script of the part's slots: a float `speed` and a material `orb`.
+  constexpr auto kPartScript = std::string_view {
+    "local Script = oxygen.script {\n"
+    "  params = {\n"
+    "    speed = oxygen.param.float {},\n"
+    "    orb = oxygen.param.asset { kind = \"material\" },\n"
+    "  },\n"
+    "}\n"
+    "return Script\n",
+  };
 
   class ScriptingSidecarImportJobReimportTest : public ScriptingImportTestBase {
   protected:
@@ -59,10 +74,109 @@ namespace {
       return Submit(std::move(request));
     }
 
-    //! Applies a sidecar whose only rows change the `speed` of one slot of
-    //! the nodes `paths` name below node 1, the scene's instance root.
+    //! How `CookInstancedPart` cooks the part.
+    struct PartSpec final {
+      //! The parameters each of the part's slots sets.
+      nlohmann::json params;
+      //! Where the script is cooked, mounted only for the part's own
+      //! bindings; empty for the scenes' root.
+      std::filesystem::path script_root;
+    };
+
+    //! Cooks `Part`, whose two nodes `kFirstPart` and `kSecondPart` each hold
+    //! the slot `main` of `kPartScript`, and `Level`, whose node 1 instances
+    //! it.
+    auto CookInstancedPart(const std::filesystem::path& cooked_root,
+      const PartSpec& spec = {}) -> bool
+    {
+      const auto& params = spec.params;
+      const auto script_root
+        = spec.script_root.empty() ? cooked_root : spec.script_root;
+      const auto part = CookDescriptor(cooked_root,
+        {
+          { "name", "Part" },
+          {
+            "nodes",
+            nlohmann::json::array({
+              { { "id", kFirstPart }, { "name", "part" } },
+              { { "id", kSecondPart }, { "name", "other" }, { "parent", 0 } },
+            }),
+          },
+        });
+      const auto script_source = script_root / "input" / "logic.luau";
+      WriteText(script_source, kPartScript);
+      const auto script = Submit(MakeScriptRequest({
+        .source_path = script_source,
+        .cooked_root = script_root,
+      }));
+      const auto part_sidecar = cooked_root / "input" / "part.sidescript.json";
+      const auto script_path = SpellReference(
+        CanonicalSceneVirtualPath("Part"), CanonicalScriptVirtualPath("logic"));
+      WriteText(part_sidecar,
+        MakeSidecarPayload(std::vector {
+          SidecarBindingSpec {
+            .node_index = 0,
+            .script_virtual_path = script_path,
+            .params = params,
+          },
+          SidecarBindingSpec {
+            .node_index = 1,
+            .script_virtual_path = script_path,
+            .params = params,
+          },
+        }));
+      auto bindings_request = MakeSidecarRequest({
+        .source_path = part_sidecar,
+        .cooked_root = cooked_root,
+        .scene_virtual_path = CanonicalSceneVirtualPath("Part"),
+      });
+      if (script_root != cooked_root) {
+        bindings_request.cooked_context_roots.push_back(script_root);
+      }
+      const auto bindings = Submit(std::move(bindings_request));
+      const auto scene_ref = SpellReference(
+        CanonicalSceneVirtualPath("Level"), CanonicalSceneVirtualPath("Part"));
+      const auto level = CookDescriptor(cooked_root,
+        {
+          { "name", "Level" },
+          {
+            "nodes",
+            nlohmann::json::array({
+              {
+                { "id", "00000000-0000-4000-8000-000000000001" },
+                { "name", "root" },
+              },
+              {
+                { "id", "00000000-0000-4000-8000-000000000002" },
+                { "name", "part" },
+                { "parent", 0 },
+                { "instance", { { "scene_ref", scene_ref } } },
+              },
+            }),
+          },
+        });
+      return part.success && script.success && bindings.success
+        && level.success;
+    }
+
+    //! A change of the parameter `key` to `value`, of type `type`.
+    [[nodiscard]] static auto ParamChange(const std::string_view key,
+      const std::string_view type, const nlohmann::json& value)
+      -> nlohmann::json
+    {
+      return {
+        { "key", key },
+        { "type", type },
+        { "value", value },
+      };
+    }
+
+    //! Applies a sidecar whose only rows make `change` of one slot of the
+    //! nodes `paths` name below node 1, the scene's instance root.
     auto ApplyInstanceChanges(const std::filesystem::path& cooked_root,
-      const std::vector<std::string_view>& paths) -> ImportReport
+      const std::vector<std::string_view>& paths,
+      const nlohmann::json& change = ParamChange("speed", "float", 2.0))
+      -> ImportReport
     {
       auto rows = nlohmann::json::array();
       for (const auto node : paths) {
@@ -70,12 +184,7 @@ namespace {
           { "node_index", 1 },
           { "node_path", nlohmann::json::array({ node }) },
           { "slot_id", kMainSlotId },
-          {
-            "params",
-            nlohmann::json::array({
-              { { "key", "speed" }, { "type", "float" }, { "value", 2.0 } },
-            }),
-          },
+          { "params", nlohmann::json::array({ change }) },
         });
       }
       const auto source = cooked_root / "input" / "level.sidescript.json";
@@ -115,63 +224,13 @@ namespace {
     InstancedNodeChangesKeepOnlyTheirNodePaths)
   {
     // Arrange
-    constexpr auto kFirst
-      = std::string_view { "00000000-0000-4000-8000-0000000000a1" };
-    constexpr auto kSecond
-      = std::string_view { "00000000-0000-4000-8000-0000000000b2" };
+    constexpr auto kFirst = kFirstPart;
+    constexpr auto kSecond = kSecondPart;
     constexpr auto kStranger
       = std::string_view { "00000000-0000-4000-8000-0000000000c3" };
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "instanced_node_changes";
-    ASSERT_TRUE(CookDescriptor(cooked_root,
-      {
-        { "name", "Part" },
-        { "nodes",
-          nlohmann::json::array({
-            { { "id", kFirst }, { "name", "part" } },
-            { { "id", kSecond }, { "name", "other" }, { "parent", 0 } },
-          }) },
-      })
-        .success);
-    // Both part nodes hold the slot the changes name.
-    const auto script_source = cooked_root / "input" / "logic.luau";
-    WriteText(script_source, SpeedScriptSource());
-    ASSERT_TRUE(Submit(MakeScriptRequest({
-                         .source_path = script_source,
-                         .cooked_root = cooked_root,
-                       }))
-        .success);
-    const auto part_sidecar = cooked_root / "input" / "part.sidescript.json";
-    const auto script = SpellReference(
-      CanonicalSceneVirtualPath("Part"), CanonicalScriptVirtualPath("logic"));
-    WriteText(part_sidecar,
-      MakeSidecarPayload(std::vector {
-        SidecarBindingSpec { .node_index = 0, .script_virtual_path = script },
-        SidecarBindingSpec { .node_index = 1, .script_virtual_path = script },
-      }));
-    ASSERT_TRUE(
-      Submit(MakeSidecarRequest({
-               .source_path = part_sidecar,
-               .cooked_root = cooked_root,
-               .scene_virtual_path = CanonicalSceneVirtualPath("Part"),
-             }))
-        .success);
-    ASSERT_TRUE(CookDescriptor(cooked_root,
-      {
-        { "name", "Level" },
-        { "nodes",
-          nlohmann::json::array({
-            { { "id", "00000000-0000-4000-8000-000000000001" },
-              { "name", "root" } },
-            { { "id", "00000000-0000-4000-8000-000000000002" },
-              { "name", "part" }, { "parent", 0 },
-              { "instance",
-                { { "scene_ref",
-                  SpellReference(CanonicalSceneVirtualPath("Level"),
-                    CanonicalSceneVirtualPath("Part")) } } } },
-          }) },
-      })
-        .success);
+    ASSERT_TRUE(CookInstancedPart(cooked_root));
 
     // Act
     const auto second_only = ApplyInstanceChanges(cooked_root, { kSecond });
@@ -212,6 +271,119 @@ namespace {
         .GetComponents<data::pak::scripting::ScriptParamOverrideRecord>()
         .size(),
       1U);
+  }
+
+  //! A change of an instanced slot's parameter follows the declarations of
+  //! the slot's script, as an override of the slot itself does, whether or
+  //! not the slot sets the parameter: an undeclared key, another type and an
+  //! asset of another type each fail at their path (R3 review, item 7).
+  NOLINT_TEST_F(ScriptingSidecarImportJobReimportTest,
+    InstancedNodeChangesFollowTheSlotScriptDeclarations)
+  {
+    // Arrange
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "instanced_node_declarations";
+    ASSERT_TRUE(CookInstancedPart(cooked_root));
+    const auto script_asset = SpellReference(
+      CanonicalSceneVirtualPath("Level"), CanonicalScriptVirtualPath("logic"));
+    const auto path_of
+      = [](const ImportReport& report,
+          const std::string_view code) -> std::optional<std::string> {
+      const auto found
+        = std::ranges::find(report.diagnostics, code, &ImportDiagnostic::code);
+      if (found == report.diagnostics.end()) {
+        return std::nullopt;
+      }
+      return found->object_path;
+    };
+
+    // Act
+    const auto undeclared = ApplyInstanceChanges(
+      cooked_root, { kFirstPart }, ParamChange("spead", "float", 2.0));
+    const auto other_type = ApplyInstanceChanges(
+      cooked_root, { kFirstPart }, ParamChange("speed", "int32", 3));
+    const auto other_asset_type = ApplyInstanceChanges(
+      cooked_root, { kFirstPart }, ParamChange("orb", "asset", script_asset));
+    const auto declared = ApplyInstanceChanges(cooked_root, { kFirstPart });
+
+    // Assert
+    EXPECT_FALSE(undeclared.success);
+    const auto undeclared_path
+      = path_of(undeclared, "script.sidecar.param_undeclared");
+    ASSERT_HAS_VALUE(undeclared_path);
+    EXPECT_EQ(*undeclared_path, "instance_bindings[0].params[0].key");
+    EXPECT_FALSE(other_type.success);
+    const auto other_type_path
+      = path_of(other_type, "script.sidecar.param_type_mismatch");
+    ASSERT_HAS_VALUE(other_type_path);
+    EXPECT_EQ(*other_type_path, "instance_bindings[0].params[0].type");
+    EXPECT_FALSE(other_asset_type.success);
+    const auto other_asset_type_path
+      = path_of(other_asset_type, "script.sidecar.param_asset_kind_mismatch");
+    ASSERT_HAS_VALUE(other_asset_type_path);
+    EXPECT_EQ(*other_asset_type_path, "instance_bindings[0].params[0].value");
+    EXPECT_TRUE(declared.success);
+  }
+
+  //! A change whose slot's script is not mounted is a warning and kept: its
+  //! declarations are checked when the scene is instantiated.
+  NOLINT_TEST_F(ScriptingSidecarImportJobReimportTest,
+    InstancedNodeChangeOfAnUnmountedScriptIsKept)
+  {
+    // Arrange
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "instanced_node_unmounted_script";
+    ASSERT_TRUE(CookInstancedPart(cooked_root,
+      {
+        .script_root = temp.Path() / "instanced_node_scripts",
+      }));
+
+    // Act
+    const auto report = ApplyInstanceChanges(cooked_root, { kFirstPart });
+    const auto level = LoadLevel(cooked_root);
+
+    // Assert
+    EXPECT_TRUE(report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "script.sidecar.instance_script_unavailable"));
+    EXPECT_EQ(
+      level.GetComponents<data::pak::scripting::ScriptParamOverrideRecord>()
+        .size(),
+      1U);
+  }
+
+  //! A change that gives an instanced slot's float `speed` a string value is
+  //! an error, and the level keeps the changes it had (R3 review, item 7).
+  NOLINT_TEST_F(ScriptingSidecarImportJobReimportTest,
+    InstancedNodeChangeOfAnotherKindIsRefused)
+  {
+    // Arrange
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "instanced_node_change_kind";
+    ASSERT_TRUE(CookInstancedPart(cooked_root,
+      {
+        .params = nlohmann::json::array({
+          ParamChange("speed", "float", 1.0),
+        }),
+      }));
+    ASSERT_TRUE(ApplyInstanceChanges(cooked_root, { kSecondPart }).success);
+
+    // Act
+    const auto other_kind = ApplyInstanceChanges(
+      cooked_root, { kFirstPart }, ParamChange("speed", "string", "fast"));
+    const auto level = LoadLevel(cooked_root);
+
+    // Assert
+    EXPECT_FALSE(other_kind.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      other_kind.diagnostics, "script.sidecar.instance_override_invalid"));
+    const auto changes
+      = level.GetComponents<data::pak::scripting::ScriptParamOverrideRecord>();
+    ASSERT_EQ(changes.size(), 1U);
+    const auto second = data::NodeId::FromString(kSecondPart);
+    ASSERT_HAS_VALUE(second);
+    EXPECT_THAT(level.GetNodePath(changes.front().target),
+      ::testing::ElementsAre(*second));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobReimportTest,

@@ -28,7 +28,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -165,7 +164,8 @@ namespace {
   using SceneMap = std::unordered_map<data::AssetKey,
     std::shared_ptr<const data::SceneAsset>>;
 
-  //! Parameter declarations of each script a sidecar references.
+  //! Parameter declarations of each script a sidecar references or a slot of
+  //! an instanced scene runs.
   using ScriptDeclarationMap
     = std::map<data::AssetKey, std::vector<SidecarParam>>;
 
@@ -1292,6 +1292,41 @@ namespace {
     return scenes;
   }
 
+  //! Adds the declarations of the scripts the slots of `instanced` run.
+  /*!
+   A script that is not mounted, or cannot be read, is left out; a change that
+   reaches its slot is reported then.
+  */
+  auto AddInstancedScriptDeclarations(
+    std::span<const SidecarCookedInspectionContext> cooked_contexts,
+    const SceneMap& instanced, ScriptDeclarationMap& declarations) -> void
+  {
+    for (const auto& scene : instanced | std::views::values) {
+      for (const auto& component :
+        scene->GetComponents<script::ScriptingComponentRecord>()) {
+        for (const auto& slot : scene->ReadScriptSlots(
+               component.slot_start_index, component.slot_count)) {
+          const auto& key = slot.script_asset_key;
+          if (declarations.contains(key)) {
+            continue;
+          }
+          const auto mounted = FindMountedAsset(cooked_contexts, key);
+          if (!mounted || mounted->entry->type != data::AssetType::kScript) {
+            continue;
+          }
+          const auto read
+            = detail::ReadCookedDescriptor(*mounted->context, key);
+          if (!read.has_value()) {
+            continue;
+          }
+          if (auto decoded = DecodeScriptDeclarations(read.value())) {
+            declarations.emplace(key, std::move(*decoded));
+          }
+        }
+      }
+    }
+  }
+
   auto BuildBindingsByNodeFromComponents(const data::SceneAsset& scene)
     -> std::map<uint32_t, std::vector<SlotWithParams>>
   {
@@ -1627,7 +1662,9 @@ namespace {
       if (!valid) {
         return std::nullopt;
       }
-      DropUnresolved(changes);
+      if (!CheckInstanceChanges(changes)) {
+        return std::nullopt;
+      }
       std::ranges::sort(changes, {}, [](const InstanceParamChange& change) {
         return std::tie(change.node_index, change.node_path, change.slot_id,
           change.param.key);
@@ -1635,77 +1672,190 @@ namespace {
       return changes;
     }
 
-    //! Composes each instance root's changes with the cooked instanced
-    //! scenes; a change naming no node, or a slot the node does not have, is
-    //! a warning and left out.
-    auto DropUnresolved(std::vector<InstanceParamChange>& changes) -> void
+    //! Composes each change with the cooked instanced scenes: a change naming
+    //! no node, or a slot the node does not have, is a warning and left out;
+    //! one that changes the kind of the slot's value, or that the slot's
+    //! script does not declare as it sets it, is an error. A change whose
+    //! slot's script is not mounted is a warning and kept.
+    /*!
+     @return Whether no change is an error.
+    */
+    auto CheckInstanceChanges(std::vector<InstanceParamChange>& changes) -> bool
     {
-      auto roots = std::set<uint32_t> {};
-      for (const auto& change : changes) {
-        roots.insert(change.node_index);
-      }
       const auto resolve = [this](const data::AssetKey& key)
         -> std::shared_ptr<const data::SceneAsset> {
         const auto found = instanced_->find(key);
         return found != instanced_->end() ? found->second : nullptr;
       };
       const auto ancestors = std::array { scene_->GetAssetKey() };
+      auto valid = true;
       auto unresolved = std::vector<const InstanceParamChange*> {};
-      for (const auto root : roots) {
+      for (const auto& change : changes) {
+        const auto object_path = change.object_path.empty()
+          ? std::string { "instance_bindings" }
+          : change.object_path;
+        // Each change is composed on its own, so that what composition finds
+        // is this change's, and the slot it applies to is known.
+        auto value = ParamValue(change.param);
+        // Parsed and cooked parameters both carry a value type.
+        DCHECK_F(value.has_value());
         const auto* instance
-          = scene_->FindComponent<world::SceneInstanceRecord>(root);
-        auto addressed = std::vector<const InstanceParamChange*> {};
-        auto scene_changes = std::vector<data::SceneChange> {};
-        for (const auto& change : changes) {
-          if (change.node_index != root) {
-            continue;
-          }
-          addressed.push_back(&change);
-          // Resolution reads the node and slot alone; the value is checked
-          // against the slot's script when the scene is instantiated.
-          scene_changes.push_back({
-            .path = change.node_path,
-            .change = data::ParameterChange {
-              .slot_id = change.slot_id,
-              .key = change.param.key,
-              .value = {},
-            },
-          });
-        }
+          = scene_->FindComponent<world::SceneInstanceRecord>(
+            change.node_index);
+        const auto scene_change = data::SceneChange {
+          .path = change.node_path,
+          .change = data::ParameterChange {
+            .slot_id = change.slot_id,
+            .key = change.param.key,
+            .value = std::move(value).value_or(data::ScriptParam {}),
+          },
+        };
         const auto composed = data::ComposeInstance(
           {
             .source = instance->scene_key,
-            .instance_root = root,
-            .changes = scene_changes,
+            .instance_root = change.node_index,
+            .changes = std::span(&scene_change, 1U),
             .ancestors = ancestors,
           },
           resolve);
-        for (const auto& entry : composed.unresolved) {
-          const auto* parameter
-            = std::get_if<data::ParameterChange>(&entry.change.change);
-          const auto match = std::ranges::find_if(
-            addressed, [&](const InstanceParamChange* change) -> bool {
-              return parameter != nullptr
-                && change->node_path == entry.change.path
-                && change->slot_id == parameter->slot_id
-                && change->param.key == parameter->key;
-            });
-          if (match != addressed.end()) {
-            unresolved.push_back(*match);
-          }
+        const auto changes_kind = std::ranges::contains(composed.issues,
+          data::CompositionIssueCode::kChangeInvalid,
+          &data::CompositionIssue::code);
+        if (changes_kind) {
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+            "script.sidecar.instance_override_invalid",
+            "The value has another kind than the slot's value of the "
+            "parameter",
+            object_path);
+          valid = false;
+          continue;
         }
-      }
-      for (const auto* change : unresolved) {
-        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kWarning,
-          "script.sidecar.instance_override_unresolved",
-          "The change names no node of the instanced scene, or a slot that "
-          "node does not have; it has no effect until it resolves",
-          change->object_path.empty() ? std::string { "instance_bindings" }
-                                      : change->object_path);
+        if (!composed.unresolved.empty()) {
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kWarning,
+            "script.sidecar.instance_override_unresolved",
+            "The change names no node of the instanced scene, or a slot that "
+            "node does not have; it has no effect until it resolves",
+            object_path);
+          unresolved.push_back(&change);
+          continue;
+        }
+        const auto* slot = AppliedSlot(composed, change);
+        DCHECK_NOTNULL_F(slot);
+        const auto declared = declarations_->find(slot->script);
+        if (declared == declarations_->end()) {
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kWarning,
+            "script.sidecar.instance_script_unavailable",
+            "The script of the slot the change reaches is not in the mounted "
+            "cooked content; the change is checked when the scene is "
+            "instantiated",
+            object_path);
+          continue;
+        }
+        if (!CheckInstanceDeclaration(change.param, declared->second,
+              data::to_string(slot->script), object_path)) {
+          valid = false;
+        }
       }
       std::erase_if(changes, [&](const InstanceParamChange& change) -> bool {
         return std::ranges::contains(unresolved, &change);
       });
+      return valid;
+    }
+
+    //! The value of a parsed parameter, as composition reads it: a string
+    //! value's text is kept in a table of its own, and a node value's path
+    //! does not take part.
+    static auto ParamValue(const SidecarParam& param)
+      -> std::optional<data::ScriptParam>
+    {
+      auto strings = data::DescriptorStringsBuilder {};
+      auto record = param.record;
+      if (record.type == script::ScriptParamType::kString) {
+        record.value.as_string_offset = strings.Add(param.string_value);
+      }
+      return data::ToScriptParam(record, strings.Build());
+    }
+
+    //! The declaration of `param` among the declarations of `script_name`, or
+    //! null after reporting an undeclared key or a value of another type at
+    //! `param_path`.
+    auto FindDeclaration(const SidecarParam& param,
+      std::span<const SidecarParam> declared, const std::string& script_name,
+      const std::string& param_path) -> const SidecarParam*
+    {
+      const auto& key = param.key;
+      const auto declaration
+        = std::ranges::find(declared, key, &SidecarParam::key);
+      if (declaration == declared.end()) {
+        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+          "script.sidecar.param_undeclared",
+          "Script '" + script_name + "' declares no parameter '" + key + "'",
+          param_path + ".key");
+        return nullptr;
+      }
+      if (declaration->record.type != param.record.type) {
+        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+          "script.sidecar.param_type_mismatch",
+          "Parameter '" + key + "' is declared "
+            + std::string(script::to_string(declaration->record.type))
+            + " but the override is "
+            + std::string(script::to_string(param.record.type)),
+          param_path + ".type");
+        return nullptr;
+      }
+      return &*declaration;
+    }
+
+    //! Checks a change of an instanced slot's parameter against the
+    //! declarations of the slot's script, as an override of the slot itself
+    //! is checked; reports every violation at `param_path`.
+    auto CheckInstanceDeclaration(const SidecarParam& param,
+      std::span<const SidecarParam> declared, const std::string& script_name,
+      const std::string& param_path) -> bool
+    {
+      const auto* declaration
+        = FindDeclaration(param, declared, script_name, param_path);
+      if (declaration == nullptr) {
+        return false;
+      }
+      const auto declared_type = declaration->record.value.as_asset.asset_type;
+      const auto changed_type = param.record.value.as_asset.asset_type;
+      const auto other_asset_type
+        = param.record.type == script::ScriptParamType::kAsset
+        && declared_type != data::AssetType::kUnknown
+        && changed_type != declared_type;
+      if (other_asset_type) {
+        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+          "script.sidecar.param_asset_kind_mismatch",
+          "Parameter '" + param.key + "' expects a "
+            + std::string(data::to_string(declared_type))
+            + " asset but the change's asset is a "
+            + std::string(data::to_string(changed_type)),
+          param_path + ".value");
+        return false;
+      }
+      return true;
+    }
+
+    //! The slot a change composed on its own applied to, or null when it did
+    //! not apply.
+    static auto AppliedSlot(const data::ComposedScene& composed,
+      const InstanceParamChange& change) -> const data::ComposedSlot*
+    {
+      for (const auto& occurrence : composed.occurrences) {
+        for (const auto& slot : occurrence.slots) {
+          const auto applied = slot.slot_id == change.slot_id
+            && std::ranges::any_of(slot.parameters,
+              [&change](const data::ComposedParameter& parameter) -> bool {
+                return parameter.key == change.param.key
+                  && parameter.supplier == data::kRequester;
+              });
+          if (applied) {
+            return &slot;
+          }
+        }
+      }
+      return nullptr;
     }
 
     //! Checks each override of `row` against the script's declarations and
@@ -1721,27 +1871,9 @@ namespace {
         const auto param_path
           = object_path + ".params[" + std::to_string(j) + "]";
         const auto& key = param.key;
-        const auto declaration = std::ranges::find_if(
-          declared, [&key](const SidecarParam& declared_param) -> bool {
-            return declared_param.key == key;
-          });
-        if (declaration == declared.end()) {
-          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-            "script.sidecar.param_undeclared",
-            "Script '" + row.script_virtual_path + "' declares no parameter '"
-              + key + "'",
-            param_path + ".key");
-          valid = false;
-          continue;
-        }
-        if (declaration->record.type != param.record.type) {
-          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-            "script.sidecar.param_type_mismatch",
-            "Parameter '" + key + "' is declared "
-              + std::string(script::to_string(declaration->record.type))
-              + " but the override is "
-              + std::string(script::to_string(param.record.type)),
-            param_path + ".type");
+        const auto* declaration = FindDeclaration(
+          param, declared, row.script_virtual_path, param_path);
+        if (declaration == nullptr) {
           valid = false;
           continue;
         }
@@ -2036,7 +2168,7 @@ namespace {
     const SidecarDocument& parsed,
     const SidecarResolvedSceneState& resolved_scene_state) -> co::Co<bool>
   {
-    const auto declarations = LoadScriptDeclarations(
+    auto declarations = LoadScriptDeclarations(
       session, request, resolver, cooked_contexts, parsed);
     if (!declarations) {
       co_return false;
@@ -2045,6 +2177,7 @@ namespace {
     const data::SceneAsset scene(resolved_scene_state.scene_key,
       std::span<const std::byte>(resolved_scene_state.source_scene_descriptor));
     const auto instanced = ReadInstancedScenes(cooked_contexts, scene);
+    AddInstancedScriptDeclarations(cooked_contexts, instanced, *declarations);
     const auto scripts = SceneScriptBuilder(session, request, resolver, parsed,
       resolved_scene_state.node_count, cooked_contexts, scene, *declarations,
       instanced)

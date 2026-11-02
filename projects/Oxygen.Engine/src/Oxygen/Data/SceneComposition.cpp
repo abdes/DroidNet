@@ -130,6 +130,19 @@ namespace {
     return outcome;
   }
 
+  //! Whether `value` has the kind of `current`: the same value type and, for
+  //! an asset, the same asset type.
+  auto IsSameParameterKind(const ScriptParam& current, const ScriptParam& value)
+    -> bool
+  {
+    if (current.index() != value.index()) {
+      return false;
+    }
+    const auto* asset = std::get_if<ScriptAssetParam>(&current);
+    return asset == nullptr
+      || asset->asset_type == std::get<ScriptAssetParam>(value).asset_type;
+  }
+
   auto ApplyParameter(std::vector<ComposedSlot>& slots,
     const world::SceneNodeIndexT node_index, const ParameterChange& change,
     const ChangeSupplier supplier) -> ChangeOutcome
@@ -141,6 +154,13 @@ namespace {
         });
     if (slot == slots.end()) {
       return ChangeOutcome::kUnresolved;
+    }
+    const auto current = std::ranges::find(
+      slot->parameters, change.key, &ComposedParameter::key);
+    const auto changes_kind = current != slot->parameters.end()
+      && !IsSameParameterKind(current->value, change.value);
+    if (changes_kind) {
+      return ChangeOutcome::kInvalid;
     }
     Upsert(slot->parameters,
       ComposedParameter {

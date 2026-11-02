@@ -34,6 +34,11 @@ using SceneResolver
   = std::function<std::shared_ptr<const SceneAsset>(const AssetKey&)>;
 
 //! A change of one script parameter of a slot of an instanced node.
+/*!
+ The value keeps the kind of the parameter's value in the slot, when the slot
+ has one: its value type and, for an asset, its asset type. Composition does
+ not read the script; its declarations are checked when the slot attaches.
+*/
 struct ParameterChange {
   ScriptSlotId slot_id;
   std::string key;
@@ -184,7 +189,8 @@ enum class CompositionIssueCode : std::uint8_t {
   kSceneMissing,
   //! An instanced scene is reached again on its own path; that branch ends.
   kCycle,
-  //! A change's value fails the validation of the record it patches.
+  //! A change's value fails the validation of the record it patches, or has
+  //! another kind than the parameter it changes.
   kChangeInvalid,
   //! The scene's script parameters cannot be decoded.
   kRecordInvalid,
@@ -257,7 +263,8 @@ enum class ChangeOutcome : std::uint8_t {
   kApplied,
   //! The node has no record for the property, or no such script slot.
   kUnresolved,
-  //! The value fails the validation of the record it patches.
+  //! The value fails the validation of the record it patches, or has another
+  //! kind than the parameter it changes.
   kInvalid,
 };
 

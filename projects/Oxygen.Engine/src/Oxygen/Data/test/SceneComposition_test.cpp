@@ -16,16 +16,19 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 #include <vector>
 
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneComposition.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -108,7 +111,7 @@ struct Instancing final {
   SceneNode holder;
 
   explicit Instancing(const InstancingSpec& spec)
-    : scene(std::string(spec.scene))
+    : scene(spec.scene)
     , root(scene.Node(spec.root))
     , holder(scene.Node(spec.holder, root))
   {
@@ -407,6 +410,84 @@ NOLINT_TEST_F(SceneCompositionTest, ParameterChangesReachTheirSlot)
   EXPECT_EQ(recomposed.front().parameters.front().supplier, 0U);
   EXPECT_FLOAT_EQ(
     std::get<float>(recomposed.front().parameters.front().value), kSpeed);
+}
+
+//! A change that gives a slot's parameter another kind, a string for a float
+//! or an asset of another type, is invalid and leaves the slot's value (R3
+//! review, item 7).
+NOLINT_TEST_F(SceneCompositionTest, ParameterChangeOfAnotherKindIsInvalid)
+{
+  const auto skin = AssetKey::FromVirtualPath("/test/Skin.omat");
+  auto rotor = SceneBuilder { "Rotor" };
+  const auto blade = rotor.Node("Blade");
+  const auto spin
+    = rotor.ScriptSlot(blade, AssetKey::FromVirtualPath("/test/Spin.oscript"),
+      {
+        { .key = "speed", .value = kSpeed },
+        {
+          .key = "skin",
+          .value = oxygen::cooker::testing::ScriptAssetValue {
+            .key = skin,
+            .type = data::AssetType::kMaterial,
+          },
+        },
+      });
+  const auto rotor_key = AssetKey::FromVirtualPath("/test/Rotor.oscene");
+  const auto rotor_scene = Scenes().Add(rotor_key, rotor);
+  auto hub = Instancing({
+    .scene = "Hub",
+    .root = "Hub",
+    .holder = "Rotor",
+    .source = rotor_key,
+  });
+  hub.scene.ScriptChange(hub.holder, { rotor.IdOf(blade) }, spin.Id(),
+    { .key = "speed", .value = std::string { "fast" } });
+  const auto scene
+    = Scenes().Add(AssetKey::FromVirtualPath("/test/Hub.oscene"), hub.scene);
+  const auto check
+    = [&](std::string key, data::ScriptParam value) -> data::ChangeOutcome {
+    return data::CheckChange(rotor_scene, blade.Index(),
+      data::SceneChange {
+        .change = data::ParameterChange {
+          .slot_id = spin.Id(),
+          .key = std::move(key),
+          .value = std::move(value),
+        },
+      });
+  };
+
+  const auto composed = data::ComposeScene(scene, Scenes().Resolver());
+  const auto same_kind = check("speed", kStreetX);
+  const auto string_for_float = check("speed", std::string { "fast" });
+  const auto same_asset_type = check("skin",
+    data::ScriptAssetParam {
+      .key = skin,
+      .asset_type = data::AssetType::kMaterial,
+    });
+  const auto other_asset_type = check("skin",
+    data::ScriptAssetParam {
+      .key = skin,
+      .asset_type = data::AssetType::kGeometry,
+    });
+
+  ASSERT_EQ(composed.occurrences.size(), 2U);
+  const auto* issue = FindIssue(composed, CompositionIssueCode::kChangeInvalid);
+  ASSERT_NE(issue, nullptr);
+  EXPECT_EQ(issue->occurrence, 1U);
+  EXPECT_EQ(issue->node_index, blade.Index());
+  EXPECT_TRUE(composed.unresolved.empty());
+  const auto& slots = composed.occurrences.at(1U).slots;
+  ASSERT_EQ(slots.size(), 1U);
+  const auto speed = std::ranges::find(
+    slots.front().parameters, "speed", &data::ComposedParameter::key);
+  ASSERT_NE(speed, slots.front().parameters.end());
+  EXPECT_EQ(speed->supplier, 1U);
+  ASSERT_TRUE(std::holds_alternative<float>(speed->value));
+  EXPECT_FLOAT_EQ(std::get<float>(speed->value), kSpeed);
+  EXPECT_EQ(same_kind, data::ChangeOutcome::kApplied);
+  EXPECT_EQ(string_for_float, data::ChangeOutcome::kInvalid);
+  EXPECT_EQ(same_asset_type, data::ChangeOutcome::kApplied);
+  EXPECT_EQ(other_asset_type, data::ChangeOutcome::kInvalid);
 }
 
 //! CheckChange applies a change to a node's own records: a property of a
