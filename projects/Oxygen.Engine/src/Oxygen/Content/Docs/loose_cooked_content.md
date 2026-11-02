@@ -28,7 +28,10 @@ priority. It acquires the existing `.generation.lock` shared before reading the
 index. A new generation has a fresh cooked SourceKey and runtime source ID;
 reusing another generation's identity is rejected before changing the mount.
 `RetireLooseCookedGeneration(source_key)` removes it from ordinary winning
-lookup. Neither operation clears unrelated assets, resources or IBL caches.
+lookup, unless a pak above it requires what only the generation provides
+(`DependencyRequirementError`; it stays mounted). Loads in flight complete from
+the retired generation. Neither operation clears unrelated assets, resources or
+IBL caches.
 `AddLooseCookedRoot` dispatches roots carrying this marker to the same
 lease-aware mount operation.
 
@@ -37,9 +40,10 @@ entries; decode operations and loaded asset/resource owners retain their actual
 source and shared marker lock. Old asset objects expose their exact
 SourceOrigin. Source-qualified operations select that source exactly. A new
 logical load and its AssetKey dependencies resolve through one immutable view of
-the declared layers, with later layers winning and tombstones masking lower
-definitions. Physical resource indices always address the container of the
-selected asset. Contextual reads and repeated publication preserve the object's
+the declared layers, with later layers winning and the tombstones of paks
+masking lower definitions; a texture another source holds, named by key,
+resolves through the same view and is recorded with the asset. Physical
+resource indices always address the container of the selected asset. Contextual reads and repeated publication preserve the object's
 recorded bindings; activating another layer never silently rebinds an existing
 object.
 

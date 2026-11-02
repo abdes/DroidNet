@@ -22,10 +22,7 @@
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
-#include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/RegionStream.h>
@@ -146,49 +143,6 @@ namespace {
     EXPECT_EQ(first_wins, expected_first);
     EXPECT_FALSE(asset_loader_->ResolveTextureResourceKey(
       "/Content/Textures/Missing.otex"));
-  }
-
-  //! A texture field naming another source's texture by key resolves in the
-  //! newest mount holding it, and to nothing when no mount does.
-  NOLINT_TEST_F(AssetLoaderBasicTest, ExternalTextureBindingResolvesByKey)
-  {
-    // Arrange
-    const auto first = TempDir() / "first";
-    const auto second = TempDir() / "second";
-    static_cast<void>(WriteSource(first, { .identity = 33U, .width = 1U }));
-    static_cast<void>(WriteSource(second, { .identity = 34U, .width = 2U }));
-    auto material = data::MaterialAsset(
-      data::AssetKey {}, data::pak::render::MaterialAssetDesc {});
-    auto references = data::AssetReferences::Create(
-      {
-        {
-          .kind = data::ResourceKind::kExternalTexture,
-          .index = data::pak::core::ResourceIndexT { 0U },
-        },
-      },
-      {
-        {
-          .key = data::TextureKeyFromVirtualPath(kMeterPath),
-          .kind = data::KeyReferenceKind::kTexture,
-        },
-      });
-    ASSERT_TRUE(references.has_value());
-    material.SetReferences(std::move(*references));
-    asset_loader_->AddLooseCookedRoot(first);
-    asset_loader_->AddLooseCookedRoot(second);
-
-    // Act
-    const auto resolved = asset_loader_->MakeTextureResourceKeyForAsset(
-      material, data::ResourceReferenceIndex { 0U });
-    const auto expected = TextureKeyIn(*asset_loader_, second);
-    asset_loader_->ClearMounts();
-    const auto unresolved = asset_loader_->MakeTextureResourceKeyForAsset(
-      material, data::ResourceReferenceIndex { 0U });
-
-    // Assert
-    ASSERT_TRUE(expected.has_value());
-    EXPECT_EQ(resolved, expected);
-    EXPECT_FALSE(unresolved.has_value());
   }
 
   //! A recorded descriptor that disagrees with its table, or a path that is

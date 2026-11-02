@@ -25,17 +25,27 @@
 #include <Oxygen/Data/AssetRuntimeBindings.h>
 
 namespace oxygen::content::internal {
+class IContentSource;
 
 struct BoundAsset final {
-  data::AssetKey key {};
+  data::AssetKey key;
   ContentPublication publication {};
-  std::shared_ptr<data::Asset> owner {};
+  std::shared_ptr<data::Asset> owner;
 };
 
 struct BoundResource final {
   ResourceKey key {};
   ContentPublication publication {};
-  std::shared_ptr<Object> owner {};
+  std::shared_ptr<Object> owner;
+};
+
+//! A texture another source holds, named by key and selected when the asset
+//! naming it loaded.
+struct BoundTexture final {
+  data::AssetKey key;
+  ResourceKey resource {};
+  //! The selected source, retained so that the texture stays readable.
+  std::shared_ptr<const IContentSource> owner;
 };
 
 //! Frozen dependency controls and exact publication metadata, owned by Data.
@@ -44,7 +54,7 @@ class ContentBindingBundle final : public data::AssetRuntimeBindings {
 public:
   ContentBindingBundle(ContentId identity,
     std::shared_ptr<const BindingViewId> view, std::vector<BoundAsset> assets,
-    std::vector<BoundResource> resources,
+    std::vector<BoundResource> resources, std::vector<BoundTexture> textures,
     std::unique_ptr<const PhysicsBindings> physics);
   ~ContentBindingBundle() override = default;
   OXYGEN_MAKE_NON_COPYABLE(ContentBindingBundle)
@@ -73,6 +83,10 @@ public:
     -> const BoundAsset*;
   [[nodiscard]] auto FindResourceBinding(ResourceKey key) const noexcept
     -> const BoundResource*;
+  //! The texture this asset names by `key`; null when no mounted source held
+  //! it at load.
+  [[nodiscard]] auto FindTexture(const data::AssetKey& key) const noexcept
+    -> const BoundTexture*;
   [[nodiscard]] auto Assets() const noexcept -> std::span<const BoundAsset>
   {
     return assets_;
@@ -84,10 +98,11 @@ public:
   }
 
 private:
-  ContentId identity_ {};
-  std::shared_ptr<const BindingViewId> view_ {};
+  ContentId identity_;
+  std::shared_ptr<const BindingViewId> view_;
   std::vector<BoundAsset> assets_;
   std::vector<BoundResource> resources_;
+  std::vector<BoundTexture> textures_;
   std::unique_ptr<const PhysicsBindings> physics_;
 };
 
@@ -108,6 +123,18 @@ public:
   }
 
   auto RequireOpen() const -> void { epoch_->RequireOpen(); }
+
+  auto AddTexture(BoundTexture texture) -> void
+  {
+    const auto key = texture.key;
+    textures_.insert_or_assign(key, std::move(texture));
+  }
+  [[nodiscard]] auto FindTexture(const data::AssetKey& key) const
+    -> const BoundTexture*
+  {
+    const auto found = textures_.find(key);
+    return found != textures_.end() ? &found->second : nullptr;
+  }
 
   template <std::derived_from<data::Asset> T>
   [[nodiscard]] auto FindAsset(const data::AssetKey& key) const
@@ -184,7 +211,7 @@ public:
 
 private:
   struct AssetAttempt final {
-    data::AssetKey key {};
+    data::AssetKey key;
     TypeId type { kInvalidTypeId };
     auto operator==(const AssetAttempt&) const -> bool = default;
   };
@@ -196,11 +223,12 @@ private:
       return hash;
     }
   };
-  std::unique_ptr<const PhysicsBindings> physics_ {};
+  std::unique_ptr<const PhysicsBindings> physics_;
   std::shared_ptr<ContentReleaseQueue> epoch_;
   std::unordered_set<AssetAttempt, AssetAttemptHash> attempted_assets_;
   std::unordered_map<data::AssetKey, BoundAsset> assets_;
   std::unordered_map<ResourceKey, BoundResource> resources_;
+  std::unordered_map<data::AssetKey, BoundTexture> textures_;
 };
 
 } // namespace oxygen::content::internal

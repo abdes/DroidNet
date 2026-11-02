@@ -81,6 +81,7 @@ namespace internal {
   class ContentReleaseQueue;
   class ContentBindingBuilder;
   class ContentBindingBundle;
+  class ContentSourceView;
   struct ContentAcquisition;
   struct SharedContentResult;
   class EvictionRegistry;
@@ -1173,9 +1174,13 @@ private:
     std::optional<std::filesystem::path> engine_content_pak,
     std::vector<ContentMount> mounts, bool verify_content,
     std::shared_ptr<serio::IoDriver> driver) -> co::Co<PreparedMountSet>;
-  //! Mounts the engine content pak, when configured, beneath every other
-  //! source.
-  auto MountEngineContentPak() -> void;
+  //! Opens the engine content pak; null when none is configured.
+  [[nodiscard]] auto OpenEngineContentPak() const
+    -> std::shared_ptr<internal::IContentSource>;
+  //! Mounts `engine_pak`, the opened engine content pak, beneath every other
+  //! source; nothing when it is null.
+  auto MountEngineContentPak(
+    std::shared_ptr<internal::IContentSource> engine_pak) -> void;
   auto CompleteMountRetirement(internal::MountReplacementState& state) noexcept
     -> void;
   struct DecodedAssetAsyncResult final {
@@ -1473,8 +1478,16 @@ private:
   using LoadedGeometryMaterialsByKey
     = std::unordered_map<data::AssetKey, std::shared_ptr<data::MaterialAsset>>;
 
-  auto BindMaterialTextureKeys(
-    data::MaterialAsset& material, data::SourceInstanceId source) -> void;
+  //! Bind each texture `asset` names by key to the texture that wins in
+  //! `view`, the view the load resolves through, so that contextual reads and
+  //! repeated publication never pick a texture of a later mount.
+  auto BindExternalTextures(const data::Asset& asset,
+    const internal::ContentSourceView* view,
+    internal::ContentBindingBuilder& bindings) -> void;
+
+  auto BindMaterialTextureKeys(data::MaterialAsset& material,
+    data::SourceInstanceId source,
+    const internal::ContentBindingBuilder& bindings) -> void;
 
   //! The texture whose key is `texture_key`, in the newest mount holding it.
   auto ResolveTextureResourceKey(const data::AssetKey& texture_key)

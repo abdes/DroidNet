@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
@@ -26,6 +27,7 @@
 #include <Oxygen/Base/TypeList.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/ContentId.h>
 #include <Oxygen/Content/Internal/ContentBindingBundle.h>
 #include <Oxygen/Content/Internal/ContentIdentity.h>
 #include <Oxygen/Content/Internal/ContentIdentityRegistry.h>
@@ -35,6 +37,7 @@
 #include <Oxygen/Content/Internal/ContentSourceView.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
+#include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/Internal/PhysicsBindings.h>
 #include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
 #include <Oxygen/Content/LoaderContext.h>
@@ -266,11 +269,12 @@ auto AssetLoader::DecodeAndPublishAssetAsync(data::AssetKey key,
       co_return internal::SharedContentResult {};
     }
     typed->SetReferences(std::move(decoded.references));
+    const auto& view = request.scope.state_->view;
     internal::ContentBindingBuilder builder(releases);
+    BindExternalTextures(*typed, view.get(), builder);
     co_await BindDependenciesAsync(
       *typed, *decoded.dependency_collector, builder, request);
     releases->RequireOpen();
-    const auto& view = request.scope.state_->view;
     const auto token = !typed->GetReferences().Keys().empty() && view
       ? view->IdentityOwner()
       : std::shared_ptr<const internal::BindingViewId> {};
@@ -374,7 +378,7 @@ auto AssetLoader::BindCollectedResourcesAsync(
   OXCO_WITH_NURSERY(nursery)
   {
     for (const auto key : keys) {
-      nursery.Start([this, key, &bindings, request]() -> co::Co<> {
+      nursery.Start([this, key, &bindings, request] -> co::Co<> {
         co_await BindResourceAsync<T>(key, bindings, request);
       });
     }
@@ -386,7 +390,7 @@ auto AssetLoader::BindDependenciesAsync(data::MaterialAsset& asset,
   const internal::DependencyCollector& collector,
   internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
-  BindMaterialTextureKeys(asset, asset.GetSourceOrigin().instance);
+  BindMaterialTextureKeys(asset, asset.GetSourceOrigin().instance, bindings);
   const std::array keys {
     asset.GetBaseColorTextureKey(),
     asset.GetNormalTextureKey(),
@@ -404,12 +408,12 @@ auto AssetLoader::BindDependenciesAsync(data::MaterialAsset& asset,
   OXCO_WITH_NURSERY(nursery)
   {
     for (const auto key : keys) {
-      nursery.Start([this, key, &bindings, request]() -> co::Co<> {
+      nursery.Start([this, key, &bindings, request] -> co::Co<> {
         co_await BindResourceAsync<data::TextureResource>(
           key, bindings, request);
       });
     }
-    nursery.Start([this, &collector, &bindings, request]() -> co::Co<> {
+    nursery.Start([this, &collector, &bindings, request] -> co::Co<> {
       co_await BindCollectedResourcesAsync<data::TextureResource>(
         collector, bindings, request);
     });
@@ -423,12 +427,12 @@ auto AssetLoader::BindDependenciesAsync(data::GeometryAsset& asset,
 {
   OXCO_WITH_NURSERY(nursery)
   {
-    nursery.Start([this, &collector, &bindings, request]() -> co::Co<> {
+    nursery.Start([this, &collector, &bindings, request] -> co::Co<> {
       co_await BindCollectedResourcesAsync<data::BufferResource>(
         collector, bindings, request);
     });
     for (const auto& key : collector.AssetDependencies()) {
-      nursery.Start([this, key, &asset, &bindings, request]() -> co::Co<> {
+      nursery.Start([this, key, &asset, &bindings, request] -> co::Co<> {
         co_await BindAssetAsync<data::MaterialAsset>(
           key, asset, bindings, request);
       });
@@ -470,18 +474,18 @@ auto AssetLoader::BindDependenciesAsync(data::SceneAsset& asset,
 {
   OXCO_WITH_NURSERY(nursery)
   {
-    nursery.Start([this, &collector, &bindings, request]() -> co::Co<> {
+    nursery.Start([this, &collector, &bindings, request] -> co::Co<> {
       co_await BindCollectedResourcesAsync<data::TextureResource>(
         collector, bindings, request);
     });
-    nursery.Start([this, &collector, &bindings, request]() -> co::Co<> {
+    nursery.Start([this, &collector, &bindings, request] -> co::Co<> {
       co_await BindCollectedResourcesAsync<data::BufferResource>(
         collector, bindings, request);
     });
     for (const auto& renderable :
       asset.GetComponents<data::pak::world::RenderableRecord>()) {
       nursery.Start([this, key = renderable.geometry_key, &asset, &bindings,
-                      request]() -> co::Co<> {
+                      request] -> co::Co<> {
         co_await BindAssetAsync<data::GeometryAsset>(
           key, asset, bindings, request);
       });
@@ -496,7 +500,7 @@ auto AssetLoader::BindDependenciesAsync(data::SceneAsset& asset,
       if (property->type == data::schema::ValueType::kAsset) {
         nursery.Start(
           [this, key = record.value.as_asset, type = property->asset_type,
-            &asset, &bindings, request]() -> co::Co<> {
+            &asset, &bindings, request] -> co::Co<> {
             co_await BindSceneAssetValueAsync(
               key, type, asset, bindings, request);
           });
@@ -506,14 +510,14 @@ auto AssetLoader::BindDependenciesAsync(data::SceneAsset& asset,
       asset.GetComponents<data::pak::scripting::ScriptingComponentRecord>()) {
       for (const auto& slot : GetHydratedScriptSlots(asset, component)) {
         nursery.Start([this, key = slot.script_asset_key, &asset, &bindings,
-                        request]() -> co::Co<> {
+                        request] -> co::Co<> {
           co_await BindAssetAsync<data::ScriptAsset>(
             key, asset, bindings, request);
         });
         for (const auto& value : slot.params | std::views::values) {
           if (const auto* param = std::get_if<data::ScriptAssetParam>(&value)) {
             nursery.Start([this, key = param->key, type = param->asset_type,
-                            &asset, &bindings, request]() -> co::Co<> {
+                            &asset, &bindings, request] -> co::Co<> {
               co_await BindSceneAssetValueAsync(
                 key, type, asset, bindings, request);
             });
@@ -583,7 +587,7 @@ auto AssetLoader::BindDependenciesAsync(data::InputMappingContextAsset& asset,
   OXCO_WITH_NURSERY(nursery)
   {
     for (const auto& key : keys) {
-      nursery.Start([this, key, &asset, &bindings, request]() -> co::Co<> {
+      nursery.Start([this, key, &asset, &bindings, request] -> co::Co<> {
         co_await BindAssetAsync<data::InputActionAsset>(
           key, asset, bindings, request);
       });
@@ -616,39 +620,35 @@ auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
       if (!payloads.insert(reference.key).second) {
         continue;
       }
-      bool found = false;
-      for (const auto& layer : view->Layers() | std::views::reverse) {
-        if (layer.deleted.contains(reference.key)) {
-          break;
-        }
-        const auto* table = layer.source->GetPhysicsTable();
-        if (!table || table->Size().get() == 0U) {
-          continue;
-        }
-        const auto source = ResolveSourceForId(layer.id);
-        if (!source) {
-          throw std::runtime_error(
-            "Physics payload source is no longer readable");
-        }
-        const auto index = source->FindPhysicsResource(reference.key);
-        if (!index) {
-          continue;
-        }
-        constexpr auto type_index = static_cast<uint16_t>(
-          IndexOf<data::PhysicsResource, ResourceTypeList>::value);
-        frozen->resources.push_back({
-          .asset_key = reference.key,
-          .key = InternResourceKey(layer.id, type_index, *index),
-          .source = layer.id,
-          .owner = source,
+      auto index = std::optional<data::pak::core::ResourceIndexT> {};
+      const auto match = internal::ResolveByPrecedence(
+        view->Layers(),
+        [&](const internal::ContentSourceLayer& layer) -> bool {
+          return layer.deleted.contains(reference.key);
+        },
+        [&](const internal::ContentSourceLayer& layer) -> bool {
+          index = layer.source->FindPhysicsResource(reference.key);
+          return index.has_value();
         });
-        found = true;
-        break;
-      }
-      if (!found) {
+      if (match.status != internal::KeyResolutionStatus::kFound
+        || !index.has_value()) {
         throw std::runtime_error("Required physics payload is missing: "
           + data::to_string(reference.key));
       }
+      const auto& layer = *match.layer;
+      const auto source = ResolveSourceForId(layer.id);
+      if (!source) {
+        throw std::runtime_error(
+          "Physics payload source is no longer readable");
+      }
+      constexpr auto type_index = static_cast<uint16_t>(
+        IndexOf<data::PhysicsResource, ResourceTypeList>::value);
+      frozen->resources.push_back({
+        .asset_key = reference.key,
+        .key = InternResourceKey(layer.id, type_index, *index),
+        .source = layer.id,
+        .owner = source,
+      });
       continue;
     }
     const auto [previous, inserted]

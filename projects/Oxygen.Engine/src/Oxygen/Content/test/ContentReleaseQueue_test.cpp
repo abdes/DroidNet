@@ -482,7 +482,7 @@ NOLINT_TEST(ContentBindingBundleTest, ParentRetainsChildrenAcrossCacheClear)
     oxygen::content::internal::ContentId {},
     std::shared_ptr<const oxygen::content::internal::BindingViewId> {},
     std::vector<oxygen::content::internal::BoundAsset> {}, std::move(resources),
-    nullptr));
+    std::vector<oxygen::content::internal::BoundTexture> {}, nullptr));
   cache.Clear();
   result = {};
   static_cast<void>(queue->Drain(cache, kDrainAll));

@@ -33,12 +33,14 @@ auto MakeAssetKey(const std::uint8_t seed) -> oxygen::data::AssetKey
 //! Test helper: write a minimal loose cooked index with one asset entry.
 /*!
  Scenario: Creates a `container.index.bin` mapping the given virtual path to
- the provided `AssetKey`.
+ the provided `AssetKey`. Roots mounted together take distinct `seed`s, the
+ identities of their SourceKeys.
 */
 auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
-  const oxygen::data::AssetKey& key, const std::string_view leaf) -> void
+  const oxygen::data::AssetKey& key, const std::string_view leaf,
+  const std::uint8_t seed = 1U) -> void
 {
-  auto loose = oxygen::cooker::testing::LooseCookedRoot { ".cooked" };
+  auto loose = oxygen::cooker::testing::LooseCookedRoot { ".cooked", seed };
   static_cast<void>(loose.Add({ .leaf = std::string(leaf), .key = key }));
   oxygen::cooker::testing::Materialize(loose.Files(), cooked_root);
 }
@@ -89,7 +91,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyDuplicatePathLastWins)
   const auto key1 = MakeAssetKey(0x22U);
 
   WriteSingleAssetIndex(cooked_root0, key0, "A.bin");
-  WriteSingleAssetIndex(cooked_root1, key1, "A.bin");
+  WriteSingleAssetIndex(cooked_root1, key1, "A.bin", 2U);
 
   oxygen::content::VirtualPathResolver resolver;
   resolver.AddLooseCookedRoot(cooked_root0);

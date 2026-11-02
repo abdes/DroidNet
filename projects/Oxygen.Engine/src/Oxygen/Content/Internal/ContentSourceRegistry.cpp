@@ -28,7 +28,9 @@
 #include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/ContentSourceView.h>
+#include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
+#include <Oxygen/Content/SourceKeyConflictError.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -38,25 +40,22 @@
 
 namespace oxygen::content::internal {
 
-auto ContentSourceRegistry::FindSourceKeyConflict(
-  const data::SourceKey source_key, const std::string_view mount_identity) const
-  -> std::optional<MountResult::SourceKeyConflict>
+auto ContentSourceRegistry::FindSourceKeyConflict(const IContentSource& source,
+  const std::optional<size_t> replaced_index) const -> const IContentSource*
 {
+  const auto source_key = source.GetSourceKey();
   if (source_key.IsNil()) {
-    return std::nullopt;
+    return nullptr;
   }
   for (size_t index = 0; index < sources_.size(); ++index) {
-    const auto& source = sources_.at(index);
-    if (source && source->GetSourceKey() == source_key
-      && source->DebugName() != mount_identity) {
-      return MountResult::SourceKeyConflict {
-        .source_key = source_key,
-        .existing_source_id = source_ids_.at(index),
-        .existing_mount_identity = std::string(source->DebugName()),
-      };
+    const auto& existing = sources_.at(index);
+    if (index != replaced_index && existing
+      && existing->GetSourceKey() == source_key
+      && existing->DebugName() != source.DebugName()) {
+      return existing.get();
     }
   }
-  return std::nullopt;
+  return nullptr;
 }
 
 namespace {
@@ -70,8 +69,7 @@ namespace {
   //! How the newest layer of `lower` that holds `requirement` meets it.
   auto CheckRequirement(const std::string& mount,
     const data::PakRequirement& requirement,
-    const std::span<const IContentSource* const> lower,
-    const std::span<const data::SourceInstanceId> ids)
+    const std::span<const IContentSource* const> lower)
     -> std::optional<FailedRequirement>
   {
     const auto failed = [&](const RequirementFailure failure) -> auto {
@@ -83,49 +81,36 @@ namespace {
         .found_mount = {},
       };
     };
-    const auto source_of
-      = [&](const data::SourceInstanceId id) -> const IContentSource& {
-      return *lower[static_cast<size_t>(
-        std::distance(ids.begin(), std::ranges::find(ids, id)))];
+    const auto deletes = [&](const IContentSource* layer) -> bool {
+      const auto* catalog = layer->GetPakCatalog();
+      return catalog != nullptr
+        && std::ranges::find(catalog->deleted, requirement.key)
+        != catalog->deleted.end();
     };
 
     auto provider = std::optional<std::string> {};
-    if (requirement.kind == data::KeyReferenceKind::kTexture) {
-      for (const auto* layer : std::views::reverse(lower)) {
-        if (auto path = layer->FindTextureVirtualPath(requirement.key)) {
-          provider = std::move(path);
-          break;
+    const auto is_texture
+      = requirement.kind == data::KeyReferenceKind::kTexture;
+    const auto match = ResolveByPrecedence(
+      lower, deletes, [&](const IContentSource* layer) -> bool {
+        if (is_texture) {
+          provider = layer->FindTextureVirtualPath(requirement.key);
+          return provider.has_value();
         }
+        return layer->HasAsset(requirement.key);
+      });
+    if (match.status == KeyResolutionStatus::kTombstoned) {
+      return failed(RequirementFailure::kTombstoned);
+    }
+    if (match.status == KeyResolutionStatus::kFound && !is_texture) {
+      const auto* layer = *match.layer;
+      if (const auto type = layer->GetAssetType(requirement.key);
+        type != requirement.type) {
+        auto mismatch = failed(RequirementFailure::kTypeMismatch);
+        mismatch.found_type = type;
+        return mismatch;
       }
-    } else {
-      const auto resolved = ResolveAssetKeyByPrecedence(ids, requirement.key,
-        {
-          .source_has_asset = [&](const data::SourceInstanceId id,
-                                const data::AssetKey& key) -> bool {
-            return source_of(id).HasAsset(key);
-          },
-          .source_tombstones_asset = [&](const data::SourceInstanceId id,
-                                       const data::AssetKey& key) -> bool {
-            const auto* catalog = source_of(id).GetPakCatalog();
-            return catalog != nullptr
-              && std::ranges::find(catalog->deleted, key)
-              != catalog->deleted.end();
-          },
-        });
-      if (resolved.status == KeyResolutionStatus::kTombstoned) {
-        return failed(RequirementFailure::kTombstoned);
-      }
-      if (resolved.status == KeyResolutionStatus::kFound
-        && resolved.source_id.has_value()) {
-        const auto& layer = source_of(*resolved.source_id);
-        if (const auto type = layer.GetAssetType(requirement.key);
-          type != requirement.type) {
-          auto mismatch = failed(RequirementFailure::kTypeMismatch);
-          mismatch.found_type = type;
-          return mismatch;
-        }
-        provider = layer.ResolveVirtualPath(requirement.key);
-      }
+      provider = layer->ResolveVirtualPath(requirement.key);
     }
     if (!provider.has_value()) {
       return failed(RequirementFailure::kMissing);
@@ -141,20 +126,59 @@ namespace {
   //! The requirements of `catalog` that the layers `lower` below it do not
   //! meet, in catalog order.
   auto FailedRequirements(const data::PakCatalog& catalog,
-    const std::span<const IContentSource* const> lower,
-    const std::span<const data::SourceInstanceId> ids)
+    const std::span<const IContentSource* const> lower)
     -> std::vector<FailedRequirement>
   {
     auto failures = std::vector<FailedRequirement> {};
     for (const auto& dependency : catalog.dependencies) {
       for (const auto& requirement : dependency.requirements) {
         if (auto failed
-          = CheckRequirement(dependency.mount, requirement, lower, ids)) {
+          = CheckRequirement(dependency.mount, requirement, lower)) {
           failures.push_back(std::move(*failed));
         }
       }
     }
     return failures;
+  }
+
+  //! Checks a stack, lowest precedence first: every pak's bases sit
+  //! immediately below it, else `std::invalid_argument`, and the layers below
+  //! every pak meet its requirements, else `DependencyRequirementError`.
+  auto ValidateStack(const std::span<const IContentSource* const> stack) -> void
+  {
+    std::vector<data::PakCatalogBase> lower_layers;
+    lower_layers.reserve(stack.size());
+    for (const auto* candidate : stack) {
+      if (const auto* catalog = candidate->GetPakCatalog()) {
+        if (const auto valid = catalog->ValidateBaseLayers(lower_layers);
+          !valid) {
+          throw std::invalid_argument(valid.error());
+        }
+        lower_layers.push_back({
+          .source_key = catalog->source_key,
+          .content_version = catalog->content_version,
+          .catalog_digest = catalog->catalog_digest,
+        });
+      } else {
+        lower_layers.push_back({
+          .source_key = candidate->GetSourceKey(),
+          .content_version = 0U,
+          .catalog_digest = {},
+        });
+      }
+    }
+
+    for (size_t index = 0; index < stack.size(); ++index) {
+      const auto* pak = stack[index];
+      if (const auto* catalog = pak->GetPakCatalog();
+        catalog != nullptr && !catalog->dependencies.empty()) {
+        auto failures = FailedRequirements(*catalog, stack.first(index));
+        if (!failures.empty()) {
+          throw DependencyRequirementError(
+            pak->SourcePath(), std::move(failures));
+        }
+      }
+    }
   }
 
   auto AllocateRuntimeIdentity() -> uint64_t
@@ -191,51 +215,20 @@ auto ContentSourceRegistry::CopyLayers() const
 }
 
 auto ContentSourceRegistry::ValidateMount(const IContentSource& source,
-  const data::SourceInstanceId source_id,
   const std::optional<size_t> replaced_index) const -> void
 {
   const auto insertion = replaced_index.value_or(sources_.size());
   const auto count = sources_.size() + (replaced_index ? 0U : 1U);
   auto stack = std::vector<const IContentSource*>(count);
-  auto ids = std::vector<data::SourceInstanceId>(count);
   for (size_t index = 0; index < count; ++index) {
     stack.at(index) = index == insertion ? &source : sources_.at(index).get();
-    ids.at(index) = index == insertion ? source_id : source_ids_.at(index);
   }
+  ValidateStack(stack);
 
-  std::vector<data::PakCatalogBase> lower_layers;
-  lower_layers.reserve(count);
-  for (const auto* candidate : stack) {
-    if (const auto* catalog = candidate->GetPakCatalog()) {
-      if (const auto valid = catalog->ValidateBaseLayers(lower_layers);
-        !valid) {
-        throw std::invalid_argument(valid.error());
-      }
-      lower_layers.push_back({
-        .source_key = catalog->source_key,
-        .content_version = catalog->content_version,
-        .catalog_digest = catalog->catalog_digest,
-      });
-    } else {
-      lower_layers.push_back({
-        .source_key = candidate->GetSourceKey(),
-        .content_version = 0U,
-        .catalog_digest = {},
-      });
-    }
-  }
-
-  for (size_t index = 0; index < count; ++index) {
-    const auto* pak = stack.at(index);
-    if (const auto* catalog = pak->GetPakCatalog();
-      catalog != nullptr && !catalog->dependencies.empty()) {
-      auto failures = FailedRequirements(
-        *catalog, std::span(stack).first(index), std::span(ids).first(index));
-      if (!failures.empty()) {
-        throw DependencyRequirementError(
-          pak->SourcePath(), std::move(failures));
-      }
-    }
+  if (const auto* const conflict
+    = FindSourceKeyConflict(source, replaced_index)) {
+    throw SourceKeyConflictError(source.GetSourceKey(),
+      std::string(source.DebugName()), std::string(conflict->DebugName()));
   }
 
   if (source.GetAssetCount() > std::numeric_limits<uint32_t>::max()) {
@@ -266,7 +259,7 @@ auto ContentSourceRegistry::InstallSource(
   const std::optional<size_t> replaced_index, const SourceKind kind)
   -> MountResult
 {
-  ValidateMount(*source, source_id, replaced_index);
+  ValidateMount(*source, replaced_index);
   if (kind != SourceKind::kGeneration) {
     const auto prior = source_key_to_ids_.find(source->GetSourceKey());
     if (prior != source_key_to_ids_.end()
@@ -290,15 +283,6 @@ auto ContentSourceRegistry::InstallSource(
   auto next_view = std::make_shared<const ContentSourceView>(
     BindingViewId { AllocateRuntimeIdentity() }, std::move(layers));
 
-  auto conflict
-    = FindSourceKeyConflict(source->GetSourceKey(), source->DebugName());
-  if (conflict
-    && (kind == SourceKind::kGeneration
-      || records_.at(conflict->existing_source_id).kind
-        == SourceKind::kGeneration)) {
-    throw std::invalid_argument(
-      "An immutable generation SourceKey is already mounted elsewhere");
-  }
   SourceRecord record {
     .key = source->GetSourceKey(),
     .mount_identity = std::string(source->DebugName()),
@@ -351,7 +335,6 @@ auto ContentSourceRegistry::InstallSource(
     .action = replaced_index ? MountAction::kRefreshed : MountAction::kMounted,
     .source_id = source_id,
     .source_index = index,
-    .source_key_conflict = std::move(conflict),
   };
 }
 
@@ -476,8 +459,8 @@ auto ContentSourceRegistry::MountGeneration(
       }
       if (record.kind != SourceKind::kGeneration
         || record.mount_identity != source->DebugName()) {
-        throw std::invalid_argument(
-          "A generation SourceKey belongs to another source");
+        throw SourceKeyConflictError(
+          key, std::string(source->DebugName()), record.mount_identity);
       }
       if (const auto active = source_id_to_index_.find(id);
         active != source_id_to_index_.end()) {
@@ -489,7 +472,6 @@ auto ContentSourceRegistry::MountGeneration(
           .action = MountAction::kRefreshed,
           .source_id = id,
           .source_index = active->second,
-          .source_key_conflict = {},
         };
       }
     }
@@ -526,6 +508,14 @@ auto ContentSourceRegistry::RetireGeneration(const data::SourceKey key) -> bool
   for (size_t index = 0; index < sources_.size(); ++index) {
     if (sources_.at(index)->GetSourceKey() == key
       && records_.at(source_ids_.at(index)).kind == SourceKind::kGeneration) {
+      auto stack = std::vector<const IContentSource*> {};
+      stack.reserve(sources_.size() - 1);
+      for (size_t layer = 0; layer < sources_.size(); ++layer) {
+        if (layer != index) {
+          stack.push_back(sources_.at(layer).get());
+        }
+      }
+      ValidateStack(stack);
       RemoveActiveSource(index);
       return true;
     }

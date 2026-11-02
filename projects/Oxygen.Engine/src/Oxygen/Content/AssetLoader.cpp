@@ -63,7 +63,6 @@
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/PakFileSource.h>
-#include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/Internal/PayloadBudget.h>
 #include <Oxygen/Content/Internal/PhysicsBindings.h>
 #include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
@@ -526,7 +525,7 @@ AssetLoader::AssetLoader(
     if (std::filesystem::is_regular_file(base::ToNativePath(pak))) {
       engine_content_pak_ = base::ToLogicalPath(
         std::filesystem::weakly_canonical(base::ToNativePath(pak)));
-      MountEngineContentPak();
+      MountEngineContentPak(OpenEngineContentPak());
     } else {
       LOG_F(WARNING,
         "ENGINE CONTENT PAK MISSING: '{}' does not exist. Every /Engine asset "
@@ -540,15 +539,25 @@ AssetLoader::AssetLoader(
   }
 }
 
-auto AssetLoader::MountEngineContentPak() -> void
+auto AssetLoader::OpenEngineContentPak() const
+  -> std::shared_ptr<internal::IContentSource>
 {
   if (!engine_content_pak_) {
+    return nullptr;
+  }
+  return std::make_shared<internal::PakFileSource>(
+    *engine_content_pak_, verify_content_hashes_, io_driver_);
+}
+
+auto AssetLoader::MountEngineContentPak(
+  std::shared_ptr<internal::IContentSource> engine_pak) -> void
+{
+  if (!engine_pak || !engine_content_pak_.has_value()) {
     return;
   }
-  static_cast<void>(impl_->source_registry.MountPak(*engine_content_pak_,
-    std::make_shared<internal::PakFileSource>(
-      *engine_content_pak_, verify_content_hashes_, io_driver_),
-    internal::ContentSourceRegistry::MountMode::kAppend));
+  static_cast<void>(
+    impl_->source_registry.MountPak(*engine_content_pak_, std::move(engine_pak),
+      internal::ContentSourceRegistry::MountMode::kAppend));
   ++impl_->mount_revision;
   LOG_F(INFO, "Mounted engine content pak: {}", engine_content_pak_->string());
 }
@@ -1106,17 +1115,6 @@ auto AssetLoader::MountPakFile(const std::filesystem::path& path)
   const auto mount_result
     = impl_->source_registry.MountPak(normalized, std::move(new_source));
   ++impl_->mount_revision;
-#ifndef NDEBUG
-  if (mount_result.source_key_conflict.has_value()) {
-    const auto& conflict = *mount_result.source_key_conflict;
-    LOG_F(WARNING,
-      "Mounted PAK shares SourceKey with a different mounted source; cache "
-      "aliasing risk: source_key={} new_path={} existing_source_id={} "
-      "existing_path={}",
-      conflict.source_key, normalized.string(), conflict.existing_source_id,
-      conflict.existing_mount_identity);
-  }
-#endif
   if (mount_result.action
       == internal::ContentSourceRegistry::MountAction::kRefreshed
     || was_already_mounted) {
@@ -1211,17 +1209,6 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
   const auto mount_result
     = impl_->source_registry.MountLoose(normalized_s, std::move(new_source));
   ++impl_->mount_revision;
-#ifndef NDEBUG
-  if (mount_result.source_key_conflict.has_value()) {
-    const auto& conflict = *mount_result.source_key_conflict;
-    LOG_F(WARNING,
-      "Mounted loose cooked root shares SourceKey with a different mounted "
-      "source; source-key lookup is ambiguous: source_key={} new_root={} "
-      "existing_source_id={} existing_mount={}",
-      conflict.source_key, normalized.string(), conflict.existing_source_id,
-      conflict.existing_mount_identity);
-  }
-#endif
   if (mount_result.action
       == internal::ContentSourceRegistry::MountAction::kRefreshed
     || was_already_mounted) {
@@ -1592,9 +1579,12 @@ auto AssetLoader::ClearMounts() -> void
     std::hash<std::thread::id> {}(std::this_thread::get_id()),
     std::hash<std::thread::id> {}(owning_thread_id_));
   AssertOwningThread(); // Ensure this method is called on the owning thread
+  // Open the engine pak first: when it cannot be opened, the mounted set
+  // stays as it was.
+  auto engine_pak = OpenEngineContentPak();
   impl_->source_registry.Clear();
   ++impl_->mount_revision;
-  MountEngineContentPak();
+  MountEngineContentPak(std::move(engine_pak));
 
   // Clear the content cache to prevent stale assets from being returned
   // when switching content sources (e.g. scene swap).
@@ -2408,8 +2398,30 @@ auto AssetLoader::PrepareAssetLoadRequest(const data::AssetKey& key,
   };
 }
 
-auto AssetLoader::BindMaterialTextureKeys(
-  data::MaterialAsset& material, const data::SourceInstanceId source) -> void
+auto AssetLoader::BindExternalTextures(const data::Asset& asset,
+  const internal::ContentSourceView* view,
+  internal::ContentBindingBuilder& bindings) -> void
+{
+  constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
+    IndexOf<data::TextureResource, ResourceTypeList>::value);
+  for (const auto& reference : asset.GetReferences().Keys()) {
+    if (reference.kind != data::KeyReferenceKind::kTexture || view == nullptr) {
+      continue;
+    }
+    if (const auto match = view->ResolveTexture(reference.key)) {
+      bindings.AddTexture({
+        .key = reference.key,
+        .resource
+        = InternResourceKey(match->layer->id, kTextureTypeIndex, match->index),
+        .owner = match->layer->source,
+      });
+    }
+  }
+}
+
+auto AssetLoader::BindMaterialTextureKeys(data::MaterialAsset& material,
+  const data::SourceInstanceId source,
+  const internal::ContentBindingBuilder& bindings) -> void
 {
   const std::array indices {
     material.GetBaseColorTexture(),
@@ -2435,13 +2447,13 @@ auto AssetLoader::BindMaterialTextureKeys(
       throw std::runtime_error(resolved.error());
     }
     if (const auto* texture_key = std::get_if<data::AssetKey>(&*resolved)) {
-      // A texture of another source resolves in the newest mount holding it;
-      // when none does, the slot shows the error texture.
-      const auto key = ResolveTextureResourceKey(*texture_key);
-      LOG_IF_F(WARNING, !key,
+      // A texture of another source is the one bound at load; when no
+      // mounted source held it, the slot shows the error texture.
+      const auto* bound = bindings.FindTexture(*texture_key);
+      LOG_IF_F(WARNING, bound == nullptr,
         "Material '{}' references texture {}, which no mounted source holds",
         material.GetAssetName(), nostd::to_string(*texture_key));
-      keys.push_back(key.value_or(ResourceKey::kError));
+      keys.push_back(bound != nullptr ? bound->resource : ResourceKey::kError);
       continue;
     }
     const auto* index = std::get_if<ResourceIndexT>(&*resolved);
@@ -2835,19 +2847,16 @@ auto AssetLoader::ResolveTextureResourceKey(const std::string_view virtual_path)
 auto AssetLoader::ResolveTextureResourceKey(const data::AssetKey& texture_key)
   -> std::optional<ResourceKey>
 {
-  // The newest mount wins, as it does for assets.
-  const auto& sources = impl_->source_registry.Sources();
-  for (auto i = sources.size(); i-- > 0;) {
-    const auto index = sources.at(i)->FindTextureIndexByKey(texture_key);
-    if (!index) {
-      continue;
-    }
-    constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
-      IndexOf<data::TextureResource, ResourceTypeList>::value);
-    return InternResourceKey(
-      impl_->source_registry.SourceIds().at(i), kTextureTypeIndex, *index);
+  const auto view = impl_->source_registry.CaptureView();
+  const auto match = view
+    ? view->ResolveTexture(texture_key)
+    : std::optional<internal::ContentSourceView::TextureMatch> {};
+  if (!match) {
+    return std::nullopt;
   }
-  return std::nullopt;
+  constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
+    IndexOf<data::TextureResource, ResourceTypeList>::value);
+  return InternResourceKey(match->layer->id, kTextureTypeIndex, match->index);
 }
 
 auto AssetLoader::MakeTextureResourceKeyForAsset(
@@ -2862,7 +2871,17 @@ auto AssetLoader::MakeTextureResourceKeyForAsset(
     return {};
   }
   if (const auto* texture_key = std::get_if<data::AssetKey>(&*resolved)) {
-    return ResolveTextureResourceKey(*texture_key);
+    // The texture bound when the asset loaded, never one of a later mount.
+    const auto& bindings = context_asset.GetRuntimeBindings();
+    if (!bindings
+      || bindings->GetTypeId()
+        != internal::ContentBindingBundle::ClassTypeId()) {
+      return std::nullopt;
+    }
+    const auto* bound
+      = std::static_pointer_cast<const internal::ContentBindingBundle>(bindings)
+          ->FindTexture(*texture_key);
+    return bound != nullptr ? std::optional { bound->resource } : std::nullopt;
   }
   const auto* index = std::get_if<ResourceIndexT>(&*resolved);
   if (index == nullptr) {
@@ -3117,36 +3136,16 @@ auto AssetLoader::ResolveAssetIdentityForKey(const data::AssetKey& key,
     return std::nullopt;
   }
 
-  const internal::KeyResolutionCallbacks callbacks {
-    .source_has_asset = [this](const data::SourceInstanceId source_id,
-                          const data::AssetKey& candidate_key) -> bool {
-      const auto source_index_opt
-        = impl_->source_registry.FindSourceIndexById(source_id);
-      if (!source_index_opt.has_value()) {
-        return false;
-      }
-      const auto& source
-        = impl_->source_registry.Sources().at(*source_index_opt);
-      return source && source->HasAsset(candidate_key);
-    },
-    .source_tombstones_asset = [this](const data::SourceInstanceId source_id,
-                                 const data::AssetKey& candidate_key) -> bool {
-      return impl_->source_registry.IsSourceTombstoningAsset(
-        source_id, candidate_key);
-    },
-  };
-
-  const auto resolution = internal::ResolveAssetKeyByPrecedence(
-    impl_->source_registry.SourceIds(), key, callbacks);
-  if (resolution.status == internal::KeyResolutionStatus::kFound
-    && resolution.source_id.has_value()) {
-    return ResolvedAssetIdentity {
-      .cache_key = FindAssetId(key, *resolution.source_id),
-      .source_id = *resolution.source_id,
-    };
+  const auto view = impl_->source_registry.CaptureView();
+  const auto source_id
+    = view ? view->ResolveAsset(key) : std::optional<data::SourceInstanceId> {};
+  if (!source_id) {
+    return std::nullopt;
   }
-
-  return std::nullopt;
+  return ResolvedAssetIdentity {
+    .cache_key = FindAssetId(key, *source_id),
+    .source_id = *source_id,
+  };
 }
 
 auto AssetLoader::ResolveSourceIdForAsset(
@@ -3177,32 +3176,8 @@ auto AssetLoader::ResolveLoadSourceId(const data::AssetKey& key,
     }
   }
 
-  const internal::KeyResolutionCallbacks callbacks {
-    .source_has_asset = [this](const data::SourceInstanceId source_id,
-                          const data::AssetKey& candidate_key) -> bool {
-      const auto source_index_opt
-        = impl_->source_registry.FindSourceIndexById(source_id);
-      if (!source_index_opt.has_value()) {
-        return false;
-      }
-      const auto& source
-        = impl_->source_registry.Sources().at(*source_index_opt);
-      return source && source->HasAsset(candidate_key);
-    },
-    .source_tombstones_asset = [this](const data::SourceInstanceId source_id,
-                                 const data::AssetKey& candidate_key) -> bool {
-      return impl_->source_registry.IsSourceTombstoningAsset(
-        source_id, candidate_key);
-    },
-  };
-
-  const auto resolution = internal::ResolveAssetKeyByPrecedence(
-    impl_->source_registry.SourceIds(), key, callbacks);
-  if (resolution.status == internal::KeyResolutionStatus::kFound) {
-    return resolution.source_id;
-  }
-
-  return std::nullopt;
+  const auto view = impl_->source_registry.CaptureView();
+  return view ? view->ResolveAsset(key) : std::nullopt;
 }
 
 auto AssetLoader::ResolveResourceSource(const ResourceKey key) const

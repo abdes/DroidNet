@@ -39,22 +39,18 @@ auto ResolveAssetKeyByPrecedence(
     return {};
   }
 
-  for (const auto source_id : std::views::reverse(source_ids)) {
-    if (callbacks.source_tombstones_asset(source_id, key)) {
-      return {
-        .status = KeyResolutionStatus::kTombstoned,
-        .source_id = source_id,
-      };
-    }
-    if (callbacks.source_has_asset(source_id, key)) {
-      return {
-        .status = KeyResolutionStatus::kFound,
-        .source_id = source_id,
-      };
-    }
+  const auto match = ResolveByPrecedence(
+    source_ids,
+    [&](const data::SourceInstanceId source_id) -> bool {
+      return callbacks.source_tombstones_asset(source_id, key);
+    },
+    [&](const data::SourceInstanceId source_id) -> bool {
+      return callbacks.source_has_asset(source_id, key);
+    });
+  if (match.layer == nullptr) {
+    return {};
   }
-
-  return {};
+  return { .status = match.status, .source_id = *match.layer };
 }
 
 auto ResolveVirtualPathByPrecedence(
@@ -68,8 +64,8 @@ auto ResolveVirtualPathByPrecedence(
   }
 
   struct Winner {
-    data::AssetKey key {};
-    data::SourceInstanceId source {};
+    data::AssetKey key;
+    data::SourceInstanceId source;
   };
   std::optional<Winner> winner;
   std::vector<VirtualPathCollision> collisions {};

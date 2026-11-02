@@ -47,16 +47,9 @@ public:
   enum class MountMode : uint8_t { kRefreshExisting, kAppend };
 
   struct MountResult final {
-    struct SourceKeyConflict final {
-      data::SourceKey source_key {};
-      data::SourceInstanceId existing_source_id;
-      std::string existing_mount_identity;
-    };
-
     MountAction action { MountAction::kMounted };
     data::SourceInstanceId source_id;
     size_t source_index { 0 };
-    std::optional<SourceKeyConflict> source_key_conflict;
   };
 
   //! How a prepared source mounts in a replacement set.
@@ -84,6 +77,9 @@ public:
 
   auto MountGeneration(std::shared_ptr<IContentSource> source,
     std::optional<data::SourceKey> replaces) -> MountResult;
+  //! Removes the active generation `source_key`, unless the paks left above
+  //! it would lose a requirement (`DependencyRequirementError`, nothing
+  //! changes). Returns false when no such generation is active.
   auto RetireGeneration(data::SourceKey source_key) -> bool;
 
   [[nodiscard]] auto AcquireSource(data::SourceInstanceId source_id) const
@@ -145,13 +141,14 @@ private:
     SourceKind kind) -> MountResult;
   //! Checks the stack `source` makes: every pak's bases sit immediately
   //! below it, and the layers below every pak meet its requirements, else
-  //! `DependencyRequirementError`; no layer changes an asset's type.
+  //! `DependencyRequirementError`; no other active source has its SourceKey,
+  //! else `SourceKeyConflictError`; no layer changes an asset's type.
   auto ValidateMount(const IContentSource& source,
-    data::SourceInstanceId source_id,
     std::optional<size_t> replaced_index) const -> void;
-  [[nodiscard]] auto FindSourceKeyConflict(
-    data::SourceKey source_key, std::string_view mount_identity) const
-    -> std::optional<MountResult::SourceKeyConflict>;
+  //! The active source, other than the replaced one, that already has the
+  //! non-nil SourceKey of `source` under another mount identity.
+  [[nodiscard]] auto FindSourceKeyConflict(const IContentSource& source,
+    std::optional<size_t> replaced_index) const -> const IContentSource*;
   auto RemoveActiveSource(size_t index) -> void;
   [[nodiscard]] auto CopyLayers() const -> std::vector<ContentSourceLayer>;
 

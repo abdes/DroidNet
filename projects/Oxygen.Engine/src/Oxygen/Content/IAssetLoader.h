@@ -310,14 +310,15 @@ public:
 
   private:
     friend class IAssetLoader;
-    EvictionSubscriptionId id_ {};
+    EvictionSubscriptionId id_;
     TypeId resource_type_ { kInvalidTypeId };
     observer_ptr<IAssetLoader> owner_ { nullptr };
     std::weak_ptr<int> alive_token_;
   };
 
   //! Resolve a texture descriptor by its virtual path in the mounted sources,
-  //! newest mount first. An absent path returns nullopt; a non-canonical path,
+  //! newest mount first; a mount that deletes it hides the lower ones. An
+  //! absent path returns nullopt; a non-canonical path,
   //! or a malformed or stale descriptor, throws. Call on the loader's owning
   //! thread before StartLoadTexture.
   [[nodiscard]] virtual auto ResolveTextureResourceKey(
@@ -333,8 +334,9 @@ public:
     -> std::optional<ResourceKey> = 0;
 
   //! Resolve a loaded asset's texture field: an entry of its owning source's
-  //! texture table, or a texture of another mounted source named by key, which
-  //! resolves in the newest mount holding it.
+  //! texture table, or a texture of another source named by key, which is the
+  //! one bound when the asset loaded; a later mount never rebinds it. A key
+  //! no mounted source held at load returns nullopt.
   [[nodiscard]] virtual auto MakeTextureResourceKeyForAsset(
     const data::Asset& context_asset,
     data::ResourceReferenceIndex resource_index)
@@ -462,9 +464,19 @@ public:
     const data::AssetKey& key, InputMappingContextCallback on_complete) = 0;
 
   //! Mount a pak file for asset loading.
+  /*!
+   @throw DependencyRequirementError When the layers below it do not meet its
+     requirements.
+   @throw SourceKeyConflictError When another mounted source has its
+     SourceKey.
+  */
   virtual auto AddPakFile(const std::filesystem::path& path) -> void = 0;
 
   //! Mount a loose cooked content root for asset loading.
+  /*!
+   @throw SourceKeyConflictError When another mounted source has its
+     SourceKey.
+  */
   virtual auto AddLooseCookedRoot(const std::filesystem::path& path) -> void
     = 0;
 
@@ -475,7 +487,12 @@ public:
     return DoMountLooseCookedGeneration(path, replaces);
   }
 
-  //! Exclude a generation from lookup; existing assets retain its storage.
+  //! Exclude a generation from lookup; existing assets and loads in flight
+  //! retain its storage. Returns false when no such generation is mounted.
+  /*!
+   @throw DependencyRequirementError When a pak mounted above it requires what
+     only the generation provides; the generation stays mounted.
+  */
   virtual auto RetireLooseCookedGeneration(data::SourceKey source_key) -> bool
     = 0;
 
@@ -495,7 +512,8 @@ public:
     -> MountRetirement = 0;
 
   //! Clear all mounted roots and pak files except the engine content pak, which
-  //! stays beneath every other source.
+  //! stays beneath every other source. The engine pak is reopened first, so a
+  //! failure to open it leaves every mount in place.
   virtual auto ClearMounts() -> void = 0;
 
   //! Await outstanding asset/resource reads before replacing mounted sources.

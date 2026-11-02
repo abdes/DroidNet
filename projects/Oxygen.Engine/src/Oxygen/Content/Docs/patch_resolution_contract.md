@@ -16,10 +16,13 @@ and [patch admission](#compatibility-validation).
 - A mount-level tombstone is terminal:
   - if a mount tombstones a key, lookup returns `not found` immediately;
   - lower-priority mounts are not consulted.
+- Only paks carry tombstones, the deletion records of their catalog; a loose
+  cooked root deletes nothing.
 
 ## AssetKey Resolution
 
-Asset-key lookup must use the shared `PatchResolutionPolicy` helper:
+Every key lookup, of an asset, a texture named by key or a physics payload,
+must use the shared `PatchResolutionPolicy` rule (`ResolveByPrecedence`):
 
 1. Traverse mounted sources from highest precedence to lowest.
 2. For each source:
@@ -56,13 +59,19 @@ providing entry's virtual path lies under the required mount. Other layers
 may sit between the pak and its providers.
 
 Validate before changing the active mount set. Install source identity and
-embedded deletion records together. Mounting or refreshing a layer checks the
-bases and the requirements of every pak in the resulting stack, so refreshing a
-lower layer preserves those of the paks above it. Reject incompatible
-asset-type overrides.
+embedded deletion records together. Mounting, refreshing or retiring a layer
+checks the bases and the requirements of every pak in the resulting stack, so
+changing a lower layer preserves those of the paks above it: a generation that
+alone meets a requirement stays mounted. Reject incompatible asset-type
+overrides.
+
+A non-nil SourceKey names one mounted source. Mounting a second source with
+the SourceKey of another mounted source is a `SourceKeyConflictError` naming
+both; refreshing the same source keeps its SourceKey.
 
 New asset graphs capture one immutable ordered layer view; all dependencies share
-that view. Existing objects retain their exact bindings. Cache identity includes
+that view, textures named by key included. Existing objects retain their exact
+bindings. Cache identity includes
 the binding view, while physical resource identity remains source-local. See
 [published generations](loose_cooked_content.md#published-generations).
 

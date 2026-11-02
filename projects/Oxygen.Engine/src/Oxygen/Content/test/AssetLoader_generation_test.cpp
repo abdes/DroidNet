@@ -40,6 +40,7 @@
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
+#include <Oxygen/Content/SourceKeyConflictError.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
@@ -51,6 +52,7 @@
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Cooker/testing/TextureBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -210,8 +212,9 @@ namespace {
     });
   }
 
-  auto WriteGeneration(const std::filesystem::path& root,
-    const GenerationRecipe recipe) -> data::SourceKey
+  //! Creates `root` and holds its generation lease exclusively while a test
+  //! writes the generation, as a cook does.
+  auto LockNewGeneration(const std::filesystem::path& root) -> serio::FileLock
   {
     std::filesystem::create_directories(root);
     auto exclusive = serio::FileLock::TryAcquire(
@@ -220,6 +223,13 @@ namespace {
     if (!exclusive) {
       throw std::system_error(exclusive.error());
     }
+    return std::move(*exclusive);
+  }
+
+  auto WriteGeneration(const std::filesystem::path& root,
+    const GenerationRecipe recipe) -> data::SourceKey
+  {
+    const auto lease = LockNewGeneration(root);
     auto source = LooseCookedRoot { "test", recipe.seed };
     if (!recipe.scene_material.IsNil()) {
       AddBoundCube(source, recipe.scene_material);
@@ -789,6 +799,172 @@ namespace {
     };
   }
 
+  //! A load paused in a generation's material loader while the generation
+  //! retires completes from that generation and keeps it leased until its
+  //! result is released.
+  auto ExerciseRetireDuringLoad(TestEventLoop* loop, std::filesystem::path root)
+    -> co::Co<>
+  {
+    const auto material_key = MaterialKey();
+    const auto source = WriteGeneration(root,
+      {
+        .material = material_key,
+        .emission = 1.0F,
+        .payload = 1U,
+        .seed = kFirstSeed,
+      });
+    co::ThreadPool pool(*loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
+    const auto pause = std::make_shared<DecodePause>();
+    loader.RegisterLoader(
+      [loop, pause](
+        LoaderContext context) -> std::unique_ptr<data::MaterialAsset> {
+        loop->Schedule(std::chrono::milliseconds::zero(),
+          [pause] -> void { pause->entered.Trigger(); });
+        pause->resumed.wait();
+        return loaders::LoadMaterialAsset(std::move(context));
+      });
+    OXCO_WITH_NURSERY(nursery)
+    {
+      const auto release_guard
+        = ScopeGuard([pause] noexcept -> void { pause->Release(); });
+      co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+      static_cast<void>(loader.MountLooseCookedGeneration(root));
+      loader.StartLoadMaterialAsset(material_key, [pause](auto result) -> auto {
+        pause->decoded = std::move(result);
+        pause->completed.Trigger();
+      });
+      co_await pause->entered;
+      EXPECT_TRUE(loader.RetireLooseCookedGeneration(source));
+      EXPECT_TRUE(loader.EnumerateMountedSources().empty());
+      pause->Release();
+      co_await pause->completed;
+      co_await loader.WaitForPendingLoadsAsync();
+      EXPECT_TRUE(pause->decoded);
+      if (pause->decoded) {
+        EXPECT_EQ(pause->decoded->GetSourceKey(), source);
+        EXPECT_FLOAT_EQ(pause->decoded->GetEmissiveFactor().at(0), 1.0F);
+        ExpectLeased(root);
+        pause->decoded.reset();
+        loader.TrimCache();
+        EXPECT_TRUE(serio::FileLock::TryAcquire(
+          root / data::loose_cooked::kGenerationLeaseFileName,
+          serio::FileLockMode::kExclusive));
+      }
+      loader.Stop();
+      co_return co::kJoin;
+    };
+  }
+
+  //! The texture key of the one texture `WriteTextureGeneration` writes.
+  auto MeterTextureKey() -> data::AssetKey
+  {
+    return data::TextureKeyFromVirtualPath("/textures/Meter.otex");
+  }
+
+  //! A generation of the `textures` mount holding one texture, `Meter.otex`.
+  struct TextureGeneration {
+    data::SourceKey source;
+    data::pak::core::ResourceIndexT row;
+  };
+
+  auto WriteTextureGeneration(const std::filesystem::path& root,
+    const std::uint8_t seed) -> TextureGeneration
+  {
+    const auto lease = LockNewGeneration(root);
+    auto source = LooseCookedRoot { "textures", seed };
+    const auto texture = cooker::testing::TextureBuilder {};
+    const auto payload = texture.Payload();
+    const auto row = source.AddTexture(payload, texture.Record(payload));
+    source.DescribeTexture("Meter.otex", row);
+    cooker::testing::Materialize(source.Files(), root);
+    return { .source = source.SourceKey(), .row = row };
+  }
+
+  //! A generation holding the material of the tests, whose base color is
+  //! the texture `MeterTextureKey` of another source.
+  auto WriteTexturedMaterial(const std::filesystem::path& root) -> void
+  {
+    const auto lease = LockNewGeneration(root);
+    auto source = LooseCookedRoot { "test", kThirdSeed };
+    auto material = cooker::testing::MaterialBuilder { "material" };
+    material.ExternalTexture(
+      &data::pak::render::MaterialAssetDesc::base_color_texture,
+      MeterTextureKey());
+    source.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = "material.omat",
+      .descriptor = material.Bytes(),
+      .references = material.References(),
+      .key = MaterialKey(),
+    });
+    cooker::testing::Materialize(source.Files(), root);
+  }
+
+  //! A material keeps the texture of another source it bound when it loaded:
+  //! a later generation of that source binds only the materials loaded after
+  //! it.
+  auto ExerciseFrozenExternalTexture(
+    TestEventLoop* loop, std::filesystem::path root) -> co::Co<>
+  {
+    const auto first_root = root / "first";
+    const auto second_root = root / "second";
+    const auto owner_root = root / "owner";
+    const auto first = WriteTextureGeneration(first_root, kFirstSeed);
+    const auto second = WriteTextureGeneration(second_root, kSecondSeed);
+    WriteTexturedMaterial(owner_root);
+    co::ThreadPool pool(*loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
+    loader.RegisterLoader(loaders::LoadMaterialAsset);
+    OXCO_WITH_NURSERY(nursery)
+    {
+      co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+      static_cast<void>(loader.MountLooseCookedGeneration(first_root));
+      static_cast<void>(loader.MountLooseCookedGeneration(owner_root));
+      const auto first_texture
+        = loader.MakeTextureResourceKey(first.source, first.row);
+      const auto old_material
+        = co_await loader.LoadAssetAsync<data::MaterialAsset>(MaterialKey());
+      if (!old_material || !first_texture) {
+        ADD_FAILURE() << "Textured material fixture failed to load";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+      EXPECT_EQ(old_material->GetBaseColorTextureKey(), *first_texture);
+      EXPECT_EQ(loader.MountLooseCookedGeneration(second_root, first.source),
+        second.source);
+      const auto second_texture
+        = loader.MakeTextureResourceKey(second.source, second.row);
+      const auto new_material
+        = co_await loader.LoadAssetAsync<data::MaterialAsset>(MaterialKey());
+      if (!new_material || !second_texture) {
+        ADD_FAILURE() << "Textured material failed to reload";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+
+      EXPECT_EQ(loader.ResolveTextureResourceKey("/textures/Meter.otex"),
+        second_texture);
+      EXPECT_EQ(new_material->GetBaseColorTextureKey(), *second_texture);
+      EXPECT_EQ(loader.MakeTextureResourceKeyForAsset(
+                  *new_material, new_material->GetBaseColorTexture()),
+        second_texture);
+      EXPECT_EQ(old_material->GetBaseColorTextureKey(), *first_texture);
+      EXPECT_EQ(loader.MakeTextureResourceKeyForAsset(
+                  *old_material, old_material->GetBaseColorTexture()),
+        first_texture);
+      ExpectLeased(first_root);
+      loader.Stop();
+      co_return co::kJoin;
+    };
+  }
+
   auto ExerciseAtomicMountSet(TestEventLoop* loop, std::filesystem::path root)
     -> co::Co<>
   {
@@ -1024,6 +1200,46 @@ namespace {
     return pak;
   }
 
+  //! A loader configuration whose engine content pak is `engine_pak`.
+  auto EngineConfig(const std::filesystem::path& engine_pak)
+    -> AssetLoaderConfig
+  {
+    AssetLoaderConfig config {};
+    config.path_finder.emplace(PathFinderConfig::Create()
+                                 .WithEngineContentPakPath(engine_pak)
+                                 .BuildShared(),
+      engine_pak.parent_path());
+    return config;
+  }
+
+  //! Writes a generation of the `Engine` mount holding the default material
+  //! the content pak requires.
+  auto WriteEngineGeneration(const std::filesystem::path& root)
+    -> data::SourceKey
+  {
+    const auto lease = LockNewGeneration(root);
+    auto engine = LooseCookedRoot { "Engine", kFirstSeed };
+    static_cast<void>(engine.Material("Default.omat"));
+    cooker::testing::Materialize(engine.Files(), root);
+    return engine.SourceKey();
+  }
+
+  //! The failed requirements that refuse `pak` on `loader`, after checking
+  //! that the refusal left the mounted sources as they were.
+  auto RefusalOf(AssetLoader& loader, const std::filesystem::path& pak)
+    -> std::vector<FailedRequirement>
+  {
+    const auto before = loader.EnumerateMountedSources().size();
+    try {
+      loader.AddPakFile(pak);
+      ADD_FAILURE() << "The pak was mounted";
+    } catch (const DependencyRequirementError& error) {
+      EXPECT_EQ(loader.EnumerateMountedSources().size(), before);
+      return error.Failures();
+    }
+    return {};
+  }
+
   NOLINT_TEST_F(AssetLoaderBasicTest, EngineContentPakStaysBeneathEveryMountSet)
   {
     // Arrange
@@ -1252,10 +1468,231 @@ namespace {
     AssetLoader without_engine(engine::internal::EngineTagFactory::Get());
     with_engine.AddLooseCookedRoot(project);
 
-    // Act and Assert
+    // Act
     NOLINT_EXPECT_NO_THROW(with_engine.AddPakFile(content_pak));
-    NOLINT_EXPECT_THROW(
-      without_engine.AddPakFile(content_pak), DependencyRequirementError);
+    const auto failures = RefusalOf(without_engine, content_pak);
+
+    // Assert
+    ASSERT_EQ(failures.size(), 1U);
+    EXPECT_EQ(failures.front().failure, RequirementFailure::kMissing);
+    EXPECT_EQ(failures.front().mount, "Engine");
+    EXPECT_EQ(failures.front().requirement.key, EngineMaterialKey());
+  }
+
+  //! A patch of the engine pak that drops the default material deletes it,
+  //! so a pak requiring it of `Engine` is refused above the patch.
+  NOLINT_TEST_F(AssetLoaderBasicTest, DeletedDependencyRefusesThePak)
+  {
+    // Arrange
+    const auto engine = EnginePak();
+    const auto engine_pak = TempDir() / "engine.pak";
+    cooker::testing::Materialize(engine.Encode(), engine_pak);
+    auto replacement = LooseCookedRoot { "Engine" };
+    static_cast<void>(replacement.Material("Other.omat"));
+    auto patch = CookedPak { std::move(replacement) };
+    patch.PatchOf(engine);
+    const auto patch_pak = TempDir() / "patch.pak";
+    cooker::testing::Materialize(patch.Encode(), patch_pak);
+    const auto content_pak = TempDir() / "content.pak";
+    cooker::testing::Materialize(ContentPak(engine).Encode(), content_pak);
+    AssetLoader loader(
+      engine::internal::EngineTagFactory::Get(), EngineConfig(engine_pak));
+    loader.AddPakFile(patch_pak);
+
+    // Act
+    const auto failures = RefusalOf(loader, content_pak);
+
+    // Assert
+    ASSERT_EQ(failures.size(), 1U);
+    EXPECT_EQ(failures.front().failure, RequirementFailure::kTombstoned);
+    EXPECT_EQ(failures.front().requirement.key, EngineMaterialKey());
+  }
+
+  //! An `Engine` whose default material key holds a geometry refuses a pak
+  //! that requires a material there, naming the type it found.
+  NOLINT_TEST_F(AssetLoaderBasicTest, DependencyOfAnotherTypeRefusesThePak)
+  {
+    // Arrange
+    auto geometry_engine = LooseCookedRoot { "Engine" };
+    const auto geometry = cooker::testing::GeometryBuilder { "Default" };
+    geometry_engine.Add({
+      .type = data::AssetType::kGeometry,
+      .leaf = "Default.ogeo",
+      .descriptor = geometry.Bytes(),
+      .references = geometry.References(),
+      .key = EngineMaterialKey(),
+    });
+    auto engine = CookedPak { std::move(geometry_engine) };
+    engine.Identity(SourceKeyOf(kEngineSeed));
+    const auto engine_pak = TempDir() / "engine.pak";
+    cooker::testing::Materialize(engine.Encode(), engine_pak);
+    const auto content_pak = TempDir() / "content.pak";
+    cooker::testing::Materialize(ContentPak(EnginePak()).Encode(), content_pak);
+    AssetLoader loader(
+      engine::internal::EngineTagFactory::Get(), EngineConfig(engine_pak));
+
+    // Act
+    const auto failures = RefusalOf(loader, content_pak);
+
+    // Assert
+    ASSERT_EQ(failures.size(), 1U);
+    EXPECT_EQ(failures.front().failure, RequirementFailure::kTypeMismatch);
+    EXPECT_EQ(failures.front().found_type, data::AssetType::kGeometry);
+  }
+
+  //! A layer of another mount that holds the required key does not meet a
+  //! requirement of `Engine`, and the refusal names the mount it found.
+  NOLINT_TEST_F(AssetLoaderBasicTest, DependencyUnderAnotherMountRefusesThePak)
+  {
+    // Arrange
+    auto other = LooseCookedRoot { "Other", kFirstSeed };
+    const auto material = cooker::testing::MaterialBuilder { "Default" };
+    other.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = "Default.omat",
+      .descriptor = material.Bytes(),
+      .references = material.References(),
+      .key = EngineMaterialKey(),
+    });
+    const auto other_root = TempDir() / "other";
+    cooker::testing::Materialize(other.Files(), other_root);
+    const auto content_pak = TempDir() / "content.pak";
+    cooker::testing::Materialize(ContentPak(EnginePak()).Encode(), content_pak);
+    AssetLoader loader(engine::internal::EngineTagFactory::Get());
+    loader.AddLooseCookedRoot(other_root);
+
+    // Act
+    const auto failures = RefusalOf(loader, content_pak);
+
+    // Assert
+    ASSERT_EQ(failures.size(), 1U);
+    EXPECT_EQ(failures.front().failure, RequirementFailure::kMountMismatch);
+    EXPECT_EQ(failures.front().found_mount, "Other");
+  }
+
+  //! Retiring the only generation that meets a mounted pak's requirement is
+  //! refused, and the generation stays mounted.
+  NOLINT_TEST_F(AssetLoaderBasicTest, RetireKeepsAGenerationAPakRequires)
+  {
+    // Arrange
+    const auto generation = TempDir() / "engine";
+    const auto source = WriteEngineGeneration(generation);
+    const auto content_pak = TempDir() / "content.pak";
+    cooker::testing::Materialize(ContentPak(EnginePak()).Encode(), content_pak);
+    AssetLoader loader(engine::internal::EngineTagFactory::Get());
+    static_cast<void>(loader.MountLooseCookedGeneration(generation));
+    loader.AddPakFile(content_pak);
+
+    // Act
+    auto failures = std::vector<FailedRequirement> {};
+    try {
+      static_cast<void>(loader.RetireLooseCookedGeneration(source));
+      ADD_FAILURE() << "The required generation was retired";
+    } catch (const DependencyRequirementError& error) {
+      failures = error.Failures();
+    }
+
+    // Assert
+    ASSERT_EQ(failures.size(), 1U);
+    EXPECT_EQ(failures.front().failure, RequirementFailure::kMissing);
+    EXPECT_EQ(loader.EnumerateMountedSources().size(), 2U);
+  }
+
+  //! A generation retires while a lower layer still meets the requirements
+  //! of the paks above it.
+  NOLINT_TEST_F(AssetLoaderBasicTest, RetireLeavesALowerProvider)
+  {
+    // Arrange
+    const auto engine_pak = TempDir() / "engine.pak";
+    cooker::testing::Materialize(EnginePak().Encode(), engine_pak);
+    const auto generation = TempDir() / "engine";
+    const auto source = WriteEngineGeneration(generation);
+    const auto content_pak = TempDir() / "content.pak";
+    cooker::testing::Materialize(ContentPak(EnginePak()).Encode(), content_pak);
+    AssetLoader loader(
+      engine::internal::EngineTagFactory::Get(), EngineConfig(engine_pak));
+    static_cast<void>(loader.MountLooseCookedGeneration(generation));
+    loader.AddPakFile(content_pak);
+
+    // Act
+    const auto retired = loader.RetireLooseCookedGeneration(source);
+
+    // Assert
+    EXPECT_TRUE(retired);
+    EXPECT_EQ(loader.EnumerateMountedSources().size(), 2U);
+  }
+
+  //! Mounts `first`, then `second`, two roots with the SourceKey `source`:
+  //! the second is refused, naming both, and the first stays mounted.
+  auto ExpectSourceKeyConflict(const std::filesystem::path& first,
+    const std::filesystem::path& second, const data::SourceKey& source) -> void
+  {
+    AssetLoader loader(engine::internal::EngineTagFactory::Get());
+    loader.AddLooseCookedRoot(first);
+
+    auto refused = std::optional<SourceKeyConflictError> {};
+    try {
+      loader.AddLooseCookedRoot(second);
+    } catch (const SourceKeyConflictError& error) {
+      refused = error;
+    }
+
+    ASSERT_HAS_VALUE(refused);
+    EXPECT_EQ(refused->GetSourceKey(), source);
+    EXPECT_NE(refused->Mount(), refused->ExistingMount());
+    const auto mounted = loader.EnumerateMountedSources();
+    ASSERT_EQ(mounted.size(), 1U);
+    EXPECT_TRUE(
+      std::filesystem::equivalent(mounted.front().source_path, first));
+  }
+
+  //! A mutable root with the SourceKey of a mounted one is refused.
+  NOLINT_TEST_F(AssetLoaderBasicTest, SharedSourceKeyRefusesAMutableRoot)
+  {
+    const auto first = TempDir() / "first";
+    const auto second = TempDir() / "second";
+    const auto source = WriteGeneration(
+      first, { .material = MaterialKey(), .seed = kFirstSeed });
+    static_cast<void>(WriteGeneration(
+      second, { .material = MaterialKey(), .seed = kFirstSeed }));
+    std::filesystem::remove(
+      first / data::loose_cooked::kGenerationLeaseFileName);
+    std::filesystem::remove(
+      second / data::loose_cooked::kGenerationLeaseFileName);
+
+    ExpectSourceKeyConflict(first, second, source);
+  }
+
+  //! A generation with the SourceKey of a mounted one is refused.
+  NOLINT_TEST_F(AssetLoaderBasicTest, SharedSourceKeyRefusesAGeneration)
+  {
+    const auto first = TempDir() / "first";
+    const auto second = TempDir() / "second";
+    const auto source = WriteGeneration(
+      first, { .material = MaterialKey(), .seed = kFirstSeed });
+    static_cast<void>(WriteGeneration(
+      second, { .material = MaterialKey(), .seed = kFirstSeed }));
+
+    ExpectSourceKeyConflict(first, second, source);
+  }
+
+  //! Clearing while the engine pak cannot be reopened fails before anything
+  //! is unmounted.
+  NOLINT_TEST_F(AssetLoaderBasicTest, FailedClearKeepsTheMounts)
+  {
+    // Arrange
+    const auto engine_pak = TempDir() / "engine.pak";
+    cooker::testing::Materialize(EnginePak().Encode(), engine_pak);
+    const auto project = TempDir() / "project";
+    static_cast<void>(WriteGeneration(project, { .material = MaterialKey() }));
+    AssetLoader loader(
+      engine::internal::EngineTagFactory::Get(), EngineConfig(engine_pak));
+    loader.AddLooseCookedRoot(project);
+    std::filesystem::rename(engine_pak, TempDir() / "moved.pak");
+
+    // Act and Assert
+    NOLINT_EXPECT_THROW(loader.ClearMounts(), std::system_error);
+    EXPECT_EQ(loader.EnumerateMountedSources().size(), 2U);
   }
 
   //! A root of the `test` mount holding the physics sidecar of `target`.
@@ -1362,6 +1799,19 @@ namespace {
   {
     TestEventLoop loop;
     co::Run(loop, ExerciseInFlightGeneration(&loop, TempDir()));
+  }
+
+  NOLINT_TEST_F(
+    AssetLoaderBasicTest, RetireDuringALoadCompletesFromTheRetiredGeneration)
+  {
+    TestEventLoop loop;
+    co::Run(loop, ExerciseRetireDuringLoad(&loop, TempDir() / "generation"));
+  }
+
+  NOLINT_TEST_F(AssetLoaderBasicTest, ExternalTextureStaysBoundAcrossASwap)
+  {
+    TestEventLoop loop;
+    co::Run(loop, ExerciseFrozenExternalTexture(&loop, TempDir()));
   }
 
   NOLINT_TEST_F(

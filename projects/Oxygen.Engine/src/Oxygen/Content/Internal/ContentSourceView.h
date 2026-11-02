@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/Internal/ContentIdentity.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
+#include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
@@ -33,9 +34,9 @@ struct ContentSourceLayer final {
     }
   }
 
-  data::SourceInstanceId id {};
-  std::shared_ptr<const IContentSource> source {};
-  std::unordered_set<data::AssetKey> deleted {};
+  data::SourceInstanceId id;
+  std::shared_ptr<const IContentSource> source;
+  std::unordered_set<data::AssetKey> deleted;
 };
 
 //! Immutable lookup metadata retained only while a load scope is active.
@@ -65,18 +66,47 @@ public:
   {
     return layers_;
   }
-  [[nodiscard]] auto ResolveAsset(const data::AssetKey& key) const noexcept
+  //! The layer whose asset `key` wins, unless a newer layer deletes it.
+  [[nodiscard]] auto ResolveAsset(const data::AssetKey& key) const
     -> std::optional<data::SourceInstanceId>
   {
-    for (auto layer = layers_.rbegin(); layer != layers_.rend(); ++layer) {
-      if (layer->deleted.contains(key)) {
-        return std::nullopt;
-      }
-      if (layer->source->HasAsset(key)) {
-        return layer->id;
-      }
+    const auto match = ResolveByPrecedence(
+      Layers(),
+      [&](const ContentSourceLayer& layer) -> bool {
+        return layer.deleted.contains(key);
+      },
+      [&](const ContentSourceLayer& layer) -> bool {
+        return layer.source->HasAsset(key);
+      });
+    return match.status == KeyResolutionStatus::kFound
+      ? std::optional { match.layer->id }
+      : std::nullopt;
+  }
+
+  //! A texture of a layer's texture table, selected by its key.
+  struct TextureMatch final {
+    const ContentSourceLayer* layer { nullptr };
+    data::pak::core::ResourceIndexT index;
+  };
+
+  //! The layer whose texture `key` wins, unless a newer layer deletes it.
+  [[nodiscard]] auto ResolveTexture(const data::AssetKey& key) const
+    -> std::optional<TextureMatch>
+  {
+    auto index = std::optional<data::pak::core::ResourceIndexT> {};
+    const auto match = ResolveByPrecedence(
+      Layers(),
+      [&](const ContentSourceLayer& layer) -> bool {
+        return layer.deleted.contains(key);
+      },
+      [&](const ContentSourceLayer& layer) -> bool {
+        index = layer.source->FindTextureIndexByKey(key);
+        return index.has_value();
+      });
+    if (match.status != KeyResolutionStatus::kFound || !index.has_value()) {
+      return std::nullopt;
     }
-    return std::nullopt;
+    return TextureMatch { .layer = match.layer, .index = *index };
   }
 
 private:

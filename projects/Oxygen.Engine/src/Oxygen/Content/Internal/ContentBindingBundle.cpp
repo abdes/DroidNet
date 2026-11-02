@@ -39,22 +39,39 @@ auto ContentBindingBuilder::Freeze(ContentId identity,
       resources.push_back(std::move(binding));
     }
   }
+  std::vector<BoundTexture> textures;
+  textures.reserve(textures_.size());
+  for (auto& [key, binding] : textures_) {
+    static_cast<void>(key);
+    textures.push_back(std::move(binding));
+  }
   return std::make_shared<const ContentBindingBundle>(identity, std::move(view),
-    std::move(assets), std::move(resources), std::move(physics_));
+    std::move(assets), std::move(resources), std::move(textures),
+    std::move(physics_));
 }
 
 ContentBindingBundle::ContentBindingBundle(ContentId identity,
   std::shared_ptr<const BindingViewId> view, std::vector<BoundAsset> assets,
-  std::vector<BoundResource> resources,
+  std::vector<BoundResource> resources, std::vector<BoundTexture> textures,
   std::unique_ptr<const PhysicsBindings> physics)
   : identity_(identity)
   , view_(std::move(view))
   , assets_(std::move(assets))
   , resources_(std::move(resources))
+  , textures_(std::move(textures))
   , physics_(std::move(physics))
 {
   std::ranges::sort(assets_, {}, &BoundAsset::key);
   std::ranges::sort(resources_, {}, &BoundResource::key);
+  std::ranges::sort(textures_, {}, &BoundTexture::key);
+}
+
+auto ContentBindingBundle::FindTexture(const data::AssetKey& key) const noexcept
+  -> const BoundTexture*
+{
+  const auto found
+    = std::ranges::lower_bound(textures_, key, {}, &BoundTexture::key);
+  return found != textures_.end() && found->key == key ? &*found : nullptr;
 }
 
 auto ContentBindingBundle::FindAssetBinding(
