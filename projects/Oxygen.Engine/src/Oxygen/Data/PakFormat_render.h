@@ -80,11 +80,12 @@ inline constexpr float kMaxMaterialEmissiveFactor = 65504.0F;
   bytecode; only metadata and lookup information.
 
   - `shader_type`: Shader stage (ShaderType enum value).
-  - `source_path_offset`: Canonical repo-relative shader source path (forward
-    slashes, normalized, no absolute paths).
-  - `entry_point_offset`: Explicit entry point name.
-  - `defines_offset`: Canonical defines string for compilation (sorted, unique
-    names); may be empty.
+  - `source_path_offset`: Canonical shader source path, relative to the engine
+    shaders directory (CanonicalShaderSourcePath).
+  - `entry_point_offset`: Entry point name, an identifier (IsShaderEntryPoint).
+  - `defines_offset`: Canonical defines string (CanonicalShaderDefines):
+    comma-separated `NAME` or `NAME=VALUE` entries sorted by unique name; may
+    be empty.
   - `shader_hash`: 64-bit hash of shader source for validation.
 
   The three strings are offsets into the material descriptor's string table.

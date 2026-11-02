@@ -23,6 +23,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_render.h>
 
 namespace oxygen::cooker::testing {
@@ -32,6 +33,13 @@ namespace {
   namespace render = data::pak::render;
 
 } // namespace
+
+auto MaterialBuilder::Record() -> render::MaterialAssetDesc
+{
+  auto record = render::MaterialAssetDesc {};
+  record.material_domain = static_cast<uint8_t>(data::MaterialDomain::kOpaque);
+  return record;
+}
 
 MaterialBuilder::MaterialBuilder(
   const std::string_view name, const render::MaterialAssetDesc record)
@@ -54,10 +62,14 @@ auto MaterialBuilder::ExternalTexture(
   return *this;
 }
 
-auto MaterialBuilder::PixelShader(std::string source, std::string entry)
-  -> MaterialBuilder&
+auto MaterialBuilder::PixelShader(std::string source, std::string entry,
+  std::string defines) -> MaterialBuilder&
 {
-  pixel_shader_.emplace(std::move(source), std::move(entry));
+  pixel_shader_.emplace(Shader {
+    .source = std::move(source),
+    .entry = std::move(entry),
+    .defines = std::move(defines),
+  });
   return *this;
 }
 
@@ -77,8 +89,9 @@ auto MaterialBuilder::Bytes() const -> std::vector<std::byte>
   if (pixel_shader_.has_value()) {
     descriptor.shader_stages = 1U << static_cast<uint32_t>(ShaderType::kPixel);
     shader.shader_type = static_cast<uint8_t>(ShaderType::kPixel);
-    shader.source_path_offset = strings.Add(pixel_shader_->first);
-    shader.entry_point_offset = strings.Add(pixel_shader_->second);
+    shader.source_path_offset = strings.Add(pixel_shader_->source);
+    shader.entry_point_offset = strings.Add(pixel_shader_->entry);
+    shader.defines_offset = strings.Add(pixel_shader_->defines);
   }
   auto bytes = std::vector<std::byte> {};
   AppendRecord(bytes, descriptor);

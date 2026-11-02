@@ -14,6 +14,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
@@ -24,6 +25,7 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/StableId.h>
@@ -39,6 +41,7 @@ namespace {
   namespace world = data::pak::world;
   namespace script = data::pak::scripting;
   namespace physics = data::pak::physics;
+  namespace render = data::pak::render;
 
   //! The record `T` at `offset` of `bytes`.
   template <class T>
@@ -161,6 +164,69 @@ auto DescriptorDefects::SetVersion(
 {
   EditRecord<core::AssetHeader>(descriptor, 0U,
     [version](auto& header) -> void { header.version = version; });
+}
+
+auto DescriptorDefects::ReplaceString(std::vector<std::byte>& descriptor,
+  const std::string_view from, const std::string_view to) -> void
+{
+  if (from.size() != to.size()) {
+    throw std::invalid_argument("a replaced string keeps its length");
+  }
+  // Each string of the table ends with a NUL; `from` and its NUL name a whole
+  // string where they start the table or follow another string's NUL.
+  const auto header = ReadRecord<core::AssetHeader>(descriptor, 0U);
+  const auto table = std::span { descriptor }.subspan(
+    header.strings.offset, header.strings.size);
+  auto wanted = std::vector<std::byte> {};
+  std::ranges::transform(from, std::back_inserter(wanted),
+    [](const char c) -> std::byte { return static_cast<std::byte>(c); });
+  wanted.push_back(std::byte { 0 });
+  for (auto rest = table; !rest.empty();) {
+    const auto found = std::ranges::search(rest, wanted);
+    if (found.empty()) {
+      break;
+    }
+    const auto at = static_cast<size_t>(found.begin() - table.begin());
+    if (at == 0U || table[at - 1U] == std::byte { 0 }) {
+      std::ranges::transform(to, found.begin(),
+        [](const char c) -> std::byte { return static_cast<std::byte>(c); });
+      data::StampDescriptorHash(descriptor);
+      return;
+    }
+    rest = table.subspan(at + 1U);
+  }
+  throw std::invalid_argument(
+    "the descriptor holds no string '" + std::string(from) + "'");
+}
+
+auto DescriptorDefects::MaterialAt(const std::span<const std::byte> material)
+  -> render::MaterialAssetDesc
+{
+  return ReadRecord<render::MaterialAssetDesc>(material, 0U);
+}
+
+auto DescriptorDefects::SetMaterial(std::vector<std::byte>& material,
+  const render::MaterialAssetDesc& desc) -> void
+{
+  WriteRecord(material, 0U, desc);
+}
+
+auto DescriptorDefects::ShaderReferenceAt(
+  const std::span<const std::byte> material, const uint32_t index)
+  -> render::ShaderReferenceDesc
+{
+  return ReadRecord<render::ShaderReferenceDesc>(material,
+    sizeof(render::MaterialAssetDesc)
+      + (size_t { index } * sizeof(render::ShaderReferenceDesc)));
+}
+
+auto DescriptorDefects::SetShaderReference(std::vector<std::byte>& material,
+  const uint32_t index, const render::ShaderReferenceDesc& shader) -> void
+{
+  WriteRecord(material,
+    sizeof(render::MaterialAssetDesc)
+      + (size_t { index } * sizeof(render::ShaderReferenceDesc)),
+    shader);
 }
 
 auto DescriptorDefects::ClearSurface(

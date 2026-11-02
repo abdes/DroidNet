@@ -47,7 +47,7 @@ auto WriteMaterialSource(const std::filesystem::path& root,
   const data::AssetKey& key, const std::array<float, 4>& color)
   -> data::SourceKey
 {
-  auto record = data::pak::render::MaterialAssetDesc {};
+  auto record = MaterialBuilder::Record();
   std::ranges::copy(color, std::begin(record.base_color));
   const auto material = MaterialBuilder { "Surface", record };
   auto source = NewSourceRoot();

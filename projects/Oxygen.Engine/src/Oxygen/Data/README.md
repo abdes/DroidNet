@@ -61,7 +61,7 @@ asset descriptors; they are not listed in the asset directory themselves.
 | `MeshView`        | Non-owning slice of mesh data                      | Ranges validated on creation                      |
 | `MeshBuilder`     | Fluent safe construction                           | Prevents mixed storage modes                      |
 | `MaterialAsset`   | PBR parameters + texture indices + shader refs     | Factories: `CreateDefault`, `CreateDebug`         |
-| `ShaderReference` | Stage + unique id + source hash                    | Inline after material desc                        |
+| `ShaderReference` | Stage + source path + entry point + source hash    | Inline after material desc; checked when built    |
 | `BufferResource`  | Raw / typed / structured buffer descriptor + bytes | Usage flags + format interpretation               |
 | `TextureResource` | Texture descriptor + bytes                         | Width/height/depth/mips/format                    |
 | `Vertex`          | Position/normal/UV/tangent frame/color             | Epsilon equality + quantized hash                 |
@@ -104,18 +104,19 @@ Physics, before authored local transforms.
 
 ## 5. Invariants & Validation (Read First)
 
-| Invariant                                                     | Enforced Where                                       |
-| ------------------------------------------------------------- | ---------------------------------------------------- |
-| Mesh has ≥1 vertex (owned storage)                            | Mesh ctor (`invalid_argument`)                       |
-| Mesh has ≥1 submesh; SubMesh has ≥1 MeshView                  | `MeshBuilder::Build` (`logic_error`)                 |
-| SubMesh has exactly 1 material (non-null)                     | SubMesh ctor (`logic_error`)                         |
-| MeshView draws ≥1 vertex and ≥1 index                         | MeshView ctor (`invalid_argument`)                   |
-| Single storage mode per MeshBuilder                           | `ValidateStorageType` (`logic_error`)                |
-| Buffers hold whole vertices and 16-bit or 32-bit indices      | Mesh buffer binding (`CookedOpenError`)              |
-| Every view lies in its buffers; its indices name its vertices | MeshView ctor and buffer binding (`CookedOpenError`) |
-| Surface table: each declared surface once, known flags        | GeometryAsset ctor (`CookedOpenError`)               |
-| Default LOD policy keeps `LodPolicyRecord`'s rules            | GeometryAsset ctor (`CookedOpenError`)               |
-| Procedural params in valid range                              | Each generator (returns std::nullopt)                |
+| Invariant                                                           | Enforced Where                                       |
+| ------------------------------------------------------------------- | ---------------------------------------------------- |
+| Mesh has ≥1 vertex (owned storage)                                  | Mesh ctor (`invalid_argument`)                       |
+| Mesh has ≥1 submesh; SubMesh has ≥1 MeshView                        | `MeshBuilder::Build` (`logic_error`)                 |
+| SubMesh has exactly 1 material (non-null)                           | SubMesh ctor (`logic_error`)                         |
+| MeshView draws ≥1 vertex and ≥1 index                               | MeshView ctor (`invalid_argument`)                   |
+| Single storage mode per MeshBuilder                                 | `ValidateStorageType` (`logic_error`)                |
+| Buffers hold whole vertices and 16-bit or 32-bit indices            | Mesh buffer binding (`CookedOpenError`)              |
+| Every view lies in its buffers; its indices name its vertices       | MeshView ctor and buffer binding (`CookedOpenError`) |
+| Surface table: each declared surface once, known flags              | GeometryAsset ctor (`CookedOpenError`)               |
+| Default LOD policy keeps `LodPolicyRecord`'s rules                  | GeometryAsset ctor (`CookedOpenError`)               |
+| Material values and shader stages are defined; one shader per stage | `CheckMaterialDescriptor` (`CookedOpenError`)        |
+| Procedural params in valid range                                    | Each generator (returns std::nullopt)                |
 
 A mesh read from its descriptor is built before its buffers load; it shows no
 vertices until `Mesh::SetBufferResources` binds buffers that hold every view.

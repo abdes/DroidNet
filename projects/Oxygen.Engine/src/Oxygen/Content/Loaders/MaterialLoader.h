@@ -9,17 +9,20 @@
 #include <algorithm>
 #include <array>
 #include <bit>
-#include <cmath>
 #include <memory>
 #include <variant>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDescriptor.h>
 #include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Unorm16.h>
@@ -43,16 +46,9 @@ inline auto LoadMaterialAsset(LoaderContext context)
   using data::Unorm16;
   using data::pak::render::MaterialAssetDesc;
   using data::pak::render::ShaderReferenceDesc;
-  using oxygen::ShaderType;
 
-  auto check_result = [](auto&& result, const char* field) -> auto {
-    if (!result) {
-      LOG_F(
-        INFO, "-failed- on {}: {}", field, result.error().message().c_str());
-      throw std::runtime_error(
-        fmt::format("error reading material asset ({}): {}", field,
-          result.error().message()));
-    }
+  const auto check_result = [](const auto& result, const char* field) -> void {
+    CheckLoaderResult(result, "material asset", field);
   };
 
   auto pack = reader.ScopedAlignment(1);
@@ -67,9 +63,12 @@ inline auto LoadMaterialAsset(LoaderContext context)
     LOG_SCOPE_F(1, "Header");
     LoadAssetHeader(reader, desc.header);
     if (desc.header.asset_type
-        != static_cast<uint8_t>(data::AssetType::kMaterial)
-      || desc.header.version != data::pak::render::kMaterialAssetVersion) {
-      throw std::runtime_error(
+      != static_cast<uint8_t>(data::AssetType::kMaterial)) {
+      throw data::CookedOpenError(
+        data::CookedDefect::kWrongMagic, "descriptor is not a material");
+    }
+    if (desc.header.version != data::pak::render::kMaterialAssetVersion) {
+      throw data::CookedOpenError(data::CookedDefect::kUnsupportedVersion,
         "unsupported MaterialAssetDesc descriptor version");
     }
   }
@@ -163,10 +162,6 @@ inline auto LoadMaterialAsset(LoaderContext context)
   for (auto& i : desc.emissive_factor) {
     auto emissive_factor_result = reader.ReadInto<float>(i);
     check_result(emissive_factor_result, "MaterialAssetDesc.emissive_factor");
-    if (!std::isfinite(i) || i < 0.0F
-      || i > data::pak::render::kMaxMaterialEmissiveFactor) {
-      throw std::runtime_error("invalid MaterialAssetDesc emissive factor");
-    }
   }
 
   auto alpha_cutoff_result = ReadUnorm16(reader, desc.alpha_cutoff);
@@ -328,36 +323,22 @@ inline auto LoadMaterialAsset(LoaderContext context)
   //   loader.AddAssetDependency(current_asset_key, shader_asset_key);
   // }
 
-  // Count set bits in shader_stages to determine number of shader references
-  uint32_t shader_stage_bits = desc.shader_stages;
-  size_t shader_count = std::popcount(shader_stage_bits);
+  // One shader reference follows per set bit of shader_stages; the descriptor
+  // check below matches them to the stages.
+  const auto shader_count = std::popcount(desc.shader_stages);
   std::vector<ShaderReference> shader_refs;
-  shader_refs.reserve(shader_count);
+  shader_refs.reserve(static_cast<size_t>(shader_count));
   LOG_F(1, "shader references : {}", shader_count);
-
-  // For each set bit, read a ShaderReferenceDesc and construct a
-  // ShaderReference
-  for (uint32_t i = 0; i < 32; ++i) {
-    if ((shader_stage_bits & (1U << i)) != 0) {
-      auto shader_result = reader.Read<ShaderReferenceDesc>();
-      check_result(shader_result, "ShaderReferenceDesc");
-      try {
-        shader_refs.emplace_back(shader_result.value(), strings);
-      } catch (const std::invalid_argument& error) {
-        throw std::runtime_error(
-          fmt::format("ShaderReferenceDesc string: {}", error.what()));
-      }
-      const auto expected_stage = static_cast<ShaderType>(i);
-      if (shader_refs.back().GetShaderType() != expected_stage) {
-        throw std::runtime_error(
-          "ShaderReferenceDesc stage mismatch vs shader_stages bitfield");
-      }
-      LOG_F(1, "   shader stage {} : {}:{} (defines: '{}', hash: 0x{:016X})", i,
-        shader_refs.back().GetSourcePath(), shader_refs.back().GetEntryPoint(),
-        shader_refs.back().GetDefines(),
-        shader_refs.back().GetShaderSourceHash());
-    }
+  for (auto i = 0; i < shader_count; ++i) {
+    auto shader_result = reader.Read<ShaderReferenceDesc>();
+    check_result(shader_result, "ShaderReferenceDesc");
+    const auto& shader = shader_refs.emplace_back(*shader_result, strings);
+    LOG_F(1, "   shader {} : {}:{} (defines: '{}', hash: 0x{:016X})",
+      nostd::to_string(shader.GetShaderType()), shader.GetSourcePath(),
+      shader.GetEntryPoint(), shader.GetDefines(),
+      shader.GetShaderSourceHash());
   }
+  data::CheckMaterialDescriptor(desc, shader_refs);
 
   SkipDescriptorStrings(reader, *descriptor_start, desc.header);
 

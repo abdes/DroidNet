@@ -89,6 +89,17 @@ copies of the cooked material descriptor.
 
 ## Validation
 
+A cooked material is refused with a `CookedOpenError` code when it breaks the
+format. `CheckMaterialDescriptor` owns the descriptor's rules: a defined domain
+other than `kUnknown`, only defined flags and stage bits, one shader reference
+per declared stage in ascending stage order, and emissive factors in range.
+Each `ShaderReference` holds a known shader type, a canonical source path, an
+identifier entry point and canonical defines: comma-separated `NAME` or
+`NAME=VALUE` entries sorted by unique name. These are the shader request rules of
+`Core/Types/ShaderRequestRules.h`, which graphics canonicalization and the
+material cook also apply, so the cook refuses at authoring what the runtime
+would refuse.
+
 Qualify native producer/load round trips, current-version acceptance, obsolete
 version rejection and finite HDR precision. Source migration preserves texture
 references and representable appearance, then recooks content. Update fixture

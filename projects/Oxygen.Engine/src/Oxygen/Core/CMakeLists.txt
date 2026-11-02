@@ -96,6 +96,7 @@ set(
   "Types/PostProcess.h"
   "Types/ResolvedView.h"
   "Types/Scissors.h"
+  "Types/ShaderRequestRules.h"
   "Types/ShaderType.h"
   "Types/TextureType.h"
   "Types/View.h"
@@ -151,6 +152,7 @@ set(
   "Types/AssetKey.cpp"
   "Types/Frustum.cpp"
   "Types/ResolvedView.cpp"
+  "Types/ShaderRequestRules.cpp"
   "Version.cpp"
 )
 set(

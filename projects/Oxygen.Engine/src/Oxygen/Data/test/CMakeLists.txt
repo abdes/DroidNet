@@ -48,6 +48,7 @@ m_gtest_program(
     "LooseCookedIndexEncoder_test.cpp"
     "LooseCookedPaths_test.cpp"
     "LooseCookedResources_test.cpp"
+    "MaterialStructure_test.cpp"
     "SurfaceInventory_test.cpp"
     "Mesh_test.cpp"
     "MeshBoundingSphere_test.cpp"

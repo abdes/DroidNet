@@ -408,7 +408,7 @@ namespace {
     const auto source_path
       = "Shaders/\xC3\x89" + std::string(200, 's') + ".hlsl";
     const auto entry_point = std::string(80, 'e');
-    const auto defines = std::string(300, 'd');
+    const auto defines = "D" + std::string(299, '_');
     auto item = MakeBaseItem();
     item.material.shader_requests = {
       MakeShaderRequest(ShaderType::kVertex, source_path, entry_point, defines),

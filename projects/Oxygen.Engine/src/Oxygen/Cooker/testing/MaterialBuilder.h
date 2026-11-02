@@ -40,8 +40,12 @@ public:
   using TextureSlot
     = data::ResourceReferenceIndex data::pak::render::MaterialAssetDesc::*;
 
+  //! An opaque material record with the format's default values, for a test
+  //! to change before passing it.
+  [[nodiscard]] static auto Record() -> data::pak::render::MaterialAssetDesc;
+
   explicit MaterialBuilder(std::string_view name = "Material",
-    data::pak::render::MaterialAssetDesc record = {});
+    data::pak::render::MaterialAssetDesc record = Record());
 
   //! Binds `slot` to row `row` of the root's texture table.
   auto Texture(TextureSlot slot, ResourceIndexT row) -> MaterialBuilder&;
@@ -50,9 +54,10 @@ public:
   auto ExternalTexture(TextureSlot slot, const data::AssetKey& texture)
     -> MaterialBuilder&;
 
-  //! Adds a pixel shader stage: the entry point `entry` of `source`.
+  //! Adds a pixel shader stage: the entry point `entry` of `source`,
+  //! compiled with `defines`.
   auto PixelShader(std::string source = "fixture.hlsl",
-    std::string entry = "PS") -> MaterialBuilder&;
+    std::string entry = "PS", std::string defines = {}) -> MaterialBuilder&;
 
   [[nodiscard]] auto Name() const noexcept -> const std::string&
   {
@@ -72,7 +77,12 @@ private:
   std::string name_;
   data::pak::render::MaterialAssetDesc record_;
   std::vector<std::pair<TextureSlot, data::TextureTarget>> textures_;
-  std::optional<std::pair<std::string, std::string>> pixel_shader_;
+  struct Shader {
+    std::string source;
+    std::string entry;
+    std::string defines;
+  };
+  std::optional<Shader> pixel_shader_;
 };
 
 } // namespace oxygen::cooker::testing

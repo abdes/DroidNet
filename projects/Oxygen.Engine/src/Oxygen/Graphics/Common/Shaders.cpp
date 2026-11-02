@@ -5,19 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cctype>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Hash.h>
+#include <Oxygen/Core/Types/ShaderRequestRules.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 
@@ -42,126 +42,35 @@ namespace {
     }
   }
 
-  [[nodiscard]] auto IsAsciiIdentifier(const std::string_view s) -> bool
-  {
-    if (s.empty()) {
-      return false;
-    }
-
-    const auto is_alpha_underscore = [](const unsigned char c) -> bool {
-      return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
-    };
-    const auto is_alnum_underscore = [](const unsigned char c) -> bool {
-      return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
-        || (c >= '0' && c <= '9') || c == '_';
-    };
-
-    if (!is_alpha_underscore(static_cast<unsigned char>(s.front()))) {
-      return false;
-    }
-    for (const char ch : s) {
-      if (!is_alnum_underscore(static_cast<unsigned char>(ch))) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  [[nodiscard]] auto IsValidDefineName(const std::string_view s) -> bool
-  {
-    if (s.empty()) {
-      return false;
-    }
-    const auto is_upper
-      = [](const unsigned char c) -> bool { return c >= 'A' && c <= 'Z'; };
-    const auto is_upper_digit_underscore = [](const unsigned char c) -> bool {
-      return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
-    };
-
-    if (!is_upper(static_cast<unsigned char>(s.front()))) {
-      return false;
-    }
-    for (const char ch : s) {
-      if (!is_upper_digit_underscore(static_cast<unsigned char>(ch))) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  [[nodiscard]] auto HasAnyWhitespace(const std::string_view s) -> bool
-  {
-    for (const char ch : s) {
-      if (std::isspace(static_cast<unsigned char>(ch)) != 0) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  [[nodiscard]] auto NormalizeSourcePath(std::string_view source_path)
-    -> std::string
-  {
-    if (source_path.empty()) {
-      throw std::invalid_argument(
-        "ShaderRequest.source_path must not be empty");
-    }
-
-    std::string tmp(source_path);
-    std::replace(tmp.begin(), tmp.end(), '\\', '/');
-
-    if (tmp.find(':') != std::string::npos) {
-      throw std::invalid_argument(
-        "ShaderRequest.source_path must be a relative path (drive ':' found)");
-    }
-
-    std::filesystem::path p(tmp);
-    if (p.is_absolute()) {
-      throw std::invalid_argument(
-        "ShaderRequest.source_path must be a relative path");
-    }
-
-    p = p.lexically_normal();
-    const std::string normalized = p.generic_string();
-    if (normalized.empty() || normalized == ".") {
-      throw std::invalid_argument(
-        "ShaderRequest.source_path must not be empty after normalization");
-    }
-
-    for (const auto& part : p) {
-      if (part == "..") {
-        throw std::invalid_argument("ShaderRequest.source_path must not "
-                                    "contain '..' after normalization");
-      }
-    }
-
-    return normalized;
-  }
-
 } // namespace
 
 auto CanonicalizeShaderRequest(ShaderRequest request) -> ShaderRequest
 {
-  request.source_path = NormalizeSourcePath(request.source_path);
+  auto source_path = CanonicalShaderSourcePath(request.source_path);
+  if (!source_path.has_value()) {
+    throw std::invalid_argument("ShaderRequest.source_path must be a relative "
+                                "path within the shaders directory");
+  }
+  request.source_path = std::move(*source_path);
 
-  if (!IsAsciiIdentifier(request.entry_point)) {
+  if (!IsShaderEntryPoint(request.entry_point)) {
     throw std::invalid_argument(
       "ShaderRequest.entry_point must be a valid identifier");
   }
 
   for (const auto& def : request.defines) {
-    if (!IsValidDefineName(def.name)) {
+    if (!IsShaderDefineName(def.name)) {
       throw std::invalid_argument(
         "ShaderRequest.defines[].name must match [A-Z][A-Z0-9_]*");
     }
-    if (def.value && HasAnyWhitespace(*def.value)) {
+    if (def.value && !IsShaderDefineValue(*def.value)) {
       throw std::invalid_argument(
         "ShaderRequest.defines[].value must not contain whitespace");
     }
   }
 
-  std::sort(request.defines.begin(), request.defines.end(),
-    [](const ShaderDefine& a, const ShaderDefine& b) -> bool {
+  std::ranges::sort(
+    request.defines, [](const ShaderDefine& a, const ShaderDefine& b) -> bool {
       if (a.name != b.name) {
         return a.name < b.name;
       }
@@ -196,8 +105,9 @@ auto FormatShaderLogKey(const ShaderRequest& request) -> std::string
     out += " [";
     bool first = true;
     for (const auto& def : request.defines) {
-      if (!first)
+      if (!first) {
         out += ',';
+      }
       first = false;
       out += def.name;
       if (def.value.has_value()) {

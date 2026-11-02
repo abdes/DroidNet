@@ -53,6 +53,7 @@ m_gtest_program(ResolvedView SOURCES "ResolvedView_test.cpp")
 m_gtest_program(NodeFrame SOURCES "NodeFrame_test.cpp")
 m_gtest_program(PhaseRegistry SOURCES "PhaseRegistry_test.cpp")
 m_gtest_program(ScriptCompileMode SOURCES "ScriptCompileMode_test.cpp")
+m_gtest_program(ShaderRequestRules SOURCES "ShaderRequestRules_test.cpp")
 m_gtest_program(
   Time
   SOURCES

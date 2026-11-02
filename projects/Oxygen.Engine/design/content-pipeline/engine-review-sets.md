@@ -268,7 +268,8 @@ them alone, and every engine reader refuses what it cannot read.
 `Data/LightValidation.h`, `Data/LodPolicyValidation.h`,
 `Data/SurfaceInventory.*`, `Data/AssetRuntimeBindings.h`, `Data/Asset.h`,
 `Data/DescriptorHash.*`,
-`Data/ComponentType.h`, `Data/MaterialDomain.h`, `Data/MeshType.h`,
+`Data/ComponentType.h`, `Data/MaterialDescriptor.*`, `Data/MaterialDomain.h`,
+`Data/MeshType.h`, `Core/Types/ShaderRequestRules.*`,
 `Data/ShaderReference.*`, `Data/SourceOrigin.h`, `Data/SurfaceId.h`,
 `Data/Vertex.h`, `Data/HalfFloat.h`, `Data/Unorm16.h`,
 `Data/ToStringConverters.cpp`; `Data/Docs/physics.md`,
@@ -293,8 +294,9 @@ and the in-memory model the interop hands to the editor.
   vertices outside the view, including buffers bound after the load; 16- and
   32-bit indices are read without assuming alignment; the remaining vertex
   `reinterpret_cast` rests on the alignment the binding checks.
-- `MaterialAsset`: texture slots, domains and shader references refuse
-  unknown values; `ShaderReference` parsing is bounded.
+- `MaterialDescriptor`, `ShaderReference`: domains, flags, stages and
+  shader references refuse unknown values with typed errors; shader paths and
+  entry points follow the one shader request rule set.
 - `StableId`, `SceneIds`: identity derivation is stable across platforms and
   documented, because the editor keys scene nodes by it.
 - `PhysicsSceneAsset`: bindings name nodes of the scene they ship with, in
@@ -390,7 +392,7 @@ eviction and hot reload, which Live Preview exercises constantly.
   documented order; a bad reference fails the instantiation with a code
   rather than producing a partial scene; `EnvironmentHydration` refuses
   unknown blocks.
-- `MaterialLoader.h:319` (shader references are not resources): confirm the
+- `MaterialLoader.h:314` (shader references are not resources): confirm the
   effect on hot reload and dependency tracking.
 - Docs: `implementation_plan.md` and the other plan-style docs in
   `Content/Docs` are current or retired.

@@ -233,7 +233,7 @@ namespace {
       .key = SceneKey(),
     });
     if (!recipe.material.IsNil()) {
-      auto record = data::pak::render::MaterialAssetDesc {};
+      auto record = cooker::testing::MaterialBuilder::Record();
       record.emissive_factor[0] = recipe.emission;
       const auto material
         = cooker::testing::MaterialBuilder { "material", record };

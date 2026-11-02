@@ -11,6 +11,7 @@
 #include <cstring>
 #include <optional>
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -19,6 +20,7 @@
 #include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
@@ -59,6 +61,35 @@ struct DescriptorDefects final {
 
   //! Sets the format version of the descriptor's header.
   static auto SetVersion(std::vector<std::byte>& descriptor, uint8_t version)
+    -> void;
+
+  //! Replaces the string `from` of the descriptor's string table with `to`,
+  //! of the same length, so no offset moves.
+  /*!
+   @throw std::invalid_argument When the lengths differ or the table holds no
+   string `from`.
+  */
+  static auto ReplaceString(std::vector<std::byte>& descriptor,
+    std::string_view from, std::string_view to) -> void;
+
+  //=== Materials ===-------------------------------------------------------//
+
+  //! The material's descriptor record.
+  [[nodiscard]] static auto MaterialAt(std::span<const std::byte> material)
+    -> data::pak::render::MaterialAssetDesc;
+
+  //! Replaces the material's descriptor record.
+  static auto SetMaterial(std::vector<std::byte>& material,
+    const data::pak::render::MaterialAssetDesc& desc) -> void;
+
+  //! The shader reference `index` of the material, in stage order.
+  [[nodiscard]] static auto ShaderReferenceAt(
+    std::span<const std::byte> material, uint32_t index)
+    -> data::pak::render::ShaderReferenceDesc;
+
+  //! Replaces the shader reference `index` of the material.
+  static auto SetShaderReference(std::vector<std::byte>& material,
+    uint32_t index, const data::pak::render::ShaderReferenceDesc& shader)
     -> void;
 
   //=== Geometries ===------------------------------------------------------//

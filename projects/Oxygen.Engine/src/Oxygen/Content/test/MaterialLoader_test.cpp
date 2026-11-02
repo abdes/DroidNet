@@ -40,8 +40,6 @@
 
 using ::testing::AllOf;
 using ::testing::Eq;
-using ::testing::IsNull;
-using ::testing::IsSupersetOf;
 using ::testing::NotNull;
 using ::testing::SizeIs;
 
@@ -192,7 +190,9 @@ NOLINT_TEST_F(
 
   // Arrange
   auto desc = MakeMaterialDescriptor("Test Material");
-  constexpr uint32_t kFlags = 0xAABBCCDDU;
+  constexpr uint32_t kFlags
+    = oxygen::data::pak::render::kMaterialFlag_DoubleSided
+    | oxygen::data::pak::render::kMaterialFlag_AlphaTest;
   constexpr uint32_t kShaderStages = 0x88U;
   constexpr auto kBaseColor = std::array { 0.1F, 0.2F, 0.3F, 0.4F };
   constexpr float kNormalScale = 1.5F;
@@ -253,7 +253,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(asset->GetAssetType(), AssetType::kMaterial);
   EXPECT_EQ(asset->GetAssetName(), "Test Material");
   EXPECT_EQ(asset->GetMaterialDomain(), MaterialDomain::kOpaque);
-  EXPECT_EQ(asset->GetFlags(), 0xAABBCCDDU);
+  EXPECT_EQ(asset->GetFlags(), kFlags);
   EXPECT_FLOAT_EQ(asset->GetNormalScale(), 1.5F);
   EXPECT_NEAR(asset->GetMetalness(), 0.7F, 1.0F / 65535.0F);
   EXPECT_NEAR(asset->GetRoughness(), 0.2F, 1.0F / 65535.0F);

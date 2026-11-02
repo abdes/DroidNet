@@ -25,6 +25,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Core/Types/ShaderRequestRules.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -397,25 +398,33 @@ auto MaterialSource::Validate(const std::string_view source_id,
   }
   std::array<bool, kMaxShaderStages> seen {};
   for (const auto& shader : shader_requests) {
-    if (shader.shader_type == 0
-      || shader.shader_type
-        > static_cast<uint8_t>(ShaderType::kMaxShaderType)) {
+    if (!IsShaderStage(shader.shader_type)) {
       error("material.shader_stage_invalid", "Shader type is invalid");
       continue;
     }
     const auto index = static_cast<std::size_t>(shader.shader_type - 1U);
-    if (index >= seen.size()) {
-      error("material.shader_stage_invalid", "Shader type is out of range");
-      continue;
-    }
     if (seen.at(index)) {
       error("material.shader_stage_duplicate",
         "Shader type is duplicated in request list");
       continue;
     }
-    if (shader.source_path.empty() || shader.entry_point.empty()) {
+    // The runtime reads only canonical paths and defines, and identifier
+    // entry points.
+    if (CanonicalShaderSourcePath(shader.source_path) != shader.source_path) {
       error("material.shader_ref_invalid",
-        "Shader source_path and entry_point must be set");
+        "Shader source_path must be a canonical path within the shaders "
+        "directory");
+      continue;
+    }
+    if (!IsShaderEntryPoint(shader.entry_point)) {
+      error("material.shader_ref_invalid",
+        "Shader entry_point must be an identifier");
+      continue;
+    }
+    if (CanonicalShaderDefines(shader.defines) != shader.defines) {
+      error("material.shader_ref_invalid",
+        "Shader defines must be sorted, unique NAME or NAME=VALUE entries "
+        "separated by commas");
       continue;
     }
     seen.at(index) = true;
@@ -532,11 +541,16 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
           "Shader stage is not recognized");
         return std::nullopt;
       }
+      // An authored path and defines are cooked in their canonical forms,
+      // when they have them; Validate refuses those without.
+      const auto shader_path = shader.at("source_path").get<std::string>();
+      const auto defines = shader.value("defines", std::string {});
       material.shader_requests.push_back(ShaderRequest {
         .shader_type = *stage,
-        .source_path = shader.at("source_path").get<std::string>(),
+        .source_path
+        = CanonicalShaderSourcePath(shader_path).value_or(shader_path),
         .entry_point = shader.at("entry_point").get<std::string>(),
-        .defines = shader.value("defines", std::string {}),
+        .defines = CanonicalShaderDefines(defines).value_or(defines),
         .shader_hash = shader.value("shader_hash", uint64_t { 0 }),
       });
     }

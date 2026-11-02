@@ -55,4 +55,14 @@ namespace oxygen::cooker::testing {
 [[nodiscard]] auto GeometryRefusal(std::span<const std::byte> bytes)
   -> std::optional<data::CookedDefect>;
 
+//! The defect the product refuses the material descriptor `bytes` with.
+/*!
+ Reads `bytes` with the material loader, which a mount uses.
+
+ @return No defect when the loader accepts the material.
+ @throw std::logic_error When the loader refuses without a defect.
+*/
+[[nodiscard]] auto MaterialRefusal(std::span<const std::byte> bytes)
+  -> std::optional<data::CookedDefect>;
+
 } // namespace oxygen::cooker::testing

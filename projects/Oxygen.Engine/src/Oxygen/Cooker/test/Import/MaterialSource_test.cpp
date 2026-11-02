@@ -98,6 +98,47 @@ namespace {
       HasDiagnosticCode(diagnostics, "material.shader_stage_duplicate"));
   }
 
+  NOLINT_TEST(MaterialSourceTest, PreparationRejectsShadersTheRuntimeRefuses)
+  {
+    for (const auto* shader :
+      {
+        R"([{"stage":"pixel","source_path":"lit.hlsl","entry_point":"2PS"}])",
+        R"([{"stage":"pixel","source_path":"../lit.hlsl","entry_point":"PS"}])",
+        R"([{"stage":"pixel","source_path":"C:/lit.hlsl","entry_point":"PS"}])",
+        R"([{"stage":"pixel","source_path":"lit.hlsl","entry_point":"PS",
+          "defines":"ALPHA,ALPHA=1"}])",
+        R"([{"stage":"pixel","source_path":"lit.hlsl","entry_point":"PS",
+          "defines":"alpha"}])",
+      }) {
+      SCOPED_TRACE(shader);
+      std::vector<ImportDiagnostic> diagnostics;
+      const auto result = MaterialSource::FromDescriptor(
+        MaterialDescriptor { "/Content/Materials/Shaded.omat" }
+          .Set("/shaders", nlohmann::json::parse(shader))
+          .Text(),
+        "material.json", "", diagnostics);
+      EXPECT_FALSE(result);
+      EXPECT_TRUE(
+        HasDiagnosticCode(diagnostics, "material.shader_ref_invalid"));
+    }
+  }
+
+  NOLINT_TEST(MaterialSourceTest, PreparationCanonicalizesShaderRequests)
+  {
+    std::vector<ImportDiagnostic> diagnostics;
+    const auto result = MaterialSource::FromDescriptor(
+      MaterialDescriptor { "/Content/Materials/Shaded.omat" }
+        .Set("/shaders", nlohmann::json::parse(R"([
+      {"stage":"pixel","source_path":"./Lit\\Common/../Lit_PS.hlsl",
+       "entry_point":"PS","defines":"LOD=2,ALPHA"}])"))
+        .Text(),
+      "material.json", "", diagnostics);
+    ASSERT_HAS_VALUE(result) << "Expected result to contain a value";
+    ASSERT_EQ(result->shader_requests.size(), 1U);
+    EXPECT_EQ(result->shader_requests.front().source_path, "Lit/Lit_PS.hlsl");
+    EXPECT_EQ(result->shader_requests.front().defines, "ALPHA,LOD=2");
+  }
+
   NOLINT_TEST(MaterialSourceTest, PreparationRejectsUnsupportedEmissionRange)
   {
     std::vector<ImportDiagnostic> diagnostics;

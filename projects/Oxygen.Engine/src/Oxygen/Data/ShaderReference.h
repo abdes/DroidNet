@@ -32,7 +32,14 @@ class ShaderReference : public oxygen::Object {
 public:
   //! Resolves a cooked reference's strings in its material's string table.
   /*!
-   @throw std::invalid_argument when a string offset is not in `strings`.
+   The source path is canonical (CanonicalShaderSourcePath), the entry point an
+   identifier (IsShaderEntryPoint) and the defines canonical
+   (CanonicalShaderDefines), as shader requests require.
+
+   @throw CookedOpenError `kOutOfBounds` when a string offset is not in
+   `strings`; `kInvalidValue` for an unknown shader type, an entry point that is
+   not an identifier or malformed defines; `kNotCanonical` for defines not
+   sorted by name; `kInvalidPath` for a source path that is not canonical.
   */
   OXGN_DATA_API ShaderReference(const pak::render::ShaderReferenceDesc& desc,
     const DescriptorStrings& strings);

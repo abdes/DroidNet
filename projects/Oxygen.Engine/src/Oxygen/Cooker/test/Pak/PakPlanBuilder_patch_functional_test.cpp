@@ -488,7 +488,7 @@ private:
 //! A material with base color red `red`.
 auto TintedMaterial(const float red) -> std::vector<std::byte>
 {
-  auto record = render::MaterialAssetDesc {};
+  auto record = fixtures::MaterialBuilder::Record();
   record.base_color[0] = red;
   return fixtures::MaterialBuilder { "Tinted", record }.Bytes();
 }
