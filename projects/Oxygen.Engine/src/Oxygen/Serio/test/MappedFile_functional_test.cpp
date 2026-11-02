@@ -18,9 +18,11 @@
 
 #include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Serio/AsyncFile.h>
 #include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/Detail/GuardedCopy.h>
 #include <Oxygen/Serio/Error.h>
+#include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/MappedFile.h>
 #include <Oxygen/Serio/NativeFile.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
@@ -91,6 +93,39 @@ NOLINT_TEST_F(MappedFileTest, ReplacementKeepsMappedVersion)
   EXPECT_THAT(mapped.Bytes(), BytesEqual(bytes_));
   EXPECT_THAT(
     Required(MappedFile::Open(path), "remap").Bytes(), BytesEqual(replacement));
+}
+
+//! Mapping an open handle shows the version that handle opened, even after
+//! the path was atomically replaced; the handle stays the caller's.
+NOLINT_TEST_F(MappedFileTest, MapOfAHandleShowsTheVersionItOpened)
+{
+  const auto path = files_.Write(bytes_);
+  const auto file
+    = Required(oxygen::serio::NativeFile::Open(path, {}), "open the file");
+  const auto replaced
+    = WriteFileAtomically(path, PatternBytes(3000, PatternSeed::kSecond));
+  ASSERT_TRUE(replaced) << replaced.error().message();
+
+  const auto mapped = MappedFile::Map(file.Handle(), path);
+
+  ASSERT_TRUE(mapped) << mapped.error().message();
+  EXPECT_THAT(mapped->Bytes(), BytesEqual(bytes_));
+  EXPECT_EQ(mapped->Path(), path);
+  EXPECT_EQ(Required(file.Size(), "size the file").get(), bytes_.size());
+}
+
+//! A file opened through a driver, for awaited reads, maps too: its metadata
+//! and its awaited payloads then read one file version.
+NOLINT_TEST_F(MappedFileTest, MapsAFileOpenedThroughADriver)
+{
+  const auto path = files_.Write(bytes_);
+  auto driver = Required(oxygen::serio::IoDriver::CreateInline(), "driver");
+  const auto file = Required(driver.Open(path, {}), "open through the driver");
+
+  const auto mapped = MappedFile::Map(file.Handle(), file.Path());
+
+  ASSERT_TRUE(mapped) << mapped.error().message();
+  EXPECT_THAT(mapped->Bytes(), BytesEqual(bytes_));
 }
 
 //! A file another handle holds open for writing maps when the mapping

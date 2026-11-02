@@ -95,7 +95,6 @@ auto MappedFile::Open(const std::filesystem::path& path,
 {
   // POSIX opens never refuse each other: every sharing is honoured.
   try {
-    auto logical = path;
     const auto native = base::ToNativePath(path);
     const auto descriptor = ::open(native.c_str(), O_RDONLY | O_CLOEXEC);
     if (descriptor < 0) {
@@ -104,7 +103,19 @@ auto MappedFile::Open(const std::filesystem::path& path,
     // The mapping keeps the file alive; the descriptor closes once mapped.
     const auto close
       = ScopeGuard([descriptor]() noexcept { ::close(descriptor); });
+    return Map(static_cast<NativeHandle>(descriptor), path);
+  } catch (const std::bad_alloc&) {
+    return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
+  } catch (const std::filesystem::filesystem_error& error) {
+    return ::oxygen::Err(error.code());
+  }
+}
 
+auto MappedFile::Map(const NativeHandle handle,
+  std::filesystem::path path) noexcept -> Result<MappedFile>
+{
+  try {
+    const auto descriptor = static_cast<int>(handle);
     struct stat info {};
     if (::fstat(descriptor, &info) != 0) {
       return ::oxygen::Err(base::LastSystemError());
@@ -114,7 +125,7 @@ auto MappedFile::Open(const std::filesystem::path& path,
       return ::oxygen::Err(std::make_error_code(std::errc::value_too_large));
     }
     if (size == 0) {
-      return ::oxygen::Ok(MappedFile(nullptr, 0, std::move(logical)));
+      return ::oxygen::Ok(MappedFile(nullptr, 0, std::move(path)));
     }
     auto* const view = ::mmap(nullptr, static_cast<size_t>(size), PROT_READ,
       MAP_PRIVATE, descriptor, 0);
@@ -122,7 +133,7 @@ auto MappedFile::Open(const std::filesystem::path& path,
       return ::oxygen::Err(base::LastSystemError());
     }
     return ::oxygen::Ok(MappedFile(static_cast<std::byte*>(view),
-      static_cast<size_t>(size), std::move(logical)));
+      static_cast<size_t>(size), std::move(path)));
   } catch (const std::bad_alloc&) {
     return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
   } catch (const std::filesystem::filesystem_error& error) {

@@ -58,12 +58,13 @@ from the mapped pages anyway.
 ```mermaid
 flowchart LR
   File[("Pak file")]
-  Map["MappedFile<br/>parsed in place"]
   Async["AsyncFile<br/>awaited payload reads"]
+  Map["MappedFile<br/>parsed in place"]
   Parser["ByteReader<br/>directory, catalog"]
   Buffer["ByteBuffer<br/>one payload"]
-  File --> Map --> Parser
-  File --> Async --> Buffer
+  File --> Async
+  Async -- "Map(handle)" --> Map --> Parser
+  Async --> Buffer
 ```
 
 - **The view keeps its version.** A mapping opened with shared deletion keeps
@@ -75,8 +76,10 @@ flowchart LR
   fatal. Views serve metadata parsed once per mount.
 - **Never awaitable.** Only the view and the blocking read touch mapped
   pages, so nothing awaited faults on the loop thread. A consumer that parses
-  a mapping and awaits payloads from the same file opens it twice: mapped,
-  and through its driver.
+  a mapping and awaits payloads from the same file opens it once, through its
+  driver, and maps that handle (`MappedFile::Map`). Opening the path a second
+  time could map a newer version than the one the payloads, and any check of
+  them, read.
 - **Mapping a file another writer appends to** needs the sharing mode that
   admits writers; the default refuses one.
 - **Prefetching** hints that a range will be parsed soon, without waiting.

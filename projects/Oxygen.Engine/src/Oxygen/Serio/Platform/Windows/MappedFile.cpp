@@ -30,6 +30,7 @@
 #include <Oxygen/Base/SystemError.h>
 #include <Oxygen/Serio/Detail/GuardedCopy.h>
 #include <Oxygen/Serio/MappedFile.h>
+#include <Oxygen/Serio/Platform/Windows/Handles.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::serio {
@@ -75,7 +76,6 @@ auto MappedFile::Open(const std::filesystem::path& path,
   const Sharing sharing) noexcept -> Result<MappedFile>
 {
   try {
-    auto logical = path;
     const auto native = base::ToNativePath(path);
     auto* const file
       = CreateFileW(native.c_str(), GENERIC_READ, ShareModeOf(sharing), nullptr,
@@ -83,11 +83,23 @@ auto MappedFile::Open(const std::filesystem::path& path,
     if (file == INVALID_HANDLE_VALUE) {
       return ::oxygen::Err(base::LastSystemError());
     }
-    // The view keeps the section, and the section the file, alive: both
-    // handles close once the view is mapped.
+    // The view keeps the section, and the section the file, alive: the file
+    // handle closes once the view is mapped.
     const auto close_file
       = ScopeGuard([file] noexcept -> void { CloseHandle(file); });
+    return Map(windows::ToNativeHandle(file), path);
+  } catch (const std::bad_alloc&) {
+    return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
+  } catch (const std::filesystem::filesystem_error& error) {
+    return ::oxygen::Err(error.code());
+  }
+}
 
+auto MappedFile::Map(const NativeHandle handle,
+  std::filesystem::path path) noexcept -> Result<MappedFile>
+{
+  try {
+    auto* const file = windows::ToHandle(handle);
     auto size = LARGE_INTEGER {};
     if (GetFileSizeEx(file, &size) == FALSE) {
       return ::oxygen::Err(base::LastSystemError());
@@ -97,7 +109,7 @@ auto MappedFile::Open(const std::filesystem::path& path,
       return ::oxygen::Err(std::make_error_code(std::errc::value_too_large));
     }
     if (size.QuadPart == 0) {
-      return ::oxygen::Ok(MappedFile(nullptr, 0, std::move(logical)));
+      return ::oxygen::Ok(MappedFile(nullptr, 0, std::move(path)));
     }
 
     auto* const section
@@ -113,7 +125,7 @@ auto MappedFile::Open(const std::filesystem::path& path,
       return ::oxygen::Err(base::LastSystemError());
     }
     return ::oxygen::Ok(MappedFile(static_cast<std::byte*>(view),
-      static_cast<size_t>(size.QuadPart), std::move(logical)));
+      static_cast<size_t>(size.QuadPart), std::move(path)));
   } catch (const std::bad_alloc&) {
     return ::oxygen::Err(std::make_error_code(std::errc::not_enough_memory));
   } catch (const std::filesystem::filesystem_error& error) {

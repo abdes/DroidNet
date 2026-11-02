@@ -56,6 +56,20 @@ public:
   OXGN_SERIO_NDAPI static auto Open(const std::filesystem::path& path,
     Sharing sharing = Sharing::kReadDelete) noexcept -> Result<MappedFile>;
 
+  //! Maps the whole file that the open, readable `handle` refers to.
+  /*!
+   The view shows the file version `handle` opened, even after its path was
+   atomically replaced, so code that already reads a file through a handle
+   maps those same bytes. The caller keeps owning `handle`: the mapping does
+   not need it once this returns. `path` is the file's logical path, which
+   `Path()` returns.
+
+   @return The mapped file, or the OS error. An empty file maps to an empty
+           view.
+  */
+  OXGN_SERIO_NDAPI static auto Map(NativeHandle handle,
+    std::filesystem::path path) noexcept -> Result<MappedFile>;
+
   OXGN_SERIO_API ~MappedFile() noexcept;
 
   OXYGEN_MAKE_NON_COPYABLE(MappedFile)
