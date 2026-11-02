@@ -1368,4 +1368,51 @@ NOLINT_TEST_F(
   EXPECT_FALSE(issues.front().resource_row.has_value());
 }
 
+//! Issues are sorted by path, then by resource row.
+NOLINT_TEST_F(LooseCookedIndexResourceTest, IssuesAreSortedByPathAndRow)
+{
+  // Arrange
+  AddBuffer(kFirstBuffer);
+  AddBuffer(kSecondBuffer);
+  Rows().at(1).data_offset = Data().size();
+  Rows().at(2).data_offset = Data().size();
+  const auto index = PublishRoot();
+  PublishText("Extra.txt", "unexpected");
+
+  // Act
+  const auto issues = index.CheckContent(TempDir(), IntegrityCheck::kMetadata);
+
+  // Assert
+  ASSERT_EQ(issues.size(), 3U);
+  EXPECT_EQ(issues.at(0).relative_path, "Extra.txt");
+  EXPECT_EQ(issues.at(0).reason, IntegrityFailure::kUnexpected);
+  EXPECT_EQ(issues.at(1).relative_path, kData);
+  EXPECT_EQ(issues.at(1).reason, IntegrityFailure::kResourceOutOfBounds);
+  EXPECT_EQ(issues.at(1).resource_row, 1U);
+  EXPECT_EQ(issues.at(2).relative_path, kData);
+  EXPECT_EQ(issues.at(2).reason, IntegrityFailure::kResourceOutOfBounds);
+  EXPECT_EQ(issues.at(2).resource_row, 2U);
+}
+
+//! A missing data file suppresses checks of its malformed table's rows.
+NOLINT_TEST_F(LooseCookedIndexResourceTest, MissingDataSuppressesRowChecks)
+{
+  // Arrange
+  AddBuffer(kFirstBuffer);
+  Rows().back().content_hash = {};
+  const auto index = PublishRoot();
+  ASSERT_TRUE(std::filesystem::remove(TempPath(kData)));
+
+  // Act
+  const auto metadata
+    = index.CheckContent(TempDir(), IntegrityCheck::kMetadata);
+  const auto full = index.CheckContent(TempDir(), IntegrityCheck::kFull);
+
+  // Assert
+  ASSERT_EQ(metadata.size(), 1U);
+  EXPECT_EQ(metadata.front().relative_path, kData);
+  EXPECT_EQ(metadata.front().reason, IntegrityFailure::kMissing);
+  EXPECT_EQ(full, metadata);
+}
+
 } // namespace

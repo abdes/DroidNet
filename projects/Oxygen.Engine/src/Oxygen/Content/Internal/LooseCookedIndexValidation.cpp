@@ -124,6 +124,97 @@ namespace {
       }
     }
   }
+
+  //! Checks every file under the canonical `root` against `inventory`: links,
+  //! non-regular, unexpected and missing files, sizes and, for `kFull`, the
+  //! digests of files that are not resource data.
+  auto CheckInventory(const std::filesystem::path& root,
+    const std::span<const lc::FileIntegrity> inventory,
+    const lc::IntegrityCheck check) -> std::vector<lc::FileIntegrityIssue>
+  {
+    std::unordered_map<std::string, const lc::FileIntegrity*> remaining;
+    remaining.reserve(inventory.size());
+    for (const auto& file : inventory) {
+      remaining.emplace(file.relative_path, &file);
+    }
+
+    std::vector<lc::FileIntegrityIssue> issues;
+    auto iterator = std::filesystem::recursive_directory_iterator(root);
+    const auto end = std::filesystem::recursive_directory_iterator {};
+    for (; iterator != end; ++iterator) {
+      const auto& entry = *iterator;
+      const auto relative
+        = entry.path().lexically_relative(root).generic_string();
+      const auto status = entry.symlink_status();
+      if (std::filesystem::is_symlink(status)
+        || base::ToLogicalPath(
+             std::filesystem::canonical(base::ToNativePath(entry.path())))
+          != base::ToLogicalPath(entry.path()).lexically_normal()) {
+        iterator.disable_recursion_pending();
+        issues.push_back({
+          .relative_path = relative,
+          .reason = lc::IntegrityFailure::kLinkedPath,
+        });
+        remaining.erase(relative);
+        continue;
+      }
+      if (std::filesystem::is_directory(status)) {
+        continue;
+      }
+      if (!std::filesystem::is_regular_file(status)) {
+        issues.push_back({
+          .relative_path = relative,
+          .reason = lc::IntegrityFailure::kNotRegular,
+        });
+        remaining.erase(relative);
+        continue;
+      }
+      if (relative == oxygen::data::loose_cooked::kIndexFileName
+        || relative == data::loose_cooked::kGenerationLeaseFileName
+        || relative == data::loose_cooked::kIndexLockFileName) {
+        continue;
+      }
+      const auto found = remaining.find(relative);
+      if (found == remaining.end()) {
+        issues.push_back({
+          .relative_path = relative,
+          .reason = lc::IntegrityFailure::kUnexpected,
+        });
+        continue;
+      }
+      const auto& expected = *found->second;
+      if (entry.file_size() != expected.size) {
+        issues.push_back({
+          .relative_path = relative,
+          .reason = lc::IntegrityFailure::kSizeMismatch,
+        });
+      } else if (check == lc::IntegrityCheck::kFull
+        && !(expected.kind.has_value()
+          && data::loose_cooked::IsResourceDataFile(*expected.kind))) {
+        const auto digest = serio::ComputeFileSha256(entry.path());
+        if (!digest) {
+          throw std::runtime_error("cannot hash '" + entry.path().string()
+            + "': " + digest.error().message());
+        }
+        if (*digest != expected.sha256) {
+          issues.push_back({
+            .relative_path = relative,
+            .reason = lc::IntegrityFailure::kDigestMismatch,
+          });
+        }
+      }
+      remaining.erase(found);
+    }
+    for (const auto& [relative, file] : remaining) {
+      static_cast<void>(file);
+      issues.push_back({
+        .relative_path = relative,
+        .reason = lc::IntegrityFailure::kMissing,
+        .resource_row = std::nullopt,
+      });
+    }
+    return issues;
+  }
 } // namespace
 
 auto LooseCookedIndexImpl::FindFileSha256(
@@ -188,89 +279,9 @@ auto LooseCookedIndexImpl::CheckContent(
   const lc::IntegrityCheck check) const -> std::vector<lc::FileIntegrityIssue>
 {
   const auto inventory = GetFileInventory();
-  std::unordered_map<std::string, const lc::FileIntegrity*> remaining;
-  remaining.reserve(inventory.size());
-  for (const auto& file : inventory) {
-    remaining.emplace(file.relative_path, &file);
-  }
-
-  std::vector<lc::FileIntegrityIssue> issues;
   const auto root = base::ToNativePath(
     std::filesystem::canonical(base::ToNativePath(cooked_root)));
-  auto iterator = std::filesystem::recursive_directory_iterator(root);
-  const auto end = std::filesystem::recursive_directory_iterator {};
-  for (; iterator != end; ++iterator) {
-    const auto& entry = *iterator;
-    const auto relative
-      = entry.path().lexically_relative(root).generic_string();
-    const auto status = entry.symlink_status();
-    if (std::filesystem::is_symlink(status)
-      || base::ToLogicalPath(
-           std::filesystem::canonical(base::ToNativePath(entry.path())))
-        != base::ToLogicalPath(entry.path()).lexically_normal()) {
-      iterator.disable_recursion_pending();
-      issues.push_back({
-        .relative_path = relative,
-        .reason = lc::IntegrityFailure::kLinkedPath,
-      });
-      remaining.erase(relative);
-      continue;
-    }
-    if (std::filesystem::is_directory(status)) {
-      continue;
-    }
-    if (!std::filesystem::is_regular_file(status)) {
-      issues.push_back({
-        .relative_path = relative,
-        .reason = lc::IntegrityFailure::kNotRegular,
-      });
-      remaining.erase(relative);
-      continue;
-    }
-    if (relative == oxygen::data::loose_cooked::kIndexFileName
-      || relative == data::loose_cooked::kGenerationLeaseFileName
-      || relative == data::loose_cooked::kIndexLockFileName) {
-      continue;
-    }
-    const auto found = remaining.find(relative);
-    if (found == remaining.end()) {
-      issues.push_back({
-        .relative_path = relative,
-        .reason = lc::IntegrityFailure::kUnexpected,
-      });
-      continue;
-    }
-    const auto& expected = *found->second;
-    if (entry.file_size() != expected.size) {
-      issues.push_back({
-        .relative_path = relative,
-        .reason = lc::IntegrityFailure::kSizeMismatch,
-      });
-    } else if (check == lc::IntegrityCheck::kFull
-      && !(expected.kind.has_value()
-        && data::loose_cooked::IsResourceDataFile(*expected.kind))) {
-      const auto digest = serio::ComputeFileSha256(entry.path());
-      if (!digest) {
-        throw std::runtime_error("cannot hash '" + entry.path().string()
-          + "': " + digest.error().message());
-      }
-      if (*digest != expected.sha256) {
-        issues.push_back({
-          .relative_path = relative,
-          .reason = lc::IntegrityFailure::kDigestMismatch,
-        });
-      }
-    }
-    remaining.erase(found);
-  }
-  for (const auto& [relative, file] : remaining) {
-    static_cast<void>(file);
-    issues.push_back({
-      .relative_path = relative,
-      .reason = lc::IntegrityFailure::kMissing,
-      .resource_row = std::nullopt,
-    });
-  }
+  auto issues = CheckInventory(root, inventory, check);
   CheckResources(root, inventory, check, issues);
   std::ranges::sort(issues, [](const auto& a, const auto& b) -> bool {
     return std::tie(a.relative_path, a.resource_row)
