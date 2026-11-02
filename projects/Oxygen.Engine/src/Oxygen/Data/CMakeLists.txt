@@ -65,6 +65,7 @@ set(
   "LooseCookedIndexEncoder.h"
   "LooseCookedIndexFormat.h"
   "LooseCookedPaths.h"
+  "MountName.h"
   "LooseCookedResources.h"
   "MaterialAsset.h"
   "MaterialDomain.h"

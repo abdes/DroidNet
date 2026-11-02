@@ -61,8 +61,9 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
     throw std::runtime_error("invalid asset type for input action descriptor");
   }
 
-  // Value type IDs are defined by ActionValueType contract (0..2).
-  if (desc.value_type > 2) {
+  const auto known_value_type
+    = data::pak::input::IsKnownValueType(desc.value_type);
+  if (!known_value_type) {
     throw std::runtime_error("invalid input action value_type");
   }
 

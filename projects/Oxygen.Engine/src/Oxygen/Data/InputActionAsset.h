@@ -54,7 +54,8 @@ public:
       == pak::input::InputActionAssetFlags::kCumulativeAccumulation;
   }
 
-  [[nodiscard]] auto GetValueTypeId() const noexcept -> uint8_t
+  [[nodiscard]] auto GetValueType() const noexcept
+    -> pak::input::InputActionValueType
   {
     return desc_.value_type;
   }

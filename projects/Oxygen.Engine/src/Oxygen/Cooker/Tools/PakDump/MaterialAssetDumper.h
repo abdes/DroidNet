@@ -18,6 +18,9 @@
 #include "AssetDumper.h"
 #include <fmt/format.h>
 
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/ByteReader.h>
 
@@ -69,8 +72,10 @@ public:
 
     ctx.Out() << "    --- Material Descriptor Fields ---\n";
 
-    PrintUtils::Field(
-      ctx.Out(), "Material Domain", static_cast<int>(mat.material_domain), 8);
+    PrintUtils::Field(ctx.Out(), "Material Domain",
+      toolkit::EnumString(
+        static_cast<data::MaterialDomain>(mat.material_domain)),
+      8);
     PrintUtils::Field(
       ctx.Out(), "Flags", asset_dump_helpers::ToHexString(mat.flags), 8);
     PrintUtils::Field(ctx.Out(), "Shader Stages",
@@ -207,8 +212,9 @@ public:
       const auto& shader_ref = *shader_ref_read;
 
       ctx.Out() << "      [" << i << "] ShaderReferenceDesc:\n";
-      PrintUtils::Field(
-        ctx.Out(), "Shader Type", static_cast<int>(shader_ref.shader_type), 10);
+      PrintUtils::Field(ctx.Out(), "Shader Type",
+        toolkit::EnumString(static_cast<ShaderType>(shader_ref.shader_type)),
+        10);
       PrintUtils::Field(ctx.Out(), "Source Path",
         asset_dump_helpers::DescriptorString(
           *data, mat.header, shader_ref.source_path_offset),

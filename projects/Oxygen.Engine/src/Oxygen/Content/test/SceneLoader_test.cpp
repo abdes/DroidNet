@@ -22,6 +22,7 @@
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h> // IWYU pragma: keep
@@ -205,10 +206,11 @@ NOLINT_TEST(SceneExposureRecordTest, PreservesCurrentPrefixAndVariableCurve)
   const auto scene
     = oxygen::data::SceneAsset(oxygen::data::AssetKey {}, exposure.bytes);
   const auto post = scene.TryGetPostProcessVolumeEnvironment();
-  if (!post.has_value()) {
-    FAIL() << "Expected post to contain a value";
-  }
-  EXPECT_EQ(post->header.record_size, 160U);
+  ASSERT_HAS_VALUE(post);
+  // The record's prefix, then the two curve keys the scene holds.
+  EXPECT_EQ(post->header.record_size,
+    sizeof(oxygen::data::pak::world::PostProcessVolumeEnvironmentRecord)
+      + (2U * sizeof(oxygen::data::pak::world::ExposureCompensationKeyRecord)));
   EXPECT_EQ(post->auto_exposure_metering_mask, exposure.metering_mask);
   EXPECT_FLOAT_EQ(post->auto_exposure_black_influence, 0.35F);
   EXPECT_FLOAT_EQ(post->auto_exposure_transition_distance_ev, 2.25F);
@@ -224,19 +226,21 @@ NOLINT_TEST(SceneExposureRecordTest, RejectsObsoleteAndMalformedLayouts)
 {
   namespace world = oxygen::data::pak::world;
   using Record = world::PostProcessVolumeEnvironmentRecord;
-  // These are independent wire offsets: the retired prefix, unsupported
-  // extension, mismatched/over-limit counts, and each reserved word.
+  // The retired prefix size, an extension version before and after the
+  // current one, and a curve count that mismatches the keys or the limit.
+  constexpr auto kRecordSize = offsetof(Record, header)
+    + offsetof(world::SceneEnvironmentSystemRecordHeader, record_size);
+  constexpr auto kExtension = offsetof(Record, exposure_extension_version);
+  constexpr auto kCurveCount = offsetof(Record, curve_key_count);
+  constexpr auto kRetiredPrefixSize = uint32_t { 104U };
   for (const auto [offset, value] : std::array {
-         std::pair { 4U, 104U },
-         std::pair { 104U, 0U },
-         std::pair { 104U, 2U },
-         std::pair { 132U, 1U },
-         std::pair { 132U, 65U },
-         std::pair { 120U, 1U },
-         std::pair { 124U, 1U },
-         std::pair { 128U, 1U },
-         std::pair { 136U, 1U },
-         std::pair { 140U, 1U },
+         std::pair { kRecordSize, kRetiredPrefixSize },
+         std::pair { kExtension, world::kExposureExtensionVersion - 1U },
+         std::pair { kExtension, world::kExposureExtensionVersion + 1U },
+         std::pair { kCurveCount, uint32_t { 1U } },
+         std::pair { kCurveCount,
+           static_cast<uint32_t>(
+             oxygen::engine::kMaxExposureCompensationCurveKeys + 1U) },
        }) {
     SCOPED_TRACE(offset);
     auto bytes = MakeExposureScene().bytes;

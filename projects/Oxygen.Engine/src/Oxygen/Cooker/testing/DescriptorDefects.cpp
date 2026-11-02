@@ -258,6 +258,13 @@ auto DescriptorDefects::SetSidecarNodeCount(
     [count](auto& desc) -> void { desc.target_node_count = count; });
 }
 
+auto DescriptorDefects::SetSidecarBackend(std::vector<std::byte>& sidecar,
+  const physics::PhysicsBackend backend) -> void
+{
+  EditRecord<physics::PhysicsSceneAssetDesc>(
+    sidecar, 0U, [backend](auto& desc) -> void { desc.backend = backend; });
+}
+
 auto DescriptorDefects::CorruptSidecarSceneHash(std::vector<std::byte>& sidecar)
   -> void
 {

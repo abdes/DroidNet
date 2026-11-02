@@ -24,6 +24,7 @@
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/AsyncFile.h>
 #include <Oxygen/Serio/IoDriver.h>
+#include <Oxygen/Serio/MappedFile.h>
 #include <Oxygen/Serio/Region.h>
 #include <Oxygen/Serio/RegionReader.h>
 #include <Oxygen/Serio/Types.h>
@@ -34,7 +35,10 @@ namespace oxygen::content::internal {
 //! from, opened through the loader's driver.
 /*!
  `PakFile` parses the mapping; the source owns the payload file, because only
- the loader awaits payloads. A verified mount checks the CRC32 before the
+ the loader awaits payloads. The pak is opened once: the metadata maps the
+ payload file's handle, so the CRC32 check, the metadata and the payloads all
+ read one file version, even when the pak is atomically replaced at its path
+ meanwhile. A verified mount checks the CRC32 through that handle before the
  source is made (`VerifyPakAsync`), so the source itself verifies only when
  asked to by a synchronous mount.
 */
@@ -249,11 +253,27 @@ private:
     const PakFile::Verification verification, serio::AsyncFile payloads,
     std::shared_ptr<serio::IoDriver> driver)
     : driver_(std::move(driver))
-    , pak_(pak_path, verification)
+    // The metadata maps the file the payloads are read from, never the path
+    // again: a pak replaced at its path after `payloads` opened it stays the
+    // one file version this source serves.
+    , pak_(serio::AnyDevice(MapMetadata(payloads)), pak_path, verification)
     , payload_file_(std::move(payloads))
     , debug_name_(pak_.FilePath().string())
   {
     Mount();
+  }
+
+  //! Maps the file `payloads` opened, for its metadata.
+  static auto MapMetadata(const serio::AsyncFile& payloads) -> serio::MappedFile
+  {
+    auto mapped = serio::MappedFile::Map(payloads.Handle(), payloads.Path());
+    if (!mapped) {
+      LOG_F(ERROR, "Failed to map pak file '{}': {}", payloads.Path().string(),
+        mapped.error().message());
+      throw std::system_error(
+        mapped.error(), "map '" + payloads.Path().string() + "'");
+    }
+    return std::move(mapped).value();
   }
 
   //! Opens the pak file through `driver` for its payloads.

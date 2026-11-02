@@ -83,7 +83,7 @@ NOLINT_TEST(PakFileTest, RefusesAnotherHeaderMagic)
   auto bytes = ValidPak(); // encoded by the product's pak writer
   CookedBytes::BreakPakMagic(bytes);
 
-  EXPECT_EQ(OpenFailure(bytes), CookedOpenFailure::kWrongFormat);
+  EXPECT_EQ(OpenDefect(bytes), CookedDefect::kWrongMagic);
 }
 ```
 

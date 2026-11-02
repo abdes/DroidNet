@@ -69,13 +69,13 @@ namespace {
       .importer = Importer::kGltf,
       .revision = 8,
       .digest
-      = "7d34b09b341c84394104c14519c66e7d63ad2b3ec3a81a7f97d92f75d61738c6",
+      = "3af2c0a0d98b9089d2de2b63264d81010d06964c2305799456aac5633a5bf8af",
     },
     {
       .importer = Importer::kFbx,
       .revision = 8,
       .digest
-      = "3d7dabbf80f9f81771b48fc4522a40d4fed5c9165de423480e93331ba8e2cee8",
+      = "c55d0b3d48e5ccac31532bb484a55f204498d8a45f2a8e1fc9185ee987a0a3ae",
     },
     {
       .importer = Importer::kTexture,
@@ -109,15 +109,15 @@ namespace {
     },
     {
       .importer = Importer::kGeometryDescriptor,
-      .revision = 4,
+      .revision = 5,
       .digest
-      = "8835adccf95dfbe6e97dbf95c4f32d0fdd321b9f51e11069b29d062f060cfd04",
+      = "e2e5dfe4679f164adc3b959a48fad1b9f6f005702a9c9cd345bc391c075660a3",
     },
     {
       .importer = Importer::kSceneDescriptor,
       .revision = 1,
       .digest
-      = "4d2a76c6a09a34e8bfb9ba41b7802426393c04cc79a328a7cdb2be3e3dcc3457",
+      = "275aeff5332281049262e1b55073f44491e6e2b85932321218350a5aa7fb79ee",
     },
     {
       .importer = Importer::kScriptAsset,
@@ -129,13 +129,13 @@ namespace {
       .importer = Importer::kScriptingSidecar,
       .revision = 1,
       .digest
-      = "03ea380d6ae4bcd42407c6d99ea96cb5da56855443fde1149c21d4e3f8ace721",
+      = "db9e5a83824b8503cc83b87a25900e881261432d076b3ede9f4ec02d82346137",
     },
     {
       .importer = Importer::kPhysicsSidecar,
-      .revision = 2,
+      .revision = 3,
       .digest
-      = "c835b5d47f2f69af87acd5a0fd6e35447c23a4790a1c3fc8a01def19b0a700ea",
+      = "ec18265d3bb50a53a6a85be1976c9bd5734842c047bef2a4a7f0fd97e8032fa8",
     },
     {
       .importer = Importer::kInput,

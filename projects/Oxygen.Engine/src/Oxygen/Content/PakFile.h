@@ -80,6 +80,17 @@ public:
 
   //! Opens the pak at `path`, mapping it for its metadata.
   /*!
+   Nothing in the pak is exposed before its whole layout is checked: every
+   section lies between the header and the footer, starts on its alignment
+   and overlaps no other; every table has its row size, and every row places
+   its payload in its region, on a payload boundary, with a digest; every
+   directory entry names its own position; every reference inventory decodes
+   within the tables; reserved bytes are zero;
+   the browse index holds canonical paths in the pak's mount, of assets its
+   directory holds.
+
+   Each refusal names the rule it breaks (`CookedOpenError::Defect`).
+
    @throw data::CookedOpenError When the file is not a pak, has a format
      version this build cannot read, is malformed, or fails `verification`.
    @throw std::system_error When the file cannot be opened.
@@ -98,19 +109,22 @@ public:
   OXGN_CNTT_API PakFile(serio::AnyDevice device, std::filesystem::path name,
     Verification verification = Verification::kNone);
 
-  //! Checks a pak header: its magic, format version and source identity.
+  //! Checks a pak header: its magic, format version, source identity and
+  //! reserved bytes.
   /*!
-   @throw data::CookedOpenError `kWrongFormat` for another magic,
-     `kUnsupportedVersion` for another format version, `kCorrupt` for an
-     invalid source identity.
+   @throw data::CookedOpenError `kWrongMagic`, `kUnsupportedVersion`,
+     `kInvalidIdentity` or `kReservedNotZero`.
   */
   OXGN_CNTT_API static auto CheckHeader(
     const data::pak::core::PakHeader& header) -> void;
 
-  //! Checks a pak footer of a file of `file_size` bytes: its magic, and that
-  //! the embedded catalog lies between the header and the footer.
+  //! Checks a pak footer of a file of `file_size` bytes: its magic, its
+  //! reserved bytes, and that the embedded catalog lies between the header
+  //! and the footer.
   /*!
-   @throw data::CookedOpenError `kCorrupt` when either check fails.
+   @throw data::CookedOpenError `kTruncated` for another footer magic,
+     `kReservedNotZero`, `kTooSmall`, `kMissingPart` for no catalog and
+     `kOutOfBounds` for one outside the body.
   */
   OXGN_CNTT_API static auto CheckFooter(
     const data::pak::core::PakFooter& footer, uint64_t file_size) -> void;
@@ -209,7 +223,8 @@ public:
   };
 
   //! Decodes a browse index whose textures index a texture table of
-  //! `texture_count` rows; an unreadable one throws `data::CookedOpenError`.
+  //! `texture_count` rows; `bytes` must hold exactly the index its header
+  //! declares. An unreadable one throws `data::CookedOpenError`.
   OXGN_CNTT_NDAPI static auto DecodeBrowseIndex(
     std::span<const std::byte> bytes, uint32_t texture_count) -> BrowseContents;
 

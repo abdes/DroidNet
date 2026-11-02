@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -236,6 +237,77 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadWrongVersionThrows)
   auto bytes = SidecarBytes();
   DescriptorDefects::SetVersion(bytes, 0xFF); // unsupported
   WriteBytes(bytes);
+
+  EXPECT_THROW(
+    { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
+}
+
+//! A sidecar that names no backend has no arm to read in its backend
+//! scalars, and is refused.
+NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadWithoutABackendThrows)
+{
+  auto bytes = SidecarBytes();
+  DescriptorDefects::SetSidecarBackend(bytes, pak7::PhysicsBackend::kNone);
+  WriteBytes(bytes);
+
+  EXPECT_THROW(
+    { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
+}
+
+//! A rigid body's reserve in the Jolt arm is refused for a Jolt sidecar; the
+//! same bytes are PhysX scalars, and load, for a PhysX one.
+NOLINT_TEST_F(
+  PhysicsSceneLoaderValidationTest, RigidBodyReservesFollowTheSidecarBackend)
+{
+  AddNodes(1U);
+  auto record = pak7::RigidBodyBindingRecord {};
+  record.backend_scalars.jolt._reserved[0] = 1U;
+  const auto bytes_for
+    = [&](const pak7::PhysicsBackend backend) -> std::vector<std::byte> {
+    auto bindings = PhysicsSidecarBuilder {};
+    bindings.RigidBody(NodeAt(0U), ShapeKey(), MaterialKey(), record)
+      .Backend(backend);
+    return SidecarBytes(bindings);
+  };
+
+  WriteBytes(bytes_for(pak7::PhysicsBackend::kJolt));
+  EXPECT_THROW(
+    { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
+  WriteBytes(bytes_for(pak7::PhysicsBackend::kPhysX));
+  EXPECT_NE(LoadPhysicsSceneAsset(MakeContext()), nullptr);
+}
+
+//! A character's reserve in the PhysX arm is refused for a PhysX sidecar; the
+//! same bytes are Jolt scalars, and load, for a Jolt one.
+NOLINT_TEST_F(
+  PhysicsSceneLoaderValidationTest, CharacterReservesFollowTheSidecarBackend)
+{
+  AddNodes(1U);
+  auto record = pak7::CharacterBindingRecord {};
+  record.backend_scalars.physx._reserved[0] = 1U;
+  const auto bytes_for
+    = [&](const pak7::PhysicsBackend backend) -> std::vector<std::byte> {
+    auto bindings = PhysicsSidecarBuilder {};
+    bindings.Character(NodeAt(0U), ShapeKey(), record).Backend(backend);
+    return SidecarBytes(bindings);
+  };
+
+  WriteBytes(bytes_for(pak7::PhysicsBackend::kPhysX));
+  EXPECT_THROW(
+    { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
+  WriteBytes(bytes_for(pak7::PhysicsBackend::kJolt));
+  EXPECT_NE(LoadPhysicsSceneAsset(MakeContext()), nullptr);
+}
+
+//! A joint's reserve in the Jolt arm is refused for a Jolt sidecar.
+NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, JointJoltReserveIsRefused)
+{
+  AddNodes(1U);
+  auto record = pak7::JointBindingRecord {};
+  record.backend_scalars.jolt._reserved[0] = 1U;
+  auto bindings = PhysicsSidecarBuilder {};
+  bindings.Joint(NodeAt(0U), std::nullopt, ConstraintKey(), record);
+  WriteBytes(SidecarBytes(bindings));
 
   EXPECT_THROW(
     { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);

@@ -6,9 +6,11 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <span>
+#include <stdexcept>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -19,6 +21,33 @@
 #include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::loaders {
+
+namespace detail {
+
+  //! Refuses a binding of `asset` whose backend scalars hold non-zero
+  //! reserved bytes in the arm of `backend`, the scene's backend.
+  inline auto CheckBackendReserves(const data::PhysicsSceneAsset& asset,
+    const data::pak::physics::PhysicsBackend backend) -> void
+  {
+    namespace physics = data::pak::physics;
+    const auto reserves_zero = [backend](const auto& bindings) -> bool {
+      return std::ranges::all_of(
+        bindings, [backend](const auto& binding) -> bool {
+          return physics::HasZeroReserves(binding.backend_scalars, backend);
+        });
+    };
+    const auto bindings_reserves_zero
+      = reserves_zero(asset.GetBindings<physics::RigidBodyBindingRecord>())
+      && reserves_zero(asset.GetBindings<physics::CharacterBindingRecord>())
+      && reserves_zero(asset.GetBindings<physics::JointBindingRecord>())
+      && reserves_zero(asset.GetBindings<physics::VehicleWheelBindingRecord>());
+    if (!bindings_reserves_zero) {
+      throw std::runtime_error(
+        "physics binding backend scalar reserved bytes are not zero");
+    }
+  }
+
+} // namespace detail
 
 //! Loader function for physics scene sidecar assets.
 /*!
@@ -73,6 +102,13 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
   if (desc.header.version != data::pak::physics::kPhysicsSceneAssetVersion) {
     throw std::runtime_error(
       "unsupported PhysicsSceneAssetDesc descriptor version");
+  }
+  // The backend selects the arm of every backend-scalar union of the
+  // bindings, so a scene cooked for none cannot be read.
+  const auto names_a_backend
+    = data::pak::physics::IsCookedBackend(desc.backend);
+  if (!names_a_backend) {
+    throw std::runtime_error("physics scene names no physics backend");
   }
 
   // Compute the full payload extent from the component table directory.
@@ -149,6 +185,7 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
       .instance = context.source_instance,
     });
   asset->SetAssetName(std::move(name));
+  detail::CheckBackendReserves(*asset, desc.backend);
   if (context.asset_references) {
     namespace physics = data::pak::physics;
     std::vector<data::KeyReference> keys;

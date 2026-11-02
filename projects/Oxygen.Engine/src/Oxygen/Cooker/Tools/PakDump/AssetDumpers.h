@@ -29,6 +29,7 @@
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -112,11 +113,11 @@ public:
           .DumpAsync(pak, entry, ctx, i, asset_loader);
       } catch (const std::exception& ex) {
         ctx.Err() << "ERROR: failed to dump asset #" << i
-                  << " (type=" << nostd::to_string(entry.asset_type)
+                  << " (type=" << toolkit::EnumString(entry.asset_type)
                   << "): " << ex.what() << "\n\n";
       } catch (...) {
         ctx.Err() << "ERROR: failed to dump asset #" << i
-                  << " (type=" << nostd::to_string(entry.asset_type)
+                  << " (type=" << toolkit::EnumString(entry.asset_type)
                   << "): unknown exception\n\n";
       }
     }

@@ -41,7 +41,7 @@ public:
     data::pak::core::AssetReferenceTable references {};
   };
 
-  //! Load and validate an index file under its shared file lock.
+  //! Load and validate a published index without taking the writer lock.
   /*!
    The file is mapped and parsed in place: the index keeps the mapping, and
    its strings and references are views of it.

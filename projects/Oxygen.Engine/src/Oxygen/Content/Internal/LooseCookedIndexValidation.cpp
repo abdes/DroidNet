@@ -30,11 +30,14 @@
 namespace oxygen::content::internal {
 
 namespace {
-  //! Verifies each resource of each data file against its table row. A table
-  //! or data file that already failed its own check is not read.
+  //! Checks each resource of each data file against its table row: that it
+  //! lies in its data file and, for `kFull`, that its bytes hash to the row's
+  //! digest. A table or data file that already failed its own check is not
+  //! read.
   auto CheckResources(const std::filesystem::path& root,
     const std::span<const lc::FileIntegrity> inventory,
-    std::vector<lc::FileIntegrityIssue>& issues) -> void
+    const lc::IntegrityCheck check, std::vector<lc::FileIntegrityIssue>& issues)
+    -> void
   {
     const auto failed = [&](const std::string& relative) -> bool {
       return std::ranges::any_of(issues,
@@ -55,8 +58,9 @@ namespace {
         continue;
       }
       const auto* const data_file = find(*data_kind);
-      if (data_file == nullptr || failed(table.relative_path)
-        || failed(data_file->relative_path)) {
+      const auto files_sound = data_file != nullptr
+        && !failed(table.relative_path) && !failed(data_file->relative_path);
+      if (!files_sound) {
         continue;
       }
       const auto table_path = base::ToNativePath(root / table.relative_path);
@@ -76,12 +80,27 @@ namespace {
       try {
         payloads = data::loose_cooked::ReadResourcePayloads(
           *table.kind, rows->Bytes());
-      } catch (const std::invalid_argument&) {
+      } catch (const data::CookedOpenError&) {
         issues.push_back({
           .relative_path = table.relative_path,
           .reason = lc::IntegrityFailure::kMalformedTable,
           .resource_row = std::nullopt,
         });
+        continue;
+      }
+      if (check == lc::IntegrityCheck::kMetadata) {
+        // The data file has its indexed size, so bounds need no read.
+        for (const auto& payload : payloads) {
+          const auto in_data_file = payload.offset <= data_file->size
+            && payload.size <= data_file->size - payload.offset;
+          if (!in_data_file) {
+            issues.push_back({
+              .relative_path = data_file->relative_path,
+              .reason = lc::IntegrityFailure::kResourceOutOfBounds,
+              .resource_row = payload.row,
+            });
+          }
+        }
         continue;
       }
       const auto data_path
@@ -252,9 +271,7 @@ auto LooseCookedIndexImpl::CheckContent(
       .resource_row = std::nullopt,
     });
   }
-  if (check == lc::IntegrityCheck::kFull) {
-    CheckResources(root, inventory, issues);
-  }
+  CheckResources(root, inventory, check, issues);
   std::ranges::sort(issues, [](const auto& a, const auto& b) -> bool {
     return std::tie(a.relative_path, a.resource_row)
       < std::tie(b.relative_path, b.resource_row);
@@ -298,7 +315,7 @@ auto LooseCookedIndexImpl::ValidateContent(
   if (first.resource_row.has_value()) {
     message += " (row " + std::to_string(*first.resource_row) + ")";
   }
-  throw std::runtime_error(message);
+  throw lc::IntegrityError(first, message);
 }
 
 } // namespace oxygen::content::internal

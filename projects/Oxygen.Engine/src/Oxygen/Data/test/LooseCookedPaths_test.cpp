@@ -36,6 +36,7 @@ INSTANTIATE_TEST_SUITE_P(BrokenRules, LooseCookedPathsRefusalTest,
   ::testing::Values(std::string_view {}, "container.index.bin",
     ".generation.lock", "Materials\\Wood.omat", "C:/Wood.omat", "/Wood.omat",
     "Materials/", "Materials//Wood.omat", "./Wood.omat", "Materials/./Wood",
-    "../Wood.omat", "Materials/../Wood.omat", "Materials/.."));
+    "../Wood.omat", "Materials/../Wood.omat", "Materials/..",
+    std::string_view { "Materials/a\0b", 13 }, "Materials/\xFF.omat"));
 
 } // namespace

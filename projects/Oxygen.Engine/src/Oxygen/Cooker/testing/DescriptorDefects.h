@@ -129,6 +129,10 @@ struct DescriptorDefects final {
   static auto SetSidecarNodeCount(
     std::vector<std::byte>& sidecar, uint32_t count) -> void;
 
+  //! Records `backend` as the backend the sidecar was cooked for.
+  static auto SetSidecarBackend(std::vector<std::byte>& sidecar,
+    data::pak::physics::PhysicsBackend backend) -> void;
+
   //! Changes the content hash of its scene the sidecar records.
   static auto CorruptSidecarSceneHash(std::vector<std::byte>& sidecar) -> void;
 

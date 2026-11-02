@@ -14,6 +14,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
@@ -21,6 +22,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/CookedRootCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/DescriptorCommands.h>
@@ -64,7 +66,7 @@ namespace {
     using oxygen::data::pak::scripting::ScriptParamType;
     switch (record.type) {
     case ScriptParamType::kBool:
-      return record.value.as_bool ? "true" : "false";
+      return record.value.as_bool != 0U ? "true" : "false";
     case ScriptParamType::kInt32:
       return std::to_string(record.value.as_int32);
     case ScriptParamType::kFloat:
@@ -136,8 +138,8 @@ namespace {
       out << "  name='"
           << ReadDescriptorString(
                descriptor, desc->header, desc->header.name_offset)
-          << "' value_type=" << static_cast<uint32_t>(desc->value_type)
-          << " flags=" << nostd::to_string(desc->flags) << "\n";
+          << "' value_type=" << toolkit::EnumString(desc->value_type)
+          << " flags=" << toolkit::EnumString(desc->flags) << "\n";
     }
 
     if (count == 0) {
@@ -184,7 +186,7 @@ namespace {
       out << "  name='"
           << ReadDescriptorString(
                descriptor, desc->header, desc->header.name_offset)
-          << "' flags=" << nostd::to_string(desc->flags)
+          << "' flags=" << toolkit::EnumString(desc->flags)
           << " mappings=" << desc->mappings.count
           << " triggers=" << desc->triggers.count
           << " aux=" << desc->trigger_aux.count
@@ -208,7 +210,7 @@ namespace {
                  descriptor, desc->header, rec->slot_name_offset)
             << "' triggers=[" << rec->trigger_start_index << ","
             << (rec->trigger_start_index + rec->trigger_count)
-            << ") flags=" << nostd::to_string(rec->flags) << "\n";
+            << ") flags=" << toolkit::EnumString(rec->flags) << "\n";
       }
 
       const auto trigger_count = static_cast<size_t>(desc->triggers.count);
@@ -221,8 +223,9 @@ namespace {
           out << "    ! trigger[" << i << "] decode failed\n";
           continue;
         }
-        out << "    trigger[" << i << "] type=" << nostd::to_string(rec->type)
-            << " behavior=" << nostd::to_string(rec->behavior)
+        out << "    trigger[" << i
+            << "] type=" << toolkit::EnumString(rec->type)
+            << " behavior=" << toolkit::EnumString(rec->behavior)
             << " threshold=" << rec->actuation_threshold << " aux=["
             << rec->aux_start_index << ","
             << (rec->aux_start_index + rec->aux_count) << ")\n";
@@ -313,7 +316,7 @@ namespace {
         out << "  name='"
             << ReadDescriptorString(
                  descriptor, desc->header, desc->header.name_offset)
-            << "' shape_type=" << static_cast<uint32_t>(desc->shape_type)
+            << "' shape_type=" << toolkit::EnumString(desc->shape_type)
             << " local_pos=(" << desc->local_position[0] << ","
             << desc->local_position[1] << "," << desc->local_position[2]
             << ") local_scale=(" << desc->local_scale[0] << ","
@@ -372,8 +375,11 @@ namespace {
           continue;
         }
         total_bindings += entry->table.count;
-        out << "    table[" << i << "] type=0x" << std::hex
-            << static_cast<uint32_t>(entry->binding_type) << std::dec
+        // A binding type is a FourCC: its value reads best in hexadecimal.
+        out << "    table[" << i << "] type="
+            << fmt::format("{}({:#010X})",
+                 nostd::to_string(entry->binding_type),
+                 std::to_underlying(entry->binding_type))
             << " count=" << entry->table.count
             << " entry_size=" << entry->table.entry_size
             << " offset=" << ToHex64(entry->table.offset) << "\n";
@@ -414,7 +420,7 @@ namespace {
               << "] key=" << oxygen::data::to_string(slot.script_asset_key)
               << " parameters=" << slot.params_count
               << " execution_order=" << slot.execution_order
-              << " flags=" << static_cast<uint32_t>(slot.flags) << "\n";
+              << " flags=" << toolkit::EnumString(slot.flags) << "\n";
           if (mode == ScriptDumpMode::kParameters) {
             for (const auto& parameter : scene.ReadScriptParameters(slot)) {
               out << "    "

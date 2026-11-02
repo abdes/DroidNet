@@ -1142,13 +1142,13 @@ namespace {
     auto prepared = co::Run(loop,
       loader.PrepareMountsAsync(
         { { .kind = ContentMount::Kind::kPakFile, .path = good_pak } }));
-    auto failure = std::optional<data::CookedOpenFailure> {};
+    auto failure = std::optional<data::CookedDefect> {};
     try {
       static_cast<void>(co::Run(loop,
         loader.PrepareMountsAsync(
           { { .kind = ContentMount::Kind::kPakFile, .path = corrupt_pak } })));
     } catch (const data::CookedOpenError& error) {
-      failure = error.Failure();
+      failure = error.Defect();
     }
 
     // Assert
@@ -1156,7 +1156,79 @@ namespace {
     retirement.Finish();
     EXPECT_EQ(loader.EnumerateMountedSources().size(), 1U);
     ASSERT_HAS_VALUE(failure);
-    EXPECT_EQ(*failure, data::CookedOpenFailure::kCorrupt);
+    EXPECT_EQ(*failure, data::CookedDefect::kDigestMismatch);
+  }
+
+  //! The rule a verified mount of the pak `bytes` refuses it for; empty when
+  //! it mounts.
+  auto VerifiedMountDefect(const std::filesystem::path& pak,
+    const std::vector<std::byte>& bytes) -> std::optional<data::CookedDefect>
+  {
+    cooker::testing::Materialize(bytes, pak);
+    TestEventLoop loop;
+    co::ThreadPool pool(loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    config.verify_content_hashes = true;
+    AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
+    try {
+      static_cast<void>(co::Run(loop,
+        loader.PrepareMountsAsync(
+          { { .kind = ContentMount::Kind::kPakFile, .path = pak } })));
+    } catch (const data::CookedOpenError& error) {
+      return error.Defect();
+    }
+    return std::nullopt;
+  }
+
+  //! A verified mount refuses a pak that holds no CRC32, which it cannot
+  //! verify.
+  NOLINT_TEST_F(AssetLoaderBasicTest, VerifiedMountRefusesAPakWithoutCrc)
+  {
+    // Arrange
+    auto bytes = EnginePak().Encode();
+    cooker::testing::CookedBytes::SetCrc(bytes, 0U);
+
+    // Act
+    const auto failure = VerifiedMountDefect(TempDir() / "no-crc.pak", bytes);
+
+    // Assert
+    ASSERT_HAS_VALUE(failure);
+    EXPECT_EQ(*failure, data::CookedDefect::kNoIntegrityData);
+  }
+
+  //! A verified mount refuses a file with no room for a footer.
+  NOLINT_TEST_F(
+    AssetLoaderBasicTest, VerifiedMountRefusesAFileShorterThanAFooter)
+  {
+    // Arrange
+    const auto bytes = std::vector<std::byte>(4);
+
+    // Act
+    const auto failure = VerifiedMountDefect(TempDir() / "short.pak", bytes);
+
+    // Assert
+    ASSERT_HAS_VALUE(failure);
+    EXPECT_EQ(*failure, data::CookedDefect::kTooSmall);
+  }
+
+  //! A verified mount refuses a malformed footer for its own defect before
+  //! reading its CRC field: a pak with no CRC32 and a non-zero footer reserve
+  //! is malformed, not unverifiable.
+  NOLINT_TEST_F(AssetLoaderBasicTest, VerifiedMountRefusesAMalformedFooterFirst)
+  {
+    // Arrange
+    auto bytes = EnginePak().Encode();
+    cooker::testing::CookedBytes::SetCrc(bytes, 0U);
+    cooker::testing::CookedBytes::SetFooterReserved(bytes);
+
+    // Act
+    const auto failure
+      = VerifiedMountDefect(TempDir() / "malformed.pak", bytes);
+
+    // Assert
+    ASSERT_HAS_VALUE(failure);
+    EXPECT_EQ(*failure, data::CookedDefect::kReservedNotZero);
   }
 
   //! A pak that requires an engine asset mounts above other layers that sit on

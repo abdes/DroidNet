@@ -6,12 +6,16 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -27,6 +31,8 @@ namespace core = oxygen::data::pak::core;
 using lc::FileKind;
 using lc::ResourcePayloadFailure;
 using oxygen::base::ComputeSha256;
+using oxygen::data::CookedDefect;
+using oxygen::data::CookedOpenError;
 using oxygen::serio::MemoryFile;
 
 //! A data file holding `payloads` back to back, and the buffer rows that
@@ -68,6 +74,20 @@ constexpr auto kSecond = std::array {
   std::byte { 4 },
   std::byte { 5 },
 };
+
+//! The rule reading the rows of `table` reports broken; they must be
+//! refused.
+auto ReadDefect(const FileKind table, const std::span<const std::byte> rows)
+  -> CookedDefect
+{
+  try {
+    static_cast<void>(lc::ReadResourcePayloads(table, rows));
+  } catch (const CookedOpenError& error) {
+    return error.Defect();
+  }
+  ADD_FAILURE() << "the rows were read";
+  return {};
+}
 
 //! Only the four resource data files are data files.
 NOLINT_TEST(LooseCookedResourcesTest, DataFilesAreTheResourceDataKinds)
@@ -126,17 +146,16 @@ NOLINT_TEST(LooseCookedResourcesTest, PayloadsAreTheRowsThatHoldBytes)
   EXPECT_EQ(payloads.at(1).sha256, ComputeSha256(kSecond));
 }
 
-//! A table that ends in a partial row, or that is no resource table, is
-//! refused.
+//! A table that ends in a partial row has the wrong row size; a kind that
+//! is no resource table is a caller error.
 NOLINT_TEST(LooseCookedResourcesTest, MalformedTablesAreRefused)
 {
   auto root = BufferRoot {};
   root.Add(kFirst);
   const auto partial = root.Rows().first(root.Rows().size() - 1U);
 
-  EXPECT_THROW(static_cast<void>(
-                 lc::ReadResourcePayloads(FileKind::kBuffersTable, partial)),
-    std::invalid_argument);
+  EXPECT_EQ(
+    ReadDefect(FileKind::kBuffersTable, partial), CookedDefect::kWrongRowSize);
   EXPECT_THROW(static_cast<void>(
                  lc::ReadResourcePayloads(FileKind::kAuxiliary, root.Rows())),
     std::invalid_argument);
@@ -188,19 +207,88 @@ NOLINT_TEST(LooseCookedResourcesTest, PayloadPastTheDataFileIsOutOfBounds)
   EXPECT_EQ(issues.front().reason, ResourcePayloadFailure::kOutOfBounds);
 }
 
-//! A row that holds bytes but no digest does not verify.
-NOLINT_TEST(LooseCookedResourcesTest, RowWithoutDigestDoesNotVerify)
+//! A row that holds bytes but no digest makes its table malformed: its
+//! payload could never verify.
+NOLINT_TEST(LooseCookedResourcesTest, RowWithoutDigestIsRefused)
 {
   auto root = BufferRoot {};
   root.Add(kFirst);
   root.rows.back().content_hash = {};
-  const auto payloads
-    = lc::ReadResourcePayloads(FileKind::kBuffersTable, root.Rows());
 
-  const auto issues = lc::VerifyResourcePayloads(payloads, root.DataFile());
+  EXPECT_EQ(ReadDefect(FileKind::kBuffersTable, root.Rows()),
+    CookedDefect::kMissingDigest);
+}
 
-  ASSERT_EQ(issues.size(), 1U);
-  EXPECT_EQ(issues.front().reason, ResourcePayloadFailure::kDigestMismatch);
+//! A texture row records the compression its format implies; a BC7 format
+//! recorded as uncompressed, or an unknown compression, is refused.
+NOLINT_TEST(LooseCookedResourcesTest, TextureRowOfAnotherCompressionIsRefused)
+{
+  const auto row = [](const oxygen::Format format,
+                     const uint8_t compression) -> core::TextureResourceDesc {
+    return {
+      .data_offset = 0U,
+      .size_bytes = static_cast<core::DataBlobSizeT>(kFirst.size()),
+      .texture_type = 0U,
+      .compression_type = compression,
+      .width = 4U,
+      .height = 4U,
+      .depth = 1U,
+      .array_layers = 1U,
+      .mip_levels = 1U,
+      .format = static_cast<uint8_t>(format),
+      .alignment = 256U,
+      .content_hash = ComputeSha256(kFirst),
+    };
+  };
+  const auto valid = std::array {
+    row(oxygen::Format::kBC7UNorm, core::kTextureCompressionBc7),
+    row(oxygen::Format::kRGBA8UNorm, core::kTextureCompressionNone),
+  };
+  const auto bc7_as_none = std::array {
+    row(oxygen::Format::kBC7UNorm, core::kTextureCompressionNone),
+  };
+  const auto unknown = std::array {
+    row(oxygen::Format::kRGBA8UNorm, uint8_t { 0xEEU }),
+  };
+
+  const auto payloads = lc::ReadResourcePayloads(
+    FileKind::kTexturesTable, std::as_bytes(std::span(valid)));
+
+  EXPECT_EQ(payloads.size(), valid.size());
+  EXPECT_EQ(
+    ReadDefect(FileKind::kTexturesTable, std::as_bytes(std::span(bc7_as_none))),
+    CookedDefect::kInvalidValue);
+  EXPECT_EQ(
+    ReadDefect(FileKind::kTexturesTable, std::as_bytes(std::span(unknown))),
+    CookedDefect::kInvalidValue);
+}
+
+//! Each format records its compression in one place.
+NOLINT_TEST(LooseCookedResourcesTest, CompressionFollowsTheFormat)
+{
+  EXPECT_EQ(core::TextureCompressionOf(oxygen::Format::kBC7UNorm),
+    core::kTextureCompressionBc7);
+  EXPECT_EQ(core::TextureCompressionOf(oxygen::Format::kBC7UNormSRGB),
+    core::kTextureCompressionBc7);
+  EXPECT_EQ(core::TextureCompressionOf(oxygen::Format::kRGBA8UNorm),
+    core::kTextureCompressionNone);
+}
+
+//! A table size is whole rows, no more than a resource index addresses.
+NOLINT_TEST(LooseCookedResourcesTest, TableSizeIsWholeAddressableRows)
+{
+  const auto row = uint64_t { sizeof(core::BufferResourceDesc) };
+  const auto max_rows = uint64_t { std::numeric_limits<uint32_t>::max() };
+
+  EXPECT_TRUE(lc::IsResourceTableSize(FileKind::kBuffersTable, 0U));
+  EXPECT_TRUE(lc::IsResourceTableSize(FileKind::kBuffersTable, 2U * row));
+  EXPECT_TRUE(lc::IsResourceTableSize(FileKind::kBuffersTable, max_rows * row));
+  EXPECT_FALSE(lc::IsResourceTableSize(FileKind::kBuffersTable, row + 1U));
+  EXPECT_FALSE(
+    lc::IsResourceTableSize(FileKind::kBuffersTable, (max_rows + 1U) * row));
+  EXPECT_THROW(
+    static_cast<void>(lc::IsResourceTableSize(FileKind::kAuxiliary, 0U)),
+    std::invalid_argument);
 }
 
 } // namespace

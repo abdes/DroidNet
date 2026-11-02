@@ -257,7 +257,8 @@ namespace {
         = data::DecodeBufferResourceDescriptor(read_result.value().Bytes());
       if (!decoded) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "geometry.buffer.sidecar_invalid", decoded.error(), object_path);
+          "geometry.buffer.sidecar_invalid", decoded.error().what(),
+          object_path);
         co_return std::nullopt;
       }
 
@@ -730,8 +731,12 @@ namespace {
         // A procedural mesh's name is its generator identity.
         mesh_desc.name_offset = strings.Add(procedural_name);
 
-        mesh_desc.info.procedural.params_size
-          = static_cast<uint32_t>(procedural_blob.size());
+        // Write the whole arm: the union starts as the standard arm, whose
+        // defaults would otherwise stay in the procedural arm's reserve.
+        mesh_desc.info.procedural = data::pak::geometry::ProceduralMeshInfo {
+          .params_size = static_cast<uint32_t>(procedural_blob.size()),
+          ._reserved = {},
+        };
       }
 
       const auto& submeshes = lod.submeshes;

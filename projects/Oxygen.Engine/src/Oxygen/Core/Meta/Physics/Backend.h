@@ -12,11 +12,15 @@
 
 namespace oxygen::core::meta::physics {
 
+// The catalog in PakPhysics.inc is the one source of the backends' values,
+// which the pak format records too.
+// NOLINTBEGIN(*-macro-usage)
+#define OXPHYS_BACKEND(name, value) name = (value),
 enum class PhysicsBackend : uint8_t {
-  kNone = 0,
-  kJolt,
-  kPhysX,
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
 };
+#undef OXPHYS_BACKEND
+// NOLINTEND(*-macro-usage)
 
 static_assert(sizeof(std::underlying_type_t<PhysicsBackend>) <= sizeof(uint8_t),
   "PhysicsBackend enum fit in `uint8_t`");

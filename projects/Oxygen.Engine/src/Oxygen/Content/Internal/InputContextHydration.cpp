@@ -18,6 +18,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/InputContextHydration.h>
@@ -73,19 +74,21 @@ namespace {
     return authored_name;
   }
 
-  auto ToActionValueType(const uint8_t value_type_id)
+  //! The Input module's value type for the cooked one; nothing for a value
+  //! the catalog does not define.
+  auto ToActionValueType(const data::pak::input::InputActionValueType value)
     -> std::optional<input::ActionValueType>
   {
-    switch (value_type_id) {
-    case static_cast<uint8_t>(input::ActionValueType::kBool):
+    using data::pak::input::InputActionValueType;
+    switch (value) {
+    case InputActionValueType::kBool:
       return input::ActionValueType::kBool;
-    case static_cast<uint8_t>(input::ActionValueType::kAxis1D):
+    case InputActionValueType::kAxis1D:
       return input::ActionValueType::kAxis1D;
-    case static_cast<uint8_t>(input::ActionValueType::kAxis2D):
+    case InputActionValueType::kAxis2D:
       return input::ActionValueType::kAxis2D;
-    default:
-      return std::nullopt;
     }
+    return std::nullopt;
   }
 
   auto ResolveInputSlot(const std::string_view slot_name)
@@ -195,12 +198,13 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
       }
 
       const auto value_type_opt
-        = ToActionValueType(action_asset->GetValueTypeId());
+        = ToActionValueType(action_asset->GetValueType());
       if (!value_type_opt.has_value()) {
         LOG_F(ERROR,
-          "ERROR [input.context.hydration_failed]: invalid value_type {} for "
-          "action '{}' ({})",
-          action_asset->GetValueTypeId(), action_name,
+          "ERROR [input.context.hydration_failed]: invalid value_type {}({}) "
+          "for action '{}' ({})",
+          nostd::to_string(action_asset->GetValueType()),
+          std::to_underlying(action_asset->GetValueType()), action_name,
           data::to_string(action_asset_key));
         return nullptr;
       }

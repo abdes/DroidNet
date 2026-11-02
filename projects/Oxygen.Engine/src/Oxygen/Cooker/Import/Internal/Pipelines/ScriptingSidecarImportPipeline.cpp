@@ -230,7 +230,7 @@ namespace {
       return false;
     }
     out.type = ScriptParamType::kBool;
-    out.value.as_bool = value.get<bool>();
+    out.value.as_bool = value.get<bool>() ? uint8_t { 1U } : uint8_t { 0U };
     return true;
   }
 

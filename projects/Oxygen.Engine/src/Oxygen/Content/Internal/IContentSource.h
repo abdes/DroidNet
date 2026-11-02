@@ -180,8 +180,12 @@ public:
     const data::AssetKey& key) const noexcept -> std::optional<std::string> = 0;
 
   //! Texture table index of the texture descriptor recorded under
-  //! `virtual_path`, or nullopt when this source records none. A recorded
-  //! descriptor that is malformed or disagrees with the table throws.
+  //! `virtual_path`, or nullopt when this source records none.
+  /*!
+   @throw data::CookedOpenError when the recorded descriptor is not one, has
+     another version, is malformed, or disagrees with its texture table.
+   @throw std::system_error when it cannot be read.
+  */
   [[nodiscard]] virtual auto FindTextureIndexByVirtualPath(
     std::string_view virtual_path) const
     -> std::optional<data::pak::core::ResourceIndexT> = 0;

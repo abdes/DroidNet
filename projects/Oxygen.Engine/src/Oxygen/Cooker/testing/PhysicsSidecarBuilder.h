@@ -69,6 +69,11 @@ public:
     SceneNode node, data::pak::physics::AggregateBindingRecord record = {})
     -> PhysicsSidecarBuilder&;
 
+  //! The backend the sidecar is cooked for, whose arm of each backend-scalar
+  //! union its records hold; Jolt by default, as an import's.
+  auto Backend(data::pak::physics::PhysicsBackend backend)
+    -> PhysicsSidecarBuilder&;
+
   //! The builder whose nodes the bindings name; none without bindings.
   [[nodiscard]] auto Owner() const noexcept -> std::optional<SceneBuilderId>
   {
@@ -95,6 +100,8 @@ private:
 
   std::optional<SceneBuilderId> owner_;
   data::pak::world::SceneNodeIndexT highest_node_ = 0;
+  data::pak::physics::PhysicsBackend backend_
+    = data::pak::physics::PhysicsBackend::kJolt;
   std::vector<data::pak::physics::RigidBodyBindingRecord> rigid_bodies_;
   std::vector<data::pak::physics::ColliderBindingRecord> colliders_;
   std::vector<data::pak::physics::CharacterBindingRecord> characters_;

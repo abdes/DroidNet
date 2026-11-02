@@ -201,6 +201,11 @@ namespace {
       }
       RequireRelPath(file.relpath);
       RequireFileNames(file);
+      const auto is_table = DataFileKindOf(file.kind).has_value();
+      if (is_table && !IsResourceTableSize(file.kind, file.size)) {
+        throw std::invalid_argument("Loose cooked index table '" + file.relpath
+          + "' does not hold whole rows");
+      }
       if (!file.virtual_path.empty()) {
         RequireUnique(virtual_paths, file.virtual_path, "virtual path");
       }

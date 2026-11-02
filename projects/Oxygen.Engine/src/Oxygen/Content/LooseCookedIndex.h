@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -65,6 +66,35 @@ struct FileIntegrityIssue final {
   IntegrityFailure reason = IntegrityFailure::kMissing;
   //! The table row of the resource a `kResource*` failure is about.
   std::optional<uint32_t> resource_row;
+
+  auto operator==(const FileIntegrityIssue&) const -> bool = default;
+};
+
+//! Loose cooked content that fails `LooseCookedIndex::ValidateContent`, and
+//! its first issue.
+class IntegrityError final : public std::runtime_error {
+public:
+  IntegrityError(const FileIntegrityIssue& issue, const std::string& message)
+    : std::runtime_error(message)
+    , reason_(issue.reason)
+    , resource_row_(issue.resource_row)
+  {
+  }
+
+  [[nodiscard]] auto Reason() const noexcept -> IntegrityFailure
+  {
+    return reason_;
+  }
+
+  //! The table row of the resource a `kResource*` failure is about.
+  [[nodiscard]] auto ResourceRow() const noexcept -> std::optional<uint32_t>
+  {
+    return resource_row_;
+  }
+
+private:
+  IntegrityFailure reason_;
+  std::optional<uint32_t> resource_row_;
 };
 
 class LooseCookedIndex final {
@@ -89,7 +119,7 @@ public:
   /*!
    @throw data::CookedOpenError `kWrongFormat` for bytes that are not an
      index, `kUnsupportedVersion` for another index version, `kCorrupt` for
-     a malformed index.
+     a malformed index. `Defect()` names the rule the bytes break.
   */
   OXGN_CNTT_API static auto LoadFromBytes(std::span<const std::byte> bytes)
     -> LooseCookedIndex;
@@ -137,9 +167,12 @@ public:
   OXGN_CNTT_NDAPI auto CheckContent(const std::filesystem::path& cooked_root,
     IntegrityCheck check) const -> std::vector<FileIntegrityIssue>;
 
-  //! Validate membership and sizes; kFull additionally verifies every digest:
-  //! the digest of each file, and of each resource in a resource data file
-  //! against its table row.
+  //! Validate membership, sizes and that each resource lies in its data
+  //! file; kFull additionally verifies every digest: the digest of each file,
+  //! and of each resource in a resource data file against its table row.
+  /*!
+   @throw IntegrityError with the first issue `CheckContent` finds.
+  */
   //! The caller protects files for the duration and any subsequent result
   //! reuse.
   OXGN_CNTT_API auto ValidateContent(const std::filesystem::path& cooked_root,

@@ -14,6 +14,7 @@
 #include "PrintUtils.h"
 
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/ByteReader.h>
 
@@ -53,8 +54,8 @@ public:
       4);
     ctx.Out() << "    --- Input Action Descriptor Fields ---\n";
     PrintUtils::Field(
-      ctx.Out(), "Value Type", static_cast<uint32_t>(desc.value_type), 8);
-    PrintUtils::Field(ctx.Out(), "Flags", nostd::to_string(desc.flags), 8);
+      ctx.Out(), "Value Type", toolkit::EnumString(desc.value_type), 8);
+    PrintUtils::Field(ctx.Out(), "Flags", toolkit::EnumString(desc.flags), 8);
 
     ctx.Out() << "\n";
     co_return;

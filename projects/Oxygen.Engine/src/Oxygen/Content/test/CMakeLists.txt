@@ -140,20 +140,6 @@ target_link_libraries(
     oxygen::serio::testing
 )
 
-m_gtest_program(PakVerification SOURCES "PakVerification_test.cpp")
-target_link_libraries(
-  "${META_MODULE_NAME}.PakVerification.Tests"
-  PRIVATE
-    oxygen::cooker::testing
-    oxygen::serio::testing
-)
-# The verification is internal to the library.
-target_sources(
-  "${META_MODULE_NAME}.PakVerification.Tests"
-  PRIVATE
-    "../Internal/PakVerification.cpp"
-)
-
 find_package(nlohmann_json CONFIG REQUIRED)
 m_gtest_program(VirtualPath SOURCES "VirtualPath_test.cpp")
 target_link_libraries(

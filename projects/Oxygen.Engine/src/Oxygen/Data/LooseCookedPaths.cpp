@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string_view>
 
+#include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
 
@@ -45,6 +46,13 @@ auto RequireIndexRelPath(const std::string_view relpath) -> void
   }
   if (relpath.empty()) {
     throw std::runtime_error("Index path must not be empty");
+  }
+  // The index stores paths NUL-terminated, so a NUL would cut one short.
+  if (relpath.contains('\0')) {
+    throw std::runtime_error("Index path must not contain NUL");
+  }
+  if (!string_utils::IsValidUtf8(relpath)) {
+    throw std::runtime_error("Index path must be UTF-8");
   }
   if (relpath.contains('\\')) {
     throw std::runtime_error("Index path must use '/' as the separator");

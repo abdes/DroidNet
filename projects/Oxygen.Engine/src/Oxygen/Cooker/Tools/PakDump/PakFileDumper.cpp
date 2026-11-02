@@ -15,7 +15,6 @@
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -32,12 +31,14 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatVersions.h>
@@ -116,18 +117,6 @@ auto FooterMagicOk(const PakFooter& footer) -> bool
   return std::ranges::equal(std::span { footer.footer_magic }, kPakFooterMagic);
 }
 
-auto TexturePackingPolicyName(uint8_t policy) -> std::string_view
-{
-  switch (policy) {
-  case 1:
-    return "D3D12";
-  case 2:
-    return "TightPacked";
-  default:
-    return "Unknown";
-  }
-}
-
 auto PrintV4TexturePayloadSummary(
   std::ostream& out, std::span<const uint8_t> payload, int indent) -> void
 {
@@ -151,8 +140,9 @@ auto PrintV4TexturePayloadSummary(
 
   Field(out, "Payload Magic", "OTX1", indent);
   Field(out, "Packing Policy",
-    fmt::format("{} ({})", static_cast<int>(header.packing_policy),
-      TexturePackingPolicyName(header.packing_policy)),
+    oxygen::content::toolkit::EnumString(
+      static_cast<oxygen::data::pak::render::TexturePackingPolicyId>(
+        header.packing_policy)),
     indent);
   Field(out, "Flags", fmt::format("0x{:02x}", header.flags), indent);
   Field(out, "Subresources", std::to_string(header.subresource_count), indent);

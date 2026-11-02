@@ -208,6 +208,37 @@ returns a bounded batch on the loader thread. Explicit trim drains returns and e
 idle entries. Retained parents keep their immutable child bindings after invalidation.
 See [ownership and release processing](deps_and_cache.md#release-processing).
 
+### Admitting cooked content
+
+A mount admits a pak or a loose cooked root only after its bytes pass the
+format's rules. Content refuses anything else before serving from it.
+
+- **Paks.** `PrepareMountsAsync` opens each pak once, through the loader's IO
+  driver. `PakFile` checks the header, footer, directory, catalog and browse
+  index. With `verify_content_hashes`, the mount also checks the pak's CRC32
+  with awaited reads, then maps the same handle, so the verified file is the
+  one it serves.
+- **Loose cooked roots.** The index and its resource tables are checked when
+  the root is mounted. See [loose cooked content](loose_cooked_content.md).
+- **One refusal, nothing mounted.** A mount set with a refused member commits
+  no member.
+
+A refusal is a `data::CookedOpenError`. Its `Defect()` is the
+`data::CookedDefect` rule the bytes break, such as `kReservedNotZero` or
+`kDigestMismatch`. Its `Failure()` is the `data::CookedOpenFailure` family a
+caller acts on:
+
+| Family                | Meaning                                 | Caller action                 |
+| --------------------- | --------------------------------------- | ----------------------------- |
+| `kWrongFormat`        | Not that format, or too small to be one | Mount the right file          |
+| `kUnsupportedVersion` | A format version this build cannot read | Recook the content            |
+| `kUnverifiable`       | Verification asked, no integrity data   | Recook it with integrity data |
+| `kCorrupt`            | That format and version, but malformed  | Recook or replace the file    |
+
+Asset descriptors are checked when they load, not when they mount. A loader
+refuses a descriptor that breaks its format, such as a physics sidecar with a
+non-zero reserve in the arm its backend selects, and the load fails.
+
 ---
 
 ## Entity relationships (conceptual)

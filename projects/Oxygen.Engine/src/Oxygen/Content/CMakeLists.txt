@@ -115,8 +115,6 @@ set(
   "Internal/PatchResolutionPolicy.h"
   "Internal/PatchResolutionPolicy.cpp"
   "Internal/PakFileSource.h"
-  "Internal/PakVerification.h"
-  "Internal/PakVerification.cpp"
   "Internal/PayloadBudget.h"
   "Internal/PayloadBudget.cpp"
   "Internal/ResourceRef.h"

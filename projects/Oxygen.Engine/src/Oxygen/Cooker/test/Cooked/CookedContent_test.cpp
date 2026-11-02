@@ -164,26 +164,26 @@ auto FlavorName(const ::testing::TestParamInfo<Flavor>& info) -> std::string
   return std::string { info.param == Flavor::kLoose ? "Loose" : "Pak" };
 }
 
-//! The failure `CookedContent::Open` of `path` reports, if it fails.
-auto OpenFailure(const cooked::CookerStorageReader& storage,
-  const fs::path& path) -> std::optional<data::CookedOpenFailure>
+//! The rule `CookedContent::Open` of `path` reports broken, if it fails.
+auto OpenDefect(const cooked::CookerStorageReader& storage,
+  const fs::path& path) -> std::optional<data::CookedDefect>
 {
   try {
     static_cast<void>(CookedContent::Open(storage, path));
   } catch (const data::CookedOpenError& error) {
-    return error.Failure();
+    return error.Defect();
   }
   return std::nullopt;
 }
 
-//! The failure `ReadCookedSummary` of `path` reports, if it fails.
-auto SummaryFailure(const cooked::CookerStorageReader& storage,
-  const fs::path& path) -> std::optional<data::CookedOpenFailure>
+//! The rule `ReadCookedSummary` of `path` reports broken, if it fails.
+auto SummaryDefect(const cooked::CookerStorageReader& storage,
+  const fs::path& path) -> std::optional<data::CookedDefect>
 {
   try {
     static_cast<void>(ReadCookedSummary(storage, path));
   } catch (const data::CookedOpenError& error) {
-    return error.Failure();
+    return error.Defect();
   }
   return std::nullopt;
 }
@@ -671,10 +671,8 @@ NOLINT_TEST_F(CookedContentTest, FolderWithoutAnIndexIsWrongFormat)
   Storage().AddFolder(folder);
 
   // Act / Assert
-  EXPECT_EQ(
-    OpenFailure(Storage(), folder), data::CookedOpenFailure::kWrongFormat);
-  EXPECT_EQ(
-    SummaryFailure(Storage(), folder), data::CookedOpenFailure::kWrongFormat);
+  EXPECT_EQ(OpenDefect(Storage(), folder), data::CookedDefect::kAbsent);
+  EXPECT_EQ(SummaryDefect(Storage(), folder), data::CookedDefect::kAbsent);
   EXPECT_FALSE(CookedContent::IsCookedSource(Storage(), folder));
 }
 
@@ -685,17 +683,16 @@ NOLINT_TEST_F(CookedContentTest, FileThatIsNotAPakIsWrongFormat)
   Storage().AddFile(file, std::vector<std::byte>(16));
 
   // Act / Assert
-  EXPECT_EQ(
-    OpenFailure(Storage(), file), data::CookedOpenFailure::kWrongFormat);
+  EXPECT_EQ(OpenDefect(Storage(), file), data::CookedDefect::kTooSmall);
 }
 
-NOLINT_TEST_F(CookedContentTest, MissingPathIsCorrupt)
+NOLINT_TEST_F(CookedContentTest, MissingPathIsAbsent)
 {
   // Arrange
   const auto missing = fs::path("/paks/missing.pak");
 
   // Act / Assert
-  EXPECT_EQ(OpenFailure(Storage(), missing), data::CookedOpenFailure::kCorrupt);
+  EXPECT_EQ(OpenDefect(Storage(), missing), data::CookedDefect::kAbsent);
   EXPECT_FALSE(CookedContent::IsCookedSource(Storage(), missing));
 }
 
@@ -716,7 +713,7 @@ NOLINT_TEST_F(
 
   // Act / Assert
   EXPECT_EQ(
-    OpenFailure(Storage(), source.path), data::CookedOpenFailure::kCorrupt);
+    OpenDefect(Storage(), source.path), data::CookedDefect::kInconsistent);
 }
 
 NOLINT_TEST_F(CookedContentTest, TextureDescriptorNamingAMissingRowIsCorrupt)
@@ -734,20 +731,22 @@ NOLINT_TEST_F(CookedContentTest, TextureDescriptorNamingAMissingRowIsCorrupt)
 
   // Act / Assert
   EXPECT_EQ(
-    OpenFailure(Storage(), source.path), data::CookedOpenFailure::kCorrupt);
+    OpenDefect(Storage(), source.path), data::CookedDefect::kOutOfBounds);
 }
 
 NOLINT_TEST_F(CookedContentTest, TableHoldingAPartialRowIsCorrupt)
 {
   // Arrange
+  // The encoder refuses such a table, so the index is damaged after it.
   auto library = LooseCookedRoot { "Game" };
-  library.AddFile(lc::FileKind::kTexturesTable, "textures.table",
-    std::vector<std::byte>(sizeof(core::TextureResourceDesc) + 1U));
-  const auto source = workspace_.Add(library);
+  static_cast<void>(library.AddTexture(SeedBytes(1U)));
+  auto files = library.Files();
+  CookedBytes::GivePartialRow(files, lc::FileKind::kTexturesTable);
+  Storage().AddFiles("/cooked/Partial", files);
 
   // Act / Assert
-  EXPECT_EQ(
-    OpenFailure(Storage(), source.path), data::CookedOpenFailure::kCorrupt);
+  EXPECT_EQ(OpenDefect(Storage(), "/cooked/Partial"),
+    data::CookedDefect::kWrongRowSize);
 }
 
 //=== Summaries without loading ===-------------------------------------------//
@@ -809,10 +808,10 @@ NOLINT_TEST_F(CookedContentTest, IndexOfAnotherVersionIsUnsupported)
   Storage().AddFiles("/cooked/Future", files);
 
   // Act / Assert
-  EXPECT_EQ(SummaryFailure(Storage(), "/cooked/Future"),
-    data::CookedOpenFailure::kUnsupportedVersion);
-  EXPECT_EQ(OpenFailure(Storage(), "/cooked/Future"),
-    data::CookedOpenFailure::kUnsupportedVersion);
+  EXPECT_EQ(SummaryDefect(Storage(), "/cooked/Future"),
+    data::CookedDefect::kUnsupportedVersion);
+  EXPECT_EQ(OpenDefect(Storage(), "/cooked/Future"),
+    data::CookedDefect::kUnsupportedVersion);
 }
 
 NOLINT_TEST_F(CookedContentTest, TruncatedIndexIsCorrupt)
@@ -823,8 +822,9 @@ NOLINT_TEST_F(CookedContentTest, TruncatedIndexIsCorrupt)
   Storage().AddFiles("/cooked/Truncated", files);
 
   // Act / Assert
-  EXPECT_EQ(SummaryFailure(Storage(), "/cooked/Truncated"),
-    data::CookedOpenFailure::kCorrupt);
+  // The index's last section now ends past the file.
+  EXPECT_EQ(SummaryDefect(Storage(), "/cooked/Truncated"),
+    data::CookedDefect::kOutOfBounds);
 }
 
 //! A pak states its library as its one mount, the assets its catalog lists,
@@ -873,7 +873,7 @@ NOLINT_TEST_F(CookedContentTest, PakSummaryStatesItsCatalog)
 struct PakDefect final {
   const char* name;
   std::function<std::vector<std::byte>()> make;
-  data::CookedOpenFailure failure;
+  data::CookedDefect defect;
 };
 
 auto DefectName(const ::testing::TestParamInfo<PakDefect>& info) -> std::string
@@ -921,15 +921,14 @@ class CookedContentPakDefectTest
 
 INSTANTIATE_TEST_SUITE_P(Defects, CookedContentPakDefectTest,
   ::testing::Values(PakDefect { "WithoutBrowseIndex", PakWithoutBrowseIndex,
-                      data::CookedOpenFailure::kCorrupt },
+                      data::CookedDefect::kMissingPart },
     PakDefect { "OfAnotherVersion", PakOfAnotherVersion,
-      data::CookedOpenFailure::kUnsupportedVersion },
-    PakDefect { "WithOtherMagic", PakWithOtherMagic,
-      data::CookedOpenFailure::kWrongFormat },
+      data::CookedDefect::kUnsupportedVersion },
     PakDefect {
-      "TooSmall", PakTooSmall, data::CookedOpenFailure::kWrongFormat },
+      "WithOtherMagic", PakWithOtherMagic, data::CookedDefect::kWrongMagic },
+    PakDefect { "TooSmall", PakTooSmall, data::CookedDefect::kTooSmall },
     PakDefect { "WithDamagedFooter", PakWithDamagedFooter,
-      data::CookedOpenFailure::kCorrupt }),
+      data::CookedDefect::kTruncated }),
   DefectName);
 
 NOLINT_TEST_P(CookedContentPakDefectTest, IsRefusedWithItsFailure)
@@ -939,8 +938,8 @@ NOLINT_TEST_P(CookedContentPakDefectTest, IsRefusedWithItsFailure)
   Storage().AddFile("/paks/defect.pak", defect.make());
 
   // Act / Assert
-  EXPECT_EQ(SummaryFailure(Storage(), "/paks/defect.pak"), defect.failure);
-  EXPECT_EQ(OpenFailure(Storage(), "/paks/defect.pak"), defect.failure);
+  EXPECT_EQ(SummaryDefect(Storage(), "/paks/defect.pak"), defect.defect);
+  EXPECT_EQ(OpenDefect(Storage(), "/paks/defect.pak"), defect.defect);
 }
 
 //=== Verifying storage ===---------------------------------------------------//

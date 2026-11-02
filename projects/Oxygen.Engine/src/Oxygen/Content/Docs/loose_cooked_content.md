@@ -497,10 +497,12 @@ only within the same valid read lease. Managed publication/provenance references
 that inventory instead of duplicating descriptor/file proofs or rehashing merely
 to translate proof models. Keep consumed-input and reuse fingerprints distinct.
 
-The loose index format (version 8) requires recooking earlier content. Qualification covers
-tampered/truncated data, absent/extra files, changed index, stale leases and
-measured removal of redundant file reads. This does not remove incremental
-staging copies; that is a different writer-granularity problem.
+The current loose index format
+([PakFormatVersions.inc](../../Data/PakFormatVersions.inc)) requires recooking
+earlier content. Qualification covers tampered/truncated data, absent/extra
+files, changed index, stale leases and measured removal of redundant file reads.
+This does not remove incremental staging copies; that is a different
+writer-granularity problem.
 
 Runtime admission checks the current index format, canonical paths, complete
 membership, exact sizes and bounds. Full SHA-256 verification (files and data-file resources) is mandatory for

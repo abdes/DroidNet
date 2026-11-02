@@ -34,7 +34,7 @@ NOLINT_TEST_F(AssetLoaderBasicTest, TruncatedPakLeavesMountsUnchanged)
     asset_loader_->AddPakFile(path);
     FAIL() << "Truncated header was accepted";
   } catch (const oxygen::data::CookedOpenError& error) {
-    EXPECT_EQ(error.Failure(), oxygen::data::CookedOpenFailure::kWrongFormat);
+    EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kTooSmall);
   }
   EXPECT_TRUE(asset_loader_->EnumerateMountedSources().empty());
 }

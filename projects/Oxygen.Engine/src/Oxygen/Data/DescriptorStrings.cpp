@@ -8,10 +8,17 @@
 #include <cstddef>
 #include <cstring>
 #include <limits>
+#include <optional>
+#include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
+#include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Data/PakFormat_core.h>
 
 namespace oxygen::data {
 
@@ -24,6 +31,10 @@ DescriptorStrings::DescriptorStrings(std::vector<char> table)
   if (!table_.empty() && (table_.front() != '\0' || table_.back() != '\0')) {
     throw std::invalid_argument(
       "descriptor string table must start and end with a NUL byte");
+  }
+  if (!string_utils::IsValidUtf8(
+        std::string_view { table_.data(), table_.size() })) {
+    throw std::invalid_argument("descriptor string table is not UTF-8");
   }
 }
 
@@ -55,6 +66,12 @@ auto DescriptorStrings::TryGet(const StringTableOffsetT offset) const noexcept
     return std::string_view {};
   }
   if (offset >= table_.size()) {
+    return std::nullopt;
+  }
+  // Every string starts after the NUL that ends the one before it; an offset
+  // into a string, which may split a UTF-8 character, names none.
+  const auto starts_a_string = table_.at(offset - 1U) == '\0';
+  if (!starts_a_string) {
     return std::nullopt;
   }
   // A non-empty table ends with NUL, so the search always finds one.
@@ -90,15 +107,13 @@ DescriptorStringsBuilder::DescriptorStringsBuilder(
   }
   // A valid table starts and ends with NUL; index each string at its first
   // offset.
+  const auto table = std::string_view { bytes_.data(), bytes_.size() };
   auto offset = std::size_t { 1 };
-  while (offset < bytes_.size()) {
-    const auto end = std::find(
-      bytes_.begin() + static_cast<std::ptrdiff_t>(offset), bytes_.end(), '\0');
-    const auto length = static_cast<std::size_t>(
-      end - bytes_.begin() - static_cast<std::ptrdiff_t>(offset));
-    offsets_.try_emplace(std::string { bytes_.data() + offset, length },
-      static_cast<StringTableOffsetT>(offset));
-    offset += length + 1;
+  while (offset < table.size()) {
+    const auto value = table.substr(offset, table.find('\0', offset) - offset);
+    offsets_.try_emplace(
+      std::string { value }, static_cast<StringTableOffsetT>(offset));
+    offset += value.size() + 1;
   }
 }
 
@@ -108,8 +123,11 @@ auto DescriptorStringsBuilder::Add(const std::string_view value)
   if (value.empty()) {
     return 0;
   }
-  if (value.find('\0') != std::string_view::npos) {
+  if (value.contains('\0')) {
     throw std::invalid_argument("descriptor strings cannot hold a NUL byte");
+  }
+  if (!string_utils::IsValidUtf8(value)) {
+    throw std::invalid_argument("descriptor strings are UTF-8");
   }
   if (const auto it = offsets_.find(std::string { value });
     it != offsets_.end()) {
@@ -141,8 +159,10 @@ auto AppendDescriptorStrings(std::vector<std::byte>& descriptor,
   };
   const auto bytes = strings.Bytes();
   descriptor.insert(descriptor.end(), bytes.begin(), bytes.end());
-  std::memcpy(descriptor.data() + offsetof(pak::core::AssetHeader, strings),
-    &table, sizeof(table));
+  std::ranges::copy(std::as_bytes(std::span { &table, 1 }),
+    std::span { descriptor }
+      .subspan(offsetof(pak::core::AssetHeader, strings))
+      .begin());
 }
 
 } // namespace oxygen::data

@@ -5,11 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -23,11 +21,14 @@
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Cooker/testing/AssetDescriptors.h>
+#include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
+#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -63,12 +64,12 @@ using oxygen::cooker::testing::LooseCookedRoot;
 auto WriteLooseCookedIndexWithInvalidTexturesTable(
   const std::filesystem::path& cooked_root) -> void
 {
-  using oxygen::data::loose_cooked::FileKind;
   auto root = LooseCookedRoot { "test" };
-  root.AddFile(FileKind::kTexturesTable, "Resources/textures.table",
-    { std::byte { 0x7f } });
-  root.AddFile(FileKind::kTexturesData, "Resources/textures.data", {});
-  oxygen::cooker::testing::Materialize(root.Files(), cooked_root);
+  static_cast<void>(root.AddTexture(oxygen::cooker::testing::SeedBytes(0x7FU)));
+  auto files = root.Files();
+  oxygen::cooker::testing::CookedBytes::GivePartialRow(
+    files, oxygen::data::loose_cooked::FileKind::kTexturesTable);
+  oxygen::cooker::testing::Materialize(files, cooked_root);
 }
 
 auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
@@ -108,7 +109,8 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root)
 
   auto root = LooseCookedRoot { "Game" };
   InputActionAssetDesc action_record {};
-  action_record.value_type = 0;
+  action_record.value_type
+    = oxygen::data::pak::input::InputActionValueType::kBool;
   action_record.flags = InputActionAssetFlags::kConsumesInput;
   const auto action_key = root.InputAction("Input/Move.oiact", action_record);
 
@@ -448,7 +450,8 @@ NOLINT_TEST_F(AssetLoaderBasicTest, AddLooseCookedRootInvalidTexturesTable)
 
   // Act & Assert
   NOLINT_EXPECT_THROW(
-    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::runtime_error);
+    { asset_loader_->AddLooseCookedRoot(cooked_root); },
+    oxygen::data::CookedOpenError);
 }
 
 NOLINT_TEST_F(AssetLoaderBasicTest, LoadAssetNonExistentReturnsNull)

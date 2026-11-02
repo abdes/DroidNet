@@ -96,7 +96,12 @@ protected:
     mesh.mesh_type = static_cast<uint8_t>(oxygen::data::MeshType::kProcedural);
     mesh.submesh_count = 1;
     mesh.mesh_view_count = 1;
-    mesh.info.procedural.params_size = static_cast<uint32_t>(parameters.size());
+    // The whole arm: the union starts as the standard arm, whose defaults
+    // would otherwise stay in the procedural arm's reserve.
+    mesh.info.procedural = oxygen::data::pak::geometry::ProceduralMeshInfo {
+      .params_size = static_cast<uint32_t>(parameters.size()),
+      ._reserved = {},
+    };
     SubMeshDesc submesh {};
     submesh.surface_id = Slot();
     submesh.material_asset_key

@@ -12,6 +12,7 @@
 #include "AssetDumper.h"
 #include <fmt/format.h>
 
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/ByteReader.h>
 
@@ -57,9 +58,9 @@ public:
     PrintUtils::Field(ctx.Out(), "Restitution", mat.restitution, 8);
     PrintUtils::Field(ctx.Out(), "Density", mat.density, 8);
     PrintUtils::Field(ctx.Out(), "Friction Combine",
-      static_cast<int>(mat.combine_mode_friction), 8);
+      toolkit::EnumString(mat.combine_mode_friction), 8);
     PrintUtils::Field(ctx.Out(), "Restitution Combine",
-      static_cast<int>(mat.combine_mode_restitution), 8);
+      toolkit::EnumString(mat.combine_mode_restitution), 8);
     ctx.Out() << "\n";
 
     co_return;

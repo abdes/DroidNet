@@ -72,7 +72,7 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
       const auto decoded
         = data::DecodeTextureResourceDescriptor(read_result.value().Bytes());
       if (!decoded) {
-        report_error("texture_descriptor_invalid", decoded.error());
+        report_error("texture_descriptor_invalid", decoded.error().what());
         co_return std::nullopt;
       }
       if (decoded->index == data::pak::core::kNoResourceIndex) {

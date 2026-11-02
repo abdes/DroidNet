@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
@@ -96,16 +95,18 @@ namespace {
     const data::pak::world::SkySphereEnvironmentRecord& source,
     const content::ResourceKey cubemap) -> void
   {
-    if (source.source
-      == static_cast<std::uint32_t>(
-        scene::environment::SkySphereSource::kSolidColor)) {
+    // The scene asset admits only the sources the catalog defines.
+    switch (source.source) {
+    case data::pak::world::SkySphereSource::kSolidColor:
       target.SetSource(scene::environment::SkySphereSource::kSolidColor);
-    } else {
+      break;
+    case data::pak::world::SkySphereSource::kCubemap:
       target.SetSource(scene::environment::SkySphereSource::kCubemap);
       target.SetCubemapResource(cubemap);
       if (cubemap.get() == 0U) {
         LOG_F(WARNING, "SkySphere uses a cubemap source but binds no cubemap");
       }
+      break;
     }
 
     target.SetSolidColorRgb(Vec3 { source.solid_color_rgb[0],
@@ -204,8 +205,15 @@ namespace {
     const data::pak::world::SkyLightEnvironmentRecord& source,
     const content::ResourceKey cubemap) -> void
   {
-    target.SetSource(
-      static_cast<scene::environment::SkyLightSource>(source.source));
+    // The scene asset admits only the sources the catalog defines.
+    switch (source.source) {
+    case data::pak::world::SkyLightSource::kCapturedScene:
+      target.SetSource(scene::environment::SkyLightSource::kCapturedScene);
+      break;
+    case data::pak::world::SkyLightSource::kSpecifiedCubemap:
+      target.SetSource(scene::environment::SkyLightSource::kSpecifiedCubemap);
+      break;
+    }
     target.SetCubemapResource(cubemap);
     if (target.GetSource()
         == scene::environment::SkyLightSource::kSpecifiedCubemap

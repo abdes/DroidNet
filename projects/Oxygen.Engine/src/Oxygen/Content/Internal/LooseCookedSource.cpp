@@ -4,22 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
-#include <cstring>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/ResourceTypes.h>
+#include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsResource.h>
@@ -67,6 +72,84 @@ namespace {
     return serio::AnyAsyncDevice(std::move(file).value());
   }
 
+  auto CorruptTextureDescriptor(const data::CookedDefect defect,
+    const std::filesystem::path& path, const std::string_view what)
+    -> data::CookedOpenError
+  {
+    return { defect,
+      "Texture descriptor '" + path.string() + "' " + std::string(what) };
+  }
+
+  auto ReadTextureDescriptor(const std::filesystem::path& path)
+    -> data::TextureResourceDescriptor
+  {
+    const auto file = serio::NativeFile::Open(path, {});
+    if (!file) {
+      throw std::system_error(file.error(),
+        "Could not open texture descriptor '" + path.string() + "'");
+    }
+    const auto size = file->Size();
+    if (!size) {
+      throw std::system_error(size.error(),
+        "Could not size texture descriptor '" + path.string() + "'");
+    }
+    // One byte past a descriptor lets the decoder tell another format or
+    // version from a malformed size.
+    constexpr auto kReadLimit
+      = uint64_t { data::kTextureResourceDescriptorSize } + 1U;
+    auto bytes = std::vector<std::byte>(
+      static_cast<size_t>(std::min(size->get(), kReadLimit)));
+    if (const auto read
+      = serio::ReadExactlyAt(*file, serio::ByteOffset { 0 }, bytes);
+      !read) {
+      throw std::system_error(read.error(),
+        "Could not read texture descriptor '" + path.string() + "'");
+    }
+    const auto decoded = data::DecodeTextureResourceDescriptor(bytes);
+    if (!decoded) {
+      throw data::CookedOpenError(decoded.error());
+    }
+    return *decoded;
+  }
+
+  auto TextureRowOffsetOrThrow(const std::filesystem::path& path,
+    const ResourceTable<data::TextureResource>* table,
+    const data::pak::core::ResourceIndexT index) -> data::pak::core::OffsetT
+  {
+    if (table == nullptr) {
+      throw CorruptTextureDescriptor(
+        data::CookedDefect::kMissingPart, path, "has no source textures table");
+    }
+    const auto offset = index == data::pak::core::kNoResourceIndex
+      ? std::nullopt
+      : table->GetResourceOffset(index);
+    if (!offset) {
+      throw CorruptTextureDescriptor(data::CookedDefect::kOutOfBounds, path,
+        "names a row outside its source textures table");
+    }
+    return *offset;
+  }
+
+  auto ValidateTextureTableRow(const std::filesystem::path& path,
+    const std::span<const std::byte> table_bytes,
+    const data::pak::core::OffsetT row_offset,
+    const data::pak::core::TextureResourceDesc& descriptor) -> void
+  {
+    const auto expected = std::as_bytes(std::span { &descriptor, 1 });
+    const auto row_in_file = row_offset <= table_bytes.size()
+      && expected.size() <= table_bytes.size() - row_offset;
+    if (!row_in_file) {
+      throw CorruptTextureDescriptor(data::CookedDefect::kOutOfBounds, path,
+        "names a row its textures table file does not hold");
+    }
+    const auto row
+      = table_bytes.subspan(static_cast<size_t>(row_offset), expected.size());
+    if (!std::ranges::equal(row, expected)) {
+      throw CorruptTextureDescriptor(data::CookedDefect::kInconsistent, path,
+        "is stale: its row differs from its source textures table");
+    }
+  }
+
 } // namespace
 
 auto LooseCookedSource::OpenFiles() -> void
@@ -92,14 +175,16 @@ auto LooseCookedSource::OpenFiles() -> void
       files.payloads = *whole;
     }
   };
-  open(
-    FilesOf<data::BufferResource>(), buffers_table_path_, buffers_data_path_);
-  open(FilesOf<data::TextureResource>(), textures_table_path_,
-    textures_data_path_);
-  open(
-    FilesOf<data::ScriptResource>(), scripts_table_path_, scripts_data_path_);
-  open(
-    FilesOf<data::PhysicsResource>(), physics_table_path_, physics_data_path_);
+
+  using data::BufferResource;
+  using data::PhysicsResource;
+  using data::ScriptResource;
+  using data::TextureResource;
+
+  open(FilesOf<BufferResource>(), buffers_table_path_, buffers_data_path_);
+  open(FilesOf<TextureResource>(), textures_table_path_, textures_data_path_);
+  open(FilesOf<ScriptResource>(), scripts_table_path_, scripts_data_path_);
+  open(FilesOf<PhysicsResource>(), physics_table_path_, physics_data_path_);
 }
 
 auto LooseCookedSource::FilesOf(const TypeId resource_type) const noexcept
@@ -157,50 +242,31 @@ auto LooseCookedSource::FindTextureIndexByVirtualPath(
     return std::nullopt;
   }
   const auto path = cooked_root_ / std::filesystem::path(*relative);
-  const auto file = serio::NativeFile::Open(path, {});
-  if (!file) {
-    throw std::system_error(file.error(),
-      "Could not open texture descriptor '" + path.string() + "'");
-  }
-  const auto size = file->Size();
-  if (!size || size->get() != data::kTextureResourceDescriptorSize) {
-    throw std::runtime_error(
-      "Texture descriptor does not use the current OTEX layout");
-  }
-  auto bytes = std::array<std::byte, data::kTextureResourceDescriptorSize> {};
-  if (!serio::ReadExactlyAt(*file, serio::ByteOffset { 0 }, bytes)) {
-    throw std::runtime_error("Texture descriptor could not be read");
-  }
-  const auto decoded = data::DecodeTextureResourceDescriptor(bytes);
-  if (!decoded) {
-    throw std::runtime_error(decoded.error());
-  }
-  const auto* table = GetTextureTable();
-  if (decoded->index == data::pak::core::kNoResourceIndex || table == nullptr
-    || !table->IsValidKey(decoded->index)) {
-    throw std::runtime_error(
-      "Texture descriptor index is outside its source texture table");
-  }
+  const auto descriptor = ReadTextureDescriptor(path);
+
+  ValidateTextureDescriptorAgainstTable(path, descriptor);
+  return descriptor.index;
+}
+
+auto LooseCookedSource::ValidateTextureDescriptorAgainstTable(
+  const std::filesystem::path& path,
+  const data::TextureResourceDescriptor& descriptor) const -> void
+{
+  const auto row_offset
+    = TextureRowOffsetOrThrow(path, GetTextureTable(), descriptor.index);
+
   // An index-only source maps no table at mount; it maps this one to compare.
   const auto& textures = files_.at(kResourceTypeIndex<data::TextureResource>);
   if (!textures.table && !textures_table_path_) {
-    throw std::runtime_error("Texture descriptor has no source textures table");
+    throw CorruptTextureDescriptor(
+      data::CookedDefect::kMissingPart, path, "has no source textures table");
   }
   const auto mapped = textures.table
     ? std::optional<serio::MappedFile> {}
     : std::optional { MapTable(*textures_table_path_) };
   const auto table_bytes = mapped ? mapped->Bytes() : textures.table->Bytes();
-  const auto offset = table->GetResourceOffset(decoded->index);
-  constexpr auto kRowSize = sizeof(decoded->descriptor);
-  if (!offset || *offset > table_bytes.size()
-    || kRowSize > table_bytes.size() - *offset
-    || std::memcmp(table_bytes.subspan(static_cast<size_t>(*offset)).data(),
-         &decoded->descriptor, kRowSize)
-      != 0) {
-    throw std::runtime_error(
-      "Texture descriptor is stale or does not match its source table");
-  }
-  return decoded->index;
+
+  ValidateTextureTableRow(path, table_bytes, row_offset, descriptor.descriptor);
 }
 
 } // namespace oxygen::content::internal

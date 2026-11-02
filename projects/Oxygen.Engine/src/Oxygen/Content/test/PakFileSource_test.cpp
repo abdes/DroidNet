@@ -36,6 +36,7 @@
 #include <Oxygen/OxCo/asio.h> // IWYU pragma: keep (EventLoopTraits)
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/AsyncDevice.h>
+#include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/MemoryFile.h>
@@ -63,6 +64,8 @@ using oxygen::serio::testing::BytesEqual;
 
 constexpr auto kMount = "Tests";
 constexpr auto kTextureSeed = uint8_t { 7U };
+//! The seed of a pak that replaces the first one at its path.
+constexpr auto kReplacementSeed = uint8_t { 8U };
 constexpr auto kTexturePayloadSize = size_t { 256U };
 //! The row of the first texture a root adds: row zero is reserved.
 constexpr auto kTextureRow = ResourceIndexT { 1U };
@@ -260,8 +263,7 @@ NOLINT_TEST(PakFilePayloadsTest, VerifiedOpenChecksBeforeParsingTheDirectory)
       = PakFile(InMemory(bytes), "test.pak", PakFile::Verification::kCrc32);
     ADD_FAILURE() << "the pak was accepted";
   } catch (const oxygen::data::CookedOpenError& error) {
-    EXPECT_EQ(error.Failure(), oxygen::data::CookedOpenFailure::kCorrupt);
-    EXPECT_STREQ(error.what(), "Pak CRC32 mismatch");
+    EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kDigestMismatch);
   }
 }
 
@@ -276,9 +278,7 @@ NOLINT_TEST(PakFilePayloadsTest, PayloadRegionOffItsBoundaryIsRefused)
     std::ignore = PakFile(InMemory(bytes), "test.pak");
     ADD_FAILURE() << "the pak was accepted";
   } catch (const oxygen::data::CookedOpenError& error) {
-    EXPECT_EQ(error.Failure(), oxygen::data::CookedOpenFailure::kCorrupt);
-    EXPECT_THAT(
-      error.what(), ::testing::HasSubstr("does not lie on payload boundaries"));
+    EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kMisaligned);
   }
 }
 
@@ -294,7 +294,7 @@ NOLINT_TEST(PakFilePayloadsTest, VerifiedOpenRefusesAPakWithoutCrc)
       = PakFile(InMemory(bytes), "test.pak", PakFile::Verification::kCrc32);
     ADD_FAILURE() << "the pak was accepted";
   } catch (const oxygen::data::CookedOpenError& error) {
-    EXPECT_EQ(error.Failure(), oxygen::data::CookedOpenFailure::kUnverifiable);
+    EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kNoIntegrityData);
   }
   EXPECT_NO_THROW(std::ignore = PakFile(InMemory(bytes), "test.pak"));
 }
@@ -311,6 +311,38 @@ NOLINT_TEST_F(PakFileSourceTest, PayloadsAreReadThroughTheDriverOpenedFile)
 
   ASSERT_HAS_VALUE(read);
   EXPECT_THAT(out, BytesEqual(std::span(bytes).subspan(16, out.size())));
+}
+
+//! A pak replaced at its path after its handle was opened is never mounted:
+//! the metadata and the payloads are both the version the handle opened.
+NOLINT_TEST_F(PakFileSourceTest, MountsTheFileItsHandleOpenedAfterAReplacement)
+{
+  // Arrange
+  const auto path = TempPath("test.pak");
+  const auto payload = SeedBytes(kTextureSeed, kTexturePayloadSize);
+  const auto opened = TexturePak(payload);
+  const auto replacement
+    = TexturePak(SeedBytes(kReplacementSeed, 2U * kTexturePayloadSize));
+  ASSERT_NE(opened, replacement);
+  Materialize(opened, path);
+  const auto driver = InlineDriver();
+  auto file = driver->Open(path, {});
+  ASSERT_HAS_VALUE(file);
+  const auto replaced = oxygen::serio::WriteFileAtomically(path, replacement);
+  ASSERT_TRUE(replaced) << replaced.error().message();
+
+  // Act
+  const auto source = PakFileSource(path, std::move(*file), driver);
+
+  // Assert
+  EXPECT_THAT(source.Pak().Bytes(), BytesEqual(opened));
+  const auto desc = TextureRow(source, kTextureRow);
+  ASSERT_EQ(desc.size_bytes, payload.size());
+  auto out = std::vector<std::byte>(desc.size_bytes);
+  const auto read
+    = ReadAtOnce(source.Payloads(), ByteOffset { desc.data_offset }, out);
+  ASSERT_HAS_VALUE(read);
+  EXPECT_THAT(out, BytesEqual(payload));
 }
 
 //! A source mounted over a loop awaits its payloads through it: the read

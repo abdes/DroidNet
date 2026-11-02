@@ -2113,6 +2113,11 @@ namespace {
       return false;
     }
     const auto& mesh_desc = *mesh_desc_read;
+    const auto reserves_zero = data::pak::geometry::HasZeroReserves(mesh_desc);
+    if (!reserves_zero) {
+      error = "geometry descriptor mesh reserved bytes are not zero";
+      return false;
+    }
     offset += sizeof(MeshDesc);
 
     const auto mesh_type = static_cast<MeshType>(mesh_desc.mesh_type);
@@ -3307,9 +3312,25 @@ namespace {
     return blob;
   }
 
+  //! The backend a physics scene records for the import backend `backend`.
+  [[nodiscard]] constexpr auto PakBackendOf(
+    const PhysicsBackend backend) noexcept -> phys::PhysicsBackend
+  {
+    switch (backend) {
+    case PhysicsBackend::kJolt:
+      return phys::PhysicsBackend::kJolt;
+    case PhysicsBackend::kPhysX:
+      return phys::PhysicsBackend::kPhysX;
+    case PhysicsBackend::kNone:
+      break;
+    }
+    return phys::PhysicsBackend::kNone;
+  }
+
   auto SerializePhysicsSceneAsset(const SidecarResolvedSceneState& scene_state,
     std::string_view sidecar_name, const std::vector<TableBlob>& input_tables,
-    std::string& error) -> std::optional<std::vector<std::byte>>
+    const PhysicsBackend backend, std::string& error)
+    -> std::optional<std::vector<std::byte>>
   {
     auto tables = input_tables;
     std::ranges::sort(
@@ -3326,6 +3347,9 @@ namespace {
     desc.header.name_offset = strings.Add(sidecar_name);
     desc.target_scene_key = scene_state.scene_key;
     desc.target_node_count = scene_state.node_count;
+    // Every binding was resolved for this backend, so its arm of each
+    // backend-scalar union is the one written.
+    desc.backend = PakBackendOf(backend);
     const auto scene_hash
       = base::ComputeSha256(scene_state.source_scene_descriptor);
     std::copy_n(scene_hash.begin(), std::size(desc.target_scene_content_hash),
@@ -3667,8 +3691,9 @@ namespace {
     }
 
     auto serialize_error = std::string {};
-    const auto descriptor_bytes = SerializePhysicsSceneAsset(
-      scene_state, sidecar_name, tables, serialize_error);
+    const auto descriptor_bytes
+      = SerializePhysicsSceneAsset(scene_state, sidecar_name, tables,
+        ResolveRequestedPhysicsBackend(request), serialize_error);
     if (!descriptor_bytes.has_value()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.sidecar.descriptor_serialize_failed",

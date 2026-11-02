@@ -103,6 +103,13 @@ public:
     return desc_.target_node_count;
   }
 
+  //! The backend the scene was cooked for, whose arm of each backend-scalar
+  //! union its bindings hold.
+  [[nodiscard]] auto GetBackend() const noexcept -> pak::physics::PhysicsBackend
+  {
+    return desc_.backend;
+  }
+
   //! Returns the expected SHA-256 of the paired scene descriptor payload.
   [[nodiscard]] auto GetTargetSceneContentHash() const noexcept
     -> std::span<const uint8_t, 32>
@@ -136,7 +143,7 @@ public:
 
     // Binding tables are stored packed (alignment 1).
     // Decode lazily into an aligned cache to avoid unaligned typed pointers.
-    const auto it = binding_cache_.find(type);
+    auto it = binding_cache_.find(type);
     if (it == binding_cache_.end()) {
       const size_t bytes_size = entry->count * sizeof(T);
       const auto bytes = data_.subspan(entry->offset, bytes_size);
@@ -148,12 +155,16 @@ public:
           bytes.subspan(i * sizeof(T), sizeof(T)).data(), sizeof(T));
       }
 
-      binding_cache_.insert_or_assign(type, std::move(decoded));
+      it = binding_cache_.insert_or_assign(type, std::move(decoded)).first;
     }
 
-    const auto& cached
-      = std::any_cast<const std::vector<T>&>(binding_cache_.find(type)->second);
-    return { cached.data(), cached.size() };
+    // The cache holds each type's records under that type's key.
+    const auto* cached = std::any_cast<std::vector<T>>(&it->second);
+    if (cached == nullptr) {
+      DCHECK_F(false, "PhysicsSceneAsset binding cache holds another type");
+      return {};
+    }
+    return { cached->data(), cached->size() };
   }
 
   //! Finds the binding record attached to a specific scene node, if any.

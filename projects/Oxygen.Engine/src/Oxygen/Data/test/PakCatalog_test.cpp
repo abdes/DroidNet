@@ -10,11 +10,14 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
@@ -22,6 +25,7 @@
 namespace {
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
+using oxygen::data::CookedDefect;
 using oxygen::data::KeyReferenceKind;
 using oxygen::data::PakCatalog;
 using oxygen::data::PakRequirement;
@@ -255,28 +259,160 @@ NOLINT_TEST(PakCatalogTest, AcceptsAnAssetAndATextureOfOneKey)
   EXPECT_TRUE(catalog.ComputeDigest());
 }
 
-NOLINT_TEST(PakCatalogTest, RejectsTruncationCorruptionAndOversizedCounts)
+//! The rule decoding `bytes`, which must fail, reports broken.
+auto DecodeDefect(const std::span<const std::byte> bytes) -> CookedDefect
 {
-  const auto valid = Catalog().Encode().value();
-  for (size_t size = 0; size < valid.size(); ++size) {
-    EXPECT_FALSE(PakCatalog::Decode(std::span(valid).first(size))) << size;
+  const auto decoded = PakCatalog::Decode(bytes);
+  if (decoded) {
+    ADD_FAILURE() << "the catalog decoded";
+    return {};
   }
+  return decoded.error().Defect();
+}
+
+// The wire layout, from the format: the version, source identity, content
+// version and four record counts, then the mount (a one-byte size and its
+// characters), then the entries (key, type, two digests); the digest of the
+// bytes before it ends the catalog.
+constexpr auto kEntryCountOffset
+  = sizeof(uint32_t) + SourceKey::kSizeBytes + sizeof(uint16_t);
+constexpr auto kHeaderSize = kEntryCountOffset + (4U * sizeof(uint32_t));
+constexpr auto kDigestSize = size_t { 32U };
+constexpr auto kEntrySize = AssetKey::kSizeBytes + 1U + (2U * kDigestSize);
+
+//! `bytes`, a catalog of the mount `mount`, with its first two entries
+//! swapped and its digest as encoded.
+auto WithSwappedEntries(std::vector<std::byte> bytes,
+  const std::string_view mount) -> std::vector<std::byte>
+{
+  const auto first = kHeaderSize + 1U + mount.size();
+  const auto entries = std::span(bytes).subspan(first, 2U * kEntrySize);
+  std::ranges::swap_ranges(
+    entries.first(kEntrySize), entries.subspan(kEntrySize));
+  return bytes;
+}
+
+//! Signs `bytes` again: their digest becomes the SHA-256 of the bytes before
+//! it, so a test reaches the checks that follow the digest's.
+auto Reseal(std::vector<std::byte>& bytes) -> void
+{
+  const auto signed_bytes = std::span(bytes).first(bytes.size() - kDigestSize);
+  const auto digest = oxygen::base::ComputeSha256(signed_bytes);
+  std::ranges::copy(std::as_bytes(std::span(digest)),
+    std::span(bytes).last(kDigestSize).begin());
+}
+
+//! A catalog cut short is truncated or short of what its counts declare,
+//! at every length.
+NOLINT_TEST(PakCatalogTest, RejectsEveryTruncation)
+{
+  const auto encoded = Catalog().Encode();
+  ASSERT_HAS_VALUE(encoded);
+  const auto& valid = *encoded;
+
+  for (size_t size = 0; size < valid.size(); ++size) {
+    const auto defect = DecodeDefect(std::span(valid).first(size));
+    EXPECT_THAT(defect,
+      ::testing::AnyOf(::testing::Eq(CookedDefect::kTruncated),
+        ::testing::Eq(CookedDefect::kSizeMismatch)))
+      << size;
+  }
+}
+
+//! Trailing bytes, a damaged digest and counts the bytes cannot hold are
+//! refused for their rule; another version is unsupported.
+NOLINT_TEST(PakCatalogTest, RejectsCorruptionAndOversizedCounts)
+{
+  const auto encoded = Catalog().Encode();
+  ASSERT_HAS_VALUE(encoded);
+  const auto& valid = *encoded;
+
   auto trailing = valid;
   trailing.push_back(std::byte { 0U });
-  EXPECT_FALSE(PakCatalog::Decode(trailing));
-  auto bytes = valid;
-  bytes.at(bytes.size() - 1U) ^= std::byte { 1U };
-  EXPECT_FALSE(PakCatalog::Decode(bytes));
-  bytes = valid;
-  bytes.at(0) = std::byte { 0U };
-  EXPECT_FALSE(PakCatalog::Decode(bytes));
-  bytes = valid;
-  constexpr auto kEntryCountOffset
-    = sizeof(uint32_t) + SourceKey::kSizeBytes + sizeof(uint16_t);
+  auto damaged_digest = valid;
+  damaged_digest.at(damaged_digest.size() - 1U) ^= std::byte { 1U };
+  auto other_version = valid;
+  other_version.at(0) = std::byte { 0U };
+  auto oversized = valid;
   for (size_t index = 0; index < sizeof(uint32_t); ++index) {
-    bytes.at(kEntryCountOffset + index) = std::byte { 0xFFU };
+    oversized.at(kEntryCountOffset + index) = std::byte { 0xFFU };
   }
-  EXPECT_FALSE(PakCatalog::Decode(bytes));
+
+  EXPECT_EQ(DecodeDefect(trailing), CookedDefect::kSizeMismatch);
+  EXPECT_EQ(DecodeDefect(damaged_digest), CookedDefect::kDigestMismatch);
+  EXPECT_EQ(DecodeDefect(other_version), CookedDefect::kUnsupportedVersion);
+  EXPECT_EQ(DecodeDefect(oversized), CookedDefect::kSizeMismatch);
+}
+
+//! The digest authenticates the bytes received: entries swapped under the
+//! original digest are refused, though the catalog they hold is the same.
+NOLINT_TEST(PakCatalogTest, RejectsBytesTheirDigestDoesNotCover)
+{
+  const auto catalog = Catalog();
+  const auto encoded = catalog.Encode();
+  ASSERT_HAS_VALUE(encoded);
+
+  const auto bytes = WithSwappedEntries(*encoded, catalog.mount);
+
+  EXPECT_EQ(DecodeDefect(bytes), CookedDefect::kDigestMismatch);
+}
+
+//! Entries out of canonical order are refused even under the digest of the
+//! bytes as they are.
+NOLINT_TEST(PakCatalogTest, RejectsRecordsOutOfCanonicalOrder)
+{
+  const auto catalog = Catalog();
+  const auto encoded = catalog.Encode();
+  ASSERT_HAS_VALUE(encoded);
+
+  auto bytes = WithSwappedEntries(*encoded, catalog.mount);
+  Reseal(bytes);
+
+  EXPECT_EQ(DecodeDefect(bytes), CookedDefect::kNotCanonical);
+}
+
+//! Names a virtual path cannot hold as its mount; each fits the field.
+constexpr auto kMisspelledMounts = std::array {
+  "bad/name",
+  "1Props",
+  "Pro ps",
+  "Pro.ps",
+  ".",
+  "Pr\xC3\xB6ps", // "Pröps": a letter beyond ASCII
+
+};
+
+//! A catalog names only mounts a virtual path can name, for itself and for
+//! each dependency, so a dependency can always match a provider.
+NOLINT_TEST(PakCatalogTest, RejectsMountsAVirtualPathCannotName)
+{
+  for (const auto* const mount : kMisspelledMounts) {
+    auto own = Catalog();
+    own.mount = mount;
+    EXPECT_FALSE(own.ComputeDigest()) << mount;
+    auto dependency = Catalog();
+    dependency.dependencies.at(0).mount = mount;
+    EXPECT_FALSE(dependency.ComputeDigest()) << mount;
+  }
+  auto derived = Catalog();
+  derived.mount = ".Derived_Props-2";
+  EXPECT_TRUE(derived.ComputeDigest());
+}
+
+//! A decoded catalog whose mount a virtual path cannot name is refused, even
+//! under a digest of its bytes.
+NOLINT_TEST(PakCatalogTest, DecodeRefusesAMisspelledMount)
+{
+  const auto catalog = Catalog();
+  ASSERT_EQ(catalog.mount, "Props");
+  const auto encoded = catalog.Encode();
+  ASSERT_HAS_VALUE(encoded);
+  auto bytes = *encoded;
+  // The mount's characters follow its one-byte size, after the header.
+  bytes.at(kHeaderSize + 1U + 2U) = std::byte { '/' };
+  Reseal(bytes);
+
+  EXPECT_EQ(DecodeDefect(bytes), CookedDefect::kInvalidPath);
 }
 
 } // namespace

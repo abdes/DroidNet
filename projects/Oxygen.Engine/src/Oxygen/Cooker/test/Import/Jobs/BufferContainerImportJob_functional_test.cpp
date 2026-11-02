@@ -48,7 +48,7 @@ namespace {
   {
     auto decoded = data::DecodeBufferResourceDescriptor(bytes);
     if (!decoded) {
-      throw std::runtime_error(decoded.error());
+      throw std::runtime_error(decoded.error().what());
     }
     return std::move(*decoded);
   }

@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <string_view>
+
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -123,15 +125,14 @@ struct MaterialAssetDesc {
   Unorm16 roughness = Unorm16 { 1.0F };
   Unorm16 ambient_occlusion = Unorm16 { 1.0F };
 
-  // --- Core texture references (Index into TextureResourceTable,
-  // core::kNoResourceIndex = invalid/none) ---
+  // --- Core texture references: each is an index into this descriptor's
+  // resource bindings (`ResourceReferenceIndex`), never a texture table
+  // row; `kNoResourceReference` (UINT32_MAX) means none ---
   ResourceReferenceIndex base_color_texture = kNoResourceReference;
   ResourceReferenceIndex normal_texture = kNoResourceReference;
   ResourceReferenceIndex metallic_texture = kNoResourceReference;
   ResourceReferenceIndex roughness_texture = kNoResourceReference;
   ResourceReferenceIndex ambient_occlusion_texture = kNoResourceReference;
-
-  static_assert(core::kNoResourceIndex == 0);
 
   // --- Additional texture references (optional, Tier 1/2) ---
   ResourceReferenceIndex emissive_texture = kNoResourceReference;
@@ -208,6 +209,8 @@ enum class TexturePackingPolicyId : uint8_t {
   kD3D12 = 1, //!< D3D12 alignment: 256-byte row pitch, 512-byte subresource
   kTightPacked = 2, //!< Minimal alignment; suitable for Vulkan or offline tools
 };
+OXGN_DATA_NDAPI auto to_string(TexturePackingPolicyId value) noexcept
+  -> std::string_view;
 
 //! Extensibility flags for texture payloads.
 /*!
@@ -294,14 +297,14 @@ static_assert(sizeof(TexturePayloadHeader) == 20);
 
 } // namespace oxygen::data::pak::render
 
-// clang-format off
 namespace oxygen::serio {
+// clang-format off
 template <> inline constexpr bool kIsRecord<data::pak::render::MaterialAssetDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::render::ShaderReferenceDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::render::SubresourceLayout> = true;
 template <> inline constexpr bool kIsRecord<data::pak::render::TexturePayloadHeader> = true;
-} // namespace oxygen::serio
 // clang-format on
+} // namespace oxygen::serio
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

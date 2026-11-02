@@ -161,9 +161,11 @@ protected:
     return bindings.Bytes(SceneKey(), scene_.Bytes(), "PhysicsScene");
   }
 
-  //! Writes `bytes` as the descriptor the loader reads.
+  //! Writes `bytes` as the descriptor the loader reads, replacing any written
+  //! before.
   auto WriteBytes(const std::span<const std::byte> bytes) -> void
   {
+    stream_.Clear();
     const auto written = writer_.WriteBlob(bytes);
     ASSERT_TRUE(written) << written.error().message();
     ASSERT_TRUE(writer_.Flush()) << "Flush failed";

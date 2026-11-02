@@ -77,16 +77,8 @@ using pak::internal::PakSourceDevices;
 
 //! The alignment a resource needs when its descriptor records none.
 constexpr uint32_t kDefaultResourceAlignment = 256U;
-//! Where payloads start and regions end, in the file.
-constexpr uint32_t kPayloadAlignment
-  = static_cast<uint32_t>(core::kPakPayloadAlignment);
 static_assert(core::kPakPayloadAlignment == serio::kIoAlignment,
   "a pak payload must serve unbuffered reads");
-constexpr uint32_t kTableAlignment = 16U;
-constexpr uint32_t kAssetAlignment = 16U;
-constexpr uint32_t kDirectoryAlignment = 16U;
-constexpr uint32_t kBrowseAlignment = 16U;
-constexpr uint32_t kFooterAlignment = 16U;
 constexpr uint64_t kMaxCountAsUint64 = std::numeric_limits<uint32_t>::max();
 constexpr int kUnknownRegionOrder = std::numeric_limits<int>::max();
 
@@ -461,7 +453,7 @@ auto MakeSkeletonTables() -> std::vector<pak::PakTablePlan>
       .entry_size = static_cast<uint32_t>(sizeof(core::TextureResourceDesc)),
       .expected_entry_size
       = static_cast<uint32_t>(sizeof(core::TextureResourceDesc)),
-      .alignment = kTableAlignment,
+      .alignment = core::kPakMetadataAlignment,
       .index_zero_required = false,
       .index_zero_present = false,
       .index_zero_forbidden = false,
@@ -474,7 +466,7 @@ auto MakeSkeletonTables() -> std::vector<pak::PakTablePlan>
       .entry_size = static_cast<uint32_t>(sizeof(core::BufferResourceDesc)),
       .expected_entry_size
       = static_cast<uint32_t>(sizeof(core::BufferResourceDesc)),
-      .alignment = kTableAlignment,
+      .alignment = core::kPakMetadataAlignment,
       .index_zero_required = false,
       .index_zero_present = false,
       .index_zero_forbidden = false,
@@ -487,7 +479,7 @@ auto MakeSkeletonTables() -> std::vector<pak::PakTablePlan>
       .entry_size = static_cast<uint32_t>(sizeof(audio::AudioResourceDesc)),
       .expected_entry_size
       = static_cast<uint32_t>(sizeof(audio::AudioResourceDesc)),
-      .alignment = kTableAlignment,
+      .alignment = core::kPakMetadataAlignment,
       .index_zero_required = false,
       .index_zero_present = false,
       .index_zero_forbidden = false,
@@ -500,7 +492,7 @@ auto MakeSkeletonTables() -> std::vector<pak::PakTablePlan>
       .entry_size = static_cast<uint32_t>(sizeof(script::ScriptResourceDesc)),
       .expected_entry_size
       = static_cast<uint32_t>(sizeof(script::ScriptResourceDesc)),
-      .alignment = kTableAlignment,
+      .alignment = core::kPakMetadataAlignment,
       .index_zero_required = false,
       .index_zero_present = false,
       .index_zero_forbidden = false,
@@ -513,7 +505,7 @@ auto MakeSkeletonTables() -> std::vector<pak::PakTablePlan>
       .entry_size = static_cast<uint32_t>(sizeof(physics::PhysicsResourceDesc)),
       .expected_entry_size
       = static_cast<uint32_t>(sizeof(physics::PhysicsResourceDesc)),
-      .alignment = kTableAlignment,
+      .alignment = core::kPakMetadataAlignment,
       .index_zero_required = false,
       .index_zero_present = false,
       .index_zero_forbidden = false,
@@ -1023,7 +1015,8 @@ auto CollectBufferSidecar(PlanningState& state, const SourceCollection& context,
   if (!decoded) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       pak::PakBuildPhase::kPlanning, "pak.plan.buffer_sidecar_invalid",
-      "Buffer sidecar is invalid: " + decoded.error(), path);
+      std::string("Buffer sidecar is invalid: ") + decoded.error().what(),
+      path);
     return;
   }
   state.buffer_sidecars[context.order].insert_or_assign(
@@ -2470,7 +2463,7 @@ auto PlanFileLayout(PlanningState& state) -> void
   auto resource_remaps = ResourceIndexRemaps {};
   auto added_null_records = std::unordered_set<std::string> {};
   for (const auto region_name : region_names) {
-    cursor = AlignUp(cursor, AlignmentBytes { kPayloadAlignment });
+    cursor = AlignUp(cursor, AlignmentBytes { core::kPakPayloadAlignment });
     const auto region_start = cursor;
 
     for (const auto& resource : state.pending_resources) {
@@ -2481,7 +2474,9 @@ auto PlanFileLayout(PlanningState& state) -> void
       // A payload starts on a payload boundary, which also satisfies the
       // smaller power-of-two alignment its descriptor records.
       cursor = AlignUp(cursor,
-        AlignmentBytes { (std::max)(resource.alignment, kPayloadAlignment) });
+        AlignmentBytes {
+          (std::max)(resource.alignment, core::kPakPayloadAlignment),
+        });
       auto& next_index = resource_index_counters[resource.resource_kind];
       const bool reserves_zero = resource.resource_kind == "texture"
         || resource.resource_kind == "buffer"
@@ -2525,13 +2520,13 @@ auto PlanFileLayout(PlanningState& state) -> void
         resource.dependent_asset_keys);
       cursor += resource.size_bytes;
     }
-    cursor = AlignUp(cursor, AlignmentBytes { kPayloadAlignment });
+    cursor = AlignUp(cursor, AlignmentBytes { core::kPakPayloadAlignment });
 
     state.data_plan.regions.push_back(pak::PakRegionPlan {
       .region_name = std::string(region_name),
       .offset = region_start,
       .size_bytes = cursor - region_start,
-      .alignment = kPayloadAlignment,
+      .alignment = core::kPakPayloadAlignment,
     });
   }
 
@@ -2570,7 +2565,7 @@ auto PlanFileLayout(PlanningState& state) -> void
   }
   PlanBrowseTextures(state, resource_remaps);
   for (const auto& asset : state.assets) {
-    cursor = AlignUp(cursor, AlignmentBytes { kAssetAlignment });
+    cursor = AlignUp(cursor, AlignmentBytes { core::kPakMetadataAlignment });
 
     if (asset.descriptor_size > std::numeric_limits<uint32_t>::max()) {
       AddDiagnostic(state.output.diagnostics,
@@ -2585,7 +2580,7 @@ auto PlanFileLayout(PlanningState& state) -> void
       .asset_type = asset.asset_type,
       .offset = cursor,
       .size_bytes = asset.descriptor_size,
-      .alignment = kAssetAlignment,
+      .alignment = core::kPakMetadataAlignment,
       .reserved_bytes_zeroed = true,
     });
     auto payload_source = pak::PakPayloadSourceSlicePlan {
@@ -2623,7 +2618,7 @@ auto PlanFileLayout(PlanningState& state) -> void
     }
   }
 
-  cursor = AlignUp(cursor, AlignmentBytes { kDirectoryAlignment });
+  cursor = AlignUp(cursor, AlignmentBytes { core::kPakMetadataAlignment });
   state.data_plan.directory.offset = cursor;
   state.data_plan.directory.size_bytes
     = static_cast<uint64_t>(state.data_plan.directory.entries.size())
@@ -2663,7 +2658,7 @@ auto PlanFileLayout(PlanningState& state) -> void
       return;
     }
 
-    cursor = AlignUp(cursor, AlignmentBytes { kBrowseAlignment });
+    cursor = AlignUp(cursor, AlignmentBytes { core::kPakMetadataAlignment });
     browse.offset = cursor;
     browse.size_bytes = *browse_payload_size;
     state.data_plan.browse_index = std::move(browse);
@@ -2687,7 +2682,7 @@ auto PlanFileLayout(PlanningState& state) -> void
     }
   }
 
-  cursor = AlignUp(cursor, AlignmentBytes { kFooterAlignment });
+  cursor = AlignUp(cursor, AlignmentBytes { core::kPakMetadataAlignment });
   state.data_plan.footer.offset = cursor;
   state.data_plan.footer.size_bytes
     = static_cast<uint32_t>(sizeof(core::PakFooter));

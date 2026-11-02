@@ -11,6 +11,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <span>
+#include <string_view>
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
@@ -38,14 +40,14 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 namespace oxygen::data::pak::world {
 
 //! Scene node flags for `NodeRecord::node_flags`.
+// clang-format off
 [[maybe_unused]] constexpr uint32_t kSceneNodeFlag_Visible = (1U << 0U);
 [[maybe_unused]] constexpr uint32_t kSceneNodeFlag_Static = (1U << 1U);
 [[maybe_unused]] constexpr uint32_t kSceneNodeFlag_CastsShadows = (1U << 2U);
 [[maybe_unused]] constexpr uint32_t kSceneNodeFlag_ReceivesShadows = (1U << 3U);
-[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_RayCastingSelectable
-  = (1U << 4U);
-[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_IgnoreParentTransform
-  = (1U << 5U);
+[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_RayCastingSelectable = (1U << 4U);
+[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_IgnoreParentTransform = (1U << 5U);
+// clang-format on
 
 //! Flags with authored Local/Inherit source modes.
 inline constexpr uint32_t kSceneNodeFlags_Inheritable = kSceneNodeFlag_Visible
@@ -426,7 +428,9 @@ static_assert(sizeof(LocalFogVolumeRecord) == 56);
   Attaches a perspective camera to a scene node.
 
   ### Coordinate System
-  - The camera looks down the -Z axis in its local space.
+  - The camera looks along its node's forward (`space::node::Forward`,
+    local -Y) with its node's up (local +Z) at the top of the image; its
+    view matrix maps them onto view space (`space::look`).
   - FOV is vertical, in radians.
 
   Authored fields are value-initialized: the scene schema owns the defaults,
@@ -544,6 +548,59 @@ enum class EnvironmentComponentType : uint32_t {
   kPostProcessVolume = 5,
   kBackground = 6,
 };
+
+//! Where a sky light record's image-based lighting comes from, from the
+//! catalog the runtime scene shares; a 32-bit field on the wire.
+enum class SkyLightSource : uint32_t {
+// NOLINTNEXTLINE(*-macro-*)
+#define OXSCN_SKY_LIGHT_SOURCE(name, value) name = value,
+#include <Oxygen/Core/Meta/Scene/Environment.inc>
+#undef OXSCN_SKY_LIGHT_SOURCE // NOLINT
+};
+
+//! What a sky sphere record renders as the background, from the catalog the
+//! runtime scene shares; a 32-bit field on the wire.
+enum class SkySphereSource : uint32_t {
+// NOLINTNEXTLINE(*-macro-*)
+#define OXSCN_SKY_SPHERE_SOURCE(name, value) name = value,
+#include <Oxygen/Core/Meta/Scene/Environment.inc>
+#undef OXSCN_SKY_SPHERE_SOURCE // NOLINT
+};
+
+// clang-format off
+OXGN_DATA_NDAPI auto to_string(SkyLightSource value) noexcept -> std::string_view;
+OXGN_DATA_NDAPI auto to_string(SkySphereSource value) noexcept -> std::string_view;
+// clang-format on
+
+//! Whether `value` is one the catalog defines.
+[[nodiscard]] constexpr auto IsKnownSource(const SkyLightSource value) noexcept
+  -> bool
+{
+  switch (value) {
+// NOLINTNEXTLINE(*-macro-*)
+#define OXSCN_SKY_LIGHT_SOURCE(name, value) case SkyLightSource::name:
+#include <Oxygen/Core/Meta/Scene/Environment.inc>
+#undef OXSCN_SKY_LIGHT_SOURCE // NOLINT
+    return true;
+  }
+  return false;
+}
+
+//! Whether `value` is one the catalog defines.
+[[nodiscard]] constexpr auto IsKnownSource(const SkySphereSource value) noexcept
+  -> bool
+{
+  switch (value) {
+// NOLINTNEXTLINE(*-macro-*)
+#define OXSCN_SKY_SPHERE_SOURCE(name, value) case SkySphereSource::name:
+#include <Oxygen/Core/Meta/Scene/Environment.inc>
+#undef OXSCN_SKY_SPHERE_SOURCE // NOLINT
+    return true;
+  }
+  return false;
+}
+OXGN_DATA_NDAPI auto to_string(EnvironmentComponentType value) noexcept
+  -> std::string_view;
 
 //! Header for the trailing SceneEnvironment block.
 /*!
@@ -681,7 +738,6 @@ struct FogEnvironmentRecord {
     = { 1.0F, 1.0F, 1.0F };
   //! Cube texture binding in the scene's resource reference table.
   ResourceReferenceIndex inscattering_color_cubemap = kNoResourceReference;
-  std::array<uint32_t, 3> inscattering_color_cubemap_reserved {};
   float inscattering_color_cubemap_angle = 0.0F;
   float inscattering_texture_tint[3] = { 1.0F, 1.0F, 1.0F };
   float fully_directional_inscattering_color_distance = 0.0F;
@@ -708,7 +764,7 @@ struct FogEnvironmentRecord {
   uint32_t visible_in_real_time_sky_captures = 1;
 };
 #pragma pack(pop)
-static_assert(sizeof(FogEnvironmentRecord) == 232);
+static_assert(sizeof(FogEnvironmentRecord) == 220);
 
 //! Packed SkyLight (IBL) environment record.
 
@@ -721,15 +777,14 @@ struct SkyLightEnvironmentRecord {
 
   uint32_t enabled = 1; //!< Whether this system is enabled (boolean).
 
-  uint32_t source = 0; // SkyLightSource
+  SkyLightSource source = SkyLightSource::kCapturedScene;
 
   //! Cube texture binding in the scene's resource reference table.
   ResourceReferenceIndex cubemap = kNoResourceReference;
   //! Illuminance, in lux, that the source delivers on an upward-facing
   //! surface. The renderer scales the imported radiance to deliver it; zero
-  //! uses the radiance as imported. Former content wrote zero here.
+  //! uses the radiance as imported.
   float illuminance_lux = 0.0F;
-  std::array<uint32_t, 2> cubemap_reserved {};
 
   float intensity = 1.0F;
   float tint_rgb[3] = { 1.0F, 1.0F, 1.0F };
@@ -745,7 +800,7 @@ struct SkyLightEnvironmentRecord {
   float lower_hemisphere_blend_alpha = 1.0F;
 };
 #pragma pack(pop)
-static_assert(sizeof(SkyLightEnvironmentRecord) == 88);
+static_assert(sizeof(SkyLightEnvironmentRecord) == 80);
 
 //! Packed SkySphere environment record.
 #pragma pack(push, 1)
@@ -757,15 +812,14 @@ struct SkySphereEnvironmentRecord {
 
   uint32_t enabled = 1; //!< Whether this system is enabled (boolean).
 
-  uint32_t source = 0; // SkySphereSource
+  SkySphereSource source = SkySphereSource::kCubemap;
 
   //! Cube texture binding in the scene's resource reference table.
   ResourceReferenceIndex cubemap = kNoResourceReference;
   //! Illuminance, in lux, that the source delivers on an upward-facing
   //! surface. The renderer scales the imported radiance to deliver it; zero
-  //! uses the radiance as imported. Former content wrote zero here.
+  //! uses the radiance as imported.
   float illuminance_lux = 0.0F;
-  std::array<uint32_t, 2> cubemap_reserved {};
 
   float solid_color_rgb[3] = { 0.0F, 0.0F, 0.0F };
   float intensity = 1.0F;
@@ -773,7 +827,7 @@ struct SkySphereEnvironmentRecord {
   float tint_rgb[3] = { 1.0F, 1.0F, 1.0F };
 };
 #pragma pack(pop)
-static_assert(sizeof(SkySphereEnvironmentRecord) == 64);
+static_assert(sizeof(SkySphereEnvironmentRecord) == 56);
 
 //! Packed PostProcessVolume environment record.
 inline constexpr uint32_t kExposureExtensionVersion
@@ -830,30 +884,17 @@ struct PostProcessVolumeEnvironmentRecord {
   float auto_exposure_transition_distance_ev
     = engine::kDefaultExposureTransitionDistance;
   ResourceReferenceIndex auto_exposure_metering_mask = kNoResourceReference;
-  std::array<uint32_t, 3> exposure_reserved {};
   uint32_t curve_key_count = 0U;
-  std::array<uint32_t, 2> curve_reserved {};
 };
 #pragma pack(pop)
-static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 144U);
-static_assert(
-  offsetof(PostProcessVolumeEnvironmentRecord, exposure_extension_version)
-  == 104U);
-static_assert(
-  offsetof(PostProcessVolumeEnvironmentRecord, auto_exposure_black_influence)
-  == 108U);
-static_assert(offsetof(PostProcessVolumeEnvironmentRecord,
-                auto_exposure_transition_distance_ev)
-  == 112U);
-static_assert(
-  offsetof(PostProcessVolumeEnvironmentRecord, auto_exposure_metering_mask)
-  == 116U);
-static_assert(
-  offsetof(PostProcessVolumeEnvironmentRecord, exposure_reserved) == 120U);
-static_assert(
-  offsetof(PostProcessVolumeEnvironmentRecord, curve_key_count) == 132U);
-static_assert(
-  offsetof(PostProcessVolumeEnvironmentRecord, curve_reserved) == 136U);
+// clang-format off
+static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 124U);
+static_assert(offsetof(PostProcessVolumeEnvironmentRecord, exposure_extension_version) == 104U);
+static_assert(offsetof(PostProcessVolumeEnvironmentRecord, auto_exposure_black_influence) == 108U);
+static_assert(offsetof(PostProcessVolumeEnvironmentRecord, auto_exposure_transition_distance_ev) == 112U);
+static_assert(offsetof(PostProcessVolumeEnvironmentRecord, auto_exposure_metering_mask) == 116U);
+static_assert(offsetof(PostProcessVolumeEnvironmentRecord, curve_key_count) == 120U);
+// clang-format on
 
 //! Validate authored scalar domains before exposing or writing a packed record.
 [[nodiscard]] inline auto HasValidPostProcessVolumeValues(
@@ -1102,6 +1143,7 @@ struct SpotLightRecord {
   float luminous_flux_lm {}; //!< Luminous flux in lumens (lm)
 };
 #pragma pack(pop)
+// clang-format off
 static_assert(sizeof(SpotLightRecord) == 58);
 static_assert(offsetof(LightCommonRecord, casts_shadows) == 16);
 static_assert(offsetof(LightCommonRecord, shadow) == 17);
@@ -1115,25 +1157,22 @@ static_assert(offsetof(SpotLightRecord, source_radius) == 50);
 static_assert(offsetof(SpotLightRecord, luminous_flux_lm) == 54);
 static_assert(offsetof(DirectionalLightRecord, angular_size_radians) == 38);
 static_assert(offsetof(DirectionalLightRecord, atmosphere_light_slot) == 42);
-static_assert(
-  offsetof(DirectionalLightRecord, use_per_pixel_atmosphere_transmittance)
-  == 43);
-static_assert(
-  offsetof(DirectionalLightRecord, atmosphere_disk_luminance_scale_rgb) == 44);
+static_assert(offsetof(DirectionalLightRecord, use_per_pixel_atmosphere_transmittance) == 43);
+static_assert(offsetof(DirectionalLightRecord, atmosphere_disk_luminance_scale_rgb) == 44);
 static_assert(offsetof(DirectionalLightRecord, cascade_count) == 56);
 static_assert(offsetof(DirectionalLightRecord, cascade_distances) == 60);
 static_assert(offsetof(DirectionalLightRecord, distribution_exponent) == 76);
 static_assert(offsetof(DirectionalLightRecord, split_mode) == 80);
 static_assert(offsetof(DirectionalLightRecord, max_shadow_distance) == 81);
 static_assert(offsetof(DirectionalLightRecord, transition_fraction) == 85);
-static_assert(
-  offsetof(DirectionalLightRecord, distance_fadeout_fraction) == 89);
+static_assert(offsetof(DirectionalLightRecord, distance_fadeout_fraction) == 89);
 static_assert(offsetof(DirectionalLightRecord, intensity_lux) == 93);
+// clang-format on
 
 } // namespace oxygen::data::pak::world
 
-// clang-format off
 namespace oxygen::serio {
+// clang-format off
 template <> inline constexpr bool kIsRecord<data::ResourceReferenceIndex> = true;
 template <typename Tag> inline constexpr bool kIsRecord<data::StableId<Tag>> = true;
 template <> inline constexpr bool kIsRecord<data::pak::world::SceneDataTable> = true;
@@ -1157,8 +1196,8 @@ template <> inline constexpr bool kIsRecord<data::pak::world::SkySphereEnvironme
 template <> inline constexpr bool kIsRecord<data::pak::world::BackgroundEnvironmentRecord> = true;
 template <> inline constexpr bool kIsRecord<data::pak::world::LightShadowSettingsRecord> = true;
 template <> inline constexpr bool kIsRecord<data::pak::world::LightCommonRecord> = true;
-} // namespace oxygen::serio
 // clang-format on
+} // namespace oxygen::serio
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

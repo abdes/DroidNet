@@ -16,7 +16,7 @@ OXDAT_FORMAT_VERSION(
   kBufferResourceDescriptorVersion, buffer_descriptor, uint16_t, 5)
 OXDAT_ASSET_VERSION(kMaterialAssetVersion, kMaterial, material, 5)
 OXDAT_ASSET_VERSION(kGeometryAssetVersion, kGeometry, geometry, 6)
-OXDAT_ASSET_VERSION(kSceneAssetVersion, kScene, scene, 16)
+OXDAT_ASSET_VERSION(kSceneAssetVersion, kScene, scene, 17)
 OXDAT_ASSET_VERSION(kScriptAssetVersion, kScript, script, 5)
 OXDAT_ASSET_VERSION(kInputActionAssetVersion, kInputAction, input_action, 2)
 OXDAT_ASSET_VERSION(kInputMappingContextAssetVersion, kInputMappingContext,
@@ -25,9 +25,9 @@ OXDAT_ASSET_VERSION(
   kPhysicsMaterialAssetVersion, kPhysicsMaterial, physics_material, 2)
 OXDAT_ASSET_VERSION(
   kCollisionShapeAssetVersion, kCollisionShape, collision_shape, 2)
-OXDAT_ASSET_VERSION(kPhysicsSceneAssetVersion, kPhysicsScene, physics_scene, 2)
+OXDAT_ASSET_VERSION(kPhysicsSceneAssetVersion, kPhysicsScene, physics_scene, 3)
 OXDAT_FORMAT_VERSION(kBrowseIndexVersion, browse_index, uint32_t, 2)
-OXDAT_FORMAT_VERSION(kExposureExtensionVersion, exposure_extension, uint32_t, 1)
+OXDAT_FORMAT_VERSION(kExposureExtensionVersion, exposure_extension, uint32_t, 2)
 
 // Revisions of what each importer cooks. An importer's revision goes up when
 // the content it cooks from the same inputs changes while every format above
@@ -43,9 +43,9 @@ OXDAT_IMPORTER_REVISION(
   kPhysicsMaterialDescriptor, physics_material_descriptor, 1)
 OXDAT_IMPORTER_REVISION(
   kCollisionShapeDescriptor, collision_shape_descriptor, 1)
-OXDAT_IMPORTER_REVISION(kGeometryDescriptor, geometry_descriptor, 4)
+OXDAT_IMPORTER_REVISION(kGeometryDescriptor, geometry_descriptor, 5)
 OXDAT_IMPORTER_REVISION(kSceneDescriptor, scene_descriptor, 1)
 OXDAT_IMPORTER_REVISION(kScriptAsset, script, 1)
 OXDAT_IMPORTER_REVISION(kScriptingSidecar, script_sidecar, 1)
-OXDAT_IMPORTER_REVISION(kPhysicsSidecar, physics_sidecar, 2)
+OXDAT_IMPORTER_REVISION(kPhysicsSidecar, physics_sidecar, 3)
 OXDAT_IMPORTER_REVISION(kInput, input, 1)

@@ -19,6 +19,7 @@
 
 #include <Oxygen/Content/Internal/Generated.UnicodeTables.h>
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Data/MountName.h>
 
 namespace oxygen::content {
 
@@ -164,16 +165,6 @@ namespace {
       && upper[3] >= '1' && upper[3] <= '9';
   }
 
-  auto IsIdentifierStart(const char c) -> bool
-  {
-    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
-  }
-
-  auto IsIdentifierChar(const char c) -> bool
-  {
-    return IsIdentifierStart(c) || (c >= '0' && c <= '9') || c == '-';
-  }
-
   auto IsDerivedContent(const std::string_view segment) -> bool
   {
     return segment.starts_with('.') || segment == "SourceMedia";
@@ -286,9 +277,7 @@ auto ValidateVirtualPathSegment(const std::string_view segment)
 auto ValidateMountName(const std::string_view mount)
   -> std::optional<VirtualPathError>
 {
-  const auto name = mount.starts_with('.') ? mount.substr(1) : mount;
-  if (name.empty() || !IsIdentifierStart(name.front())
-    || !std::ranges::all_of(name.substr(1), IsIdentifierChar)) {
+  if (!data::IsMountNameSpelling(mount)) {
     return VirtualPathError::kInvalidMountName;
   }
   if (mount.size() > kMaxVirtualPathSegmentBytes) {

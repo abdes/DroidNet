@@ -784,6 +784,12 @@ is used internally:
     | Vehicle wheel  | Jolt: `mWheelCastor` (castor angle in radians, affecting self-aligning torque) / PhysX: —                                                                                                                 |
     | Aggregate      | —                                                                                                                                                                                                         |
 
+    The sidecar records the backend it was cooked for once, in its
+    descriptor (`PhysicsSceneAssetDesc::backend`, never `kNone`): every
+    union of its records holds that backend's arm. The loader refuses a
+    sidecar without a backend, and reserved bytes of the arm in use that are
+    not zero (`HasZeroReserves(scalars, backend)`).
+
   **Backend-cooked binary artifacts** (one blob per asset, tagged by format):
 
   - **Non-analytic shape binary** — cooked collision geometry for a single

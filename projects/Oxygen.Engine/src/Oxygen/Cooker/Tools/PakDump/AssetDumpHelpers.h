@@ -23,6 +23,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
@@ -30,12 +31,6 @@
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::pakdump::asset_dump_helpers {
-
-[[nodiscard]] inline auto GetAssetTypeName(
-  const oxygen::data::AssetType asset_type) -> const char*
-{
-  return oxygen::data::to_string(asset_type);
-}
 
 inline auto PrintAssetKey(const oxygen::data::AssetKey& key, DumpContext& ctx)
   -> void
@@ -125,9 +120,7 @@ inline auto PrintAssetMetadata(std::ostream& out,
   const oxygen::data::pak::core::AssetDirectoryEntry& e) -> void
 {
   out << "    --- asset metadata ---\n";
-  PrintUtils::Field(out, "Asset Type",
-    std::string(GetAssetTypeName(e.asset_type)) + " ("
-      + nostd::to_string(e.asset_type) + ")");
+  PrintUtils::Field(out, "Asset Type", toolkit::EnumString(e.asset_type));
   PrintUtils::Field(out, "Entry Offset", ToHexString(e.entry_offset));
   PrintUtils::Field(out, "Desc Offset", ToHexString(e.desc_offset));
   PrintUtils::Field(out, "Desc Size", std::to_string(e.desc_size) + " bytes");

@@ -63,7 +63,6 @@
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/PakFileSource.h>
-#include <Oxygen/Content/Internal/PakVerification.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/Internal/PayloadBudget.h>
 #include <Oxygen/Content/Internal/PhysicsBindings.h>
@@ -102,6 +101,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -123,11 +123,14 @@
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/TaskCancelledException.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/AsyncDevice.h>
 #include <Oxygen/Serio/AsyncFile.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/FileLock.h>
+#include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Types.h>
 
 using oxygen::content::AssetLoader;
 using oxygen::content::LoaderContext;
@@ -289,6 +292,66 @@ inline auto IsResourceTypeId(const oxygen::TypeId type_id) -> bool
   static const auto ids = MakeTypeIdArray(oxygen::content::ResourceTypeList {});
   return std::ranges::any_of(
     ids, [type_id](const auto id) -> auto { return id == type_id; });
+}
+} // namespace
+
+namespace {
+//! Verifies the CRC32 of the pak `file` opened through the loader's driver,
+//! awaiting its reads on the loop.
+/*!
+ Reads the footer, checks it (`PakFile::CheckFooter`), and hashes the whole
+ file except the footer's CRC field with `serio::AsyncComputeCrc32`, so no
+ thread blocks to read the pak. A malformed footer is refused before its CRC
+ field is read. A verified mount refuses a pak without a CRC32.
+
+ The mount maps the pak's metadata from the same handle afterwards
+ (`PakFileSource`), so the file verified is the file served.
+
+ @throw data::CookedOpenError `kTooSmall` for a file shorter than a footer,
+   the footer's defect for a malformed footer, `kNoIntegrityData` for a pak
+   without a CRC32, `kDigestMismatch` for a CRC32 mismatch.
+ @throw std::system_error With the device's error, when the file's size or
+   bytes cannot be read.
+*/
+auto VerifyPakAsync(const oxygen::serio::AsyncFile& file,
+  const std::filesystem::path& path) -> oxygen::co::Co<>
+{
+  using oxygen::data::CookedDefect;
+  using oxygen::data::CookedOpenError;
+  using oxygen::data::pak::core::PakFooter;
+  namespace serio = oxygen::serio;
+
+  const auto size = file.Size();
+  if (!size) {
+    throw std::system_error(size.error(), "size of '" + path.string() + "'");
+  }
+  const auto holds_footer = size->get() >= sizeof(PakFooter);
+  if (!holds_footer) {
+    throw CookedOpenError(
+      CookedDefect::kTooSmall, "Pak is smaller than its footer");
+  }
+  auto footer = PakFooter {};
+  if (const auto read = co_await serio::AsyncReadExactlyAt(file,
+        serio::ByteOffset { size->get() - sizeof(PakFooter) },
+        std::as_writable_bytes(std::span { &footer, 1 }));
+    !read) {
+    throw std::system_error(
+      read.error(), "read the footer of '" + path.string() + "'");
+  }
+  PakFile::CheckFooter(footer, size->get());
+  const auto check = PakFile::CrcCheckOf(footer, size->get());
+  if (!check) {
+    LOG_F(ERROR, "Verified open of a pak without CRC32 path={}", path.string());
+    throw CookedOpenError(
+      CookedDefect::kNoIntegrityData, "Pak holds no CRC32 to verify");
+  }
+  const auto crc = co_await serio::AsyncComputeCrc32(
+    file, std::vector<serio::ByteRange> { check->crc_field });
+  if (!crc) {
+    throw std::system_error(
+      crc.error(), "read '" + path.string() + "' for CRC32");
+  }
+  PakFile::CheckCrc32(*check, *crc, path);
 }
 } // namespace
 
@@ -1255,7 +1318,7 @@ auto AssetLoader::PrepareMountSetAsync(
       throw std::system_error(file.error(), "open '" + path.string() + "'");
     }
     if (verify_content) {
-      co_await internal::VerifyPakAsync(*file, path);
+      co_await VerifyPakAsync(*file, path);
     }
     co_return std::move(file).value();
   };
@@ -2789,10 +2852,12 @@ auto AssetLoader::ResolveTextureResourceKey(const data::AssetKey& texture_key)
 
 auto AssetLoader::MakeTextureResourceKeyForAsset(
   const data::Asset& context_asset,
-  const data::ResourceReferenceIndex reference) -> std::optional<ResourceKey>
+  const data::ResourceReferenceIndex resource_index)
+  -> std::optional<ResourceKey>
 {
   AssertOwningThread();
-  const auto resolved = context_asset.GetReferences().ResolveTexture(reference);
+  const auto resolved
+    = context_asset.GetReferences().ResolveTexture(resource_index);
   if (!resolved) {
     return {};
   }
@@ -2803,12 +2868,12 @@ auto AssetLoader::MakeTextureResourceKeyForAsset(
   if (index == nullptr) {
     return {};
   }
-  const auto resource_index = *index;
+  const auto table_index = *index;
 
-  if (resource_index == data::pak::core::kNoResourceIndex) {
+  if (table_index == data::pak::core::kNoResourceIndex) {
     return std::nullopt;
   }
-  if (resource_index == data::pak::core::kErrorTextureResourceIndex) {
+  if (table_index == data::pak::core::kErrorTextureResourceIndex) {
     return ResourceKey::kError;
   }
   const auto source_id = ResolveAssetSourceId(context_asset);
@@ -2817,21 +2882,22 @@ auto AssetLoader::MakeTextureResourceKeyForAsset(
   }
   const auto source = ResolveSourceForId(*source_id);
   const auto* table = source != nullptr ? source->GetTextureTable() : nullptr;
-  if (table == nullptr || !table->IsValidKey(resource_index)) {
+  if (table == nullptr || !table->IsValidKey(table_index)) {
     return std::nullopt;
   }
   constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
     IndexOf<data::TextureResource, ResourceTypeList>::value);
-  return InternResourceKey(*source_id, kTextureTypeIndex, resource_index);
+  return InternResourceKey(*source_id, kTextureTypeIndex, table_index);
 }
 
 auto AssetLoader::MakeScriptResourceKeyForAsset(
   const data::Asset& context_asset,
-  const data::ResourceReferenceIndex reference) -> std::optional<ResourceKey>
+  const data::ResourceReferenceIndex resource_index)
+  -> std::optional<ResourceKey>
 {
   AssertOwningThread();
   const auto resolved = context_asset.GetReferences().ResolveResource(
-    reference, data::ResourceKind::kScript);
+    resource_index, data::ResourceKind::kScript);
   if (!resolved) {
     return {};
   }
@@ -2839,7 +2905,7 @@ auto AssetLoader::MakeScriptResourceKeyForAsset(
   if (!index) {
     return {};
   }
-  const auto resource_index = *index;
+  const auto table_index = *index;
 
   const internal::ScriptQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
@@ -2860,15 +2926,15 @@ auto AssetLoader::MakeScriptResourceKeyForAsset(
     },
   };
   return script_query_service_->MakeScriptResourceKeyForAsset(
-    context_asset.GetAssetKey(), resource_index, callbacks);
+    context_asset.GetAssetKey(), table_index, callbacks);
 }
 
 auto AssetLoader::ReadScriptResourceForAsset(const data::Asset& context_asset,
-  const data::ResourceReferenceIndex reference) const
+  const data::ResourceReferenceIndex resource_index) const
   -> std::shared_ptr<const data::ScriptResource>
 {
   const auto resolved = context_asset.GetReferences().ResolveResource(
-    reference, data::ResourceKind::kScript);
+    resource_index, data::ResourceKind::kScript);
   if (!resolved) {
     return {};
   }
@@ -2876,7 +2942,7 @@ auto AssetLoader::ReadScriptResourceForAsset(const data::Asset& context_asset,
   if (!index) {
     return {};
   }
-  const auto resource_index = *index;
+  const auto table_index = *index;
 
   const internal::ScriptQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
@@ -2891,7 +2957,7 @@ auto AssetLoader::ReadScriptResourceForAsset(const data::Asset& context_asset,
     .make_script_resource_key = {},
   };
   return script_query_service_->ReadScriptResourceForAsset(
-    context_asset.GetAssetKey(), resource_index, callbacks);
+    context_asset.GetAssetKey(), table_index, callbacks);
 }
 
 auto AssetLoader::MakePhysicsResourceKeyForAsset(

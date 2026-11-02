@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/PackedPak.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -77,5 +78,10 @@ private:
   uint16_t content_version_ = 1U;
   std::optional<data::SourceKey> identity_;
 };
+
+//! The bytes of the browse index `browse` describes, encoded on its own by
+//! the product's encoder, for tests of browse decoding.
+[[nodiscard]] auto EncodeBrowseIndex(
+  const content::pak::PakBrowseIndexPlan& browse) -> std::vector<std::byte>;
 
 } // namespace oxygen::cooker::testing

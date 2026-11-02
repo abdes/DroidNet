@@ -36,7 +36,7 @@ public:
   //! Takes a table's bytes.
   /*!
    @throw std::invalid_argument if a non-empty table does not start and end
-     with `\0`.
+     with `\0`, or is not UTF-8.
   */
   OXGN_DATA_API explicit DescriptorStrings(std::vector<char> table);
 
@@ -56,14 +56,16 @@ public:
     const pak::core::DescriptorStringTable& table, std::size_t size) noexcept
     -> bool;
 
-  //! Resolves the string at `offset`; nullopt when it is not in the table.
+  //! Resolves the string that starts at `offset`; nullopt when no string of
+  //! the table starts there, such as an offset past it or into a string.
   OXGN_DATA_NDAPI auto TryGet(
     pak::core::StringTableOffsetT offset) const noexcept
     -> std::optional<std::string_view>;
 
   //! Resolves the string at `offset`.
   /*!
-   @throw std::invalid_argument when the offset is not in the table.
+   @throw std::invalid_argument when no string of the table starts at
+     `offset`.
   */
   OXGN_DATA_NDAPI auto Get(pak::core::StringTableOffsetT offset) const
     -> std::string_view;
@@ -94,7 +96,7 @@ public:
 
   //! Returns the offset of `value`, adding it on first use.
   /*!
-   @throw std::invalid_argument if `value` holds `\0`.
+   @throw std::invalid_argument if `value` holds `\0` or is not UTF-8.
    @throw std::length_error if the table would exceed the 32-bit offset range.
   */
   OXGN_DATA_NDAPI auto Add(std::string_view value)

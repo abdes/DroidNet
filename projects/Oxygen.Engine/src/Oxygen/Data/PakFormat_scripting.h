@@ -8,7 +8,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <span>
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -100,6 +99,9 @@ static_assert(sizeof(ScriptAssetParamValue) == 17);
  `kUnsetNodeParam` in the node index, or a nil key with the declared asset
  kind.
 
+ A `kBool` value is `as_bool`, 0 or 1: records hold no C++ `bool`, which a
+ byte other than 0 or 1 would make undefined behavior to read.
+
  `key_offset` and a `kString` value's `as_string_offset` are offsets into the
  string table of the descriptor that holds the record: the script descriptor
  for declarations, the scene descriptor for slot overrides.
@@ -110,7 +112,7 @@ struct ScriptParamRecord {
   core::StringTableOffsetT key_offset; // Parameter name
   ScriptParamType type = ScriptParamType::kNone;
   union {
-    bool as_bool = false;
+    uint8_t as_bool = 0;
     int32_t as_int32;
     float as_float;
     float as_vec[4]; // Used for Vec2, Vec3, Vec4
@@ -121,6 +123,9 @@ struct ScriptParamRecord {
 };
 #pragma pack(pop)
 static_assert(sizeof(ScriptParamRecord) == 25);
+static_assert(offsetof(ScriptParamRecord, key_offset) == 0);
+static_assert(offsetof(ScriptParamRecord, type) == 4);
+static_assert(offsetof(ScriptParamRecord, value) == 8);
 
 //! Whether `record` holds a known type, a key, and a value its type allows;
 //! loading checks this for declarations and overrides alike.
@@ -136,10 +141,7 @@ static_assert(sizeof(ScriptParamRecord) == 25);
       && asset_type <= AssetType::kMaxAssetType;
   }
   if (record.type == ScriptParamType::kBool) {
-    // Read from bytes, the value may hold any byte; only 0 and 1 are a bool.
-    return std::to_integer<uint8_t>(
-             std::as_bytes(std::span { &record.value, 1 }).front())
-      <= 1U;
+    return record.value.as_bool <= 1U;
   }
   return true;
 }
@@ -225,14 +227,14 @@ static_assert(sizeof(ScriptAssetDesc) == 83);
 
 } // namespace oxygen::data::pak::scripting
 
-// clang-format off
 namespace oxygen::serio {
+// clang-format off
 template <> inline constexpr bool kIsRecord<data::pak::scripting::ScriptingComponentRecord> = true;
 template <> inline constexpr bool kIsRecord<data::pak::scripting::ScriptSlotRecord> = true;
 template <> inline constexpr bool kIsRecord<data::pak::scripting::ScriptResourceDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::scripting::ScriptAssetDesc> = true;
-} // namespace oxygen::serio
 // clang-format on
+} // namespace oxygen::serio
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

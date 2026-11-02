@@ -956,7 +956,7 @@
         },
         "source": {
           "type": "integer",
-          "minimum": 0
+          "enum": [0, 1]
         },
         "cubemap_ref": {
           "allOf": [

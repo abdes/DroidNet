@@ -67,13 +67,17 @@ auto Material(const std::string_view virtual_path) -> IndexedAsset
   };
 }
 
-//! A resource data file carries no digest: each row of its table does.
+//! A resource data file carries no digest: each row of its table does. A
+//! resource table holds one row.
 auto File(const FileKind kind, const std::string_view relpath) -> IndexedFile
 {
+  const auto is_table
+    = oxygen::data::loose_cooked::DataFileKindOf(kind).has_value();
   return {
     .kind = kind,
     .relpath = std::string(relpath),
-    .size = relpath.size(),
+    .size = is_table ? oxygen::data::loose_cooked::ResourceRowSize(kind)
+                     : relpath.size(),
     .sha256 = oxygen::data::loose_cooked::IsResourceDataFile(kind)
       ? oxygen::base::Sha256Digest {}
       : DigestOf(relpath),

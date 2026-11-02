@@ -166,6 +166,9 @@ NOLINT_TEST(DescriptorDefectsTest, SidecarDefectsBreakOneRule)
   DescriptorDefects::SetSidecarScene(moved, Key("/Game/Other.oscene"));
   auto counted = valid;
   DescriptorDefects::SetSidecarNodeCount(counted, 2U);
+  auto unbacked = valid;
+  DescriptorDefects::SetSidecarBackend(
+    unbacked, physics::PhysicsBackend::kNone);
   auto hashed = valid;
   DescriptorDefects::CorruptSidecarSceneHash(hashed);
   auto typed = valid;
@@ -177,6 +180,8 @@ NOLINT_TEST(DescriptorDefectsTest, SidecarDefectsBreakOneRule)
 
   EXPECT_EQ(read(moved).GetTargetSceneKey(), Key("/Game/Other.oscene"));
   EXPECT_EQ(read(counted).GetTargetNodeCount(), 2U);
+  EXPECT_EQ(read(valid).GetBackend(), physics::PhysicsBackend::kJolt);
+  EXPECT_EQ(read(unbacked).GetBackend(), physics::PhysicsBackend::kNone);
   EXPECT_FALSE(std::ranges::equal(read(hashed).GetTargetSceneContentHash(),
     read(valid).GetTargetSceneContentHash()));
   EXPECT_THROW(static_cast<void>(read(typed)), std::runtime_error);

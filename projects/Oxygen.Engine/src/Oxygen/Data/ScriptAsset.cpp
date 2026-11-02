@@ -46,7 +46,7 @@ auto ToScriptParam(const pak::scripting::ScriptParamRecord& record,
   const auto& value = record.value;
   switch (record.type) {
   case ScriptParamType::kBool:
-    return value.as_bool;
+    return value.as_bool != 0U;
   case ScriptParamType::kInt32:
     return value.as_int32;
   case ScriptParamType::kFloat:
@@ -128,7 +128,7 @@ auto MakeScriptParamRecord(const std::string_view key, const ScriptParam& value,
       using T = std::decay_t<decltype(v)>;
       if constexpr (std::is_same_v<T, bool>) {
         record.type = ScriptParamType::kBool;
-        out.as_bool = v;
+        out.as_bool = v ? uint8_t { 1U } : uint8_t { 0U };
       } else if constexpr (std::is_same_v<T, int32_t>) {
         record.type = ScriptParamType::kInt32;
         out.as_int32 = v;

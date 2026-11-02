@@ -97,6 +97,10 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
   default:
     throw std::runtime_error("Collision shape kind is invalid");
   }
+  const auto reserves_zero = physics::HasZeroReserves(descriptor);
+  if (!reserves_zero) {
+    throw std::runtime_error("Collision shape reserved bytes are not zero");
+  }
   if (descriptor.cooked_shape_ref.payload_type != required_payload
     || (required_payload != physics::ShapePayloadType::kInvalid
       && descriptor.cooked_shape_ref.payload_asset_key.IsNil())
@@ -137,6 +141,11 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
         const auto child
           = serio::CopyAt<physics::CompoundShapeChildDesc>(*child_bytes);
         CheckLoaderResult(child, "collision shape", "compound child");
+        const auto child_reserves_zero = physics::HasZeroReserves(*child);
+        if (!child_reserves_zero) {
+          throw std::runtime_error(
+            "Compound child reserved bytes are not zero");
+        }
         keys.push_back({
           .key = child->payload_asset_key,
           .kind = data::KeyReferenceKind::kPhysicsResource,

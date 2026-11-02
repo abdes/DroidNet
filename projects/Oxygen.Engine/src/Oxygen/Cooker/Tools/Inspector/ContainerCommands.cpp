@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
-#include <cstdint>
 #include <filesystem>
 #include <iomanip>
 #include <ios>
@@ -24,13 +23,12 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/ContainerCommands.h>
 #include <Oxygen/Cooker/Tools/Inspector/CookedRootCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/DumpFormat.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 
 namespace oxygen::content::inspection {
@@ -122,8 +120,7 @@ namespace {
 
     for (const auto& e : entries) {
       os << "- key='" << oxygen::data::to_string(e.key) << "'";
-      os << " type='" << nostd::to_string(e.type) << "'("
-         << static_cast<unsigned>(e.type) << ")'";
+      os << " type=" << toolkit::EnumString(e.type);
 
       if (!e.virtual_path.empty()) {
         os << " vpath='" << e.virtual_path << "'";

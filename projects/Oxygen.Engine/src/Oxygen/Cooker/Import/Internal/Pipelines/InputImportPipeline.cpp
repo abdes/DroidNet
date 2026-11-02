@@ -47,7 +47,6 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -61,6 +60,7 @@ namespace {
   using data::pak::input::InputActionAssetDesc;
   using data::pak::input::InputActionAssetFlags;
   using data::pak::input::InputActionMappingRecord;
+  using data::pak::input::InputActionValueType;
   using data::pak::input::InputMappingContextAssetDesc;
   using data::pak::input::InputMappingContextFlags;
   using data::pak::input::InputTriggerAuxRecord;
@@ -71,7 +71,7 @@ namespace {
 
   struct DeclaredAction final {
     std::string name;
-    uint8_t value_type = 0;
+    InputActionValueType value_type = InputActionValueType::kBool;
     bool consumes_input = false;
     bool cumulative = false;
     data::AssetKey key;
@@ -197,16 +197,16 @@ namespace {
   }
 
   [[nodiscard]] auto ParseActionType(std::string_view value)
-    -> std::optional<uint8_t>
+    -> std::optional<InputActionValueType>
   {
     if (value == "bool") {
-      return static_cast<uint8_t>(input::ActionValueType::kBool);
+      return InputActionValueType::kBool;
     }
     if (value == "axis1d") {
-      return static_cast<uint8_t>(input::ActionValueType::kAxis1D);
+      return InputActionValueType::kAxis1D;
     }
     if (value == "axis2d") {
-      return static_cast<uint8_t>(input::ActionValueType::kAxis2D);
+      return InputActionValueType::kAxis2D;
     }
     return std::nullopt;
   }

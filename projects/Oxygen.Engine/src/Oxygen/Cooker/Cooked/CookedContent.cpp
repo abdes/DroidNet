@@ -55,8 +55,8 @@ namespace {
 
   namespace fs = std::filesystem;
   namespace core = data::pak::core;
+  using data::CookedDefect;
   using data::CookedOpenError;
-  using data::CookedOpenFailure;
   using data::loose_cooked::FileKind;
   using lc::FileIntegrity;
   using lc::LooseCookedIndex;
@@ -76,16 +76,15 @@ namespace {
     return static_cast<size_t>(kind);
   }
 
-  auto Corrupt(const fs::path& path, const std::string_view what)
-    -> CookedOpenError
+  auto Corrupt(const CookedDefect defect, const fs::path& path,
+    const std::string_view what) -> CookedOpenError
   {
-    return { CookedOpenFailure::kCorrupt,
-      "'" + path.generic_string() + "': " + std::string(what) };
+    return { defect, "'" + path.generic_string() + "': " + std::string(what) };
   }
 
   auto Unreadable(const fs::path& path) -> CookedOpenError
   {
-    return Corrupt(path, "cannot be read");
+    return Corrupt(CookedDefect::kTruncated, path, "cannot be read");
   }
 
   auto Size(const serio::AnyDevice& device, const fs::path& path) -> uint64_t
@@ -144,8 +143,8 @@ namespace {
         try {
           return data::loose_cooked::ReadResourcePayloads(
             *table.kind, rows->Bytes());
-        } catch (const std::invalid_argument& error) {
-          throw Corrupt(table_path, error.what());
+        } catch (const CookedOpenError& error) {
+          throw Corrupt(error.Defect(), table_path, error.what());
         }
       }();
       const auto data_path = root / data_file->relative_path;
@@ -153,12 +152,14 @@ namespace {
         payloads, OpenFile(storage, data_path));
       if (!failures.empty()) {
         const auto& first = failures.front();
-        throw std::runtime_error("'" + data_path.generic_string()
-          + "': the resource of row " + std::to_string(first.row)
-          + (first.reason
-                == data::loose_cooked::ResourcePayloadFailure::kOutOfBounds
-              ? " lies outside the file"
-              : " does not have the SHA-256 of its table row"));
+        const auto out_of_bounds = first.reason
+          == data::loose_cooked::ResourcePayloadFailure::kOutOfBounds;
+        throw Corrupt(out_of_bounds ? CookedDefect::kOutOfBounds
+                                    : CookedDefect::kDigestMismatch,
+          data_path,
+          "the resource of row " + std::to_string(first.row)
+            + (out_of_bounds ? " lies outside the file"
+                             : " does not have the SHA-256 of its table row"));
       }
     }
   }
@@ -232,7 +233,7 @@ namespace {
   {
     const auto index_path = root / kIndexFileName;
     if (storage.KindOf(index_path) != PathKind::kFile) {
-      throw CookedOpenError(CookedOpenFailure::kWrongFormat,
+      throw CookedOpenError(CookedDefect::kAbsent,
         "'" + root.generic_string() + "' holds no "
           + std::string(kIndexFileName));
     }
@@ -240,14 +241,8 @@ namespace {
     if (!bytes) {
       throw Unreadable(index_path);
     }
-    try {
-      // The index takes the bytes it was read into; nothing is copied.
-      return LooseCookedIndex::LoadFromBytes(std::move(*bytes));
-    } catch (const CookedOpenError&) {
-      throw;
-    } catch (const std::exception& error) {
-      throw Corrupt(index_path, error.what());
-    }
+    // The index takes the bytes it was read into; nothing is copied.
+    return LooseCookedIndex::LoadFromBytes(std::move(*bytes));
   }
 
   auto OpenPak(const CookerStorageReader& storage, const fs::path& path)
@@ -255,15 +250,9 @@ namespace {
   {
     auto device = storage.Open(path);
     if (!device) {
-      throw Unreadable(path);
+      throw Corrupt(CookedDefect::kAbsent, path, "cannot be opened as a pak");
     }
-    try {
-      return std::make_unique<PakFile>(std::move(device).value(), path);
-    } catch (const CookedOpenError&) {
-      throw;
-    } catch (const std::exception& error) {
-      throw Corrupt(path, error.what());
-    }
+    return std::make_unique<PakFile>(std::move(device).value(), path);
   }
 
   //! Whether the script descriptor at `descriptor` names an external source.
@@ -380,7 +369,8 @@ CookedResourceTable::CookedResourceTable(const TableKind kind,
 {
   const auto row_size = RowSize(kind);
   if (rows_.range.count.get() % row_size != 0U) {
-    throw Corrupt(rows_.file, "the resource table holds a partial row");
+    throw Corrupt(CookedDefect::kWrongRowSize, rows_.file,
+      "the resource table holds a partial row");
   }
   row_count_ = static_cast<uint32_t>(rows_.range.count.get() / row_size);
 }
@@ -497,7 +487,8 @@ auto CookedContent::Impl::LoadLoose() -> void
   for (const auto& key : index.GetAllAssetKeys()) {
     const auto relpath = index.FindDescriptorRelPath(key);
     if (!relpath) {
-      throw Corrupt(root, "an asset has no descriptor");
+      throw Corrupt(
+        CookedDefect::kMissingPart, root, "an asset has no descriptor");
     }
     const auto file = root / fs::path(std::string(*relpath));
     auto size = index.FindDescriptorSize(key).value_or(0U);
@@ -577,21 +568,25 @@ auto CookedContent::Impl::LoadLoose() -> void
       const auto path = root / file.relative_path;
       const auto device = OpenFile(*storage, path);
       if (Size(device, path) != data::kTextureResourceDescriptorSize) {
-        throw Corrupt(path, "is not a texture descriptor");
+        throw Corrupt(
+          CookedDefect::kSizeMismatch, path, "is not a texture descriptor");
       }
       auto bytes = std::vector<std::byte>(data::kTextureResourceDescriptorSize);
       ReadAt(device, path, 0, bytes);
       const auto decoded = data::DecodeTextureResourceDescriptor(bytes);
       if (!decoded) {
-        throw Corrupt(path, decoded.error());
+        throw Corrupt(decoded.error().Defect(), path, decoded.error().what());
       }
-      if (decoded->index == core::kNoResourceIndex
-        || decoded->index.get() >= textures.RowCount()) {
-        throw Corrupt(path, "names a row outside the texture table");
+      const auto row_in_table = decoded->index != core::kNoResourceIndex
+        && decoded->index.get() < textures.RowCount();
+      if (!row_in_table) {
+        throw Corrupt(CookedDefect::kOutOfBounds, path,
+          "names a row outside the texture table");
       }
       const auto row = textures.RowBytes(decoded->index);
       if (std::memcmp(row.data(), &decoded->descriptor, row.size()) != 0) {
-        throw Corrupt(path, "disagrees with its texture table row");
+        throw Corrupt(CookedDefect::kInconsistent, path,
+          "disagrees with its texture table row");
       }
       named_textures.push_back({
         .virtual_path = file.virtual_path,
@@ -625,7 +620,8 @@ auto CookedContent::Impl::LoadPak() -> void
     const auto listed = std::ranges::find(
       catalog.entries, entry.asset_key, &data::PakCatalogEntry::asset_key);
     if (listed == catalog.entries.end()) {
-      throw Corrupt(source.path, "the catalog does not list a pak asset");
+      throw Corrupt(CookedDefect::kInconsistent, source.path,
+        "the catalog does not list a pak asset");
     }
     const auto path = paths.find(entry.asset_key);
     assets.push_back({
@@ -660,7 +656,8 @@ auto CookedContent::Impl::LoadPak() -> void
       continue;
     }
     if (table->entry_size != CookedResourceTable::RowSize(kind)) {
-      throw Corrupt(source.path, "a resource table has an unknown row size");
+      throw Corrupt(CookedDefect::kWrongRowSize, source.path,
+        "a resource table has an unknown row size");
     }
     tables.emplace_back(kind, *storage, make_observer(&pak->Device()),
       StoredBytes {
@@ -814,7 +811,7 @@ auto CookedContent::Descriptor(const data::AssetKey& key) const
     // after the index recorded it.
     const auto size = FileSize(*impl_->storage, stored.file);
     if (size != stored.range.count.get()) {
-      throw Corrupt(stored.file,
+      throw Corrupt(CookedDefect::kSizeMismatch, stored.file,
         "has " + std::to_string(size)
           + " bytes, but the index records its size as "
           + std::to_string(stored.range.count.get()));
@@ -870,20 +867,24 @@ auto CookedContent::VerifyStorage(const lc::IntegrityCheck check) const -> void
   for (const auto& file : impl_->inventory) {
     const auto path = root / file.relative_path;
     if (impl_->storage->KindOf(path) != PathKind::kFile) {
-      throw std::runtime_error("'" + path.generic_string() + "' is missing");
+      throw Corrupt(CookedDefect::kMissingPart, path, "is missing");
     }
     const auto device = OpenFile(*impl_->storage, path);
     if (Size(device, path) != file.size) {
-      throw std::runtime_error(
-        "'" + path.generic_string() + "' does not have its indexed size");
+      throw Corrupt(
+        CookedDefect::kSizeMismatch, path, "does not have its indexed size");
     }
-    if (check == lc::IntegrityCheck::kFull
-      && !(file.kind.has_value()
-        && data::loose_cooked::IsResourceDataFile(*file.kind))) {
+    // A resource data file has no digest of its own: its rows do.
+    const auto has_own_digest = !(file.kind.has_value()
+      && data::loose_cooked::IsResourceDataFile(*file.kind));
+    if (check == lc::IntegrityCheck::kFull && has_own_digest) {
       const auto digest = serio::ComputeSha256(device);
-      if (!digest || *digest != file.sha256) {
-        throw std::runtime_error(
-          "'" + path.generic_string() + "' does not have its indexed digest");
+      if (!digest) {
+        throw Unreadable(path);
+      }
+      if (*digest != file.sha256) {
+        throw Corrupt(CookedDefect::kDigestMismatch, path,
+          "does not have its indexed digest");
       }
     }
   }
@@ -894,14 +895,17 @@ auto CookedContent::VerifyStorage(const lc::IntegrityCheck check) const -> void
     const auto& stored = impl_->descriptors.at(i);
     const auto device = OpenFile(*impl_->storage, stored.file);
     if (Size(device, stored.file) != stored.range.count.get()) {
-      throw std::runtime_error("'" + stored.file.generic_string()
-        + "' does not have its indexed size");
+      throw Corrupt(CookedDefect::kSizeMismatch, stored.file,
+        "does not have its indexed size");
     }
     if (check == lc::IntegrityCheck::kFull) {
       const auto digest = serio::ComputeSha256(device);
-      if (!digest || *digest != impl_->assets.at(i).descriptor_sha256) {
-        throw std::runtime_error("'" + stored.file.generic_string()
-          + "' does not have its indexed digest");
+      if (!digest) {
+        throw Unreadable(stored.file);
+      }
+      if (*digest != impl_->assets.at(i).descriptor_sha256) {
+        throw Corrupt(CookedDefect::kDigestMismatch, stored.file,
+          "does not have its indexed digest");
       }
     }
   }

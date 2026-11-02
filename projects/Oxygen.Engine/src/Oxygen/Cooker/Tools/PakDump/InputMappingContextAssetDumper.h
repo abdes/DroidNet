@@ -19,6 +19,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/ByteReader.h>
 
@@ -60,7 +61,7 @@ public:
         *data, desc.header, desc.header.name_offset),
       4);
     ctx.Out() << "    --- Input Mapping Context Descriptor Fields ---\n";
-    PrintUtils::Field(ctx.Out(), "Flags", nostd::to_string(desc.flags), 8);
+    PrintUtils::Field(ctx.Out(), "Flags", toolkit::EnumString(desc.flags), 8);
     PrintUtils::Field(ctx.Out(), "Mappings Count", desc.mappings.count, 8);
     PrintUtils::Field(
       ctx.Out(), "Mappings Entry Size", desc.mappings.entry_size, 8);
@@ -139,7 +140,7 @@ public:
             record.trigger_start_index + record.trigger_count),
           10);
         PrintUtils::Field(
-          ctx.Out(), "Flags", nostd::to_string(record.flags), 10);
+          ctx.Out(), "Flags", toolkit::EnumString(record.flags), 10);
         PrintUtils::Field(ctx.Out(), "Scale",
           fmt::format("[{:.3f}, {:.3f}]", record.scale[0], record.scale[1]),
           10);
@@ -170,8 +171,9 @@ public:
         const auto& record = *record_read;
 
         ctx.Out() << "      [" << i
-                  << "] type=" << nostd::to_string(record.type)
-                  << " behavior=" << nostd::to_string(record.behavior) << "\n";
+                  << "] type=" << toolkit::EnumString(record.type)
+                  << " behavior=" << toolkit::EnumString(record.behavior)
+                  << "\n";
         PrintUtils::Field(
           ctx.Out(), "Actuation Threshold", record.actuation_threshold, 10);
         PrintUtils::Field(ctx.Out(), "Linked Action",

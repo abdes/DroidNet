@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include <Oxygen/Serio/Record.h>
@@ -22,11 +23,14 @@ struct AssetReferenceTable {
 };
 #pragma pack(pop)
 static_assert(sizeof(AssetReferenceTable) == 16);
+static_assert(offsetof(AssetReferenceTable, offset) == 0);
+static_assert(offsetof(AssetReferenceTable, resource_count) == 8);
+static_assert(offsetof(AssetReferenceTable, key_count) == 12);
 
 } // namespace oxygen::data::pak::core
 
-// clang-format off
 namespace oxygen::serio {
+// clang-format off
 template <> inline constexpr bool kIsRecord<data::pak::core::AssetReferenceTable> = true;
-} // namespace oxygen::serio
 // clang-format on
+} // namespace oxygen::serio

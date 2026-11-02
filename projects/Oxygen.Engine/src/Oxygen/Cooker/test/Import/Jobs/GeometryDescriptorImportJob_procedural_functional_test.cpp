@@ -398,6 +398,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
                 bytes, mesh_desc.name_offset),
       "Capsule/Capsule");
     EXPECT_EQ(mesh_desc.info.procedural.params_size, 16U);
+    EXPECT_TRUE(oxygen::data::pak::geometry::HasZeroReserves(mesh_desc));
     const auto hemisphere_segments = oxygen::serio::CopyAt<uint32_t>(
       std::span { bytes }, oxygen::serio::ByteOffset { params_offset });
     const auto radial_segments = oxygen::serio::CopyAt<uint32_t>(
@@ -676,6 +677,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
               descriptor_bytes, mesh_desc.name_offset),
     "IcoSphere/SoftBall");
   EXPECT_EQ(mesh_desc.info.procedural.params_size, sizeof(uint32_t));
+  EXPECT_TRUE(oxygen::data::pak::geometry::HasZeroReserves(mesh_desc));
   const auto param_count
     = oxygen::serio::CopyAt<uint32_t>(std::span { descriptor_bytes },
       oxygen::serio::ByteOffset { params_offset });

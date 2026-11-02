@@ -109,6 +109,29 @@ namespace {
     }
   }
 
+  //! Whether a sky record of `bytes` names a source the catalog defines; a
+  //! record of another type names none.
+  auto HasKnownSkySource(
+    const uint32_t record_type, const std::span<const std::byte> bytes) -> bool
+  {
+    using pak::world::EnvironmentComponentType;
+    if (record_type
+      == nostd::to_underlying(EnvironmentComponentType::kSkyLight)) {
+      return pak::world::IsKnownSource(
+        ReadPackedRecord<pak::world::SkyLightEnvironmentRecord>(
+          bytes, "SceneAsset sky light record")
+          .source);
+    }
+    if (record_type
+      == nostd::to_underlying(EnvironmentComponentType::kSkySphere)) {
+      return pak::world::IsKnownSource(
+        ReadPackedRecord<pak::world::SkySphereEnvironmentRecord>(
+          bytes, "SceneAsset sky sphere record")
+          .source);
+    }
+    return true;
+  }
+
 } // namespace
 
 auto SceneAsset::ReadScriptSlots(const uint32_t start,
@@ -647,6 +670,11 @@ auto SceneAsset::ParseAndValidate() -> void
       }
 
       const auto bytes = data_.subspan(cursor, record_size);
+      const auto names_a_known_source = HasKnownSkySource(record_type, bytes);
+      if (!names_a_known_source) {
+        throw std::runtime_error(
+          "SceneAsset sky record names an unknown source");
+      }
       if (record_type
         == nostd::to_underlying(
           pak::world::EnvironmentComponentType::kPostProcessVolume)) {

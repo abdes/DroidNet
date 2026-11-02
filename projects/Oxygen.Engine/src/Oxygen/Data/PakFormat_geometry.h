@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <span>
+#include <string_view>
 #include <type_traits>
 
 #include <Oxygen/Base/Compilers.h>
@@ -43,6 +45,8 @@ enum class LodPolicyType : uint8_t {
   kScreenSpaceError = 2, //!< By screen-space error, with directional
                          //!< hysteresis.
 };
+OXGN_DATA_NDAPI auto to_string(LodPolicyType value) noexcept
+  -> std::string_view;
 
 //! A geometry LOD policy, the value of the scene schema's `lod-policy` type.
 /*!
@@ -171,7 +175,9 @@ struct SkinnedMeshInfo {
   ResourceReferenceIndex inverse_bind_buffer = kNoResourceReference;
   //!< Mesh-to-skeleton remap buffer
   ResourceReferenceIndex joint_remap_buffer = kNoResourceReference;
-  //!< Skeleton asset reference - TODO: future
+  //!< The skeleton asset, a logical reference: the loader records it and
+  //!< never loads it as a dependency. Making it one is a versioned change
+  //!< of the geometry format and its reference inventory.
   AssetKey skeleton_asset_key;
   //!< Number of joints referenced by this mesh
   uint16_t joint_count = 0;
@@ -235,14 +241,14 @@ struct MeshDesc {
     ProceduralMeshInfo procedural;
   } info {};
 
+// NOLINTNEXTLINE(*-macro-*) - stamps one IsX() query per mesh type
 #define OXYGEN_MESH_IS(NAME, ENUM)                                             \
-  [[nodiscard]] constexpr bool Is##NAME() const                                \
+  [[nodiscard]] constexpr auto Is##NAME() const noexcept -> bool               \
   {                                                                            \
     return static_cast<std::underlying_type_t<MeshType>>(MeshType::ENUM)       \
       == mesh_type;                                                            \
   }
 
-  // NOLINTBEGIN
   OXYGEN_MESH_IS(Standard, kStandard)
   OXYGEN_MESH_IS(Procedural, kProcedural)
   OXYGEN_MESH_IS(Skinned, kSkinned)
@@ -252,7 +258,6 @@ struct MeshDesc {
   OXYGEN_MESH_IS(Navigation, kNavigation)
   OXYGEN_MESH_IS(Billboard, kBillboard)
   OXYGEN_MESH_IS(Voxel, kVoxel)
-  // NOLINTEND
 
 #undef OXYGEN_MESH_IS
 };
@@ -263,6 +268,33 @@ struct MeshDesc {
 #pragma pack(pop)
 static_assert(sizeof(MeshDesc) == 85);
 static_assert(std::is_trivially_copyable_v<MeshDesc>);
+
+//! Whether the standard mesh arm's reserved bytes are zero.
+[[nodiscard]] inline auto HasZeroReserves(const StandardMeshInfo& info) noexcept
+  -> bool
+{
+  return core::IsZeroReserve(std::as_bytes(std::span { info._reserved }));
+}
+
+//! Whether the procedural mesh arm's reserved bytes are zero.
+[[nodiscard]] inline auto HasZeroReserves(
+  const ProceduralMeshInfo& info) noexcept -> bool
+{
+  return core::IsZeroReserve(std::as_bytes(std::span { info._reserved }));
+}
+
+//! Whether the reserved bytes of the mesh's active arm are zero; the skinned
+//! arm and the mesh types without an arm hold none.
+[[nodiscard]] inline auto HasZeroReserves(const MeshDesc& mesh) noexcept -> bool
+{
+  if (mesh.IsStandard()) {
+    return HasZeroReserves(mesh.info.standard);
+  }
+  if (mesh.IsProcedural()) {
+    return HasZeroReserves(mesh.info.procedural);
+  }
+  return true;
+}
 
 //! Sub-mesh descriptor (64 bytes + MeshView table)
 /*!
@@ -332,16 +364,16 @@ static_assert(std::is_trivially_copyable_v<MeshViewDesc>);
 
 } // namespace oxygen::data::pak::geometry
 
-// clang-format off
 namespace oxygen::serio {
+// clang-format off
 template <> inline constexpr bool kIsRecord<data::pak::geometry::GeometryAssetDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::geometry::MeshDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::geometry::SubMeshDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::geometry::MeshViewDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::geometry::LodPolicyRecord> = true;
 template <> inline constexpr bool kIsRecord<data::pak::geometry::SurfaceDesc> = true;
-} // namespace oxygen::serio
 // clang-format on
+} // namespace oxygen::serio
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

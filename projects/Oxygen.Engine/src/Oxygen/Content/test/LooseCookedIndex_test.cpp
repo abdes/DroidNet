@@ -13,6 +13,8 @@
 #include <exception>
 #include <filesystem>
 #include <functional>
+#include <limits>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -32,6 +34,7 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_references.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -48,8 +51,8 @@ using oxygen::content::lc::IntegrityFailure;
 using oxygen::content::lc::LooseCookedIndex;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
+using oxygen::data::CookedDefect;
 using oxygen::data::CookedOpenError;
-using oxygen::data::CookedOpenFailure;
 using oxygen::data::loose_cooked::AssetEntry;
 using oxygen::data::loose_cooked::FileKind;
 using oxygen::data::loose_cooked::FileRecord;
@@ -99,12 +102,16 @@ auto Material(const std::string_view virtual_path,
 }
 
 //! A resource data file carries no digest: each row of its table does.
+//! A resource table holds one row.
 auto File(const FileKind kind, const std::string_view relpath) -> IndexedFile
 {
+  const auto is_table
+    = oxygen::data::loose_cooked::DataFileKindOf(kind).has_value();
   return {
     .kind = kind,
     .relpath = std::string(relpath),
-    .size = relpath.size(),
+    .size = is_table ? oxygen::data::loose_cooked::ResourceRowSize(kind)
+                     : relpath.size(),
     .sha256 = oxygen::data::loose_cooked::IsResourceDataFile(kind)
       ? oxygen::base::Sha256Digest {}
       : DigestOf(relpath),
@@ -182,23 +189,50 @@ auto FileRecordOffset(const Bytes& bytes, const size_t index) -> uint64_t
   return HeaderOf(bytes).file_records_offset + (index * sizeof(FileRecord));
 }
 
-//! The failure loading `bytes` raises; the test fails when they load.
-auto RefusalOf(const Bytes& bytes) -> std::pair<CookedOpenFailure, std::string>
+//! The rule loading `bytes` reports broken; the test fails when they load.
+auto RefusalOf(const Bytes& bytes) -> std::pair<CookedDefect, std::string>
 {
   try {
     static_cast<void>(LooseCookedIndexImpl::LoadFromBytes(bytes));
   } catch (const CookedOpenError& error) {
-    return { error.Failure(), error.what() };
+    return { error.Defect(), error.what() };
   }
   ADD_FAILURE() << "the index loaded";
   return {};
 }
 
-auto ExpectCorrupt(const Bytes& bytes, const std::string_view message) -> void
+auto ExpectDefect(const Bytes& bytes, const CookedDefect defect,
+  const std::string_view message) -> void
 {
-  const auto [failure, what] = RefusalOf(bytes);
-  EXPECT_EQ(failure, CookedOpenFailure::kCorrupt) << what;
-  EXPECT_THAT(what, testing::HasSubstr(std::string(message)));
+  try {
+    static_cast<void>(LooseCookedIndexImpl::LoadFromBytes(bytes));
+    ADD_FAILURE() << "the index loaded";
+  } catch (const CookedOpenError& error) {
+    EXPECT_EQ(error.Defect(), defect);
+    EXPECT_THAT(error.what(), testing::HasSubstr(std::string(message)));
+  }
+}
+
+auto References() -> oxygen::data::AssetReferences
+{
+  auto references = oxygen::data::AssetReferences::Create(
+    {
+      {
+        .kind = oxygen::data::ResourceKind::kTexture,
+        .index = oxygen::data::pak::core::ResourceIndexT { 3U },
+      },
+    },
+    {
+      {
+        .key = AssetKey::FromVirtualPath("/Content/Materials/Base.omat"),
+        .kind = oxygen::data::KeyReferenceKind::kAsset,
+        .expected_type = AssetType::kMaterial,
+      },
+    });
+  if (!references) {
+    throw std::runtime_error(references.error());
+  }
+  return std::move(*references);
 }
 
 //=== Encoding and loading ===------------------------------------------------//
@@ -312,6 +346,34 @@ NOLINT_TEST(LooseCookedIndexLoadTest, OwnedBytesLoad)
   EXPECT_EQ(index.FindVirtualPath(wood.key), wood.virtual_path);
 }
 
+//! Moving an owned index preserves its borrowed strings and reference tail.
+NOLINT_TEST(LooseCookedIndexLoadTest, MovedOwnedIndexKeepsItsViews)
+{
+  // Arrange
+  auto wood = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  wood.references = References();
+  auto retained_path = std::optional<std::string_view> {};
+  auto moved = [&] {
+    auto original
+      = LooseCookedIndexImpl::LoadFromBytes(Encode(std::array { wood }));
+    retained_path = original.FindVirtualPath(wood.key);
+    return LooseCookedIndexImpl(std::move(original));
+  }();
+  auto destination = LooseCookedIndexImpl::LoadFromBytes(Encode({}));
+
+  // Act
+  destination = std::move(moved);
+
+  // Assert
+  ASSERT_HAS_VALUE(retained_path);
+  EXPECT_EQ(*retained_path, wood.virtual_path);
+  EXPECT_EQ(
+    destination.FindDescriptorRelPath(wood.key), wood.descriptor_relpath);
+  const auto references = destination.FindAssetReferences(wood.key);
+  ASSERT_HAS_VALUE(references);
+  EXPECT_EQ(*references, wood.references);
+}
+
 //=== Header refusals ===-----------------------------------------------------//
 
 //! Bytes that are not an index are a wrong format, not a corrupt index.
@@ -323,8 +385,8 @@ NOLINT_TEST(LooseCookedIndexHeaderTest, ForeignBytesAreAWrongFormat)
   const auto too_small = Bytes(sizeof(IndexHeader) - 1);
 
   // Act & Assert
-  EXPECT_EQ(RefusalOf(wrong_magic).first, CookedOpenFailure::kWrongFormat);
-  EXPECT_EQ(RefusalOf(too_small).first, CookedOpenFailure::kWrongFormat);
+  EXPECT_EQ(RefusalOf(wrong_magic).first, CookedDefect::kWrongMagic);
+  EXPECT_EQ(RefusalOf(too_small).first, CookedDefect::kTooSmall);
 }
 
 NOLINT_TEST(LooseCookedIndexHeaderTest, AnotherVersionIsUnsupported)
@@ -334,7 +396,71 @@ NOLINT_TEST(LooseCookedIndexHeaderTest, AnotherVersionIsUnsupported)
   PatchHeader(bytes, [](IndexHeader& header) -> void { header.version = 999; });
 
   // Act & Assert
-  EXPECT_EQ(RefusalOf(bytes).first, CookedOpenFailure::kUnsupportedVersion);
+  EXPECT_EQ(RefusalOf(bytes).first, CookedDefect::kUnsupportedVersion);
+}
+
+//! Magic is checked before version when both header fields are invalid.
+NOLINT_TEST(LooseCookedIndexHeaderTest, WrongMagicPrecedesUnsupportedVersion)
+{
+  // Arrange
+  auto bytes = Encode({});
+  PatchHeader(bytes, [](IndexHeader& header) -> void {
+    header.magic.front() = 'X';
+    header.version = 999;
+  });
+
+  // Act & Assert
+  GCHECK_F(ExpectDefect(
+    bytes, CookedDefect::kWrongMagic, "Invalid loose cooked index magic"));
+}
+
+//! Section bounds are checked before layout arithmetic on untrusted offsets.
+NOLINT_TEST(LooseCookedIndexHeaderTest, SectionBoundsPrecedeLayout)
+{
+  // Arrange
+  auto bytes = Encode({});
+  PatchHeader(bytes, [](IndexHeader& header) -> void {
+    header.string_table_offset = std::numeric_limits<uint64_t>::max();
+  });
+
+  // Act & Assert
+  GCHECK_F(ExpectDefect(
+    bytes, CookedDefect::kOutOfBounds, "string table lies outside"));
+}
+
+//! The header's reserve is zero; any other byte there is refused.
+NOLINT_TEST(LooseCookedIndexHeaderTest, ReservedBytesAreZero)
+{
+  // Arrange
+  auto bytes = Encode({});
+  PatchHeader(bytes, [](IndexHeader& header) -> void {
+    std::span { header._reserved }.back() = 1U;
+  });
+
+  // Act & Assert
+  GCHECK_F(ExpectDefect(
+    bytes, CookedDefect::kReservedNotZero, "reserved bytes are not zero"));
+}
+
+//! A resource table holds whole rows; an index that records any other size
+//! for one is refused when it loads.
+NOLINT_TEST(LooseCookedIndexFileTest, TableOfAPartialRowIsRefused)
+{
+  // Arrange
+  const auto table = File(FileKind::kBuffersTable, "Resources/buffers.table");
+  const auto data = File(FileKind::kBuffersData, "Resources/buffers.data");
+  auto bytes = Encode({}, std::array { table, data });
+  // Files are encoded in path order: the data file's record, then the
+  // table's.
+  constexpr auto kTable = size_t { 1 };
+  const auto partial = static_cast<decltype(FileRecord::size)>(
+    oxygen::data::loose_cooked::ResourceRowSize(FileKind::kBuffersTable) + 1U);
+  Patch(bytes, FileRecordOffset(bytes, kTable) + offsetof(FileRecord, size),
+    partial);
+
+  // Act & Assert
+  GCHECK_F(ExpectDefect(
+    bytes, CookedDefect::kWrongRowSize, "does not hold whole rows"));
 }
 
 NOLINT_TEST(LooseCookedIndexHeaderTest, MalformedHeadersAreCorrupt)
@@ -344,35 +470,43 @@ NOLINT_TEST(LooseCookedIndexHeaderTest, MalformedHeadersAreCorrupt)
 
   struct Case {
     std::string_view message;
+    CookedDefect defect;
     std::function<void(IndexHeader&)> edit;
   };
   const auto cases = std::array {
     Case {
       .message = "String table must start after index header",
+      .defect = CookedDefect::kOverlap,
       .edit = [](IndexHeader& h) -> void { h.string_table_offset = 8; },
     },
     Case {
       .message = "Asset entries must start after the end of the string table",
+      .defect = CookedDefect::kOverlap,
       .edit = [](IndexHeader& h) -> void { --h.asset_entries_offset; },
     },
     Case {
       .message = "Unsupported IndexHeader flags",
+      .defect = CookedDefect::kInvalidValue,
       .edit = [](IndexHeader& h) -> void { h.flags |= 0x80U; },
     },
     Case {
       .message = "must declare virtual-path support",
+      .defect = CookedDefect::kInvalidValue,
       .edit = [](IndexHeader& h) -> void { h.flags = kHasFileRecords; },
     },
     Case {
       .message = "flags disallow file records",
+      .defect = CookedDefect::kInconsistent,
       .edit = [](IndexHeader& h) -> void { h.flags = kHasVirtualPaths; },
     },
     Case {
       .message = "non-zero UUIDv7 source identity",
+      .defect = CookedDefect::kInvalidIdentity,
       .edit = [](IndexHeader& h) -> void { h.source_identity = {}; },
     },
     Case {
       .message = "Unexpected AssetEntry size",
+      .defect = CookedDefect::kWrongRowSize,
       .edit = [](IndexHeader& h) -> void { ++h.asset_entry_size; },
     },
   };
@@ -386,7 +520,7 @@ NOLINT_TEST(LooseCookedIndexHeaderTest, MalformedHeadersAreCorrupt)
     PatchHeader(bytes, test_case.edit);
 
     // Act & Assert
-    ExpectCorrupt(bytes, test_case.message);
+    ExpectDefect(bytes, test_case.defect, test_case.message);
   }
 }
 
@@ -405,10 +539,10 @@ NOLINT_TEST(LooseCookedIndexAssetTest, VirtualPathsMustBeCanonical)
   // Act & Assert
   EXPECT_NO_THROW(static_cast<void>(
     LooseCookedIndexImpl::LoadFromBytes(Encode(std::array { custom }))));
-  ExpectCorrupt(
-    Encode(std::array { no_slash }), "Virtual path is not canonical");
-  ExpectCorrupt(
-    Encode(std::array { dot_dot }), "Virtual path is not canonical");
+  ExpectDefect(Encode(std::array { no_slash }), CookedDefect::kInvalidPath,
+    "Virtual path is not canonical");
+  ExpectDefect(Encode(std::array { dot_dot }), CookedDefect::kInvalidPath,
+    "Virtual path is not canonical");
 }
 
 NOLINT_TEST(LooseCookedIndexAssetTest, ContentPathsMustBeContainerRelative)
@@ -418,27 +552,32 @@ NOLINT_TEST(LooseCookedIndexAssetTest, ContentPathsMustBeContainerRelative)
     std::string_view valid;
     std::string_view relpath;
     std::string_view message;
+    CookedDefect defect;
   };
   const auto cases = std::array {
     Case {
       .valid = "Materials/Wood.omat",
       .relpath = "Materials\\Wood.omat",
       .message = "'/' as the separator",
+      .defect = CookedDefect::kInvalidPath,
     },
     Case {
       .valid = "AMaterials/Wood.omat",
       .relpath = "/Materials/Wood.omat",
       .message = "container-relative",
+      .defect = CookedDefect::kInvalidPath,
     },
     Case {
       .valid = "Materials/xx/Wood.omat",
       .relpath = "Materials/../Wood.omat",
       .message = "'..'",
+      .defect = CookedDefect::kInvalidPath,
     },
     Case {
       .valid = "container.index.bxn",
       .relpath = "container.index.bin",
       .message = "Reserved path",
+      .defect = CookedDefect::kInvalidPath,
     },
   };
   for (const auto& test_case : cases) {
@@ -448,7 +587,7 @@ NOLINT_TEST(LooseCookedIndexAssetTest, ContentPathsMustBeContainerRelative)
     ReplaceString(bytes, test_case.valid, test_case.relpath);
 
     // Act & Assert
-    ExpectCorrupt(bytes, test_case.message);
+    ExpectDefect(bytes, test_case.defect, test_case.message);
   }
 }
 
@@ -478,9 +617,9 @@ NOLINT_TEST(LooseCookedIndexAssetTest, IdentitiesListedTwiceAreCorrupt)
     first->descriptor_relpath_offset);
 
   // Act & Assert
-  ExpectCorrupt(same_key, "Duplicate AssetKey");
-  ExpectCorrupt(same_path, "Duplicate virtual path");
-  ExpectCorrupt(same_file, "Duplicate content path");
+  ExpectDefect(same_key, CookedDefect::kDuplicate, "Duplicate AssetKey");
+  ExpectDefect(same_path, CookedDefect::kDuplicate, "Duplicate virtual path");
+  ExpectDefect(same_file, CookedDefect::kDuplicate, "Duplicate content path");
 }
 
 NOLINT_TEST(LooseCookedIndexAssetTest, DescriptorWithoutDigestIsCorrupt)
@@ -493,7 +632,113 @@ NOLINT_TEST(LooseCookedIndexAssetTest, DescriptorWithoutDigestIsCorrupt)
     oxygen::base::Sha256Digest {});
 
   // Act & Assert
-  ExpectCorrupt(bytes, "Missing descriptor SHA-256");
+  ExpectDefect(
+    bytes, CookedDefect::kMissingDigest, "Missing descriptor SHA-256");
+}
+
+//! The string itself must be unique, even when offsets differ.
+NOLINT_TEST(LooseCookedIndexAssetTest, EqualVirtualPathsAtDifferentOffsets)
+{
+  // Arrange
+  auto bytes = Encode(std::array {
+    Material("/Content/Materials/A.omat", "Materials/A.omat"),
+    Material("/Content/Materials/B.omat", "Materials/B.omat"),
+  });
+  ReplaceString(
+    bytes, "/Content/Materials/B.omat", "/Content/Materials/A.omat");
+
+  // Act & Assert
+  GCHECK_F(ExpectDefect(
+    bytes, CookedDefect::kDuplicate, "Duplicate virtual path string"));
+}
+
+//! Reference blocks are packed in directory order and consume the index tail.
+NOLINT_TEST(LooseCookedIndexAssetTest, ReferenceBlockBoundariesAreValidated)
+{
+  // Arrange
+  auto first_asset = Material("/Content/Materials/A.omat", "Materials/A.omat");
+  auto second_asset = Material("/Content/Materials/B.omat", "Materials/B.omat");
+  first_asset.references = References();
+  second_asset.references = References();
+  const auto valid = Encode(std::array { first_asset, second_asset });
+  const auto first = oxygen::serio::CopyAt<AssetEntry>(std::span { valid },
+    oxygen::serio::ByteOffset { AssetEntryOffset(valid, 0) });
+  const auto second = oxygen::serio::CopyAt<AssetEntry>(std::span { valid },
+    oxygen::serio::ByteOffset { AssetEntryOffset(valid, 1) });
+  ASSERT_HAS_VALUE(first);
+  ASSERT_HAS_VALUE(second);
+
+  const auto patch_references
+    = [](Bytes& bytes, const size_t index,
+        const oxygen::data::pak::core::AssetReferenceTable& references) {
+        Patch(bytes,
+          AssetEntryOffset(bytes, index) + offsetof(AssetEntry, references),
+          references);
+      };
+
+  auto empty_with_offset = valid;
+  auto empty = first->references;
+  empty.resource_count = 0;
+  empty.key_count = 0;
+  patch_references(empty_with_offset, 0, empty);
+
+  auto gap = valid;
+  auto displaced = first->references;
+  ++displaced.offset;
+  patch_references(gap, 0, displaced);
+
+  auto overlap = valid;
+  auto overlapping = second->references;
+  overlapping.offset = first->references.offset;
+  patch_references(overlap, 1, overlapping);
+
+  auto beyond_end = valid;
+  auto oversized = first->references;
+  oversized.resource_count = std::numeric_limits<uint32_t>::max();
+  patch_references(beyond_end, 0, oversized);
+
+  auto malformed = valid;
+  Patch(malformed, first->references.offset, uint8_t { 0xFF });
+
+  auto trailing = valid;
+  trailing.push_back(std::byte { 0 });
+
+  // Act & Assert
+  GCHECK_F(ExpectDefect(empty_with_offset, CookedDefect::kInvalidReference,
+    "Empty asset reference block must have zero offset"));
+  GCHECK_F(ExpectDefect(
+    gap, CookedDefect::kOverlap, "Asset reference blocks must follow"));
+  GCHECK_F(ExpectDefect(
+    overlap, CookedDefect::kOverlap, "Asset reference blocks must follow"));
+  GCHECK_F(
+    ExpectDefect(beyond_end, CookedDefect::kOutOfBounds, "asset references"));
+  GCHECK_F(ExpectDefect(
+    malformed, CookedDefect::kInvalidReference, "Asset reference block"));
+  GCHECK_F(ExpectDefect(trailing, CookedDefect::kOverlap,
+    "reference blocks do not cover the index tail"));
+}
+
+//! Reference validation precedes descriptor digest validation.
+NOLINT_TEST(LooseCookedIndexAssetTest, ReferenceDefectPrecedesMissingDigest)
+{
+  // Arrange
+  auto asset = Material("/Content/Materials/A.omat", "Materials/A.omat");
+  asset.references = References();
+  auto bytes = Encode(std::array { asset });
+  const auto entry = oxygen::serio::CopyAt<AssetEntry>(std::span { bytes },
+    oxygen::serio::ByteOffset { AssetEntryOffset(bytes, 0) });
+  ASSERT_HAS_VALUE(entry);
+  auto references = entry->references;
+  ++references.offset;
+  Patch(bytes, AssetEntryOffset(bytes, 0) + offsetof(AssetEntry, references),
+    references);
+  Patch(bytes,
+    AssetEntryOffset(bytes, 0) + offsetof(AssetEntry, descriptor_sha256),
+    oxygen::base::Sha256Digest {});
+
+  // Act & Assert
+  GCHECK_F(ExpectDefect(
+    bytes, CookedDefect::kOverlap, "Asset reference blocks must follow"));
 }
 
 //=== File record refusals ===------------------------------------------------//
@@ -520,8 +765,10 @@ NOLINT_TEST(LooseCookedIndexFileTest, TablesAndDataFilesComeInPairs)
     // Act & Assert
     EXPECT_NO_THROW(static_cast<void>(LooseCookedIndexImpl::LoadFromBytes(
       Encode({}, std::array { table, data }))));
-    ExpectCorrupt(Encode({}, std::array { table }), "must provide both");
-    ExpectCorrupt(Encode({}, std::array { data }), "must provide both");
+    ExpectDefect(Encode({}, std::array { table }), CookedDefect::kMissingPart,
+      "must provide both");
+    ExpectDefect(Encode({}, std::array { data }), CookedDefect::kMissingPart,
+      "must provide both");
   }
 }
 
@@ -535,6 +782,7 @@ NOLINT_TEST(LooseCookedIndexFileTest, MalformedRecordsAreCorrupt)
   };
   struct Case {
     std::string_view message;
+    CookedDefect defect;
     std::function<void(Bytes&)> edit;
   };
   const auto kind_at = [](const Bytes& bytes) -> uint64_t {
@@ -543,18 +791,26 @@ NOLINT_TEST(LooseCookedIndexFileTest, MalformedRecordsAreCorrupt)
   const auto cases = std::array {
     Case {
       .message = "Unsupported FileKind",
+      .defect = CookedDefect::kInvalidValue,
       .edit = [&](Bytes& bytes) -> void {
         Patch(bytes, kind_at(bytes), uint16_t { 99 });
       },
     },
     Case {
       .message = "Duplicate FileKind record",
+      .defect = CookedDefect::kDuplicate,
+      // A second buffers table of whole rows, so only its kind is wrong.
       .edit = [&](Bytes& bytes) -> void {
         Patch(bytes, kind_at(bytes), FileKind::kBuffersTable);
+        Patch(bytes, FileRecordOffset(bytes, 0) + offsetof(FileRecord, size),
+          static_cast<decltype(FileRecord::size)>(
+            oxygen::data::loose_cooked::ResourceRowSize(
+              FileKind::kBuffersTable)));
       },
     },
     Case {
       .message = "Missing file SHA-256",
+      .defect = CookedDefect::kMissingDigest,
       .edit = [](Bytes& bytes) -> void {
         Patch(bytes, FileRecordOffset(bytes, 0) + offsetof(FileRecord, sha256),
           oxygen::base::Sha256Digest {});
@@ -567,7 +823,7 @@ NOLINT_TEST(LooseCookedIndexFileTest, MalformedRecordsAreCorrupt)
     test_case.edit(bytes);
 
     // Act & Assert
-    ExpectCorrupt(bytes, test_case.message);
+    ExpectDefect(bytes, test_case.defect, test_case.message);
   }
 }
 
@@ -611,7 +867,7 @@ NOLINT_TEST(LooseCookedIndexFileTest, LoaderRefusesDigestOnDataFile)
   for (size_t i = 0; i < count; ++i) {
     const auto record = oxygen::serio::CopyAt<FileRecord>(
       std::span { bytes }.subspan(FileRecordOffset(bytes, i)));
-    ASSERT_TRUE(record.has_value());
+    ASSERT_HAS_VALUE(record);
     if (record->kind == FileKind::kBuffersData) {
       Patch(bytes, FileRecordOffset(bytes, i) + offsetof(FileRecord, sha256),
         DigestOf("forged"));
@@ -621,7 +877,8 @@ NOLINT_TEST(LooseCookedIndexFileTest, LoaderRefusesDigestOnDataFile)
   ASSERT_TRUE(patched);
 
   // Act & Assert
-  ExpectCorrupt(bytes, "Resource data file SHA-256");
+  ExpectDefect(
+    bytes, CookedDefect::kInvalidValue, "Resource data file SHA-256");
 }
 
 //! A texture descriptor record keeps the virtual path it is addressed by.
@@ -668,6 +925,7 @@ NOLINT_TEST(LooseCookedIndexFileTest, InvalidFileVirtualPathsAreCorrupt)
     std::string_view name;
     size_t record;
     uint32_t virtual_path_offset;
+    CookedDefect defect;
   };
   const auto cases = std::array {
     // The table's leading NUL: an empty virtual path.
@@ -675,17 +933,20 @@ NOLINT_TEST(LooseCookedIndexFileTest, InvalidFileVirtualPathsAreCorrupt)
       .name = "texture without virtual path",
       .record = kSky,
       .virtual_path_offset = 0U,
+      .defect = CookedDefect::kInvalidPath,
     },
     // Past the leading '/': `Content/Textures/Sky.otex`, not canonical.
     Case {
       .name = "texture with a relative virtual path",
       .record = kSky,
       .virtual_path_offset = sky_record.virtual_path_offset + 1U,
+      .defect = CookedDefect::kInvalidPath,
     },
     Case {
       .name = "auxiliary file with a virtual path",
       .record = kHull,
       .virtual_path_offset = sky_record.virtual_path_offset,
+      .defect = CookedDefect::kInvalidValue,
     },
   };
   for (const auto& test_case : cases) {
@@ -695,9 +956,8 @@ NOLINT_TEST(LooseCookedIndexFileTest, InvalidFileVirtualPathsAreCorrupt)
       test_case.virtual_path_offset);
 
     // Act & Assert
-    const auto [failure, what] = RefusalOf(bytes);
-    EXPECT_EQ(failure, CookedOpenFailure::kCorrupt)
-      << test_case.name << ": " << what;
+    const auto [defect, what] = RefusalOf(bytes);
+    EXPECT_EQ(defect, test_case.defect) << test_case.name << ": " << what;
   }
 }
 
@@ -720,7 +980,71 @@ NOLINT_TEST(LooseCookedIndexFileTest, TextureAndAssetShareNoVirtualPath)
     entry->virtual_path_offset);
 
   // Act & Assert
-  ExpectCorrupt(bytes, "Duplicate virtual path");
+  ExpectDefect(bytes, CookedDefect::kDuplicate, "Duplicate virtual path");
+}
+
+//! Asset descriptors and file records share one content-path namespace.
+NOLINT_TEST(LooseCookedIndexFileTest, AssetAndFileShareNoContentPath)
+{
+  // Arrange
+  const auto asset
+    = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  const auto file = File(FileKind::kAuxiliary, "Ship/Hull.obuf");
+  auto bytes = Encode(std::array { asset }, std::array { file });
+  const auto entry = oxygen::serio::CopyAt<AssetEntry>(std::span { bytes },
+    oxygen::serio::ByteOffset { AssetEntryOffset(bytes, 0) });
+  ASSERT_HAS_VALUE(entry);
+  Patch(bytes,
+    FileRecordOffset(bytes, 0) + offsetof(FileRecord, relpath_offset),
+    entry->descriptor_relpath_offset);
+
+  // Act & Assert
+  GCHECK_F(
+    ExpectDefect(bytes, CookedDefect::kDuplicate, "Duplicate content path"));
+}
+
+//! Path-keyed file kinds may appear more than once.
+NOLINT_TEST(LooseCookedIndexFileTest, MultiplePathKeyedRecordsLoad)
+{
+  // Arrange
+  auto sky = File(FileKind::kTextureDescriptor, "Textures/Sky.otex");
+  sky.virtual_path = "/Content/Textures/Sky.otex";
+  sky.source_path = std::string(kSource);
+  auto ground = File(FileKind::kTextureDescriptor, "Textures/Ground.otex");
+  ground.virtual_path = "/Content/Textures/Ground.otex";
+  ground.source_path = std::string(kSource);
+  const auto files = std::array {
+    File(FileKind::kAuxiliary, "Ship/Hull.obuf"),
+    File(FileKind::kAuxiliary, "Ship/Wing.obuf"),
+    sky,
+    ground,
+  };
+
+  // Act
+  const auto index = LooseCookedIndexImpl::LoadFromBytes(Encode({}, files));
+
+  // Assert
+  EXPECT_EQ(index.GetFileInventory().size(), files.size());
+  EXPECT_EQ(index.FindTextureDescriptorRelPath(sky.virtual_path), sky.relpath);
+  EXPECT_EQ(
+    index.FindTextureDescriptorRelPath(ground.virtual_path), ground.relpath);
+}
+
+//! File kind validation precedes path validation.
+NOLINT_TEST(LooseCookedIndexFileTest, InvalidKindPrecedesInvalidPath)
+{
+  // Arrange
+  auto bytes
+    = Encode({}, std::array { File(FileKind::kAuxiliary, "Hull.obuf") });
+  Patch(bytes, FileRecordOffset(bytes, 0) + offsetof(FileRecord, kind),
+    uint16_t { 99 });
+  Patch(bytes,
+    FileRecordOffset(bytes, 0) + offsetof(FileRecord, relpath_offset),
+    std::numeric_limits<uint32_t>::max());
+
+  // Act & Assert
+  GCHECK_F(
+    ExpectDefect(bytes, CookedDefect::kInvalidValue, "Unsupported FileKind"));
 }
 
 //=== Files on disk ===-------------------------------------------------------//
@@ -769,6 +1093,32 @@ NOLINT_TEST_F(LooseCookedIndexFileSystemTest, MappedIndexSurvivesRepublication)
   EXPECT_EQ(
     LooseCookedIndexImpl::LoadFromFile(IndexPath()).FindVirtualPath(base.key),
     base.virtual_path);
+}
+
+//! Moving a mapped index retains its original strings and reference bytes.
+NOLINT_TEST_F(LooseCookedIndexFileSystemTest, MovedMappedIndexKeepsItsViews)
+{
+  // Arrange
+  auto wood = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  wood.references = References();
+  Publish("container.index.bin", Encode(std::array { wood }));
+  auto retained_path = std::optional<std::string_view> {};
+  auto moved = [&] {
+    auto original = LooseCookedIndexImpl::LoadFromFile(IndexPath());
+    retained_path = original.FindVirtualPath(wood.key);
+    return LooseCookedIndexImpl(std::move(original));
+  }();
+
+  // Act
+  auto destination = LooseCookedIndexImpl::LoadFromBytes(Encode({}));
+  destination = std::move(moved);
+
+  // Assert
+  ASSERT_HAS_VALUE(retained_path);
+  EXPECT_EQ(*retained_path, wood.virtual_path);
+  const auto references = destination.FindAssetReferences(wood.key);
+  ASSERT_HAS_VALUE(references);
+  EXPECT_EQ(*references, wood.references);
 }
 
 //! A reader takes no lock and still reads one whole index during publication.
@@ -981,24 +1331,35 @@ NOLINT_TEST_F(LooseCookedIndexResourceTest, RowPastTheDataFileIsOutOfBounds)
 
   // Act
   const auto issues = index.CheckContent(TempDir(), IntegrityCheck::kFull);
+  const auto metadata_issues
+    = index.CheckContent(TempDir(), IntegrityCheck::kMetadata);
 
   // Assert
   ASSERT_EQ(issues.size(), 1U);
   EXPECT_EQ(issues.front().reason, IntegrityFailure::kResourceOutOfBounds);
   EXPECT_EQ(issues.front().resource_row, 1U);
+  EXPECT_EQ(metadata_issues, issues);
+  try {
+    index.ValidateContent(TempDir(), IntegrityCheck::kMetadata);
+    ADD_FAILURE() << "the content validated";
+  } catch (const oxygen::content::lc::IntegrityError& error) {
+    EXPECT_EQ(error.Reason(), IntegrityFailure::kResourceOutOfBounds);
+    EXPECT_EQ(error.ResourceRow(), std::optional<uint32_t> { 1U });
+  }
 }
 
-//! A table that ends in a partial row is malformed, and its data file is not
-//! read.
-NOLINT_TEST_F(LooseCookedIndexResourceTest, PartialRowMakesTheTableMalformed)
+//! A table with a payload row of no digest is malformed, even to the metadata
+//! check, and its data file is not read.
+NOLINT_TEST_F(
+  LooseCookedIndexResourceTest, RowWithoutDigestMakesTheTableMalformed)
 {
   // Arrange
   AddBuffer(kFirstBuffer);
-  const auto rows = std::as_bytes(std::span(Rows()));
-  const auto index = PublishRoot(rows.first(rows.size() - 1U));
+  Rows().back().content_hash = {};
+  const auto index = PublishRoot();
 
   // Act
-  const auto issues = index.CheckContent(TempDir(), IntegrityCheck::kFull);
+  const auto issues = index.CheckContent(TempDir(), IntegrityCheck::kMetadata);
 
   // Assert
   ASSERT_EQ(issues.size(), 1U);

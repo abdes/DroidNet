@@ -91,7 +91,8 @@ struct PakCatalog final {
     -> Result<std::vector<std::byte>, std::string>;
   //! Decodes an encoded catalog; a version this build cannot read is
   //! `CookedOpenFailure::kUnsupportedVersion`, anything malformed
-  //! `kCorrupt`.
+  //! `kCorrupt`: records out of the order `Encode` writes, or a digest that
+  //! is not the SHA-256 of the bytes before it.
   OXGN_DATA_NDAPI static auto Decode(std::span<const std::byte> bytes)
     -> Result<PakCatalog, CookedOpenError>;
 };

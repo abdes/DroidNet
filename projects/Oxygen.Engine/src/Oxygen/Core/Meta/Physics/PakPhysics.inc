@@ -40,6 +40,26 @@ OXPHYS_RESOURCE_FORMAT(kPhysXVehicleSettingsBinary, 9)
 #undef OXPHYS_RESOURCE_FORMAT
 
 // ============================================================================
+// PhysicsBackend
+// ============================================================================
+// The physics backend: the one a build runs, and the one a physics scene was
+// cooked for, which selects the arm of its bindings' backend-scalar unions.
+// `kNone` is no backend; a cooked scene never records it.
+//
+// Expected consumer macro:
+//   OXPHYS_BACKEND(name, value)
+//
+#ifndef OXPHYS_BACKEND
+#  define OXPHYS_BACKEND(name, value)
+#endif
+
+OXPHYS_BACKEND(kNone, 0)
+OXPHYS_BACKEND(kJolt, 1)
+OXPHYS_BACKEND(kPhysX, 2)
+
+#undef OXPHYS_BACKEND
+
+// ============================================================================
 // PhysicsCombineMode
 // ============================================================================
 // How friction or restitution values are combined at a contact point.

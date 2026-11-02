@@ -12,6 +12,7 @@
 add_library(
   oxygen-cooker-toolkit
   STATIC
+  "EnumString.h"
   "ToolApp.cpp"
   "ToolApp.h"
   "ToolCommand.h"

@@ -4,13 +4,25 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <stdexcept>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
+#include <Oxygen/Cooker/Pak/PakMeasureStore.h>
+#include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/PackedPak.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::cooker::testing {
 
@@ -105,6 +117,16 @@ auto CookedPak::DefaultIdentity() const -> data::SourceKey
     seed = static_cast<uint8_t>(seed + static_cast<uint8_t>(c));
   }
   return SourceKeyOf(seed);
+}
+
+auto EncodeBrowseIndex(const content::pak::PakBrowseIndexPlan& browse)
+  -> std::vector<std::byte>
+{
+  auto bytes = std::vector<std::byte> {};
+  if (!content::pak::StoreBrowseIndexPayload(browse, bytes)) {
+    throw std::invalid_argument("the product cannot encode the browse index");
+  }
+  return bytes;
 }
 
 } // namespace oxygen::cooker::testing

@@ -157,6 +157,13 @@ auto PhysicsSidecarBuilder::Aggregate(const SceneNode node,
   return *this;
 }
 
+auto PhysicsSidecarBuilder::Backend(
+  const data::pak::physics::PhysicsBackend backend) -> PhysicsSidecarBuilder&
+{
+  backend_ = backend;
+  return *this;
+}
+
 auto PhysicsSidecarBuilder::Bytes(const data::AssetKey& scene_key,
   const std::span<const std::byte> scene_bytes,
   const std::string_view name) const -> std::vector<std::byte>
@@ -195,6 +202,7 @@ auto PhysicsSidecarBuilder::Bytes(const data::AssetKey& scene_key,
   desc.header.name_offset = strings.Add(name);
   desc.target_scene_key = scene_key;
   desc.target_node_count = node_count;
+  desc.backend = backend_;
   const auto hash = base::ComputeSha256(scene_bytes);
   std::ranges::copy(hash, std::begin(desc.target_scene_content_hash));
   desc.component_table_count = static_cast<uint32_t>(tables.size());

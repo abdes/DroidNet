@@ -20,9 +20,11 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -31,37 +33,93 @@ namespace oxygen::data {
 
 namespace {
 
-  //! Why `header` does not start a current descriptor of `kind`; nullopt when
-  //! it does.
-  auto CheckHeader(const ResourceDescriptorHeader& header,
-    const std::array<char, 4>& magic, const uint16_t version,
-    const std::string_view kind) -> std::optional<std::string>
+  auto Refusal(const CookedDefect defect, const std::string_view message)
+    -> CookedOpenError
   {
-    if (header.magic != magic) {
-      return std::string(kind) + " descriptor has an invalid magic";
-    }
-    if (header.version != version) {
-      return std::string(kind) + " descriptor has an unsupported version";
-    }
-    return std::nullopt;
+    return { defect, std::string(message) };
   }
 
-  //! Why `views` cannot be a buffer descriptor's views; nullopt when they can.
-  auto CheckViewNames(const std::span<const BufferResourceView> views)
-    -> std::optional<std::string>
+  //! Reads the header that starts `bytes` as a current descriptor of `kind`.
+  auto ReadHeader(const std::span<const std::byte> bytes,
+    const std::array<char, 4>& magic, const uint16_t version,
+    const std::string_view kind)
+    -> Result<ResourceDescriptorHeader, CookedOpenError>
   {
+    const auto header = serio::CopyAt<ResourceDescriptorHeader>(bytes);
+    if (!header) {
+      return Err(Refusal(CookedDefect::kTooSmall,
+        std::string(kind) + " descriptor is too small for its header"));
+    }
+    if (header->magic != magic) {
+      return Err(Refusal(CookedDefect::kWrongMagic,
+        std::string(kind) + " descriptor has an invalid magic"));
+    }
+    if (header->version != version) {
+      return Err(Refusal(CookedDefect::kUnsupportedVersion,
+        std::string(kind) + " descriptor has an unsupported version"));
+    }
+    return Ok(*header);
+  }
+
+  //! Why `views` cannot be the views of the buffer `descriptor` describes;
+  //! nullopt when they can.
+  /*!
+   Names are non-empty and distinct, and one is `kWholeBufferViewName`, equal
+   to `WholeBufferView(descriptor)`. Every other view lies in the buffer and
+   on its element stride, and its element range is its byte range in
+   elements.
+  */
+  auto CheckViews(const pak::core::BufferResourceDesc& descriptor,
+    const std::span<const BufferResourceView> views)
+    -> std::optional<CookedOpenError>
+  {
+    const auto stride = BufferElementStride(descriptor);
+    if (stride == 0) {
+      return Refusal(
+        CookedDefect::kInvalidValue, "Buffer descriptor has no element stride");
+    }
+    const auto size = uint64_t { descriptor.size_bytes };
     auto names = std::unordered_set<std::string_view> {};
     for (const auto& view : views) {
       if (view.name.empty()) {
-        return std::string("Buffer descriptor contains an empty view name");
+        return Refusal(CookedDefect::kInvalidValue,
+          "Buffer descriptor contains an empty view name");
       }
       if (!names.insert(view.name).second) {
-        return std::string("Buffer descriptor contains duplicate view names");
+        return Refusal(CookedDefect::kDuplicate,
+          "Buffer descriptor contains duplicate view names");
+      }
+      if (view.name == kWholeBufferViewName) {
+        if (view != WholeBufferView(descriptor)) {
+          return Refusal(CookedDefect::kInconsistent,
+            "Buffer descriptor whole view does not span the buffer");
+        }
+        continue;
+      }
+      const auto in_buffer = view.byte_offset <= size
+        && view.byte_length <= size - view.byte_offset;
+      if (!in_buffer) {
+        return Refusal(CookedDefect::kOutOfBounds,
+          "Buffer descriptor view lies outside the buffer");
+      }
+      const auto on_stride
+        = view.byte_offset % stride == 0 && view.byte_length % stride == 0;
+      if (!on_stride) {
+        return Refusal(CookedDefect::kMisaligned,
+          "Buffer descriptor view does not start and end on its stride");
+      }
+      const auto elements_match_bytes
+        = view.element_offset == view.byte_offset / stride
+        && view.element_count == view.byte_length / stride;
+      if (!elements_match_bytes) {
+        return Refusal(CookedDefect::kInconsistent,
+          "Buffer descriptor view does not match its element range");
       }
     }
     if (!names.contains(kWholeBufferViewName)) {
-      return std::string("Buffer descriptor is missing required '")
-        + std::string(kWholeBufferViewName) + "' view";
+      return Refusal(CookedDefect::kMissingPart,
+        std::string("Buffer descriptor is missing required '")
+          + std::string(kWholeBufferViewName) + "' view");
     }
     return std::nullopt;
   }
@@ -124,33 +182,33 @@ auto EncodeTextureResourceDescriptor(
 }
 
 auto DecodeTextureResourceDescriptor(const std::span<const std::byte> bytes)
-  -> Result<TextureResourceDescriptor, std::string>
+  -> Result<TextureResourceDescriptor, CookedOpenError>
 {
+  const auto header = ReadHeader(bytes, kTextureResourceDescriptorMagic,
+    kTextureResourceDescriptorVersion, "Texture");
+  if (!header) {
+    return Err(header.error());
+  }
   if (bytes.size() != kTextureResourceDescriptorSize) {
-    return Err(
-      std::string("Texture descriptor size does not match the current format"));
+    return Err(Refusal(CookedDefect::kSizeMismatch,
+      "Texture descriptor size does not match its format"));
   }
-  serio::ReadOnlyMemoryStream stream(bytes);
-  serio::Reader reader(stream);
-  auto record = TextureResourceDescriptorRecord {};
-  if (!reader.ReadInto(record)) {
-    return Err(std::string("Texture descriptor could not be decoded"));
-  }
-  if (auto error = CheckHeader(record.header, kTextureResourceDescriptorMagic,
-        kTextureResourceDescriptorVersion, "Texture")) {
-    return Err(std::move(*error));
+  const auto record = serio::CopyAt<TextureResourceDescriptorRecord>(bytes);
+  if (!record) {
+    return Err(Refusal(
+      CookedDefect::kTruncated, "Texture descriptor could not be decoded"));
   }
   return Ok(TextureResourceDescriptor {
-    .index = record.header.index,
-    .descriptor = record.descriptor,
+    .index = record->header.index,
+    .descriptor = record->descriptor,
   });
 }
 
 auto EncodeBufferResourceDescriptor(const BufferResourceDescriptor& descriptor)
   -> std::vector<std::byte>
 {
-  if (auto error = CheckViewNames(descriptor.views)) {
-    throw std::invalid_argument(*error);
+  if (const auto error = CheckViews(descriptor.descriptor, descriptor.views)) {
+    throw std::invalid_argument(error->what());
   }
 
   auto strings = DescriptorStringsBuilder {};
@@ -187,29 +245,32 @@ auto EncodeBufferResourceDescriptor(const BufferResourceDescriptor& descriptor)
 }
 
 auto DecodeBufferResourceDescriptor(const std::span<const std::byte> bytes)
-  -> Result<BufferResourceDescriptor, std::string>
+  -> Result<BufferResourceDescriptor, CookedOpenError>
 {
+  if (const auto header = ReadHeader(bytes, kBufferResourceDescriptorMagic,
+        kBufferResourceDescriptorVersion, "Buffer");
+    !header) {
+    return Err(header.error());
+  }
   serio::ReadOnlyMemoryStream stream(bytes);
   serio::Reader reader(stream);
   auto record = BufferResourceDescriptorRecord {};
   if (!reader.ReadInto(record)) {
-    return Err(std::string("Buffer descriptor is truncated"));
-  }
-  if (auto error = CheckHeader(record.header, kBufferResourceDescriptorMagic,
-        kBufferResourceDescriptorVersion, "Buffer")) {
-    return Err(std::move(*error));
+    return Err(
+      Refusal(CookedDefect::kTruncated, "Buffer descriptor is truncated"));
   }
   const auto views_size
     = uint64_t { record.view_count } * sizeof(BufferViewRecord);
   if (bytes.size()
     != sizeof(record) + views_size + uint64_t { record.strings_size }) {
-    return Err(std::string(
+    return Err(Refusal(CookedDefect::kSizeMismatch,
       "Buffer descriptor size does not match its view and string counts"));
   }
 
   auto views = std::vector<BufferViewRecord>(record.view_count);
   if (!reader.ReadBlobInto(std::as_writable_bytes(std::span { views }))) {
-    return Err(std::string("Buffer descriptor view table is truncated"));
+    return Err(Refusal(
+      CookedDefect::kTruncated, "Buffer descriptor view table is truncated"));
   }
   auto strings = DescriptorStrings {};
   try {
@@ -219,7 +280,8 @@ auto DecodeBufferResourceDescriptor(const std::span<const std::byte> bytes)
       [](const std::byte value) -> char { return static_cast<char>(value); });
     strings = DescriptorStrings { std::move(chars) };
   } catch (const std::invalid_argument&) {
-    return Err(std::string("Buffer descriptor string table is invalid"));
+    return Err(Refusal(CookedDefect::kInvalidString,
+      "Buffer descriptor string table is invalid"));
   }
 
   auto result = BufferResourceDescriptor {
@@ -231,8 +293,8 @@ auto DecodeBufferResourceDescriptor(const std::span<const std::byte> bytes)
   for (const auto& view : views) {
     const auto name = strings.TryGet(view.name_offset);
     if (!name) {
-      return Err(
-        std::string("Buffer descriptor view name is not in its table"));
+      return Err(Refusal(CookedDefect::kInvalidString,
+        "Buffer descriptor view name is not in its table"));
     }
     result.views.push_back(BufferResourceView {
       .name = std::string(*name),
@@ -242,7 +304,7 @@ auto DecodeBufferResourceDescriptor(const std::span<const std::byte> bytes)
       .element_count = view.element_count,
     });
   }
-  if (auto error = CheckViewNames(result.views)) {
+  if (auto error = CheckViews(result.descriptor, result.views)) {
     return Err(std::move(*error));
   }
   return Ok(std::move(result));

@@ -20,6 +20,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -185,7 +186,7 @@ public:
 
     const auto DumpComponentTableHeader
       = [&](const ComponentType type, const size_t count) -> void {
-      ctx.Out() << "      " << ::nostd::to_string(type) << ": " << count
+      ctx.Out() << "      " << toolkit::EnumString(type) << ": " << count
                 << "\n";
     };
 
@@ -240,7 +241,7 @@ public:
           const auto& policy = oxygen::base::CheckedAt(
             policies, record.value.as_record_index.get());
           PrintUtils::Field(ctx.Out(), label,
-            "type=" + std::to_string(static_cast<int>(policy.type))
+            "type=" + toolkit::EnumString(policy.type)
               + " boundaries=" + std::to_string(policy.boundary_count),
             10);
           break;
@@ -289,7 +290,10 @@ public:
 
         ctx.Out() << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field(ctx.Out(), "Atmosphere Slot",
-          static_cast<int>(rec.atmosphere_light_slot), 10);
+          toolkit::EnumString(
+            static_cast<oxygen::data::schema::AtmosphereLightSlot>(
+              rec.atmosphere_light_slot)),
+          10);
         PrintUtils::Field(ctx.Out(), "Per-pixel Transmittance",
           rec.use_per_pixel_atmosphere_transmittance != 0U, 10);
         PrintUtils::Field(ctx.Out(), "Disk Luminance Scale",
@@ -297,8 +301,11 @@ public:
             rec.atmosphere_disk_luminance_scale_rgb),
           10);
         PrintUtils::Field(ctx.Out(), "Cascade Count", rec.cascade_count, 10);
-        PrintUtils::Field(
-          ctx.Out(), "Split Mode", static_cast<uint32_t>(rec.split_mode), 10);
+        PrintUtils::Field(ctx.Out(), "Split Mode",
+          toolkit::EnumString(
+            static_cast<oxygen::data::schema::DirectionalCsmSplitMode>(
+              rec.split_mode)),
+          10);
         PrintUtils::Field(
           ctx.Out(), "Max Shadow Distance", rec.max_shadow_distance, 10);
         PrintUtils::Field(
@@ -413,28 +420,6 @@ public:
     PrintUtils::Field(ctx.Out(), "Systems Count", env_header.systems_count, 8);
     ctx.Out() << "\n";
 
-    const auto EnvironmentTypeName
-      = [](const EnvironmentComponentType type) -> const char* {
-      switch (type) {
-      case EnvironmentComponentType::kSkyAtmosphere:
-        return "SkyAtmosphere";
-      case EnvironmentComponentType::kVolumetricClouds:
-        return "VolumetricClouds";
-      case EnvironmentComponentType::kFog:
-        return "Fog";
-      case EnvironmentComponentType::kSkyLight:
-        return "SkyLight";
-      case EnvironmentComponentType::kSkySphere:
-        return "SkySphere";
-      case EnvironmentComponentType::kPostProcessVolume:
-        return "PostProcessVolume";
-      case EnvironmentComponentType::kBackground:
-        return "Background";
-      default:
-        return "Unknown";
-      }
-    };
-
     const auto records = scene->GetEnvironmentSystemRecords();
     for (size_t i = 0; i < records.size(); ++i) {
       const auto& record = oxygen::base::CheckedAt(records, i);
@@ -442,7 +427,7 @@ public:
         = static_cast<EnvironmentComponentType>(record.header.system_type);
 
       ctx.Out() << fmt::format("      [{}] {} (size {})\n", i,
-        EnvironmentTypeName(type), record.header.record_size);
+        toolkit::EnumString(type), record.header.record_size);
 
       const auto TryReadSkyAtmosphere
         = [&](const std::span<const std::byte> bytes)
@@ -725,7 +710,7 @@ public:
         }
 
         PrintUtils::Field(
-          ctx.Out(), "Source", static_cast<int>(rec->source), 10);
+          ctx.Out(), "Source", toolkit::EnumString(rec->source), 10);
         PrintUtils::Field(
           ctx.Out(), "Cubemap Texture Reference", rec->cubemap.get(), 10);
         PrintUtils::Field(ctx.Out(), "Intensity", rec->intensity, 10);
@@ -758,7 +743,7 @@ public:
         }
 
         PrintUtils::Field(
-          ctx.Out(), "Source", static_cast<int>(rec->source), 10);
+          ctx.Out(), "Source", toolkit::EnumString(rec->source), 10);
         PrintUtils::Field(
           ctx.Out(), "Cubemap Texture Reference", rec->cubemap.get(), 10);
         PrintUtils::Field(ctx.Out(), "Solid Color",
@@ -788,9 +773,9 @@ public:
         }
 
         PrintUtils::Field(
-          ctx.Out(), "Tone Mapper", static_cast<int>(rec->tone_mapper), 10);
-        PrintUtils::Field(
-          ctx.Out(), "Exposure Mode", static_cast<int>(rec->exposure_mode), 10);
+          ctx.Out(), "Tone Mapper", toolkit::EnumString(rec->tone_mapper), 10);
+        PrintUtils::Field(ctx.Out(), "Exposure Mode",
+          toolkit::EnumString(rec->exposure_mode), 10);
         PrintUtils::Field(ctx.Out(), "Exposure Compensation (EV)",
           rec->exposure_compensation_ev, 10);
         PrintUtils::Field(
@@ -815,7 +800,7 @@ public:
         PrintUtils::Field(
           ctx.Out(), "Manual Exposure (EV)", rec->manual_exposure_ev, 10);
         PrintUtils::Field(ctx.Out(), "Metering Mode",
-          static_cast<int>(rec->auto_exposure_metering_mode), 10);
+          toolkit::EnumString(rec->auto_exposure_metering_mode), 10);
         PrintUtils::Field(
           ctx.Out(), "Low Percentile", rec->auto_exposure_low_percentile, 10);
         PrintUtils::Field(

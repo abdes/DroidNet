@@ -483,6 +483,21 @@ def _enumeration_values(enumeration: Enumeration) -> list[str]:
             f"inline constexpr std::array<std::string_view, {count}> "
             f"k{name}MemberKeys {{ {keys} }};"
         ),
+        "",
+        f"//! The name of a {name} member, as the schema spells it.",
+        (
+            f"[[nodiscard]] constexpr auto to_string(const {name} value) "
+            "noexcept -> std::string_view"
+        ),
+        "{",
+        "  switch (value) {",
+        *(
+            f'  case {name}::k{member.name}: return "{member.name}";'
+            for member in enumeration.members
+        ),
+        "  }",
+        '  return "__NotSupported__";',
+        "}",
     ]
 
 

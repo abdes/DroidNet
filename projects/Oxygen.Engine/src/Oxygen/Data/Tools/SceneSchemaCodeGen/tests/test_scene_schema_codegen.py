@@ -17,7 +17,6 @@ from typing import Any
 
 import pytest
 import yaml
-
 from scene_schema_codegen import changes, cli, cpp, model
 
 _SCHEMA_DIR = Path(__file__).resolve().parents[3] / "Schema"
@@ -651,6 +650,17 @@ def test_enum_member_keys_are_snake_case_in_member_order() -> None:
         "inline constexpr std::array<std::string_view, 2> "
         'kModeMemberKeys { "auto", "manual_distances" };'
     ) in text
+
+
+def test_enum_names_its_members_by_their_schema_names() -> None:
+    document = _minimal()
+    document["enums"][0]["members"][1]["name"] = "ManualDistances"
+    text = _text(document)
+    assert (
+        "constexpr auto to_string(const Mode value) noexcept -> std::string_view"
+    ) in text
+    assert '  case Mode::kAuto: return "Auto";' in text
+    assert '  case Mode::kManualDistances: return "ManualDistances";' in text
 
 
 def test_root_default_is_rendered() -> None:

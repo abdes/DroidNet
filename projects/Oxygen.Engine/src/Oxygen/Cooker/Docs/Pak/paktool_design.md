@@ -70,8 +70,8 @@ Current request/result contracts:
 
 Current format baseline:
 
-- The pak binary format remains version `7` in
-  `src/Oxygen/Data/PakFormat_core.h`.
+- The pak binary format is the current version of the version catalog,
+  [PakFormatVersions.inc](../../../Data/PakFormatVersions.inc).
 
 Design consequence:
 

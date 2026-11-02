@@ -367,7 +367,6 @@ auto TextureEmitter::ToPakDescriptor(const CookedTexturePayload& cooked,
   desc.size_bytes
     = static_cast<data::pak::core::DataBlobSizeT>(cooked.payload.size());
   desc.texture_type = static_cast<uint8_t>(cooked.desc.texture_type);
-  desc.compression_type = 0;
   desc.width = cooked.desc.width;
   desc.height = cooked.desc.height;
   desc.depth = cooked.desc.depth;
@@ -377,15 +376,8 @@ auto TextureEmitter::ToPakDescriptor(const CookedTexturePayload& cooked,
   desc.alignment = static_cast<uint16_t>(policy.AlignRowPitchBytes(1));
   desc.content_hash = cooked.desc.content_hash;
 
-  switch (cooked.desc.format) {
-  case Format::kBC7UNorm:
-  case Format::kBC7UNormSRGB:
-    desc.compression_type = 7;
-    break;
-  default:
-    desc.compression_type = 0;
-    break;
-  }
+  desc.compression_type
+    = data::pak::core::TextureCompressionOf(cooked.desc.format);
 
   return desc;
 }

@@ -6,6 +6,10 @@
 
 #pragma once
 
+#include <cstdint>
+#include <string>
+#include <string_view>
+
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/Record.h>
@@ -21,10 +25,10 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 */
 namespace oxygen::data::pak::input {
 
-[[maybe_unused]] constexpr uint8_t kInputActionAssetVersion
-  = version::kInputActionAssetVersion;
-[[maybe_unused]] constexpr uint8_t kInputMappingContextAssetVersion
-  = version::kInputMappingContextAssetVersion;
+// clang-format off
+[[maybe_unused]] constexpr uint8_t kInputActionAssetVersion = version::kInputActionAssetVersion;
+[[maybe_unused]] constexpr uint8_t kInputMappingContextAssetVersion = version::kInputMappingContextAssetVersion;
+// clang-format on
 
 enum class InputActionAssetFlags : uint32_t {
   kNone = 0,
@@ -80,10 +84,35 @@ struct InputDataTable {
 #pragma pack(pop)
 static_assert(sizeof(InputDataTable) == 16);
 
+//! The value an input action produces, from the catalog the Input module's
+//! `ActionValueType` shares.
+enum class InputActionValueType : uint8_t {
+// NOLINTNEXTLINE(*-macro-*)
+#define OXNPUT_ACTION_VALUE_TYPE(name, value) name = value,
+#include <Oxygen/Core/Meta/Input/ActionValue.inc>
+#undef OXNPUT_ACTION_VALUE_TYPE // NOLINT
+};
+OXGN_DATA_NDAPI auto to_string(InputActionValueType value) noexcept
+  -> std::string_view;
+
+//! Whether `value` is one the catalog defines.
+[[nodiscard]] constexpr auto IsKnownValueType(
+  const InputActionValueType value) noexcept -> bool
+{
+  switch (value) {
+// NOLINTNEXTLINE(*-macro-*)
+#define OXNPUT_ACTION_VALUE_TYPE(name, value) case InputActionValueType::name:
+#include <Oxygen/Core/Meta/Input/ActionValue.inc>
+#undef OXNPUT_ACTION_VALUE_TYPE // NOLINT
+    return true;
+  }
+  return false;
+}
+
 #pragma pack(push, 1)
 struct InputActionAssetDesc {
   core::AssetHeader header;
-  uint8_t value_type = 0;
+  InputActionValueType value_type = InputActionValueType::kBool;
   InputActionAssetFlags flags = InputActionAssetFlags::kNone;
 };
 #pragma pack(pop)
@@ -143,16 +172,16 @@ static_assert(sizeof(InputTriggerAuxRecord) == 32);
 
 } // namespace oxygen::data::pak::input
 
-// clang-format off
 namespace oxygen::serio {
+// clang-format off
 template <> inline constexpr bool kIsRecord<data::pak::input::InputDataTable> = true;
 template <> inline constexpr bool kIsRecord<data::pak::input::InputActionAssetDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::input::InputMappingContextAssetDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::input::InputActionMappingRecord> = true;
 template <> inline constexpr bool kIsRecord<data::pak::input::InputTriggerRecord> = true;
 template <> inline constexpr bool kIsRecord<data::pak::input::InputTriggerAuxRecord> = true;
-} // namespace oxygen::serio
 // clang-format on
+} // namespace oxygen::serio
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

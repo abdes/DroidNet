@@ -5,10 +5,14 @@
 //===----------------------------------------------------------------------===//
 // Covers: Content/PakFile.h
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <limits>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <system_error>
 #include <tuple>
 #include <utility>
@@ -22,6 +26,7 @@
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -41,17 +46,19 @@ namespace {
 using oxygen::content::PakFile;
 using oxygen::cooker::testing::CookedBytes;
 using oxygen::cooker::testing::CookedPak;
+using oxygen::cooker::testing::EncodeBrowseIndex;
 using oxygen::cooker::testing::LooseCookedRoot;
 using oxygen::cooker::testing::Materialize;
 using oxygen::cooker::testing::SeedBytes;
 using oxygen::cooker::testing::SourceKeyOf;
+using oxygen::data::CookedDefect;
 using oxygen::data::CookedOpenError;
-using oxygen::data::CookedOpenFailure;
 using oxygen::serio::testing::BytesEqual;
 
 constexpr auto kMount = "Tests";
 constexpr auto kMaterialLeaf = "A.omat";
 constexpr auto kMaterialPath = "/Tests/A.omat";
+constexpr auto kTexturePath = "/Tests/T.otex";
 constexpr auto kUnknownFormatVersion = uint16_t { 99U };
 constexpr auto kOtherIdentitySeed = uint8_t { 0xEEU };
 
@@ -63,13 +70,13 @@ auto Open(const std::vector<std::byte>& bytes) -> PakFile
     "test.pak" };
 }
 
-//! The failure the pak `bytes` hold is refused with.
-auto OpenFailure(const std::vector<std::byte>& bytes) -> CookedOpenFailure
+//! The rule the pak `bytes` hold is refused for.
+auto OpenDefect(const std::vector<std::byte>& bytes) -> CookedDefect
 {
   try {
     std::ignore = Open(bytes);
   } catch (const CookedOpenError& error) {
-    return error.Failure();
+    return error.Defect();
   }
   ADD_FAILURE() << "the pak was accepted";
   return {};
@@ -98,6 +105,63 @@ auto OneMaterial() -> LooseCookedRoot
 auto ValidPak() -> std::vector<std::byte>
 {
   return CookedPak { OneMaterial() }.Encode();
+}
+
+//! The bytes of a valid pak of a material that binds a texture, and the
+//! texture: every section of a pak, and a reference inventory.
+auto TexturedPak() -> std::vector<std::byte>
+{
+  auto root = LooseCookedRoot { kMount };
+  const auto texture = root.AddTexture(SeedBytes(0x5AU));
+  auto material = oxygen::cooker::testing::MaterialBuilder { "A" };
+  material.Texture(
+    &oxygen::data::pak::render::MaterialAssetDesc::base_color_texture, texture);
+  static_cast<void>(root.Material(kMaterialLeaf, material));
+  return CookedPak { root }.Encode();
+}
+
+//! A browse index of one asset, at `kMaterialPath`, and one texture, of row
+//! one, at `kTexturePath`, encoded by the product.
+auto BrowseIndex(const uint32_t texture_index = 1U) -> std::vector<std::byte>
+{
+  return EncodeBrowseIndex({
+    .entries = { {
+      .asset_key = oxygen::data::AssetKey::FromVirtualPath(kMaterialPath),
+      .virtual_path = kMaterialPath,
+    }, },
+    .textures = { {
+      .texture_index = texture_index,
+      .virtual_path = kTexturePath,
+    }, },
+  });
+}
+
+//! The rule decoding the browse index `bytes`, of a pak of `textures`
+//! texture rows, is refused for.
+auto BrowseDefect(const std::vector<std::byte>& bytes, const uint32_t textures)
+  -> CookedDefect
+{
+  try {
+    std::ignore = PakFile::DecodeBrowseIndex(bytes, textures);
+  } catch (const CookedOpenError& error) {
+    return error.Defect();
+  }
+  ADD_FAILURE() << "the browse index was accepted";
+  return {};
+}
+
+//! A root of the mount with two materials that bind the same texture, so
+//! both hold a reference inventory.
+auto TwoTexturedMaterials() -> LooseCookedRoot
+{
+  auto root = LooseCookedRoot { kMount };
+  const auto texture = root.AddTexture(SeedBytes(0x5AU));
+  auto material = oxygen::cooker::testing::MaterialBuilder { "A" };
+  material.Texture(
+    &oxygen::data::pak::render::MaterialAssetDesc::base_color_texture, texture);
+  static_cast<void>(root.Material(kMaterialLeaf, material));
+  static_cast<void>(root.Material("B.omat", material));
+  return root;
 }
 
 NOLINT_TEST(PakFileTest, OpensItsMetadata)
@@ -149,59 +213,294 @@ NOLINT_TEST(PakFileTest, RefusesADeviceWithoutAView)
     PakFile(std::move(device), "test.pak"), std::invalid_argument);
 }
 
+//! Bytes too few to hold a pak header are no pak.
 NOLINT_TEST(PakFileTest, RefusesTooFewBytesForAHeader)
 {
-  EXPECT_EQ(
-    OpenFailure(std::vector<std::byte>(4)), CookedOpenFailure::kWrongFormat);
+  EXPECT_EQ(OpenDefect(std::vector<std::byte>(4)), CookedDefect::kTooSmall);
 }
 
-NOLINT_TEST(PakFileTest, RefusesAnotherHeaderMagic)
+//! Every directory entry records its own position, not another row's.
+NOLINT_TEST(PakFileTest, RefusesAnIncorrectDirectoryEntryOffset)
 {
-  auto bytes = ValidPak();
-  CookedBytes::BreakPakMagic(bytes);
+  // Arrange
+  auto root = OneMaterial();
+  static_cast<void>(root.Material("B.omat"));
+  const auto valid = CookedPak { root }.Encode();
+  const auto directory_offset = Open(valid).Footer().directory_offset;
+  constexpr auto kEntrySize
+    = sizeof(oxygen::data::pak::core::AssetDirectoryEntry);
+  // Zero, the first row's position, one byte past the second's, and a value
+  // whose position arithmetic would wrap.
+  const auto offsets = std::array {
+    uint64_t { 0U },
+    directory_offset,
+    directory_offset + kEntrySize + 1U,
+    std::numeric_limits<uint64_t>::max(),
+  };
 
-  EXPECT_EQ(OpenFailure(bytes), CookedOpenFailure::kWrongFormat);
+  // Act & Assert
+  for (const auto offset : offsets) {
+    auto bytes = valid;
+    CookedBytes::SetDirectoryEntryOffset(bytes, 1U, offset);
+    EXPECT_EQ(OpenDefect(bytes), CookedDefect::kInconsistent) << offset;
+  }
 }
 
-NOLINT_TEST(PakFileTest, RefusesAnotherFormatVersion)
+//! Directory checks precede reference decoding when both are malformed.
+NOLINT_TEST(PakFileTest, DescriptorOverlapPrecedesInvalidReference)
 {
-  auto bytes = ValidPak();
-  CookedBytes::SetPakVersion(bytes, kUnknownFormatVersion);
+  // Arrange
+  auto bytes = TexturedPak();
+  CookedBytes::BreakReferenceKind(bytes);
+  CookedBytes::MoveDescriptorOntoDirectory(bytes);
 
-  EXPECT_EQ(OpenFailure(bytes), CookedOpenFailure::kUnsupportedVersion);
+  // Act & Assert
+  EXPECT_EQ(OpenDefect(bytes), CookedDefect::kOverlap);
 }
 
-NOLINT_TEST(PakFileTest, RefusesAnotherFooterMagic)
+//! Table row sizes are validated before resource region alignment.
+NOLINT_TEST(PakFileTest, TableRowSizePrecedesRegionAlignment)
 {
-  auto bytes = ValidPak();
-  CookedBytes::BreakFooterMagic(bytes);
+  // Arrange
+  auto bytes = TexturedPak();
+  CookedBytes::GrowTextureEntrySize(bytes);
+  CookedBytes::MisalignTextureRegion(bytes);
 
-  EXPECT_EQ(OpenFailure(bytes), CookedOpenFailure::kCorrupt);
+  // Act & Assert
+  EXPECT_EQ(OpenDefect(bytes), CookedDefect::kWrongRowSize);
 }
 
-NOLINT_TEST(PakFileTest, RefusesAMissingCatalog)
+//! Reference inventories start immediately after the final descriptor.
+NOLINT_TEST(PakFileTest, RefusesADisplacedReferenceInventory)
 {
-  auto bytes = ValidPak();
-  CookedBytes::DropCatalog(bytes);
+  // Arrange
+  auto bytes = TexturedPak();
+  CookedBytes::DisplaceReferenceInventory(bytes);
 
-  EXPECT_EQ(OpenFailure(bytes), CookedOpenFailure::kCorrupt);
+  // Act & Assert
+  EXPECT_EQ(OpenDefect(bytes), CookedDefect::kOverlap);
 }
 
-NOLINT_TEST(PakFileTest, RefusesADirectoryOutsideThePak)
+//! Inventories of successive assets cannot name the same block.
+NOLINT_TEST(PakFileTest, RefusesOverlappingReferenceInventories)
 {
-  auto bytes = ValidPak();
-  CookedBytes::MoveDirectoryOutside(bytes);
+  // Arrange
+  auto bytes = CookedPak { TwoTexturedMaterials() }.Encode();
+  CookedBytes::ShareReferenceInventory(bytes);
 
-  EXPECT_EQ(OpenFailure(bytes), CookedOpenFailure::kCorrupt);
+  // Act & Assert
+  EXPECT_EQ(OpenDefect(bytes), CookedDefect::kOverlap);
 }
 
-NOLINT_TEST(PakFileTest, RefusesACatalogOfAnotherIdentity)
+//! An empty reference inventory names no bytes of the pak.
+NOLINT_TEST(PakFileTest, RefusesALocatedEmptyReferenceInventory)
 {
+  // Arrange
   auto bytes = ValidPak();
-  CookedBytes::SetHeaderIdentity(bytes, SourceKeyOf(kOtherIdentitySeed));
+  CookedBytes::LocateEmptyReferenceInventory(bytes);
 
-  EXPECT_EQ(OpenFailure(bytes), CookedOpenFailure::kCorrupt);
+  // Act & Assert
+  EXPECT_EQ(OpenDefect(bytes), CookedDefect::kInvalidReference);
 }
+
+//! Asset and texture browse paths share one namespace.
+NOLINT_TEST(PakFileTest, BrowseRefusesAnAssetTexturePathCollision)
+{
+  // Arrange
+  auto bytes = BrowseIndex();
+  CookedBytes::AliasBrowseTextureToFirstEntry(bytes);
+
+  // Act & Assert
+  EXPECT_EQ(BrowseDefect(bytes, 2U), CookedDefect::kDuplicate);
+}
+
+//! The texture index is checked before the texture's path: a texture
+//! outside the table is refused although its path lies outside the strings.
+NOLINT_TEST(PakFileTest, BrowseTextureIndexPrecedesItsPath)
+{
+  // Arrange
+  auto bytes = BrowseIndex(/*texture_index=*/2U);
+  CookedBytes::SetBrowseTexturePathOffset(
+    bytes, std::numeric_limits<uint32_t>::max());
+
+  // Act & Assert
+  EXPECT_EQ(BrowseDefect(bytes, 2U), CookedDefect::kOutOfBounds);
+}
+
+//! The product's browse index decodes to its entries.
+NOLINT_TEST(PakFileTest, BrowseDecodesItsEntries)
+{
+  // Act
+  const auto browse = PakFile::DecodeBrowseIndex(BrowseIndex(), 2U);
+
+  // Assert
+  ASSERT_EQ(browse.entries.size(), 1U);
+  ASSERT_EQ(browse.textures.size(), 1U);
+  EXPECT_EQ(browse.entries.front().virtual_path, kMaterialPath);
+  EXPECT_EQ(browse.textures.front().virtual_path, kTexturePath);
+}
+
+//! A browse index holds exactly the payload its header declares: a byte
+//! after it is a size mismatch.
+NOLINT_TEST(PakFileTest, BrowseRefusesTrailingBytes)
+{
+  // Arrange
+  auto bytes = BrowseIndex();
+  bytes.push_back(std::byte { 0x7F });
+
+  // Act & Assert
+  EXPECT_EQ(BrowseDefect(bytes, 2U), CookedDefect::kSizeMismatch);
+}
+
+struct PakRefusal final {
+  std::string name;
+  std::function<void(std::vector<std::byte>&)> apply;
+  CookedDefect defect;
+};
+
+class PakFileRefusalTest : public ::testing::TestWithParam<PakRefusal> { };
+
+//! A pak that breaks one rule of the format is refused at open, before
+//! anything in it is exposed, naming that rule. CRC verification is off, so
+//! each rule is checked on its own.
+NOLINT_TEST_P(PakFileRefusalTest, RefusesTheBrokenRule)
+{
+  auto bytes = TexturedPak();
+
+  GetParam().apply(bytes);
+
+  EXPECT_EQ(OpenDefect(bytes), GetParam().defect);
+}
+
+INSTANTIATE_TEST_SUITE_P(Rules, PakFileRefusalTest,
+  ::testing::Values(
+    PakRefusal {
+      .name = "HeaderMagic",
+      .apply = &CookedBytes::BreakPakMagic,
+      .defect = CookedDefect::kWrongMagic,
+    },
+    PakRefusal {
+      .name = "FormatVersion",
+      .apply = [](std::vector<std::byte>& bytes) -> void {
+        CookedBytes::SetPakVersion(bytes, kUnknownFormatVersion);
+      },
+      .defect = CookedDefect::kUnsupportedVersion,
+    },
+    PakRefusal {
+      .name = "FooterMagic",
+      .apply = &CookedBytes::BreakFooterMagic,
+      .defect = CookedDefect::kTruncated,
+    },
+    PakRefusal {
+      .name = "HeaderReserved",
+      .apply = &CookedBytes::SetHeaderReserved,
+      .defect = CookedDefect::kReservedNotZero,
+    },
+    PakRefusal {
+      .name = "FooterReserved",
+      .apply = &CookedBytes::SetFooterReserved,
+      .defect = CookedDefect::kReservedNotZero,
+    },
+    PakRefusal {
+      .name = "DirectoryEntryReserved",
+      .apply = &CookedBytes::SetDirectoryEntryReserved,
+      .defect = CookedDefect::kReservedNotZero,
+    },
+    PakRefusal {
+      .name = "NoCatalog",
+      .apply = &CookedBytes::DropCatalog,
+      .defect = CookedDefect::kMissingPart,
+    },
+    PakRefusal {
+      .name = "CatalogOutsideTheBody",
+      .apply = &CookedBytes::OverrunCatalog,
+      .defect = CookedDefect::kOutOfBounds,
+    },
+    PakRefusal {
+      .name = "CatalogOfAnotherIdentity",
+      .apply = [](std::vector<std::byte>& bytes) -> void {
+        CookedBytes::SetHeaderIdentity(bytes, SourceKeyOf(kOtherIdentitySeed));
+      },
+      .defect = CookedDefect::kInconsistent,
+    },
+    PakRefusal {
+      .name = "DirectoryOutsideThePak",
+      .apply = &CookedBytes::MoveDirectoryOutside,
+      .defect = CookedDefect::kOutOfBounds,
+    },
+    PakRefusal {
+      .name = "NoBrowseIndex",
+      .apply = &CookedBytes::DropBrowseIndex,
+      .defect = CookedDefect::kMissingPart,
+    },
+    PakRefusal {
+      .name = "OverlappingRegions",
+      .apply = &CookedBytes::OverlapAudioRegionWithTextures,
+      .defect = CookedDefect::kOverlap,
+    },
+    PakRefusal {
+      .name = "MisalignedRegion",
+      .apply = &CookedBytes::MisalignTextureRegion,
+      .defect = CookedDefect::kMisaligned,
+    },
+    PakRefusal {
+      .name = "TableOfAnotherRowSize",
+      .apply = &CookedBytes::GrowTextureEntrySize,
+      .defect = CookedDefect::kWrongRowSize,
+    },
+    PakRefusal {
+      .name = "UnknownBindingKind",
+      .apply = &CookedBytes::BreakReferenceKind,
+      .defect = CookedDefect::kInvalidReference,
+    },
+    PakRefusal {
+      .name = "RowWithoutDigest",
+      .apply = &CookedBytes::ClearTextureDigest,
+      .defect = CookedDefect::kMissingDigest,
+    },
+    PakRefusal {
+      .name = "PayloadOutsideItsRegion",
+      .apply = &CookedBytes::MoveTexturePayloadOutsideRegion,
+      .defect = CookedDefect::kOutOfBounds,
+    },
+    PakRefusal {
+      .name = "PayloadOffItsBoundary",
+      .apply = &CookedBytes::MisalignTexturePayload,
+      .defect = CookedDefect::kMisaligned,
+    },
+    PakRefusal {
+      .name = "UnknownCompression",
+      .apply = [](std::vector<std::byte>& bytes) -> void {
+        CookedBytes::SetTextureCompression(bytes, 0xEEU);
+      },
+      .defect = CookedDefect::kInvalidValue,
+    },
+    PakRefusal {
+      .name = "BrowsePathNotUtf8",
+      .apply = &CookedBytes::BreakBrowsePathUtf8,
+      .defect = CookedDefect::kInvalidPath,
+    },
+    PakRefusal {
+      .name = "BrowsePathDotSegment",
+      .apply = &CookedBytes::BreakBrowsePathDotSegment,
+      .defect = CookedDefect::kInvalidPath,
+    },
+    PakRefusal {
+      .name = "BrowsePathOfAnotherMount",
+      .apply = &CookedBytes::ChangeBrowseMount,
+      .defect = CookedDefect::kInconsistent,
+    },
+    PakRefusal {
+      .name = "BrowseAssetNotInThePak",
+      .apply = [](std::vector<std::byte>& bytes) -> void {
+        CookedBytes::SetBrowseAssetKey(
+          bytes, oxygen::data::AssetKey::FromVirtualPath("/Tests/Absent.omat"));
+      },
+      .defect = CookedDefect::kInconsistent,
+    }),
+  [](const ::testing::TestParamInfo<PakRefusal>& info) -> std::string {
+    return info.param.name;
+  });
 
 //! The CRC covers the whole pak except its own field: a CRC computed here,
 //! skipping that field, is accepted.
@@ -226,7 +525,12 @@ NOLINT_TEST(PakFileTest, Crc32ValidationFailsWhenAByteChanges)
 
   const auto pak = Open(bytes);
 
-  NOLINT_EXPECT_THROW(pak.ValidateCrc32Integrity(), std::runtime_error);
+  try {
+    pak.ValidateCrc32Integrity();
+    ADD_FAILURE() << "the CRC32 validated";
+  } catch (const CookedOpenError& error) {
+    EXPECT_EQ(error.Defect(), CookedDefect::kDigestMismatch);
+  }
 }
 
 NOLINT_TEST(PakFileTest, Crc32ValidationSkippedWhenZero)

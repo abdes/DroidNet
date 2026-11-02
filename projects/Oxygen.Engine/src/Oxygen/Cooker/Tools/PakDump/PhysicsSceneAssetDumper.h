@@ -10,11 +10,14 @@
 #include <cstring>
 #include <ostream>
 #include <span>
+#include <utility>
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
 #include <fmt/format.h>
 
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -23,30 +26,6 @@ namespace oxygen::content::pakdump {
 
 //! Dumps physics scene asset descriptors.
 class PhysicsSceneAssetDumper final : public AssetDumper {
-  static auto BindingTypeName(
-    const oxygen::data::pak::physics::PhysicsBindingType type) -> const char*
-  {
-    using oxygen::data::pak::physics::PhysicsBindingType;
-    switch (type) {
-    case PhysicsBindingType::kRigidBody:
-      return "RigidBody";
-    case PhysicsBindingType::kCollider:
-      return "Collider";
-    case PhysicsBindingType::kCharacter:
-      return "Character";
-    case PhysicsBindingType::kSoftBody:
-      return "SoftBody";
-    case PhysicsBindingType::kJoint:
-      return "Joint";
-    case PhysicsBindingType::kVehicle:
-      return "Vehicle";
-    case PhysicsBindingType::kAggregate:
-      return "Aggregate";
-    default:
-      return "Unknown";
-    }
-  }
-
   static auto InRange(
     const size_t offset, const size_t size, const size_t total) -> bool
   {
@@ -121,7 +100,7 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       PrintUtils::Field(out, "Sample Topology Asset Key",
         oxygen::data::to_string(record.topology_asset_key), 10);
       PrintUtils::Field(out, "Sample Topology Format",
-        static_cast<uint32_t>(record.topology_format), 10);
+        toolkit::EnumString(record.topology_format), 10);
       PrintUtils::Field(
         out, "Sample Solver Iterations", record.solver_iteration_count, 10);
       PrintUtils::Field(
@@ -152,7 +131,7 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       const auto& record = *record_read;
       PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
       PrintUtils::Field(out, "Sample Controller Type",
-        static_cast<uint32_t>(record.controller_type), 10);
+        toolkit::EnumString(record.controller_type), 10);
       PrintUtils::Field(
         out, "Sample Wheel Slice Offset", record.wheel_slice_offset, 10);
       PrintUtils::Field(
@@ -214,6 +193,8 @@ public:
     PrintUtils::Field(
       ctx.Out(), "Target Node Count", scene.target_node_count, 8);
     PrintUtils::Field(
+      ctx.Out(), "Backend", toolkit::EnumString(scene.backend), 8);
+    PrintUtils::Field(
       ctx.Out(), "Component Table Count", scene.component_table_count, 8);
     PrintUtils::Field(ctx.Out(), "Component Directory Offset",
       asset_dump_helpers::ToHexString(scene.component_table_directory_offset),
@@ -256,11 +237,12 @@ public:
       const auto entry_size = static_cast<size_t>(table_desc.table.entry_size);
       const auto table_size = count * entry_size;
 
+      // A binding type is a FourCC: its value reads best in hexadecimal.
       ctx.Out() << fmt::format(
-        "          [{}] {} ({:#010X}) count={} entry_size={} "
+        "          [{}] {}({:#010X}) count={} entry_size={} "
         "offset={}\n",
-        i, BindingTypeName(table_desc.binding_type),
-        static_cast<uint32_t>(table_desc.binding_type), table_desc.table.count,
+        i, nostd::to_string(table_desc.binding_type),
+        std::to_underlying(table_desc.binding_type), table_desc.table.count,
         table_desc.table.entry_size,
         asset_dump_helpers::ToHexString(table_desc.table.offset));
       total_bindings += table_desc.table.count;

@@ -15,6 +15,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/api_export.h>
@@ -117,7 +118,10 @@ struct BufferResourceView {
 //! A decoded `.obuf` file.
 /*!
  View names are non-empty and distinct, and one of them is
- `kWholeBufferViewName`.
+ `kWholeBufferViewName`, which equals `WholeBufferView` of the descriptor. The
+ buffer has a nonzero `BufferElementStride`; every other view lies within the
+ buffer, starts and ends on that stride, and its element range is its byte
+ range divided by it.
 */
 struct BufferResourceDescriptor {
   pak::core::ResourceIndexT index { pak::core::kNoResourceIndex };
@@ -140,25 +144,34 @@ OXGN_DATA_NDAPI auto WholeBufferView(
 OXGN_DATA_NDAPI auto EncodeTextureResourceDescriptor(
   const TextureResourceDescriptor& descriptor) -> std::vector<std::byte>;
 
-//! Decodes a `.otex` file; fails on any other size, magic or version.
+//! Decodes a `.otex` file.
+/*!
+ @return `CookedOpenFailure::kWrongFormat` for bytes that do not start with a
+   texture descriptor's magic, `kUnsupportedVersion` for another version and
+   `kCorrupt` for any other size.
+*/
 OXGN_DATA_NDAPI auto DecodeTextureResourceDescriptor(
   std::span<const std::byte> bytes)
-  -> Result<TextureResourceDescriptor, std::string>;
+  -> Result<TextureResourceDescriptor, CookedOpenError>;
 
 //! Encodes a `.obuf` file.
 /*!
- @throw std::invalid_argument when a view name is empty, repeated or holds
-   `\0`, or no view is `kWholeBufferViewName`.
+ @throw std::invalid_argument when the views break the
+ `BufferResourceDescriptor` rules, or a view name holds `\0` or is not UTF-8.
 */
 OXGN_DATA_NDAPI auto EncodeBufferResourceDescriptor(
   const BufferResourceDescriptor& descriptor) -> std::vector<std::byte>;
 
-//! Decodes a `.obuf` file; fails on a wrong magic or version, a size its
-//! counts do not account for, or view names `EncodeBufferResourceDescriptor`
-//! rejects.
+//! Decodes a `.obuf` file.
+/*!
+ @return `CookedOpenFailure::kWrongFormat` for bytes that do not start with a
+   buffer descriptor's magic, `kUnsupportedVersion` for another version and
+   `kCorrupt` for a size its counts do not account for, a malformed string
+   table, or views `EncodeBufferResourceDescriptor` refuses.
+*/
 OXGN_DATA_NDAPI auto DecodeBufferResourceDescriptor(
   std::span<const std::byte> bytes)
-  -> Result<BufferResourceDescriptor, std::string>;
+  -> Result<BufferResourceDescriptor, CookedOpenError>;
 
 } // namespace oxygen::data
 

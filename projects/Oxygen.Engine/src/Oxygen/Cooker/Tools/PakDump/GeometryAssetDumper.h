@@ -17,6 +17,7 @@
 #include "AssetDumper.h"
 
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -103,10 +104,8 @@ public:
       const auto mesh_type = static_cast<MeshType>(mesh_desc.mesh_type);
 
       ctx.Out() << "    LOD[" << lod << "] Mesh: " << mesh_name << "\n";
-      PrintUtils::Field(ctx.Out(), "Mesh Type",
-        std::string(nostd::to_string(mesh_type)) + " ("
-          + std::to_string(mesh_desc.mesh_type) + ")",
-        8);
+      PrintUtils::Field(
+        ctx.Out(), "Mesh Type", toolkit::EnumString(mesh_type), 8);
       PrintUtils::Field(ctx.Out(), "SubMesh Count", mesh_desc.submesh_count, 8);
       PrintUtils::Field(
         ctx.Out(), "MeshView Count", mesh_desc.mesh_view_count, 8);
@@ -331,7 +330,7 @@ private:
       return;
     }
     out << "        LOD Policy: unknown type "
-        << static_cast<uint32_t>(policy.type) << "\n";
+        << toolkit::EnumString(policy.type) << "\n";
   }
 };
 

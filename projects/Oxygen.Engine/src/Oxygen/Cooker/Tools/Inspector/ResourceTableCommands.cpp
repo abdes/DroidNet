@@ -13,13 +13,12 @@
 #include <ostream>
 #include <sstream>
 #include <string>
-#include <string_view>
 #include <vector>
 
-#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/CookedRootCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/DumpFormat.h>
@@ -96,9 +95,9 @@ namespace {
 
     for (size_t i = 0; i < entries.size(); ++i) {
       const auto& e = entries.at(i);
-      const auto* const format_name
-        = nostd::to_string(static_cast<oxygen::Format>(e.element_format));
-      const auto usage_name = nostd::to_string(
+      const auto format_name
+        = toolkit::EnumString(static_cast<oxygen::Format>(e.element_format));
+      const auto usage_name = toolkit::EnumString(
         static_cast<oxygen::data::BufferResource::UsageFlags>(e.usage_flags));
 
       out << std::right << std::setw(3) << i << (i == 0 ? "*" : " ") << " ";
@@ -144,10 +143,10 @@ namespace {
 
     for (size_t i = 0; i < entries.size(); ++i) {
       const auto& e = entries.at(i);
-      const auto* const type_name
-        = nostd::to_string(static_cast<oxygen::TextureType>(e.texture_type));
-      const auto* const format_name
-        = nostd::to_string(static_cast<oxygen::Format>(e.format));
+      const auto type_name
+        = toolkit::EnumString(static_cast<oxygen::TextureType>(e.texture_type));
+      const auto format_name
+        = toolkit::EnumString(static_cast<oxygen::Format>(e.format));
       std::ostringstream dims;
       dims << e.width << "x" << e.height;
 
@@ -197,51 +196,7 @@ namespace {
 
     for (size_t i = 0; i < entries.size(); ++i) {
       const auto& e = entries.at(i);
-      std::string_view format_name = "Unknown";
-      switch (static_cast<oxygen::data::pak::physics::PhysicsResourceFormat>(
-        e.format)) {
-      case oxygen::data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary:
-        format_name = "JoltShapeBinary";
-        break;
-      case oxygen::data::pak::physics::PhysicsResourceFormat::
-        kJoltConstraintBinary:
-        format_name = "JoltConstraintBinary";
-        break;
-      case oxygen::data::pak::physics::PhysicsResourceFormat::
-        kJoltSoftBodySharedSettingsBinary:
-        format_name = "JoltSoftBodySharedSettingsBinary";
-        break;
-      case oxygen::data::pak::physics::PhysicsResourceFormat::
-        kJoltVehicleConstraintBinary:
-        format_name = "JoltVehicleConstraintBinary";
-        break;
-      case oxygen::data::pak::physics::PhysicsResourceFormat::
-        kPhysXConvexMeshBinary:
-        format_name = "PhysXConvexMeshBinary";
-        break;
-      case oxygen::data::pak::physics::PhysicsResourceFormat::
-        kPhysXTriangleMeshBinary:
-        format_name = "PhysXTriangleMeshBinary";
-        break;
-      case oxygen::data::pak::physics::PhysicsResourceFormat::
-        kPhysXHeightFieldBinary:
-        format_name = "PhysXHeightFieldBinary";
-        break;
-      case oxygen::data::pak::physics::PhysicsResourceFormat::
-        kPhysXConstraintBinary:
-        format_name = "PhysXConstraintBinary";
-        break;
-      case oxygen::data::pak::physics::PhysicsResourceFormat::
-        kPhysXVehicleSettingsBinary:
-        format_name = "PhysXVehicleSettingsBinary";
-        break;
-      case oxygen::data::pak::physics::PhysicsResourceFormat::
-        kPhysXSoftBodySettingsBinary:
-        format_name = "PhysXSoftBodySettingsBinary";
-        break;
-      default:
-        break;
-      }
+      const auto format_name = toolkit::EnumString(e.format);
 
       out << std::right << std::setw(3) << i << (i == 0 ? "*" : " ") << " ";
       out << std::left << std::setw(kOffsetColumn) << ToHex64(e.data_offset)

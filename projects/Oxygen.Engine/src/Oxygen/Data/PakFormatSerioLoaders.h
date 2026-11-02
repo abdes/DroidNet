@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cmath>
 
 #include <Oxygen/Data/LightValidation.h>
@@ -73,18 +72,18 @@ inline auto Load(AnyReader& reader,
   data::pak::world::PostProcessVolumeEnvironmentRecord& r) -> Result<void>
 {
   CHECK_RESULT(LoadRecord(reader, r));
-  const auto reserved_is_zero
-    = [](const uint32_t value) -> bool { return value == 0U; };
-  if (!data::pak::world::HasValidPostProcessVolumeValues(r)
-    || r.exposure_extension_version
-      != data::pak::world::kExposureExtensionVersion
-    || r.curve_key_count > engine::kMaxExposureCompensationCurveKeys
-    || !std::ranges::all_of(r.exposure_reserved, reserved_is_zero)
-    || !std::ranges::all_of(r.curve_reserved, reserved_is_zero)
-    || r.header.record_size
-      != sizeof(r)
-        + (r.curve_key_count
-          * sizeof(data::pak::world::ExposureCompensationKeyRecord))) {
+  const auto values_valid
+    = data::pak::world::HasValidPostProcessVolumeValues(r);
+  const auto extension_current = r.exposure_extension_version
+    == data::pak::world::kExposureExtensionVersion;
+  const auto curve_within_limit
+    = r.curve_key_count <= engine::kMaxExposureCompensationCurveKeys;
+  const auto record_size_matches = r.header.record_size
+    == sizeof(r)
+      + (r.curve_key_count
+        * sizeof(data::pak::world::ExposureCompensationKeyRecord));
+  if (!values_valid || !extension_current || !curve_within_limit
+    || !record_size_matches) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
 

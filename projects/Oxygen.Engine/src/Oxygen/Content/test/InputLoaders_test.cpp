@@ -149,11 +149,12 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetValidDescriptorParses)
   using oxygen::data::AssetType;
   using oxygen::data::pak::input::InputActionAssetDesc;
   using oxygen::data::pak::input::InputActionAssetFlags;
+  using oxygen::data::pak::input::InputActionValueType;
 
   InputActionAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
   desc.header.version = oxygen::data::pak::input::kInputActionAssetVersion;
-  desc.value_type = 2;
+  desc.value_type = InputActionValueType::kAxis2D;
   desc.flags = InputActionAssetFlags::kConsumesInput
     | InputActionAssetFlags::kCumulativeAccumulation;
   const auto strings = oxygen::data::DescriptorStringsBuilder {};
@@ -166,7 +167,7 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetValidDescriptorParses)
   auto context = MakeParseOnlyContext();
   const auto asset = LoadInputActionAsset(context);
   ASSERT_THAT(asset, ::testing::NotNull());
-  EXPECT_EQ(asset->GetValueTypeId(), 2);
+  EXPECT_EQ(asset->GetValueType(), InputActionValueType::kAxis2D);
   EXPECT_TRUE(asset->ConsumesInput());
   EXPECT_TRUE(asset->AccumulatesCumulatively());
 }
@@ -269,11 +270,13 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetInvalidValueTypeThrows)
   using oxygen::content::loaders::LoadInputActionAsset;
   using oxygen::data::AssetType;
   using oxygen::data::pak::input::InputActionAssetDesc;
+  using oxygen::data::pak::input::InputActionValueType;
 
   InputActionAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
   desc.header.version = oxygen::data::pak::input::kInputActionAssetVersion;
-  desc.value_type = 7;
+  // A value no catalog entry defines.
+  desc.value_type = static_cast<InputActionValueType>(7U);
 
   WriteBlob(desc);
   ASSERT_TRUE(writer_.Flush());

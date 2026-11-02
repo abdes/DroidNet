@@ -6,9 +6,13 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
@@ -16,6 +20,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
@@ -34,8 +39,20 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 //! Oxygen PAK format core domain schema.
 /*!
  Owns foundational container/resource/asset structures and shared scalar types.
+
+ Every multi-byte value of a pak, and of the loose cooked files that share its
+ records, is little-endian; floating-point values are IEEE-754. Each record's
+ field offsets are part of the contract and pinned below its definition.
+
+ A `_reserved` field only rounds its record to a fixed size (see
+ `Docs/binary_packing_discipline.md`); it is never space for later fields.
+ Its bytes are zero: writers zero them, and readers refuse a file whose
+ reserved bytes are not.
 */
 namespace oxygen::data::pak::core {
+
+static_assert(std::endian::native == std::endian::little,
+  "pak records are read and written in place on little-endian hosts");
 
 //=== Type Aliases ===--------------------------------------------------------//
 
@@ -77,6 +94,16 @@ inline constexpr std::array<char, 8> kPakHeaderMagic
 inline constexpr std::array<char, 8> kPakFooterMagic
   = { 'O', 'X', 'P', 'A', 'K', 'E', 'N', 'D' };
 
+//! Whether the bytes of a reserve are all zero, as the format requires of
+//! every `_reserved` field; pass `std::as_bytes(std::span { r._reserved })`.
+//! A union arm's reserve is checked only when the arm is the active one.
+[[nodiscard]] inline auto IsZeroReserve(
+  const std::span<const std::byte> reserve) noexcept -> bool
+{
+  return std::ranges::all_of(reserve,
+    [](const std::byte value) -> bool { return value == std::byte { 0U }; });
+}
+
 //! Current PAK binary format version; a build reads only this version.
 constexpr uint16_t kPakVersion = version::kPakVersion;
 inline constexpr uint32_t kBrowseIndexVersion = version::kBrowseIndexVersion;
@@ -85,7 +112,33 @@ inline constexpr uint32_t kBrowseIndexVersion = version::kBrowseIndexVersion;
 //! The boundary every resource payload of a pak starts on, and every resource
 //! region is padded to: 4 KiB, so a payload can be read unbuffered or handed
 //! to DirectStorage as it lies in the file.
-inline constexpr uint64_t kPakPayloadAlignment = 4096U;
+inline constexpr uint32_t kPakPayloadAlignment = 4096U;
+
+//! The boundary every resource table, asset descriptor, the asset directory,
+//! the browse index and the footer of a pak start on.
+inline constexpr uint32_t kPakMetadataAlignment = 16U;
+
+//! `TextureResourceDesc::compression_type` of a payload in a format that is
+//! not block compressed.
+inline constexpr uint8_t kTextureCompressionNone = 0U;
+//! `TextureResourceDesc::compression_type` of a BC7 payload (`kBC7UNorm`,
+//! `kBC7UNormSRGB`); the value is the BCn family number.
+inline constexpr uint8_t kTextureCompressionBc7 = 7U;
+
+//! The `compression_type` a texture row of `format` records: the one place a
+//! compression is tied to the formats that use it. A new compression adds
+//! its constant above and its formats here; writers and readers follow.
+[[nodiscard]] constexpr auto TextureCompressionOf(const Format format) noexcept
+  -> uint8_t
+{
+  switch (format) {
+  case Format::kBC7UNorm:
+  case Format::kBC7UNormSRGB:
+    return kTextureCompressionBc7;
+  default:
+    return kTextureCompressionNone;
+  }
+}
 
 //=== PAK File Format Structures ===------------------------------------------//
 
@@ -108,6 +161,10 @@ struct PakHeader {
 };
 #pragma pack(pop)
 static_assert(sizeof(PakHeader) == 256);
+static_assert(offsetof(PakHeader, magic) == 0);
+static_assert(offsetof(PakHeader, version) == 8);
+static_assert(offsetof(PakHeader, content_version) == 10);
+static_assert(offsetof(PakHeader, source_identity) == 12);
 
 //! Resource region offset/size descriptor.
 /*!
@@ -126,6 +183,8 @@ struct ResourceRegion {
 };
 #pragma pack(pop)
 static_assert(sizeof(ResourceRegion) == 16);
+static_assert(offsetof(ResourceRegion, offset) == 0);
+static_assert(offsetof(ResourceRegion, size) == 8);
 
 //! Resource table.
 /*!
@@ -149,6 +208,9 @@ struct ResourceTable {
 };
 #pragma pack(pop)
 static_assert(sizeof(ResourceTable) == 16);
+static_assert(offsetof(ResourceTable, offset) == 0);
+static_assert(offsetof(ResourceTable, count) == 8);
+static_assert(offsetof(ResourceTable, entry_size) == 12);
 
 //! Fixed-size footer at the end of the PAK file.
 /*!
@@ -194,13 +256,17 @@ struct PakFooter {
   OffsetT catalog_offset = 0;
   uint64_t catalog_size = 0;
 
-  // Tail reserve to keep fixed 256-byte footer contract.
-  uint8_t _reserved[28] = {}; // Tail reserve to keep fixed 256-byte footer size
+  // Rounds the footer to 256 bytes. The one reserve not at the end of its
+  // record: the CRC32 and the footer magic follow it, because the magic must
+  // be the last 8 bytes of the file and the CRC32 sits at a fixed distance
+  // from the end (see `Docs/binary_packing_discipline.md`, Rule 5).
+  uint8_t _reserved[28] = {};
 
   // -- CRC32 Integrity --
   // CRC32 covers the *entire* file, including the footer and footer magic
-  // bytes, EXCEPT these 4 bytes (`pak_crc32`) which are excluded (skipped)
-  // from the CRC stream during calculation.
+  // bytes, EXCEPT these 4 bytes (`pak_crc32`, at footer offset 244, file
+  // offset `file_size - 12`) which are excluded (skipped) from the CRC stream
+  // during calculation.
   // Standard IEEE CRC32 parameters: polynomial 0x04C11DB7, initial value
   // 0xFFFFFFFF, reflect in/out, final XOR 0xFFFFFFFF.
   // A value of 0 indicates that integrity validation SHOULD be skipped.
@@ -211,6 +277,25 @@ struct PakFooter {
 };
 #pragma pack(pop)
 static_assert(sizeof(PakFooter) == 256);
+static_assert(offsetof(PakFooter, directory_offset) == 0);
+static_assert(offsetof(PakFooter, directory_size) == 8);
+static_assert(offsetof(PakFooter, asset_count) == 16);
+static_assert(offsetof(PakFooter, texture_region) == 24);
+static_assert(offsetof(PakFooter, buffer_region) == 40);
+static_assert(offsetof(PakFooter, audio_region) == 56);
+static_assert(offsetof(PakFooter, script_region) == 72);
+static_assert(offsetof(PakFooter, physics_region) == 88);
+static_assert(offsetof(PakFooter, texture_table) == 104);
+static_assert(offsetof(PakFooter, buffer_table) == 120);
+static_assert(offsetof(PakFooter, audio_table) == 136);
+static_assert(offsetof(PakFooter, script_resource_table) == 152);
+static_assert(offsetof(PakFooter, physics_resource_table) == 168);
+static_assert(offsetof(PakFooter, browse_index_offset) == 184);
+static_assert(offsetof(PakFooter, browse_index_size) == 192);
+static_assert(offsetof(PakFooter, catalog_offset) == 200);
+static_assert(offsetof(PakFooter, catalog_size) == 208);
+static_assert(offsetof(PakFooter, pak_crc32) == 244);
+static_assert(offsetof(PakFooter, footer_magic) == 248);
 
 //! Asset directory entry.
 /*!
@@ -235,6 +320,12 @@ struct AssetDirectoryEntry {
 };
 #pragma pack(pop)
 static_assert(sizeof(AssetDirectoryEntry) == 64);
+static_assert(offsetof(AssetDirectoryEntry, asset_key) == 0);
+static_assert(offsetof(AssetDirectoryEntry, asset_type) == 16);
+static_assert(offsetof(AssetDirectoryEntry, entry_offset) == 17);
+static_assert(offsetof(AssetDirectoryEntry, desc_offset) == 25);
+static_assert(offsetof(AssetDirectoryEntry, desc_size) == 33);
+static_assert(offsetof(AssetDirectoryEntry, references) == 37);
 
 //! Embedded browse index header.
 /*!
@@ -263,6 +354,11 @@ struct PakBrowseIndexHeader {
 };
 #pragma pack(pop)
 static_assert(sizeof(PakBrowseIndexHeader) == 24);
+static_assert(offsetof(PakBrowseIndexHeader, magic) == 0);
+static_assert(offsetof(PakBrowseIndexHeader, version) == 8);
+static_assert(offsetof(PakBrowseIndexHeader, entry_count) == 12);
+static_assert(offsetof(PakBrowseIndexHeader, texture_entry_count) == 16);
+static_assert(offsetof(PakBrowseIndexHeader, string_table_size) == 20);
 
 //! Embedded browse index entry.
 /*!
@@ -277,6 +373,9 @@ struct PakBrowseIndexEntry {
 };
 #pragma pack(pop)
 static_assert(sizeof(PakBrowseIndexEntry) == 24);
+static_assert(offsetof(PakBrowseIndexEntry, asset_key) == 0);
+static_assert(offsetof(PakBrowseIndexEntry, virtual_path_offset) == 16);
+static_assert(offsetof(PakBrowseIndexEntry, virtual_path_length) == 20);
 
 //! Embedded browse index texture entry.
 /*!
@@ -291,6 +390,9 @@ struct PakBrowseIndexTextureEntry {
 };
 #pragma pack(pop)
 static_assert(sizeof(PakBrowseIndexTextureEntry) == 12);
+static_assert(offsetof(PakBrowseIndexTextureEntry, texture_index) == 0);
+static_assert(offsetof(PakBrowseIndexTextureEntry, virtual_path_offset) == 4);
+static_assert(offsetof(PakBrowseIndexTextureEntry, virtual_path_length) == 8);
 
 //! Buffer resource table entry
 /*!
@@ -347,10 +449,18 @@ struct BufferResourceDesc {
 };
 #pragma pack(pop)
 static_assert(sizeof(BufferResourceDesc) == 53);
+static_assert(offsetof(BufferResourceDesc, data_offset) == 0);
+static_assert(offsetof(BufferResourceDesc, size_bytes) == 8);
+static_assert(offsetof(BufferResourceDesc, usage_flags) == 12);
+static_assert(offsetof(BufferResourceDesc, element_stride) == 16);
+static_assert(offsetof(BufferResourceDesc, element_format) == 20);
+static_assert(offsetof(BufferResourceDesc, content_hash) == 21);
 
 //! Texture resource table entry
 /*!
   @note Texture `format` must be one of the core type `Format` enum values.
+  @note `compression_type` is `TextureCompressionOf(format)`; readers refuse
+  any other value (`HasSupportedCompression`). `format` stays authoritative.
   @note Textures are always aligned to 256 bytes.
   @note `content_hash` is the full SHA-256 of the texture's `size_bytes`
   payload bytes at `data_offset`. Its producer computes it from the bytes it
@@ -363,8 +473,7 @@ struct TextureResourceDesc {
   core::OffsetT data_offset; // Absolute offset to texture data
   core::DataBlobSizeT size_bytes; // Size of texture data
   uint8_t texture_type; // 2D, 3D, Cube, etc. (enum) (defined externally)
-  // TODO: Add compression type enum, avoiding enum proliferation if possible
-  uint8_t compression_type; // Compression (BC1, BC3, ASTC, etc.) (external)
+  uint8_t compression_type; // kTextureCompression* of `format`
   uint32_t width; // Texture width
   uint32_t height; // Texture height
   uint16_t depth; // For 3D textures (volume), otherwise 1
@@ -376,6 +485,27 @@ struct TextureResourceDesc {
 };
 #pragma pack(pop)
 static_assert(sizeof(TextureResourceDesc) == 63);
+
+//! Whether `row` records the compression its format implies; any other
+//! value is one this build does not implement.
+[[nodiscard]] constexpr auto HasSupportedCompression(
+  const TextureResourceDesc& row) noexcept -> bool
+{
+  return row.compression_type
+    == TextureCompressionOf(static_cast<Format>(row.format));
+}
+static_assert(offsetof(TextureResourceDesc, data_offset) == 0);
+static_assert(offsetof(TextureResourceDesc, size_bytes) == 8);
+static_assert(offsetof(TextureResourceDesc, texture_type) == 12);
+static_assert(offsetof(TextureResourceDesc, compression_type) == 13);
+static_assert(offsetof(TextureResourceDesc, width) == 14);
+static_assert(offsetof(TextureResourceDesc, height) == 18);
+static_assert(offsetof(TextureResourceDesc, depth) == 22);
+static_assert(offsetof(TextureResourceDesc, array_layers) == 24);
+static_assert(offsetof(TextureResourceDesc, mip_levels) == 26);
+static_assert(offsetof(TextureResourceDesc, format) == 28);
+static_assert(offsetof(TextureResourceDesc, alignment) == 29);
+static_assert(offsetof(TextureResourceDesc, content_hash) == 31);
 
 //! A descriptor's string table.
 /*!
@@ -395,6 +525,8 @@ struct DescriptorStringTable {
 };
 #pragma pack(pop)
 static_assert(sizeof(DescriptorStringTable) == 8);
+static_assert(offsetof(DescriptorStringTable, offset) == 0);
+static_assert(offsetof(DescriptorStringTable, size) == 4);
 
 //! Asset header.
 /*!
@@ -429,11 +561,18 @@ struct AssetHeader {
 };
 #pragma pack(pop)
 static_assert(sizeof(AssetHeader) == 51);
+static_assert(offsetof(AssetHeader, asset_type) == 0);
+static_assert(offsetof(AssetHeader, strings) == 1);
+static_assert(offsetof(AssetHeader, name_offset) == 9);
+static_assert(offsetof(AssetHeader, version) == 13);
+static_assert(offsetof(AssetHeader, streaming_priority) == 14);
+static_assert(offsetof(AssetHeader, content_hash) == 15);
+static_assert(offsetof(AssetHeader, variant_flags) == 47);
 
 } // namespace oxygen::data::pak::core
 
-// clang-format off
 namespace oxygen::serio {
+// clang-format off
 template <> inline constexpr bool kIsRecord<data::AssetKey> = true;
 template <> inline constexpr bool kIsRecord<data::pak::core::ResourceIndexT> = true;
 template <> inline constexpr bool kIsRecord<data::pak::core::ResourceRegion> = true;
@@ -447,8 +586,8 @@ template <> inline constexpr bool kIsRecord<data::pak::core::PakBrowseIndexTextu
 template <> inline constexpr bool kIsRecord<data::pak::core::BufferResourceDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::core::TextureResourceDesc> = true;
 template <> inline constexpr bool kIsRecord<data::pak::core::AssetHeader> = true;
-} // namespace oxygen::serio
 // clang-format on
+} // namespace oxygen::serio
 
 // NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

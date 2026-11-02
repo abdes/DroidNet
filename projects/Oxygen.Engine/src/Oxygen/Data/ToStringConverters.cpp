@@ -3,11 +3,6 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
-//===----------------------------------------------------------------------===//
-// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause.
-// SPDX-License-Identifier: BSD-3-Clause
-//===----------------------------------------------------------------------===//
 
 #include <cstdint>
 #include <string>
@@ -411,6 +406,230 @@ auto oxygen::data::pak::input::to_string(
   return result;
 }
 
+namespace {
+
+//! A catalog name, such as `kRigidBody`, without its `k`.
+constexpr auto CatalogName(const std::string_view name) noexcept
+  -> std::string_view
+{
+  return name.substr(1);
+}
+
+} // namespace
+
+// Each enum below is named from the catalog that defines its values, so a
+// value added to a catalog is named with it.
+// NOLINTBEGIN(*-macro-usage)
+#define OXPHYS_BACKEND(name, value)                                            \
+  case PhysicsBackend::name:                                                   \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(const PhysicsBackend value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_BACKEND
+
+#define OXPHYS_RESOURCE_FORMAT(name, value)                                    \
+  case PhysicsResourceFormat::name:                                            \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(
+  const PhysicsResourceFormat value) noexcept -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_RESOURCE_FORMAT
+
+#define OXPHYS_COMBINE_MODE(name, value)                                       \
+  case PhysicsCombineMode::name:                                               \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(
+  const PhysicsCombineMode value) noexcept -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_COMBINE_MODE
+
+#define OXPHYS_SHAPE_TYPE(name, value)                                         \
+  case ShapeType::name:                                                        \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(const ShapeType value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_SHAPE_TYPE
+
+#define OXPHYS_SHAPE_PAYLOAD_TYPE(name, value)                                 \
+  case ShapePayloadType::name:                                                 \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(
+  const ShapePayloadType value) noexcept -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_SHAPE_PAYLOAD_TYPE
+
+#define OXPHYS_WORLD_BOUNDARY_MODE(name, value)                                \
+  case WorldBoundaryMode::name:                                                \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(
+  const WorldBoundaryMode value) noexcept -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_WORLD_BOUNDARY_MODE
+
+#define OXPHYS_BODY_TYPE(name, value)                                          \
+  case PhysicsBodyType::name:                                                  \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(const PhysicsBodyType value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_BODY_TYPE
+
+#define OXPHYS_MOTION_QUALITY(name, value)                                     \
+  case PhysicsMotionQuality::name:                                             \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(
+  const PhysicsMotionQuality value) noexcept -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_MOTION_QUALITY
+
+#define OXPHYS_SOFT_BODY_TETHER_MODE(name, value)                              \
+  case SoftBodyTetherMode::name:                                               \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(
+  const SoftBodyTetherMode value) noexcept -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_SOFT_BODY_TETHER_MODE
+
+#define OXPHYS_VEHICLE_CONTROLLER_TYPE(name, value)                            \
+  case VehicleControllerType::name:                                            \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(
+  const VehicleControllerType value) noexcept -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_VEHICLE_CONTROLLER_TYPE
+
+#define OXPHYS_VEHICLE_WHEEL_SIDE(name, value)                                 \
+  case VehicleWheelSide::name:                                                 \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(
+  const VehicleWheelSide value) noexcept -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_VEHICLE_WHEEL_SIDE
+
+#define OXPHYS_AGGREGATE_AUTHORITY(name, value)                                \
+  case AggregateAuthority::name:                                               \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(
+  const AggregateAuthority value) noexcept -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_AGGREGATE_AUTHORITY
+
+#define OXPHYS_BINDING_TYPE(name, value)                                       \
+  case PhysicsBindingType::name:                                               \
+    return CatalogName(#name);
+auto oxygen::data::pak::physics::to_string(
+  const PhysicsBindingType value) noexcept -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXPHYS_BINDING_TYPE
+
+#define OXNPUT_ACTION_VALUE_TYPE(name, value)                                  \
+  case InputActionValueType::name:                                             \
+    return CatalogName(#name);
+auto oxygen::data::pak::input::to_string(
+  const InputActionValueType value) noexcept -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Input/ActionValue.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXNPUT_ACTION_VALUE_TYPE
+
+#define OXSCN_SKY_LIGHT_SOURCE(name, value)                                    \
+  case SkyLightSource::name:                                                   \
+    return CatalogName(#name);
+auto oxygen::data::pak::world::to_string(const SkyLightSource value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Scene/Environment.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXSCN_SKY_LIGHT_SOURCE
+
+#define OXSCN_SKY_SPHERE_SOURCE(name, value)                                   \
+  case SkySphereSource::name:                                                  \
+    return CatalogName(#name);
+auto oxygen::data::pak::world::to_string(const SkySphereSource value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+#include <Oxygen/Core/Meta/Scene/Environment.inc> // NOLINT
+  }
+  return "__NotSupported__";
+}
+#undef OXSCN_SKY_SPHERE_SOURCE
+
+// NOLINTEND(*-macro-usage)
+
 auto oxygen::data::loose_cooked::to_string(
   const oxygen::data::loose_cooked::IndexFlags value) -> std::string
 {
@@ -441,4 +660,49 @@ auto oxygen::data::loose_cooked::to_string(
 
   DCHECK_EQ_F(checked, value, "to_string: Unchecked IndexFlags value detected");
   return result;
+}
+
+auto oxygen::data::pak::world::to_string(
+  const oxygen::data::pak::world::EnvironmentComponentType value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+    // clang-format off
+    case EnvironmentComponentType::kSkyAtmosphere:     return "SkyAtmosphere";
+    case EnvironmentComponentType::kVolumetricClouds:  return "VolumetricClouds";
+    case EnvironmentComponentType::kFog:               return "Fog";
+    case EnvironmentComponentType::kSkyLight:          return "SkyLight";
+    case EnvironmentComponentType::kSkySphere:         return "SkySphere";
+    case EnvironmentComponentType::kPostProcessVolume: return "PostProcessVolume";
+    case EnvironmentComponentType::kBackground:        return "Background";
+    // clang-format on
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::data::pak::geometry::to_string(
+  const oxygen::data::pak::geometry::LodPolicyType value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+    // clang-format off
+    case LodPolicyType::kFixed:            return "Fixed";
+    case LodPolicyType::kDistance:         return "Distance";
+    case LodPolicyType::kScreenSpaceError: return "ScreenSpaceError";
+    // clang-format on
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::data::pak::render::to_string(
+  const oxygen::data::pak::render::TexturePackingPolicyId value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+    // clang-format off
+    case TexturePackingPolicyId::kD3D12:       return "D3D12";
+    case TexturePackingPolicyId::kTightPacked: return "TightPacked";
+    // clang-format on
+  }
+  return "__NotSupported__";
 }

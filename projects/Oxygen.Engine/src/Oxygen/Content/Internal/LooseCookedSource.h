@@ -20,10 +20,15 @@
 #include <Oxygen/Content/Internal/ResourceTypes.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/MappedFile.h>
 #include <Oxygen/Serio/Region.h>
+
+namespace oxygen::data {
+struct TextureResourceDescriptor;
+} // namespace oxygen::data
 
 namespace oxygen::serio {
 class IoDriver;
@@ -73,13 +78,13 @@ public:
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kBuffersTable); rel) {
       buffers_table_path_ = cooked_root_ / std::filesystem::path(*rel);
-      InitializeBufferTable();
+      buffers_table_.emplace(TableOf(FileKind::kBuffersTable));
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kTexturesTable);
       rel) {
       textures_table_path_ = cooked_root_ / std::filesystem::path(*rel);
-      InitializeTextureTable();
+      textures_table_.emplace(TableOf(FileKind::kTexturesTable));
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kBuffersData); rel) {
@@ -92,7 +97,7 @@ public:
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kScriptsTable); rel) {
       scripts_table_path_ = cooked_root_ / std::filesystem::path(*rel);
-      InitializeScriptTable();
+      scripts_table_.emplace(TableOf(FileKind::kScriptsTable));
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kScriptsData); rel) {
@@ -101,14 +106,13 @@ public:
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kPhysicsTable); rel) {
       physics_table_path_ = cooked_root_ / std::filesystem::path(*rel);
-      InitializePhysicsTable();
+      physics_table_.emplace(TableOf(FileKind::kPhysicsTable));
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kPhysicsData); rel) {
       physics_data_path_ = cooked_root_ / std::filesystem::path(*rel);
     }
 
-    ValidateTableDataPairs();
     if (mode != OpenMode::kIndexOnly) {
       OpenFiles();
     }
@@ -284,166 +288,22 @@ private:
   OXGN_CNTT_NDAPI static auto OpenDescriptor(const std::filesystem::path& path)
     -> std::unique_ptr<serio::AnyReader>;
 
-  auto ValidateTableDataPairs() const -> void
+  //! Checks that the decoded descriptor agrees with its source texture table.
+  auto ValidateTextureDescriptorAgainstTable(const std::filesystem::path& path,
+    const data::TextureResourceDescriptor& descriptor) const -> void;
+
+  //! The metadata of the indexed resource table file `kind`; the index
+  //! admits only tables of whole rows, at most 2^32 of them.
+  [[nodiscard]] auto TableOf(const data::loose_cooked::FileKind kind) const
+    -> data::pak::core::ResourceTable
   {
-    const auto buffers_table = buffers_table_path_.has_value();
-    const auto buffers_data = buffers_data_path_.has_value();
-    if (buffers_table != buffers_data) {
-      throw std::runtime_error(
-        "Loose cooked root must provide both buffers.table and buffers.data");
-    }
-
-    const auto textures_table = textures_table_path_.has_value();
-    const auto textures_data = textures_data_path_.has_value();
-    if (textures_table != textures_data) {
-      throw std::runtime_error(
-        "Loose cooked root must provide both textures.table and textures.data");
-    }
-
-    const auto scripts_table = scripts_table_path_.has_value();
-    const auto scripts_data = scripts_data_path_.has_value();
-    if (scripts_table != scripts_data) {
-      throw std::runtime_error(
-        "Loose cooked root must provide both scripts.table and scripts.data");
-    }
-
-    const auto physics_table = physics_table_path_.has_value();
-    const auto physics_data = physics_data_path_.has_value();
-    if (physics_table != physics_data) {
-      throw std::runtime_error(
-        "Loose cooked root must provide both physics.table and physics.data");
-    }
-  }
-
-  auto InitializeBufferTable() -> void
-  {
-    if (!buffers_table_path_) {
-      return;
-    }
-    const auto indexed_size
-      = index_.FindFileSize(data::loose_cooked::FileKind::kBuffersTable);
-    if (!indexed_size) {
-      throw std::runtime_error("Index is missing buffers.table size");
-    }
-    const auto size = *indexed_size;
-
-    constexpr uint64_t kEntrySize = sizeof(data::pak::core::BufferResourceDesc);
-    if (kEntrySize == 0 || (size % kEntrySize) != 0) {
-      throw std::runtime_error(
-        "Invalid buffers.table size: " + buffers_table_path_->string());
-    }
-
-    const auto count = size / kEntrySize;
-    if (count > std::numeric_limits<uint32_t>::max()) {
-      throw std::runtime_error(
-        "buffers.table too large: " + buffers_table_path_->string());
-    }
-
-    data::pak::core::ResourceTable meta {
+    const auto row_size = data::loose_cooked::ResourceRowSize(kind);
+    const auto rows = index_.FindFileSize(kind).value_or(0U) / row_size;
+    return {
       .offset = 0,
-      .count = static_cast<uint32_t>(count),
-      .entry_size = static_cast<uint32_t>(kEntrySize),
+      .count = static_cast<uint32_t>(rows),
+      .entry_size = static_cast<uint32_t>(row_size),
     };
-    buffers_table_.emplace(meta);
-  }
-
-  auto InitializeTextureTable() -> void
-  {
-    if (!textures_table_path_) {
-      return;
-    }
-    const auto indexed_size
-      = index_.FindFileSize(data::loose_cooked::FileKind::kTexturesTable);
-    if (!indexed_size) {
-      throw std::runtime_error("Index is missing textures.table size");
-    }
-    const auto size = *indexed_size;
-
-    constexpr uint64_t kEntrySize
-      = sizeof(data::pak::core::TextureResourceDesc);
-    if (kEntrySize == 0 || (size % kEntrySize) != 0) {
-      throw std::runtime_error(
-        "Invalid textures.table size: " + textures_table_path_->string());
-    }
-
-    const auto count = size / kEntrySize;
-    if (count > std::numeric_limits<uint32_t>::max()) {
-      throw std::runtime_error(
-        "textures.table too large: " + textures_table_path_->string());
-    }
-
-    data::pak::core::ResourceTable meta {
-      .offset = 0,
-      .count = static_cast<uint32_t>(count),
-      .entry_size = static_cast<uint32_t>(kEntrySize),
-    };
-    textures_table_.emplace(meta);
-  }
-
-  auto InitializePhysicsTable() -> void
-  {
-    if (!physics_table_path_) {
-      return;
-    }
-    const auto indexed_size
-      = index_.FindFileSize(data::loose_cooked::FileKind::kPhysicsTable);
-    if (!indexed_size) {
-      throw std::runtime_error("Index is missing physics.table size");
-    }
-    const auto size = *indexed_size;
-
-    constexpr uint64_t kEntrySize
-      = sizeof(data::pak::physics::PhysicsResourceDesc);
-    if (kEntrySize == 0 || (size % kEntrySize) != 0) {
-      throw std::runtime_error(
-        "Invalid physics.table size: " + physics_table_path_->string());
-    }
-
-    const auto count = size / kEntrySize;
-    if (count > std::numeric_limits<uint32_t>::max()) {
-      throw std::runtime_error(
-        "physics.table too large: " + physics_table_path_->string());
-    }
-
-    data::pak::core::ResourceTable meta {
-      .offset = 0,
-      .count = static_cast<uint32_t>(count),
-      .entry_size = static_cast<uint32_t>(kEntrySize),
-    };
-    physics_table_.emplace(meta);
-  }
-
-  auto InitializeScriptTable() -> void
-  {
-    if (!scripts_table_path_) {
-      return;
-    }
-    const auto indexed_size
-      = index_.FindFileSize(data::loose_cooked::FileKind::kScriptsTable);
-    if (!indexed_size) {
-      throw std::runtime_error("Index is missing scripts.table size");
-    }
-    const auto size = *indexed_size;
-
-    constexpr uint64_t kEntrySize
-      = sizeof(data::pak::scripting::ScriptResourceDesc);
-    if (kEntrySize == 0 || (size % kEntrySize) != 0) {
-      throw std::runtime_error(
-        "Invalid scripts.table size: " + scripts_table_path_->string());
-    }
-
-    const auto count = size / kEntrySize;
-    if (count > std::numeric_limits<uint32_t>::max()) {
-      throw std::runtime_error(
-        "scripts.table too large: " + scripts_table_path_->string());
-    }
-
-    data::pak::core::ResourceTable meta {
-      .offset = 0,
-      .count = static_cast<uint32_t>(count),
-      .entry_size = static_cast<uint32_t>(kEntrySize),
-    };
-    scripts_table_.emplace(meta);
   }
 
   std::filesystem::path cooked_root_;

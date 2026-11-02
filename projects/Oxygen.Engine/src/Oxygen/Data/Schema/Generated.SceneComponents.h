@@ -1618,6 +1618,17 @@ inline constexpr std::array<std::uint8_t, 3> kVisibilitySourceMembers { 0, 1, 2 
 //! The key a document spells each VisibilitySource member by, in member order.
 inline constexpr std::array<std::string_view, 3> kVisibilitySourceMemberKeys { "inherit", "shown", "hidden" };
 
+//! The name of a VisibilitySource member, as the schema spells it.
+[[nodiscard]] constexpr auto to_string(const VisibilitySource value) noexcept -> std::string_view
+{
+  switch (value) {
+  case VisibilitySource::kInherit: return "Inherit";
+  case VisibilitySource::kShown: return "Shown";
+  case VisibilitySource::kHidden: return "Hidden";
+  }
+  return "__NotSupported__";
+}
+
 //! The members of ShadowSource, by wire value.
 enum class ShadowSource : std::uint8_t {
   kInherit = 0,
@@ -1631,6 +1642,17 @@ inline constexpr std::array<std::uint8_t, 3> kShadowSourceMembers { 0, 1, 2 };
 //! The key a document spells each ShadowSource member by, in member order.
 inline constexpr std::array<std::string_view, 3> kShadowSourceMemberKeys { "inherit", "on", "off" };
 
+//! The name of a ShadowSource member, as the schema spells it.
+[[nodiscard]] constexpr auto to_string(const ShadowSource value) noexcept -> std::string_view
+{
+  switch (value) {
+  case ShadowSource::kInherit: return "Inherit";
+  case ShadowSource::kOn: return "On";
+  case ShadowSource::kOff: return "Off";
+  }
+  return "__NotSupported__";
+}
+
 //! The members of CameraAspectMode, by wire value.
 enum class CameraAspectMode : std::uint8_t {
   kAuto = 0,
@@ -1642,6 +1664,16 @@ inline constexpr std::array<std::uint8_t, 2> kCameraAspectModeMembers { 0, 1 };
 
 //! The key a document spells each CameraAspectMode member by, in member order.
 inline constexpr std::array<std::string_view, 2> kCameraAspectModeMemberKeys { "auto", "fixed" };
+
+//! The name of a CameraAspectMode member, as the schema spells it.
+[[nodiscard]] constexpr auto to_string(const CameraAspectMode value) noexcept -> std::string_view
+{
+  switch (value) {
+  case CameraAspectMode::kAuto: return "Auto";
+  case CameraAspectMode::kFixed: return "Fixed";
+  }
+  return "__NotSupported__";
+}
 
 //! The members of AtmosphereLightSlot, by wire value.
 enum class AtmosphereLightSlot : std::uint8_t {
@@ -1655,6 +1687,17 @@ inline constexpr std::array<std::uint8_t, 3> kAtmosphereLightSlotMembers { 0, 1,
 
 //! The key a document spells each AtmosphereLightSlot member by, in member order.
 inline constexpr std::array<std::string_view, 3> kAtmosphereLightSlotMemberKeys { "none", "primary", "secondary" };
+
+//! The name of a AtmosphereLightSlot member, as the schema spells it.
+[[nodiscard]] constexpr auto to_string(const AtmosphereLightSlot value) noexcept -> std::string_view
+{
+  switch (value) {
+  case AtmosphereLightSlot::kNone: return "None";
+  case AtmosphereLightSlot::kPrimary: return "Primary";
+  case AtmosphereLightSlot::kSecondary: return "Secondary";
+  }
+  return "__NotSupported__";
+}
 
 //! The members of ShadowResolutionHint, by wire value.
 enum class ShadowResolutionHint : std::uint8_t {
@@ -1670,6 +1713,18 @@ inline constexpr std::array<std::uint8_t, 4> kShadowResolutionHintMembers { 0, 1
 //! The key a document spells each ShadowResolutionHint member by, in member order.
 inline constexpr std::array<std::string_view, 4> kShadowResolutionHintMemberKeys { "low", "medium", "high", "ultra" };
 
+//! The name of a ShadowResolutionHint member, as the schema spells it.
+[[nodiscard]] constexpr auto to_string(const ShadowResolutionHint value) noexcept -> std::string_view
+{
+  switch (value) {
+  case ShadowResolutionHint::kLow: return "Low";
+  case ShadowResolutionHint::kMedium: return "Medium";
+  case ShadowResolutionHint::kHigh: return "High";
+  case ShadowResolutionHint::kUltra: return "Ultra";
+  }
+  return "__NotSupported__";
+}
+
 //! The members of DirectionalCsmSplitMode, by wire value.
 enum class DirectionalCsmSplitMode : std::uint8_t {
   kGenerated = 0,
@@ -1681,6 +1736,16 @@ inline constexpr std::array<std::uint8_t, 2> kDirectionalCsmSplitModeMembers { 0
 
 //! The key a document spells each DirectionalCsmSplitMode member by, in member order.
 inline constexpr std::array<std::string_view, 2> kDirectionalCsmSplitModeMemberKeys { "generated", "manual_distances" };
+
+//! The name of a DirectionalCsmSplitMode member, as the schema spells it.
+[[nodiscard]] constexpr auto to_string(const DirectionalCsmSplitMode value) noexcept -> std::string_view
+{
+  switch (value) {
+  case DirectionalCsmSplitMode::kGenerated: return "Generated";
+  case DirectionalCsmSplitMode::kManualDistances: return "ManualDistances";
+  }
+  return "__NotSupported__";
+}
 
 //! Defaults and ranges of Transform, in field units.
 namespace transform {

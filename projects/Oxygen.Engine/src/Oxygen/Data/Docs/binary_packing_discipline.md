@@ -71,6 +71,10 @@ Forbidden for reserve fields: `reserved`, `reserved0`, `reserved1`, `_padding`,
 
 Reserves MUST appear at the END of the structure, after all active fields.
 
+The one exception is `PakFooter`: its `_reserved` precedes `pak_crc32` and
+`footer_magic`, because the magic must be the last 8 bytes of the file and the
+CRC32 field sits at a fixed distance from the end.
+
 ### Rule 6: Reserve Initialization
 
 All reserve fields MUST be zero-initialized: `= {}`.
@@ -306,9 +310,11 @@ selection belongs to Content.
 
 ### Cutover and precedent
 
-Use PAK v8 and loose index v3. Bump material, geometry, scene and script
-descriptor versions for their changed reference semantics/layout; unchanged
-key-only layouts retain their own versions. All shipping readers accept only the
+Bump the PAK and loose index versions, and the material, geometry, scene and
+script descriptor versions, for their changed reference semantics/layout;
+unchanged key-only layouts retain their own versions. The current numbers
+live only in the version catalog,
+[PakFormatVersions.inc](../PakFormatVersions.inc). All shipping readers accept only the
 new current container formats. Update Serio codecs, native producers/readers,
 Inspector, native fixture writers together, then recook maintained content. Do
 not add legacy decoding or infer a binding table from an old descriptor.

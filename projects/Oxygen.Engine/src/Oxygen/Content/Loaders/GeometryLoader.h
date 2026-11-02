@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -48,9 +49,9 @@ namespace detail {
     }
   }
 
-  // Helper to read a bounding box (float[3])
-  inline auto ReadBoundingBox(
-    serio::AnyReader& reader, float (&bbox)[3], const char* field_name) -> void
+  // Helper to read a bounding box corner (three floats)
+  inline auto ReadBoundingBox(serio::AnyReader& reader,
+    const std::span<float, 3> bbox, const char* field_name) -> void
   {
     for (float& i : bbox) {
       auto f_result = reader.ReadInto<float>(i);
@@ -95,16 +96,16 @@ namespace detail {
       CheckResult(max_result, "m.bounding_box_max");
     }
 
-    // MeshInfo arms are fixed-width on disk. Consume the reserved tail bytes so
-    // subsequent SubMeshDesc reads start at the correct offset.
-    constexpr size_t kStandardConsumed
-      = (sizeof(ResourceReferenceIndex) * 2) + (sizeof(float) * 3 * 2);
-    constexpr size_t kStandardTail
-      = sizeof(data::pak::geometry::StandardMeshInfo) - kStandardConsumed;
-    static_assert(kStandardTail == 40);
-    auto skip_result
-      = reader.Forward(static_cast<std::streamoff>(kStandardTail));
-    CheckResult(skip_result, "m.standard.reserved");
+    // MeshInfo arms are fixed-width on disk. Read the reserved tail bytes so
+    // subsequent SubMeshDesc reads start at the correct offset, and refuse a
+    // non-zero reserve.
+    auto reserved_result = reader.ReadBlobInto(
+      std::as_writable_bytes(std::span { info._reserved }));
+    CheckResult(reserved_result, "m.standard.reserved");
+    const auto reserves_zero = data::pak::geometry::HasZeroReserves(info);
+    if (!reserves_zero) {
+      throw std::runtime_error("Standard mesh reserved bytes are not zero");
+    }
 
     if (context.parse_only) {
       return { nullptr, nullptr };
@@ -151,14 +152,15 @@ namespace detail {
     CheckResult(params_size_result, "m.param_blob_size");
     LOG_F(2, "param blob size : {}", info.params_size);
 
-    // Consume reserved tail bytes for the fixed-width ProceduralMeshInfo arm.
-    constexpr size_t kProceduralConsumed = sizeof(uint32_t);
-    constexpr size_t kProceduralTail
-      = sizeof(data::pak::geometry::ProceduralMeshInfo) - kProceduralConsumed;
-    static_assert(kProceduralTail == 68);
-    auto skip_result
-      = reader.Forward(static_cast<std::streamoff>(kProceduralTail));
-    CheckResult(skip_result, "m.procedural.reserved");
+    // Read the reserved tail bytes of the fixed-width ProceduralMeshInfo arm,
+    // and refuse a non-zero reserve.
+    auto reserved_result = reader.ReadBlobInto(
+      std::as_writable_bytes(std::span { info._reserved }));
+    CheckResult(reserved_result, "m.procedural.reserved");
+    const auto reserves_zero = data::pak::geometry::HasZeroReserves(info);
+    if (!reserves_zero) {
+      throw std::runtime_error("Procedural mesh reserved bytes are not zero");
+    }
 
     std::vector<std::byte> param_blob;
     if (info.params_size > 0) {

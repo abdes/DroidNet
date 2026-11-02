@@ -306,7 +306,7 @@ and the in-memory model the interop hands to the editor.
 `Content/LooseCookedIndex.*`, `Content/VirtualPath*`,
 `Content/Internal/ContentSource*`, `Content/Internal/IContentSource.*`,
 `Content/Internal/LooseCooked*`, `Content/Internal/PakFileSource.h`,
-`Content/Internal/PakVerification.*`, `Content/Internal/PatchResolutionPolicy.*`,
+`Content/Internal/PatchResolutionPolicy.*`,
 `Content/Internal/ContentIdentity*`, `Player/PlayerModule.cpp` and the
 Player launch schema; `Content/Docs/patch_resolution_contract.md`,
 `Content/Docs/virtual_paths.md`, `Content/Docs/loose_cooked_content.md`,
@@ -332,8 +332,9 @@ retire, clear, load during a swap.
   reads the new generation's half-written files.
 - `ContentSourceRegistry`: source-key conflicts, `PruneExpiredSources`, and
   the binding-view lifetime (`CaptureView`) under concurrent loads.
-- `PakVerification`: the CRC pass runs off the pool's blocking workers, and a
-  verified mount refuses a corrupt pak with a typed code.
+- Verified pak mounts (`AssetLoader`): the CRC pass awaits its reads on the
+  loop, hashes the handle the mount then maps, and refuses a corrupt or
+  unverifiable pak with a typed code.
 - `VirtualPath` and `VirtualPathResolver`: one grammar, shared with the
   managed side through `VirtualPathCases.json`; the two `reinterpret_cast`s
   in `VirtualPath.cpp` are safe for every UTF-8 input.

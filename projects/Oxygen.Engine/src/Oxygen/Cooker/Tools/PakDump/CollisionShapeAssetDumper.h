@@ -12,6 +12,7 @@
 #include "AssetDumper.h"
 #include <fmt/format.h>
 
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -54,7 +55,7 @@ public:
 
     ctx.Out() << "    --- Collision Shape Fields ---\n";
     PrintUtils::Field(
-      ctx.Out(), "Shape Type", static_cast<uint32_t>(shape.shape_type), 8);
+      ctx.Out(), "Shape Type", toolkit::EnumString(shape.shape_type), 8);
     PrintUtils::Field(ctx.Out(), "Local Position",
       fmt::format("[{:.3f}, {:.3f}, {:.3f}]", shape.local_position[0],
         shape.local_position[1], shape.local_position[2]),

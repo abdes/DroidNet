@@ -16,6 +16,7 @@
 #include "AssetDumper.h"
 #include "PrintUtils.h"
 
+#include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -59,8 +60,7 @@ public:
       ctx.Out(), "Bytecode Reference", desc.bytecode_resource_index.get(), 8);
     PrintUtils::Field(
       ctx.Out(), "Source Reference", desc.source_resource_index.get(), 8);
-    PrintUtils::Field(ctx.Out(), "Flags",
-      asset_dump_helpers::ToHexString(static_cast<uint32_t>(desc.flags)), 8);
+    PrintUtils::Field(ctx.Out(), "Flags", toolkit::EnumString(desc.flags), 8);
     {
       const auto path = asset_dump_helpers::DescriptorString(
         *data, desc.header, desc.external_source_path_offset);

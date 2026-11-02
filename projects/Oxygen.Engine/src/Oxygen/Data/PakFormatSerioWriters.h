@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cmath>
 
 #include <Oxygen/Data/PakFormat.h>
@@ -39,18 +38,18 @@ inline auto Store(AnyWriter& writer,
   const data::pak::world::PostProcessVolumeEnvironmentRecord& record)
   -> Result<void>
 {
-  const auto reserved_is_zero
-    = [](const uint32_t value) -> bool { return value == 0U; };
-  if (!data::pak::world::HasValidPostProcessVolumeValues(record)
-    || record.exposure_extension_version
-      != data::pak::world::kExposureExtensionVersion
-    || record.curve_key_count > engine::kMaxExposureCompensationCurveKeys
-    || record.header.record_size
-      != sizeof(record)
-        + (record.curve_key_count
-          * sizeof(data::pak::world::ExposureCompensationKeyRecord))
-    || !std::ranges::all_of(record.exposure_reserved, reserved_is_zero)
-    || !std::ranges::all_of(record.curve_reserved, reserved_is_zero)) {
+  const auto values_valid
+    = data::pak::world::HasValidPostProcessVolumeValues(record);
+  const auto extension_current = record.exposure_extension_version
+    == data::pak::world::kExposureExtensionVersion;
+  const auto curve_within_limit
+    = record.curve_key_count <= engine::kMaxExposureCompensationCurveKeys;
+  const auto record_size_matches = record.header.record_size
+    == sizeof(record)
+      + (record.curve_key_count
+        * sizeof(data::pak::world::ExposureCompensationKeyRecord));
+  if (!values_valid || !extension_current || !curve_within_limit
+    || !record_size_matches) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
   return StoreRecord(writer, record);

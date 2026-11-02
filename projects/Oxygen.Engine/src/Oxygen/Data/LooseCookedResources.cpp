@@ -6,11 +6,15 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -20,13 +24,17 @@
 
 namespace oxygen::data::loose_cooked {
 
+using data::CookedDefect;
+using data::CookedOpenError;
+
 namespace {
   template <class Desc>
   auto ReadRows(const std::span<const std::byte> rows)
     -> std::vector<ResourcePayload>
   {
     if (rows.size() % sizeof(Desc) != 0U) {
-      throw std::invalid_argument("the resource table holds a partial row");
+      throw CookedOpenError(
+        CookedDefect::kWrongRowSize, "the resource table holds a partial row");
     }
     auto payloads = std::vector<ResourcePayload> {};
     const auto count = rows.size() / sizeof(Desc);
@@ -34,10 +42,21 @@ namespace {
       const auto desc
         = serio::CopyAt<Desc>(rows.subspan(row * sizeof(Desc), sizeof(Desc)));
       if (!desc) {
-        throw std::invalid_argument("the resource table holds a partial row");
+        throw CookedOpenError(CookedDefect::kWrongRowSize,
+          "the resource table holds a partial row");
+      }
+      if constexpr (std::is_same_v<Desc, pak::core::TextureResourceDesc>) {
+        if (!pak::core::HasSupportedCompression(*desc)) {
+          throw CookedOpenError(CookedDefect::kInvalidValue,
+            "a texture row records a compression its format lacks");
+        }
       }
       if (desc->size_bytes == 0U) {
         continue;
+      }
+      if (base::IsAllZero(desc->content_hash)) {
+        throw CookedOpenError(
+          CookedDefect::kMissingDigest, "a resource row has no content digest");
       }
       payloads.push_back({
         .row = static_cast<uint32_t>(row),
@@ -86,6 +105,15 @@ auto ResourceRowSize(const FileKind table) -> size_t
   default:
     throw std::invalid_argument("not a resource table kind");
   }
+}
+
+auto IsResourceTableSize(const FileKind table, const uint64_t size) -> bool
+{
+  const auto row_size = ResourceRowSize(table);
+  const auto holds_whole_rows = size % row_size == 0U;
+  const auto rows_fit_an_index
+    = size / row_size <= std::numeric_limits<uint32_t>::max();
+  return holds_whole_rows && rows_fit_an_index;
 }
 
 auto ReadResourcePayloads(const FileKind table,

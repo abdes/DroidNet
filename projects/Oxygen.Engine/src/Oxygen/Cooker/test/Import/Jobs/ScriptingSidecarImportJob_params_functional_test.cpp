@@ -21,7 +21,6 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Testing/GTest.h>
@@ -455,7 +454,7 @@ return Script
     };
 
     EXPECT_EQ(ParamAt(0).type, ScriptParamType::kBool);
-    EXPECT_TRUE(ParamAt(0).value.as_bool);
+    EXPECT_EQ(ParamAt(0).value.as_bool, 1U);
     EXPECT_EQ(ParamAt(1).type, ScriptParamType::kInt32);
     EXPECT_EQ(ParamAt(1).value.as_int32, 42);
     EXPECT_EQ(ParamAt(2).type, ScriptParamType::kFloat);

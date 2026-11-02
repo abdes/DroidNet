@@ -4,15 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Testing/GTest.h>
@@ -25,6 +29,8 @@ using oxygen::data::BufferResourceDescriptor;
 using oxygen::data::BufferResourceDescriptorRecord;
 using oxygen::data::BufferResourceView;
 using oxygen::data::BufferViewRecord;
+using oxygen::data::CookedDefect;
+using oxygen::data::CookedOpenError;
 using oxygen::data::DecodeBufferResourceDescriptor;
 using oxygen::data::DecodeTextureResourceDescriptor;
 using oxygen::data::EncodeBufferResourceDescriptor;
@@ -109,6 +115,33 @@ auto Buffer() -> BufferResourceDescriptor
   };
 }
 
+//! The rule a decode that must fail reports broken.
+template <class T>
+auto DefectOf(const oxygen::Result<T, CookedOpenError>& decoded) -> CookedDefect
+{
+  if (decoded) {
+    ADD_FAILURE() << "the descriptor decoded";
+    return {};
+  }
+  return decoded.error().Defect();
+}
+
+//! Writes `value` over the field at `offset` of `bytes`.
+auto Patch(std::vector<std::byte>& bytes, const std::size_t offset,
+  const uint64_t value) -> void
+{
+  std::memcpy(&bytes.at(offset), &value, sizeof(value));
+}
+
+//! Where the buffer descriptor's view `view` stores the field at
+//! `field_offset` of its record.
+constexpr auto ViewFieldAt(
+  const std::size_t view, const std::size_t field_offset) -> std::size_t
+{
+  return sizeof(BufferResourceDescriptorRecord)
+    + (view * sizeof(BufferViewRecord)) + field_offset;
+}
+
 auto HeaderOf(const std::span<const std::byte> bytes)
   -> ResourceDescriptorHeader
 {
@@ -138,7 +171,8 @@ NOLINT_TEST(ResourceDescriptorTest, TextureRoundTrips)
     0);
 }
 
-//! A texture descriptor of another size, magic or version does not decode.
+//! A texture descriptor of another magic is another format, of another
+//! version unsupported, and of another size malformed.
 NOLINT_TEST(ResourceDescriptorTest, TextureRejectsOtherLayouts)
 {
   const auto bytes = EncodeTextureResourceDescriptor(Texture());
@@ -150,11 +184,18 @@ NOLINT_TEST(ResourceDescriptorTest, TextureRejectsOtherLayouts)
   other_version.at(kVersionOffset)
     = std::byte { kTextureResourceDescriptorVersion - 1U };
 
-  EXPECT_FALSE(
-    DecodeTextureResourceDescriptor(std::span(bytes).first(bytes.size() - 1U)));
-  EXPECT_FALSE(DecodeTextureResourceDescriptor(longer));
-  EXPECT_FALSE(DecodeTextureResourceDescriptor(other_magic));
-  EXPECT_FALSE(DecodeTextureResourceDescriptor(other_version));
+  EXPECT_EQ(DefectOf(DecodeTextureResourceDescriptor(
+              std::span(bytes).first(sizeof(ResourceDescriptorHeader) - 1U))),
+    CookedDefect::kTooSmall);
+  EXPECT_EQ(DefectOf(DecodeTextureResourceDescriptor(
+              std::span(bytes).first(bytes.size() - 1U))),
+    CookedDefect::kSizeMismatch);
+  EXPECT_EQ(DefectOf(DecodeTextureResourceDescriptor(longer)),
+    CookedDefect::kSizeMismatch);
+  EXPECT_EQ(DefectOf(DecodeTextureResourceDescriptor(other_magic)),
+    CookedDefect::kWrongMagic);
+  EXPECT_EQ(DefectOf(DecodeTextureResourceDescriptor(other_version)),
+    CookedDefect::kUnsupportedVersion);
 }
 
 //! A buffer descriptor is its header, the buffer's row, its views and their
@@ -183,28 +224,112 @@ NOLINT_TEST(ResourceDescriptorTest, BufferRoundTrips)
   EXPECT_EQ(decoded->views, buffer.views);
 }
 
-//! Encoding refuses views a reader would reject: an empty or repeated name,
-//! or no whole-buffer view.
-NOLINT_TEST(ResourceDescriptorTest, BufferEncodeRejectsInvalidViews)
+//! Views at the buffer's bounds are valid: one that ends at its last byte,
+//! and an empty one at its end.
+NOLINT_TEST(ResourceDescriptorTest, BufferRoundTripsBoundaryViews)
 {
-  auto unnamed = Buffer();
-  unnamed.views.at(1).name.clear();
-  auto repeated = Buffer();
-  repeated.views.at(1).name = std::string(kWholeBufferViewName);
-  auto partial = Buffer();
-  partial.views.erase(partial.views.begin());
+  auto buffer = Buffer();
+  buffer.views.push_back({
+    .name = "end",
+    .byte_offset = 32U,
+    .byte_length = 0U,
+    .element_offset = 8U,
+    .element_count = 0U,
+  });
 
-  NOLINT_EXPECT_THROW(
-    (void)EncodeBufferResourceDescriptor(unnamed), std::invalid_argument);
-  NOLINT_EXPECT_THROW(
-    (void)EncodeBufferResourceDescriptor(repeated), std::invalid_argument);
-  NOLINT_EXPECT_THROW(
-    (void)EncodeBufferResourceDescriptor(partial), std::invalid_argument);
+  const auto decoded
+    = DecodeBufferResourceDescriptor(EncodeBufferResourceDescriptor(buffer));
+
+  ASSERT_HAS_VALUE(decoded);
+  EXPECT_EQ(decoded->views, buffer.views);
 }
 
-//! A buffer descriptor that is truncated, has trailing bytes, another magic
-//! or version, a view name outside its table or a repeated view name does
-//! not decode.
+//! Encoding refuses views a reader would reject: an empty or repeated name,
+//! no whole-buffer view, a whole-buffer view that does not span the buffer,
+//! and a view outside the buffer, off its stride or whose elements are not
+//! its bytes.
+NOLINT_TEST(ResourceDescriptorTest, BufferEncodeRejectsInvalidViews)
+{
+  const auto with_tail = [](const auto& change) -> BufferResourceDescriptor {
+    auto buffer = Buffer();
+    change(buffer.views.at(1));
+    return buffer;
+  };
+  auto partial = Buffer();
+  partial.views.erase(partial.views.begin());
+  auto short_whole = Buffer();
+  short_whole.views.at(0).byte_length = 16U;
+  const auto invalid = std::array {
+    with_tail([](BufferResourceView& view) -> void { view.name.clear(); }),
+    with_tail([](BufferResourceView& view) -> void {
+      view.name = std::string(kWholeBufferViewName);
+    }),
+    partial,
+    short_whole,
+    // Overflows when its end is computed naively.
+    with_tail([](BufferResourceView& view) -> void {
+      view.byte_offset = std::numeric_limits<uint64_t>::max();
+      view.byte_length = 2U;
+    }),
+    with_tail([](BufferResourceView& view) -> void { view.byte_length = 20U; }),
+    with_tail([](BufferResourceView& view) -> void {
+      view.byte_offset = 18U;
+      view.byte_length = 12U;
+    }),
+    with_tail(
+      [](BufferResourceView& view) -> void { view.element_count = 3U; }),
+  };
+
+  for (const auto& buffer : invalid) {
+    NOLINT_EXPECT_THROW(
+      (void)EncodeBufferResourceDescriptor(buffer), std::invalid_argument);
+  }
+}
+
+//! A view a writer would refuse is malformed when read: outside the buffer,
+//! even by overflow, off its stride, or of elements other than its bytes.
+NOLINT_TEST(ResourceDescriptorTest, BufferRejectsInvalidViewRanges)
+{
+  const auto bytes = EncodeBufferResourceDescriptor(Buffer());
+  const auto with = [&bytes](const std::size_t field_offset,
+                      const uint64_t value) -> std::vector<std::byte> {
+    auto broken = bytes;
+    Patch(broken, ViewFieldAt(1U, field_offset), value);
+    return broken;
+  };
+  struct Case {
+    std::vector<std::byte> bytes;
+    CookedDefect defect;
+  };
+  const auto cases = std::array {
+    Case {
+      .bytes = with(offsetof(BufferViewRecord, byte_offset),
+        std::numeric_limits<uint64_t>::max()),
+      .defect = CookedDefect::kOutOfBounds,
+    },
+    Case {
+      .bytes = with(offsetof(BufferViewRecord, byte_length), 20U),
+      .defect = CookedDefect::kOutOfBounds,
+    },
+    Case {
+      .bytes = with(offsetof(BufferViewRecord, byte_length), 14U),
+      .defect = CookedDefect::kMisaligned,
+    },
+    Case {
+      .bytes = with(offsetof(BufferViewRecord, element_offset), 3U),
+      .defect = CookedDefect::kInconsistent,
+    },
+  };
+
+  for (const auto& broken : cases) {
+    EXPECT_EQ(
+      DefectOf(DecodeBufferResourceDescriptor(broken.bytes)), broken.defect);
+  }
+}
+
+//! A buffer descriptor of another magic is another format, of another
+//! version unsupported; one that is truncated, has trailing bytes, a view
+//! name outside its table or a repeated view name is malformed.
 NOLINT_TEST(ResourceDescriptorTest, BufferRejectsMalformedBytes)
 {
   const auto bytes = EncodeBufferResourceDescriptor(Buffer());
@@ -222,15 +347,22 @@ NOLINT_TEST(ResourceDescriptorTest, BufferRejectsMalformedBytes)
   std::memcpy(&repeated_name.at(NameOffsetAt(1U)),
     &repeated_name.at(NameOffsetAt(0U)), sizeof(core::StringTableOffsetT));
 
-  EXPECT_FALSE(DecodeBufferResourceDescriptor(
-    std::span(bytes).first(sizeof(BufferResourceDescriptorRecord) - 1U)));
-  EXPECT_FALSE(
-    DecodeBufferResourceDescriptor(std::span(bytes).first(bytes.size() - 1U)));
-  EXPECT_FALSE(DecodeBufferResourceDescriptor(longer));
-  EXPECT_FALSE(DecodeBufferResourceDescriptor(other_magic));
-  EXPECT_FALSE(DecodeBufferResourceDescriptor(other_version));
-  EXPECT_FALSE(DecodeBufferResourceDescriptor(stray_name));
-  EXPECT_FALSE(DecodeBufferResourceDescriptor(repeated_name));
+  EXPECT_EQ(DefectOf(DecodeBufferResourceDescriptor(std::span(bytes).first(
+              sizeof(BufferResourceDescriptorRecord) - 1U))),
+    CookedDefect::kTruncated);
+  EXPECT_EQ(DefectOf(DecodeBufferResourceDescriptor(
+              std::span(bytes).first(bytes.size() - 1U))),
+    CookedDefect::kSizeMismatch);
+  EXPECT_EQ(DefectOf(DecodeBufferResourceDescriptor(longer)),
+    CookedDefect::kSizeMismatch);
+  EXPECT_EQ(DefectOf(DecodeBufferResourceDescriptor(other_magic)),
+    CookedDefect::kWrongMagic);
+  EXPECT_EQ(DefectOf(DecodeBufferResourceDescriptor(other_version)),
+    CookedDefect::kUnsupportedVersion);
+  EXPECT_EQ(DefectOf(DecodeBufferResourceDescriptor(stray_name)),
+    CookedDefect::kInvalidString);
+  EXPECT_EQ(DefectOf(DecodeBufferResourceDescriptor(repeated_name)),
+    CookedDefect::kDuplicate);
 }
 
 //! A buffer's element is its stride, else its format's element, else a byte;

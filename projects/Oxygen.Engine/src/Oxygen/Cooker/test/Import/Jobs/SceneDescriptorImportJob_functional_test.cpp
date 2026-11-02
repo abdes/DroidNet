@@ -1166,7 +1166,7 @@ namespace {
 
     const auto sky_sphere = scene.TryGetSkySphereEnvironment();
     ASSERT_HAS_VALUE(sky_sphere) << "Expected sky_sphere to contain a value";
-    EXPECT_EQ(sky_sphere->source, 0U);
+    EXPECT_EQ(sky_sphere->source, data::pak::world::SkySphereSource::kCubemap);
     EXPECT_FLOAT_EQ(sky_sphere->intensity, 2.0F);
     EXPECT_FLOAT_EQ(sky_sphere->rotation_radians, 1.25F);
     EXPECT_FLOAT_EQ(sky_sphere->tint_rgb[2], 0.7F);
@@ -1270,7 +1270,10 @@ namespace {
             data::AssetKey {}, std::span<const std::byte>(bytes));
           const auto post = scene.TryGetPostProcessVolumeEnvironment();
           ASSERT_HAS_VALUE(post);
-          EXPECT_EQ(post->header.record_size, 160U);
+          // The record's prefix, then the two curve keys the scene holds.
+          EXPECT_EQ(post->header.record_size,
+            sizeof(data::pak::world::PostProcessVolumeEnvironmentRecord)
+              + (2U * sizeof(data::pak::world::ExposureCompensationKeyRecord)));
           EXPECT_EQ(static_cast<uint32_t>(post->tone_mapper), tone);
           EXPECT_EQ(static_cast<uint32_t>(post->exposure_mode), exposure);
           EXPECT_EQ(
@@ -1291,7 +1294,8 @@ namespace {
           EXPECT_FLOAT_EQ(post->auto_exposure_spot_meter_radius, 0.35F);
           EXPECT_FLOAT_EQ(post->auto_exposure_black_influence, 0.4F);
           EXPECT_FLOAT_EQ(post->auto_exposure_transition_distance_ev, 2.5F);
-          EXPECT_EQ(post->exposure_extension_version, 1U);
+          EXPECT_EQ(post->exposure_extension_version,
+            data::pak::world::kExposureExtensionVersion);
           EXPECT_EQ(
             post->auto_exposure_metering_mask, data::kNoResourceReference);
           const auto curve = scene.GetPostProcessCompensationCurve();
