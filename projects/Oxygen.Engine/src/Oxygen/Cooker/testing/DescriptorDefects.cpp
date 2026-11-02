@@ -9,6 +9,8 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -187,13 +189,53 @@ auto DescriptorDefects::MeshViewAt(const std::span<const std::byte> geometry,
   const uint32_t index) -> mesh::MeshViewDesc
 {
   return ReadRecord<mesh::MeshViewDesc>(
-    geometry, MeshViewOffset(geometry, index));
+    geometry, LodRecordOffset(geometry, index));
 }
 
 auto DescriptorDefects::SetMeshView(std::vector<std::byte>& geometry,
   const uint32_t index, const mesh::MeshViewDesc& view) -> void
 {
-  WriteRecord(geometry, MeshViewOffset(geometry, index), view);
+  WriteRecord(geometry, LodRecordOffset(geometry, index), view);
+}
+
+auto DescriptorDefects::SurfaceDefaultsAt(
+  const std::span<const std::byte> geometry, const uint32_t index)
+  -> mesh::SurfaceDesc
+{
+  return ReadRecord<mesh::SurfaceDesc>(
+    geometry, SurfaceDefaultsOffset(geometry, index));
+}
+
+auto DescriptorDefects::SetSurfaceDefaults(std::vector<std::byte>& geometry,
+  const uint32_t index, const mesh::SurfaceDesc& surface) -> void
+{
+  WriteRecord(geometry, SurfaceDefaultsOffset(geometry, index), surface);
+}
+
+auto DescriptorDefects::DropSurfaceDefaults(std::vector<std::byte>& geometry)
+  -> void
+{
+  // The entry is removed, so the records still end where the string table
+  // starts.
+  auto desc = ReadRecord<mesh::GeometryAssetDesc>(geometry, 0U);
+  if (desc.surface_count == 0U) {
+    throw std::invalid_argument("the geometry declares no surface defaults");
+  }
+  const auto last = SurfaceDefaultsOffset(geometry, desc.surface_count - 1U);
+  const auto entry
+    = std::next(geometry.begin(), static_cast<std::ptrdiff_t>(last));
+  geometry.erase(entry,
+    std::next(entry, static_cast<std::ptrdiff_t>(sizeof(mesh::SurfaceDesc))));
+  --desc.surface_count;
+  desc.header.strings.offset -= sizeof(mesh::SurfaceDesc);
+  WriteRecord(geometry, 0U, desc);
+}
+
+auto DescriptorDefects::SetDefaultLodPolicy(
+  std::vector<std::byte>& geometry, const mesh::LodPolicyRecord& policy) -> void
+{
+  EditRecord<mesh::GeometryAssetDesc>(geometry, 0U,
+    [&policy](auto& desc) -> void { desc.default_lod_policy = policy; });
 }
 
 auto DescriptorDefects::PointNodeTablePastTheEnd(std::vector<std::byte>& scene)
@@ -371,14 +413,15 @@ auto DescriptorDefects::SetBindingTableType(std::vector<std::byte>& sidecar,
     });
 }
 
-auto DescriptorDefects::MeshViewOffset(
-  const std::span<const std::byte> geometry, const uint32_t index) -> size_t
+auto DescriptorDefects::LodRecordOffset(
+  const std::span<const std::byte> geometry, const std::optional<uint32_t> view)
+  -> size_t
 {
   // Each LOD's mesh is followed by its procedural parameters, if any, then
   // by its submeshes, each followed by its views.
   const auto desc = ReadRecord<mesh::GeometryAssetDesc>(geometry, 0U);
   auto at = sizeof(desc);
-  auto remaining = index;
+  auto remaining = view;
   for (auto lod = uint32_t { 0U }; lod < desc.lod_count; ++lod) {
     const auto lod_mesh = ReadRecord<mesh::MeshDesc>(geometry, at);
     at += sizeof(lod_mesh);
@@ -388,14 +431,30 @@ auto DescriptorDefects::MeshViewOffset(
     for (auto i = uint32_t { 0U }; i < lod_mesh.submesh_count; ++i) {
       const auto submesh = ReadRecord<mesh::SubMeshDesc>(geometry, at);
       at += sizeof(submesh);
-      if (remaining < submesh.mesh_view_count) {
-        return at + (size_t { remaining } * sizeof(mesh::MeshViewDesc));
+      if (remaining.has_value()) {
+        if (*remaining < submesh.mesh_view_count) {
+          return at + (size_t { *remaining } * sizeof(mesh::MeshViewDesc));
+        }
+        *remaining -= submesh.mesh_view_count;
       }
-      remaining -= submesh.mesh_view_count;
       at += size_t { submesh.mesh_view_count } * sizeof(mesh::MeshViewDesc);
     }
   }
-  throw std::invalid_argument("the geometry has no such mesh view");
+  if (view.has_value()) {
+    throw std::invalid_argument("the geometry has no such mesh view");
+  }
+  return at;
+}
+
+auto DescriptorDefects::SurfaceDefaultsOffset(
+  const std::span<const std::byte> geometry, const uint32_t index) -> size_t
+{
+  const auto desc = ReadRecord<mesh::GeometryAssetDesc>(geometry, 0U);
+  if (index >= desc.surface_count) {
+    throw std::invalid_argument("the geometry has no such surface defaults");
+  }
+  return LodRecordOffset(geometry, std::nullopt)
+    + (size_t { index } * sizeof(mesh::SurfaceDesc));
 }
 
 auto DescriptorDefects::RecordOffset(const std::span<const std::byte> scene,

@@ -835,8 +835,11 @@ private:
   no table and declares none; its users take the scene schema's defaults.
 
   @throw std::invalid_argument when a LOD is null, the LOD count exceeds
-  kMaxLodCount, a surface identity is nil, or a surface table does not list
-  exactly the declared surfaces or comes with an invalid LOD policy.
+  kMaxLodCount or a surface identity is nil.
+  @throw CookedOpenError `kInconsistent` when the surface table does not list
+  every declared surface or lists another, `kDuplicate` when it lists a
+  surface twice, and `kInvalidValue` for unknown surface flags or a default
+  LOD policy breaking LodPolicyRecord's rules.
 
   @see Mesh, SubMesh, AssetHeader, PakFormat.h
 */

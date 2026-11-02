@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -81,6 +82,29 @@ struct DescriptorDefects final {
   //! Sets the mesh view `index` of the geometry.
   static auto SetMeshView(std::vector<std::byte>& geometry, uint32_t index,
     const data::pak::geometry::MeshViewDesc& view) -> void;
+
+  //! The surface defaults `index` of the geometry's surface table.
+  /*!
+   @throw std::invalid_argument When the table has no such entry.
+  */
+  [[nodiscard]] static auto SurfaceDefaultsAt(
+    std::span<const std::byte> geometry, uint32_t index)
+    -> data::pak::geometry::SurfaceDesc;
+
+  //! Sets the surface defaults `index` of the geometry's surface table.
+  static auto SetSurfaceDefaults(std::vector<std::byte>& geometry,
+    uint32_t index, const data::pak::geometry::SurfaceDesc& surface) -> void;
+
+  //! Removes the last entry of the geometry's surface table, so it declares
+  //! the defaults of one surface fewer.
+  /*!
+   @throw std::invalid_argument When the geometry declares no defaults.
+  */
+  static auto DropSurfaceDefaults(std::vector<std::byte>& geometry) -> void;
+
+  //! Sets the geometry's default LOD policy, whatever rules it breaks.
+  static auto SetDefaultLodPolicy(std::vector<std::byte>& geometry,
+    const data::pak::geometry::LodPolicyRecord& policy) -> void;
 
   //=== Scenes ===----------------------------------------------------------//
 
@@ -214,11 +238,19 @@ struct DescriptorDefects final {
   }
 
 private:
-  //! The offset of the mesh view `index` of the geometry.
+  //! The offset of the mesh view `view` of the geometry or, without a view,
+  //! the end of its LOD records, where its surface table starts.
   /*!
    @throw std::invalid_argument When the geometry has no such view.
   */
-  [[nodiscard]] static auto MeshViewOffset(
+  [[nodiscard]] static auto LodRecordOffset(std::span<const std::byte> geometry,
+    std::optional<uint32_t> view) -> size_t;
+
+  //! The offset of the entry `index` of the geometry's surface table.
+  /*!
+   @throw std::invalid_argument When the table has no such entry.
+  */
+  [[nodiscard]] static auto SurfaceDefaultsOffset(
     std::span<const std::byte> geometry, uint32_t index) -> size_t;
 
   //! The offset of the record `index`, of `size` bytes, of the component

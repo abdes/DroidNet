@@ -689,9 +689,9 @@ inline auto LoadGeometryAsset(const LoaderContext& context)
     context.ValidateReferences(resources, keys);
   }
 
-  // Construct and return GeometryAsset with LOD meshes; it rejects a surface
-  // table that does not list exactly the declared surfaces, and an invalid
-  // default LOD policy.
+  // Construct and return GeometryAsset with LOD meshes; it refuses a surface
+  // table that does not list each declared surface once with known flags, and
+  // an invalid default LOD policy.
   const auto name_offset = desc.header.name_offset;
   auto geometry = std::make_unique<data::GeometryAsset>(
     context.current_asset_key, desc, std::move(lod_meshes),

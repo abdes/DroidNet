@@ -113,6 +113,8 @@ Physics, before authored local transforms.
 | Single storage mode per MeshBuilder                           | `ValidateStorageType` (`logic_error`)                |
 | Buffers hold whole vertices and 16-bit or 32-bit indices      | Mesh buffer binding (`CookedOpenError`)              |
 | Every view lies in its buffers; its indices name its vertices | MeshView ctor and buffer binding (`CookedOpenError`) |
+| Surface table: each declared surface once, known flags        | GeometryAsset ctor (`CookedOpenError`)               |
+| Default LOD policy keeps `LodPolicyRecord`'s rules            | GeometryAsset ctor (`CookedOpenError`)               |
 | Procedural params in valid range                              | Each generator (returns std::nullopt)                |
 
 A mesh read from its descriptor is built before its buffers load; it shows no

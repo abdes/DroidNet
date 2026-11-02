@@ -386,7 +386,9 @@ oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
   }
   const auto revision = ComputeSurfaceLayoutRevision(surfaces_.surfaces);
   if (!revision) {
-    throw std::invalid_argument("Geometry surface layout is invalid");
+    // The surfaces are built above with distinct, non-nil identities and
+    // distinct bindings, so the inventory rules hold.
+    throw std::logic_error("Geometry surface layout breaks inventory rules");
   }
   surfaces_.layout_revision = revision.value();
   if (surface_table.has_value()) {
@@ -398,20 +400,25 @@ auto oxygen::data::GeometryAsset::ApplySurfaceTable(
   const std::span<const pak::geometry::SurfaceDesc> surface_table) -> void
 {
   if (surface_table.size() != surfaces_.surfaces.size()) {
-    throw std::invalid_argument(
+    throw CookedOpenError(CookedDefect::kInconsistent,
       "Geometry surface table does not list the declared surfaces");
   }
   constexpr auto kKnownFlags = pak::geometry::kSurfaceFlag_Visible
     | pak::geometry::kSurfaceFlag_CastsShadows;
   for (const auto& entry : surface_table) {
     if ((entry.flags & ~kKnownFlags) != 0U) {
-      throw std::invalid_argument("Geometry surface flags are unknown");
+      throw CookedOpenError(
+        CookedDefect::kInvalidValue, "Geometry surface flags are unknown");
     }
     const auto found = std::ranges::find(
       surfaces_.surfaces, entry.surface_id, &Surface::surface_id);
-    if (found == surfaces_.surfaces.end() || found->defaults.has_value()) {
-      throw std::invalid_argument(
+    if (found == surfaces_.surfaces.end()) {
+      throw CookedOpenError(CookedDefect::kInconsistent,
         "Geometry surface table does not list the declared surfaces");
+    }
+    if (found->defaults.has_value()) {
+      throw CookedOpenError(CookedDefect::kDuplicate,
+        "Geometry surface table lists a surface twice");
     }
     found->defaults = SurfaceDefaults {
       .visible = (entry.flags & pak::geometry::kSurfaceFlag_Visible) != 0U,
@@ -420,7 +427,8 @@ auto oxygen::data::GeometryAsset::ApplySurfaceTable(
     };
   }
   if (!IsValidLodPolicy(desc_.default_lod_policy)) {
-    throw std::invalid_argument("Geometry default LOD policy is invalid");
+    throw CookedOpenError(
+      CookedDefect::kInvalidValue, "Geometry default LOD policy is invalid");
   }
   default_lod_policy_ = desc_.default_lod_policy;
 }

@@ -20,6 +20,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Serio/ByteBuffer.h>
@@ -37,8 +38,9 @@ inline auto TakePayload(const LoaderContext& context, const uint64_t size_bytes,
     return {};
   }
   if (!context.payload || context.payload->Size().get() != size_bytes) {
-    throw std::runtime_error(fmt::format(
-      "error reading {}: payload of {} bytes was not read", what, size_bytes));
+    throw data::CookedOpenError(data::CookedDefect::kSizeMismatch,
+      fmt::format("error reading {}: payload of {} bytes was not read", what,
+        size_bytes));
   }
   return std::move(*context.payload);
 }
@@ -53,29 +55,38 @@ inline auto AddRangeEnd(size_t& end, const size_t offset, const size_t size)
 
   const size_t candidate = offset + size;
   if (candidate < offset) {
-    throw std::runtime_error("range overflow");
+    throw data::CookedOpenError(
+      data::CookedDefect::kOutOfBounds, "range overflow");
   }
   end = std::max(end, candidate);
 }
 
+//! Refuses a descriptor whose read of `field` failed: it ends before the
+//! bytes the read needs.
+/*!
+ @throw data::CookedOpenError `kTruncated` when `result` holds an error.
+*/
 inline auto CheckLoaderResult(const oxygen::Result<void>& result,
   const char* subject, const char* field) -> void
 {
   if (!result) {
     LOG_F(ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
-    throw std::runtime_error(fmt::format(
-      "error reading {} ({}): {}", subject, field, result.error().message()));
+    throw data::CookedOpenError(data::CookedDefect::kTruncated,
+      fmt::format(
+        "error reading {} ({}): {}", subject, field, result.error().message()));
   }
 }
 
+//! Refuses a descriptor whose read of `field` failed, as the `void` overload.
 template <typename T>
 inline auto CheckLoaderResult(const oxygen::Result<T>& result,
   const char* subject, const char* field) -> void
 {
   if (!result) {
     LOG_F(ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
-    throw std::runtime_error(fmt::format(
-      "error reading {} ({}): {}", subject, field, result.error().message()));
+    throw data::CookedOpenError(data::CookedDefect::kTruncated,
+      fmt::format(
+        "error reading {} ({}): {}", subject, field, result.error().message()));
   }
 }
 
@@ -147,7 +158,7 @@ inline auto LoadAssetHeader(
   if (!result) {
     LOG_F(
       INFO, "-failed- on AssetHeader: {}", result.error().message().c_str());
-    throw std::runtime_error(
+    throw data::CookedOpenError(data::CookedDefect::kTruncated,
       fmt::format("error reading asset header: {}", result.error().message()));
   }
 
@@ -155,7 +166,7 @@ inline auto LoadAssetHeader(
   auto asset_type = header.asset_type;
   if (asset_type > static_cast<uint8_t>(AssetType::kMaxAssetType)) {
     LOG_F(ERROR, "-failed- on invalid asset type {}", asset_type);
-    throw std::runtime_error(
+    throw data::CookedOpenError(data::CookedDefect::kInvalidValue,
       fmt::format("invalid asset type in header: {}", asset_type));
   }
   LOG_F(1, "asset type         : {}",
@@ -180,7 +191,9 @@ inline auto LoadAssetHeader(
 /*!
  Leaves the reader where it was.
 
- @throw std::runtime_error when the table cannot be read or is malformed.
+ @throw data::CookedOpenError `kOutOfBounds` when the table is empty or starts
+ within the asset header, `kTruncated` when it runs past the descriptor, and
+ `kInvalidString` when it is malformed.
 */
 inline auto ReadDescriptorStrings(serio::AnyReader& reader,
   const size_t descriptor_start, const data::pak::core::AssetHeader& header)
@@ -188,7 +201,8 @@ inline auto ReadDescriptorStrings(serio::AnyReader& reader,
 {
   const auto& table = header.strings;
   if (table.size == 0 || table.offset < sizeof(data::pak::core::AssetHeader)) {
-    throw std::runtime_error("descriptor string table location is invalid");
+    throw data::CookedOpenError(data::CookedDefect::kOutOfBounds,
+      "descriptor string table location is invalid");
   }
   const auto position = reader.Position();
   CheckLoaderResult(position, "descriptor", "position");
@@ -203,7 +217,8 @@ inline auto ReadDescriptorStrings(serio::AnyReader& reader,
   try {
     return data::DescriptorStrings { std::move(chars) };
   } catch (const std::invalid_argument& error) {
-    throw std::runtime_error(error.what());
+    throw data::CookedOpenError(
+      data::CookedDefect::kInvalidString, error.what());
   }
 }
 
@@ -212,7 +227,9 @@ inline auto ReadDescriptorStrings(serio::AnyReader& reader,
  Loaders consume their whole descriptor. A descriptor whose string table
  follows its records calls this after reading them.
 
- @throw std::runtime_error when the records do not end where the table starts.
+ @throw data::CookedOpenError `kSizeMismatch` when the records do not end
+ where the table starts, `kTruncated` when the table runs past the
+ descriptor.
 */
 inline auto SkipDescriptorStrings(serio::AnyReader& reader,
   const size_t descriptor_start, const data::pak::core::AssetHeader& header)
@@ -221,7 +238,7 @@ inline auto SkipDescriptorStrings(serio::AnyReader& reader,
   const auto position = reader.Position();
   CheckLoaderResult(position, "descriptor", "position");
   if (*position != descriptor_start + header.strings.offset) {
-    throw std::runtime_error(
+    throw data::CookedOpenError(data::CookedDefect::kSizeMismatch,
       "descriptor records do not end where its string table starts");
   }
   CheckLoaderResult(
@@ -230,7 +247,8 @@ inline auto SkipDescriptorStrings(serio::AnyReader& reader,
 
 //! Resolves a string of a descriptor's string table.
 /*!
- @throw std::runtime_error naming `field` when the offset is not in the table.
+ @throw data::CookedOpenError `kOutOfBounds`, naming `field`, when the offset
+ is not in the table.
 */
 inline auto ResolveDescriptorString(const data::DescriptorStrings& strings,
   const data::pak::core::StringTableOffsetT offset, const char* field)
@@ -238,7 +256,7 @@ inline auto ResolveDescriptorString(const data::DescriptorStrings& strings,
 {
   const auto value = strings.TryGet(offset);
   if (!value) {
-    throw std::runtime_error(
+    throw data::CookedOpenError(data::CookedDefect::kOutOfBounds,
       fmt::format("{} offset {} is outside the string table", field, offset));
   }
   return std::string { *value };
