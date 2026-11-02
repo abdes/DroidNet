@@ -23,8 +23,9 @@ namespace oxygen::nexus {
 
  ### Key Features
 
- - **Lazy Initialization**: Slots start uninitialized (0) and lazy-initialize
-   to generation 1 on first access via either Load() or Bump().
+ - **Lazy Initialization**: Slots start uninitialized (0) and are at
+   generation 1 until bumped: Load() initializes them to 1, and a first
+   Bump() counts from 1.
  - **Thread-Safe Operations**: All operations use atomic memory ordering for
    concurrent allocator and reclamation paths.
  - **Zero-Based Invalid**: Generation 0 represents uninitialized/invalid slots,
@@ -156,7 +157,7 @@ public:
   //! Increment generation value for resource reclamation.
   /*!
    Atomically increments the generation counter for a bindless slot using
-   release memory ordering. Safe to call from resource reclamation paths
+   acquire-release memory ordering. Safe to call from resource reclamation paths
    without explicit synchronization.
 
    @param index Bindless handle index to increment
@@ -164,8 +165,9 @@ public:
    ### Performance Characteristics
 
    - Time Complexity: O(1)
-   - Memory: No allocation, one atomic fetch_add
-   - Optimization: Uses release ordering for visibility to other threads
+   - Memory: No allocation, one atomic compare-exchange loop
+   - Optimization: Uses acquire-release ordering for visibility to other
+     threads
 
    ### Usage Examples
 
@@ -177,8 +179,9 @@ public:
    auto new_gen = tracker.Load(oxygen::bindless::HeapIndex{slot_index});
    ```
 
-   @note For uninitialized slots (0), this increments to 1. For initialized
-         slots, this increments to the next generation value.
+   @note An uninitialized slot (0) is at generation 1, as a Load() would make
+         it, so its first bump makes it 2: every bump counts, whether a Load()
+         or a Bump() reached the slot first.
    @warning Out-of-bounds indices are silently ignored.
    @see Load
   */
@@ -188,7 +191,11 @@ public:
     if (u_index >= size_) {
       return;
     }
-    table_[u_index].value.fetch_add(1U, std::memory_order_release);
+    auto& value = table_[u_index].value;
+    auto current = value.load(std::memory_order_acquire);
+    while (
+      !value.compare_exchange_weak(current, (current == 0U ? 1U : current) + 1U,
+        std::memory_order_acq_rel, std::memory_order_acquire)) { }
   }
 
   //! Resize generation table while preserving existing values.

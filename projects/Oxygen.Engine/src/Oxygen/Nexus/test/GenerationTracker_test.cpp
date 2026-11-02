@@ -350,8 +350,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(t.Load(idx2), kGen1);
 }
 
-//! Verify that Bump on completely uninitialized slots works correctly. This
-//! test discovers the actual behavior of Bump on uninitialized slots.
+//! A first Bump on a slot nobody loaded counts from generation 1, as if a
+//! Load() had initialized it: every bump counts, whichever call came first.
 NOLINT_TEST_F(
   GenerationTrackerTest, Bump_UninitializedSlot_LazyInitializesAndIncrements)
 {
@@ -362,22 +362,11 @@ NOLINT_TEST_F(
   GenTracker t(b::Capacity { 2U });
   const auto idx = b::HeapIndex { 0U };
 
-  // Act: Bump without ever calling Load() first
+  // Act
   t.Bump(idx);
 
-  // Act & Assert: Load after bump to see what the actual behavior is
-  const auto gen_after_bump = t.Load(idx);
-
-  // The actual implementation behavior: Bump on uninitialized slot results in 1
-  // (not 2 as originally expected). This suggests Bump initializes to 0, then
-  // increments to 1, while Load() initializes directly to 1.
-  EXPECT_EQ(gen_after_bump, kGen1);
-
-  // Act & Assert: Another bump should increment to 2
-  t.Bump(idx);
+  // Assert
   EXPECT_EQ(t.Load(idx), kGen2);
-
-  // Act & Assert: Another bump should increment to 3
   t.Bump(idx);
   EXPECT_EQ(t.Load(idx), kGen3);
 }
@@ -410,7 +399,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   // Act: Multiple threads concurrently loading the same uninitialized slot
   threads.reserve(num_threads);
   for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([&tracker, idx, t, &results]() -> void {
+    threads.emplace_back([&tracker, idx, t, &results] -> void {
       results[static_cast<std::size_t>(t)].reserve(kNumOperations);
       for (int i = 0; i < kNumOperations; ++i) {
         results[static_cast<std::size_t>(t)].push_back(tracker.Load(idx).get());
@@ -456,7 +445,7 @@ NOLINT_TEST_F(
   // Act: Multiple threads concurrently bumping the same slot
   threads.reserve(num_threads);
   for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([&tracker, idx]() -> void {
+    threads.emplace_back([&tracker, idx] -> void {
       for (int i = 0; i < kNumBumpsPerThread; ++i) {
         tracker.Bump(idx);
       }
@@ -498,7 +487,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   threads.reserve(num_reader_threads + num_writer_threads);
   for (int t = 0; t < num_reader_threads; ++t) {
     threads.emplace_back([&tracker, idx, &start_flag, &min_observed_gen,
-                           &max_observed_gen]() -> void {
+                           &max_observed_gen] -> void {
       while (!start_flag.load()) {
         std::this_thread::yield();
       }
@@ -522,7 +511,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
 
   // Writer threads continuously increment generation
   for (int t = 0; t < num_writer_threads; ++t) {
-    threads.emplace_back([&tracker, idx, &start_flag]() -> void {
+    threads.emplace_back([&tracker, idx, &start_flag] -> void {
       while (!start_flag.load()) {
         std::this_thread::yield();
       }
@@ -584,7 +573,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
     const auto idx = b::HeapIndex { static_cast<uint32_t>(slot) };
 
     for (int t = 0; t < threads_per_slot; ++t) {
-      threads.emplace_back([&tracker, idx, slot, &final_generations]() -> void {
+      threads.emplace_back([&tracker, idx, slot, &final_generations] -> void {
         // Initialize the slot (lazy)
         [[maybe_unused]] const auto init_gen = tracker.Load(idx);
 
@@ -676,7 +665,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   std::vector<std::thread> writers;
   writers.reserve(kWriterThreads);
   for (int t = 0; t < kWriterThreads; ++t) {
-    writers.emplace_back([&tracker, &start]() -> void {
+    writers.emplace_back([&tracker, &start] -> void {
       while (!start.load(std::memory_order_acquire)) { }
       for (int i = 0; i < kIters; ++i) {
         tracker.Bump(HeapIndex { 0U });
@@ -688,7 +677,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   std::vector<std::thread> readers;
   readers.reserve(kReaderThreads);
   for (int t = 0; t < kReaderThreads; ++t) {
-    readers.emplace_back([&tracker, &start, &max_seen]() -> void {
+    readers.emplace_back([&tracker, &start, &max_seen] -> void {
       while (!start.load(std::memory_order_acquire)) { }
       uint32_t last = 0;
       for (int i = 0; i < kIters; ++i) {
