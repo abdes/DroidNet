@@ -165,6 +165,7 @@ set(
   "Meta/Input/PakFormat.inc"
   "Meta/Physics/PakPhysics.inc"
   "Meta/Physics/PakPhysicsShape.inc"
+  "Meta/Scene/Environment.inc"
   "Meta/Scripting/ScriptCompileMode.inc"
 )
 # Keep .def catalogs visible to IDE/target dependency graph without letting

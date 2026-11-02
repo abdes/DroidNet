@@ -69,7 +69,7 @@ static float3 CaptureSkySphereRadiance(GpuSkySphereParams sky_sphere,
     uint cube_srv, float3 direction, uint output_size)
 {
     // A capture snapshot's intensity is the illuminance calibration scale.
-    if (sky_sphere.source == kSkySphereSourceSolidColor)
+    if (sky_sphere.source == (uint)SkySphereSource::kSolidColor)
         return sky_sphere.solid_color_rgb * sky_sphere.intensity;
     return SampleSourceCube(cube_srv,
         RotateDirectionAroundOxygenUp(direction, sky_sphere.rotation_radians), output_size)

@@ -9,10 +9,12 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 
 namespace oxygen::vortex {
 
@@ -188,10 +190,12 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyLightParams {
   std::array<std::uint32_t, 3> metadata_padding {};
 };
 
-//! `GpuSkySphereParams::source` values; mirror
-//! scene::environment::SkySphereSource.
-inline constexpr std::uint32_t kSkySphereSourceCubemap = 0U;
-inline constexpr std::uint32_t kSkySphereSourceSolidColor = 1U;
+//! `GpuSkySphereParams::source` values: the scene's sky sphere sources, which
+//! the shader contract (EnvironmentStaticData.hlsli) mirrors.
+inline constexpr std::uint32_t kSkySphereSourceCubemap
+  = std::to_underlying(oxygen::scene::environment::SkySphereSource::kCubemap);
+inline constexpr std::uint32_t kSkySphereSourceSolidColor = std::to_underlying(
+  oxygen::scene::environment::SkySphereSource::kSolidColor);
 
 struct alignas(packing::kShaderDataFieldAlignment) GpuSkySphereParams {
   std::array<float, 3> solid_color_rgb { 0.0F, 0.0F, 0.0F };

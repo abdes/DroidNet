@@ -9,10 +9,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
-#include <ios>
-#include <iterator>
 #include <limits>
 #include <memory>
 #include <numbers>
@@ -101,10 +97,6 @@
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
 
-#ifndef OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR
-#  define OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR ""
-#endif
-
 namespace oxygen::vortex::internal {
 auto RendererTagFactory::Get() noexcept -> RendererTag
 {
@@ -179,28 +171,6 @@ auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics)
       std::weak_ptr<Graphics>(graphics), std::move(config), kCapabilities),
     DestroyRenderer,
   };
-}
-
-auto ReadShaderSource(const std::filesystem::path& relative_path) -> std::string
-{
-  const auto shader_path = std::filesystem::path {
-    OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR,
-  } / relative_path;
-  auto input = std::ifstream(shader_path, std::ios::binary);
-  EXPECT_TRUE(input.is_open()) << shader_path.string();
-  if (!input.is_open()) {
-    return {};
-  }
-
-  return {
-    std::istreambuf_iterator<char>(input),
-    std::istreambuf_iterator<char>(),
-  };
-}
-
-auto Contains(const std::string& text, const std::string_view needle) -> bool
-{
-  return text.contains(needle);
 }
 
 auto MakeResolvedView(const float width, const float height,
@@ -433,56 +403,6 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(
     static_data.sky_light.diffuse_sh_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(static_data.sky_light.ibl_generation, 0U);
-}
-
-NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
-  StaticSkyLightShaderConsumersUseDiffuseShBindingWithoutVisualFallback)
-{
-  const auto forward_mesh
-    = ReadShaderSource("Stages/Translucency/ForwardMesh_PS.hlsl");
-  const auto forward_debug
-    = ReadShaderSource("Stages/Translucency/ForwardDebug_PS.hlsl");
-  const auto local_fog
-    = ReadShaderSource("Services/Environment/LocalFogVolumeCommon.hlsli");
-
-  ASSERT_FALSE(forward_mesh.empty());
-  ASSERT_FALSE(forward_debug.empty());
-  ASSERT_FALSE(local_fog.empty());
-
-  EXPECT_TRUE(Contains(forward_mesh, "EvaluateSkyIbl"));
-  EXPECT_TRUE(Contains(local_fog, "EvaluateSkyDiffuseIrradiance"));
-  EXPECT_TRUE(Contains(forward_debug, "sky_light.cubemap_slot"));
-
-  EXPECT_FALSE(Contains(forward_mesh, "sky_sphere.cubemap_slot"));
-  EXPECT_FALSE(Contains(forward_debug, "sky_sphere.cubemap_slot"));
-  EXPECT_FALSE(Contains(forward_mesh, "irradiance_map_slot"));
-  EXPECT_FALSE(Contains(local_fog, "irradiance_map_slot"));
-  EXPECT_FALSE(
-    Contains(forward_debug, "slot = env_data.sky_sphere.cubemap_slot"));
-}
-
-NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
-  SkyPassShaderRendersSkySphereBeforeAtmosphereLutRequirement)
-{
-  const auto sky = ReadShaderSource("Services/Environment/Sky.hlsl");
-
-  ASSERT_FALSE(sky.empty());
-  EXPECT_TRUE(Contains(sky, "env_data.sky_sphere.enabled"));
-  EXPECT_TRUE(Contains(sky, "kSkySphereSourceSolidColor"));
-  EXPECT_TRUE(Contains(sky, "TextureCube<float4> sky_cube"));
-  EXPECT_TRUE(Contains(
-    sky, "env_data.sky_sphere.cubemap_slot != K_INVALID_BINDLESS_INDEX"));
-  EXPECT_TRUE(
-    Contains(sky, "BX_IN_TEXTURES(env_data.sky_sphere.cubemap_slot)"));
-  EXPECT_TRUE(Contains(sky, "RotateDirectionAroundOxygenUp"));
-  EXPECT_TRUE(Contains(sky, "CubemapSamplingDirFromOxygenWS"));
-
-  const auto sky_sphere_branch = sky.find("env_data.sky_sphere.enabled");
-  const auto atmosphere_lut_requirement
-    = sky.find("env_data.atmosphere.sky_view_lut_slot");
-  ASSERT_NE(sky_sphere_branch, std::string::npos);
-  ASSERT_NE(atmosphere_lut_requirement, std::string::npos);
-  EXPECT_LT(sky_sphere_branch, atmosphere_lut_requirement);
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,

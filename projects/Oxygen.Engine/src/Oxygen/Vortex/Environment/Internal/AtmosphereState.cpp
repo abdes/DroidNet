@@ -7,6 +7,9 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
+
+#include <glm/vec3.hpp>
 
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -184,7 +187,7 @@ namespace {
     }
 
     model.enabled = sky_light->IsEnabled();
-    model.source = static_cast<std::uint32_t>(sky_light->GetSource());
+    model.source = std::to_underlying(sky_light->GetSource());
     model.cubemap_resource = sky_light->GetCubemapResource();
     model.illuminance_lux = sky_light->GetIlluminanceLux();
     model.intensity_mul = sky_light->GetIntensityMul();
@@ -442,14 +445,15 @@ auto HashSkyCaptureInputs(const StableAtmosphereState& state) -> std::uint64_t
   for (std::size_t index = 0;
     index < state.view_products.atmosphere_lights.size(); ++index) {
     const auto& light = state.view_products.atmosphere_lights[index];
-    hash = HashCombineU64(hash, light.enabled);
-    if (!light.enabled)
+    hash = HashCombineU64(hash, static_cast<std::uint64_t>(light.enabled));
+    if (!light.enabled) {
       continue;
+    }
     const auto node = state.capture_light_nodes[index];
     hash = HashCombineU64(hash, node.Index());
     hash = HashCombineU64(hash, node.Generation());
     hash = HashCombineU64(hash, node.GetSceneId());
-    for (unsigned c = 0; c < 3; ++c) {
+    for (glm::length_t c = 0; c < 3; ++c) {
       hash = HashCombineU64(hash, FloatBits(light.direction_to_light_ws[c]));
       hash = HashCombineU64(hash, FloatBits(light.illuminance_rgb_lux[c]));
       hash = HashCombineU64(hash, FloatBits(light.disk_luminance_scale_rgb[c]));
@@ -501,7 +505,7 @@ auto AtmosphereState::Update(const scene::Scene& scene_ref,
   }
 
   stable_hash_ = stable_hash;
-  state_ = next;
+  state_ = std::move(next);
   return true;
 }
 

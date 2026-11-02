@@ -12,13 +12,12 @@
 
 namespace oxygen::scene::environment {
 
-//! Sky background source.
-enum class SkySphereSource {
-  //! Use a specified cubemap asset.
-  kCubemap,
-
-  //! Render a constant color background.
-  kSolidColor,
+//! Sky background source, from the catalog the cooked scene format shares.
+enum class SkySphereSource : uint8_t {
+// NOLINTNEXTLINE(*-macro-*)
+#define OXSCN_SKY_SPHERE_SOURCE(name, value) name = value,
+#include <Oxygen/Core/Meta/Scene/Environment.inc>
+#undef OXSCN_SKY_SPHERE_SOURCE // NOLINT
 };
 
 //! Scene-global sky background parameters.

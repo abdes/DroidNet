@@ -24,12 +24,6 @@ struct AtmosphereDensityProfile
 static const uint FOG_MODEL_EXPONENTIAL_HEIGHT = 0u;
 static const uint FOG_MODEL_VOLUMETRIC = 1u;
 
-static const uint SKY_LIGHT_SOURCE_CAPTURED_SCENE = 0u;
-static const uint SKY_LIGHT_SOURCE_SPECIFIED_CUBEMAP = 1u;
-
-static const uint SKY_SPHERE_SOURCE_CUBEMAP = 0u;
-static const uint SKY_SPHERE_SOURCE_SOLID_COLOR = 1u;
-
 static const uint TONEMAPPER_ACES_FITTED = 0u;
 static const uint TONEMAPPER_REINHARD = 1u;
 static const uint TONEMAPPER_NONE = 2u;
@@ -191,9 +185,13 @@ struct GpuSkyLightParams
     uint3 metadata_padding;
 };
 
-// GpuSkySphereParams::source values.
-static const uint kSkySphereSourceCubemap = 0u;
-static const uint kSkySphereSourceSolidColor = 1u;
+// GpuSkySphereParams::source values, from the catalog the scene and the cooked
+// scene share.
+enum class SkySphereSource : uint {
+#define OXSCN_SKY_SPHERE_SOURCE(name, value) name = value,
+#include "Core/Meta/Scene/Environment.inc"
+#undef OXSCN_SKY_SPHERE_SOURCE
+};
 
 // Mirrors oxygen::engine::GpuSkySphereParams (sizeof = 48)
 struct GpuSkySphereParams

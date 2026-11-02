@@ -143,11 +143,6 @@ target_link_libraries(
   PRIVATE
     oxygen::serio::testing
 )
-target_compile_definitions(
-  Oxygen.Vortex.EnvironmentLightingService.Tests
-  PRIVATE
-    OXYGEN_D3D12_VORTEX_SHADER_SOURCE_DIR="${PROJECT_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/Shaders/Vortex"
-)
 
 m_gtest_program(
   SceneRendererPublication

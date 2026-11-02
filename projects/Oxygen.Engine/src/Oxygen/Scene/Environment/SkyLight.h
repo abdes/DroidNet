@@ -12,13 +12,13 @@
 
 namespace oxygen::scene::environment {
 
-//! Image-based lighting source type.
-enum class SkyLightSource {
-  //! The renderer captures the scene's sky/background into an IBL.
-  kCapturedScene,
-
-  //! The renderer uses a specified cubemap asset.
-  kSpecifiedCubemap,
+//! Image-based lighting source type, from the catalog the cooked scene format
+//! shares.
+enum class SkyLightSource : uint8_t {
+// NOLINTNEXTLINE(*-macro-*)
+#define OXSCN_SKY_LIGHT_SOURCE(name, value) name = value,
+#include <Oxygen/Core/Meta/Scene/Environment.inc>
+#undef OXSCN_SKY_LIGHT_SOURCE // NOLINT
 };
 
 //! Scene-global sky light (IBL) parameters.

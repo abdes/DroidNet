@@ -6,18 +6,27 @@
 
 #pragma once
 
+#include <cstdint>
+#include <utility>
+
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 
 namespace oxygen::vortex::environment {
 
-inline constexpr std::uint32_t kSkyLightSourceCapturedScene = 0U;
-inline constexpr std::uint32_t kSkyLightSourceSpecifiedCubemap = 1U;
+//! `SkyLightEnvironmentModel::source` values: the scene's sky light sources.
+inline constexpr std::uint32_t kSkyLightSourceCapturedScene
+  = std::to_underlying(
+    oxygen::scene::environment::SkyLightSource::kCapturedScene);
+inline constexpr std::uint32_t kSkyLightSourceSpecifiedCubemap
+  = std::to_underlying(
+    oxygen::scene::environment::SkyLightSource::kSpecifiedCubemap);
 
 struct SkyLightEnvironmentModel {
   bool enabled { false };
-  std::uint32_t source { 0U };
+  std::uint32_t source { kSkyLightSourceCapturedScene };
   content::ResourceKey cubemap_resource {};
   float intensity_mul { 1.0F };
   glm::vec3 tint_rgb { 1.0F, 1.0F, 1.0F };

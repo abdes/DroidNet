@@ -188,11 +188,11 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     if (env_data.sky_sphere.enabled != 0u)
     {
         float3 sky_color = 0.0f.xxx;
-        if (env_data.sky_sphere.source == kSkySphereSourceSolidColor)
+        if (env_data.sky_sphere.source == (uint)SkySphereSource::kSolidColor)
         {
             sky_color = env_data.sky_sphere.solid_color_rgb;
         }
-        else if (env_data.sky_sphere.source == kSkySphereSourceCubemap
+        else if (env_data.sky_sphere.source == (uint)SkySphereSource::kCubemap
             && env_data.sky_sphere.cubemap_slot != K_INVALID_BINDLESS_INDEX
             && BX_IN_TEXTURES(env_data.sky_sphere.cubemap_slot))
         {
