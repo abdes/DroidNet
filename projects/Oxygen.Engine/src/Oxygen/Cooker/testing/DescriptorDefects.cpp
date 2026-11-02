@@ -195,6 +195,22 @@ auto DescriptorDefects::SetNode(std::vector<std::byte>& scene,
     ElementOffset(desc.nodes, index, sizeof(world::NodeRecord), "node"), node);
 }
 
+auto DescriptorDefects::SetComponentTableType(std::vector<std::byte>& scene,
+  const data::ComponentType table, const uint32_t type) -> void
+{
+  EditRecord<world::SceneComponentTableDesc>(scene,
+    TableEntryOffset(scene, table),
+    [type](auto& entry) -> void { entry.component_type = type; });
+}
+
+auto DescriptorDefects::SetComponentEntrySize(std::vector<std::byte>& scene,
+  const data::ComponentType type, const uint32_t size) -> void
+{
+  EditRecord<world::SceneComponentTableDesc>(scene,
+    TableEntryOffset(scene, type),
+    [size](auto& entry) -> void { entry.table.entry_size = size; });
+}
+
 auto DescriptorDefects::ScriptSlotAt(const std::span<const std::byte> scene,
   const uint32_t index) -> script::ScriptSlotRecord
 {
@@ -242,6 +258,29 @@ auto DescriptorDefects::SetEnvironmentRecordSize(std::vector<std::byte>& scene,
   const auto at = static_cast<size_t>(record.data() - scene.data());
   EditRecord<world::SceneEnvironmentSystemRecordHeader>(
     scene, at, [size](auto& header) -> void { header.record_size = size; });
+}
+
+auto DescriptorDefects::SetEnvironmentRecordType(std::vector<std::byte>& scene,
+  const world::EnvironmentComponentType record, const uint32_t type) -> void
+{
+  const auto bytes = EnvironmentRecord(scene, record);
+  const auto at = static_cast<size_t>(bytes.data() - scene.data());
+  EditRecord<world::SceneEnvironmentSystemRecordHeader>(
+    scene, at, [type](auto& header) -> void { header.system_type = type; });
+}
+
+auto DescriptorDefects::SetEnvironmentRecordCount(
+  std::vector<std::byte>& scene, const uint32_t count) -> void
+{
+  EditRecord<world::SceneEnvironmentBlockHeader>(scene,
+    EnvironmentOffset(scene),
+    [count](auto& header) -> void { header.systems_count = count; });
+}
+
+auto DescriptorDefects::DropEnvironmentBlock(std::vector<std::byte>& scene)
+  -> void
+{
+  scene.resize(EnvironmentOffset(scene));
 }
 
 auto DescriptorDefects::SetSidecarScene(
@@ -293,13 +332,21 @@ auto DescriptorDefects::RecordOffset(const std::span<const std::byte> scene,
   const data::ComponentType type, const uint32_t index, const size_t size)
   -> size_t
 {
+  const auto entry = ReadRecord<world::SceneComponentTableDesc>(
+    scene, TableEntryOffset(scene, type));
+  return ElementOffset(entry.table, index, size, "component");
+}
+
+auto DescriptorDefects::TableEntryOffset(const std::span<const std::byte> scene,
+  const data::ComponentType type) -> size_t
+{
   const auto desc = ReadRecord<world::SceneAssetDesc>(scene, 0U);
   for (auto i = uint32_t { 0U }; i < desc.component_table_count; ++i) {
-    const auto entry = ReadRecord<world::SceneComponentTableDesc>(scene,
-      static_cast<size_t>(desc.component_table_directory_offset)
-        + (size_t { i } * sizeof(world::SceneComponentTableDesc)));
-    if (entry.component_type == static_cast<uint32_t>(type)) {
-      return ElementOffset(entry.table, index, size, "component");
+    const auto at = static_cast<size_t>(desc.component_table_directory_offset)
+      + (size_t { i } * sizeof(world::SceneComponentTableDesc));
+    if (ReadRecord<world::SceneComponentTableDesc>(scene, at).component_type
+      == static_cast<uint32_t>(type)) {
+      return at;
     }
   }
   throw std::invalid_argument("the scene has no such component table");

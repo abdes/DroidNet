@@ -179,8 +179,6 @@ target_link_libraries(
     oxygen::cooker::testing
 )
 
-m_gtest_program(LoadersScripting SOURCES "SceneScriptingLoader_test.cpp")
-
 m_gtest_program(
   SourceRegistry
   SOURCES

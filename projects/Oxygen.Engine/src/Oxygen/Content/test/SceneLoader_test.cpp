@@ -11,6 +11,7 @@
 #include <memory>
 #include <span>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -20,10 +21,12 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h> // IWYU pragma: keep
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
@@ -45,6 +48,8 @@ using oxygen::cooker::testing::DescriptorDefects;
 using oxygen::cooker::testing::NodeFlags;
 using oxygen::cooker::testing::NodeTransform;
 using oxygen::cooker::testing::SceneBuilder;
+using oxygen::cooker::testing::SceneRefusal;
+using oxygen::data::CookedDefect;
 
 //! A valid one-node scene whose node has a transform after its flag words.
 auto MakeSceneWithFlags(const NodeFlags flags = {}) -> std::vector<std::byte>
@@ -109,15 +114,7 @@ NOLINT_TEST(SceneFlagRecordTest, RejectsUnknownAndAmbiguousFlags)
        }) {
     auto bytes
       = MakeSceneWithRawFlags({ .values = values, .inherited = inherited });
-    EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
-      std::runtime_error);
-    auto stream
-      = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
-    auto reader = oxygen::serio::Reader(stream);
-    auto context = oxygen::content::LoaderContext {};
-    context.desc_reader = &reader;
-    context.parse_only = true;
-    EXPECT_THROW(LoadSceneAsset(context), std::runtime_error);
+    EXPECT_EQ(SceneRefusal(bytes), CookedDefect::kInvalidValue);
   }
 }
 
@@ -130,22 +127,16 @@ NOLINT_TEST(SceneFlagRecordTest, RejectsInvalidNodeReferences)
       std::span<const std::byte>(valid));
   ASSERT_HAS_VALUE(desc);
   const auto past_strings = desc->header.strings.size;
-  for (const auto [parent, name] :
-    std::array { std::pair { 1U, 0U }, std::pair { 0U, past_strings } }) {
+  for (const auto& [parent, name, defect] : std::array {
+         std::tuple { 1U, 0U, CookedDefect::kInvalidReference },
+         std::tuple { 0U, past_strings, CookedDefect::kInvalidString },
+       }) {
     auto bytes = valid;
     auto node = DescriptorDefects::NodeAt(bytes, 0U);
     node.parent_index = parent;
     node.scene_name_offset = name;
     DescriptorDefects::SetNode(bytes, 0U, node);
-    EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
-      std::runtime_error);
-    auto stream
-      = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
-    auto reader = oxygen::serio::Reader(stream);
-    auto context = oxygen::content::LoaderContext {};
-    context.desc_reader = &reader;
-    context.parse_only = true;
-    EXPECT_THROW(LoadSceneAsset(context), std::runtime_error);
+    EXPECT_EQ(SceneRefusal(bytes), defect);
   }
 }
 
@@ -153,15 +144,7 @@ NOLINT_TEST(SceneFlagRecordTest, RejectsRetiredSceneVersionFour)
 {
   auto bytes = MakeSceneWithFlags();
   DescriptorDefects::SetVersion(bytes, 4U);
-  EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
-    std::runtime_error);
-  auto stream
-    = oxygen::serio::ReadOnlyMemoryStream(std::span<const std::byte>(bytes));
-  auto reader = oxygen::serio::Reader(stream);
-  auto context = oxygen::content::LoaderContext {};
-  context.desc_reader = &reader;
-  context.parse_only = true;
-  EXPECT_THROW(LoadSceneAsset(context), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(bytes), CookedDefect::kUnsupportedVersion);
 }
 
 //! A scene with a post process volume, and the metering mask it names.
@@ -227,28 +210,33 @@ NOLINT_TEST(SceneExposureRecordTest, RejectsObsoleteAndMalformedLayouts)
   namespace world = oxygen::data::pak::world;
   using Record = world::PostProcessVolumeEnvironmentRecord;
   // The retired prefix size, an extension version before and after the
-  // current one, and a curve count that mismatches the keys or the limit.
+  // current one, and a curve count that mismatches the keys or the limit:
+  // the record's decoder refuses all but the first.
   constexpr auto kRecordSize = offsetof(Record, header)
     + offsetof(world::SceneEnvironmentSystemRecordHeader, record_size);
   constexpr auto kExtension = offsetof(Record, exposure_extension_version);
   constexpr auto kCurveCount = offsetof(Record, curve_key_count);
   constexpr auto kRetiredPrefixSize = uint32_t { 104U };
-  for (const auto [offset, value] : std::array {
-         std::pair { kRecordSize, kRetiredPrefixSize },
-         std::pair { kExtension, world::kExposureExtensionVersion - 1U },
-         std::pair { kExtension, world::kExposureExtensionVersion + 1U },
-         std::pair { kCurveCount, uint32_t { 1U } },
-         std::pair { kCurveCount,
-           static_cast<uint32_t>(
-             oxygen::engine::kMaxExposureCompensationCurveKeys + 1U) },
-       }) {
+  for (const auto& [offset, value, defect] :
+    std::array {
+      std::tuple {
+        kRecordSize, kRetiredPrefixSize, CookedDefect::kSizeMismatch },
+      std::tuple { kExtension, world::kExposureExtensionVersion - 1U,
+        CookedDefect::kInvalidValue },
+      std::tuple { kExtension, world::kExposureExtensionVersion + 1U,
+        CookedDefect::kInvalidValue },
+      std::tuple { kCurveCount, uint32_t { 1U }, CookedDefect::kInvalidValue },
+      std::tuple { kCurveCount,
+        static_cast<uint32_t>(
+          oxygen::engine::kMaxExposureCompensationCurveKeys + 1U),
+        CookedDefect::kInvalidValue },
+    }) {
     SCOPED_TRACE(offset);
     auto bytes = MakeExposureScene().bytes;
     const auto record = DescriptorDefects::EnvironmentRecord(
       bytes, world::EnvironmentComponentType::kPostProcessVolume);
     std::memcpy(record.subspan(offset).data(), &value, sizeof(value));
-    EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
-      std::runtime_error);
+    EXPECT_EQ(SceneRefusal(bytes), defect);
   }
   auto bytes = MakeExposureScene().bytes;
   const auto record = DescriptorDefects::EnvironmentRecord(
@@ -259,17 +247,7 @@ NOLINT_TEST(SceneExposureRecordTest, RejectsObsoleteAndMalformedLayouts)
       .subspan(sizeof(Record) + sizeof(world::ExposureCompensationKeyRecord))
       .data(),
     &kBadValue, sizeof(kBadValue));
-  EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
-    std::runtime_error);
-}
-
-NOLINT_TEST(SceneExposureRecordTest, RejectsSceneVersionFive)
-{
-  constexpr uint8_t kRetiredSceneVersion = 5U;
-  auto bytes = MakeSceneWithFlags();
-  DescriptorDefects::SetVersion(bytes, kRetiredSceneVersion);
-  EXPECT_THROW((oxygen::data::SceneAsset(oxygen::data::AssetKey {}, bytes)),
-    std::runtime_error);
+  EXPECT_EQ(SceneRefusal(bytes), CookedDefect::kNotCanonical);
 }
 
 class SceneLoaderTest : public testing::Test {

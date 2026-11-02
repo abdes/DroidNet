@@ -144,10 +144,9 @@ NOLINT_TEST_F(ScenePipelineTest, CollectMinimalSceneBuildsDescriptor)
   EXPECT_NE(node.scene_name_offset, 0U);
   EXPECT_EQ(scene.GetNodeName(node), "Root");
 
-  const auto* env_header = scene.GetEnvironmentBlockHeader();
-  ASSERT_NE(env_header, nullptr);
-  EXPECT_EQ(env_header->systems_count, 0U);
-  EXPECT_EQ(env_header->byte_size,
+  const auto& env_header = scene.GetEnvironmentBlockHeader();
+  EXPECT_EQ(env_header.systems_count, 0U);
+  EXPECT_EQ(env_header.byte_size,
     sizeof(data::pak::world::SceneEnvironmentBlockHeader));
 }
 
@@ -282,10 +281,9 @@ NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
   const auto header_size
     = sizeof(data::pak::world::SceneEnvironmentBlockHeader);
   const auto record_size = sizeof(data::pak::world::FogEnvironmentRecord);
-  const auto* env_header = scene.GetEnvironmentBlockHeader();
-  ASSERT_NE(env_header, nullptr);
-  EXPECT_EQ(env_header->systems_count, 1U);
-  EXPECT_EQ(env_header->byte_size, header_size + record_size);
+  const auto& env_header = scene.GetEnvironmentBlockHeader();
+  EXPECT_EQ(env_header.systems_count, 1U);
+  EXPECT_EQ(env_header.byte_size, header_size + record_size);
 }
 
 } // namespace

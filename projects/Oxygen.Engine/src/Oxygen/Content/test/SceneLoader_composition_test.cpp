@@ -9,7 +9,6 @@
 #include <memory>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -19,9 +18,11 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceOrigin.h>
@@ -54,6 +55,8 @@ auto MenuKey() -> AssetKey
 
 using oxygen::cooker::testing::DescriptorDefects;
 using oxygen::cooker::testing::SceneBuilder;
+using oxygen::cooker::testing::SceneRefusal;
+using oxygen::data::CookedDefect;
 
 constexpr world::SceneNodeIndexT kNodeCount = 3U;
 constexpr world::SceneNodeIndexT kCameraNode = 2U;
@@ -182,77 +185,79 @@ NOLINT_TEST(
   EXPECT_TRUE(collector->AssetDependencies().empty());
 }
 
-//! One invalid composition per case: a valid scene with one defect.
-auto InvalidCompositions() -> std::vector<std::vector<std::byte>>
+//! A valid scene with one defect, and the defect it is refused with.
+struct InvalidComposition final {
+  std::vector<std::byte> bytes;
+  CookedDefect defect;
+};
+
+auto InvalidCompositions() -> std::vector<InvalidComposition>
 {
-  using oxygen::data::ComponentType;
-  auto cases = std::vector<std::vector<std::byte>> {};
+  auto cases = std::vector<InvalidComposition> {};
 
-  const auto with_camera
-    = [] { return MakeComposedScene({ .starting_camera = true }); };
-  // Not a camera node.
-  cases.push_back(with_camera());
-  DescriptorDefects::SetStartingCamera(
-    cases.back(), world::NodeRef { .node_index = 0U });
-  // Not a node.
-  cases.push_back(with_camera());
-  DescriptorDefects::SetStartingCamera(
-    cases.back(), world::NodeRef { .node_index = kNodeCount });
-
-  const auto instance_defect
-    = [&cases](std::vector<world::SceneNodeIndexT> nodes, const auto& damage) {
-        auto bytes = MakeComposedScene({ .instances = std::move(nodes) });
-        damage(bytes);
-        cases.push_back(std::move(bytes));
-      };
-  const auto set_instance = [](std::vector<std::byte>& bytes,
-                              const uint32_t index, const auto& edit) {
-    auto record = DescriptorDefects::ComponentAt<world::SceneInstanceRecord>(
-      bytes, ComponentType::kSceneInstance, index);
-    edit(record);
-    DescriptorDefects::SetComponent(
-      bytes, ComponentType::kSceneInstance, index, record);
+  const auto camera_defect = [&cases](const world::SceneNodeIndexT node) {
+    auto bytes = MakeComposedScene({ .starting_camera = true });
+    DescriptorDefects::SetStartingCamera(
+      bytes, world::NodeRef { .node_index = node });
+    cases.push_back(
+      { .bytes = std::move(bytes), .defect = CookedDefect::kInvalidReference });
   };
-  instance_defect({ 1U }, [&set_instance](std::vector<std::byte>& bytes) {
-    set_instance(bytes, 0U, [](world::SceneInstanceRecord& record) {
-      record.node_index = kNodeCount;
-    });
-  });
-  instance_defect({ 1U }, [&set_instance](std::vector<std::byte>& bytes) {
-    set_instance(bytes, 0U,
-      [](world::SceneInstanceRecord& record) { record.scene_key = {}; });
-  });
-  instance_defect({ 0U, 1U }, [&set_instance](std::vector<std::byte>& bytes) {
-    const auto first
-      = DescriptorDefects::ComponentAt<world::SceneInstanceRecord>(
-        bytes, ComponentType::kSceneInstance, 0U);
-    set_instance(bytes, 1U, [&first](world::SceneInstanceRecord& record) {
+  camera_defect(0U); // Not a camera node.
+  camera_defect(kNodeCount); // Not a node.
+
+  const auto instance_defect =
+    [&cases](std::vector<world::SceneNodeIndexT> nodes, const uint32_t index,
+      const CookedDefect defect, const auto& edit) {
+      auto bytes = MakeComposedScene({ .instances = std::move(nodes) });
+      const auto first
+        = DescriptorDefects::ComponentAt<world::SceneInstanceRecord>(
+          bytes, ComponentType::kSceneInstance, 0U);
+      auto record = DescriptorDefects::ComponentAt<world::SceneInstanceRecord>(
+        bytes, ComponentType::kSceneInstance, index);
+      edit(record, first);
+      DescriptorDefects::SetComponent(
+        bytes, ComponentType::kSceneInstance, index, record);
+      cases.push_back({ .bytes = std::move(bytes), .defect = defect });
+    };
+  instance_defect({ 1U }, 0U, CookedDefect::kInvalidReference,
+    [](auto& record, const auto&) { record.node_index = kNodeCount; });
+  instance_defect({ 1U }, 0U, CookedDefect::kMissingPart,
+    [](auto& record, const auto&) { record.scene_key = {}; });
+  instance_defect({ 0U, 1U }, 1U, CookedDefect::kDuplicate,
+    [](auto& record, const auto& first) {
       record.node_index = first.node_index;
     });
-  });
 
-  const auto set_context = [](std::vector<std::byte>& bytes,
-                             const uint32_t index, const AssetKey& key) {
-    auto record
-      = DescriptorDefects::ComponentAt<world::StartingInputContextRecord>(
-        bytes, ComponentType::kStartingInputContext, index);
-    record.context_key = key;
-    DescriptorDefects::SetComponent(
-      bytes, ComponentType::kStartingInputContext, index, record);
-  };
-  cases.push_back(MakeComposedScene({ .contexts = { { .key = MenuKey() } } }));
-  set_context(cases.back(), 0U, AssetKey {});
-  cases.push_back(MakeComposedScene({
-    .contexts
-    = { { .key = MenuKey() }, { .key = GameplayKey(), .priority = 1 } },
-  }));
-  set_context(cases.back(), 1U,
-    DescriptorDefects::ComponentAt<world::StartingInputContextRecord>(
-      cases.back(), ComponentType::kStartingInputContext, 0U)
-      .context_key);
+  const auto context_defect
+    = [&cases](const CompositionInput& input, const uint32_t index,
+        const CookedDefect defect, const auto& key_of) {
+        auto bytes = MakeComposedScene(input);
+        auto record
+          = DescriptorDefects::ComponentAt<world::StartingInputContextRecord>(
+            bytes, ComponentType::kStartingInputContext, index);
+        record.context_key = key_of(bytes);
+        DescriptorDefects::SetComponent(
+          bytes, ComponentType::kStartingInputContext, index, record);
+        cases.push_back({ .bytes = std::move(bytes), .defect = defect });
+      };
+  context_defect({ .contexts = { { .key = MenuKey() } } }, 0U,
+    CookedDefect::kMissingPart,
+    [](const std::vector<std::byte>&) { return AssetKey {}; });
+  context_defect(
+    {
+      .contexts
+      = { { .key = MenuKey() }, { .key = GameplayKey(), .priority = 1 } },
+    },
+    1U, CookedDefect::kDuplicate, [](const std::vector<std::byte>& bytes) {
+      return DescriptorDefects::ComponentAt<world::StartingInputContextRecord>(
+        bytes, ComponentType::kStartingInputContext, 0U)
+        .context_key;
+    });
 
-  cases.push_back(MakeComposedScene({}));
-  DescriptorDefects::SetSceneFlags(cases.back(), 1U << 1U);
+  auto flagged = MakeComposedScene({});
+  DescriptorDefects::SetSceneFlags(flagged, 1U << 1U);
+  cases.push_back(
+    { .bytes = std::move(flagged), .defect = CookedDefect::kInvalidValue });
   return cases;
 }
 
@@ -260,11 +265,9 @@ auto InvalidCompositions() -> std::vector<std::vector<std::byte>>
 NOLINT_TEST(SceneCompositionLoadTest, RejectsInvalidCompositionRecords)
 {
   auto case_index = size_t { 0 };
-  for (auto& bytes : InvalidCompositions()) {
+  for (const auto& [bytes, defect] : InvalidCompositions()) {
     SCOPED_TRACE(case_index++);
-    EXPECT_THROW(
-      (oxygen::data::SceneAsset(AssetKey {}, bytes)), std::runtime_error);
-    EXPECT_THROW(LoadParseOnly(bytes), std::runtime_error);
+    EXPECT_EQ(SceneRefusal(bytes), defect);
   }
 }
 

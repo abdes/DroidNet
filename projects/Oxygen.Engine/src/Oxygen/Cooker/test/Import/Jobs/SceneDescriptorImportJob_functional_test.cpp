@@ -137,7 +137,6 @@ namespace {
       scene.GetComponents<data::pak::world::RenderableRecord>().empty());
     EXPECT_TRUE(
       scene.GetComponents<data::pak::world::PerspectiveCameraRecord>().empty());
-    ASSERT_TRUE(scene.HasEnvironmentBlock());
     const auto background = scene.TryGetBackgroundEnvironment();
     if (!background) {
       FAIL() << "Expected background";

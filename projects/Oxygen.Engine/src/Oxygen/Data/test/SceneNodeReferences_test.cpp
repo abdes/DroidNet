@@ -8,15 +8,14 @@
 // nodes an instance brings in (overrides, script parameter changes, the
 // starting camera).
 
-#include <cstddef>
-#include <memory>
-#include <stdexcept>
 #include <vector>
 
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -29,11 +28,13 @@ namespace data = oxygen::data;
 namespace world = data::pak::world;
 namespace script = data::pak::scripting;
 using data::ComponentType;
+using data::CookedDefect;
 using data::NodeId;
 using data::schema::OverrideId;
 using oxygen::cooker::testing::DescriptorDefects;
 using oxygen::cooker::testing::SceneBuilder;
 using oxygen::cooker::testing::SceneNode;
+using oxygen::cooker::testing::SceneRefusal;
 using oxygen::cooker::testing::ScriptParam;
 
 //! The nodes `Lamp/Bulb` the instanced scene brings in; they belong to that
@@ -74,12 +75,6 @@ auto PositionValue() -> world::OverrideValue
   return value;
 }
 
-auto Read(const std::vector<std::byte>& descriptor)
-  -> std::shared_ptr<data::SceneAsset>
-{
-  return std::make_shared<data::SceneAsset>(SceneKey(), descriptor);
-}
-
 //! Composition finds nodes by ID, so a scene refuses a node without one and
 //! two nodes with one ID.
 NOLINT_TEST(SceneNodeReferencesTest, RejectsMissingAndRepeatedNodeIds)
@@ -98,8 +93,8 @@ NOLINT_TEST(SceneNodeReferencesTest, RejectsMissingAndRepeatedNodeIds)
   node.node_id = DescriptorDefects::NodeAt(repeated, 0U).node_id;
   DescriptorDefects::SetNode(repeated, 1U, node);
 
-  EXPECT_THROW(static_cast<void>(Read(missing)), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(Read(repeated)), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(missing), CookedDefect::kMissingPart);
+  EXPECT_EQ(SceneRefusal(repeated), CookedDefect::kDuplicate);
 }
 
 //! A change addresses an instanced node by its instance root and the path of
@@ -135,7 +130,7 @@ NOLINT_TEST(SceneNodeReferencesTest, RejectsAnOwnedNodeChangeOfARecordValue)
   DescriptorDefects::SetComponent(
     descriptor, ComponentType::kOverride, 0U, record);
 
-  EXPECT_THROW(static_cast<void>(Read(descriptor)), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(descriptor), CookedDefect::kInconsistent);
 }
 
 //! A path runs below an instance root and names a path the scene holds.
@@ -167,9 +162,9 @@ NOLINT_TEST(SceneNodeReferencesTest, RejectsInvalidNodePaths)
   DescriptorDefects::SetComponent(
     bad_elements, ComponentType::kNodePath, 0U, path);
 
-  EXPECT_THROW(static_cast<void>(Read(not_a_root)), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(Read(out_of_range)), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(Read(bad_elements)), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(not_a_root), CookedDefect::kInvalidReference);
+  EXPECT_EQ(SceneRefusal(out_of_range), CookedDefect::kInvalidReference);
+  EXPECT_EQ(SceneRefusal(bad_elements), CookedDefect::kOutOfBounds);
 }
 
 //! A script parameter change names an instanced node, its slot and the key.
@@ -190,7 +185,7 @@ NOLINT_TEST(SceneNodeReferencesTest, ReadsScriptParameterChanges)
 
   EXPECT_EQ(
     scene->GetComponents<script::ScriptParamOverrideRecord>().size(), 1U);
-  EXPECT_THROW(static_cast<void>(Read(rejected)), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(rejected), CookedDefect::kInconsistent);
 }
 
 //! The starting camera may be a node an instance brings in; one of the
@@ -210,7 +205,7 @@ NOLINT_TEST(SceneNodeReferencesTest, AcceptsAnInstancedStartingCamera)
     FAIL() << "the scene has no starting camera";
   }
   EXPECT_EQ(camera->node_path, 0U);
-  EXPECT_THROW(static_cast<void>(Read(owned)), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(owned), CookedDefect::kInvalidReference);
 }
 
 } // namespace

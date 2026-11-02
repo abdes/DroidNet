@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -17,14 +18,16 @@
 #include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Cooker/testing/ProductLoad.h>
+#include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
-#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
@@ -35,26 +38,22 @@ using oxygen::cooker::testing::DescriptorDefects;
 using oxygen::cooker::testing::GeometryBuilder;
 using oxygen::cooker::testing::PhysicsSidecarBuilder;
 using oxygen::cooker::testing::SceneBuilder;
+using oxygen::cooker::testing::SceneRefusal;
 namespace data = oxygen::data;
 namespace world = oxygen::data::pak::world;
 namespace physics = oxygen::data::pak::physics;
+using data::CookedDefect;
 using data::schema::OverrideId;
+
+//! A FourCC no component type uses: 'XXXX'.
+constexpr uint32_t kUnknownComponentType = 0x58585858U;
+
+//! An environment system type the format does not define.
+constexpr uint32_t kUnknownEnvironmentType = 0xFFFFU;
 
 auto Key(const char* path) -> data::AssetKey
 {
   return data::AssetKey::FromVirtualPath(path);
-}
-
-//! Whether the scene reader refuses `bytes`.
-auto Refused(const std::vector<std::byte>& bytes) -> bool
-{
-  try {
-    static_cast<void>(data::SceneAsset(
-      Key("/Game/Main.oscene"), std::span<const std::byte>(bytes)));
-  } catch (const std::runtime_error&) {
-    return true;
-  }
-  return false;
 }
 
 //! A scene with a node, a renderable with an override, a script slot and a
@@ -76,54 +75,87 @@ auto Scene() -> SceneBuilder
 //! The valid scene the defects start from reads back.
 NOLINT_TEST(DescriptorDefectsTest, TheValidSceneReads)
 {
-  EXPECT_FALSE(Refused(Scene().Bytes()));
+  EXPECT_EQ(SceneRefusal(Scene().Bytes()), std::nullopt);
 }
 
-//! Each scene defect breaks one rule the scene reader checks.
-NOLINT_TEST(DescriptorDefectsTest, EachSceneDefectIsRefused)
+//! Each scene defect breaks one rule, which the scene reader and the scene
+//! loader refuse with its defect.
+NOLINT_TEST(DescriptorDefectsTest, EachSceneDefectBreaksOneRule)
 {
   const auto valid = Scene().Bytes();
-  const auto refused = [&valid](const auto& defect) -> bool {
+  const auto refusal = [&valid](const auto& defect) -> auto {
     auto bytes = valid;
     defect(bytes);
-    return Refused(bytes);
+    return SceneRefusal(bytes);
   };
 
-  EXPECT_TRUE(refused([](auto& bytes) -> void {
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
     DescriptorDefects::SetVersion(
       bytes, static_cast<uint8_t>(world::kSceneAssetVersion - 1U));
-  }));
-  EXPECT_TRUE(refused([](auto& bytes) -> void {
+  }),
+    CookedDefect::kUnsupportedVersion);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
     DescriptorDefects::PointNodeTablePastTheEnd(bytes);
-  }));
-  EXPECT_TRUE(refused([](auto& bytes) -> void {
+  }),
+    CookedDefect::kOutOfBounds);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
     DescriptorDefects::SetSceneFlags(bytes, 1U << 31U);
-  }));
-  EXPECT_TRUE(refused([](auto& bytes) -> void {
+  }),
+    CookedDefect::kInvalidValue);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
     DescriptorDefects::SetStartingCamera(bytes, { .node_index = 0U });
-  }));
-  EXPECT_TRUE(refused([](auto& bytes) -> void {
+  }),
+    CookedDefect::kInvalidReference);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
     auto node = DescriptorDefects::NodeAt(bytes, 1U);
     node.parent_index = 7U;
     DescriptorDefects::SetNode(bytes, 1U, node);
-  }));
-  EXPECT_TRUE(refused([](auto& bytes) -> void {
+  }),
+    CookedDefect::kInvalidReference);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
     auto change = DescriptorDefects::ComponentAt<world::OverrideRecord>(
       bytes, data::ComponentType::kOverride, 0U);
     change.value.as_bool = 2U;
     DescriptorDefects::SetComponent(
       bytes, data::ComponentType::kOverride, 0U, change);
-  }));
-  EXPECT_TRUE(refused([](auto& bytes) -> void {
+  }),
+    CookedDefect::kInvalidValue);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
     auto slot = DescriptorDefects::ScriptSlotAt(bytes, 0U);
     slot.script_asset_key = {};
     DescriptorDefects::SetScriptSlot(bytes, 0U, slot);
-  }));
-  EXPECT_TRUE(refused([](auto& bytes) -> void {
+  }),
+    CookedDefect::kMissingPart);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
+    DescriptorDefects::SetComponentTableType(
+      bytes, data::ComponentType::kScripting, kUnknownComponentType);
+  }),
+    CookedDefect::kInvalidValue);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
+    DescriptorDefects::SetComponentEntrySize(bytes,
+      data::ComponentType::kScripting,
+      sizeof(oxygen::data::pak::scripting::ScriptingComponentRecord) + 1U);
+  }),
+    CookedDefect::kWrongRowSize);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
     DescriptorDefects::SetEnvironmentRecordSize(bytes,
       world::EnvironmentComponentType::kFog,
       sizeof(world::FogEnvironmentRecord) - 4U);
-  }));
+  }),
+    CookedDefect::kSizeMismatch);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
+    DescriptorDefects::SetEnvironmentRecordType(
+      bytes, world::EnvironmentComponentType::kFog, kUnknownEnvironmentType);
+  }),
+    CookedDefect::kInvalidValue);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
+    DescriptorDefects::SetEnvironmentRecordCount(bytes, 2U);
+  }),
+    CookedDefect::kOutOfBounds);
+  EXPECT_EQ(refusal([](auto& bytes) -> void {
+    DescriptorDefects::DropEnvironmentBlock(bytes);
+  }),
+    CookedDefect::kMissingPart);
 }
 
 //! A record defect writes the record it reads back.

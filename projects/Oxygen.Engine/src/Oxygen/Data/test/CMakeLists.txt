@@ -69,6 +69,7 @@ m_gtest_program(
     "SceneRecordDefaults_test.cpp"
     "SceneRecordValidation_test.cpp"
     "SceneScriptLayout_test.cpp"
+    "SceneStructure_test.cpp"
     "StableId_test.cpp"
     "SubMesh_test.cpp"
     "TextureResource_test.cpp"

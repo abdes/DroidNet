@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <exception>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -70,10 +71,8 @@ namespace {
       return std::nullopt;
     }
 
-    const auto* environment = scene_asset->GetEnvironmentBlockHeader();
-    const auto environment_offset = environment
-      ? descriptor_bytes.size() - environment->byte_size
-      : descriptor_bytes.size();
+    const auto environment_offset = descriptor_bytes.size()
+      - scene_asset->GetEnvironmentBlockHeader().byte_size;
     auto state = ResolvedSceneState {
       .scene_key = scene_key,
       .scene_virtual_path = std::move(scene_virtual_path),
@@ -201,9 +200,8 @@ namespace {
   {
     using data::AssetType;
 
-    for (auto it = cooked_contexts.rbegin(); it != cooked_contexts.rend();
-      ++it) {
-      const auto* scene_asset = it->content.FindAsset(scene_key);
+    for (const auto& cooked_context : std::views::reverse(cooked_contexts)) {
+      const auto* scene_asset = cooked_context.content.FindAsset(scene_key);
       if (scene_asset == nullptr) {
         continue;
       }
@@ -219,7 +217,7 @@ namespace {
 
       auto descriptor_bytes = std::vector<std::byte> {};
       try {
-        descriptor_bytes = it->content.Descriptor(scene_key);
+        descriptor_bytes = cooked_context.content.Descriptor(scene_key);
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           std::string(diagnostics.target_scene_read_failed_code),

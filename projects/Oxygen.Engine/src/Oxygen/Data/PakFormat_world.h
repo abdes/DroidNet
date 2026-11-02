@@ -202,9 +202,10 @@ static_assert(sizeof(SceneAssetDesc) == 107);
 
  All offsets are bytes relative to the start of the descriptor payload.
 
- @note This is a forward-compatible extension point. Loaders may ignore unknown
-   component types. Known component tables are typically sorted by `node_index`
-   for efficient loading.
+ A directory names each component type at most once, and only types
+ `ComponentType` defines. A table of node components holds at most one record
+ per node, sorted by `node_index`. Readers refuse any other directory or
+ table.
 */
 #pragma pack(push, 1)
 struct SceneComponentTableDesc {
@@ -281,8 +282,8 @@ static_assert(sizeof(NodeRecord) == 72);
   - The scene's changes of the geometry's asset defaults are `OverrideRecord`
     entries of the same node.
 
-  @note Component tables are typically sorted by `node_index` for efficient
-  loading.
+  @note A node has at most one renderable; the table is sorted by
+  `node_index`.
 */
 struct RenderableRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
@@ -623,7 +624,8 @@ static_assert(sizeof(SceneEnvironmentBlockHeader) == 8);
 /*!
  - `system_type` is an `EnvironmentComponentType` enum value.
  - `record_size` is the byte size of the entire record, including this header.
-   Unknown `system_type` values can be skipped using `record_size`.
+ - A block holds at most one record of each type. Readers refuse a
+   `system_type` the format does not define.
 */
 #pragma pack(push, 1)
 struct SceneEnvironmentSystemRecordHeader {
@@ -1014,8 +1016,18 @@ inline constexpr std::array kKnownEnvironmentRecordSizes {
   },
 };
 
+//! Whether `system_type` is an environment record type the format defines.
+[[nodiscard]] constexpr auto IsKnownEnvironmentSystemType(
+  const uint32_t system_type) noexcept -> bool
+{
+  return std::ranges::any_of(kKnownEnvironmentRecordSizes,
+    [system_type](const EnvironmentRecordSizeEntry& entry) -> bool {
+      return entry.system_type == system_type;
+    });
+}
+
 //! Validate the current record length, including the bounded exposure-curve
-//! tail.
+//! tail; a record of a type the format does not define has no valid length.
 [[nodiscard]] constexpr auto IsValidEnvironmentRecordSize(
   const SceneEnvironmentSystemRecordHeader& header) noexcept -> bool
 {
@@ -1035,8 +1047,7 @@ inline constexpr std::array kKnownEnvironmentRecordSizes {
       return record_size == entry.record_size;
     }
   }
-  // Unknown system records retain the envelope's existing skip semantics.
-  return true;
+  return false;
 }
 
 //! Common shadow settings packed into light component records.

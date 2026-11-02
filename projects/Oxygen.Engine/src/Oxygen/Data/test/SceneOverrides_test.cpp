@@ -9,16 +9,16 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <memory>
-#include <stdexcept>
 #include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -31,10 +31,12 @@ namespace data = oxygen::data;
 namespace world = data::pak::world;
 namespace geometry = data::pak::geometry;
 using data::ComponentType;
+using data::CookedDefect;
 using data::schema::OverrideId;
 using oxygen::cooker::testing::DescriptorDefects;
 using oxygen::cooker::testing::SceneBuilder;
 using oxygen::cooker::testing::SceneNode;
+using oxygen::cooker::testing::SceneRefusal;
 
 constexpr float kLodDistance = 10.0F;
 constexpr float kLodHysteresis = 0.1F;
@@ -88,13 +90,6 @@ auto AddMesh(SceneBuilder& scene, const std::string_view name = "Mesh")
   const auto mesh = scene.Node(name);
   scene.Renderable(mesh, data::AssetKey::FromVirtualPath("/test/Mesh.ogeo"));
   return mesh;
-}
-
-//! The scene asset the reader reads from `descriptor`.
-auto Read(const std::vector<std::byte>& descriptor)
-  -> std::shared_ptr<data::SceneAsset>
-{
-  return std::make_shared<data::SceneAsset>(SceneKey(), descriptor);
 }
 
 //! The record `index` of the override table of `descriptor`.
@@ -157,7 +152,7 @@ NOLINT_TEST(SceneOverridesTest, RejectsUnknownOverrideId)
   record.override_id = OverrideId::kInvalid;
   SetOverride(descriptor, 0U, record);
 
-  EXPECT_THROW(static_cast<void>(Read(descriptor)), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(descriptor), CookedDefect::kInvalidValue);
 }
 
 //! A surface property needs its surface and layout revision; a component
@@ -179,9 +174,9 @@ NOLINT_TEST(SceneOverridesTest, RejectsPartsThatDoNotMatchTheProperty)
   record.part_id = Surface();
   SetOverride(with_surface, 0U, record);
 
-  EXPECT_THROW(static_cast<void>(Read(no_surface)), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(Read(no_revision)), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(Read(with_surface)), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(no_surface), CookedDefect::kMissingPart);
+  EXPECT_EQ(SceneRefusal(no_revision), CookedDefect::kMissingPart);
+  EXPECT_EQ(SceneRefusal(with_surface), CookedDefect::kInconsistent);
 }
 
 //! The table is sorted and names each property and part once per node.
@@ -203,8 +198,8 @@ NOLINT_TEST(SceneOverridesTest, RejectsUnsortedOrRepeatedOverrides)
   auto repeated = valid;
   SetOverride(repeated, 1U, first);
 
-  EXPECT_THROW(static_cast<void>(Read(unsorted)), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(Read(repeated)), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(unsorted), CookedDefect::kNotCanonical);
+  EXPECT_EQ(SceneRefusal(repeated), CookedDefect::kDuplicate);
 }
 
 //! A bool is 0 or 1, an asset value is not nil, and a LOD policy names a
@@ -240,10 +235,10 @@ NOLINT_TEST(SceneOverridesTest, RejectsMalformedValues)
   DescriptorDefects::SetComponent(
     decreasing, ComponentType::kOverrideLodPolicy, 0U, policy);
 
-  EXPECT_THROW(static_cast<void>(Read(bad_bool)), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(Read(nil_material)), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(Read(past_the_table)), std::runtime_error);
-  EXPECT_THROW(static_cast<void>(Read(decreasing)), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(bad_bool), CookedDefect::kInvalidValue);
+  EXPECT_EQ(SceneRefusal(nil_material), CookedDefect::kMissingPart);
+  EXPECT_EQ(SceneRefusal(past_the_table), CookedDefect::kInvalidReference);
+  EXPECT_EQ(SceneRefusal(decreasing), CookedDefect::kInvalidValue);
 }
 
 //! A LOD policy record no override names is refused.
@@ -257,7 +252,7 @@ NOLINT_TEST(SceneOverridesTest, RejectsUnusedLodPolicyRecords)
   record.value.as_record_index = world::OverrideRecordIndex { 0U };
   SetOverride(descriptor, 1U, record);
 
-  EXPECT_THROW(static_cast<void>(Read(descriptor)), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(descriptor), CookedDefect::kInconsistent);
 }
 
 //! An override on a node without a renderable is refused.
@@ -273,7 +268,7 @@ NOLINT_TEST(SceneOverridesTest, RejectsOverridesOfNodesWithoutRenderable)
   record.target.node_index = empty.Index();
   SetOverride(descriptor, 0U, record);
 
-  EXPECT_THROW(static_cast<void>(Read(descriptor)), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(descriptor), CookedDefect::kInvalidReference);
 }
 
 } // namespace

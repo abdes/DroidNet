@@ -101,6 +101,15 @@ struct DescriptorDefects final {
     std::memcpy(std::span(scene).subspan(at).data(), &record, sizeof(Record));
   }
 
+  //! Records `type`, whatever value it holds, as the component type of the
+  //! scene's component table `table`.
+  static auto SetComponentTableType(std::vector<std::byte>& scene,
+    data::ComponentType table, uint32_t type) -> void;
+
+  //! Records `size` as the entry size of the scene's component table `type`.
+  static auto SetComponentEntrySize(std::vector<std::byte>& scene,
+    data::ComponentType type, uint32_t size) -> void;
+
   //! The script slot `index` of the scene.
   [[nodiscard]] static auto ScriptSlotAt(std::span<const std::byte> scene,
     uint32_t index) -> data::pak::scripting::ScriptSlotRecord;
@@ -118,6 +127,19 @@ struct DescriptorDefects final {
   //! `type`, leaving its bytes as they are.
   static auto SetEnvironmentRecordSize(std::vector<std::byte>& scene,
     data::pak::world::EnvironmentComponentType type, uint32_t size) -> void;
+
+  //! Records `type`, whatever value it holds, as the system type of the
+  //! scene's environment record of type `record`.
+  static auto SetEnvironmentRecordType(std::vector<std::byte>& scene,
+    data::pak::world::EnvironmentComponentType record, uint32_t type) -> void;
+
+  //! Records `count` as the number of the scene's environment records,
+  //! leaving the records as they are.
+  static auto SetEnvironmentRecordCount(
+    std::vector<std::byte>& scene, uint32_t count) -> void;
+
+  //! Removes the scene's environment block, which ends the descriptor.
+  static auto DropEnvironmentBlock(std::vector<std::byte>& scene) -> void;
 
   //=== Physics sidecars ===------------------------------------------------//
 
@@ -148,6 +170,13 @@ private:
   */
   [[nodiscard]] static auto RecordOffset(std::span<const std::byte> scene,
     data::ComponentType type, uint32_t index, size_t size) -> size_t;
+
+  //! The offset of the directory entry of the scene's component table `type`.
+  /*!
+   @throw std::invalid_argument When the scene has no such table.
+  */
+  [[nodiscard]] static auto TableEntryOffset(
+    std::span<const std::byte> scene, data::ComponentType type) -> size_t;
 };
 
 } // namespace oxygen::cooker::testing

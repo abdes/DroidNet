@@ -7,30 +7,25 @@
 #pragma once
 
 #include <algorithm>
-#include <any>
 #include <cstddef>
-#include <cstring>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string_view>
-#include <unordered_map>
+#include <tuple>
 #include <unordered_set>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/api_export.h>
-#include <Oxygen/Serio/MemoryStream.h>
-#include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::data {
 
@@ -100,16 +95,101 @@ template <> struct ComponentTraits<pak::scripting::ScriptParamOverrideRecord> {
   static constexpr ComponentType kType = ComponentType::kScriptParamOverride;
 };
 
+//! The record types of the component tables a scene holds, one table per
+//! type; the reader refuses a table of any other type.
+using SceneComponentRecords = std::tuple<pak::world::RenderableRecord,
+  pak::world::OverrideRecord, pak::geometry::LodPolicyRecord,
+  pak::world::LocalFogVolumeRecord, pak::world::PerspectiveCameraRecord,
+  pak::world::OrthographicCameraRecord, pak::world::DirectionalLightRecord,
+  pak::world::PointLightRecord, pak::world::SpotLightRecord,
+  pak::scripting::ScriptingComponentRecord, pak::world::SceneInstanceRecord,
+  pak::world::StartingInputContextRecord, pak::world::NodePathRecord,
+  pak::world::NodePathElement, pak::scripting::ScriptParamOverrideRecord>;
+
+//! A record of a node's component: tables of them hold one record per node,
+//! sorted by node.
+template <typename T>
+concept NodeComponentRecord = requires(const T& record) { record.node_index; };
+
+//! Traits class to map environment records to their system type.
+template <typename T> struct EnvironmentTraits;
+
+template <>
+struct EnvironmentTraits<pak::world::SkyAtmosphereEnvironmentRecord> {
+  static constexpr auto kType
+    = pak::world::EnvironmentComponentType::kSkyAtmosphere;
+};
+
+template <>
+struct EnvironmentTraits<pak::world::VolumetricCloudsEnvironmentRecord> {
+  static constexpr auto kType
+    = pak::world::EnvironmentComponentType::kVolumetricClouds;
+};
+
+template <> struct EnvironmentTraits<pak::world::FogEnvironmentRecord> {
+  static constexpr auto kType = pak::world::EnvironmentComponentType::kFog;
+};
+
+template <> struct EnvironmentTraits<pak::world::SkyLightEnvironmentRecord> {
+  static constexpr auto kType = pak::world::EnvironmentComponentType::kSkyLight;
+};
+
+template <> struct EnvironmentTraits<pak::world::SkySphereEnvironmentRecord> {
+  static constexpr auto kType
+    = pak::world::EnvironmentComponentType::kSkySphere;
+};
+
+template <>
+struct EnvironmentTraits<pak::world::PostProcessVolumeEnvironmentRecord> {
+  static constexpr auto kType
+    = pak::world::EnvironmentComponentType::kPostProcessVolume;
+};
+
+template <> struct EnvironmentTraits<pak::world::BackgroundEnvironmentRecord> {
+  static constexpr auto kType
+    = pak::world::EnvironmentComponentType::kBackground;
+};
+
+//! The environment records a scene holds, at most one of each type.
+using SceneEnvironmentRecords
+  = std::tuple<pak::world::SkyAtmosphereEnvironmentRecord,
+    pak::world::VolumetricCloudsEnvironmentRecord,
+    pak::world::FogEnvironmentRecord, pak::world::SkyLightEnvironmentRecord,
+    pak::world::SkySphereEnvironmentRecord,
+    pak::world::PostProcessVolumeEnvironmentRecord,
+    pak::world::BackgroundEnvironmentRecord>;
+
+namespace detail {
+
+  //! The decoded storage of a list of scene record types: a table of each,
+  //! or at most one of each.
+  template <typename Records> struct SceneRecordStorage;
+
+  template <typename... Records>
+  struct SceneRecordStorage<std::tuple<Records...>> {
+    using Tables = std::tuple<std::vector<Records>...>;
+    using Optionals = std::tuple<std::optional<Records>...>;
+  };
+
+} // namespace detail
+
 //! Represents a loaded Scene asset.
 /*!
-  SceneAsset provides a high-level, read-only view over the raw binary data of a
-  cooked scene asset (SceneAssetDesc). It handles the details of navigating the
-  node hierarchy, string tables, and component directories.
+  SceneAsset is the validating reader of a cooked scene descriptor
+  (SceneAssetDesc) and the read-only model of what it holds: the node
+  hierarchy, the string table, the component tables and the environment
+  records.
 
-  ### Zero-Copy Design
-  This class is designed to be a lightweight wrapper around the raw data blob.
-  It does not copy the data, but rather provides views (std::span) into it.
-  The raw data must remain valid for the lifetime of this object.
+  ### Admission
+  Construction decodes and checks the whole descriptor and refuses it with a
+  `CookedOpenError` naming the rule it breaks. An admitted scene is immutable:
+  its accessors only read what construction decoded, so any thread may read
+  it.
+
+  ### Storage
+  The descriptor bytes must outlive a scene constructed over a span; a scene
+  constructed from a vector owns them. Script slots and environment record
+  views refer to those bytes.
 
   ### Usage
   ```cpp
@@ -147,9 +227,8 @@ public:
   //! Constructs a SceneAsset from a raw data blob.
   /*!
     @param key The stable asset key.
-    @param data The raw binary data of the scene asset (must start with
-    SceneAssetDesc).
-    @throws std::runtime_error if the data is invalid or too small.
+    @param data The scene descriptor, exactly.
+    @throw CookedOpenError When the descriptor breaks a rule of its format.
   */
   OXGN_DATA_API SceneAsset(AssetKey key, std::span<const std::byte> data,
     SourceOrigin source_origin = {});
@@ -159,9 +238,8 @@ public:
     This is the preferred construction path for loaders.
 
     @param key The stable asset key.
-    @param data The raw binary data of the scene asset (must start with
-      SceneAssetDesc).
-    @throws std::runtime_error if the data is invalid or too small.
+    @param data The scene descriptor, exactly.
+    @throw CookedOpenError When the descriptor breaks a rule of its format.
   */
   OXGN_DATA_API SceneAsset(
     AssetKey key, std::vector<std::byte> data, SourceOrigin source_origin = {});
@@ -195,8 +273,11 @@ public:
     -> std::vector<pak::scripting::ScriptParamRecord>;
 
   //! Returns a view of all nodes in the scene.
-  OXGN_DATA_NDAPI auto GetNodes() const noexcept
-    -> std::span<const pak::world::NodeRecord>;
+  [[nodiscard]] auto GetNodes() const noexcept
+    -> std::span<const pak::world::NodeRecord>
+  {
+    return nodes_;
+  }
 
   //! Returns the node at the specified index.
   /*!
@@ -254,17 +335,11 @@ public:
 
   //=== Environment Access (v3+) ===----------------------------------------//
 
-  //! Returns true if this scene carries a trailing environment block.
-  OXGN_DATA_NDAPI auto HasEnvironmentBlock() const noexcept -> bool
+  //! The header of the environment block that ends the descriptor.
+  [[nodiscard]] auto GetEnvironmentBlockHeader() const noexcept
+    -> const pak::world::SceneEnvironmentBlockHeader&
   {
-    return has_environment_block_;
-  }
-
-  //! Gets the parsed environment block header (if present).
-  OXGN_DATA_NDAPI auto GetEnvironmentBlockHeader() const noexcept
-    -> const pak::world::SceneEnvironmentBlockHeader*
-  {
-    return has_environment_block_ ? &environment_block_header_ : nullptr;
+    return environment_block_header_;
   }
 
   //! Returns a stable view over environment-system records.
@@ -276,23 +351,41 @@ public:
 
   // Typed environment access (v3+). These return structs as defined in the
   // PAK format, not runtime Scene objects.
-  OXGN_DATA_NDAPI auto TryGetSkyAtmosphereEnvironment() const
-    -> std::optional<pak::world::SkyAtmosphereEnvironmentRecord>;
+  [[nodiscard]] auto TryGetSkyAtmosphereEnvironment() const noexcept
+    -> std::optional<pak::world::SkyAtmosphereEnvironmentRecord>
+  {
+    return EnvironmentRecord<pak::world::SkyAtmosphereEnvironmentRecord>();
+  }
 
-  OXGN_DATA_NDAPI auto TryGetVolumetricCloudsEnvironment() const
-    -> std::optional<pak::world::VolumetricCloudsEnvironmentRecord>;
+  [[nodiscard]] auto TryGetVolumetricCloudsEnvironment() const noexcept
+    -> std::optional<pak::world::VolumetricCloudsEnvironmentRecord>
+  {
+    return EnvironmentRecord<pak::world::VolumetricCloudsEnvironmentRecord>();
+  }
 
-  OXGN_DATA_NDAPI auto TryGetFogEnvironment() const
-    -> std::optional<pak::world::FogEnvironmentRecord>;
+  [[nodiscard]] auto TryGetFogEnvironment() const noexcept
+    -> std::optional<pak::world::FogEnvironmentRecord>
+  {
+    return EnvironmentRecord<pak::world::FogEnvironmentRecord>();
+  }
 
-  OXGN_DATA_NDAPI auto TryGetSkyLightEnvironment() const
-    -> std::optional<pak::world::SkyLightEnvironmentRecord>;
+  [[nodiscard]] auto TryGetSkyLightEnvironment() const noexcept
+    -> std::optional<pak::world::SkyLightEnvironmentRecord>
+  {
+    return EnvironmentRecord<pak::world::SkyLightEnvironmentRecord>();
+  }
 
-  OXGN_DATA_NDAPI auto TryGetSkySphereEnvironment() const
-    -> std::optional<pak::world::SkySphereEnvironmentRecord>;
+  [[nodiscard]] auto TryGetSkySphereEnvironment() const noexcept
+    -> std::optional<pak::world::SkySphereEnvironmentRecord>
+  {
+    return EnvironmentRecord<pak::world::SkySphereEnvironmentRecord>();
+  }
 
-  OXGN_DATA_NDAPI auto TryGetPostProcessVolumeEnvironment() const
-    -> std::optional<pak::world::PostProcessVolumeEnvironmentRecord>;
+  [[nodiscard]] auto TryGetPostProcessVolumeEnvironment() const noexcept
+    -> std::optional<pak::world::PostProcessVolumeEnvironmentRecord>
+  {
+    return EnvironmentRecord<pak::world::PostProcessVolumeEnvironmentRecord>();
+  }
 
   //! Curve keys decoded from the current post-process record's bounded tail.
   [[nodiscard]] auto GetPostProcessCompensationCurve() const noexcept
@@ -302,87 +395,32 @@ public:
   }
 
   //! Returns the authored display background when present.
-  OXGN_DATA_NDAPI auto TryGetBackgroundEnvironment() const
-    -> std::optional<pak::world::BackgroundEnvironmentRecord>;
+  [[nodiscard]] auto TryGetBackgroundEnvironment() const noexcept
+    -> std::optional<pak::world::BackgroundEnvironmentRecord>
+  {
+    return EnvironmentRecord<pak::world::BackgroundEnvironmentRecord>();
+  }
 
   //=== Component Access ===--------------------------------------------------//
 
-  //! Returns a view of all components of the specified type.
-  /*!
-    @tparam T The component record type (e.g. pak::world::RenderableRecord).
-    @return A span of component records. Returns empty span if no table exists.
-  */
-  // Decoding allocates the component cache; failing to allocate is fatal.
+  //! Returns the records of the component table of type `T`, empty when the
+  //! scene has no such table.
   template <typename T>
-  // NOLINTNEXTLINE(bugprone-exception-escape)
   [[nodiscard]] auto GetComponents() const noexcept -> std::span<const T>
   {
-    // Map C++ type to ComponentType enum using Traits.
-    constexpr ComponentType type = ComponentTraits<T>::kType;
-    const auto* entry = FindComponentTableEntry(type);
-    if (entry == nullptr || entry->count == 0) {
-      return {};
-    }
-    if (entry->entry_size != sizeof(T)) {
-      DCHECK_F(false,
-        "SceneAsset component table entry size mismatch (validated by "
-        "loader)");
-      return {};
-    }
-
-    // Component tables are stored packed (alignment 1). Exposing them via
-    // unaligned typed pointers is UB in Release builds. Decode field-by-field
-    // into an aligned cache and return a stable view.
-    const auto it = component_cache_.find(type);
-    if (it == component_cache_.end()) {
-      const size_t bytes_size = entry->count * entry->entry_size;
-      const auto bytes = data_.subspan(entry->offset, bytes_size);
-
-      oxygen::serio::ReadOnlyMemoryStream stream(bytes);
-      oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(stream);
-      auto pack = reader.ScopedAlignment(1);
-
-      std::vector<T> decoded;
-      decoded.resize(entry->count);
-      for (size_t i = 0; i < entry->count; ++i) {
-        const auto res = reader.ReadInto(decoded.at(i));
-        if (!res) {
-          DCHECK_F(false,
-            "SceneAsset failed to deserialize component table (validated by "
-            "loader)");
-          return {};
-        }
-      }
-
-      component_cache_.insert_or_assign(type, std::move(decoded));
-    }
-
-    const auto& cached = std::any_cast<const std::vector<T>&>(
-      component_cache_.find(type)->second);
-    return { cached.data(), cached.size() };
+    return std::get<std::vector<T>>(component_tables_);
   }
 
-  //! Finds the component of type T attached to the specified node.
-  /*!
-    @tparam T The component record type.
-    @param node_index The index of the node to find the component for.
-    @return Pointer to the component record, or nullptr if not found.
-
-    @note Assumes component tables are sorted by node_index (as per spec).
-    Uses binary search for O(log N) lookup.
-  */
-  template <typename T>
+  //! The component of type `T` of the node `node_index`, if it has one.
+  template <NodeComponentRecord T>
   [[nodiscard]] auto FindComponent(
     pak::world::SceneNodeIndexT node_index) const noexcept -> const T*
   {
-    auto components = GetComponents<T>();
-
-    // Binary search for the node_index
-    auto it = std::lower_bound(components.begin(), components.end(), node_index,
-      [](const T& record, pak::world::SceneNodeIndexT index) -> auto {
-        return record.node_index < index;
-      });
-
+    // The reader admits node tables only in strict node order.
+    const auto components = GetComponents<T>();
+    const auto it
+      = std::ranges::lower_bound(components, node_index, std::ranges::less {},
+        [](const T& record) -> auto { return record.node_index; });
     if (it != components.end() && it->node_index == node_index) {
       return &(*it);
     }
@@ -390,22 +428,25 @@ public:
   }
 
 private:
-  struct ComponentTableEntry;
-
-  // Finds a component table entry for the given component type.
-  [[nodiscard]] auto FindComponentTableEntry(ComponentType type) const noexcept
-    -> const ComponentTableEntry*
+  template <typename T>
+  [[nodiscard]] auto EnvironmentRecord() const noexcept -> std::optional<T>
   {
-    for (const auto& entry : component_tables_) {
-      if (entry.type == type) {
-        return &entry;
-      }
-    }
-    return nullptr;
+    return std::get<std::optional<T>>(environment_records_);
   }
 
-  // Validates offsets and sizes against the data buffer
+  //=== Admission, in reading order ===------------------------------------//
+
+  //! Runs every step below, each relying on those before it.
   auto ParseAndValidate() -> void;
+  auto ReadHeader() -> void;
+  auto ReadStrings() -> void;
+  auto ReadNodes() -> void;
+  auto ValidateHierarchy() const -> void;
+  auto ReadComponentTables() -> void;
+  auto ValidateNodeTables() const -> void;
+  auto ValidateComponentOwners() const -> void;
+  auto ReadScriptTables() -> void;
+  auto ReadEnvironment() -> void;
 
   // Validates node IDs, node paths and every node reference.
   auto ValidateNodeIdentity() const -> void;
@@ -428,40 +469,19 @@ private:
   std::span<const std::byte> data_;
   pak::world::SceneAssetDesc desc_ {};
 
-  // Cached pointers for fast access
-  size_t node_count_ { 0 };
+  //! Where the bytes the descriptor's tables, slots and parameters hold end:
+  //! the start of the environment block.
+  std::size_t payload_end_ { 0U };
 
-  // Nodes are stored packed (alignment 1). Decode lazily into an aligned
-  // cache to avoid unaligned typed pointers.
-  mutable std::vector<pak::world::NodeRecord> nodes_cache_;
-  mutable bool nodes_cache_valid_ { false };
-
-  //! The descriptor's string table.
   DescriptorStrings strings_;
+  std::vector<pak::world::NodeRecord> nodes_;
+  detail::SceneRecordStorage<SceneComponentRecords>::Tables component_tables_;
 
-  // Component directory cache (type -> {ptr, count})
-  struct ComponentTableEntry {
-    ComponentType type;
-    pak::core::OffsetT offset;
-    size_t count;
-    uint32_t entry_size;
-  };
-  std::vector<ComponentTableEntry> component_tables_;
-
-  // Optional trailing environment block.
-  bool has_environment_block_ { false };
   pak::world::SceneEnvironmentBlockHeader environment_block_header_ {};
   std::vector<EnvironmentSystemRecordView> environment_system_records_;
-  std::optional<pak::world::PostProcessVolumeEnvironmentRecord>
-    post_process_record_;
+  detail::SceneRecordStorage<SceneEnvironmentRecords>::Optionals
+    environment_records_;
   std::vector<pak::world::ExposureCompensationKeyRecord> post_process_curve_;
-
-  // Decoded component tables, keyed by ComponentType.
-  mutable std::unordered_map<ComponentType, std::any> component_cache_;
-
-  template <typename RecordT>
-  auto TryGetEnvironmentRecordAs(
-    pak::world::EnvironmentComponentType type) const -> std::optional<RecordT>;
 };
 
 } // namespace oxygen::data

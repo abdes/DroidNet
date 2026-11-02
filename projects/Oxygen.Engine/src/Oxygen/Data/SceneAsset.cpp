@@ -16,24 +16,27 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
-#include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/LodPolicyValidation.h>
+#include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -43,6 +46,15 @@ namespace oxygen::data {
 
 namespace {
 
+  //! Refuses the descriptor for breaking the rule `rule` describes.
+  [[noreturn]] auto Refuse(
+    const CookedDefect defect, const std::string_view rule) -> void
+  {
+    throw CookedOpenError(defect, "SceneAsset " + std::string(rule));
+  }
+
+  //! Decodes the record `RecordT` that `bytes` hold exactly; its decoder
+  //! checks the values the format defines.
   template <typename RecordT>
   auto ReadPackedRecord(const std::span<const std::byte> bytes,
     const std::string_view what) -> RecordT
@@ -52,84 +64,48 @@ namespace {
     auto packed = reader.ScopedAlignment(1);
 
     RecordT record {};
-    const auto res = reader.ReadInto(record);
-    if (!res) {
-      throw std::runtime_error(std::string(what) + " decode failed");
+    if (!reader.ReadInto(record)) {
+      Refuse(CookedDefect::kInvalidValue,
+        std::string(what) + " holds values its format does not define");
     }
     return record;
   }
 
-  //! Instances are sorted by node, one per node, and name a scene.
-  auto ValidateSceneInstances(const std::span<const std::byte> data,
-    const pak::world::SceneComponentTable& table,
-    const pak::world::SceneNodeIndexT node_count) -> void
+  //! Whether `size` bytes at `offset` lie within `total` bytes.
+  auto RangeFits(const std::size_t offset, const std::size_t size,
+    const std::size_t total) noexcept -> bool
   {
-    if (table.entry_size != sizeof(pak::world::SceneInstanceRecord)) {
-      throw std::runtime_error(
-        "SceneAsset scene instance record size mismatch");
-    }
-    std::optional<pak::world::SceneNodeIndexT> previous;
-    for (uint32_t index = 0; index < table.count; ++index) {
-      const auto record = ReadPackedRecord<pak::world::SceneInstanceRecord>(
-        data.subspan(table.offset + (size_t { index } * table.entry_size),
-          table.entry_size),
-        "SceneAsset scene instance");
-      if (record.node_index >= node_count
-        || (previous && record.node_index <= *previous)) {
-        throw std::runtime_error("SceneAsset scene instance nodes must be "
-                                 "in range, sorted and unique");
-      }
-      if (record.scene_key.IsNil()) {
-        throw std::runtime_error("SceneAsset scene instance has no scene");
-      }
-      previous = record.node_index;
-    }
+    return offset <= total && size <= total - offset;
   }
 
-  //! Starting input contexts name distinct contexts.
-  auto ValidateStartingInputContexts(const std::span<const std::byte> data,
-    const pak::world::SceneComponentTable& table) -> void
+  //! Calls `visit.template operator()<Record>()` for each type of `Records`.
+  template <typename Records, typename Visit>
+  auto ForEachRecordType(const Visit& visit) -> void
   {
-    if (table.entry_size != sizeof(pak::world::StartingInputContextRecord)) {
-      throw std::runtime_error(
-        "SceneAsset starting input context record size mismatch");
-    }
-    std::unordered_set<AssetKey> contexts;
-    for (uint32_t index = 0; index < table.count; ++index) {
-      const auto record
-        = ReadPackedRecord<pak::world::StartingInputContextRecord>(
-          data.subspan(table.offset + (size_t { index } * table.entry_size),
-            table.entry_size),
-          "SceneAsset starting input context");
-      if (record.context_key.IsNil()
-        || !contexts.insert(record.context_key).second) {
-        throw std::runtime_error(
-          "SceneAsset starting input contexts must be named and distinct");
-      }
-    }
+    [&visit]<typename... Record>(std::type_identity<std::tuple<Record...>>) {
+      (visit.template operator()<Record>(), ...);
+    }(std::type_identity<Records> {});
   }
 
-  //! Whether a sky record of `bytes` names a source the catalog defines; a
-  //! record of another type names none.
-  auto HasKnownSkySource(
-    const uint32_t record_type, const std::span<const std::byte> bytes) -> bool
+  //! Whether `slots` already has an owner of the atmosphere light slot of
+  //! `record`, claiming it otherwise.
+  template <typename LightRecord>
+  auto ClaimsATakenAtmosphereSlot(const LightRecord& record,
+    std::array<bool, schema::kAtmosphereLightSlotMembers.size()>& slots) -> bool
   {
-    using pak::world::EnvironmentComponentType;
-    if (record_type
-      == nostd::to_underlying(EnvironmentComponentType::kSkyLight)) {
-      return pak::world::IsKnownSource(
-        ReadPackedRecord<pak::world::SkyLightEnvironmentRecord>(
-          bytes, "SceneAsset sky light record")
-          .source);
+    if constexpr (requires { record.atmosphere_light_slot; }) {
+      const auto slot = record.atmosphere_light_slot;
+      if (slot == std::to_underlying(schema::AtmosphereLightSlot::kNone)) {
+        return false;
+      }
+      if (slot >= slots.size()) {
+        Refuse(CookedDefect::kInvalidValue,
+          "light names an atmosphere slot the format does not define");
+      }
+      return std::exchange(slots.at(slot), true);
+    } else {
+      return false;
     }
-    if (record_type
-      == nostd::to_underlying(EnvironmentComponentType::kSkySphere)) {
-      return pak::world::IsKnownSource(
-        ReadPackedRecord<pak::world::SkySphereEnvironmentRecord>(
-          bytes, "SceneAsset sky sphere record")
-          .source);
-    }
-    return true;
   }
 
 } // namespace
@@ -149,7 +125,7 @@ auto SceneAsset::ReadScriptSlots(const uint32_t start,
     slots.push_back(ReadPackedRecord<pak::scripting::ScriptSlotRecord>(
       data_.subspan(
         static_cast<size_t>(offset), sizeof(pak::scripting::ScriptSlotRecord)),
-      "Scene script slot"));
+      "script slot"));
   }
   return slots;
 }
@@ -172,7 +148,7 @@ auto SceneAsset::ReadScriptParameters(
     parameters.push_back(ReadPackedRecord<pak::scripting::ScriptParamRecord>(
       data_.subspan(
         static_cast<size_t>(offset), sizeof(pak::scripting::ScriptParamRecord)),
-      "Scene script parameter"));
+      "script parameter"));
   }
   return parameters;
 }
@@ -194,40 +170,10 @@ SceneAsset::SceneAsset(
   ParseAndValidate();
 }
 
-// Decoding allocates the node cache; failing to allocate is fatal.
-// NOLINTNEXTLINE(bugprone-exception-escape)
-auto SceneAsset::GetNodes() const noexcept
-  -> std::span<const pak::world::NodeRecord>
+auto SceneAsset::GetNodeName(const pak::world::NodeRecord& node) const noexcept
+  -> std::string_view
 {
-  if (node_count_ == 0) {
-    return {};
-  }
-
-  if (!nodes_cache_valid_) {
-    const size_t nodes_bytes = node_count_ * sizeof(pak::world::NodeRecord);
-    const auto bytes = data_.subspan(desc_.nodes.offset, nodes_bytes);
-
-    oxygen::serio::ReadOnlyMemoryStream stream(bytes);
-    oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(stream);
-    auto pack = reader.ScopedAlignment(1);
-
-    nodes_cache_.clear();
-    nodes_cache_.resize(node_count_);
-    for (size_t i = 0; i < node_count_; ++i) {
-      const auto res = reader.ReadInto(nodes_cache_.at(i));
-      if (!res) {
-        DCHECK_F(false,
-          "SceneAsset failed to deserialize node table (validated by "
-          "loader)");
-        nodes_cache_.clear();
-        return {};
-      }
-    }
-
-    nodes_cache_valid_ = true;
-  }
-
-  return { nodes_cache_.data(), nodes_cache_.size() };
+  return strings_.TryGet(node.scene_name_offset).value_or(std::string_view {});
 }
 
 // An index out of range is a caller bug; the checked access aborts on it.
@@ -235,15 +181,7 @@ auto SceneAsset::GetNodes() const noexcept
 auto SceneAsset::GetNode(pak::world::SceneNodeIndexT index) const noexcept
   -> const pak::world::NodeRecord&
 {
-  const auto nodes = GetNodes();
-  DCHECK_LT_F(index, nodes.size());
-  return oxygen::base::CheckedAt(nodes, index);
-}
-
-auto SceneAsset::GetNodeName(const pak::world::NodeRecord& node) const noexcept
-  -> std::string_view
-{
-  return strings_.TryGet(node.scene_name_offset).value_or(std::string_view {});
+  return oxygen::base::CheckedAt(GetNodes(), index);
 }
 
 // Calling this on a scene without nodes is a caller bug; the checked access
@@ -251,340 +189,382 @@ auto SceneAsset::GetNodeName(const pak::world::NodeRecord& node) const noexcept
 // NOLINTNEXTLINE(bugprone-exception-escape)
 auto SceneAsset::GetRootNode() const noexcept -> const pak::world::NodeRecord&
 {
-  const auto nodes = GetNodes();
-  DCHECK_GT_F(nodes.size(), 0U);
-  return oxygen::base::CheckedAt(nodes, 0);
+  return oxygen::base::CheckedAt(GetNodes(), 0);
 }
 
 auto SceneAsset::ParseAndValidate() -> void
 {
-  if (data_.size() < sizeof(pak::world::SceneAssetDesc)) {
-    throw std::runtime_error("SceneAsset data too small for header");
+  ReadHeader();
+  ReadStrings();
+  ReadNodes();
+  ValidateHierarchy();
+  ReadComponentTables();
+  ValidateNodeTables();
+  ValidateComponentOwners();
+  ReadScriptTables();
+  ReadEnvironment();
+
+  std::unordered_set<pak::world::SceneNodeIndexT> instance_roots;
+  for (const auto& instance :
+    GetComponents<pak::world::SceneInstanceRecord>()) {
+    instance_roots.insert(instance.node_index);
   }
+  ValidateNodeIdentity();
+  if (const auto camera = GetStartingCamera()) {
+    ValidateNodeRef(*camera, instance_roots, "starting camera");
+  }
+  ValidateScriptNodes(instance_roots);
+  ValidateOverrides(instance_roots);
+}
 
-  desc_ = ReadPackedRecord<pak::world::SceneAssetDesc>(
-    data_.first(sizeof(pak::world::SceneAssetDesc)), "SceneAsset header");
-
+auto SceneAsset::ReadHeader() -> void
+{
+  using pak::world::SceneAssetDesc;
+  if (data_.size() < sizeof(SceneAssetDesc)) {
+    Refuse(CookedDefect::kTooSmall, "descriptor is smaller than its header");
+  }
+  desc_ = ReadPackedRecord<SceneAssetDesc>(
+    data_.first(sizeof(SceneAssetDesc)), "header");
+  if (static_cast<AssetType>(desc_.header.asset_type) != AssetType::kScene) {
+    Refuse(CookedDefect::kWrongMagic, "descriptor is not a scene's");
+  }
   if (desc_.header.version != pak::world::kSceneAssetVersion) {
-    throw std::runtime_error(
-      "SceneAsset unsupported descriptor version; re-cook the scene content");
+    Refuse(CookedDefect::kUnsupportedVersion,
+      "descriptor version is not current; re-cook the scene content");
   }
-
-  if ((desc_.flags & ~pak::world::SceneAssetFlags::kModelScene)
-    != pak::world::SceneAssetFlags::kNone) {
-    throw std::runtime_error("SceneAsset has unknown scene flags");
+  const auto has_unknown_flags
+    = (desc_.flags & ~pak::world::SceneAssetFlags::kModelScene)
+    != pak::world::SceneAssetFlags::kNone;
+  if (has_unknown_flags) {
+    Refuse(CookedDefect::kInvalidValue, "has unknown scene flags");
   }
+  payload_end_ = sizeof(SceneAssetDesc);
+}
 
-  auto range_ok
-    = [](const size_t offset, const size_t size, const size_t total) -> bool {
-    return offset <= total && size <= (total - offset);
-  };
-
-  has_environment_block_ = false;
-  environment_system_records_.clear();
-  post_process_record_.reset();
-  post_process_curve_.clear();
-
-  size_t payload_end = sizeof(pak::world::SceneAssetDesc);
-  std::unordered_set<std::uint32_t> camera_nodes;
-
-  // Validate String Table
+auto SceneAsset::ReadStrings() -> void
+{
   try {
     strings_ = DescriptorStrings::FromDescriptor(data_, desc_.header.strings);
   } catch (const std::invalid_argument& error) {
-    throw std::runtime_error(
-      std::string("SceneAsset string table is invalid: ") + error.what());
+    Refuse(CookedDefect::kInvalidString,
+      std::string("string table is invalid: ") + error.what());
   }
   const auto name = strings_.TryGet(desc_.header.name_offset);
   if (!name) {
-    throw std::runtime_error("SceneAsset name offset out of range");
+    Refuse(CookedDefect::kInvalidString, "name offset is not a string");
   }
   SetAssetName(std::string { *name });
-  payload_end = (std::max)(payload_end,
-    static_cast<size_t>(desc_.header.strings.offset)
-      + desc_.header.strings.size);
+  payload_end_ = (std::max)(payload_end_,
+    std::size_t { desc_.header.strings.offset } + desc_.header.strings.size);
+}
 
-  // Validate Node Table
-  if (desc_.nodes.count > 0) {
-    const size_t nodes_bytes
-      = static_cast<size_t>(desc_.nodes.count) * sizeof(pak::world::NodeRecord);
-    if (!range_ok(desc_.nodes.offset, nodes_bytes, data_.size())) {
-      throw std::runtime_error("SceneAsset node table out of bounds");
-    }
-    if (desc_.nodes.entry_size != sizeof(pak::world::NodeRecord)) {
-      throw std::runtime_error("SceneAsset node record size mismatch");
-    }
-
-    for (uint32_t index = 0; index < desc_.nodes.count; ++index) {
-      const auto record = ReadPackedRecord<pak::world::NodeRecord>(
-        data_.subspan(desc_.nodes.offset
-            + (static_cast<size_t>(index) * sizeof(pak::world::NodeRecord)),
-          sizeof(pak::world::NodeRecord)),
-        "SceneAsset node record");
-      if (!pak::world::HasCanonicalNodeFlags(record)) {
-        throw std::runtime_error(
-          "SceneAsset node flag source state is invalid");
-      }
-      if (record.parent_index >= desc_.nodes.count) {
-        throw std::runtime_error("SceneAsset parent_index out of range");
-      }
-      if (!strings_.TryGet(record.scene_name_offset)) {
-        throw std::runtime_error("SceneAsset node name offset out of range");
-      }
-    }
-
-    payload_end = (std::max)(payload_end, desc_.nodes.offset + nodes_bytes);
+auto SceneAsset::ReadNodes() -> void
+{
+  using pak::world::NodeRecord;
+  const auto& table = desc_.nodes;
+  if (table.count == 0U) {
+    return;
   }
-
-  // Validate Component Directory
-  if (desc_.component_table_count > 0) {
-    const size_t dir_bytes = static_cast<size_t>(desc_.component_table_count)
-      * sizeof(pak::world::SceneComponentTableDesc);
-    if (!range_ok(
-          desc_.component_table_directory_offset, dir_bytes, data_.size())) {
-      throw std::runtime_error("SceneAsset component directory out of bounds");
+  const auto bytes = std::size_t { table.count } * sizeof(NodeRecord);
+  if (!RangeFits(table.offset, bytes, data_.size())) {
+    Refuse(
+      CookedDefect::kOutOfBounds, "node table lies outside the descriptor");
+  }
+  if (table.entry_size != sizeof(NodeRecord)) {
+    Refuse(CookedDefect::kWrongRowSize, "node table rows are not node records");
+  }
+  nodes_.reserve(table.count);
+  for (uint32_t index = 0; index < table.count; ++index) {
+    const auto record = ReadPackedRecord<NodeRecord>(
+      data_.subspan(table.offset + (std::size_t { index } * sizeof(NodeRecord)),
+        sizeof(NodeRecord)),
+      "node record");
+    if (!pak::world::HasCanonicalNodeFlags(record)) {
+      Refuse(CookedDefect::kInvalidValue, "node flag source state is invalid");
     }
+    if (!strings_.TryGet(record.scene_name_offset)) {
+      Refuse(CookedDefect::kInvalidString, "node name offset is not a string");
+    }
+    nodes_.push_back(record);
+  }
+  payload_end_ = (std::max)(payload_end_, table.offset + bytes);
+}
 
-    payload_end = (std::max)(payload_end,
-      static_cast<size_t>(desc_.component_table_directory_offset + dir_bytes));
+auto SceneAsset::ValidateHierarchy() const -> void
+{
+  // Node 0 is the scene's root, and every parent chain ends at a root: a node
+  // that is its own parent.
+  if (nodes_.empty()) {
+    return;
+  }
+  if (nodes_.front().parent_index != 0U) {
+    Refuse(CookedDefect::kInvalidReference, "node 0 is not a root");
+  }
+  enum class Visit : uint8_t { kUnseen, kOnTrail, kDone };
+  auto visits = std::vector<Visit>(nodes_.size(), Visit::kUnseen);
+  auto trail = std::vector<pak::world::SceneNodeIndexT> {};
+  for (pak::world::SceneNodeIndexT start = 0; start < nodes_.size(); ++start) {
+    auto at = start;
+    while (visits.at(at) == Visit::kUnseen) {
+      const auto parent = nodes_.at(at).parent_index;
+      if (parent >= nodes_.size()) {
+        Refuse(CookedDefect::kInvalidReference,
+          "node parent is not a node of the scene");
+      }
+      visits.at(at) = Visit::kOnTrail;
+      trail.push_back(at);
+      if (parent == at) {
+        break;
+      }
+      at = parent;
+    }
+    const auto closes_a_cycle
+      = visits.at(at) == Visit::kOnTrail && nodes_.at(at).parent_index != at;
+    if (closes_a_cycle) {
+      Refuse(CookedDefect::kInvalidReference, "node parents form a cycle");
+    }
+    for (const auto node : trail) {
+      visits.at(node) = Visit::kDone;
+    }
+    trail.clear();
+  }
+}
 
-    const auto dir_span
-      = data_.subspan(desc_.component_table_directory_offset, dir_bytes);
+auto SceneAsset::ReadComponentTables() -> void
+{
+  using pak::world::SceneComponentTableDesc;
+  const auto count = desc_.component_table_count;
+  if (count == 0U) {
+    return;
+  }
+  const auto directory_bytes
+    = std::size_t { count } * sizeof(SceneComponentTableDesc);
+  const auto directory_offset
+    = std::size_t { desc_.component_table_directory_offset };
+  if (!RangeFits(directory_offset, directory_bytes, data_.size())) {
+    Refuse(CookedDefect::kOutOfBounds,
+      "component directory lies outside the descriptor");
+  }
+  payload_end_ = (std::max)(payload_end_, directory_offset + directory_bytes);
 
-    std::unordered_set<std::uint32_t> light_nodes;
-    // Slots are indexed by wire value; an assigned slot has one owner.
-    std::array<bool, schema::kAtmosphereLightSlotMembers.size()>
-      atmosphere_slots {};
-    component_tables_.clear();
-    component_tables_.reserve(desc_.component_table_count);
-    for (uint32_t i = 0; i < desc_.component_table_count; ++i) {
-      const auto entry_bytes = dir_span.subspan(
-        static_cast<size_t>(i) * sizeof(pak::world::SceneComponentTableDesc),
-        sizeof(pak::world::SceneComponentTableDesc));
-      const auto entry = ReadPackedRecord<pak::world::SceneComponentTableDesc>(
-        entry_bytes, "SceneAsset component table descriptor");
-
-      if (entry.table.count == 0) {
-        continue;
-      }
-
-      const size_t table_bytes
-        = static_cast<size_t>(entry.table.count) * entry.table.entry_size;
-      if (!range_ok(entry.table.offset, table_bytes, data_.size())) {
-        throw std::runtime_error("SceneAsset component table out of bounds");
-      }
-
-      payload_end = (std::max)(payload_end,
-        static_cast<size_t>(entry.table.offset + table_bytes));
-
-      const auto type = static_cast<ComponentType>(entry.component_type);
-      if (type == ComponentType::kRenderable
-        && entry.table.entry_size != sizeof(pak::world::RenderableRecord)) {
-        throw std::runtime_error("SceneAsset renderable record size mismatch");
-      }
-      if (type == ComponentType::kOverride
-        && entry.table.entry_size != sizeof(pak::world::OverrideRecord)) {
-        throw std::runtime_error("SceneAsset override record size mismatch");
-      }
-      if (type == ComponentType::kOverrideLodPolicy
-        && entry.table.entry_size != sizeof(pak::geometry::LodPolicyRecord)) {
-        throw std::runtime_error(
-          "SceneAsset override LOD policy record size mismatch");
-      }
-      if (type == ComponentType::kLocalFogVolume
-        && entry.table.entry_size != sizeof(pak::world::LocalFogVolumeRecord)) {
-        throw std::runtime_error(
-          "SceneAsset local fog volume record size mismatch");
-      }
-      if (type == ComponentType::kPerspectiveCamera
-        && entry.table.entry_size
-          != sizeof(pak::world::PerspectiveCameraRecord)) {
-        throw std::runtime_error(
-          "SceneAsset perspective camera record size mismatch");
-      }
-      if (type == ComponentType::kOrthographicCamera
-        && entry.table.entry_size
-          != sizeof(pak::world::OrthographicCameraRecord)) {
-        throw std::runtime_error(
-          "SceneAsset orthographic camera record size mismatch");
-      }
-
-      if (type == ComponentType::kDirectionalLight
-        && entry.table.entry_size
-          != sizeof(pak::world::DirectionalLightRecord)) {
-        throw std::runtime_error(
-          "SceneAsset directional light record size mismatch");
-      }
-      if (type == ComponentType::kPointLight
-        && entry.table.entry_size != sizeof(pak::world::PointLightRecord)) {
-        throw std::runtime_error("SceneAsset point light record size mismatch");
-      }
-      if (type == ComponentType::kSpotLight
-        && entry.table.entry_size != sizeof(pak::world::SpotLightRecord)) {
-        throw std::runtime_error("SceneAsset spot light record size mismatch");
-      }
-      if (type == ComponentType::kNodePath
-        && entry.table.entry_size != sizeof(pak::world::NodePathRecord)) {
-        throw std::runtime_error("SceneAsset node path record size mismatch");
-      }
-      if (type == ComponentType::kNodePathElement
-        && entry.table.entry_size != sizeof(pak::world::NodePathElement)) {
-        throw std::runtime_error(
-          "SceneAsset node path element record size mismatch");
-      }
-      if (type == ComponentType::kScriptParamOverride
-        && entry.table.entry_size
-          != sizeof(pak::scripting::ScriptParamOverrideRecord)) {
-        throw std::runtime_error(
-          "SceneAsset script parameter change record size mismatch");
-      }
-
-      if (type == ComponentType::kLocalFogVolume) {
-        // Decoding validates each record's values.
-        for (uint32_t index = 0; index < entry.table.count; ++index) {
-          std::ignore = ReadPackedRecord<pak::world::LocalFogVolumeRecord>(
-            data_.subspan(entry.table.offset
-                + (static_cast<size_t>(index) * entry.table.entry_size),
-              entry.table.entry_size),
-            "SceneAsset local fog volume");
+  const auto read_table
+    = [this]<typename T>(const pak::world::SceneComponentTable& table) {
+        if (table.count == 0U) {
+          return;
         }
-      }
-
-      if (type == ComponentType::kPerspectiveCamera
-        || type == ComponentType::kOrthographicCamera) {
-        for (uint32_t index = 0; index < entry.table.count; ++index) {
-          const auto camera_bytes = data_.subspan(entry.table.offset
-              + (static_cast<size_t>(index) * entry.table.entry_size),
-            entry.table.entry_size);
-          if (type == ComponentType::kPerspectiveCamera) {
-            const auto record
-              = ReadPackedRecord<pak::world::PerspectiveCameraRecord>(
-                camera_bytes, "SceneAsset perspective camera");
-            if (record.node_index >= desc_.nodes.count
-              || !camera_nodes.insert(record.node_index).second) {
-              throw std::runtime_error(
-                "SceneAsset camera node ownership is invalid");
-            }
-          } else {
-            const auto record
-              = ReadPackedRecord<pak::world::OrthographicCameraRecord>(
-                camera_bytes, "SceneAsset orthographic camera");
-            if (record.node_index >= desc_.nodes.count
-              || !camera_nodes.insert(record.node_index).second) {
-              throw std::runtime_error(
-                "SceneAsset camera node ownership is invalid");
-            }
-          }
+        if (table.entry_size != sizeof(T)) {
+          Refuse(CookedDefect::kWrongRowSize,
+            "component table rows are not its type's records");
         }
-      }
-
-      const auto validate_lights = [&]<typename T> -> auto {
-        for (std::uint32_t index = 0U; index < entry.table.count; ++index) {
-          const auto record = ReadPackedRecord<T>(
-            data_.subspan(entry.table.offset
-                + (static_cast<std::size_t>(index) * entry.table.entry_size),
-              entry.table.entry_size),
-            "SceneAsset light");
-          if (record.node_index >= desc_.nodes.count
-            || !light_nodes.insert(record.node_index).second) {
-            throw std::runtime_error(
-              "SceneAsset light node ownership is invalid");
-          }
-          if constexpr (requires { record.atmosphere_light_slot; }) {
-            const auto slot = record.atmosphere_light_slot;
-            if (slot != std::to_underlying(schema::AtmosphereLightSlot::kNone)
-              && std::exchange(atmosphere_slots.at(slot), true)) {
-              throw std::runtime_error(
-                "SceneAsset atmosphere slot has multiple owners");
-            }
-          }
+        const auto bytes = std::size_t { table.count } * sizeof(T);
+        if (!RangeFits(table.offset, bytes, data_.size())) {
+          Refuse(CookedDefect::kOutOfBounds,
+            "component table lies outside the descriptor");
         }
+        auto& records = std::get<std::vector<T>>(component_tables_);
+        records.reserve(table.count);
+        for (uint32_t index = 0; index < table.count; ++index) {
+          records.push_back(ReadPackedRecord<T>(
+            data_.subspan(
+              table.offset + (std::size_t { index } * sizeof(T)), sizeof(T)),
+            "component record"));
+        }
+        payload_end_ = (std::max)(payload_end_, table.offset + bytes);
       };
-      if (type == ComponentType::kDirectionalLight) {
-        validate_lights
-          .template operator()<pak::world::DirectionalLightRecord>();
-      } else if (type == ComponentType::kPointLight) {
-        validate_lights.template operator()<pak::world::PointLightRecord>();
-      } else if (type == ComponentType::kSpotLight) {
-        validate_lights.template operator()<pak::world::SpotLightRecord>();
-      } else if (type == ComponentType::kSceneInstance) {
-        ValidateSceneInstances(data_, entry.table, desc_.nodes.count);
-      } else if (type == ComponentType::kStartingInputContext) {
-        ValidateStartingInputContexts(data_, entry.table);
-      }
 
-      component_tables_.push_back({
-        .type = type,
-        .offset = entry.table.offset,
-        .count = entry.table.count,
-        .entry_size = entry.table.entry_size,
-      });
+  // The directory names each type the format defines at most once; only then
+  // are its tables read.
+  std::vector<SceneComponentTableDesc> entries;
+  entries.reserve(count);
+  std::unordered_set<uint32_t> types;
+  for (uint32_t index = 0; index < count; ++index) {
+    const auto& entry
+      = entries.emplace_back(ReadPackedRecord<SceneComponentTableDesc>(
+        data_.subspan(directory_offset
+            + (std::size_t { index } * sizeof(SceneComponentTableDesc)),
+          sizeof(SceneComponentTableDesc)),
+        "component directory entry"));
+    auto known = false;
+    ForEachRecordType<SceneComponentRecords>([&]<typename T> {
+      known = known
+        || entry.component_type
+          == nostd::to_underlying(ComponentTraits<T>::kType);
+    });
+    if (!known) {
+      Refuse(CookedDefect::kInvalidValue,
+        "component directory names a type the format does not define");
+    }
+    if (!types.insert(entry.component_type).second) {
+      Refuse(CookedDefect::kDuplicate,
+        "component directory names a table type twice");
+    }
+  }
+  for (const auto& entry : entries) {
+    ForEachRecordType<SceneComponentRecords>([&]<typename T> {
+      if (entry.component_type
+        == nostd::to_underlying(ComponentTraits<T>::kType)) {
+        read_table.template operator()<T>(entry.table);
+      }
+    });
+  }
+}
+
+auto SceneAsset::ValidateNodeTables() const -> void
+{
+  // A node table holds at most one record per node, in node order, which the
+  // lookup by node relies on.
+  ForEachRecordType<SceneComponentRecords>([this]<typename T> {
+    if constexpr (NodeComponentRecord<T>) {
+      std::optional<pak::world::SceneNodeIndexT> previous;
+      for (const auto& record : GetComponents<T>()) {
+        if (record.node_index >= nodes_.size()) {
+          Refuse(CookedDefect::kInvalidReference,
+            "component names a node the scene does not hold");
+        }
+        const auto repeats_its_node
+          = previous.has_value() && record.node_index == *previous;
+        const auto precedes_its_node
+          = previous.has_value() && record.node_index < *previous;
+        if (repeats_its_node) {
+          Refuse(CookedDefect::kDuplicate, "node has two components of a type");
+        }
+        if (precedes_its_node) {
+          Refuse(CookedDefect::kNotCanonical,
+            "component table is not in node order");
+        }
+        previous = record.node_index;
+      }
+    }
+  });
+}
+
+auto SceneAsset::ValidateComponentOwners() const -> void
+{
+  // A node owns at most one camera and one light, and an atmosphere slot has
+  // at most one light.
+  std::unordered_set<pak::world::SceneNodeIndexT> camera_nodes;
+  const auto own_camera = [&camera_nodes](const auto& cameras) {
+    for (const auto& camera : cameras) {
+      if (!camera_nodes.insert(camera.node_index).second) {
+        Refuse(CookedDefect::kDuplicate, "node owns two cameras");
+      }
+    }
+  };
+  own_camera(GetComponents<pak::world::PerspectiveCameraRecord>());
+  own_camera(GetComponents<pak::world::OrthographicCameraRecord>());
+
+  std::unordered_set<pak::world::SceneNodeIndexT> light_nodes;
+  // Slots are indexed by wire value; an assigned slot has one owner.
+  std::array<bool, schema::kAtmosphereLightSlotMembers.size()>
+    atmosphere_slots {};
+  const auto own_light = [&](const auto& lights) {
+    for (const auto& light : lights) {
+      if (!light_nodes.insert(light.node_index).second) {
+        Refuse(CookedDefect::kDuplicate, "node owns two lights");
+      }
+      if (ClaimsATakenAtmosphereSlot(light, atmosphere_slots)) {
+        Refuse(CookedDefect::kDuplicate, "atmosphere slot has two lights");
+      }
+    }
+  };
+  own_light(GetComponents<pak::world::DirectionalLightRecord>());
+  own_light(GetComponents<pak::world::PointLightRecord>());
+  own_light(GetComponents<pak::world::SpotLightRecord>());
+
+  for (const auto& instance :
+    GetComponents<pak::world::SceneInstanceRecord>()) {
+    if (instance.scene_key.IsNil()) {
+      Refuse(CookedDefect::kMissingPart, "scene instance names no scene");
+    }
+  }
+  std::unordered_set<AssetKey> contexts;
+  for (const auto& context :
+    GetComponents<pak::world::StartingInputContextRecord>()) {
+    if (context.context_key.IsNil()) {
+      Refuse(CookedDefect::kMissingPart, "starting input context has no key");
+    }
+    if (!contexts.insert(context.context_key).second) {
+      Refuse(CookedDefect::kDuplicate, "starting input context appears twice");
     }
   }
 
   // An instanced starting camera is checked when the scene is composed.
   const auto& camera = desc_.starting_camera;
-  if (camera.node_index != pak::world::kNoStartingCamera
+  const auto names_an_own_node_without_camera
+    = camera.node_index != pak::world::kNoStartingCamera
     && camera.node_path == pak::world::kNoNodePath
-    && !camera_nodes.contains(camera.node_index)) {
-    throw std::runtime_error("SceneAsset starting camera is not a camera node");
+    && !camera_nodes.contains(camera.node_index);
+  if (names_an_own_node_without_camera) {
+    Refuse(
+      CookedDefect::kInvalidReference, "starting camera is not a camera node");
   }
+}
 
-  // Reset the node cache.
-  node_count_ = desc_.nodes.count;
-  nodes_cache_valid_ = false;
-  nodes_cache_.clear();
-
-  if (desc_.script_slots.count != 0U) {
-    const auto slots_size = uint64_t { desc_.script_slots.count }
-      * sizeof(pak::scripting::ScriptSlotRecord);
-    if (desc_.script_slots.entry_size
-        != sizeof(pak::scripting::ScriptSlotRecord)
-      || desc_.script_slots.offset < payload_end
-      || !range_ok(desc_.script_slots.offset, slots_size, data_.size())) {
-      throw std::runtime_error("SceneAsset script slot table is invalid");
+auto SceneAsset::ReadScriptTables() -> void
+{
+  using pak::scripting::ScriptParamRecord;
+  using pak::scripting::ScriptSlotRecord;
+  const auto& table = desc_.script_slots;
+  if (table.count == 0U) {
+    if (table.offset != 0U || table.entry_size != 0U) {
+      Refuse(CookedDefect::kNotCanonical,
+        "empty script slot table does not use the empty range");
     }
-    payload_end = desc_.script_slots.offset + slots_size;
-    for (const auto& slot : ReadScriptSlots(0U, desc_.script_slots.count)) {
+  } else {
+    const auto slots_size = uint64_t { table.count } * sizeof(ScriptSlotRecord);
+    if (table.entry_size != sizeof(ScriptSlotRecord)) {
+      Refuse(
+        CookedDefect::kWrongRowSize, "script slot rows are not slot records");
+    }
+    if (table.offset < payload_end_) {
+      Refuse(CookedDefect::kOverlap, "script slots overlap the tables");
+    }
+    if (!RangeFits(table.offset, slots_size, data_.size())) {
+      Refuse(
+        CookedDefect::kOutOfBounds, "script slots lie outside the descriptor");
+    }
+    payload_end_ = table.offset + slots_size;
+    // Each slot's parameters follow the slots, in slot order.
+    for (const auto& slot : ReadScriptSlots(0U, table.count)) {
       if (slot.script_asset_key.IsNil()) {
-        throw std::runtime_error("Scene script slot has no script asset");
+        Refuse(CookedDefect::kMissingPart, "script slot names no script");
       }
       if (slot.slot_id.IsNil()) {
-        throw std::runtime_error("Scene script slot has no slot ID");
+        Refuse(CookedDefect::kMissingPart, "script slot has no slot ID");
       }
-      const auto params_size = uint64_t { slot.params_count }
-        * sizeof(pak::scripting::ScriptParamRecord);
+      const auto params_size
+        = uint64_t { slot.params_count } * sizeof(ScriptParamRecord);
       if (params_size == 0U) {
         if (slot.params_array_offset != 0U) {
-          throw std::runtime_error(
-            "Empty scene script parameters must have zero offset");
+          Refuse(CookedDefect::kNotCanonical,
+            "empty script parameters do not use the empty range");
         }
         continue;
       }
-      if (slot.params_array_offset != payload_end
-        || !range_ok(slot.params_array_offset, params_size, data_.size())) {
-        throw std::runtime_error("SceneAsset script parameters must follow "
-                                 "slots without gaps or overlap");
+      if (slot.params_array_offset != payload_end_) {
+        Refuse(CookedDefect::kOverlap,
+          "script parameters do not follow the slots without gaps or overlap");
       }
-      payload_end += params_size;
+      if (!RangeFits(slot.params_array_offset, params_size, data_.size())) {
+        Refuse(CookedDefect::kOutOfBounds,
+          "script parameters lie outside the descriptor");
+      }
+      payload_end_ += params_size;
     }
-  } else if (desc_.script_slots.offset != 0U
-    || desc_.script_slots.entry_size != 0U) {
-    throw std::runtime_error(
-      "Empty scene script table must use a canonical empty range");
   }
 
-  std::vector<std::pair<uint32_t, uint32_t>> script_ranges;
+  // The scripting components own the slots, each a contiguous range of its
+  // own, together all of them.
+  std::vector<std::pair<uint32_t, uint32_t>> ranges;
   for (const auto& component :
     GetComponents<pak::scripting::ScriptingComponentRecord>()) {
-    if (component.slot_start_index > desc_.script_slots.count
-      || component.slot_count
-        > desc_.script_slots.count - component.slot_start_index) {
-      throw std::runtime_error(
-        "Scene scripting component slot range is out of bounds");
+    if (component.slot_start_index > table.count
+      || component.slot_count > table.count - component.slot_start_index) {
+      Refuse(CookedDefect::kOutOfBounds,
+        "scripting component names slots the scene does not hold");
     }
     if (component.slot_count != 0U) {
-      script_ranges.emplace_back(component.slot_start_index,
+      ranges.emplace_back(component.slot_start_index,
         component.slot_start_index + component.slot_count);
     }
     // A change of a slot's parameter names the slot by its ID.
@@ -592,142 +572,130 @@ auto SceneAsset::ParseAndValidate() -> void
     for (const auto& slot :
       ReadScriptSlots(component.slot_start_index, component.slot_count)) {
       if (!slot_ids.insert(slot.slot_id).second) {
-        throw std::runtime_error("Scene node has two script slots of one ID");
+        Refuse(CookedDefect::kDuplicate, "node has two script slots of one ID");
       }
     }
   }
-  std::ranges::sort(script_ranges);
-  uint32_t next_script_slot = 0;
-  for (const auto [begin, end] : script_ranges) {
-    if (begin != next_script_slot) {
-      throw std::runtime_error(
-        "Scene script slot ownership has gaps or overlap");
+  std::ranges::sort(ranges);
+  uint32_t next_slot = 0;
+  for (const auto [begin, end] : ranges) {
+    if (begin != next_slot) {
+      Refuse(
+        CookedDefect::kOverlap, "script slot owners leave gaps or overlap");
     }
-    next_script_slot = end;
+    next_slot = end;
   }
-  if (next_script_slot != desc_.script_slots.count) {
-    throw std::runtime_error("Scene script table contains unowned slots");
+  if (next_slot != table.count) {
+    Refuse(CookedDefect::kOverlap, "script slot table holds unowned slots");
+  }
+}
+
+auto SceneAsset::ReadEnvironment() -> void
+{
+  using pak::world::SceneEnvironmentBlockHeader;
+  using pak::world::SceneEnvironmentSystemRecordHeader;
+  // The environment block starts where the payload ends and ends the
+  // descriptor.
+  if (!RangeFits(
+        payload_end_, sizeof(SceneEnvironmentBlockHeader), data_.size())) {
+    Refuse(CookedDefect::kMissingPart, "has no environment block");
+  }
+  environment_block_header_ = ReadPackedRecord<SceneEnvironmentBlockHeader>(
+    data_.subspan(payload_end_, sizeof(SceneEnvironmentBlockHeader)),
+    "environment block header");
+  const auto& block = environment_block_header_;
+  const auto block_ends_the_descriptor
+    = block.byte_size >= sizeof(SceneEnvironmentBlockHeader)
+    && block.byte_size == data_.size() - payload_end_;
+  if (!block_ends_the_descriptor) {
+    Refuse(CookedDefect::kSizeMismatch,
+      "environment block does not end the descriptor");
+  }
+  const auto record_room
+    = (block.byte_size - sizeof(SceneEnvironmentBlockHeader))
+    / sizeof(SceneEnvironmentSystemRecordHeader);
+  if (block.systems_count > record_room) {
+    Refuse(CookedDefect::kOutOfBounds,
+      "environment block counts more records than it holds");
   }
 
-  // Optional trailing environment block (v3+ scenes).
-  // This block is not referenced by offsets in the descriptor; it begins at
-  // the end of the scene payload.
-  if (payload_end + sizeof(pak::world::SceneEnvironmentBlockHeader)
-    <= data_.size()) {
-    const auto env_header
-      = ReadPackedRecord<pak::world::SceneEnvironmentBlockHeader>(
-        data_.subspan(
-          payload_end, sizeof(pak::world::SceneEnvironmentBlockHeader)),
-        "SceneAsset environment block header");
-
-    if (env_header.byte_size
-      < sizeof(pak::world::SceneEnvironmentBlockHeader)) {
-      throw std::runtime_error(
-        "SceneAsset environment block byte_size too small");
+  const auto read_record = [this]<typename T>(const std::size_t offset,
+                             const std::span<const std::byte> bytes) {
+    auto& stored = std::get<std::optional<T>>(environment_records_);
+    if (stored.has_value()) {
+      Refuse(CookedDefect::kDuplicate, "environment holds a record twice");
     }
-
-    const size_t env_end = payload_end + env_header.byte_size;
-    if (env_end != data_.size() || env_end < payload_end) {
-      throw std::runtime_error("SceneAsset environment block out of bounds");
+    const auto record
+      = ReadPackedRecord<T>(bytes.first(sizeof(T)), "environment record");
+    if constexpr (requires { record.source; }) {
+      if (!pak::world::IsKnownSource(record.source)) {
+        Refuse(CookedDefect::kInvalidValue,
+          "sky record names a source the format does not define");
+      }
     }
-
-    has_environment_block_ = true;
-    environment_block_header_ = env_header;
-
-    environment_system_records_.reserve(env_header.systems_count);
-
-    size_t cursor
-      = payload_end + sizeof(pak::world::SceneEnvironmentBlockHeader);
-    for (uint32_t i = 0; i < env_header.systems_count; ++i) {
-      if (cursor + sizeof(pak::world::SceneEnvironmentSystemRecordHeader)
-        > env_end) {
-        throw std::runtime_error(
-          "SceneAsset environment record header out of bounds");
-      }
-
-      const auto record_header
-        = ReadPackedRecord<pak::world::SceneEnvironmentSystemRecordHeader>(
-          data_.subspan(
-            cursor, sizeof(pak::world::SceneEnvironmentSystemRecordHeader)),
-          "SceneAsset environment record header");
-
-      const uint32_t record_type = record_header.system_type;
-      const uint32_t record_size = record_header.record_size;
-
-      if (record_size
-        < sizeof(pak::world::SceneEnvironmentSystemRecordHeader)) {
-        throw std::runtime_error(
-          "SceneAsset environment record_size too small");
-      }
-
-      const size_t record_end = cursor + record_size;
-      if (record_end > env_end || record_end < cursor) {
-        throw std::runtime_error("SceneAsset environment record out of bounds");
-      }
-
-      if (!pak::world::IsValidEnvironmentRecordSize(record_header)) {
-        throw std::runtime_error("SceneAsset environment record size mismatch");
-      }
-
-      const auto bytes = data_.subspan(cursor, record_size);
-      const auto names_a_known_source = HasKnownSkySource(record_type, bytes);
-      if (!names_a_known_source) {
-        throw std::runtime_error(
-          "SceneAsset sky record names an unknown source");
-      }
-      if (record_type
-        == nostd::to_underlying(
-          pak::world::EnvironmentComponentType::kPostProcessVolume)) {
-        if (post_process_record_) {
-          throw std::runtime_error(
-            "SceneAsset contains duplicate post-process records");
+    if constexpr (std::is_same_v<T,
+                    pak::world::PostProcessVolumeEnvironmentRecord>) {
+      // The record's decoder checks that its size holds its curve keys.
+      using Key = pak::world::ExposureCompensationKeyRecord;
+      post_process_curve_.reserve(record.curve_key_count);
+      for (uint32_t index = 0; index < record.curve_key_count; ++index) {
+        const auto key = ReadPackedRecord<Key>(
+          bytes.subspan(
+            sizeof(T) + (std::size_t { index } * sizeof(Key)), sizeof(Key)),
+          "exposure compensation key");
+        if (!post_process_curve_.empty()
+          && key.metered_ev <= post_process_curve_.back().metered_ev) {
+          Refuse(CookedDefect::kNotCanonical,
+            "exposure curve EV keys do not strictly increase");
         }
-        const auto record
-          = ReadPackedRecord<pak::world::PostProcessVolumeEnvironmentRecord>(
-            bytes.first(sizeof(pak::world::PostProcessVolumeEnvironmentRecord)),
-            "SceneAsset post-process record");
-        auto key_bytes = bytes.subspan(sizeof(record));
-        post_process_curve_.reserve(record.curve_key_count);
-        for (uint32_t index = 0; index < record.curve_key_count; ++index) {
-          const auto key
-            = ReadPackedRecord<pak::world::ExposureCompensationKeyRecord>(
-              key_bytes.first(
-                sizeof(pak::world::ExposureCompensationKeyRecord)),
-              "SceneAsset exposure compensation key");
-          if (!post_process_curve_.empty()
-            && key.metered_ev <= post_process_curve_.back().metered_ev) {
-            throw std::runtime_error(
-              "SceneAsset exposure curve EV keys must be strictly increasing");
-          }
-          post_process_curve_.push_back(key);
-          key_bytes = key_bytes.subspan(sizeof(key));
-        }
-        post_process_record_ = record;
+        post_process_curve_.push_back(key);
       }
-      environment_system_records_.push_back(EnvironmentSystemRecordView {
-        .header = record_header,
-        .record_offset = cursor,
-        .bytes = bytes,
-      });
-      cursor = record_end;
     }
+    stored = record;
+    environment_system_records_.push_back(EnvironmentSystemRecordView {
+      .header = record.header,
+      .record_offset = offset,
+      .bytes = bytes,
+    });
+  };
 
-    if (cursor != env_end) {
-      throw std::runtime_error(
-        "SceneAsset environment block contains trailing bytes");
+  environment_system_records_.reserve(block.systems_count);
+  auto cursor = payload_end_ + sizeof(SceneEnvironmentBlockHeader);
+  for (uint32_t index = 0; index < block.systems_count; ++index) {
+    if (!RangeFits(
+          cursor, sizeof(SceneEnvironmentSystemRecordHeader), data_.size())) {
+      Refuse(CookedDefect::kOutOfBounds,
+        "environment record header lies outside the block");
     }
+    const auto header = ReadPackedRecord<SceneEnvironmentSystemRecordHeader>(
+      data_.subspan(cursor, sizeof(SceneEnvironmentSystemRecordHeader)),
+      "environment record header");
+    if (!pak::world::IsKnownEnvironmentSystemType(header.system_type)) {
+      Refuse(CookedDefect::kInvalidValue,
+        "environment record type is not one the format defines");
+    }
+    // A valid size holds at least the record's header.
+    if (!pak::world::IsValidEnvironmentRecordSize(header)) {
+      Refuse(CookedDefect::kSizeMismatch,
+        "environment record size is not its type's");
+    }
+    if (!RangeFits(cursor, header.record_size, data_.size())) {
+      Refuse(CookedDefect::kOutOfBounds,
+        "environment record lies outside the block");
+    }
+    const auto bytes = data_.subspan(cursor, header.record_size);
+    ForEachRecordType<SceneEnvironmentRecords>([&]<typename T> {
+      if (header.system_type
+        == nostd::to_underlying(EnvironmentTraits<T>::kType)) {
+        read_record.template operator()<T>(cursor, bytes);
+      }
+    });
+    cursor += header.record_size;
   }
-  std::unordered_set<pak::world::SceneNodeIndexT> instance_roots;
-  for (const auto& instance :
-    GetComponents<pak::world::SceneInstanceRecord>()) {
-    instance_roots.insert(instance.node_index);
+  if (cursor != data_.size()) {
+    Refuse(CookedDefect::kSizeMismatch,
+      "environment block holds bytes after its records");
   }
-  ValidateNodeIdentity();
-  if (camera.node_index != pak::world::kNoStartingCamera) {
-    ValidateNodeRef(camera, instance_roots, "starting camera");
-  }
-  ValidateScriptNodes(instance_roots);
-  ValidateOverrides(instance_roots);
 }
 
 auto SceneAsset::GetNodePath(const pak::world::NodeRef& ref) const
@@ -751,24 +719,37 @@ auto SceneAsset::ValidateNodeIdentity() const -> void
 {
   // Composition finds nodes by ID: an ID names one node of the scene.
   std::unordered_set<NodeId> ids;
-  for (const auto& node : GetNodes()) {
-    if (node.node_id.IsNil() || !ids.insert(node.node_id).second) {
-      throw std::runtime_error(
-        "SceneAsset node IDs must be set and unique in the scene");
+  for (const auto& node : nodes_) {
+    if (node.node_id.IsNil()) {
+      Refuse(CookedDefect::kMissingPart, "node has no node ID");
+    }
+    if (!ids.insert(node.node_id).second) {
+      Refuse(CookedDefect::kDuplicate, "two nodes share a node ID");
     }
   }
   const auto elements = GetComponents<pak::world::NodePathElement>();
-  for (const auto& path : GetComponents<pak::world::NodePathRecord>()) {
-    if (path.count == 0U || path.first > elements.size()
-      || path.count > elements.size() - path.first) {
-      throw std::runtime_error("SceneAsset node path range is invalid");
-    }
-  }
   if (std::ranges::any_of(
         elements, [](const pak::world::NodePathElement& element) -> bool {
           return element.node_id.IsNil();
         })) {
-    throw std::runtime_error("SceneAsset node path element has no node ID");
+    Refuse(CookedDefect::kMissingPart, "node path element has no node ID");
+  }
+  // A path names one node, so two paths name two nodes.
+  std::vector<std::vector<NodeId>> paths;
+  for (const auto& path : GetComponents<pak::world::NodePathRecord>()) {
+    if (path.count == 0U || path.first > elements.size()
+      || path.count > elements.size() - path.first) {
+      Refuse(
+        CookedDefect::kOutOfBounds, "node path runs outside its element table");
+    }
+    auto& path_ids = paths.emplace_back();
+    for (const auto& element : elements.subspan(path.first, path.count)) {
+      path_ids.push_back(element.node_id);
+    }
+  }
+  std::ranges::sort(paths);
+  if (std::ranges::adjacent_find(paths) != paths.end()) {
+    Refuse(CookedDefect::kDuplicate, "two node paths name one node");
   }
 }
 
@@ -776,20 +757,21 @@ auto SceneAsset::ValidateNodeRef(const pak::world::NodeRef& ref,
   const std::unordered_set<pak::world::SceneNodeIndexT>& instance_roots,
   const std::string_view what) const -> void
 {
-  if (ref.node_index >= desc_.nodes.count) {
-    throw std::runtime_error(
-      "SceneAsset " + std::string(what) + " names a node out of range");
+  if (ref.node_index >= nodes_.size()) {
+    Refuse(CookedDefect::kInvalidReference,
+      std::string(what) + " names a node out of range");
   }
   if (ref.node_path == pak::world::kNoNodePath) {
     return;
   }
   if (ref.node_path >= GetComponents<pak::world::NodePathRecord>().size()) {
-    throw std::runtime_error(
-      "SceneAsset " + std::string(what) + " names a node path out of range");
+    Refuse(CookedDefect::kInvalidReference,
+      std::string(what) + " names a node path out of range");
   }
   if (!instance_roots.contains(ref.node_index)) {
-    throw std::runtime_error("SceneAsset " + std::string(what)
-      + " has a node path below a node that is not an instance root");
+    Refuse(CookedDefect::kInvalidReference,
+      std::string(what)
+        + " has a node path below a node that is not an instance root");
   }
 }
 
@@ -800,6 +782,13 @@ auto SceneAsset::ValidateScriptNodes(
   using pak::scripting::ScriptParamType;
   const auto validate_param
     = [&](const pak::scripting::ScriptParamRecord& param) -> void {
+    if (!TryGetScriptParamKey(param, strings_)) {
+      Refuse(
+        CookedDefect::kInvalidString, "script parameter key is not a string");
+    }
+    if (!ToScriptParam(param, strings_)) {
+      Refuse(CookedDefect::kInvalidValue, "script parameter value is invalid");
+    }
     if (param.type == ScriptParamType::kNode
       && param.value.as_node.node_index != pak::scripting::kUnsetNodeParam) {
       ValidateNodeRef(param.value.as_node, instance_roots, "node parameter");
@@ -817,26 +806,28 @@ auto SceneAsset::ValidateScriptNodes(
   for (const auto& change :
     GetComponents<pak::scripting::ScriptParamOverrideRecord>()) {
     if (change.target.node_path == pak::world::kNoNodePath) {
-      throw std::runtime_error(
-        "SceneAsset script parameter change must name an instanced node");
+      Refuse(CookedDefect::kInconsistent,
+        "script parameter change does not name an instanced node");
     }
     ValidateNodeRef(change.target, instance_roots, "script parameter change");
-    if (change.slot_id.IsNil() || !strings_.TryGet(change.param.key_offset)
-      || (change.param.type == ScriptParamType::kString
-        && !strings_.TryGet(change.param.value.as_string_offset))) {
-      throw std::runtime_error(
-        "SceneAsset script parameter change has no slot or key");
+    if (change.slot_id.IsNil()) {
+      Refuse(CookedDefect::kMissingPart, "script parameter change has no slot");
     }
     validate_param(change.param);
     if (previous != nullptr) {
       const auto previous_key
         = strings_.TryGet(previous->param.key_offset).value_or("");
       const auto key = strings_.TryGet(change.param.key_offset).value_or("");
-      if (std::tie(previous->target, previous->slot_id, previous_key)
-        >= std::tie(change.target, change.slot_id, key)) {
-        throw std::runtime_error(
-          "SceneAsset script parameter changes must be sorted and unique per "
-          "node, slot and key");
+      const auto previous_address
+        = std::tie(previous->target, previous->slot_id, previous_key);
+      const auto address = std::tie(change.target, change.slot_id, key);
+      if (previous_address == address) {
+        Refuse(CookedDefect::kDuplicate,
+          "two script parameter changes name one node, slot and key");
+      }
+      if (previous_address > address) {
+        Refuse(CookedDefect::kNotCanonical,
+          "script parameter changes are not sorted by node, slot and key");
       }
     }
     previous = &change;
@@ -857,53 +848,60 @@ auto SceneAsset::ValidateOverrides(
   for (const auto& record : GetComponents<pak::world::OverrideRecord>()) {
     const auto* property = schema::FindOverrideProperty(record.override_id);
     if (property == nullptr) {
-      throw std::runtime_error("SceneAsset override names an unknown property");
+      Refuse(CookedDefect::kInvalidValue, "override names an unknown property");
     }
     ValidateNodeRef(record.target, instance_roots, "override");
     if (record.target.node_path == pak::world::kNoNodePath) {
       // A node of this scene stores only its overrides of its asset's values;
       // every other value lives in the node's own records.
       if (!property->asset_sourced) {
-        throw std::runtime_error(
-          "SceneAsset override names a property the node's records hold");
+        Refuse(CookedDefect::kInconsistent,
+          "override names a property the node's records hold");
       }
       // Every asset-sourced property belongs to the geometry component
       // today; a property of another component needs its own owner check.
       if (property->component_kind != std::string_view { "geometry" }) {
-        throw std::runtime_error(
-          "SceneAsset override component is not supported");
+        Refuse(CookedDefect::kInconsistent,
+          "override names a component no asset sources");
       }
       if (!renderable_nodes.contains(record.target.node_index)) {
-        throw std::runtime_error("SceneAsset override node has no renderable");
+        Refuse(
+          CookedDefect::kInvalidReference, "override node has no renderable");
       }
     }
     switch (property->part_kind) {
     case schema::PartKind::kNone:
       if (!record.part_id.IsNil() || !base::IsAllZero(record.layout_revision)) {
-        throw std::runtime_error(
-          "SceneAsset component override must not name a part");
+        Refuse(CookedDefect::kInconsistent, "component override names a part");
       }
       break;
     case schema::PartKind::kSurface:
       if (record.part_id.IsNil() || base::IsAllZero(record.layout_revision)) {
-        throw std::runtime_error(
-          "SceneAsset surface override needs its surface and layout revision");
+        Refuse(CookedDefect::kMissingPart,
+          "surface override needs its surface and layout revision");
       }
       break;
     }
-    if (previous != nullptr
-      && std::tie(previous->target, previous->override_id, previous->part_id)
-        >= std::tie(record.target, record.override_id, record.part_id)) {
-      throw std::runtime_error(
-        "SceneAsset overrides must be sorted and unique per target, property "
-        "and part");
+    if (previous != nullptr) {
+      const auto previous_address
+        = std::tie(previous->target, previous->override_id, previous->part_id);
+      const auto address
+        = std::tie(record.target, record.override_id, record.part_id);
+      if (previous_address == address) {
+        Refuse(CookedDefect::kDuplicate,
+          "two overrides name one target, property and part");
+      }
+      if (previous_address > address) {
+        Refuse(CookedDefect::kNotCanonical,
+          "overrides are not sorted by target, property and part");
+      }
     }
     previous = &record;
     ValidateOverrideValue(*property, record.value, lod_policy_used);
   }
   if (std::ranges::find(lod_policy_used, false) != lod_policy_used.end()) {
-    throw std::runtime_error(
-      "SceneAsset override LOD policy table contains unused records");
+    Refuse(CookedDefect::kInconsistent,
+      "LOD policy records and the overrides naming them do not pair");
   }
 }
 
@@ -912,9 +910,13 @@ auto SceneAsset::ValidateOverrideValue(const schema::OverrideProperty& property,
   std::vector<bool>& lod_policy_used) const -> void
 {
   const auto bytes = std::as_bytes(std::span { &value, 1 });
-  const auto unused_bytes_are_zero = [bytes](const std::size_t used) -> bool {
-    return std::ranges::all_of(bytes.subspan(used),
+  const auto require_zero_after = [bytes](const std::size_t used) -> void {
+    const auto unused_bytes_are_zero = std::ranges::all_of(bytes.subspan(used),
       [](const std::byte byte) -> bool { return byte == std::byte { 0 }; });
+    if (!unused_bytes_are_zero) {
+      Refuse(CookedDefect::kReservedNotZero,
+        "override value bytes past its type are not zero");
+    }
   };
   // The range of a change of a wired property is checked when it is applied,
   // with the record it patches.
@@ -924,158 +926,59 @@ auto SceneAsset::ValidateOverrideValue(const schema::OverrideProperty& property,
   };
   switch (property.member) {
   case schema::ValueMember::kBool:
-    if (value.as_bool > 1U || !unused_bytes_are_zero(sizeof(value.as_bool))) {
-      throw std::runtime_error("SceneAsset override bool value is invalid");
+    if (value.as_bool > 1U) {
+      Refuse(CookedDefect::kInvalidValue, "override bool value is invalid");
     }
+    require_zero_after(sizeof(value.as_bool));
     return;
   case schema::ValueMember::kInt32:
-    if (!unused_bytes_are_zero(sizeof(value.as_int32))) {
-      throw std::runtime_error("SceneAsset override int value is invalid");
-    }
+    require_zero_after(sizeof(value.as_int32));
     return;
   case schema::ValueMember::kFloat:
-    if (!finite(std::span(&value.as_float, 1))
-      || !unused_bytes_are_zero(sizeof(value.as_float))) {
-      throw std::runtime_error("SceneAsset override float value is invalid");
+    if (!finite(std::span(&value.as_float, 1))) {
+      Refuse(CookedDefect::kInvalidValue, "override float value is invalid");
     }
+    require_zero_after(sizeof(value.as_float));
     return;
   case schema::ValueMember::kVec3:
-    if (!finite(value.as_vec3)
-      || !unused_bytes_are_zero(sizeof(value.as_vec3))) {
-      throw std::runtime_error("SceneAsset override vector value is invalid");
+    if (!finite(value.as_vec3)) {
+      Refuse(CookedDefect::kInvalidValue, "override vector value is invalid");
     }
+    require_zero_after(sizeof(value.as_vec3));
     return;
   case schema::ValueMember::kQuat:
     if (!finite(value.as_quat)) {
-      throw std::runtime_error("SceneAsset override rotation is invalid");
+      Refuse(CookedDefect::kInvalidValue, "override rotation is invalid");
     }
     return;
   case schema::ValueMember::kAsset:
     if (value.as_asset.IsNil()) {
-      throw std::runtime_error("SceneAsset override asset value is nil");
+      Refuse(CookedDefect::kMissingPart, "override asset value is nil");
     }
     return;
   case schema::ValueMember::kRecordIndex: {
+    require_zero_after(sizeof(value.as_record_index));
     const auto index = value.as_record_index.get();
     const auto lod_policies = GetComponents<pak::geometry::LodPolicyRecord>();
-    if (!unused_bytes_are_zero(sizeof(value.as_record_index))
-      || index >= lod_policies.size() || lod_policy_used.at(index)
-      || !IsValidLodPolicy(lod_policies[index])) {
-      throw std::runtime_error(
-        "SceneAsset override LOD policy value is invalid");
+    if (index >= lod_policies.size()) {
+      Refuse(CookedDefect::kInvalidReference,
+        "override names a LOD policy the scene does not hold");
+    }
+    if (lod_policy_used.at(index)) {
+      Refuse(CookedDefect::kInconsistent,
+        "LOD policy records and the overrides naming them do not pair");
+    }
+    if (!IsValidLodPolicy(lod_policies[index])) {
+      Refuse(CookedDefect::kInvalidValue, "override LOD policy is invalid");
     }
     lod_policy_used.at(index) = true;
     return;
   }
   case schema::ValueMember::kStringOffset:
     // No changeable property holds a string.
-    throw std::runtime_error("SceneAsset override value type is not supported");
+    Refuse(CookedDefect::kInvalidValue, "override value type is not supported");
   }
-  throw std::runtime_error("SceneAsset override value type is unknown");
-}
-
-template <typename RecordT>
-auto SceneAsset::TryGetEnvironmentRecordAs(
-  const pak::world::EnvironmentComponentType type) const
-  -> std::optional<RecordT>
-{
-  if (!HasEnvironmentBlock()) {
-    return std::nullopt;
-  }
-
-  const auto records = GetEnvironmentSystemRecords();
-  for (const auto& record : records) {
-    if (record.header.system_type != nostd::to_underlying(type)) {
-      continue;
-    }
-
-    if (record.bytes.size() != sizeof(RecordT)) {
-      throw std::runtime_error(
-        "SceneAsset environment record size mismatch (validated by loader)");
-    }
-
-    oxygen::serio::ReadOnlyMemoryStream stream(record.bytes);
-    oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(stream);
-    auto packed = reader.ScopedAlignment(1);
-
-    RecordT decoded {};
-    const auto res = reader.ReadInto(decoded);
-    if (!res) {
-      throw std::runtime_error(
-        "SceneAsset failed to deserialize environment record");
-    }
-    return decoded;
-  }
-
-  return std::nullopt;
-}
-
-auto SceneAsset::TryGetSkyAtmosphereEnvironment() const
-  -> std::optional<pak::world::SkyAtmosphereEnvironmentRecord>
-{
-  return TryGetEnvironmentRecordAs<pak::world::SkyAtmosphereEnvironmentRecord>(
-    pak::world::EnvironmentComponentType::kSkyAtmosphere);
-}
-
-auto SceneAsset::TryGetVolumetricCloudsEnvironment() const
-  -> std::optional<pak::world::VolumetricCloudsEnvironmentRecord>
-{
-  return TryGetEnvironmentRecordAs<
-    pak::world::VolumetricCloudsEnvironmentRecord>(
-    pak::world::EnvironmentComponentType::kVolumetricClouds);
-}
-
-auto SceneAsset::TryGetFogEnvironment() const
-  -> std::optional<pak::world::FogEnvironmentRecord>
-{
-  return TryGetEnvironmentRecordAs<pak::world::FogEnvironmentRecord>(
-    pak::world::EnvironmentComponentType::kFog);
-}
-
-auto SceneAsset::TryGetSkyLightEnvironment() const
-  -> std::optional<pak::world::SkyLightEnvironmentRecord>
-{
-  if (!HasEnvironmentBlock()) {
-    return std::nullopt;
-  }
-
-  const auto records = GetEnvironmentSystemRecords();
-  for (const auto& record : records) {
-    if (record.header.system_type
-      != nostd::to_underlying(
-        pak::world::EnvironmentComponentType::kSkyLight)) {
-      continue;
-    }
-
-    if (record.bytes.size() == sizeof(pak::world::SkyLightEnvironmentRecord)) {
-      return ReadPackedRecord<pak::world::SkyLightEnvironmentRecord>(
-        record.bytes, "SceneAsset SkyLight environment record");
-    }
-    throw std::runtime_error(
-      "SceneAsset SkyLight environment record size mismatch");
-  }
-
-  return std::nullopt;
-}
-
-auto SceneAsset::TryGetSkySphereEnvironment() const
-  -> std::optional<pak::world::SkySphereEnvironmentRecord>
-{
-  return TryGetEnvironmentRecordAs<pak::world::SkySphereEnvironmentRecord>(
-    pak::world::EnvironmentComponentType::kSkySphere);
-}
-
-auto SceneAsset::TryGetPostProcessVolumeEnvironment() const
-  -> std::optional<pak::world::PostProcessVolumeEnvironmentRecord>
-{
-  return post_process_record_;
-}
-
-auto SceneAsset::TryGetBackgroundEnvironment() const
-  -> std::optional<pak::world::BackgroundEnvironmentRecord>
-{
-  return TryGetEnvironmentRecordAs<pak::world::BackgroundEnvironmentRecord>(
-    pak::world::EnvironmentComponentType::kBackground);
+  Refuse(CookedDefect::kInvalidValue, "override value type is unknown");
 }
 
 } // namespace oxygen::data

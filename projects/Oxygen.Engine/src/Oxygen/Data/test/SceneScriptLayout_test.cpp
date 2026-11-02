@@ -11,9 +11,11 @@
 #include <vector>
 
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Testing/GTest.h>
@@ -21,8 +23,10 @@
 namespace {
 namespace data = oxygen::data;
 namespace script = data::pak::scripting;
+using data::CookedDefect;
 using oxygen::cooker::testing::DescriptorDefects;
 using oxygen::cooker::testing::SceneBuilder;
+using oxygen::cooker::testing::SceneRefusal;
 using oxygen::cooker::testing::ScriptParam;
 
 constexpr uint32_t kSlotCount = 2U;
@@ -39,11 +43,6 @@ auto ValidScene() -> std::vector<std::byte>
       { ScriptParam { .key = "v", .value = static_cast<int32_t>(i) } });
   }
   return scene.Bytes();
-}
-
-auto ReadsAsScene(const std::vector<std::byte>& bytes) -> void
-{
-  static_cast<void>(data::SceneAsset({}, bytes));
 }
 
 NOLINT_TEST(SceneScriptLayoutTest, ReadsLocalSlotsAndParameters)
@@ -74,7 +73,7 @@ NOLINT_TEST(SceneScriptLayoutTest, RejectsOverlappingParameterRanges)
     = DescriptorDefects::ScriptSlotAt(bytes, 0U).params_array_offset;
   DescriptorDefects::SetScriptSlot(bytes, 1U, slot);
 
-  EXPECT_THROW(ReadsAsScene(bytes), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(bytes), CookedDefect::kOverlap);
 }
 
 NOLINT_TEST(SceneScriptLayoutTest, RejectsTruncatedParameters)
@@ -83,7 +82,7 @@ NOLINT_TEST(SceneScriptLayoutTest, RejectsTruncatedParameters)
   bytes.resize(static_cast<size_t>(
     DescriptorDefects::ScriptSlotAt(bytes, 1U).params_array_offset));
 
-  EXPECT_THROW(ReadsAsScene(bytes), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(bytes), CookedDefect::kOutOfBounds);
 }
 
 NOLINT_TEST(SceneScriptLayoutTest, RejectsUnownedSlots)
@@ -96,7 +95,7 @@ NOLINT_TEST(SceneScriptLayoutTest, RejectsUnownedSlots)
   DescriptorDefects::SetComponent(
     bytes, data::ComponentType::kScripting, 0U, component);
 
-  EXPECT_THROW(ReadsAsScene(bytes), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(bytes), CookedDefect::kOverlap);
 }
 
 NOLINT_TEST(SceneScriptLayoutTest, RejectsInvalidLocalSlotRange)
@@ -109,7 +108,7 @@ NOLINT_TEST(SceneScriptLayoutTest, RejectsInvalidLocalSlotRange)
   DescriptorDefects::SetComponent(
     bytes, data::ComponentType::kScripting, 0U, component);
 
-  EXPECT_THROW(ReadsAsScene(bytes), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(bytes), CookedDefect::kOutOfBounds);
 }
 
 NOLINT_TEST(SceneScriptLayoutTest, RejectsMissingScriptIdentity)
@@ -119,7 +118,7 @@ NOLINT_TEST(SceneScriptLayoutTest, RejectsMissingScriptIdentity)
   slot.script_asset_key = {};
   DescriptorDefects::SetScriptSlot(bytes, 0U, slot);
 
-  EXPECT_THROW(ReadsAsScene(bytes), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(bytes), CookedDefect::kMissingPart);
 }
 
 //! A change of a slot's parameter names the slot by its ID, so every slot has
@@ -135,7 +134,7 @@ NOLINT_TEST(SceneScriptLayoutTest, RejectsMissingOrRepeatedSlotIds)
   slot.slot_id = DescriptorDefects::ScriptSlotAt(valid, 1U).slot_id;
   DescriptorDefects::SetScriptSlot(repeated, 0U, slot);
 
-  EXPECT_THROW(ReadsAsScene(missing), std::runtime_error);
-  EXPECT_THROW(ReadsAsScene(repeated), std::runtime_error);
+  EXPECT_EQ(SceneRefusal(missing), CookedDefect::kMissingPart);
+  EXPECT_EQ(SceneRefusal(repeated), CookedDefect::kDuplicate);
 }
 } // namespace

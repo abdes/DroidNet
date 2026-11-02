@@ -39,6 +39,8 @@ add_library(
   "PhysicsSidecarBuilder.cpp"
   "PhysicsSidecarBuilder.h"
   "ProductLoad.h"
+  "ProductRefusal.cpp"
+  "ProductRefusal.h"
   "SceneBuilder.cpp"
   "SceneBuilder.h"
   "ScriptBuilder.cpp"

@@ -222,7 +222,6 @@ auto MainModule::RegisterEmptySceneUiTest(ImGuiTestEngine* engine) -> void
       IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
       IM_CHECK(app.active_scene_asset_pin_);
       IM_CHECK(app.active_scene_asset_pin_->GetNodes().empty());
-      IM_CHECK(app.active_scene_asset_pin_->HasEnvironmentBlock());
       const auto scene = app.GetShell().TryGetScene();
       IM_CHECK(scene && scene->GetEnvironment());
       IM_CHECK(app.ResolveRenderer());

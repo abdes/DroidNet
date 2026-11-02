@@ -6,213 +6,30 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <ranges>
-#include <string>
-#include <string_view>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
-#include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/ComponentType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
-#include <Oxygen/Data/ScriptAsset.h>
-#include <Oxygen/Serio/MemoryStream.h>
-#include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content::loaders {
 
 namespace detail {
-
-  template <typename RecordT>
-  inline auto ReadPackedRecord(const std::span<const std::byte> bytes,
-    const std::string_view what) -> RecordT
-  {
-    oxygen::serio::ReadOnlyMemoryStream stream(bytes);
-    oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(stream);
-    auto packed = reader.ScopedAlignment(1);
-
-    RecordT record {};
-    const auto res = reader.ReadInto(record);
-    if (!res) {
-      throw std::runtime_error(std::string(what) + " decode failed");
-    }
-    return record;
-  }
-
-  template <typename RecordT>
-  inline auto ValidateComponentTable(
-    const std::span<const std::byte> table_bytes,
-    const oxygen::data::pak::world::SceneComponentTable& table,
-    const uint32_t node_count) -> void
-  {
-    const auto count = table.count;
-    if (count == 0) {
-      return;
-    }
-    if (table.entry_size != sizeof(RecordT)) {
-      throw std::runtime_error("scene asset component record size mismatch");
-    }
-    if (table_bytes.size() < static_cast<size_t>(count) * sizeof(RecordT)) {
-      throw std::runtime_error("scene asset component table out of bounds");
-    }
-
-    oxygen::data::pak::world::SceneNodeIndexT prev = 0;
-    bool have_prev = false;
-    for (uint32_t i = 0; i < count; ++i) {
-      const auto record = ReadPackedRecord<RecordT>(
-        table_bytes.subspan(
-          static_cast<size_t>(i) * sizeof(RecordT), sizeof(RecordT)),
-        "scene asset component record");
-
-      if (record.node_index >= node_count) {
-        throw std::runtime_error(
-          "scene asset component node_index out of range");
-      }
-
-      if (have_prev && record.node_index < prev) {
-        throw std::runtime_error(
-          "scene asset component table must be sorted by node_index");
-      }
-      prev = record.node_index;
-      have_prev = true;
-    }
-  }
-
-  inline auto ValidateScriptingSlotRanges(
-    const std::span<const std::byte> table_bytes,
-    const oxygen::data::pak::world::SceneComponentTable& table,
-    const uint32_t global_slot_count) -> void
-  {
-    using RecordT = oxygen::data::pak::scripting::ScriptingComponentRecord;
-    const auto count = table.count;
-
-    if (count == 0) {
-      return;
-    }
-    if (table_bytes.size() < static_cast<size_t>(count) * sizeof(RecordT)) {
-      throw std::runtime_error("scene asset scripting table out of bounds");
-    }
-
-    std::vector<std::pair<uint32_t, uint32_t>> ranges;
-    ranges.reserve(count);
-
-    for (uint32_t i = 0; i < count; ++i) {
-      const auto record = ReadPackedRecord<RecordT>(
-        table_bytes.subspan(
-          static_cast<size_t>(i) * sizeof(RecordT), sizeof(RecordT)),
-        "scene asset scripting component record");
-
-      if (record.slot_start_index > global_slot_count
-        || record.slot_count > (global_slot_count - record.slot_start_index)) {
-        throw std::runtime_error(
-          "scene asset scripting slot range out of bounds");
-      }
-
-      const auto range_begin = record.slot_start_index;
-      const auto range_end = record.slot_start_index + record.slot_count;
-
-      if (range_begin != range_end) {
-        ranges.emplace_back(range_begin, range_end);
-      }
-    }
-    std::ranges::sort(ranges);
-    uint32_t next_slot = 0;
-    for (const auto [begin, end] : ranges) {
-      if (begin != next_slot) {
-        throw std::runtime_error(
-          "Scene script slot ranges contain gaps or overlap");
-      }
-      next_slot = end;
-    }
-    if (next_slot != global_slot_count) {
-      throw std::runtime_error("Scene script table contains unowned slots");
-    }
-  }
-
-  inline auto ValidateTrailingEnvironmentBlock(
-    const std::span<const std::byte> bytes, const size_t payload_end) -> void
-  {
-    if (payload_end > bytes.size()) {
-      throw std::runtime_error("scene asset payload end out of bounds");
-    }
-
-    if (payload_end
-        + sizeof(oxygen::data::pak::world::SceneEnvironmentBlockHeader)
-      > bytes.size()) {
-      return;
-    }
-
-    const auto header
-      = ReadPackedRecord<oxygen::data::pak::world::SceneEnvironmentBlockHeader>(
-        bytes.subspan(payload_end,
-          sizeof(oxygen::data::pak::world::SceneEnvironmentBlockHeader)),
-        "scene environment block header");
-
-    if (header.byte_size
-      < sizeof(oxygen::data::pak::world::SceneEnvironmentBlockHeader)) {
-      throw std::runtime_error("scene environment block byte_size too small");
-    }
-
-    const size_t env_end = payload_end + header.byte_size;
-    if (env_end > bytes.size() || env_end < payload_end) {
-      throw std::runtime_error("scene environment block out of bounds");
-    }
-
-    size_t cursor = payload_end
-      + sizeof(oxygen::data::pak::world::SceneEnvironmentBlockHeader);
-    for (uint32_t i = 0; i < header.systems_count; ++i) {
-      if (cursor
-          + sizeof(oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader)
-        > env_end) {
-        throw std::runtime_error(
-          "scene environment record header out of bounds");
-      }
-
-      const auto record_header = ReadPackedRecord<
-        oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader>(
-        bytes.subspan(cursor,
-          sizeof(oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader)),
-        "scene environment record header");
-
-      const uint32_t record_size = record_header.record_size;
-
-      if (record_size < sizeof(
-            oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader)) {
-        throw std::runtime_error("scene environment record_size too small");
-      }
-
-      const size_t record_end = cursor + record_size;
-      if (record_end > env_end || record_end < cursor) {
-        throw std::runtime_error("scene environment record out of bounds");
-      }
-
-      if (!data::pak::world::IsValidEnvironmentRecordSize(record_header)) {
-        throw std::runtime_error("scene environment record size mismatch");
-      }
-
-      cursor = record_end;
-    }
-
-    if (cursor != env_end) {
-      throw std::runtime_error("scene environment block has trailing bytes");
-    }
-  }
 
   //! Texture bindings the scene's environment records use.
   inline auto EnvironmentTextureUses(const data::SceneAsset& asset)
@@ -243,9 +60,84 @@ namespace detail {
     return uses;
   }
 
+  //! The assets an admitted scene names, by the type each must have.
+  struct SceneAssetReferences final {
+    //! What the scene's load depends on.
+    std::unordered_set<data::AssetKey> geometries;
+    std::unordered_map<data::AssetKey, data::AssetType> override_assets;
+    std::unordered_set<data::AssetKey> scripts;
+    std::unordered_map<data::AssetKey, data::AssetType> parameter_assets;
+    bool has_scripting = false;
+    //! What instantiation loads: a missing one is an issue on its instance or
+    //! context rather than a failed scene load.
+    std::unordered_set<data::AssetKey> instances;
+    std::unordered_set<data::AssetKey> contexts;
+  };
+
+  inline auto CollectSceneAssetReferences(const data::SceneAsset& asset)
+    -> SceneAssetReferences
+  {
+    namespace world = data::pak::world;
+    namespace scripting = data::pak::scripting;
+    auto references = SceneAssetReferences {};
+    for (const auto& renderable :
+      asset.GetComponents<world::RenderableRecord>()) {
+      references.geometries.insert(renderable.geometry_key);
+    }
+    for (const auto& change : asset.GetComponents<world::OverrideRecord>()) {
+      // The scene admits only overrides of properties the schema declares.
+      const auto* property
+        = data::schema::FindOverrideProperty(change.override_id);
+      if (property->type == data::schema::ValueType::kAsset
+        && !change.value.as_asset.IsNil()) {
+        DCHECK_F(property->asset_type != data::AssetType::kUnknown);
+        references.override_assets.insert_or_assign(
+          change.value.as_asset, property->asset_type);
+      }
+    }
+    const auto add_parameter
+      = [&references](const scripting::ScriptParamRecord& param) -> void {
+      if (param.type == scripting::ScriptParamType::kAsset
+        && !param.value.as_asset.key.IsNil()) {
+        references.parameter_assets.insert_or_assign(
+          param.value.as_asset.key, param.value.as_asset.asset_type);
+      }
+    };
+    for (const auto& change :
+      asset.GetComponents<scripting::ScriptParamOverrideRecord>()) {
+      add_parameter(change.param);
+    }
+    for (const auto& component :
+      asset.GetComponents<scripting::ScriptingComponentRecord>()) {
+      references.has_scripting = true;
+      for (const auto& slot : asset.ReadScriptSlots(
+             component.slot_start_index, component.slot_count)) {
+        references.scripts.insert(slot.script_asset_key);
+        for (const auto& param : asset.ReadScriptParameters(slot)) {
+          add_parameter(param);
+        }
+      }
+    }
+    for (const auto& instance :
+      asset.GetComponents<world::SceneInstanceRecord>()) {
+      references.instances.insert(instance.scene_key);
+    }
+    for (const auto& context :
+      asset.GetComponents<world::StartingInputContextRecord>()) {
+      references.contexts.insert(context.context_key);
+    }
+    return references;
+  }
+
 } // namespace detail
 
 //! Loader for scene assets.
+/*!
+ Reads the descriptor the context's reader holds, from its position to its
+ end, and admits it as a `data::SceneAsset`, which refuses a malformed scene
+ with a `data::CookedOpenError`. The loader then checks what the scene
+ references and registers what its load depends on.
+*/
 inline auto LoadSceneAsset(const LoaderContext& context)
   -> std::unique_ptr<data::SceneAsset>
 {
@@ -254,364 +146,16 @@ inline auto LoadSceneAsset(const LoaderContext& context)
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
+  auto bytes_res = reader.ReadBlob(reader.Remaining().get());
+  CheckLoaderResult(bytes_res, "scene asset", "ReadBlob(descriptor)");
 
-  // Scene descriptors are packed byte blobs.
-  // Use scoped alignment 1 to avoid any implicit alignment/padding behavior.
-  auto packed = reader.ScopedAlignment(1);
-
-  const auto base_pos_res = reader.Position();
-  CheckLoaderResult(base_pos_res, "scene asset", "Position(base)");
-  const size_t base_pos = *base_pos_res;
-
-  // Read the fixed header first so we can compute the total descriptor size.
-  data::pak::world::SceneAssetDesc desc {};
-  {
-    auto blob_res = reader.ReadBlob(sizeof(desc));
-    CheckLoaderResult(blob_res, "scene asset", "ReadBlob(SceneAssetDesc)");
-    desc = detail::ReadPackedRecord<data::pak::world::SceneAssetDesc>(
-      *blob_res, "scene asset descriptor");
-  }
-
-  if (static_cast<data::AssetType>(desc.header.asset_type)
-    != data::AssetType::kScene) {
-    throw std::runtime_error("invalid asset type for scene descriptor");
-  }
-
-  // Scene descriptor format versioning is per-asset (AssetHeader::version),
-  // independent from the PAK container format version.
-  // Scene descriptors include a trailing SceneEnvironment block (empty
-  // allowed).
-  if (desc.header.version != data::pak::world::kSceneAssetVersion) {
-    throw std::runtime_error(
-      "scene descriptor version is not current; re-cook the scene content");
-  }
-
-  // Compute the full payload size from the descriptor ranges.
-  size_t end = sizeof(data::pak::world::SceneAssetDesc);
-
-  if (desc.nodes.count > 0) {
-    if (desc.nodes.entry_size != sizeof(data::pak::world::NodeRecord)) {
-      throw std::runtime_error("scene asset node record size mismatch");
-    }
-    const size_t bytes
-      = static_cast<size_t>(desc.nodes.count) * desc.nodes.entry_size;
-    AddRangeEnd(end, desc.nodes.offset, bytes);
-  }
-
-  if (desc.header.strings.size == 0
-    || desc.header.strings.offset < sizeof(data::pak::world::SceneAssetDesc)) {
-    throw std::runtime_error("scene asset string table location is invalid");
-  }
-  AddRangeEnd(end, desc.header.strings.offset, desc.header.strings.size);
-
-  // Read the component directory entries (if any) to validate and extend end.
-  std::vector<data::pak::world::SceneComponentTableDesc> tables;
-  if (desc.component_table_count > 0) {
-    const size_t dir_bytes = static_cast<size_t>(desc.component_table_count)
-      * sizeof(data::pak::world::SceneComponentTableDesc);
-    AddRangeEnd(end, desc.component_table_directory_offset, dir_bytes);
-
-    auto seek_res
-      = reader.Seek(base_pos + desc.component_table_directory_offset);
-    CheckLoaderResult(
-      seek_res, "scene asset", "Seek(component_table_directory)");
-
-    tables.reserve(desc.component_table_count);
-    for (uint32_t i = 0; i < desc.component_table_count; ++i) {
-      auto entry_blob
-        = reader.ReadBlob(sizeof(data::pak::world::SceneComponentTableDesc));
-      CheckLoaderResult(
-        entry_blob, "scene asset", "ReadBlob(SceneComponentTableDesc)");
-      const auto entry
-        = detail::ReadPackedRecord<data::pak::world::SceneComponentTableDesc>(
-          *entry_blob, "scene component table descriptor");
-
-      if (entry.table.count > 0) {
-        const size_t bytes
-          = static_cast<size_t>(entry.table.count) * entry.table.entry_size;
-        AddRangeEnd(end, entry.table.offset, bytes);
-      }
-
-      tables.push_back(entry);
-    }
-  }
-
-  std::vector<data::pak::scripting::ScriptSlotRecord> script_slots;
-  if (desc.script_slots.count != 0U) {
-    if (desc.script_slots.entry_size
-        != sizeof(data::pak::scripting::ScriptSlotRecord)
-      || desc.script_slots.offset < end) {
-      throw std::runtime_error("Scene script slot table is invalid");
-    }
-    const auto slots_size = size_t { desc.script_slots.count }
-      * sizeof(data::pak::scripting::ScriptSlotRecord);
-    AddRangeEnd(end, desc.script_slots.offset, slots_size);
-    CheckLoaderResult(reader.Seek(base_pos + desc.script_slots.offset),
-      "scene asset", "Seek(script_slots)");
-    const auto slot_bytes = reader.ReadBlob(slots_size);
-    CheckLoaderResult(slot_bytes, "scene asset", "ReadBlob(script_slots)");
-    script_slots.reserve(desc.script_slots.count);
-    for (uint32_t i = 0; i < desc.script_slots.count; ++i) {
-      const auto slot
-        = detail::ReadPackedRecord<data::pak::scripting::ScriptSlotRecord>(
-          std::span(*slot_bytes)
-            .subspan(
-              size_t { i } * sizeof(data::pak::scripting::ScriptSlotRecord),
-              sizeof(data::pak::scripting::ScriptSlotRecord)),
-          "scene script slot");
-      if (slot.params_count != 0U) {
-        const auto params_size = size_t { slot.params_count }
-          * sizeof(data::pak::scripting::ScriptParamRecord);
-        if (slot.params_array_offset != end) {
-          throw std::runtime_error(
-            "Scene script parameters must follow the slot table in order");
-        }
-        AddRangeEnd(end, slot.params_array_offset, params_size);
-      } else if (slot.params_array_offset != 0U) {
-        throw std::runtime_error(
-          "Empty scene script parameters have nonzero offset");
-      }
-      script_slots.push_back(slot);
-    }
-  }
-
-  // Load the full descriptor payload as bytes.
-  {
-    auto seek_res = reader.Seek(base_pos);
-    CheckLoaderResult(seek_res, "scene asset", "Seek(base)");
-  }
-
-  auto blob_res = reader.ReadBlob(end);
-  CheckLoaderResult(blob_res, "scene asset", "ReadBlob(scene_payload)");
-  std::vector<std::byte> bytes = std::move(*blob_res);
-
-  const size_t payload_end = end;
-  {
-    data::pak::world::SceneEnvironmentBlockHeader env_header {};
-    const auto header_res = reader.ReadBlob(sizeof(env_header));
-    CheckLoaderResult(
-      header_res, "scene asset", "ReadBlob(scene_environment_header)");
-    env_header
-      = detail::ReadPackedRecord<data::pak::world::SceneEnvironmentBlockHeader>(
-        *header_res, "scene environment block header");
-    if (env_header.byte_size
-      < sizeof(data::pak::world::SceneEnvironmentBlockHeader)) {
-      throw std::runtime_error("scene environment block byte_size too small");
-    }
-
-    const size_t tail_size = env_header.byte_size
-      - sizeof(data::pak::world::SceneEnvironmentBlockHeader);
-    const auto tail_res = reader.ReadBlob(tail_size);
-    CheckLoaderResult(
-      tail_res, "scene asset", "ReadBlob(scene_environment_block)");
-
-    bytes.reserve(bytes.size() + sizeof(env_header) + tail_size);
-    bytes.insert(bytes.end(), (*header_res).begin(), (*header_res).end());
-    bytes.insert(bytes.end(), (*tail_res).begin(), (*tail_res).end());
-  }
-
-  // Full validation (loader responsibility).
-  const auto bytes_span = std::span<const std::byte>(bytes);
-
-  auto strings = data::DescriptorStrings {};
-  try {
-    strings = data::DescriptorStrings::FromDescriptor(
-      bytes_span, desc.header.strings);
-  } catch (const std::invalid_argument& error) {
-    throw std::runtime_error(
-      fmt::format("scene asset string table: {}", error.what()));
-  }
-  static_cast<void>(
-    ResolveDescriptorString(strings, desc.header.name_offset, "scene name"));
-  for (uint32_t index = 0; index < desc.nodes.count; ++index) {
-    const auto node = detail::ReadPackedRecord<data::pak::world::NodeRecord>(
-      bytes_span.subspan(desc.nodes.offset
-          + (static_cast<size_t>(index) * sizeof(data::pak::world::NodeRecord)),
-        sizeof(data::pak::world::NodeRecord)),
-      "scene node record");
-    if (!data::pak::world::HasCanonicalNodeFlags(node)) {
-      throw std::runtime_error("scene node flag source state is invalid");
-    }
-    if (node.parent_index >= desc.nodes.count) {
-      throw std::runtime_error("scene asset parent_index out of range");
-    }
-    static_cast<void>(ResolveDescriptorString(
-      strings, node.scene_name_offset, "scene node name"));
-  }
-
-  // Validate known component tables and (optionally) collect dependencies.
-  const uint32_t node_count = desc.nodes.count;
-  std::unordered_set<oxygen::data::AssetKey> geometry_deps;
-  // Assets the overrides name, by the asset type of their property.
-  std::unordered_map<oxygen::data::AssetKey, oxygen::data::AssetType>
-    override_asset_deps;
-  std::unordered_set<oxygen::data::AssetKey> script_deps;
-  std::unordered_map<oxygen::data::AssetKey, oxygen::data::AssetType>
-    param_asset_deps;
-  bool has_scripting_table = false;
-  // Instanced scenes and starting contexts are references, not load
-  // dependencies: instantiation loads them, and a missing one is an issue on
-  // its instance or context rather than a failed scene load.
-  std::unordered_set<oxygen::data::AssetKey> instance_refs;
-  std::unordered_set<oxygen::data::AssetKey> context_refs;
-
-  for (const auto& entry : tables) {
-    if (entry.table.count == 0) {
-      continue;
-    }
-
-    const size_t table_bytes_total
-      = static_cast<size_t>(entry.table.count) * entry.table.entry_size;
-    const auto table_bytes
-      = bytes_span.subspan(entry.table.offset, table_bytes_total);
-
-    const auto type
-      = static_cast<oxygen::data::ComponentType>(entry.component_type);
-
-    if (type == oxygen::data::ComponentType::kRenderable) {
-      detail::ValidateComponentTable<
-        oxygen::data::pak::world::RenderableRecord>(
-        table_bytes, entry.table, node_count);
-
-      // Dependency collection is identity-only.
-      for (uint32_t i = 0; i < entry.table.count; ++i) {
-        const auto record = detail::ReadPackedRecord<
-          oxygen::data::pak::world::RenderableRecord>(
-          table_bytes.subspan(static_cast<size_t>(i)
-              * sizeof(oxygen::data::pak::world::RenderableRecord),
-            sizeof(oxygen::data::pak::world::RenderableRecord)),
-          "scene renderable record");
-        geometry_deps.insert(record.geometry_key);
-      }
-    } else if (type == oxygen::data::ComponentType::kOverride) {
-      // The scene asset validates each override's target and order.
-      using Record = oxygen::data::pak::world::OverrideRecord;
-      if (entry.table.entry_size != sizeof(Record)) {
-        throw std::runtime_error("scene override record size mismatch");
-      }
-      for (uint32_t i = 0; i < entry.table.count; ++i) {
-        const auto record = detail::ReadPackedRecord<Record>(
-          table_bytes.subspan(
-            static_cast<size_t>(i) * sizeof(Record), sizeof(Record)),
-          "scene override");
-        const auto* property
-          = data::schema::FindOverrideProperty(record.override_id);
-        if (property == nullptr) {
-          throw std::runtime_error("scene override names an unknown property");
-        }
-        if (property->type == data::schema::ValueType::kAsset
-          && !record.value.as_asset.IsNil()) {
-          DCHECK_F(property->asset_type != data::AssetType::kUnknown);
-          override_asset_deps.insert_or_assign(
-            record.value.as_asset, property->asset_type);
-        }
-      }
-    } else if (type == oxygen::data::ComponentType::kScriptParamOverride) {
-      using Record = data::pak::scripting::ScriptParamOverrideRecord;
-      if (entry.table.entry_size != sizeof(Record)) {
-        throw std::runtime_error(
-          "scene script parameter change record size mismatch");
-      }
-      for (uint32_t i = 0; i < entry.table.count; ++i) {
-        const auto record = detail::ReadPackedRecord<Record>(
-          table_bytes.subspan(size_t { i } * sizeof(Record), sizeof(Record)),
-          "scene script parameter change");
-        if (!data::TryGetScriptParamKey(record.param, strings)
-          || !data::ToScriptParam(record.param, strings)) {
-          throw std::runtime_error(
-            "scene script parameter change has an invalid key or value");
-        }
-        if (record.param.type == data::pak::scripting::ScriptParamType::kAsset
-          && !record.param.value.as_asset.key.IsNil()) {
-          param_asset_deps.insert_or_assign(record.param.value.as_asset.key,
-            record.param.value.as_asset.asset_type);
-        }
-      }
-    } else if (type == oxygen::data::ComponentType::kPerspectiveCamera) {
-      detail::ValidateComponentTable<
-        oxygen::data::pak::world::PerspectiveCameraRecord>(
-        table_bytes, entry.table, node_count);
-    } else if (type == oxygen::data::ComponentType::kOrthographicCamera) {
-      detail::ValidateComponentTable<
-        oxygen::data::pak::world::OrthographicCameraRecord>(
-        table_bytes, entry.table, node_count);
-    } else if (type == oxygen::data::ComponentType::kDirectionalLight) {
-      detail::ValidateComponentTable<
-        oxygen::data::pak::world::DirectionalLightRecord>(
-        table_bytes, entry.table, node_count);
-    } else if (type == oxygen::data::ComponentType::kPointLight) {
-      detail::ValidateComponentTable<
-        oxygen::data::pak::world::PointLightRecord>(
-        table_bytes, entry.table, node_count);
-    } else if (type == oxygen::data::ComponentType::kSpotLight) {
-      detail::ValidateComponentTable<oxygen::data::pak::world::SpotLightRecord>(
-        table_bytes, entry.table, node_count);
-    } else if (type == oxygen::data::ComponentType::kSceneInstance) {
-      using Record = data::pak::world::SceneInstanceRecord;
-      detail::ValidateComponentTable<Record>(
-        table_bytes, entry.table, node_count);
-      for (uint32_t i = 0; i < entry.table.count; ++i) {
-        const auto record = detail::ReadPackedRecord<Record>(
-          table_bytes.subspan(size_t { i } * sizeof(Record), sizeof(Record)),
-          "scene instance record");
-        instance_refs.insert(record.scene_key);
-      }
-    } else if (type == oxygen::data::ComponentType::kStartingInputContext) {
-      using Record = data::pak::world::StartingInputContextRecord;
-      if (entry.table.entry_size != sizeof(Record)) {
-        throw std::runtime_error(
-          "scene starting input context record size mismatch");
-      }
-      for (uint32_t i = 0; i < entry.table.count; ++i) {
-        const auto record = detail::ReadPackedRecord<Record>(
-          table_bytes.subspan(size_t { i } * sizeof(Record), sizeof(Record)),
-          "scene starting input context");
-        context_refs.insert(record.context_key);
-      }
-    } else if (type == oxygen::data::ComponentType::kScripting) {
-      detail::ValidateComponentTable<
-        oxygen::data::pak::scripting::ScriptingComponentRecord>(
-        table_bytes, entry.table, node_count);
-      has_scripting_table = true;
-
-      detail::ValidateScriptingSlotRanges(
-        table_bytes, entry.table, desc.script_slots.count);
-      for (uint32_t i = 0; i < entry.table.count; ++i) {
-        const auto record = detail::ReadPackedRecord<
-          data::pak::scripting::ScriptingComponentRecord>(
-          table_bytes.subspan(size_t { i }
-              * sizeof(data::pak::scripting::ScriptingComponentRecord),
-            sizeof(data::pak::scripting::ScriptingComponentRecord)),
-          "scene scripting component");
-        for (const auto& slot : std::span(script_slots)
-               .subspan(record.slot_start_index, record.slot_count)) {
-          if (!slot.script_asset_key.IsNil()) {
-            script_deps.insert(slot.script_asset_key);
-          }
-          for (uint32_t p = 0; p < slot.params_count; ++p) {
-            using ParamRecord = data::pak::scripting::ScriptParamRecord;
-            const auto param = detail::ReadPackedRecord<ParamRecord>(
-              bytes_span.subspan(
-                slot.params_array_offset + (size_t { p } * sizeof(ParamRecord)),
-                sizeof(ParamRecord)),
-              "scene script parameter");
-            if (!data::TryGetScriptParamKey(param, strings)
-              || !data::ToScriptParam(param, strings)) {
-              throw std::runtime_error(
-                "scene script parameter has an invalid key or value");
-            }
-            if (param.type == data::pak::scripting::ScriptParamType::kAsset
-              && !param.value.as_asset.key.IsNil()) {
-              param_asset_deps.insert_or_assign(
-                param.value.as_asset.key, param.value.as_asset.asset_type);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  detail::ValidateTrailingEnvironmentBlock(bytes_span, payload_end);
+  auto asset = std::make_unique<data::SceneAsset>(context.current_asset_key,
+    std::move(*bytes_res),
+    data::SourceOrigin {
+      .key = context.source_key,
+      .instance = context.source_instance,
+    });
+  const auto references = detail::CollectSceneAssetReferences(*asset);
 
   if (!context.parse_only || context.dependency_collector) {
     if (!context.dependency_collector) {
@@ -620,29 +164,23 @@ inline auto LoadSceneAsset(const LoaderContext& context)
       throw std::runtime_error(
         "SceneLoader requires a DependencyCollector for async decode");
     }
-
-    for (const auto& dep : geometry_deps) {
-      context.dependency_collector->AddAssetDependency(dep);
+    auto& collector = *context.dependency_collector;
+    for (const auto& dep : references.geometries) {
+      collector.AddAssetDependency(dep);
     }
-    for (const auto& dep : override_asset_deps | std::views::keys) {
-      context.dependency_collector->AddAssetDependency(dep);
+    for (const auto& dep : references.override_assets | std::views::keys) {
+      collector.AddAssetDependency(dep);
     }
-    if (has_scripting_table) {
-      for (const auto& dep : script_deps) {
-        context.dependency_collector->AddAssetDependency(dep);
+    if (references.has_scripting) {
+      for (const auto& dep : references.scripts) {
+        collector.AddAssetDependency(dep);
       }
-      for (const auto& dep : param_asset_deps | std::views::keys) {
-        context.dependency_collector->AddAssetDependency(dep);
+      for (const auto& dep : references.parameter_assets | std::views::keys) {
+        collector.AddAssetDependency(dep);
       }
     }
   }
 
-  auto asset = std::make_unique<data::SceneAsset>(context.current_asset_key,
-    std::move(bytes),
-    data::SourceOrigin {
-      .key = context.source_key,
-      .instance = context.source_instance,
-    });
   if (context.asset_references) {
     std::vector<data::KeyReference> keys;
     const auto add_asset
@@ -653,22 +191,22 @@ inline auto LoadSceneAsset(const LoaderContext& context)
         .expected_type = type,
       });
     };
-    for (const auto& key : geometry_deps) {
+    for (const auto& key : references.geometries) {
       add_asset(key, data::AssetType::kGeometry);
     }
-    for (const auto& [key, type] : override_asset_deps) {
+    for (const auto& [key, type] : references.override_assets) {
       add_asset(key, type);
     }
-    for (const auto& key : script_deps) {
+    for (const auto& key : references.scripts) {
       add_asset(key, data::AssetType::kScript);
     }
-    for (const auto& [key, type] : param_asset_deps) {
+    for (const auto& [key, type] : references.parameter_assets) {
       add_asset(key, type);
     }
-    for (const auto& key : instance_refs) {
+    for (const auto& key : references.instances) {
       add_asset(key, data::AssetType::kScene);
     }
-    for (const auto& key : context_refs) {
+    for (const auto& key : references.contexts) {
       add_asset(key, data::AssetType::kInputMappingContext);
     }
     context.ValidateReferences(detail::EnvironmentTextureUses(*asset), keys);

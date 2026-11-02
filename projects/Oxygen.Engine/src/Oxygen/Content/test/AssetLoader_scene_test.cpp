@@ -6,10 +6,7 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <stdexcept>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "./AssetLoader_test.h"
 
@@ -19,9 +16,11 @@
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/OxCo/Co.h>
@@ -130,23 +129,6 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetLooseCookedSceneLoads)
 } // namespace
 
 NOLINT_TEST(
-  SceneVersionMigrationTest, PackedSceneV7IsRejectedBeforeDecodingRecords)
-{
-  constexpr uint8_t kRetiredSceneVersion = 7U;
-  auto bytes = oxygen::cooker::testing::SceneBuilder { "Retired" }.Bytes();
-  oxygen::cooker::testing::DescriptorDefects::SetVersion(
-    bytes, kRetiredSceneVersion);
-  try {
-    const auto scene = oxygen::data::SceneAsset { oxygen::data::AssetKey {},
-      std::move(bytes) };
-    FAIL() << "Retired scene version was accepted";
-  } catch (const std::runtime_error& error) {
-    EXPECT_THAT(
-      error.what(), ::testing::HasSubstr("unsupported descriptor version"));
-  }
-}
-
-NOLINT_TEST(
   SceneVersionMigrationTest, CurrentSceneRejectsRetiredSkyLightRecordSize)
 {
   namespace world = oxygen::data::pak::world;
@@ -157,11 +139,6 @@ NOLINT_TEST(
   auto bytes = scene.Bytes();
   oxygen::cooker::testing::DescriptorDefects::SetEnvironmentRecordSize(bytes,
     world::EnvironmentComponentType::kSkyLight, kRetiredSkyLightRecordSize);
-  try {
-    const auto asset = oxygen::data::SceneAsset { oxygen::data::AssetKey {},
-      std::move(bytes) };
-    FAIL() << "Retired SkyLight record was accepted";
-  } catch (const std::runtime_error& error) {
-    EXPECT_THAT(error.what(), ::testing::HasSubstr("environment record"));
-  }
+  EXPECT_EQ(oxygen::cooker::testing::SceneRefusal(bytes),
+    oxygen::data::CookedDefect::kSizeMismatch);
 }

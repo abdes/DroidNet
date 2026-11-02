@@ -406,14 +406,8 @@ public:
     DumpSpotLights();
     DumpLocalFogVolumes();
 
-    // v3+ scenes: validated trailing SceneEnvironment block.
-    if (!scene->HasEnvironmentBlock()) {
-      ctx.Out() << "    SceneEnvironment Block: (not present)\n\n";
-      co_return;
-    }
-
     const SceneEnvironmentBlockHeader env_header
-      = *scene->GetEnvironmentBlockHeader();
+      = scene->GetEnvironmentBlockHeader();
 
     ctx.Out() << "    SceneEnvironment Block:\n";
     PrintUtils::Field(ctx.Out(), "Byte Size", env_header.byte_size, 8);
