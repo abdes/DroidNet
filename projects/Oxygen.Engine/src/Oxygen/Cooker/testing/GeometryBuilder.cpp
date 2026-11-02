@@ -27,6 +27,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -235,7 +236,7 @@ auto GeometryBuilder::Bytes() const -> std::vector<std::byte>
     AppendRecord(bytes, surface);
   }
   data::AppendDescriptorStrings(bytes, strings);
-  StampContentHash(bytes);
+  data::StampDescriptorHash(bytes);
   const auto encoded_references = std::move(references).Build();
   detail::CheckWithLoader("geometry '" + name_ + "'", bytes, encoded_references,
     content::loaders::LoadGeometryAsset);

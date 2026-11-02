@@ -267,6 +267,7 @@ them alone, and every engine reader refuses what it cannot read.
 `Data/StableId.*`, `Data/Schema/*`, `Data/Tools/SceneSchemaCodeGen/*`,
 `Data/LightValidation.h`, `Data/LodPolicyValidation.h`,
 `Data/SurfaceInventory.*`, `Data/AssetRuntimeBindings.h`, `Data/Asset.h`,
+`Data/DescriptorHash.*`,
 `Data/ComponentType.h`, `Data/MaterialDomain.h`, `Data/MeshType.h`,
 `Data/ShaderReference.*`, `Data/SourceOrigin.h`, `Data/SurfaceId.h`,
 `Data/Vertex.h`, `Data/HalfFloat.h`, `Data/Unorm16.h`,
@@ -397,7 +398,6 @@ eviction and hot reload, which Live Preview exercises constantly.
 `Cooker/CookedVersions.*`, `Cooker/Import/Internal/LooseCooked*`
 (`LooseCookedWriter`, `LooseCookedLayout`, `LooseCookedIndexRegistry`),
 `Cooker/Import/Internal/ResourceTable*`, `Cooker/Import/Internal/Emitters/*`,
-`Cooker/Import/Internal/Utils/ContentHashUtils.h`,
 `Cooker/Import/Internal/FileSourceReader.*`,
 `Cooker/Import/Internal/SourceLayoutHash.h`; `design/proposals/cooked-sources/`.
 

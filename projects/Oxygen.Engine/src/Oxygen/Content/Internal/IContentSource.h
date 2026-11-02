@@ -95,8 +95,12 @@ public:
 
   //! A reader of the descriptor of asset `key`, positioned at its start, with
   //! positions relative to it; null when the source does not hold it.
-  [[nodiscard]] virtual auto CreateAssetDescriptorReader(
-    const data::AssetKey& key) const -> std::unique_ptr<serio::AnyReader> = 0;
+  /*!
+   @throw data::CookedOpenError when the descriptor does not record its
+     content hash.
+  */
+  [[nodiscard]] auto CreateAssetDescriptorReader(
+    const data::AssetKey& key) const -> std::unique_ptr<serio::AnyReader>;
   [[nodiscard]] auto ReadAssetReferences(const data::AssetKey& key) const
     -> data::AssetReferences
   {
@@ -213,6 +217,11 @@ private:
     physics_index_;
   [[nodiscard]] virtual auto ReadAssetReferenceMetadata(
     const data::AssetKey& key) const -> data::AssetReferences = 0;
+
+  //! A reader of the descriptor of asset `key`, as the source holds it,
+  //! positioned at its start; null when the source does not hold it.
+  [[nodiscard]] virtual auto OpenAssetDescriptor(
+    const data::AssetKey& key) const -> std::unique_ptr<serio::AnyReader> = 0;
 
   //! The row space of `resource_type`'s table: the bytes its row offsets are
   //! offsets of. A pak's offsets are offsets of the pak, so its row space is

@@ -38,17 +38,17 @@ namespace oxygen::content::import {
 //! Pipeline for CPU-bound material cooking.
 /*!
  MaterialPipeline is a compute-only pipeline used by async imports. It
- assembles `MaterialAssetDesc` payloads and optional shader references, then
- computes content hashes using the provided `co::ThreadPool` when enabled.
+ assembles `MaterialAssetDesc` payloads and optional shader references.
 
- The pipeline does not perform I/O and does not assign resource indices.
- Use `AssetEmitter` to emit cooked payloads.
+ The pipeline does not perform I/O, does not assign resource indices and does
+ not record the descriptor content hash. Use `AssetEmitter` to emit cooked
+ payloads; it records the hash.
 
  ### Work Model
 
  - Producers submit `WorkItem` objects.
- - Worker coroutines run on the import thread and offload hashing (and optional
-   build work) to the ThreadPool.
+ - Worker coroutines run on the import thread and offload build work to the
+   ThreadPool.
  - Completed `WorkResult` objects are collected on the import thread.
 
  ### Cancellation Semantics

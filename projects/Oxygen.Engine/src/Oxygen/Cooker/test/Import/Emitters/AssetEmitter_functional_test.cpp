@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
@@ -714,6 +715,23 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsDifferentContentHasDifferentHash)
   const auto& records = emitter_->Records();
   ASSERT_EQ(records.size(), 2);
   EXPECT_NE(records.at(0).descriptor_sha256, records.at(1).descriptor_sha256);
+}
+
+//! An emitted descriptor records its content hash, whatever its header held.
+NOLINT_TEST_F(AssetEmitterTest, EmitRecordsTheDescriptorContentHash)
+{
+  auto bytes = fixtures::MaterialBuilder { "test" }.Bytes();
+  fixtures::DescriptorDefects::ClearContentHash(bytes);
+
+  RunInNursery([&](co::Nursery& writes) -> Co<> {
+    auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
+    emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
+      "/.cooked/Materials/Stamped.omat", "Materials/Stamped.omat", bytes, {});
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+  });
+
+  EXPECT_EQ(ReadBytes("Materials/Stamped.omat"),
+    fixtures::MaterialBuilder { "test" }.Bytes());
 }
 
 } // namespace

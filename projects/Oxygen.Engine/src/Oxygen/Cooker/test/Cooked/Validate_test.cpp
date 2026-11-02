@@ -9,7 +9,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <span>
@@ -22,6 +21,7 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
@@ -94,9 +94,9 @@ auto WoodWithVersionShifted(const int delta) -> std::vector<std::byte>
   auto bytes = fixtures::MaterialBuilder { "Wood" }.Bytes();
   const auto read = serio::CopyAt<core::AssetHeader>(std::span { bytes });
   EXPECT_TRUE(read.has_value());
-  auto header = read.value_or(core::AssetHeader {});
-  header.version = static_cast<uint8_t>(header.version + delta);
-  std::memcpy(bytes.data(), &header, sizeof(header));
+  const auto header = read.value_or(core::AssetHeader {});
+  fixtures::DescriptorDefects::SetVersion(
+    bytes, static_cast<uint8_t>(header.version + delta));
   return bytes;
 }
 

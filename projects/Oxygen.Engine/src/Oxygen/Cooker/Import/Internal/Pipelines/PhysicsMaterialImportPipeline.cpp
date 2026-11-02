@@ -9,25 +9,19 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
-#include <span>
 #include <stop_token>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsMaterialImportPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {
 
@@ -37,19 +31,6 @@ namespace {
     -> bool
   {
     return token.stop_possible() && token.stop_requested();
-  }
-
-  auto PatchContentHash(std::vector<std::byte>& bytes,
-    const data::pak::core::ContentHashDigest& content_hash) -> void
-  {
-    constexpr auto kOffset
-      = offsetof(data::pak::physics::PhysicsMaterialAssetDesc, header)
-      + offsetof(data::pak::core::AssetHeader, content_hash);
-    if (bytes.size() < kOffset + sizeof(content_hash)) {
-      return;
-    }
-    std::ranges::copy(std::as_bytes(std::span(content_hash)),
-      std::span(bytes).subspan(kOffset).begin());
   }
 
   [[nodiscard]] auto SerializeDescriptor(
@@ -63,16 +44,13 @@ namespace {
 
 } // namespace
 
-PhysicsMaterialImportPipeline::PhysicsMaterialImportPipeline(
-  co::ThreadPool& thread_pool)
-  : PhysicsMaterialImportPipeline(thread_pool, Config {})
+PhysicsMaterialImportPipeline::PhysicsMaterialImportPipeline()
+  : PhysicsMaterialImportPipeline(Config {})
 {
 }
 
-PhysicsMaterialImportPipeline::PhysicsMaterialImportPipeline(
-  co::ThreadPool& thread_pool, Config config)
-  : thread_pool_(thread_pool)
-  , config_(config)
+PhysicsMaterialImportPipeline::PhysicsMaterialImportPipeline(Config config)
+  : config_(config)
   , input_channel_(config_.queue_capacity)
   , output_channel_(config_.queue_capacity)
 {
@@ -197,13 +175,6 @@ auto PhysicsMaterialImportPipeline::Worker() -> co::Co<>
 
     const auto cook_start = std::chrono::steady_clock::now();
     auto descriptor_bytes = SerializeDescriptor(item.descriptor, item.name);
-    const auto content_hash
-      = co_await ComputeContentHash(descriptor_bytes, item.stop_token);
-    if (!content_hash.has_value()) {
-      co_await ReportCancelled(std::move(item));
-      continue;
-    }
-    PatchContentHash(descriptor_bytes, *content_hash);
 
     auto result = WorkResult {
       .source_id = std::move(item.source_id),
@@ -222,31 +193,6 @@ auto PhysicsMaterialImportPipeline::Worker() -> co::Co<>
   }
 
   co_return;
-}
-
-auto PhysicsMaterialImportPipeline::ComputeContentHash(
-  std::vector<std::byte>& descriptor_bytes, const std::stop_token stop_token)
-  -> co::Co<std::optional<data::pak::core::ContentHashDigest>>
-{
-  if (IsStopRequested(stop_token)) {
-    co_return std::nullopt;
-  }
-
-  const auto bytes = std::span<const std::byte>(
-    descriptor_bytes.data(), descriptor_bytes.size());
-  const auto content_hash = co_await thread_pool_.Run(
-    [bytes, stop_token](
-      co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
-      if (IsStopRequested(stop_token) || canceled) {
-        return data::pak::core::ContentHashDigest {};
-      }
-      return util::ComputeContentSha256(bytes);
-    });
-
-  if (IsStopRequested(stop_token) || base::IsAllZero(content_hash)) {
-    co_return std::nullopt;
-  }
-  co_return content_hash;
 }
 
 auto PhysicsMaterialImportPipeline::ReportCancelled(WorkItem item) -> co::Co<>

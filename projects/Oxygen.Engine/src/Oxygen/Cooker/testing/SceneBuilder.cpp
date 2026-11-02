@@ -26,13 +26,13 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/NodePathTable.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -706,7 +706,7 @@ auto SceneBuilder::Bytes() const -> std::vector<std::byte>
   for (const auto& record : environment_) {
     Append(bytes, record);
   }
-  StampContentHash(bytes);
+  data::StampDescriptorHash(bytes);
 
   try {
     static_cast<void>(

@@ -280,7 +280,6 @@ set(
   "Import/Internal/TextureSourceAssembly_internal.h"
   "Import/Internal/Utils/BufferViews.h"
   "Import/Internal/Utils/SourceReadDiagnostics.h"
-  "Import/Internal/Utils/ContentHashUtils.h"
   "Import/Internal/Utils/DescriptorDocument.h"
   "Import/Internal/Utils/ImportSettingsUtils.h"
   "Import/Internal/Utils/JsonSchemaValidation.h"

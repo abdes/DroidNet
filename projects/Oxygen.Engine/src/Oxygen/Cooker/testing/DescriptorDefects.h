@@ -26,7 +26,8 @@ namespace oxygen::cooker::testing {
 /*!
  Each defect breaks one rule of its format, expressed against the descriptor
  structs, so a test of that rule keeps testing it after a format change. A
- defect leaves the header's content hash as it was; no reader checks it.
+ defect records the descriptor's new content hash, except a defect of that
+ hash.
 
  A record defect (`SetNode`, `SetComponent`, `SetScriptSlot`) writes a record
  a test read with the matching `*At` and changed in one field; a defect of a
@@ -45,6 +46,12 @@ struct DescriptorDefects final {
   //! Sets the asset type of the descriptor's header.
   static auto SetAssetType(
     std::vector<std::byte>& descriptor, data::AssetType type) -> void;
+
+  //! Clears the content hash of the descriptor's header.
+  static auto ClearContentHash(std::vector<std::byte>& descriptor) -> void;
+
+  //! Changes the content hash of the descriptor's header.
+  static auto CorruptContentHash(std::vector<std::byte>& descriptor) -> void;
 
   //! Sets the format version of the descriptor's header.
   static auto SetVersion(std::vector<std::byte>& descriptor, uint8_t version)

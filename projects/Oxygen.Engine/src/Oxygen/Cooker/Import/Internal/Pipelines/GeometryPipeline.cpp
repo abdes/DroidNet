@@ -20,7 +20,6 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
@@ -30,7 +29,6 @@
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -39,7 +37,6 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -63,10 +60,8 @@ namespace {
 
 } // namespace
 
-GeometryPipeline::GeometryPipeline(
-  co::ThreadPool& thread_pool, std::optional<Config> config)
-  : thread_pool_(thread_pool)
-  , config_(config.has_value() ? config.value() : Config {})
+GeometryPipeline::GeometryPipeline(std::optional<Config> config)
+  : config_(config.has_value() ? config.value() : Config {})
   , input_channel_(config_.queue_capacity)
   , output_channel_(config_.queue_capacity)
 {
@@ -169,12 +164,12 @@ auto GeometryPipeline::FinalizeDescriptor(
   const std::span<const std::byte> descriptor_bytes,
   const std::span<const MaterialKeyPatch> material_patches,
   std::vector<ImportDiagnostic>& diagnostics)
-  -> co::Co<std::optional<GeometryPipeline::FinalizedDescriptor>>
+  -> std::optional<GeometryPipeline::FinalizedDescriptor>
 {
   if (descriptor_bytes.empty()) {
     diagnostics.push_back(MakeErrorDiagnostic(
       "mesh.finalize_failed", "Descriptor bytes are empty", "", ""));
-    co_return std::nullopt;
+    return std::nullopt;
   }
 
   std::vector input_copy(descriptor_bytes.begin(), descriptor_bytes.end());
@@ -192,26 +187,25 @@ auto GeometryPipeline::FinalizeDescriptor(
   if (!read_pod(asset_desc)) {
     diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
       "Failed to read geometry asset descriptor", "", ""));
-    co_return std::nullopt;
+    return std::nullopt;
   }
 
   if (bindings.size() != asset_desc.lod_count) {
     diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
       "Descriptor LOD count does not match bindings", "", ""));
-    co_return std::nullopt;
+    return std::nullopt;
   }
 
   serio::MemoryStream output_stream;
   serio::Writer writer(output_stream);
   const auto pack_writer = writer.ScopedAlignment(1);
 
-  asset_desc.header.content_hash = {};
   if (!writer.WriteBlob(std::as_bytes(
         std::span<const data::pak::geometry::GeometryAssetDesc, 1>(
           &asset_desc, 1)))) {
     diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
       "Failed to write geometry asset descriptor", "", ""));
-    co_return std::nullopt;
+    return std::nullopt;
   }
 
   AssetReferenceBuilder references;
@@ -226,7 +220,7 @@ auto GeometryPipeline::FinalizeDescriptor(
     if (!patches.emplace(patch.material_key_offset, patch.key).second) {
       diagnostics.push_back(MakeErrorDiagnostic(
         "mesh.finalize_failed", "Duplicate material patch offset", "", ""));
-      co_return std::nullopt;
+      return std::nullopt;
     }
   }
 
@@ -235,7 +229,7 @@ auto GeometryPipeline::FinalizeDescriptor(
     if (!read_pod(mesh_desc)) {
       diagnostics.push_back(MakeErrorDiagnostic(
         "mesh.finalize_failed", "Failed to read mesh descriptor", "", ""));
-      co_return std::nullopt;
+      return std::nullopt;
     }
 
     const auto& binding = oxygen::base::CheckedAt(bindings, lod_i);
@@ -259,7 +253,7 @@ auto GeometryPipeline::FinalizeDescriptor(
               &mesh_desc, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "mesh.finalize_failed", "Failed to write mesh descriptor", "", ""));
-        co_return std::nullopt;
+        return std::nullopt;
       }
     } else if (static_cast<data::MeshType>(mesh_desc.mesh_type)
       == data::MeshType::kProcedural) {
@@ -268,7 +262,7 @@ auto GeometryPipeline::FinalizeDescriptor(
               &mesh_desc, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "mesh.finalize_failed", "Failed to write mesh descriptor", "", ""));
-        co_return std::nullopt;
+        return std::nullopt;
       }
 
       const auto params_size = mesh_desc.info.procedural.params_size;
@@ -277,13 +271,13 @@ auto GeometryPipeline::FinalizeDescriptor(
         if (!blob) {
           diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
             "Failed to read procedural mesh params", "", ""));
-          co_return std::nullopt;
+          return std::nullopt;
         }
         if (!writer.WriteBlob(std::as_bytes(
               std::span<const std::byte>(blob->data(), blob->size())))) {
           diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
             "Failed to write procedural mesh params", "", ""));
-          co_return std::nullopt;
+          return std::nullopt;
         }
       }
     } else {
@@ -296,7 +290,7 @@ auto GeometryPipeline::FinalizeDescriptor(
               &mesh_desc, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "mesh.finalize_failed", "Failed to write mesh descriptor", "", ""));
-        co_return std::nullopt;
+        return std::nullopt;
       }
     }
 
@@ -305,7 +299,7 @@ auto GeometryPipeline::FinalizeDescriptor(
       if (!read_pod(submesh_desc)) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "mesh.finalize_failed", "Failed to read submesh descriptor", "", ""));
-        co_return std::nullopt;
+        return std::nullopt;
       }
 
       const auto position = writer.Position();
@@ -315,7 +309,7 @@ auto GeometryPipeline::FinalizeDescriptor(
         || *position > std::numeric_limits<uint32_t>::max() - kMaterialOffset) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
           "Submesh material offset exceeds descriptor bounds", "", ""));
-        co_return std::nullopt;
+        return std::nullopt;
       }
       const auto material_offset
         = static_cast<uint32_t>(*position + kMaterialOffset);
@@ -332,7 +326,7 @@ auto GeometryPipeline::FinalizeDescriptor(
               &submesh_desc, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
           "Failed to write submesh descriptor", "", ""));
-        co_return std::nullopt;
+        return std::nullopt;
       }
 
       // MeshView records are serialized immediately after each SubMesh record.
@@ -342,7 +336,7 @@ auto GeometryPipeline::FinalizeDescriptor(
         if (!read_pod(view_desc)) {
           diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
             "Failed to read mesh view descriptor", "", ""));
-          co_return std::nullopt;
+          return std::nullopt;
         }
 
         if (!writer.WriteBlob(std::as_bytes(
@@ -350,7 +344,7 @@ auto GeometryPipeline::FinalizeDescriptor(
                 &view_desc, 1)))) {
           diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
             "Failed to write mesh view descriptor", "", ""));
-          co_return std::nullopt;
+          return std::nullopt;
         }
       }
     }
@@ -361,7 +355,7 @@ auto GeometryPipeline::FinalizeDescriptor(
     > (input_copy.size() / sizeof(data::pak::geometry::SurfaceDesc))) {
     diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
       "Geometry surface count exceeds the descriptor size", "", ""));
-    co_return std::nullopt;
+    return std::nullopt;
   }
   const auto surface_table_size = static_cast<size_t>(asset_desc.surface_count)
     * sizeof(data::pak::geometry::SurfaceDesc);
@@ -371,7 +365,7 @@ auto GeometryPipeline::FinalizeDescriptor(
       surface_table->data(), surface_table->size())))) {
     diagnostics.push_back(MakeErrorDiagnostic(
       "mesh.finalize_failed", "Failed to copy the surface table", "", ""));
-    co_return std::nullopt;
+    return std::nullopt;
   }
 
   // The descriptor string table follows the surface table; records keep their
@@ -383,13 +377,13 @@ auto GeometryPipeline::FinalizeDescriptor(
     || strings.size != input_copy.size() - strings.offset) {
     diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
       "Geometry descriptor string table does not follow its meshes", "", ""));
-    co_return std::nullopt;
+    return std::nullopt;
   }
   if (!writer.WriteBlob(std::span<const std::byte>(input_copy)
           .subspan(strings.offset, strings.size))) {
     diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
       "Failed to write geometry descriptor string table", "", ""));
-    co_return std::nullopt;
+    return std::nullopt;
   }
 
   const auto output_span = output_stream.Data();
@@ -398,35 +392,10 @@ auto GeometryPipeline::FinalizeDescriptor(
   if (!patches.empty()) {
     diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
       "Material patch does not identify a submesh material field", "", ""));
-    co_return std::nullopt;
+    return std::nullopt;
   }
 
-  const auto hash = co_await thread_pool_.Run(
-    [bytes
-      = std::span<const std::byte>(output_bytes.data(), output_bytes.size())](
-      co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
-      DLOG_F(1, "Compute content hash");
-      if (canceled) {
-        return data::pak::core::ContentHashDigest {};
-      }
-      return util::ComputeContentSha256(bytes);
-    });
-
-  if (!base::IsAllZero(hash)) {
-    asset_desc.header.content_hash = hash;
-    // The descriptor was written first, so it is patched in place.
-    const auto desc_bytes = std::as_bytes(
-      std::span<const data::pak::geometry::GeometryAssetDesc, 1>(
-        &asset_desc, 1));
-    if (output_bytes.size() < desc_bytes.size()) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-        "Failed to write geometry asset descriptor hash", "", ""));
-      co_return std::nullopt;
-    }
-    std::ranges::copy(desc_bytes, output_bytes.begin());
-  }
-
-  co_return FinalizedDescriptor {
+  return FinalizedDescriptor {
     .bytes = std::move(output_bytes),
     .references = std::move(references).Build(),
   };
@@ -459,7 +428,7 @@ auto GeometryPipeline::Worker() -> co::Co<>
 
     const auto cook_start = std::chrono::steady_clock::now();
     std::vector<ImportDiagnostic> diagnostics;
-    auto finalized = co_await FinalizeDescriptor(item.bindings,
+    auto finalized = FinalizeDescriptor(item.bindings,
       item.cooked.descriptor_bytes, item.material_patches, diagnostics);
 
     if (item.stop_token.stop_requested()) {

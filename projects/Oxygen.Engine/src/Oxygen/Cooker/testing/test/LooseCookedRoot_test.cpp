@@ -149,8 +149,8 @@ NOLINT_TEST_F(LooseCookedRootTest, PhysicsSidecarMatchesItsScene)
   EXPECT_EQ(descriptor.target_scene_key, scene);
   EXPECT_EQ(descriptor.target_node_count,
     data::SceneAsset(scene, scene_bytes).GetNodes().size());
-  const auto hash = base::ComputeSha256(scene_bytes);
-  EXPECT_TRUE(std::ranges::equal(descriptor.target_scene_content_hash, hash));
+  EXPECT_TRUE(std::ranges::equal(descriptor.target_scene_content_hash,
+    data::SceneAsset(scene, scene_bytes).GetContentHash()));
   EXPECT_THROW(
     static_cast<void>(game.PhysicsSidecar("Other.opscene", game.KeyOf("None"))),
     std::invalid_argument);

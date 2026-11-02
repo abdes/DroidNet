@@ -31,7 +31,6 @@
 #include <glm/ext/vector_uint4.hpp>
 #include <glm/geometric.hpp>
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -523,7 +522,7 @@ namespace {
       HasDiagnosticCode(result.diagnostics, "mesh.procedural_unsupported"));
   }
 
-  NOLINT_TEST_F(GeometryPipelineTest, FinalizeDescriptorPatchesIndicesAndHash)
+  NOLINT_TEST_F(GeometryPipelineTest, FinalizeDescriptorPatchesIndices)
   {
     const auto buffers = MakeTriangleMeshBuffers();
     MeshBuildPipeline::WorkResult result;
@@ -537,7 +536,7 @@ namespace {
           .queue_capacity = 4,
           .worker_count = 1,
         });
-      GeometryPipeline finalizer(pool_, GeometryPipeline::Config {});
+      GeometryPipeline finalizer(GeometryPipeline::Config {});
 
       OXCO_WITH_NURSERY(n)
       {
@@ -555,7 +554,7 @@ namespace {
           .index_buffer = data::pak::core::ResourceIndexT { 22U },
         };
 
-        finalized = co_await finalizer.FinalizeDescriptor(
+        finalized = finalizer.FinalizeDescriptor(
           std::span<const MeshBufferBindings>(&bindings, 1),
           result.cooked->descriptor_bytes,
           std::span<const GeometryPipeline::MaterialKeyPatch> {}, diagnostics);
@@ -567,13 +566,6 @@ namespace {
     ASSERT_TRUE(diagnostics.empty());
 
     const auto& bytes = finalized->bytes;
-    const auto asset_desc_read
-      = oxygen::serio::CopyAt<data::pak::geometry::GeometryAssetDesc>(
-        std::span { bytes });
-    ASSERT_HAS_VALUE(asset_desc_read);
-    const auto& asset_desc = *asset_desc_read;
-    EXPECT_FALSE(base::IsAllZero(asset_desc.header.content_hash));
-
     size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
     const auto mesh_desc_read
       = oxygen::serio::CopyAt<data::pak::geometry::MeshDesc>(

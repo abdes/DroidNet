@@ -18,9 +18,10 @@ Current implementation status snapshot:
 3. Implemented: Inline buffer cooking path — the job optionally cooks buffer
    chunks (vertex, index, skinning) declared in its own `buffers` array via
    `BufferPipeline` before descriptor finalization begins.
-4. Implemented: `GeometryPipeline::FinalizeDescriptorBytes` — patches buffer
+4. Implemented: `GeometryPipeline::FinalizeDescriptor` — patches buffer
    `ResourceIndexT` fields and material `AssetKey` fields into the pre-built
-   descriptor byte stream, then hashes the full payload.
+   descriptor byte stream. It does not hash; `AssetEmitter` records the
+   descriptor's `content_hash` on emission.
 5. Implemented: Loose-cooked emission (`.ogeo` descriptors) via
    `AssetEmitter::Emit` with `AssetType::kGeometry` routing.
 6. Implemented: Buffer sidecar dependency resolution via `.obuf` sidecar file
@@ -66,9 +67,8 @@ In scope:
    (a reference to a `.omat` file) resolved to an `AssetKey`.
 6. LOD hierarchy: 1–8 LODs, each with 1–N submeshes, each submesh with 1–N mesh
    views.
-7. Descriptor finalization: `GeometryPipeline::FinalizeDescriptorBytes` patches
-   `ResourceIndexT` placeholders and material `AssetKey` fields; optionally
-   hashes the full byte span.
+7. Descriptor finalization: `GeometryPipeline::FinalizeDescriptor` patches
+   `ResourceIndexT` placeholders and material `AssetKey` fields.
 8. Loose-cooked descriptor emission (`.ogeo`) via `LooseCookedLayout`.
 9. Binary format: `GeometryAssetDesc` (174 bytes) + `MeshDesc[lod_count]` (85
    bytes each, variable tail) + `SurfaceDesc[surface_count]` (20 bytes each) +
@@ -107,13 +107,15 @@ Out of scope:
    byte arithmetic for new logic).
 6. Buffer resource indices in the serialized descriptor MUST be initialized to
    `kNoResourceIndex` in `PrepareGeometryDescriptor` and patched by
-   `GeometryPipeline::FinalizeDescriptorBytes` using `MeshBufferBindings`. No
+   `GeometryPipeline::FinalizeDescriptor` using `MeshBufferBindings`. No
    resource index value must be hard-coded into the pre-built descriptor bytes.
 7. Material `AssetKey` fields in `SubMeshDesc` are embedded during
    `PrepareGeometryDescriptor` (resolved at cook time) and are NOT re-patched by
-   `FinalizeDescriptorBytes` unless supplied as `MaterialKeyPatch` entries.
-8. Content hashing uses the full finalized byte span (all struct types) and is
-   always computed.
+   `FinalizeDescriptor` unless supplied as `MaterialKeyPatch` entries.
+8. The descriptor's `header.content_hash` is the SHA-256 of the full finalized
+   byte span (all struct types) with that field zeroed. `AssetEmitter` records
+   it on emission (`data::StampDescriptorHash`); loaders and
+   `content::ValidateAssetDescriptor` refuse a descriptor without it.
 9. `GeometryAssetDesc`, `MeshDesc`, `SubMeshDesc`, and `MeshViewDesc` binary
    layouts MUST NOT be modified without incrementing `kGeometryAssetVersion` and
    updating the `static_assert(sizeof(...))` guards.
@@ -238,8 +240,8 @@ flowchart LR
   end
 
   subgraph Finalization
-    O[GeometryPipeline\nFinalizeDescriptorBytes]
-    P["Patch ResourceIndexT fields\nPatch MaterialKeyPatch fields\nContentHash (optional)"]
+    O[GeometryPipeline\nFinalizeDescriptor]
+    P["Patch ResourceIndexT fields\nPatch MaterialKeyPatch fields"]
   end
 
   subgraph Output
@@ -269,10 +271,11 @@ Architectural split:
 1. The import job owns: inline buffer cooking (optional), descriptor byte
    assembly, buffer sidecar resolution, material key resolution, and final
    emission.
-2. `GeometryPipeline::FinalizeDescriptorBytes` is a self-contained utility that
-   patches a pre-built descriptor byte stream with live resource indices and
-   hashes it. It does not maintain queued pipeline state for the
-   descriptor-driven path (it is used inline, not via Submit/Collect).
+2. `GeometryPipeline::FinalizeDescriptor` is a self-contained synchronous
+   utility that patches a pre-built descriptor byte stream with live resource
+   indices and material keys. It does not hash. It does not maintain queued
+   pipeline state for the descriptor-driven path (it is used inline, not via
+   Submit/Collect).
 3. Runtime loading reads the descriptor field-by-field (packed alignment=1),
    creates buffer resource dependencies asynchronously, and registers submesh
    material `AssetKey` dependencies — no cooking at load time.
@@ -315,20 +318,23 @@ Architectural split:
      descriptor JSON, (2) optionally cooks inline buffers via `BufferPipeline`
      and caches their emitted sidecars, (3) calls `PrepareGeometryDescriptor` to
      build the binary descriptor with placeholder resource indices, (4) calls
-     `GeometryPipeline::FinalizeDescriptorBytes` to patch indices and hash, (5)
-     emits the `.ogeo` file via `AssetEmitter`.
+     `GeometryPipeline::FinalizeDescriptor` to patch indices and material keys,
+     (5) emits the `.ogeo` file via `AssetEmitter`, which records the
+     descriptor's `content_hash`.
    - stages: `ReParseDescriptor` → `ValidateSchema` → `LoadMountedInspections` →
      `CookInlineBuffers` (if `buffers` present) → `PrepareGeometryDescriptor` →
-     `FinalizeDescriptorBytes` → `EmitAsset` → `FinalizeSession`.
+     `FinalizeDescriptor` → `EmitAsset` → `FinalizeSession`.
 
 4. **Pipeline:** `oxygen::content::import::GeometryPipeline`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h`
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.cpp`
-   - role: finalization pipeline. Provides `FinalizeDescriptorBytes` as a
-     stateless utility (reads back the pre-built bytes, patches buffer
-     `ResourceIndexT` fields and optional material `AssetKey` fields, zeroes
-     `content_hash`, re-serializes, and hashes on a thread pool).
+   - role: finalization pipeline. Provides `FinalizeDescriptor` as a
+     synchronous stateless utility (reads back the pre-built bytes, patches
+     buffer `ResourceIndexT` fields and optional material `AssetKey` fields,
+     and re-serializes; no hashing). The constructor is
+     `explicit GeometryPipeline(std::optional<Config> config = {})` and takes
+     no `ThreadPool`.
      Also implements bounded-channel Submit/Collect workers for future use with
      `MeshBuildPipeline::CookedGeometryPayload`.
    - config: default `queue_capacity=16`, `worker_count=1` (from
@@ -340,7 +346,7 @@ Architectural split:
      `joint_weight_buffer`, `inverse_bind_buffer`, `joint_remap_buffer` (all
      `ResourceIndexT`, default `kNoResourceIndex`).
    - role: carries the resolved buffer resource indices for one LOD from the job
-     to `FinalizeDescriptorBytes`.
+     to `FinalizeDescriptor`.
 
 6. **Pipeline Types - Stream View:** `oxygen::content::import::MeshStreamView`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
@@ -823,27 +829,26 @@ Produces `PreparedGeometryDescriptor` (raw descriptor bytes +
 
 ### 8.3 Post-Descriptor Stages (in `ExecuteAsync`, after `PrepareGeometryDescriptor`)
 
-| Step | Function                  | Action                                                                                                                                                                                                                                                   |
-| ---- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 13   | `FinalizeDescriptorBytes` | `GeometryPipeline::FinalizeDescriptorBytes(bindings, descriptor_bytes, material_patches, diagnostics)` — re-reads `GeometryAssetDesc`, for each LOD reads `MeshDesc` and patches the corresponding `MeshBufferBindings`; re-serializes; hashes full span |
-| 14   | `EmitAsset`               | `session.AssetEmitter().Emit(geometry_key, AssetType::kGeometry, virtual_path, descriptor_relpath, *finalized_bytes)`                                                                                                                                    |
+| Step | Function             | Action                                                                                                                                                                                                                                                                         |
+| ---- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 13   | `FinalizeDescriptor` | `GeometryPipeline::FinalizeDescriptor(bindings, descriptor_bytes, material_patches, diagnostics)` returns `std::optional<FinalizedDescriptor>` — re-reads `GeometryAssetDesc`, for each LOD reads `MeshDesc` and patches the corresponding `MeshBufferBindings`; re-serializes |
+| 14   | `EmitAsset`          | `session.AssetEmitter().Emit(geometry_key, AssetType::kGeometry, virtual_path, descriptor_relpath, *finalized_bytes)`; the emitter records `header.content_hash`                                                                                                               |
 
-### 8.4 `GeometryPipeline::FinalizeDescriptorBytes` Internal Steps
+### 8.4 `GeometryPipeline::FinalizeDescriptor` Internal Steps
 
 1. Parse `GeometryAssetDesc` from `descriptor_bytes`.
 2. Verify `bindings.size() == asset_desc.lod_count`.
-3. Zero `asset_desc.header.content_hash`, re-write `GeometryAssetDesc`.
-4. For each LOD: read `MeshDesc`; patch buffer resource index fields
+3. For each LOD: read `MeshDesc`; patch buffer resource index fields
    (`vertex_buffer`, `index_buffer`, and skinning fields) from `bindings[i]`,
    skipping `kNoResourceIndex` entries; re-write `MeshDesc`. Forward over any
    procedural param blob. Forward over `SubMeshDesc[]` and `MeshViewDesc[]`.
-5. Apply any `MaterialKeyPatch` entries by writing `AssetKey` at the specified
+4. Apply any `MaterialKeyPatch` entries by writing `AssetKey` at the specified
    byte offset.
-6. Copy the `SurfaceDesc[surface_count]` table unchanged; the string table
+5. Copy the `SurfaceDesc[surface_count]` table unchanged; the string table
    follows it at the same offset.
-7. Compute the SHA-256 (`ContentHashDigest`) over the finalized byte span on the
-   thread pool; patch `content_hash` at its fixed offset in the re-written
-   `GeometryAssetDesc.header`.
+
+The function leaves `header.content_hash` untouched; `AssetEmitter` records it
+when the finalized bytes are emitted.
 
 ---
 
@@ -859,7 +864,7 @@ struct AssetHeader {
   StringTableOffsetT name_offset = 0;  // geometry name
   uint8_t version = 0;                 // kGeometryAssetVersion
   uint8_t streaming_priority = 0;      // 0 = highest
-  ContentHashDigest content_hash = {}; // SHA-256, set by finalization
+  ContentHashDigest content_hash = {}; // SHA-256, set by AssetEmitter
   uint32_t variant_flags = 0;          // geometry attribute mask
 };
 #pragma pack(pop)
@@ -1140,8 +1145,8 @@ Key contracts:
 1. `GeometryAsset` does not own GPU handles. Vertex/index buffer upload and GPU
    resource creation are the renderer's responsibility via the resolved
    `BufferResource` dependencies.
-2. `content_hash` is the SHA-256 of the descriptor; importers deduplicate by it
-   during incremental imports. The buffer descriptor input carries no
+2. `content_hash` is the SHA-256 of the whole descriptor with that field
+   zeroed, recorded by `AssetEmitter`. The buffer descriptor input carries no
    `content_hash`: `BufferPipeline` computes each buffer's SHA-256.
 3. Procedural mesh geometry is fully regenerated at load time; no GPU buffers
    are registered as resource dependencies for procedural LODs.
@@ -1149,7 +1154,7 @@ Key contracts:
    without allocating vertex/index memory (standard/skinned) or resolving buffer
    dependencies.
 5. The buffer resource indices in `MeshDesc.info.standard/skinned` carry the
-   fully resolved `ResourceIndexT` values written by `FinalizeDescriptorBytes`.
+   fully resolved `ResourceIndexT` values written by `FinalizeDescriptor`.
    The runtime does NOT re-derive these; it reads them directly from the file.
 6. `kNoResourceIndex` sentinel values in buffer fields are skipped by both
    `AddResourceDependency` and the renderer; they indicate an absent or optional

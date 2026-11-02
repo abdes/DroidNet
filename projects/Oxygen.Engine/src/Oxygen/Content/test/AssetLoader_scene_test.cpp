@@ -4,9 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
+#include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "./AssetLoader_test.h"
 
@@ -44,9 +49,18 @@ using oxygen::data::SceneAsset;
 
 namespace {
 
+//! The descriptor of a scene with a single root node.
+auto SingleRootNodeScene() -> std::vector<std::byte>
+{
+  auto scene = oxygen::cooker::testing::SceneBuilder { "test" };
+  scene.Node("root");
+  return scene.Bytes();
+}
+
 auto WriteLooseCookedSceneWithSingleRootNode(
   const std::filesystem::path& cooked_root,
-  const oxygen::data::AssetKey& scene_key) -> void
+  const oxygen::data::AssetKey& scene_key,
+  std::vector<std::byte> descriptor = SingleRootNodeScene()) -> void
 {
   using oxygen::data::AssetType;
 
@@ -57,7 +71,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   root.Add({
     .type = AssetType::kScene,
     .leaf = "TestScene.scene",
-    .descriptor = scene.Bytes(),
+    .descriptor = std::move(descriptor),
     .references = scene.References(),
     .key = scene_key,
   });
@@ -65,7 +79,37 @@ auto WriteLooseCookedSceneWithSingleRootNode(
 }
 
 //! Fixture for AssetLoader dependency tests
-class AssetLoaderSceneTest : public AssetLoaderBasicTest { };
+class AssetLoaderSceneTest : public AssetLoaderBasicTest {
+protected:
+  //! The scene `scene_key` an AssetLoader loads from the loose cooked root
+  //! `cooked_root`; null when it refuses it.
+  static auto LoadLooseCookedScene(const std::filesystem::path& cooked_root,
+    const oxygen::data::AssetKey& scene_key) -> std::shared_ptr<SceneAsset>
+  {
+    TestEventLoop el;
+    auto scene = std::shared_ptr<SceneAsset> {};
+    oxygen::co::Run(el,
+      [](std::filesystem::path cooked_root, oxygen::data::AssetKey scene_key,
+        TestEventLoop* loop, std::shared_ptr<SceneAsset>* scene) -> Co<> {
+        oxygen::co::ThreadPool pool(*loop, 2);
+        AssetLoaderConfig config {};
+        config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+        AssetLoader loader(Tag::Get(), config);
+        loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
+
+        OXCO_WITH_NURSERY(n)
+        {
+          co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+          loader.Run();
+          loader.AddLooseCookedRoot(cooked_root);
+          *scene = co_await loader.LoadAssetAsync<SceneAsset>(scene_key);
+          loader.Stop();
+          co_return oxygen::co::kJoin;
+        };
+      }(cooked_root, scene_key, &el, &scene));
+    return scene;
+  }
+};
 
 //=== AssetLoader Scene Loading Tests ===-----------------------------------//
 
@@ -83,47 +127,41 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetLooseCookedSceneLoads)
     = oxygen::data::AssetKey::FromVirtualPath("/test/test_scene_loose.asset");
   WriteLooseCookedSceneWithSingleRootNode(cooked_root, scene_key);
 
-  TestEventLoop el;
+  // Act
+  const auto scene = LoadLooseCookedScene(cooked_root, scene_key);
 
-  // Act + Assert
-  oxygen::co::Run(el,
-    [](std::filesystem::path cooked_root, oxygen::data::AssetKey scene_key,
-      TestEventLoop* loop) -> Co<> {
-      auto& el = *loop;
-      using oxygen::content::AssetLoader;
-      using oxygen::content::AssetLoaderConfig;
-      using oxygen::data::SceneAsset;
+  // Assert
+  ASSERT_THAT(scene, NotNull());
+  EXPECT_EQ(scene->GetNodes().size(), 1);
+  EXPECT_EQ(scene->GetNodeName(scene->GetRootNode()), "root");
+  EXPECT_TRUE(
+    scene->GetComponents<oxygen::data::pak::world::RenderableRecord>().empty());
+}
 
-      oxygen::co::ThreadPool pool(el, 2);
-      AssetLoaderConfig config {};
-      config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-      AssetLoader loader(Tag::Get(), config);
+//! The loader refuses a scene whose descriptor does not record its content
+//! hash, as it does any asset descriptor: the load fails with that defect.
+NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetRefusesASceneWithAStaleHash)
+{
+  // Arrange
+  const auto cooked_root = TempDir() / "loose_cooked_stale_scene";
+  const auto scene_key
+    = oxygen::data::AssetKey::FromVirtualPath("/test/test_scene_stale.asset");
+  auto descriptor = SingleRootNodeScene();
+  oxygen::cooker::testing::DescriptorDefects::CorruptContentHash(descriptor);
+  WriteLooseCookedSceneWithSingleRootNode(
+    cooked_root, scene_key, std::move(descriptor));
 
-      loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
+  // Act
+  auto failure = std::optional<oxygen::data::CookedDefect> {};
+  try {
+    static_cast<void>(LoadLooseCookedScene(cooked_root, scene_key));
+  } catch (const oxygen::data::CookedOpenError& error) {
+    failure = error.Defect();
+  }
 
-      OXCO_WITH_NURSERY(n)
-      {
-        co_await n.Start(&AssetLoader::ActivateAsync, &loader);
-        loader.Run();
-
-        loader.AddLooseCookedRoot(cooked_root);
-
-        const auto scene
-          = co_await loader.LoadAssetAsync<SceneAsset>(scene_key);
-        EXPECT_THAT(scene, NotNull());
-
-        if (scene) {
-          EXPECT_EQ(scene->GetNodes().size(), 1);
-          EXPECT_EQ(scene->GetNodeName(scene->GetRootNode()), "root");
-          EXPECT_TRUE(
-            scene->GetComponents<oxygen::data::pak::world::RenderableRecord>()
-              .empty());
-        }
-
-        loader.Stop();
-        co_return oxygen::co::kJoin;
-      };
-    }(cooked_root, scene_key, &el));
+  // Assert
+  ASSERT_HAS_VALUE(failure);
+  EXPECT_EQ(*failure, oxygen::data::CookedDefect::kDigestMismatch);
 }
 
 } // namespace

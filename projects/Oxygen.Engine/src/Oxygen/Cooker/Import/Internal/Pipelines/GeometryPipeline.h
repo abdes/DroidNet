@@ -27,7 +27,6 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {
 
@@ -88,7 +87,7 @@ public:
     //! Cooked geometry payload.
     std::optional<MeshBuildPipeline::CookedGeometryPayload> cooked;
 
-    //! Finalized descriptor bytes (patched + hashed).
+    //! Finalized descriptor bytes (patched).
     FinalizedDescriptor descriptor;
 
     //! Any diagnostics produced during processing.
@@ -101,8 +100,7 @@ public:
     bool success = false;
   };
 
-  OXGN_COOK_API explicit GeometryPipeline(
-    co::ThreadPool& thread_pool, std::optional<Config> config = {});
+  OXGN_COOK_API explicit GeometryPipeline(std::optional<Config> config = {});
 
   OXGN_COOK_API ~GeometryPipeline() override;
 
@@ -157,19 +155,18 @@ public:
     return config_.queue_capacity;
   }
 
-  //! Patch buffer indices and compute descriptor content hash.
+  //! Patch buffer indices and material keys into the descriptor.
   OXGN_COOK_NDAPI auto FinalizeDescriptor(
     std::span<const MeshBufferBindings> bindings,
     std::span<const std::byte> descriptor_bytes,
     std::span<const MaterialKeyPatch> material_patches,
     std::vector<ImportDiagnostic>& diagnostics)
-    -> co::Co<std::optional<FinalizedDescriptor>>;
+    -> std::optional<FinalizedDescriptor>;
 
 private:
   [[nodiscard]] auto Worker() -> co::Co<>;
   auto ReportCancelled(WorkItem item) -> co::Co<>;
 
-  co::ThreadPool& thread_pool_;
   Config config_;
 
   co::Channel<WorkItem> input_channel_;

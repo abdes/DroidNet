@@ -22,6 +22,7 @@
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -91,7 +92,7 @@ namespace {
     const auto params = std::as_bytes(std::span(records));
     encoded.bytes.insert(encoded.bytes.end(), params.begin(), params.end());
     data::AppendDescriptorStrings(encoded.bytes, strings);
-    StampContentHash(encoded.bytes);
+    data::StampDescriptorHash(encoded.bytes);
     return encoded;
   }
 

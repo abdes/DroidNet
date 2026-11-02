@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -15,7 +14,6 @@
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -27,21 +25,6 @@ struct DescriptorFixture final {
   std::vector<std::byte> bytes;
   data::AssetReferences references;
 };
-
-//! Records in the asset header of the descriptor `bytes` the SHA-256 of
-//! its bytes, taken with that field zeroed, as a cook does.
-inline auto StampContentHash(std::vector<std::byte>& bytes) -> void
-{
-  constexpr auto kOffset = offsetof(data::pak::core::AssetHeader, content_hash);
-  constexpr auto kSize = sizeof(data::pak::core::AssetHeader::content_hash);
-  if (bytes.size() < kOffset + kSize) {
-    throw std::invalid_argument("descriptor is smaller than its header");
-  }
-  const auto field = std::span(bytes).subspan(kOffset, kSize);
-  std::ranges::fill(field, std::byte { 0 });
-  const auto hash = base::ComputeSha256(bytes);
-  std::ranges::copy(std::as_bytes(std::span(hash)), field.begin());
-}
 
 template <typename T>
 auto AppendRecord(std::vector<std::byte>& bytes, const T& record) -> void

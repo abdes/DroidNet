@@ -4,26 +4,33 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <unordered_map>
 #include <utility>
 
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/ResourceTypes.h>
+#include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PhysicsResource.h>
-#include <Oxygen/Data/ScriptResource.h>
-#include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/ByteReader.h>
+#include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Region.h>
+#include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::internal {
 
@@ -54,6 +61,26 @@ auto IContentSource::PayloadWithin(
   return *payload;
 }
 
+auto IContentSource::CreateAssetDescriptorReader(
+  const data::AssetKey& key) const -> std::unique_ptr<serio::AnyReader>
+{
+  auto reader = OpenAssetDescriptor(key);
+  if (!reader) {
+    return nullptr;
+  }
+  const auto bytes = reader->ReadBlob(reader->Remaining().get());
+  if (!bytes) {
+    throw std::system_error(
+      bytes.error(), "Could not read asset descriptor " + data::to_string(key));
+  }
+  data::CheckDescriptorHash(*bytes);
+  if (const auto rewound = reader->Seek(0); !rewound) {
+    throw std::system_error(rewound.error(),
+      "Could not rewind asset descriptor " + data::to_string(key));
+  }
+  return reader;
+}
+
 auto IContentSource::ResourceDescriptorBytes(
   const TypeId resource_type, const data::pak::core::ResourceIndexT index) const
   -> std::optional<std::span<const std::byte>>
@@ -61,7 +88,7 @@ auto IContentSource::ResourceDescriptorBytes(
   using Row = std::optional<std::span<const std::byte>>;
   return VisitResourceType(
     resource_type,
-    [&]<typename T>() -> Row {
+    [&]<typename T> -> Row {
       const auto* table = TableOf<T>();
       if (table == nullptr) {
         return std::nullopt;
@@ -74,7 +101,7 @@ auto IContentSource::ResourceDescriptorBytes(
       }
       return space.subspan(static_cast<size_t>(*offset), kSize);
     },
-    []() -> Row { return std::nullopt; });
+    [] -> Row { return std::nullopt; });
 }
 
 auto IContentSource::FindTextureVirtualPath(const data::AssetKey& key) const

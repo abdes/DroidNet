@@ -135,10 +135,6 @@ private:
     std::shared_ptr<data::PhysicsSceneAsset> physics_asset);
   //! Resolve the mandatory physics sidecar key for the scene.
 
-  //! Validate strict scene/physics identity invariants.
-  void ValidatePhysicsSidecarIdentity(const data::SceneAsset& scene_asset,
-    const data::PhysicsSceneAsset& physics_asset,
-    const data::AssetKey& sidecar_key) const;
   //! Track module lifecycle and cache PhysicsModule when available.
   void OnModuleAttached(const engine::ModuleEvent& event);
   //! Resolve a live PhysicsModule instance, refreshing cached pointer.

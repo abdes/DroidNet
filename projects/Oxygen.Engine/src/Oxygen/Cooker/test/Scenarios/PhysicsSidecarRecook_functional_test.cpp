@@ -44,6 +44,7 @@
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -951,8 +952,7 @@ NOLINT_TEST_F(PhysicsComplexSceneTest,
   const auto scene_bytes
     = oxygen::cooker::test::ReadBytes(Path("Scenes/ComplexScene.oscene"));
   ASSERT_FALSE(scene_bytes.empty());
-  const auto scene_hash = base::ComputeSha256(
-    std::span<const std::byte>(scene_bytes.data(), scene_bytes.size()));
+  const auto scene_hash = data::ComputeDescriptorHash(scene_bytes);
   if (!parsed_sidecar_.has_value()) {
     FAIL() << "Expected the sidecar to be parsed";
   }

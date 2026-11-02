@@ -398,7 +398,7 @@ struct PhysicsSceneAssetDesc {
   uint32_t component_table_count = 0;
   //!< Offset to PhysicsComponentTableDesc[]
   core::OffsetT component_table_directory_offset = 0;
-  //!< SHA-256 of paired .oscene payload
+  //!< Content hash of the paired scene, as its asset header records it
   uint8_t target_scene_content_hash[32] = {};
   //!< The backend the bindings' backend scalars are for; never `kNone`
   PhysicsBackend backend = PhysicsBackend::kNone;

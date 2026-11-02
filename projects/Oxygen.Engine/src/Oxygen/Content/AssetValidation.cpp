@@ -23,6 +23,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -45,6 +46,7 @@ auto ValidateAssetDescriptor(const data::AssetType type,
     || header.asset_type != static_cast<uint8_t>(type)) {
     throw std::runtime_error("Asset descriptor type/version is invalid");
   }
+  data::CheckDescriptorHash(bytes);
   serio::ReadOnlyMemoryStream stream(bytes);
   serio::Reader reader(stream);
   const LoaderContext context {

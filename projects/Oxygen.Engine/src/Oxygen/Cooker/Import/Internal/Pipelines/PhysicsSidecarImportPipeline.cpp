@@ -79,7 +79,6 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Constants.h>
@@ -89,6 +88,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -203,18 +203,6 @@ namespace {
     }
     value.append(kPhysicsSuffix);
     return value;
-  }
-
-  auto PatchContentHash(std::vector<std::byte>& bytes,
-    const data::pak::core::ContentHashDigest& hash) -> void
-  {
-    constexpr auto kOffset
-      = offsetof(data::pak::core::AssetHeader, content_hash);
-    if (bytes.size() < kOffset + sizeof(hash)) {
-      return;
-    }
-    std::memcpy(std::span { bytes }.subspan(kOffset, sizeof(hash)).data(),
-      &hash, sizeof(hash));
   }
 
   struct RigidBodyBindingSource final {
@@ -3077,7 +3065,7 @@ namespace {
     payload.data.assign(blob_bytes.begin(), blob_bytes.end());
     payload.format = format;
     payload.alignment = 16;
-    payload.content_hash = util::ComputeContentSha256(payload.data);
+    payload.content_hash = base::ComputeSha256(payload.data);
     return payload;
   }
 
@@ -3351,7 +3339,7 @@ namespace {
     // backend-scalar union is the one written.
     desc.backend = PakBackendOf(backend);
     const auto scene_hash
-      = base::ComputeSha256(scene_state.source_scene_descriptor);
+      = data::ComputeDescriptorHash(scene_state.source_scene_descriptor);
     std::copy_n(scene_hash.begin(), std::size(desc.target_scene_content_hash),
       std::begin(desc.target_scene_content_hash));
     desc.component_table_count = static_cast<uint32_t>(tables.size());
@@ -3426,7 +3414,6 @@ namespace {
     const auto stream_data = stream.Data();
     auto bytes = std::vector<std::byte>(stream_data.begin(), stream_data.end());
     data::AppendDescriptorStrings(bytes, strings);
-    PatchContentHash(bytes, util::ComputeContentSha256(bytes));
     return bytes;
   }
 

@@ -274,11 +274,17 @@ remain valid through generation replacement.
     storage with no intermediate scene graph. The job owns the storage and
     registers plan items and dependencies via `ImportPlanner`.
 
-14. **ThreadPool-Only content_hash**: `content_hash` is computed only on the
-    ThreadPool, and always. The invariant is that all dependencies are ready
-    and the full descriptor payload is known before hashing. Resource hashes
-    are full SHA-256 digests (`ContentHashDigest`) computed from the bytes the
-    producer holds; no import reads a data file again to hash it.
+14. **Hash Ownership**: the descriptor header `content_hash` is recorded by
+    `AssetEmitter::Emit`/`EmitSync` in every descriptor they emit, through
+    `data::StampDescriptorHash` (SHA-256 of the whole descriptor with that
+    field zeroed). Pipelines have no descriptor-hash step. Loaders and
+    `content::ValidateAssetDescriptor` refuse a descriptor whose header does
+    not record it (`kMissingDigest` / `kDigestMismatch`). Resource payload
+    `content_hash` values are computed only on the ThreadPool, and always. The
+    invariant is that all dependencies are ready and the full payload is known
+    before hashing. Resource hashes are full SHA-256 digests
+    (`ContentHashDigest`) computed from the bytes the producer holds; no import
+    reads a data file again to hash it.
 
 15. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
     emitters (TextureEmitter, BufferEmitter, AssetEmitter). Created lazily on

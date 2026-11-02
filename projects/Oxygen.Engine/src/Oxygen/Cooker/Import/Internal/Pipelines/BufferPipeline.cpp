@@ -22,7 +22,6 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
@@ -237,7 +236,7 @@ auto BufferPipeline::ComputeContentHash(WorkItem& item)
         return {};
       }
 
-      const auto hash = util::ComputeContentSha256(bytes);
+      const auto hash = base::ComputeSha256(bytes);
       DLOG_F(2, "hashed {} -> {}", source_id, base::ToHexString(hash));
       return hash;
     });

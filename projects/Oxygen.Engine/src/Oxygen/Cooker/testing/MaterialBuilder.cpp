@@ -21,6 +21,7 @@
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_render.h>
 
@@ -85,7 +86,7 @@ auto MaterialBuilder::Bytes() const -> std::vector<std::byte>
     AppendRecord(bytes, shader);
   }
   data::AppendDescriptorStrings(bytes, strings);
-  StampContentHash(bytes);
+  data::StampDescriptorHash(bytes);
   const auto encoded_references = std::move(references).Build();
   detail::CheckWithLoader("material '" + name_ + "'", bytes, encoded_references,
     content::loaders::LoadMaterialAsset);

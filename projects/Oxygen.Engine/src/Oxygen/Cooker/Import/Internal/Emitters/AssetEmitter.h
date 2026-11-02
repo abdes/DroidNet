@@ -134,7 +134,9 @@ public:
    Starts publishing the descriptor file in the nursery. The file path is
    determined by `descriptor_relpath` relative to the cooked root. A second
    emission of the same path while its write is in flight is queued: one
-   write per path is in flight, and the latest bytes win.
+   write per path is in flight, and the latest bytes win. The emitted
+   descriptor records its content hash in its header, whatever `bytes` holds
+   there.
 
    @param key              Stable identity of the asset.
    @param asset_type       Asset type for loader dispatch.

@@ -21,7 +21,6 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsResourceImportPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
@@ -204,7 +203,7 @@ auto PhysicsResourceImportPipeline::Worker() -> co::Co<>
 auto PhysicsResourceImportPipeline::ComputeContentHash(WorkItem& item)
   -> co::Co<std::optional<ImportDiagnostic>>
 {
-  if (!util::IsZeroContentSha256(item.cooked.content_hash)) {
+  if (!base::IsAllZero(item.cooked.content_hash)) {
     co_return std::nullopt;
   }
   if (IsStopRequested(item.stop_token)) {
@@ -220,13 +219,12 @@ auto PhysicsResourceImportPipeline::ComputeContentHash(WorkItem& item)
       if (IsStopRequested(stop_token) || canceled) {
         return base::Sha256Digest {};
       }
-      const auto hash = util::ComputeContentSha256(bytes);
+      const auto hash = base::ComputeSha256(bytes);
       DLOG_F(2, "hashed {} -> sha256", source_id);
       return hash;
     });
 
-  if (!IsStopRequested(item.stop_token)
-    && !util::IsZeroContentSha256(content_hash)) {
+  if (!IsStopRequested(item.stop_token) && !base::IsAllZero(content_hash)) {
     item.cooked.content_hash = content_hash;
   }
   co_return std::nullopt;

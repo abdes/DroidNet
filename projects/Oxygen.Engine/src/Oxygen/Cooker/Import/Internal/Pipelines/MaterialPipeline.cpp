@@ -10,8 +10,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
-#include <iterator>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -21,14 +19,12 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -37,7 +33,6 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialDomain.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -390,42 +385,6 @@ namespace {
     return bytes;
   }
 
-  auto PatchContentHash(std::vector<std::byte>& bytes,
-    const data::pak::core::ContentHashDigest& content_hash) -> void
-  {
-    constexpr size_t kOffset
-      = offsetof(data::pak::render::MaterialAssetDesc, header)
-      + offsetof(data::pak::core::AssetHeader, content_hash);
-    if (bytes.size() < kOffset + sizeof(content_hash)) {
-      return;
-    }
-    std::ranges::copy(
-      std::as_bytes(std::span<const data::pak::core::ContentHashDigest, 1>(
-        &content_hash, 1)),
-      std::next(bytes.begin(), kOffset));
-  }
-
-  [[nodiscard]] auto ComputeContentHashOnThreadPool(co::ThreadPool& thread_pool,
-    std::span<const std::byte> bytes, std::stop_token stop_token)
-    -> co::Co<std::optional<data::pak::core::ContentHashDigest>>
-  {
-    const auto hash = co_await thread_pool.Run(
-      [bytes, stop_token](
-        co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
-        DLOG_F(1, "Compute content hash");
-        if (stop_token.stop_requested() || canceled) {
-          return data::pak::core::ContentHashDigest {};
-        }
-        return util::ComputeContentSha256(bytes);
-      });
-
-    if (stop_token.stop_requested() || base::IsAllZero(hash)) {
-      co_return std::nullopt;
-    }
-
-    co_return hash;
-  }
-
   [[nodiscard]] auto BuildMaterialPayload(const MaterialSource& material,
     const std::string_view source_id, const std::stop_token& stop_token,
     std::vector<ImportDiagnostic> diagnostics) -> BuildOutcome
@@ -717,22 +676,11 @@ auto MaterialPipeline::Worker() -> co::Co<>
       continue;
     }
 
-    auto bytes = build_outcome.bytes;
-
-    auto hash = co_await ComputeContentHashOnThreadPool(thread_pool_,
-      std::span<const std::byte>(bytes.data(), bytes.size()), item.stop_token);
-    if (!hash.has_value()) {
-      co_await ReportCancelled(std::move(item));
-      continue;
-    }
-
-    PatchContentHash(bytes, *hash);
-
     output.cooked = CookedMaterialPayload {
       .material_key = material_key,
       .virtual_path = virtual_path,
       .descriptor_relpath = descriptor_relpath,
-      .descriptor_bytes = std::move(bytes),
+      .descriptor_bytes = std::move(build_outcome.bytes),
       .references = std::move(build_outcome.references),
     };
     output.success = true;

@@ -190,8 +190,7 @@ public:
     return *std::ranges::next(keys.begin(), index);
   }
 
-  [[nodiscard]] auto CreateAssetDescriptorReader(
-    const data::AssetKey& key) const
+  [[nodiscard]] auto OpenAssetDescriptor(const data::AssetKey& key) const
     -> std::unique_ptr<serio::AnyReader> override
   {
     const auto rel = index_.FindDescriptorRelPath(key);

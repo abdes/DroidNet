@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <stdexcept>
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
@@ -19,6 +18,7 @@
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -27,7 +27,6 @@ using oxygen::cooker::testing::LooseCookedRoot;
 using oxygen::cooker::testing::MemoryFileSystem;
 using oxygen::cooker::testing::PhysicsSidecarBuilder;
 using oxygen::cooker::testing::SceneBuilder;
-namespace base = oxygen::base;
 namespace cooked = oxygen::content::cooked;
 namespace data = oxygen::data;
 namespace physics = oxygen::data::pak::physics;
@@ -74,8 +73,8 @@ NOLINT_TEST(PhysicsSidecarBuilderTest, BindingsReadBackAndMatchTheScene)
 
   EXPECT_EQ(sidecar.GetTargetSceneKey(), scene);
   EXPECT_EQ(sidecar.GetTargetNodeCount(), 3U);
-  EXPECT_TRUE(std::ranges::equal(sidecar.GetTargetSceneContentHash(),
-    base::ComputeSha256(content.Descriptor(scene))));
+  EXPECT_NO_THROW(
+    sidecar.CheckTarget(data::SceneAsset(scene, content.Descriptor(scene))));
   const auto bodies = sidecar.GetBindings<physics::RigidBodyBindingRecord>();
   ASSERT_EQ(bodies.size(), 1U);
   EXPECT_EQ(bodies[0].node_index, crate.Index());

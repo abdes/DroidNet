@@ -6,11 +6,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <exception>
 #include <filesystem>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -32,7 +31,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Config/EngineConfig.h>
@@ -475,7 +473,7 @@ void SceneLoaderService::OnPhysicsSceneLoaded(
         + " sidecar_key=" + data::to_string(sidecar_key));
     }
 
-    ValidatePhysicsSidecarIdentity(*scene_asset, *physics_asset, sidecar_key);
+    physics_asset->CheckTarget(*scene_asset);
 
     swap_.asset = std::move(scene_asset);
     swap_.physics_asset = std::move(physics_asset);
@@ -499,47 +497,6 @@ void SceneLoaderService::OnPhysicsSceneLoaded(
     active_camera_ = {};
     ready_ = false;
     failed_ = true;
-  }
-}
-
-void SceneLoaderService::ValidatePhysicsSidecarIdentity(
-  const data::SceneAsset& scene_asset,
-  const data::PhysicsSceneAsset& physics_asset,
-  const data::AssetKey& sidecar_key) const
-{
-  const auto& target_scene_key = physics_asset.GetTargetSceneKey();
-  if (target_scene_key != scene_asset.GetAssetKey()) {
-    throw std::runtime_error(
-      std::string("physics sidecar target_scene_key mismatch sidecar_key=")
-      + data::to_string(sidecar_key)
-      + " scene_key=" + data::to_string(scene_asset.GetAssetKey())
-      + " target_scene_key=" + data::to_string(target_scene_key));
-  }
-
-  const auto scene_node_count = scene_asset.GetNodes().size();
-  if (scene_node_count
-    > static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
-    throw std::runtime_error("scene node count exceeds uint32 range");
-  }
-  const auto scene_node_count_u32 = static_cast<uint32_t>(scene_node_count);
-  const auto target_node_count = physics_asset.GetTargetNodeCount();
-  if (target_node_count != scene_node_count_u32) {
-    throw std::runtime_error(
-      std::string("physics sidecar target_node_count mismatch sidecar_key=")
-      + data::to_string(sidecar_key)
-      + " expected=" + std::to_string(scene_node_count_u32)
-      + " actual=" + std::to_string(target_node_count));
-  }
-
-  const auto scene_digest = base::ComputeSha256(scene_asset.GetRawData());
-  const auto target_scene_content_hash
-    = physics_asset.GetTargetSceneContentHash();
-  if (!std::ranges::equal(target_scene_content_hash, scene_digest)) {
-    throw std::runtime_error(
-      std::string(
-        "physics sidecar target_scene_content_hash mismatch sidecar_key=")
-      + data::to_string(sidecar_key)
-      + " scene_key=" + data::to_string(scene_asset.GetAssetKey()));
   }
 }
 

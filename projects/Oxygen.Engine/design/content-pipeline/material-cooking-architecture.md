@@ -16,8 +16,7 @@ Current implementation status snapshot:
    (`type: "material-descriptor"`) with full schema validation at both
    request-build time and job execution.
 3. Implemented: `MaterialPipeline` async pipeline with ORM packing resolution,
-   scalar normalization, UV transform extraction, shader synthesis, and content
-   hashing.
+   scalar normalization, UV transform extraction, and shader synthesis.
 4. Implemented: Loose-cooked emission (`.omat` descriptors) via
    `AssetEmitter::Emit` with `AssetType::kMaterial` routing.
 5. Implemented: Texture dependency resolution via `.otex` sidecar file reads
@@ -74,8 +73,9 @@ Out of scope:
 6. ORM packing state MUST be expressed via `OrmPolicy` and stored in
    `kMaterialFlag_GltfOrmPacked` — no hard-coded channel assumptions in cooking
    stages.
-7. Content hashing uses the full serialized byte span (both `MaterialAssetDesc`
-   and all `ShaderReferenceDesc` entries) and is always computed.
+7. The descriptor's `header.content_hash` covers the full serialized byte span
+   (both `MaterialAssetDesc` and all `ShaderReferenceDesc` entries) with that
+   field zeroed. `AssetEmitter` records it; the pipeline does not hash.
 8. `MaterialAssetDesc` and `ShaderReferenceDesc` binary layout MUST NOT be
    modified without incrementing `kMaterialAssetVersion` and updating the
    `static_assert(sizeof(...))` guards.
@@ -262,9 +262,8 @@ Architectural split:
         `ShaderReferenceDesc[N]`, computes `shader_stages` bitfield.
      10. `SerializeMaterialDescriptor` — packs `MaterialAssetDesc` (311 bytes),
          `ShaderReferenceDesc[]` and the string table to a `MemoryStream`.
-     11. `ComputeContentHashOnThreadPool` — hashes full serialized
-         span on thread pool.
-     12. `PatchContentHash` — patches `header.content_hash` at fixed offset.
+         The pipeline does not hash the descriptor; `AssetEmitter` records
+         `header.content_hash` when it emits the bytes.
    - note: `MaterialPipeline` does NOT emit cooked files; only `AssetEmitter` in
      `MaterialDescriptorImportJob::ExecuteAsync` writes the `.omat` file.
    - config: default `queue_capacity=64`, `worker_count=2` (from
@@ -639,20 +638,18 @@ All material cooking stages execute within `BuildMaterialPayload` in the
 `MaterialPipeline` worker coroutine. Stages are not independently named in
 `detail` namespace (unlike `TexturePipeline`). The full sequence per work item:
 
-| Step | Function                         | Action                                                                                             |
-| ---- | -------------------------------- | -------------------------------------------------------------------------------------------------- |
-| 1    | Header init                      | `asset_type=kMaterial`, `version=kMaterialAssetVersion`, `name=material_name`                      |
-| 2    | Baseline flags                   | `flags = kMaterialFlag_NoTextureSampling`                                                          |
-| 3    | `ResolveMaterialDomain`          | Maps `MaterialAlphaMode` → `MaterialDomain`; sets `kMaterialFlag_AlphaTest` for masked             |
-| 4    | `ApplyMaterialInputs`            | Normalizes all PBR scalars; encodes Unorm16/HalfFloat; handles `roughness_as_glossiness`           |
-| 5    | `ResolveOrmPacked`               | Returns packed `ResourceIndexT` when ORM is compatible; errors on `kForcePacked` mismatch          |
-| 6    | Flag update                      | Clears `kMaterialFlag_NoTextureSampling` if `HasAnyAssignedTextures()`                             |
-| 7    | `AssignTextureIndices`           | Fills 12 `*_texture` `ResourceIndexT` fields; handles ORM shared index                             |
-| 8    | `BuildMaterialUvTransformDesc`   | Writes first assigned binding's UV scale/offset/rotation to descriptor                             |
-| 9    | `BuildShaderReferences`          | Validates, deduplicates, sorts, encodes `ShaderReferenceDesc[]`; computes `shader_stages` bitfield |
-| 10   | `SerializeMaterialDescriptor`    | Packed write: `MaterialAssetDesc` (311 B) + `ShaderReferenceDesc[N]` (21 B × N) + string table     |
-| 11   | `ComputeContentHashOnThreadPool` | Hashes full byte span on thread pool                                                               |
-| 12   | `PatchContentHash`               | Patches `header.content_hash` field at fixed byte offset in serialized output                      |
+| Step | Function                       | Action                                                                                             |
+| ---- | ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| 1    | Header init                    | `asset_type=kMaterial`, `version=kMaterialAssetVersion`, `name=material_name`                      |
+| 2    | Baseline flags                 | `flags = kMaterialFlag_NoTextureSampling`                                                          |
+| 3    | `ResolveMaterialDomain`        | Maps `MaterialAlphaMode` → `MaterialDomain`; sets `kMaterialFlag_AlphaTest` for masked             |
+| 4    | `ApplyMaterialInputs`          | Normalizes all PBR scalars; encodes Unorm16/HalfFloat; handles `roughness_as_glossiness`           |
+| 5    | `ResolveOrmPacked`             | Returns packed `ResourceIndexT` when ORM is compatible; errors on `kForcePacked` mismatch          |
+| 6    | Flag update                    | Clears `kMaterialFlag_NoTextureSampling` if `HasAnyAssignedTextures()`                             |
+| 7    | `AssignTextureIndices`         | Fills 12 `*_texture` `ResourceIndexT` fields; handles ORM shared index                             |
+| 8    | `BuildMaterialUvTransformDesc` | Writes first assigned binding's UV scale/offset/rotation to descriptor                             |
+| 9    | `BuildShaderReferences`        | Validates, deduplicates, sorts, encodes `ShaderReferenceDesc[]`; computes `shader_stages` bitfield |
+| 10   | `SerializeMaterialDescriptor`  | Packed write: `MaterialAssetDesc` (311 B) + `ShaderReferenceDesc[N]` (21 B × N) + string table     |
 
 All stages cooperatively support cancellation via `work_item.stop_token`.
 
@@ -675,7 +672,7 @@ struct AssetHeader {
   StringTableOffsetT name_offset = 0; // Asset name (debug/tools)
   uint8_t  version         = 0;      // kMaterialAssetVersion
   uint8_t  streaming_priority = 0;
-  ContentHashDigest content_hash = {}; // Full SHA-256 of the descriptor
+  ContentHashDigest content_hash = {}; // SHA-256, set by AssetEmitter
   uint32_t variant_flags   = 0;
 };
 #pragma pack(pop)
@@ -870,7 +867,9 @@ Key contracts:
 1. `kMaterialFlag_NoTextureSampling` in `flags` tells the renderer whether to
    sample any textures. The renderer MUST check this flag before indexing the
    texture slots.
-2. `content_hash` is used for deduplication during incremental imports.
+2. `content_hash` is the SHA-256 of the whole descriptor with that field
+   zeroed. `AssetEmitter` records it (`data::StampDescriptorHash`); loaders
+   and `content::ValidateAssetDescriptor` refuse a descriptor without it.
 3. `MaterialAsset` does not own GPU handles. Shader compilation and GPU resource
    creation are the renderer's responsibility.
 4. The `shader_stages` bitfield is the authoritative count for

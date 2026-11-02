@@ -8,7 +8,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -29,6 +28,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -46,6 +46,16 @@ namespace {
       throw std::runtime_error(std::string("Virtual path is not canonical: ")
         + nostd::to_string(*error));
     }
+  }
+
+  //! The descriptor `bytes` with its content hash recorded, as a cook emits
+  //! every asset descriptor.
+  auto StampedDescriptor(const std::span<const std::byte> bytes)
+    -> std::vector<std::byte>
+  {
+    auto stamped = std::vector<std::byte>(bytes.begin(), bytes.end());
+    data::StampDescriptorHash(stamped);
+    return stamped;
   }
 
 } // namespace
@@ -79,9 +89,10 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
   }
 
   // Validate paths (must match PAK format requirements)
+  const auto descriptor = StampedDescriptor(bytes);
   RequireCanonicalVirtualPath(virtual_path);
   data::loose_cooked::RequireIndexRelPath(descriptor_relpath);
-  ValidateAssetDescriptor(asset_type, key, bytes, references);
+  ValidateAssetDescriptor(asset_type, key, descriptor, references);
 
   if (const auto it = key_by_virtual_path_.find(std::string(virtual_path));
     it != key_by_virtual_path_.end() && it->second != key) {
@@ -95,18 +106,18 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
       "Conflicting descriptor path mapping in loose cooked container");
   }
 
-  const auto sha256 = base::ComputeSha256(bytes);
+  const auto sha256 = base::ComputeSha256(descriptor);
 
   // Build full path for the descriptor file
   const auto descriptor_path = cooked_root_ / descriptor_relpath;
 
   DLOG_F(INFO, "Emit: type={} vpath='{}' relpath='{}' size={}",
     static_cast<int>(asset_type), virtual_path, descriptor_relpath,
-    bytes.size());
+    descriptor.size());
 
-  RecordAsset(key, asset_type, virtual_path, descriptor_relpath, bytes.size(),
-    std::move(references), sha256);
-  QueueDescriptorWrite(descriptor_path, descriptor_relpath, bytes);
+  RecordAsset(key, asset_type, virtual_path, descriptor_relpath,
+    descriptor.size(), std::move(references), sha256);
+  QueueDescriptorWrite(descriptor_path, descriptor_relpath, descriptor);
 }
 
 auto AssetEmitter::EmitSync(const data::AssetKey& key,
@@ -118,9 +129,10 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
     throw std::runtime_error("AssetEmitter is finalized");
   }
 
+  const auto descriptor = StampedDescriptor(bytes);
   RequireCanonicalVirtualPath(virtual_path);
   data::loose_cooked::RequireIndexRelPath(descriptor_relpath);
-  ValidateAssetDescriptor(asset_type, key, bytes, references);
+  ValidateAssetDescriptor(asset_type, key, descriptor, references);
 
   if (const auto it = key_by_virtual_path_.find(std::string(virtual_path));
     it != key_by_virtual_path_.end() && it->second != key) {
@@ -134,19 +146,19 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
       "Conflicting descriptor path mapping in loose cooked container");
   }
 
-  const auto sha256 = base::ComputeSha256(bytes);
+  const auto sha256 = base::ComputeSha256(descriptor);
 
   const auto descriptor_path = cooked_root_ / descriptor_relpath;
   const auto write_result
-    = co_await storage_->PublishAsync(*driver_, descriptor_path, bytes);
+    = co_await storage_->PublishAsync(*driver_, descriptor_path, descriptor);
   if (!write_result) {
     throw std::runtime_error("Failed to write '"
       + std::string(descriptor_relpath) + "' (" + descriptor_path.string()
       + "): " + write_result.error().message());
   }
 
-  RecordAsset(key, asset_type, virtual_path, descriptor_relpath, bytes.size(),
-    std::move(references), sha256);
+  RecordAsset(key, asset_type, virtual_path, descriptor_relpath,
+    descriptor.size(), std::move(references), sha256);
 }
 
 auto AssetEmitter::Count() const noexcept -> size_t { return records_.size(); }

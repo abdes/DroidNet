@@ -972,9 +972,9 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   const auto& prepared = *prepared_opt;
-  auto finalizer = GeometryPipeline(*ThreadPool(), GeometryPipeline::Config {});
+  auto finalizer = GeometryPipeline(GeometryPipeline::Config {});
   auto finalize_diagnostics = std::vector<ImportDiagnostic> {};
-  auto finalized = co_await finalizer.FinalizeDescriptor(prepared.lod_bindings,
+  auto finalized = finalizer.FinalizeDescriptor(prepared.lod_bindings,
     prepared.descriptor_bytes,
     std::span<const GeometryPipeline::MaterialKeyPatch> {},
     finalize_diagnostics);

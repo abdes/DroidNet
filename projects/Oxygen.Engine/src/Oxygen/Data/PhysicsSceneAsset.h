@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <any>
 #include <cstddef>
 #include <cstdint>
@@ -28,6 +27,8 @@ namespace oxygen::data {
 
 // Forward declaration of BindingTraits (specializations follow after the class)
 template <typename T> struct BindingTraits;
+
+class SceneAsset;
 
 // Hash functor for PhysicsBindingType (scoped enum over uint32_t)
 struct PhysicsBindingTypeHash {
@@ -110,12 +111,21 @@ public:
     return desc_.backend;
   }
 
-  //! Returns the expected SHA-256 of the paired scene descriptor payload.
+  //! The content hash of the paired scene when this sidecar was cooked.
   [[nodiscard]] auto GetTargetSceneContentHash() const noexcept
     -> std::span<const uint8_t, 32>
   {
     return std::span<const uint8_t, 32> { desc_.target_scene_content_hash };
   }
+
+  //! Checks that `scene` is the scene this sidecar was cooked against: its
+  //! key, its node count and its content hash.
+  /*!
+   @throw CookedOpenError `kInvalidReference` when `scene` has another key,
+     `kInconsistent` when it has another node count, and `kDigestMismatch`
+     when it has another content hash.
+  */
+  OXGN_DATA_API auto CheckTarget(const SceneAsset& scene) const -> void;
 
   //=== Binding Table Access ===----------------------------------------------//
 

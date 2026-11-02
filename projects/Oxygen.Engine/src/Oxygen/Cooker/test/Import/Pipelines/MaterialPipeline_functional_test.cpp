@@ -6,7 +6,6 @@
 
 // Covers: Import/Internal/Pipelines/MaterialPipeline.cpp
 
-#include <algorithm>
 #include <array>
 #include <bit>
 #include <cstddef>
@@ -22,7 +21,6 @@
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
@@ -137,19 +135,6 @@ namespace {
     return stages;
   }
 
-  auto ZeroContentHash(std::vector<std::byte> bytes) -> std::vector<std::byte>
-  {
-    constexpr size_t kOffset
-      = offsetof(data::pak::render::MaterialAssetDesc, header)
-      + offsetof(data::pak::core::AssetHeader, content_hash);
-    constexpr size_t kHashSize = sizeof(data::pak::core::ContentHashDigest);
-    if (bytes.size() >= kOffset + kHashSize) {
-      std::ranges::fill(
-        std::span { bytes }.subspan(kOffset, kHashSize), std::byte { 0 });
-    }
-    return bytes;
-  }
-
   //=== Fixtures
   //===--------------------------------------------------------------//
 
@@ -161,29 +146,6 @@ namespace {
 
   //=== Basic Behavior Tests
   //===-----------------------------------------------------//
-
-  NOLINT_TEST_F(
-    MaterialPipelineTest, CollectComputesContentHashFromDescriptorBytes)
-  {
-    const auto result
-      = RunPipelineOnce<MaterialPipeline>(loop_, MakeBaseItem(), pool_,
-        MaterialPipeline::Config {
-          .queue_capacity = 4,
-          .worker_count = 1,
-          .use_thread_pool = true,
-        });
-
-    ASSERT_TRUE(result.success);
-    ASSERT_HAS_VALUE(result.cooked)
-      << "Expected result.cooked to contain a value";
-
-    const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
-    auto zeroed = ZeroContentHash(result.cooked->descriptor_bytes);
-    const auto expected_hash = util::ComputeContentSha256(
-      std::span<const std::byte>(zeroed.data(), zeroed.size()));
-
-    EXPECT_EQ(desc.header.content_hash, expected_hash);
-  }
 
   NOLINT_TEST_F(MaterialPipelineTest, RejectsInvalidCompiledEmission)
   {

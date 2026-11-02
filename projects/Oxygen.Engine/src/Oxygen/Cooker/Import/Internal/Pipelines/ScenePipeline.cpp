@@ -10,7 +10,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <optional>
 #include <span>
 #include <string>
@@ -22,14 +21,12 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -250,7 +247,6 @@ namespace {
     auto strings = build.strings;
     desc.header.name_offset = strings.Add(scene_name);
     desc.header.version = data::pak::world::kSceneAssetVersion;
-    desc.header.content_hash = {};
     desc.nodes.offset = sizeof(SceneAssetDesc);
     desc.nodes.count = static_cast<uint32_t>(build.nodes.size());
     desc.nodes.entry_size = sizeof(NodeRecord);
@@ -562,18 +558,6 @@ namespace {
     return outcome;
   }
 
-  auto PatchContentHash(std::vector<std::byte>& bytes,
-    const data::pak::core::ContentHashDigest& content_hash) -> void
-  {
-    constexpr auto kOffset
-      = offsetof(data::pak::core::AssetHeader, content_hash);
-    if (bytes.size() < kOffset + sizeof(content_hash)) {
-      return;
-    }
-    std::memcpy(std::span(bytes).subspan(kOffset).data(), &content_hash,
-      sizeof(content_hash));
-  }
-
 } // namespace
 
 ScenePipeline::ScenePipeline(
@@ -764,23 +748,6 @@ auto ScenePipeline::Worker() -> co::Co<>
     if (item.stop_token.stop_requested()) {
       co_await ReportCancelled(std::move(item));
       continue;
-    }
-
-    if (outcome.success) {
-      auto hash = co_await thread_pool_.Run(
-        [bytes = std::span<const std::byte>(outcome.bytes),
-          stop_token = item.stop_token](co::ThreadPool::CancelToken canceled)
-          -> data::pak::core::ContentHashDigest {
-          DLOG_F(1, "Compute content hash");
-          if (stop_token.stop_requested() || canceled) {
-            return {};
-          }
-          return util::ComputeContentSha256(bytes);
-        });
-
-      if (!base::IsAllZero(hash)) {
-        PatchContentHash(outcome.bytes, hash);
-      }
     }
 
     WorkResult result {

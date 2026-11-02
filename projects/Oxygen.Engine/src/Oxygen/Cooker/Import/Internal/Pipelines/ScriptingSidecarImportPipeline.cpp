@@ -51,7 +51,6 @@
 #include <Oxygen/Cooker/Import/Internal/NodeReferenceJson.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptingSidecarImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -952,7 +951,6 @@ namespace {
       out.resize(sizeof(world::SceneAssetDesc));
 
       auto desc = source_desc_;
-      desc.header.content_hash = {};
       desc.nodes.offset = sizeof(world::SceneAssetDesc);
       const auto scene_strings_offset
         = uint64_t { desc.nodes.offset } + node_table_size_;
@@ -1846,13 +1844,6 @@ namespace {
         "script.sidecar.scene_patch_failed", std::move(patch_error));
       return std::nullopt;
     }
-
-    const auto hash = util::ComputeContentSha256(patched_scene_bytes);
-    constexpr auto kContentHashOffset
-      = offsetof(data::pak::core::AssetHeader, content_hash);
-    std::memcpy(
-      std::span(patched_scene_bytes).subspan(kContentHashOffset).data(), &hash,
-      sizeof(hash));
 
     return patched_scene_bytes;
   }

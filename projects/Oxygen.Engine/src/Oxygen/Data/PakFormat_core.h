@@ -543,8 +543,9 @@ static_assert(offsetof(DescriptorStringTable, size) == 4);
    assets should be loaded. Lower values indicate higher priority.
  - The `asset_type` field is redundant with the directory entry, but is
    necessary for debugging and sanity checks.
- - The `content_hash` field is the full SHA-256 digest used to verify cooked
-   artifact integrity.
+ - The `content_hash` field is the SHA-256 of the whole descriptor, taken with
+   this field zeroed (`data::ComputeDescriptorHash`). A cook records it and
+   every reader of cooked content refuses a descriptor that does not.
  - The `variant_flags` field is a project-defined bitfield that can be used to
    store additional metadata about the asset, such as its intended use or
    compatibility with specific features.

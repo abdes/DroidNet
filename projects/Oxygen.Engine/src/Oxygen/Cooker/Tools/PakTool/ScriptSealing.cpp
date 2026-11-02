@@ -46,6 +46,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -492,6 +493,7 @@ namespace {
     const auto record_bytes = std::as_bytes(std::span(records));
     sealed.insert(sealed.end(), record_bytes.begin(), record_bytes.end());
     data::AppendDescriptorStrings(sealed, strings);
+    data::StampDescriptorHash(sealed);
     return sealed;
   }
 

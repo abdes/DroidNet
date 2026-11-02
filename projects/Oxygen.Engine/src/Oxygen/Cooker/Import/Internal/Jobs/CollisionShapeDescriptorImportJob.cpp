@@ -27,6 +27,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
@@ -41,7 +42,6 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/CollisionShapeDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/CollisionShapeImportPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -453,7 +453,7 @@ namespace {
     cooked.data.assign(blob_bytes.begin(), blob_bytes.end());
     cooked.format = phys::PhysicsResourceFormat::kJoltShapeBinary;
     cooked.alignment = 16;
-    cooked.content_hash = util::ComputeContentSha256(cooked.data);
+    cooked.content_hash = base::ComputeSha256(cooked.data);
 
     try {
       const auto emitted
@@ -889,7 +889,7 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     descriptor.cooked_shape_ref.payload_type = payload->payload_type;
   }
 
-  auto& pipeline = CreatePipeline<CollisionShapeImportPipeline>(*ThreadPool(),
+  auto& pipeline = CreatePipeline<CollisionShapeImportPipeline>(
     CollisionShapeImportPipeline::Config {
       .queue_capacity = Concurrency().material.queue_capacity,
       .worker_count = Concurrency().material.workers,

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -17,8 +18,10 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::data {
@@ -38,6 +41,23 @@ PhysicsSceneAsset::PhysicsSceneAsset(
   , data_(owned_data_->data(), owned_data_->size())
 {
   ParseAndValidate();
+}
+
+auto PhysicsSceneAsset::CheckTarget(const SceneAsset& scene) const -> void
+{
+  if (GetTargetSceneKey() != scene.GetAssetKey()) {
+    throw CookedOpenError(
+      CookedDefect::kInvalidReference, "physics sidecar targets another scene");
+  }
+  if (GetTargetNodeCount() != scene.GetNodes().size()) {
+    throw CookedOpenError(CookedDefect::kInconsistent,
+      "physics sidecar node count differs from its scene's");
+  }
+  if (!std::ranges::equal(
+        GetTargetSceneContentHash(), scene.GetContentHash())) {
+    throw CookedOpenError(CookedDefect::kDigestMismatch,
+      "physics sidecar was cooked against another version of its scene");
+  }
 }
 
 auto PhysicsSceneAsset::ParseAndValidate() -> void

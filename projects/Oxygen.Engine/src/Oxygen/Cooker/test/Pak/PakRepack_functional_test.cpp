@@ -171,8 +171,8 @@ NOLINT_TEST_P(PakRepackSceneTest, KeepsPhysicsSidecarTargets)
     const auto sidecar
       = data::PhysicsSceneAsset(mask.sidecar, pak.Descriptor(mask.sidecar));
     EXPECT_EQ(sidecar.GetTargetSceneKey(), mask.scene);
-    EXPECT_TRUE(std::ranges::equal(sidecar.GetTargetSceneContentHash(),
-      oxygen::base::ComputeSha256(pak.Descriptor(mask.scene))));
+    EXPECT_NO_THROW(sidecar.CheckTarget(
+      data::SceneAsset(mask.scene, pak.Descriptor(mask.scene))));
   }
 }
 

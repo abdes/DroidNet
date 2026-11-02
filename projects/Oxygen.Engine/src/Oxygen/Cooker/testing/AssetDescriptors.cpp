@@ -6,7 +6,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -23,6 +22,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -44,7 +44,7 @@ namespace {
     auto strings = data::DescriptorStringsBuilder {};
     record.header.name_offset = strings.Add(name);
     auto bytes = data::MakeDescriptorBytes(record, strings);
-    StampContentHash(bytes);
+    data::StampDescriptorHash(bytes);
     return bytes;
   }
 
@@ -160,7 +160,7 @@ auto InputContextBuilder::Bytes() const -> std::vector<std::byte>
     AppendRecord(bytes, record);
   }
   data::AppendDescriptorStrings(bytes, strings);
-  StampContentHash(bytes);
+  data::StampDescriptorHash(bytes);
   detail::CheckWithLoader("input mapping context '" + name_ + "'", bytes,
     References(), content::loaders::LoadInputMappingContextAsset);
   return bytes;

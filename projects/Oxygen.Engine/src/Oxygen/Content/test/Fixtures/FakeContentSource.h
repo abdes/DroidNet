@@ -127,8 +127,7 @@ public:
     }
     return std::ranges::next(assets_.begin(), index)->first;
   }
-  [[nodiscard]] auto CreateAssetDescriptorReader(
-    const data::AssetKey& /*key*/) const
+  [[nodiscard]] auto OpenAssetDescriptor(const data::AssetKey& /*key*/) const
     -> std::unique_ptr<serio::AnyReader> override
   {
     return nullptr;

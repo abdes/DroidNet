@@ -35,6 +35,7 @@
 #include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -49,7 +50,6 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline_tangents.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SurfaceAllocation.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Core/Constants.h>
@@ -1600,7 +1600,7 @@ namespace {
     if (IsCanceled(stop_token, canceled)) {
       return;
     }
-    payload.content_hash = util::ComputeContentSha256(payload.data);
+    payload.content_hash = base::ComputeSha256(payload.data);
   }
 
   [[nodiscard]] auto BuildCookedMeshPayload(const LodBuildData& lod,

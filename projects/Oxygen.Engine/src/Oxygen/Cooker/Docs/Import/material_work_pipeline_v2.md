@@ -297,9 +297,7 @@ For each work item:
    - Fill `material_domain`, `flags`, `shader_stages`, and all scalar fields
 10. Serialize descriptor bytes with packed alignment = 1, followed by shader
     references.
-11. Compute `header.content_hash` on the ThreadPool after the full descriptor
-    bytes are known.
-12. Return `CookedMaterialPayload`.
+11. Return `CookedMaterialPayload`.
 
 ---
 
@@ -321,8 +319,6 @@ The pipeline is defined as two stages with explicit parallelization boundaries:
 - Populate `MaterialAssetDesc` (all PBR fields)
 - Build `ShaderReferenceDesc` table and `shader_stages`
 - Serialize descriptor bytes + shader references
-- Compute `header.content_hash` on the ThreadPool after the full descriptor
-  bytes are finalized
 
 ---
 
@@ -350,9 +346,8 @@ Key requirements:
 - `shader_stages` matches the serialized shader refs (zero is invalid for
   successful materials and must emit a diagnostic)
 - `header.version = kMaterialAssetVersion`
-- `header.content_hash` is computed on the ThreadPool after dependencies are
-  ready and is non-zero when payload bytes are
-  non-empty
+- `header.content_hash` is left to the emitter: `AssetEmitter` records it
+  (`data::StampDescriptorHash`) over descriptor bytes + shader refs
 
 ### UV Transform Fields
 
@@ -424,9 +419,8 @@ the PAK format:
 - Shader reference table emission for all required stages.
 - Full PBR Tier 1/2 fields: emissive, specular, sheen, clearcoat, transmission,
   thickness, IOR, and attenuation.
-- Asset header metadata: `version`, `streaming_priority`, `content_hash`,
-  `variant_flags` (`content_hash` computed on the ThreadPool after dependencies
-  are ready).
+- Asset header metadata: `version`, `streaming_priority`, `variant_flags`
+  (the emitter records `content_hash` when it emits the descriptor).
 - UV transform and UV set handling via the extension above or baking.
 
 ---
@@ -519,7 +513,10 @@ Pipeline tracks submitted/completed/failed counts and exposes
 2. Descriptor serialization must be packed (alignment = 1).
 3. `kMaterialFlag_NoTextureSampling` must reflect `assigned` texture bindings.
 4. `header.version` must use `kMaterialAssetVersion`.
-5. `header.content_hash` must cover descriptor bytes + shader refs.
+5. `header.content_hash` covers descriptor bytes + shader refs. The emitter
+   guarantees it: `AssetEmitter::Emit` and `EmitSync` record it in every
+   descriptor, and loaders and `content::ValidateAssetDescriptor` refuse a
+   descriptor without it (`kMissingDigest` / `kDigestMismatch`).
 6. No exceptions across async boundaries.
 
 ---

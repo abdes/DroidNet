@@ -17,14 +17,13 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
-#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -203,7 +202,7 @@ auto PhysicsSidecarBuilder::Bytes(const data::AssetKey& scene_key,
   desc.target_scene_key = scene_key;
   desc.target_node_count = node_count;
   desc.backend = backend_;
-  const auto hash = base::ComputeSha256(scene_bytes);
+  const auto hash = data::ComputeDescriptorHash(scene_bytes);
   std::ranges::copy(hash, std::begin(desc.target_scene_content_hash));
   desc.component_table_count = static_cast<uint32_t>(tables.size());
   desc.component_table_directory_offset
@@ -234,7 +233,7 @@ auto PhysicsSidecarBuilder::Bytes(const data::AssetKey& scene_key,
     append(table.bytes);
   }
   data::AppendDescriptorStrings(bytes, strings);
-  StampContentHash(bytes);
+  data::StampDescriptorHash(bytes);
 
   try {
     static_cast<void>(data::PhysicsSceneAsset(

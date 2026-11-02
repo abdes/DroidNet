@@ -250,7 +250,7 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       descriptor_doc.at("combine_mode_restitution").get<std::string>());
   }
 
-  auto& pipeline = CreatePipeline<PhysicsMaterialImportPipeline>(*ThreadPool(),
+  auto& pipeline = CreatePipeline<PhysicsMaterialImportPipeline>(
     PhysicsMaterialImportPipeline::Config {
       .queue_capacity = Concurrency().material.queue_capacity,
       .worker_count = Concurrency().material.workers,

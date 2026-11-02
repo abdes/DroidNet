@@ -900,9 +900,10 @@ is used internally:
     transforms with no awareness of the physics backend.
   - **Positional index stability** — resource indices and scene node indices
     embedded in binding records are positional: they are stable if and only if
-    cooking is deterministic and reproducible. Sidecar identity checks (scene
-    content key + node count) are the runtime guard against index drift caused
-    by partial re-cooks or version skew.
+    cooking is deterministic and reproducible. Sidecar identity checks
+    (`PhysicsSceneAsset::CheckTarget`: scene key, node count and scene content
+    hash) are the runtime guard against index drift caused by partial re-cooks
+    or version skew.
 
 ### Illustrative Scenario
 
@@ -982,9 +983,10 @@ _Physics sidecar:_ The cooker computes the sidecar relationships and emits the
 compiled artifact as `Scenes/bouncing_sphere.opscene`. At the head of this file
 is a `PhysicsSceneAssetDesc` whose `target_scene_key` is the `AssetKey` of the
 paired scene (xxHash3-128 of its virtual path — stable identity), whose
-`target_scene_content_hash` is the SHA-256 of the scene binary built in the same
-cook run (version guard), and whose `target_node_count` matches the exact node
-count of that scene (quick early-reject). A single `RigidBodyBindingRecord` is
+`target_scene_content_hash` is the content hash of the scene descriptor built
+in the same cook run, as its asset header records it (version guard), and whose
+`target_node_count` matches the exact node count of that scene (quick
+early-reject). A single `RigidBodyBindingRecord` is
 written into the `kRigidBody` component table in the file, pointing to the
 sphere's scene node index, and referencing the `CollisionShapeAssetDesc` and
 `PhysicsMaterialAssetDesc` `AssetKey` values.

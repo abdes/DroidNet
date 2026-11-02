@@ -15,7 +15,6 @@
 #include <functional>
 #include <memory>
 #include <optional>
-#include <span>
 #include <sstream>
 #include <stop_token>
 #include <string>
@@ -578,8 +577,8 @@ auto WorkDispatcher::EnsureGeometryPipeline(co::Nursery& nursery)
   -> GeometryPipeline&
 {
   if (!geometry_pipeline_) {
-    geometry_pipeline_ = std::make_unique<GeometryPipeline>(*thread_pool_,
-      GeometryPipeline::Config {
+    geometry_pipeline_
+      = std::make_unique<GeometryPipeline>(GeometryPipeline::Config {
         .queue_capacity = concurrency_.geometry.queue_capacity,
         .worker_count = concurrency_.geometry.workers,
       });

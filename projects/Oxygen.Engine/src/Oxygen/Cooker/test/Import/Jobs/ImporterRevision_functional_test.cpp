@@ -121,9 +121,9 @@ namespace {
     },
     {
       .importer = Importer::kScriptAsset,
-      .revision = 1,
+      .revision = 2,
       .digest
-      = "af3bdb0d5ad5ac493c03762e025598c8718363cd1e4f8dd448d2fbd500f69985",
+      = "112c901be6b70b3d6f698dabb548300c94b0c20aaa7d2fcd50feb42fe85718f5",
     },
     {
       .importer = Importer::kScriptingSidecar,
@@ -133,9 +133,9 @@ namespace {
     },
     {
       .importer = Importer::kPhysicsSidecar,
-      .revision = 3,
+      .revision = 4,
       .digest
-      = "ec18265d3bb50a53a6a85be1976c9bd5734842c047bef2a4a7f0fd97e8032fa8",
+      = "d78fa087815a75f3fd68b3f396d4a797b5f7813aa82fdeaa1458e8e2c583097b",
     },
     {
       .importer = Importer::kInput,

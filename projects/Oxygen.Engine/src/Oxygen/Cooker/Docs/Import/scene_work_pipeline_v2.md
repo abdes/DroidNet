@@ -277,10 +277,7 @@ follows this behavior (implementation notes & diagnostics below):
      available record bytes); failures emit blocking diagnostics
      (`scene.environment.*`).
    - Writer failures produce `scene.serialize_failed` diagnostics.
-6. If serialization succeeded, the pipeline computes the `content_hash` on the
-   `ThreadPool` (cancellable) and patches `SceneAssetDesc.header.content_hash`
-   when the computed hash is non-zero.
-7. The worker constructs a `WorkResult` with collected diagnostics and
+6. The worker constructs a `WorkResult` with collected diagnostics and
    `ImportWorkItemTelemetry` (cook duration) and sends it to the output channel.
    If `WorkItem.on_finished` is provided it is invoked after work completes.
 
@@ -338,8 +335,6 @@ Pipeline responsibilities (performed by `ScenePipeline`):
   `SceneAssetDesc`, `NodeRecord[]`, string table, component tables, component
   directory, SceneEnvironmentBlock.
 - Validate environment system records (record header size, payload size).
-- Compute and patch `SceneAssetDesc.header.content_hash`
-  (computed on the `ThreadPool`).
 - Emit diagnostics for serialization and environment validation failures.
 
 Notes:
@@ -375,8 +370,10 @@ Notes:
 - `nodes.entry_size` must equal `sizeof(NodeRecord)`.
 - Component tables use `ComponentType` FourCC values (e.g., `kRenderable`).
 - `SceneAssetDesc.header.version = data::pak::kSceneAssetVersion`.
-- `SceneAssetDesc.header.content_hash` must cover descriptor bytes + environment
-  block bytes and is computed on the ThreadPool after dependencies are ready.
+- `SceneAssetDesc.header.content_hash` is not written by the pipeline.
+  `AssetEmitter` records it when it emits the descriptor
+  (`data::StampDescriptorHash`: SHA-256 of the whole descriptor, environment
+  block included, with that field zeroed).
 
 ### Scene Environment Block
 
@@ -406,7 +403,7 @@ Notes:
   - Serialize `SceneAssetDesc` and trailing payload with packed alignment.
   - Validate and append the SceneEnvironment block; reject invalid system
     records.
-  - Populate `SceneAssetDesc.header.version` and compute `header.content_hash`.
+  - Populate `SceneAssetDesc.header.version`.
 
 ### Importer/Orchestrator Responsibilities
 
@@ -457,9 +454,11 @@ Pipeline tracks submitted/completed/failed counts and exposes
    maps to the empty string; the pipeline will serialize the bytes as provided.
 4. Environment block header is always appended (even empty) and system record
    headers must be validated by the pipeline.
-5. `header.content_hash` must cover the entire descriptor payload including the
-   environment block; the pipeline computes the hash on the `ThreadPool` and
-   patches the header only when the hash is non-zero.
+5. `header.content_hash` covers the entire descriptor payload including the
+   environment block. The emitter guarantees it: `AssetEmitter::Emit` and
+   `EmitSync` record it in every descriptor they emit, and loaders and
+   `content::ValidateAssetDescriptor` refuse a descriptor that does not carry
+   it (`kMissingDigest` / `kDigestMismatch`).
 
 Diagnostic codes emitted by the pipeline include (non-exhaustive):
 

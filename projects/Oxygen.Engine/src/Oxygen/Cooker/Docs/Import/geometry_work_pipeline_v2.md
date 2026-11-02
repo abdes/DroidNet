@@ -80,8 +80,8 @@ cooking (vertex/index expansion, attribute policy application, tangent and
 normal generation, and creation of buffer payloads and raw descriptor bytes) is
 performed by the **MeshBuildPipeline**. The `GeometryPipeline` is a
 descriptor-finalization stage that patches buffer indices, applies resolved
-material keys, and computes the geometry descriptor `content_hash` once all
-buffer indices are known.
+material keys once all buffer indices are known. It does not hash the
+descriptor; `AssetEmitter` records the header `content_hash` when it emits it.
 
 Core properties:
 
@@ -91,8 +91,8 @@ Core properties:
 - **No I/O**: does not write files or emit buffers – it produces finalized
   descriptor bytes; `BufferEmitter` / `AssetEmitter` still perform writes.
 - **Job-scoped**: created per job and started in the job’s child nursery.
-- **ThreadPool offload**: descriptor `content_hash` computation runs on
-  `co::ThreadPool`.
+- **Synchronous**: finalization only patches bytes; it uses no `co::ThreadPool`
+  and has no hash step.
 - **Strict failure policy**: finalization failures surface as explicit
   diagnostics; no silent fallbacks are performed.
 - **Planner‑gated**: the planner submits finalization work only after buffer
@@ -114,12 +114,12 @@ document
   indices) plus a table of per-submesh material patch offsets.
 - **GeometryPipeline**: finalizes the geometry descriptor by patching buffer
   bindings (indices), applying resolved material keys at the recorded byte
-  offsets, and computing the descriptor-level `content_hash` (SHA-256, on the
-  ThreadPool).
+  offsets.
 - **BufferEmitter**: assigns stable buffer indices, writes `buffers.data` and
   `buffers.table`, and makes the binding indices available for finalization.
 - **AssetEmitter**: writes `.ogeo` geometry descriptor files using the finalized
-  descriptor bytes produced by `GeometryPipeline`.
+  descriptor bytes produced by `GeometryPipeline`, and records the descriptor
+  `header.content_hash` (`data::StampDescriptorHash`) in them.
 
 ---
 
@@ -224,7 +224,7 @@ A completed GeometryPipeline work item produces a `WorkResult` that contains:
 - `cooked` (optional): the `CookedGeometryPayload` when finalization succeeded
   (otherwise `std::nullopt`).
 - `finalized_descriptor_bytes`: the finalized `.ogeo` payload (buffer indices
-  and material keys patched, and `header.content_hash` written).
+  and material keys patched).
 - `diagnostics`: any `ImportDiagnostic` entries produced during finalization.
 - `telemetry`: per-item timing/telemetry (e.g., `cook_duration`).
 - `success`: true on success; false if canceled or any errors occurred.
@@ -247,7 +247,8 @@ and a public helper for descriptor finalization:
 
 - `Config` — configuration with `queue_capacity` (default 32) and
   `worker_count` (default 1 in the implementation).
-- `GeometryPipeline(co::ThreadPool&, Config)` — create the pipeline.
+- `explicit GeometryPipeline(std::optional<Config> config = {})` — create the
+  pipeline.
 - `Start(co::Nursery&)` — starts worker coroutines.
 - `Submit(WorkItem)` / `TrySubmit(WorkItem)` — submit work (blocking / non-
   blocking variants).
@@ -256,12 +257,11 @@ and a public helper for descriptor finalization:
 - `Close()` — close the input queue.
 - `HasPending()` / `PendingCount()` / `GetProgress()` — progress and counters.
 - `InputQueueSize()` / `OutputQueueSize()` — inspect channel sizes.
-- `FinalizeDescriptorBytes(bindings, descriptor_bytes, material_patches, diagnostics)`
-  — public coroutine that patches buffer bindings/materials into the supplied
-  `descriptor_bytes`, computes `header.content_hash` on the ThreadPool, and
-  returns the finalized byte vector or
-  `std::nullopt` on failure. Diagnostics are appended to the provided
-  diagnostics vector.
+- `FinalizeDescriptor(bindings, descriptor_bytes, material_patches, diagnostics)`
+  — public synchronous function that patches buffer bindings/materials into the
+  supplied `descriptor_bytes` and returns a `std::optional<FinalizedDescriptor>`
+  holding the finalized bytes, or `std::nullopt` on failure. Diagnostics are
+  appended to the provided diagnostics vector.
 
 ---
 
@@ -269,8 +269,7 @@ and a public helper for descriptor finalization:
 
 Workers run as coroutines and process descriptor-finalization work items from
 the bounded input queue. GeometryPipeline workers are lightweight: they call
-`FinalizeDescriptorBytes()` to patch bindings/materials and compute
-`header.content_hash`.
+`FinalizeDescriptor()` to patch bindings/materials.
 
 For each work item the worker performs:
 
@@ -278,7 +277,7 @@ For each work item the worker performs:
    continue.
 2. Invoke `on_started()` (if provided).
 3. Call
-   `FinalizeDescriptorBytes(bindings, cooked.descriptor_bytes, material_patches, diagnostics)`
+   `FinalizeDescriptor(bindings, cooked.descriptor_bytes, material_patches, diagnostics)`
    which:
    - Validates the supplied descriptor bytes and reads the header
      (`GeometryAssetDesc`).
@@ -293,16 +292,13 @@ For each work item the worker performs:
    - Applies all material key patches by seeking to each recorded absolute
      offset and writing the `data::AssetKey` value. Offsets outside the
      descriptor bounds are treated as errors.
-   - Schedules `util::ComputeContentSha256` on the `co::ThreadPool` and, on
-     success, writes `header.content_hash` into the descriptor bytes.
    - Returns the finalized bytes or `std::nullopt` on any failure, accumulating
      diagnostics.
-4. If cancellation is requested after finalization started, report cancelled.
-5. Determine `success = finalized.has_value() && diagnostics.empty()`.
-6. Assemble and send a `WorkResult` containing the `source_id`, optional
+4. Determine `success = finalized.has_value() && diagnostics.empty()`.
+5. Assemble and send a `WorkResult` containing the `source_id`, optional
    `cooked` payload (present on success), `finalized_descriptor_bytes`, any
    diagnostics, `telemetry` (e.g., `cook_duration`) and the `success` flag.
-7. Invoke `on_finished()` if provided.
+6. Invoke `on_finished()` if provided.
 
 All errors are reported as `ImportDiagnostic` entries; no exceptions cross async
 boundaries.
@@ -388,9 +384,7 @@ boundaries.
 4. Emit submesh descriptors and mesh views verbatim.
 5. Apply all `material_patches` by writing `data::AssetKey` values at their
    recorded absolute offsets. Offsets outside the descriptor range are errors.
-6. Compute `header.content_hash` on `co::ThreadPool` over the
-   complete finalized bytes and write it into the header.
-7. Return the finalized descriptor bytes or an error diagnostic.
+6. Return the finalized descriptor bytes or an error diagnostic.
 
 ---
 
@@ -417,8 +411,9 @@ Requirements:
 
 - `GeometryAssetDesc.header.asset_type = AssetType::kGeometry`
 - `GeometryAssetDesc.header.version = kGeometryAssetVersion`
-- `GeometryAssetDesc.header.content_hash` computed on the ThreadPool after all
-  buffer indices are known, over the **complete** descriptor bytes
+- `GeometryAssetDesc.header.content_hash` is recorded by `AssetEmitter` over
+  the **complete** finalized descriptor bytes (all buffer indices and material
+  keys patched); the pipeline does not write it
 - `lod_count = lods.size()`
 - `SubMeshDesc::material_asset_key` populated for each submesh
 - `material_patch_offsets` provides absolute offsets (from payload start) for
@@ -485,9 +480,9 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
 - **Mesh types**: `kStandard`, `kSkinned`, and `kProcedural` are supported. Mesh
   types without a defined blob must emit a diagnostic and be skipped or coerced
   to `kStandard` per job policy.
-- **Header metadata**: `header.version` and `header.content_hash` are populated;
-  `GeometryPipeline` computes `header.content_hash` on the `co::ThreadPool`
-  after buffer indices are patched.
+- **Header metadata**: `header.version` is populated by the pipeline;
+  `AssetEmitter` records `header.content_hash` when it emits the finalized
+  descriptor.
 - **Attribute mask**: missing attributes are reflected via
   `header.variant_flags` (union-of-LOD attributes).
 - **Failure policy**: no geometry fallback is allowed. Any failure produces

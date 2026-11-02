@@ -18,6 +18,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -47,7 +48,8 @@ namespace {
     return *read;
   }
 
-  //! Writes `record` at `offset` of `bytes`.
+  //! Writes `record` at `offset` of the descriptor `bytes`, and records
+  //! its new content hash, so the edit breaks no other rule.
   template <class T>
   auto WriteRecord(
     std::vector<std::byte>& bytes, const size_t offset, const T& record) -> void
@@ -57,6 +59,7 @@ namespace {
     }
     std::ranges::copy(std::bit_cast<std::array<std::byte, sizeof(T)>>(record),
       std::span { bytes }.subspan(offset).begin());
+    data::StampDescriptorHash(bytes);
   }
 
   //! Reads the record `T` at `offset` of `bytes`, lets `edit` change it and
@@ -68,6 +71,17 @@ namespace {
     auto record = ReadRecord<T>(bytes, offset);
     edit(record);
     WriteRecord(bytes, offset, record);
+  }
+
+  //! The bytes of the descriptor `bytes` that hold its content hash.
+  auto HashField(std::vector<std::byte>& bytes) -> std::span<std::byte>
+  {
+    constexpr auto kOffset = offsetof(core::AssetHeader, content_hash);
+    constexpr auto kSize = sizeof(core::AssetHeader::content_hash);
+    if (bytes.size() < sizeof(core::AssetHeader)) {
+      throw std::invalid_argument("the descriptor is smaller than its header");
+    }
+    return std::span { bytes }.subspan(kOffset, kSize);
   }
 
   //! The offset of the element `index` of `table`, of `size` bytes.
@@ -126,6 +140,18 @@ auto DescriptorDefects::SetAssetType(
   });
 }
 
+auto DescriptorDefects::ClearContentHash(std::vector<std::byte>& descriptor)
+  -> void
+{
+  std::ranges::fill(HashField(descriptor), std::byte { 0 });
+}
+
+auto DescriptorDefects::CorruptContentHash(std::vector<std::byte>& descriptor)
+  -> void
+{
+  HashField(descriptor).front() ^= std::byte { 0xFF };
+}
+
 auto DescriptorDefects::SetVersion(
   std::vector<std::byte>& descriptor, const uint8_t version) -> void
 {
@@ -152,6 +178,7 @@ auto DescriptorDefects::ClearSurface(
     throw std::invalid_argument(
       "the geometry names no surface " + data::to_string(surface));
   }
+  data::StampDescriptorHash(geometry);
 }
 
 auto DescriptorDefects::PointNodeTablePastTheEnd(std::vector<std::byte>& scene)
@@ -281,6 +308,7 @@ auto DescriptorDefects::DropEnvironmentBlock(std::vector<std::byte>& scene)
   -> void
 {
   scene.resize(EnvironmentOffset(scene));
+  data::StampDescriptorHash(scene);
 }
 
 auto DescriptorDefects::SetSidecarScene(

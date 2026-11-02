@@ -10,7 +10,6 @@
 #include <chrono>
 #include <cstdint>
 #include <functional>
-#include <optional>
 #include <stop_token>
 #include <string>
 #include <vector>
@@ -25,7 +24,6 @@
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {
 
@@ -59,10 +57,8 @@ public:
     bool success = false;
   };
 
-  OXGN_COOK_API explicit CollisionShapeImportPipeline(
-    co::ThreadPool& thread_pool);
-  OXGN_COOK_API CollisionShapeImportPipeline(
-    co::ThreadPool& thread_pool, Config config);
+  OXGN_COOK_API explicit CollisionShapeImportPipeline();
+  OXGN_COOK_API explicit CollisionShapeImportPipeline(Config config);
   OXGN_COOK_API ~CollisionShapeImportPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(CollisionShapeImportPipeline)
@@ -90,12 +86,8 @@ public:
 
 private:
   [[nodiscard]] auto Worker() -> co::Co<>;
-  [[nodiscard]] auto ComputeContentHash(
-    std::vector<std::byte>& descriptor_bytes, std::stop_token stop_token)
-    -> co::Co<std::optional<data::pak::core::ContentHashDigest>>;
   auto ReportCancelled(WorkItem item) -> co::Co<>;
 
-  co::ThreadPool& thread_pool_;
   Config config_;
   co::Channel<WorkItem> input_channel_;
   co::Channel<WorkResult> output_channel_;

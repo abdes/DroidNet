@@ -1955,13 +1955,7 @@ auto ValidatePhysicsScenePairs(PlanningState& state) -> void
       if (!scene_bytes) {
         continue;
       }
-      const auto scene = data::SceneAsset(found->first, scene_bytes->Bytes());
-      if (scene.GetNodes().size() != sidecar.GetTargetNodeCount()
-        || !std::ranges::equal(sidecar.GetTargetSceneContentHash(),
-          oxygen::base::ComputeSha256(scene_bytes->Bytes()))) {
-        throw std::runtime_error(
-          "Physics sidecar does not match its target scene");
-      }
+      sidecar.CheckTarget(data::SceneAsset(found->first, scene_bytes->Bytes()));
       state.physics_scene_pairs.push_back(PhysicsScenePair {
         .scene_key = found->first,
         .sidecar_key = asset.key,

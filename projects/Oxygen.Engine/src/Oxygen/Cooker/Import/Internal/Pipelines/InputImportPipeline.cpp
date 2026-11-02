@@ -38,7 +38,6 @@
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
@@ -479,17 +478,6 @@ namespace {
     }
   };
 
-  auto PatchContentHash(std::vector<std::byte>& bytes,
-    const data::pak::core::ContentHashDigest& hash) -> void
-  {
-    constexpr auto kOffset
-      = offsetof(data::pak::core::AssetHeader, content_hash);
-    if (bytes.size() < kOffset + sizeof(hash)) {
-      return;
-    }
-    std::memcpy(std::span(bytes).subspan(kOffset).data(), &hash, sizeof(hash));
-  }
-
   auto SerializeAction(const DeclaredAction& action) -> std::vector<std::byte>
   {
     auto desc = InputActionAssetDesc {};
@@ -504,9 +492,7 @@ namespace {
       desc.flags |= InputActionAssetFlags::kCumulativeAccumulation;
     }
 
-    auto bytes = data::MakeDescriptorBytes(desc, strings);
-    PatchContentHash(bytes, util::ComputeContentSha256(bytes));
-    return bytes;
+    return data::MakeDescriptorBytes(desc, strings);
   }
 
   auto SerializeContext(const BuiltContextAsset& context, std::string& error)
@@ -560,7 +546,6 @@ namespace {
     const auto data = stream.Data();
     auto bytes = std::vector<std::byte>(data.begin(), data.end());
     data::AppendDescriptorStrings(bytes, strings);
-    PatchContentHash(bytes, util::ComputeContentSha256(bytes));
     return bytes;
   }
 
