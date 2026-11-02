@@ -7,7 +7,11 @@
 #pragma once
 
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -23,62 +27,88 @@
 
 namespace oxygen::string_utils {
 
-#ifndef OXYGEN_WINDOWS
 namespace detail {
-  // Strict, locale-independent UTF-8 / UTF-16 / UTF-32 codec for platforms
-  // where wchar_t holds one Unicode scalar value. Rejects overlong forms,
-  // surrogate code points, values above U+10FFFF and truncated sequences.
-  static_assert(sizeof(wchar_t) == 4, "POSIX wide strings are UTF-32");
-
   inline constexpr char32_t kMaxCodePoint = 0x10FFFF;
 
-  [[nodiscard]] constexpr auto IsScalarValue(const char32_t cp) noexcept
+  [[nodiscard]] constexpr auto IsScalarValue(const char32_t cp) noexcept -> bool
   {
     return cp <= kMaxCodePoint && (cp < 0xD800 || cp > 0xDFFF);
   }
+
+  //! Decodes one strict UTF-8 sequence at `pos`, which lies before the end of
+  //! `in`, and advances `pos` past it. Nothing for an overlong form, a
+  //! surrogate, a value above U+10FFFF or a truncated sequence.
+  [[nodiscard]] constexpr auto TryDecodeUtf8(
+    const std::string_view in, size_t& pos) noexcept -> std::optional<char32_t>
+  {
+    struct Shape {
+      size_t extra;
+      char32_t bits;
+      char32_t min;
+    };
+    const auto lead = static_cast<unsigned char>(in[pos++]);
+    if (lead < 0x80U) {
+      return lead;
+    }
+    const auto shape = [lead]() -> std::optional<Shape> {
+      if ((lead & 0xE0U) == 0xC0U) {
+        return Shape { .extra = 1, .bits = lead & 0x1FU, .min = 0x80 };
+      }
+      if ((lead & 0xF0U) == 0xE0U) {
+        return Shape { .extra = 2, .bits = lead & 0x0FU, .min = 0x800 };
+      }
+      if ((lead & 0xF8U) == 0xF0U) {
+        return Shape { .extra = 3, .bits = lead & 0x07U, .min = 0x10000 };
+      }
+      return std::nullopt;
+    }();
+    if (!shape || in.size() - pos < shape->extra) {
+      return std::nullopt;
+    }
+    auto cp = shape->bits;
+    for (size_t i = 0; i < shape->extra; ++i) {
+      const auto next = static_cast<unsigned char>(in[pos++]);
+      if ((next & 0xC0U) != 0x80U) {
+        return std::nullopt;
+      }
+      cp = (cp << 6U) | (next & 0x3FU);
+    }
+    if (cp < shape->min || !IsScalarValue(cp)) {
+      return std::nullopt;
+    }
+    return cp;
+  }
+} // namespace detail
+
+//! Whether `text` is strict UTF-8: no overlong form, surrogate, value above
+//! U+10FFFF or truncated sequence.
+[[nodiscard]] constexpr auto IsValidUtf8(const std::string_view text) noexcept
+  -> bool
+{
+  size_t pos = 0;
+  while (pos < text.size()) {
+    if (!detail::TryDecodeUtf8(text, pos)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+#ifndef OXYGEN_WINDOWS
+namespace detail {
+  // Locale-independent UTF-8 / UTF-16 / UTF-32 codec for platforms where
+  // wchar_t holds one Unicode scalar value.
+  static_assert(sizeof(wchar_t) == 4, "POSIX wide strings are UTF-32");
 
   //! Decode one UTF-8 sequence starting at `pos`; advances `pos`.
   [[nodiscard]] inline auto DecodeUtf8(std::string_view in, size_t& pos)
     -> char32_t
   {
-    const auto fail
-      = [] { throw std::runtime_error("Invalid UTF-8 sequence"); };
-    const auto lead = static_cast<unsigned char>(in[pos++]);
-    if (lead < 0x80) {
-      return lead;
+    const auto cp = TryDecodeUtf8(in, pos);
+    if (!cp) {
+      throw std::runtime_error("Invalid UTF-8 sequence");
     }
-    size_t extra = 0;
-    char32_t cp = 0;
-    char32_t min = 0;
-    if ((lead & 0xE0U) == 0xC0U) {
-      extra = 1;
-      cp = lead & 0x1FU;
-      min = 0x80;
-    } else if ((lead & 0xF0U) == 0xE0U) {
-      extra = 2;
-      cp = lead & 0x0FU;
-      min = 0x800;
-    } else if ((lead & 0xF8U) == 0xF0U) {
-      extra = 3;
-      cp = lead & 0x07U;
-      min = 0x10000;
-    } else {
-      fail();
-    }
-    if (in.size() - pos < extra) {
-      fail();
-    }
-    for (size_t i = 0; i < extra; ++i) {
-      const auto next = static_cast<unsigned char>(in[pos++]);
-      if ((next & 0xC0U) != 0x80U) {
-        fail();
-      }
-      cp = (cp << 6U) | (next & 0x3FU);
-    }
-    if (cp < min || !IsScalarValue(cp)) {
-      fail();
-    }
-    return cp;
+    return *cp;
   }
 
   //! Append the UTF-8 encoding of a Unicode scalar value.
@@ -126,6 +156,24 @@ namespace detail {
 } // namespace detail
 #endif
 
+namespace detail {
+  //! The length of a string as the Windows conversion APIs take it.
+  /*!
+   They take an `int`, and read `-1` as "up to a terminator", so a length
+   that does not fit is refused rather than narrowed.
+
+   @throw std::length_error when `size` exceeds what an `int` holds.
+  */
+  [[nodiscard]] constexpr auto ToApiLength(const size_t size) -> int
+  {
+    if (size > static_cast<size_t>(std::numeric_limits<int>::max())) {
+      throw std::length_error(
+        "string is too long for a Windows conversion API");
+    }
+    return static_cast<int>(size);
+  }
+} // namespace detail
+
 // Concept to ensure the output type has clear(), resize(), and data() methods
 // and that T::value_type is convertible to char
 template <typename T>
@@ -144,20 +192,25 @@ void Utf8ToWide(const InputType& in, std::wstring& out)
     out.clear();
     return;
   }
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   const std::string_view sv_in(
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     reinterpret_cast<const char*>(in.data()), in.size());
 
 #ifdef OXYGEN_WINDOWS
-  const int size_needed = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-    sv_in.data(), static_cast<int>(sv_in.size()), nullptr, 0);
+  // The length goes with the data, checked by ToApiLength, which the check
+  // cannot see through.
+  // NOLINTBEGIN(bugprone-suspicious-stringview-data-usage)
+  const auto in_length = detail::ToApiLength(sv_in.size());
+  const int size_needed = MultiByteToWideChar(
+    CP_UTF8, MB_ERR_INVALID_CHARS, sv_in.data(), in_length, nullptr, 0);
   if (size_needed <= 0) {
     windows::WindowsException::ThrowFromLastError();
   }
 
   out.resize(size_needed);
   const int ret = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-    sv_in.data(), static_cast<int>(sv_in.size()), out.data(), size_needed);
+    sv_in.data(), in_length, out.data(), size_needed);
+  // NOLINTEND(bugprone-suspicious-stringview-data-usage)
   if (ret <= 0) {
     windows::WindowsException::ThrowFromLastError();
   }
@@ -203,17 +256,23 @@ void WideToUtf8(const std::wstring_view& in, OutputType& out)
     return;
   }
 #ifdef OXYGEN_WINDOWS
-  int size_needed = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
-    in.data(), static_cast<int>(in.size()), nullptr, 0, nullptr, nullptr);
+  // The length goes with the data, checked by ToApiLength, which the check
+  // cannot see through.
+  // NOLINTBEGIN(bugprone-suspicious-stringview-data-usage)
+  // NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
+  const auto in_length = detail::ToApiLength(in.size());
+  const int size_needed = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+    in.data(), in_length, nullptr, 0, nullptr, nullptr);
   if (size_needed <= 0) {
     windows::WindowsException::ThrowFromLastError();
   }
 
   out.resize(size_needed);
-  const int ret = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, in.data(),
-    static_cast<int>(in.size()),
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    reinterpret_cast<char*>(out.data()), size_needed, nullptr, nullptr);
+  const int ret
+    = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, in.data(), in_length,
+      reinterpret_cast<char*>(out.data()), size_needed, nullptr, nullptr);
+  // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
+  // NOLINTEND(bugprone-suspicious-stringview-data-usage)
   if (ret <= 0) {
     windows::WindowsException::ThrowFromLastError();
   }

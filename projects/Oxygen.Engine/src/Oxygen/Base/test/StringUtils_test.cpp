@@ -8,6 +8,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <limits>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -103,17 +105,12 @@ NOLINT_TEST_F(ToWideTest, RejectsInvalidUtf8Sequence)
 NOLINT_TEST_F(ToWideTest, CanConvertLargeUtf8String)
 {
   constexpr size_t length = 1000;
-  constexpr char8_t value = 42;
-  // Create an array and fill it with the same value
-  std::array<char8_t, length> big_utf8 {};
-  big_utf8.fill(value);
-  big_utf8.back() = '\0'; // Null-terminate the string
+  const std::u8string big_utf8(length, u8'*');
 
   std::wstring output {};
-  const std::string_view view(reinterpret_cast<const char*>(big_utf8.data()));
-  NOLINT_EXPECT_NO_THROW(Utf8ToWide(view, output));
+  NOLINT_EXPECT_NO_THROW(Utf8ToWide(big_utf8, output));
 
-  EXPECT_EQ(length - 1, output.size());
+  EXPECT_EQ(length, output.size());
 }
 
 struct WideStringConversionTestParam {
@@ -136,7 +133,8 @@ NOLINT_TEST_P(ToUtf8Test, ConvertsValidWideStringToUtf8String)
   std::string expected;
   std::visit(
     [&](auto&& arg) -> auto {
-      expected = std::string(reinterpret_cast<const char*>(arg));
+      const auto text = std::basic_string_view(arg);
+      expected.assign(text.begin(), text.end());
     },
     expected_output);
 
@@ -201,6 +199,23 @@ NOLINT_TEST_F(ToUtf8Test, CanConvertLargeWideString)
   EXPECT_EQ(length - 1, output.size());
 }
 
+//! A length the Windows conversion APIs take as an `int` is passed as is up
+//! to the largest one; a longer one is refused, never narrowed to a negative
+//! length that would make the API scan for a terminator.
+NOLINT_TEST(ApiLengthTest, RefusesALengthAnIntCannotHold)
+{
+  constexpr auto kLargest = std::numeric_limits<int>::max();
+
+  EXPECT_EQ(detail::ToApiLength(0U), 0);
+  EXPECT_EQ(detail::ToApiLength(static_cast<size_t>(kLargest)), kLargest);
+  EXPECT_THROW(
+    static_cast<void>(detail::ToApiLength(static_cast<size_t>(kLargest) + 1U)),
+    std::length_error);
+  EXPECT_THROW(
+    static_cast<void>(detail::ToApiLength(std::numeric_limits<size_t>::max())),
+    std::length_error);
+}
+
 //=== UTF-16 (char16_t) to UTF-8 Conversion Tests ===-------------------------//
 
 namespace {
@@ -217,7 +232,9 @@ namespace {
   };
 
   //! The same text encoded in UTF-8: G r C3BC F09F9880 CEA9.
-  const std::string kExpectedUtf8 { "G\x72\xC3\xBC\xF0\x9F\x98\x80\xCE\xA9" };
+  constexpr std::string_view kExpectedUtf8 {
+    "G\x72\xC3\xBC\xF0\x9F\x98\x80\xCE\xA9"
+  };
 } // namespace
 
 //! char16_t input converts correctly on every platform (on Linux wchar_t is
@@ -233,9 +250,7 @@ NOLINT_TEST(StringUtilsTest, WideToUtf8_Char16IntoUtf8String)
 {
   std::u8string output;
   NOLINT_EXPECT_NO_THROW(WideToUtf8(kUtf16Text.data(), output));
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-  const std::string as_narrow { reinterpret_cast<const char*>(output.data()),
-    output.size() };
+  const std::string as_narrow(output.begin(), output.end());
   EXPECT_EQ(as_narrow, kExpectedUtf8);
 }
 
@@ -249,6 +264,28 @@ NOLINT_TEST(StringUtilsTest, WideToUtf8_Char16LoneSurrogateThrows)
   std::string output;
   NOLINT_EXPECT_THROW(
     WideToUtf8(lone_surrogate.data(), output), std::exception);
+}
+
+//! Strict UTF-8 accepts every well-formed sequence length, the empty text and
+//! embedded NUL, which is a valid code point.
+NOLINT_TEST(StringUtilsTest, IsValidUtf8AcceptsWellFormedText)
+{
+  EXPECT_TRUE(IsValidUtf8(""));
+  EXPECT_TRUE(IsValidUtf8(kExpectedUtf8));
+  EXPECT_TRUE(IsValidUtf8(std::string_view { "a\0b", 3 }));
+  EXPECT_TRUE(IsValidUtf8("\xF4\x8F\xBF\xBF")); // U+10FFFF
+}
+
+//! Strict UTF-8 refuses every malformed sequence the decoder refuses.
+NOLINT_TEST(StringUtilsTest, IsValidUtf8RefusesMalformedText)
+{
+  EXPECT_FALSE(IsValidUtf8("\xFF")); // no lead byte
+  EXPECT_FALSE(IsValidUtf8("\x80")); // lone continuation
+  EXPECT_FALSE(IsValidUtf8("\xC3")); // truncated
+  EXPECT_FALSE(IsValidUtf8("\xC3\x28")); // bad continuation
+  EXPECT_FALSE(IsValidUtf8("\xC0\xAF")); // overlong '/'
+  EXPECT_FALSE(IsValidUtf8("\xED\xA0\x80")); // surrogate U+D800
+  EXPECT_FALSE(IsValidUtf8("\xF4\x90\x80\x80")); // above U+10FFFF
 }
 
 } // namespace oxygen::string_utils
