@@ -282,10 +282,11 @@ and the in-memory model the interop hands to the editor.
   bounded; component tables are checked for the sort order and type order the
   reader assumes; the header content hash is verified, not trusted;
   instances, changes and starting state by node path refuse dangling paths.
-- `Schema/Generated.SceneComponents.h` and `SceneSchemaCodeGen`: generation
-  is deterministic and checked in sync with `SceneComponents.schema.json` (a
-  test or build step fails on drift); `PropertyRange` limits match the
-  schema.
+- `SceneSchemaCodeGen`: `SceneComponents.yaml` is the one source, validated
+  against `SceneComponents.schema.json`; generation of the versioned
+  `Generated.SceneComponents.h` and `Generated.SceneChanges.h` is
+  deterministic, and stale checked-in headers cannot go unnoticed;
+  `PropertyRange` limits match the schema.
 - `GeometryAsset.h` (1 300 lines in a header): LOD, submesh and index ranges
   are validated against the referenced buffers; 16- and 32-bit indices are
   handled; the remaining `reinterpret_cast` is justified.
