@@ -53,8 +53,7 @@ namespace {
     const auto vertices = mesh->Vertices();
     ASSERT_EQ(vertices.size(), expected.first.size());
     for (size_t index = 0; index < vertices.size(); ++index) {
-      EXPECT_TRUE(data::StrictlyEqual(
-        CheckedAt(vertices, index), expected.first.at(index)))
+      EXPECT_TRUE(CheckedAt(vertices, index) == expected.first.at(index))
         << "vertex " << index;
     }
     EXPECT_THAT(mesh->IndexBuffer().Widened(),
