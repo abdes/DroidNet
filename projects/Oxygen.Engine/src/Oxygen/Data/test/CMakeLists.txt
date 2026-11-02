@@ -36,6 +36,7 @@ m_gtest_program(
     "AssetReferences_test.cpp"
     "PakCatalog_test.cpp"
     "BufferResource_test.cpp"
+    "BufferStructure_test.cpp"
     "CanonicalPrimitives_test.cpp"
     "Capsule_test.cpp"
     "CameraExposureSerialization_test.cpp"
@@ -78,6 +79,7 @@ m_gtest_program(
     "StableId_test.cpp"
     "SubMesh_test.cpp"
     "TextureResource_test.cpp"
+    "TextureStructure_test.cpp"
     "ToStringConverters_test.cpp"
     "Vertex_test.cpp"
 )

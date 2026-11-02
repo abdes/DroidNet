@@ -129,10 +129,7 @@ auto HzbPyramidBuilder::ComputeMipCount(const std::uint32_t root_width,
 {
   CHECK_F(root_width != 0U && root_height != 0U,
     "HZB requires a non-empty root extent");
-  return (std::max)(static_cast<std::uint32_t>(
-                      std::bit_width((std::max)(root_width, root_height)))
-      - 1U,
-    1U);
+  return (std::max)(MipChainLength(root_width, root_height) - 1U, 1U);
 }
 
 auto HzbPyramidBuilder::MakeTextureDesc(const std::uint32_t source_width,

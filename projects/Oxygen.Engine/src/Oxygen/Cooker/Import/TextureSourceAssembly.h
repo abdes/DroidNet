@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/TextureImportError.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Serio/ByteBuffer.h>
 
 namespace oxygen::content::import {
@@ -40,9 +41,6 @@ enum class CubeFace : uint8_t {
   kNegativeZ = 5,  //!< -Z face: world +Y (back)
   // clang-format on
 };
-
-//! Number of faces in a cube map.
-inline constexpr uint8_t kCubeFaceCount = 6;
 
 //! String representation of CubeFace enum values.
 OXGN_COOK_NDAPI auto to_string(CubeFace face) -> const char*;
@@ -259,7 +257,7 @@ inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kGpuCubeFaceBases = {
 //! Assemble a cube map from 6 individual face images.
 /*!
   Combines 6 separate face images into a single `ScratchImage` with
-  `texture_type = kTextureCube` and `array_layers = 6`.
+  `texture_type = kTextureCube` and `array_layers = kCubeFaceCount`.
 
   All face images must have identical dimensions and format.
 
@@ -433,7 +431,7 @@ OXGN_COOK_NDAPI auto DetectCubeMapLayout(const ScratchImage& image) noexcept
 /*!
   Extracts the 6 cube faces from a single image containing all faces arranged
   in one of the supported layouts. The output is a single ScratchImage with
-  `texture_type = kTextureCube` and `array_layers = 6`.
+  `texture_type = kTextureCube` and `array_layers = kCubeFaceCount`.
 
   ### Face Mapping
 

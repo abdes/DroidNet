@@ -20,6 +20,7 @@
 #include <Oxygen/Cooker/Import/TextureImportError.h>
 #include <Oxygen/Cooker/test/Support/TestImages.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -255,7 +256,7 @@ NOLINT_TEST(CompressedImageDecodeTest, CubeMapKtx2IsRefused)
     .height = kSize,
     .rgba = pixels,
     .encoding = Ktx2Encoding::kRaw,
-    .faces = 6U,
+    .faces = oxygen::kCubeFaceCount,
   });
 
   const auto decoded = DecodeToScratchImage(ktx2);

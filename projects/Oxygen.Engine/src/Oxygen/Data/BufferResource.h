@@ -56,6 +56,15 @@ public:
 
   //! Constructs a BufferResource that owns `data`, the buffer its loader read
   //! the payload into.
+  /*!
+   The row must declare usage flags the format defines, with at most one
+   update frequency, and either an element format a buffer can hold (one
+   texel per element) with no stride, or a stride; its size is whole
+   elements, and `data` holds it.
+
+   @throw CookedOpenError When the row breaks a rule, or `data` holds another
+     size.
+  */
   OXGN_DATA_API BufferResource(
     pak::core::BufferResourceDesc desc, serio::ByteBuffer data);
 
@@ -80,8 +89,8 @@ public:
     return static_cast<UsageFlags>(desc_.usage_flags);
   }
 
-  //! Returns the stride of each element in bytes (ignored for raw buffers, i.e.
-  //! format is Format::kUnknown).
+  //! Returns the stride of each element in bytes: 1 for a raw buffer, 0 for a
+  //! formatted one, whose format sets it.
   [[nodiscard]] auto GetElementStride() const noexcept
   {
     return desc_.element_stride;
@@ -101,7 +110,7 @@ public:
   //! raw/structured).
   [[nodiscard]] auto IsFormatted() const noexcept
   {
-    // Formatted: element_format != 0, element_stride should be 0 and is ignored
+    // Formatted: element_format != 0 and element_stride == 0.
     return GetElementFormat() != Format::kUnknown;
   }
 

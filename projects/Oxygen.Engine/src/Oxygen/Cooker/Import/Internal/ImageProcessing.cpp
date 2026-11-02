@@ -9,18 +9,117 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <functional>
 #include <numbers>
+#include <numeric>
 #include <span>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/Internal/ImageProcessing.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 
 namespace oxygen::content::import {
+
+//===----------------------------------------------------------------------===//
+// Texels - RGBA8 and RGBA32Float texel access
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+  //! One texel's four channels in its format's own range: 0..255 for RGBA8,
+  //! the stored value for RGBA32Float.
+  using Texel = std::array<float, 4>;
+
+  //! Whether `format` stores float channels; anything else is RGBA8.
+  [[nodiscard]] auto IsFloat(const Format format) noexcept -> bool
+  {
+    return format == Format::kRGBA32Float;
+  }
+
+  //! The largest channel value of `format`: an opaque alpha.
+  [[nodiscard]] auto ChannelMax(const Format format) noexcept -> float
+  {
+    return IsFloat(format) ? 1.0F : 255.0F;
+  }
+
+  //! The byte offset of texel (`x`, `y`) of a subresource whose rows lie
+  //! `row_pitch` bytes apart.
+  [[nodiscard]] auto TexelOffset(const Format format, const uint64_t row_pitch,
+    const uint32_t x, const uint32_t y) -> std::size_t
+  {
+    return static_cast<std::size_t>(
+      (uint64_t { y } * row_pitch) + graphics::detail::RowBytes(format, x));
+  }
+
+  [[nodiscard]] auto ReadTexel(const std::span<const std::byte> bytes,
+    const Format format, const std::size_t offset) -> Texel
+  {
+    if (IsFloat(format)) {
+      auto texel = Texel {};
+      std::memcpy(texel.data(), bytes.subspan(offset, sizeof(texel)).data(),
+        sizeof(texel));
+      return texel;
+    }
+    auto raw = std::array<uint8_t, 4> {};
+    std::memcpy(
+      raw.data(), bytes.subspan(offset, sizeof(raw)).data(), sizeof(raw));
+    auto texel = Texel {};
+    std::ranges::transform(raw, texel.begin(),
+      [](const uint8_t value) -> float { return static_cast<float>(value); });
+    return texel;
+  }
+
+  //! Writes `texel`; an RGBA8 channel is rounded to the nearest value in
+  //! 0..255.
+  auto WriteTexel(const std::span<std::byte> bytes, const Format format,
+    const std::size_t offset, const Texel& texel) -> void
+  {
+    if (IsFloat(format)) {
+      std::memcpy(bytes.subspan(offset, sizeof(texel)).data(), texel.data(),
+        sizeof(texel));
+      return;
+    }
+    auto raw = std::array<uint8_t, 4> {};
+    std::ranges::transform(
+      texel, raw.begin(), [](const float value) -> uint8_t {
+        return static_cast<uint8_t>(
+          std::lround(std::clamp(value, 0.0F, 255.0F)));
+      });
+    std::memcpy(
+      bytes.subspan(offset, sizeof(raw)).data(), raw.data(), sizeof(raw));
+  }
+
+  //! Applies `edit` to every texel of every layer of `image`, from mip
+  //! `first_mip` on.
+  template <typename Edit>
+  auto ForEachTexel(
+    ScratchImage& image, const uint16_t first_mip, const Edit& edit) -> void
+  {
+    const auto& meta = image.Meta();
+    for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
+      for (uint16_t mip = first_mip; mip < meta.mip_levels; ++mip) {
+        const auto view = image.GetImage(layer, mip);
+        const auto pixels = image.GetMutablePixels(layer, mip);
+        for (uint32_t y = 0; y < view.height; ++y) {
+          for (uint32_t x = 0; x < view.width; ++x) {
+            const auto offset
+              = TexelOffset(meta.format, view.row_pitch_bytes, x, y);
+            auto texel = ReadTexel(pixels, meta.format, offset);
+            edit(texel);
+            WriteTexel(pixels, meta.format, offset, texel);
+          }
+        }
+      }
+    }
+  }
+
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // image::color - Color Space Conversion Implementation
@@ -71,50 +170,24 @@ namespace image::color {
     void ConvertImageColorSpace(
       ScratchImage& image, float (*convert_fn)(float) noexcept)
     {
-      const auto& meta = image.Meta();
-      const auto format = meta.format;
+      const auto format = image.Meta().format;
 
       // Only support RGBA8 and RGBA32Float
       if (format != Format::kRGBA8UNorm && format != Format::kRGBA32Float) {
         return;
       }
 
-      for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
-        for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
-          auto pixels = image.GetMutablePixels(layer, mip);
-          const auto view = image.GetImage(layer, mip);
-
-          if (format == Format::kRGBA32Float) {
-            auto* float_data = reinterpret_cast<float*>(pixels.data());
-            const auto pixel_count
-              = static_cast<size_t>(view.width) * view.height;
-
-            for (size_t i = 0; i < pixel_count; ++i) {
-              const size_t offset = i * 4;
-              float_data[offset + 0] = convert_fn(float_data[offset + 0]);
-              float_data[offset + 1] = convert_fn(float_data[offset + 1]);
-              float_data[offset + 2] = convert_fn(float_data[offset + 2]);
-              // Alpha unchanged
-            }
-          } else { // RGBA8
-            auto* byte_data = reinterpret_cast<uint8_t*>(pixels.data());
-            const auto pixel_count
-              = static_cast<size_t>(view.width) * view.height;
-
-            for (size_t i = 0; i < pixel_count; ++i) {
-              const size_t offset = i * 4;
-              for (size_t c = 0; c < 3; ++c) { // RGB only
-                const float normalized
-                  = static_cast<float>(byte_data[offset + c]) / 255.0F;
-                const float converted = convert_fn(normalized);
-                const float clamped = std::clamp(converted, 0.0F, 1.0F);
-                byte_data[offset + c]
-                  = static_cast<uint8_t>(std::round(clamped * 255.0F));
-              }
-            }
-          }
-        }
-      }
+      // An RGBA8 channel converts normalized and stays in range.
+      const auto max = ChannelMax(format);
+      const auto convert = [&](float& channel) -> void {
+        channel = IsFloat(format)
+          ? convert_fn(channel)
+          : std::clamp(convert_fn(channel / max), 0.0F, 1.0F) * max;
+      };
+      ForEachTexel(image, 0U, [&](Texel& texel) -> void {
+        std::ranges::for_each(std::span(texel).first<3>(), convert);
+        // Alpha unchanged
+      });
     }
 
   } // namespace
@@ -193,46 +266,32 @@ namespace image::hdr {
     ScratchImageMeta ldr_meta = meta;
     ldr_meta.format = Format::kRGBA8UNorm;
     ScratchImage ldr_image = ScratchImage::Create(ldr_meta);
+    if (!ldr_image.IsValid()) {
+      return {};
+    }
 
+    const auto ldr_max = ChannelMax(ldr_meta.format);
     for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
       for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
         const auto src_view = hdr_image.GetImage(layer, mip);
-        auto dst_pixels = ldr_image.GetMutablePixels(layer, mip);
+        const auto dst_view = ldr_image.GetImage(layer, mip);
+        const auto dst_pixels = ldr_image.GetMutablePixels(layer, mip);
 
-        const auto* src_data
-          = reinterpret_cast<const float*>(src_view.pixels.data());
-        auto* dst_data = reinterpret_cast<uint8_t*>(dst_pixels.data());
+        for (uint32_t y = 0; y < src_view.height; ++y) {
+          for (uint32_t x = 0; x < src_view.width; ++x) {
+            const auto hdr_pixel = ReadTexel(src_view.pixels, meta.format,
+              TexelOffset(meta.format, src_view.row_pitch_bytes, x, y));
 
-        const auto pixel_count
-          = static_cast<size_t>(src_view.width) * src_view.height;
+            auto ldr_pixel = AcesTonemap(ApplyExposure(hdr_pixel, exposure));
 
-        for (size_t i = 0; i < pixel_count; ++i) {
-          const size_t src_offset = i * 4;
-          const size_t dst_offset = i * 4;
-
-          // Read HDR pixel
-          std::array hdr_pixel = {
-            src_data[src_offset + 0],
-            src_data[src_offset + 1],
-            src_data[src_offset + 2],
-            src_data[src_offset + 3],
-          };
-
-          // Apply exposure
-          auto exposed = ApplyExposure(hdr_pixel, exposure);
-
-          // Apply tonemapping
-          auto tonemapped = AcesTonemap(exposed);
-
-          // Quantize to 8-bit
-          dst_data[dst_offset + 0]
-            = static_cast<uint8_t>(std::round(tonemapped[0] * 255.0F));
-          dst_data[dst_offset + 1]
-            = static_cast<uint8_t>(std::round(tonemapped[1] * 255.0F));
-          dst_data[dst_offset + 2]
-            = static_cast<uint8_t>(std::round(tonemapped[2] * 255.0F));
-          dst_data[dst_offset + 3]
-            = static_cast<uint8_t>(std::round(tonemapped[3] * 255.0F));
+            // Quantize to 8-bit
+            std::ranges::transform(ldr_pixel, ldr_pixel.begin(),
+              [ldr_max](
+                const float value) -> float { return value * ldr_max; });
+            WriteTexel(dst_pixels, ldr_meta.format,
+              TexelOffset(ldr_meta.format, dst_view.row_pitch_bytes, x, y),
+              ldr_pixel);
+          }
         }
       }
     }
@@ -248,45 +307,39 @@ namespace image::hdr {
 
 namespace image::mip {
 
+  // clang-format off
   auto BesselI0(const float x) noexcept -> float
   {
-    // Modified Bessel function I0 using polynomial approximation
+    // Modified Bessel function I0, by the polynomial approximations of
+    // Abramowitz & Stegun 9.8.1 (|x| < 3.75) and 9.8.2 (|x| >= 3.75).
+    // Coefficients run from the constant term up.
+    constexpr auto kBelow = std::array {
+      1.0F, 3.5156229F, 3.0899424F, 1.2067492F, 0.2659732F, 0.0360768F,
+      0.0045813F,
+    };
+    constexpr auto kAbove = std::array {
+      0.39894228F,  0.01328592F, 0.00225319F, -0.00157565F, 0.00916281F,
+      -0.02057706F, 0.02635537F, -0.01647633F, 0.00392377F,
+    };
+    constexpr auto kSplit = 3.75F;
+
+    // c0 + t * (c1 + t * (c2 + ...)), innermost term first.
+    const auto polynomial
+      = [](const auto& coefficients, const float t) -> float {
+          return std::accumulate(coefficients.rbegin(), coefficients.rend(),
+            0.0F, [t](const float sum, const float c) -> float {
+              return (sum * t) + c;
+            });
+        };
+
     const float ax = std::abs(x);
-
-    if (ax < 3.75F) {
-      const float t = x / 3.75F;
-      const float t2 = t * t;
-      return 1.0F
-        + (t2
-          * (3.5156229F
-            + (t2
-              * (3.0899424F
-                + (t2
-                  * (1.2067492F
-                    + (t2
-                      * (0.2659732F
-                        + (t2 * (0.0360768F + (t2 * 0.0045813F)))))))))));
+    if (ax < kSplit) {
+      const float t = x / kSplit;
+      return polynomial(kBelow, t * t);
     }
-
-    const float t = 3.75F / ax;
-    return (std::exp(ax) / std::sqrt(ax))
-      * (0.39894228F
-        + (t
-          * (0.01328592F
-            + (t
-              * (0.00225319F
-                + (t
-                  * (-0.00157565F
-                    + (t
-                      * (0.00916281F
-                        + (t
-                          * (-0.02057706F
-                            + (t
-                              * (0.02635537F
-                                + (t
-                                  * (-0.01647633F
-                                    + (t * 0.00392377F))))))))))))))));
+    return (std::exp(ax) / std::sqrt(ax)) * polynomial(kAbove, kSplit / ax);
   }
+  // clang-format on
 
   auto KaiserWindow(const float x, const float alpha) noexcept -> float
   {
@@ -298,117 +351,61 @@ namespace image::mip {
     return BesselI0(arg) / BesselI0(alpha);
   }
 
-  auto LanczosKernel(const float x, const int a) noexcept -> float
+  auto LanczosKernel(const float x) noexcept -> float
   {
+    constexpr auto kLobes = 3.0F;
     if (std::abs(x) < 1e-6F) {
       return 1.0F;
     }
 
-    const float a_float = static_cast<float>(a);
-    if (std::abs(x) >= a_float) {
+    if (std::abs(x) >= kLobes) {
       return 0.0F;
     }
 
     const float pi_x = std::numbers::pi_v<float> * x;
     const float sinc = std::sin(pi_x) / pi_x;
-    const float lanczos_window = std::sin(pi_x / a_float) / (pi_x / a_float);
+    const float lanczos_window = std::sin(pi_x / kLobes) / (pi_x / kLobes);
     return sinc * lanczos_window;
-  }
-
-  auto ComputeMipCount(const uint32_t width, const uint32_t height) noexcept
-    -> uint32_t
-  {
-    const uint32_t max_dim = (std::max)(width, height);
-    if (max_dim == 0) {
-      return 0;
-    }
-
-    // floor(log2(max_dim)) + 1
-    uint32_t count = 1;
-    uint32_t dim = max_dim;
-    while (dim > 1) {
-      dim >>= 1;
-      ++count;
-    }
-    return count;
   }
 
   namespace {
 
+    //! The mip a downsample writes: its texels and where they lie.
+    struct MipTarget final {
+      std::span<std::byte> bytes;
+      ImageView view;
+    };
+
     //=== Box Filter Implementation
     //===------------------------------------------//
 
-    void DownsampleBox2D(const ImageView& src, std::span<std::byte> dst,
-      uint32_t dst_width, uint32_t dst_height, Format format)
+    void DownsampleBox2D(const ImageView& src, const MipTarget& dst)
     {
-      if (format == Format::kRGBA32Float) {
-        const auto* src_data
-          = reinterpret_cast<const float*>(src.pixels.data());
-        auto* dst_data = reinterpret_cast<float*>(dst.data());
-        const uint32_t src_stride = src.row_pitch_bytes / sizeof(float);
+      const auto format = src.format;
+      for (uint32_t y = 0; y < dst.view.height; ++y) {
+        for (uint32_t x = 0; x < dst.view.width; ++x) {
+          const uint32_t sx = x * 2;
+          const uint32_t sy = y * 2;
 
-        for (uint32_t y = 0; y < dst_height; ++y) {
-          for (uint32_t x = 0; x < dst_width; ++x) {
-            const uint32_t sx = x * 2;
-            const uint32_t sy = y * 2;
+          // Clamp source coordinates
+          const uint32_t sx1 = (std::min)(sx + 1, src.width - 1);
+          const uint32_t sy1 = (std::min)(sy + 1, src.height - 1);
 
-            // Clamp source coordinates
-            const uint32_t sx1 = (std::min)(sx + 1, src.width - 1);
-            const uint32_t sy1 = (std::min)(sy + 1, src.height - 1);
-
-            std::array<float, 4> sum = { 0, 0, 0, 0 };
-
-            // Sample 2x2 block
-            for (uint32_t py : { sy, sy1 }) {
-              for (uint32_t px : { sx, sx1 }) {
-                const size_t src_offset = (static_cast<size_t>(py) * src_stride)
-                  + (static_cast<size_t>(px) * 4);
-                for (int c = 0; c < 4; ++c) {
-                  sum[c] += src_data[src_offset + c];
-                }
-              }
-            }
-
-            // Average
-            const size_t dst_offset
-              = ((static_cast<size_t>(y) * dst_width) + x) * 4;
-            for (int c = 0; c < 4; ++c) {
-              dst_data[dst_offset + c] = sum[c] * 0.25F;
+          // Sample 2x2 block
+          auto sum = Texel {};
+          for (uint32_t py : { sy, sy1 }) {
+            for (uint32_t px : { sx, sx1 }) {
+              const auto texel = ReadTexel(src.pixels, format,
+                TexelOffset(format, src.row_pitch_bytes, px, py));
+              std::ranges::transform(sum, texel, sum.begin(), std::plus {});
             }
           }
-        }
-      } else { // RGBA8
-        const auto* src_data
-          = reinterpret_cast<const uint8_t*>(src.pixels.data());
-        auto* dst_data = reinterpret_cast<uint8_t*>(dst.data());
-        const uint32_t src_stride = src.row_pitch_bytes;
 
-        for (uint32_t y = 0; y < dst_height; ++y) {
-          for (uint32_t x = 0; x < dst_width; ++x) {
-            const uint32_t sx = x * 2;
-            const uint32_t sy = y * 2;
-
-            const uint32_t sx1 = (std::min)(sx + 1, src.width - 1);
-            const uint32_t sy1 = (std::min)(sy + 1, src.height - 1);
-
-            std::array<uint32_t, 4> sum = { 0, 0, 0, 0 };
-
-            for (uint32_t py : { sy, sy1 }) {
-              for (uint32_t px : { sx, sx1 }) {
-                const size_t src_offset
-                  = (static_cast<size_t>(py) * src_stride) + (px * 4);
-                for (int c = 0; c < 4; ++c) {
-                  sum[c] += src_data[src_offset + c];
-                }
-              }
-            }
-
-            const size_t dst_offset
-              = ((static_cast<size_t>(y) * dst_width) + x) * 4;
-            for (int c = 0; c < 4; ++c) {
-              dst_data[dst_offset + c] = static_cast<uint8_t>((sum[c] + 2) / 4);
-            }
-          }
+          // Average
+          std::ranges::transform(sum, sum.begin(),
+            [](const float value) -> float { return value * 0.25F; });
+          WriteTexel(dst.bytes, format,
+            TexelOffset(format, dst.view.row_pitch_bytes, x, y), sum);
         }
       }
     }
@@ -416,9 +413,9 @@ namespace image::mip {
     //=== Separable Filter Implementation
     //===------------------------------------//
 
-    using KernelFunc = float (*)(float, float);
+    using KernelFunc = float (*)(float);
 
-    [[nodiscard]] auto KaiserKernel(float x, float /*param*/) noexcept -> float
+    [[nodiscard]] auto KaiserKernel(const float x) noexcept -> float
     {
       // Kaiser window with alpha=4.0, width=3 (radius)
       constexpr float kAlpha = 4.0F;
@@ -429,16 +426,12 @@ namespace image::mip {
       return KaiserWindow(x / kWidth, kAlpha);
     }
 
-    [[nodiscard]] auto LanczosKernelWrapper(float x, float /*param*/) noexcept
-      -> float
+    void DownsampleSeparable2D(
+      const ImageView& src, const MipTarget& dst, const KernelFunc kernel)
     {
-      return LanczosKernel(x, 3); // Lanczos-3
-    }
-
-    void DownsampleSeparable2D(const ImageView& src, std::span<std::byte> dst,
-      uint32_t dst_width, uint32_t dst_height, Format format, KernelFunc kernel,
-      float /*kernel_param*/)
-    {
+      const auto format = src.format;
+      const auto dst_width = dst.view.width;
+      const auto dst_height = dst.view.height;
       if (dst_width == 0 || dst_height == 0) {
         return;
       }
@@ -449,13 +442,16 @@ namespace image::mip {
       // Y pass).
       const uint32_t temp_width = dst_width;
       const uint32_t temp_height = src.height;
-      std::vector<float> temp_buffer(
-        static_cast<size_t>(temp_width) * temp_height * 4);
+      std::vector<Texel> temp_buffer(
+        static_cast<size_t>(temp_width) * temp_height);
+      const auto temp_at = [&](const uint32_t x, const uint32_t y) -> Texel& {
+        return temp_buffer.at((static_cast<size_t>(y) * temp_width) + x);
+      };
 
       // Both Kaiser and Lanczos-3 implementations in this file utilize a radius
       // approx 3.0 pixels.
       // - Kaiser: kWidth = 3.0 (hardcoded)
-      // - Lanczos: a = 3 (from wrapper)
+      // - Lanczos: kLobes = 3
       constexpr float kernel_width = 3.0F;
 
       // Helper for 1D resampling
@@ -471,30 +467,28 @@ namespace image::mip {
           const int start = static_cast<int>(std::floor(center - radius));
           const int end = static_cast<int>(std::ceil(center + radius));
 
-          std::array val = { 0.0F, 0.0F, 0.0F, 0.0F };
+          auto val = Texel {};
           float weight_sum = 0.0F;
 
           for (int j = start; j < end; ++j) {
             const float dist = (static_cast<float>(j) + 0.5F - center);
-            const float weight = kernel(dist / support_scale, 0.0F);
+            const float weight = kernel(dist / support_scale);
 
             const int src_idx
               = std::clamp(j, 0, static_cast<int>(src_size) - 1);
 
-            std::array<float, 4> pixel {};
-            sample_src(static_cast<uint32_t>(src_idx), pixel);
-
-            for (int c = 0; c < 4; ++c) {
-              val[c] += pixel[c] * weight;
-            }
+            const Texel pixel = sample_src(static_cast<uint32_t>(src_idx));
+            std::ranges::transform(pixel, val, val.begin(),
+              [weight](const float sample, const float accumulated) -> float {
+                return accumulated + (sample * weight);
+              });
             weight_sum += weight;
           }
 
           if (std::abs(weight_sum) > 1e-6F) {
             const float inv_w = 1.0F / weight_sum;
-            for (int c = 0; c < 4; ++c) {
-              val[c] *= inv_w;
-            }
+            std::ranges::transform(val, val.begin(),
+              [inv_w](const float value) -> float { return value * inv_w; });
           }
 
           write_dst(i, val);
@@ -502,38 +496,17 @@ namespace image::mip {
       };
 
       // 2. Pass 1: Horizontal Resampling (Rows)
-      //    Src (W x H) -> Temp (DstW x H)
+      //    Src (W x H) -> Temp (DstW x H). RGBA8 keeps its 0..255 range for
+      //    precision.
       for (uint32_t y = 0; y < src.height; ++y) {
         resample_1d(
           src.width, temp_width,
-          [&](uint32_t src_x, std::array<float, 4>& out) -> void {
-            size_t offset = 0;
-            if (format == Format::kRGBA32Float) {
-              offset = (static_cast<size_t>(y) * src.row_pitch_bytes)
-                + (static_cast<size_t>(src_x) * 16);
-              const auto* p
-                = reinterpret_cast<const float*>(src.pixels.data() + offset);
-              for (int c = 0; c < 4; ++c) {
-                out[c] = p[c];
-              }
-            } else { // RGBA8
-              offset = (static_cast<size_t>(y) * src.row_pitch_bytes)
-                + (static_cast<size_t>(src_x) * 4);
-              const auto* p
-                = reinterpret_cast<const uint8_t*>(src.pixels.data() + offset);
-              for (int c = 0; c < 4; ++c) {
-                out[c]
-                  = static_cast<float>(p[c]); // Keep 0..255 range for precision
-              }
-            }
+          [&](uint32_t src_x) -> Texel {
+            return ReadTexel(src.pixels, format,
+              TexelOffset(format, src.row_pitch_bytes, src_x, y));
           },
-          [&](uint32_t dst_x, const std::array<float, 4>& in) -> void {
-            const size_t offset
-              = ((static_cast<size_t>(y) * temp_width) + dst_x) * 4;
-            float* p = temp_buffer.data() + offset;
-            for (int c = 0; c < 4; ++c) {
-              p[c] = in[c];
-            }
+          [&](uint32_t dst_x, const Texel& in) -> void {
+            temp_at(dst_x, y) = in;
           });
       }
 
@@ -542,32 +515,10 @@ namespace image::mip {
       for (uint32_t x = 0; x < dst_width; ++x) {
         resample_1d(
           temp_height, dst_height,
-          [&](uint32_t src_y, std::array<float, 4>& out) -> void {
-            const size_t offset
-              = ((static_cast<size_t>(src_y) * temp_width) + x) * 4;
-            const float* p = temp_buffer.data() + offset;
-            for (int c = 0; c < 4; ++c) {
-              out[c] = p[c];
-            }
-          },
-          [&](uint32_t dst_y, const std::array<float, 4>& in) -> void {
-            if (format == Format::kRGBA32Float) {
-              const size_t offset
-                = ((static_cast<size_t>(dst_y) * dst_width) + x) * 4;
-              auto* p = reinterpret_cast<float*>(dst.data())
-                + offset; // tight packing assumed
-              for (int c = 0; c < 4; ++c) {
-                p[c] = in[c];
-              }
-            } else { // RGBA8
-              const size_t offset
-                = ((static_cast<size_t>(dst_y) * dst_width) + x) * 4;
-              auto* p = reinterpret_cast<uint8_t*>(dst.data()) + offset;
-              for (int c = 0; c < 4; ++c) {
-                p[c] = static_cast<uint8_t>(
-                  std::clamp(in[c] + 0.5F, 0.0F, 255.0F));
-              }
-            }
+          [&](uint32_t src_y) -> Texel { return temp_at(x, src_y); },
+          [&](uint32_t dst_y, const Texel& in) -> void {
+            WriteTexel(dst.bytes, format,
+              TexelOffset(format, dst.view.row_pitch_bytes, x, dst_y), in);
           });
       }
     }
@@ -585,7 +536,7 @@ namespace image::mip {
     }
 
     const uint32_t full_mip_count
-      = ComputeMipCount(src_meta.width, src_meta.height);
+      = MipChainLength(src_meta.width, src_meta.height);
     const uint32_t mip_count = (target_mip_levels == 0)
       ? full_mip_count
       : (std::min)(target_mip_levels, full_mip_count);
@@ -617,27 +568,22 @@ namespace image::mip {
     for (uint16_t layer = 0; layer < dst_meta.array_layers; ++layer) {
       for (uint16_t mip = 1; mip < dst_meta.mip_levels; ++mip) {
         const auto prev_view = result.GetImage(layer, mip - 1);
-        auto curr_pixels = result.GetMutablePixels(layer, mip);
-
-        const uint32_t curr_width
-          = ScratchImage::ComputeMipDimension(src_meta.width, mip);
-        const uint32_t curr_height
-          = ScratchImage::ComputeMipDimension(src_meta.height, mip);
+        const auto target = MipTarget {
+          .bytes = result.GetMutablePixels(layer, mip),
+          .view = result.GetImage(layer, mip),
+        };
 
         switch (filter) {
         case MipFilter::kBox:
-          DownsampleBox2D(
-            prev_view, curr_pixels, curr_width, curr_height, dst_meta.format);
+          DownsampleBox2D(prev_view, target);
           break;
 
         case MipFilter::kKaiser:
-          DownsampleSeparable2D(prev_view, curr_pixels, curr_width, curr_height,
-            dst_meta.format, KaiserKernel, 4.0F);
+          DownsampleSeparable2D(prev_view, target, KaiserKernel);
           break;
 
         case MipFilter::kLanczos:
-          DownsampleSeparable2D(prev_view, curr_pixels, curr_width, curr_height,
-            dst_meta.format, LanczosKernelWrapper, 3.0F);
+          DownsampleSeparable2D(prev_view, target, LanczosKernel);
           break;
         }
       }
@@ -710,127 +656,38 @@ namespace image::content {
       return result;
     }
 
-    // Renormalize each pixel in each mip (skip mip 0 as it's copied)
-    const auto& meta = result.Meta();
-    const bool is_float = (meta.format == Format::kRGBA32Float);
-
-    for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
-      for (uint16_t mip = 1; mip < meta.mip_levels; ++mip) {
-        auto pixels = result.GetMutablePixels(layer, mip);
-        const auto view = result.GetImage(layer, mip);
-        const auto pixel_count = static_cast<size_t>(view.width) * view.height;
-
-        if (is_float) {
-          auto* float_data = reinterpret_cast<float*>(pixels.data());
-          for (size_t i = 0; i < pixel_count; ++i) {
-            const size_t offset = i * 4;
-            std::array pixel = {
-              float_data[offset + 0],
-              float_data[offset + 1],
-              float_data[offset + 2],
-              float_data[offset + 3],
-            };
-
-            auto normalized = RenormalizeNormal(pixel);
-
-            float_data[offset + 0] = normalized[0];
-            float_data[offset + 1] = normalized[1];
-            float_data[offset + 2] = normalized[2];
-            float_data[offset + 3] = normalized[3];
-          }
-        } else { // RGBA8
-          auto* byte_data = reinterpret_cast<uint8_t*>(pixels.data());
-          for (size_t i = 0; i < pixel_count; ++i) {
-            const size_t offset = i * 4;
-            std::array pixel = {
-              static_cast<float>(byte_data[offset + 0]) / 255.0F,
-              static_cast<float>(byte_data[offset + 1]) / 255.0F,
-              static_cast<float>(byte_data[offset + 2]) / 255.0F,
-              static_cast<float>(byte_data[offset + 3]) / 255.0F,
-            };
-
-            auto normalized = RenormalizeNormal(pixel);
-
-            byte_data[offset + 0]
-              = static_cast<uint8_t>(std::round(normalized[0] * 255.0F));
-            byte_data[offset + 1]
-              = static_cast<uint8_t>(std::round(normalized[1] * 255.0F));
-            byte_data[offset + 2]
-              = static_cast<uint8_t>(std::round(normalized[2] * 255.0F));
-            byte_data[offset + 3]
-              = static_cast<uint8_t>(std::round(normalized[3] * 255.0F));
-          }
-        }
-      }
-    }
+    // Renormalize each pixel in each mip (skip mip 0 as it's copied), in
+    // [0,1]
+    const auto max = ChannelMax(result.Meta().format);
+    ForEachTexel(result, 1U, [max](Texel& texel) -> void {
+      std::ranges::transform(texel, texel.begin(),
+        [max](const float value) -> float { return value / max; });
+      texel = RenormalizeNormal(texel);
+      std::ranges::transform(texel, texel.begin(),
+        [max](const float value) -> float { return value * max; });
+    });
 
     return result;
   }
 
   void FlipNormalGreen(ScratchImage& image)
   {
-    const auto& meta = image.Meta();
-    const bool is_float = (meta.format == Format::kRGBA32Float);
-
-    for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
-      for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
-        auto pixels = image.GetMutablePixels(layer, mip);
-        const auto view = image.GetImage(layer, mip);
-        const auto pixel_count = static_cast<size_t>(view.width) * view.height;
-
-        if (is_float) {
-          auto* float_data = reinterpret_cast<float*>(pixels.data());
-          for (size_t i = 0; i < pixel_count; ++i) {
-            const size_t offset = (i * 4) + 1; // Green channel
-            // Flip: [0,1] -> [1,0]
-            float_data[offset] = 1.0F - float_data[offset];
-          }
-        } else { // RGBA8
-          auto* byte_data = reinterpret_cast<uint8_t*>(pixels.data());
-          for (size_t i = 0; i < pixel_count; ++i) {
-            const size_t offset = (i * 4) + 1; // Green channel
-            byte_data[offset] = 255 - byte_data[offset];
-          }
-        }
-      }
-    }
+    // Flip: [0,1] -> [1,0]
+    const auto max = ChannelMax(image.Meta().format);
+    ForEachTexel(image, 0U, [max](Texel& texel) -> void {
+      auto& green = std::get<1>(texel);
+      green = max - green;
+    });
   }
 
   void MoveValueToRed(ScratchImage& image, const TextureChannel channel)
   {
-    const auto& meta = image.Meta();
-    const bool is_float = (meta.format == Format::kRGBA32Float);
+    const auto max = ChannelMax(image.Meta().format);
     const auto source = static_cast<size_t>(channel);
-
-    for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
-      for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
-        auto pixels = image.GetMutablePixels(layer, mip);
-        const auto view = image.GetImage(layer, mip);
-        const auto pixel_count = static_cast<size_t>(view.width) * view.height;
-
-        if (is_float) {
-          auto* float_data = reinterpret_cast<float*>(pixels.data());
-          for (size_t i = 0; i < pixel_count; ++i) {
-            auto* pixel = float_data + (i * 4);
-            const auto value = pixel[source];
-            pixel[0] = value;
-            pixel[1] = value;
-            pixel[2] = value;
-            pixel[3] = 1.0F;
-          }
-        } else { // RGBA8
-          auto* byte_data = reinterpret_cast<uint8_t*>(pixels.data());
-          for (size_t i = 0; i < pixel_count; ++i) {
-            auto* pixel = byte_data + (i * 4);
-            const auto value = pixel[source];
-            pixel[0] = value;
-            pixel[1] = value;
-            pixel[2] = value;
-            pixel[3] = 255;
-          }
-        }
-      }
-    }
+    ForEachTexel(image, 0U, [max, source](Texel& texel) -> void {
+      const auto value = texel.at(source);
+      texel = { value, value, value, max };
+    });
   }
 
 } // namespace image::content

@@ -22,6 +22,7 @@
 
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -32,7 +33,6 @@ namespace oxygen::vortex::environment::internal {
 
 namespace {
 
-  inline constexpr std::uint32_t kCubeFaceCount = 6U;
   inline constexpr float kFp16MaxFinite = 65504.0F;
 
   // Cubemaps hold hardware faces with rows top first, in hardware cube space,
@@ -107,22 +107,10 @@ namespace {
     return glm::normalize(space::environment::WorldFromCube(cube));
   }
 
-  [[nodiscard]] auto ComputeMipCount(std::uint32_t face_size) noexcept
-    -> std::uint32_t
-  {
-    auto mip_count = 1U;
-    face_size >>= 1U;
-    while (face_size > 0U) {
-      ++mip_count;
-      face_size >>= 1U;
-    }
-    return mip_count;
-  }
-
   [[nodiscard]] auto MipFaceSize(const std::uint32_t base_face_size,
     const std::uint32_t mip) noexcept -> std::uint32_t
   {
-    return (std::max)(1U, base_face_size >> mip);
+    return MipExtent(base_face_size, mip);
   }
 
   [[nodiscard]] auto FaceMipElementCount(const MipChain chain) noexcept
@@ -486,7 +474,7 @@ auto ProcessStaticSkyLightCubemapCpu(
 
   StaticSkyLightCpuProducts products {};
   products.output_face_size = output_face_size;
-  products.mip_count = ComputeMipCount(output_face_size);
+  products.mip_count = MipChainLength(output_face_size, output_face_size);
   products.source_radiance_scale = source_radiance_scale;
   const MipChain chain {
     .base_face_size = output_face_size,

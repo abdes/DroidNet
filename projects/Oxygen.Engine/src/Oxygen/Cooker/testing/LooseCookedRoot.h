@@ -177,7 +177,7 @@ public:
     -> ResourceIndexT;
 
   auto AddBuffer(std::span<const std::byte> payload,
-    data::pak::core::BufferResourceDesc desc = {}) -> ResourceIndexT;
+    data::pak::core::BufferResourceDesc desc = RawBuffer()) -> ResourceIndexT;
 
   auto AddScript(std::span<const std::byte> payload,
     data::pak::scripting::ScriptResourceDesc desc = {}) -> ResourceIndexT;
@@ -221,6 +221,9 @@ public:
   //! A 1x1 RGBA8 texture row with no payload position yet.
   [[nodiscard]] static auto OnePixelTexture()
     -> data::pak::core::TextureResourceDesc;
+
+  //! A raw buffer row (one-byte elements) with no payload position yet.
+  [[nodiscard]] static auto RawBuffer() -> data::pak::core::BufferResourceDesc;
 
 private:
   template <class Desc> struct Table final {

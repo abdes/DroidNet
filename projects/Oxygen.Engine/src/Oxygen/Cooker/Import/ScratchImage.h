@@ -137,17 +137,6 @@ public:
 
   //=== Static Helpers ===----------------------------------------------------//
 
-  //! Compute the number of mip levels for a texture of given dimensions.
-  /*!
-    Returns `floor(log2(max(width, height))) + 1` for a full mip chain.
-
-    @param width  Base width in pixels
-    @param height Base height in pixels
-    @return Number of mip levels in a full chain
-  */
-  OXGN_COOK_NDAPI static auto ComputeMipCount(
-    uint32_t width, uint32_t height) noexcept -> uint32_t;
-
   //! Compute the linear subresource index.
   /*!
     Subresources are ordered: layer 0 mips 0..N-1, layer 1 mips 0..N-1, ...
@@ -161,22 +150,7 @@ public:
     uint16_t array_layer, uint16_t mip_level, uint16_t mip_levels) noexcept
     -> uint32_t
   {
-    return static_cast<uint32_t>(array_layer) * mip_levels + mip_level;
-  }
-
-  //! Compute mip dimensions for a given level.
-  /*!
-    Each dimension halves per mip level, clamped to a minimum of 1.
-
-    @param base_dimension Base dimension (width, height, or depth)
-    @param mip_level      Mip level index (0 = base)
-    @return Dimension at the specified mip level
-  */
-  [[nodiscard]] static constexpr auto ComputeMipDimension(
-    uint32_t base_dimension, uint16_t mip_level) noexcept -> uint32_t
-  {
-    const auto shifted = base_dimension >> mip_level;
-    return shifted > 0 ? shifted : 1;
+    return (static_cast<uint32_t>(array_layer) * mip_levels) + mip_level;
   }
 
   //=== Factory Methods ===---------------------------------------------------//
@@ -187,7 +161,8 @@ public:
     Pixel data is zero-initialized.
 
     @param meta Metadata describing the texture
-    @return Initialized ScratchImage, or empty if allocation fails
+    @return Initialized ScratchImage, or empty if allocation fails or its
+      storage exceeds the 4 GiB its 32-bit offsets address
   */
   OXGN_COOK_NDAPI static auto Create(const ScratchImageMeta& meta)
     -> ScratchImage;

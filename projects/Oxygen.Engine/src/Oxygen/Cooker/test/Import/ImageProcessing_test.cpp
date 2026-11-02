@@ -8,7 +8,6 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -25,7 +24,6 @@ using oxygen::ColorSpace;
 using oxygen::Format;
 using oxygen::content::import::MipFilter;
 using oxygen::content::import::ScratchImage;
-using oxygen::content::import::ScratchImageMeta;
 using oxygen::content::import::TextureChannel;
 
 namespace color = oxygen::content::import::image::color;
@@ -69,7 +67,8 @@ NOLINT_TEST(ColorSpaceConversionTest, LinearToSrgbConvertsKnownValues)
 
 NOLINT_TEST(ColorSpaceConversionTest, RoundTripPreservesValues)
 {
-  constexpr float kTestValues[] = { 0.0F, 0.1F, 0.25F, 0.5F, 0.75F, 1.0F };
+  constexpr auto kTestValues
+    = std::array { 0.0F, 0.1F, 0.25F, 0.5F, 0.75F, 1.0F };
 
   for (const float value : kTestValues) {
     const float linear = color::SrgbToLinear(value);
@@ -177,47 +176,31 @@ NOLINT_TEST(MipFilterKernelTest, KaiserWindowReturnsZeroOutsideRange)
 
 NOLINT_TEST(MipFilterKernelTest, LanczosKernelReturnsOneAtCenter)
 {
-  EXPECT_NEAR(mip::LanczosKernel(0.0F, 3), 1.0F, 1e-5F);
+  EXPECT_NEAR(mip::LanczosKernel(0.0F), 1.0F, 1e-5F);
 }
 
 NOLINT_TEST(MipFilterKernelTest, LanczosKernelReturnsZeroAtIntegers)
 {
-  EXPECT_NEAR(mip::LanczosKernel(1.0F, 3), 0.0F, 1e-5F);
-  EXPECT_NEAR(mip::LanczosKernel(2.0F, 3), 0.0F, 1e-5F);
-  EXPECT_NEAR(mip::LanczosKernel(-1.0F, 3), 0.0F, 1e-5F);
+  EXPECT_NEAR(mip::LanczosKernel(1.0F), 0.0F, 1e-5F);
+  EXPECT_NEAR(mip::LanczosKernel(2.0F), 0.0F, 1e-5F);
+  EXPECT_NEAR(mip::LanczosKernel(-1.0F), 0.0F, 1e-5F);
 }
 
 NOLINT_TEST(MipFilterKernelTest, LanczosKernelReturnsZeroOutsideSupport)
 {
-  EXPECT_EQ(mip::LanczosKernel(3.0F, 3), 0.0F);
-  EXPECT_EQ(mip::LanczosKernel(-3.0F, 3), 0.0F);
-  EXPECT_EQ(mip::LanczosKernel(4.0F, 3), 0.0F);
+  EXPECT_EQ(mip::LanczosKernel(3.0F), 0.0F);
+  EXPECT_EQ(mip::LanczosKernel(-3.0F), 0.0F);
+  EXPECT_EQ(mip::LanczosKernel(4.0F), 0.0F);
 }
 
 //===----------------------------------------------------------------------===//
 // Mip Generation Tests
 //===----------------------------------------------------------------------===//
 
-NOLINT_TEST(MipGenerationTest, ComputeMipCountReturnsCorrectValues)
-{
-  EXPECT_EQ(mip::ComputeMipCount(1, 1), 1U);
-  EXPECT_EQ(mip::ComputeMipCount(2, 2), 2U);
-  EXPECT_EQ(mip::ComputeMipCount(4, 4), 3U);
-  EXPECT_EQ(mip::ComputeMipCount(256, 256), 9U);
-  EXPECT_EQ(mip::ComputeMipCount(1024, 512), 11U); // max(1024,512) = 1024
-}
-
-NOLINT_TEST(MipGenerationTest, ComputeMipCountHandlesNpot)
-{
-  EXPECT_EQ(mip::ComputeMipCount(100, 100), 7U); // floor(log2(100))+1 = 7
-  EXPECT_EQ(mip::ComputeMipCount(127, 127), 7U);
-  EXPECT_EQ(mip::ComputeMipCount(128, 128), 8U);
-}
-
 NOLINT_TEST(MipGenerationTest, GenerateChain2DCreatesFullChain)
 {
   // Create a 4x4 RGBA8 image
-  std::vector<std::byte> pixels(4 * 4 * 4);
+  std::vector<std::byte> pixels(std::size_t { 4 } * 4 * 4);
   for (auto& pixel : pixels) {
     pixel = std::byte { 128 }; // Mid-gray
   }
@@ -280,7 +263,7 @@ NOLINT_TEST(ContentProcessingTest, RenormalizeNormalNormalizesNonUnit)
 NOLINT_TEST(ContentProcessingTest, FlipNormalGreenInvertsGreenChannel)
 {
   // Create a 2x2 RGBA8 image
-  std::vector<std::byte> pixels(2 * 2 * 4);
+  std::vector<std::byte> pixels(std::size_t { 2 } * 2 * 4);
   for (size_t i = 0; i < 4; ++i) {
     const size_t offset = i * 4;
     pixels.at(offset + 0) = std::byte { 128 }; // R
@@ -296,21 +279,24 @@ NOLINT_TEST(ContentProcessingTest, FlipNormalGreenInvertsGreenChannel)
   content::FlipNormalGreen(image);
 
   const auto view = image.GetImage(0, 0);
-  const auto* data = reinterpret_cast<const uint8_t*>(view.pixels.data());
 
   for (size_t i = 0; i < 4; ++i) {
     const size_t offset = i * 4;
-    EXPECT_EQ(data[offset + 0], 128U); // R unchanged
-    EXPECT_EQ(data[offset + 1], 191U); // G flipped: 255 - 64 = 191
-    EXPECT_EQ(data[offset + 2], 255U); // B unchanged
-    EXPECT_EQ(data[offset + 3], 255U); // A unchanged
+    const auto r = std::to_integer<unsigned>(view.pixels[offset + 0]);
+    const auto g = std::to_integer<unsigned>(view.pixels[offset + 1]);
+    const auto b = std::to_integer<unsigned>(view.pixels[offset + 2]);
+    const auto a = std::to_integer<unsigned>(view.pixels[offset + 3]);
+    EXPECT_EQ(r, 128U); // R unchanged
+    EXPECT_EQ(g, 191U); // G flipped: 255 - 64 = 191
+    EXPECT_EQ(b, 255U); // B unchanged
+    EXPECT_EQ(a, 255U); // A unchanged
   }
 }
 
 NOLINT_TEST(
   ContentProcessingTest, MoveValueToRedCopiesTheChannelAndOpaquesAlpha)
 {
-  std::vector<std::byte> pixels(2 * 2 * 4);
+  std::vector<std::byte> pixels(std::size_t { 2 } * 2 * 4);
   for (size_t i = 0; i < 4; ++i) {
     const size_t offset = i * 4;
     pixels.at(offset + 0) = std::byte { 10 };
@@ -325,13 +311,12 @@ NOLINT_TEST(
   content::MoveValueToRed(image, TextureChannel::kAlpha);
 
   const auto view = image.GetImage(0, 0);
-  const auto* data = reinterpret_cast<const uint8_t*>(view.pixels.data());
   for (size_t i = 0; i < 4; ++i) {
     const size_t offset = i * 4;
-    EXPECT_EQ(data[offset + 0], 77U);
-    EXPECT_EQ(data[offset + 1], 77U);
-    EXPECT_EQ(data[offset + 2], 77U);
-    EXPECT_EQ(data[offset + 3], 255U);
+    EXPECT_EQ(std::to_integer<unsigned>(view.pixels[offset + 0]), 77U);
+    EXPECT_EQ(std::to_integer<unsigned>(view.pixels[offset + 1]), 77U);
+    EXPECT_EQ(std::to_integer<unsigned>(view.pixels[offset + 2]), 77U);
+    EXPECT_EQ(std::to_integer<unsigned>(view.pixels[offset + 3]), 255U);
   }
 }
 

@@ -40,6 +40,7 @@
 namespace {
 
 using oxygen::Format;
+using oxygen::MipExtent;
 using oxygen::TextureType;
 using oxygen::ViewId;
 using oxygen::graphics::CommandRecorder;
@@ -74,12 +75,6 @@ constexpr auto kOffsetViewSource = SourceCase {
   .width = 1366U,
   .height = 768U,
 };
-
-auto MipExtent(const std::uint32_t root, const std::uint32_t mip)
-  -> std::uint32_t
-{
-  return (std::max)(1U, root >> mip);
-}
 
 //! Reference reduction: mip-0 texel `x` reduces source pixels `2x` and
 //! `2x + 1` clamped to the rect; later mips reduce clamped 2 x 2 blocks.

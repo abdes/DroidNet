@@ -55,16 +55,16 @@ auto TextureSlice::Resolve(const TextureDesc& desc) const -> TextureSlice
     mip_level, desc.mip_levels);
 
   if (width == kWholeExtent) {
-    ret.width = (std::max)(desc.width >> mip_level, 1U);
+    ret.width = MipExtent(desc.width, mip_level);
   }
 
   if (height == kWholeExtent) {
-    ret.height = (std::max)(desc.height >> mip_level, 1U);
+    ret.height = MipExtent(desc.height, mip_level);
   }
 
   if (depth == kWholeExtent) {
     if (desc.texture_type == TextureType::kTexture3D) {
-      ret.depth = (std::max)(desc.depth >> mip_level, 1U);
+      ret.depth = MipExtent(desc.depth, mip_level);
     } else {
       ret.depth = 1;
     }
@@ -199,7 +199,7 @@ auto oxygen::graphics::ResolveTextureBufferCopyRegion(const TextureDesc& desc,
   return resolved;
 }
 
-Texture::~Texture() { }
+Texture::~Texture() = default;
 
 auto Texture::GetNativeView(const DescriptorAllocationHandle& view_handle,
   const TextureViewDescription& view_desc) const -> NativeView

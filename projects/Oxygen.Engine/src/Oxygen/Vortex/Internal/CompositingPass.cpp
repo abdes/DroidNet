@@ -23,6 +23,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -90,8 +91,8 @@ namespace {
     const auto mip_level = sub_resources.base_mip_level;
 
     return {
-      (std::max)(1U, texture_desc.width >> mip_level),
-      (std::max)(1U, texture_desc.height >> mip_level),
+      MipExtent(texture_desc.width, mip_level),
+      MipExtent(texture_desc.height, mip_level),
     };
   }
 

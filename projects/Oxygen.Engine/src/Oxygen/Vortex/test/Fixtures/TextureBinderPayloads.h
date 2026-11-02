@@ -65,8 +65,9 @@ namespace detail {
   }
 
   //! Builds the payload of `desc` and records its size and SHA-256 in it.
-  [[nodiscard]] inline auto BuildV4TexturePayload(
+  [[nodiscard]] inline auto BuildTexturePayload(
     data::pak::core::TextureResourceDesc& desc,
+    const data::pak::render::TexturePackingPolicyId policy,
     const std::span<const data::pak::render::SubresourceLayout> layouts,
     const std::span<const std::uint8_t> data_region) -> std::vector<uint8_t>
   {
@@ -86,7 +87,7 @@ namespace detail {
 
     TexturePayloadHeader header {};
     header.magic = data::pak::render::kTexturePayloadMagic;
-    header.packing_policy = 0U;
+    header.packing_policy = static_cast<std::uint8_t>(policy);
     header.flags = 0U;
     header.subresource_count = static_cast<std::uint16_t>(layouts.size());
     header.total_payload_size = static_cast<std::uint32_t>(total_payload_size);
@@ -164,7 +165,7 @@ namespace detail {
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
-  // desc.size_bytes set after v4 payload is built.
+  // desc.size_bytes set after the payload is built.
   desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
   desc.compression_type = 0;
   desc.width = 1U;
@@ -200,7 +201,8 @@ namespace detail {
     },
   };
 
-  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
+  auto payload = detail::BuildTexturePayload(desc,
+    data::pak::render::TexturePackingPolicyId::kD3D12, layouts, data_region);
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
@@ -227,7 +229,7 @@ namespace detail {
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
-  // desc.size_bytes set after v4 payload is built.
+  // desc.size_bytes set after the payload is built.
   desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
   desc.compression_type = 0;
   desc.width = 1U;
@@ -255,7 +257,9 @@ namespace detail {
     },
   };
 
-  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
+  auto payload = detail::BuildTexturePayload(desc,
+    data::pak::render::TexturePackingPolicyId::kTightPacked, layouts,
+    data_region);
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
@@ -274,94 +278,46 @@ namespace detail {
   return bytes;
 }
 
-//! A tight-packed 1x1 cube: six 4-byte faces, one mip each. `format` other
-//! than RGBA8 describes the same bytes, to exercise format rejection.
+//! A tight-packed 1x1 cube of `format`: six one-texel faces, one mip each. A
+//! format the binder does not upload, such as BC1, exercises its rejection.
 [[nodiscard]] inline auto MakeTightPackedTextureCube1x1Rgba8Payload(
   const Format format = Format::kRGBA8UNorm) -> std::vector<uint8_t>
 {
   using data::pak::core::TextureResourceDesc;
   using data::pak::render::SubresourceLayout;
 
-  constexpr std::uint32_t kFaceCount = 6U;
-  constexpr std::uint32_t kFaceBytes = 4U;
+  // A face is one texel: one block of a block-compressed format, at most 16
+  // bytes.
+  const auto face_bytes
+    = static_cast<std::uint32_t>(graphics::detail::RowBytes(format, 1U));
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
-  // desc.size_bytes set after v4 payload is built.
+  // desc.size_bytes set after the payload is built.
   desc.texture_type = static_cast<uint8_t>(TextureType::kTextureCube);
-  desc.compression_type = 0;
+  desc.compression_type = data::pak::core::TextureCompressionOf(format);
   desc.width = 1U;
   desc.height = 1U;
   desc.depth = 1U;
-  desc.array_layers = kFaceCount;
+  desc.array_layers = kCubeFaceCount;
   desc.mip_levels = 1U;
   desc.format = static_cast<uint8_t>(format);
   desc.alignment = 256U;
 
   const std::vector<std::uint8_t> data_region(
-    static_cast<std::size_t>(kFaceCount) * kFaceBytes, 0xFFU);
-  std::array<SubresourceLayout, kFaceCount> layouts {};
-  for (std::uint32_t face = 0U; face < kFaceCount; ++face) {
+    static_cast<std::size_t>(kCubeFaceCount) * face_bytes, 0xFFU);
+  std::array<SubresourceLayout, kCubeFaceCount> layouts {};
+  for (std::uint32_t face = 0U; face < kCubeFaceCount; ++face) {
     layouts.at(face) = SubresourceLayout {
-      .offset_bytes = face * kFaceBytes,
-      .row_pitch_bytes = kFaceBytes,
-      .size_bytes = kFaceBytes,
+      .offset_bytes = face * face_bytes,
+      .row_pitch_bytes = face_bytes,
+      .size_bytes = face_bytes,
     };
   }
 
-  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
-
-  std::vector<uint8_t> bytes;
-  bytes.resize(sizeof(desc) + payload.size());
-  const auto bytes_span = std::as_writable_bytes(std::span {
-    bytes,
-  });
-  detail::CopyBytes(bytes_span.subspan(0, sizeof(desc)),
-    std::as_bytes(std::span {
-      &desc,
-      1,
-    }));
-  detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
-    std::as_bytes(std::span {
-      payload,
-    }));
-  return bytes;
-}
-
-[[nodiscard]] inline auto MakeInvalidTexture1x1Rgba8Payload_RowPitchTooSmall()
-  -> std::vector<uint8_t>
-{
-  using data::pak::core::TextureResourceDesc;
-  using data::pak::render::SubresourceLayout;
-
-  TextureResourceDesc desc {};
-  desc.data_offset = sizeof(desc);
-  // desc.size_bytes set after v4 payload is built.
-  desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
-  desc.compression_type = 0;
-  desc.width = 1U;
-  desc.height = 1U;
-  desc.depth = 1U;
-  desc.array_layers = 1U;
-  desc.mip_levels = 1U;
-  desc.format = static_cast<uint8_t>(Format::kRGBA8UNorm);
-  desc.alignment = 256U;
-
-  // Invalid: row pitch is smaller than bytes_per_row (RGBA8 => 4 bytes).
-  const std::vector<std::uint8_t> data_region {
-    0xFF,
-    0xFF,
-    0xFF,
-  };
-  const std::array<SubresourceLayout, 1> layouts {
-    SubresourceLayout {
-      .offset_bytes = 0U,
-      .row_pitch_bytes = 3U,
-      .size_bytes = 3U,
-    },
-  };
-
-  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
+  auto payload = detail::BuildTexturePayload(desc,
+    data::pak::render::TexturePackingPolicyId::kTightPacked, layouts,
+    data_region);
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
@@ -388,9 +344,10 @@ namespace detail {
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
-  // desc.size_bytes set after v4 payload is built.
+  // desc.size_bytes set after the payload is built.
   desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
-  desc.compression_type = 0;
+  desc.compression_type
+    = data::pak::core::TextureCompressionOf(Format::kBC7UNorm);
   desc.width = 8U;
   desc.height = 8U;
   desc.depth = 1U;
@@ -438,7 +395,8 @@ namespace detail {
     }
   }
 
-  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
+  auto payload = detail::BuildTexturePayload(desc,
+    data::pak::render::TexturePackingPolicyId::kD3D12, layouts, data_region);
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
@@ -465,7 +423,7 @@ namespace detail {
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
-  // desc.size_bytes set after v4 payload is built.
+  // desc.size_bytes set after the payload is built.
   desc.texture_type = static_cast<uint8_t>(TextureType::kTexture2D);
   desc.compression_type = 0;
   desc.width = 4U;
@@ -476,16 +434,17 @@ namespace detail {
   desc.format = static_cast<uint8_t>(Format::kBC1UNorm);
   desc.alignment = 256U;
 
-  std::vector<std::uint8_t> data_region(1024U);
+  std::vector<std::uint8_t> data_region(256U);
   const std::array<SubresourceLayout, 1> layouts {
     SubresourceLayout {
       .offset_bytes = 0U,
       .row_pitch_bytes = 256U,
-      .size_bytes = 1024U,
+      .size_bytes = 256U,
     },
   };
 
-  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
+  auto payload = detail::BuildTexturePayload(desc,
+    data::pak::render::TexturePackingPolicyId::kD3D12, layouts, data_region);
 
   std::vector<uint8_t> bytes;
   bytes.resize(sizeof(desc) + payload.size());
@@ -521,7 +480,7 @@ struct SyntheticTextureShape {
     .type = TextureType::kTextureCube,
     .width = size,
     .height = size,
-    .layers = 6U,
+    .layers = kCubeFaceCount,
     .format = format,
   };
 }
@@ -557,7 +516,8 @@ struct SyntheticTextureShape {
       .size_bytes = static_cast<std::uint32_t>(layer_bytes),
     });
   }
-  auto payload = detail::BuildV4TexturePayload(desc, layouts, texels);
+  auto payload = detail::BuildTexturePayload(desc,
+    data::pak::render::TexturePackingPolicyId::kTightPacked, layouts, texels);
   return std::make_shared<data::TextureResource>(desc,
     serio::ByteBuffer::CopyOf(std::as_bytes(std::span { payload })).value());
 }

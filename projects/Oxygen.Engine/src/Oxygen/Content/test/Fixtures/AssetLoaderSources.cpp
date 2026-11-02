@@ -7,18 +7,17 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <iterator>
 #include <span>
 
-#include "../Utils/PakUtils.h"
 #include "AssetLoaderSources.h"
 
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/TextureBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -65,13 +64,10 @@ auto WriteMaterialSource(const std::filesystem::path& root,
 auto WriteTexturedMaterialSource(const std::filesystem::path& root,
   const data::AssetKey& key) -> data::SourceKey
 {
-  constexpr uint32_t kTextureAlignment = 256U;
-  const auto payload
-    = MakeV4TexturePayload(kTextureAlignment, std::byte { 0x55 },
-      data::pak::render::TexturePackingPolicyId::kD3D12, kTextureAlignment);
+  const auto pixel = cooker::testing::TextureBuilder {};
+  const auto payload = pixel.Payload();
   auto source = NewSourceRoot();
-  const auto texture = source.AddTexture(
-    std::as_bytes(std::span(payload)), LooseCookedRoot::OnePixelTexture());
+  const auto texture = source.AddTexture(payload, pixel.Record(payload));
   auto material = MaterialBuilder { "Surface" };
   material.Texture(&MaterialAssetDesc::base_color_texture, texture)
     .Texture(&MaterialAssetDesc::normal_texture, texture);

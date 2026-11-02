@@ -205,8 +205,6 @@ NOLINT_TEST_F(MeshBuffersTest, RefusesBuffersOfAnotherShape)
   const auto bytes = std::vector<std::byte>((5 * sizeof(Vertex)) + 2);
   const auto partial_vertex
     = Buffer(bytes, BufferResource::UsageFlags::kVertexBuffer, 1U);
-  const auto partial_index = Buffer(std::span(bytes).first(14),
-    BufferResource::UsageFlags::kIndexBuffer, 0U, Format::kR32UInt);
   const auto byte_indices = Buffer(std::span(bytes).first(4),
     BufferResource::UsageFlags::kIndexBuffer, 0U, Format::kR8UInt);
   const auto raw_indices = Buffer(
@@ -214,10 +212,6 @@ NOLINT_TEST_F(MeshBuffersTest, RefusesBuffersOfAnotherShape)
 
   EXPECT_EQ(Refusal([&] -> void {
     mesh->SetBufferResources(partial_vertex, Indices<uint32_t>({ 0, 0, 1, 2 }));
-  }),
-    CookedDefect::kWrongRowSize);
-  EXPECT_EQ(Refusal([&] -> void {
-    mesh->SetBufferResources(Vertices(5), partial_index);
   }),
     CookedDefect::kWrongRowSize);
   for (const auto& indices : { byte_indices, raw_indices }) {

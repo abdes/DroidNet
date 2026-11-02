@@ -191,13 +191,12 @@ NOLINT_TEST_F(ImmutableTextureUploadTest, RejectsBoxedUpdatesBeforeRecording)
 //! A cube uploads as six full faces, like a six-layer 2D array.
 NOLINT_TEST_F(ImmutableTextureUploadTest, PreparesEveryCubeFace)
 {
-  constexpr std::uint32_t kFaceCount = 6U;
   constexpr auto kTexel = std::array { std::byte { 7 } };
   auto cube
     = Gfx().GetResourceRegistry().RegisterManagedTexture(Gfx().CreateTexture({
       .width = 1U,
       .height = 1U,
-      .array_size = kFaceCount,
+      .array_size = kCubeFaceCount,
       .format = Format::kR8UNorm,
       .texture_type = TextureType::kTextureCube,
       .is_shader_resource = true,
@@ -207,7 +206,7 @@ NOLINT_TEST_F(ImmutableTextureUploadTest, PreparesEveryCubeFace)
   ASSERT_TRUE(cube.has_value());
   auto source = UploadTextureSourceView {};
   auto faces = std::vector<UploadSubresource> {};
-  for (std::uint32_t face = 0U; face < kFaceCount; ++face) {
+  for (std::uint32_t face = 0U; face < kCubeFaceCount; ++face) {
     faces.push_back({ .array_slice = face });
     source.subresources.push_back({
       .bytes = kTexel,

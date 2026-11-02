@@ -15,6 +15,7 @@
 
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
@@ -37,6 +38,7 @@
 #include <Oxygen/Graphics/Common/Submission.h>
 #include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -45,8 +47,44 @@
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
-using namespace oxygen;
-using namespace oxygen::graphics;
+using oxygen::Format;
+using oxygen::Graphics;
+using oxygen::GraphicsBackendLoader;
+using oxygen::GraphicsConfig;
+using oxygen::SizeBytes;
+using oxygen::TextureType;
+using oxygen::graphics::AllocationBudget;
+using oxygen::graphics::AllocationBudgetLimits;
+using oxygen::graphics::BackendLifecycle;
+using oxygen::graphics::BackendType;
+using oxygen::graphics::Buffer;
+using oxygen::graphics::BufferDesc;
+using oxygen::graphics::BufferMemory;
+using oxygen::graphics::Color;
+using oxygen::graphics::CommandList;
+using oxygen::graphics::CommandRecording;
+using oxygen::graphics::CompletionStatus;
+using oxygen::graphics::DescriptorVisibility;
+using oxygen::graphics::GpuBufferReadback;
+using oxygen::graphics::QueueRole;
+using oxygen::graphics::ReadbackError;
+using oxygen::graphics::RegistrationError;
+using oxygen::graphics::RegistrationLease;
+using oxygen::graphics::RegistrationUse;
+using oxygen::graphics::ResourceStates;
+using oxygen::graphics::ResourceViewType;
+using oxygen::graphics::SharedTransferQueueStrategy;
+using oxygen::graphics::SingleQueueStrategy;
+using oxygen::graphics::SubmissionException;
+using oxygen::graphics::SubmissionOutcome;
+using oxygen::graphics::SubmissionPolicy;
+using oxygen::graphics::Texture;
+using oxygen::graphics::TextureDesc;
+using oxygen::graphics::TextureViewDescription;
+namespace bindless = oxygen::bindless;
+namespace frame = oxygen::frame;
+namespace internal = oxygen::graphics::internal;
+namespace loader = oxygen::loader;
 
 class BackendLifetimeIntegration : public testing::TestWithParam<BackendType> {
 protected:
@@ -68,7 +106,7 @@ NOLINT_TEST_P(BackendLifetimeIntegration,
   EXPECT_FALSE(graphics->IsRunning());
   graphics->CreateCommandQueues(SingleQueueStrategy());
   auto budget = std::make_shared<AllocationBudget>(AllocationBudgetLimits {
-    .total = SizeBytes { 16U * 1024U * 1024U },
+    .total = SizeBytes { uint64_t { 16U } * 1024U * 1024U },
     .compact_indices = SizeBytes { 0 },
     .driver_headroom = SizeBytes { 0 },
   });
@@ -152,13 +190,13 @@ NOLINT_TEST_P(
   auto graphics = loader.LoadBackend(GetParam(), config, {}).lock();
   ASSERT_TRUE(graphics);
   auto budget = std::make_shared<AllocationBudget>(AllocationBudgetLimits {
-    .total = SizeBytes { 16U * 1024U * 1024U },
+    .total = SizeBytes { uint64_t { 16U } * 1024U * 1024U },
     .compact_indices = SizeBytes { 0 },
     .driver_headroom = SizeBytes { 0 },
   });
   TextureDesc desc;
   desc.width = desc.height = 32;
-  desc.array_size = 6;
+  desc.array_size = oxygen::kCubeFaceCount;
   desc.format = Format::kDepth32;
   desc.texture_type = TextureType::kTextureCubeArray;
   desc.is_shader_resource = desc.is_render_target = desc.is_typeless = true;
@@ -210,8 +248,9 @@ NOLINT_TEST_P(
   EXPECT_EQ(budget->Snapshot().allocated, charged);
   EXPECT_THROW((void)loader.LoadBackend(GetParam(), config, {}),
     loader::InvalidOperationError);
-  std::jthread cleanup(
-    [pin = std::move(*use)]() mutable -> void { pin = RegistrationUse {}; });
+  std::jthread cleanup {
+    [pin = std::move(*use)] mutable -> void { pin = RegistrationUse {}; },
+  };
   cleanup.join();
   EXPECT_TRUE(weak_texture.expired());
   EXPECT_EQ(budget->Snapshot().allocated.get(), 0U);
@@ -245,7 +284,7 @@ NOLINT_TEST_P(
   ASSERT_TRUE(recording->RetainRegistration(registry, *lease)); // deduplicated
   auto result = recording.SubmitWithReceipt();
   ASSERT_EQ(result.outcome, SubmissionOutcome::kSubmitted);
-  ASSERT_TRUE(result.receipt);
+  ASSERT_HAS_VALUE(result.receipt);
   *lease = {};
   buffer.reset();
   EXPECT_FALSE(weak_buffer.expired());
@@ -279,7 +318,7 @@ NOLINT_TEST_P(
   const auto queue = graphics->GetCommandQueue(QueueRole::kGraphics);
   const auto frame_marker = queue->SignalSubmittedWork();
   const auto result = recording.SubmitWithReceipt();
-  ASSERT_TRUE(result.receipt);
+  ASSERT_HAS_VALUE(result.receipt);
   *lease = {};
   buffer.reset();
   queue->Wait(frame_marker);
@@ -307,14 +346,14 @@ NOLINT_TEST_P(
     SubmissionPolicy::kExplicit);
   ASSERT_TRUE(writer->RetainRegistration(registry, *lease));
   const auto produced = writer.SubmitWithReceipt();
-  ASSERT_TRUE(produced.receipt);
+  ASSERT_HAS_VALUE(produced.receipt);
   auto reader = graphics->AcquireCommandRecorder(
     graphics->QueueKeyFor(QueueRole::kGraphics), "Graphics consumer",
     SubmissionPolicy::kExplicit);
   ASSERT_TRUE(reader->RetainRegistration(registry, *lease));
   reader->RecordDependency(*produced.receipt);
   const auto consumed = reader.SubmitWithReceipt();
-  ASSERT_TRUE(consumed.receipt);
+  ASSERT_HAS_VALUE(consumed.receipt);
   EXPECT_NE(produced.receipt->Queue(), consumed.receipt->Queue());
   auto producer = graphics->GetCommandQueue(QueueRole::kTransfer);
   auto consumer = graphics->GetCommandQueue(QueueRole::kGraphics);
@@ -430,7 +469,7 @@ NOLINT_TEST_P(
     SubmissionPolicy::kExplicit);
   ASSERT_TRUE(recording->RetainRegistration(registry, *lease));
   const auto result = recording.SubmitWithReceipt();
-  ASSERT_TRUE(result.receipt);
+  ASSERT_HAS_VALUE(result.receipt);
   auto queue = graphics->GetCommandQueue(QueueRole::kGraphics);
   internal::SubmissionFaultTestAccess::LoseDevice(*queue);
   EXPECT_EQ(
@@ -536,7 +575,7 @@ NOLINT_TEST_P(
   producer->CopyBuffer(*storage, 0, *upload, 0, 4);
   producer->RequireResourceStateFinal(*storage, ResourceStates::kCommon);
   const auto written = producer.SubmitWithReceipt();
-  ASSERT_TRUE(written.receipt);
+  ASSERT_HAS_VALUE(written.receipt);
   auto consumer = graphics->AcquireCommandRecorder(
     graphics->QueueKeyFor(QueueRole::kGraphics), "Actual consumer",
     SubmissionPolicy::kExplicit);
@@ -548,7 +587,7 @@ NOLINT_TEST_P(
   consumer->FlushBarriers();
   consumer->CopyBuffer(*readback, 0, *storage, 0, 4);
   const auto read = consumer.SubmitWithReceipt();
-  ASSERT_TRUE(read.receipt);
+  ASSERT_HAS_VALUE(read.receipt);
   graphics->GetCommandQueue(QueueRole::kGraphics)->Flush();
   EXPECT_EQ(*static_cast<const uint32_t*>(readback->Map()), expected);
   readback->UnMap();

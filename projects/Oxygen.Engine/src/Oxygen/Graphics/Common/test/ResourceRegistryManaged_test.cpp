@@ -78,7 +78,6 @@ using oxygen::graphics::TextureViewDescription;
 using oxygen::graphics::TextureViewRequest;
 namespace detail = oxygen::graphics::detail;
 
-constexpr std::uint32_t kCubeFaceCount = 6U;
 constexpr BackendIncarnationId kTestBackend { 71U };
 constexpr BackendIncarnationId kOtherBackend { 72U };
 using oxygen::graphics::testing::FakeResource;
@@ -146,7 +145,7 @@ public:
   TextureDesc desc {
     .width = 16U,
     .height = 16U,
-    .array_size = kCubeFaceCount,
+    .array_size = oxygen::kCubeFaceCount,
     .mip_levels = 2U,
     .format = oxygen::Format::kRGBA32Float,
     .texture_type = oxygen::TextureType::kTextureCube,
@@ -219,26 +218,44 @@ auto InitialTextureViews() -> std::array<TextureViewRequest, 3>
 {
   using oxygen::Format;
   using oxygen::TextureType;
-  return { TextureViewRequest { .description={ .view_type = ResourceViewType::kTexture_SRV,
-                                  .format = Format::kRGBA32Float,
-                                  .dimension = TextureType::kTextureCube, },
-             .domain=oxygen::bindless::generated::kTexturesDomain, },
-    TextureViewRequest { .description={ .view_type = ResourceViewType::kTexture_UAV,
-                           .format = Format::kRGBA32Float,
-                           .dimension = TextureType::kTexture2DArray,
-                           .sub_resources = { .base_mip_level = 0U,
-                             .num_mip_levels = 1U,
-                             .base_array_slice = 0U,
-                             .num_array_slices = kCubeFaceCount, }, },
-      .domain={}, },
-    TextureViewRequest { .description={ .view_type = ResourceViewType::kTexture_UAV,
-                           .format = Format::kRGBA32Float,
-                           .dimension = TextureType::kTexture2DArray,
-                           .sub_resources = { .base_mip_level = 1U,
-                             .num_mip_levels = 1U,
-                             .base_array_slice = 0U,
-                             .num_array_slices = kCubeFaceCount, }, },
-      .domain={}, }, };
+  return {
+    TextureViewRequest {
+      .description = {
+        .view_type = ResourceViewType::kTexture_SRV,
+        .format = Format::kRGBA32Float,
+        .dimension = TextureType::kTextureCube,
+      },
+      .domain = oxygen::bindless::generated::kTexturesDomain,
+    },
+    TextureViewRequest {
+      .description = {
+        .view_type = ResourceViewType::kTexture_UAV,
+        .format = Format::kRGBA32Float,
+        .dimension = TextureType::kTexture2DArray,
+        .sub_resources = {
+          .base_mip_level = 0U,
+          .num_mip_levels = 1U,
+          .base_array_slice = 0U,
+          .num_array_slices = oxygen::kCubeFaceCount,
+        },
+      },
+      .domain = {},
+    },
+    TextureViewRequest {
+      .description = {
+        .view_type = ResourceViewType::kTexture_UAV,
+        .format = Format::kRGBA32Float,
+        .dimension = TextureType::kTexture2DArray,
+        .sub_resources = {
+          .base_mip_level = 1U,
+          .num_mip_levels = 1U,
+          .base_array_slice = 0U,
+          .num_array_slices = oxygen::kCubeFaceCount,
+        },
+      },
+      .domain = {},
+    },
+  };
 }
 
 static_assert(!std::is_copy_constructible_v<ManagedTexture>);

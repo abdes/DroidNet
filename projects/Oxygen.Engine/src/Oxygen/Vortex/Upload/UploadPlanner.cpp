@@ -19,6 +19,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
@@ -27,7 +28,6 @@
 #include <Oxygen/Vortex/Upload/UploadPolicy.h>
 
 using oxygen::graphics::TextureUploadRegion;
-using oxygen::graphics::detail::FormatInfo;
 
 namespace {
 
@@ -391,8 +391,8 @@ auto UploadPlanner::PlanTexture2D(const UploadTextureDesc& desc,
       continue;
     }
 
-    const uint32_t mip_w = (std::max)(dst_desc.width >> mip, 1U);
-    const uint32_t mip_h = (std::max)(dst_desc.height >> mip, 1U);
+    const uint32_t mip_w = MipExtent(dst_desc.width, mip);
+    const uint32_t mip_h = MipExtent(dst_desc.height, mip);
 
     const bool full = (sr.width == 0U) && (sr.height == 0U);
     if ((sr.width == 0U) != (sr.height == 0U)) {
@@ -612,9 +612,9 @@ auto UploadPlanner::PlanTexture3D(const UploadTextureDesc& desc,
       continue;
     }
 
-    const auto mip_w = (std::max)(dst_desc.width >> mip, 1U);
-    const auto mip_h = (std::max)(dst_desc.height >> mip, 1U);
-    const auto mip_d = (std::max)(dst_desc.depth >> mip, 1U);
+    const auto mip_w = MipExtent(dst_desc.width, mip);
+    const auto mip_h = MipExtent(dst_desc.height, mip);
+    const auto mip_d = MipExtent(dst_desc.depth, mip);
     const bool full_xy = (sr.width == 0U) && (sr.height == 0U);
     if ((sr.width == 0U) != (sr.height == 0U)) {
       LOG_F(WARNING,

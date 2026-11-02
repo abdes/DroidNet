@@ -242,47 +242,6 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBufferRawBufferReturnsBufferAsset)
   EXPECT_TRUE(asset->IsRaw());
 }
 
-//! Test: LoadBufferResource returns kUnknown for invalid element format.
-NOLINT_TEST_F(
-  BufferLoaderBasicTest, LoadBufferInvalidElementFormatReturnsUnknown)
-{
-  using oxygen::Format;
-  using oxygen::content::testing::WriteDescriptorWithData;
-  using oxygen::data::BufferResource;
-
-  // Arrange: Hexdump for a BufferResourceDesc header (53 bytes, padded to 56),
-  // with element_format = 255 (invalid). Field layout:
-  // clang-format off
-  //   0x00: data_offset      = 256   (00 01 00 00 00 00 00 00)
-  //   0x08: size_bytes       = 64    (40 00 00 00)
-  //   0x0C: usage_flags      = 1     (01 00 00 00) // kVertexBuffer
-  //   0x10: element_stride   = 0     (00 00 00 00)
-  //   0x14: element_format   = 255   (FF) <- invalid
-  //   0x15: content_hash     = {0}    (32 zero bytes, not verified)
-  // clang-format on
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 40 00 00 00 01 00 00 00
-    16: 00 00 00 00 FF 00 00 00 00 00 00 00 00 00 00 00
-    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    48: 00 00 00 00 00 00 00 00
-  )";
-  constexpr uint64_t data_offset = 256;
-  constexpr uint32_t size_bytes = 64;
-  constexpr auto fill_value = std::byte { 0x33 };
-
-  // Write header and 64 bytes of data (simulate offset)
-  WriteDescriptorWithData(
-    desc_writer_, data_writer_, hexdump, data_offset + size_bytes, fill_value);
-
-  // Act
-  const auto context = CreateLoaderContext();
-  const auto asset = LoadBufferResource(context);
-
-  // Assert
-  ASSERT_THAT(asset, NotNull());
-  EXPECT_EQ(asset->GetElementFormat(), Format::kUnknown);
-}
-
 //! Test: LoadBufferResource correctly handles multiple usage flags.
 NOLINT_TEST_F(
   BufferLoaderBasicTest, LoadBufferMultipleUsageFlagsReturnsBufferAsset)

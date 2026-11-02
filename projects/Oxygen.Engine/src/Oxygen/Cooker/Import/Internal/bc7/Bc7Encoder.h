@@ -108,7 +108,8 @@ OXGN_COOK_NDAPI auto EncodeTexture(
 //! Encode a full texture with cooperative cancellation.
 /*! @see EncodeTexture(const ScratchImage&, const Bc7EncoderParams&) */
 OXGN_COOK_NDAPI auto EncodeTexture(const ScratchImage& source,
-  const Bc7EncoderParams& params, std::stop_token stop_token) -> ScratchImage;
+  const Bc7EncoderParams& params, const std::stop_token& stop_token)
+  -> ScratchImage;
 
 //! Encode a full texture using a Bc7Quality preset.
 /*!
@@ -124,42 +125,6 @@ OXGN_COOK_NDAPI auto EncodeTexture(
 //! Encode a full texture using a Bc7Quality preset with cancellation.
 /*! @see EncodeTexture(const ScratchImage&, Bc7Quality) */
 OXGN_COOK_NDAPI auto EncodeTexture(const ScratchImage& source,
-  Bc7Quality quality, std::stop_token stop_token) -> ScratchImage;
-
-//! Compute the number of BC7 blocks in one dimension.
-/*!
-  @param dimension Dimension in pixels
-  @return Number of 4x4 blocks (rounded up)
-*/
-[[nodiscard]] constexpr auto ComputeBlockCount(uint32_t dimension) noexcept
-  -> uint32_t
-{
-  return (dimension + kBc7BlockDimension - 1) / kBc7BlockDimension;
-}
-
-//! Compute the row pitch for a BC7-compressed surface.
-/*!
-  @param width Width in pixels
-  @return Row pitch in bytes (blocks_x * 16)
-*/
-[[nodiscard]] constexpr auto ComputeBc7RowPitch(uint32_t width) noexcept
-  -> uint32_t
-{
-  return ComputeBlockCount(width) * kBc7BlockSizeBytes;
-}
-
-//! Compute the total size of a BC7-compressed surface.
-/*!
-  @param width  Width in pixels
-  @param height Height in pixels
-  @return Total size in bytes
-*/
-[[nodiscard]] constexpr auto ComputeBc7SurfaceSize(
-  uint32_t width, uint32_t height) noexcept -> size_t
-{
-  const auto blocks_x = ComputeBlockCount(width);
-  const auto blocks_y = ComputeBlockCount(height);
-  return static_cast<size_t>(blocks_x) * blocks_y * kBc7BlockSizeBytes;
-}
+  Bc7Quality quality, const std::stop_token& stop_token) -> ScratchImage;
 
 } // namespace oxygen::content::import::bc7

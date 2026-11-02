@@ -141,9 +141,8 @@ namespace {
       desc.depth = desc.array_layers = desc.mip_levels = 1U;
       desc.format = static_cast<std::uint8_t>(format);
       constexpr auto kPayloadAlignment = 256U;
-      constexpr auto kBc7Compression = 7U;
       desc.alignment = kPayloadAlignment;
-      desc.compression_type = compressed ? kBc7Compression : 0U;
+      desc.compression_type = data::pak::core::TextureCompressionOf(format);
       const auto encoded = EncodeBc7(endpoints, selectors);
       auto bytes = std::vector<std::uint8_t>(
         compressed ? encoded.size() : sizeof(pixels));
@@ -173,7 +172,9 @@ namespace {
       const std::span<const std::uint8_t> bytes) -> content::ResourceKey
     {
       const auto key = owned_asset_loader_->MintSyntheticTextureKey();
-      auto payload = detail::BuildV4TexturePayload(desc, layouts, bytes);
+      auto payload = detail::BuildTexturePayload(desc,
+        data::pak::render::TexturePackingPolicyId::kTightPacked, layouts,
+        bytes);
       owned_asset_loader_->SetTexture(key,
         std::make_shared<data::TextureResource>(
           desc, oxygen::serio::testing::OwnedBytes(payload)));
@@ -744,8 +745,8 @@ namespace {
       desc.compression_type = compressed ? 7U : 0U;
       auto bytes = std::vector<std::uint8_t> {};
       auto layouts = std::array<data::pak::render::SubresourceLayout, 3> {};
-      for (std::size_t level = 0U; level < colors.size(); ++level) {
-        const auto width = 4U >> level;
+      for (std::uint32_t level = 0U; level < colors.size(); ++level) {
+        const auto width = MipExtent(4U, level);
         const auto size = compressed ? 16U : width * width * 4U;
         const auto offset = bytes.size();
         bytes.resize(offset + size);

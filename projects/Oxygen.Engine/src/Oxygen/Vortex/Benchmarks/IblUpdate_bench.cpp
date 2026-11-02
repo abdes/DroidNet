@@ -66,7 +66,6 @@
 
 namespace oxygen::vortex::testing::exposure {
 namespace {
-  constexpr auto kCubeFaceCount = 6U;
   constexpr auto kFramesPerSecond = 60U;
   constexpr auto kScheduledScopeCapacity = 1024U;
   constexpr auto kImmediateScopeCapacity = 128U;

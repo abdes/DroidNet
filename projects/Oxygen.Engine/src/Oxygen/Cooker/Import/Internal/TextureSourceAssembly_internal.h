@@ -15,6 +15,7 @@
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 
 namespace oxygen::content::import::detail {
 

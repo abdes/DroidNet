@@ -27,6 +27,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::Format;
+using oxygen::kCubeFaceCount;
 using oxygen::TextureType;
 using oxygen::content::import::AssembleCubeFromFaces;
 using oxygen::content::import::ConvertEquirectangularToCube;
@@ -34,7 +35,6 @@ using oxygen::content::import::CubeFace;
 using oxygen::content::import::CubeMapImageLayout;
 using oxygen::content::import::EquirectToCubeOptions;
 using oxygen::content::import::ExtractCubeFacesFromLayout;
-using oxygen::content::import::kCubeFaceCount;
 using oxygen::content::import::MipFilter;
 using oxygen::content::import::ScratchImage;
 using oxygen::content::import::SubresourceId;
@@ -82,7 +82,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, EnumValuesMatchExpectedOrdering)
 //! kCubeFaceCount constant equals 6.
 NOLINT_TEST(TextureSourceAssemblyTest, CubeFaceCountIsSix)
 {
-  EXPECT_EQ(kCubeFaceCount, 6);
+  EXPECT_EQ(kCubeFaceCount, 6U);
 }
 
 //=== SubresourceId Tests

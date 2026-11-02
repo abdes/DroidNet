@@ -4,6 +4,7 @@
 // SPDX-License: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -15,94 +16,115 @@ namespace oxygen::graphics::detail {
 
 // Format mapping table. The rows must be in the exactly same order as Format
 // enum members are defined.
-static const FormatInfo kFormatInfo[] = {
+static constexpr auto kFormatInfo = std::to_array<FormatInfo>({
   // clang-format off
   //    format                 bytes  blk       kind                 red   green  blue   alpha  depth  stencl signed srgb
-  { Format::kUnknown,             0,   0, FormatKind::kInteger,     false, false, false, false, false, false, false, false },
-  { Format::kR8UInt,              1,   1, FormatKind::kInteger,     true,  false, false, false, false, false, false, false },
-  { Format::kR8SInt,              1,   1, FormatKind::kInteger,     true,  false, false, false, false, false, true,  false },
-  { Format::kR8UNorm,             1,   1, FormatKind::kNormalized,  true,  false, false, false, false, false, false, false },
-  { Format::kR8SNorm,             1,   1, FormatKind::kNormalized,  true,  false, false, false, false, false, true,  false },
-  { Format::kR16UInt,             2,   1, FormatKind::kInteger,     true,  false, false, false, false, false, false, false },
-  { Format::kR16SInt,             2,   1, FormatKind::kInteger,     true,  false, false, false, false, false, true,  false },
-  { Format::kR16UNorm,            2,   1, FormatKind::kNormalized,  true,  false, false, false, false, false, false, false },
-  { Format::kR16SNorm,            2,   1, FormatKind::kNormalized,  true,  false, false, false, false, false, true,  false },
-  { Format::kR16Float,            2,   1, FormatKind::kFloat,       true,  false, false, false, false, false, true,  false },
-  { Format::kR32UInt,             4,   1, FormatKind::kInteger,     true,  false, false, false, false, false, false, false },
-  { Format::kR32SInt,             4,   1, FormatKind::kInteger,     true,  false, false, false, false, false, true,  false },
-  { Format::kR32Float,            4,   1, FormatKind::kFloat,       true,  false, false, false, false, false, true,  false },
-  { Format::kRG8UInt,             2,   1, FormatKind::kInteger,     true,  true,  false, false, false, false, false, false },
-  { Format::kRG8SInt,             2,   1, FormatKind::kInteger,     true,  true,  false, false, false, false, true,  false },
-  { Format::kRG8UNorm,            2,   1, FormatKind::kNormalized,  true,  true,  false, false, false, false, false, false },
-  { Format::kRG8SNorm,            2,   1, FormatKind::kNormalized,  true,  true,  false, false, false, false, true,  false },
-  { Format::kRG16UInt,            4,   1, FormatKind::kInteger,     true,  true,  false, false, false, false, false, false },
-  { Format::kRG16SInt,            4,   1, FormatKind::kInteger,     true,  true,  false, false, false, false, true,  false },
-  { Format::kRG16UNorm,           4,   1, FormatKind::kNormalized,  true,  true,  false, false, false, false, false, false },
-  { Format::kRG16SNorm,           4,   1, FormatKind::kNormalized,  true,  true,  false, false, false, false, true,  false },
-  { Format::kRG16Float,           4,   1, FormatKind::kFloat,       true,  true,  false, false, false, false, true,  false },
-  { Format::kRG32UInt,            8,   1, FormatKind::kInteger,     true,  true,  false, false, false, false, false, false },
-  { Format::kRG32SInt,            8,   1, FormatKind::kInteger,     true,  true,  false, false, false, false, true,  false },
-  { Format::kRG32Float,           8,   1, FormatKind::kFloat,       true,  true,  false, false, false, false, true,  false },
-  { Format::kRGB32UInt,          12,   1, FormatKind::kInteger,     true,  true,  true,  false, false, false, false, false },
-  { Format::kRGB32SInt,          12,   1, FormatKind::kInteger,     true,  true,  true,  false, false, false, true,  false },
-  { Format::kRGB32Float,         12,   1, FormatKind::kFloat,       true,  true,  true,  false, false, false, true,  false },
-  { Format::kRGBA8UInt,           4,   1, FormatKind::kInteger,     true,  true,  true,  true,  false, false, false, false },
-  { Format::kRGBA8SInt,           4,   1, FormatKind::kInteger,     true,  true,  true,  true,  false, false, true,  false },
-  { Format::kRGBA8UNorm,          4,   1, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, false },
-  { Format::kRGBA8UNormSRGB,      4,   1, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, true  },
-  { Format::kRGBA8SNorm,          4,   1, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, true,  false },
-  { Format::kBGRA8UNorm,          4,   1, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, false },
-  { Format::kBGRA8UNormSRGB,      4,   1, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, true  },
-  { Format::kRGBA16UInt,          8,   1, FormatKind::kInteger,     true,  true,  true,  true,  false, false, false, false },
-  { Format::kRGBA16SInt,          8,   1, FormatKind::kInteger,     true,  true,  true,  true,  false, false, true,  false },
-  { Format::kRGBA16UNorm,         8,   1, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, false },
-  { Format::kRGBA16SNorm,         8,   1, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, true,  false },
-  { Format::kRGBA16Float,         8,   1, FormatKind::kFloat,       true,  true,  true,  true,  false, false, true,  false },
-  { Format::kRGBA32UInt,         16,   1, FormatKind::kInteger,     true,  true,  true,  true,  false, false, false, false },
-  { Format::kRGBA32SInt,         16,   1, FormatKind::kInteger,     true,  true,  true,  true,  false, false, true,  false },
-  { Format::kRGBA32Float,        16,   1, FormatKind::kFloat,       true,  true,  true,  true,  false, false, true,  false },
-  { Format::kB5G6R5UNorm,         2,   1, FormatKind::kNormalized,  true,  true,  true,  false, false, false, false, false },
-  { Format::kB5G5R5A1UNorm,       2,   1, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, false },
-  { Format::kB4G4R4A4UNorm,       2,   1, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, false },
-  { Format::kR11G11B10Float,      4,   1, FormatKind::kFloat,       true,  true,  true,  false, false, false, false, false },
-  { Format::kR10G10B10A2UNorm,    4,   1, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, false },
-  { Format::kR10G10B10A2UInt,     4,   1, FormatKind::kInteger,     true,  true,  true,  true,  false, false, false, false },
-  { Format::kR9G9B9E5Float,       4,   1, FormatKind::kFloat,       true,  true,  true,  false, false, false, false, false },
-  { Format::kBC1UNorm,            8,   4, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, false },
-  { Format::kBC1UNormSRGB,        8,   4, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, true  },
-  { Format::kBC2UNorm,           16,   4, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, false },
-  { Format::kBC2UNormSRGB,       16,   4, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, true  },
-  { Format::kBC3UNorm,           16,   4, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, false },
-  { Format::kBC3UNormSRGB,       16,   4, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, true  },
-  { Format::kBC4UNorm,            8,   4, FormatKind::kNormalized,  true,  false, false, false, false, false, false, false },
-  { Format::kBC4SNorm,            8,   4, FormatKind::kNormalized,  true,  false, false, false, false, false, true,  false },
-  { Format::kBC5UNorm,           16,   4, FormatKind::kNormalized,  true,  true,  false, false, false, false, false, false },
-  { Format::kBC5SNorm,           16,   4, FormatKind::kNormalized,  true,  true,  false, false, false, false, true,  false },
-  { Format::kBC6HFloatU,         16,   4, FormatKind::kFloat,       true,  true,  true,  false, false, false, false, false },
-  { Format::kBC6HFloatS,         16,   4, FormatKind::kFloat,       true,  true,  true,  false, false, false, true,  false },
-  { Format::kBC7UNorm,           16,   4, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, false },
-  { Format::kBC7UNormSRGB,       16,   4, FormatKind::kNormalized,  true,  true,  true,  true,  false, false, false, true  },
-  { Format::kDepth16,             2,   1, FormatKind::kDepthStencil,false, false, false, false, true,  false, false, false },
-  { Format::kDepth24Stencil8,     4,   1, FormatKind::kDepthStencil,false, false, false, false, true,  true,  false, false },
-  { Format::kDepth32,             4,   1, FormatKind::kDepthStencil,false, false, false, false, true,  false, false, false },
-  { Format::kDepth32Stencil8,     8,   1, FormatKind::kDepthStencil,false, false, false, false, true,  true,  false, false },
+  { .format=Format::kUnknown,             .bytes_per_block=0,   .block_size=0, .kind=FormatKind::kInteger,     .has_red=false, .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kR8UInt,              .bytes_per_block=1,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kR8SInt,              .bytes_per_block=1,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kR8UNorm,             .bytes_per_block=1,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kR8SNorm,             .bytes_per_block=1,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kR16UInt,             .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kR16SInt,             .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kR16UNorm,            .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kR16SNorm,            .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kR16Float,            .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kFloat,       .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kR32UInt,             .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kR32SInt,             .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kR32Float,            .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kFloat,       .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRG8UInt,             .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kRG8SInt,             .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRG8UNorm,            .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kRG8SNorm,            .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRG16UInt,            .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kRG16SInt,            .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRG16UNorm,           .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kRG16SNorm,           .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRG16Float,           .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kFloat,       .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRG32UInt,            .bytes_per_block=8,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kRG32SInt,            .bytes_per_block=8,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRG32Float,           .bytes_per_block=8,   .block_size=1, .kind=FormatKind::kFloat,       .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRGB32UInt,          .bytes_per_block=12,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kRGB32SInt,          .bytes_per_block=12,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRGB32Float,         .bytes_per_block=12,   .block_size=1, .kind=FormatKind::kFloat,       .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRGBA8UInt,           .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kRGBA8SInt,           .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRGBA8UNorm,          .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kRGBA8UNormSRGB,      .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=true  },
+  { .format=Format::kRGBA8SNorm,          .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kBGRA8UNorm,          .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kBGRA8UNormSRGB,      .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=true  },
+  { .format=Format::kRGBA16UInt,          .bytes_per_block=8,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kRGBA16SInt,          .bytes_per_block=8,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRGBA16UNorm,         .bytes_per_block=8,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kRGBA16SNorm,         .bytes_per_block=8,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRGBA16Float,         .bytes_per_block=8,   .block_size=1, .kind=FormatKind::kFloat,       .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRGBA32UInt,         .bytes_per_block=16,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kRGBA32SInt,         .bytes_per_block=16,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kRGBA32Float,        .bytes_per_block=16,   .block_size=1, .kind=FormatKind::kFloat,       .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kB5G6R5UNorm,         .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kB5G5R5A1UNorm,       .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kB4G4R4A4UNorm,       .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kR11G11B10Float,      .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kFloat,       .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kR10G10B10A2UNorm,    .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kR10G10B10A2UInt,     .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kInteger,     .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kR9G9B9E5Float,       .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kFloat,       .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kBC1UNorm,            .bytes_per_block=8,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kBC1UNormSRGB,        .bytes_per_block=8,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=true  },
+  { .format=Format::kBC2UNorm,           .bytes_per_block=16,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kBC2UNormSRGB,       .bytes_per_block=16,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=true  },
+  { .format=Format::kBC3UNorm,           .bytes_per_block=16,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kBC3UNormSRGB,       .bytes_per_block=16,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=true  },
+  { .format=Format::kBC4UNorm,            .bytes_per_block=8,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kBC4SNorm,            .bytes_per_block=8,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kBC5UNorm,           .bytes_per_block=16,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kBC5SNorm,           .bytes_per_block=16,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=false, .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kBC6HFloatU,         .bytes_per_block=16,   .block_size=4, .kind=FormatKind::kFloat,       .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kBC6HFloatS,         .bytes_per_block=16,   .block_size=4, .kind=FormatKind::kFloat,       .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=false, .has_depth=false, .has_stencil=false, .is_signed=true,  .is_srgb=false },
+  { .format=Format::kBC7UNorm,           .bytes_per_block=16,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kBC7UNormSRGB,       .bytes_per_block=16,   .block_size=4, .kind=FormatKind::kNormalized,  .has_red=true,  .has_green=true,  .has_blue=true,  .has_alpha=true,  .has_depth=false, .has_stencil=false, .is_signed=false, .is_srgb=true  },
+  { .format=Format::kDepth16,             .bytes_per_block=2,   .block_size=1, .kind=FormatKind::kDepthStencil,.has_red=false, .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=true,  .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kDepth24Stencil8,     .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kDepthStencil,.has_red=false, .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=true,  .has_stencil=true,  .is_signed=false, .is_srgb=false },
+  { .format=Format::kDepth32,             .bytes_per_block=4,   .block_size=1, .kind=FormatKind::kDepthStencil,.has_red=false, .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=true,  .has_stencil=false, .is_signed=false, .is_srgb=false },
+  { .format=Format::kDepth32Stencil8,     .bytes_per_block=8,   .block_size=1, .kind=FormatKind::kDepthStencil,.has_red=false, .has_green=false, .has_blue=false, .has_alpha=false, .has_depth=true,  .has_stencil=true,  .is_signed=false, .is_srgb=false },
   // clang-format on
-};
+});
 
 auto GetFormatInfo(Format format) -> const FormatInfo&
 {
-  static_assert(sizeof(kFormatInfo) / sizeof(FormatInfo)
-      == static_cast<size_t>(Format::kMaxFormat) + 1,
+  static_assert(
+    kFormatInfo.size() == static_cast<size_t>(Format::kMaxFormat) + 1,
     "The format info table doesn't have the right number of elements");
 
   if (static_cast<uint32_t>(format)
     > static_cast<uint32_t>(Format::kMaxFormat)) {
-    return kFormatInfo[0]; // kUnknown
+    return kFormatInfo.front(); // kUnknown
   }
 
-  const FormatInfo& info = kFormatInfo[static_cast<uint32_t>(format)];
+  const FormatInfo& info = kFormatInfo.at(static_cast<uint32_t>(format));
   assert(info.format == format);
   return info;
+}
+
+auto RowBytes(const Format format, const uint32_t width) -> uint64_t
+{
+  const auto& info = GetFormatInfo(format);
+  if (info.block_size == 0U) {
+    return 0U;
+  }
+  const auto blocks
+    = (uint64_t { width } + info.block_size - 1U) / info.block_size;
+  return blocks * info.bytes_per_block;
+}
+
+auto BlockRows(const Format format, const uint32_t height) -> uint32_t
+{
+  const auto& info = GetFormatInfo(format);
+  if (info.block_size == 0U) {
+    return 0U;
+  }
+  return static_cast<uint32_t>(
+    (uint64_t { height } + info.block_size - 1U) / info.block_size);
 }
 
 auto IsHdr(Format format) -> bool

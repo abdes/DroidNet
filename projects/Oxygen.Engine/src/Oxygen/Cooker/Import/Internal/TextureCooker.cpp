@@ -343,10 +343,8 @@ namespace {
       }
       present[index] = true;
 
-      const auto expected_width
-        = ScratchImage::ComputeMipDimension(base_width, mip);
-      const auto expected_height
-        = ScratchImage::ComputeMipDimension(base_height, mip);
+      const auto expected_width = MipExtent(base_width, mip);
+      const auto expected_height = MipExtent(base_height, mip);
 
       const auto src_view = source.image.GetImage(0, 0);
       if (src_view.width != expected_width
@@ -354,7 +352,8 @@ namespace {
         return Err(TextureImportError::kDimensionMismatch);
       }
 
-      const auto expected_row_bytes = ComputeRowBytes(expected_width, format);
+      const auto expected_row_bytes
+        = graphics::detail::RowBytes(format, expected_width);
       if (src_view.row_pitch_bytes != expected_row_bytes) {
         return Err(TextureImportError::kOutputFormatInvalid);
       }
@@ -710,7 +709,7 @@ namespace detail {
 
     // Compute target mip count
     const uint32_t full_mip_count
-      = image::mip::ComputeMipCount(image.Meta().width, image.Meta().height);
+      = MipChainLength(image.Meta().width, image.Meta().height);
 
     uint32_t target_mip_count = full_mip_count;
     if (desc.mip_policy == MipPolicy::kMaxCount) {
@@ -913,37 +912,19 @@ namespace detail {
         const auto src_bytes = src_view.pixels;
         const auto dst_bytes = std::span { payload }.subspan(layout.offset);
 
-        // Copy row by row with potential padding
-        const auto& format_info = graphics::detail::GetFormatInfo(meta.format);
-        const uint32_t src_row_bytes
-          = ComputeRowBytes(layout.width, meta.format);
-
-        if (format_info.block_size == 1) {
-          // Uncompressed format
-          for (uint32_t row = 0; row < layout.height; ++row) {
-            std::memcpy(
-              dst_bytes.subspan(static_cast<size_t>(row) * layout.row_pitch)
-                .data(),
-              src_bytes
-                .subspan(static_cast<size_t>(row) * src_view.row_pitch_bytes)
-                .data(),
-              src_row_bytes);
-          }
-        } else {
-          // Block-compressed format
-          const uint32_t blocks_y = (layout.height + format_info.block_size - 1)
-            / format_info.block_size;
-          for (uint32_t block_row = 0; block_row < blocks_y; ++block_row) {
-            std::memcpy(
-              dst_bytes
-                .subspan(static_cast<size_t>(block_row) * layout.row_pitch)
-                .data(),
-              src_bytes
-                .subspan(
-                  static_cast<size_t>(block_row) * src_view.row_pitch_bytes)
-                .data(),
-              src_row_bytes);
-          }
+        // Copy row of blocks by row, padding each to the policy's pitch.
+        const auto src_row_bytes
+          = graphics::detail::RowBytes(meta.format, layout.width);
+        const auto rows
+          = graphics::detail::BlockRows(meta.format, layout.height);
+        for (uint32_t row = 0; row < rows; ++row) {
+          std::memcpy(
+            dst_bytes.subspan(static_cast<size_t>(row) * layout.row_pitch)
+              .data(),
+            src_bytes
+              .subspan(static_cast<size_t>(row) * src_view.row_pitch_bytes)
+              .data(),
+            src_row_bytes);
         }
       }
     }
@@ -968,8 +949,8 @@ namespace {
       return 0;
     }
     auto dropped = uint16_t { 0 };
-    while ((std::max)(ScratchImage::ComputeMipDimension(meta.width, dropped),
-             ScratchImage::ComputeMipDimension(meta.height, dropped))
+    while ((std::max)(MipExtent(meta.width, dropped),
+             MipExtent(meta.height, dropped))
       > max_size) {
       ++dropped;
     }
@@ -991,11 +972,10 @@ namespace {
     const ScratchImage& image, const MipRange& range) -> ScratchImage
   {
     auto meta = image.Meta();
-    meta.width = ScratchImage::ComputeMipDimension(meta.width, range.first);
-    meta.height = ScratchImage::ComputeMipDimension(meta.height, range.first);
+    meta.width = MipExtent(meta.width, range.first);
+    meta.height = MipExtent(meta.height, range.first);
     if (meta.texture_type == TextureType::kTexture3D) {
-      meta.depth = static_cast<uint16_t>(
-        ScratchImage::ComputeMipDimension(meta.depth, range.first));
+      meta.depth = static_cast<uint16_t>(MipExtent(meta.depth, range.first));
     }
     meta.mip_levels = range.count;
     auto result = ScratchImage::Create(meta);
@@ -1151,8 +1131,7 @@ namespace {
     // Skip an encoding round trip when no mip generation is needed.
     auto target_mips = resolved_desc.mip_policy == MipPolicy::kNone
       ? 1U
-      : image::mip::ComputeMipCount(
-          processed->Meta().width, processed->Meta().height);
+      : MipChainLength(processed->Meta().width, processed->Meta().height);
     if (resolved_desc.mip_policy == MipPolicy::kMaxCount) {
       target_mips = (std::min)(target_mips,
         static_cast<std::uint32_t>(resolved_desc.max_mip_levels));

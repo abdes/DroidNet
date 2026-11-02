@@ -40,10 +40,10 @@ struct SubresourceLayout {
   uint64_t offset = 0;
 
   //! Row pitch in bytes (stride between rows).
-  uint32_t row_pitch = 0;
+  uint64_t row_pitch = 0;
 
   //! Size in bytes of this subresource.
-  uint32_t size_bytes = 0;
+  uint64_t size_bytes = 0;
 
   //! Width of this subresource in pixels.
   uint32_t width = 0;
@@ -91,7 +91,7 @@ public:
     @return Aligned row pitch in bytes
   */
   [[nodiscard]] virtual auto AlignRowPitchBytes(
-    uint32_t row_bytes) const noexcept -> uint32_t = 0;
+    uint64_t row_bytes) const noexcept -> uint64_t = 0;
 
   //! Align subresource offset to the required boundary.
   /*!
@@ -131,11 +131,11 @@ public:
     return "d3d12";
   }
 
-  [[nodiscard]] auto AlignRowPitchBytes(uint32_t row_bytes) const noexcept
-    -> uint32_t override
+  [[nodiscard]] auto AlignRowPitchBytes(uint64_t row_bytes) const noexcept
+    -> uint64_t override
   {
     return (row_bytes + kD3D12RowPitchAlignment - 1)
-      & ~(kD3D12RowPitchAlignment - 1);
+      & ~static_cast<uint64_t>(kD3D12RowPitchAlignment - 1);
   }
 
   [[nodiscard]] auto AlignSubresourceOffset(uint64_t offset) const noexcept
@@ -169,8 +169,8 @@ public:
     return "tight";
   }
 
-  [[nodiscard]] auto AlignRowPitchBytes(uint32_t row_bytes) const noexcept
-    -> uint32_t override
+  [[nodiscard]] auto AlignRowPitchBytes(uint64_t row_bytes) const noexcept
+    -> uint64_t override
   {
     return row_bytes; // No padding
   }
@@ -184,62 +184,8 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
-// Format Utilities
-//===----------------------------------------------------------------------===//
-
-//! Compute bytes per pixel for uncompressed formats, or bytes per block for
-//! compressed formats.
-/*!
-  @param format Pixel format
-  @return Bytes per pixel/block, or 0 for unknown formats
-*/
-OXGN_COOK_NDAPI auto ComputeBytesPerPixelOrBlock(Format format) noexcept
-  -> uint32_t;
-
-//! Compute the block dimension for a format.
-/*!
-  @param format Pixel format
-  @return Block dimension (1 for uncompressed, 4 for BC formats)
-*/
-OXGN_COOK_NDAPI auto ComputeBlockDimension(Format format) noexcept -> uint32_t;
-
-//! Compute the unaligned row bytes for a surface.
-/*!
-  Accounts for both uncompressed and block-compressed formats.
-
-  @param width  Surface width in pixels
-  @param format Pixel format
-  @return Unaligned row size in bytes
-*/
-OXGN_COOK_NDAPI auto ComputeRowBytes(uint32_t width, Format format) noexcept
-  -> uint32_t;
-
-//! Compute the unaligned surface size in bytes.
-/*!
-  @param width  Surface width in pixels
-  @param height Surface height in pixels
-  @param format Pixel format
-  @return Unaligned surface size in bytes
-*/
-OXGN_COOK_NDAPI auto ComputeSurfaceBytes(
-  uint32_t width, uint32_t height, Format format) noexcept -> uint64_t;
-
-//===----------------------------------------------------------------------===//
 // Subresource Layout Computation
 //===----------------------------------------------------------------------===//
-
-//! Compute mip dimension at a given level.
-/*!
-  @param base_dimension Base dimension (width or height at mip 0)
-  @param mip_level      Mip level (0 = base)
-  @return Dimension at the given mip level, minimum 1
-*/
-[[nodiscard]] constexpr auto ComputeMipDimension(
-  uint32_t base_dimension, uint32_t mip_level) noexcept -> uint32_t
-{
-  const uint32_t result = base_dimension >> mip_level;
-  return result > 0 ? result : 1;
-}
 
 //! Compute layouts for all subresources in a texture.
 /*!

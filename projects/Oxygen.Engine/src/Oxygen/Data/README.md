@@ -116,6 +116,9 @@ Physics, before authored local transforms.
 | Surface table: each declared surface once, known flags              | GeometryAsset ctor (`CookedOpenError`)               |
 | Default LOD policy keeps `LodPolicyRecord`'s rules                  | GeometryAsset ctor (`CookedOpenError`)               |
 | Material values and shader stages are defined; one shader per stage | `CheckMaterialDescriptor` (`CookedOpenError`)        |
+| Texture type, format, compression and extents are defined           | TextureResource ctor (`CookedOpenError`)             |
+| Texture subresources hold their rows within the payload data        | TextureResource ctor (`CookedOpenError`)             |
+| Buffer usage, element format or stride, and size are coherent       | BufferResource ctor (`CookedOpenError`)              |
 | Procedural params in valid range                                    | Each generator (returns std::nullopt)                |
 
 A mesh read from its descriptor is built before its buffers load; it shows no
@@ -256,13 +259,13 @@ Performance tweaks (safe & optional):
 
 ## 11. Troubleshooting
 
-| Symptom                              | Likely Cause                                                      | Action                                                              |
-| ------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Crash inside MeshView ctor           | Out-of-range descriptor values                                    | Validate source descriptor before construction                      |
-| Empty index buffer unexpectedly      | Index format/stride mismatch or size misaligned                   | Inspect `BufferResource` element_format & stride; logging will warn |
-| Logic error mixing storage           | Called `WithBufferResources` after `WithVertices` (or vice versa) | Use one storage mode per builder instance                           |
-| Bounding sphere seems large          | Sphere derived from AABB, not minimal                             | Implement tighter sphere if necessary                               |
-| Procedural generator returns nullopt | Invalid parameters (below minimums)                               | Re-check segment/size constraints                                   |
+| Symptom                              | Likely Cause                                                      | Action                                                |
+| ------------------------------------ | ----------------------------------------------------------------- | ----------------------------------------------------- |
+| Crash inside MeshView ctor           | Out-of-range descriptor values                                    | Validate source descriptor before construction        |
+| Buffer refused on load               | Index format/stride mismatch or size misaligned                   | Read the `CookedOpenError`; fix the cooked buffer row |
+| Logic error mixing storage           | Called `WithBufferResources` after `WithVertices` (or vice versa) | Use one storage mode per builder instance             |
+| Bounding sphere seems large          | Sphere derived from AABB, not minimal                             | Implement tighter sphere if necessary                 |
+| Procedural generator returns nullopt | Invalid parameters (below minimums)                               | Re-check segment/size constraints                     |
 
 ---
 

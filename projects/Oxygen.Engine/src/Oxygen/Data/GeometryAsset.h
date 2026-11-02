@@ -635,7 +635,7 @@ public:
    The buffers are bound only when they hold every view of the mesh.
 
    @throw CookedOpenError `kMissingPart` for an absent buffer,
-     `kWrongRowSize` for a buffer that does not hold whole elements,
+     `kWrongRowSize` for a vertex buffer that does not hold whole vertices,
      `kMisaligned` for a vertex buffer not aligned for its vertices,
      `kInvalidValue` for an index buffer not of 16-bit or 32-bit indices,
      and `kOutOfBounds` for a view past its buffer or an index past the

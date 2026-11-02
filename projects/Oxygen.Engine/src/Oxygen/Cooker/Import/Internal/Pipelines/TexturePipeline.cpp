@@ -305,7 +305,8 @@ namespace {
       }
 
       const auto src_view = slices[source_index].GetImage(0, 0);
-      const auto expected_row_bytes = ComputeRowBytes(src_view.width, format);
+      const auto expected_row_bytes
+        = graphics::detail::RowBytes(format, src_view.width);
       if (src_view.row_pitch_bytes != expected_row_bytes) {
         return Err(TextureImportError::kOutputFormatInvalid);
       }
@@ -710,10 +711,8 @@ namespace {
       }
       present[index] = true;
 
-      const auto expected_width
-        = ScratchImage::ComputeMipDimension(base_width, mip);
-      const auto expected_height
-        = ScratchImage::ComputeMipDimension(base_height, mip);
+      const auto expected_width = MipExtent(base_width, mip);
+      const auto expected_height = MipExtent(base_height, mip);
 
       const auto src_view = decoded_images[i].GetImage(0, 0);
       if (src_view.width != expected_width
@@ -724,7 +723,8 @@ namespace {
         };
       }
 
-      const auto expected_row_bytes = ComputeRowBytes(expected_width, format);
+      const auto expected_row_bytes
+        = graphics::detail::RowBytes(format, expected_width);
       if (src_view.row_pitch_bytes != expected_row_bytes) {
         return {
           .cooked = Err(TextureImportError::kOutputFormatInvalid),

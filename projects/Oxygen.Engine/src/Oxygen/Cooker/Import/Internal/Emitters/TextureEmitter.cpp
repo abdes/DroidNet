@@ -28,10 +28,12 @@
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Serio/AnyDevice.h>
@@ -42,6 +44,9 @@
 namespace oxygen::content::import {
 
 namespace {
+
+  //! The format of the fallback texture: one opaque white texel.
+  constexpr auto kFallbackFormat = Format::kRGBA8UNorm;
 
   // Accepts any Result<T> and checks for error, logs and throws if needed.
   template <typename ResultT>
@@ -98,8 +103,12 @@ namespace {
     -> std::vector<std::byte>
   {
     LOG_SCOPE_FUNCTION(1);
-    constexpr uint32_t kUnalignedPitch = 4;
-    const uint32_t aligned_pitch = policy.AlignRowPitchBytes(kUnalignedPitch);
+    const auto aligned_pitch64 = policy.AlignRowPitchBytes(
+      graphics::detail::RowBytes(kFallbackFormat, 1U));
+    if (aligned_pitch64 > std::numeric_limits<uint32_t>::max()) {
+      return {};
+    }
+    const auto aligned_pitch = static_cast<uint32_t>(aligned_pitch64);
 
     const uint32_t layouts_offset
       = sizeof(data::pak::render::TexturePayloadHeader);
@@ -347,7 +356,7 @@ auto TextureEmitter::CreateFallbackPayload() const -> CookedTexturePayload
   cooked.desc.depth = 1;
   cooked.desc.array_layers = 1;
   cooked.desc.mip_levels = 1;
-  cooked.desc.format = Format::kRGBA8UNorm;
+  cooked.desc.format = kFallbackFormat;
   cooked.desc.packing_policy_id = config_.packing_policy_id;
   cooked.desc.content_hash = content_hash;
   cooked.payload = std::move(payload_bytes);
@@ -357,11 +366,6 @@ auto TextureEmitter::CreateFallbackPayload() const -> CookedTexturePayload
 auto TextureEmitter::ToPakDescriptor(const CookedTexturePayload& cooked,
   const uint64_t data_offset) const -> TextureResourceDesc
 {
-  const auto policy_id = cooked.desc.packing_policy_id.empty()
-    ? config_.packing_policy_id
-    : cooked.desc.packing_policy_id;
-  const auto& policy = ResolvePackingPolicy(policy_id);
-
   TextureResourceDesc desc {};
   desc.data_offset = data_offset;
   desc.size_bytes
@@ -373,7 +377,7 @@ auto TextureEmitter::ToPakDescriptor(const CookedTexturePayload& cooked,
   desc.array_layers = cooked.desc.array_layers;
   desc.mip_levels = cooked.desc.mip_levels;
   desc.format = static_cast<uint8_t>(cooked.desc.format);
-  desc.alignment = static_cast<uint16_t>(policy.AlignRowPitchBytes(1));
+  desc.alignment = data::TextureResource::kDataAlignment;
   desc.content_hash = cooked.desc.content_hash;
 
   desc.compression_type

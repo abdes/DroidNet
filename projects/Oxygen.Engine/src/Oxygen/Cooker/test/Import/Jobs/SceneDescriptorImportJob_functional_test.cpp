@@ -374,7 +374,7 @@ namespace {
   {
     auto desc = LooseCookedRoot::OnePixelTexture();
     desc.texture_type = static_cast<uint8_t>(TextureType::kTextureCube);
-    desc.array_layers = 6U;
+    desc.array_layers = kCubeFaceCount;
     desc.format = static_cast<uint8_t>(Format::kRGBA16Float);
     const auto row = textures.AddTexture(SeedBytes(1U, 24U), desc);
     textures.DescribeTexture(leaf, row);

@@ -74,7 +74,6 @@ namespace {
   using graphics::ResourceViewType;
   namespace root = bindless::generated::d3d12;
 
-  constexpr auto kCubeFaces = 6U;
   constexpr auto kMipZeroWorkKinds = 6U;
   constexpr auto kGroupEdge = 8U;
   constexpr auto kShPartialElements = 10U;
@@ -111,22 +110,22 @@ namespace {
 
   auto WorkRecordCount(const IblProcessSettings& settings) -> std::uint32_t
   {
-    auto size = settings.face_size;
-    const auto mips = static_cast<std::uint32_t>(std::bit_width(size));
+    const auto mips = MipChainLength(settings.face_size, settings.face_size);
     const auto tile_size = settings.dispatch_tile_size;
     auto count = (4U * mips) + 2U;
     if (tile_size == 0U) {
       return count;
     }
-    for (auto mip = 0U; mip < mips; ++mip, size >>= 1U) {
+    for (auto mip = 0U; mip < mips; ++mip) {
+      const auto size = MipExtent(settings.face_size, mip);
       if (size <= tile_size) {
         continue;
       }
       const auto tiles_per_face = (size / tile_size) * (size / tile_size);
       // At mip zero: capture, normalize, SH, prefilter and both half chains.
       // Later mips: downsample, prefilter and both half chains.
-      count
-        += (mip == 0U ? kMipZeroWorkKinds : 4U) * kCubeFaces * tiles_per_face;
+      count += (mip == 0U ? kMipZeroWorkKinds : 4U) * kCubeFaceCount
+        * tiles_per_face;
     }
     return count;
   }
@@ -204,7 +203,7 @@ namespace {
       {
         .width = size,
         .height = size,
-        .array_size = kCubeFaces,
+        .array_size = kCubeFaceCount,
         .mip_levels = mips,
         .format = format,
         .texture_type = TextureType::kTextureCube,
@@ -1166,7 +1165,7 @@ auto IblGpuProcessor::PrepareSource(
     if ((source_registration
           && (!identity || *identity != source_registration.Identity()))
       || desc.texture_type != TextureType::kTextureCube
-      || desc.array_size != kCubeFaces || desc.width != desc.height
+      || desc.array_size != kCubeFaceCount || desc.width != desc.height
       || desc.width == 0U || settings.face_size > desc.width
       || !desc.is_shader_resource) {
       return std::unexpected(IblProcessError::kInvalidSource);
@@ -1264,14 +1263,14 @@ auto IblGpuProcessor::PrepareSource(
       source_srv = source_view->shader_visible_index;
     }
     const auto size = settings.face_size;
-    const auto mips = static_cast<std::uint32_t>(std::bit_width(size));
+    const auto mips = MipChainLength(size, size);
     const auto work_records = WorkRecordCount(settings);
     const auto tiles = ((size + (kGroupEdge - 1U)) / 8U)
-      * ((size + (kGroupEdge - 1U)) / 8U) * kCubeFaces;
+      * ((size + (kGroupEdge - 1U)) / 8U) * kCubeFaceCount;
     auto precision_tiles = 0U;
     for (auto mip = 0U; mip < mips; ++mip) {
-      const auto groups = ((size >> mip) + (kGroupEdge - 1U)) / 8U;
-      precision_tiles += 2U * groups * groups * kCubeFaces;
+      const auto groups = (MipExtent(size, mip) + (kGroupEdge - 1U)) / 8U;
+      precision_tiles += 2U * groups * groups * kCubeFaceCount;
     }
     if (!version->storage || version->storage->size != size) {
       {
@@ -1399,7 +1398,7 @@ auto IblGpuProcessor::PrepareSource(
     for (auto mip = 1U; mip < mips; ++mip) {
       base.input_uav = processed.uavs.at(mip - 1U).get();
       base.output_uav = processed.uavs.at(mip).get();
-      base.output_size = size >> mip;
+      base.output_size = MipExtent(size, mip);
       work.push_back(base);
     }
     base.input_uav = processed.uavs.at(0).get();
@@ -1410,13 +1409,13 @@ auto IblGpuProcessor::PrepareSource(
     for (auto mip = 0U; mip < mips; ++mip) {
       base.source_srv = processed.srv.get();
       base.output_uav = specular.uavs.at(mip).get();
-      base.output_size = size >> mip;
+      base.output_size = MipExtent(size, mip);
       base.output_mip = mip;
       work.push_back(base);
     }
     const auto half_work = static_cast<std::uint32_t>(work.size());
     for (auto mip = 0U; mip < mips; ++mip) {
-      base.output_size = size >> mip;
+      base.output_size = MipExtent(size, mip);
       base.output_mip = mip;
       base.input_uav = processed.uavs.at(mip).get();
       base.output_uav = processed_half.uavs.at(mip).get();
@@ -1477,7 +1476,7 @@ auto IblGpuProcessor::PrepareSource(
       const auto [groups, faces, rows] = shape;
       auto y = rows;
       if (y == 0U) {
-        y = faces == kCubeFaces ? groups : 1U;
+        y = faces == kCubeFaceCount ? groups : 1U;
       }
       const auto shader = std::string_view(entry);
       const auto& record = work.at(index);
@@ -1522,7 +1521,7 @@ auto IblGpuProcessor::PrepareSource(
                             DispatchShape shape) -> void {
       const auto [groups, faces, rows] = shape;
       const auto tile_groups = settings.dispatch_tile_size / 8U;
-      if (tile_groups == 0U || faces != kCubeFaces || rows != 0U
+      if (tile_groups == 0U || faces != kCubeFaceCount || rows != 0U
         || groups <= tile_groups) {
         dispatch_raw(entry, index, shape);
         return;
@@ -1548,7 +1547,7 @@ auto IblGpuProcessor::PrepareSource(
     const auto cube_shape = [](std::uint32_t edge) -> DispatchShape {
       return {
         .groups = (edge + kGroupEdge - 1U) / kGroupEdge,
-        .faces = kCubeFaces,
+        .faces = kCubeFaceCount,
       };
     };
     dispatch("IblInitializeCS", 0U, {});
@@ -1557,17 +1556,19 @@ auto IblGpuProcessor::PrepareSource(
     dispatch("IblRangeCS", 0U, {});
     dispatch("IblNormalizeCS", 1U, cube_shape(size));
     for (auto mip = 1U; mip < mips; ++mip) {
-      dispatch("IblMipCS", mip + 1U, cube_shape(size >> mip));
+      dispatch("IblMipCS", mip + 1U, cube_shape(MipExtent(size, mip)));
     }
     dispatch("IblShCS", sh_work, cube_shape(size));
     dispatch("IblShReduceCS", sh_work, {});
     for (auto mip = 0U; mip < mips; ++mip) {
-      dispatch("IblPrefilterCS", specular_work + mip, cube_shape(size >> mip));
+      dispatch("IblPrefilterCS", specular_work + mip,
+        cube_shape(MipExtent(size, mip)));
     }
     for (auto mip = 0U; mip < mips; ++mip) {
-      dispatch("IblNarrowCS", half_work + (2U * mip), cube_shape(size >> mip));
-      dispatch(
-        "IblNarrowCS", half_work + (2U * mip) + 1U, cube_shape(size >> mip));
+      dispatch("IblNarrowCS", half_work + (2U * mip),
+        cube_shape(MipExtent(size, mip)));
+      dispatch("IblNarrowCS", half_work + (2U * mip) + 1U,
+        cube_shape(MipExtent(size, mip)));
     }
     // Scan both complete chains into disjoint partials, then reduce once.
     // Rows keep larger specified cubes within D3D12's dispatch limit.

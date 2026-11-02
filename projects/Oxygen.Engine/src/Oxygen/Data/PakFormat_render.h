@@ -202,9 +202,10 @@ static_assert(sizeof(MaterialAssetDesc) == 311);
 
 //! Packing policy identifier stored in texture payload headers.
 /*!
-  Identifies the alignment and packing strategy used for subresource data
-  within a texture payload. The runtime loader uses this to correctly
-  interpret offsets and pitches.
+  Identifies the alignment and packing strategy the cook laid the
+  subresource data of a texture payload out with. Readers read each
+  subresource's offset and pitch from its layout, and refuse an unknown
+  policy.
 */
 enum class TexturePackingPolicyId : uint8_t {
   kD3D12 = 1, //!< D3D12 alignment: 256-byte row pitch, 512-byte subresource
@@ -221,8 +222,8 @@ enum class TexturePayloadFlags : uint8_t {
   kNone = 0,
   kPremultipliedAlpha = (1U << 0U), //!< Alpha is premultiplied
   kTailMipsUncompressed = (
-    1U << 1U), //!< Tail mips stored uncompressed (reserved)
-  // Bits 2-7 reserved for future use.
+    1U << 1U), //!< Tail mips stored uncompressed (reserved; readers refuse it)
+  // Bits 2-7 reserved for future use; readers refuse them.
 };
 
 //! Bitwise OR for TexturePayloadFlags.

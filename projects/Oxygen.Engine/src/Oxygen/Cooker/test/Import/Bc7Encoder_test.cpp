@@ -21,9 +21,7 @@ namespace {
 
 using oxygen::Format;
 using oxygen::content::import::Bc7Quality;
-using oxygen::content::import::ImageView;
 using oxygen::content::import::ScratchImage;
-using oxygen::content::import::ScratchImageMeta;
 namespace bc7 = oxygen::content::import::bc7;
 
 //===----------------------------------------------------------------------===//
@@ -67,44 +65,6 @@ NOLINT_TEST(Bc7EncoderParamsTest, FromQualityMapsCorrectly)
     bc7::Bc7EncoderParams::Default().uber_level);
   EXPECT_EQ(bc7::Bc7EncoderParams::FromQuality(Bc7Quality::kHigh).uber_level,
     bc7::Bc7EncoderParams::High().uber_level);
-}
-
-//===----------------------------------------------------------------------===//
-// BC7 Block Count Tests
-//===----------------------------------------------------------------------===//
-
-NOLINT_TEST(Bc7BlockCountTest, ComputeBlockCountExactMultiples)
-{
-  EXPECT_EQ(bc7::ComputeBlockCount(4), 1U);
-  EXPECT_EQ(bc7::ComputeBlockCount(8), 2U);
-  EXPECT_EQ(bc7::ComputeBlockCount(16), 4U);
-  EXPECT_EQ(bc7::ComputeBlockCount(256), 64U);
-}
-
-NOLINT_TEST(Bc7BlockCountTest, ComputeBlockCountRoundsUp)
-{
-  EXPECT_EQ(bc7::ComputeBlockCount(1), 1U);
-  EXPECT_EQ(bc7::ComputeBlockCount(2), 1U);
-  EXPECT_EQ(bc7::ComputeBlockCount(3), 1U);
-  EXPECT_EQ(bc7::ComputeBlockCount(5), 2U);
-  EXPECT_EQ(bc7::ComputeBlockCount(7), 2U);
-  EXPECT_EQ(bc7::ComputeBlockCount(9), 3U);
-}
-
-NOLINT_TEST(Bc7BlockCountTest, ComputeBc7RowPitchReturnsCorrectPitch)
-{
-  EXPECT_EQ(bc7::ComputeBc7RowPitch(4), 16U); // 1 block
-  EXPECT_EQ(bc7::ComputeBc7RowPitch(8), 32U); // 2 blocks
-  EXPECT_EQ(bc7::ComputeBc7RowPitch(16), 64U); // 4 blocks
-  EXPECT_EQ(bc7::ComputeBc7RowPitch(5), 32U); // 2 blocks (rounded up)
-}
-
-NOLINT_TEST(Bc7BlockCountTest, ComputeBc7SurfaceSizeReturnsCorrectSize)
-{
-  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(4, 4), 16U); // 1x1 blocks
-  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(8, 8), 64U); // 2x2 blocks
-  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(16, 16), 256U); // 4x4 blocks
-  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(5, 5), 64U); // 2x2 blocks (rounded)
 }
 
 //===----------------------------------------------------------------------===//
@@ -178,7 +138,7 @@ protected:
 NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurface4x4ProducesValidOutput)
 {
   // Create a 4x4 RGBA8 image
-  std::vector<std::byte> pixels(4 * 4 * 4);
+  std::vector<std::byte> pixels(std::size_t { 4 } * 4 * 4);
   for (size_t i = 0; i < pixels.size(); i += 4) {
     pixels.at(i + 0) = std::byte { 200 }; // R
     pixels.at(i + 1) = std::byte { 100 }; // G
@@ -205,7 +165,7 @@ NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurface4x4ProducesValidOutput)
 NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurfaceNonMultiple4HandlesEdges)
 {
   // Create a 5x5 RGBA8 image
-  std::vector<std::byte> pixels(5 * 5 * 4);
+  std::vector<std::byte> pixels(std::size_t { 5 } * 5 * 4);
   for (size_t i = 0; i < pixels.size(); i += 4) {
     pixels.at(i + 0) = std::byte { 128 };
     pixels.at(i + 1) = std::byte { 128 };
@@ -234,7 +194,7 @@ NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurfaceNonMultiple4HandlesEdges)
 NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurfaceInvalidFormatReturnsEmpty)
 {
   // Create a float image (wrong format)
-  std::vector<std::byte> pixels(4 * 4 * 16); // RGBA32Float
+  std::vector<std::byte> pixels(std::size_t { 4 } * 4 * 16); // RGBA32Float
   auto source = ScratchImage::CreateFromData(
     4, 4, Format::kRGBA32Float, 64, std::move(pixels));
   ASSERT_TRUE(source.IsValid());
@@ -258,7 +218,7 @@ protected:
 
 NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTextureSingleMipSucceeds)
 {
-  std::vector<std::byte> pixels(8 * 8 * 4);
+  std::vector<std::byte> pixels(std::size_t { 8 } * 8 * 4);
   for (auto& byte : pixels) {
     byte = std::byte { 128 };
   }
@@ -278,7 +238,7 @@ NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTextureSingleMipSucceeds)
 
 NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTextureQualityPresetWorks)
 {
-  std::vector<std::byte> pixels(4 * 4 * 4);
+  std::vector<std::byte> pixels(std::size_t { 4 } * 4 * 4);
   for (auto& byte : pixels) {
     byte = std::byte { 200 };
   }
@@ -295,7 +255,7 @@ NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTextureQualityPresetWorks)
 
 NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTextureQualityNoneReturnsEmpty)
 {
-  std::vector<std::byte> pixels(4 * 4 * 4, std::byte { 128 });
+  std::vector<std::byte> pixels(std::size_t { 4 } * 4 * 4, std::byte { 128 });
   auto source = ScratchImage::CreateFromData(
     4, 4, Format::kRGBA8UNorm, 16, std::move(pixels));
   ASSERT_TRUE(source.IsValid());

@@ -17,6 +17,7 @@
 #include <glm/ext/vector_double3.hpp>
 #include <glm/geometric.hpp>
 
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/test/Lighting/LightingGpuAbiFixture.h>
 
@@ -24,7 +25,6 @@ namespace oxygen::vortex::testing {
 namespace {
   constexpr std::uint32_t kGeometryProbe = 39U;
   constexpr std::uint32_t kResultWords = 16U;
-  constexpr std::uint32_t kFaceCount = 6U;
   constexpr std::size_t kUvWord = 4U;
   constexpr std::size_t kCubeDirectionWord = 8U;
   constexpr std::size_t kRestoredDirectionWord = 12U;
@@ -130,7 +130,7 @@ NOLINT_TEST_F(LightingGpuAbiTest, CubemapGeometryFacesEdgesCornersAndAxisTies)
 {
   auto inputs = std::vector<GeometryInput> {};
   constexpr auto coordinates = std::array { 0.0F, 0.25F, 0.5F, 0.75F, 1.0F };
-  for (std::uint32_t face = 0U; face < kFaceCount; ++face) {
+  for (std::uint32_t face = 0U; face < kCubeFaceCount; ++face) {
     for (const auto u : coordinates) {
       for (const auto v : coordinates) {
         const auto direction = Direction(face, { u, v });
@@ -235,7 +235,7 @@ NOLINT_TEST_F(
       EXPECT_NEAR(area, TexelArea(input.pixel, size), kTexelTolerance);
       sum += area;
     }
-    EXPECT_NEAR(sum * kFaceCount, 4.0 * std::numbers::pi, kSphereTolerance);
+    EXPECT_NEAR(sum * kCubeFaceCount, 4.0 * std::numbers::pi, kSphereTolerance);
   }
 }
 } // namespace oxygen::vortex::testing

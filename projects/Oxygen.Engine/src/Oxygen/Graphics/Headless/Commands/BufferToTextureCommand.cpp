@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cstdint>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
@@ -17,7 +17,6 @@
 #include <Oxygen/Graphics/Headless/Commands/BufferToTextureCommand.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
 
-using oxygen::graphics::detail::FormatInfo;
 using oxygen::graphics::detail::GetFormatInfo;
 
 namespace oxygen::graphics::headless {
@@ -34,8 +33,8 @@ auto BufferToTextureCommand::DoExecute(CommandContext& /*ctx*/) -> void
 {
   // Doing arithmetic directly in uint32_t as requested by caller.
 
-  auto src_h = static_cast<const Buffer*>(src_);
-  auto dst_h = static_cast<Texture*>(dst_);
+  const auto* src_h = static_cast<const Buffer*>(src_);
+  auto* dst_h = static_cast<Texture*>(dst_);
   if (src_h == nullptr || dst_h == nullptr) {
     LOG_F(WARNING, "Headless BufferToTexture: non-headless resources");
     return;
@@ -54,13 +53,14 @@ auto BufferToTextureCommand::DoExecute(CommandContext& /*ctx*/) -> void
   if (!is_block) {
     const auto bytes_per_pixel = static_cast<uint32_t>(finfo.bytes_per_block);
     const auto mip = dst_slice.mip_level;
-    const auto mip_w = (std::max)(1U, dst_desc.width >> mip);
+    const auto mip_w = MipExtent(dst_desc.width, mip);
     const auto texture_row_stride = mip_w * bytes_per_pixel; // dst stride
     const auto copy_bytes_per_row
       = dst_slice.width * bytes_per_pixel; // src bytes to copy
-    auto buffer_row_pitch = region_.buffer_row_pitch ? region_.buffer_row_pitch
-                                                     : copy_bytes_per_row;
-    auto buffer_slice_pitch = region_.buffer_slice_pitch
+    auto buffer_row_pitch = (region_.buffer_row_pitch != 0U)
+      ? region_.buffer_row_pitch
+      : copy_bytes_per_row;
+    auto buffer_slice_pitch = (region_.buffer_slice_pitch != 0U)
       ? region_.buffer_slice_pitch
       : buffer_row_pitch * dst_slice.height;
 
@@ -99,9 +99,10 @@ auto BufferToTextureCommand::DoExecute(CommandContext& /*ctx*/) -> void
 
     // Each row in buffer now corresponds to blocks_x * bytes_per_block
     auto texture_block_row_pitch = blocks_x * bytes_per_block;
-    auto buffer_row_pitch = region_.buffer_row_pitch ? region_.buffer_row_pitch
-                                                     : texture_block_row_pitch;
-    auto buffer_slice_pitch = region_.buffer_slice_pitch
+    auto buffer_row_pitch = (region_.buffer_row_pitch != 0U)
+      ? region_.buffer_row_pitch
+      : texture_block_row_pitch;
+    auto buffer_slice_pitch = (region_.buffer_slice_pitch != 0U)
       ? region_.buffer_slice_pitch
       : (buffer_row_pitch * blocks_y);
 
@@ -112,7 +113,7 @@ auto BufferToTextureCommand::DoExecute(CommandContext& /*ctx*/) -> void
       const auto mip = dst_slice.mip_level;
 
       // Precompute mip-specific values
-      const auto mip_w = (std::max)(1U, dst_desc.width >> mip);
+      const auto mip_w = MipExtent(dst_desc.width, mip);
       const auto mip_blocks_x = (mip_w + block_w - 1) / block_w;
 
       for (auto by = 0U; by < blocks_y; ++by) {

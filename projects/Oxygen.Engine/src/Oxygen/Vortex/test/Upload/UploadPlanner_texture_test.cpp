@@ -376,7 +376,7 @@ NOLINT_TEST_F(UploadPlannerTextureTest, TextureCube_TwoFaces)
   td.width = 64;
   td.height = 64;
   td.depth = 1;
-  td.array_size = 6; // 6 faces
+  td.array_size = oxygen::kCubeFaceCount;
   td.mip_levels = 1;
   td.texture_type = oxygen::TextureType::kTextureCube;
   td.format = oxygen::Format::kRGBA8UNorm;

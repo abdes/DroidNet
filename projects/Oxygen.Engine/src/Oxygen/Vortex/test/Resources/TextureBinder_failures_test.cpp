@@ -26,8 +26,6 @@ using oxygen::content::ResourceKey;
 using oxygen::vortex::testing::FakeGraphics;
 using oxygen::vortex::testing::MakeCookedTexture1x1Rgba8Payload;
 using oxygen::vortex::testing::MakeCookedTexture4x4Bc1Payload;
-using oxygen::vortex::testing::
-  MakeInvalidTexture1x1Rgba8Payload_RowPitchTooSmall;
 using oxygen::vortex::testing::MakeTightPackedTextureCube1x1Rgba8Payload;
 using oxygen::vortex::testing::TextureBinderTest;
 
@@ -126,28 +124,6 @@ NOLINT_TEST_F(TextureBinderFailureTest, ForcedError_IsDeterministic)
   EXPECT_EQ(TexBinder().GetOrAllocate(key), index);
   EXPECT_EQ(TexBinder().GetResidentContentRevision(), revision);
   EXPECT_EQ(Gfx().srv_view_log_.events.size(), views);
-}
-
-//! Cooked texture layout violations must be rejected deterministically.
-/*! The binder validates cooked payload layouts against the texture descriptor
-    and format metadata (block size and bytes per block). An inconsistent
-    layout table (e.g., row pitch too small) publishes the error binding. */
-NOLINT_TEST_F(TextureBinderFailureTest, InvalidCookedLayout_Rejected)
-{
-  // Arrange
-  const auto before = AllocatedSrvCount();
-  const ResourceKey key = Loader().MintSyntheticTextureKey();
-  const auto payload = MakeInvalidTexture1x1Rgba8Payload_RowPitchTooSmall();
-  Loader().PreloadCookedTexture(key, std::span(payload.data(), payload.size()));
-  (void)TexBinder().GetOrAllocate(key);
-
-  // Act: process the queued upload attempt.
-  BeginVisibleFrame();
-
-  // Assert
-  EXPECT_EQ(TexBinder().GetOrAllocate(key), ErrorIndex());
-  EXPECT_TRUE(TexBinder().HasResourceFailed(key));
-  EXPECT_EQ(AllocatedSrvCount(), before);
 }
 
 //! Unsupported formats publish the error binding.

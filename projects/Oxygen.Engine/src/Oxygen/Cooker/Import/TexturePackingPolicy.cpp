@@ -11,7 +11,7 @@
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
-#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 
 namespace oxygen::content::import {
 
@@ -29,53 +29,6 @@ auto TightPackedPolicy::Instance() noexcept -> const TightPackedPolicy&
 {
   static const TightPackedPolicy instance;
   return instance;
-}
-
-//===----------------------------------------------------------------------===//
-// Format Utilities
-//===----------------------------------------------------------------------===//
-
-auto ComputeBytesPerPixelOrBlock(const Format format) noexcept -> uint32_t
-{
-  const auto& info = graphics::detail::GetFormatInfo(format);
-  return info.bytes_per_block;
-}
-
-auto ComputeBlockDimension(const Format format) noexcept -> uint32_t
-{
-  const auto& info = graphics::detail::GetFormatInfo(format);
-  return info.block_size;
-}
-
-auto ComputeRowBytes(const uint32_t width, const Format format) noexcept
-  -> uint32_t
-{
-  const auto& info = graphics::detail::GetFormatInfo(format);
-
-  if (info.block_size == 1) {
-    // Uncompressed format: width * bytes_per_pixel
-    return width * info.bytes_per_block;
-  }
-
-  // Block-compressed format: ceil(width / block_size) * bytes_per_block
-  const uint32_t blocks = (width + info.block_size - 1) / info.block_size;
-  return blocks * info.bytes_per_block;
-}
-
-auto ComputeSurfaceBytes(const uint32_t width, const uint32_t height,
-  const Format format) noexcept -> uint64_t
-{
-  const auto& info = graphics::detail::GetFormatInfo(format);
-
-  if (info.block_size == 1) {
-    // Uncompressed format
-    return static_cast<uint64_t>(width) * height * info.bytes_per_block;
-  }
-
-  // Block-compressed format
-  const uint32_t blocks_x = (width + info.block_size - 1) / info.block_size;
-  const uint32_t blocks_y = (height + info.block_size - 1) / info.block_size;
-  return static_cast<uint64_t>(blocks_x) * blocks_y * info.bytes_per_block;
 }
 
 //===----------------------------------------------------------------------===//
@@ -117,27 +70,17 @@ auto ComputeSubresourceLayouts(const ScratchImageMeta& meta,
       SubresourceLayout layout;
 
       // Compute dimensions at this mip level
-      layout.width = ComputeMipDimension(meta.width, mip);
-      layout.height = ComputeMipDimension(meta.height, mip);
-      layout.depth
-        = ComputeMipDimension(static_cast<uint32_t>(meta.depth), mip);
+      layout.width = MipExtent(meta.width, mip);
+      layout.height = MipExtent(meta.height, mip);
+      layout.depth = MipExtent(meta.depth, mip);
 
-      // Compute row pitch with alignment
-      const uint32_t unaligned_row_bytes
-        = ComputeRowBytes(layout.width, meta.format);
-      layout.row_pitch = policy.AlignRowPitchBytes(unaligned_row_bytes);
-
-      // Compute subresource size
-      const auto& info = graphics::detail::GetFormatInfo(meta.format);
-      if (info.block_size == 1) {
-        // Uncompressed: row_pitch * height * depth
-        layout.size_bytes = layout.row_pitch * layout.height * layout.depth;
-      } else {
-        // Block-compressed: row_pitch * blocks_y * depth
-        const uint32_t blocks_y
-          = (layout.height + info.block_size - 1) / info.block_size;
-        layout.size_bytes = layout.row_pitch * blocks_y * layout.depth;
-      }
+      // Each row of blocks is padded to the policy's pitch; a subresource
+      // holds its rows of every depth slice.
+      layout.row_pitch = policy.AlignRowPitchBytes(
+        graphics::detail::RowBytes(meta.format, layout.width));
+      layout.size_bytes = layout.row_pitch
+        * graphics::detail::BlockRows(meta.format, layout.height)
+        * layout.depth;
 
       // Align offset for this subresource
       layout.offset = policy.AlignSubresourceOffset(current_offset);

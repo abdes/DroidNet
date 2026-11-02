@@ -47,6 +47,7 @@
 namespace {
 
 using oxygen::Format;
+using oxygen::kCubeFaceCount;
 using oxygen::TextureType;
 using oxygen::content::import::Bc7Quality;
 using oxygen::content::import::CubeFace;
@@ -54,7 +55,6 @@ using oxygen::content::import::CubeMapImageLayout;
 using oxygen::content::import::ImportOptions;
 using oxygen::content::import::ImportTelemetry;
 using oxygen::content::import::IsHdrFormat;
-using oxygen::content::import::kCubeFaceCount;
 using oxygen::content::import::MipFilter;
 using oxygen::content::import::ScratchImage;
 using oxygen::content::import::TextureImportDesc;

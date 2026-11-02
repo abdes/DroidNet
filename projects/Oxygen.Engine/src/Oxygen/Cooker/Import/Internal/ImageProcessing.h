@@ -144,22 +144,9 @@ namespace image::mip {
   */
   OXGN_COOK_NDAPI auto KaiserWindow(float x, float alpha) noexcept -> float;
 
-  //! Compute Lanczos kernel value.
-  /*!
-    @param x Position
-    @param a Lanczos parameter (typically 2 or 3)
-    @return Kernel value
-  */
-  OXGN_COOK_NDAPI auto LanczosKernel(float x, int a) noexcept -> float;
-
-  //! Compute the number of mip levels for given dimensions.
-  /*!
-    @param width  Base width in pixels
-    @param height Base height in pixels
-    @return Number of mip levels for a full chain
-  */
-  OXGN_COOK_NDAPI auto ComputeMipCount(uint32_t width, uint32_t height) noexcept
-    -> uint32_t;
+  //! The Lanczos-3 kernel at `x`: a sinc windowed by a sinc three lobes
+  //! wide, zero beyond them.
+  OXGN_COOK_NDAPI auto LanczosKernel(float x) noexcept -> float;
 
   //! Generate a mip chain for a 2D texture.
   /*!

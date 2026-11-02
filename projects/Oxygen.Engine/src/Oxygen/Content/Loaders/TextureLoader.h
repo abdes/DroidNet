@@ -7,10 +7,6 @@
 #pragma once
 
 #include <memory>
-#include <span>
-#include <vector>
-
-#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
@@ -27,7 +23,7 @@ namespace oxygen::content::loaders {
 //! Loader for texture assets.
 
 //! Loads a texture resource from a PAK file stream.
-inline auto LoadTextureResource(LoaderContext context)
+inline auto LoadTextureResource(const LoaderContext& context)
   -> std::unique_ptr<data::TextureResource>
 {
   LOG_SCOPE_F(1, "Load Texture Resource");
@@ -38,20 +34,10 @@ inline auto LoadTextureResource(LoaderContext context)
 
   using data::pak::core::TextureResourceDesc;
 
-  auto check_result = [](auto&& result, const char* field) -> auto {
-    if (!result) {
-      LOG_F(
-        ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
-      throw std::runtime_error(
-        fmt::format("error reading texture resource ({}): {}", field,
-          result.error().message()));
-    }
-  };
-
   // Read TextureResourceDesc from the stream
   auto pack = reader.ScopedAlignment(1);
   auto result = reader.Read<TextureResourceDesc>();
-  check_result(result, "TextureResourceDesc");
+  CheckLoaderResult(result, "texture resource", "TextureResourceDesc");
   const auto& desc = result.value();
 
   auto tex_type = static_cast<TextureType>(desc.texture_type);

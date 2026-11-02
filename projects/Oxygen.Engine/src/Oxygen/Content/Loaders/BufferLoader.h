@@ -8,8 +8,6 @@
 
 #include <memory>
 
-#include <fmt/format.h>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -22,7 +20,7 @@
 namespace oxygen::content::loaders {
 
 //! Loads a buffer resource from a PAK file stream.
-inline auto LoadBufferResource(LoaderContext context)
+inline auto LoadBufferResource(const LoaderContext& context)
   -> std::unique_ptr<data::BufferResource>
 {
   LOG_SCOPE_F(1, "Load Buffer Resource");
@@ -33,20 +31,10 @@ inline auto LoadBufferResource(LoaderContext context)
 
   using data::pak::core::BufferResourceDesc;
 
-  auto check_result = [](auto&& result, const char* field) -> auto {
-    if (!result) {
-      LOG_F(
-        ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
-      throw std::runtime_error(
-        fmt::format("error reading buffer resource ({}): {}", field,
-          result.error().message()));
-    }
-  };
-
   // Read BufferResourceDesc from the stream
   auto pack = reader.ScopedAlignment(1);
   auto result = reader.Read<BufferResourceDesc>();
-  check_result(result, "BufferResourceDesc");
+  CheckLoaderResult(result, "buffer resource", "BufferResourceDesc");
   const auto& desc = result.value();
 
   auto buf_format = static_cast<Format>(desc.element_format);

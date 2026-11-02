@@ -117,11 +117,11 @@ auto FooterMagicOk(const PakFooter& footer) -> bool
   return std::ranges::equal(std::span { footer.footer_magic }, kPakFooterMagic);
 }
 
-auto PrintV4TexturePayloadSummary(
+auto PrintTexturePayloadSummary(
   std::ostream& out, std::span<const uint8_t> payload, int indent) -> void
 {
   if (payload.size() < sizeof(TexturePayloadHeader)) {
-    Field(out, "Texture Payload", "Too small to contain v4 header", indent);
+    Field(out, "Texture Payload", "Too small to contain its header", indent);
     return;
   }
 
@@ -129,12 +129,12 @@ auto PrintV4TexturePayloadSummary(
   auto header_reader = oxygen::serio::ByteReader { payload_bytes };
   const auto header_read = header_reader.Read<TexturePayloadHeader>();
   if (!header_read) {
-    Field(out, "Texture Payload", "Too small to contain v4 header", indent);
+    Field(out, "Texture Payload", "Too small to contain its header", indent);
     return;
   }
   const auto& header = *header_read;
   if (header.magic != kTexturePayloadMagic) {
-    Field(out, "Texture Payload", "Missing v4 magic (expected 'OTX1')", indent);
+    Field(out, "Texture Payload", "Missing magic (expected 'OTX1')", indent);
     return;
   }
 
@@ -363,7 +363,7 @@ public:
             Field(ctx.Out(), "Content Hash",
               ToHexString(texture_resource->GetContentHash()), 8);
             if (ctx.verbose) {
-              PrintV4TexturePayloadSummary(
+              PrintTexturePayloadSummary(
                 ctx.Out(), texture_resource->GetPayload(), 8);
             }
             if (ctx.show_resource_data) {

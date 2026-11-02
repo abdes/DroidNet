@@ -6,11 +6,16 @@
 
 #pragma once
 
-#include <cstdlib>
-#include <cstring>
+#include <algorithm>
+#include <charconv>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Data/PakFormat.h>
@@ -42,12 +47,13 @@ inline auto ParseHexDumpWithOffset(const std::string& hexdump)
         continue; // skip non-byte tokens
       }
       // Convert hex string to byte
-      char* end = nullptr;
-      int value = std::strtol(byte_str.c_str(), &end, 16);
-      if (end != byte_str.c_str() + 2) {
+      const auto* const last = std::to_address(byte_str.cend());
+      auto value = uint8_t {};
+      const auto parsed = std::from_chars(byte_str.data(), last, value, 16);
+      if (parsed.ec != std::errc {} || parsed.ptr != last) {
         continue; // skip invalid hex
       }
-      buffer.push_back(static_cast<std::byte>(value));
+      buffer.push_back(std::byte { value });
     }
   }
   return buffer;
@@ -64,41 +70,6 @@ inline auto ParseHexDumpWithOffset(const std::string& hexdump,
     buffer.resize(total_size, pad_byte);
   }
   return buffer;
-}
-
-inline auto MakeV4TexturePayload(const uint32_t data_size,
-  const std::byte fill_value,
-  const oxygen::data::pak::render::TexturePackingPolicyId policy
-  = oxygen::data::pak::render::TexturePackingPolicyId::kD3D12,
-  const uint32_t row_pitch_bytes = 0U) -> std::vector<uint8_t>
-{
-  using oxygen::data::pak::render::SubresourceLayout;
-  using oxygen::data::pak::render::TexturePackingPolicyId;
-  using oxygen::data::pak::render::TexturePayloadFlags;
-  using oxygen::data::pak::render::TexturePayloadHeader;
-
-  TexturePayloadHeader header {};
-  header.magic = oxygen::data::pak::render::kTexturePayloadMagic;
-  header.packing_policy = static_cast<uint8_t>(policy);
-  header.flags = static_cast<uint8_t>(TexturePayloadFlags::kNone);
-  header.subresource_count = 1;
-  header.layouts_offset_bytes = static_cast<uint32_t>(sizeof(header));
-  header.data_offset_bytes = header.layouts_offset_bytes
-    + static_cast<uint32_t>(sizeof(SubresourceLayout));
-  header.total_payload_size = header.data_offset_bytes + data_size;
-
-  SubresourceLayout layout {};
-  layout.offset_bytes = 0;
-  layout.row_pitch_bytes = row_pitch_bytes != 0U ? row_pitch_bytes : data_size;
-  layout.size_bytes = data_size;
-
-  std::vector<uint8_t> payload(header.total_payload_size, 0);
-  std::memcpy(payload.data(), &header, sizeof(header));
-  std::memcpy(
-    payload.data() + header.layouts_offset_bytes, &layout, sizeof(layout));
-  std::ranges::fill(payload.begin() + header.data_offset_bytes, payload.end(),
-    static_cast<uint8_t>(fill_value));
-  return payload;
 }
 
 template <serio::OutputStream DescS, serio::OutputStream DataS>

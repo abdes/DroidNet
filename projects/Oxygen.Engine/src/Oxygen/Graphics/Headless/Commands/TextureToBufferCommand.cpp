@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
@@ -65,8 +65,8 @@ TextureToBufferCommand::TextureToBufferCommand(graphics::Buffer* dst,
 
 auto TextureToBufferCommand::DoExecute(CommandContext& /*ctx*/) -> void
 {
-  auto dst_h = static_cast<Buffer*>(dst_);
-  auto src_h = static_cast<const Texture*>(src_);
+  auto* dst_h = dst_;
+  const auto* src_h = static_cast<const Texture*>(src_);
   if (dst_h == nullptr || src_h == nullptr) {
     LOG_F(WARNING, "Headless TextureToBuffer: non-headless resources");
     return;
@@ -81,9 +81,9 @@ auto TextureToBufferCommand::DoExecute(CommandContext& /*ctx*/) -> void
   const auto& layout = src_h->GetLayoutStrategy();
   const auto& finfo = GetFormatInfo(src_desc.format);
   const auto mip = slice.mip_level;
-  const auto mip_width = (std::max)(1U, src_desc.width >> mip);
-  const auto mip_height = (std::max)(1U, src_desc.height >> mip);
-  const auto mip_depth = (std::max)(1U, src_desc.depth >> mip);
+  const auto mip_width = MipExtent(src_desc.width, mip);
+  const auto mip_height = MipExtent(src_desc.height, mip);
+  const auto mip_depth = MipExtent(src_desc.depth, mip);
   const auto mip_base
     = layout.ComputeSliceMipBaseOffset(src_desc, slice.array_slice, mip);
 
@@ -100,12 +100,13 @@ auto TextureToBufferCommand::DoExecute(CommandContext& /*ctx*/) -> void
     for (auto z = 0U; z < slice.depth; ++z) {
       for (auto y = 0U; y < slice.height; ++y) {
         const auto texture_offset = static_cast<uint64_t>(mip_base)
-          + static_cast<uint64_t>(slice.z + z) * texture_depth_stride
-          + static_cast<uint64_t>(slice.y + y) * texture_row_stride
-          + static_cast<uint64_t>(slice.x) * bytes_per_pixel;
+          + (static_cast<uint64_t>(slice.z + z) * texture_depth_stride)
+          + (static_cast<uint64_t>(slice.y + y) * texture_row_stride)
+          + (static_cast<uint64_t>(slice.x) * bytes_per_pixel);
         const auto buffer_offset = resolved_region.buffer_offset.get()
-          + static_cast<uint64_t>(z) * resolved_region.buffer_slice_pitch.get()
-          + static_cast<uint64_t>(y) * resolved_region.buffer_row_pitch.get();
+          + (static_cast<uint64_t>(z)
+            * resolved_region.buffer_slice_pitch.get())
+          + (static_cast<uint64_t>(y) * resolved_region.buffer_row_pitch.get());
 
         src_h->ReadBacking(row.data(), static_cast<uint32_t>(texture_offset),
           static_cast<uint32_t>(copy_bytes_per_row));
@@ -136,14 +137,14 @@ auto TextureToBufferCommand::DoExecute(CommandContext& /*ctx*/) -> void
     for (auto row_index = 0U; row_index < tight_footprint.row_count;
       ++row_index) {
       const auto texture_offset = static_cast<uint64_t>(mip_base)
-        + static_cast<uint64_t>(slice.z + z) * texture_depth_stride
-        + static_cast<uint64_t>(copy_block_y + row_index)
-          * texture_block_row_stride
-        + static_cast<uint64_t>(copy_block_x) * bytes_per_block;
+        + (static_cast<uint64_t>(slice.z + z) * texture_depth_stride)
+        + (static_cast<uint64_t>(copy_block_y + row_index)
+          * texture_block_row_stride)
+        + (static_cast<uint64_t>(copy_block_x) * bytes_per_block);
       const auto buffer_offset = resolved_region.buffer_offset.get()
-        + static_cast<uint64_t>(z) * resolved_region.buffer_slice_pitch.get()
-        + static_cast<uint64_t>(row_index)
-          * resolved_region.buffer_row_pitch.get();
+        + (static_cast<uint64_t>(z) * resolved_region.buffer_slice_pitch.get())
+        + (static_cast<uint64_t>(row_index)
+          * resolved_region.buffer_row_pitch.get());
 
       src_h->ReadBacking(row.data(), static_cast<uint32_t>(texture_offset),
         static_cast<uint32_t>(copy_bytes_per_row));

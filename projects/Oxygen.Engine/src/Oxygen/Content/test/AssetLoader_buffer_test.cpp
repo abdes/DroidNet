@@ -26,6 +26,7 @@
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Cooker/testing/TextureBuilder.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -261,32 +262,19 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
 
   // Arrange
   static constexpr std::size_t kDataOffset = 256;
-  static constexpr uint32_t kPixelBytes = 287;
-  static constexpr auto kFill = std::byte { 0x99 };
 
-  oxygen::data::pak::core::TextureResourceDesc desc {};
+  const auto texture = oxygen::cooker::testing::TextureBuilder {}.Size(
+    { .width = 128U, .height = 64U });
+  const auto payload = texture.Payload();
+  auto desc = texture.Record(payload);
   desc.data_offset = static_cast<uint64_t>(kDataOffset);
-  desc.texture_type = 3; // TextureType::kTexture2D
-  desc.compression_type = 0;
-  static constexpr uint32_t kTextureWidth = 128U;
-  desc.width = kTextureWidth;
-  desc.height = 64;
-  desc.depth = 1;
-  desc.array_layers = 1;
-  desc.mip_levels = 1;
-  desc.format = 0;
-  desc.alignment = kDataOffset;
-
-  const auto payload
-    = oxygen::content::testing::MakeV4TexturePayload(kPixelBytes, kFill);
-  desc.size_bytes = static_cast<uint32_t>(payload.size());
 
   TestEventLoop el;
 
   // Act + Assert
   oxygen::co::Run(el,
     [](oxygen::data::pak::core::TextureResourceDesc desc,
-      std::vector<uint8_t> payload, TestEventLoop* loop) -> Co<> {
+      std::vector<std::byte> payload, TestEventLoop* loop) -> Co<> {
       auto& el = *loop;
       AssetLoaderConfig config {};
 
@@ -321,9 +309,11 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
         EXPECT_EQ(resource->GetDepth(), 1U);
         EXPECT_EQ(resource->GetArrayLayers(), 1U);
         EXPECT_EQ(resource->GetMipCount(), 1U);
-        EXPECT_EQ(resource->GetData().size(), kPixelBytes);
-        EXPECT_THAT(resource->GetData(),
-          ::testing::Each(std::to_integer<uint8_t>(kFill)));
+        const auto data = std::span(payload).subspan(
+          oxygen::cooker::testing::TextureBuilder::HeaderAt(payload)
+            .data_offset_bytes);
+        EXPECT_TRUE(
+          std::ranges::equal(std::as_bytes(resource->GetData()), data));
 
         auto cached = loader.GetResource<TextureResource>(key);
         EXPECT_THAT(cached, NotNull());

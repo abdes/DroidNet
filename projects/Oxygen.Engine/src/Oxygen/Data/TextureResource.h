@@ -6,10 +6,9 @@
 
 #pragma once
 
-#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <span>
-#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -20,7 +19,6 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/api_export.h>
 #include <Oxygen/Serio/ByteBuffer.h>
-#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::data {
@@ -43,19 +41,27 @@ public:
   //! Type alias for the descriptor type used by this resource.
   using DescT = pak::core::TextureResourceDesc;
 
+  //! The alignment, in bytes, every texture row records for its payload.
+  static constexpr uint16_t kDataAlignment = 256U;
+
   /*! Constructs a TextureResource that owns `payload`, the buffer its loader
       read the cooked payload into.
+
+      The row must declare a known type that is not multisampled (a row has
+      no sample count), a known format and the compression it uses, extents
+      its type has, no more mips than its full chain, and `kDataAlignment`.
+      The payload must hold its header, its known packing policy and flags,
+      one layout per layer and mip (layer-major), and data after the layout
+      table. Each layout's row pitch holds at least the row bytes of its
+      mip's width in the format, and its size is that pitch times the rows
+      of blocks of the mip's height times the mip's depth, within the data.
+
       @param desc Texture resource descriptor from PAK file.
       @param payload Cooked texture payload (header + layouts + data).
-      @throw std::invalid_argument When the payload is malformed.
+      @throw CookedOpenError When the row or the payload breaks a rule.
   */
-  TextureResource(
-    pak::core::TextureResourceDesc desc, serio::ByteBuffer payload)
-    : desc_(desc)
-    , payload_(std::move(payload))
-  {
-    Validate();
-  }
+  OXGN_DATA_API TextureResource(
+    pak::core::TextureResourceDesc desc, serio::ByteBuffer payload);
 
   ~TextureResource() override = default;
 
@@ -67,8 +73,6 @@ public:
     , payload_header_(other.payload_header_)
     , subresource_layouts_(std::move(other.subresource_layouts_))
     , payload_(std::move(other.payload_))
-    , payload_data_offset_bytes_(other.payload_data_offset_bytes_)
-    , payload_data_size_bytes_(other.payload_data_size_bytes_)
   {
     other.ResetMovedFromState();
   }
@@ -81,8 +85,6 @@ public:
       payload_header_ = other.payload_header_;
       subresource_layouts_ = std::move(other.subresource_layouts_);
       payload_ = std::move(other.payload_);
-      payload_data_offset_bytes_ = other.payload_data_offset_bytes_;
-      payload_data_size_bytes_ = other.payload_data_size_bytes_;
       other.ResetMovedFromState();
     }
     return *this;
@@ -97,7 +99,7 @@ public:
   //! payload header and layout table).
   [[nodiscard]] auto GetDataSize() const noexcept -> std::size_t
   {
-    return payload_data_size_bytes_;
+    return GetData().size();
   }
 
   OXGN_DATA_NDAPI auto GetTextureType() const noexcept -> TextureType;
@@ -149,8 +151,7 @@ public:
   //! Returns an immutable span of the pixel/block data region.
   [[nodiscard]] auto GetData() const noexcept -> std::span<const uint8_t>
   {
-    return std::span<const uint8_t>(
-      Payload().subspan(payload_data_offset_bytes_, payload_data_size_bytes_));
+    return Payload().subspan(payload_header_.data_offset_bytes);
   }
 
   //! Returns the full cooked payload bytes (header + layouts + data).
@@ -178,8 +179,6 @@ private:
   pak::render::TexturePayloadHeader payload_header_ {};
   std::vector<pak::render::SubresourceLayout> subresource_layouts_;
   serio::ByteBuffer payload_;
-  std::size_t payload_data_offset_bytes_ = 0;
-  std::size_t payload_data_size_bytes_ = 0;
 
   //! The payload bytes, as the byte type texture consumers read.
   [[nodiscard]] auto Payload() const noexcept -> std::span<const uint8_t>
@@ -193,205 +192,6 @@ private:
     payload_header_ = {};
     subresource_layouts_.clear();
     payload_ = {};
-    payload_data_offset_bytes_ = 0;
-    payload_data_size_bytes_ = 0;
-  }
-
-  //! Parses a v4 format payload (with TexturePayloadHeader).
-  void ParseV4Payload()
-  {
-    const auto payload_size = payload_.Bytes().size();
-    auto reader = serio::ByteReader { payload_.Bytes() };
-    const auto header = reader.Read<pak::render::TexturePayloadHeader>();
-    if (!header) {
-      throw std::invalid_argument("TextureResource: payload too small");
-    }
-    payload_header_ = *header;
-
-    const auto expected_subresources = static_cast<std::uint32_t>(
-      static_cast<std::uint64_t>(desc_.array_layers) * desc_.mip_levels);
-    if (payload_header_.subresource_count != expected_subresources) {
-      throw std::invalid_argument(
-        "TextureResource: subresource count mismatch");
-    }
-
-    if (payload_header_.total_payload_size != payload_size) {
-      throw std::invalid_argument(
-        "TextureResource: payload size mismatch with header");
-    }
-
-    const auto layouts_offset
-      = static_cast<std::size_t>(payload_header_.layouts_offset_bytes);
-    const auto data_offset
-      = static_cast<std::size_t>(payload_header_.data_offset_bytes);
-    const auto layout_count
-      = static_cast<std::size_t>(payload_header_.subresource_count);
-    const auto layouts_bytes
-      = layout_count * sizeof(pak::render::SubresourceLayout);
-
-    if (layouts_offset < sizeof(pak::render::TexturePayloadHeader)
-      || layouts_offset > payload_size) {
-      throw std::invalid_argument("TextureResource: invalid layouts offset");
-    }
-
-    if (layouts_bytes > payload_size
-      || layouts_offset > payload_size - layouts_bytes) {
-      throw std::invalid_argument(
-        "TextureResource: layout table exceeds payload bounds");
-    }
-
-    if (data_offset < layouts_offset + layouts_bytes
-      || data_offset > payload_size) {
-      throw std::invalid_argument(
-        "TextureResource: invalid data offset in payload header");
-    }
-
-    if (!reader.Seek(serio::ByteOffset { layouts_offset })) {
-      throw std::invalid_argument("TextureResource: invalid layouts offset");
-    }
-    subresource_layouts_.reserve(layout_count);
-    for (std::size_t i = 0; i < layout_count; ++i) {
-      const auto layout = reader.Read<pak::render::SubresourceLayout>();
-      if (!layout) {
-        throw std::invalid_argument(
-          "TextureResource: layout table exceeds payload bounds");
-      }
-      subresource_layouts_.push_back(*layout);
-    }
-
-    payload_data_offset_bytes_ = data_offset;
-    payload_data_size_bytes_ = payload_size - payload_data_offset_bytes_;
-
-    std::size_t required_data_size = 0;
-    for (const auto& layout : subresource_layouts_) {
-      const auto offset_in_data = static_cast<std::size_t>(layout.offset_bytes);
-      const auto size_bytes = static_cast<std::size_t>(layout.size_bytes);
-
-      if (offset_in_data > payload_data_size_bytes_
-        || size_bytes > payload_data_size_bytes_ - offset_in_data) {
-        throw std::invalid_argument(
-          "TextureResource: subresource layout exceeds payload bounds");
-      }
-
-      required_data_size
-        = (std::max)(required_data_size, offset_in_data + size_bytes);
-    }
-
-    if (required_data_size > payload_data_size_bytes_) {
-      throw std::invalid_argument(
-        "TextureResource: payload data truncated for subresources");
-    }
-  }
-
-  void ParsePayload()
-  {
-    if (payload_.Bytes().size() < sizeof(pak::render::TexturePayloadHeader)) {
-      throw std::invalid_argument("TextureResource: payload too small");
-    }
-
-    auto reader = serio::ByteReader { payload_.Bytes() };
-    const auto magic = reader.Read<uint32_t>();
-    if (!magic || *magic != pak::render::kTexturePayloadMagic) {
-      throw std::invalid_argument("TextureResource: invalid payload magic");
-    }
-
-    ParseV4Payload();
-  }
-
-  void Validate()
-  {
-    constexpr uint16_t kExpectedTextureAlignmentBytes = 256;
-    if (desc_.alignment != kExpectedTextureAlignmentBytes) {
-      throw std::invalid_argument(
-        "TextureResource: alignment must be 256 bytes");
-    }
-
-    ParsePayload();
-
-    // Basic dimension checks
-    if (desc_.width == 0) {
-      throw std::invalid_argument("TextureResource: width must be > 0");
-    }
-    if (desc_.mip_levels == 0) {
-      throw std::invalid_argument("TextureResource: mip_levels must be > 0");
-    }
-
-    // Height/depth rules per texture type (only enforce obvious invariants)
-    switch (static_cast<TextureType>(desc_.texture_type)) {
-    case TextureType::kTexture1D:
-    case TextureType::kTexture1DArray:
-      if (desc_.height != 1) {
-        throw std::invalid_argument(
-          "TextureResource: 1D textures must have height == 1");
-      }
-      if (desc_.depth != 1) {
-        throw std::invalid_argument(
-          "TextureResource: 1D textures must have depth == 1");
-      }
-      break;
-    case TextureType::kTexture2D:
-    case TextureType::kTexture2DArray:
-    case TextureType::kTexture2DMultiSample:
-    case TextureType::kTexture2DMultiSampleArray:
-    case TextureType::kTextureCube:
-    case TextureType::kTextureCubeArray:
-      if (desc_.height == 0) {
-        throw std::invalid_argument(
-          "TextureResource: 2D-like textures must have height > 0");
-      }
-      if (desc_.depth != 1) {
-        throw std::invalid_argument(
-          "TextureResource: 2D-like textures must have depth == 1");
-      }
-      break;
-    case TextureType::kTexture3D:
-      if (desc_.height == 0) {
-        throw std::invalid_argument(
-          "TextureResource: 3D textures must have height > 0");
-      }
-      if (desc_.depth == 0) {
-        throw std::invalid_argument(
-          "TextureResource: 3D textures must have depth > 0");
-      }
-      break;
-    default:
-      // Unknown enum is allowed (will map to kUnknown); enforce minimal height
-      if (desc_.height == 0) {
-        throw std::invalid_argument(
-          "TextureResource: height must be > 0 for unknown texture type");
-      }
-      if (desc_.depth == 0) {
-        throw std::invalid_argument(
-          "TextureResource: depth must be > 0 for unknown texture type");
-      }
-      break;
-    }
-
-    // Array layers must be >= 1
-    if (desc_.array_layers == 0) {
-      throw std::invalid_argument("TextureResource: array_layers must be >= 1");
-    }
-
-    // Mip level upper bound: floor(log2(max_dim)) + 1
-    const auto max_dim = (std::max)({
-      desc_.width,
-      desc_.height,
-      static_cast<uint32_t>(desc_.depth == 0 ? 1 : desc_.depth),
-    });
-    uint16_t max_mip_levels = 1;
-    uint32_t tmp = max_dim;
-    while (tmp > 1) {
-      tmp >>= 1U;
-      ++max_mip_levels;
-    }
-    if (desc_.mip_levels > max_mip_levels) {
-      throw std::invalid_argument("TextureResource: mip_levels exceed limit");
-    }
-
-    if (desc_.size_bytes != payload_.Bytes().size()) {
-      throw std::invalid_argument(
-        "TextureResource: descriptor size_bytes mismatch with payload size");
-    }
   }
 };
 

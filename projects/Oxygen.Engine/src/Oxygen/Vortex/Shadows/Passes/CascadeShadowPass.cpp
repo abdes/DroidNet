@@ -19,6 +19,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
@@ -41,9 +42,6 @@ namespace oxygen::vortex::shadows {
 
 namespace {
 
-  using internal::kLocalShadowSlopeDepthBiasScale;
-
-  constexpr std::uint32_t kCubeFaceCount = 6U;
   //! PCF taps per point-shadow lookup at each quality tier.
   constexpr std::uint32_t kLowPointPcfSamples = 1U;
   constexpr std::uint32_t kMediumPointPcfSamples = 5U;

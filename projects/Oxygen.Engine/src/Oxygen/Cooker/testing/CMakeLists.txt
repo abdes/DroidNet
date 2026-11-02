@@ -46,6 +46,8 @@ add_library(
   "ScriptBuilder.cpp"
   "ScriptBuilder.h"
   "Seeds.h"
+  "TextureBuilder.cpp"
+  "TextureBuilder.h"
 )
 add_library(oxygen::cooker::testing ALIAS Oxygen.Cooker.Testing)
 set_target_properties(

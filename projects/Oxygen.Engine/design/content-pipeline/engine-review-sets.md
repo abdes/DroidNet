@@ -270,6 +270,7 @@ them alone, and every engine reader refuses what it cannot read.
 `Data/DescriptorHash.*`,
 `Data/ComponentType.h`, `Data/MaterialDescriptor.*`, `Data/MaterialDomain.h`,
 `Data/MeshType.h`, `Core/Types/ShaderRequestRules.*`,
+`Core/Detail/FormatUtils.*`, `Core/Types/TextureType.h`,
 `Data/ShaderReference.*`, `Data/SourceOrigin.h`, `Data/SurfaceId.h`,
 `Data/Vertex.h`, `Data/HalfFloat.h`, `Data/Unorm16.h`,
 `Data/ToStringConverters.cpp`; `Data/Docs/physics.md`,
@@ -297,6 +298,10 @@ and the in-memory model the interop hands to the editor.
 - `MaterialDescriptor`, `ShaderReference`: domains, flags, stages and
   shader references refuse unknown values with typed errors; shader paths and
   entry points follow the one shader request rule set.
+- `TextureResource`, `BufferResource`: types, formats, extents, layers and
+  usage are refused with typed errors when the format does not define them;
+  each texture subresource holds at least its format's row bytes per row and
+  exactly its rows, from the one row rule in `FormatUtils`.
 - `StableId`, `SceneIds`: identity derivation is stable across platforms and
   documented, because the editor keys scene nodes by it.
 - `PhysicsSceneAsset`: bindings name nodes of the scene they ship with, in

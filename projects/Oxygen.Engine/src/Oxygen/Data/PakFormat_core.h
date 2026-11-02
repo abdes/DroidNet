@@ -428,7 +428,7 @@ static_assert(offsetof(PakBrowseIndexTextureEntry, virtual_path_length) == 8);
     0x40 : CPUReadable       (CPU can read from buffer)
 
     // --- Update Frequency Flags (mutually exclusive) ---
-    // Only one of these should be set; if none, default to Static.
+    // At most one is set; readers refuse more. None means Static.
     0x80 : Dynamic           (frequently updated)
     0x100: Static            (rarely updated)
     0x200: Immutable         (never updated after creation)

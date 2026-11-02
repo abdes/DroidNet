@@ -53,7 +53,7 @@ using oxygen::data::detail::ReferencedBufferStorage;
 namespace {
 
 //! The type of the indices `buffer` holds, which its format names, or its
-//! stride for a buffer without one.
+//! stride for a buffer without one. The buffer holds whole elements of either.
 auto IndexTypeOf(const BufferResource& buffer) -> IndexType
 {
   const auto format = buffer.GetElementFormat();
@@ -66,12 +66,6 @@ auto IndexTypeOf(const BufferResource& buffer) -> IndexType
   if (!narrow && !wide) {
     throw CookedOpenError(CookedDefect::kInvalidValue,
       "The index buffer does not hold 16-bit or 32-bit indices");
-  }
-  const auto element_size
-    = narrow ? sizeof(std::uint16_t) : sizeof(std::uint32_t);
-  if (buffer.GetData().size() % element_size != 0) {
-    throw CookedOpenError(CookedDefect::kWrongRowSize,
-      "The index buffer does not hold whole indices");
   }
   return narrow ? IndexType::kUInt16 : IndexType::kUInt32;
 }

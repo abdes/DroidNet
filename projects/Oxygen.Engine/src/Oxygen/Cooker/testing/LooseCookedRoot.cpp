@@ -476,6 +476,11 @@ auto LooseCookedRoot::OnePixelTexture() -> data::pak::core::TextureResourceDesc
   };
 }
 
+auto LooseCookedRoot::RawBuffer() -> data::pak::core::BufferResourceDesc
+{
+  return { .element_stride = 1U };
+}
+
 template <class Desc>
 auto LooseCookedRoot::AddRow(Table<Desc>& table,
   const std::span<const std::byte> payload, Desc desc) -> ResourceIndexT

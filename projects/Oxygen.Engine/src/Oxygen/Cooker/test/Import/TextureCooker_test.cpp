@@ -290,7 +290,7 @@ NOLINT_TEST(
       const auto expected
         = static_cast<unsigned>(std::floor((255.0 * 12.92 * linear) + .5));
       EXPECT_GT(expected, 0U);
-      const auto width = size >> mip;
+      const auto width = oxygen::MipExtent(size, mip);
       const auto& layout = cooked->layouts.at(mip);
       const auto data = std::span { cooked->payload }.subspan(
         header.data_offset_bytes + layout.offset_bytes);

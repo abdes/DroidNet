@@ -421,7 +421,7 @@ namespace {
       auto texture = graphics.CreateTexture({
         .width = size,
         .height = size,
-        .array_size = 6U,
+        .array_size = kCubeFaceCount,
         .format = Format::kRGBA32Float,
         .texture_type = TextureType::kTextureCube,
         .debug_name = "IBL.ReferenceSource",
@@ -503,7 +503,7 @@ namespace {
     auto ReadFace(const Owner& products, const graphics::Texture& texture,
       std::uint32_t face, std::uint32_t mip) -> std::vector<Pixel>
     {
-      const auto size = texture.GetDescriptor().width >> mip;
+      const auto size = MipExtent(texture.GetDescriptor().width, mip);
       auto readback
         = GetReadbackManager()->CreateTextureReadback("IBL face check");
       SubmitCommands(
@@ -2926,7 +2926,7 @@ namespace {
     double peak_matching_error = 0.0;
     unsigned comparisons = 0U;
     for (const auto mip : { 0U, 2U, 4U, 5U, 7U }) {
-      const auto size = 128U >> mip;
+      const auto size = MipExtent(128U, mip);
       const auto roughness
         = std::exp2((static_cast<double>(mip) + 2.0 - 7.0) / 1.2);
       for (auto face = 0U; face < 6U; ++face) {

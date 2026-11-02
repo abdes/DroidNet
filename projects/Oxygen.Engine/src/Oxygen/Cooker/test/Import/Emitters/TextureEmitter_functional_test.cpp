@@ -526,6 +526,43 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWithoutUserTexturesWritesFallback)
   });
 }
 
+//! A row records the texture data alignment whatever the packing policy:
+//! tight packing pads no rows, but its texture still reads.
+NOLINT_TEST_F(TextureEmitterTest, TightPackingWritesAReadableTexture)
+{
+  RunInNursery([&](co::Nursery& writes) -> co::Co<> {
+    auto config = MakeEmitterConfig();
+    config.packing_policy_id = "tight";
+    TextureEmitter emitter(writes, TextureAggregator(), config);
+
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    EXPECT_TRUE(co_await table_registry_->FinalizeAll());
+
+    const auto table
+      = ParseTextureTable(ReadBytes(Root() / loose_layout::kTexturesTable));
+    if (table.size() != 1U) {
+      ADD_FAILURE() << "Expected only the fallback row, got " << table.size();
+      co_return;
+    }
+    EXPECT_EQ(
+      table.at(0).alignment, oxygen::data::TextureResource::kDataAlignment);
+    auto payload = oxygen::serio::ByteBuffer::CopyOf(
+      ReadBytes(Root() / loose_layout::kTexturesData));
+    if (!payload.has_value()) {
+      ADD_FAILURE() << "Cannot hold the payload: " << payload.error().message();
+      co_return;
+    }
+
+    const auto fallback
+      = oxygen::data::TextureResource(table.at(0), std::move(payload).value());
+
+    EXPECT_EQ(fallback.GetPayloadHeader().packing_policy,
+      static_cast<uint8_t>(
+        oxygen::data::pak::render::TexturePackingPolicyId::kTightPacked));
+    EXPECT_EQ(fallback.GetSubresourceLayouts().front().row_pitch_bytes, 4U);
+  });
+}
+
 //=== State Query Tests ===---------------------------------------------------//
 
 NOLINT_TEST_F(TextureEmitterTest, StatsDataFileSizeTracksAccumulatedSize)

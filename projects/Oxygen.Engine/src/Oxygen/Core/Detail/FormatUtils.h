@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <type_traits>
+#include <cstdint>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -44,6 +44,14 @@ struct FormatInfo {
  \return A reference to the format information structure.
 */
 OXGN_CORE_NDAPI auto GetFormatInfo(Format format) -> const FormatInfo&;
+
+//! The bytes of one row of `width` texels of `format`, unpadded: whole blocks
+//! of a block-compressed format. 0 for a format without blocks (`kUnknown`).
+OXGN_CORE_NDAPI auto RowBytes(Format format, uint32_t width) -> uint64_t;
+
+//! The rows of blocks that `height` texels of `format` span: `height` for an
+//! uncompressed format. 0 for a format without blocks (`kUnknown`).
+OXGN_CORE_NDAPI auto BlockRows(Format format, uint32_t height) -> uint32_t;
 
 //! Returns true if the format is HDR (float and not sRGB).
 OXGN_CORE_NDAPI auto IsHdr(Format format) -> bool;

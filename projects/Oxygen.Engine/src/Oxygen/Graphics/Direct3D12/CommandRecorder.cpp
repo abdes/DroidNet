@@ -979,9 +979,8 @@ auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
       desc.debug_name, subresources.num_mip_levels);
     if (depth_stencil) {
       // Depth and stencil data can only be copied as whole subresources.
-      const auto mip_width = (std::max)(1U, desc.width >> dst_slice.mip_level);
-      const auto mip_height
-        = (std::max)(1U, desc.height >> dst_slice.mip_level);
+      const auto mip_width = MipExtent(desc.width, dst_slice.mip_level);
+      const auto mip_height = MipExtent(desc.height, dst_slice.mip_level);
       CHECK_F(dst_slice.x == 0U && dst_slice.y == 0U && dst_slice.z == 0U
           && dst_slice.width == mip_width && dst_slice.height == mip_height,
         "CopyBufferToTexture into depth/stencil `{}` must cover whole "

@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <optional>
+#include <span>
 
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -21,13 +21,19 @@
 namespace oxygen::vortex::resources {
 
 namespace {
-  constexpr std::uint32_t kCubeFaces = 6U;
   constexpr std::uint32_t kMeasuredMinimumSize = 32U;
 
+  //! A point of a cube face, each coordinate in [-1, 1].
+  struct FacePoint final {
+    double u = 0.0;
+    double v = 0.0;
+  };
+
   //! Hardware cube-space direction of a face texel; +Y is world up.
-  auto FaceDirection(const std::uint32_t face, const double u, const double v)
+  auto FaceDirection(const std::uint32_t face, const FacePoint& point)
     -> std::array<double, 3>
   {
+    const auto [u, v] = point;
     switch (face) {
     case 0:
       return { 1.0, -v, -u };
@@ -77,17 +83,17 @@ namespace {
     return std::ldexp(1.0 + fraction, exponent - 15);
   }
 
-  auto ReadRgb(const std::uint8_t* texel, const Format format)
+  auto ReadRgb(const std::span<const std::uint8_t> texel, const Format format)
     -> std::array<double, 3>
   {
     if (format == Format::kRGBA32Float) {
       std::array<float, 3> rgb {};
-      std::memcpy(rgb.data(), texel, sizeof(rgb));
+      std::memcpy(rgb.data(), texel.data(), sizeof(rgb));
       return { rgb[0], rgb[1], rgb[2] };
     }
     if (format == Format::kR11G11B10Float || format == Format::kR9G9B9E5Float) {
       std::uint32_t packed {};
-      std::memcpy(&packed, texel, sizeof(packed));
+      std::memcpy(&packed, texel.data(), sizeof(packed));
       if (format == Format::kR11G11B10Float) {
         return {
           SmallFloat(packed & 0x7FFU, 6U),
@@ -104,7 +110,7 @@ namespace {
       };
     }
     std::array<std::uint16_t, 3> bits {};
-    std::memcpy(bits.data(), texel, sizeof(bits));
+    std::memcpy(bits.data(), texel.data(), sizeof(bits));
     return {
       data::HalfFloat { bits[0] }.ToFloat(),
       data::HalfFloat { bits[1] }.ToFloat(),
@@ -121,9 +127,9 @@ auto MeasureCubeIlluminance(const data::TextureResource& texture)
   const auto mips = static_cast<std::uint32_t>(texture.GetMipCount());
   const auto layouts = texture.GetSubresourceLayouts();
   if (texel_bytes == 0U || texture.GetTextureType() != TextureType::kTextureCube
-    || texture.GetArrayLayers() != kCubeFaces
+    || texture.GetArrayLayers() != kCubeFaceCount
     || texture.GetWidth() != texture.GetHeight() || texture.GetWidth() == 0U
-    || mips == 0U || layouts.size() != std::size_t { kCubeFaces } * mips) {
+    || mips == 0U || layouts.size() != std::size_t { kCubeFaceCount } * mips) {
     return std::nullopt;
   }
 
@@ -133,11 +139,11 @@ auto MeasureCubeIlluminance(const data::TextureResource& texture)
     && (texture.GetWidth() >> (mip + 1U)) >= kMeasuredMinimumSize) {
     ++mip;
   }
-  const auto size = (std::max)(texture.GetWidth() >> mip, 1U);
+  const auto size = MipExtent(texture.GetWidth(), mip);
   const auto data = texture.GetData();
   const double texel_extent = 2.0 / size;
   double illuminance = 0.0;
-  for (auto face = 0U; face < kCubeFaces; ++face) {
+  for (auto face = 0U; face < kCubeFaceCount; ++face) {
     const auto& layout = layouts[(face * mips) + mip];
     const std::size_t row_bytes = std::size_t { size } * texel_bytes;
     if (layout.row_pitch_bytes < row_bytes
@@ -147,16 +153,18 @@ auto MeasureCubeIlluminance(const data::TextureResource& texture)
       return std::nullopt;
     }
     for (auto y = 0U; y < size; ++y) {
-      const auto* row = data.data() + layout.offset_bytes
-        + (std::size_t { layout.row_pitch_bytes } * y);
+      const auto row = data.subspan(std::size_t { layout.offset_bytes }
+          + (std::size_t { layout.row_pitch_bytes } * y),
+        row_bytes);
       const double v = ((y + 0.5) * texel_extent) - 1.0;
       for (auto x = 0U; x < size; ++x) {
         const double u = ((x + 0.5) * texel_extent) - 1.0;
-        const auto direction = FaceDirection(face, u, v);
+        const auto direction = FaceDirection(face, { .u = u, .v = v });
         if (direction[1] <= 0.0) {
           continue;
         }
-        const auto [r, g, b] = ReadRgb(row + (x * texel_bytes), format);
+        const auto [r, g, b] = ReadRgb(
+          row.subspan(std::size_t { x } * texel_bytes, texel_bytes), format);
         const double luminance = (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
         if (!std::isfinite(luminance) || luminance <= 0.0) {
           continue;

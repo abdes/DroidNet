@@ -11,6 +11,7 @@
 #include <span>
 
 #include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/PakFormat_core.h>
 
 namespace oxygen::cooker::testing {
 
@@ -64,5 +65,28 @@ namespace oxygen::cooker::testing {
 */
 [[nodiscard]] auto MaterialRefusal(std::span<const std::byte> bytes)
   -> std::optional<data::CookedDefect>;
+
+//! The defect the product refuses the texture row `desc` and its `payload`
+//! with.
+/*!
+ Reads them with the texture loader, which a mount uses, as it reads them:
+ the row from the descriptor stream, the payload already read in full.
+
+ @return No defect when the loader accepts the texture.
+ @throw std::logic_error When the loader refuses without a defect.
+*/
+[[nodiscard]] auto TextureRefusal(
+  const data::pak::core::TextureResourceDesc& desc,
+  std::span<const std::byte> payload) -> std::optional<data::CookedDefect>;
+
+//! The defect the product refuses the buffer row `desc` and its `payload`
+//! with, read as `TextureRefusal` reads a texture.
+/*!
+ @return No defect when the loader accepts the buffer.
+ @throw std::logic_error When the loader refuses without a defect.
+*/
+[[nodiscard]] auto BufferRefusal(
+  const data::pak::core::BufferResourceDesc& desc,
+  std::span<const std::byte> payload) -> std::optional<data::CookedDefect>;
 
 } // namespace oxygen::cooker::testing

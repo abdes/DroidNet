@@ -7,6 +7,7 @@
 // Covers: Import/TexturePackingPolicy.cpp
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ScratchImage.h>
@@ -19,17 +20,10 @@ namespace {
 
 using oxygen::Format;
 using oxygen::TextureType;
-using oxygen::content::import::ComputeBlockDimension;
-using oxygen::content::import::ComputeBytesPerPixelOrBlock;
-using oxygen::content::import::ComputeMipDimension;
-using oxygen::content::import::ComputeRowBytes;
 using oxygen::content::import::ComputeSubresourceLayouts;
-using oxygen::content::import::ComputeSurfaceBytes;
 using oxygen::content::import::ComputeTotalPayloadSize;
 using oxygen::content::import::D3D12PackingPolicy;
-using oxygen::content::import::kD3D12RowPitchAlignment;
 using oxygen::content::import::kD3D12SubresourcePlacementAlignment;
-using oxygen::content::import::kTightPackedSubresourceAlignment;
 using oxygen::content::import::ScratchImageMeta;
 using oxygen::content::import::TightPackedPolicy;
 
@@ -105,81 +99,6 @@ NOLINT_TEST_F(TightPackedPolicyTest, AlignSubresourceOffsetAligns4Bytes)
   EXPECT_EQ(policy_.AlignSubresourceOffset(3), 4U);
   EXPECT_EQ(policy_.AlignSubresourceOffset(4), 4U);
   EXPECT_EQ(policy_.AlignSubresourceOffset(5), 8U);
-}
-
-//===----------------------------------------------------------------------===//
-// Format Utilities Tests
-//===----------------------------------------------------------------------===//
-
-NOLINT_TEST(FormatUtilitiesTest, BytesPerPixelOrBlockCommonFormats)
-{
-  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kRGBA8UNorm), 4U);
-  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kRGBA16Float), 8U);
-  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kRGBA32Float), 16U);
-  EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kBC7UNorm), 16U);
-}
-
-NOLINT_TEST(FormatUtilitiesTest, BlockDimensionUncompressed)
-{
-  EXPECT_EQ(ComputeBlockDimension(Format::kRGBA8UNorm), 1U);
-  EXPECT_EQ(ComputeBlockDimension(Format::kRGBA16Float), 1U);
-}
-
-NOLINT_TEST(FormatUtilitiesTest, BlockDimensionBC7)
-{
-  EXPECT_EQ(ComputeBlockDimension(Format::kBC7UNorm), 4U);
-}
-
-NOLINT_TEST(FormatUtilitiesTest, RowBytesUncompressedRGBA8)
-{
-  EXPECT_EQ(ComputeRowBytes(64, Format::kRGBA8UNorm), 256U); // 64 * 4
-  EXPECT_EQ(ComputeRowBytes(256, Format::kRGBA8UNorm), 1024U); // 256 * 4
-}
-
-NOLINT_TEST(FormatUtilitiesTest, RowBytesBC7)
-{
-  // BC7: 16 bytes per 4x4 block
-  EXPECT_EQ(ComputeRowBytes(4, Format::kBC7UNorm), 16U); // 1 block
-  EXPECT_EQ(ComputeRowBytes(8, Format::kBC7UNorm), 32U); // 2 blocks
-  EXPECT_EQ(ComputeRowBytes(5, Format::kBC7UNorm), 32U); // 2 blocks (rounds up)
-  EXPECT_EQ(ComputeRowBytes(256, Format::kBC7UNorm), 1024U); // 64 blocks
-}
-
-NOLINT_TEST(FormatUtilitiesTest, SurfaceBytesUncompressedRGBA8)
-{
-  EXPECT_EQ(
-    ComputeSurfaceBytes(64, 64, Format::kRGBA8UNorm), 16384U); // 64*64*4
-  EXPECT_EQ(ComputeSurfaceBytes(256, 256, Format::kRGBA8UNorm), 262144U);
-}
-
-NOLINT_TEST(FormatUtilitiesTest, SurfaceBytesBC7)
-{
-  // BC7: 16 bytes per 4x4 block
-  EXPECT_EQ(ComputeSurfaceBytes(4, 4, Format::kBC7UNorm), 16U); // 1 block
-  EXPECT_EQ(ComputeSurfaceBytes(8, 8, Format::kBC7UNorm), 64U); // 4 blocks
-  EXPECT_EQ(
-    ComputeSurfaceBytes(256, 256, Format::kBC7UNorm), 65536U); // 64*64 blocks
-}
-
-//===----------------------------------------------------------------------===//
-// Mip Dimension Tests
-//===----------------------------------------------------------------------===//
-
-NOLINT_TEST(MipDimensionTest, ComputeMipDimensionStandardCases)
-{
-  EXPECT_EQ(ComputeMipDimension(256, 0), 256U);
-  EXPECT_EQ(ComputeMipDimension(256, 1), 128U);
-  EXPECT_EQ(ComputeMipDimension(256, 2), 64U);
-  EXPECT_EQ(ComputeMipDimension(256, 3), 32U);
-  EXPECT_EQ(ComputeMipDimension(256, 8), 1U);
-}
-
-NOLINT_TEST(MipDimensionTest, ComputeMipDimensionMinimumIsOne)
-{
-  EXPECT_EQ(ComputeMipDimension(256, 9), 1U);
-  EXPECT_EQ(ComputeMipDimension(256, 10), 1U);
-  EXPECT_EQ(ComputeMipDimension(1, 0), 1U);
-  EXPECT_EQ(ComputeMipDimension(1, 1), 1U);
 }
 
 //===----------------------------------------------------------------------===//
@@ -265,6 +184,28 @@ NOLINT_TEST(SubresourceLayoutTest, BC7D3D12)
   EXPECT_EQ(layouts.at(0).row_pitch, 1024U);
   // Size: 64 * 64 blocks * 16 bytes = 65536
   EXPECT_EQ(layouts.at(0).size_bytes, 65536U);
+}
+
+//! A subresource of more than 4 GiB keeps its size: the cook refuses it when
+//! it records the layout, rather than recording a wrapped one.
+NOLINT_TEST(SubresourceLayoutTest, LargeSubresourceSizeDoesNotWrap)
+{
+  const ScratchImageMeta meta {
+    .texture_type = TextureType::kTexture2D,
+    .width = 65536,
+    .height = 8192,
+    .depth = 1,
+    .array_layers = 1,
+    .mip_levels = 1,
+    .format = Format::kRGBA32Float,
+  };
+
+  const auto layouts
+    = ComputeSubresourceLayouts(meta, TightPackedPolicy::Instance());
+
+  ASSERT_EQ(layouts.size(), 1U);
+  EXPECT_EQ(layouts.at(0).row_pitch, 65536U * 16U);
+  EXPECT_EQ(layouts.at(0).size_bytes, uint64_t { 65536U } * 16U * 8192U);
 }
 
 NOLINT_TEST(SubresourceLayoutTest, TightPackedNoPadding)

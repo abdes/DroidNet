@@ -37,36 +37,6 @@ NOLINT_TEST(ScratchImageBasicTest, DefaultConstructionCreatesInvalidImage)
   EXPECT_EQ(image.GetSubresourceCount(), 0U);
 }
 
-//! ComputeMipCount returns correct values for various dimensions.
-NOLINT_TEST(ScratchImageBasicTest, ComputeMipCountReturnsCorrectValues)
-{
-  EXPECT_EQ(ScratchImage::ComputeMipCount(1, 1), 1U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(2, 2), 2U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(4, 4), 3U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(8, 8), 4U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(16, 16), 5U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(256, 256), 9U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(1024, 1024), 11U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(2048, 2048), 12U);
-}
-
-//! ComputeMipCount handles non-square textures correctly.
-NOLINT_TEST(ScratchImageBasicTest, ComputeMipCountNonSquareTextures)
-{
-  EXPECT_EQ(ScratchImage::ComputeMipCount(1024, 512), 11U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(512, 1024), 11U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(4, 1), 3U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(1, 4), 3U);
-}
-
-//! ComputeMipCount returns 0 for zero dimensions.
-NOLINT_TEST(ScratchImageBasicTest, ComputeMipCountZeroDimensions)
-{
-  EXPECT_EQ(ScratchImage::ComputeMipCount(0, 0), 0U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(0, 100), 0U);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(100, 0), 0U);
-}
-
 //! ComputeSubresourceIndex follows layer-major ordering.
 NOLINT_TEST(ScratchImageBasicTest, ComputeSubresourceIndexLayerMajorOrdering)
 {
@@ -83,16 +53,6 @@ NOLINT_TEST(ScratchImageBasicTest, ComputeSubresourceIndexLayerMajorOrdering)
   EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(1, 1, kMipLevels), 5U);
   EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(1, 2, kMipLevels), 6U);
   EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(1, 3, kMipLevels), 7U);
-}
-
-//! ComputeMipDimension halves correctly with minimum of 1.
-NOLINT_TEST(ScratchImageBasicTest, ComputeMipDimensionHalvesCorrectly)
-{
-  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 0), 1024U);
-  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 1), 512U);
-  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 2), 256U);
-  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 10), 1U);
-  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 11), 1U); // Clamped to 1
 }
 
 //=== ScratchImage Create Tests ===------------------------------------------//
@@ -184,6 +144,25 @@ NOLINT_TEST(ScratchImageCreateTest, ZeroDimensionsReturnsInvalidImage)
   EXPECT_FALSE(image.IsValid());
 }
 
+//! An image of more than 4 GiB is refused before any allocation: its 32-bit
+//! offsets would wrap.
+NOLINT_TEST(ScratchImageCreateTest, StorageBeyond4GiBReturnsInvalidImage)
+{
+  const ScratchImageMeta meta {
+    .texture_type = TextureType::kTexture2D,
+    .width = 16384,
+    .height = 16384,
+    .depth = 1,
+    .array_layers = 1,
+    .mip_levels = 1,
+    .format = Format::kRGBA32Float,
+  };
+
+  auto image = ScratchImage::Create(meta);
+
+  EXPECT_FALSE(image.IsValid());
+}
+
 //=== ScratchImage CreateFromData Tests ===----------------------------------//
 
 //! Test fixture for ScratchImage::CreateFromData tests.
@@ -195,10 +174,10 @@ NOLINT_TEST(ScratchImageCreateFromDataTest, ValidDataCreatesImageWithData)
   constexpr uint32_t kBpp = 4;
   constexpr uint32_t kRowPitch = kWidth * kBpp;
 
-  std::vector<std::byte> pixels(kWidth * kHeight * kBpp);
+  std::vector<std::byte> pixels(std::size_t { kWidth } * kHeight * kBpp);
   // Fill with test pattern: each pixel has its index as value
   for (size_t i = 0; i < pixels.size(); ++i) {
-    pixels.at(i) = static_cast<std::byte>(i & 0xFF);
+    pixels.at(i) = static_cast<std::byte>(i & 0xFFU);
   }
 
   auto image = ScratchImage::CreateFromData(
@@ -210,6 +189,24 @@ NOLINT_TEST(ScratchImageCreateFromDataTest, ValidDataCreatesImageWithData)
   EXPECT_EQ(image.Meta().mip_levels, 1U);
   EXPECT_EQ(image.Meta().array_layers, 1U);
   EXPECT_EQ(image.GetTotalSizeBytes(), kWidth * kHeight * kBpp);
+}
+
+//! An image whose rows are padded shows every row, padding included: a row
+//! starts `row_pitch_bytes` after the one above it.
+NOLINT_TEST(ScratchImageCreateFromDataTest, PaddedRowsAreAllInTheImage)
+{
+  constexpr uint32_t kWidth = 2;
+  constexpr uint32_t kHeight = 3;
+  constexpr uint32_t kRowPitch = 16; // 8 bytes of texels, 8 of padding
+
+  auto image
+    = ScratchImage::CreateFromData(kWidth, kHeight, Format::kRGBA8UNorm,
+      kRowPitch, std::vector<std::byte>(std::size_t { kRowPitch } * kHeight));
+
+  const auto view = image.GetImage(0, 0);
+  EXPECT_EQ(view.row_pitch_bytes, kRowPitch);
+  EXPECT_EQ(view.pixels.size(), std::size_t { kRowPitch } * kHeight);
+  EXPECT_EQ(image.GetMutablePixels(0, 0).size(), view.pixels.size());
 }
 
 //=== ScratchImage GetImage Tests ===----------------------------------------//
