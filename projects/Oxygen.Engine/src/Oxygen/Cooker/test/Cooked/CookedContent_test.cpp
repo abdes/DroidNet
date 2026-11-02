@@ -1027,6 +1027,72 @@ NOLINT_TEST_F(CookedContentTest, VerifyStorageCatchesAMissingMemberFile)
     content.VerifyStorage(IntegrityCheck::kMetadata), std::runtime_error);
 }
 
+//! The indexed size is checked before a changed descriptor's digest.
+NOLINT_TEST_F(CookedContentTest, VerifyStorageReportsSizeBeforeDigest)
+{
+  // Arrange
+  const auto content = OpenAs(Flavor::kLoose);
+  const auto stored = content.DescriptorStored(sample_.material);
+  FlipByte(Storage(), stored.file, 0U);
+  GrowFile(Storage(), stored.file);
+
+  // Act / Assert
+  try {
+    content.VerifyStorage(IntegrityCheck::kFull);
+    ADD_FAILURE() << "the changed descriptor verified";
+  } catch (const data::CookedOpenError& error) {
+    EXPECT_EQ(error.Defect(), data::CookedDefect::kSizeMismatch);
+    EXPECT_THAT(
+      error.what(), ::testing::HasSubstr(stored.file.generic_string()));
+  }
+}
+
+//! The first missing indexed file is reported in inventory path order.
+NOLINT_TEST_F(CookedContentTest, VerifyStorageReportsFirstMissingFileByPath)
+{
+  // Arrange
+  const auto content = OpenAs(Flavor::kLoose);
+  const auto material = content.DescriptorStored(sample_.material).file;
+  const auto geometry = content.DescriptorStored(sample_.geometry).file;
+  ASSERT_TRUE(Storage().Remove(material));
+  ASSERT_TRUE(Storage().Remove(geometry));
+  const auto first
+    = std::min(material.generic_string(), geometry.generic_string());
+
+  // Act / Assert
+  try {
+    content.VerifyStorage(IntegrityCheck::kMetadata);
+    ADD_FAILURE() << "the missing files verified";
+  } catch (const data::CookedOpenError& error) {
+    EXPECT_EQ(error.Defect(), data::CookedDefect::kMissingPart);
+    EXPECT_THAT(error.what(), ::testing::HasSubstr(first));
+  }
+}
+
+//! The metadata check does not read resource rows; the full check hashes them.
+NOLINT_TEST_F(CookedContentTest, VerifyStorageMetadataDoesNotReadResourceRows)
+{
+  // Arrange
+  const auto content = OpenAs(Flavor::kLoose);
+  const auto& table = content.ResourceTable(data::ResourceKind::kBuffer);
+  const auto& rows = table.RowsStored();
+  const auto offset = rows.range.offset.get()
+    + (static_cast<uint64_t>(sample_.buffer_row.get())
+      * cooked::CookedResourceTable::RowSize(cooked::TableKind::kBuffer))
+    + offsetof(core::BufferResourceDesc, content_hash);
+  FlipByte(Storage(), rows.file, offset);
+
+  // Act / Assert
+  EXPECT_NO_THROW(content.VerifyStorage(IntegrityCheck::kMetadata));
+  try {
+    content.VerifyStorage(IntegrityCheck::kFull);
+    ADD_FAILURE() << "the changed resource table verified";
+  } catch (const data::CookedOpenError& error) {
+    EXPECT_EQ(error.Defect(), data::CookedDefect::kDigestMismatch);
+    EXPECT_THAT(error.what(), ::testing::HasSubstr(rows.file.generic_string()));
+  }
+}
+
 //! A pak's check is its CRC, which only the full check reads.
 NOLINT_TEST_F(CookedContentTest, VerifyStorageCatchesAPakOfAnotherCrc)
 {

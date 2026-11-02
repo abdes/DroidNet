@@ -473,8 +473,16 @@ struct CookedContent::Impl {
   }
 
   auto LoadLoose() -> void;
+  auto LoadLooseAssets(const LooseCookedIndex& index) -> void;
+  auto LoadLooseTables(const LooseCookedIndex& index) -> void;
+  auto LoadLooseNamedFiles(const CookedResourceTable& textures) -> void;
   auto LoadPak() -> void;
+  auto LoadPakAssets() -> void;
+  auto LoadPakTables() -> void;
+  auto LoadPakNamedTextures() -> void;
   auto IndexAssets() -> void;
+  auto VerifyLooseFiles(lc::IntegrityCheck check) const -> void;
+  auto VerifyLooseDescriptors(lc::IntegrityCheck check) const -> void;
 };
 
 auto CookedContent::Impl::LoadLoose() -> void
@@ -483,7 +491,14 @@ auto CookedContent::Impl::LoadLoose() -> void
   const auto index = LoadIndex(*storage, root);
   summary = LooseSummary(*storage, root, index);
   inventory = index.GetFileInventory();
+  LoadLooseAssets(index);
+  LoadLooseTables(index);
+  LoadLooseNamedFiles(tables.at(TableSlot(TableKind::kTexture)));
+}
 
+auto CookedContent::Impl::LoadLooseAssets(const LooseCookedIndex& index) -> void
+{
+  const auto& root = source.path;
   for (const auto& key : index.GetAllAssetKeys()) {
     const auto relpath = index.FindDescriptorRelPath(key);
     if (!relpath) {
@@ -523,7 +538,11 @@ auto CookedContent::Impl::LoadLoose() -> void
         .count = serio::ByteCount { size }, },
     });
   }
+}
 
+auto CookedContent::Impl::LoadLooseTables(const LooseCookedIndex& index) -> void
+{
+  const auto& root = source.path;
   const auto table_files = std::array {
     std::pair { FileKind::kTexturesTable, FileKind::kTexturesData },
     std::pair { FileKind::kBuffersTable, FileKind::kBuffersData },
@@ -561,8 +580,12 @@ auto CookedContent::Impl::LoadLoose() -> void
     tables.emplace_back(kind, *storage, observer_ptr<const serio::AnyDevice> {},
       std::move(rows), std::move(data));
   }
+}
 
-  const auto& textures = tables.at(TableSlot(TableKind::kTexture));
+auto CookedContent::Impl::LoadLooseNamedFiles(
+  const CookedResourceTable& textures) -> void
+{
+  const auto& root = source.path;
   for (const auto& file : inventory) {
     if (file.kind == FileKind::kTextureDescriptor) {
       const auto path = root / file.relative_path;
@@ -610,6 +633,13 @@ auto CookedContent::Impl::LoadPak() -> void
 {
   pak = OpenPak(*storage, source.path);
   summary = PakSummary(*pak);
+  LoadPakAssets();
+  LoadPakTables();
+  LoadPakNamedTextures();
+}
+
+auto CookedContent::Impl::LoadPakAssets() -> void
+{
   const auto& catalog = pak->Catalog();
 
   auto paths = std::map<data::AssetKey, std::string> {};
@@ -639,7 +669,10 @@ auto CookedContent::Impl::LoadPak() -> void
         .count = serio::ByteCount { entry.desc_size }, },
     });
   }
+}
 
+auto CookedContent::Impl::LoadPakTables() -> void
+{
   const auto& footer = pak->Footer();
   const auto layout = std::array {
     std::pair { &footer.texture_table, &footer.texture_region },
@@ -672,6 +705,10 @@ auto CookedContent::Impl::LoadPak() -> void
           .count = serio::ByteCount { region->size }, },
       });
   }
+}
+
+auto CookedContent::Impl::LoadPakNamedTextures() -> void
+{
   for (const auto& texture : pak->BrowseTextures()) {
     named_textures.push_back({
       .virtual_path = texture.virtual_path,
@@ -855,21 +892,16 @@ auto CookedContent::Catalog() const noexcept -> const data::PakCatalog*
   return impl_->pak ? &impl_->pak->Catalog() : nullptr;
 }
 
-auto CookedContent::VerifyStorage(const lc::IntegrityCheck check) const -> void
+auto CookedContent::Impl::VerifyLooseFiles(const lc::IntegrityCheck check) const
+  -> void
 {
-  if (impl_->pak) {
-    if (check == lc::IntegrityCheck::kFull) {
-      impl_->pak->ValidateCrc32Integrity();
-    }
-    return;
-  }
-  const auto& root = impl_->source.path;
-  for (const auto& file : impl_->inventory) {
+  const auto& root = source.path;
+  for (const auto& file : inventory) {
     const auto path = root / file.relative_path;
-    if (impl_->storage->KindOf(path) != PathKind::kFile) {
+    if (storage->KindOf(path) != PathKind::kFile) {
       throw Corrupt(CookedDefect::kMissingPart, path, "is missing");
     }
-    const auto device = OpenFile(*impl_->storage, path);
+    const auto device = OpenFile(*storage, path);
     if (Size(device, path) != file.size) {
       throw Corrupt(
         CookedDefect::kSizeMismatch, path, "does not have its indexed size");
@@ -888,12 +920,14 @@ auto CookedContent::VerifyStorage(const lc::IntegrityCheck check) const -> void
       }
     }
   }
-  if (check == lc::IntegrityCheck::kFull) {
-    VerifyResources(*impl_->storage, root, impl_->inventory);
-  }
-  for (size_t i = 0; i < impl_->assets.size(); ++i) {
-    const auto& stored = impl_->descriptors.at(i);
-    const auto device = OpenFile(*impl_->storage, stored.file);
+}
+
+auto CookedContent::Impl::VerifyLooseDescriptors(
+  const lc::IntegrityCheck check) const -> void
+{
+  for (size_t i = 0; i < assets.size(); ++i) {
+    const auto& stored = descriptors.at(i);
+    const auto device = OpenFile(*storage, stored.file);
     if (Size(device, stored.file) != stored.range.count.get()) {
       throw Corrupt(CookedDefect::kSizeMismatch, stored.file,
         "does not have its indexed size");
@@ -903,12 +937,27 @@ auto CookedContent::VerifyStorage(const lc::IntegrityCheck check) const -> void
       if (!digest) {
         throw Unreadable(stored.file);
       }
-      if (*digest != impl_->assets.at(i).descriptor_sha256) {
+      if (*digest != assets.at(i).descriptor_sha256) {
         throw Corrupt(CookedDefect::kDigestMismatch, stored.file,
           "does not have its indexed digest");
       }
     }
   }
+}
+
+auto CookedContent::VerifyStorage(const lc::IntegrityCheck check) const -> void
+{
+  if (impl_->pak) {
+    if (check == lc::IntegrityCheck::kFull) {
+      impl_->pak->ValidateCrc32Integrity();
+    }
+    return;
+  }
+  impl_->VerifyLooseFiles(check);
+  if (check == lc::IntegrityCheck::kFull) {
+    VerifyResources(*impl_->storage, impl_->source.path, impl_->inventory);
+  }
+  impl_->VerifyLooseDescriptors(check);
 }
 
 auto ReadCookedSummary(const CookerStorageReader& storage, const fs::path& path)
