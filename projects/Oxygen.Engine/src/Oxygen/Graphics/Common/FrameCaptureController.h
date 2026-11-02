@@ -57,9 +57,13 @@ OXGN_GFX_API constexpr auto HasAllFeatures(const FrameCaptureFeature features,
 }
 
 //! Backend-owned GPU frame-capture control surface.
-class OXGN_GFX_API FrameCaptureController {
+class FrameCaptureController {
 public:
+  FrameCaptureController() = default;
   virtual ~FrameCaptureController() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(FrameCaptureController)
+  OXYGEN_MAKE_NON_MOVABLE(FrameCaptureController)
 
   [[nodiscard]] virtual auto GetProviderName() const noexcept
     -> std::string_view = 0;

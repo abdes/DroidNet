@@ -48,11 +48,11 @@ namespace oxygen::clap {
  * `std::any`. The concrete implementation of this interface will deal with
  * specific value types.
  */
-class OXGN_CLP_API ValueSemantics {
+class ValueSemantics {
 public:
   ValueSemantics() = default;
 
-  virtual ~ValueSemantics() noexcept;
+  OXGN_CLP_API virtual ~ValueSemantics() noexcept;
 
   OXYGEN_MAKE_NON_COPYABLE(ValueSemantics)
   OXYGEN_MAKE_NON_MOVABLE(ValueSemantics)

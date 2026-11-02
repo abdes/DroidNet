@@ -15,7 +15,6 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
 
@@ -221,7 +220,7 @@ private:
   };
 
   //! Base indices for different heaps.
-  std::unordered_map<std::string, bindless::HeapIndex> heap_base_indices_ {};
+  std::unordered_map<std::string, bindless::HeapIndex> heap_base_indices_;
 };
 
 //! Abstract interface for descriptor allocation from heaps.
@@ -242,7 +241,7 @@ private:
  The allocator is responsible for managing the lifecycle of descriptors but not
  the resources they describe (textures, buffers, etc.).
 */
-class OXGN_GFX_API DescriptorAllocator {
+class DescriptorAllocator {
 public:
   DescriptorAllocator() = default;
   virtual ~DescriptorAllocator() = default;
