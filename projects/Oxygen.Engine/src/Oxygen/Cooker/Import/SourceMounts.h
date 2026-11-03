@@ -168,6 +168,20 @@ namespace mount_codes {
         .message = "source '{}' needs mount '{}', which no mounts file binds "
                    "on this machine",
       };
+  inline constexpr auto kSourceMountMisspelled
+    = MountCode<std::string_view, std::string_view, std::string_view> {
+        .id = "import.mount_misspelled",
+        .severity = ImportSeverity::kError,
+        .message = "source '{}' names mount '{}', which is spelled '{}': a "
+                   "mount name is case-sensitive",
+      };
+  inline constexpr auto kSourceCrossesMount
+    = MountCode<std::string_view, std::string_view> {
+        .id = "import.source_crosses_mount",
+        .severity = ImportSeverity::kError,
+        .message = "source '{}' leads through a link to '{}', in another "
+                   "mount: name the file by that mount path",
+      };
   inline constexpr auto kDerivedFromNotDerived = MountCode<std::string_view> {
     .id = "import.derived_from_not_derived",
     .severity = ImportSeverity::kError,
@@ -448,11 +462,17 @@ struct MountTable final {
 
   /*!
    Locates a source a committed file names: a mount path (`/Content/...`), or
-   a path relative to the project root that lies in a `Source` mount.
+   a path relative to the project root that lies in a `Source` mount. A mount
+   path names its mount exactly as declared, follows the virtual path rules
+   (`content::VirtualPathRuleSet::kCooked`, which accepts source media) and
+   names a file that lies in that mount, links resolved.
 
    @param source The path and the field that holds it.
    @param findings Receives `path.absolute_committed` for an absolute path,
-     `import.mount_unbound` for a mount with no folder and
+     `import.reference_invalid`, naming the `vpath.*` code, for a mount path
+     the rules refuse, `import.mount_misspelled` for a mount name spelled in
+     another case, `import.source_crosses_mount` for a file a link puts in
+     another mount, `import.mount_unbound` for a mount with no folder and
      `import.source_outside_mount` for a source in no `Source` mount.
    @return The located source, or nothing.
   */

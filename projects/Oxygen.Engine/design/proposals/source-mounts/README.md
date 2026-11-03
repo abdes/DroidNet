@@ -131,7 +131,7 @@ stored.
 
 | Rule                 | Contract                                                                                                                                                                                                                                                                                                                                                                            |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unique names         | Names are unique, ignoring case, across a run's mount table                                                                                                                                                                                                                                                                                                                         |
+| Unique names         | Names are unique, ignoring case, across a run's mount table. A mount path spells the name as declared: `/content/...` for mount `Content` is `import.mount_misspelled`                                                                                                                                                                                                              |
 | `Engine`             | Reserved for the engine content build; a project mount named `Engine` is refused                                                                                                                                                                                                                                                                                                    |
 | Name follows content | A folder is mounted under one name by every project that mounts it, because its identities and the references other mounts hold to it carry that name. Its files reference each other relatively, without the name. Mounting a studio library as `Studio` here and `Shared` there breaks every reference into it in one of the two projects ([changing a mount](#changing-a-mount)) |
 | Kind is fixed        | `.mounts.json` binds or overrides a `Path`; it never changes a `Kind`                                                                                                                                                                                                                                                                                                               |
@@ -316,9 +316,13 @@ resolved through the file system to its final path (`GetFinalPathNameByHandle`
 on Windows, `realpath` elsewhere), with links and short names expanded. A folder
 that does not exist yet is canonicalized through its deepest existing parent;
 one with no existing parent (a removed drive, an unreachable share) keeps its
-text form and is `Missing`. The same canonical form is used to turn a file into its mount path, so a file
-reached through a link maps to the mount that holds its final location, or is
-refused with `import.source_outside_mount`. Folders are compared ignoring case
+text form and is `Missing`. The same canonical form turns a file into its
+mount path: a file reached through a link is named by its final location. A
+mount path names the mount that holds the file, so text whose link leads into
+another mount is refused with `import.source_crosses_mount`, naming the mount
+path to write instead, and one that leads out of every mount with
+`import.source_outside_mount`. A link never gives a file a second name, and a
+reference means what it says. Folders are compared ignoring case
 on Windows and as the file system reports elsewhere.
 
 The canonical folder is a local fact like any folder: it is logged with the
@@ -438,6 +442,8 @@ output identity no longer takes part.
 | A sidecar completing a scene                                      | The scene's recorded source, as today                   | No collision with the scene   |
 | A source in no mount                                              | None                                                    | `import.source_outside_mount` |
 | `Red.omat.json` written `red.omat.json` in a manifest             | Compared ignoring case, as identities are               | Same source                   |
+| `/content/Red.omat.json` for mount `Content`                      | None                                                    | `import.mount_misspelled`     |
+| `/Content/Shared/Red.omat.json`, `Shared` a link into mount `Lib` | None                                                    | `import.source_crosses_mount` |
 
 The field keeps its type and position. Its content changes for every entry, so
 the loose cooked index version goes from 6 to 7 and older roots are rejected
@@ -599,7 +605,9 @@ migration and dependencies are in
   of another mount.
 - **Folders are compared canonically.** Links, `subst` drives, UNC paths and
   short names are resolved before mounts are checked or files are mapped, so
-  no alias gives a file a second mount path.
+  no alias gives a file a second mount path. A mount path whose link leads
+  into another mount is refused rather than silently renamed: remapping it
+  would record a mount the author never wrote.
 - **The cooker records mount paths.** The loose cooked index's source field
   becomes the source's mount path; the version goes to 7. This replaces the
   derivation #81 reports and makes "same source" mean "same file".

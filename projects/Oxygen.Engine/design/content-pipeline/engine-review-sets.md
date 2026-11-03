@@ -463,7 +463,9 @@ everything outside the rule.
   `vpath.reference_outside_mount`, the one grammar code for the rule,
   reported as `import.reference_invalid` naming that code.
   Windows-specific inputs are covered: case, drive-relative and UNC paths,
-  `\` separators, trailing dots and spaces, junctions and symbolic links.
+  `\` separators, trailing dots and spaces, junctions and symbolic links. A
+  mount path names its mount as declared (`import.mount_misspelled`) and a
+  file in it: a link into another mount is `import.source_crosses_mount`.
 - Mount names: `content::ValidateMountName` (the mount table's rule),
   `oxygen.mounts.schema.json` and `VirtualPath` agree exactly (one rule, no
   leading `.`); conflicts and folder overlaps are

@@ -584,6 +584,18 @@ namespace {
               declaration.name, request_->owner, name_subject, reporter_)) {
           continue;
         }
+        // A native caller can pass any value; it is never read as `Source`.
+        if (declaration.kind != MountKind::kSource
+          && declaration.kind != MountKind::kCooked) {
+          reporter_.Report(mount_codes::kKindUnknown,
+            Subject {
+              .file = DeclaredIn(),
+              .field = field + ".kind",
+              .mount = declaration.name,
+            },
+            declaration.name, to_string(declaration.kind));
+          continue;
+        }
         if (const auto existing = by_name_.find(FoldName(declaration.name));
           existing != by_name_.end()) {
           reporter_.Report(mount_codes::kNameDuplicate, name_subject,
@@ -1019,16 +1031,27 @@ namespace {
     if (!text.has_root_directory()) {
       return table.MountPathOf(base / text, findings);
     }
+    if (const auto error = content::ValidateVirtualPath(
+          committed, content::VirtualPathRuleSet::kCooked);
+      error.has_value()) {
+      findings.push_back(internal::RefuseReference(subject.file.string(),
+        subject.file.string(), committed, *error, subject.field));
+      return std::nullopt;
+    }
 
     const auto parts = Components(text.relative_path());
-    const auto named = parts.empty() ? std::string {} : parts.front().string();
+    const auto named = parts.front().string();
     const auto mount
       = std::ranges::find_if(table.mounts, [&named](const Mount& m) -> bool {
           return FoldName(m.name) == FoldName(named);
         });
-    if (mount == table.mounts.end() || mount->kind != MountKind::kSource
-      || parts.size() < 2) {
+    if (mount == table.mounts.end() || mount->kind != MountKind::kSource) {
       reporter.Report(mount_codes::kSourceOutsideMount, subject, committed);
+      return std::nullopt;
+    }
+    if (mount->name != named) {
+      reporter.Report(mount_codes::kSourceMountMisspelled, subject, committed,
+        named, mount->name);
       return std::nullopt;
     }
     if (mount->state == MountState::kUnbound) {
@@ -1040,7 +1063,16 @@ namespace {
     for (const auto& part : parts | std::views::drop(1)) {
       file /= part;
     }
-    return table.MountPathOf(file, findings);
+    // A link may lead out of the mount the text names; the file is then named
+    // by the mount that holds it, never by the link.
+    auto located = table.MountPathOf(file, findings);
+    if (located.has_value()
+      && MountRootOf(located->mount_path) != "/" + mount->name) {
+      reporter.Report(mount_codes::kSourceCrossesMount, subject, committed,
+        located->mount_path);
+      return std::nullopt;
+    }
+    return located;
   }
 
 } // namespace

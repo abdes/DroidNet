@@ -44,8 +44,8 @@ namespace oxygen::cooker::testing {
 /*!
  Paths compare by their lexically normal generic spelling, so a test names
  files by absolute paths under a root no test creates. Adding a file or a
- folder adds its parent folders. Nothing is a link, so a path's canonical
- spelling is its lexically normal one.
+ folder adds its parent folders. A path's canonical spelling is its lexically
+ normal one, with the links a test adds resolved.
 */
 class MemoryFileSystem final : public content::cooked::ImportStorage,
                                public content::import::IMountFileSystem {
@@ -63,6 +63,15 @@ public:
       }
       path = parent.generic_string();
     }
+  }
+
+  //! Makes `link` a link to the folder `target`, as a junction or a symbolic
+  //! link is: a path below `link` has its canonical spelling below `target`.
+  auto AddLink(const std::filesystem::path& link,
+    const std::filesystem::path& target) -> void
+  {
+    AddFolder(std::filesystem::path(Key(link)).parent_path());
+    links_.insert_or_assign(Key(link), Key(target));
   }
 
   //! Adds a file, replacing one at the same path, and its parent folders.
@@ -343,7 +352,19 @@ public:
   [[nodiscard]] auto Canonical(const std::filesystem::path& path) const
     -> std::filesystem::path override
   {
-    return path.lexically_normal();
+    auto canonical = Key(path);
+    // A link's target may itself lie below a link; each pass resolves one.
+    for (auto pass = std::size_t { 0 }; pass <= links_.size(); ++pass) {
+      const auto link = std::ranges::find_if(links_, [&](const auto& entry) {
+        return canonical == entry.first
+          || canonical.starts_with(entry.first + "/");
+      });
+      if (link == links_.end()) {
+        break;
+      }
+      canonical = link->second + canonical.substr(link->first.size());
+    }
+    return std::filesystem::path(canonical).lexically_normal();
   }
 
 private:
@@ -574,6 +595,7 @@ private:
   }
 
   std::set<std::string> folders_;
+  std::map<std::string, std::string> links_;
   std::map<std::string, std::vector<std::byte>> files_;
   std::map<std::string, std::error_code> unpublishable_;
   std::map<std::string, std::error_code> unmovable_;

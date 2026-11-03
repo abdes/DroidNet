@@ -522,6 +522,21 @@ NOLINT_TEST(SourceMountKindTest, ManifestRefusesAnUnknownKind)
     << errors.str();
 }
 
+//! A declaration whose kind is neither `Source` nor `Cooked` is
+//! `mount.kind_unknown`, however it was built, and never read as `Source`.
+NOLINT_TEST_F(SourceMountsTest, UnknownDeclaredKindIsRefused)
+{
+  auto declaration = Declared("Content", "Content");
+  declaration.kind = static_cast<MountKind>(2);
+
+  const auto table = ResolveMountTable(Request({ declaration }));
+
+  EXPECT_FALSE(table.IsValid());
+  EXPECT_TRUE(HasDiagnosticCode(table.diagnostics, codes::kKindUnknown.id))
+    << DiagnosticSummary(table.diagnostics);
+  EXPECT_FALSE(table.Find("Content"));
+}
+
 //! A folder that does not exist warns and is `Missing`.
 NOLINT_TEST_F(SourceMountsTest, MissingFolderWarns)
 {
@@ -877,6 +892,102 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesAnAbsolutePath)
 
   EXPECT_FALSE(located.has_value());
   EXPECT_TRUE(HasDiagnosticCode(findings, codes::kAbsoluteCommitted.id))
+    << DiagnosticSummary(findings);
+}
+
+//! A mount name is spelled as declared: `/content/...` from a `/Content`
+//! file is `import.mount_misspelled`, never a second spelling of the
+//! referrer's own mount.
+NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesAMisspelledMount)
+{
+  const auto table
+    = ResolveMountTable(Request({ Declared("Content", "Content") }));
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+
+  const auto located = table.LocateReference(
+    Project() / "Content" / "Materials" / "wood.material.json",
+    CommittedPath { .text = "/content/Images/wood.png", .field = "source" },
+    findings);
+
+  EXPECT_FALSE(located.has_value());
+  EXPECT_TRUE(HasDiagnosticCode(findings, codes::kSourceMountMisspelled.id))
+    << DiagnosticSummary(findings);
+}
+
+//! A mount path the virtual path rules refuse is `import.reference_invalid`,
+//! naming the rule, before any file is looked for.
+NOLINT_TEST_F(SourceMountsTest, LocateSourceRefusesAPathTheRulesRefuse)
+{
+  const auto table
+    = ResolveMountTable(Request({ Declared("Content", "Content") }));
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+
+  const auto located = table.LocateSource(
+    CommittedPath { .text = "/Content/Images/wood.png.", .field = "source" },
+    findings);
+
+  EXPECT_FALSE(located.has_value());
+  ASSERT_TRUE(HasDiagnosticCode(findings, "import.reference_invalid"))
+    << DiagnosticSummary(findings);
+  EXPECT_NE(findings.front().message.find("vpath.segment.trailing_dot"),
+    std::string::npos);
+  EXPECT_EQ(findings.front().object_path, "source");
+}
+
+//! A link inside the mount the text names leaves the file in that mount: it
+//! is named by its final location there.
+NOLINT_TEST_F(SourceMountsTest, LocateSourceFollowsALinkWithinItsMount)
+{
+  files_.AddLink(
+    Project() / "Content" / "Alias", Project() / "Content" / "Images");
+  const auto table
+    = ResolveMountTable(Request({ Declared("Content", "Content") }));
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+
+  const auto located = table.LocateSource(
+    CommittedPath { .text = "/Content/Alias/wood.png", .field = "source" },
+    findings);
+
+  ASSERT_HAS_VALUE(located) << DiagnosticSummary(findings);
+  EXPECT_EQ(located->mount_path, "/Content/Images/wood.png");
+}
+
+//! A link that leads into another mount is `import.source_crosses_mount`: the
+//! file is named by the mount that holds it, never through the link.
+NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesALinkIntoAnotherMount)
+{
+  MakeFolder(Project() / "Media" / "Images");
+  files_.AddLink(
+    Project() / "Content" / "Shared", Project() / "Media" / "Images");
+  const auto table = ResolveMountTable(
+    Request({ Declared("Content", "Content"), Declared("Media", "Media") }));
+  ASSERT_TRUE(table.IsValid()) << DiagnosticSummary(table.diagnostics);
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+
+  const auto located = table.LocateReference(
+    Project() / "Content" / "Materials" / "wood.material.json",
+    CommittedPath { .text = "../Shared/wood.png", .field = "source" },
+    findings);
+
+  EXPECT_FALSE(located.has_value());
+  EXPECT_TRUE(HasDiagnosticCode(findings, codes::kSourceCrossesMount.id))
+    << DiagnosticSummary(findings);
+}
+
+//! A link that leads out of every mount is `import.source_outside_mount`.
+NOLINT_TEST_F(SourceMountsTest, LocateSourceRefusesALinkOutOfEveryMount)
+{
+  files_.AddLink(Project() / "Content" / "Elsewhere", Root() / "Elsewhere");
+  const auto table
+    = ResolveMountTable(Request({ Declared("Content", "Content") }));
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+
+  const auto located = table.LocateSource(
+    CommittedPath { .text = "/Content/Elsewhere/wood.png", .field = "source" },
+    findings);
+
+  EXPECT_FALSE(located.has_value());
+  EXPECT_TRUE(HasDiagnosticCode(findings, codes::kSourceOutsideMount.id))
     << DiagnosticSummary(findings);
 }
 
