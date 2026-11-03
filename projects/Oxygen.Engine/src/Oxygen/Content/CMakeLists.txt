@@ -90,7 +90,7 @@ set(
   "Internal/ContentBindingBundle.cpp"
   "Internal/ContentSourceRegistry.h"
   "Internal/ContentSourceView.h"
-  "Internal/CookedOpenFailure.h"
+  "Internal/OpenFailure.h"
   "Internal/ContentLoadScopeState.h"
   "Internal/ContentSourceRegistry.cpp"
   "Internal/EvictionRegistry.h"

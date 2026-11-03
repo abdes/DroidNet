@@ -16,7 +16,7 @@
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Testing/GTest.h>
@@ -30,7 +30,7 @@ using oxygen::data::BufferResourceDescriptorRecord;
 using oxygen::data::BufferResourceView;
 using oxygen::data::BufferViewRecord;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using oxygen::data::DecodeBufferResourceDescriptor;
 using oxygen::data::DecodeTextureResourceDescriptor;
 using oxygen::data::EncodeBufferResourceDescriptor;
@@ -117,7 +117,8 @@ auto Buffer() -> BufferResourceDescriptor
 
 //! The rule a decode that must fail reports broken.
 template <class T>
-auto DefectOf(const oxygen::Result<T, CookedOpenError>& decoded) -> CookedDefect
+auto DefectOf(const oxygen::Result<T, CookedFormatError>& decoded)
+  -> CookedDefect
 {
   if (decoded) {
     ADD_FAILURE() << "the descriptor decoded";

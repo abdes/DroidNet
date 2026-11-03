@@ -13,7 +13,7 @@
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/ByteBuffer.h>
 
@@ -23,7 +23,7 @@ namespace {
 
 using oxygen::Format;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using Usage = BufferResource::UsageFlags;
 
 //! Every usage flag the format defines.
@@ -40,12 +40,12 @@ auto CheckUsage(const uint32_t flags) -> void
 {
   const auto unknown = flags & ~std::to_underlying(kKnownUsage);
   if (unknown != 0U) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format("buffer usage flags 0x{:08X} are unknown", unknown));
   }
   const auto frequencies = flags & std::to_underlying(kFrequencies);
   if (std::popcount(frequencies) > 1) {
-    throw CookedOpenError(CookedDefect::kInconsistent,
+    throw CookedFormatError(CookedDefect::kInconsistent,
       fmt::format(
         "buffer usage flags 0x{:08X} name more than one update frequency",
         flags));
@@ -62,17 +62,17 @@ auto CheckFormatted(const oxygen::data::pak::core::BufferResourceDesc& desc)
   const auto holds_elements
     = info.bytes_per_block != 0U && info.block_size == 1U;
   if (!holds_elements) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format("buffer element format {} is unknown or block compressed",
         desc.element_format));
   }
   if (desc.element_stride != 0U) {
-    throw CookedOpenError(CookedDefect::kInconsistent,
+    throw CookedFormatError(CookedDefect::kInconsistent,
       fmt::format("formatted buffer has a stride of {}; its format sets it",
         desc.element_stride));
   }
   if (desc.size_bytes % info.bytes_per_block != 0U) {
-    throw CookedOpenError(CookedDefect::kSizeMismatch,
+    throw CookedFormatError(CookedDefect::kSizeMismatch,
       fmt::format("buffer of {} bytes holds part of a {}-byte element",
         desc.size_bytes, info.bytes_per_block));
   }
@@ -87,11 +87,11 @@ auto CheckStructured(const oxygen::data::pak::core::BufferResourceDesc& desc)
     return;
   }
   if (desc.element_stride == 0U) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       "a buffer without an element format needs an element stride");
   }
   if (desc.size_bytes % desc.element_stride != 0U) {
-    throw CookedOpenError(CookedDefect::kSizeMismatch,
+    throw CookedFormatError(CookedDefect::kSizeMismatch,
       fmt::format("buffer of {} bytes holds part of a {}-byte element",
         desc.size_bytes, desc.element_stride));
   }
@@ -136,7 +136,7 @@ BufferResource::BufferResource(
     CheckStructured(desc_);
   }
   if (data_.Bytes().size() != desc_.size_bytes) {
-    throw CookedOpenError(CookedDefect::kSizeMismatch,
+    throw CookedFormatError(CookedDefect::kSizeMismatch,
       fmt::format("buffer row names {} bytes, its payload holds {}",
         desc_.size_bytes, data_.Bytes().size()));
   }

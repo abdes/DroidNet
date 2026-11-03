@@ -15,7 +15,7 @@
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -32,7 +32,7 @@ namespace render = oxygen::data::pak::render;
 using oxygen::Format;
 using oxygen::TextureType;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 
 auto CheckType(const core::TextureResourceDesc& desc) -> void
 {
@@ -41,13 +41,13 @@ auto CheckType(const core::TextureResourceDesc& desc) -> void
     = desc.texture_type > std::to_underlying(TextureType::kUnknown)
     && desc.texture_type <= std::to_underlying(TextureType::kMaxTextureType);
   if (!known) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format("texture type {} is unknown", desc.texture_type));
   }
   const auto multisampled = type == TextureType::kTexture2DMultiSample
     || type == TextureType::kTexture2DMultiSampleArray;
   if (multisampled) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       "a texture row has no sample count to describe a multisampled texture");
   }
 }
@@ -58,11 +58,11 @@ auto CheckFormat(const core::TextureResourceDesc& desc) -> void
   const auto has_blocks
     = oxygen::graphics::detail::GetFormatInfo(format).bytes_per_block != 0U;
   if (!has_blocks) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format("texture format {} is unknown", desc.format));
   }
   if (!core::HasSupportedCompression(desc)) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format("texture compression {} is not the compression of format {}",
         desc.compression_type, desc.format));
   }
@@ -100,13 +100,13 @@ auto CheckExtents(const core::TextureResourceDesc& desc) -> void
   const auto empty = desc.width == 0U || desc.height == 0U || desc.depth == 0U
     || desc.array_layers == 0U || desc.mip_levels == 0U;
   if (empty) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format("texture extents {}x{}x{}, {} layers, {} mips are empty",
         desc.width, desc.height, desc.depth, desc.array_layers,
         desc.mip_levels));
   }
   if (!HasExtentsOfItsType(desc)) {
-    throw CookedOpenError(CookedDefect::kInconsistent,
+    throw CookedFormatError(CookedDefect::kInconsistent,
       fmt::format(
         "texture extents {}x{}x{}, {} layers are not those of type {}",
         desc.width, desc.height, desc.depth, desc.array_layers,
@@ -115,7 +115,7 @@ auto CheckExtents(const core::TextureResourceDesc& desc) -> void
   const auto chain
     = oxygen::MipChainLength(desc.width, desc.height, desc.depth);
   if (std::cmp_greater(desc.mip_levels, chain)) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format("texture has {} mips, its chain {}", desc.mip_levels, chain));
   }
 }
@@ -127,12 +127,12 @@ auto CheckRow(const core::TextureResourceDesc& desc, const size_t payload_size)
   CheckFormat(desc);
   CheckExtents(desc);
   if (desc.alignment != TextureResource::kDataAlignment) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format("texture alignment {} is not {}", desc.alignment,
         TextureResource::kDataAlignment));
   }
   if (desc.size_bytes != payload_size) {
-    throw CookedOpenError(CookedDefect::kSizeMismatch,
+    throw CookedFormatError(CookedDefect::kSizeMismatch,
       fmt::format("texture row names {} bytes, its payload holds {}",
         desc.size_bytes, payload_size));
   }
@@ -144,13 +144,13 @@ auto ReadHeader(const core::TextureResourceDesc& desc,
   auto reader = oxygen::serio::ByteReader { payload };
   const auto read = reader.Read<render::TexturePayloadHeader>();
   if (!read) {
-    throw CookedOpenError(CookedDefect::kTruncated,
+    throw CookedFormatError(CookedDefect::kTruncated,
       fmt::format(
         "texture payload of {} bytes holds no header", payload.size()));
   }
   const auto& header = *read;
   if (header.magic != render::kTexturePayloadMagic) {
-    throw CookedOpenError(CookedDefect::kWrongMagic,
+    throw CookedFormatError(CookedDefect::kWrongMagic,
       fmt::format("texture payload magic 0x{:08X} is not OTX1", header.magic));
   }
   const auto known_policy = header.packing_policy
@@ -158,7 +158,7 @@ auto ReadHeader(const core::TextureResourceDesc& desc,
     || header.packing_policy
       == std::to_underlying(render::TexturePackingPolicyId::kTightPacked);
   if (!known_policy) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format(
         "texture packing policy {} is unknown", header.packing_policy));
   }
@@ -167,18 +167,18 @@ auto ReadHeader(const core::TextureResourceDesc& desc,
     = std::to_underlying(render::TexturePayloadFlags::kPremultipliedAlpha);
   const auto unread_flags = header.flags & ~uint32_t { kReadFlags };
   if (unread_flags != 0U) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format("texture payload flags 0x{:02X} are unknown or reserved",
         unread_flags));
   }
   const auto subresources = uint32_t { desc.array_layers } * desc.mip_levels;
   if (header.subresource_count != subresources) {
-    throw CookedOpenError(CookedDefect::kInconsistent,
+    throw CookedFormatError(CookedDefect::kInconsistent,
       fmt::format("texture payload has {} subresources, its row {}",
         header.subresource_count, subresources));
   }
   if (header.total_payload_size != payload.size()) {
-    throw CookedOpenError(CookedDefect::kSizeMismatch,
+    throw CookedFormatError(CookedDefect::kSizeMismatch,
       fmt::format("texture payload header names {} bytes, the payload holds {}",
         header.total_payload_size, payload.size()));
   }
@@ -189,13 +189,13 @@ auto ReadHeader(const core::TextureResourceDesc& desc,
     = header.layouts_offset_bytes >= sizeof(render::TexturePayloadHeader)
     && layouts_end <= payload.size();
   if (!table_in_payload) {
-    throw CookedOpenError(CookedDefect::kOutOfBounds,
+    throw CookedFormatError(CookedDefect::kOutOfBounds,
       "texture subresource layouts lie outside the payload");
   }
   const auto data_after_table = header.data_offset_bytes >= layouts_end
     && header.data_offset_bytes <= payload.size();
   if (!data_after_table) {
-    throw CookedOpenError(CookedDefect::kOutOfBounds,
+    throw CookedFormatError(CookedDefect::kOutOfBounds,
       "texture data does not follow its subresource layouts");
   }
   return header;
@@ -207,7 +207,7 @@ auto ReadLayouts(const render::TexturePayloadHeader& header,
 {
   auto reader = oxygen::serio::ByteReader { payload };
   if (!reader.Seek(oxygen::serio::ByteOffset { header.layouts_offset_bytes })) {
-    throw CookedOpenError(CookedDefect::kOutOfBounds,
+    throw CookedFormatError(CookedDefect::kOutOfBounds,
       "texture subresource layouts lie outside the payload");
   }
   auto layouts = std::vector<render::SubresourceLayout> {};
@@ -215,7 +215,7 @@ auto ReadLayouts(const render::TexturePayloadHeader& header,
   for (uint32_t index = 0U; index < header.subresource_count; ++index) {
     const auto layout = reader.Read<render::SubresourceLayout>();
     if (!layout) {
-      throw CookedOpenError(CookedDefect::kOutOfBounds,
+      throw CookedFormatError(CookedDefect::kOutOfBounds,
         "texture subresource layouts lie outside the payload");
     }
     layouts.push_back(*layout);
@@ -236,7 +236,7 @@ auto CheckSubresources(const core::TextureResourceDesc& desc,
       const auto row_bytes = oxygen::graphics::detail::RowBytes(
         format, oxygen::MipExtent(desc.width, mip));
       if (layout.row_pitch_bytes < row_bytes) {
-        throw CookedOpenError(CookedDefect::kInconsistent,
+        throw CookedFormatError(CookedDefect::kInconsistent,
           fmt::format("texture layer {} mip {} has a row pitch of {} bytes, "
                       "below its {} row bytes",
             layer, mip, layout.row_pitch_bytes, row_bytes));
@@ -247,14 +247,14 @@ auto CheckSubresources(const core::TextureResourceDesc& desc,
       } * oxygen::MipExtent(desc.depth, mip);
       const auto holds = uint64_t { layout.row_pitch_bytes } * rows;
       if (layout.size_bytes != holds) {
-        throw CookedOpenError(CookedDefect::kSizeMismatch,
+        throw CookedFormatError(CookedDefect::kSizeMismatch,
           fmt::format("texture layer {} mip {} has {} bytes, its rows {}",
             layer, mip, layout.size_bytes, holds));
       }
       const auto in_data
         = uint64_t { layout.offset_bytes } + layout.size_bytes <= data_size;
       if (!in_data) {
-        throw CookedOpenError(CookedDefect::kOutOfBounds,
+        throw CookedFormatError(CookedDefect::kOutOfBounds,
           fmt::format(
             "texture layer {} mip {} lies outside the data", layer, mip));
       }

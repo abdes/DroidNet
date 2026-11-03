@@ -23,7 +23,7 @@ namespace oxygen::content::loaders {
 /*!
  Reads the descriptor the context's reader holds, from its position to its
  end, and admits it as a `data::PhysicsSceneAsset`, which refuses a malformed
- sidecar with a `data::CookedOpenError`. The loader then checks what the
+ sidecar with a `data::CookedFormatError`. The loader then checks what the
  sidecar references.
 
  @see LoadSceneAsset, data::PhysicsSceneAsset

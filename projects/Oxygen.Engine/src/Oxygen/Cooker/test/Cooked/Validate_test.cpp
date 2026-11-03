@@ -29,7 +29,7 @@
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -167,7 +167,7 @@ NOLINT_TEST_F(ValidateTest, IndexOfAnotherVersionCannotBeOpened)
   // Act / Assert
   EXPECT_THROW(static_cast<void>(CookedContent::Open(
                  workspace_.Storage(), fs::path("/cooked/Future"))),
-    data::CookedOpenError);
+    data::CookedFormatError);
 }
 
 NOLINT_TEST_F(ValidateTest, DescriptorOfAnOlderVersionIsRefused)

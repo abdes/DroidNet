@@ -80,7 +80,7 @@ namespace {
       try {
         payloads = data::loose_cooked::ReadResourcePayloads(
           *table.kind, rows->Bytes());
-      } catch (const data::CookedOpenError&) {
+      } catch (const data::CookedFormatError&) {
         issues.push_back({
           .relative_path = table.relative_path,
           .reason = lc::IntegrityFailure::kMalformedTable,

@@ -15,7 +15,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/api_export.h>
@@ -146,13 +146,13 @@ OXGN_DATA_NDAPI auto EncodeTextureResourceDescriptor(
 
 //! Decodes a `.otex` file.
 /*!
- @return `CookedOpenFailure::kWrongFormat` for bytes that do not start with a
+ @return `CookedFormatFailure::kWrongFormat` for bytes that do not start with a
    texture descriptor's magic, `kUnsupportedVersion` for another version and
    `kCorrupt` for any other size.
 */
 OXGN_DATA_NDAPI auto DecodeTextureResourceDescriptor(
   std::span<const std::byte> bytes)
-  -> Result<TextureResourceDescriptor, CookedOpenError>;
+  -> Result<TextureResourceDescriptor, CookedFormatError>;
 
 //! Encodes a `.obuf` file.
 /*!
@@ -164,14 +164,14 @@ OXGN_DATA_NDAPI auto EncodeBufferResourceDescriptor(
 
 //! Decodes a `.obuf` file.
 /*!
- @return `CookedOpenFailure::kWrongFormat` for bytes that do not start with a
+ @return `CookedFormatFailure::kWrongFormat` for bytes that do not start with a
    buffer descriptor's magic, `kUnsupportedVersion` for another version and
    `kCorrupt` for a size its counts do not account for, a malformed string
    table, or views `EncodeBufferResourceDescriptor` refuses.
 */
 OXGN_DATA_NDAPI auto DecodeBufferResourceDescriptor(
   std::span<const std::byte> bytes)
-  -> Result<BufferResourceDescriptor, CookedOpenError>;
+  -> Result<BufferResourceDescriptor, CookedFormatError>;
 
 } // namespace oxygen::data
 

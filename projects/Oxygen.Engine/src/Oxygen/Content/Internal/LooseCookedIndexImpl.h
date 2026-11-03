@@ -57,7 +57,7 @@ public:
 
   //! Load and validate the bytes of an index file, which the index copies.
   /*!
-   @throw data::CookedOpenError `kWrongFormat` for bytes that are not an
+   @throw data::CookedFormatError `kWrongFormat` for bytes that are not an
      index, `kUnsupportedVersion` for another index version, `kCorrupt` for
      a malformed index.
   */

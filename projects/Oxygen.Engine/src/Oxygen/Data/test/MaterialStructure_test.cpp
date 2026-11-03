@@ -17,7 +17,7 @@
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Core/Types/ShaderType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Testing/GTest.h>

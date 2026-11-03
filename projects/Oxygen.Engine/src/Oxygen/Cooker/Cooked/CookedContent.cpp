@@ -34,7 +34,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedResources.h>
@@ -56,7 +56,7 @@ namespace {
   namespace fs = std::filesystem;
   namespace core = data::pak::core;
   using data::CookedDefect;
-  using data::CookedOpenError;
+  using data::CookedFormatError;
   using data::loose_cooked::FileKind;
   using lc::FileIntegrity;
   using lc::LooseCookedIndex;
@@ -77,12 +77,12 @@ namespace {
   }
 
   auto Corrupt(const CookedDefect defect, const fs::path& path,
-    const std::string_view what) -> CookedOpenError
+    const std::string_view what) -> CookedFormatError
   {
     return { defect, "'" + path.generic_string() + "': " + std::string(what) };
   }
 
-  auto Unreadable(const fs::path& path) -> CookedOpenError
+  auto Unreadable(const fs::path& path) -> CookedFormatError
   {
     return Corrupt(CookedDefect::kTruncated, path, "cannot be read");
   }
@@ -143,7 +143,7 @@ namespace {
         try {
           return data::loose_cooked::ReadResourcePayloads(
             *table.kind, rows->Bytes());
-        } catch (const CookedOpenError& error) {
+        } catch (const CookedFormatError& error) {
           throw Corrupt(error.Defect(), table_path, error.what());
         }
       }();
@@ -233,7 +233,7 @@ namespace {
   {
     const auto index_path = root / kIndexFileName;
     if (storage.KindOf(index_path) != PathKind::kFile) {
-      throw CookedOpenError(CookedDefect::kAbsent,
+      throw CookedFormatError(CookedDefect::kAbsent,
         "'" + root.generic_string() + "' holds no "
           + std::string(kIndexFileName));
     }

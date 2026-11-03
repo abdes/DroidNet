@@ -57,12 +57,12 @@
 #include <Oxygen/Content/Internal/ContentReleaseQueue.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/ContentSourceView.h>
-#include <Oxygen/Content/Internal/CookedOpenFailure.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/EvictionRegistry.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
+#include <Oxygen/Content/Internal/OpenFailure.h>
 #include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/Internal/PayloadBudget.h>
 #include <Oxygen/Content/Internal/PhysicsBindings.h>
@@ -101,7 +101,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -307,7 +307,7 @@ namespace {
  The mount maps the pak's metadata from the same handle afterwards
  (`PakFileSource`), so the file verified is the file served.
 
- @throw data::CookedOpenError `kTooSmall` for a file shorter than a footer,
+ @throw data::CookedFormatError `kTooSmall` for a file shorter than a footer,
    the footer's defect for a malformed footer, `kNoIntegrityData` for a pak
    without a CRC32, `kDigestMismatch` for a CRC32 mismatch.
  @throw std::system_error With the device's error, when the file's size or
@@ -317,7 +317,7 @@ auto VerifyPakAsync(const oxygen::serio::AsyncFile& file,
   const std::filesystem::path& path) -> oxygen::co::Co<>
 {
   using oxygen::data::CookedDefect;
-  using oxygen::data::CookedOpenError;
+  using oxygen::data::CookedFormatError;
   using oxygen::data::pak::core::PakFooter;
   namespace serio = oxygen::serio;
 
@@ -327,7 +327,7 @@ auto VerifyPakAsync(const oxygen::serio::AsyncFile& file,
   }
   const auto holds_footer = size->get() >= sizeof(PakFooter);
   if (!holds_footer) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kTooSmall, "Pak is smaller than its footer");
   }
   auto footer = PakFooter {};
@@ -342,7 +342,7 @@ auto VerifyPakAsync(const oxygen::serio::AsyncFile& file,
   const auto check = PakFile::CrcCheckOf(footer, size->get());
   if (!check) {
     LOG_F(ERROR, "Verified open of a pak without CRC32 path={}", path.string());
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kNoIntegrityData, "Pak holds no CRC32 to verify");
   }
   const auto crc = co_await serio::AsyncComputeCrc32(

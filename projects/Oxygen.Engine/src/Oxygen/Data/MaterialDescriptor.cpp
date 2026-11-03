@@ -15,7 +15,7 @@
 
 #include <Oxygen/Core/Types/ShaderRequestRules.h>
 #include <Oxygen/Core/Types/ShaderType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/MaterialDescriptor.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -26,7 +26,7 @@ namespace {
 namespace render = oxygen::data::pak::render;
 using oxygen::ShaderType;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using oxygen::data::MaterialDomain;
 
 // Every flag PakFormat_render.h defines.
@@ -57,16 +57,16 @@ auto CheckValues(const render::MaterialAssetDesc& desc) -> void
     && desc.material_domain
       <= static_cast<uint8_t>(MaterialDomain::kMaxMaterialDomain);
   if (!known_domain) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format("material domain {} is unknown", desc.material_domain));
   }
   if ((desc.flags & ~kKnownFlags) != 0U) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format(
         "material flags 0x{:08X} are unknown", desc.flags & ~kKnownFlags));
   }
   if (const auto unknown = UnknownStages(desc.shader_stages); unknown != 0U) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       fmt::format("material shader stages 0x{:08X} are unknown", unknown));
   }
   const auto emissive_in_range
@@ -75,7 +75,7 @@ auto CheckValues(const render::MaterialAssetDesc& desc) -> void
           && value <= render::kMaxMaterialEmissiveFactor;
       });
   if (!emissive_in_range) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kInvalidValue, "material emissive factor is out of range");
   }
 }
@@ -88,7 +88,7 @@ auto oxygen::data::CheckMaterialDescriptor(
 {
   CheckValues(desc);
   if (std::cmp_not_equal(shaders.size(), std::popcount(desc.shader_stages))) {
-    throw CookedOpenError(CookedDefect::kInconsistent,
+    throw CookedFormatError(CookedDefect::kInconsistent,
       fmt::format("material declares {} shader stages and has {} shaders",
         std::popcount(desc.shader_stages), shaders.size()));
   }
@@ -96,7 +96,7 @@ auto oxygen::data::CheckMaterialDescriptor(
   for (const auto& shader : shaders) {
     const auto expected = static_cast<ShaderType>(std::countr_zero(stages));
     if (shader.GetShaderType() != expected) {
-      throw CookedOpenError(CookedDefect::kInconsistent,
+      throw CookedFormatError(CookedDefect::kInconsistent,
         "material shaders are not its declared stages in ascending order");
     }
     stages &= stages - 1U;

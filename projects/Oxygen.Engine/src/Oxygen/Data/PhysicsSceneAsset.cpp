@@ -22,7 +22,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -41,7 +41,7 @@ namespace {
   [[noreturn]] auto Refuse(
     const CookedDefect defect, const std::string_view rule) -> void
   {
-    throw CookedOpenError(defect, "PhysicsSceneAsset " + std::string(rule));
+    throw CookedFormatError(defect, "PhysicsSceneAsset " + std::string(rule));
   }
 
   //! Whether `size` bytes at `offset` lie within `total` bytes.
@@ -171,16 +171,16 @@ PhysicsSceneAsset::PhysicsSceneAsset(const AssetKey key,
 auto PhysicsSceneAsset::CheckTarget(const SceneAsset& scene) const -> void
 {
   if (GetTargetSceneKey() != scene.GetAssetKey()) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kInvalidReference, "physics sidecar targets another scene");
   }
   if (GetTargetNodeCount() != scene.GetNodes().size()) {
-    throw CookedOpenError(CookedDefect::kInconsistent,
+    throw CookedFormatError(CookedDefect::kInconsistent,
       "physics sidecar node count differs from its scene's");
   }
   if (!std::ranges::equal(
         GetTargetSceneContentHash(), scene.GetContentHash())) {
-    throw CookedOpenError(CookedDefect::kDigestMismatch,
+    throw CookedFormatError(CookedDefect::kDigestMismatch,
       "physics sidecar was cooked against another version of its scene");
   }
 }

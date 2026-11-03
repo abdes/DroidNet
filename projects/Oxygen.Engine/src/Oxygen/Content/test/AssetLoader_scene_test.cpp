@@ -25,7 +25,7 @@
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/OxCo/Co.h>
@@ -155,7 +155,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetRefusesASceneWithAStaleHash)
   auto failure = std::optional<oxygen::data::CookedDefect> {};
   try {
     static_cast<void>(LoadLooseCookedScene(cooked_root, scene_key));
-  } catch (const oxygen::data::CookedOpenError& error) {
+  } catch (const oxygen::data::CookedFormatError& error) {
     failure = error.Defect();
   }
 

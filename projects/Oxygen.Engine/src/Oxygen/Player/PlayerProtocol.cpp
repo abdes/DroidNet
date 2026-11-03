@@ -19,7 +19,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Player/PlayerProtocol.h>
@@ -99,7 +99,7 @@ auto MountFailureCode(const std::exception_ptr& error) noexcept
     return kDependencyMissingCode;
   } catch (const content::SourceKeyConflictError&) {
     return kSourceKeyConflictCode;
-  } catch (const data::CookedOpenError& refused) {
+  } catch (const data::CookedFormatError& refused) {
     return refused.Defect() == data::CookedDefect::kAbsent
       ? kContentMissingCode
       : kContentRefusedCode;

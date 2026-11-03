@@ -19,8 +19,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Content/Internal/CookedOpenFailure.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
+#include <Oxygen/Content/Internal/OpenFailure.h>
 #include <Oxygen/Content/Internal/ResourceTypes.h>
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/AsyncFile.h>

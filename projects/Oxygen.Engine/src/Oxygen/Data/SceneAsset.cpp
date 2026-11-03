@@ -27,7 +27,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/LodPolicyValidation.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -50,7 +50,7 @@ namespace {
   [[noreturn]] auto Refuse(
     const CookedDefect defect, const std::string_view rule) -> void
   {
-    throw CookedOpenError(defect, "SceneAsset " + std::string(rule));
+    throw CookedFormatError(defect, "SceneAsset " + std::string(rule));
   }
 
   //! Decodes the record `RecordT` that `bytes` hold exactly; its decoder

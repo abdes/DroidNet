@@ -12,7 +12,7 @@
 #include <Oxygen/Cooker/testing/TextureBuilder.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
@@ -23,7 +23,7 @@ using oxygen::Format;
 using oxygen::TextureType;
 using oxygen::cooker::testing::TextureBuilder;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using oxygen::data::TextureResource;
 using oxygen::serio::ByteBuffer;
 
@@ -105,7 +105,7 @@ NOLINT_TEST(TextureResourceTest, RefusesAPayloadOfAnotherSize)
   try {
     static_cast<void>(
       TextureResource { desc, ByteBuffer::CopyOf(payload).value() });
-  } catch (const CookedOpenError& error) {
+  } catch (const CookedFormatError& error) {
     refused = error.Defect();
   }
   EXPECT_EQ(refused, CookedDefect::kSizeMismatch);

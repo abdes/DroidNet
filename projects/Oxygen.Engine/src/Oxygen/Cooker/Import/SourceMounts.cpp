@@ -39,7 +39,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Serio/AnyDevice.h>
 
@@ -787,7 +787,7 @@ namespace {
       auto summary = cooked::CookedSummary {};
       try {
         summary = cooked::ReadCookedSummary(Files(), mount.folder);
-      } catch (const data::CookedOpenError& error) {
+      } catch (const data::CookedFormatError& error) {
         findings.Report(mount_codes::kCookedFormatUnsupported, subject,
           mount.name, folder, error.what());
       }

@@ -12,9 +12,9 @@
 
 namespace oxygen::data {
 
-//! Why a cooked container, a pak or a loose cooked index, cannot be opened:
-//! what a caller can do about it.
-enum class CookedOpenFailure : uint8_t {
+//! Why a cooked artifact (a pak, a loose cooked index or a descriptor) is
+//! refused for breaking a rule of its format: what a caller can do about it.
+enum class CookedFormatFailure : uint8_t {
   //! Not a file of that format: its magic differs, or it is too small to
   //! hold one.
   kWrongFormat = 0,
@@ -29,7 +29,7 @@ enum class CookedOpenFailure : uint8_t {
 
 //! The rule a refused cooked artifact (a pak, its catalog and browse index, a
 //! loose cooked index or a resource descriptor) breaks. Each defect belongs
-//! to one `CookedOpenFailure`; see `FailureOf`.
+//! to one `CookedFormatFailure`; see `FailureOf`.
 enum class CookedDefect : uint8_t {
   //=== kWrongFormat ===----------------------------------------------------//
 
@@ -95,17 +95,17 @@ enum class CookedDefect : uint8_t {
 
 //! The family of `defect`: what a caller can do about it.
 [[nodiscard]] constexpr auto FailureOf(const CookedDefect defect) noexcept
-  -> CookedOpenFailure
+  -> CookedFormatFailure
 {
   switch (defect) {
   case CookedDefect::kAbsent:
   case CookedDefect::kTooSmall:
   case CookedDefect::kWrongMagic:
-    return CookedOpenFailure::kWrongFormat;
+    return CookedFormatFailure::kWrongFormat;
   case CookedDefect::kUnsupportedVersion:
-    return CookedOpenFailure::kUnsupportedVersion;
+    return CookedFormatFailure::kUnsupportedVersion;
   case CookedDefect::kNoIntegrityData:
-    return CookedOpenFailure::kUnverifiable;
+    return CookedFormatFailure::kUnverifiable;
   case CookedDefect::kTruncated:
   case CookedDefect::kSizeMismatch:
   case CookedDefect::kOutOfBounds:
@@ -124,23 +124,24 @@ enum class CookedDefect : uint8_t {
   case CookedDefect::kNotCanonical:
   case CookedDefect::kInconsistent:
   case CookedDefect::kMissingPart:
-    return CookedOpenFailure::kCorrupt;
+    return CookedFormatFailure::kCorrupt;
   }
-  return CookedOpenFailure::kCorrupt;
+  return CookedFormatFailure::kCorrupt;
 }
 
-//! A cooked artifact that cannot be opened: the rule it breaks, and a
-//! message for logs.
-class CookedOpenError final : public std::runtime_error {
+//! A cooked artifact that breaks a rule of its format: the rule, and a
+//! message for logs. A consumer refuses content that follows its format but
+//! breaks a rule of its own with an error of its own.
+class CookedFormatError final : public std::runtime_error {
 public:
-  CookedOpenError(const CookedDefect defect, const std::string& message)
+  CookedFormatError(const CookedDefect defect, const std::string& message)
     : std::runtime_error(message)
     , defect_(defect)
   {
   }
 
   //! What a caller can do about the refusal.
-  [[nodiscard]] auto Failure() const noexcept -> CookedOpenFailure
+  [[nodiscard]] auto Failure() const noexcept -> CookedFormatFailure
   {
     return FailureOf(defect_);
   }

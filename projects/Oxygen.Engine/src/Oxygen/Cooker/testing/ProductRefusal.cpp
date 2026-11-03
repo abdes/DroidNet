@@ -22,7 +22,7 @@
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -41,7 +41,7 @@ namespace {
   {
     try {
       read();
-    } catch (const data::CookedOpenError& refused) {
+    } catch (const data::CookedFormatError& refused) {
       return refused.Defect();
     } catch (const std::exception& failed) {
       throw std::logic_error(

@@ -133,7 +133,7 @@ namespace detail {
 /*!
  Reads the descriptor the context's reader holds, from its position to its
  end, and admits it as a `data::SceneAsset`, which refuses a malformed scene
- with a `data::CookedOpenError`. The loader then checks what the scene
+ with a `data::CookedFormatError`. The loader then checks what the scene
  references and registers what its load depends on.
 */
 inline auto LoadSceneAsset(const LoaderContext& context)

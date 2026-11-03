@@ -15,7 +15,7 @@
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::content::testing::AssetLoaderBasicTest;
@@ -33,7 +33,7 @@ NOLINT_TEST_F(AssetLoaderBasicTest, TruncatedPakLeavesMountsUnchanged)
   try {
     asset_loader_->AddPakFile(path);
     FAIL() << "Truncated header was accepted";
-  } catch (const oxygen::data::CookedOpenError& error) {
+  } catch (const oxygen::data::CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kTooSmall);
   }
   EXPECT_TRUE(asset_loader_->EnumerateMountedSources().empty());
@@ -44,7 +44,7 @@ NOLINT_TEST_F(AssetLoaderBasicTest, MissingPakLeavesMountsUnchanged)
   try {
     asset_loader_->AddPakFile(TempDir() / "missing.pak");
     FAIL() << "Missing source was mounted";
-  } catch (const oxygen::data::CookedOpenError& error) {
+  } catch (const oxygen::data::CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kAbsent);
   }
   EXPECT_TRUE(asset_loader_->EnumerateMountedSources().empty());
@@ -60,7 +60,7 @@ NOLINT_TEST_F(AssetLoaderBasicTest, MissingLooseRootLeavesMountsUnchanged)
   try {
     asset_loader_->AddLooseCookedRoot(empty);
     FAIL() << "A folder without an index was mounted";
-  } catch (const oxygen::data::CookedOpenError& error) {
+  } catch (const oxygen::data::CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kAbsent);
   }
   EXPECT_TRUE(asset_loader_->EnumerateMountedSources().empty());

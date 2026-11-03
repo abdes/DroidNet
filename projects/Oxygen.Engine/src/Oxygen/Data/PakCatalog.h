@@ -18,7 +18,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/api_export.h>
 
@@ -90,11 +90,11 @@ struct PakCatalog final {
   OXGN_DATA_NDAPI auto Encode() const
     -> Result<std::vector<std::byte>, std::string>;
   //! Decodes an encoded catalog; a version this build cannot read is
-  //! `CookedOpenFailure::kUnsupportedVersion`, anything malformed
+  //! `CookedFormatFailure::kUnsupportedVersion`, anything malformed
   //! `kCorrupt`: records out of the order `Encode` writes, or a digest that
   //! is not the SHA-256 of the bytes before it.
   OXGN_DATA_NDAPI static auto Decode(std::span<const std::byte> bytes)
-    -> Result<PakCatalog, CookedOpenError>;
+    -> Result<PakCatalog, CookedFormatError>;
 };
 
 } // namespace oxygen::data

@@ -27,7 +27,7 @@
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/CookedSource.h>
 
 namespace oxygen::examples::ui {
@@ -64,7 +64,7 @@ namespace {
         content::cooked::RealCookerStorage(), row.path);
       row.state = SourceState::kPending;
       row.error.clear();
-    } catch (const data::CookedOpenError& error) {
+    } catch (const data::CookedFormatError& error) {
       row.state = SourceState::kUnreadable;
       row.open_failure = error.Failure();
       row.error = error.what();

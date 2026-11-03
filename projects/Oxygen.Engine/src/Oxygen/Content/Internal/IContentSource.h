@@ -96,7 +96,7 @@ public:
   //! A reader of the descriptor of asset `key`, positioned at its start, with
   //! positions relative to it; null when the source does not hold it.
   /*!
-   @throw data::CookedOpenError when the descriptor does not record its
+   @throw data::CookedFormatError when the descriptor does not record its
      content hash.
   */
   [[nodiscard]] auto CreateAssetDescriptorReader(
@@ -186,7 +186,7 @@ public:
   //! Texture table index of the texture descriptor recorded under
   //! `virtual_path`, or nullopt when this source records none.
   /*!
-   @throw data::CookedOpenError when the recorded descriptor is not one, has
+   @throw data::CookedFormatError when the recorded descriptor is not one, has
      another version, is malformed, or disagrees with its texture table.
    @throw std::system_error when it cannot be read.
   */

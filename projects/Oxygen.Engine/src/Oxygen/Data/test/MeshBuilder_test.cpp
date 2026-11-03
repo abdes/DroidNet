@@ -18,7 +18,7 @@
 
 // Project
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -658,7 +658,7 @@ NOLINT_TEST_F(
 
   // Act & Assert
   NOLINT_EXPECT_THROW(
-    [[maybe_unused]] auto _ = builder.Build(), oxygen::data::CookedOpenError);
+    [[maybe_unused]] auto _ = builder.Build(), oxygen::data::CookedFormatError);
 }
 
 //=== Unsuccessful Build Tests ===--------------------------------------------//

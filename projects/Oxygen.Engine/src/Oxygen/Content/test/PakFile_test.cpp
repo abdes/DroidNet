@@ -27,7 +27,7 @@
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PhysicsResource.h>
@@ -51,7 +51,7 @@ using oxygen::cooker::testing::Materialize;
 using oxygen::cooker::testing::SeedBytes;
 using oxygen::cooker::testing::SourceKeyOf;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using oxygen::serio::testing::BytesEqual;
 
 constexpr auto kMount = "Tests";
@@ -74,7 +74,7 @@ auto OpenDefect(const std::vector<std::byte>& bytes) -> CookedDefect
 {
   try {
     std::ignore = Open(bytes);
-  } catch (const CookedOpenError& error) {
+  } catch (const CookedFormatError& error) {
     return error.Defect();
   }
   ADD_FAILURE() << "the pak was accepted";
@@ -142,7 +142,7 @@ auto BrowseDefect(const std::vector<std::byte>& bytes, const uint32_t textures)
 {
   try {
     std::ignore = PakFile::DecodeBrowseIndex(bytes, textures);
-  } catch (const CookedOpenError& error) {
+  } catch (const CookedFormatError& error) {
     return error.Defect();
   }
   ADD_FAILURE() << "the browse index was accepted";
@@ -203,7 +203,7 @@ NOLINT_TEST(PakFileTest, MissingFileThrows)
   try {
     static_cast<void>(PakFile(dir.Path() / "missing.pak"));
     FAIL() << "A missing pak was opened";
-  } catch (const oxygen::data::CookedOpenError& error) {
+  } catch (const oxygen::data::CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kAbsent);
   }
 }
@@ -532,7 +532,7 @@ NOLINT_TEST(PakFileTest, Crc32ValidationFailsWhenAByteChanges)
   try {
     pak.ValidateCrc32Integrity();
     ADD_FAILURE() << "the CRC32 validated";
-  } catch (const CookedOpenError& error) {
+  } catch (const CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), CookedDefect::kDigestMismatch);
   }
 }

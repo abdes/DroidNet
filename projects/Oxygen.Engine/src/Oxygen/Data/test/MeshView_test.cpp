@@ -22,7 +22,7 @@
 // Project
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 
@@ -76,7 +76,7 @@ private:
 //! Fixture for index type widening / promotion behavior (edge / format cases)
 class MeshViewIndexTypeTest : public ::testing::Test { };
 
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using ::testing::SizeIs;
 
 //! Tests MeshView construction with valid data and accessor methods.
@@ -259,25 +259,25 @@ NOLINT_TEST_F(MeshViewRefusalTest, RefusesViewsPastTheBuffers)
                    .index_count = 3,
                    .first_vertex = 10,
                    .vertex_count = 3 } }),
-    CookedOpenError);
+    CookedFormatError);
   EXPECT_THROW((MeshView { *mesh,
                  oxygen::data::pak::geometry::MeshViewDesc { .first_index = 10,
                    .index_count = 3,
                    .first_vertex = 0,
                    .vertex_count = 3 } }),
-    CookedOpenError);
+    CookedFormatError);
   EXPECT_THROW((MeshView { *mesh,
                  oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
                    .index_count = 3,
                    .first_vertex = 5,
                    .vertex_count = 1 } }),
-    CookedOpenError);
+    CookedFormatError);
   EXPECT_THROW((MeshView { *mesh,
                  oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
                    .index_count = 1,
                    .first_vertex = 3,
                    .vertex_count = 5 } }),
-    CookedOpenError);
+    CookedFormatError);
 }
 
 //! A view of no vertex and no index is refused.
@@ -393,7 +393,7 @@ NOLINT_TEST_F(MeshViewRefusalTest, RefusesLastIndexPastEnd)
         .first_vertex = 0,
         .vertex_count = static_cast<uint32_t>(vertices.size()),
       } }),
-    CookedOpenError);
+    CookedFormatError);
 }
 
 //! (9) 16-bit indices: Widened() iteration yields same sequence as source

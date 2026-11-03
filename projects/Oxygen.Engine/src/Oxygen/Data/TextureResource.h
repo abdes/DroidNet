@@ -58,7 +58,7 @@ public:
 
       @param desc Texture resource descriptor from PAK file.
       @param payload Cooked texture payload (header + layouts + data).
-      @throw CookedOpenError When the row or the payload breaks a rule.
+      @throw CookedFormatError When the row or the payload breaks a rule.
   */
   OXGN_DATA_API TextureResource(
     pak::core::TextureResourceDesc desc, serio::ByteBuffer payload);

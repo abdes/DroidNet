@@ -23,7 +23,7 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/CookedSource.h>
 
 namespace oxygen::examples::ui {
@@ -68,7 +68,7 @@ struct CookedSourceRow final {
   std::vector<content::FailedRequirement> failures;
   //! Why it is refused, missing or unreadable.
   std::string error;
-  std::optional<data::CookedOpenFailure> open_failure;
+  std::optional<data::CookedFormatFailure> open_failure;
 };
 
 //! The row's mount, such as `/Showcase`; `?` before its summary is read.
@@ -96,7 +96,7 @@ struct SourceDetails final {
 
 //! Reads the assets of the cooked source `path`, without loading them.
 /*!
- @throw data::CookedOpenError When the source cannot be read.
+ @throw data::CookedFormatError When the source cannot be read.
 */
 [[nodiscard]] auto ReadSourceDetails(const std::filesystem::path& path)
   -> SourceDetails;

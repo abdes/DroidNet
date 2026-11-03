@@ -23,7 +23,7 @@ namespace oxygen::data {
  are finite and within [0, kMaxMaterialEmissiveFactor]. Each reference checks
  its own contract when it is built (ShaderReference).
 
- @throw CookedOpenError `kInvalidValue` for an unknown domain, flag or stage,
+ @throw CookedFormatError `kInvalidValue` for an unknown domain, flag or stage,
  or an emissive factor out of range; `kInconsistent` when the references are
  not the declared stages.
 */

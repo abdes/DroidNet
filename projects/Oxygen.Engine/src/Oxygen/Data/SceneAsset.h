@@ -182,7 +182,7 @@ namespace detail {
 
   ### Admission
   Construction decodes and checks the whole descriptor and refuses it with a
-  `CookedOpenError` naming the rule it breaks. An admitted scene is immutable:
+  `CookedFormatError` naming the rule it breaks. An admitted scene is immutable:
   its accessors only read what construction decoded, so any thread may read
   it.
 
@@ -228,7 +228,7 @@ public:
   /*!
     @param key The stable asset key.
     @param data The scene descriptor, exactly.
-    @throw CookedOpenError When the descriptor breaks a rule of its format.
+    @throw CookedFormatError When the descriptor breaks a rule of its format.
   */
   OXGN_DATA_API SceneAsset(AssetKey key, std::span<const std::byte> data,
     SourceOrigin source_origin = {});
@@ -239,7 +239,7 @@ public:
 
     @param key The stable asset key.
     @param data The scene descriptor, exactly.
-    @throw CookedOpenError When the descriptor breaks a rule of its format.
+    @throw CookedFormatError When the descriptor breaks a rule of its format.
   */
   OXGN_DATA_API SceneAsset(
     AssetKey key, std::vector<std::byte> data, SourceOrigin source_origin = {});

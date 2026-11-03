@@ -15,7 +15,7 @@
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -40,7 +40,7 @@ auto HashDefect(const std::span<const std::byte> bytes)
 {
   try {
     data::CheckDescriptorHash(bytes);
-  } catch (const data::CookedOpenError& error) {
+  } catch (const data::CookedFormatError& error) {
     return error.Defect();
   }
   return std::nullopt;

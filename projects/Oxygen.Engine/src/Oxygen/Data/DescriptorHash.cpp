@@ -10,7 +10,7 @@
 #include <span>
 
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
@@ -28,7 +28,7 @@ namespace {
   auto HashField(const std::span<Byte> descriptor) -> std::span<Byte, kHashSize>
   {
     if (descriptor.size() < sizeof(AssetHeader)) {
-      throw CookedOpenError(CookedDefect::kTooSmall,
+      throw CookedFormatError(CookedDefect::kTooSmall,
         "asset descriptor is smaller than its asset header");
     }
     return descriptor.template subspan<kHashOffset, kHashSize>();
@@ -59,12 +59,12 @@ auto CheckDescriptorHash(const std::span<const std::byte> descriptor) -> void
   const auto recorded = HashField(descriptor);
   if (std::ranges::all_of(recorded,
         [](const std::byte value) -> bool { return value == std::byte {}; })) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kMissingDigest, "asset descriptor records no content hash");
   }
   const auto expected = ComputeDescriptorHash(descriptor);
   if (!std::ranges::equal(recorded, std::as_bytes(std::span(expected)))) {
-    throw CookedOpenError(CookedDefect::kDigestMismatch,
+    throw CookedFormatError(CookedDefect::kDigestMismatch,
       "asset descriptor content hash does not match its bytes");
   }
 }

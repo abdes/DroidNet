@@ -14,7 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -25,7 +25,7 @@
 namespace oxygen::data::loose_cooked {
 
 using data::CookedDefect;
-using data::CookedOpenError;
+using data::CookedFormatError;
 
 namespace {
   template <class Desc>
@@ -33,7 +33,7 @@ namespace {
     -> std::vector<ResourcePayload>
   {
     if (rows.size() % sizeof(Desc) != 0U) {
-      throw CookedOpenError(
+      throw CookedFormatError(
         CookedDefect::kWrongRowSize, "the resource table holds a partial row");
     }
     auto payloads = std::vector<ResourcePayload> {};
@@ -42,12 +42,12 @@ namespace {
       const auto desc
         = serio::CopyAt<Desc>(rows.subspan(row * sizeof(Desc), sizeof(Desc)));
       if (!desc) {
-        throw CookedOpenError(CookedDefect::kWrongRowSize,
+        throw CookedFormatError(CookedDefect::kWrongRowSize,
           "the resource table holds a partial row");
       }
       if constexpr (std::is_same_v<Desc, pak::core::TextureResourceDesc>) {
         if (!pak::core::HasSupportedCompression(*desc)) {
-          throw CookedOpenError(CookedDefect::kInvalidValue,
+          throw CookedFormatError(CookedDefect::kInvalidValue,
             "a texture row records a compression its format lacks");
         }
       }
@@ -55,7 +55,7 @@ namespace {
         continue;
       }
       if (base::IsAllZero(desc->content_hash)) {
-        throw CookedOpenError(
+        throw CookedFormatError(
           CookedDefect::kMissingDigest, "a resource row has no content digest");
       }
       payloads.push_back({

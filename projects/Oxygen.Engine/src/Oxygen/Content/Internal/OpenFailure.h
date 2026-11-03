@@ -9,7 +9,7 @@
 #include <filesystem>
 #include <system_error>
 
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 
 namespace oxygen::content::internal {
 
@@ -24,7 +24,7 @@ namespace oxygen::content::internal {
   const std::error_code& error, const std::filesystem::path& path) -> void
 {
   if (error == std::errc::no_such_file_or_directory) {
-    throw data::CookedOpenError(data::CookedDefect::kAbsent,
+    throw data::CookedFormatError(data::CookedDefect::kAbsent,
       "'" + path.generic_string() + "' does not exist");
   }
   throw std::system_error(error, "open '" + path.string() + "'");

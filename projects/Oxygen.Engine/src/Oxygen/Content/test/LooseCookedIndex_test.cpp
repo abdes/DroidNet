@@ -29,7 +29,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedResources.h>
@@ -52,7 +52,7 @@ using oxygen::content::lc::LooseCookedIndex;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using oxygen::data::loose_cooked::AssetEntry;
 using oxygen::data::loose_cooked::FileKind;
 using oxygen::data::loose_cooked::FileRecord;
@@ -194,7 +194,7 @@ auto RefusalOf(const Bytes& bytes) -> std::pair<CookedDefect, std::string>
 {
   try {
     static_cast<void>(LooseCookedIndexImpl::LoadFromBytes(bytes));
-  } catch (const CookedOpenError& error) {
+  } catch (const CookedFormatError& error) {
     return { error.Defect(), error.what() };
   }
   ADD_FAILURE() << "the index loaded";
@@ -207,7 +207,7 @@ auto ExpectDefect(const Bytes& bytes, const CookedDefect defect,
   try {
     static_cast<void>(LooseCookedIndexImpl::LoadFromBytes(bytes));
     ADD_FAILURE() << "the index loaded";
-  } catch (const CookedOpenError& error) {
+  } catch (const CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), defect);
     EXPECT_THAT(error.what(), testing::HasSubstr(std::string(message)));
   }

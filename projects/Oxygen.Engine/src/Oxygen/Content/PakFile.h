@@ -22,7 +22,7 @@
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PhysicsResource.h>
@@ -74,7 +74,7 @@ public:
     //! Check the footer's CRC32 of the whole pak, in one sequential pass,
     //! before parsing anything past the header and footer, so the parse
     //! reads pages the pass already brought in. A pak with no CRC32 is
-    //! refused (`CookedOpenFailure::kUnverifiable`).
+    //! refused (`CookedFormatFailure::kUnverifiable`).
     kCrc32,
   };
 
@@ -89,9 +89,9 @@ public:
    the browse index holds canonical paths in the pak's mount, of assets its
    directory holds.
 
-   Each refusal names the rule it breaks (`CookedOpenError::Defect`).
+   Each refusal names the rule it breaks (`CookedFormatError::Defect`).
 
-   @throw data::CookedOpenError When the file is not a pak, has a format
+   @throw data::CookedFormatError When the file is not a pak, has a format
      version this build cannot read, is malformed, or fails `verification`.
    @throw std::system_error When the file cannot be opened.
   */
@@ -101,9 +101,9 @@ public:
   //! Reads the pak `device` holds; `name` stands for its path in logs.
   /*!
    @throw std::invalid_argument When `device` is not contiguous.
-   @throw data::CookedOpenError When the bytes are not a pak, have a format
+   @throw data::CookedFormatError When the bytes are not a pak, have a format
      version this build cannot read, or are malformed.
-   @throw data::CookedOpenError `kCorrupt` too when `verification` checks the
+   @throw data::CookedFormatError `kCorrupt` too when `verification` checks the
      CRC32 and it does not match.
   */
   OXGN_CNTT_API PakFile(serio::AnyDevice device, std::filesystem::path name,
@@ -112,7 +112,7 @@ public:
   //! Checks a pak header: its magic, format version, source identity and
   //! reserved bytes.
   /*!
-   @throw data::CookedOpenError `kWrongMagic`, `kUnsupportedVersion`,
+   @throw data::CookedFormatError `kWrongMagic`, `kUnsupportedVersion`,
      `kInvalidIdentity` or `kReservedNotZero`.
   */
   OXGN_CNTT_API static auto CheckHeader(
@@ -122,7 +122,7 @@ public:
   //! reserved bytes, and that the embedded catalog lies between the header
   //! and the footer.
   /*!
-   @throw data::CookedOpenError `kTruncated` for another footer magic,
+   @throw data::CookedFormatError `kTruncated` for another footer magic,
      `kReservedNotZero`, `kTooSmall`, `kMissingPart` for no catalog and
      `kOutOfBounds` for one outside the body.
   */
@@ -147,7 +147,7 @@ public:
   //! Checks the CRC32 `actual` of the pak at `path` against `check`, and
   //! logs the outcome.
   /*!
-   @throw data::CookedOpenError `kCorrupt` when they differ.
+   @throw data::CookedFormatError `kCorrupt` when they differ.
   */
   OXGN_CNTT_API static auto CheckCrc32(const CrcCheck& check, uint32_t actual,
     const std::filesystem::path& path) -> void;
@@ -224,7 +224,7 @@ public:
 
   //! Decodes a browse index whose textures index a texture table of
   //! `texture_count` rows; `bytes` must hold exactly the index its header
-  //! declares. An unreadable one throws `data::CookedOpenError`.
+  //! declares. An unreadable one throws `data::CookedFormatError`.
   OXGN_CNTT_NDAPI static auto DecodeBrowseIndex(
     std::span<const std::byte> bytes, uint32_t texture_count) -> BrowseContents;
 
@@ -261,7 +261,7 @@ public:
   /*!
    If the footer's `pak_crc32` is zero, validation is skipped.
 
-   @throw data::CookedOpenError `kCorrupt` when the computed CRC32 does not
+   @throw data::CookedFormatError `kCorrupt` when the computed CRC32 does not
      match the footer.
    @throw std::system_error When the file cannot be read.
   */

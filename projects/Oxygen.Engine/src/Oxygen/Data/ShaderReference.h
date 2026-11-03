@@ -36,7 +36,7 @@ public:
    identifier (IsShaderEntryPoint) and the defines canonical
    (CanonicalShaderDefines), as shader requests require.
 
-   @throw CookedOpenError `kOutOfBounds` when a string offset is not in
+   @throw CookedFormatError `kOutOfBounds` when a string offset is not in
    `strings`; `kInvalidValue` for an unknown shader type, an entry point that is
    not an identifier or malformed defines; `kNotCanonical` for defines not
    sorted by name; `kInvalidPath` for a source path that is not canonical.

@@ -28,7 +28,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/LodPolicyValidation.h>
@@ -41,7 +41,7 @@
 
 using oxygen::data::BufferResource;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using oxygen::data::Mesh;
 using oxygen::data::MeshView;
 using oxygen::data::SubMesh;
@@ -64,7 +64,7 @@ auto IndexTypeOf(const BufferResource& buffer) -> IndexType
   const auto wide
     = format == oxygen::Format::kR32UInt || (unformatted && stride == 4U);
   if (!narrow && !wide) {
-    throw CookedOpenError(CookedDefect::kInvalidValue,
+    throw CookedFormatError(CookedDefect::kInvalidValue,
       "The index buffer does not hold 16-bit or 32-bit indices");
   }
   return narrow ? IndexType::kUInt16 : IndexType::kUInt32;
@@ -75,11 +75,11 @@ auto CheckVertexBuffer(const BufferResource& buffer) -> void
 {
   const auto bytes = buffer.GetData();
   if (bytes.size() % sizeof(Vertex) != 0) {
-    throw CookedOpenError(CookedDefect::kWrongRowSize,
+    throw CookedFormatError(CookedDefect::kWrongRowSize,
       "The vertex buffer does not hold whole vertices");
   }
   if (std::bit_cast<std::uintptr_t>(bytes.data()) % alignof(Vertex) != 0) {
-    throw CookedOpenError(CookedDefect::kMisaligned,
+    throw CookedFormatError(CookedDefect::kMisaligned,
       "The vertex buffer is not aligned for its vertices");
   }
 }
@@ -97,7 +97,7 @@ auto CheckView(const MeshView& view, const std::size_t vertex_count,
   const auto holds_indices = view.FirstIndex() <= indices.Count()
     && view.IndexCount() <= indices.Count() - view.FirstIndex();
   if (!holds_vertices || !holds_indices) {
-    throw CookedOpenError(CookedDefect::kOutOfBounds,
+    throw CookedFormatError(CookedDefect::kOutOfBounds,
       fmt::format("The mesh view of {} vertices from {} and {} indices from {} "
                   "is past its buffers of {} vertices and {} indices",
         view.VertexCount(), view.FirstVertex(), view.IndexCount(),
@@ -110,7 +110,7 @@ auto CheckView(const MeshView& view, const std::size_t vertex_count,
       return index < view.VertexCount();
     });
   if (!in_view) {
-    throw CookedOpenError(CookedDefect::kOutOfBounds,
+    throw CookedFormatError(CookedDefect::kOutOfBounds,
       fmt::format("An index of the mesh view is past its {} vertices",
         view.VertexCount()));
   }
@@ -207,7 +207,7 @@ auto Mesh::SetBufferResources(std::shared_ptr<BufferResource> vertex_buffer,
     throw std::logic_error("A mesh that owns its vertices binds no buffers");
   }
   if (!vertex_buffer || !index_buffer) {
-    throw CookedOpenError(CookedDefect::kMissingPart,
+    throw CookedFormatError(CookedDefect::kMissingPart,
       "The mesh is bound without its vertex or its index buffer");
   }
   CheckVertexBuffer(*vertex_buffer);
@@ -394,24 +394,24 @@ auto oxygen::data::GeometryAsset::ApplySurfaceTable(
   const std::span<const pak::geometry::SurfaceDesc> surface_table) -> void
 {
   if (surface_table.size() != surfaces_.surfaces.size()) {
-    throw CookedOpenError(CookedDefect::kInconsistent,
+    throw CookedFormatError(CookedDefect::kInconsistent,
       "Geometry surface table does not list the declared surfaces");
   }
   constexpr auto kKnownFlags = pak::geometry::kSurfaceFlag_Visible
     | pak::geometry::kSurfaceFlag_CastsShadows;
   for (const auto& entry : surface_table) {
     if ((entry.flags & ~kKnownFlags) != 0U) {
-      throw CookedOpenError(
+      throw CookedFormatError(
         CookedDefect::kInvalidValue, "Geometry surface flags are unknown");
     }
     const auto found = std::ranges::find(
       surfaces_.surfaces, entry.surface_id, &Surface::surface_id);
     if (found == surfaces_.surfaces.end()) {
-      throw CookedOpenError(CookedDefect::kInconsistent,
+      throw CookedFormatError(CookedDefect::kInconsistent,
         "Geometry surface table does not list the declared surfaces");
     }
     if (found->defaults.has_value()) {
-      throw CookedOpenError(CookedDefect::kDuplicate,
+      throw CookedFormatError(CookedDefect::kDuplicate,
         "Geometry surface table lists a surface twice");
     }
     found->defaults = SurfaceDefaults {
@@ -421,7 +421,7 @@ auto oxygen::data::GeometryAsset::ApplySurfaceTable(
     };
   }
   if (!IsValidLodPolicy(desc_.default_lod_policy)) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kInvalidValue, "Geometry default LOD policy is invalid");
   }
   default_lod_policy_ = desc_.default_lod_policy;

@@ -15,7 +15,7 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -32,7 +32,7 @@ using lc::FileKind;
 using lc::ResourcePayloadFailure;
 using oxygen::base::ComputeSha256;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using oxygen::serio::MemoryFile;
 
 //! A data file holding `payloads` back to back, and the buffer rows that
@@ -82,7 +82,7 @@ auto ReadDefect(const FileKind table, const std::span<const std::byte> rows)
 {
   try {
     static_cast<void>(lc::ReadResourcePayloads(table, rows));
-  } catch (const CookedOpenError& error) {
+  } catch (const CookedFormatError& error) {
     return error.Defect();
   }
   ADD_FAILURE() << "the rows were read";

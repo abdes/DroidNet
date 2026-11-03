@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/api_export.h>
@@ -66,7 +66,7 @@ OXGN_DATA_NDAPI auto IsResourceTableSize(FileKind table, uint64_t size) -> bool;
  are left out: they hold no bytes to verify.
 
  @throw std::invalid_argument when `table` is not a resource table kind.
- @throw CookedOpenError `kWrongRowSize` when `rows` ends in a partial row,
+ @throw CookedFormatError `kWrongRowSize` when `rows` ends in a partial row,
    `kMissingDigest` when a row of a payload has no digest, `kInvalidValue`
    when a texture row records a compression its format does not imply.
 */

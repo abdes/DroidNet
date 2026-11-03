@@ -24,12 +24,12 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Content/Internal/CookedOpenFailure.h>
+#include <Oxygen/Content/Internal/OpenFailure.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
@@ -45,7 +45,7 @@
 using oxygen::content::PakFile;
 using oxygen::data::AssetKey;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using oxygen::data::pak::core::AssetDirectoryEntry;
 using oxygen::data::pak::core::kPakMetadataAlignment;
 using oxygen::data::pak::core::kPakPayloadAlignment;
@@ -80,7 +80,7 @@ auto Section(const Bytes bytes, const uint64_t offset, const uint64_t size,
 {
   const auto in_bytes = offset <= bytes.size() && size <= bytes.size() - offset;
   if (!in_bytes) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kOutOfBounds, std::string(what) + " is out of bounds");
   }
   return bytes.subspan(static_cast<size_t>(offset), static_cast<size_t>(size));
@@ -110,7 +110,7 @@ auto ReadPakHeader(const Bytes bytes, oxygen::data::SourceKey& source_key_out)
   if (!header_result) {
     LOG_F(
       ERROR, "Failed to read pak header: {}", header_result.error().message());
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kTooSmall, "File too small to hold a pak header");
   }
 
@@ -131,7 +131,7 @@ auto ReadPakFooter(const Bytes bytes) -> PakFooter
   if (bytes.size() < sizeof(PakHeader) + sizeof(PakFooter)) {
     LOG_F(ERROR, "Pak file is smaller than a header and a footer: {} bytes",
       bytes.size());
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kTooSmall, "File too small to hold a pak");
   }
   const auto footer_result
@@ -140,7 +140,7 @@ auto ReadPakFooter(const Bytes bytes) -> PakFooter
   if (!footer_result) {
     LOG_F(
       ERROR, "Failed to read pak footer: {}", footer_result.error().message());
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kTruncated, "Failed to read pak footer");
   }
 
@@ -163,14 +163,14 @@ auto ReadAndIndexDirectory(const Bytes bytes, const PakFooter& footer,
     = footer.asset_count <= footer.directory_size / kEntrySize
     && footer.directory_size == footer.asset_count * kEntrySize;
   if (!sized_for_its_entries) {
-    throw CookedOpenError(CookedDefect::kSizeMismatch,
+    throw CookedFormatError(CookedDefect::kSizeMismatch,
       "PAK asset directory size does not match its asset count");
   }
   const auto body_end = file_size - sizeof(PakFooter);
   const auto in_body = footer.directory_offset <= body_end
     && footer.directory_size <= body_end - footer.directory_offset;
   if (!in_body) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kOutOfBounds, "PAK asset directory is out of bounds");
   }
 
@@ -186,31 +186,31 @@ auto ReadAndIndexDirectory(const Bytes bytes, const PakFooter& footer,
     if (!entry_result) {
       LOG_F(ERROR, "Failed to read asset directory entry: {}",
         entry_result.error().message());
-      throw CookedOpenError(
+      throw CookedFormatError(
         CookedDefect::kTruncated, "Failed to read asset directory entries");
     }
     const auto& entry = *entry_result;
     if (!IsZero(entry._reserved)) {
-      throw CookedOpenError(CookedDefect::kReservedNotZero,
+      throw CookedFormatError(CookedDefect::kReservedNotZero,
         "PAK directory entry reserved bytes are not zero");
     }
     const auto names_its_position
       = entry.entry_offset == footer.directory_offset + (i * kEntrySize);
     if (!names_its_position) {
-      throw CookedOpenError(CookedDefect::kInconsistent,
+      throw CookedFormatError(CookedDefect::kInconsistent,
         "PAK directory entry offset does not match its position");
     }
     const auto before_directory = entry.desc_offset <= footer.directory_offset
       && entry.desc_size <= footer.directory_offset - entry.desc_offset;
     if (!before_directory) {
-      throw CookedOpenError(
+      throw CookedFormatError(
         CookedDefect::kOverlap, "PAK descriptor overlaps the directory");
     }
     metadata_begin
       = std::max(metadata_begin, entry.desc_offset + entry.desc_size);
     directory.push_back(entry);
     if (!key_to_index.emplace(entry.asset_key, directory.size() - 1).second) {
-      throw CookedOpenError(CookedDefect::kDuplicate,
+      throw CookedFormatError(CookedDefect::kDuplicate,
         "PAK asset directory contains a duplicate key");
     }
   }
@@ -236,7 +236,7 @@ auto ValidateReferenceInventories(const Bytes bytes, const PakFooter& footer,
     if (size == 0U) {
       const auto located_nowhere = references.offset == 0U;
       if (!located_nowhere) {
-        throw CookedOpenError(CookedDefect::kInvalidReference,
+        throw CookedFormatError(CookedDefect::kInvalidReference,
           "Empty PAK reference inventory has a nonzero offset");
       }
       continue;
@@ -244,13 +244,13 @@ auto ValidateReferenceInventories(const Bytes bytes, const PakFooter& footer,
     // Inventories follow the descriptors, back to back, in directory order.
     const auto follows_previous = references.offset == next_inventory;
     if (!follows_previous) {
-      throw CookedOpenError(CookedDefect::kOverlap,
+      throw CookedFormatError(CookedDefect::kOverlap,
         "PAK reference inventories are not contiguous after the descriptors");
     }
     const auto before_directory = references.offset <= footer.directory_offset
       && size <= footer.directory_offset - references.offset;
     if (!before_directory) {
-      throw CookedOpenError(CookedDefect::kOverlap,
+      throw CookedFormatError(CookedDefect::kOverlap,
         "PAK reference inventory overlaps the directory");
     }
     next_inventory += size;
@@ -259,12 +259,12 @@ auto ValidateReferenceInventories(const Bytes bytes, const PakFooter& footer,
         static_cast<size_t>(references.offset), static_cast<size_t>(size)),
       references.resource_count, references.key_count);
     if (!decoded) {
-      throw CookedOpenError(CookedDefect::kInvalidReference,
+      throw CookedFormatError(CookedDefect::kInvalidReference,
         "PAK reference inventory: " + decoded.error());
     }
     if (const auto bounded = decoded->ValidateResourceBounds(counts);
       !bounded) {
-      throw CookedOpenError(CookedDefect::kInvalidReference,
+      throw CookedFormatError(CookedDefect::kInvalidReference,
         "PAK reference inventory: " + bounded.error());
     }
   }
@@ -302,11 +302,11 @@ auto CheckSections(std::vector<PakSection> sections, const uint64_t file_size)
     const auto in_body = section.offset >= begin && section.offset <= end
       && section.size <= end - section.offset;
     if (!in_body) {
-      throw CookedOpenError(CookedDefect::kOutOfBounds,
+      throw CookedFormatError(CookedDefect::kOutOfBounds,
         std::string(section.what) + " lies outside the pak body");
     }
     if (section.offset % section.alignment != 0U) {
-      throw CookedOpenError(CookedDefect::kMisaligned,
+      throw CookedFormatError(CookedDefect::kMisaligned,
         std::string(section.what) + " is not aligned");
     }
   }
@@ -314,7 +314,7 @@ auto CheckSections(std::vector<PakSection> sections, const uint64_t file_size)
   for (const auto& [lower, upper] : sections | std::views::adjacent<2>) {
     const auto disjoint = lower.offset + lower.size <= upper.offset;
     if (!disjoint) {
-      throw CookedOpenError(CookedDefect::kOverlap,
+      throw CookedFormatError(CookedDefect::kOverlap,
         std::string(lower.what) + " overlaps " + std::string(upper.what));
     }
   }
@@ -329,7 +329,7 @@ auto TableSection(const ResourceTable& table, const std::string_view what)
   const auto rows_have_their_size
     = table.count == 0U || table.entry_size == sizeof(Desc);
   if (!rows_have_their_size) {
-    throw CookedOpenError(CookedDefect::kWrongRowSize,
+    throw CookedFormatError(CookedDefect::kWrongRowSize,
       std::string(what) + " has the wrong entry size");
   }
   return {
@@ -350,19 +350,19 @@ auto CheckRows(const Bytes bytes, const ResourceTable& table,
     const auto desc = oxygen::serio::CopyAt<Desc>(
       bytes, oxygen::serio::ByteOffset { table.offset + (row * sizeof(Desc)) });
     if (!desc) {
-      throw CookedOpenError(
+      throw CookedFormatError(
         CookedDefect::kTruncated, std::string(what) + " row is truncated");
     }
     if constexpr (requires { desc->_reserved; }) {
       if (!IsZero(desc->_reserved)) {
-        throw CookedOpenError(CookedDefect::kReservedNotZero,
+        throw CookedFormatError(CookedDefect::kReservedNotZero,
           std::string(what) + " row reserved bytes are not zero");
       }
     }
     if constexpr (std::is_same_v<Desc,
                     oxygen::data::pak::core::TextureResourceDesc>) {
       if (!oxygen::data::pak::core::HasSupportedCompression(*desc)) {
-        throw CookedOpenError(CookedDefect::kInvalidValue,
+        throw CookedFormatError(CookedDefect::kInvalidValue,
           std::string(what) + " row records a compression its format lacks");
       }
     }
@@ -374,16 +374,16 @@ auto CheckRows(const Bytes bytes, const ResourceTable& table,
       && offset - region.offset <= region.size
       && desc->size_bytes <= region.size - (offset - region.offset);
     if (!in_region) {
-      throw CookedOpenError(CookedDefect::kOutOfBounds,
+      throw CookedFormatError(CookedDefect::kOutOfBounds,
         std::string(what) + " row lies outside its region");
     }
     if (offset % kPakPayloadAlignment != 0U) {
-      throw CookedOpenError(CookedDefect::kMisaligned,
+      throw CookedFormatError(CookedDefect::kMisaligned,
         std::string(what) + " row does not start on a payload boundary");
     }
     if constexpr (requires { desc->content_hash; }) {
       if (oxygen::base::IsAllZero(desc->content_hash)) {
-        throw CookedOpenError(CookedDefect::kMissingDigest,
+        throw CookedFormatError(CookedDefect::kMissingDigest,
           std::string(what) + " row has no content digest");
       }
     }
@@ -393,7 +393,7 @@ auto CheckRows(const Bytes bytes, const ResourceTable& table,
 auto CheckFooterAlignment(const Bytes bytes) -> void
 {
   if ((bytes.size() - sizeof(PakFooter)) % kPakMetadataAlignment != 0U) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kMisaligned, "PAK footer is not aligned");
   }
 }
@@ -445,7 +445,7 @@ auto AppendResourceRegions(
        }) {
     // A region is padded to whole payload boundaries.
     if (region.size % kPakPayloadAlignment != 0U) {
-      throw CookedOpenError(CookedDefect::kMisaligned,
+      throw CookedFormatError(CookedDefect::kMisaligned,
         std::string(what) + " is not padded to a payload boundary");
     }
     sections.push_back({
@@ -519,17 +519,17 @@ auto CheckBrowseContents(const PakFile::BrowseContents& contents,
   };
   for (const auto& entry : contents.entries) {
     if (!in_mount(entry.virtual_path)) {
-      throw CookedOpenError(CookedDefect::kInconsistent,
+      throw CookedFormatError(CookedDefect::kInconsistent,
         "Browse index path lies outside the pak's mount");
     }
     if (!key_to_index.contains(entry.asset_key)) {
-      throw CookedOpenError(CookedDefect::kInconsistent,
+      throw CookedFormatError(CookedDefect::kInconsistent,
         "Browse index names an asset the pak does not hold");
     }
   }
   for (const auto& texture : contents.textures) {
     if (!in_mount(texture.virtual_path)) {
-      throw CookedOpenError(CookedDefect::kInconsistent,
+      throw CookedFormatError(CookedDefect::kInconsistent,
         "Browse index path lies outside the pak's mount");
     }
   }
@@ -542,14 +542,14 @@ auto LoadPakCatalog(const Bytes bytes, const ParsedPakMetadata& metadata)
   auto catalog = oxygen::data::PakCatalog::Decode(Section(
     bytes, footer.catalog_offset, footer.catalog_size, "Embedded PAK catalog"));
   if (!catalog) {
-    throw CookedOpenError(catalog.error());
+    throw CookedFormatError(catalog.error());
   }
   const auto describes_its_container
     = catalog->source_key == metadata.source_key
     && catalog->content_version == metadata.header.content_version
     && catalog->entries.size() == metadata.directory.size();
   if (!describes_its_container) {
-    throw CookedOpenError(CookedDefect::kInconsistent,
+    throw CookedFormatError(CookedDefect::kInconsistent,
       "Embedded PAK catalog disagrees with its container");
   }
   for (const auto& entry : catalog->entries) {
@@ -557,7 +557,7 @@ auto LoadPakCatalog(const Bytes bytes, const ParsedPakMetadata& metadata)
     const auto in_directory = found != metadata.key_to_index.end()
       && metadata.directory.at(found->second).asset_type == entry.asset_type;
     if (!in_directory) {
-      throw CookedOpenError(CookedDefect::kInconsistent,
+      throw CookedFormatError(CookedDefect::kInconsistent,
         "Embedded PAK catalog disagrees with its directory");
     }
   }
@@ -585,7 +585,7 @@ auto VerifyDeviceCrc32(const oxygen::serio::AnyDevice& device,
     if (missing == MissingCrc::kRefuse) {
       LOG_F(
         ERROR, "Verified open of a pak without CRC32 path={}", path.string());
-      throw CookedOpenError(
+      throw CookedFormatError(
         CookedDefect::kNoIntegrityData, "Pak holds no CRC32 to verify");
     }
     LOG_F(
@@ -624,7 +624,7 @@ namespace {
 using BrowseReader = oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream>;
 
 auto BrowseError(const CookedDefect defect, const std::string& message)
-  -> CookedOpenError
+  -> CookedFormatError
 {
   return { defect, "Browse index: " + message };
 }
@@ -827,7 +827,7 @@ PakFile::PakFile(serio::AnyDevice device, std::filesystem::path name,
   }
   bytes_ = *view;
 
-  // Every refusal of the file's bytes throws `CookedOpenError` where its rule
+  // Every refusal of the file's bytes throws `CookedFormatError` where its rule
   // is checked; I/O failures throw `std::system_error`.
   const auto bytes = bytes_;
   auto metadata = LoadPakMetadata(bytes, [&](const PakFooter& footer) -> void {
@@ -845,7 +845,7 @@ PakFile::PakFile(serio::AnyDevice device, std::filesystem::path name,
 
   // Every pak holds its browse index; the catalog check bounds it.
   if (footer_.browse_index_size == 0U) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kMissingPart, "The pak holds no browse index");
   }
   auto browse = DecodeBrowseIndex(Section(bytes, footer_.browse_index_offset,
@@ -864,7 +864,7 @@ auto PakFile::CheckHeader(const PakHeader& header) -> void
   if (!std::ranges::equal(
         std::span { header.magic }, oxygen::data::pak::core::kPakHeaderMagic)) {
     LOG_F(ERROR, "Invalid pak file header magic");
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kWrongMagic, "Invalid pak file header magic");
   }
   if (header.version != oxygen::data::pak::core::kCurrentPakFormatVersion) {
@@ -873,17 +873,17 @@ auto PakFile::CheckHeader(const PakHeader& header) -> void
       + std::to_string(oxygen::data::pak::core::kCurrentPakFormatVersion)
       + " only).";
     LOG_F(ERROR, "{}", msg);
-    throw CookedOpenError(CookedDefect::kUnsupportedVersion, msg);
+    throw CookedFormatError(CookedDefect::kUnsupportedVersion, msg);
   }
   if (!oxygen::data::SourceKey::FromBytes(header.source_identity).has_value()) {
     LOG_F(
       ERROR, "Invalid pak source_identity: expected canonical UUIDv7 bytes");
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kInvalidIdentity, "Invalid pak file source identity");
   }
   if (!IsZero(header._reserved)) {
     LOG_F(ERROR, "Pak header reserved bytes are not zero");
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kReservedNotZero, "Pak header reserved bytes are not zero");
   }
 }
@@ -897,20 +897,20 @@ auto PakFile::CheckFooter(const PakFooter& footer, const uint64_t file_size)
   if (!std::ranges::equal(footer_magic, expected_footer_magic)) {
     LOG_F(ERROR, "Invalid pak file footer magic");
     // A pak whose last bytes are no footer was cut short or appended to.
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kTruncated, "Invalid pak file footer magic");
   }
   if (!IsZero(footer._reserved)) {
     LOG_F(ERROR, "Pak footer reserved bytes are not zero");
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kReservedNotZero, "Pak footer reserved bytes are not zero");
   }
   if (file_size < sizeof(PakHeader) + sizeof(PakFooter)) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kTooSmall, "File too small to hold a pak");
   }
   if (footer.catalog_size == 0U) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kMissingPart, "The pak holds no embedded catalog");
   }
   const auto body_end = file_size - sizeof(PakFooter);
@@ -918,7 +918,7 @@ auto PakFile::CheckFooter(const PakFooter& footer, const uint64_t file_size)
     && footer.catalog_offset <= body_end
     && footer.catalog_size <= body_end - footer.catalog_offset;
   if (!catalog_in_body) {
-    throw CookedOpenError(
+    throw CookedFormatError(
       CookedDefect::kOutOfBounds, "Embedded PAK catalog is out of bounds");
   }
 }
@@ -945,7 +945,8 @@ auto PakFile::CheckCrc32(const CrcCheck& check, const uint32_t actual,
   if (actual != check.expected) {
     LOG_F(ERROR, "CRC32 mismatch path={} expected=0x{:08x} actual=0x{:08x}",
       path.string(), check.expected, actual);
-    throw CookedOpenError(CookedDefect::kDigestMismatch, "Pak CRC32 mismatch");
+    throw CookedFormatError(
+      CookedDefect::kDigestMismatch, "Pak CRC32 mismatch");
   }
   LOG_F(INFO, "CRC32 OK path={} crc32=0x{:08x}", path.string(), actual);
 }

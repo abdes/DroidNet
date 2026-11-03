@@ -57,7 +57,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -1364,7 +1364,7 @@ namespace {
       static_cast<void>(co::Run(loop,
         loader.PrepareMountsAsync(
           { { .kind = ContentMount::Kind::kPakFile, .path = corrupt_pak } })));
-    } catch (const data::CookedOpenError& error) {
+    } catch (const data::CookedFormatError& error) {
       failure = error.Defect();
     }
 
@@ -1392,7 +1392,7 @@ namespace {
       static_cast<void>(co::Run(loop,
         loader.PrepareMountsAsync(
           { { .kind = ContentMount::Kind::kPakFile, .path = pak } })));
-    } catch (const data::CookedOpenError& error) {
+    } catch (const data::CookedFormatError& error) {
       return error.Defect();
     }
     return std::nullopt;
@@ -1743,7 +1743,7 @@ namespace {
     std::filesystem::rename(engine_pak, TempDir() / "moved.pak");
 
     // Act and Assert
-    NOLINT_EXPECT_THROW(loader.ClearMounts(), data::CookedOpenError);
+    NOLINT_EXPECT_THROW(loader.ClearMounts(), data::CookedFormatError);
     EXPECT_EQ(loader.EnumerateMountedSources().size(), 2U);
   }
 

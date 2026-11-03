@@ -17,7 +17,7 @@
 #include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Testing/GTest.h>
@@ -68,7 +68,7 @@ auto TargetDefect(const data::SceneAsset& scene,
     = data::PhysicsSceneAsset(Key("/Game/Main.opscene"), sidecar);
   try {
     sidecar_asset.CheckTarget(scene);
-  } catch (const data::CookedOpenError& error) {
+  } catch (const data::CookedFormatError& error) {
     return error.Defect();
   }
   return std::nullopt;

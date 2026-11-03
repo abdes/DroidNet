@@ -25,7 +25,7 @@
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -442,7 +442,7 @@ NOLINT_TEST_F(AssetLoaderBasicTest, AddLooseCookedRootInvalidTexturesTable)
   // Act & Assert
   NOLINT_EXPECT_THROW(
     { asset_loader_->AddLooseCookedRoot(cooked_root); },
-    oxygen::data::CookedOpenError);
+    oxygen::data::CookedFormatError);
 }
 
 NOLINT_TEST_F(AssetLoaderBasicTest, LoadAssetNonExistentReturnsNull)

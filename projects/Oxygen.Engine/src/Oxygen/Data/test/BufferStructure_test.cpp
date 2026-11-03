@@ -14,7 +14,7 @@
 #include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Testing/GTest.h>
@@ -25,7 +25,7 @@ using oxygen::Format;
 using oxygen::cooker::testing::BufferRefusal;
 using oxygen::data::BufferResource;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using oxygen::data::pak::core::BufferResourceDesc;
 using Usage = oxygen::data::BufferResource::UsageFlags;
 
@@ -158,7 +158,7 @@ NOLINT_TEST_F(BufferStructureTest, RefusesAPayloadOfAnotherSize)
   try {
     static_cast<void>(
       BufferResource(desc, oxygen::serio::ByteBuffer::CopyOf(payload).value()));
-  } catch (const CookedOpenError& error) {
+  } catch (const CookedFormatError& error) {
     refused = error.Defect();
   }
   EXPECT_EQ(refused, CookedDefect::kSizeMismatch);

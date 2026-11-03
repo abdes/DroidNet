@@ -20,7 +20,7 @@
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/CookedOpenError.h> // IWYU pragma: export
+#include <Oxygen/Data/CookedFormatError.h> // IWYU pragma: export
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 
@@ -117,7 +117,7 @@ public:
     const std::filesystem::path& index_path) -> LooseCookedIndex;
   //! Loads the bytes of an index file, which the index copies.
   /*!
-   @throw data::CookedOpenError `kWrongFormat` for bytes that are not an
+   @throw data::CookedFormatError `kWrongFormat` for bytes that are not an
      index, `kUnsupportedVersion` for another index version, `kCorrupt` for
      a malformed index. `Defect()` names the rule the bytes break.
   */

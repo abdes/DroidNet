@@ -80,7 +80,7 @@ public:
   //! A view of `desc`'s ranges of the buffers of `mesh`.
   /*!
    @throw std::invalid_argument When the view draws no vertex or no index.
-   @throw CookedOpenError `kOutOfBounds` when the mesh holds its buffers and
+   @throw CookedFormatError `kOutOfBounds` when the mesh holds its buffers and
      they do not hold the view, or an index is past the view's vertices.
   */
   OXGN_DATA_API MeshView(const Mesh& mesh, pak::geometry::MeshViewDesc desc);
@@ -634,7 +634,7 @@ public:
   /*!
    The buffers are bound only when they hold every view of the mesh.
 
-   @throw CookedOpenError `kMissingPart` for an absent buffer,
+   @throw CookedFormatError `kMissingPart` for an absent buffer,
      `kWrongRowSize` for a vertex buffer that does not hold whole vertices,
      `kMisaligned` for a vertex buffer not aligned for its vertices,
      `kInvalidValue` for an index buffer not of 16-bit or 32-bit indices,
@@ -836,7 +836,7 @@ private:
 
   @throw std::invalid_argument when a LOD is null, the LOD count exceeds
   kMaxLodCount or a surface identity is nil.
-  @throw CookedOpenError `kInconsistent` when the surface table does not list
+  @throw CookedFormatError `kInconsistent` when the surface table does not list
   every declared surface or lists another, `kDuplicate` when it lists a
   surface twice, and `kInvalidValue` for unknown surface flags or a default
   LOD policy breaking LodPolicyRecord's rules.

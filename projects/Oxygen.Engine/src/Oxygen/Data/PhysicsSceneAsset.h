@@ -95,7 +95,7 @@ namespace detail {
   PhysicsSceneAsset is the validating reader of a cooked physics sidecar
   descriptor (PhysicsSceneAssetDesc) and the read-only model of the bindings
   it holds. Construction decodes every binding table and refuses a malformed
-  descriptor with a `CookedOpenError`: an unknown or repeated table type, a
+  descriptor with a `CookedFormatError`: an unknown or repeated table type, a
   binding of a node its scene does not hold, a node table out of node order,
   wheel slices that do not partition the wheel table, soft body vertex lists
   off their records, and non-zero reserves in the arm of its backend.
@@ -120,7 +120,7 @@ class PhysicsSceneAsset final : public Asset {
 public:
   //! Reads the sidecar descriptor `data`.
   /*!
-   @throw CookedOpenError When the descriptor breaks a rule of its format.
+   @throw CookedFormatError When the descriptor breaks a rule of its format.
   */
   OXGN_DATA_API PhysicsSceneAsset(AssetKey key, std::span<const std::byte> data,
     SourceOrigin source_origin = {});
@@ -169,7 +169,7 @@ public:
   //! Checks that `scene` is the scene this sidecar was cooked against: its
   //! key, its node count and its content hash.
   /*!
-   @throw CookedOpenError `kInvalidReference` when `scene` has another key,
+   @throw CookedFormatError `kInvalidReference` when `scene` has another key,
      `kInconsistent` when it has another node count, and `kDigestMismatch`
      when it has another content hash.
   */

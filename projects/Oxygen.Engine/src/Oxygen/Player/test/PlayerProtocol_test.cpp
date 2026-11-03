@@ -21,7 +21,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/StableId.h>
@@ -190,17 +190,17 @@ NOLINT_TEST(PlayerProtocolTest, SourceKeyConflictNamesBothSources)
 NOLINT_TEST(PlayerProtocolTest, EveryMountFailureHasACode)
 {
   using oxygen::data::CookedDefect;
-  using oxygen::data::CookedOpenError;
+  using oxygen::data::CookedFormatError;
   const auto cases
     = std::vector<std::pair<std::exception_ptr, std::string_view>> {
         {
           std::make_exception_ptr(
-            CookedOpenError(CookedDefect::kAbsent, "gone")),
+            CookedFormatError(CookedDefect::kAbsent, "gone")),
           oxygen::player::kContentMissingCode,
         },
         {
           std::make_exception_ptr(
-            CookedOpenError(CookedDefect::kDigestMismatch, "corrupt")),
+            CookedFormatError(CookedDefect::kDigestMismatch, "corrupt")),
           oxygen::player::kContentRefusedCode,
         },
         {

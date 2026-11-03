@@ -17,7 +17,7 @@ namespace oxygen::data {
 //! The content hash of an asset descriptor: the SHA-256 of all its bytes,
 //! taken with `pak::core::AssetHeader::content_hash` zeroed.
 /*!
- @throw CookedOpenError `kTooSmall` when `descriptor` is smaller than its
+ @throw CookedFormatError `kTooSmall` when `descriptor` is smaller than its
    asset header.
 */
 OXGN_DATA_NDAPI auto ComputeDescriptorHash(
@@ -25,14 +25,14 @@ OXGN_DATA_NDAPI auto ComputeDescriptorHash(
 
 //! Records in the asset header of `descriptor` its content hash.
 /*!
- @throw CookedOpenError `kTooSmall` when `descriptor` is smaller than its
+ @throw CookedFormatError `kTooSmall` when `descriptor` is smaller than its
    asset header.
 */
 OXGN_DATA_API auto StampDescriptorHash(std::span<std::byte> descriptor) -> void;
 
 //! Checks that the asset header of `descriptor` records its content hash.
 /*!
- @throw CookedOpenError `kTooSmall` when `descriptor` is smaller than its
+ @throw CookedFormatError `kTooSmall` when `descriptor` is smaller than its
    asset header, `kMissingDigest` when the header records no hash, and
    `kDigestMismatch` when it records another one.
 */

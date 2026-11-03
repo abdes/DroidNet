@@ -28,7 +28,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -213,7 +213,7 @@ class CookedContent final {
 public:
   //! Opens `source` through `files`, which outlive the content.
   /*!
-   @throw data::CookedOpenError `kWrongFormat` for a folder without an index
+   @throw data::CookedFormatError `kWrongFormat` for a folder without an index
      or a file that is not a pak; `kCorrupt` for one that cannot be read or
      disagrees with itself.
   */
@@ -304,7 +304,7 @@ private:
 //! catalog. A loose root's script descriptors are read only for their
 //! external source.
 /*!
- @throw data::CookedOpenError As `CookedContent::Open`.
+ @throw data::CookedFormatError As `CookedContent::Open`.
 */
 OXGN_COOK_NDAPI auto ReadCookedSummary(const CookerStorageReader& storage,
   const std::filesystem::path& path) -> CookedSummary;

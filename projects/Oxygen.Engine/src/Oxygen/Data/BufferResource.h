@@ -62,7 +62,7 @@ public:
    texel per element) with no stride, or a stride; its size is whole
    elements, and `data` holds it.
 
-   @throw CookedOpenError When the row breaks a rule, or `data` holds another
+   @throw CookedFormatError When the row breaks a rule, or `data` holds another
      size.
   */
   OXGN_DATA_API BufferResource(

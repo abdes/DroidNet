@@ -37,7 +37,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
@@ -170,7 +170,7 @@ auto OpenDefect(const cooked::CookerStorageReader& storage,
 {
   try {
     static_cast<void>(CookedContent::Open(storage, path));
-  } catch (const data::CookedOpenError& error) {
+  } catch (const data::CookedFormatError& error) {
     return error.Defect();
   }
   return std::nullopt;
@@ -182,7 +182,7 @@ auto SummaryDefect(const cooked::CookerStorageReader& storage,
 {
   try {
     static_cast<void>(ReadCookedSummary(storage, path));
-  } catch (const data::CookedOpenError& error) {
+  } catch (const data::CookedFormatError& error) {
     return error.Defect();
   }
   return std::nullopt;
@@ -1040,7 +1040,7 @@ NOLINT_TEST_F(CookedContentTest, VerifyStorageReportsSizeBeforeDigest)
   try {
     content.VerifyStorage(IntegrityCheck::kFull);
     ADD_FAILURE() << "the changed descriptor verified";
-  } catch (const data::CookedOpenError& error) {
+  } catch (const data::CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), data::CookedDefect::kSizeMismatch);
     EXPECT_THAT(
       error.what(), ::testing::HasSubstr(stored.file.generic_string()));
@@ -1063,7 +1063,7 @@ NOLINT_TEST_F(CookedContentTest, VerifyStorageReportsFirstMissingFileByPath)
   try {
     content.VerifyStorage(IntegrityCheck::kMetadata);
     ADD_FAILURE() << "the missing files verified";
-  } catch (const data::CookedOpenError& error) {
+  } catch (const data::CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), data::CookedDefect::kMissingPart);
     EXPECT_THAT(error.what(), ::testing::HasSubstr(first));
   }
@@ -1087,7 +1087,7 @@ NOLINT_TEST_F(CookedContentTest, VerifyStorageMetadataDoesNotReadResourceRows)
   try {
     content.VerifyStorage(IntegrityCheck::kFull);
     ADD_FAILURE() << "the changed resource table verified";
-  } catch (const data::CookedOpenError& error) {
+  } catch (const data::CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), data::CookedDefect::kDigestMismatch);
     EXPECT_THAT(error.what(), ::testing::HasSubstr(rows.file.generic_string()));
   }

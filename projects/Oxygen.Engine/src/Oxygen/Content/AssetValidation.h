@@ -19,7 +19,7 @@ namespace oxygen::content {
 //! Validate a current descriptor and its complete reference inventory using
 //! the runtime typed decoders. Does not read or load dependency payloads.
 //! Throws std::runtime_error for malformed or inconsistent data, and
-//! data::CookedOpenError for a descriptor that does not record its content
+//! data::CookedFormatError for a descriptor that does not record its content
 //! hash.
 OXGN_CNTT_API auto ValidateAssetDescriptor(data::AssetType type,
   const data::AssetKey& key, std::span<const std::byte> bytes,

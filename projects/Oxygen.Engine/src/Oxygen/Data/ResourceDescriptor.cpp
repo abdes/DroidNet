@@ -20,7 +20,7 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
@@ -34,7 +34,7 @@ namespace oxygen::data {
 namespace {
 
   auto Refusal(const CookedDefect defect, const std::string_view message)
-    -> CookedOpenError
+    -> CookedFormatError
   {
     return { defect, std::string(message) };
   }
@@ -43,7 +43,7 @@ namespace {
   auto ReadHeader(const std::span<const std::byte> bytes,
     const std::array<char, 4>& magic, const uint16_t version,
     const std::string_view kind)
-    -> Result<ResourceDescriptorHeader, CookedOpenError>
+    -> Result<ResourceDescriptorHeader, CookedFormatError>
   {
     const auto header = serio::CopyAt<ResourceDescriptorHeader>(bytes);
     if (!header) {
@@ -71,7 +71,7 @@ namespace {
   */
   auto CheckViews(const pak::core::BufferResourceDesc& descriptor,
     const std::span<const BufferResourceView> views)
-    -> std::optional<CookedOpenError>
+    -> std::optional<CookedFormatError>
   {
     const auto stride = BufferElementStride(descriptor);
     if (stride == 0) {
@@ -182,7 +182,7 @@ auto EncodeTextureResourceDescriptor(
 }
 
 auto DecodeTextureResourceDescriptor(const std::span<const std::byte> bytes)
-  -> Result<TextureResourceDescriptor, CookedOpenError>
+  -> Result<TextureResourceDescriptor, CookedFormatError>
 {
   const auto header = ReadHeader(bytes, kTextureResourceDescriptorMagic,
     kTextureResourceDescriptorVersion, "Texture");
@@ -245,7 +245,7 @@ auto EncodeBufferResourceDescriptor(const BufferResourceDescriptor& descriptor)
 }
 
 auto DecodeBufferResourceDescriptor(const std::span<const std::byte> bytes)
-  -> Result<BufferResourceDescriptor, CookedOpenError>
+  -> Result<BufferResourceDescriptor, CookedFormatError>
 {
   if (const auto header = ReadHeader(bytes, kBufferResourceDescriptorMagic,
         kBufferResourceDescriptorVersion, "Buffer");

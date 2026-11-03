@@ -24,7 +24,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/MountName.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormatVersions.h>
@@ -96,13 +96,13 @@ namespace {
   }
 
   auto Refusal(const CookedDefect defect, const std::string& message)
-    -> Result<void, CookedOpenError>
+    -> Result<void, CookedFormatError>
   {
-    return Err(CookedOpenError(defect, message));
+    return Err(CookedFormatError(defect, message));
   }
 
   auto ValidateEntries(const PakCatalog& catalog)
-    -> Result<void, CookedOpenError>
+    -> Result<void, CookedFormatError>
   {
     std::unordered_set<AssetKey> keys;
     for (const auto& entry : catalog.entries) {
@@ -126,10 +126,11 @@ namespace {
           CookedDefect::kDuplicate, "Duplicate or conflicting PAK deletion");
       }
     }
-    return Result<void, CookedOpenError>::Ok();
+    return Result<void, CookedFormatError>::Ok();
   }
 
-  auto ValidateBases(const PakCatalog& catalog) -> Result<void, CookedOpenError>
+  auto ValidateBases(const PakCatalog& catalog)
+    -> Result<void, CookedFormatError>
   {
     std::unordered_set<SourceKey> bases;
     for (const auto& base : catalog.bases) {
@@ -143,11 +144,11 @@ namespace {
         return Refusal(CookedDefect::kDuplicate, "Repeated PAK base");
       }
     }
-    return Result<void, CookedOpenError>::Ok();
+    return Result<void, CookedFormatError>::Ok();
   }
 
   auto ValidateDependencies(const PakCatalog& catalog)
-    -> Result<void, CookedOpenError>
+    -> Result<void, CookedFormatError>
   {
     // A mount is required once, never the pak's own, and for something.
     std::unordered_set<std::string_view> mounts;
@@ -181,12 +182,12 @@ namespace {
         }
       }
     }
-    return Result<void, CookedOpenError>::Ok();
+    return Result<void, CookedFormatError>::Ok();
   }
 
   //! Why `catalog` breaks a rule of the format, or nothing when it does not.
   auto ValidateStructure(const PakCatalog& catalog)
-    -> Result<void, CookedOpenError>
+    -> Result<void, CookedFormatError>
   {
     if (catalog.source_key.IsNil()) {
       return Refusal(
@@ -306,7 +307,7 @@ namespace {
   }
 
   auto Corrupt(const CookedDefect defect, const std::string& message)
-    -> CookedOpenError
+    -> CookedFormatError
   {
     return { defect, message };
   }
@@ -392,18 +393,21 @@ namespace {
         .has_value();
     }
 
-    auto ReadHeader() const -> Result<PakCatalog, CookedOpenError>;
+    auto ReadHeader() const -> Result<PakCatalog, CookedFormatError>;
     auto ReadEntries(PakCatalog& catalog) const
-      -> Result<void, CookedOpenError>;
+      -> Result<void, CookedFormatError>;
     auto ReadDeletions(PakCatalog& catalog) const
-      -> Result<void, CookedOpenError>;
-    auto ReadBases(PakCatalog& catalog) const -> Result<void, CookedOpenError>;
+      -> Result<void, CookedFormatError>;
+    auto ReadBases(PakCatalog& catalog) const
+      -> Result<void, CookedFormatError>;
     auto ReadDependencies(PakCatalog& catalog) const
-      -> Result<void, CookedOpenError>;
-    auto ReadDigest(PakCatalog& catalog) const -> Result<void, CookedOpenError>;
+      -> Result<void, CookedFormatError>;
+    auto ReadDigest(PakCatalog& catalog) const
+      -> Result<void, CookedFormatError>;
   };
 
-  auto CatalogReader::ReadHeader() const -> Result<PakCatalog, CookedOpenError>
+  auto CatalogReader::ReadHeader() const
+    -> Result<PakCatalog, CookedFormatError>
   {
     DCHECK_NOTNULL_F(reader);
     uint32_t version = 0;
@@ -412,7 +416,7 @@ namespace {
         CookedDefect::kTruncated, "Could not decode PAK catalog header"));
     }
     if (version != pak::version::kPakCatalogVersion) {
-      return Err(CookedOpenError(CookedDefect::kUnsupportedVersion,
+      return Err(CookedFormatError(CookedDefect::kUnsupportedVersion,
         "Unsupported PAK catalog version; recook content"));
     }
     std::array<uint8_t, SourceKey::kSizeBytes> source_bytes {};
@@ -455,7 +459,7 @@ namespace {
   }
 
   auto CatalogReader::ReadEntries(PakCatalog& catalog) const
-    -> Result<void, CookedOpenError>
+    -> Result<void, CookedFormatError>
   {
     DCHECK_NOTNULL_F(reader);
     for (auto& entry : catalog.entries) {
@@ -473,11 +477,11 @@ namespace {
       entry.asset_key = AssetKey::FromBytes(key_bytes);
       entry.asset_type = static_cast<AssetType>(type);
     }
-    return Result<void, CookedOpenError>::Ok();
+    return Result<void, CookedFormatError>::Ok();
   }
 
   auto CatalogReader::ReadDeletions(PakCatalog& catalog) const
-    -> Result<void, CookedOpenError>
+    -> Result<void, CookedFormatError>
   {
     DCHECK_NOTNULL_F(reader);
     for (auto& key : catalog.deleted) {
@@ -488,11 +492,11 @@ namespace {
       }
       key = AssetKey::FromBytes(key_bytes);
     }
-    return Result<void, CookedOpenError>::Ok();
+    return Result<void, CookedFormatError>::Ok();
   }
 
   auto CatalogReader::ReadBases(PakCatalog& catalog) const
-    -> Result<void, CookedOpenError>
+    -> Result<void, CookedFormatError>
   {
     DCHECK_NOTNULL_F(reader);
     std::array<uint8_t, SourceKey::kSizeBytes> source_bytes {};
@@ -511,11 +515,11 @@ namespace {
       }
       base.source_key = *base_key;
     }
-    return Result<void, CookedOpenError>::Ok();
+    return Result<void, CookedFormatError>::Ok();
   }
 
   auto CatalogReader::ReadDependencies(PakCatalog& catalog) const
-    -> Result<void, CookedOpenError>
+    -> Result<void, CookedFormatError>
   {
     DCHECK_NOTNULL_F(reader);
     for (auto& dependency : catalog.dependencies) {
@@ -543,11 +547,11 @@ namespace {
         };
       }
     }
-    return Result<void, CookedOpenError>::Ok();
+    return Result<void, CookedFormatError>::Ok();
   }
 
   auto CatalogReader::ReadDigest(PakCatalog& catalog) const
-    -> Result<void, CookedOpenError>
+    -> Result<void, CookedFormatError>
   {
     DCHECK_NOTNULL_F(reader);
     if (Remaining() != 0U) {
@@ -566,12 +570,12 @@ namespace {
       return Err(
         Corrupt(CookedDefect::kDigestMismatch, "PAK catalog digest mismatch"));
     }
-    return Result<void, CookedOpenError>::Ok();
+    return Result<void, CookedFormatError>::Ok();
   }
 } // namespace
 
 auto PakCatalog::Decode(const std::span<const std::byte> bytes)
-  -> Result<PakCatalog, CookedOpenError>
+  -> Result<PakCatalog, CookedFormatError>
 {
   if (bytes.size() < kHeaderSize + sizeof(uint8_t) + kDigestSize) {
     return Err(Corrupt(CookedDefect::kTruncated, "Truncated PAK catalog"));

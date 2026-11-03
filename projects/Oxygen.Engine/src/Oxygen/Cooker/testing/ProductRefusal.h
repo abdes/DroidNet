@@ -10,7 +10,7 @@
 #include <optional>
 #include <span>
 
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
 namespace oxygen::cooker::testing {

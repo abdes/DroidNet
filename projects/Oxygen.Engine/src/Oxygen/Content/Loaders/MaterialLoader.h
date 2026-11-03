@@ -20,7 +20,7 @@
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDescriptor.h>
 #include <Oxygen/Data/ShaderReference.h>
@@ -64,11 +64,11 @@ inline auto LoadMaterialAsset(LoaderContext context)
     LoadAssetHeader(reader, desc.header);
     if (desc.header.asset_type
       != static_cast<uint8_t>(data::AssetType::kMaterial)) {
-      throw data::CookedOpenError(
+      throw data::CookedFormatError(
         data::CookedDefect::kWrongMagic, "descriptor is not a material");
     }
     if (desc.header.version != data::pak::render::kMaterialAssetVersion) {
-      throw data::CookedOpenError(data::CookedDefect::kUnsupportedVersion,
+      throw data::CookedFormatError(data::CookedDefect::kUnsupportedVersion,
         "unsupported MaterialAssetDesc descriptor version");
     }
   }

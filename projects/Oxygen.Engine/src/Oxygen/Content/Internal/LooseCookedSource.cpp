@@ -24,7 +24,7 @@
 #include <Oxygen/Content/Internal/ResourceTypes.h>
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsResource.h>
@@ -74,7 +74,7 @@ namespace {
 
   auto CorruptTextureDescriptor(const data::CookedDefect defect,
     const std::filesystem::path& path, const std::string_view what)
-    -> data::CookedOpenError
+    -> data::CookedFormatError
   {
     return { defect,
       "Texture descriptor '" + path.string() + "' " + std::string(what) };
@@ -107,7 +107,7 @@ namespace {
     }
     const auto decoded = data::DecodeTextureResourceDescriptor(bytes);
     if (!decoded) {
-      throw data::CookedOpenError(decoded.error());
+      throw data::CookedFormatError(decoded.error());
     }
     return *decoded;
   }

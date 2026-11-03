@@ -27,7 +27,7 @@
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -237,8 +237,8 @@ NOLINT_TEST_F(PakFileSourceTest, VerifiedMountRefusesACorruptPak)
   auto bytes = TexturePak(SeedBytes(kTextureSeed));
   CookedBytes::CorruptCrc(bytes);
 
-  NOLINT_EXPECT_THROW(
-    std::ignore = Mount(bytes, /*verify=*/true), oxygen::data::CookedOpenError);
+  NOLINT_EXPECT_THROW(std::ignore = Mount(bytes, /*verify=*/true),
+    oxygen::data::CookedFormatError);
 }
 
 //! A verified mount of an intact pak opens it, as an unverified one does.
@@ -262,7 +262,7 @@ NOLINT_TEST(PakFilePayloadsTest, VerifiedOpenChecksBeforeParsingTheDirectory)
     std::ignore
       = PakFile(InMemory(bytes), "test.pak", PakFile::Verification::kCrc32);
     ADD_FAILURE() << "the pak was accepted";
-  } catch (const oxygen::data::CookedOpenError& error) {
+  } catch (const oxygen::data::CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kDigestMismatch);
   }
 }
@@ -277,7 +277,7 @@ NOLINT_TEST(PakFilePayloadsTest, PayloadRegionOffItsBoundaryIsRefused)
   try {
     std::ignore = PakFile(InMemory(bytes), "test.pak");
     ADD_FAILURE() << "the pak was accepted";
-  } catch (const oxygen::data::CookedOpenError& error) {
+  } catch (const oxygen::data::CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kMisaligned);
   }
 }
@@ -293,7 +293,7 @@ NOLINT_TEST(PakFilePayloadsTest, VerifiedOpenRefusesAPakWithoutCrc)
     std::ignore
       = PakFile(InMemory(bytes), "test.pak", PakFile::Verification::kCrc32);
     ADD_FAILURE() << "the pak was accepted";
-  } catch (const oxygen::data::CookedOpenError& error) {
+  } catch (const oxygen::data::CookedFormatError& error) {
     EXPECT_EQ(error.Defect(), oxygen::data::CookedDefect::kNoIntegrityData);
   }
   EXPECT_NO_THROW(std::ignore = PakFile(InMemory(bytes), "test.pak"));

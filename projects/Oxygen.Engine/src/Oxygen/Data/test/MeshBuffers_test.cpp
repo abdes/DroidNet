@@ -17,7 +17,7 @@
 
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/CookedOpenError.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MeshType.h>
@@ -32,7 +32,7 @@ namespace {
 using oxygen::Format;
 using oxygen::data::BufferResource;
 using oxygen::data::CookedDefect;
-using oxygen::data::CookedOpenError;
+using oxygen::data::CookedFormatError;
 using oxygen::data::MaterialAsset;
 using oxygen::data::Mesh;
 using oxygen::data::MeshBuilder;
@@ -83,7 +83,7 @@ template <typename Bind>
 {
   try {
     bind();
-  } catch (const CookedOpenError& refused) {
+  } catch (const CookedFormatError& refused) {
     return refused.Defect();
   }
   return std::nullopt;
