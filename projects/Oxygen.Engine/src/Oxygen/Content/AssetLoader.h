@@ -1126,11 +1126,16 @@ public:
     LoadFnErased loader_erased
       = [load_fn = std::forward<LF>(load_fn)](
           LoaderContext context) -> std::shared_ptr<void> {
+      // The decode reads its whole descriptor from the start.
+      const auto descriptor_size = context.desc_reader != nullptr
+        ? context.desc_reader->Remaining().get()
+        : 0U;
       auto result = load_fn(context);
       if (!result) {
         return nullptr;
       }
       if constexpr (std::derived_from<T, data::Asset>) {
+        result->SetDescriptorSize(descriptor_size);
         if (context.source_content
           && (context.source_key.IsNil()
             || result->GetSourceOrigin()

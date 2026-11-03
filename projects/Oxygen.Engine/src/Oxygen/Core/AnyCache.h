@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -281,6 +282,22 @@ public:
   //! Construct a cache with a given budget.
   explicit AnyCache(CostType budget = std::numeric_limits<CostType>::max())
     : eviction_(budget)
+  {
+    if (budget == 0) {
+      throw std::invalid_argument("Cache budget must be > 0");
+    }
+  }
+
+  //! Construct a cache with a given budget, whose eviction policy measures
+  //! each entry with `cost`.
+  /*!
+   The policy measures an entry again when it leaves, so `cost` must give the
+   same cost for a value for as long as the value is cached.
+  */
+  template <typename CostFn>
+    requires std::constructible_from<EvictionPolicyType, CostType, CostFn>
+  AnyCache(CostType budget, CostFn cost)
+    : eviction_(budget, std::move(cost))
   {
     if (budget == 0) {
       throw std::invalid_argument("Cache budget must be > 0");

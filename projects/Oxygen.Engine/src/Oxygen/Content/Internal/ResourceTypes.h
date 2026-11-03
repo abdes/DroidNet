@@ -29,9 +29,11 @@ template <typename T>
 inline constexpr auto kResourceTypeIndex = IndexOf<T, ResourceTypeList>::value;
 
 namespace detail {
+  //! Calls `fn.template operator()<T>()` for the `T` of `types` whose type id
+  //! is `type`, else `otherwise()`.
   template <typename... T, typename Fn, typename Otherwise>
-  auto VisitResourceTypeIn(TypeList<T...> /*types*/, const TypeId type,
-    const Fn& fn, const Otherwise& otherwise) -> decltype(otherwise())
+  auto VisitTypeIn(TypeList<T...> /*types*/, const TypeId type, const Fn& fn,
+    const Otherwise& otherwise) -> decltype(otherwise())
   {
     auto result = std::optional<decltype(otherwise())> {};
     static_cast<void>(((type == T::ClassTypeId()
@@ -48,7 +50,7 @@ template <typename Fn, typename Otherwise>
 auto VisitResourceType(const TypeId type, const Fn& fn,
   const Otherwise& otherwise) -> decltype(otherwise())
 {
-  return detail::VisitResourceTypeIn(ResourceTypeList {}, type, fn, otherwise);
+  return detail::VisitTypeIn(ResourceTypeList {}, type, fn, otherwise);
 }
 
 //! `VisitResourceType` for a type that must be a resource type.
@@ -58,9 +60,8 @@ auto VisitResourceType(const TypeId type, const Fn& fn,
 template <typename Fn> auto WithResourceType(const TypeId type, const Fn& fn)
 {
   using Result = decltype(fn.template operator()<data::BufferResource>());
-  return VisitResourceType(type, fn, []() -> Result {
-    throw std::invalid_argument("Unsupported resource type");
-  });
+  return VisitResourceType(type, fn,
+    [] -> Result { throw std::invalid_argument("Unsupported resource type"); });
 }
 
 } // namespace oxygen::content::internal

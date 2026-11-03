@@ -33,6 +33,7 @@
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ContentId.h>
 #include <Oxygen/Content/ContentLoadError.h>
+#include <Oxygen/Content/Internal/AssetTypes.h>
 #include <Oxygen/Content/Internal/ContentBindingBundle.h>
 #include <Oxygen/Content/Internal/ContentIdentity.h>
 #include <Oxygen/Content/Internal/ContentIdentityRegistry.h>
@@ -83,40 +84,8 @@ namespace {
   template <typename Fn>
   auto WithContentType(const TypeId type, const Fn& fn) -> std::shared_ptr<void>
   {
-    if (type == data::MaterialAsset::ClassTypeId()) {
-      return fn.template operator()<data::MaterialAsset>();
-    }
-    if (type == data::GeometryAsset::ClassTypeId()) {
-      return fn.template operator()<data::GeometryAsset>();
-    }
-    if (type == data::SceneAsset::ClassTypeId()) {
-      return fn.template operator()<data::SceneAsset>();
-    }
-    if (type == data::PhysicsSceneAsset::ClassTypeId()) {
-      return fn.template operator()<data::PhysicsSceneAsset>();
-    }
-    if (type == data::ScriptAsset::ClassTypeId()) {
-      return fn.template operator()<data::ScriptAsset>();
-    }
-    if (type == data::InputActionAsset::ClassTypeId()) {
-      return fn.template operator()<data::InputActionAsset>();
-    }
-    if (type == data::InputMappingContextAsset::ClassTypeId()) {
-      return fn.template operator()<data::InputMappingContextAsset>();
-    }
-    if (type == data::TextureResource::ClassTypeId()) {
-      return fn.template operator()<data::TextureResource>();
-    }
-    if (type == data::BufferResource::ClassTypeId()) {
-      return fn.template operator()<data::BufferResource>();
-    }
-    if (type == data::ScriptResource::ClassTypeId()) {
-      return fn.template operator()<data::ScriptResource>();
-    }
-    if (type == data::PhysicsResource::ClassTypeId()) {
-      return fn.template operator()<data::PhysicsResource>();
-    }
-    return {};
+    return internal::VisitContentType(
+      type, fn, [] -> std::shared_ptr<void> { return {}; });
   }
 
   template <typename T> constexpr auto AssetKind() -> data::AssetType

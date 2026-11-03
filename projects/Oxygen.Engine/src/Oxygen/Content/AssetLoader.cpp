@@ -51,6 +51,7 @@
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/Internal/AssetTypes.h>
 #include <Oxygen/Content/Internal/ContentBindingBundle.h>
 #include <Oxygen/Content/Internal/ContentIdentity.h>
 #include <Oxygen/Content/Internal/ContentIdentityRegistry.h>
@@ -276,6 +277,31 @@ inline auto GetResourceTypeIdByIndex(std::size_t type_index)
   return ids.at(type_index);
 }
 
+//! An entry's cost against the content cache's budget: the cooked bytes it
+//! holds, a resource's payload or an asset's descriptor. Both are fixed once
+//! the entry is decoded, as the cache's policy requires.
+auto CookedBytes(const std::shared_ptr<void>& value, const oxygen::TypeId type)
+  -> std::size_t
+{
+  using oxygen::content::internal::VisitAssetType;
+  using oxygen::content::internal::VisitResourceType;
+  return VisitAssetType(
+    type,
+    [&value]<typename T> -> std::size_t {
+      return static_cast<const T*>(value.get())->GetDescriptorSize();
+    },
+    [&value, type] -> std::size_t {
+      return VisitResourceType(
+        type,
+        [&value]<typename T> -> std::size_t {
+          return static_cast<const T*>(value.get())->GetDataSize();
+        },
+        [type] -> std::size_t {
+          ABORT_F("The content cache holds no entry of type {}", type);
+        });
+    });
+}
+
 //! The index of textures in `ResourceTypeList`, the type part of their keys.
 constexpr auto kTextureResourceTypeIndex
   = static_cast<uint16_t>(oxygen::IndexOf<oxygen::data::TextureResource,
@@ -499,6 +525,7 @@ auto CreateIoDriver(const oxygen::observer_ptr<asio::io_context> loop)
 AssetLoader::AssetLoader(
   engine::EngineTag /*tag*/, const AssetLoaderConfig& config)
   : impl_(std::make_unique<Impl>())
+  , content_cache_(std::numeric_limits<std::size_t>::max(), &CookedBytes)
   , releases_(std::make_shared<internal::ContentReleaseQueue>())
   , thread_pool_(config.thread_pool)
   , io_driver_(CreateIoDriver(config.io_context))

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -101,7 +102,7 @@ public:
   }
 
   //! Returns the asset type field from the header (for debugging).
-  auto GetAssetType() const noexcept -> AssetType
+  [[nodiscard]] auto GetAssetType() const noexcept -> AssetType
   {
     return static_cast<AssetType>(GetHeader().asset_type);
   }
@@ -121,37 +122,59 @@ public:
     return name_;
   }
 
+  //! Records the size of the cooked descriptor the asset was decoded from.
+  auto SetDescriptorSize(const uint64_t size) -> void
+  {
+    if (runtime_bindings_) {
+      throw std::logic_error("Published asset sizes are immutable");
+    }
+    descriptor_size_ = size;
+  }
+
+  //! The size, in bytes, of the cooked descriptor the asset was decoded from;
+  //! the asset's cost against a content cache's budget.
+  [[nodiscard]] auto GetDescriptorSize() const noexcept -> uint64_t
+  {
+    return descriptor_size_;
+  }
+
   //! Returns the asset format version.
-  auto GetVersion() const noexcept -> uint8_t { return GetHeader().version; }
+  [[nodiscard]] auto GetVersion() const noexcept -> uint8_t
+  {
+    return GetHeader().version;
+  }
 
   //! Returns the streaming priority (0=highest, 255=lowest).
-  auto GetStreamingPriority() const noexcept -> uint8_t
+  [[nodiscard]] auto GetStreamingPriority() const noexcept -> uint8_t
   {
     return GetHeader().streaming_priority;
   }
 
   //! Returns the content integrity hash (full SHA-256 digest).
-  auto GetContentHash() const noexcept -> const pak::core::ContentHashDigest&
+  [[nodiscard]] auto GetContentHash() const noexcept
+    -> const pak::core::ContentHashDigest&
   {
     return GetHeader().content_hash;
   }
 
   //! Returns the project-defined variant flags.
-  auto GetVariantFlags() const noexcept -> uint32_t
+  [[nodiscard]] auto GetVariantFlags() const noexcept -> uint32_t
   {
     return GetHeader().variant_flags;
   }
 
 protected:
   //! Returns the asset header (to be implemented by derived classes).
-  virtual auto GetHeader() const noexcept -> const pak::core::AssetHeader& = 0;
+  [[nodiscard]] virtual auto GetHeader() const noexcept
+    -> const pak::core::AssetHeader& = 0;
 
 private:
   AssetKey asset_key_;
   SourceOrigin source_origin_ {};
   std::string name_;
+  uint64_t descriptor_size_ { 0 };
   AssetReferences references_;
-  std::shared_ptr<const AssetRuntimeBindings> runtime_bindings_ {};
+  std::shared_ptr<const AssetRuntimeBindings> runtime_bindings_;
 };
 
 } // namespace oxygen::data

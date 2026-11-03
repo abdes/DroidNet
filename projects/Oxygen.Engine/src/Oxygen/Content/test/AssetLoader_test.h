@@ -6,16 +6,22 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ContentLoadError.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/CookedFormatError.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
@@ -80,6 +86,18 @@ private:
     co_return result;
   }
 };
+
+//! The cooked bytes of a vertex buffer of `size` bytes of `fill`, three floats
+//! per element, as `CookedResourceData<data::BufferResource>` takes them.
+inline auto CookedVertexBuffer(const std::size_t size, const std::byte fill)
+  -> std::vector<uint8_t>
+{
+  auto desc = data::pak::core::BufferResourceDesc {};
+  desc.usage_flags = 1U;
+  desc.element_format = static_cast<uint8_t>(Format::kRGB32Float);
+  return cooker::testing::CookedResourceBytes(
+    desc, std::vector<std::byte>(size, fill));
+}
 
 //! Awaits `load`, returning what it threw, or null when it completed.
 template <typename T>

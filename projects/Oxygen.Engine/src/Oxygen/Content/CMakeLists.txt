@@ -92,6 +92,7 @@ set(
   "Internal/ContentSourceRegistry.h"
   "Internal/ContentSourceView.h"
   "Internal/OpenFailure.h"
+  "Internal/AssetTypes.h"
   "Internal/ContentLoadScopeState.h"
   "Internal/ContentSourceRegistry.cpp"
   "Internal/EvictionRegistry.h"
