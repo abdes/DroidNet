@@ -106,7 +106,7 @@ public:
     }
 
     KeyType key_;
-    Uuid cache_ {};
+    Uuid cache_;
     uint64_t incarnation_ = 0;
   };
 
@@ -157,7 +157,7 @@ public:
   //! Owns the exact retired publication until notification finishes.
   struct RetiredEntry final {
     EntryReference entry;
-    std::shared_ptr<void> value {};
+    std::shared_ptr<void> value;
     TypeId type { kInvalidTypeId };
   };
 
@@ -215,27 +215,28 @@ public:
   auto Release(UsageTicket&& ticket) -> bool
   {
     std::unique_lock lock(mutex_);
+    // A ticket of another cache stays the caller's, to return there.
     if (!ticket.active_ || ticket.entry_.cache_ != *identity_) {
       return false;
     }
-    const auto found = map_.find(ticket.entry_.key_);
+    // This cache spends the ticket, whether or not its usage still counts.
+    auto released = std::move(ticket);
+    const auto found = map_.find(released.entry_.key_);
     if (found == map_.end()
-      || found->second.incarnation != ticket.entry_.incarnation_) {
-      ticket.active_ = false;
+      || found->second.incarnation != released.entry_.incarnation_) {
       return false;
     }
-    auto& count = UsageCount(found->second.owners, ticket.owner_, ticket.kind_);
+    auto& count
+      = UsageCount(found->second.owners, released.owner_, released.kind_);
     if (count == 0) {
-      ticket.active_ = false;
       return false;
     }
     const auto callback = on_eviction_;
     auto evicted = eviction_.CheckIn(found->second.policy);
     --count;
-    ticket.active_ = false;
     if (evicted) {
       RetiredEntry retired {
-        .entry = std::move(ticket.entry_),
+        .entry = std::move(released.entry_),
         .value = eviction_.EntryValue(*evicted),
         .type = eviction_.EntryTypeId(*evicted),
       };
@@ -303,7 +304,7 @@ public:
   */
   template <CacheValueType V> auto Store(const KeyType& key, V value) -> bool
   {
-    using Value = typename V::element_type;
+    using Value = V::element_type;
     const auto type = value ? Value::ClassTypeId() : kInvalidTypeId;
     return StoreValue(key, std::move(value), type, std::nullopt).stored;
   }
@@ -342,7 +343,7 @@ public:
     const auto retired = SnapshotRetired(found->first, found->second);
     const auto callback = on_eviction_;
     const auto incarnation = AllocateIncarnation();
-    using Value = typename V::element_type;
+    using Value = V::element_type;
     const auto type = value ? Value::ClassTypeId() : kInvalidTypeId;
     if (!eviction_.TryReplace(found->second.policy, value, type)) {
       return false;
@@ -700,7 +701,7 @@ public:
       using difference_type = std::ptrdiff_t;
       iterator() = default;
       explicit iterator(base_iter it)
-        : it_(it)
+        : it_(std::move(it))
       {
       }
       auto operator*() const -> const value_type& { return it_->first; }
@@ -902,7 +903,7 @@ private:
     std::optional<UsageTicket> usage {};
   };
 
-  auto StoreValue(const KeyType& key, std::shared_ptr<void> value,
+  auto StoreValue(const KeyType& key, const std::shared_ptr<void>& value,
     const TypeId type, const std::optional<UsageRequest> usage) -> StoreResult
   {
     std::vector<RetiredEntry> retired;
@@ -944,7 +945,7 @@ private:
     }
     const auto [position, inserted] = map_.try_emplace(key);
     bool admitted = false;
-    const auto rollback = Finally([&]() noexcept -> auto {
+    const auto rollback = Finally([&] noexcept -> auto {
       if (inserted && !admitted) {
         map_.erase(position);
       }
@@ -952,7 +953,7 @@ private:
     if (!inserted) {
       retired.push_back(SnapshotRetired(position->first, position->second));
       bool replaced = false;
-      const auto discard_failed = Finally([&]() noexcept -> auto {
+      const auto discard_failed = Finally([&] noexcept -> auto {
         if (!replaced) {
           retired.pop_back();
         }
@@ -973,7 +974,7 @@ private:
         }
         {
           const auto restore_budget
-            = Finally([&]() noexcept -> auto { eviction_.SetBudget(budget); });
+            = Finally([&] noexcept -> auto { eviction_.SetBudget(budget); });
           eviction_.SetBudget(budget - static_cast<CostType>(cost));
           static_cast<void>(EnforceBudget(retired));
         }
