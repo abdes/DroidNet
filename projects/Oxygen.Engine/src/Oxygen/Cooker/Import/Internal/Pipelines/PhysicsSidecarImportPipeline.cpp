@@ -66,7 +66,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Span.h>
-#include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -80,6 +79,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
@@ -105,12 +105,13 @@ namespace {
 
   namespace phys = data::pak::physics;
   using core::meta::physics::PhysicsBackend;
-  using SidecarCookedInspectionContext = detail::CookedInspectionContext;
   using SidecarResolvedSceneState = detail::ResolvedSceneState;
+
+  //! The prefix of the sidecar's codes, such as `index_load_failed`.
+  constexpr auto kPhysicsSidecarCodePrefix = "physics.sidecar.";
 
   const auto kPhysicsSidecarResolverDiagnostics
     = detail::SidecarSceneResolverDiagnostics {
-        .index_load_failed_code = "physics.sidecar.index_load_failed",
         .inflight_target_scene_ambiguous_code
         = "physics.sidecar.inflight_target_scene_ambiguous",
         .target_scene_invalid_code = "physics.sidecar.target_scene_invalid",
@@ -1248,8 +1249,7 @@ namespace {
   struct BindingValidationContext final {
     observer_ptr<ImportSession> session;
     observer_ptr<const ImportRequest> request;
-    observer_ptr<content::VirtualPathResolver> resolver;
-    std::span<const SidecarCookedInspectionContext> cooked_contexts;
+    std::span<const internal::MountedCookedSource> mounts;
     observer_ptr<const AssetRecordMap> target_assets;
     uint32_t node_count = 0;
   };
@@ -1276,42 +1276,29 @@ namespace {
     const auto named
       = "'" + reference->written + "' resolves to " + reference->resolved;
 
-    auto resolved_key = std::optional<data::AssetKey> {};
-    try {
-      resolved_key = ctx.resolver->ResolveAssetKey(reference->resolved);
-    } catch (const std::exception& ex) {
-      AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
-        std::string(codes.unresolved),
-        "Invalid virtual path: " + named + ": " + std::string(ex.what()),
-        std::string(object_path));
-      return std::nullopt;
-    }
-
-    if (!resolved_key.has_value()) {
-      AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
-        std::string(codes.unresolved),
-        "Resolved key not found for virtual path: " + named,
-        std::string(object_path));
-      return std::nullopt;
-    }
-
-    const auto target_it = ctx.target_assets->find(*resolved_key);
-    if (target_it == ctx.target_assets->end()) {
-      bool found_in_other_source = false;
-      for (const auto& context : ctx.cooked_contexts) {
-        if (context.content.FindAsset(*resolved_key) != nullptr) {
-          found_in_other_source = true;
-          break;
-        }
+    const auto found = internal::LookupReference(
+      ctx.mounts, *ctx.request, *reference, std::nullopt);
+    if (!found.has_value()) {
+      if (found.error().reason == internal::AssetReferenceRefusal::kUnmounted) {
+        ctx.session->AddDiagnostic(internal::RefuseUnmountedReference(
+          *ctx.request, *reference, std::string(object_path)));
+      } else {
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
+          std::string(codes.unresolved),
+          "Reference was not found: "
+            + internal::DescribeLookup(*reference, found.error()),
+          std::string(object_path));
       }
+      return std::nullopt;
+    }
 
+    // The bindings complete the target scene: what they name is in the cooked
+    // root that holds it.
+    const auto target_it = ctx.target_assets->find(found->key);
+    if (target_it == ctx.target_assets->end()) {
       AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
-        found_in_other_source ? "physics.sidecar.reference_source_mismatch"
-                              : std::string(codes.unresolved),
-        found_in_other_source
-          ? "Resolved reference is not in the target scene source domain: "
-            + named
-          : "Resolved key not found for virtual path: " + named,
+        "physics.sidecar.reference_source_mismatch",
+        "Resolved reference is not in the target scene source domain: " + named,
         std::string(object_path));
       return std::nullopt;
     }
@@ -1324,7 +1311,7 @@ namespace {
       return std::nullopt;
     }
 
-    return *resolved_key;
+    return found->key;
   }
 
   auto ValidateNodeIndex(const uint32_t node_index, const uint32_t node_count,
@@ -3445,63 +3432,21 @@ namespace {
     return true;
   }
 
-  auto LoadCookedContextsAndMountResolver(ImportSession& session,
-    const ImportRequest& request,
-    std::vector<SidecarCookedInspectionContext>& cooked_contexts,
-    content::VirtualPathResolver& resolver) -> bool
-  {
-    cooked_contexts.clear();
-    const auto context_roots = internal::ContextCookedRoots(request);
-    cooked_contexts.reserve(1U + context_roots.size());
-
-    auto primary_context
-      = detail::LoadCookedInspectionContext(session.CookedRoot(), session,
-        request, kPhysicsSidecarResolverDiagnostics);
-    if (!primary_context) {
-      return false;
-    }
-    cooked_contexts.push_back(std::move(*primary_context));
-
-    for (const auto& context_root : context_roots) {
-      auto context = detail::LoadCookedInspectionContext(
-        context_root, session, request, kPhysicsSidecarResolverDiagnostics);
-      if (!context) {
-        return false;
-      }
-      cooked_contexts.push_back(std::move(*context));
-    }
-
-    for (const auto& context : cooked_contexts) {
-      try {
-        detail::MountCookedInspectionContext(resolver, context);
-      } catch (const std::exception& ex) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.sidecar.resolver_mount_failed",
-          "Failed mounting cooked root for sidecar resolution: "
-            + context.cooked_root.string() + " (" + ex.what() + ")");
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   auto ResolveAndValidateBindings(PhysicsSidecarDocument& parsed,
     const SidecarResolvedSceneState& resolved_scene_state,
-    std::span<const SidecarCookedInspectionContext> cooked_contexts,
-    content::VirtualPathResolver& resolver, ImportSession& session,
-    const ImportRequest& request) -> bool
+    std::span<const internal::MountedCookedSource> mounts,
+    ImportSession& session, const ImportRequest& request) -> bool
   {
-    const auto* target_context = detail::ResolveSceneInspectionContextByKey(
-      cooked_contexts, resolved_scene_state.scene_key);
-    if (target_context == nullptr) {
+    const auto* target_content
+      = detail::FindSceneContent(mounts, resolved_scene_state.scene_key);
+    if (target_content == nullptr) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.sidecar.target_scene_missing",
         "Resolved target scene key is not present in cooked scene context");
       return false;
     }
 
-    const auto target_assets = BuildAssetRecordMap(target_context->content);
+    const auto target_assets = BuildAssetRecordMap(*target_content);
     const auto requested_backend = ResolveRequestedPhysicsBackend(request);
     if (requested_backend == PhysicsBackend::kNone) {
       AddDiagnostic(session, request, ImportSeverity::kError,
@@ -3512,8 +3457,7 @@ namespace {
     auto validation_ctx = BindingValidationContext {
       .session = observer_ptr { &session },
       .request = observer_ptr { &request },
-      .resolver = observer_ptr { &resolver },
-      .cooked_contexts = cooked_contexts,
+      .mounts = mounts,
       .target_assets = observer_ptr { &target_assets },
       .node_count = resolved_scene_state.node_count,
     };
@@ -3536,7 +3480,7 @@ namespace {
       return false;
     }
     return EmitBackendCookedBindingResources(
-      parsed, session, request, target_context->content);
+      parsed, session, request, *target_content);
   }
 
   auto BuildPhysicsSidecarTables(const PhysicsSidecarDocument& parsed,
@@ -3880,22 +3824,21 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  auto cooked_contexts = std::vector<SidecarCookedInspectionContext> {};
-  auto resolver = content::VirtualPathResolver {};
-  if (!LoadCookedContextsAndMountResolver(
-        *session, request, cooked_contexts, resolver)) {
+  auto mounts = internal::LoadMountedCookedSources(
+    *session, request, kPhysicsSidecarCodePrefix);
+  if (session->HasErrors()) {
     co_return false;
   }
 
-  auto resolved_scene_state = detail::ResolveTargetSceneState(*session, request,
-    resolver, cooked_contexts, physics.target_scene_virtual_path,
-    kPhysicsSidecarResolverDiagnostics);
+  auto resolved_scene_state
+    = detail::ResolveTargetSceneState(*session, request, mounts,
+      physics.target_scene_virtual_path, kPhysicsSidecarResolverDiagnostics);
   if (!resolved_scene_state.has_value()) {
     co_return false;
   }
 
-  if (!ResolveAndValidateBindings(*parsed, *resolved_scene_state,
-        cooked_contexts, resolver, *session, request)) {
+  if (!ResolveAndValidateBindings(
+        *parsed, *resolved_scene_state, mounts, *session, request)) {
     co_return false;
   }
 
@@ -3903,8 +3846,8 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   references.AddLogical(
     resolved_scene_state->scene_key, data::AssetType::kScene);
   const auto tables = BuildPhysicsSidecarTables(*parsed, references);
-  // The contexts keep files of the cooked root open; the emission writes it.
-  cooked_contexts.clear();
+  // The mounts keep files of the cooked root open; the emission writes it.
+  mounts.clear();
   if (!SerializeAndEmitPhysicsSidecar(*resolved_scene_state, request, tables,
         *session, std::move(references).Build())) {
     co_return false;

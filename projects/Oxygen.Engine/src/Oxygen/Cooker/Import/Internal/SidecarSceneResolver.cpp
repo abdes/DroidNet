@@ -10,24 +10,21 @@
 #include <optional>
 #include <ranges>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Content/VirtualPathResolver.h>
-#include <Oxygen/Cooker/Cooked/CookedContent.h>
-#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SceneAsset.h>
 
@@ -194,14 +191,17 @@ namespace {
 
   auto ResolveSceneBindingContextFromCookedInspection(ImportSession& session,
     const ImportRequest& request, const data::AssetKey& scene_key,
-    std::span<const CookedInspectionContext> cooked_contexts,
+    std::span<const internal::MountedCookedSource> mounts,
     const SidecarSceneResolverDiagnostics& diagnostics)
     -> SceneBindingContextOutcome
   {
     using data::AssetType;
 
-    for (const auto& cooked_context : std::views::reverse(cooked_contexts)) {
-      const auto* scene_asset = cooked_context.content.FindAsset(scene_key);
+    for (const auto& mount : std::views::reverse(mounts)) {
+      if (!mount.content.has_value()) {
+        continue;
+      }
+      const auto* scene_asset = mount.content->FindAsset(scene_key);
       if (scene_asset == nullptr) {
         continue;
       }
@@ -217,7 +217,7 @@ namespace {
 
       auto descriptor_bytes = std::vector<std::byte> {};
       try {
-        descriptor_bytes = cooked_context.content.Descriptor(scene_key);
+        descriptor_bytes = mount.content->Descriptor(scene_key);
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           std::string(diagnostics.target_scene_read_failed_code),
@@ -250,73 +250,50 @@ namespace {
 
 } // namespace
 
-auto LoadCookedInspectionContext(const std::filesystem::path& cooked_root,
-  ImportSession& session, const ImportRequest& request,
-  const SidecarSceneResolverDiagnostics& diagnostics)
-  -> std::optional<CookedInspectionContext>
-{
-  try {
-    return CookedInspectionContext {
-      .cooked_root = cooked_root,
-      .content
-      = cooked::CookedContent::Open(cooked::RealCookerStorage(), cooked_root),
-    };
-  } catch (const std::exception& ex) {
-    AddDiagnostic(session, request, ImportSeverity::kError,
-      std::string(diagnostics.index_load_failed_code),
-      "Failed loading cooked index: " + std::string(ex.what()));
-    return std::nullopt;
-  }
-}
-
-auto MountCookedInspectionContext(content::VirtualPathResolver& resolver,
-  const CookedInspectionContext& context) -> void
-{
-  if (context.content.Source().kind == data::CookedSourceKind::kPak) {
-    resolver.AddPakFile(context.cooked_root);
-  } else {
-    resolver.AddLooseCookedRoot(context.cooked_root);
-  }
-}
-
-auto ReadCookedDescriptor(const CookedInspectionContext& context,
+auto ReadCookedDescriptor(const internal::MountedCookedSource& mount,
   const data::AssetKey& key) -> std::optional<std::vector<std::byte>>
 {
+  if (!mount.content.has_value()) {
+    return std::nullopt;
+  }
   try {
-    return context.content.Descriptor(key);
+    return mount.content->Descriptor(key);
   } catch (const std::exception&) {
     return std::nullopt;
   }
 }
 
-auto ResolveSceneInspectionContextByKey(
-  std::span<const CookedInspectionContext> cooked_contexts,
-  const data::AssetKey& scene_key) -> const CookedInspectionContext*
+auto FindSceneContent(
+  const std::span<const internal::MountedCookedSource> mounts,
+  const data::AssetKey& scene_key) -> const cooked::CookedContent*
 {
-  for (size_t i = cooked_contexts.size(); i > 0; --i) {
-    const auto& context = cooked_contexts[i - 1U];
-    const auto* asset = context.content.FindAsset(scene_key);
+  for (const auto& mount : std::views::reverse(mounts)) {
+    if (!mount.content.has_value()) {
+      continue;
+    }
+    const auto* asset = mount.content->FindAsset(scene_key);
     if (asset != nullptr && asset->type == data::AssetType::kScene) {
-      return &context;
+      return &*mount.content;
     }
   }
   return nullptr;
 }
 
 auto ResolveTargetSceneState(ImportSession& session,
-  const ImportRequest& request, content::VirtualPathResolver& resolver,
-  std::span<const CookedInspectionContext> cooked_contexts,
-  std::string_view target_scene_virtual_path,
+  const ImportRequest& request,
+  const std::span<const internal::MountedCookedSource> mounts,
+  const std::string_view target_scene_virtual_path,
   const SidecarSceneResolverDiagnostics& diagnostics)
   -> std::optional<ResolvedSceneState>
 {
-  std::optional<data::AssetKey> resolver_key {};
-  try {
-    resolver_key = resolver.ResolveAssetKey(target_scene_virtual_path);
-  } catch (const std::invalid_argument& ex) {
+  if (const auto error
+    = content::ValidateVirtualPath(target_scene_virtual_path);
+    error.has_value()) {
     AddDiagnostic(session, request, ImportSeverity::kError,
       std::string(diagnostics.target_scene_virtual_path_invalid_code),
-      "Target scene virtual path is invalid: " + std::string(ex.what()));
+      "Target scene virtual path is invalid: "
+        + std::string(target_scene_virtual_path) + " ("
+        + content::to_string(*error) + ")");
     return std::nullopt;
   }
 
@@ -330,17 +307,24 @@ auto ResolveTargetSceneState(ImportSession& session,
     return std::nullopt;
   }
 
-  if (!resolver_key.has_value()) {
+  // The scene is the sidecar's own identity, looked up as any reference is.
+  const auto identity = internal::ResolvedReference {
+    .written = std::string(target_scene_virtual_path),
+    .resolved = std::string(target_scene_virtual_path),
+  };
+  const auto found
+    = internal::LookupReference(mounts, request, identity, std::nullopt);
+  if (!found.has_value()) {
     AddDiagnostic(session, request, ImportSeverity::kError,
       std::string(diagnostics.target_scene_missing_code),
       "Target scene virtual path was not found: "
-        + std::string(target_scene_virtual_path));
+        + internal::DescribeLookup(identity, found.error()));
     return std::nullopt;
   }
 
   const auto inflight_key_outcome
     = ResolveSceneBindingContextFromInflightBySceneKey(
-      session, request, *resolver_key, diagnostics);
+      session, request, found->key, diagnostics);
   if (inflight_key_outcome.state.has_value()) {
     return inflight_key_outcome.state;
   }
@@ -349,7 +333,7 @@ auto ResolveTargetSceneState(ImportSession& session,
   }
 
   const auto cooked_outcome = ResolveSceneBindingContextFromCookedInspection(
-    session, request, *resolver_key, cooked_contexts, diagnostics);
+    session, request, found->key, mounts, diagnostics);
   if (cooked_outcome.state.has_value()) {
     return cooked_outcome.state;
   }

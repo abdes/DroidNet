@@ -7,7 +7,6 @@
 #pragma once
 
 #include <cstddef>
-#include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
@@ -15,15 +14,12 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
-
-namespace oxygen::content {
-class VirtualPathResolver;
-} // namespace oxygen::content
 
 namespace oxygen::content::import {
 struct ImportRequest;
@@ -34,7 +30,6 @@ namespace oxygen::content::import::detail {
 
 //! Diagnostic-code selection for sidecar target-scene resolution.
 struct SidecarSceneResolverDiagnostics final {
-  std::string_view index_load_failed_code;
   std::string_view inflight_target_scene_ambiguous_code;
   std::string_view target_scene_invalid_code;
   std::string_view target_scene_not_scene_code;
@@ -45,7 +40,7 @@ struct SidecarSceneResolverDiagnostics final {
 
 //! Resolved target scene binding state used by sidecar pipelines.
 struct ResolvedSceneState final {
-  data::AssetKey scene_key {};
+  data::AssetKey scene_key;
   std::string scene_virtual_path;
   std::string scene_descriptor_relpath;
   std::vector<std::byte> source_scene_descriptor;
@@ -56,45 +51,29 @@ struct ResolvedSceneState final {
     existing_scripting_components;
 };
 
-//! A mounted cooked root used for resolution, with its content.
-/*!
- The content keeps files of the root open (`cooked::CookedContent`): release
- it before the import rewrites a file of that root.
-*/
-struct CookedInspectionContext final {
-  std::filesystem::path cooked_root;
-  cooked::CookedContent content;
-};
-
-//! Opens the cooked root `cooked_root` as a context; nullopt, with
-//! `index_load_failed_code`, when it cannot be opened.
-OXGN_COOK_NDAPI auto LoadCookedInspectionContext(
-  const std::filesystem::path& cooked_root, ImportSession& session,
-  const ImportRequest& request,
-  const SidecarSceneResolverDiagnostics& diagnostics)
-  -> std::optional<CookedInspectionContext>;
-
-//! Mount a loaded context, a pak or a loose root, into a resolver.
-OXGN_COOK_API auto MountCookedInspectionContext(
-  content::VirtualPathResolver& resolver,
-  const CookedInspectionContext& context) -> void;
-
-//! Read the descriptor of the asset `key` a loaded context lists; nullopt
-//! when it cannot be read.
+//! Read the descriptor of the asset `key` a mounted cooked root lists;
+//! nullopt when the root holds no content or the descriptor cannot be read.
 OXGN_COOK_NDAPI auto ReadCookedDescriptor(
-  const CookedInspectionContext& context, const data::AssetKey& key)
+  const internal::MountedCookedSource& mount, const data::AssetKey& key)
   -> std::optional<std::vector<std::byte>>;
 
-//! Resolve the mounted context containing a given scene key (highest
-//! precedence).
-OXGN_COOK_API auto ResolveSceneInspectionContextByKey(
-  std::span<const CookedInspectionContext> cooked_contexts,
-  const data::AssetKey& scene_key) -> const CookedInspectionContext*;
+//! The content of the mounted cooked root of the highest precedence that
+//! lists the scene `scene_key`; null when none does.
+OXGN_COOK_NDAPI auto FindSceneContent(
+  std::span<const internal::MountedCookedSource> mounts,
+  const data::AssetKey& scene_key) -> const cooked::CookedContent*;
 
-//! Resolve target scene state from inflight contexts and mounted cooked roots.
+//! Resolve the target scene of a sidecar, its identity: a scene the same
+//! batch imports, else the scene a mounted cooked root lists.
+/*!
+ The identity is a canonical virtual path, refused with
+ `target_scene_virtual_path_invalid_code` otherwise. It is found the way any
+ reference is (`internal::LookupReference`), so a sidecar and the jobs it
+ completes read the same cooked roots.
+*/
 OXGN_COOK_NDAPI auto ResolveTargetSceneState(ImportSession& session,
-  const ImportRequest& request, content::VirtualPathResolver& resolver,
-  std::span<const CookedInspectionContext> cooked_contexts,
+  const ImportRequest& request,
+  std::span<const internal::MountedCookedSource> mounts,
   std::string_view target_scene_virtual_path,
   const SidecarSceneResolverDiagnostics& diagnostics)
   -> std::optional<ResolvedSceneState>;

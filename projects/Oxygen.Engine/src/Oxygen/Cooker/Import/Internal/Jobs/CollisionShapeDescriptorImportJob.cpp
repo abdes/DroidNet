@@ -27,9 +27,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
-#include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
@@ -43,11 +41,11 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/CollisionShapeDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/CollisionShapeImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -65,14 +63,6 @@ namespace {
   };
 
   using AssetTypeMap = std::unordered_map<data::AssetKey, data::AssetType>;
-
-  //! A mounted loose cooked root and the types of the assets it holds. Its
-  //! content is not kept open: the job writes into the primary root.
-  struct MountedInspectionContext final {
-    std::filesystem::path cooked_root;
-    AssetTypeMap assets;
-    bool is_primary = false;
-  };
 
   struct PayloadResolution final {
     data::AssetKey payload_asset_key;
@@ -242,104 +232,33 @@ namespace {
     return out;
   }
 
-  auto LoadMountedInspectionContexts(ImportSession& session,
-    const ImportRequest& request, content::VirtualPathResolver& resolver,
-    std::vector<MountedInspectionContext>& contexts) -> bool
+  //! The types of the assets the job's own cooked root lists; empty when
+  //! nothing was cooked into it yet. Null when the job reads no such root.
+  [[nodiscard]] auto PrimaryAssets(
+    const std::span<const internal::MountedCookedSource> mounts,
+    const std::filesystem::path& primary_root) -> std::optional<AssetTypeMap>
   {
-    contexts.clear();
-    auto roots = internal::BuildUniqueMountedCookedRoots(request);
-    contexts.reserve(roots.size());
-
-    const auto primary_root = session.CookedRoot().lexically_normal();
-    const auto primary_root_key = primary_root.generic_string();
-    auto has_primary = false;
-
-    for (auto& root : roots) {
-      auto context = MountedInspectionContext {
-        .cooked_root = root.lexically_normal(),
-        .assets = {},
-        .is_primary = false,
-      };
-      context.is_primary
-        = context.cooked_root.generic_string() == primary_root_key;
-
-      auto load_error = std::optional<std::string> {};
-      try {
-        const auto content
-          = cooked::CookedContent::Open(cooked::RealCookerStorage(),
-            data::CookedSource {
-              .kind = data::CookedSourceKind::kLooseCooked,
-              .path = context.cooked_root,
-            });
-        context.assets.reserve(content.Assets().size());
-        for (const auto& asset : content.Assets()) {
-          context.assets.insert_or_assign(asset.key, asset.type);
-        }
-      } catch (const std::exception& ex) {
-        load_error = ex.what();
-      }
-      if (load_error.has_value()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.shape.index_load_failed",
-          "Failed loading cooked index: " + *load_error,
-          context.cooked_root.generic_string());
-        return false;
-      }
-
-      auto mount_error = std::optional<std::string> {};
-      try {
-        resolver.AddLooseCookedRoot(context.cooked_root);
-      } catch (const std::exception& ex) {
-        mount_error = ex.what();
-      }
-      if (mount_error.has_value()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.shape.resolver_mount_failed",
-          "Failed mounting cooked root for shape resolution: "
-            + context.cooked_root.generic_string() + " (" + *mount_error + ")");
-        return false;
-      }
-
-      if (context.is_primary) {
-        has_primary = true;
-      }
-      contexts.push_back(std::move(context));
-    }
-
-    if (!has_primary) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.primary_source_missing",
-        "Primary cooked root is not present in mounted inspection contexts");
-      return false;
-    }
-    return true;
-  }
-
-  [[nodiscard]] auto FindPrimaryAssets(
-    const std::vector<MountedInspectionContext>& contexts)
-    -> const AssetTypeMap*
-  {
-    for (const auto& context : contexts) {
-      if (context.is_primary) {
-        return &context.assets;
-      }
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto KeyExistsInNonPrimaryContexts(
-    const std::vector<MountedInspectionContext>& contexts,
-    const data::AssetKey& key) -> bool
-  {
-    return std::ranges::any_of(
-      contexts, [&key](const MountedInspectionContext& context) -> bool {
-        return !context.is_primary && context.assets.contains(key);
+    const auto primary = std::ranges::find_if(
+      mounts, [&](const internal::MountedCookedSource& mount) -> bool {
+        return mount.root.lexically_normal() == primary_root.lexically_normal();
       });
+    if (primary == mounts.end()) {
+      return std::nullopt;
+    }
+    auto assets = AssetTypeMap {};
+    if (primary->content.has_value()) {
+      for (const auto& asset : primary->content->Assets()) {
+        assets.insert_or_assign(asset.key, asset.type);
+      }
+    }
+    return assets;
   }
 
+  //! Looks up `material_ref`, which names a physics material of the job's own
+  //! cooked root.
   auto ResolvePhysicsMaterialKey(ImportSession& session,
-    const ImportRequest& request, content::VirtualPathResolver& resolver,
-    const std::vector<MountedInspectionContext>& contexts,
+    const ImportRequest& request,
+    const std::span<const internal::MountedCookedSource> mounts,
     const AssetTypeMap& primary_assets, const std::string_view material_ref,
     data::AssetKey& out_material_key) -> bool
   {
@@ -352,37 +271,27 @@ namespace {
     const auto named
       = "'" + reference->written + "' resolves to " + reference->resolved;
 
-    auto resolved_key = std::optional<data::AssetKey> {};
-    auto resolve_error = std::optional<std::string> {};
-    try {
-      resolved_key = resolver.ResolveAssetKey(reference->resolved);
-    } catch (const std::exception& ex) {
-      resolve_error = ex.what();
-    }
-    if (resolve_error.has_value()) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        internal::kReferenceInvalidCode,
-        named + ", which the resolver refuses: " + *resolve_error,
-        "material_ref");
-      return false;
-    }
-    if (!resolved_key.has_value()) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.material_ref_unresolved",
-        "Resolved key not found for material_ref: " + named, "material_ref");
+    const auto found
+      = internal::LookupReference(mounts, request, *reference, std::nullopt);
+    if (!found.has_value()) {
+      if (found.error().reason == internal::AssetReferenceRefusal::kUnmounted) {
+        session.AddDiagnostic(internal::RefuseUnmountedReference(
+          request, *reference, "material_ref"));
+      } else {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "physics.shape.material_ref_unresolved",
+          "Reference was not found: "
+            + internal::DescribeLookup(*reference, found.error()),
+          "material_ref");
+      }
       return false;
     }
 
-    const auto primary_it = primary_assets.find(*resolved_key);
+    const auto primary_it = primary_assets.find(found->key);
     if (primary_it == primary_assets.end()) {
-      const auto found_elsewhere
-        = KeyExistsInNonPrimaryContexts(contexts, *resolved_key);
       AddDiagnostic(session, request, ImportSeverity::kError,
-        found_elsewhere ? "physics.shape.reference_source_mismatch"
-                        : "physics.shape.material_ref_unresolved",
-        found_elsewhere
-          ? "Resolved material_ref is not in the target source domain: " + named
-          : "Resolved key not found for material_ref: " + named,
+        "physics.shape.reference_source_mismatch",
+        "Resolved material_ref is not in the target source domain: " + named,
         "material_ref");
       return false;
     }
@@ -395,7 +304,7 @@ namespace {
       return false;
     }
 
-    out_material_key = *resolved_key;
+    out_material_key = found->key;
     return true;
   }
 
@@ -775,9 +684,9 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  auto resolver = content::VirtualPathResolver {};
-  auto contexts = std::vector<MountedInspectionContext> {};
-  if (!LoadMountedInspectionContexts(session, Request(), resolver, contexts)) {
+  auto mounts
+    = internal::LoadMountedCookedSources(session, Request(), "physics.shape.");
+  if (session.HasErrors()) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
       "Collision shape descriptor context loading failed");
     co_return co_await FinalizeWithTelemetry(session);
@@ -790,8 +699,9 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  const auto* const primary_source_assets = FindPrimaryAssets(contexts);
-  if (primary_source_assets == nullptr) {
+  const auto primary_source_assets
+    = PrimaryAssets(mounts, session.CookedRoot());
+  if (!primary_source_assets.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "physics.shape.primary_source_missing",
       "Primary source asset index is not available");
@@ -867,13 +777,15 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto material_key = data::AssetKey {};
   const auto material_ref
     = descriptor_doc.at("material_ref").get<std::string>();
-  if (!ResolvePhysicsMaterialKey(session, Request(), resolver, contexts,
-        primary_assets, material_ref, material_key)) {
+  if (!ResolvePhysicsMaterialKey(session, Request(), mounts, primary_assets,
+        material_ref, material_key)) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
       "Collision shape material_ref resolution failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
   descriptor.material_asset_key = material_key;
+  // The mounts keep files of the cooked root open; the job writes into it.
+  mounts.clear();
 
   if (const auto payload_type = PayloadTypeForShapeType(shape_type);
     payload_type.has_value()) {

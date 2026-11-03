@@ -35,8 +35,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Span.h>
-#include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -50,6 +48,7 @@
 #include <Oxygen/Cooker/Import/Internal/NodeReferenceJson.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptingSidecarImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -72,12 +71,13 @@ namespace {
 
   namespace script = data::pak::scripting;
   namespace world = data::pak::world;
-  using SidecarCookedInspectionContext = detail::CookedInspectionContext;
   using SidecarResolvedSceneState = detail::ResolvedSceneState;
+
+  //! The prefix of the sidecar's codes, such as `index_load_failed`.
+  constexpr auto kScriptSidecarCodePrefix = "script.sidecar.";
 
   const auto kScriptSidecarResolverDiagnostics
     = detail::SidecarSceneResolverDiagnostics {
-        .index_load_failed_code = "script.sidecar.index_load_failed",
         .inflight_target_scene_ambiguous_code
         = "script.sidecar.inflight_target_scene_ambiguous",
         .target_scene_invalid_code = "script.sidecar.target_scene_invalid",
@@ -1110,18 +1110,20 @@ namespace {
   };
 
   struct MountedAsset final {
-    observer_ptr<const SidecarCookedInspectionContext> context;
+    observer_ptr<const internal::MountedCookedSource> context;
     observer_ptr<const cooked::CookedAsset> entry;
   };
 
-  //! Finds an asset in the cooked contexts, the last mounted one first.
+  //! Finds an asset in the mounted cooked roots, the last mounted one first.
   auto FindMountedAsset(
-    std::span<const SidecarCookedInspectionContext> cooked_contexts,
+    std::span<const internal::MountedCookedSource> cooked_contexts,
     const data::AssetKey& key) -> std::optional<MountedAsset>
   {
-    for (size_t i = cooked_contexts.size(); i > 0; --i) {
-      const auto& context = oxygen::base::CheckedAt(cooked_contexts, i - 1U);
-      if (const auto* asset = context.content.FindAsset(key);
+    for (const auto& context : std::views::reverse(cooked_contexts)) {
+      if (!context.content.has_value()) {
+        continue;
+      }
+      if (const auto* asset = context.content->FindAsset(key);
         asset != nullptr) {
         return MountedAsset {
           .context = observer_ptr { &context },
@@ -1130,17 +1132,6 @@ namespace {
       }
     }
     return std::nullopt;
-  }
-
-  auto ResolveMountedAssetTypeByKey(
-    std::span<const SidecarCookedInspectionContext> cooked_contexts,
-    const data::AssetKey& key) -> std::optional<data::AssetType>
-  {
-    const auto mounted = FindMountedAsset(cooked_contexts, key);
-    if (!mounted) {
-      return std::nullopt;
-    }
-    return mounted->entry->type;
   }
 
   //! Reads the parameter declarations of a cooked script descriptor.
@@ -1197,8 +1188,8 @@ namespace {
    reports them with their JSON paths.
   */
   auto LoadScriptDeclarations(ImportSession& session,
-    const ImportRequest& request, content::VirtualPathResolver& resolver,
-    std::span<const SidecarCookedInspectionContext> cooked_contexts,
+    const ImportRequest& request,
+    std::span<const internal::MountedCookedSource> cooked_contexts,
     const SidecarDocument& parsed) -> std::optional<ScriptDeclarationMap>
   {
     auto declarations = ScriptDeclarationMap {};
@@ -1208,17 +1199,14 @@ namespace {
       if (!reference.has_value()) {
         continue;
       }
-      auto key = std::optional<data::AssetKey> {};
-      try {
-        key = resolver.ResolveAssetKey(reference->resolved);
-      } catch (const std::invalid_argument&) {
+      const auto found = internal::LookupReference(
+        cooked_contexts, request, *reference, data::AssetType::kScript);
+      if (!found.has_value() || declarations.contains(found->key)) {
         continue;
       }
-      if (!key || declarations.contains(*key)) {
-        continue;
-      }
-      const auto mounted = FindMountedAsset(cooked_contexts, *key);
-      if (!mounted || mounted->entry->type != data::AssetType::kScript) {
+      const auto key = found->key;
+      const auto mounted = FindMountedAsset(cooked_contexts, key);
+      if (!mounted) {
         continue;
       }
 
@@ -1241,7 +1229,7 @@ namespace {
           object_path);
         continue;
       }
-      declarations.emplace(*key, std::move(*decoded));
+      declarations.emplace(key, std::move(*decoded));
     }
     if (session.HasErrors()) {
       return std::nullopt;
@@ -1253,7 +1241,7 @@ namespace {
   //! not mounted or cannot be read is absent, and changes below it are not
   //! checked: its own cook reports it.
   auto ReadInstancedScenes(
-    std::span<const SidecarCookedInspectionContext> cooked_contexts,
+    std::span<const internal::MountedCookedSource> cooked_contexts,
     const data::SceneAsset& scene) -> SceneMap
   {
     auto scenes = SceneMap {};
@@ -1298,7 +1286,7 @@ namespace {
    reaches its slot is reported then.
   */
   auto AddInstancedScriptDeclarations(
-    std::span<const SidecarCookedInspectionContext> cooked_contexts,
+    std::span<const internal::MountedCookedSource> cooked_contexts,
     const SceneMap& instanced, ScriptDeclarationMap& declarations) -> void
   {
     for (const auto& scene : instanced | std::views::values) {
@@ -1447,14 +1435,12 @@ namespace {
   class SceneScriptBuilder final {
   public:
     SceneScriptBuilder(ImportSession& session, const ImportRequest& request,
-      content::VirtualPathResolver& resolver, const SidecarDocument& parsed,
-      const uint32_t node_count,
-      std::span<const SidecarCookedInspectionContext> cooked_contexts,
+      const SidecarDocument& parsed, const uint32_t node_count,
+      std::span<const internal::MountedCookedSource> cooked_contexts,
       const data::SceneAsset& scene, const ScriptDeclarationMap& declarations,
       const SceneMap& instanced)
       : session_(&session)
       , request_(&request)
-      , resolver_(&resolver)
       , parsed_(&parsed)
       , node_count_(node_count)
       , cooked_contexts_(cooked_contexts)
@@ -1491,42 +1477,21 @@ namespace {
               script_reference.error(), object_path + ".script_virtual_path"));
           continue;
         }
-        auto resolved_script_key = std::optional<data::AssetKey> {};
-        try {
-          resolved_script_key
-            = resolver_->ResolveAssetKey(script_reference->resolved);
-        } catch (const std::invalid_argument& ex) {
-          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-            internal::kReferenceInvalidCode,
-            "Script virtual path is invalid: " + std::string(ex.what()),
+        const auto found = internal::LookupReference(cooked_contexts_,
+          *request_, *script_reference, data::AssetType::kScript);
+        if (!found.has_value()) {
+          ReportRefusedReference(*script_reference, found.error(),
+            {
+              .subject = "The script",
+              .missing = "script.sidecar.script_ref_unresolved",
+              .type_mismatch = "script.sidecar.script_ref_not_script_asset",
+            },
             object_path + ".script_virtual_path");
           continue;
         }
-        if (!resolved_script_key.has_value()) {
-          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-            "script.sidecar.script_ref_unresolved",
-            "Script virtual path did not resolve to an asset key",
-            object_path + ".script_virtual_path");
-          continue;
-        }
-        const auto resolved_asset_type = ResolveMountedAssetTypeByKey(
-          cooked_contexts_, *resolved_script_key);
-        if (!resolved_asset_type.has_value()) {
-          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-            "script.sidecar.script_ref_unresolved",
-            "Resolved script key is not present in mounted cooked context",
-            object_path + ".script_virtual_path");
-          continue;
-        }
-        if (*resolved_asset_type != data::AssetType::kScript) {
-          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-            "script.sidecar.script_ref_not_script_asset",
-            "Resolved reference does not identify a script asset",
-            object_path + ".script_virtual_path");
-          continue;
-        }
+        const auto resolved_script_key = found->key;
 
-        const auto declared = declarations_->find(*resolved_script_key);
+        const auto declared = declarations_->find(resolved_script_key);
         if (declared == declarations_->end()) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
             "script.sidecar.script_declarations_unreadable",
@@ -1541,7 +1506,7 @@ namespace {
 
         auto payload = SlotWithParams {};
         payload.slot.slot_id = row.slot_id;
-        payload.slot.script_asset_key = *resolved_script_key;
+        payload.slot.script_asset_key = resolved_script_key;
         payload.slot.params_array_offset = 0;
         payload.slot.params_count = 0;
         payload.slot.execution_order = row.execution_order;
@@ -1913,51 +1878,72 @@ namespace {
           *request_, param.asset_virtual_path, reference.error(), value_path));
         return std::nullopt;
       }
-      auto asset_key = std::optional<data::AssetKey> {};
-      try {
-        asset_key = resolver_->ResolveAssetKey(reference->resolved);
-      } catch (const std::invalid_argument& ex) {
-        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-          internal::kReferenceInvalidCode,
-          "Asset virtual path of parameter '" + key
-            + "' is invalid: " + std::string(ex.what()),
-          value_path);
-        return std::nullopt;
-      }
-      const auto asset_type = asset_key
-        ? ResolveMountedAssetTypeByKey(cooked_contexts_, *asset_key)
-        : std::nullopt;
-      if (!asset_type) {
-        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-          "script.sidecar.param_asset_unresolved",
-          "Asset '" + param.asset_virtual_path + "' of parameter '" + key
-            + "' is not present in the mounted cooked content",
-          value_path);
-        return std::nullopt;
-      }
-      if (declared_type != data::AssetType::kUnknown
-        && *asset_type != declared_type) {
-        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-          "script.sidecar.param_asset_kind_mismatch",
-          "Parameter '" + key + "' expects a "
-            + std::string(data::to_string(declared_type)) + " asset but '"
-            + param.asset_virtual_path + "' is a "
-            + std::string(data::to_string(*asset_type)),
+      const auto expected = declared_type == data::AssetType::kUnknown
+        ? std::nullopt
+        : std::optional { declared_type };
+      const auto found = internal::LookupReference(
+        cooked_contexts_, *request_, *reference, expected);
+      if (!found.has_value()) {
+        ReportRefusedReference(*reference, found.error(),
+          {
+            .subject = "The asset of parameter '" + key + "'",
+            .missing = "script.sidecar.param_asset_unresolved",
+            .type_mismatch = "script.sidecar.param_asset_kind_mismatch",
+          },
           value_path);
         return std::nullopt;
       }
       return script::ScriptAssetParamValue {
-        .key = *asset_key,
-        .asset_type = *asset_type,
+        .key = found->key,
+        .asset_type = found->type,
       };
+    }
+
+    //! What a refused reference names, and the codes its refusals take
+    //! besides `import.reference_unmounted`.
+    struct RefusedReference final {
+      //! How the message names the reference, such as `The script`.
+      std::string subject;
+      std::string_view missing;
+      std::string_view type_mismatch;
+    };
+
+    //! Reports a reference `LookupReference` refused, with what it looked
+    //! for.
+    auto ReportRefusedReference(const internal::ResolvedReference& reference,
+      const internal::AssetReferenceRefused& refused,
+      const RefusedReference& report, std::string object_path) const -> void
+    {
+      switch (refused.reason) {
+      case internal::AssetReferenceRefusal::kUnmounted:
+        session_->AddDiagnostic(internal::RefuseUnmountedReference(
+          *request_, reference, std::move(object_path)));
+        return;
+      case internal::AssetReferenceRefusal::kMissing:
+        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+          std::string(report.missing),
+          report.subject
+            + " was not found: " + internal::DescribeLookup(reference, refused),
+          std::move(object_path));
+        return;
+      case internal::AssetReferenceRefusal::kTypeMismatch:
+        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+          std::string(report.type_mismatch),
+          report.subject + " is a "
+            + std::string(data::to_string(
+              refused.found_type.value_or(data::AssetType::kUnknown)))
+            + " asset of the wrong type: "
+            + internal::DescribeLookup(reference, refused),
+          std::move(object_path));
+        return;
+      }
     }
 
     observer_ptr<ImportSession> session_;
     observer_ptr<const ImportRequest> request_;
-    observer_ptr<content::VirtualPathResolver> resolver_;
     observer_ptr<const SidecarDocument> parsed_;
     uint32_t node_count_ = 0;
-    std::span<const SidecarCookedInspectionContext> cooked_contexts_;
+    std::span<const internal::MountedCookedSource> cooked_contexts_;
     observer_ptr<const data::SceneAsset> scene_;
     observer_ptr<const ScriptDeclarationMap> declarations_;
     observer_ptr<const SceneMap> instanced_;
@@ -2118,58 +2104,17 @@ namespace {
     return handles;
   }
 
-  auto LoadCookedContextsAndMountResolver(ImportSession& session,
-    const ImportRequest& request,
-    std::vector<SidecarCookedInspectionContext>& cooked_contexts,
-    content::VirtualPathResolver& resolver) -> bool
-  {
-    cooked_contexts.clear();
-    const auto context_roots = internal::ContextCookedRoots(request);
-    cooked_contexts.reserve(1U + context_roots.size());
-
-    auto primary_context
-      = detail::LoadCookedInspectionContext(session.CookedRoot(), session,
-        request, kScriptSidecarResolverDiagnostics);
-    if (!primary_context) {
-      return false;
-    }
-    cooked_contexts.push_back(std::move(*primary_context));
-
-    for (const auto& context_root : context_roots) {
-      auto context = detail::LoadCookedInspectionContext(
-        context_root, session, request, kScriptSidecarResolverDiagnostics);
-      if (!context) {
-        return false;
-      }
-      cooked_contexts.push_back(std::move(*context));
-    }
-
-    for (const auto& context : cooked_contexts) {
-      try {
-        detail::MountCookedInspectionContext(resolver, context);
-      } catch (const std::exception& ex) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.resolver_mount_failed",
-          "Failed mounting cooked root for sidecar resolution: "
-            + context.cooked_root.string() + " (" + ex.what() + ")");
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   //! Patches the target scene with the sidecar's scripts and emits it. The
-  //! cooked contexts are released before the emission: they keep files of
-  //! the cooked root open, the target scene's descriptor among them.
+  //! mounted cooked roots are released before the emission: they keep files
+  //! of the cooked root open, the target scene's descriptor among them.
   auto ApplyScriptingSidecar(ImportSession& session,
-    const ImportRequest& request, content::VirtualPathResolver& resolver,
-    std::vector<SidecarCookedInspectionContext>& cooked_contexts,
+    const ImportRequest& request,
+    std::vector<internal::MountedCookedSource>& cooked_contexts,
     const SidecarDocument& parsed,
     const SidecarResolvedSceneState& resolved_scene_state) -> co::Co<bool>
   {
-    auto declarations = LoadScriptDeclarations(
-      session, request, resolver, cooked_contexts, parsed);
+    auto declarations
+      = LoadScriptDeclarations(session, request, cooked_contexts, parsed);
     if (!declarations) {
       co_return false;
     }
@@ -2178,7 +2123,7 @@ namespace {
       std::span<const std::byte>(resolved_scene_state.source_scene_descriptor));
     const auto instanced = ReadInstancedScenes(cooked_contexts, scene);
     AddInstancedScriptDeclarations(cooked_contexts, instanced, *declarations);
-    const auto scripts = SceneScriptBuilder(session, request, resolver, parsed,
+    const auto scripts = SceneScriptBuilder(session, request, parsed,
       resolved_scene_state.node_count, cooked_contexts, scene, *declarations,
       instanced)
                            .Build();
@@ -2387,26 +2332,24 @@ auto ScriptingSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  auto cooked_contexts = std::vector<SidecarCookedInspectionContext> {};
-  auto resolver = content::VirtualPathResolver {};
-  if (!LoadCookedContextsAndMountResolver(
-        *session, req, cooked_contexts, resolver)) {
+  auto cooked_contexts = internal::LoadMountedCookedSources(
+    *session, req, kScriptSidecarCodePrefix);
+  if (session->HasErrors()) {
     co_return false;
   }
 
   auto descriptor_edit = co_await item.index_registry->LockDescriptor(
     session->CookedRoot(), req.options.scripting.target_scene_virtual_path);
 
-  const auto resolved_scene_state
-    = detail::ResolveTargetSceneState(*session, req, resolver, cooked_contexts,
-      req.options.scripting.target_scene_virtual_path,
-      kScriptSidecarResolverDiagnostics);
+  const auto resolved_scene_state = detail::ResolveTargetSceneState(*session,
+    req, cooked_contexts, req.options.scripting.target_scene_virtual_path,
+    kScriptSidecarResolverDiagnostics);
   if (!resolved_scene_state.has_value()) {
     co_return false;
   }
 
   co_return co_await ApplyScriptingSidecar(
-    *session, req, resolver, cooked_contexts, *parsed, *resolved_scene_state);
+    *session, req, cooked_contexts, *parsed, *resolved_scene_state);
 }
 
 auto ScriptingSidecarImportPipeline::ReportCancelled(WorkItem item) -> co::Co<>

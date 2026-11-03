@@ -166,9 +166,11 @@ The sidecar execution is complex as it performs "patch operations".
    schemas, extracts scalar bounds, mapping paths (`script_virtual_path`),
    `slot_id` elements, and dynamically-typed script `params` structures.
    Verifies identity boundaries resolving conflicts.
-2. **Context Resolution**: Maps `target_scene_virtual_path` utilizing the
-   pipeline's available `VirtualPathResolver` resolving scene dependencies from
-   `inflight_scene_contexts` or querying `CookedInspectionContext`.
+2. **Context Resolution**: Finds the scene `target_scene_virtual_path` names,
+   a canonical virtual path: a scene of `inflight_scene_contexts`, else the
+   scene the mounted cooked roots list (`LookupReference`). Script references
+   and asset parameters are looked up the same way, so a reference outside
+   every mounted root is `import.reference_unmounted`, as in every job.
 3. **Global Extrapolations**: Fetches the underlying `script-bindings.table`
    (contains `ScriptSlotRecord`) and `script-bindings.data` (contains
    `ScriptParamRecord`). Ensures no orphaned structures exist.

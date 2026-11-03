@@ -22,6 +22,7 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
@@ -415,6 +416,46 @@ namespace {
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
       report->diagnostics, "physics.shape.schema_validation_failed"));
+  }
+
+  //! A material_ref is looked up as every reference is: one of no mounted
+  //! cooked root is `import.reference_unmounted`, and one the shape's own
+  //! mount does not list is `physics.shape.material_ref_unresolved`, naming
+  //! where it was looked for.
+  NOLINT_TEST_F(CollisionShapeDescriptorImportJobTest,
+    MaterialRefIsLookedUpLikeAnyReference)
+  {
+    const auto cooked_root = TempDir() / "material_ref_lookup";
+    std::filesystem::create_directories(cooked_root);
+    const auto source_root = cooked_root.parent_path() / "source_data";
+    const auto material_report = Import(
+      MakeMaterialRequest({ .source = source_root, .cooked = cooked_root }));
+    ASSERT_HAS_VALUE(material_report);
+    ASSERT_TRUE(material_report->success);
+    const auto import_with = [&](const std::string_view material_ref) {
+      auto shape
+        = MakeShape("/Cooked/Physics/Shapes/floor_box.ocshape", "floor_box");
+      shape.Set("/half_extents", { 25.0F, 0.5F, 25.0F })
+        .Set("/material_ref", material_ref);
+      return Import(MakeCollisionShapeRequest(
+        { .source = source_root, .cooked = cooked_root }, shape));
+    };
+
+    const auto unmounted
+      = import_with("/Library/Physics/Materials/stone.opmat");
+    const auto missing = import_with("../Materials/missing.opmat");
+
+    ASSERT_HAS_VALUE(unmounted);
+    EXPECT_FALSE(unmounted->success);
+    EXPECT_TRUE(
+      HasDiagnosticCode(unmounted->diagnostics, "import.reference_unmounted"));
+    ASSERT_HAS_VALUE(missing);
+    EXPECT_FALSE(missing->success);
+    const auto unresolved = std::ranges::find(missing->diagnostics,
+      std::string { "physics.shape.material_ref_unresolved" },
+      &ImportDiagnostic::code);
+    ASSERT_NE(unresolved, missing->diagnostics.end());
+    EXPECT_THAT(unresolved->message, ::testing::HasSubstr("looked for"));
   }
 
 } // namespace
