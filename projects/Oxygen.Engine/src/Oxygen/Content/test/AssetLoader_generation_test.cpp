@@ -10,7 +10,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <functional>
@@ -27,7 +26,6 @@
 #include "AssetLoader_test.h"
 
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ContentLoadError.h>
@@ -46,6 +44,7 @@
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
@@ -264,15 +263,9 @@ namespace {
 
   auto CookedScriptBytes(const uint8_t payload) -> std::vector<uint8_t>
   {
-    data::pak::scripting::ScriptResourceDesc descriptor {};
-    descriptor.data_offset = sizeof(descriptor);
-    descriptor.size_bytes = 1;
-    descriptor.content_hash
-      = base::ComputeSha256(std::as_bytes(std::span { &payload, 1U }));
-    std::vector<uint8_t> bytes(sizeof(descriptor) + 1);
-    std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
-    bytes.back() = payload;
-    return bytes;
+    const std::array<std::byte, 1> bytes { std::byte { payload } };
+    return cooker::testing::CookedResourceBytes(
+      data::pak::scripting::ScriptResourceDesc {}, bytes);
   }
 
   auto ExpectLeased(const std::filesystem::path& root) -> void
@@ -653,6 +646,25 @@ namespace {
     }
   };
 
+  //! A material decoder that, for a descriptor of `paused_source` (of any
+  //! source when none), signals `pause->entered` on the loop and waits for
+  //! `pause->Release()` before it decodes.
+  auto PausingMaterialDecoder(TestEventLoop* loop,
+    std::shared_ptr<DecodePause> pause,
+    std::optional<data::SourceKey> paused_source = std::nullopt) -> auto
+  {
+    return
+      [loop, pause = std::move(pause), paused_source](
+        const LoaderContext& context) -> std::unique_ptr<data::MaterialAsset> {
+        if (!paused_source || context.source_key == *paused_source) {
+          loop->Schedule(std::chrono::milliseconds::zero(),
+            [pause] -> void { pause->entered.Trigger(); });
+          pause->resumed.wait();
+        }
+        return loaders::LoadMaterialAsset(context);
+      };
+  }
+
   auto ExerciseRevokedGeometryDependencies(
     TestEventLoop* loop, std::filesystem::path root) -> co::Co<>
   {
@@ -693,14 +705,7 @@ namespace {
           .instance = context.source_instance,
         });
     });
-    loader.RegisterLoader(
-      [loop, pause](
-        LoaderContext context) -> std::unique_ptr<data::MaterialAsset> {
-        loop->Schedule(std::chrono::milliseconds::zero(),
-          [pause] -> void { pause->entered.Trigger(); });
-        pause->resumed.wait();
-        return loaders::LoadMaterialAsset(std::move(context));
-      });
+    loader.RegisterLoader(PausingMaterialDecoder(loop, pause));
     OXCO_WITH_NURSERY(nursery)
     {
       const auto release_guard
@@ -756,16 +761,7 @@ namespace {
     config.thread_pool = observer_ptr { &pool };
     AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
     const auto pause = std::make_shared<DecodePause>();
-    loader.RegisterLoader(
-      [loop, pause, old_source](
-        LoaderContext context) -> std::unique_ptr<data::MaterialAsset> {
-        if (context.source_key == old_source) {
-          loop->Schedule(std::chrono::milliseconds::zero(),
-            [pause] -> void { pause->entered.Trigger(); });
-          pause->resumed.wait();
-        }
-        return loaders::LoadMaterialAsset(std::move(context));
-      });
+    loader.RegisterLoader(PausingMaterialDecoder(loop, pause, old_source));
     OXCO_WITH_NURSERY(nursery)
     {
       const auto release_guard
@@ -820,14 +816,7 @@ namespace {
     config.thread_pool = observer_ptr { &pool };
     AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
     const auto pause = std::make_shared<DecodePause>();
-    loader.RegisterLoader(
-      [loop, pause](
-        LoaderContext context) -> std::unique_ptr<data::MaterialAsset> {
-        loop->Schedule(std::chrono::milliseconds::zero(),
-          [pause] -> void { pause->entered.Trigger(); });
-        pause->resumed.wait();
-        return loaders::LoadMaterialAsset(std::move(context));
-      });
+    loader.RegisterLoader(PausingMaterialDecoder(loop, pause));
     OXCO_WITH_NURSERY(nursery)
     {
       const auto release_guard

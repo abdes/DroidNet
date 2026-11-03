@@ -4,18 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <atomic>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "./AssetLoader_test.h"
-#include "Utils/PakUtils.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
@@ -39,9 +36,9 @@ using oxygen::content::AssetLoader;
 using oxygen::content::AssetLoaderConfig;
 using oxygen::content::CookedResourceData;
 using oxygen::content::EvictionEvent;
-using oxygen::content::EvictionReason;
 using oxygen::content::ResourceKey;
 using oxygen::content::testing::AssetLoaderBasicTest;
+using oxygen::content::testing::CookedVertexBuffer;
 using oxygen::data::BufferResource;
 
 namespace {
@@ -125,22 +122,6 @@ NOLINT_TEST_F(
   EXPECT_EQ(calls, 1U);
 }
 
-auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
-  const uint8_t fill) -> std::vector<uint8_t>
-{
-  // Minimal copy of helper used by other eviction tests to build valid
-  // resource payloads for buffer tests.
-  auto header = oxygen::content::testing::ParseHexDumpWithOffset(hexdump);
-
-  std::vector<uint8_t> bytes(size, fill);
-  const auto copy_count = std::min(bytes.size(), header.size());
-  for (std::size_t i = 0; i < copy_count; ++i) {
-    bytes.at(i) = static_cast<uint8_t>(header.at(i));
-  }
-
-  return bytes;
-}
-
 auto LoadThenTrim(AssetLoader* loader, const ResourceKey key,
   std::vector<uint8_t> bytes) -> Co<>
 {
@@ -177,14 +158,9 @@ NOLINT_TEST_F(
       loader.Run();
 
       auto make_payload = [] -> std::vector<uint8_t> {
-        const std::string hexdump = R"(
-           0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-          16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-        )";
-        constexpr std::size_t kDataOffset = 256;
         constexpr std::size_t kSizeBytes = 192;
         constexpr uint8_t kFill = 0x6A;
-        return MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+        return CookedVertexBuffer(kSizeBytes, std::byte { kFill });
       };
 
       std::atomic<int> self_count { 0 };
@@ -241,14 +217,9 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
       loader.Run();
 
       auto make_payload = [] -> std::vector<uint8_t> {
-        const std::string hexdump = R"(
-           0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-          16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-        )";
-        constexpr std::size_t kDataOffset = 256;
         constexpr std::size_t kSizeBytes = 192;
         constexpr uint8_t kFill = 0x3C;
-        return MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+        return CookedVertexBuffer(kSizeBytes, std::byte { kFill });
       };
 
       std::atomic<int> first_count { 0 };

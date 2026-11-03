@@ -201,4 +201,21 @@ auto BufferRefusal(const data::pak::core::BufferResourceDesc& desc,
     });
 }
 
+auto BufferRowRefusal(const std::span<const std::byte> row)
+  -> std::optional<data::CookedDefect>
+{
+  auto buffer = serio::ByteBuffer {};
+  return RefusalOf("the buffer loader", [row, &buffer] -> void {
+    auto stream = serio::ReadOnlyMemoryStream { row };
+    auto reader = serio::Reader<serio::ReadOnlyMemoryStream> { stream };
+    static_cast<void>(
+      content::loaders::LoadBufferResource(content::LoaderContext {
+        .desc_reader = &reader,
+        .payload = observer_ptr<serio::ByteBuffer> { &buffer },
+        .work_offline = true,
+        .parse_only = true,
+      }));
+  });
+}
+
 } // namespace oxygen::cooker::testing

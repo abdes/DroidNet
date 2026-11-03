@@ -4,20 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <string>
 #include <utility>
 #include <vector>
 
 #include "./AssetLoader_test.h"
-#include "Utils/PakUtils.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
@@ -29,10 +25,6 @@
 #ifndef NDEBUG
 #endif
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/InputMappingContextAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
@@ -52,14 +44,9 @@ using oxygen::content::AssetLoaderConfig;
 using oxygen::content::CookedResourceData;
 using oxygen::content::ResourceKey;
 using oxygen::content::testing::AssetLoaderBasicTest;
+using oxygen::content::testing::CookedVertexBuffer;
 
 using oxygen::data::BufferResource;
-using oxygen::data::GeometryAsset;
-using oxygen::data::InputMappingContextAsset;
-using oxygen::data::MaterialAsset;
-using oxygen::data::TextureResource;
-
-using oxygen::base::CheckedAt;
 
 namespace {
 
@@ -76,35 +63,15 @@ protected:
   }
 };
 
-auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
-  const uint8_t fill) -> std::vector<uint8_t>
-{
-  auto header = oxygen::content::testing::ParseHexDumpWithOffset(
-    hexdump, static_cast<int>(size), std::byte { fill });
-
-  std::vector<uint8_t> bytes(size, fill);
-  const auto copy_count = std::min(bytes.size(), header.size());
-  for (std::size_t i = 0; i < copy_count; ++i) {
-    bytes.at(i) = static_cast<uint8_t>(header.at(i));
-  }
-
-  return bytes;
-}
-
 //! Owner destruction returns usage; explicit trim removes idle cache entries.
 NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceOwnerDropAllowsTrim)
 {
 
   // Arrange
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-  )";
-  static constexpr std::size_t kDataOffset = 256;
   static constexpr std::size_t kSizeBytes = 192;
   static constexpr uint8_t kFill = 0xAB;
 
-  auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+  auto bytes = CookedVertexBuffer(kSizeBytes, std::byte { kFill });
 
   TestEventLoop el;
 
@@ -163,15 +130,10 @@ NOLINT_TEST_F(
   AssetLoaderLifetimeAsyncTest, Characterization_DefaultResidencyIsManualTrim)
 {
   static constexpr int kResourceCount = 96;
-  static constexpr std::size_t kDataOffset = 256;
   static constexpr std::size_t kSizeBytes = 192;
   static constexpr uint8_t kFill = 0x7DU;
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-  )";
 
-  auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+  auto bytes = CookedVertexBuffer(kSizeBytes, std::byte { kFill });
   TestEventLoop el;
   oxygen::co::Run(
     el, [](std::vector<uint8_t> bytes, TestEventLoop* loop) -> Co<> {
@@ -225,15 +187,10 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnloadRefcountedCheckouts)
 {
 
   // Arrange
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-  )";
-  static constexpr std::size_t kDataOffset = 256;
   static constexpr std::size_t kSizeBytes = 192;
   static constexpr uint8_t kFill = 0x5A;
 
-  auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+  auto bytes = CookedVertexBuffer(kSizeBytes, std::byte { kFill });
 
   TestEventLoop el;
 
@@ -284,14 +241,9 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnloadRefcountedCheckouts)
 //! Test: explicit resource pin/unpin requires symmetry and preserves residency.
 NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourcePinUnpinSymmetryExpected)
 {
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-  )";
-  static constexpr std::size_t kDataOffset = 256;
   static constexpr std::size_t kSizeBytes = 192;
   static constexpr uint8_t kFill = 0x31;
-  auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+  auto bytes = CookedVertexBuffer(kSizeBytes, std::byte { kFill });
 
   TestEventLoop el;
   oxygen::co::Run(
@@ -505,14 +457,9 @@ NOLINT_TEST(InFlightOperationTablePriorityContractTest, TieUsesEarliestSequence)
 NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
   LoadRequestForCookedResourceExpectedToPropagateToLoaderContext)
 {
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-  )";
-  static constexpr std::size_t kDataOffset = 256;
   static constexpr std::size_t kSizeBytes = 192;
   static constexpr uint8_t kFill = 0x19;
-  auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+  auto bytes = CookedVertexBuffer(kSizeBytes, std::byte { kFill });
   TestEventLoop el;
   oxygen::co::Run(
     el, [](std::vector<uint8_t> bytes, TestEventLoop* loop) -> Co<> {

@@ -4,16 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
-#include <string>
 #include <vector>
 
 #include "./AssetLoader_test.h"
-#include "Utils/PakUtils.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
@@ -22,7 +19,6 @@
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -44,26 +40,12 @@ using oxygen::content::EvictionEvent;
 using oxygen::content::EvictionReason;
 using oxygen::content::ResourceKey;
 using oxygen::content::testing::AssetLoaderBasicTest;
+using oxygen::content::testing::CookedVertexBuffer;
 
 using oxygen::data::BufferResource;
-using oxygen::data::MaterialAsset;
 using oxygen::data::TextureResource;
 
 namespace {
-
-auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
-  const uint8_t fill) -> std::vector<uint8_t>
-{
-  auto header = oxygen::content::testing::ParseHexDumpWithOffset(hexdump);
-
-  std::vector<uint8_t> bytes(size, fill);
-  const auto copy_count = std::min(bytes.size(), header.size());
-  for (std::size_t i = 0; i < copy_count; ++i) {
-    bytes.at(i) = static_cast<uint8_t>(header.at(i));
-  }
-
-  return bytes;
-}
 
 //! Fixture for eviction notification tests.
 class AssetLoaderEvictionAsyncTest : public AssetLoaderBasicTest {
@@ -96,18 +78,13 @@ NOLINT_TEST_F(
   using namespace std::chrono_literals;
 
   // Arrange
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-  )";
-  static constexpr std::size_t kDataOffset = 256;
   static constexpr std::size_t kSizeBytes = 192;
   static constexpr uint8_t kFill = 0xAB;
 
   TestEventLoop el;
 
   // Act + Assert
-  oxygen::co::Run(el, [](std::string hexdump, TestEventLoop* loop) -> Co<> {
+  oxygen::co::Run(el, [](TestEventLoop* loop) -> Co<> {
     auto& el = *loop;
     AssetLoaderConfig config {};
 
@@ -124,8 +101,7 @@ NOLINT_TEST_F(
       loader.Run();
 
       const auto key = loader.MintSyntheticBufferKey();
-      auto bytes
-        = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+      auto bytes = CookedVertexBuffer(kSizeBytes, std::byte { kFill });
       std::span<const uint8_t> span(bytes.data(), bytes.size());
 
       std::vector<EvictionEvent> events;
@@ -154,7 +130,7 @@ NOLINT_TEST_F(
       (void)subscription;
       co_return oxygen::co::kJoin;
     };
-  }(hexdump, &el));
+  }(&el));
 }
 
 NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
@@ -162,18 +138,13 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
   using namespace std::chrono_literals;
 
   // Arrange
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-  )";
-  static constexpr std::size_t kDataOffset = 256;
   static constexpr std::size_t kSizeBytes = 192;
   static constexpr uint8_t kFill = 0x5A;
 
   TestEventLoop el;
 
   // Act + Assert
-  oxygen::co::Run(el, [](std::string hexdump, TestEventLoop* loop) -> Co<> {
+  oxygen::co::Run(el, [](TestEventLoop* loop) -> Co<> {
     auto& el = *loop;
     AssetLoaderConfig config {};
 
@@ -190,8 +161,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
       loader.Run();
 
       const auto key = loader.MintSyntheticBufferKey();
-      auto bytes
-        = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+      auto bytes = CookedVertexBuffer(kSizeBytes, std::byte { kFill });
       std::span<const uint8_t> span(bytes.data(), bytes.size());
 
       std::vector<EvictionEvent> events;
@@ -213,7 +183,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
       (void)subscription;
       co_return oxygen::co::kJoin;
     };
-  }(hexdump, &el));
+  }(&el));
 }
 
 NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
@@ -221,18 +191,13 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
   using namespace std::chrono_literals;
 
   // Arrange
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-  )";
-  static constexpr std::size_t kDataOffset = 256;
   static constexpr std::size_t kSizeBytes = 192;
   static constexpr uint8_t kFill = 0x11;
 
   TestEventLoop el;
 
   // Act + Assert
-  oxygen::co::Run(el, [](std::string hexdump, TestEventLoop* loop) -> Co<> {
+  oxygen::co::Run(el, [](TestEventLoop* loop) -> Co<> {
     auto& el = *loop;
     AssetLoaderConfig config {};
 
@@ -249,8 +214,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
       loader.Run();
 
       const auto key = loader.MintSyntheticBufferKey();
-      auto bytes
-        = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+      auto bytes = CookedVertexBuffer(kSizeBytes, std::byte { kFill });
       std::span<const uint8_t> span(bytes.data(), bytes.size());
 
       std::vector<EvictionEvent> events;
@@ -277,7 +241,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
       (void)subscription;
       co_return oxygen::co::kJoin;
     };
-  }(hexdump, &el));
+  }(&el));
 }
 
 NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
@@ -285,18 +249,13 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
   using namespace std::chrono_literals;
 
   // Arrange
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-  )";
-  static constexpr std::size_t kDataOffset = 256;
   static constexpr std::size_t kSizeBytes = 192;
   static constexpr uint8_t kFill = 0x22;
 
   TestEventLoop el;
 
   // Act + Assert
-  oxygen::co::Run(el, [](std::string hexdump, TestEventLoop* loop) -> Co<> {
+  oxygen::co::Run(el, [](TestEventLoop* loop) -> Co<> {
     auto& el = *loop;
     AssetLoaderConfig config {};
 
@@ -313,8 +272,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
       loader.Run();
 
       const auto key = loader.MintSyntheticBufferKey();
-      auto bytes
-        = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+      auto bytes = CookedVertexBuffer(kSizeBytes, std::byte { kFill });
       std::span<const uint8_t> span(bytes.data(), bytes.size());
 
       std::vector<EvictionEvent> events;
@@ -340,7 +298,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
       (void)subscription;
       co_return oxygen::co::kJoin;
     };
-  }(hexdump, &el));
+  }(&el));
 }
 
 } // namespace

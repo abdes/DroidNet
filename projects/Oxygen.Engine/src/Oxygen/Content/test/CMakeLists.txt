@@ -70,7 +70,6 @@ m_gtest_program(
     "AssetLoader_scripting_test.cpp"
     "AssetLoader_test_fixture.cpp"
     "AssetLoader_test.h"
-    "Utils/PakUtils.h"
 )
 target_link_libraries(
   "${META_MODULE_NAME}.AssetLoader.Tests"

@@ -56,7 +56,7 @@ struct PairedScene final {
 //! The scene `bytes` describe, under the key the sidecars target.
 auto SceneOf(const std::span<const std::byte> bytes) -> data::SceneAsset
 {
-  return data::SceneAsset(Key("/Game/Main.oscene"), bytes);
+  return { Key("/Game/Main.oscene"), bytes };
 }
 
 //! The rule the sidecar `sidecar` breaks against `scene`; empty when it

@@ -100,4 +100,13 @@ namespace oxygen::cooker::testing {
   const data::pak::core::BufferResourceDesc& desc,
   std::span<const std::byte> payload) -> std::optional<data::CookedDefect>;
 
+//! The defect the product refuses the buffer row bytes `row` with, which
+//! may end before a whole row; the row's payload is empty.
+/*!
+ @return No defect when the loader accepts the buffer.
+ @throw std::logic_error When the loader refuses without a defect.
+*/
+[[nodiscard]] auto BufferRowRefusal(std::span<const std::byte> row)
+  -> std::optional<data::CookedDefect>;
+
 } // namespace oxygen::cooker::testing

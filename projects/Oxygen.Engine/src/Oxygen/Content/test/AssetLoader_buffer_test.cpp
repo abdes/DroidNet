@@ -7,17 +7,14 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <limits>
 #include <memory>
 #include <span>
-#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
 #include "./AssetLoader_test.h"
-#include "Utils/PakUtils.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
@@ -26,6 +23,7 @@
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Cooker/testing/TextureBuilder.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -48,25 +46,12 @@ using oxygen::content::AssetLoaderConfig;
 using oxygen::content::CookedResourceData;
 using oxygen::content::ResourceKey;
 using oxygen::content::testing::AssetLoaderBasicTest;
+using oxygen::content::testing::CookedVertexBuffer;
 
 using oxygen::data::BufferResource;
 using oxygen::data::TextureResource;
 
 namespace {
-
-auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
-  const uint8_t fill) -> std::vector<uint8_t>
-{
-  auto header = oxygen::content::testing::ParseHexDumpWithOffset(hexdump);
-
-  std::vector<uint8_t> bytes(size, fill);
-  const auto copy_count = std::min(bytes.size(), header.size());
-  for (std::size_t i = 0; i < copy_count; ++i) {
-    bytes.at(i) = static_cast<uint8_t>(header.at(i));
-  }
-
-  return bytes;
-}
 
 //! Fixture for buffer-provided async load tests.
 class AssetLoaderBufferFromBufferAsyncTest : public AssetLoaderBasicTest { };
@@ -118,15 +103,10 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
 {
 
   // Arrange
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-  )";
-  static constexpr std::size_t kDataOffset = 256;
   static constexpr std::size_t kSizeBytes = 192;
   static constexpr uint8_t kFill = 0xAB;
 
-  auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+  auto bytes = CookedVertexBuffer(kSizeBytes, std::byte { kFill });
 
   TestEventLoop el;
 
@@ -185,15 +165,10 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
 {
 
   // Arrange
-  const std::string hexdump = R"(
-     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
-    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
-  )";
-  static constexpr std::size_t kDataOffset = 256;
   static constexpr std::size_t kSizeBytes = 192;
   static constexpr uint8_t kFill = 0x5A;
 
-  auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+  auto bytes = CookedVertexBuffer(kSizeBytes, std::byte { kFill });
 
   TestEventLoop el;
 
@@ -261,13 +236,10 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
 {
 
   // Arrange
-  static constexpr std::size_t kDataOffset = 256;
-
   const auto texture = oxygen::cooker::testing::TextureBuilder {}.Size(
     { .width = 128U, .height = 64U });
   const auto payload = texture.Payload();
-  auto desc = texture.Record(payload);
-  desc.data_offset = static_cast<uint64_t>(kDataOffset);
+  const auto desc = texture.Record(payload);
 
   TestEventLoop el;
 
@@ -286,10 +258,8 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
       loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
 
       const auto key = loader.MintSyntheticTextureKey();
-      std::vector<uint8_t> bytes(kDataOffset + payload.size(), 0);
-      std::memcpy(bytes.data(), &desc, sizeof(desc));
-      std::memcpy(std::span(bytes).subspan(kDataOffset).data(), payload.data(),
-        payload.size());
+      const auto bytes
+        = oxygen::cooker::testing::CookedResourceBytes(desc, payload);
 
       OXCO_WITH_NURSERY(n)
       {
