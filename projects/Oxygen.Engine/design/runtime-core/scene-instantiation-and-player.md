@@ -1,7 +1,11 @@
 # Scene instantiation and the player host
 
 Status: **design; approved by owner decision SD-2 on 2026-10-11; the player
-built 2026-10-13 (`src/Oxygen/Player`)**. Needed by the editor's Play command
+built 2026-10-13 (`src/Oxygen/Player`)**.
+
+Last updated: 2026-11-03
+
+Needed by the editor's Play command
 ([script authoring](../../../../design/editor/lld/script-authoring.md#8-play))
 and by
 [scene script hosting](../scripting/scene-script-hosting.md#5-scene-script-attachment).
@@ -56,13 +60,20 @@ instantiation loads them through `IAssetLoader::StartLoadScene` and
 `StartLoadInputMappingContextAsset`. Instanced scenes contribute nodes and
 scripts, never start state or environment.
 
-It creates nodes in index order with names, flags and transforms; attaches
-renderables with material overrides, cameras, lights, local fog volumes and the
-environment; instantiates the model scenes the scene instances under their
-instance roots ([scene composition](scene-composition.md)); applies the scene's
-start state (below); and then attaches scripts. It applies authored values only:
-no camera is invented and no camera value is rewritten. Unsupported or failed
-records become issues with the node index; the rest of the scene loads.
+It runs in this order: it applies the requested scene's environment; loads the
+scenes it instances and composes the scene
+([scene composition](scene-composition.md)); builds the composed tree, creating
+nodes in index order with names, flags and transforms and attaching renderables
+with material overrides, cameras, lights and local fog volumes, the instanced
+scenes under their instance roots; applies the scene's start state (below) and
+starts its input contexts; and last attaches scripts. It applies authored
+values only: no camera is invented and no camera value is rewritten.
+`request.asset` and `request.target` must not be null.
+
+Instantiation is best effort. A record that cannot be applied, a change that
+does not resolve, a missing instanced scene or a cycle is an issue with the
+scene and node index; the rest of the scene loads, and the call does not fail
+for it.
 
 ### Scene start state
 
@@ -83,7 +94,8 @@ loaded. Oxygen follows the same model for both.
   `SetActiveCamera(SceneNode)` accepts a live node with a camera component;
   `ActiveCamera()` returns it, or nothing once that node is destroyed or loses
   its camera. Instantiation sets it to the starting camera, or, when none is
-  authored, to the first camera in node order with an issue saying so.
+  authored or it does not resolve, to the first camera in composed order with an
+  issue saying so.
 - **Scripts switch cameras** with `oxygen.scene.active_camera()` and
   `oxygen.scene.set_active_camera(node)`; setting a node without a camera
   returns `false` and changes nothing.

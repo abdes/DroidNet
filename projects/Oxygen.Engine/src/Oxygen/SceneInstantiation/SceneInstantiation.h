@@ -172,14 +172,15 @@ struct InstanceRequest {
 
 //! Creates the runtime scene of a cooked scene asset in `request.target`.
 /*!
- Loads the scenes it instances, composes it (`data::ComposeScene`) and builds
- the composed tree: each scene's nodes in index order with names, flags,
- transforms and hierarchy, every change applied; renderables with their
- overrides, cameras, lights and local fog volumes. Each instance root gets a
- `SceneInstanceComponent`. The environment, start state and input contexts
- are the requested scene's; then the scripts of every scene attach with their
- effective parameters. Only authored values are applied: no camera is created
- and no camera value is changed.
+ Applies the requested scene's environment, then loads the scenes it
+ instances, composes it (`data::ComposeScene`) and builds the composed tree:
+ each scene's nodes in index order with names, flags, transforms and
+ hierarchy, every change applied; renderables with their overrides, cameras,
+ lights and local fog volumes. Each instance root gets a
+ `SceneInstanceComponent`. Then the requested scene's start state applies and
+ its input contexts start, and last the scripts of every scene attach with
+ their effective parameters. Only authored values are applied: no camera is
+ created and no camera value is changed.
 
  Start state: the active camera is the authored starting camera, which may be
  a camera an instance brings in, or, when none is authored or it does not
@@ -191,6 +192,8 @@ struct InstanceRequest {
  instanced scenes and cycles become issues; the rest of the scene loads. The
  scene's dependencies must be loaded; instanced scenes and starting contexts
  are references and are loaded here.
+
+ @pre `request.asset` and `request.target` are not null.
 */
 OXGN_SCNI_NDAPI auto Instantiate(SceneInstantiationRequest request,
   content::IAssetLoader& loader) -> co::Co<InstantiationResult>;

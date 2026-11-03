@@ -1383,10 +1383,9 @@ namespace {
 auto Instantiate(SceneInstantiationRequest request,
   content::IAssetLoader& loader) -> co::Co<InstantiationResult>
 {
+  DCHECK_NOTNULL_F(request.asset, "a scene instantiates from its asset");
+  DCHECK_NOTNULL_F(request.target, "a scene instantiates into a scene");
   auto result = InstantiationResult {};
-  if (!request.asset || request.target == nullptr) {
-    co_return result;
-  }
   const auto& asset = *request.asset;
   auto& target = *request.target;
   auto instantiator
