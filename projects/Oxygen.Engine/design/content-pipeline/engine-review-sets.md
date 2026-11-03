@@ -408,7 +408,9 @@ eviction and mount replacement, which Live Preview exercises constantly.
 (`LooseCookedWriter`, `LooseCookedLayout`, `LooseCookedIndexRegistry`),
 `Cooker/Import/Internal/ResourceTable*`, `Cooker/Import/Internal/Emitters/*`,
 `Cooker/Import/Internal/FileSourceReader.*`,
-`Cooker/Import/Internal/SourceLayoutHash.h`; `design/proposals/cooked-sources/`.
+`Cooker/Import/Internal/SourceLayoutHash.h`, and the content checks of
+`Content/LooseCookedIndex.*` (`CheckContent`, `ValidateContent`);
+`design/proposals/cooked-sources/`.
 
 **Objectives.** A loose cooked root is written so that a reader never sees an
 inconsistent state, and `CookedContent` tells the editor exactly what a
