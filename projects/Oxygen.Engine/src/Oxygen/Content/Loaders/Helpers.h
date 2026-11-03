@@ -12,17 +12,22 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Content/Internal/DependencyCollector.h>
+#include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -260,6 +265,29 @@ inline auto ResolveDescriptorString(const data::DescriptorStrings& strings,
       fmt::format("{} offset {} is outside the string table", field, offset));
   }
   return std::string { *value };
+}
+
+//! Collects the local texture `reference` names, which the asset's load then
+//! loads and holds; a texture of another source is bound by key when the
+//! asset publishes, and the fallback and error textures are no dependency.
+/*!
+ Reading the asset's references checked that every local texture binding lies
+ inside its source's texture table.
+*/
+inline auto CollectTexture(const LoaderContext& context,
+  const data::ResourceReferenceIndex reference) -> void
+{
+  const auto target = context.ResolveTexture(reference);
+  const auto* index = std::get_if<data::pak::core::ResourceIndexT>(&target);
+  if (index == nullptr || *index == data::pak::core::kFallbackResourceIndex
+    || *index == data::pak::core::kErrorTextureResourceIndex) {
+    return;
+  }
+  context.dependency_collector->AddResourceDependency(internal::ResourceRef {
+    .source = context.source_instance,
+    .resource_type_id = data::TextureResource::ClassTypeId(),
+    .resource_index = *index,
+  });
 }
 
 } // namespace oxygen::content::loaders

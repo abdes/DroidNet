@@ -285,6 +285,11 @@ public:
   //! record of the scene names it by.
   auto Texture(ResourceIndexT row) -> data::ResourceReferenceIndex;
 
+  //! Binds the texture `texture` another source holds; returns the index a
+  //! record of the scene names it by.
+  auto ExternalTexture(const data::AssetKey& texture)
+    -> data::ResourceReferenceIndex;
+
   //=== Output ===----------------------------------------------------------//
 
   //! The descriptor.
@@ -357,6 +362,8 @@ private:
   [[nodiscard]] auto Require(SceneNode node) const
     -> data::pak::world::SceneNodeIndexT;
   auto AddEnvironment(std::vector<std::byte> record) -> SceneBuilder&;
+  auto BindTexture(const data::TextureTarget& texture)
+    -> data::ResourceReferenceIndex;
 
   std::string name_;
   SceneBuilderId owner_;
@@ -380,7 +387,8 @@ private:
   data::pak::world::SceneAssetFlags flags_
     = data::pak::world::SceneAssetFlags::kNone;
   std::vector<std::vector<std::byte>> environment_;
-  std::vector<ResourceIndexT> textures_;
+  //! The textures the scene binds, in binding order.
+  std::vector<data::TextureTarget> textures_;
 };
 
 } // namespace oxygen::cooker::testing

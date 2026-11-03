@@ -276,6 +276,44 @@ inline auto GetResourceTypeIdByIndex(std::size_t type_index)
   return ids.at(type_index);
 }
 
+//! The index of textures in `ResourceTypeList`, the type part of their keys.
+constexpr auto kTextureResourceTypeIndex
+  = static_cast<uint16_t>(oxygen::IndexOf<oxygen::data::TextureResource,
+    oxygen::content::ResourceTypeList>::value);
+
+//! What a texture field shows, from what its asset's load holds in
+//! `bindings`: nothing (nullopt) for no texture, or the fallback texture
+//! (`ResourceKey {}`); the error texture for the error index or for a texture
+//! the load could not hold; otherwise the held texture. `local` keys an entry
+//! of the asset's own texture table and `holds` tells whether the load holds
+//! a texture.
+template <typename Bindings, typename LocalKey, typename Holds>
+auto ShownTexture(const oxygen::data::TextureTarget& target,
+  const Bindings& bindings, const LocalKey& local, const Holds& holds)
+  -> std::optional<oxygen::content::ResourceKey>
+{
+  using oxygen::content::ResourceKey;
+  if (const auto* key = std::get_if<oxygen::data::AssetKey>(&target)) {
+    // The texture bound when the asset loaded, never one of a later mount.
+    const auto* bound = bindings.FindTexture(*key);
+    return bound != nullptr && holds(bound->resource) ? bound->resource
+                                                      : ResourceKey::kError;
+  }
+  const auto* index
+    = std::get_if<oxygen::data::pak::core::ResourceIndexT>(&target);
+  if (index == nullptr) {
+    return std::nullopt;
+  }
+  if (*index == oxygen::data::pak::core::kFallbackResourceIndex) {
+    return ResourceKey {};
+  }
+  if (*index == oxygen::data::pak::core::kErrorTextureResourceIndex) {
+    return ResourceKey::kError;
+  }
+  const auto texture = local(*index);
+  return holds(texture) ? texture : ResourceKey::kError;
+}
+
 inline auto GetResourceTypeIndexByTypeId(const oxygen::TypeId type_id)
   -> uint16_t
 {
@@ -2477,23 +2515,31 @@ auto AssetLoader::PrepareAssetLoadRequest(const data::AssetKey& key,
 
 auto AssetLoader::BindExternalTextures(const data::Asset& asset,
   const internal::ContentSourceView* view,
-  internal::ContentBindingBuilder& bindings) -> void
+  internal::ContentBindingBuilder& bindings) -> std::vector<ResourceKey>
 {
-  constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
-    IndexOf<data::TextureResource, ResourceTypeList>::value);
+  auto bound = std::vector<ResourceKey> {};
   for (const auto& reference : asset.GetReferences().Keys()) {
     if (reference.kind != data::KeyReferenceKind::kTexture || view == nullptr) {
       continue;
     }
-    if (const auto match = view->ResolveTexture(reference.key)) {
-      bindings.AddTexture({
-        .key = reference.key,
-        .resource
-        = InternResourceKey(match->layer->id, kTextureTypeIndex, match->index),
-        .owner = match->layer->source,
-      });
+    const auto match = view->ResolveTexture(reference.key);
+    if (!match) {
+      LOG_F(WARNING,
+        "Asset '{}' shows the error texture for texture {}, which no mounted "
+        "source holds",
+        asset.GetAssetName(), nostd::to_string(reference.key));
+      continue;
     }
+    const auto resource = InternResourceKey(
+      match->layer->id, kTextureResourceTypeIndex, match->index);
+    bindings.AddTexture({
+      .key = reference.key,
+      .resource = resource,
+      .owner = match->layer->source,
+    });
+    bound.push_back(resource);
   }
+  return bound;
 }
 
 auto AssetLoader::BindMaterialTextureKeys(data::MaterialAsset& material,
@@ -2516,34 +2562,20 @@ auto AssetLoader::BindMaterialTextureKeys(data::MaterialAsset& material,
   };
   std::vector<ResourceKey> keys;
   keys.reserve(indices.size());
-  constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
-    IndexOf<data::TextureResource, ResourceTypeList>::value);
+  const auto local = [this, source](const ResourceIndexT index) -> ResourceKey {
+    return InternResourceKey(source, kTextureResourceTypeIndex, index);
+  };
+  const auto holds = [&bindings](const ResourceKey texture) -> bool {
+    return bindings.FindResource<data::TextureResource>(texture) != nullptr;
+  };
   for (const auto reference : indices) {
     const auto resolved = material.GetReferences().ResolveTexture(reference);
     if (!resolved) {
       throw ContentLoadError(
         ContentLoadFailure::kReferenceInvalid, resolved.error());
     }
-    if (const auto* texture_key = std::get_if<data::AssetKey>(&*resolved)) {
-      // A texture of another source is the one bound at load; when no
-      // mounted source held it, the slot shows the error texture.
-      const auto* bound = bindings.FindTexture(*texture_key);
-      LOG_IF_F(WARNING, bound == nullptr,
-        "Material '{}' references texture {}, which no mounted source holds",
-        material.GetAssetName(), nostd::to_string(*texture_key));
-      keys.push_back(bound != nullptr ? bound->resource : ResourceKey::kError);
-      continue;
-    }
-    const auto* index = std::get_if<ResourceIndexT>(&*resolved);
-    if (index != nullptr
-      && *index == data::pak::core::kErrorTextureResourceIndex) {
-      keys.push_back(ResourceKey::kError);
-      continue;
-    }
     keys.push_back(
-      index == nullptr || *index == data::pak::core::kFallbackResourceIndex
-        ? ResourceKey {}
-        : InternResourceKey(source, kTextureTypeIndex, *index));
+      ShownTexture(*resolved, bindings, local, holds).value_or(ResourceKey {}));
   }
   material.SetTextureResourceKeys(std::move(keys));
 }
@@ -2907,9 +2939,8 @@ auto AssetLoader::MakeTextureResourceKey(const data::SourceKey source_key,
   if (!table || !table->IsValidKey(resource_index)) {
     return std::nullopt;
   }
-  constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
-    IndexOf<data::TextureResource, ResourceTypeList>::value);
-  return InternResourceKey(*source_id, kTextureTypeIndex, resource_index);
+  return InternResourceKey(
+    *source_id, kTextureResourceTypeIndex, resource_index);
 }
 
 auto AssetLoader::ResolveTextureResourceKey(const std::string_view virtual_path)
@@ -2934,9 +2965,8 @@ auto AssetLoader::ResolveTextureResourceKey(const data::AssetKey& texture_key)
   if (!match) {
     return std::nullopt;
   }
-  constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
-    IndexOf<data::TextureResource, ResourceTypeList>::value);
-  return InternResourceKey(match->layer->id, kTextureTypeIndex, match->index);
+  return InternResourceKey(
+    match->layer->id, kTextureResourceTypeIndex, match->index);
 }
 
 auto AssetLoader::MakeTextureResourceKeyForAsset(
@@ -2947,46 +2977,22 @@ auto AssetLoader::MakeTextureResourceKeyForAsset(
   AssertOwningThread();
   const auto resolved
     = context_asset.GetReferences().ResolveTexture(resource_index);
-  if (!resolved) {
-    return {};
-  }
-  if (const auto* texture_key = std::get_if<data::AssetKey>(&*resolved)) {
-    // The texture bound when the asset loaded, never one of a later mount.
-    const auto& bindings = context_asset.GetRuntimeBindings();
-    if (!bindings
-      || bindings->GetTypeId()
-        != internal::ContentBindingBundle::ClassTypeId()) {
-      return std::nullopt;
-    }
-    const auto* bound
-      = std::static_pointer_cast<const internal::ContentBindingBundle>(bindings)
-          ->FindTexture(*texture_key);
-    return bound != nullptr ? std::optional { bound->resource } : std::nullopt;
-  }
-  const auto* index = std::get_if<ResourceIndexT>(&*resolved);
-  if (index == nullptr) {
-    return {};
-  }
-  const auto table_index = *index;
-
-  if (table_index == data::pak::core::kNoResourceIndex) {
+  const auto& retained = context_asset.GetRuntimeBindings();
+  if (!resolved || !retained
+    || retained->GetTypeId() != internal::ContentBindingBundle::ClassTypeId()) {
+    // Not an asset this loader bound; its fields show nothing it holds.
     return std::nullopt;
   }
-  if (table_index == data::pak::core::kErrorTextureResourceIndex) {
-    return ResourceKey::kError;
-  }
-  const auto source_id = ResolveAssetSourceId(context_asset);
-  if (!source_id) {
-    return std::nullopt;
-  }
-  const auto source = ResolveSourceForId(*source_id);
-  const auto* table = source != nullptr ? source->GetTextureTable() : nullptr;
-  if (table == nullptr || !table->IsValidKey(table_index)) {
-    return std::nullopt;
-  }
-  constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
-    IndexOf<data::TextureResource, ResourceTypeList>::value);
-  return InternResourceKey(*source_id, kTextureTypeIndex, table_index);
+  const auto& bindings
+    = static_cast<const internal::ContentBindingBundle&>(*retained);
+  const auto source = context_asset.GetSourceOrigin().instance;
+  const auto local = [this, source](const ResourceIndexT index) -> ResourceKey {
+    return InternResourceKey(source, kTextureResourceTypeIndex, index);
+  };
+  const auto holds = [&bindings](const ResourceKey texture) -> bool {
+    return bindings.FindResource(texture) != nullptr;
+  };
+  return ShownTexture(*resolved, bindings, local, holds);
 }
 
 auto AssetLoader::MakeScriptResourceKeyForAsset(

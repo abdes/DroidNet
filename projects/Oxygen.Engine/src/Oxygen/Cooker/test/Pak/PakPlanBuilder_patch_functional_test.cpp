@@ -470,11 +470,9 @@ auto TexturedRoot(const uint8_t seed,
   -> LooseCookedRoot
 {
   auto root = LooseCookedRoot { "Game", seed };
-  const auto texture = fixtures::TextureBuilder {};
-  const auto payload = texture.Payload();
   for (const auto name : textures) {
     root.DescribeTexture("Textures/" + std::string(name) + ".otex",
-      root.AddTexture(payload, texture.Record(payload)));
+      root.AddTexture(fixtures::TextureBuilder {}));
   }
   auto material = fixtures::MaterialBuilder { "Wood" };
   if (external.has_value()) {

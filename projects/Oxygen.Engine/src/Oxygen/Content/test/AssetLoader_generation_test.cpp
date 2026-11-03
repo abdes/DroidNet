@@ -878,9 +878,7 @@ namespace {
   {
     const auto lease = LockNewGeneration(root);
     auto source = LooseCookedRoot { "textures", seed };
-    const auto texture = cooker::testing::TextureBuilder {};
-    const auto payload = texture.Payload();
-    const auto row = source.AddTexture(payload, texture.Record(payload));
+    const auto row = source.AddTexture(cooker::testing::TextureBuilder {});
     source.DescribeTexture("Meter.otex", row);
     cooker::testing::Materialize(source.Files(), root);
     return { .source = source.SourceKey(), .row = row };
@@ -1517,12 +1515,10 @@ namespace {
   {
     // Arrange
     constexpr auto kMeter = std::string_view { "/Engine/Meter.otex" };
-    const auto texture = cooker::testing::TextureBuilder {};
-    const auto payload = texture.Payload();
     auto textured = LooseCookedRoot { "Engine" };
     static_cast<void>(textured.Material("Default.omat"));
     textured.DescribeTexture(
-      "Meter.otex", textured.AddTexture(payload, texture.Record(payload)));
+      "Meter.otex", textured.AddTexture(cooker::testing::TextureBuilder {}));
     auto engine = CookedPak { std::move(textured) };
     engine.Identity(SourceKeyOf(kEngineSeed));
     auto dropped = LooseCookedRoot { "Engine" };

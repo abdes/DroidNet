@@ -412,15 +412,28 @@ auto SceneBuilder::ScriptSlot(const SceneNode node,
 auto SceneBuilder::Texture(const ResourceIndexT row)
   -> data::ResourceReferenceIndex
 {
-  if (const auto found = std::ranges::find(textures_, row);
-    found != textures_.end()) {
-    return data::ResourceReferenceIndex {
-      static_cast<uint32_t>(found - textures_.begin()),
-    };
+  return BindTexture(data::TextureTarget { row });
+}
+
+auto SceneBuilder::ExternalTexture(const data::AssetKey& texture)
+  -> data::ResourceReferenceIndex
+{
+  return BindTexture(data::TextureTarget { texture });
+}
+
+auto SceneBuilder::BindTexture(const data::TextureTarget& texture)
+  -> data::ResourceReferenceIndex
+{
+  // A cook binds each texture once, in the order the scene names them; the
+  // references bind them in the same order, so a binding's index is its
+  // position.
+  auto found = std::ranges::find(textures_, texture);
+  if (found == textures_.end()) {
+    textures_.push_back(texture);
+    found = std::prev(textures_.end());
   }
-  textures_.push_back(row);
   return data::ResourceReferenceIndex {
-    static_cast<uint32_t>(textures_.size() - 1U),
+    static_cast<uint32_t>(found - textures_.begin()),
   };
 }
 
@@ -722,9 +735,8 @@ auto SceneBuilder::Bytes() const -> std::vector<std::byte>
 auto SceneBuilder::References() const -> data::AssetReferences
 {
   auto references = content::import::AssetReferenceBuilder {};
-  for (const auto row : textures_) {
-    static_cast<void>(
-      references.AddResource(data::ResourceKind::kTexture, row));
+  for (const auto& texture : textures_) {
+    static_cast<void>(references.AddTexture(texture));
   }
   for (const auto& renderable : renderables_) {
     references.AddAsset(renderable.geometry_key, data::AssetType::kGeometry);

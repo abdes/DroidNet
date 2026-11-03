@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -211,6 +212,25 @@ namespace {
                                   source_instance] -> ParsedPhysicsDescriptor {
       return ParsePhysicsDescriptor(*source, reference, source_instance);
     });
+  }
+
+  //! Awaits the load of a texture `asset` names: a texture that does not
+  //! load warns, and the asset's fields that name it show the error texture.
+  auto TolerateTexture(co::Co<> load, const data::Asset& asset,
+    const ResourceKey texture) -> co::Co<>
+  {
+    try {
+      co_await std::move(load);
+    } catch (const OperationCancelledException&) {
+      throw;
+    } catch (const co::TaskCancelledException&) {
+      throw;
+    } catch (const std::exception& error) {
+      LOG_F(WARNING,
+        "Asset '{}' shows the error texture for texture {}, which did not "
+        "load: {}",
+        asset.GetAssetName(), texture.get(), error.what());
+    }
   }
 
   [[noreturn]] auto RefuseSidecar(const data::AssetKey& key,
@@ -423,9 +443,32 @@ auto AssetLoader::DecodeAndPublishAssetAsync(data::AssetKey key,
     typed->SetReferences(std::move(decoded.references));
     const auto& view = request.scope.state_->view;
     internal::ContentBindingBuilder builder(releases);
-    BindExternalTextures(*typed, view.get(), builder);
-    co_await BindDependenciesAsync(
-      *typed, *decoded.dependency_collector, builder, request);
+    // The asset holds every texture it names: those of other sources, bound
+    // here by key, and the local ones its loader collected. A texture is an
+    // optional input: one that does not load leaves its fields showing the
+    // error texture.
+    const auto& collector = *decoded.dependency_collector;
+    auto textures = BindExternalTextures(*typed, view.get(), builder);
+    std::ranges::copy(CollectedResourceKeys<data::TextureResource>(collector),
+      std::back_inserter(textures));
+    OXCO_WITH_NURSERY(nursery)
+    {
+      for (const auto texture : textures) {
+        nursery.Start([this, texture, &typed, &builder, request] -> co::Co<> {
+          co_await TolerateTexture(
+            BindResourceAsync<data::TextureResource>(texture, builder, request),
+            *typed, texture);
+        });
+      }
+      nursery.Start([this, &typed, &collector, &builder, request] -> co::Co<> {
+        co_await BindDependenciesAsync(*typed, collector, builder, request);
+      });
+      co_return co::kJoin;
+    };
+    if constexpr (std::same_as<T, data::MaterialAsset>) {
+      BindMaterialTextureKeys(
+        *typed, typed->GetSourceOrigin().instance, builder);
+    }
     releases->RequireOpen();
     const auto token = !typed->GetReferences().Keys().empty() && view
       ? view->IdentityOwner()
@@ -514,9 +557,8 @@ auto AssetLoader::BindResourceAsync(ResourceKey key,
 }
 
 template <typename T>
-auto AssetLoader::BindCollectedResourcesAsync(
-  const internal::DependencyCollector& collector,
-  internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
+auto AssetLoader::CollectedResourceKeys(
+  const internal::DependencyCollector& collector) -> std::vector<ResourceKey>
 {
   auto keys = std::vector<ResourceKey> {};
   for (const auto& reference : collector.ResourceRefDependencies()) {
@@ -531,6 +573,15 @@ auto AssetLoader::BindCollectedResourcesAsync(
       keys.push_back(key);
     }
   }
+  return keys;
+}
+
+template <typename T>
+auto AssetLoader::BindCollectedResourcesAsync(
+  const internal::DependencyCollector& collector,
+  internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
+{
+  const auto keys = CollectedResourceKeys<T>(collector);
   // Independent loads start together, so their payload reads are in flight
   // on the device at once.
   OXCO_WITH_NURSERY(nursery)
@@ -544,39 +595,13 @@ auto AssetLoader::BindCollectedResourcesAsync(
   };
 }
 
-auto AssetLoader::BindDependenciesAsync(data::MaterialAsset& asset,
-  const internal::DependencyCollector& collector,
-  internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
+auto AssetLoader::BindDependenciesAsync(data::MaterialAsset& /*asset*/,
+  const internal::DependencyCollector& /*collector*/,
+  internal::ContentBindingBuilder& /*bindings*/, LoadRequest /*request*/)
+  -> co::Co<>
 {
-  BindMaterialTextureKeys(asset, asset.GetSourceOrigin().instance, bindings);
-  const std::array keys {
-    asset.GetBaseColorTextureKey(),
-    asset.GetNormalTextureKey(),
-    asset.GetMetallicTextureKey(),
-    asset.GetRoughnessTextureKey(),
-    asset.GetAmbientOcclusionTextureKey(),
-    asset.GetEmissiveTextureKey(),
-    asset.GetSpecularTextureKey(),
-    asset.GetSheenColorTextureKey(),
-    asset.GetClearcoatTextureKey(),
-    asset.GetClearcoatNormalTextureKey(),
-    asset.GetTransmissionTextureKey(),
-    asset.GetThicknessTextureKey(),
-  };
-  OXCO_WITH_NURSERY(nursery)
-  {
-    for (const auto key : keys) {
-      nursery.Start([this, key, &bindings, request] -> co::Co<> {
-        co_await BindResourceAsync<data::TextureResource>(
-          key, bindings, request);
-      });
-    }
-    nursery.Start([this, &collector, &bindings, request] -> co::Co<> {
-      co_await BindCollectedResourcesAsync<data::TextureResource>(
-        collector, bindings, request);
-    });
-    co_return co::kJoin;
-  };
+  // A material depends only on its textures, which every asset binds.
+  co_return;
 }
 
 auto AssetLoader::BindDependenciesAsync(data::GeometryAsset& asset,
@@ -632,10 +657,6 @@ auto AssetLoader::BindDependenciesAsync(data::SceneAsset& asset,
 {
   OXCO_WITH_NURSERY(nursery)
   {
-    nursery.Start([this, &collector, &bindings, request] -> co::Co<> {
-      co_await BindCollectedResourcesAsync<data::TextureResource>(
-        collector, bindings, request);
-    });
     nursery.Start([this, &collector, &bindings, request] -> co::Co<> {
       co_await BindCollectedResourcesAsync<data::BufferResource>(
         collector, bindings, request);

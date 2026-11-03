@@ -6,19 +6,17 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <iterator>
 #include <limits>
 #include <memory>
 #include <span>
-#include <stdexcept>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "Fixtures/LoaderTestFixtures.h"
-#include "Utils/PakUtils.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Span.h>
@@ -26,9 +24,12 @@
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
+#include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -48,6 +49,21 @@ using oxygen::content::loaders::LoadMaterialAsset;
 using oxygen::base::CheckedAt;
 
 namespace {
+
+using oxygen::cooker::testing::MaterialBuilder;
+using oxygen::cooker::testing::MaterialRefusal;
+using oxygen::data::CookedDefect;
+
+//! Expects `load` to be refused with a `CookedFormatError` of `expected`.
+auto ExpectDefect(auto&& load, const CookedDefect expected) -> void
+{
+  try {
+    load();
+    FAIL() << "The descriptor was accepted";
+  } catch (const oxygen::data::CookedFormatError& error) {
+    EXPECT_EQ(error.Defect(), expected);
+  }
+}
 
 //=== MaterialLoader Basic Functionality Tests ===----------------------------//
 
@@ -157,7 +173,8 @@ NOLINT_TEST_F(MaterialLoaderBasicTest, RejectsObsoleteMaterialVersion)
   desc.header.version = 2;
   WriteMaterialDescriptor(desc);
 
-  EXPECT_THROW(LoadMaterialAsset(CreateLoaderContext()), std::runtime_error);
+  ExpectDefect([&] { (void)LoadMaterialAsset(CreateLoaderContext()); },
+    CookedDefect::kUnsupportedVersion);
 }
 
 NOLINT_TEST_F(MaterialLoaderBasicTest, RejectsNonFiniteEmission)
@@ -166,7 +183,8 @@ NOLINT_TEST_F(MaterialLoaderBasicTest, RejectsNonFiniteEmission)
   desc.emissive_factor[0] = std::numeric_limits<float>::infinity();
   WriteMaterialDescriptor(desc);
 
-  EXPECT_THROW(LoadMaterialAsset(CreateLoaderContext()), std::runtime_error);
+  ExpectDefect([&] { (void)LoadMaterialAsset(CreateLoaderContext()); },
+    CookedDefect::kInvalidValue);
 }
 
 //! Test: LoadMaterialAsset returns valid MaterialAsset for correct input.
@@ -301,36 +319,13 @@ NOLINT_TEST_F(
 
 //=== MaterialLoader Error Handling Tests ===---------------------------------//
 
-//! Fixture for MaterialLoader error test cases.
-class MaterialLoaderErrorTest : public MaterialLoaderBasicTest {
-  // Inherits all functionality from MaterialLoaderBasicTest
-};
-
-//! Test: LoadMaterialAsset throws when header reading fails.
-/*!
-  Scenario: Tests error handling when the material descriptor header is
-  truncated or corrupted, ensuring proper error propagation.
-*/
-NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterialTruncatedHeaderThrows)
+//! A descriptor that ends inside its asset header is refused as truncated.
+NOLINT_TEST(MaterialLoaderRefusalTest, RefusesADescriptorCutInsideItsHeader)
 {
-  using oxygen::content::testing::ParseHexDumpWithOffset;
+  auto bytes = MaterialBuilder { "material" }.Bytes();
+  bytes.resize(sizeof(oxygen::data::pak::core::AssetHeader) / 2U);
 
-  // Arrange: Write only partial header (insufficient bytes)
-  const std::string truncated_hexdump = R"(
-     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
-    16: 00 00 00 00 00 00 00 00
-  )";
-
-  {
-    auto pack = desc_writer_.ScopedAlignment(1);
-    auto buf = ParseHexDumpWithOffset(truncated_hexdump, 32);
-    ASSERT_TRUE(desc_writer_.WriteBlob(buf));
-  }
-  EXPECT_TRUE(desc_stream_.Seek(oxygen::serio::ByteOffset { 0 }));
-
-  // Act + Assert: Should throw due to incomplete header
-  auto context = CreateLoaderContext();
-  EXPECT_THROW({ (void)LoadMaterialAsset(context); }, std::runtime_error);
+  EXPECT_EQ(MaterialRefusal(bytes), CookedDefect::kTruncated);
 }
 
 //! Test: LoadMaterialAsset handles zero texture indices correctly.
@@ -376,7 +371,7 @@ NOLINT_TEST_F(
   ASSERT_HAS_VALUE(references);
   auto [context, collector] = CreateDecodeLoaderContext();
   context.asset_references = oxygen::observer_ptr(&*references);
-  auto asset = LoadMaterialAsset(std::move(context));
+  auto asset = LoadMaterialAsset(context);
 
   // Assert
   ASSERT_THAT(asset, NotNull());
@@ -389,20 +384,6 @@ NOLINT_TEST_F(
   EXPECT_THAT(asset->GetShaders(), SizeIs(0)); // No shaders
 
   EXPECT_THAT(collector->ResourceRefDependencies(), SizeIs(0));
-}
-
-//! Test: Non-parse-only loads require a dependency collector.
-NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterialNoCollectorThrows)
-{
-  auto desc = MakeMaterialDescriptor("Test Material");
-  WriteMaterialDescriptor(desc);
-
-  auto context = CreateLoaderContext();
-  context.parse_only = false;
-  context.dependency_collector.reset();
-
-  EXPECT_THROW(
-    { (void)LoadMaterialAsset(std::move(context)); }, std::runtime_error);
 }
 
 //! Test: LoadMaterialAsset handles single shader stage correctly.
@@ -450,41 +431,16 @@ NOLINT_TEST_F(MaterialLoaderBasicTest, LoadMaterialSingleShaderStageWorks)
         &oxygen::data::ShaderReference::GetShaderSourceHash, Eq(0xBBAAU))));
 }
 
-//! Test: LoadMaterialAsset throws when shader reading fails.
-/*!
-  Scenario: Tests error handling when shader_stages indicates shaders exist
-  but reading the shader reference fails due to insufficient data.
-*/
-NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterialShaderReadFailureThrows)
+//! A descriptor cut inside its shader references is refused as truncated,
+//! before they are read: it also ends before the string table that follows
+//! them.
+NOLINT_TEST(MaterialLoaderRefusalTest, RefusesADescriptorCutInsideItsShaders)
 {
-  using oxygen::content::testing::ParseHexDumpWithOffset;
+  auto bytes = MaterialBuilder { "material" }.PixelShader().Bytes();
+  bytes.resize(sizeof(oxygen::data::pak::render::MaterialAssetDesc)
+    + (sizeof(oxygen::data::pak::render::ShaderReferenceDesc) / 2U));
 
-  // Arrange: Material indicating 1 shader but insufficient data
-  auto desc = MakeMaterialDescriptor("Test Material");
-  desc.shader_stages = 0x8U;
-
-  // Incomplete shader data (needs 424 bytes but only provide 50)
-  const std::string partial_shader_hexdump = R"(
-     0: 56 65 72 74 65 78 53 68 61 64 65 72 00 00 00 00
-    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    48: 00 00
-  )";
-
-  {
-    auto pack = desc_writer_.ScopedAlignment(1);
-    ASSERT_TRUE(desc_writer_.WriteBlob(
-      std::as_bytes(std::span<const MaterialAssetDesc, 1>(&desc, 1))));
-    constexpr size_t kTruncatedShaderSize = 50U;
-    auto sh_buf
-      = ParseHexDumpWithOffset(partial_shader_hexdump, kTruncatedShaderSize);
-    ASSERT_TRUE(desc_writer_.WriteBlob(sh_buf));
-  }
-  EXPECT_TRUE(desc_stream_.Seek(oxygen::serio::ByteOffset { 0 }));
-
-  // Act + Assert: Should throw due to incomplete shader data
-  auto context = CreateLoaderContext();
-  EXPECT_THROW({ (void)LoadMaterialAsset(context); }, std::runtime_error);
+  EXPECT_EQ(MaterialRefusal(bytes), CookedDefect::kTruncated);
 }
 
 //! Repeated local texture bindings collect one exact source-qualified
@@ -512,7 +468,7 @@ NOLINT_TEST_F(
   ASSERT_HAS_VALUE(references);
   auto [context, collector] = CreateDecodeLoaderContext();
   context.asset_references = oxygen::observer_ptr(&*references);
-  (void)LoadMaterialAsset(std::move(context));
+  (void)LoadMaterialAsset(context);
 
   const ResourceRef expected {
     .source = oxygen::data::SourceInstanceId { 7 },
@@ -552,7 +508,7 @@ NOLINT_TEST_F(
   // Act
   auto [context, collector] = CreateDecodeLoaderContext();
   context.asset_references = oxygen::observer_ptr(&*references);
-  auto asset = LoadMaterialAsset(std::move(context));
+  auto asset = LoadMaterialAsset(context);
 
   // Assert
   ASSERT_THAT(asset, NotNull());

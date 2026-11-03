@@ -58,6 +58,7 @@ m_gtest_program(
     "AssetLoader_physics_test.cpp"
     "AssetLoader_basic_test.cpp"
     "AssetLoader_buffer_test.cpp"
+    "AssetLoader_environment_test.cpp"
     "AssetLoader_eviction_test.cpp"
     "AssetLoader_eviction_reentrancy_test.cpp"
     "AssetLoader_autotrim_test.cpp"

@@ -64,10 +64,8 @@ auto WriteMaterialSource(const std::filesystem::path& root,
 auto WriteTexturedMaterialSource(const std::filesystem::path& root,
   const data::AssetKey& key) -> data::SourceKey
 {
-  const auto pixel = cooker::testing::TextureBuilder {};
-  const auto payload = pixel.Payload();
   auto source = NewSourceRoot();
-  const auto texture = source.AddTexture(payload, pixel.Record(payload));
+  const auto texture = source.AddTexture(cooker::testing::TextureBuilder {});
   auto material = MaterialBuilder { "Surface" };
   material.Texture(&MaterialAssetDesc::base_color_texture, texture)
     .Texture(&MaterialAssetDesc::normal_texture, texture);

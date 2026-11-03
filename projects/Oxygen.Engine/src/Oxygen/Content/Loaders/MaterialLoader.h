@@ -10,13 +10,11 @@
 #include <array>
 #include <bit>
 #include <memory>
-#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
-#include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -24,7 +22,6 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDescriptor.h>
 #include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Stream.h>
@@ -32,7 +29,7 @@
 namespace oxygen::content::loaders {
 
 //! Loader for material assets.
-inline auto LoadMaterialAsset(LoaderContext context)
+inline auto LoadMaterialAsset(const LoaderContext& context)
   -> std::unique_ptr<data::MaterialAsset>
 {
   LOG_SCOPE_FUNCTION(1);
@@ -311,18 +308,6 @@ inline auto LoadMaterialAsset(LoaderContext context)
   LOG_F(2, "thickness        : {:.3f}", desc.thickness_factor.ToFloat());
   LOG_F(2, "attenuation dist : {:.3f}", desc.attenuation_distance);
 
-  // TODO: Implement shader refs as resources
-  // Currently shader references are embedded data without asset keys
-  // In the future, shaders should be separate assets/resources with proper keys
-  //
-  // Register asset dependencies for shader references
-  // for (const auto& shader_ref : shader_refs) {
-  //   oxygen::data::AssetKey shader_asset_key = shader_ref.GetAssetKey();
-  //   LOG_F(2, "Registering asset dependency: shader = {}",
-  //   nostd::to_string(shader_asset_key));
-  //   loader.AddAssetDependency(current_asset_key, shader_asset_key);
-  // }
-
   // One shader reference follows per set bit of shader_stages; the descriptor
   // check below matches them to the stages.
   const auto shader_count = std::popcount(desc.shader_stages);
@@ -364,36 +349,13 @@ inline auto LoadMaterialAsset(LoaderContext context)
     });
   context.ValidateReferences(resource_uses, {});
 
-  if (!context.parse_only && !context.dependency_collector) {
-    throw std::runtime_error(
-      "MaterialAsset loader requires a dependency collector; "
-      "non-parse-only loads must be orchestrated via async publish");
-  }
+  DCHECK_F(context.parse_only || context.dependency_collector,
+    "MaterialAsset loader requires a dependency collector; "
+    "non-parse-only loads must be orchestrated via async publish");
 
   if (!context.parse_only) {
-    using data::TextureResource;
-    using data::pak::core::kNoResourceIndex;
-
-    auto collect_texture_ref
-      = [&](const ResourceReferenceIndex reference) -> void {
-      // Another source's texture is bound by key when the material publishes.
-      const auto target = context.ResolveTexture(reference);
-      const auto* texture_index = std::get_if<ResourceIndexT>(&target);
-      if (texture_index == nullptr || *texture_index == kNoResourceIndex
-        || *texture_index == data::pak::core::kErrorTextureResourceIndex) {
-        return;
-      }
-
-      internal::ResourceRef ref {
-        .source = context.source_instance,
-        .resource_type_id = TextureResource::ClassTypeId(),
-        .resource_index = *texture_index,
-      };
-      context.dependency_collector->AddResourceDependency(ref);
-    };
-
     for (const auto reference : texture_references) {
-      collect_texture_ref(reference);
+      CollectTexture(context, reference);
     }
   }
 

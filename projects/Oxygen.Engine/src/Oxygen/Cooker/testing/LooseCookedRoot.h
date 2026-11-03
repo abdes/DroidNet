@@ -22,6 +22,7 @@
 #include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/ScriptBuilder.h>
+#include <Oxygen/Cooker/testing/TextureBuilder.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -175,6 +176,10 @@ public:
   auto AddTexture(std::span<const std::byte> payload,
     data::pak::core::TextureResourceDesc desc = OnePixelTexture())
     -> ResourceIndexT;
+
+  //! Adds the texture `texture` describes, a payload the texture loader
+  //! reads, with its row; returns its row.
+  auto AddTexture(const TextureBuilder& texture) -> ResourceIndexT;
 
   auto AddBuffer(std::span<const std::byte> payload,
     data::pak::core::BufferResourceDesc desc = RawBuffer()) -> ResourceIndexT;

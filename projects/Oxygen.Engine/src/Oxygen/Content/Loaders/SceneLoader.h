@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <memory>
 #include <ranges>
-#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -17,7 +16,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
-#include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -208,17 +206,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
 
   if (!context.parse_only) {
     for (const auto& use : detail::EnvironmentTextureUses(*asset)) {
-      const auto index = context.ResolveResource(use.reference, use.kind);
-      if (index && *index != data::pak::core::kFallbackResourceIndex
-        && *index != data::pak::core::kErrorTextureResourceIndex) {
-        const auto* table = context.source_content
-          ? context.source_content->GetTextureTable()
-          : nullptr;
-        if (!table || !table->IsValidKey(*index)) {
-          throw std::runtime_error("Scene environment texture binding is "
-                                   "outside its source texture table");
-        }
-      }
+      CollectTexture(context, use.reference);
     }
   }
   return asset;

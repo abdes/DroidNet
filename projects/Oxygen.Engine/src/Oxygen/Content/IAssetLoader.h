@@ -333,10 +333,11 @@ public:
     data::SourceKey source_key, data::pak::core::ResourceIndexT resource_index)
     -> std::optional<ResourceKey> = 0;
 
-  //! Resolve a loaded asset's texture field: an entry of its owning source's
-  //! texture table, or a texture of another source named by key, which is the
-  //! one bound when the asset loaded; a later mount never rebinds it. A key
-  //! no mounted source held at load returns nullopt.
+  //! The texture a loaded asset's texture field shows: the one the asset's
+  //! load holds, an entry of its owning source's texture table or a texture
+  //! of another source named by key; a later mount never rebinds it. A field
+  //! naming a texture the load could not hold shows `ResourceKey::kError`, as
+  //! the load warned; a field naming no texture returns nullopt.
   [[nodiscard]] virtual auto MakeTextureResourceKeyForAsset(
     const data::Asset& context_asset,
     data::ResourceReferenceIndex resource_index)

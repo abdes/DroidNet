@@ -25,6 +25,7 @@
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
+#include <Oxygen/Cooker/testing/TextureBuilder.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -340,6 +341,13 @@ auto LooseCookedRoot::AddTexture(const std::span<const std::byte> payload,
   data::pak::core::TextureResourceDesc desc) -> ResourceIndexT
 {
   return AddRow(textures_, payload, desc);
+}
+
+auto LooseCookedRoot::AddTexture(const TextureBuilder& texture)
+  -> ResourceIndexT
+{
+  const auto payload = texture.Payload();
+  return AddTexture(payload, texture.Record(payload));
 }
 
 auto LooseCookedRoot::AddBuffer(const std::span<const std::byte> payload,

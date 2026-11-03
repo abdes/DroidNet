@@ -1369,6 +1369,11 @@ private:
   template <typename T>
   auto BindResourceAsync(ResourceKey key,
     internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
+  //! The resources of type `T` an asset's loader collected.
+  template <typename T>
+  auto CollectedResourceKeys(const internal::DependencyCollector& collector)
+    -> std::vector<ResourceKey>;
+  //! Binds the resources of type `T` an asset's loader collected, all at once.
   template <typename T>
   auto BindCollectedResourcesAsync(
     const internal::DependencyCollector& collector,
@@ -1486,9 +1491,13 @@ private:
   //! Bind each texture `asset` names by key to the texture that wins in
   //! `view`, the view the load resolves through, so that contextual reads and
   //! repeated publication never pick a texture of a later mount.
+  /*!
+   @return The resources bound, which the load then loads and holds, as it
+     holds the local textures the asset's loader collects.
+  */
   auto BindExternalTextures(const data::Asset& asset,
     const internal::ContentSourceView* view,
-    internal::ContentBindingBuilder& bindings) -> void;
+    internal::ContentBindingBuilder& bindings) -> std::vector<ResourceKey>;
 
   auto BindMaterialTextureKeys(data::MaterialAsset& material,
     data::SourceInstanceId source,
