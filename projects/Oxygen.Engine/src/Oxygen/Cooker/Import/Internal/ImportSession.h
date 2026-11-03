@@ -52,19 +52,18 @@ class LooseCookedIndexRegistry;
 /*!
  The session provides a clean boundary between:
  - AsyncImporter (shared compute infrastructure)
- - Per-job output state (diagnostics, LooseCookedWriter)
+ - Per-job output state (diagnostics, emitters)
 
- The session owns the `LooseCookedWriter` and collects diagnostics during
- import. Its emitters start their cooked writes in the nursery the session is
- given (the job's producer nursery), so cancelling the job cancels the writes.
- Call `Finalize()` to wait for all I/O and write the index file.
+ The session collects diagnostics during import and registers what it emits
+ with the cooked root's index session (`LooseCookedIndexRegistry`). Its emitters
+ start their cooked writes in the nursery the session is given (the job's
+ producer nursery), so cancelling the job cancels the writes. Call `Finalize()`
+ to wait for all I/O and write the index file.
 
  ### Key Features
 
  - **Thread-Safe Diagnostics**: `AddDiagnostic()` is safe to call from any
    thread (ThreadPool workers, I/O callbacks).
- - **Lazy LooseCookedWriter**: Writer is created on construction pointing at
-   the cooked root from the request.
  - **Async Finalization**: `Finalize()` is a coroutine that waits for pending
    I/O and writes the container index file.
 
@@ -122,12 +121,6 @@ public:
   //! Get the cooked root path for this session.
   OXGN_COOK_NDAPI auto CookedRoot() const noexcept
     -> const std::filesystem::path&;
-
-  //=== LooseCookedWriter Access
-  //===-------------------------------------------//
-
-  //! Get the loose cooked writer for this session.
-  OXGN_COOK_NDAPI auto CookedWriter() noexcept -> LooseCookedWriter&;
 
   //! Get the async file reader (non-owning).
   OXGN_COOK_NDAPI auto FileReader() const noexcept
@@ -301,7 +294,6 @@ private:
   //! The file system of the index registry, which the service shares.
   observer_ptr<cooked::ImportStorage> storage_;
   std::filesystem::path cooked_root_;
-  LooseCookedWriter cooked_writer_;
 
   std::optional<std::unique_ptr<import::TextureEmitter>> texture_emitter_;
   std::optional<std::unique_ptr<import::BufferEmitter>> buffer_emitter_;

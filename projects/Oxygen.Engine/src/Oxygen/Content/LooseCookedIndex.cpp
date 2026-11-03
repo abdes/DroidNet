@@ -18,6 +18,7 @@
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 
@@ -69,6 +70,23 @@ auto LooseCookedIndex::LoadFromBytes(std::vector<std::byte>&& bytes)
 auto LooseCookedIndex::Guid() const noexcept -> data::SourceKey
 {
   return impl_->Guid();
+}
+
+auto LooseCookedIndex::Commit() const noexcept -> uint64_t
+{
+  return impl_->Commit();
+}
+
+auto LooseCookedIndex::RetiredFiles() const noexcept
+  -> std::span<const data::loose_cooked::RetiredFile>
+{
+  return impl_->RetiredFiles();
+}
+
+auto LooseCookedIndex::Requirements() const noexcept
+  -> std::span<const AssetRequirement>
+{
+  return impl_->Requirements();
 }
 
 auto LooseCookedIndex::FindDescriptorRelPath(

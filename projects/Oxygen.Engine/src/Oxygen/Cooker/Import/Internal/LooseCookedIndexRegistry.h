@@ -89,8 +89,8 @@ public:
   /*! @see LooseCookedWriter::RegisterExternalAuxiliaryFile */
   OXGN_COOK_API auto RegisterExternalAuxiliaryFile(
     const std::filesystem::path& cooked_root, std::string_view relpath,
-    const LooseCookedProducer& producer, const LooseCookedFileDigest& produced)
-    -> void;
+    std::string_view virtual_path, const LooseCookedProducer& producer,
+    const LooseCookedFileDigest& produced) -> void;
 
   //! Retire the outputs a complete re-cook no longer writes.
   /*! @see LooseCookedWriter::RetireUnwrittenOutputs */
@@ -106,7 +106,9 @@ public:
     data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, const LooseCookedFileDigest& produced,
     const data::AssetReferences& references,
-    const LooseCookedProducer& producer) -> void;
+    const LooseCookedProducer& producer,
+    std::span<const data::loose_cooked::IndexedRequirement> requirements = {})
+    -> void;
 
   //! Retire participation and await the cohort's index publication.
   /*! All participants receive the published identity. Only the writing session

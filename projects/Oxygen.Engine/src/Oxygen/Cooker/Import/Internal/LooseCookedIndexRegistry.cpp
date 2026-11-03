@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -25,6 +25,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/OxCo/Co.h>
@@ -119,7 +120,6 @@ auto LooseCookedIndexRegistry::RegisterExternalFile(
   const data::loose_cooked::FileKind kind, std::string_view relpath,
   const LooseCookedFileDigest& produced) -> void
 {
-  const auto key = NormalizeKey(cooked_root);
   const auto state = GetEntry(cooked_root);
   std::scoped_lock lock(state->mutex);
   auto& entry = *state;
@@ -130,14 +130,13 @@ auto LooseCookedIndexRegistry::RegisterExternalFile(
 
   entry.writer->RegisterExternalFile(kind, relpath, produced);
   DLOG_F(INFO, "File '{}' kind={} registered for '{}'", std::string(relpath),
-    static_cast<uint32_t>(kind), key);
+    static_cast<uint32_t>(kind), NormalizeKey(cooked_root));
 }
 
 auto LooseCookedIndexRegistry::RegisterExternalDataFile(
   const std::filesystem::path& cooked_root,
   const data::loose_cooked::FileKind kind, std::string_view relpath) -> void
 {
-  const auto key = NormalizeKey(cooked_root);
   const auto state = GetEntry(cooked_root);
   std::scoped_lock lock(state->mutex);
   auto& entry = *state;
@@ -148,7 +147,8 @@ auto LooseCookedIndexRegistry::RegisterExternalDataFile(
 
   entry.writer->RegisterExternalDataFile(kind, relpath);
   DLOG_F(INFO, "Data file '{}' kind={} registered for '{}'",
-    std::string(relpath), static_cast<uint32_t>(kind), key);
+    std::string(relpath), static_cast<uint32_t>(kind),
+    NormalizeKey(cooked_root));
 }
 
 auto LooseCookedIndexRegistry::RegisterExternalTextureDescriptor(
@@ -156,7 +156,6 @@ auto LooseCookedIndexRegistry::RegisterExternalTextureDescriptor(
   std::string_view virtual_path, const LooseCookedProducer& producer,
   const LooseCookedFileDigest& produced) -> void
 {
-  const auto key = NormalizeKey(cooked_root);
   const auto state = GetEntry(cooked_root);
   std::scoped_lock lock(state->mutex);
   auto& entry = *state;
@@ -168,15 +167,14 @@ auto LooseCookedIndexRegistry::RegisterExternalTextureDescriptor(
   entry.writer->RegisterExternalTextureDescriptor(
     relpath, virtual_path, producer, produced);
   DLOG_F(INFO, "Texture descriptor '{}' ({}) registered for '{}'",
-    std::string(relpath), std::string(virtual_path), key);
+    std::string(relpath), std::string(virtual_path), NormalizeKey(cooked_root));
 }
 
 auto LooseCookedIndexRegistry::RegisterExternalAuxiliaryFile(
   const std::filesystem::path& cooked_root, std::string_view relpath,
-  const LooseCookedProducer& producer, const LooseCookedFileDigest& produced)
-  -> void
+  std::string_view virtual_path, const LooseCookedProducer& producer,
+  const LooseCookedFileDigest& produced) -> void
 {
-  const auto key = NormalizeKey(cooked_root);
   const auto state = GetEntry(cooked_root);
   std::scoped_lock lock(state->mutex);
   auto& entry = *state;
@@ -185,16 +183,16 @@ auto LooseCookedIndexRegistry::RegisterExternalAuxiliaryFile(
     entry.writer = std::make_unique<LooseCookedWriter>(cooked_root, *storage_);
   }
 
-  entry.writer->RegisterExternalAuxiliaryFile(relpath, producer, produced);
-  DLOG_F(
-    INFO, "Auxiliary file '{}' registered for '{}'", std::string(relpath), key);
+  entry.writer->RegisterExternalAuxiliaryFile(
+    relpath, virtual_path, producer, produced);
+  DLOG_F(INFO, "Auxiliary file '{}' registered for '{}'", std::string(relpath),
+    NormalizeKey(cooked_root));
 }
 
 auto LooseCookedIndexRegistry::RetireUnwrittenOutputs(
   const std::filesystem::path& cooked_root, const LooseCookedRecook& recook)
   -> void
 {
-  const auto key = NormalizeKey(cooked_root);
   const auto state = GetEntry(cooked_root);
   std::scoped_lock lock(state->mutex);
   auto& entry = *state;
@@ -205,17 +203,17 @@ auto LooseCookedIndexRegistry::RetireUnwrittenOutputs(
 
   entry.writer->RetireUnwrittenOutputs(recook);
   DLOG_F(INFO, "Outputs '{}' no longer writes under '{}' retire from '{}'",
-    recook.source, recook.identity, key);
+    recook.source, recook.identity, NormalizeKey(cooked_root));
 }
 
 auto LooseCookedIndexRegistry::RegisterProducedAssetDescriptor(
   const std::filesystem::path& cooked_root, const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
   std::string_view descriptor_relpath, const LooseCookedFileDigest& produced,
-  const data::AssetReferences& references, const LooseCookedProducer& producer)
+  const data::AssetReferences& references, const LooseCookedProducer& producer,
+  const std::span<const data::loose_cooked::IndexedRequirement> requirements)
   -> void
 {
-  const auto storage_key = NormalizeKey(cooked_root);
   const auto state = GetEntry(cooked_root);
   std::scoped_lock lock(state->mutex);
   auto& entry = *state;
@@ -225,10 +223,10 @@ auto LooseCookedIndexRegistry::RegisterProducedAssetDescriptor(
   }
 
   entry.writer->RegisterProducedAssetDescriptor(key, asset_type, virtual_path,
-    descriptor_relpath, produced, references, producer);
+    descriptor_relpath, produced, references, producer, requirements);
   DLOG_F(INFO, "Asset '{}' type={} relpath='{}' registered for '{}'",
     data::to_string(key), static_cast<uint32_t>(asset_type),
-    std::string(descriptor_relpath), storage_key);
+    std::string(descriptor_relpath), NormalizeKey(cooked_root));
 }
 
 auto LooseCookedIndexRegistry::EndSession(ImportSessionToken& participation)

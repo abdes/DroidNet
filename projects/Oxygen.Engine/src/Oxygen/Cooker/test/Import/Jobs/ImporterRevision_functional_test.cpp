@@ -67,81 +67,81 @@ namespace {
   constexpr auto kGolden = std::to_array<GoldenOutput>({
     {
       .importer = Importer::kGltf,
-      .revision = 8,
+      .revision = 9,
       .digest
-      = "3af2c0a0d98b9089d2de2b63264d81010d06964c2305799456aac5633a5bf8af",
+      = "a8db591a7a88a95be700c7494099f71005cce1fd4e6dc8369697e122968e2d60",
     },
     {
       .importer = Importer::kFbx,
-      .revision = 8,
+      .revision = 9,
       .digest
-      = "c55d0b3d48e5ccac31532bb484a55f204498d8a45f2a8e1fc9185ee987a0a3ae",
+      = "968e060b50e8005c0cf925f4ce9277184dc3eab3db1f063b1ee643bcbef21dd8",
     },
     {
       .importer = Importer::kTexture,
-      .revision = 4,
+      .revision = 5,
       .digest
-      = "323638f9734039409a714491bb482e638ed02d885a1281e131a2ec12e3bd2736",
+      = "a29e0978e13f327d808eed9de1913c0584a2b4429a72191f72216b23aaa97552",
     },
     {
       .importer = Importer::kBufferContainer,
-      .revision = 3,
+      .revision = 4,
       .digest
-      = "df84ea0d66dfb18a4edc3c6f90e5c9f53053bb496efcaeeaf9389d520e689f4a",
+      = "2195e4857935ea5460f79e7b5d73e2702f864b2b00a68d269c06b660bac7ab38",
     },
     {
       .importer = Importer::kMaterialDescriptor,
-      .revision = 1,
+      .revision = 2,
       .digest
-      = "e27cf4d7b9c8eea64732e90423124b655a2389a9dd96c44477ba12606d78504e",
+      = "30a0a6ce91cd0333b471e07f47b7f7ff690069b65a840ed3d708bdbde54727fd",
     },
     {
       .importer = Importer::kPhysicsMaterialDescriptor,
-      .revision = 1,
+      .revision = 2,
       .digest
-      = "1957ba2992afae7e688d46122fcfe1d8ea7bbfc42f202b573dad4660e217ceee",
+      = "025bb76e81f6c311cb8f3753d5d2e6fa524b33332cc3e7b460bb942e9ede6f7d",
     },
     {
       .importer = Importer::kCollisionShapeDescriptor,
-      .revision = 1,
+      .revision = 2,
       .digest
-      = "c423ba1663d54f16e0431ecb00f4e0912b45a273c6b33d54e0d508a92667c9da",
+      = "88d285a6adc3f381acb70177f99c15be15ed071194618c719244cc779bb62fda",
     },
     {
       .importer = Importer::kGeometryDescriptor,
-      .revision = 5,
+      .revision = 6,
       .digest
-      = "e2e5dfe4679f164adc3b959a48fad1b9f6f005702a9c9cd345bc391c075660a3",
+      = "ba488928f5b43d8df92f9b44b50d56837ba68cf1c3936bcb9a5d2b3b3fe2afe2",
     },
     {
       .importer = Importer::kSceneDescriptor,
-      .revision = 1,
+      .revision = 2,
       .digest
-      = "275aeff5332281049262e1b55073f44491e6e2b85932321218350a5aa7fb79ee",
+      = "43c02f14d0c10fe080357d8d2de8885fa743206dad4b2f785f3eba8f22c36ec3",
     },
     {
       .importer = Importer::kScriptAsset,
-      .revision = 2,
+      .revision = 3,
       .digest
-      = "112c901be6b70b3d6f698dabb548300c94b0c20aaa7d2fcd50feb42fe85718f5",
+      = "5c6f87cf4b3df6c50ca00c568e74c4654202665ccf5e40507733459a2ce4ee12",
     },
     {
       .importer = Importer::kScriptingSidecar,
-      .revision = 1,
+      .revision = 2,
       .digest
-      = "db9e5a83824b8503cc83b87a25900e881261432d076b3ede9f4ec02d82346137",
+      = "a430d6c5aa43943f2b349edcb8b55c73b8d0c22e3b8ebfdfe9490b509507eafb",
     },
     {
       .importer = Importer::kPhysicsSidecar,
-      .revision = 4,
+      .revision = 5,
       .digest
-      = "d78fa087815a75f3fd68b3f396d4a797b5f7813aa82fdeaa1458e8e2c583097b",
+      = "1a37713eb03bb3fcba622e20321751669a7017d781bd3a6bc24a2bb5ce80a9e6",
     },
     {
       .importer = Importer::kInput,
-      .revision = 1,
+      .revision = 2,
       .digest
-      = "ed55ad546fea83382b34cab7d1d42605eb7b1e51d731d9ddd7b2e0d98a3a293e",
+      = "12f0d486c3ecd12dc7c992566eb216cb9050ec1888312e2a7d879b91feadd94f",
     },
   });
 

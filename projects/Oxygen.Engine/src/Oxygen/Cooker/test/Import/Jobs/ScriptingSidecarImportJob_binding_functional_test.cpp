@@ -6,7 +6,6 @@
 
 // Covers: Import/Internal/Jobs/ScriptingSidecarImportJob.cpp
 
-#include <algorithm>
 #include <filesystem>
 #include <latch>
 #include <string>
@@ -19,7 +18,6 @@
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneIds.h>
@@ -79,7 +77,7 @@ namespace {
     EXPECT_FALSE(StoresScriptBindingsFile(inspection_after_sidecar));
 
     const auto scene_bytes
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key);
     ASSERT_FALSE(scene_bytes.empty());
     auto scene = data::SceneAsset(scene_asset->key, scene_bytes);
     const auto components = scene.GetComponents<ScriptingComponentRecord>();
@@ -145,7 +143,7 @@ namespace {
     EXPECT_FALSE(StoresScriptBindingsFile(inspection_after_sidecar));
 
     const auto scene_bytes
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key);
     ASSERT_FALSE(scene_bytes.empty());
     auto scene = data::SceneAsset(scene_asset->key, scene_bytes);
     const auto components = scene.GetComponents<ScriptingComponentRecord>();

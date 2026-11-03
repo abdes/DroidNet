@@ -47,15 +47,15 @@ namespace internal {
   };
 
   //! Resolve an authored texture reference against the job's identity
-  //! (`ResolveJobReference`), then look it up: in the job's own output root
-  //! first, where it binds a local texture-table entry, then in its cooked
-  //! context roots, newest first, where it binds the texture by key without
-  //! copying it. Returns `std::nullopt` after reporting an error diagnostic; a
-  //! missing descriptor resolves as `missing` when the request allows it.
+  //! (`ResolveJobReference`), then look it up in the indexes of the mounted
+  //! cooked roots, newest first: in the job's own output root it binds a local
+  //! texture-table entry, in a cooked context root it binds the texture by key
+  //! without copying it. Returns `std::nullopt` after reporting an error
+  //! diagnostic; a missing descriptor resolves as `missing` when the request
+  //! allows it.
   [[nodiscard]] auto ResolveTextureReference(
     observer_ptr<ImportSession> session,
     observer_ptr<const ImportRequest> request,
-    observer_ptr<IAsyncFileReader> reader,
     std::span<const MountedCookedSource> mounts,
     TextureReferenceRequest reference)
     -> co::Co<std::optional<ResolvedTextureReference>>;

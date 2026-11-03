@@ -10,6 +10,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -32,6 +33,9 @@
 namespace oxygen::serio {
 
 namespace {
+  constexpr std::string_view kSiblingPrefix = ".oxygen-";
+  constexpr std::string_view kSiblingSuffix = ".tmp";
+
   //! A unique sibling of a destination: its path, and its file name, which
   //! is ASCII, so a log can name it without converting the path.
   struct SiblingName {
@@ -76,7 +80,8 @@ namespace {
   //! rename on one volume.
   auto SiblingOf(const std::filesystem::path& path) -> SiblingName
   {
-    auto file_name = ".oxygen-" + Uuid::Generate().ToString() + ".tmp";
+    auto file_name = std::string(kSiblingPrefix) + Uuid::Generate().ToString()
+      + std::string(kSiblingSuffix);
     auto sibling = base::ToNativePath(path.parent_path() / file_name);
     return SiblingName {
       .path = std::move(sibling),
@@ -108,6 +113,18 @@ namespace {
     return replaced;
   }
 } // namespace
+
+auto IsAtomicSiblingName(const std::string_view file_name) noexcept -> bool
+{
+  if (!file_name.starts_with(kSiblingPrefix)
+    || !file_name.ends_with(kSiblingSuffix)
+    || file_name.size() <= kSiblingPrefix.size() + kSiblingSuffix.size()) {
+    return false;
+  }
+  const auto uuid = file_name.substr(kSiblingPrefix.size(),
+    file_name.size() - kSiblingPrefix.size() - kSiblingSuffix.size());
+  return Uuid::FromString(uuid).has_value();
+}
 
 namespace detail {
   auto ClassifyReplaceError(const std::filesystem::path& from,

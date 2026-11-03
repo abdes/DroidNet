@@ -27,6 +27,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -53,6 +54,8 @@ struct LooseAsset final {
   //! tests of a root that lies about its descriptors.
   std::optional<uint64_t> recorded_size;
   std::optional<base::Sha256Digest> recorded_sha256;
+  //! What the asset requires of other mounts, as a cook records it.
+  std::vector<data::loose_cooked::IndexedRequirement> requirements;
 };
 
 //! The resource tables of a loose cooked root.

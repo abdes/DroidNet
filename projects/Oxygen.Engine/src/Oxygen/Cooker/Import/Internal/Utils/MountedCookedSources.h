@@ -18,7 +18,9 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 
 namespace oxygen::content::import {
 struct ImportRequest;
@@ -74,15 +76,25 @@ struct AssetReferenceRefused final {
 /*!
  Every authored reference is looked up the same way, after
  `ResolveJobReference` resolved it: the mounted indexes are searched from the
- highest precedence down; a path no index lists resolves to a descriptor a
- mounted root already holds at the path's place in the job's mount, typed by
- its extension. The key is the one the index lists, or the one the path
- derives.
+ highest precedence down, and only an index lists an asset. A path no index
+ lists is refused, with where each index would hold it.
 */
 [[nodiscard]] auto LookupReference(std::span<const MountedCookedSource> mounts,
   const ImportRequest& request, const ResolvedReference& reference,
   std::optional<data::AssetType> expected_type)
   -> std::expected<ResolvedAssetReference, AssetReferenceRefused>;
+
+//! What `references` require of mounts other than `own_mount`: each asset
+//! or texture they name that a mounted cooked root of another mount provides,
+//! found from the highest precedence down, once.
+/*!
+ A reference no mounted root provides, or one the job's own mount provides,
+ is no requirement: the job refused the first already, and the second is in
+ the index the requirement would be recorded in.
+*/
+OXGN_COOK_NDAPI auto RequirementsOf(std::span<const MountedCookedSource> mounts,
+  std::string_view own_mount, const data::AssetReferences& references)
+  -> std::vector<data::loose_cooked::IndexedRequirement>;
 
 //! The sentence that says what a refused lookup looked for, for a diagnostic.
 /*!

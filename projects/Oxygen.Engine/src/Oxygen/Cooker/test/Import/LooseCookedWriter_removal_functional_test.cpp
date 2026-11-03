@@ -21,6 +21,7 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/AssetType.h>
@@ -52,6 +53,25 @@ namespace {
   auto DescriptorPath(const std::string& name) -> std::string
   {
     return "Materials/" + MaterialFile(name);
+  }
+
+  //! The content name, relative to the root, of the file with layout path
+  //! `layout_relpath`.
+  auto ContentRelpath(const MemoryFileSystem& storage,
+    const std::filesystem::path& cooked_root,
+    const std::string_view layout_relpath) -> std::string
+  {
+    return cooker::test::CookedFile(cooked_root, layout_relpath, storage)
+      .lexically_relative(cooked_root)
+      .generic_string();
+  }
+
+  //! Whether a file of layout path `layout_relpath` is in the root.
+  auto HasFile(const MemoryFileSystem& storage,
+    const std::filesystem::path& cooked_root,
+    const std::string_view layout_relpath) -> bool
+  {
+    return cooker::test::HasCookedFile(cooked_root, layout_relpath, storage);
   }
 
   //! Cooks materials A and B into a fresh root.
@@ -92,14 +112,16 @@ namespace {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "loose_cooked_writer_removal";
     CookTwoMaterials(storage, cooked_root);
+    const auto removed_file
+      = ContentRelpath(storage, cooked_root, DescriptorPath("A"));
 
     LooseCookedWriter writer(cooked_root, storage);
     writer.RemoveAssetDescriptor(VirtualPath("A"));
     const auto result = writer.Finish();
 
-    EXPECT_EQ(result.removed_files, std::vector { DescriptorPath("A") });
-    EXPECT_FALSE(Exists(storage, cooked_root / DescriptorPath("A")));
-    EXPECT_TRUE(Exists(storage, cooked_root / DescriptorPath("B")));
+    EXPECT_EQ(result.removed_files, std::vector { removed_file });
+    EXPECT_FALSE(HasFile(storage, cooked_root, DescriptorPath("A")));
+    EXPECT_TRUE(HasFile(storage, cooked_root, DescriptorPath("B")));
     const auto content = CookedContent::Open(storage, cooked_root);
     ASSERT_EQ(content.Assets().size(), 1U);
     EXPECT_EQ(content.Assets().front().virtual_path, VirtualPath("B"));
@@ -118,7 +140,8 @@ namespace {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "loose_cooked_writer_reused_path";
     CookTwoMaterials(storage, cooked_root);
-    const auto auxiliary = std::vector { std::byte { 0x5A } };
+    // The same bytes as the descriptor's, so the file has its content name.
+    const auto auxiliary = fixtures::MaterialBuilder { "bytes" }.Bytes();
 
     LooseCookedWriter writer(cooked_root, storage);
     writer.RemoveAssetDescriptor(VirtualPath("A"));
@@ -126,7 +149,7 @@ namespace {
     const auto result = writer.Finish();
 
     EXPECT_TRUE(result.removed_files.empty());
-    EXPECT_TRUE(Exists(storage, cooked_root / DescriptorPath("A")));
+    EXPECT_TRUE(HasFile(storage, cooked_root, DescriptorPath("A")));
     EXPECT_TRUE(HasMatchingContent(storage, cooked_root));
   }
 
@@ -146,8 +169,10 @@ namespace {
       = std::vector<std::byte>(published.begin(), published.end());
 
     LooseCookedWriter writer(cooked_root, storage);
+    // The same bytes as the descriptor's: the two content names then differ
+    // only in case.
     writer.WriteFile(FileKind::kAuxiliary, "Materials/a.omat",
-      std::vector { std::byte { 0x5A } });
+      fixtures::MaterialBuilder { "bytes" }.Bytes());
 
     EXPECT_THROW(
       static_cast<void>(writer.Finish()), import::LooseCookedIdentityCollision);
@@ -177,25 +202,21 @@ namespace {
   }
 
   /*!
-   Scenario: another writer publishes an asset after this writer opened the
-   root. The removal applies to the index published at Finish, so it still
-   removes that asset.
+   Scenario: a writer holding the root has a removal pending when another
+   cook tries to publish the asset it removes. The root has one live writer,
+   so the other cook is refused instead of publishing under the remover.
   */
-  NOLINT_TEST(LooseCookedWriterRemovalTest,
-    RemoveAssetDescriptorAppliesToTheIndexPublishedAtFinish)
+  NOLINT_TEST(
+    LooseCookedWriterRemovalTest, ARootHeldByARemovingWriterRefusesAnotherCook)
   {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "loose_cooked_writer_late_removal";
 
     LooseCookedWriter remover(cooked_root, storage);
     remover.RemoveAssetDescriptor(VirtualPath("A"));
-    CookTwoMaterials(storage, cooked_root);
-    static_cast<void>(remover.Finish());
 
-    const auto content = CookedContent::Open(storage, cooked_root);
-    ASSERT_EQ(content.Assets().size(), 1U);
-    EXPECT_EQ(content.Assets().front().virtual_path, VirtualPath("B"));
-    EXPECT_FALSE(Exists(storage, cooked_root / DescriptorPath("A")));
+    EXPECT_THROW(
+      CookTwoMaterials(storage, cooked_root), import::LooseCookedRootBusy);
   }
 
   NOLINT_TEST(
@@ -248,13 +269,15 @@ namespace {
       static_cast<void>(writer.Finish());
     }
 
+    const auto removed_file = ContentRelpath(storage, cooked_root, "Aux/A.bin");
+
     LooseCookedWriter writer(cooked_root, storage);
-    writer.RemoveAuxiliaryFile("Aux/A.bin");
+    writer.RemoveAuxiliaryFile(removed_file);
     const auto result = writer.Finish();
 
-    EXPECT_EQ(result.removed_files, std::vector<std::string> { "Aux/A.bin" });
-    EXPECT_FALSE(Exists(storage, cooked_root / "Aux/A.bin"));
-    EXPECT_TRUE(Exists(storage, cooked_root / "Aux/B.bin"));
+    EXPECT_EQ(result.removed_files, std::vector { removed_file });
+    EXPECT_FALSE(HasFile(storage, cooked_root, "Aux/A.bin"));
+    EXPECT_TRUE(HasFile(storage, cooked_root, "Aux/B.bin"));
     EXPECT_TRUE(HasMatchingContent(storage, cooked_root));
   }
 

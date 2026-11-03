@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-11-01
+Last updated: 2026-11-03
 
 This plan implements the [proposal](README.md) as specified by the
 [design](design.md). It orders the work into slices, says what each slice
@@ -125,7 +125,10 @@ decisions are in before S14.
 S6a to S6e finish the engine side of S6 and of the
 [Serio](../../../src/Oxygen/Serio/README.md) and [cooked sources](../cooked-sources/README.md)
 work. They change no editor code; editor work they require is a task of the
-editor slice named in their rows. S6f takes the engine share of S19 to S21, so
+editor slice named in their rows. The engine slice S2 of review set R6,
+[loose root publication](../cooked-sources/root-publication.md), lands and is
+installed before S7: its loose index version 9 is the one the editor slices
+consume. S6f takes the engine share of S19 to S21, so
 from S7 on every slice is editor or interop work and touches the engine only
 incidentally.
 
@@ -327,7 +330,8 @@ verified pak mount (async CRC on the loop); `ScriptQueryService`; the
 texture, buffer, script and physics resources and their producers;
 `PakPlanBuilder`; PakDump; the bytecode cache; `ExternalFileResolver`;
 `ControlServer`; `Console::Registry`; the loose index (a blocking file lock
-on `container.index.lock`).
+on `container.index.lock`, which the R6 S2 writer lease,
+`container.writer.lock`, replaces).
 
 Unit tests: each new API's own tests in Serio (conformance where it is a
 device or backend), and the moved consumers' tests migrated with them,
@@ -469,8 +473,11 @@ Requires the S3 SDK install. Deletes: `IdentityField`, `TextureSource.VirtualPat
 `InputActionReference.IsPath`. Adds: identity parameters on every reader and
 writer, `IFileReferenceLocator`, the record suffix in `AssetFileTypes`
 (`ToIdentity`, `SourcesOf`, `CompanionsOf`), the schema conformance test of
-`AssetReferenceField`. Follows the S6d formats: the managed `LooseCookedIndex`
-reads version 8 and accepts only a zero digest for resource data files,
+`AssetReferenceField`. Follows the S6d and R6 S2 formats: the managed
+`LooseCookedIndex` reads version 9 (commit, retired and requirement records)
+and accepts only a zero digest for resource data files; it, `CookedIndexSnapshot`,
+`CookedInventoryReport` and `CookRootImage` treat `container.writer.lock` and
+`.leases` as reserved, and retired files as listed;
 `TextureDescriptorFile` reads version 2 with the 63-byte row, and
 `NativeInventoryFixture` lists data files without a digest and reports the
 `resource_*` reasons.
@@ -489,7 +496,8 @@ Requires the S5 and S6 SDK installs. Deletes: `MountKind.Pak`,
 `CookedContentSourceKind.Pak`, the `Pak` branches in `CookedLibraryReadSet`,
 `ProjectAssetFiles`, `AssetCatalog` and Content Explorer, the typed library
 name, `SourceMountPathOf` and `LocateSourceMountPath`. Adds: `Invalid`,
-findings, roles, library facts, the `.cooked` resolution, `ProjectContext.LocateReference`,
+findings, roles, library facts (a loose root's requirements from its index
+records), the `.cooked` resolution, `ProjectContext.LocateReference`,
 project schema version 3, the library template, the publication reader types
 in Managed.Assets.
 
@@ -526,7 +534,8 @@ reference check, `reference.into_project_mount`, `references.json` version 2.
 Unit and functional tests: `CookPathsTests`, `ContentCookAssetKindsTests`,
 `ReferenceCheck` over a fake library catalog, `CookSourceAnalyzer` texture
 diagnostics with a fake project, `SceneDescriptorGenerator` spelling as a pure
-function over a scene model. Docs: `content-pipeline.md` 7.2, 7.4, 7.5, 8.6.
+function over a scene model, `CookIncrementalPlanner` reuse of an unchanged
+output whose content-named descriptor path the index records. Docs: `content-pipeline.md` 7.2, 7.4, 7.5, 8.6.
 
 Integration tests left for S20: the cooking, import, inspection and publication
 integration tests in the test impact table.
@@ -564,7 +573,8 @@ sources. Docs: `content-pipeline.md` 17, ContentPipeline README.
 Requires S18 decisions. Deletes: the typed-name library add, library rename,
 re-rooting under the mount name, the binary unavailable-state adapter. Adds:
 Add library, `Invalid` presentation, `.cooked` follow in Live Preview and Play,
-generation swap with `replaces`. Functional tests: `ContentMountsViewModelTests`,
+generation swap with `replaces`; a loose generation with unmet requirements
+mounts and its mount reports `mount.cooked_dependency_missing`. Functional tests: `ContentMountsViewModelTests`,
 `CookedLibraryFoldersTests`, `PreviewSession` swap over a fake engine port,
 `PlaySession` launch roots. Docs: `content-folders-ui.md`, `live-preview.md`.
 

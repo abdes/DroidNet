@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <string>
@@ -17,11 +18,13 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Semaphore.h>
@@ -51,6 +54,32 @@ auto ResourceTableRegistry::NormalizeKey(
   const std::filesystem::path& cooked_root) const -> std::string
 {
   return base::PathIdentityKey(cooked_root);
+}
+
+auto ReadCommittedResource(const cooked::CookerStorageReader& storage,
+  const std::filesystem::path& cooked_root,
+  const data::loose_cooked::FileKind table_kind) -> CommittedResource
+{
+  const auto index_path = cooked_root / data::loose_cooked::kIndexFileName;
+  if (storage.KindOf(index_path) != cooked::PathKind::kFile) {
+    return {};
+  }
+  auto bytes
+    = cooked::ReadWholeFile(storage, index_path, cooked::kMaxMetadataBytes);
+  if (!bytes) {
+    throw ResourceTableError(
+      index_path, "cannot be read: " + bytes.error().message());
+  }
+  const auto index
+    = content::internal::LooseCookedIndexImpl::LoadFromBytes(std::move(*bytes));
+  auto committed = CommittedResource {};
+  if (const auto table = index.FindFileRelPath(table_kind)) {
+    committed.table_relpath = std::string(*table);
+  }
+  if (const auto data_kind = data::loose_cooked::DataFileKindOf(table_kind)) {
+    committed.data_length = index.FindFileSize(*data_kind).value_or(0U);
+  }
+  return committed;
 }
 
 auto ResourceTableRegistry::TextureAggregator(
@@ -233,7 +262,11 @@ auto ResourceTableRegistry::EndSession(ImportSessionToken& participation)
     if (!finalized) {
       end.ok = false;
     } else if (const auto& written = aggregator.Written()) {
-      end.written.push_back({ .kind = kind, .digest = *written });
+      end.written.push_back({
+        .kind = kind,
+        .relpath = written->relpath,
+        .digest = written->digest,
+      });
     }
   };
   if (textures) {

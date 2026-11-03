@@ -297,6 +297,8 @@ public:
 
   OXGN_CNTT_API auto RetireLooseCookedGeneration(data::SourceKey source_key)
     -> bool override;
+  OXGN_CNTT_NDAPI auto UnmetRequirements(data::SourceKey source_key) const
+    -> std::vector<FailedRequirement> override;
 
   OXGN_CNTT_NDAPI auto PrepareMountsAsync(std::vector<ContentMount> mounts)
     -> co::Co<PreparedMountSet> override;

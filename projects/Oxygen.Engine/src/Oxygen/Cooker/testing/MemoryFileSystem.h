@@ -142,6 +142,15 @@ public:
         });
       }
     }
+    for (const auto& file : HeldLockFiles()) {
+      if (file.starts_with(prefix)) {
+        entries.push_back({
+          .relative_path = file.substr(prefix.size()),
+          .kind = content::lc::RootEntryKind::kFile,
+          .size = 0,
+        });
+      }
+    }
     if (entries.empty() && !folders_.contains(key)) {
       return ::oxygen::Err(
         std::make_error_code(std::errc::no_such_file_or_directory));
@@ -267,25 +276,50 @@ public:
     return {};
   }
 
-  //! An in-process lock per path: threads of a test exclude each other as
-  //! processes do on the real file system. The lock file is added as an empty
-  //! file, as the real file system creates it.
-  [[nodiscard]] auto LockExclusive(const std::filesystem::path& path)
+  //! An in-process lock per path, held without waiting: threads of a test
+  //! exclude each other as processes do on the real file system. While it is
+  //! held, its file is listed as an empty file, as the real file system
+  //! creates and removes it.
+  [[nodiscard]] auto TryLock(
+    const std::filesystem::path& path, const serio::FileLockMode mode) const
     -> Result<std::unique_ptr<content::cooked::StorageLock>> override
   {
-    auto* mutex = [this, &path] -> std::mutex* {
-      const std::scoped_lock guard(locks_mutex_);
-      if (!files_.contains(Key(path))) {
-        AddFile(path, std::span<const std::byte> {});
-      }
-      auto& slot = locks_[Key(path)];
-      if (!slot) {
-        slot = std::make_unique<std::mutex>();
-      }
-      return slot.get();
-    }();
+    const std::scoped_lock guard(locks_mutex_);
+    auto& state = locks_[Key(path)];
+    const auto exclusive = mode == serio::FileLockMode::kExclusive;
+    if (state.exclusive || (exclusive && state.shared != 0)) {
+      return ::oxygen::Err(
+        std::make_error_code(std::errc::device_or_resource_busy));
+    }
+    if (exclusive) {
+      state.exclusive = true;
+    } else {
+      ++state.shared;
+    }
     return ::oxygen::Ok(std::unique_ptr<content::cooked::StorageLock>(
-      std::make_unique<HeldMutex>(*mutex)));
+      std::make_unique<HeldLock>(*this, Key(path), exclusive)));
+  }
+
+  [[nodiscard]] auto Truncate(const std::filesystem::path& path,
+    const serio::ByteCount size) -> Result<void> override
+  {
+    const auto it = files_.find(Key(path));
+    if (it == files_.end()) {
+      return ::oxygen::Err(
+        std::make_error_code(std::errc::no_such_file_or_directory));
+    }
+    if (it->second.size() > size.get()) {
+      it->second.resize(static_cast<size_t>(size.get()));
+    }
+    return {};
+  }
+
+  //! Whether a lock of `path` is held.
+  [[nodiscard]] auto IsLocked(const std::filesystem::path& path) const -> bool
+  {
+    const std::scoped_lock guard(locks_mutex_);
+    const auto it = locks_.find(Key(path));
+    return it != locks_.end() && it->second.IsHeld();
   }
 
   [[nodiscard]] auto SizeOf(const std::filesystem::path& path) const
@@ -313,17 +347,60 @@ public:
   }
 
 private:
+  //! The holders of one lock path.
+  struct LockState final {
+    uint32_t shared = 0;
+    bool exclusive = false;
+
+    [[nodiscard]] auto IsHeld() const noexcept -> bool
+    {
+      return exclusive || shared != 0;
+    }
+  };
+
   //! A held in-process lock of one path.
-  class HeldMutex final : public content::cooked::StorageLock {
+  class HeldLock final : public content::cooked::StorageLock {
   public:
-    explicit HeldMutex(std::mutex& mutex)
-      : lock_(mutex)
+    HeldLock(const MemoryFileSystem& file_system, std::string key,
+      const bool exclusive) noexcept
+      : file_system_(make_observer(&file_system))
+      , key_(std::move(key))
+      , exclusive_(exclusive)
     {
     }
 
+    ~HeldLock() override
+    {
+      const std::scoped_lock guard(file_system_->locks_mutex_);
+      auto& state = file_system_->locks_.at(key_);
+      if (exclusive_) {
+        state.exclusive = false;
+      } else {
+        --state.shared;
+      }
+    }
+
+    OXYGEN_MAKE_NON_COPYABLE(HeldLock)
+    OXYGEN_MAKE_NON_MOVABLE(HeldLock)
+
   private:
-    std::unique_lock<std::mutex> lock_;
+    observer_ptr<const MemoryFileSystem> file_system_;
+    std::string key_;
+    bool exclusive_ = false;
   };
+
+  //! The lock files held now, as the empty files the real file system holds.
+  [[nodiscard]] auto HeldLockFiles() const -> std::vector<std::string>
+  {
+    const std::scoped_lock guard(locks_mutex_);
+    auto held = std::vector<std::string> {};
+    for (const auto& [key, state] : locks_) {
+      if (state.IsHeld() && !files_.contains(key)) {
+        held.push_back(key);
+      }
+    }
+    return held;
+  }
 
   //! The device `OpenData` hands out: it reads and writes the stored bytes of
   //! one file, growing them as `serio::MemoryFile` does.
@@ -501,9 +578,9 @@ private:
   std::map<std::string, std::error_code> unpublishable_;
   std::map<std::string, std::error_code> unmovable_;
   std::map<std::string, std::error_code> unwritable_data_;
-  //! Entries are never erased, so a held lock's mutex outlives it.
-  std::map<std::string, std::unique_ptr<std::mutex>> locks_;
-  std::mutex locks_mutex_;
+  //! Entries are never erased, so a held lock's state outlives it.
+  mutable std::map<std::string, LockState> locks_;
+  mutable std::mutex locks_mutex_;
 };
 
 } // namespace oxygen::cooker::testing

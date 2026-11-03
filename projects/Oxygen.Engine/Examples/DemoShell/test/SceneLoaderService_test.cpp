@@ -27,6 +27,7 @@
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/ContentMounts.h>
+#include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResidencyPin.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
@@ -461,6 +462,12 @@ namespace {
       -> bool override
     {
       return false;
+    }
+
+    [[nodiscard]] auto UnmetRequirements(data::SourceKey /*source_key*/) const
+      -> std::vector<content::FailedRequirement> override
+    {
+      return {};
     }
     auto ClearMounts() -> void override { }
     auto WaitForPendingLoadsAsync() -> co::Co<> override { co_return; }

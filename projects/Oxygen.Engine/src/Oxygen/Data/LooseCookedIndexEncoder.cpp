@@ -22,6 +22,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
@@ -145,8 +146,8 @@ namespace {
   }
 
   //! Refuses a file record that names what only another kind of record may:
-  //! only a texture descriptor has a virtual path, and only it and an
-  //! auxiliary file a producing source.
+  //! only a texture descriptor and an auxiliary file have a virtual path and a
+  //! producing source, which a texture descriptor requires.
   auto RequireFileNames(const IndexedFile& file) -> void
   {
     if (file.kind == FileKind::kTextureDescriptor) {
@@ -155,11 +156,15 @@ namespace {
         file.source_path, RecordName::kProducingSource, file.relpath);
       return;
     }
+    if (file.kind == FileKind::kAuxiliary) {
+      return;
+    }
     if (!file.virtual_path.empty()) {
       throw std::invalid_argument("Loose cooked index file '" + file.relpath
-        + "' has a virtual path, which only a texture descriptor may have");
+        + "' has a virtual path, which only a texture descriptor or an "
+          "auxiliary file may have");
     }
-    if (!file.source_path.empty() && file.kind != FileKind::kAuxiliary) {
+    if (!file.source_path.empty()) {
       throw std::invalid_argument("Loose cooked index file '" + file.relpath
         + "' has a producing source, which only a texture descriptor or an "
           "auxiliary file may have");
@@ -191,9 +196,10 @@ namespace {
     auto kinds = std::unordered_set<FileKind> {};
     for (const auto& ref : files) {
       const auto& file = ref.get();
-      if (file.kind == FileKind::kUnknown) {
-        throw std::invalid_argument(
-          "Loose cooked index file '" + file.relpath + "' has no kind");
+      if (file.kind == FileKind::kUnknown
+        || file.kind == FileKind::kAssetDescriptor) {
+        throw std::invalid_argument("Loose cooked index file '" + file.relpath
+          + "' has no kind, or the kind only a retired record names");
       }
       if (!IsPathKeyed(file.kind) && !kinds.insert(file.kind).second) {
         throw std::invalid_argument("Loose cooked index lists file kind "
@@ -214,6 +220,68 @@ namespace {
         RequireNoDigest(file.sha256, file.relpath);
       } else {
         RequireDigest(file.sha256, file.relpath);
+      }
+    }
+  }
+
+  //! Refuses retired files the loader would refuse: one listed twice, one the
+  //! commit lists, or one retired at no commit up to the index's own.
+  auto ValidateRetired(const std::span<const RetiredFile> retired,
+    const std::span<const FileRef> files,
+    const std::span<const AssetRef> assets, const uint64_t commit) -> void
+  {
+    if (commit == 0) {
+      throw std::invalid_argument(
+        "Loose cooked index commit must be 1 or more");
+    }
+    auto listed = std::unordered_set<std::string_view> {};
+    for (const auto& file : files) {
+      listed.insert(file.get().relpath);
+    }
+    for (const auto& asset : assets) {
+      listed.insert(asset.get().descriptor_relpath);
+    }
+    auto seen = std::unordered_set<std::string_view> {};
+    for (const auto& file : retired) {
+      RequireRelPath(file.relpath);
+      RequireUnique(seen, file.relpath, "retired file");
+      if (listed.contains(file.relpath)) {
+        throw std::invalid_argument(
+          "Loose cooked index retires '" + file.relpath + "', which it lists");
+      }
+      if (file.kind == FileKind::kUnknown || IsResourceDataFile(file.kind)) {
+        throw std::invalid_argument("Loose cooked index retires '"
+          + file.relpath + "', which has no kind or is a data file");
+      }
+      if (file.retired_at == 0 || file.retired_at > commit) {
+        throw std::invalid_argument("Loose cooked index retires '"
+          + file.relpath + "' at a commit it does not follow");
+      }
+    }
+  }
+
+  //! Refuses requirements the loader would refuse.
+  auto ValidateRequirements(const IndexedAsset& asset) -> void
+  {
+    for (size_t i = 0; i < asset.requirements.size(); ++i) {
+      const auto& requirement = asset.requirements[i];
+      const auto named = !requirement.mount.empty()
+        && !requirement.mount.contains('/')
+        && !requirement.mount.contains('\0');
+      const auto is_asset = requirement.kind == KeyReferenceKind::kAsset;
+      const auto is_texture = requirement.kind == KeyReferenceKind::kTexture
+        && requirement.type == AssetType::kUnknown;
+      if (!named || (!is_asset && !is_texture)) {
+        throw std::invalid_argument("Loose cooked index asset '"
+          + asset.virtual_path
+          + "' has a requirement of no mount, or of another kind");
+      }
+      if (std::ranges::find(asset.requirements.begin(),
+            asset.requirements.begin() + static_cast<std::ptrdiff_t>(i),
+            requirement)
+        != asset.requirements.begin() + static_cast<std::ptrdiff_t>(i)) {
+        throw std::invalid_argument("Loose cooked index asset '"
+          + asset.virtual_path + "' lists a requirement twice");
       }
     }
   }
@@ -242,6 +310,11 @@ auto EncodeLooseCookedIndex(
     return file.get().relpath;
   });
   ValidateContent(assets, files);
+  ValidateRetired(content.retired, files, assets, content.commit);
+  auto retired_files = std::vector<std::reference_wrapper<const RetiredFile>>(
+    content.retired.begin(), content.retired.end());
+  std::ranges::sort(retired_files, {},
+    [](const RetiredFile& file) -> const std::string& { return file.relpath; });
 
   // Lay out every section first: the header names their offsets.
   auto strings = StringTable {};
@@ -274,6 +347,30 @@ auto EncodeLooseCookedIndex(
       .sha256 = file.sha256,
     });
   }
+  auto retired_records = std::vector<RetiredRecord> {};
+  retired_records.reserve(retired_files.size());
+  for (const auto& ref : retired_files) {
+    const auto& file = ref.get();
+    retired_records.push_back(RetiredRecord {
+      .kind = file.kind,
+      .relpath_offset = strings.Add(file.relpath),
+      .retired_at = file.retired_at,
+    });
+  }
+  auto requirement_records = std::vector<RequirementRecord> {};
+  for (size_t i = 0; i < assets.size(); ++i) {
+    const auto& asset = assets[i].get();
+    ValidateRequirements(asset);
+    for (const auto& requirement : asset.requirements) {
+      requirement_records.push_back(RequirementRecord {
+        .asset_index = CountOf(i, "assets"),
+        .mount_offset = strings.Add(requirement.mount),
+        .kind = static_cast<uint8_t>(requirement.kind),
+        .key = requirement.key,
+        .asset_type = static_cast<uint8_t>(requirement.type),
+      });
+    }
+  }
 
   auto header = IndexHeader {
     .content_version = content.content_version,
@@ -285,6 +382,12 @@ auto EncodeLooseCookedIndex(
     .asset_entry_size = sizeof(AssetEntry),
     .file_record_count = CountOf(records.size(), "files"),
     .file_record_size = sizeof(FileRecord),
+    .commit = content.commit,
+    .retired_record_count = CountOf(retired_records.size(), "retired files"),
+    .retired_record_size = sizeof(RetiredRecord),
+    .requirement_record_count
+    = CountOf(requirement_records.size(), "requirements"),
+    .requirement_record_size = sizeof(RequirementRecord),
   };
   std::ranges::transform(data::as_bytes(content.source_key),
     std::begin(header.source_identity), [](const auto value) -> uint8_t {
@@ -295,9 +398,16 @@ auto EncodeLooseCookedIndex(
   header.file_records_offset = header.asset_entries_offset
     + (uint64_t { header.asset_count } * sizeof(AssetEntry));
 
-  // Reference blocks follow the file records, in asset order, without gaps.
-  auto reference_cursor = header.file_records_offset
+  header.retired_records_offset = header.file_records_offset
     + (uint64_t { header.file_record_count } * sizeof(FileRecord));
+  header.requirement_records_offset = header.retired_records_offset
+    + (uint64_t { header.retired_record_count } * sizeof(RetiredRecord));
+
+  // Reference blocks follow the requirement records, in asset order, without
+  // gaps.
+  auto reference_cursor = header.requirement_records_offset
+    + (uint64_t { header.requirement_record_count }
+      * sizeof(RequirementRecord));
   for (size_t i = 0; i < entries.size(); ++i) {
     const auto& references = assets[i].get().references;
     auto& table = entries[i].references;
@@ -318,6 +428,12 @@ auto EncodeLooseCookedIndex(
     CHECK_RESULT(writer.Write(entry));
   }
   for (const auto& record : records) {
+    CHECK_RESULT(writer.Write(record));
+  }
+  for (const auto& record : retired_records) {
+    CHECK_RESULT(writer.Write(record));
+  }
+  for (const auto& record : requirement_records) {
     CHECK_RESULT(writer.Write(record));
   }
   for (const auto& ref : assets) {

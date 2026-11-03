@@ -191,6 +191,12 @@ public:
     return false;
   }
 
+  [[nodiscard]] auto UnmetRequirements(data::SourceKey /*source_key*/) const
+    -> std::vector<content::FailedRequirement> override
+  {
+    return {};
+  }
+
   auto ClearMounts() -> void override { }
   auto WaitForPendingLoadsAsync() -> co::Co<> override { co_return; }
   auto PrepareMountsAsync(std::vector<content::ContentMount> /*mounts*/)

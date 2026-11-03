@@ -32,6 +32,7 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/AssetValidation.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
@@ -44,6 +45,8 @@
 #include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/FileLock.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::import {
@@ -134,6 +137,12 @@ namespace {
     return cooked_root / internal::loose_layout::kIndexFileName;
   }
 
+  //! A file a commit lists, as its successor finds what it stopped listing.
+  struct PublishedFile final {
+    std::string relpath;
+    FileKind kind = FileKind::kUnknown;
+  };
+
 } // namespace
 
 struct LooseCookedWriter::Impl final {
@@ -141,7 +150,11 @@ struct LooseCookedWriter::Impl final {
     : storage_(make_observer(&storage))
     , cooked_root_(std::move(cooked_root))
   {
+    AcquireWriterLease_();
     LoadExistingIndexIfPresent_();
+    // No other writer can run: what no commit lists is a crashed one's.
+    DeleteUncommitted_();
+    Reclaim_();
   }
 
   auto SetSourceKey(std::optional<data::SourceKey> key) -> void
@@ -281,7 +294,8 @@ struct LooseCookedWriter::Impl final {
       .key = key,
       .asset_type = asset_type,
       .virtual_path = std::string(virtual_path),
-      .descriptor_relpath = std::string(descriptor_relpath),
+      .descriptor_relpath
+      = data::loose_cooked::ContentRelPath(descriptor_relpath, digest),
       .descriptor_size = bytes.size(),
       .descriptor_sha256 = digest,
       .references = references,
@@ -290,9 +304,7 @@ struct LooseCookedWriter::Impl final {
 
     RequireOwnIdentity_(
       record.virtual_path, record.source_path, "WriteAssetDescriptor");
-    const auto path_on_disk
-      = cooked_root_ / std::filesystem::path(descriptor_relpath);
-    WriteBinaryFile(*storage_, path_on_disk, bytes);
+    WriteContentFile_(record.descriptor_relpath, bytes);
 
     InsertAsset_(record, "WriteAssetDescriptor");
     written_virtual_paths_.emplace(virtual_path);
@@ -303,23 +315,33 @@ struct LooseCookedWriter::Impl final {
   {
     data::loose_cooked::RequireIndexRelPath(relpath);
 
-    const auto path_on_disk = cooked_root_ / std::filesystem::path(relpath);
-
+    // A resource data file keeps its name and only grows; its table rows
+    // hold the digests of its resources. Any other file is content-named.
+    const auto is_data_file = data::loose_cooked::IsResourceDataFile(kind);
+    const auto digest
+      = is_data_file ? base::Sha256Digest {} : base::ComputeSha256(bytes);
     StoredFile record {
       .kind = kind,
-      .relpath = std::string(relpath),
+      .relpath = is_data_file
+        ? std::string(relpath)
+        : data::loose_cooked::ContentRelPath(relpath, digest),
       .size = bytes.size(),
-      // A resource data file has no digest; its table rows hold the digests
-      // of its resources.
-      .sha256 = data::loose_cooked::IsResourceDataFile(kind)
-        ? base::Sha256Digest {}
-        : base::ComputeSha256(bytes),
+      .sha256 = digest,
       .updated = true,
       .externally_written = false,
     };
 
+    if (is_data_file) {
+      RequireAppended_(record.relpath, bytes);
+    }
+    const auto stored_relpath = record.relpath;
     StoreFile_(std::move(record), "WriteFile");
-    WriteBinaryFile(*storage_, path_on_disk, bytes);
+    if (is_data_file) {
+      WriteBinaryFile(
+        *storage_, cooked_root_ / std::filesystem::path(stored_relpath), bytes);
+    } else {
+      WriteContentFile_(stored_relpath, bytes);
+    }
   }
 
   auto RegisterExternalFile(const FileKind kind, std::string_view relpath,
@@ -332,12 +354,13 @@ struct LooseCookedWriter::Impl final {
           ? "RegisterExternalFile: a resource data file has no digest"
           : "RegisterExternalFile: the file has no digest");
     }
-    if (kind == FileKind::kTextureDescriptor) {
+    if (kind == FileKind::kTextureDescriptor
+      || (kind == FileKind::kAuxiliary && !virtual_path.empty())) {
       RequireCanonicalVirtualPath(virtual_path);
       RequireCanonicalVirtualPath(source_path);
     } else if (!virtual_path.empty()) {
-      throw std::runtime_error(
-        "RegisterExternalFile: only texture descriptors have virtual paths");
+      throw std::runtime_error("RegisterExternalFile: only texture descriptors "
+                               "and auxiliary files have virtual paths");
     } else if (!source_path.empty()) {
       if (kind != FileKind::kAuxiliary) {
         throw std::runtime_error("RegisterExternalFile: only texture "
@@ -375,18 +398,20 @@ struct LooseCookedWriter::Impl final {
   }
 
   auto RegisterExternalAuxiliaryFile(std::string_view relpath,
-    const LooseCookedProducer& producer, const LooseCookedFileDigest& produced)
-    -> void
+    std::string_view virtual_path, const LooseCookedProducer& producer,
+    const LooseCookedFileDigest& produced) -> void
   {
-    RegisterExternalFile(
-      FileKind::kAuxiliary, relpath, produced, {}, ResolveSource_(producer));
+    RegisterExternalFile(FileKind::kAuxiliary, relpath, produced, virtual_path,
+      ResolveSource_(producer));
   }
 
   auto RegisterProducedAssetDescriptor(const data::AssetKey& key,
     const data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, const LooseCookedFileDigest& produced,
     const data::AssetReferences& references,
-    const LooseCookedProducer& producer) -> void
+    const LooseCookedProducer& producer,
+    const std::span<const data::loose_cooked::IndexedRequirement> requirements)
+    -> void
   {
     RequireCanonicalVirtualPath(virtual_path);
     data::loose_cooked::RequireIndexRelPath(descriptor_relpath);
@@ -401,6 +426,8 @@ struct LooseCookedWriter::Impl final {
       path_on_disk);
     StoreAsset_(key, asset_type, virtual_path, descriptor_relpath, produced,
       references, producer, "RegisterProducedAssetDescriptor");
+    assets_.at(key).requirements.assign(
+      requirements.begin(), requirements.end());
   }
 
   auto RegisterExternalAssetDescriptor(const data::AssetKey& key,
@@ -481,35 +508,13 @@ struct LooseCookedWriter::Impl final {
 
   [[nodiscard]] auto Finish() -> LooseCookedWriteResult
   {
+    // The writer lease, held since the writer opened the root, keeps every
+    // other writer out: the commit it read is still the latest.
     const auto index_path = IndexPath(cooked_root_);
-    // Merge with the latest published index and replace it as one step for
-    // every writer of this cooked root; readers map whole published indexes.
-    const auto lock = storage_->LockExclusive(
-      content::internal::LooseCookedIndexImpl::LockPathOf(index_path));
-    if (!lock) {
-      throw std::system_error(lock.error(),
-        "cannot lock the index of '" + cooked_root_.string() + "'");
-    }
 
-    auto current_assets = assets_;
-    auto current_files = files_;
-
-    LoadExistingIndexIfPresent_();
-    const auto published_paths = PhysicalPaths_();
-
-    for (const auto& [key, asset] : current_assets) {
-      static_cast<void>(key);
-      if (written_virtual_paths_.contains(asset.virtual_path)) {
-        InsertAsset_(asset, "Finish.merge_assets");
-      }
-    }
-
-    for (auto& [path, file] : current_files) {
+    for (auto& [path, file] : files_) {
       static_cast<void>(path);
-      if (!file.updated) {
-        continue; // Preserve other writers' published metadata.
-      }
-      if (file.externally_written) {
+      if (file.updated && file.externally_written) {
         // Its producer hashed the bytes as it wrote them; a resource data
         // file has no digest of its own, only its resources do.
         const auto physical_path = cooked_root_ / file.relpath;
@@ -518,24 +523,34 @@ struct LooseCookedWriter::Impl final {
         file.sha256 = file.produced.has_value() ? file.produced->sha256
                                                 : base::Sha256Digest {};
       }
-      StoreFile_(std::move(file), "Finish.merge_files");
     }
 
-    ApplyRemovals_(current_files);
+    const auto session_files = files_;
+    ApplyRemovals_(session_files);
 
     const auto cooked_root_str = cooked_root_.string();
     LOG_SCOPE_F(INFO, "Finish {}", cooked_root_str);
 
     ValidateRequiredFilePairs_();
-    // Retired from what the two indexes list: a path the new index lists, as
-    // any kind of file, stays on disk.
+    // Retired from what the two commits list: a path the new one lists, as
+    // any kind of file, stays.
     const auto kept_paths = PhysicalPaths_();
+    const auto commit = commit_ + 1;
     auto removed_files = std::vector<std::string> {};
-    for (const auto& [folded, relpath] : published_paths) {
+    for (const auto& [folded, file] : published_paths_) {
       if (!kept_paths.contains(folded)) {
-        removed_files.push_back(relpath);
+        removed_files.push_back(file.relpath);
+        retired_.push_back({
+          .kind = file.kind,
+          .relpath = file.relpath,
+          .retired_at = commit,
+        });
       }
     }
+    // A retired file the new commit lists again is current, not retired.
+    std::erase_if(retired_, [&](const auto& retired) -> bool {
+      return kept_paths.contains(FoldIdentity(retired.relpath));
+    });
     std::ranges::sort(removed_files);
 
     const auto source_key = ResolveSourceKey_();
@@ -545,6 +560,7 @@ struct LooseCookedWriter::Impl final {
       .cooked_root = cooked_root_,
       .source_key = source_key,
       .content_version = content_version,
+      .commit = commit,
       .removed_files = std::move(removed_files),
     };
 
@@ -573,11 +589,22 @@ struct LooseCookedWriter::Impl final {
       {
         .source_key = source_key,
         .content_version = content_version,
+        .commit = commit,
         .assets = out.assets,
         .files = out.files,
+        .retired = retired_,
       });
-    DeleteRemovedFiles_(out.removed_files);
+    commit_ = commit;
+    published_paths_ = ListedPaths_();
+    for (auto& [path, file] : files_) {
+      static_cast<void>(path);
+      file.updated = false;
+    }
 
+    // What this session wrote and the commit does not list, then what no
+    // reader of an earlier commit needs any more.
+    DeleteUncommitted_();
+    Reclaim_();
     return out;
   }
 
@@ -610,7 +637,7 @@ private:
     return paths;
   }
 
-  //! Requires the index file lock and the merged index.
+  //! Requires the writer lease.
   auto ApplyRemovals_(
     const std::unordered_map<std::string, StoredFile>& session_files) -> void
   {
@@ -656,7 +683,7 @@ private:
   }
 
   //! Retires the outputs the index records for a re-cooked source that this
-  //! writer does not write. Requires the index file lock and the merged index.
+  //! writer does not write. Requires the writer lease.
   auto RetireUnwrittenOutputs_(
     const std::unordered_map<std::string, StoredFile>& session_files) -> void
   {
@@ -721,32 +748,191 @@ private:
     }
   }
 
-  //! Deletes files the published index no longer lists, and the folders they
-  //! leave empty, so a later write names its folders anew: on a file system
-  //! that ignores case, a kept folder would keep a name renamed only in case.
-  auto DeleteRemovedFiles_(const std::vector<std::string>& relpaths) const
-    -> void
+  //! Takes the root's writer lease, held until the writer is destroyed.
+  auto AcquireWriterLease_() -> void
   {
-    for (const auto& relpath : relpaths) {
-      if (const auto removed
-        = storage_->Remove(cooked_root_ / std::filesystem::path(relpath));
-        !removed) {
-        throw std::system_error(removed.error(),
-          "Failed to delete removed cooked file '" + relpath + "'");
+    auto lease = storage_->TryLock(
+      cooked_root_ / std::string(data::loose_cooked::kWriterLockFileName),
+      serio::FileLockMode::kExclusive);
+    if (!lease) {
+      if (lease.error() == std::errc::device_or_resource_busy) {
+        throw LooseCookedRootBusy(
+          "another writer is cooking '" + cooked_root_.generic_string() + "'");
       }
-      for (auto folder = std::filesystem::path(relpath).parent_path();
-        !folder.empty(); folder = folder.parent_path()) {
-        const auto removed = storage_->RemoveEmptyFolder(cooked_root_ / folder);
-        if (!removed) {
-          throw std::system_error(removed.error(),
-            "Failed to delete emptied cooked folder '" + folder.generic_string()
-              + "'");
+      throw std::system_error(lease.error(),
+        "cannot take the writer lease of '" + cooked_root_.string() + "'");
+    }
+    writer_lease_ = std::move(lease).value();
+  }
+
+  //! Publishes `bytes` as the content-named file `relpath`, unless a file the
+  //! root holds already has that name, and so those bytes.
+  auto WriteContentFile_(const std::string& relpath,
+    const std::span<const std::byte> bytes) const -> void
+  {
+    const auto path = cooked_root_ / std::filesystem::path(relpath);
+    if (const auto size = storage_->SizeOf(path);
+      size.has_value() && size->get() == bytes.size()) {
+      return;
+    }
+    WriteBinaryFile(*storage_, path, bytes);
+  }
+
+  //! Refuses data file bytes that do not begin with what the commit records
+  //! of the file: a data file only grows.
+  auto RequireAppended_(const std::string& relpath,
+    const std::span<const std::byte> bytes) const -> void
+  {
+    const auto existing = files_.find(relpath);
+    if (existing == files_.end() || existing->second.size == 0) {
+      return;
+    }
+    const auto committed = cooked::ReadWholeFile(*storage_,
+      cooked_root_ / std::filesystem::path(relpath), cooked::kMaxDataFileBytes);
+    const auto appended = committed.has_value()
+      && committed->size() >= existing->second.size
+      && bytes.size() >= existing->second.size
+      && std::ranges::equal(
+        bytes.first(static_cast<size_t>(existing->second.size)),
+        std::span(*committed)
+          .first(static_cast<size_t>(existing->second.size)));
+    if (!appended) {
+      throw std::runtime_error("WriteFile: the resource data file '" + relpath
+        + "' would not begin with its committed bytes");
+    }
+  }
+
+  //! Deletes the file `relpath` and the folders it leaves empty, so a later
+  //! write names its folders anew: on a file system that ignores case, a
+  //! kept folder would keep a name renamed only in case.
+  auto DeleteFile_(const std::string& relpath) const -> Result<void>
+  {
+    CHECK_RESULT(
+      storage_->Remove(cooked_root_ / std::filesystem::path(relpath)));
+    for (auto folder = std::filesystem::path(relpath).parent_path();
+      !folder.empty(); folder = folder.parent_path()) {
+      const auto removed = storage_->RemoveEmptyFolder(cooked_root_ / folder);
+      if (!removed) {
+        return ::oxygen::Err(removed.error());
+      }
+      if (!*removed) {
+        break;
+      }
+    }
+    return {};
+  }
+
+  //! Drops what no commit records: each data file's bytes past its committed
+  //! length, and every file of a writer's naming that no commit lists. Only
+  //! the writer lease holder runs it, so these are its own or a crashed
+  //! writer's; any other unlisted file is left for checks to refuse.
+  auto DeleteUncommitted_() -> void
+  {
+    for (const auto& [relpath, file] : files_) {
+      if (!data::loose_cooked::IsResourceDataFile(file.kind)) {
+        continue;
+      }
+      const auto path = cooked_root_ / std::filesystem::path(relpath);
+      if (const auto size = storage_->SizeOf(path);
+        size.has_value() && size->get() > file.size) {
+        if (const auto cut
+          = storage_->Truncate(path, serio::ByteCount { file.size });
+          !cut) {
+          throw std::system_error(cut.error(),
+            "Failed to drop the uncommitted tail of '" + relpath + "'");
         }
-        if (!*removed) {
-          break;
+        LOG_F(INFO, "Dropped {} uncommitted bytes of '{}'",
+          size->get() - file.size, relpath);
+      }
+    }
+    const auto entries = storage_->List(cooked_root_);
+    if (!entries) {
+      return; // A root not written yet holds nothing.
+    }
+    auto listed = std::unordered_set<std::string> {};
+    for (const auto& [folded, file] : ListedPaths_()) {
+      static_cast<void>(folded);
+      listed.insert(file.relpath);
+    }
+    for (const auto& retired : retired_) {
+      listed.insert(retired.relpath);
+    }
+    for (const auto& entry : *entries) {
+      const auto& relpath = entry.relative_path;
+      if (entry.kind != content::lc::RootEntryKind::kFile
+        || data::loose_cooked::IsReservedRelPath(relpath)
+        || listed.contains(relpath)
+        || !data::loose_cooked::IsWriterOutputRelPath(relpath)) {
+        continue;
+      }
+      if (const auto deleted = DeleteFile_(relpath); !deleted) {
+        throw std::system_error(deleted.error(),
+          "Failed to delete the uncommitted file '" + relpath + "'");
+      }
+      LOG_F(INFO, "Deleted the uncommitted file '{}'", relpath);
+    }
+  }
+
+  //! Deletes each retired file no reader of an earlier commit can open: one
+  //! retired at commit `R` waits while a reader leases a commit before `R`.
+  auto Reclaim_() -> void
+  {
+    if (retired_.empty()) {
+      return;
+    }
+    const auto leases_folder
+      = cooked_root_ / std::string(data::loose_cooked::kLeasesFolderName);
+    auto oldest_read = std::optional<uint64_t> {};
+    if (const auto leases = storage_->List(leases_folder); leases.has_value()) {
+      for (const auto& entry : *leases) {
+        const auto commit
+          = data::loose_cooked::LeasedCommitOf(entry.relative_path);
+        if (entry.kind != content::lc::RootEntryKind::kFile
+          || !commit.has_value()) {
+          continue;
+        }
+        // Held only for the check: a lease nobody holds is removed with it.
+        const auto probe = storage_->TryLock(
+          leases_folder / entry.relative_path, serio::FileLockMode::kExclusive);
+        if (!probe && probe.error() == std::errc::device_or_resource_busy) {
+          oldest_read = std::min(oldest_read.value_or(*commit), *commit);
         }
       }
     }
+    std::erase_if(retired_, [&](const auto& retired) -> bool {
+      if (oldest_read.has_value() && retired.retired_at > *oldest_read) {
+        return false;
+      }
+      if (const auto deleted = DeleteFile_(retired.relpath); !deleted) {
+        // A reader that does not share deletion holds it; the next session
+        // tries again.
+        LOG_F(WARNING, "Kept the retired file '{}': {}", retired.relpath,
+          deleted.error().message());
+        return false;
+      }
+      return true;
+    });
+  }
+
+  //! Every path the index lists, folded as a case-insensitive file system
+  //! compares them, with its spelling and kind.
+  [[nodiscard]] auto ListedPaths_() const
+    -> std::unordered_map<std::string, PublishedFile>
+  {
+    auto paths = std::unordered_map<std::string, PublishedFile> {};
+    for (const auto& [key, asset] : assets_) {
+      static_cast<void>(key);
+      paths.insert_or_assign(FoldIdentity(asset.descriptor_relpath),
+        PublishedFile {
+          .relpath = asset.descriptor_relpath,
+          .kind = FileKind::kAssetDescriptor,
+        });
+    }
+    for (const auto& [relpath, file] : files_) {
+      paths.insert_or_assign(FoldIdentity(relpath),
+        PublishedFile { .relpath = relpath, .kind = file.kind });
+    }
+    return paths;
   }
 
   [[nodiscard]] auto HasFileKind_(const FileKind kind) const -> bool
@@ -763,15 +949,20 @@ private:
         "Texture descriptor records require a virtual path: " + file.relpath);
     }
     if (!IsPathKeyed(file.kind)) {
-      // A root holds one table or data file of each kind, at one path.
+      // A root holds one table or data file of each kind. A data file keeps
+      // its one path; a table of new rows has a new content name, and its
+      // record replaces the old one, which the commit then retires.
       const auto existing
         = std::ranges::find_if(files_, [&](const auto& item) -> auto {
             return item.second.kind == file.kind;
           });
       if (existing != files_.end() && existing->first != file.relpath) {
-        throw std::runtime_error(std::string(context) + ": file kind "
-          + std::to_string(static_cast<uint16_t>(file.kind)) + " is at '"
-          + existing->first + "', not at '" + file.relpath + "'");
+        if (data::loose_cooked::IsResourceDataFile(file.kind)) {
+          throw std::runtime_error(std::string(context) + ": file kind "
+            + std::to_string(static_cast<uint16_t>(file.kind)) + " is at '"
+            + existing->first + "', not at '" + file.relpath + "'");
+        }
+        files_.erase(existing);
       }
     }
     if (!file.virtual_path.empty()) {
@@ -798,7 +989,7 @@ private:
     files_.insert_or_assign(path, std::move(file));
   }
 
-  //! Requires the index file lock.
+  //! Requires the writer lease.
   auto LoadExistingIndexIfPresent_() -> void
   {
     assets_.clear();
@@ -824,6 +1015,8 @@ private:
           std::move(*bytes));
       existing_guid_ = index.Guid();
       existing_content_version_ = index.ContentVersion();
+      commit_ = index.Commit();
+      retired_.assign(index.RetiredFiles().begin(), index.RetiredFiles().end());
 
       for (const auto key : index.GetAllAssetKeys()) {
         const auto rel = index.FindDescriptorRelPath(key);
@@ -853,6 +1046,11 @@ private:
           std::copy_n(sha->begin(), record.descriptor_sha256.size(),
             record.descriptor_sha256.begin());
         }
+        for (const auto& [asset, requirement] : index.Requirements()) {
+          if (asset == key) {
+            record.requirements.push_back(requirement);
+          }
+        }
 
         InsertAsset_(record, "Load");
       }
@@ -875,8 +1073,10 @@ private:
           "Load");
       }
 
-      DLOG_F(INFO, "Loaded existing loose cooked index: assets={}, files={}",
-        assets_.size(), files_.size());
+      published_paths_ = ListedPaths_();
+      DLOG_F(INFO,
+        "Loaded loose cooked commit {}: assets={}, files={}, retired={}",
+        commit_, assets_.size(), files_.size(), retired_.size());
     } catch (const std::exception& ex) {
       throw std::runtime_error(
         std::string("Failed to load existing loose cooked index: ")
@@ -960,13 +1160,23 @@ private:
         committed.error(), "Failed to publish loose cooked index");
     }
 
-    LOG_F(INFO, "Wrote loose cooked index: assets={}, files={}",
-      content.assets.size(), content.files.size());
+    LOG_F(INFO, "Wrote loose cooked commit {}: assets={}, files={}, retired={}",
+      content.commit, content.assets.size(), content.files.size(),
+      content.retired.size());
   }
 
   //! Where the cooked root is stored: every read, write and removal.
   observer_ptr<cooked::CookerStorage> storage_;
   std::filesystem::path cooked_root_;
+  //! The root's writer lease, held for the writer's life.
+  std::unique_ptr<cooked::StorageLock> writer_lease_;
+  //! The commit the root holds: 0 before its first.
+  uint64_t commit_ = 0;
+  //! What that commit lists, folded, as its successor finds what it stopped
+  //! listing.
+  std::unordered_map<std::string, PublishedFile> published_paths_;
+  //! Files earlier commits listed that may still be on disk.
+  std::vector<data::loose_cooked::RetiredFile> retired_;
 
   std::optional<data::SourceKey> source_key_override_;
   std::optional<uint16_t> content_version_override_;
@@ -1047,11 +1257,12 @@ auto LooseCookedWriter::RegisterProducedAssetDescriptor(
   const data::AssetKey& key, const data::AssetType asset_type,
   std::string_view virtual_path, std::string_view descriptor_relpath,
   const LooseCookedFileDigest& produced,
-  const data::AssetReferences& references, const LooseCookedProducer& producer)
+  const data::AssetReferences& references, const LooseCookedProducer& producer,
+  const std::span<const data::loose_cooked::IndexedRequirement> requirements)
   -> void
 {
   impl_->RegisterProducedAssetDescriptor(key, asset_type, virtual_path,
-    descriptor_relpath, produced, references, producer);
+    descriptor_relpath, produced, references, producer, requirements);
 }
 
 auto LooseCookedWriter::RegisterExternalAssetDescriptor(
@@ -1065,10 +1276,11 @@ auto LooseCookedWriter::RegisterExternalAssetDescriptor(
 }
 
 auto LooseCookedWriter::RegisterExternalAuxiliaryFile(std::string_view relpath,
-  const LooseCookedProducer& producer, const LooseCookedFileDigest& produced)
-  -> void
+  std::string_view virtual_path, const LooseCookedProducer& producer,
+  const LooseCookedFileDigest& produced) -> void
 {
-  impl_->RegisterExternalAuxiliaryFile(relpath, producer, produced);
+  impl_->RegisterExternalAuxiliaryFile(
+    relpath, virtual_path, producer, produced);
 }
 
 auto LooseCookedWriter::RemoveAssetDescriptor(std::string_view virtual_path)

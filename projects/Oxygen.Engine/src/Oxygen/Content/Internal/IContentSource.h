@@ -80,6 +80,14 @@ public:
     return nullptr;
   }
 
+  //! What a loose root's assets require of other mounts; a pak states its
+  //! requirements in its catalog instead.
+  [[nodiscard]] virtual auto GetLooseRequirements() const noexcept
+    -> std::span<const lc::AssetRequirement>
+  {
+    return {};
+  }
+
   [[nodiscard]] virtual auto GetAssetType(
     const data::AssetKey& key) const noexcept
     -> std::optional<data::AssetType> = 0;

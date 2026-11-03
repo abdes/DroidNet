@@ -9,8 +9,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <filesystem>
-#include <functional>
-#include <latch>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -24,6 +22,7 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -92,35 +91,40 @@ namespace {
     EXPECT_EQ(Asset(Inspect(storage, cooked_root)).source_path, kRedSource);
   }
 
-  //! Two writers of one cooked root that finish at once keep each other's
-  //! records: each merges the published index under the root's index lock,
-  //! which excludes writers in other threads and processes alike.
+  //! A second writer of a cooked root on the real file system is refused
+  //! while the first holds the root's writer lease, which excludes writers in
+  //! other threads and processes alike; once the first is done, the second
+  //! writes on top of its commit.
   NOLINT_TEST(LooseCookedWriterUpdateTest, ConcurrentWritersKeepBothRecords)
   {
     const auto temp = oxygen::testing::ScopedTempDir {};
     auto& storage = cooked::RealCookerStorage();
     const auto cooked_root = temp.Path() / "concurrent";
     const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
-    // Both writers read the root before either publishes: without the lock,
-    // the second publication would drop the first one's record.
-    LooseCookedWriter red(cooked_root, storage);
+    {
+      LooseCookedWriter red(cooked_root, storage);
+      red.WriteAssetDescriptor(MakeFirstByteAssetKey(0x31),
+        AssetType::kMaterial, "/.cooked/Materials/Red.omat",
+        "Materials/Red.omat", bytes, {},
+        FromSource("/.cooked/Materials/Red.omat.json"));
+
+      auto refused = false;
+      auto other = std::thread([&] -> void {
+        try {
+          LooseCookedWriter blue(cooked_root, storage);
+        } catch (const import::LooseCookedRootBusy&) {
+          refused = true;
+        }
+      });
+      other.join();
+      EXPECT_TRUE(refused);
+      (void)red.Finish();
+    }
     LooseCookedWriter blue(cooked_root, storage);
-    red.WriteAssetDescriptor(MakeFirstByteAssetKey(0x31), AssetType::kMaterial,
-      "/.cooked/Materials/Red.omat", "Materials/Red.omat", bytes, {},
-      FromSource("/.cooked/Materials/Red.omat.json"));
     blue.WriteAssetDescriptor(MakeFirstByteAssetKey(0x32), AssetType::kMaterial,
       "/.cooked/Materials/Blue.omat", "Materials/Blue.omat", bytes, {},
       FromSource("/.cooked/Materials/Blue.omat.json"));
-
-    auto start = std::latch { 2 };
-    auto finish = [&start](LooseCookedWriter& writer) -> void {
-      start.arrive_and_wait();
-      (void)writer.Finish();
-    };
-    auto red_thread = std::thread(finish, std::ref(red));
-    auto blue_thread = std::thread(finish, std::ref(blue));
-    red_thread.join();
-    blue_thread.join();
+    (void)blue.Finish();
 
     const auto content = CookedContent::Open(storage, cooked_root);
     EXPECT_EQ(content.Assets().size(), 2U);
@@ -157,14 +161,16 @@ namespace {
 
     const auto content = Inspect(storage, cooked_root);
     const auto asset = Asset(content);
-    EXPECT_EQ(content.DescriptorStored(asset.key)
-                .file.lexically_relative(cooked_root)
-                .generic_string(),
+    EXPECT_EQ(cooker::test::LayoutPathOf(content.DescriptorStored(asset.key)
+                  .file.lexically_relative(cooked_root)
+                  .generic_string()),
       "Materials/Red2.omat");
     EXPECT_EQ(asset.references, second.References());
     EXPECT_EQ(asset.descriptor_sha256, base::ComputeSha256(second.Bytes()));
-    // The descriptor at its former path is listed no more, so it is deleted.
-    EXPECT_FALSE(Exists(storage, cooked_root / "Materials/Red.omat"));
+    // The descriptor at its former path is retired, and with no reader of the
+    // commit that listed it, deleted.
+    EXPECT_FALSE(
+      cooker::test::HasCookedFile(cooked_root, "Materials/Red.omat", storage));
   }
 
   //! A source's recook under another key replaces its entry at the identity.
@@ -307,7 +313,7 @@ namespace {
       std::runtime_error);
   }
 
-  //! A table or data file is written again at its path; another path for its
+  //! A data file is written again at its path, grown; another path for its
   //! kind is refused.
   NOLINT_TEST(LooseCookedWriterUpdateTest, AFileKindHasOnePath)
   {
@@ -316,7 +322,7 @@ namespace {
     const std::vector<std::byte> bytes0 = { std::byte { 0x01 } };
     const auto table = BufferTable(1U);
     const std::vector<std::byte> bytes1
-      = { std::byte { 0xAA }, std::byte { 0xBB } };
+      = { std::byte { 0x01 }, std::byte { 0xBB } };
 
     {
       LooseCookedWriter writer(cooked_root, storage);
@@ -467,7 +473,8 @@ namespace {
     // Act & Assert
     EXPECT_THROW((void)writer.Finish(), std::system_error);
     EXPECT_TRUE(std::ranges::equal(storage.Bytes(index_path), before));
-    EXPECT_TRUE(Exists(storage, cooked_root / "Materials/Red.omat"));
+    EXPECT_TRUE(
+      cooker::test::HasCookedFile(cooked_root, "Materials/Red.omat", storage));
   }
 
 } // namespace

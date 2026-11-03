@@ -19,6 +19,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -38,6 +39,7 @@
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/ByteReader.h>
+#include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
@@ -916,8 +918,8 @@ NOLINT_TEST(LooseCookedIndexFileTest, TextureDescriptorKeepsItsVirtualPath)
   EXPECT_EQ(inventory.front().virtual_path, "/Content/Textures/Sky.otex");
 }
 
-//! A texture descriptor needs a canonical virtual path of its own; no other
-//! file record may carry one.
+//! A texture descriptor needs a canonical virtual path of its own; an
+//! auxiliary file's, which it may carry, is canonical and its own too.
 NOLINT_TEST(LooseCookedIndexFileTest, InvalidFileVirtualPathsAreCorrupt)
 {
   // A texture descriptor and an auxiliary file, both valid; each case then
@@ -958,10 +960,16 @@ NOLINT_TEST(LooseCookedIndexFileTest, InvalidFileVirtualPathsAreCorrupt)
       .defect = CookedDefect::kInvalidPath,
     },
     Case {
-      .name = "auxiliary file with a virtual path",
+      .name = "auxiliary file with the texture's virtual path",
       .record = kHull,
       .virtual_path_offset = sky_record.virtual_path_offset,
-      .defect = CookedDefect::kInvalidValue,
+      .defect = CookedDefect::kDuplicate,
+    },
+    Case {
+      .name = "auxiliary file with a relative virtual path",
+      .record = kHull,
+      .virtual_path_offset = sky_record.virtual_path_offset + 1U,
+      .defect = CookedDefect::kInvalidPath,
     },
   };
   for (const auto& test_case : cases) {
@@ -1428,6 +1436,179 @@ NOLINT_TEST_F(LooseCookedIndexResourceTest, MissingDataSuppressesRowChecks)
   EXPECT_EQ(metadata.front().relative_path, kData);
   EXPECT_EQ(metadata.front().reason, IntegrityFailure::kMissing);
   EXPECT_EQ(full, metadata);
+}
+
+//=== Commits ===-------------------------------------------------------------//
+
+//! An index holds its commit, the files earlier commits listed and what its
+//! assets require of other mounts.
+NOLINT_TEST(LooseCookedIndexCommitTest, ProtocolRecordsReadBack)
+{
+  using oxygen::data::KeyReferenceKind;
+  using oxygen::data::loose_cooked::IndexedRequirement;
+  using oxygen::data::loose_cooked::RetiredFile;
+
+  // Arrange
+  auto wood = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  const auto required = IndexedRequirement {
+    .mount = "Engine",
+    .kind = KeyReferenceKind::kAsset,
+    .key = AssetKey::FromVirtualPath("/Engine/Base.omat"),
+    .type = AssetType::kMaterial,
+  };
+  wood.requirements = { required };
+  const auto assets = std::array { wood };
+  const auto retired = std::array {
+    RetiredFile {
+      .kind = FileKind::kAssetDescriptor,
+      .relpath = "Materials/Old.omat",
+      .retired_at = 5,
+    },
+  };
+  auto stream = oxygen::serio::MemoryStream {};
+  auto writer = oxygen::serio::Writer(stream);
+  ASSERT_TRUE(oxygen::data::loose_cooked::EncodeLooseCookedIndex(
+    IndexContent {
+      .source_key = TestSourceKey(),
+      .content_version = 7,
+      .commit = 6,
+      .assets = assets,
+      .files = {},
+      .retired = retired,
+    },
+    writer)
+      .has_value());
+
+  // Act
+  const auto index = LooseCookedIndexImpl::LoadFromBytes(stream.Data());
+
+  // Assert
+  EXPECT_EQ(index.Commit(), 6U);
+  ASSERT_EQ(index.RetiredFiles().size(), 1U);
+  EXPECT_EQ(index.RetiredFiles().front(), retired.front());
+  ASSERT_EQ(index.Requirements().size(), 1U);
+  EXPECT_EQ(index.Requirements().front().asset, wood.key);
+  EXPECT_EQ(index.Requirements().front().requirement, required);
+}
+
+//! An index of no commit is corrupt.
+NOLINT_TEST(LooseCookedIndexCommitTest, CommitZeroIsCorrupt)
+{
+  // Arrange
+  auto bytes = Encode({});
+  PatchHeader(bytes, [](IndexHeader& header) -> void { header.commit = 0; });
+
+  // Act & Assert
+  GCHECK_F(ExpectDefect(bytes, CookedDefect::kInvalidValue, "commit"));
+}
+
+//! What a writer is cooking, or a crashed writer left, is uncommitted: a
+//! mount accepts it, and only a check reports it. A file someone else put
+//! there is unexpected.
+NOLINT_TEST_F(LooseCookedIndexFileSystemTest, UncommittedFilesAreNoDamage)
+{
+  using oxygen::data::loose_cooked::RetiredFile;
+
+  // Arrange
+  const auto wood
+    = Material("/Content/Materials/Wood.omat", "Materials/Wood.omat");
+  PublishText(wood.descriptor_relpath, wood.descriptor_relpath);
+  const auto assets = std::array { wood };
+  const auto retired = std::array {
+    RetiredFile {
+      .kind = FileKind::kAssetDescriptor,
+      .relpath = "Materials/Kept.omat",
+      .retired_at = 2,
+    },
+    RetiredFile {
+      .kind = FileKind::kAssetDescriptor,
+      .relpath = "Materials/Gone.omat",
+      .retired_at = 2,
+    },
+  };
+  auto stream = oxygen::serio::MemoryStream {};
+  auto writer = oxygen::serio::Writer(stream);
+  ASSERT_TRUE(oxygen::data::loose_cooked::EncodeLooseCookedIndex(
+    IndexContent {
+      .source_key = TestSourceKey(),
+      .content_version = 7,
+      .commit = 2,
+      .assets = assets,
+      .files = {},
+      .retired = retired,
+    },
+    writer)
+      .has_value());
+  Publish("container.index.bin", stream.Data());
+  PublishText("Materials/Kept.omat", "retired");
+  PublishText("Materials/Wood.0123456789abcdef.omat", "a writer's");
+  PublishText(
+    "Materials/.oxygen-0190f3a2-5c1b-7d2e-8f3a-1b2c3d4e5f60.tmp", "sibling");
+  PublishText("container.writer.lock", "");
+  PublishText(".leases/2.lock", "");
+  const auto index = LooseCookedIndexImpl::LoadFromFile(IndexPath());
+
+  // Act
+  const auto issues = index.CheckContent(TempDir(), IntegrityCheck::kFull);
+
+  // Assert
+  ASSERT_EQ(issues.size(), 2U);
+  EXPECT_EQ(issues.at(0).reason, IntegrityFailure::kUncommitted);
+  EXPECT_EQ(issues.at(1).reason, IntegrityFailure::kUncommitted);
+  EXPECT_NO_THROW(index.ValidateContent(TempDir(), IntegrityCheck::kFull));
+
+  // Act: someone else's file
+  PublishText("Materials/Notes.txt", "foreign");
+
+  // Assert
+  EXPECT_THROW(index.ValidateContent(TempDir(), IntegrityCheck::kMetadata),
+    oxygen::content::lc::IntegrityError);
+}
+
+//! A reader of a plain root holds the lease of the commit it loaded until it
+//! lets it go, and the lease leaves no file behind.
+NOLINT_TEST_F(LooseCookedIndexFileSystemTest, LeasedIndexHoldsItsCommit)
+{
+  // Arrange
+  Publish("container.index.bin", Encode({}));
+  const auto lease_path = TempPath(".leases/1.lock");
+
+  // Act
+  {
+    const auto leased = oxygen::content::internal::LoadLeasedIndex(TempDir());
+
+    // Assert
+    EXPECT_TRUE(leased.lease.IsLocked());
+    EXPECT_EQ(leased.index.Commit(), 1U);
+    EXPECT_TRUE(std::filesystem::exists(lease_path));
+    const auto writer = oxygen::serio::FileLock::TryAcquire(lease_path,
+      oxygen::serio::FileLockMode::kExclusive,
+      oxygen::serio::FileLockOpenMode::kTemporary);
+    ASSERT_FALSE(writer.has_value());
+    EXPECT_EQ(writer.error(), std::errc::device_or_resource_busy);
+  }
+  EXPECT_FALSE(std::filesystem::exists(lease_path));
+}
+
+//! Bytes a writer appended to a data file past its committed length are
+//! uncommitted, not a size mismatch.
+NOLINT_TEST_F(
+  LooseCookedIndexResourceTest, DataPastItsCommittedLengthIsUncommitted)
+{
+  // Arrange
+  AddBuffer(kFirstBuffer);
+  const auto index = PublishRoot();
+  auto grown = Data();
+  grown.push_back(std::byte { 9 });
+  Publish(kData, grown);
+
+  // Act
+  const auto issues = index.CheckContent(TempDir(), IntegrityCheck::kFull);
+
+  // Assert
+  ASSERT_EQ(issues.size(), 1U);
+  EXPECT_EQ(issues.front().reason, IntegrityFailure::kUncommittedTail);
+  EXPECT_NO_THROW(index.ValidateContent(TempDir(), IntegrityCheck::kFull));
 }
 
 } // namespace

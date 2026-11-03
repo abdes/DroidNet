@@ -132,7 +132,8 @@ private:
   struct BufferSidecarDescriptor final {
     data::pak::core::ResourceIndexT resource_index;
     std::string_view source_id;
-    std::string_view relpath;
+    //! The identity a reference names the sidecar by.
+    std::string virtual_path;
   };
 
   [[nodiscard]] auto EmitBufferSidecarDescriptor(

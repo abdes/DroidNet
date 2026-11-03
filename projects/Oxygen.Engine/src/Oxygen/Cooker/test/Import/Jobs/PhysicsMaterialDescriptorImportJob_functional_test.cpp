@@ -20,6 +20,7 @@
 
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -83,15 +84,15 @@ namespace {
     const auto has_output = [&](const std::string_view relpath) -> bool {
       return std::ranges::any_of(
         report->outputs, [&](const ImportOutputRecord& output) -> bool {
-          return output.path == relpath;
+          return oxygen::cooker::test::LayoutPathOf(output.path) == relpath;
         });
     };
     EXPECT_TRUE(has_output(kRelPath));
 
-    const auto material_path = cooked_root / std::filesystem::path { kRelPath };
-    ASSERT_TRUE(std::filesystem::exists(material_path));
+    ASSERT_TRUE(oxygen::cooker::test::HasCookedFile(cooked_root, kRelPath));
 
-    const auto bytes = ReadBytes(material_path);
+    const auto bytes
+      = ReadBytes(oxygen::cooker::test::CookedFile(cooked_root, kRelPath));
     ASSERT_GE(
       bytes.size(), sizeof(data::pak::physics::PhysicsMaterialAssetDesc));
     const auto desc = ReadPhysicsMaterialDesc(bytes);
@@ -168,7 +169,8 @@ namespace {
     EXPECT_TRUE(report->success);
     EXPECT_TRUE(std::ranges::any_of(
       report->outputs, [](const ImportOutputRecord& output) -> bool {
-        return output.path == "Physics/Materials/Wet Ground.v2 (2).opmat";
+        return oxygen::cooker::test::LayoutPathOf(output.path)
+          == "Physics/Materials/Wet Ground.v2 (2).opmat";
       }));
   }
 

@@ -7,15 +7,18 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -315,6 +318,135 @@ NOLINT_TEST(LooseCookedIndexEncoderTest, StreamErrorsAreReturned)
   // Assert
   ASSERT_FALSE(encoded.has_value());
   EXPECT_EQ(encoded.error(), oxygen::serio::Error::kNoSpace);
+}
+
+//! The commit, the retired records and the requirement records follow the
+//! file records, in path and asset order, before the reference blocks.
+NOLINT_TEST(LooseCookedIndexEncoderTest, CommitRetiredAndRequirementsAreLaidOut)
+{
+  using oxygen::data::KeyReferenceKind;
+  using oxygen::data::loose_cooked::IndexedRequirement;
+  using oxygen::data::loose_cooked::RequirementRecord;
+  using oxygen::data::loose_cooked::RetiredFile;
+  using oxygen::data::loose_cooked::RetiredRecord;
+
+  // Arrange
+  auto material = Material("/Content/A.omat");
+  material.requirements = {
+    IndexedRequirement {
+      .mount = "Engine",
+      .kind = KeyReferenceKind::kTexture,
+      .key = AssetKey::FromVirtualPath("/Engine/Checker.otex"),
+      .type = AssetType::kUnknown,
+    },
+  };
+  const auto assets = std::array { material };
+  const auto retired = std::array {
+    RetiredFile {
+      .kind = FileKind::kAssetDescriptor,
+      .relpath = "Content/Old.omat",
+      .retired_at = 3,
+    },
+  };
+  auto content = Content(assets, {});
+  content.commit = 4;
+  content.retired = retired;
+  auto stream = oxygen::serio::MemoryStream {};
+  auto writer = oxygen::serio::Writer(stream);
+
+  // Act
+  const auto encoded = EncodeLooseCookedIndex(content, writer);
+
+  // Assert
+  ASSERT_TRUE(encoded.has_value());
+  auto reader = ByteReader(stream.Data());
+  const auto header = reader.Read<IndexHeader>();
+  ASSERT_HAS_VALUE(header);
+  EXPECT_EQ(header->commit, 4U);
+  EXPECT_EQ(header->retired_record_count, 1U);
+  EXPECT_EQ(header->requirement_record_count, 1U);
+  EXPECT_EQ(header->retired_records_offset, header->file_records_offset);
+  EXPECT_EQ(header->requirement_records_offset,
+    header->retired_records_offset + sizeof(RetiredRecord));
+  EXPECT_EQ(stream.Data().size(),
+    header->requirement_records_offset + sizeof(RequirementRecord));
+  ASSERT_TRUE(reader.Seek(ByteOffset { header->retired_records_offset }));
+  const auto record = reader.Read<RetiredRecord>();
+  ASSERT_HAS_VALUE(record);
+  EXPECT_EQ(record->kind, FileKind::kAssetDescriptor);
+  EXPECT_EQ(record->retired_at, 3U);
+  const auto requirement = reader.Read<RequirementRecord>();
+  ASSERT_HAS_VALUE(requirement);
+  EXPECT_EQ(requirement->asset_index, 0U);
+  EXPECT_EQ(
+    requirement->kind, static_cast<uint8_t>(KeyReferenceKind::kTexture));
+}
+
+//! Commits, retired files and requirements the loader would refuse are
+//! refused before anything is written.
+NOLINT_TEST(
+  LooseCookedIndexEncoderTest, ProtocolRecordsTheFormatCannotHoldAreRefused)
+{
+  using oxygen::data::KeyReferenceKind;
+  using oxygen::data::loose_cooked::IndexedRequirement;
+  using oxygen::data::loose_cooked::RetiredFile;
+
+  const auto material = Material("/Content/A.omat");
+  const auto retire
+    = [](std::string relpath, const uint64_t at) -> RetiredFile {
+    return {
+      .kind = FileKind::kAuxiliary,
+      .relpath = std::move(relpath),
+      .retired_at = at,
+    };
+  };
+  const auto encode = [&](IndexedAsset asset, const uint64_t commit,
+                        const std::vector<RetiredFile>& retired) -> void {
+    const auto assets = std::array { std::move(asset) };
+    auto content = Content(assets, {});
+    content.commit = commit;
+    content.retired = retired;
+    auto stream = oxygen::serio::MemoryStream {};
+    auto writer = oxygen::serio::Writer(stream);
+    static_cast<void>(EncodeLooseCookedIndex(content, writer));
+  };
+  auto texture_with_type = material;
+  texture_with_type.requirements = {
+    IndexedRequirement {
+      .mount = "Engine",
+      .kind = KeyReferenceKind::kTexture,
+      .key = AssetKey::FromVirtualPath("/Engine/Sky.otex"),
+      .type = AssetType::kMaterial,
+    },
+  };
+  auto unmounted = material;
+  unmounted.requirements = {
+    IndexedRequirement {
+      .mount = {},
+      .kind = KeyReferenceKind::kAsset,
+      .key = AssetKey::FromVirtualPath("/Engine/A.omat"),
+      .type = AssetType::kMaterial,
+    },
+  };
+  auto twice = material;
+  twice.requirements
+    = { unmounted.requirements.front(), unmounted.requirements.front() };
+  twice.requirements.at(0).mount = "Engine";
+  twice.requirements.at(1).mount = "Engine";
+
+  EXPECT_THROW(encode(material, 0, {}), std::invalid_argument);
+  EXPECT_THROW(
+    encode(material, 2, { retire("Old.obuf", 3) }), std::invalid_argument);
+  EXPECT_THROW(
+    encode(material, 2, { retire("Old.obuf", 0) }), std::invalid_argument);
+  EXPECT_THROW(encode(material, 2, { retire(material.descriptor_relpath, 2) }),
+    std::invalid_argument);
+  EXPECT_THROW(
+    encode(material, 2, { retire("Old.obuf", 1), retire("Old.obuf", 2) }),
+    std::invalid_argument);
+  EXPECT_THROW(encode(texture_with_type, 1, {}), std::invalid_argument);
+  EXPECT_THROW(encode(unmounted, 1, {}), std::invalid_argument);
+  EXPECT_THROW(encode(twice, 1, {}), std::invalid_argument);
 }
 
 } // namespace

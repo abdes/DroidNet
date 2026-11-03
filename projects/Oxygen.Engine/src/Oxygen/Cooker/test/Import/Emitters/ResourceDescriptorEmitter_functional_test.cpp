@@ -15,6 +15,7 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/OxCo/Co.h>
@@ -124,7 +125,9 @@ NOLINT_TEST_F(
       co_return;
     }
     EXPECT_NE(result.error().error.value(), 0);
-    EXPECT_EQ(result.error().path.filename(), "Paint.base_color.otex");
+    EXPECT_EQ(oxygen::cooker::test::LayoutPathOf(
+                result.error().path.filename().generic_string()),
+      "Paint.base_color.otex");
   });
 }
 
@@ -168,8 +171,8 @@ NOLINT_TEST_F(
   });
 }
 
-//! A buffer descriptor path the index cannot hold, one leaving the cooked root
-//! or rooted, is refused before anything is written.
+//! A buffer descriptor identity in no mount, or whose path leaves the cooked
+//! root, is refused before anything is written.
 NOLINT_TEST_F(
   ResourceDescriptorEmitterTest, BufferPathLeavingTheRootIsRefusedUnwritten)
 {
@@ -178,12 +181,15 @@ NOLINT_TEST_F(
       .size_bytes = 4U,
     };
     const auto index = oxygen::data::pak::core::ResourceIndexT { 1U };
-    for (const auto* const relpath :
-      { "../outside.obuf", "/rooted.obuf", "Buffers/../../outside.obuf" }) {
-      EXPECT_THROW(static_cast<void>(
-                     emitter.EmitBufferAtRelPath(relpath, index, descriptor)),
+    for (const auto* const virtual_path :
+      { "/Content/../outside.obuf", "/Content/Buffers/../../outside.obuf" }) {
+      EXPECT_THROW(
+        static_cast<void>(emitter.EmitBuffer(virtual_path, index, descriptor)),
         std::runtime_error);
     }
+    EXPECT_THROW(
+      static_cast<void>(emitter.EmitBuffer("rooted.obuf", index, descriptor)),
+      std::invalid_argument);
 
     EXPECT_TRUE(co_await emitter.Finalize());
   });

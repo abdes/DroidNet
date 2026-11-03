@@ -21,6 +21,7 @@
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/IoDriver.h>
 #include <Oxygen/Serio/Types.h>
 
@@ -98,6 +99,19 @@ public:
   //! (`content::lc::RootFiles::List`); a link is listed and nothing below it.
   [[nodiscard]] virtual auto List(const std::filesystem::path& path) const
     -> Result<std::vector<content::lc::RootEntry>> = 0;
+
+  //! Locks the file `path` in `mode` without waiting, for as long as the
+  //! returned lock lives, against its other holders in this process and in
+  //! others.
+  /*!
+   The file and its parent folders are created when missing, and the file is
+   removed when its last holder releases it, so a lease leaves nothing
+   behind. A holder in a conflicting mode is `device_or_resource_busy`. A
+   reader leases a loose root's commit this way, and a writer takes the
+   root's writer lease.
+  */
+  [[nodiscard]] virtual auto TryLock(const std::filesystem::path& path,
+    serio::FileLockMode mode) const -> Result<std::unique_ptr<StorageLock>> = 0;
 };
 
 //! Where the Cooker reads cooked sources and publishes paks, manifests and
@@ -141,11 +155,14 @@ public:
   [[nodiscard]] virtual auto Move(const std::filesystem::path& from,
     const std::filesystem::path& to) -> Result<void> = 0;
 
-  //! Locks the file `path` exclusively, waiting for its other holders, in
-  //! this process and in others; the file and its parent folders are created
-  //! when missing. The lock file stays when the lock is released.
-  [[nodiscard]] virtual auto LockExclusive(const std::filesystem::path& path)
-    -> Result<std::unique_ptr<StorageLock>> = 0;
+  //! Cuts the file `path` to its first `size` bytes; a file already no
+  //! longer is a success.
+  /*!
+   A writer drops the bytes of a resource data file past its committed
+   length, which no commit records, before it appends.
+  */
+  [[nodiscard]] virtual auto Truncate(const std::filesystem::path& path,
+    serio::ByteCount size) -> Result<void> = 0;
 
   //! The size of the file `path`; nothing when `path` names no file.
   /*!
@@ -170,10 +187,10 @@ public:
   //! Publishes `bytes` as the whole file `path` (parent folders created),
   //! replacing it atomically; the write is awaited through `driver`.
   /*!
-   Buffered durability: the loose index, published stably, holds the digests
-   of the files published this way. A cancelled or failed publication leaves
-   the destination as it was. `bytes` stays valid until the coroutine
-   completes.
+   Stable durability: a loose index that lists the file is published after
+   it, so the file is on disk before any commit names it. A cancelled or
+   failed publication leaves the destination as it was. `bytes` stays valid
+   until the coroutine completes.
   */
   [[nodiscard]] virtual auto PublishAsync(serio::IoDriver& driver,
     std::filesystem::path path, std::span<const std::byte> bytes)
@@ -185,7 +202,8 @@ public:
   /*!
    The device writes the file that `Open`, `SizeOf` and `KindOf` see, so a
    reader finds the bytes written through it once the awaited write
-   completes. It must not outlive `driver`.
+   completes; its writer flushes it stably before a commit records its new
+   length. It must not outlive `driver`.
   */
   [[nodiscard]] virtual auto OpenData(serio::IoDriver& driver,
     const std::filesystem::path& path) -> Result<serio::AnyAsyncDevice> = 0;

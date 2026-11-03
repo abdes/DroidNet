@@ -43,6 +43,11 @@ namespace oxygen::content::internal {
  descriptor it reads: the loose layout keeps each in a file of its own. An
  index-only source, for lookups while a cook has unpublished files, opens
  nothing but the index.
+
+ The source reads one commit whole. A generation is held by its lease; a
+ plain root by the reader lease of the commit it mounted
+ (`LoadLeasedIndex`), so no writer reclaims a descriptor the mounted index
+ lists. Each data file is read up to the length its commit records.
 */
 class LooseCookedSource final : public IContentSource {
 public:
@@ -65,8 +70,8 @@ public:
     , debug_name_(cooked_root_.string())
     , generation_lock_(std::move(generation_lock))
     , driver_(std::move(driver))
-    , index_(LooseCookedIndexImpl::LoadFromFile(
-        cooked_root_ / oxygen::data::loose_cooked::kIndexFileName))
+    , index_(
+        LoadIndex(cooked_root_, generation_lock_.IsLocked(), commit_lease_))
   {
     using oxygen::data::loose_cooked::FileKind;
 
@@ -136,6 +141,12 @@ public:
   [[nodiscard]] auto GetSourceKey() const noexcept -> data::SourceKey override
   {
     return index_.Guid();
+  }
+
+  [[nodiscard]] auto GetLooseRequirements() const noexcept
+    -> std::span<const lc::AssetRequirement> override
+  {
+    return index_.Requirements();
   }
 
   [[nodiscard]] auto CookedRoot() const noexcept -> const std::filesystem::path&
@@ -284,6 +295,22 @@ private:
 
   OXGN_CNTT_API auto OpenFiles() -> void;
 
+  //! The index of `cooked_root`: a generation's under its held lease, a
+  //! plain root's under the reader lease of its commit, which goes to
+  //! `commit_lease`.
+  [[nodiscard]] static auto LoadIndex(const std::filesystem::path& cooked_root,
+    const bool generation_leased, serio::FileLock& commit_lease)
+    -> LooseCookedIndexImpl
+  {
+    if (generation_leased) {
+      return LooseCookedIndexImpl::LoadFromFile(
+        cooked_root / data::loose_cooked::kIndexFileName);
+    }
+    auto leased = LoadLeasedIndex(cooked_root);
+    commit_lease = std::move(leased.lease);
+    return std::move(leased.index);
+  }
+
   OXGN_CNTT_NDAPI static auto OpenDescriptor(const std::filesystem::path& path)
     -> std::unique_ptr<serio::AnyReader>;
 
@@ -308,6 +335,9 @@ private:
   std::filesystem::path cooked_root_;
   std::string debug_name_;
   serio::FileLock generation_lock_;
+  //! The reader lease of the mounted commit of a plain root; declared before
+  //! the index it protects.
+  serio::FileLock commit_lease_;
   //! Declared before the files: the driver outlives the files it opened.
   std::shared_ptr<serio::IoDriver> driver_;
   LooseCookedIndexImpl index_;

@@ -62,6 +62,8 @@ public:
   //! A table the last session of a cohort wrote.
   struct WrittenTable final {
     data::loose_cooked::FileKind kind = data::loose_cooked::FileKind::kUnknown;
+    //! Its content-named path below the cooked root.
+    std::string relpath;
     LooseCookedFileDigest digest;
   };
 

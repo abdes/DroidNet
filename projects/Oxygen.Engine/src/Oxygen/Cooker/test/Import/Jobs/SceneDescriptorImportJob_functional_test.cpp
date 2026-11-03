@@ -34,6 +34,7 @@
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -71,6 +72,8 @@ namespace oxygen::content::import::test {
 namespace {
 
   using nlohmann::json;
+  using oxygen::cooker::test::CookedFile;
+  using oxygen::cooker::test::HasCookedFile;
   using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
   using oxygen::cooker::test::SceneDescriptor;
@@ -122,7 +125,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
     ASSERT_EQ(report->scenes_written, 1U);
-    const auto bytes = ReadBytes(root / "Scenes/EmptyScene.oscene");
+    const auto bytes = ReadBytes(CookedFile(root, "Scenes/EmptyScene.oscene"));
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     EXPECT_TRUE(scene.GetNodes().empty());
     EXPECT_TRUE(
@@ -199,7 +202,7 @@ namespace {
       = data::AssetKey::FromVirtualPath("/.cooked/Scenes/Model.oscene");
     const auto context_key
       = data::AssetKey::FromVirtualPath("/.cooked/Input/gameplay.oimap");
-    const auto bytes = ReadBytes(root / "Scenes/Level.oscene");
+    const auto bytes = ReadBytes(CookedFile(root, "Scenes/Level.oscene"));
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     EXPECT_FALSE(scene.IsModelScene());
     EXPECT_EQ(scene.GetStartingCamera(),
@@ -337,7 +340,7 @@ namespace {
     EXPECT_TRUE(HasDiagnosticCode(
       report->diagnostics, "scene.starting_camera.unresolved"));
     const auto scene = data::SceneAsset(
-      data::AssetKey {}, ReadBytes(root / "Scenes/Level.oscene"));
+      data::AssetKey {}, ReadBytes(CookedFile(root, "Scenes/Level.oscene")));
     EXPECT_FALSE(scene.GetStartingCamera().has_value());
     const auto changes = scene.GetComponents<world::OverrideRecord>();
     ASSERT_EQ(changes.size(), 1U);
@@ -390,7 +393,7 @@ namespace {
     const auto success = Import(MakeRequest(root, mask_scene));
     ASSERT_HAS_VALUE(success);
     ASSERT_TRUE(success->success);
-    const auto bytes = ReadBytes(root / "Scenes/MaskScene.oscene");
+    const auto bytes = ReadBytes(CookedFile(root, "Scenes/MaskScene.oscene"));
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     const auto exposure = scene.TryGetPostProcessVolumeEnvironment();
     ASSERT_HAS_VALUE(exposure) << "Expected exposure to contain a value";
@@ -413,12 +416,14 @@ namespace {
     EXPECT_FALSE(srgb->success);
     EXPECT_TRUE(HasDiagnosticCode(
       srgb->diagnostics, "scene.descriptor.mask_format_invalid"));
+    // A descriptor that names no table row is a root its index cannot vouch
+    // for: opening it refuses the root.
     MaterializeMeteringMask(root, Format::kRGBA8UNorm, true);
     const auto absent = Import(MakeRequest(root, mask_scene));
     ASSERT_HAS_VALUE(absent);
     EXPECT_FALSE(absent->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      absent->diagnostics, "scene.descriptor.texture_descriptor_invalid"));
+      absent->diagnostics, "scene.descriptor.index_load_failed"));
 
     // A deleted mask, a root that keeps the texture but no longer describes
     // it, leaves the scene without one, with a warning.
@@ -432,7 +437,7 @@ namespace {
     EXPECT_TRUE(HasDiagnosticCode(
       deleted->diagnostics, "scene.descriptor.texture_descriptor_missing"));
     const auto unmasked = data::SceneAsset(
-      data::AssetKey {}, ReadBytes(root / "Scenes/MaskScene.oscene"))
+      data::AssetKey {}, ReadBytes(CookedFile(root, "Scenes/MaskScene.oscene")))
                             .TryGetPostProcessVolumeEnvironment();
     ASSERT_HAS_VALUE(unmasked);
     EXPECT_EQ(
@@ -473,7 +478,7 @@ namespace {
     const auto references = index.FindAssetReferences(*scene_key);
     ASSERT_HAS_VALUE(references);
     const auto exposure = data::SceneAsset(
-      data::AssetKey {}, ReadBytes(root / "Scenes/MaskScene.oscene"))
+      data::AssetKey {}, ReadBytes(CookedFile(root, "Scenes/MaskScene.oscene")))
                             .TryGetPostProcessVolumeEnvironment();
     ASSERT_HAS_VALUE(exposure);
     const auto target
@@ -523,7 +528,7 @@ namespace {
     const auto report = Import(MakeRequest(root, physical));
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
-    const auto bytes = ReadBytes(root / "Scenes/Physical.oscene");
+    const auto bytes = ReadBytes(CookedFile(root, "Scenes/Physical.oscene"));
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     const auto perspective
       = scene.GetComponents<world::PerspectiveCameraRecord>();
@@ -629,7 +634,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
     ASSERT_EQ(report->scenes_written, 1U);
-    const auto bytes = ReadBytes(root / "Scenes/Flags.oscene");
+    const auto bytes = ReadBytes(CookedFile(root, "Scenes/Flags.oscene"));
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     const auto nodes = scene.GetNodes();
     ASSERT_EQ(nodes.size(), 5U);
@@ -698,7 +703,7 @@ namespace {
       const auto report = Import(std::move(request));
       ASSERT_HAS_VALUE(report);
       ASSERT_TRUE(report->success);
-      const auto bytes = ReadBytes(output / "Scenes/Scene.oscene");
+      const auto bytes = ReadBytes(CookedFile(output, "Scenes/Scene.oscene"));
       const auto scene = data::SceneAsset(
         data::AssetKey {}, std::span<const std::byte>(bytes));
       const auto renderables
@@ -731,7 +736,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success)
       << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
-    const auto bytes = ReadBytes(output / "Scenes/Scene.oscene");
+    const auto bytes = ReadBytes(CookedFile(output, "Scenes/Scene.oscene"));
     const auto scene
       = data::SceneAsset(data::AssetKey {}, std::span<const std::byte>(bytes));
     const auto renderables
@@ -829,10 +834,10 @@ namespace {
     EXPECT_FALSE(HasDiagnosticCode(
       report->diagnostics, "scene.descriptor.reference_missing"));
 
-    const auto scene_path = cooked_root / "Scenes/DemoScene.oscene";
-    EXPECT_TRUE(std::filesystem::exists(scene_path));
+    EXPECT_TRUE(HasCookedFile(cooked_root, "Scenes/DemoScene.oscene"));
 
-    const auto scene_bytes = ReadBytes(scene_path);
+    const auto scene_bytes
+      = ReadBytes(CookedFile(cooked_root, "Scenes/DemoScene.oscene"));
     ASSERT_FALSE(scene_bytes.empty());
 
     const auto scene = oxygen::data::SceneAsset(
@@ -926,10 +931,10 @@ namespace {
     EXPECT_TRUE(report->success);
     EXPECT_EQ(report->scenes_written, 1U);
 
-    const auto scene_path = cooked_root / "Scenes/DirectionalTuning.oscene";
-    ASSERT_TRUE(std::filesystem::exists(scene_path));
+    ASSERT_TRUE(HasCookedFile(cooked_root, "Scenes/DirectionalTuning.oscene"));
 
-    const auto scene_bytes = ReadBytes(scene_path);
+    const auto scene_bytes
+      = ReadBytes(CookedFile(cooked_root, "Scenes/DirectionalTuning.oscene"));
     ASSERT_FALSE(scene_bytes.empty());
 
     const auto scene = oxygen::data::SceneAsset(
@@ -1138,10 +1143,10 @@ namespace {
     EXPECT_TRUE(report->success);
     EXPECT_EQ(report->scenes_written, 1U);
 
-    const auto scene_path = cooked_root / "Scenes/EnvironmentScene.oscene";
-    ASSERT_TRUE(std::filesystem::exists(scene_path));
+    ASSERT_TRUE(HasCookedFile(cooked_root, "Scenes/EnvironmentScene.oscene"));
 
-    const auto scene_bytes = ReadBytes(scene_path);
+    const auto scene_bytes
+      = ReadBytes(CookedFile(cooked_root, "Scenes/EnvironmentScene.oscene"));
     ASSERT_FALSE(scene_bytes.empty());
 
     const auto scene = oxygen::data::SceneAsset(
@@ -1263,8 +1268,8 @@ namespace {
           ASSERT_HAS_VALUE(report);
           ASSERT_TRUE(report->success);
           EXPECT_EQ(report->scenes_written, 1U);
-          const auto path = root / "Scenes/Environment.oscene";
-          const auto bytes = ReadBytes(path);
+          const auto bytes
+            = ReadBytes(CookedFile(root, "Scenes/Environment.oscene"));
           const auto scene = data::SceneAsset(
             data::AssetKey {}, std::span<const std::byte>(bytes));
           const auto post = scene.TryGetPostProcessVolumeEnvironment();
@@ -1421,10 +1426,9 @@ namespace {
     // Assert
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
-    const auto scene_path = output / "Scenes/Scene.oscene";
     const auto scene = data::SceneAsset(
       data::AssetKey::FromVirtualPath("/.cooked/Scenes/Scene.oscene"),
-      ReadBytes(scene_path));
+      ReadBytes(CookedFile(output, "Scenes/Scene.oscene")));
     const auto renderables
       = scene.GetComponents<data::pak::world::RenderableRecord>();
     ASSERT_EQ(renderables.size(), 1U);
@@ -1474,7 +1478,7 @@ namespace {
     EXPECT_EQ(warning->severity, ImportSeverity::kWarning);
     const auto scene = data::SceneAsset(
       data::AssetKey::FromVirtualPath("/.cooked/Scenes/Scene.oscene"),
-      ReadBytes(output / "Scenes/Scene.oscene"));
+      ReadBytes(CookedFile(output, "Scenes/Scene.oscene")));
     EXPECT_EQ(
       scene.GetComponents<data::pak::world::RenderableRecord>().size(), 1U);
     EXPECT_TRUE(

@@ -162,7 +162,7 @@ namespace {
         co_return ::oxygen::Err(parent.error());
       }
       const auto written = co_await serio::AsyncWriteFileAtomically(
-        driver, path, bytes, serio::Durability::kBuffered);
+        driver, path, bytes, serio::Durability::kStable);
       if (!written) {
         co_return ::oxygen::Err(written.error());
       }
@@ -226,18 +226,36 @@ namespace {
       return {};
     }
 
-    [[nodiscard]] auto LockExclusive(const fs::path& path)
+    [[nodiscard]] auto TryLock(
+      const fs::path& path, const serio::FileLockMode mode) const
       -> Result<std::unique_ptr<StorageLock>> override
     {
       CHECK_RESULT(CreateParent(path));
-      auto lock = serio::FileLock::Acquire(base::ToNativePath(path),
-        serio::FileLockMode::kExclusive,
-        serio::FileLockOpenMode::kOpenOrCreate);
+      auto lock = serio::FileLock::TryAcquire(
+        base::ToNativePath(path), mode, serio::FileLockOpenMode::kTemporary);
       if (!lock) {
         return ::oxygen::Err(lock.error());
       }
       return ::oxygen::Ok(std::unique_ptr<StorageLock>(
         std::make_unique<HeldFileLock>(std::move(lock).value())));
+    }
+
+    [[nodiscard]] auto Truncate(const fs::path& path,
+      const serio::ByteCount size) -> Result<void> override
+    {
+      const auto native = base::ToNativePath(path);
+      auto ec = std::error_code {};
+      const auto current = fs::file_size(native, ec);
+      if (ec) {
+        return ::oxygen::Err(ec);
+      }
+      if (current > size.get()) {
+        fs::resize_file(native, size.get(), ec);
+        if (ec) {
+          return ::oxygen::Err(ec);
+        }
+      }
+      return {};
     }
 
     [[nodiscard]] auto SizeOf(const fs::path& path) const

@@ -110,10 +110,10 @@ lock.
   locked (a mutex that leaves no file behind).
 
 Content's [published generations](../../Content/Docs/loose_cooked_content.md#published-generations)
-take shared and exclusive leases on markers, and the loose cooked index's
-writers serialize on `container.index.lock` for their read, merge and
-publication. Readers of the index take no lock: the atomic replacement gives
-them a whole index.
+take shared and exclusive leases on markers. A loose root's writer holds a
+temporary exclusive lock, `container.writer.lock`, for its whole session, and
+its readers hold temporary shared leases of the commit they read; a writer
+probes them exclusively before it deletes what an older commit listed.
 
 ### Example: writers that merge into one file
 

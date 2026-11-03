@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -43,6 +44,7 @@
 #include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/FileLock.h>
 
 namespace oxygen::content::import {
 
@@ -258,6 +260,13 @@ namespace {
       -> Result<std::vector<content::lc::RootEntry>> override
     {
       return cooked::RealCookerStorage().List(path);
+    }
+
+    [[nodiscard]] auto TryLock(
+      const fs::path& path, const serio::FileLockMode mode) const
+      -> Result<std::unique_ptr<cooked::StorageLock>> override
+    {
+      return cooked::RealCookerStorage().TryLock(path, mode);
     }
 
     [[nodiscard]] auto Canonical(const fs::path& path) const

@@ -12,25 +12,38 @@
 #include <filesystem>
 #include <span>
 #include <stdexcept>
+#include <string>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 #include "LooseCookedWriterTestSupport.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
+#include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/HoldingStorage.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedPaths.h>
+#include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -54,6 +67,48 @@ auto MakeBufferRow(const BufferRowSpec& spec)
   row.size_bytes = spec.size_bytes;
   row.content_hash.at(0) = spec.tag;
   return row;
+}
+
+namespace lc = oxygen::data::loose_cooked;
+
+//! The record an index lists for the file `relpath` holding `bytes`; a data
+//! file has no digest of its own.
+auto RecordOf(const lc::FileKind kind, std::string relpath,
+  const std::span<const std::byte> bytes) -> lc::IndexedFile
+{
+  return {
+    .kind = kind,
+    .relpath = std::move(relpath),
+    .size = bytes.size(),
+    .sha256 = lc::IsResourceDataFile(kind) ? oxygen::base::Sha256Digest {}
+                                           : oxygen::base::ComputeSha256(bytes),
+  };
+}
+
+//! The record of an empty buffers data file, which a buffers table pairs.
+auto EmptyBuffersData() -> lc::IndexedFile
+{
+  return RecordOf(lc::FileKind::kBuffersData,
+    std::string(imp::internal::loose_layout::kBuffersData), {});
+}
+
+//! The bytes of the index of a commit that listed `files`: the way a table or
+//! data file a root already holds is found.
+auto EncodeIndex(const std::span<const lc::IndexedFile> files)
+  -> std::vector<std::byte>
+{
+  auto stream = oxygen::serio::MemoryStream {};
+  auto writer = oxygen::serio::Writer(stream);
+  const auto encoded = lc::EncodeLooseCookedIndex(
+    {
+      .source_key = oxygen::data::SourceKey { oxygen::Uuid::Generate() },
+      .files = files,
+    },
+    writer);
+  if (!encoded) {
+    throw std::system_error(encoded.error(), "encode the loose index");
+  }
+  return { stream.Data().begin(), stream.Data().end() };
 }
 
 NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
@@ -89,6 +144,18 @@ NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
         attempting.Trigger();
         co_await tables.WaitForFinalization(root);
         admitted = true;
+        // The first session's table is on disk; a commit lists it, as the
+        // import that owns the root does, so the next session loads it.
+        const auto table_path = oxygen::cooker::test::CookedFile(
+          root, imp::internal::loose_layout::kBuffersTable);
+        const auto table_bytes = oxygen::cooker::test::ReadBytes(table_path);
+        const auto listed = std::array {
+          RecordOf(lc::FileKind::kBuffersTable,
+            table_path.lexically_relative(root).generic_string(), table_bytes),
+          EmptyBuffersData(),
+        };
+        oxygen::cooker::test::WriteBytes(
+          root / std::string(lc::kIndexFileName), EncodeIndex(listed));
         auto second = tables.BeginSession(root);
         second_index = tables.BufferAggregator(root)
                          .Acquire(MakeBufferRow({ .tag = 2U }), 1U)
@@ -107,9 +174,7 @@ NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
   EXPECT_EQ(second_index, inserted.index + 1U);
 }
 
-//! The last session of a cohort writes the tables and reports the digest of
-//! each as it wrote it; the sessions before it write nothing.
-//! A table the cooked root holds but that cannot be read as rows fails the
+//! A table the cooked root lists but that cannot be read as rows fails the
 //! import: starting it empty would publish a table that drops the root's
 //! existing resources.
 NOLINT_TEST(ResourceTableRegistryTest, UnreadableExistingTableFailsTheImport)
@@ -118,19 +183,30 @@ NOLINT_TEST(ResourceTableRegistryTest, UnreadableExistingTableFailsTheImport)
   imp::ImportEventLoop loop;
   auto storage = oxygen::cooker::testing::MemoryFileSystem {};
   const auto root = oxygen::content::testing::MemoryRoot() / "broken_table";
-  // One byte: not a whole number of buffer rows.
-  storage.AddFile(root / imp::internal::loose_layout::kBuffersTable,
-    std::array { std::byte { 1U } });
+  // One byte: not a whole number of buffer rows, though the index records
+  // the table of one row the commit wrote.
+  const auto table_bytes = std::array { std::byte { 1U } };
+  auto table = RecordOf(lc::FileKind::kBuffersTable,
+    lc::ContentRelPath(imp::internal::loose_layout::kBuffersTable,
+      oxygen::base::ComputeSha256(table_bytes)),
+    table_bytes);
+  table.size = lc::ResourceRowSize(lc::FileKind::kBuffersTable);
+  const auto listed = std::array { table, EmptyBuffersData() };
+  const auto table_path = root / listed.front().relpath;
+  storage.AddFile(table_path, table_bytes);
+  storage.AddFile(root / std::string(lc::kIndexFileName), EncodeIndex(listed));
   imp::ResourceTableRegistry tables(
     loop.Driver(), oxygen::make_observer(&storage));
 
   // Act + Assert
   EXPECT_THROW(
     static_cast<void>(tables.BufferAggregator(root)), imp::ResourceTableError);
-  EXPECT_EQ(storage.SizeOf(root / imp::internal::loose_layout::kBuffersTable),
-    oxygen::serio::ByteCount { 1U });
+  EXPECT_EQ(storage.SizeOf(table_path), oxygen::serio::ByteCount { 1U });
 }
 
+//! The last session of a cohort writes the tables and reports the content
+//! name and digest of each as it wrote it; the sessions before it write
+//! nothing.
 NOLINT_TEST(ResourceTableRegistryTest, LastSessionReportsTheTablesItWrote)
 {
   // Arrange
@@ -160,9 +236,10 @@ NOLINT_TEST(ResourceTableRegistryTest, LastSessionReportsTheTablesItWrote)
   ASSERT_EQ(second_end.written.size(), 1U);
   const auto& table = second_end.written.front();
   EXPECT_EQ(table.kind, oxygen::data::loose_cooked::FileKind::kBuffersTable);
-  const auto bytes = oxygen::content::cooked::ReadWholeFile(storage,
-    root / imp::internal::loose_layout::kBuffersTable,
-    oxygen::content::cooked::kMaxMetadataBytes);
+  EXPECT_EQ(oxygen::cooker::test::LayoutPathOf(table.relpath),
+    imp::internal::loose_layout::kBuffersTable);
+  const auto bytes = oxygen::content::cooked::ReadWholeFile(
+    storage, root / table.relpath, oxygen::content::cooked::kMaxMetadataBytes);
   ASSERT_HAS_VALUE(bytes);
   EXPECT_EQ(table.digest.size, bytes->size());
   EXPECT_EQ(table.digest.sha256, oxygen::base::ComputeSha256(*bytes));
@@ -178,8 +255,24 @@ NOLINT_TEST(ResourceTableRegistryTest, ReservedRangesWrittenThroughOneDataFile)
   auto storage = oxygen::cooker::testing::MemoryFileSystem {};
   const auto root = oxygen::content::testing::MemoryRoot() / "ranges";
   const auto data_path = root / imp::internal::loose_layout::kBuffersData;
-  storage.AddFile(
-    data_path, std::array { std::byte { 0xAA }, std::byte { 0xBB } });
+  const auto committed = std::array { std::byte { 0xAA }, std::byte { 0xBB } };
+  storage.AddFile(data_path, committed);
+  // The index lists the data file at the length the commit holds: new
+  // payloads go after it.
+  // The table of the commit holds the reserved empty row.
+  const auto sentinel
+    = std::vector<std::byte>(lc::ResourceRowSize(lc::FileKind::kBuffersTable));
+  const auto table = RecordOf(lc::FileKind::kBuffersTable,
+    lc::ContentRelPath(imp::internal::loose_layout::kBuffersTable,
+      oxygen::base::ComputeSha256(sentinel)),
+    sentinel);
+  storage.AddFile(root / table.relpath, sentinel);
+  const auto listed = std::array {
+    table,
+    RecordOf(lc::FileKind::kBuffersData,
+      std::string(imp::internal::loose_layout::kBuffersData), committed),
+  };
+  storage.AddFile(root / std::string(lc::kIndexFileName), EncodeIndex(listed));
   imp::ResourceTableRegistry tables(
     loop.Driver(), oxygen::make_observer(&storage));
   auto& aggregator = tables.BufferAggregator(root);
@@ -230,10 +323,19 @@ NOLINT_TEST(ResourceTableRegistryTest, TableThatCannotBePublishedFailsTheEnd)
   imp::ResourceTableRegistry tables(
     loop.Driver(), oxygen::make_observer(&storage));
   auto session = tables.BeginSession(root);
-  static_cast<void>(
-    tables.BufferAggregator(root).Acquire(MakeBufferRow({ .tag = 1U }), 1U));
-  // The empty table is created at the first entry; its publication fails.
-  storage.FailPublishing(root / imp::internal::loose_layout::kBuffersTable);
+  const auto acquired
+    = tables.BufferAggregator(root).Acquire(MakeBufferRow({ .tag = 1U }), 1U);
+  // The table is published under its content name, which the rows decide:
+  // the sentinel and the row acquired above.
+  auto rows = std::array {
+    oxygen::data::pak::core::BufferResourceDesc {},
+    MakeBufferRow({ .tag = 1U }),
+  };
+  rows.at(1).data_offset = acquired.reservation.aligned_offset;
+  const auto table_path = root
+    / lc::ContentRelPath(imp::internal::loose_layout::kBuffersTable,
+      oxygen::base::ComputeSha256(std::as_bytes(std::span(rows))));
+  storage.FailPublishing(table_path);
 
   // Act
   auto end = imp::ResourceTableRegistry::SessionEnd {};
@@ -242,6 +344,8 @@ NOLINT_TEST(ResourceTableRegistryTest, TableThatCannotBePublishedFailsTheEnd)
   // Assert
   EXPECT_FALSE(end.ok);
   EXPECT_TRUE(end.written.empty());
+  EXPECT_FALSE(oxygen::cooker::test::HasCookedFile(
+    root, imp::internal::loose_layout::kBuffersTable, storage));
 }
 
 } // namespace

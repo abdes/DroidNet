@@ -24,6 +24,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/ContentMounts.h>
+#include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/ResidencyPin.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
@@ -502,6 +503,16 @@ public:
   */
   virtual auto RetireLooseCookedGeneration(data::SourceKey source_key) -> bool
     = 0;
+
+  //! The requirements of the mounted loose root `source_key` on other mounts
+  //! that the layers below it do not meet; empty for any other source.
+  /*!
+   A loose root mounts with unmet requirements, which are content being
+   authored: a load of what one names fails as any missing reference does. A
+   pak's unmet requirement refuses its mount instead.
+  */
+  [[nodiscard]] virtual auto UnmetRequirements(data::SourceKey source_key) const
+    -> std::vector<FailedRequirement> = 0;
 
   //! Prepare a complete mount set off-thread without changing active
   //! precedence: loose cooked roots and pak files, lowest precedence first,

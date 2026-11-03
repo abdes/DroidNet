@@ -86,12 +86,23 @@ system lock also protects against reclamation by another process. Publisher CAS
 and selection rules are separate from this byte-lifetime contract; the shared
 lock primitive is owned by [Serio](../../Serio/Docs/publication.md#file-locks).
 
-Writers of one root's index serialize their read, merge and publication on
-`container.index.lock`, a sibling of the index taken exclusively with
-`serio::FileLock::Acquire`: it excludes writers in other processes as well as
-other threads, so a cooker and an editor importing into the same root keep
-each other's records. Readers take no lock: the index is replaced atomically,
-so a reader maps a whole index, the old one or the new one.
+A plain loose root is published by commits
+([loose root publication](../../../../design/proposals/cooked-sources/root-publication.md)):
+its index is the only commit, every other file but a data file has a content
+name, and a data file's committed length is the size its index records. A
+writer holds `container.writer.lock` for its whole session, so a root has one
+writer at a time. A mounted plain root holds the reader lease of the commit it
+mapped, `.leases/<commit>.lock`, shared, for the source's life
+(`internal::LoadLeasedIndex`): no writer reclaims a file that commit lists
+while the lease is held, and each data file is read up to its committed
+length, whatever a writer appends after it. A generation is held by its own
+lease instead.
+
+A loose root states what its assets require of other mounts. It mounts with
+the requirements the layers below it do not meet, which
+`IAssetLoader::UnmetRequirements` lists and the mount logs: a load of what one
+names fails as any missing reference does. A pak's unmet requirement refuses
+its mount.
 
 ---
 
@@ -473,8 +484,14 @@ file (`buffers.data`, `textures.data`, `scripts.data`, `physics.data`) records
 an all-zero digest: its resources are appended by many producers, so no one
 holds a whole-file digest, and each resource is instead verified against the
 SHA-256 in its table row. Inventory membership is complete. The index's own
-digest lives in the selecting publication record; `.generation.lock` and
-`container.index.lock` are the explicit non-content exceptions.
+digest lives in the selecting publication record; `.generation.lock`,
+`container.writer.lock` and the `.leases` folder are the explicit non-content
+exceptions. A file an earlier commit listed is retired: the index lists it
+with the commit that retired it, and it may be gone. A writer's output that no
+commit lists (a content-named file, an atomic publication's sibling) and a
+data file's bytes past its committed length are uncommitted
+(`kUncommitted`, `kUncommittedTail`): `ValidateContent`, which a mount runs,
+accepts them, and `CheckContent` reports them.
 
 LooseCookedWriter finalization owns inventory production after all writes and
 resource tables finish. `Finish` never hashes a file: tables and descriptors are

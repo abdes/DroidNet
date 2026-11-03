@@ -65,6 +65,19 @@ public:
   }
 
   //! Makes this layer a pak with `catalog`.
+  //! Makes the source a loose root whose assets require `requirements`.
+  auto SetLooseRequirements(std::vector<lc::AssetRequirement> requirements)
+    -> void
+  {
+    loose_requirements_ = std::move(requirements);
+  }
+
+  [[nodiscard]] auto GetLooseRequirements() const noexcept
+    -> std::span<const lc::AssetRequirement> override
+  {
+    return loose_requirements_;
+  }
+
   auto SetCatalog(data::PakCatalog catalog) -> void
   {
     catalog_ = std::move(catalog);
@@ -202,6 +215,7 @@ private:
   std::map<data::AssetKey, Asset> assets_;
   std::vector<std::string> textures_;
   std::optional<data::PakCatalog> catalog_;
+  std::vector<lc::AssetRequirement> loose_requirements_;
 };
 
 } // namespace oxygen::content::testing

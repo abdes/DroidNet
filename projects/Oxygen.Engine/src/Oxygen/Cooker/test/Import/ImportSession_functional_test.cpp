@@ -38,6 +38,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -207,20 +208,6 @@ NOLINT_TEST_F(ImportSessionTest, ConstructorNoExplicitCookedRootUsesSourceDir)
     observer_ptr(index_registry_.get()));
 
   EXPECT_EQ(session.CookedRoot(), TempDir() / "models");
-}
-
-NOLINT_TEST_F(ImportSessionTest, CookedWriterIsAccessible)
-{
-  const auto request = MakeRequest();
-
-  ImportSession session(request, observer_ptr(reader_.get()),
-    observer_ptr(&loop_->Driver()), observer_ptr(writes_),
-    observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
-    observer_ptr(index_registry_.get()));
-
-  // Just verify we can access it without crash
-  const auto& writer = session.CookedWriter();
-  (void)writer;
 }
 
 //=== Emitter Access Tests ===------------------------------------------------//
@@ -639,10 +626,10 @@ NOLINT_TEST_F(ImportSessionTest, FinalizePendingWritesWaitsForCompletion)
 
     (void)co_await session.Finalize();
 
-    EXPECT_TRUE(
-      std::filesystem::exists(request.cooked_root.value() / "test1.omat"));
-    EXPECT_TRUE(
-      std::filesystem::exists(request.cooked_root.value() / "test2.omat"));
+    EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
+      request.cooked_root.value(), "test1.omat"));
+    EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
+      request.cooked_root.value(), "test2.omat"));
     co_return;
   });
 }
@@ -755,8 +742,9 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
     EXPECT_FALSE(textures.RowsStored().file.empty());
     EXPECT_EQ(
       relative_to_root(textures.DataStored().file), "Resources/textures.data");
-    EXPECT_EQ(
-      relative_to_root(textures.RowsStored().file), "Resources/textures.table");
+    EXPECT_EQ(oxygen::cooker::test::LayoutPathOf(
+                relative_to_root(textures.RowsStored().file)),
+      "Resources/textures.table");
 
     const auto& buffers
       = content.ResourceTable(oxygen::data::ResourceKind::kBuffer);
@@ -764,13 +752,15 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
     EXPECT_FALSE(buffers.RowsStored().file.empty());
     EXPECT_EQ(
       relative_to_root(buffers.DataStored().file), "Resources/buffers.data");
-    EXPECT_EQ(
-      relative_to_root(buffers.RowsStored().file), "Resources/buffers.table");
+    EXPECT_EQ(oxygen::cooker::test::LayoutPathOf(
+                relative_to_root(buffers.RowsStored().file)),
+      "Resources/buffers.table");
 
     const auto* const asset = content.FindAsset(kKey);
     EXPECT_NE(asset, nullptr);
     if (asset != nullptr) {
-      EXPECT_EQ(relative_to_root(content.DescriptorStored(kKey).file),
+      EXPECT_EQ(oxygen::cooker::test::LayoutPathOf(
+                  relative_to_root(content.DescriptorStored(kKey).file)),
         descriptor_relpath);
       EXPECT_EQ(asset->virtual_path, virtual_path);
     }
@@ -863,10 +853,9 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeIncludesResourceSidecarOutputs)
     const auto texture_rel = session.ResourceDescriptorEmitter().EmitTexture(
       "/.cooked/Wood.glb/wood.base_color.otex",
       oxygen::data::pak::core::ResourceIndexT { texture_index }, *texture_desc);
-    const auto buffer_rel
-      = session.ResourceDescriptorEmitter().EmitBufferAtRelPath(
-        "Wood.glb/Mesh.lod0.vertex.obuf",
-        oxygen::data::pak::core::ResourceIndexT { buffer_index }, *buffer_desc);
+    const auto buffer_rel = session.ResourceDescriptorEmitter().EmitBuffer(
+      "/.cooked/Wood.glb/Mesh.lod0.vertex.obuf",
+      oxygen::data::pak::core::ResourceIndexT { buffer_index }, *buffer_desc);
 
     const auto report = co_await session.Finalize();
     EXPECT_TRUE(report.success);

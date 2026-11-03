@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -48,8 +49,13 @@ struct EmittedAssetRecord {
   //! Virtual path for tooling/editors (e.g., "/.cooked/Materials/Wood").
   std::string virtual_path;
 
-  //! Container-relative path to descriptor file (e.g., "Materials/Wood.omat").
+  //! Container-relative content name of the descriptor file (e.g.,
+  //! "Materials/Wood.3f9a07c1d2b4e6a8.omat"), which the index lists.
   std::string descriptor_relpath;
+
+  //! The layout path the asset claims (e.g., "Materials/Wood.omat"): two
+  //! assets never claim one.
+  std::string layout_relpath;
 
   //! Size of descriptor bytes written.
   uint64_t descriptor_size = 0;
@@ -131,12 +137,12 @@ public:
 
   //! Emit an asset descriptor file.
   /*!
-   Starts publishing the descriptor file in the nursery. The file path is
-   determined by `descriptor_relpath` relative to the cooked root. A second
-   emission of the same path while its write is in flight is queued: one
-   write per path is in flight, and the latest bytes win. The emitted
-   descriptor records its content hash in its header, whatever `bytes` holds
-   there.
+   Starts publishing the descriptor file in the nursery, under the content
+   name of `descriptor_relpath` relative to the cooked root
+   (`data::loose_cooked::ContentRelPath`). A second emission of the asset
+   with other bytes writes another file, and the record names the latest;
+   bytes already written are not written again. The emitted descriptor
+   records its content hash in its header, whatever `bytes` holds there.
 
    @param key              Stable identity of the asset.
    @param asset_type       Asset type for loader dispatch.
@@ -198,23 +204,24 @@ public:
   OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, WriteFailure>>;
 
 private:
-  struct DescriptorWriteState {
-    std::filesystem::path descriptor_path;
-    bool write_in_flight = false;
-    std::optional<std::vector<std::byte>> queued_bytes;
+  //! The layout path an asset claims and the content name its bytes have.
+  struct DescriptorPaths final {
+    std::string_view layout;
+    std::string_view content;
   };
 
   auto RecordAsset(const data::AssetKey& key, data::AssetType asset_type,
-    std::string_view virtual_path, std::string_view descriptor_relpath,
+    std::string_view virtual_path, DescriptorPaths paths,
     uint64_t descriptor_size, data::AssetReferences references,
     const base::Sha256Digest& sha256) -> void;
 
-  auto QueueDescriptorWrite(const std::filesystem::path& descriptor_path,
-    std::string_view descriptor_relpath, std::span<const std::byte> bytes)
-    -> void;
+  //! Starts writing `bytes` under their content name `content_relpath`,
+  //! unless they are written already: a content name has one content.
+  auto QueueDescriptorWrite(const std::string& content_relpath,
+    std::span<const std::byte> bytes) -> void;
 
-  //! Publishes `bytes`, then the bytes queued behind them, one at a time.
-  auto WriteDescriptor(std::string descriptor_relpath,
+  //! Publishes `bytes` as `content_relpath`, unless the root holds it.
+  auto WriteDescriptor(std::string content_relpath,
     std::vector<std::byte> bytes) -> co::Co<Result<void>>;
 
   observer_ptr<cooked::ImportStorage> storage_;
@@ -226,8 +233,10 @@ private:
 
   std::unordered_map<data::AssetKey, size_t> record_index_by_key_;
   std::unordered_map<std::string, data::AssetKey> key_by_virtual_path_;
+  //! By the layout path each asset claims, which names its descriptor.
   std::unordered_map<std::string, data::AssetKey> key_by_descriptor_relpath_;
-  std::unordered_map<std::string, DescriptorWriteState> write_state_by_relpath_;
+  //! The content names written or being written.
+  std::unordered_set<std::string> written_relpaths_;
 
   std::vector<EmittedAssetRecord> records_;
 };

@@ -14,7 +14,6 @@
 #include <utility>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
@@ -24,13 +23,11 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::internal {
 auto ResolveTextureReference(observer_ptr<ImportSession> session,
   observer_ptr<const ImportRequest> request,
-  observer_ptr<IAsyncFileReader> reader,
   const std::span<const MountedCookedSource> mounts,
   TextureReferenceRequest reference)
   -> co::Co<std::optional<ResolvedTextureReference>>
@@ -52,52 +49,28 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
   }
   const auto& virtual_path = resolved->resolved;
 
-  // The job's own output binds the texture-table entry it cooks there.
+  // The job's own output binds the texture-table entry it cooks there; a
+  // cooked context root holds it by key, and the runtime resolves it in
+  // whichever mount holds that path. Only an index lists a texture.
   const auto output_root = BuildMountedCookedRoots(*request).front();
   auto relpath = std::string {};
   const auto in_output
     = TryVirtualPathToRelPath(*request, virtual_path, relpath);
-  if (in_output) {
-    // The descriptor is at its identity; there is no other name for it.
-    const auto descriptor_path = output_root / std::filesystem::path(relpath);
-    auto exists_error = std::error_code {};
-    if (std::filesystem::is_regular_file(descriptor_path, exists_error)) {
-      const auto read_result = co_await reader->ReadFile(descriptor_path);
-      if (!read_result.has_value()) {
-        report_error("texture_descriptor_read_failed",
-          "Failed reading texture descriptor '" + descriptor_path.string()
-            + "': " + read_result.error().message());
-        co_return std::nullopt;
-      }
-      const auto decoded
-        = data::DecodeTextureResourceDescriptor(read_result.value().Bytes());
-      if (!decoded) {
-        report_error("texture_descriptor_invalid", decoded.error().what());
-        co_return std::nullopt;
-      }
-      if (decoded->index == data::pak::core::kNoResourceIndex) {
-        report_error("texture_descriptor_invalid",
-          "Texture descriptor names no texture-table entry");
-        co_return std::nullopt;
-      }
-      co_return ResolvedTextureReference {
-        .target = decoded->index,
-        .descriptor = decoded->descriptor,
-      };
-    }
-  }
-
-  // A cooked context root holds it: the descriptor names it by key, and the
-  // runtime resolves it in whichever mount holds that path.
   auto output_error = std::error_code {};
   for (const auto& mount : std::views::reverse(mounts)) {
-    if (!mount.content
-      || std::filesystem::equivalent(mount.root, output_root, output_error)) {
+    if (!mount.content) {
       continue;
     }
     const auto* const named = mount.content->FindNamedTexture(virtual_path);
     if (named == nullptr) {
       continue;
+    }
+    const auto is_output
+      = std::filesystem::equivalent(mount.root, output_root, output_error);
+    if (is_output && named->row == data::pak::core::kNoResourceIndex) {
+      report_error("texture_descriptor_invalid",
+        "Texture descriptor names no texture-table entry");
+      co_return std::nullopt;
     }
     auto descriptor = data::pak::core::TextureResourceDesc {};
     try {
@@ -108,7 +81,9 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
       co_return std::nullopt;
     }
     co_return ResolvedTextureReference {
-      .target = data::TextureKeyFromVirtualPath(virtual_path),
+      .target = is_output
+        ? data::TextureTarget { named->row }
+        : data::TextureTarget { data::TextureKeyFromVirtualPath(virtual_path) },
       .descriptor = descriptor,
     };
   }
@@ -119,7 +94,7 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
     co_return std::nullopt;
   }
 
-  // Only the job's own output root can hold a descriptor outside an index.
+  // A reference in the job's own mount names what its index would list.
   const auto looked_for = "'" + resolved->written + "' resolves to "
     + virtual_path + "; looked for "
     + (output_root / std::filesystem::path(relpath)).generic_string();

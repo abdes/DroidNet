@@ -25,6 +25,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/HashedBytes.h>
@@ -36,12 +37,14 @@
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/HoldingStorage.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -72,6 +75,15 @@ using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 
 namespace {
+
+//! The content name an emitted descriptor of `layout_relpath` and `bytes`
+//! gets below the cooked root.
+auto ContentNameOf(const std::string_view layout_relpath,
+  const std::vector<std::byte>& bytes) -> std::string
+{
+  return oxygen::data::loose_cooked::ContentRelPath(
+    layout_relpath, oxygen::base::ComputeSha256(std::span(bytes)));
+}
 
 //! Bytes of `text`.
 auto BytesOf(const std::string_view text) -> std::vector<std::byte>
@@ -242,12 +254,12 @@ NOLINT_TEST_F(EmitterWritesTest, WritesBelongToTheNurseryThatStartedThem)
     {
       auto second = ResourceDescriptorEmitter(
         storage, loop_->Driver(), other, TempDir() / "second");
-      static_cast<void>(second.EmitBufferAtRelPath("second.obuf",
+      static_cast<void>(second.EmitBuffer("/Content/second.obuf",
         oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
       OXCO_WITH_NURSERY(cancelled)
       {
         first.emplace(storage, loop_->Driver(), cancelled, TempDir() / "first");
-        static_cast<void>(first->EmitBufferAtRelPath("first.obuf",
+        static_cast<void>(first->EmitBuffer("/Content/first.obuf",
           oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
         // Before its write ran: the first session's write never completes.
         cancelled.Cancel();
@@ -259,8 +271,10 @@ NOLINT_TEST_F(EmitterWritesTest, WritesBelongToTheNurseryThatStartedThem)
   });
 
   EXPECT_TRUE(other_result);
-  EXPECT_TRUE(std::filesystem::exists(TempDir() / "second" / "second.obuf"));
-  EXPECT_FALSE(std::filesystem::exists(TempDir() / "first" / "first.obuf"));
+  EXPECT_TRUE(
+    oxygen::cooker::test::HasCookedFile(TempDir() / "second", "second.obuf"));
+  EXPECT_FALSE(
+    oxygen::cooker::test::HasCookedFile(TempDir() / "first", "first.obuf"));
 }
 
 //! The in-memory device writes the stored bytes of the file: readers of the
@@ -291,9 +305,14 @@ NOLINT_TEST_F(EmitterWritesTest, AssetEmitterFinalizeReturnsTheFirstWriteError)
 {
   auto storage = fixtures::MemoryFileSystem {};
   const auto root = std::filesystem::path("/memory/asset_errors");
-  storage.FailPublishing(root / "Materials/A.omat",
+  // Storage refuses the exact path: the one the descriptor's content names.
+  storage.FailPublishing(root
+      / ContentNameOf(
+        "Materials/A.omat", fixtures::MaterialBuilder { "a" }.Bytes()),
     std::make_error_code(std::errc::no_space_on_device));
-  storage.FailPublishing(root / "Materials/B.omat");
+  storage.FailPublishing(root
+    / ContentNameOf(
+      "Materials/B.omat", fixtures::MaterialBuilder { "b" }.Bytes()));
   auto result = oxygen::Result<void, WriteFailure> {};
   size_t errors = 0;
 
@@ -320,41 +339,51 @@ NOLINT_TEST_F(EmitterWritesTest, AssetEmitterFinalizeReturnsTheFirstWriteError)
   EXPECT_EQ(errors, 2U);
 }
 
-//! Emissions of one path while its write is in flight are coalesced: one write
-//! at a time, and the latest bytes win.
+//! Descriptors of one layout path each have their own content-named file, so
+//! writes of different bytes do not meet: all of them land and the record
+//! names the latest. The same bytes emitted while their write is in flight
+//! start no second write.
 NOLINT_TEST_F(
-  EmitterWritesTest, AssetEmitterLatestBytesWinWhileAWriteIsInFlight)
+  EmitterWritesTest, AssetEmitterWritesEachContentNameOnceWhileInFlight)
 {
   auto memory = fixtures::MemoryFileSystem {};
   fixtures::HoldingStorage storage(memory);
   const auto root = std::filesystem::path("/memory/asset_coalesce");
   const auto key = AssetKey::FromVirtualPath("/.cooked/Materials/Wood.omat");
+  const auto first = fixtures::MaterialBuilder { "v1" }.Bytes();
+  const auto latest = fixtures::MaterialBuilder { "v2" }.Bytes();
   auto result = oxygen::Result<void, WriteFailure> {};
+  std::string latest_relpath;
 
   co::Run(*loop_, [&] -> co::Co<> {
     OXCO_WITH_NURSERY(writes)
     {
       AssetEmitter emitter(storage, loop_->Driver(), writes, root);
-      for (const std::string_view name : { "v1", "v2", "v3" }) {
-        emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
-          "Materials/Wood.omat", fixtures::MaterialBuilder { name }.Bytes(),
-          {});
-        if (name[1] == '1') {
-          // The first write stops in flight; the others queue behind it.
-          co_await storage.publication_held;
-        }
-      }
+      emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
+        "Materials/Wood.omat", first, {});
+      // The first write stops in flight.
+      co_await storage.publication_held;
+      emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
+        "Materials/Wood.omat", first, {});
       EXPECT_EQ(storage.InFlight(), 1U);
+      emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
+        "Materials/Wood.omat", latest, {});
       storage.Release();
       result = co_await emitter.Finalize();
+      latest_relpath = emitter.Records().at(0).descriptor_relpath;
       co_return co::kJoin;
     };
   });
 
   ASSERT_TRUE(result);
-  const auto stored = memory.Bytes(root / "Materials/Wood.omat");
-  const auto latest = fixtures::MaterialBuilder { "v3" }.Bytes();
+  EXPECT_EQ(latest_relpath, ContentNameOf("Materials/Wood.omat", latest));
+  const auto stored = memory.Bytes(root / latest_relpath);
   EXPECT_EQ(std::vector<std::byte>(stored.begin(), stored.end()), latest);
+  // Nothing retires the first descriptor: its file stays, whole.
+  const auto first_stored
+    = memory.Bytes(root / ContentNameOf("Materials/Wood.omat", first));
+  EXPECT_EQ(
+    std::vector<std::byte>(first_stored.begin(), first_stored.end()), first);
 }
 
 //! A data write that fails is the error `Finalize` returns; the index the

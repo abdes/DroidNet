@@ -23,6 +23,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/CookedFormatError.h> // IWYU pragma: export
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/AnyDevice.h>
@@ -62,6 +63,30 @@ enum class IntegrityFailure : uint8_t {
   kResourceOutOfBounds,
   //! A resource whose bytes do not hash to its table row's SHA-256.
   kResourceDigestMismatch,
+  //! A file no commit lists that a writer produces (a content-named file or
+  //! an atomic publication's sibling): a running session's, or one a crashed
+  //! session left for the next writer to delete. Mounting accepts it.
+  kUncommitted,
+  //! A data file longer than the length its commit records: bytes a session
+  //! appended and has not committed. Mounting accepts it.
+  kUncommittedTail,
+};
+
+//! Whether a mount accepts a root with this issue: a writer's work in
+//! progress, or what a crashed writer left for the next one, never damage.
+[[nodiscard]] constexpr auto IsUncommitted(
+  const IntegrityFailure reason) noexcept -> bool
+{
+  return reason == IntegrityFailure::kUncommitted
+    || reason == IntegrityFailure::kUncommittedTail;
+}
+
+//! A requirement of one asset of the index on another mount.
+struct AssetRequirement final {
+  data::AssetKey asset;
+  data::loose_cooked::IndexedRequirement requirement;
+
+  auto operator==(const AssetRequirement&) const -> bool = default;
 };
 
 struct FileIntegrityIssue final {
@@ -187,6 +212,17 @@ public:
 
   OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;
 
+  //! The commit the index is, from 1.
+  OXGN_CNTT_NDAPI auto Commit() const noexcept -> uint64_t;
+
+  //! The files earlier commits listed and this one does not, by path.
+  OXGN_CNTT_NDAPI auto RetiredFiles() const noexcept
+    -> std::span<const data::loose_cooked::RetiredFile>;
+
+  //! What the assets require of other mounts, in asset order.
+  OXGN_CNTT_NDAPI auto Requirements() const noexcept
+    -> std::span<const AssetRequirement>;
+
   OXGN_CNTT_NDAPI auto FindDescriptorRelPath(
     const data::AssetKey& key) const noexcept
     -> std::optional<std::string_view>;
@@ -232,7 +268,10 @@ public:
   //! file; kFull additionally verifies every digest: the digest of each file,
   //! and of each resource in a resource data file against its table row.
   /*!
-   @throw IntegrityError with the first issue `CheckContent` finds.
+   A writer's uncommitted files and data tails (`IsUncommitted`) are no
+   damage, so a root a writer is cooking, or one a crash left, validates.
+
+   @throw IntegrityError with the first other issue `CheckContent` finds.
   */
   //! The caller protects files for the duration and any subsequent result
   //! reuse.

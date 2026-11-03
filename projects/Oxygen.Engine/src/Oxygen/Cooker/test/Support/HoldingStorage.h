@@ -142,10 +142,17 @@ public:
     return inner_->SizeOf(path);
   }
 
-  [[nodiscard]] auto LockExclusive(const std::filesystem::path& path)
+  [[nodiscard]] auto TryLock(
+    const std::filesystem::path& path, const serio::FileLockMode mode) const
     -> Result<std::unique_ptr<content::cooked::StorageLock>> override
   {
-    return inner_->LockExclusive(path);
+    return inner_->TryLock(path, mode);
+  }
+
+  [[nodiscard]] auto Truncate(const std::filesystem::path& path,
+    const serio::ByteCount size) -> Result<void> override
+  {
+    return inner_->Truncate(path, size);
   }
 
 private:

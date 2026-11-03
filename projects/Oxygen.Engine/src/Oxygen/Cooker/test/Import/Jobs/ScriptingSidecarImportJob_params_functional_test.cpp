@@ -85,9 +85,8 @@ namespace {
       if (entry.type != AssetType::kScene) {
         continue;
       }
-      const auto descriptor_name = inspection_before.DescriptorStored(entry.key)
-                                     .file.filename()
-                                     .string();
+      const auto descriptor_name
+        = DescriptorLayoutName(inspection_before, entry.key);
       if (descriptor_name == "scene_a.oscene") {
         scene_a = AssetRef {
           .key = entry.key,
@@ -144,7 +143,7 @@ namespace {
         return 0.0F;
       }
       const auto scene_bytes
-        = ReadBytes(cooked_root / scene_ref.descriptor_relpath);
+        = ReadCurrentDescriptor(cooked_root, scene_ref.key);
       EXPECT_FALSE(scene_bytes.empty());
       if (scene_bytes.empty()) {
         return 0.0F;
@@ -245,9 +244,8 @@ namespace {
       if (entry.type != AssetType::kScene) {
         continue;
       }
-      const auto descriptor_name = inspection_before.DescriptorStored(entry.key)
-                                     .file.filename()
-                                     .string();
+      const auto descriptor_name
+        = DescriptorLayoutName(inspection_before, entry.key);
       if (descriptor_name == "scene_a.oscene") {
         scene_a = AssetRef {
           .key = entry.key,
@@ -329,7 +327,7 @@ namespace {
         return 0.0F;
       }
       const auto scene_bytes
-        = ReadBytes(cooked_root / scene_ref.descriptor_relpath);
+        = ReadCurrentDescriptor(cooked_root, scene_ref.key);
       EXPECT_FALSE(scene_bytes.empty());
       if (scene_bytes.empty()) {
         return 0.0F;
@@ -461,7 +459,7 @@ return Script
     EXPECT_FLOAT_EQ(ParamAt(2).value.as_float, 3.5F);
     EXPECT_EQ(ParamAt(3).type, ScriptParamType::kString);
     const auto scene_bytes
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key);
     EXPECT_EQ(oxygen::cooker::testing::ReadDescriptorString(
                 scene_bytes, ParamAt(3).key_offset),
       title_key);

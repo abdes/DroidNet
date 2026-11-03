@@ -24,6 +24,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/MappedFile.h>
 
 namespace oxygen::content::internal {
@@ -68,16 +69,21 @@ public:
   OXGN_CNTT_NDAPI static auto LoadFromBytes(std::vector<std::byte>&& bytes)
     -> LooseCookedIndexImpl;
 
-  //! The lock file that serializes the writers of the index `index_path`.
-  /*!
-   A writer holds an exclusive lock on it across its read, merge and publish
-   cycle. Readers take no lock: the published index is replaced atomically, so
-   a reader maps one whole index, the old or the new.
-  */
-  OXGN_CNTT_NDAPI static auto LockPathOf(
-    const std::filesystem::path& index_path) -> std::filesystem::path;
-
   OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;
+
+  [[nodiscard]] auto Commit() const noexcept -> uint64_t { return commit_; }
+
+  [[nodiscard]] auto RetiredFiles() const noexcept
+    -> std::span<const data::loose_cooked::RetiredFile>
+  {
+    return retired_;
+  }
+
+  [[nodiscard]] auto Requirements() const noexcept
+    -> std::span<const lc::AssetRequirement>
+  {
+    return requirements_;
+  }
 
   //! The cook-defined content version of the index header.
   [[nodiscard]] auto ContentVersion() const noexcept -> uint16_t
@@ -189,6 +195,9 @@ private:
   std::vector<FileInfo> auxiliary_files_;
   std::vector<FileInfo> texture_descriptors_;
   data::SourceKey guid_;
+  uint64_t commit_ = 0;
+  std::vector<data::loose_cooked::RetiredFile> retired_;
+  std::vector<lc::AssetRequirement> requirements_;
 
   static auto Load(IndexBytes bytes) -> LooseCookedIndexImpl;
   auto Parse() -> void;
@@ -196,7 +205,33 @@ private:
   static auto ReadStringTable(IndexLoadContext& context) -> void;
   static auto ReadAssetEntries(IndexLoadContext& context) -> void;
   static auto ReadFileRecords(IndexLoadContext& context) -> void;
+  static auto ReadRetiredRecords(IndexLoadContext& context) -> void;
+  static auto ReadRequirementRecords(IndexLoadContext& context) -> void;
   static auto ValidateFilePairs(const LooseCookedIndexImpl& index) -> void;
 };
+
+//! The published index of a plain loose root and the reader lease of its
+//! commit.
+struct LeasedLooseCookedIndex final {
+  LooseCookedIndexImpl index;
+  //! Unlocked when the root admits no lease (a reader without write access).
+  serio::FileLock lease;
+};
+
+//! Loads the index of the plain loose root `cooked_root` under a shared
+//! lease of its commit, so no writer reclaims a file that commit lists while
+//! the lease is held.
+/*!
+ The reader maps the index, takes `.leases/<commit>.lock` shared, then reads
+ the current index's commit again: if a writer published a newer one in
+ between, the lease may have come too late, and the reader starts over. A
+ root whose lease the reader cannot create (access denied) is read unleased:
+ no writer with the reader's permissions can write it either.
+
+ @throw std::system_error `device_or_resource_busy` after eight commits in a
+   row raced the lease; the errors of `LoadFromFile`.
+*/
+OXGN_CNTT_NDAPI auto LoadLeasedIndex(const std::filesystem::path& cooked_root)
+  -> LeasedLooseCookedIndex;
 
 } // namespace oxygen::content::internal

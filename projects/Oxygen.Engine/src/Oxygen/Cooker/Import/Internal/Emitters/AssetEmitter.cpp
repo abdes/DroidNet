@@ -107,17 +107,17 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
   }
 
   const auto sha256 = base::ComputeSha256(descriptor);
-
-  // Build full path for the descriptor file
-  const auto descriptor_path = cooked_root_ / descriptor_relpath;
+  const auto content_relpath
+    = data::loose_cooked::ContentRelPath(descriptor_relpath, sha256);
 
   DLOG_F(INFO, "Emit: type={} vpath='{}' relpath='{}' size={}",
-    static_cast<int>(asset_type), virtual_path, descriptor_relpath,
+    static_cast<int>(asset_type), virtual_path, content_relpath,
     descriptor.size());
 
-  RecordAsset(key, asset_type, virtual_path, descriptor_relpath,
+  RecordAsset(key, asset_type, virtual_path,
+    { .layout = descriptor_relpath, .content = content_relpath },
     descriptor.size(), std::move(references), sha256);
-  QueueDescriptorWrite(descriptor_path, descriptor_relpath, descriptor);
+  QueueDescriptorWrite(content_relpath, descriptor);
 }
 
 auto AssetEmitter::EmitSync(const data::AssetKey& key,
@@ -147,17 +147,19 @@ auto AssetEmitter::EmitSync(const data::AssetKey& key,
   }
 
   const auto sha256 = base::ComputeSha256(descriptor);
+  const auto content_relpath
+    = data::loose_cooked::ContentRelPath(descriptor_relpath, sha256);
 
-  const auto descriptor_path = cooked_root_ / descriptor_relpath;
   const auto write_result
-    = co_await storage_->PublishAsync(*driver_, descriptor_path, descriptor);
+    = co_await WriteDescriptor(content_relpath, descriptor);
   if (!write_result) {
-    throw std::runtime_error("Failed to write '"
-      + std::string(descriptor_relpath) + "' (" + descriptor_path.string()
-      + "): " + write_result.error().message());
+    throw std::runtime_error("Failed to write '" + content_relpath
+      + "': " + write_result.error().message());
   }
+  written_relpaths_.insert(content_relpath);
 
-  RecordAsset(key, asset_type, virtual_path, descriptor_relpath,
+  RecordAsset(key, asset_type, virtual_path,
+    { .layout = descriptor_relpath, .content = content_relpath },
     descriptor.size(), std::move(references), sha256);
 }
 
@@ -176,9 +178,10 @@ auto AssetEmitter::Records() const noexcept
 
 auto AssetEmitter::RecordAsset(const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
-  std::string_view descriptor_relpath, const uint64_t descriptor_size,
+  const DescriptorPaths paths, const uint64_t descriptor_size,
   data::AssetReferences references, const base::Sha256Digest& sha256) -> void
 {
+  const auto descriptor_relpath = paths.layout;
   if (const auto it = record_index_by_key_.find(key);
     it != record_index_by_key_.end()) {
     auto& record = records_.at(it->second);
@@ -191,8 +194,8 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
       }
       key_by_virtual_path_.insert_or_assign(std::string(virtual_path), key);
     }
-    if (record.descriptor_relpath != descriptor_relpath) {
-      const auto old_descriptor_relpath = record.descriptor_relpath;
+    if (record.layout_relpath != descriptor_relpath) {
+      const auto old_descriptor_relpath = record.layout_relpath;
       if (const auto key_it
         = key_by_descriptor_relpath_.find(old_descriptor_relpath);
         key_it != key_by_descriptor_relpath_.end() && key_it->second == key) {
@@ -204,7 +207,8 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
 
     record.asset_type = asset_type;
     record.virtual_path = std::string(virtual_path);
-    record.descriptor_relpath = std::string(descriptor_relpath);
+    record.layout_relpath = std::string(descriptor_relpath);
+    record.descriptor_relpath = std::string(paths.content);
     record.descriptor_size = descriptor_size;
     record.descriptor_sha256 = sha256;
     record.references = std::move(references);
@@ -215,7 +219,8 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
     .key = key,
     .asset_type = asset_type,
     .virtual_path = std::string(virtual_path),
-    .descriptor_relpath = std::string(descriptor_relpath),
+    .descriptor_relpath = std::string(paths.content),
+    .layout_relpath = std::string(descriptor_relpath),
     .descriptor_size = descriptor_size,
     .descriptor_sha256 = sha256,
     .references = std::move(references),
@@ -229,49 +234,34 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
     std::string(descriptor_relpath), key);
 }
 
-auto AssetEmitter::QueueDescriptorWrite(
-  const std::filesystem::path& descriptor_path,
-  std::string_view descriptor_relpath, std::span<const std::byte> bytes) -> void
+auto AssetEmitter::QueueDescriptorWrite(const std::string& content_relpath,
+  const std::span<const std::byte> bytes) -> void
 {
-  auto owned = std::vector<std::byte>(bytes.begin(), bytes.end());
-
-  auto& state = write_state_by_relpath_[std::string(descriptor_relpath)];
-  if (state.descriptor_path.empty()) {
-    state.descriptor_path = descriptor_path;
-  }
-
-  if (state.write_in_flight) {
-    state.queued_bytes = std::move(owned);
+  if (!written_relpaths_.insert(content_relpath).second) {
     return;
   }
-
-  state.write_in_flight = true;
-  writes_.Start(descriptor_path,
-    WriteDescriptor(std::string(descriptor_relpath), std::move(owned)));
+  writes_.Start(cooked_root_ / std::filesystem::path(content_relpath),
+    WriteDescriptor(
+      content_relpath, std::vector<std::byte>(bytes.begin(), bytes.end())));
 }
 
-auto AssetEmitter::WriteDescriptor(const std::string descriptor_relpath,
+auto AssetEmitter::WriteDescriptor(const std::string content_relpath,
   std::vector<std::byte> bytes) -> co::Co<Result<void>>
 {
-  for (;;) {
-    auto& state = write_state_by_relpath_.at(descriptor_relpath);
-    const auto written = co_await storage_->PublishAsync(
-      *driver_, state.descriptor_path, std::span<const std::byte>(bytes));
-    if (!written) {
-      LOG_F(ERROR, "Failed to write '{}' ({}): {}", descriptor_relpath,
-        state.descriptor_path.string(), written.error().message());
-      writes_.Record(state.descriptor_path, written);
-    }
-
-    // The latest bytes queued while this write was in flight go next.
-    auto& after = write_state_by_relpath_.at(descriptor_relpath);
-    if (!after.queued_bytes) {
-      after.write_in_flight = false;
-      co_return Result<void> {};
-    }
-    bytes = std::move(*after.queued_bytes);
-    after.queued_bytes.reset();
+  const auto path = cooked_root_ / std::filesystem::path(content_relpath);
+  // A file of this content name already holds these bytes.
+  if (const auto size = storage_->SizeOf(path);
+    size.has_value() && size->get() == bytes.size()) {
+    co_return Result<void> {};
   }
+  const auto written = co_await storage_->PublishAsync(
+    *driver_, path, std::span<const std::byte>(bytes));
+  if (!written) {
+    // The write group records the failure this returns.
+    LOG_F(ERROR, "Failed to write '{}': {}", content_relpath,
+      written.error().message());
+  }
+  co_return written;
 }
 
 auto AssetEmitter::Finalize() -> co::Co<Result<void, WriteFailure>>

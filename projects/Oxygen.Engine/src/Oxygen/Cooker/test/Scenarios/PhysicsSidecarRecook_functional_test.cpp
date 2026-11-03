@@ -35,6 +35,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
@@ -188,13 +189,31 @@ namespace {
       cooked::RealCookerStorage(), cooked_root);
   }
 
-  //! The digest of the stub geometry's descriptor, wherever the index of
+  //! The file of `layout_relpath` below `cooked_root`: a data file keeps its
+  //! layout name, every other file is named by its content.
+  auto CookedPath(const std::filesystem::path& cooked_root,
+    const std::string_view layout_relpath) -> std::filesystem::path
+  {
+    if (layout_relpath.ends_with(".data")) {
+      return cooked_root / std::filesystem::path(layout_relpath);
+    }
+    return oxygen::cooker::test::CookedFile(cooked_root, layout_relpath);
+  }
+
+  //! The digest of the descriptor of `key`, wherever the index of
   //! `cooked_root` places it.
+  auto DescriptorDigest(const std::filesystem::path& cooked_root,
+    const data::AssetKey& key) -> base::Sha256Digest
+  {
+    return base::ComputeSha256(OpenCooked(cooked_root).Descriptor(key));
+  }
+
+  //! The digest of the stub geometry's descriptor.
   auto StubGeometryDigest(const std::filesystem::path& cooked_root)
     -> base::Sha256Digest
   {
-    return base::ComputeSha256(OpenCooked(cooked_root)
-        .Descriptor(data::AssetKey::FromVirtualPath(kGeometryVirtualPath)));
+    return DescriptorDigest(
+      cooked_root, data::AssetKey::FromVirtualPath(kGeometryVirtualPath));
   }
 
   auto FindInspectionAsset(const cooked::CookedContent& inspection,
@@ -222,8 +241,10 @@ namespace {
   auto HasOutputPath(const ImportReport& report, const std::string_view relpath)
     -> bool
   {
-    return std::ranges::any_of(report.outputs,
-      [&](const ImportOutputRecord& o) -> bool { return o.path == relpath; });
+    return std::ranges::any_of(
+      report.outputs, [&](const ImportOutputRecord& o) -> bool {
+        return oxygen::cooker::test::LayoutPathOf(o.path) == relpath;
+      });
   }
 
   auto MakeSceneDescriptorRequest(const std::filesystem::path& cooked_root,
@@ -682,7 +703,7 @@ namespace {
   {
     const auto path
       = [&](const std::string_view relpath) -> std::filesystem::path {
-      return cooked_root / std::filesystem::path(relpath);
+      return CookedPath(cooked_root, relpath);
     };
     snapshot.scene_digest
       = ComputeFileDigest(path("Scenes/ComplexScene.oscene"));
@@ -777,7 +798,7 @@ namespace {
     [[nodiscard]] static auto Path(const std::string_view relpath)
       -> std::filesystem::path
     {
-      return cooked_root_ / std::filesystem::path(relpath);
+      return CookedPath(cooked_root_, relpath);
     }
 
     template <typename Record>
@@ -1170,19 +1191,18 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   ASSERT_HAS_VALUE(first_sidecar_report);
   ASSERT_TRUE(first_sidecar_report->success);
 
-  const auto scene_path
-    = cooked_root / std::filesystem::path("Scenes/ComplexScene.oscene");
-  const auto sidecar_path
-    = cooked_root / std::filesystem::path("Scenes/ComplexScene.opscene");
-  const auto material_path
-    = cooked_root / std::filesystem::path("Physics/Materials/ground.opmat");
-  const auto shape_path = cooked_root
-    / std::filesystem::path("Physics/Shapes/chassis_compound.ocshape");
-
-  const auto scene_digest_before = ComputeFileDigest(scene_path);
-  const auto sidecar_digest_before = ComputeFileDigest(sidecar_path);
-  const auto material_digest_before = ComputeFileDigest(material_path);
-  const auto shape_digest_before = ComputeFileDigest(shape_path);
+  // The digests are those of the descriptors the index lists: a changed
+  // descriptor is a new file, and the old one stays while the inspection
+  // below holds its commit.
+  const auto digest_of
+    = [&](const std::string_view virtual_path) -> base::Sha256Digest {
+    return DescriptorDigest(
+      cooked_root, data::AssetKey::FromVirtualPath(virtual_path));
+  };
+  const auto scene_digest_before = digest_of(kSceneVirtualPath);
+  const auto sidecar_digest_before = digest_of(kSidecarVirtualPath);
+  const auto material_digest_before = digest_of(kMaterialVirtualPath);
+  const auto shape_digest_before = digest_of(kShapeVirtualPath);
   const auto geometry_digest_before = StubGeometryDigest(cooked_root);
 
   const auto before_inspection = OpenCooked(cooked_root);
@@ -1210,10 +1230,10 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   ASSERT_HAS_VALUE(second_sidecar_report);
   ASSERT_TRUE(second_sidecar_report->success);
 
-  const auto scene_digest_after = ComputeFileDigest(scene_path);
-  const auto sidecar_digest_after = ComputeFileDigest(sidecar_path);
-  const auto material_digest_after = ComputeFileDigest(material_path);
-  const auto shape_digest_after = ComputeFileDigest(shape_path);
+  const auto scene_digest_after = digest_of(kSceneVirtualPath);
+  const auto sidecar_digest_after = digest_of(kSidecarVirtualPath);
+  const auto material_digest_after = digest_of(kMaterialVirtualPath);
+  const auto shape_digest_after = digest_of(kShapeVirtualPath);
   const auto geometry_digest_after = StubGeometryDigest(cooked_root);
 
   EXPECT_EQ(scene_digest_before, scene_digest_after);

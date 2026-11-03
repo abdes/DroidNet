@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -141,8 +142,8 @@ NOLINT_TEST(GeometryDescriptorImportJobTest, UnindexedMaterialFileIsNoAsset)
   const auto report = SubmitAndWait(service, std::move(request));
   ASSERT_HAS_VALUE(report);
   ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
-  const auto descriptor_bytes
-    = ReadBytes(cooked_root / "Geometry/Unindexed.ogeo");
+  const auto descriptor_bytes = ReadBytes(
+    oxygen::cooker::test::CookedFile(cooked_root, "Geometry/Unindexed.ogeo"));
   const auto offset = sizeof(data::pak::geometry::GeometryAssetDesc)
     + sizeof(data::pak::geometry::MeshDesc);
   const auto submesh = oxygen::serio::CopyAt<data::pak::geometry::SubMeshDesc>(

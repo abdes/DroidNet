@@ -39,7 +39,9 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -1145,6 +1147,81 @@ NOLINT_TEST_F(CookedContentTest, VerifyStorageCatchesAPakOfAnotherCrc)
   // Act / Assert
   EXPECT_NO_THROW(content.VerifyStorage(IntegrityCheck::kMetadata));
   EXPECT_THROW(content.VerifyStorage(IntegrityCheck::kFull), std::exception);
+}
+
+//=== Commits ===-------------------------------------------------------------//
+
+//! A loose root is read under the lease of the commit it opened, for as long
+//! as the content lives, so no writer reclaims a file it lists.
+NOLINT_TEST_F(CookedContentTest, ALooseRootIsReadUnderTheLeaseOfItsCommit)
+{
+  // Arrange
+  const auto lease
+    = SourceOf(Flavor::kLoose).path / data::loose_cooked::LeaseRelPath(1);
+
+  // Act
+  {
+    const auto content = OpenAs(Flavor::kLoose);
+
+    // Assert
+    EXPECT_TRUE(Storage().IsLocked(lease));
+  }
+  EXPECT_FALSE(Storage().IsLocked(lease));
+}
+
+//! A loose root states what its assets require of other mounts, by mount,
+//! each once.
+NOLINT_TEST(CookedContentSummaryTest, ALooseRootStatesItsRequirements)
+{
+  // Arrange
+  const auto required = data::loose_cooked::IndexedRequirement {
+    .mount = "Engine",
+    .kind = data::KeyReferenceKind::kAsset,
+    .key = data::AssetKey::FromVirtualPath("/Engine/Base.omat"),
+    .type = data::AssetType::kMaterial,
+  };
+  auto library = LooseCookedRoot { "Game" };
+  for (const auto* leaf : { "Materials/A.omat", "Materials/B.omat" }) {
+    static_cast<void>(library.Add({
+      .type = data::AssetType::kMaterial,
+      .leaf = leaf,
+      .descriptor = fixtures::MaterialBuilder { leaf }.Bytes(),
+      .requirements = { required },
+    }));
+  }
+  auto storage = MemoryFileSystem {};
+  storage.AddFiles("/memory/Game", library.Files());
+
+  // Act
+  const auto summary
+    = CookedContent::Open(storage, fs::path { "/memory/Game" }).Summary();
+
+  // Assert
+  const auto expected = std::vector {
+    data::PakRequirement {
+      .kind = required.kind,
+      .key = required.key,
+      .type = required.type,
+    },
+  };
+  ASSERT_EQ(summary.requirements.size(), 1U);
+  EXPECT_EQ(summary.requirements.front().mount, "Engine");
+  EXPECT_EQ(summary.requirements.front().requirements, expected);
+}
+
+//! A writer's output that no commit lists opens, and a storage check refuses
+//! it: a clean session never leaves one.
+NOLINT_TEST_F(CookedContentTest, VerifyStorageRefusesAnUncommittedFile)
+{
+  // Arrange
+  Storage().AddFile(
+    SourceOf(Flavor::kLoose).path / "Materials/Wood.0123456789abcdef.omat",
+    "left by a crashed cook");
+  const auto content = OpenAs(Flavor::kLoose);
+
+  // Act / Assert
+  EXPECT_EQ(VerifyDefect(content, IntegrityCheck::kMetadata),
+    data::CookedDefect::kInconsistent);
 }
 
 } // namespace

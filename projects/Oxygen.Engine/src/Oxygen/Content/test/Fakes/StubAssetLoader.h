@@ -12,6 +12,7 @@
 #include <span>
 #include <stdexcept>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Content/IAssetLoader.h>
@@ -144,15 +145,24 @@ public:
   {
     return {};
   }
+
+  [[nodiscard]] auto UnmetRequirements(data::SourceKey /*source_key*/) const
+    -> std::vector<content::FailedRequirement> override
+  {
+    return {};
+  }
   auto PrepareMountsAsync(std::vector<ContentMount> /*mounts*/)
     -> co::Co<PreparedMountSet> override
   {
     // Mount sets are made only by AssetLoader.
     throw std::logic_error("StubAssetLoader does not prepare mounts");
   }
-  auto CommitPreparedMounts(PreparedMountSet&& /*prepared*/)
+  auto CommitPreparedMounts(PreparedMountSet&& prepared)
     -> MountRetirement override
   {
+    // Consumed, as a commit consumes it.
+    const auto discarded = std::move(prepared);
+    static_cast<void>(discarded);
     throw std::logic_error("StubAssetLoader does not commit mounts");
   }
   auto ClearMounts() -> void override { }
@@ -161,15 +171,18 @@ public:
   auto ProcessPendingReleases() -> void override { }
   auto SetResidencyPolicy(const ResidencyPolicy& /*policy*/) -> void override {
   }
-  auto GetResidencyPolicy() const noexcept -> ResidencyPolicy override
+  [[nodiscard]] auto GetResidencyPolicy() const noexcept
+    -> ResidencyPolicy override
   {
     return {};
   }
-  auto QueryResidencyPolicyState() const -> ResidencyPolicyState override
+  [[nodiscard]] auto QueryResidencyPolicyState() const
+    -> ResidencyPolicyState override
   {
     return {};
   }
-  auto EnumerateMountedScenes() const -> std::vector<MountedSceneEntry> override
+  [[nodiscard]] auto EnumerateMountedScenes() const
+    -> std::vector<MountedSceneEntry> override
   {
     return {};
   }
@@ -200,7 +213,7 @@ public:
   {
     co_return std::vector<MountedInputContextEntry> {};
   }
-  auto EnumerateMountedSources() const
+  [[nodiscard]] auto EnumerateMountedSources() const
     -> std::vector<MountedSourceEntry> override
   {
     return {};
@@ -212,7 +225,7 @@ public:
   auto ApplyConsoleCVars(const console::Console& /*console*/) -> void override
   {
   }
-  auto PeekTexture(ResourceKey /*key*/) const
+  [[nodiscard]] auto PeekTexture(ResourceKey /*key*/) const
     -> observer_ptr<const data::TextureResource> override
   {
     return {};
@@ -309,20 +322,21 @@ public:
   {
     return {};
   }
-  auto ReadCollisionShapeAssetDescForAsset(const data::Asset& /*context_asset*/,
+  [[nodiscard]] auto ReadCollisionShapeAssetDescForAsset(
+    const data::Asset& /*context_asset*/,
     const data::AssetKey& /*shape_asset_key*/) const
     -> std::optional<data::pak::physics::CollisionShapeAssetDesc> override
   {
     return {};
   }
-  auto ReadPhysicsMaterialAssetDescForAsset(
+  [[nodiscard]] auto ReadPhysicsMaterialAssetDescForAsset(
     const data::Asset& /*context_asset*/,
     const data::AssetKey& /*material_asset_key*/) const
     -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc> override
   {
     return {};
   }
-  auto FindPhysicsSidecarAssetKeyForScene(
+  [[nodiscard]] auto FindPhysicsSidecarAssetKeyForScene(
     const data::Asset& /*scene_asset*/) const
     -> std::optional<data::AssetKey> override
   {
@@ -344,47 +358,50 @@ public:
   {
     return {};
   }
-  auto GetHydratedScriptSlots(const data::SceneAsset& /*scene_asset*/,
+  [[nodiscard]] auto GetHydratedScriptSlots(
+    const data::SceneAsset& /*scene_asset*/,
     const data::pak::scripting::ScriptingComponentRecord& /*component*/) const
     -> std::vector<HydratedScriptSlot> override
   {
     return {};
   }
-  auto HasTexture(ResourceKey /*key*/) const noexcept -> bool override
-  {
-    return {};
-  }
-  auto HasBuffer(ResourceKey /*key*/) const noexcept -> bool override
-  {
-    return {};
-  }
-  auto HasMaterialAsset(const data::AssetKey& /*key*/) const noexcept
+  [[nodiscard]] auto HasTexture(ResourceKey /*key*/) const noexcept
     -> bool override
   {
     return {};
   }
-  auto HasGeometryAsset(const data::AssetKey& /*key*/) const noexcept
+  [[nodiscard]] auto HasBuffer(ResourceKey /*key*/) const noexcept
     -> bool override
   {
     return {};
   }
-  auto HasScriptAsset(const data::AssetKey& /*key*/) const noexcept
-    -> bool override
+  [[nodiscard]] auto HasMaterialAsset(
+    const data::AssetKey& /*key*/) const noexcept -> bool override
   {
     return {};
   }
-  auto HasPhysicsSceneAsset(const data::AssetKey& /*key*/) const noexcept
-    -> bool override
+  [[nodiscard]] auto HasGeometryAsset(
+    const data::AssetKey& /*key*/) const noexcept -> bool override
   {
     return {};
   }
-  auto HasInputActionAsset(const data::AssetKey& /*key*/) const noexcept
-    -> bool override
+  [[nodiscard]] auto HasScriptAsset(
+    const data::AssetKey& /*key*/) const noexcept -> bool override
   {
     return {};
   }
-  auto HasInputMappingContextAsset(const data::AssetKey& /*key*/) const noexcept
-    -> bool override
+  [[nodiscard]] auto HasPhysicsSceneAsset(
+    const data::AssetKey& /*key*/) const noexcept -> bool override
+  {
+    return {};
+  }
+  [[nodiscard]] auto HasInputActionAsset(
+    const data::AssetKey& /*key*/) const noexcept -> bool override
+  {
+    return {};
+  }
+  [[nodiscard]] auto HasInputMappingContextAsset(
+    const data::AssetKey& /*key*/) const noexcept -> bool override
   {
     return {};
   }

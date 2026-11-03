@@ -9,7 +9,7 @@
 // spec name is how tools report it.
 OXDAT_FORMAT_VERSION(kPakVersion, pak, uint16_t, 12)
 OXDAT_FORMAT_VERSION(kPakCatalogVersion, pak_catalog, uint32_t, 5)
-OXDAT_FORMAT_VERSION(kLooseCookedIndexVersion, loose_cooked_index, uint16_t, 8)
+OXDAT_FORMAT_VERSION(kLooseCookedIndexVersion, loose_cooked_index, uint16_t, 9)
 OXDAT_FORMAT_VERSION(
   kTextureResourceDescriptorVersion, texture_descriptor, uint16_t, 3)
 OXDAT_FORMAT_VERSION(
@@ -34,18 +34,18 @@ OXDAT_FORMAT_VERSION(kExposureExtensionVersion, exposure_extension, uint32_t, 2)
 // stays the same, so that content an earlier revision cooked is cooked again.
 // The importer is the enumerator of `content::import::Importer`; its spec name
 // is how the ImportTool reports it.
-OXDAT_IMPORTER_REVISION(kGltf, gltf, 8)
-OXDAT_IMPORTER_REVISION(kFbx, fbx, 8)
-OXDAT_IMPORTER_REVISION(kTexture, texture, 4)
-OXDAT_IMPORTER_REVISION(kBufferContainer, buffer_container, 3)
-OXDAT_IMPORTER_REVISION(kMaterialDescriptor, material_descriptor, 1)
+OXDAT_IMPORTER_REVISION(kGltf, gltf, 9)
+OXDAT_IMPORTER_REVISION(kFbx, fbx, 9)
+OXDAT_IMPORTER_REVISION(kTexture, texture, 5)
+OXDAT_IMPORTER_REVISION(kBufferContainer, buffer_container, 4)
+OXDAT_IMPORTER_REVISION(kMaterialDescriptor, material_descriptor, 2)
 OXDAT_IMPORTER_REVISION(
-  kPhysicsMaterialDescriptor, physics_material_descriptor, 1)
+  kPhysicsMaterialDescriptor, physics_material_descriptor, 2)
 OXDAT_IMPORTER_REVISION(
-  kCollisionShapeDescriptor, collision_shape_descriptor, 1)
-OXDAT_IMPORTER_REVISION(kGeometryDescriptor, geometry_descriptor, 5)
-OXDAT_IMPORTER_REVISION(kSceneDescriptor, scene_descriptor, 1)
-OXDAT_IMPORTER_REVISION(kScriptAsset, script, 2)
-OXDAT_IMPORTER_REVISION(kScriptingSidecar, script_sidecar, 1)
-OXDAT_IMPORTER_REVISION(kPhysicsSidecar, physics_sidecar, 4)
-OXDAT_IMPORTER_REVISION(kInput, input, 1)
+  kCollisionShapeDescriptor, collision_shape_descriptor, 2)
+OXDAT_IMPORTER_REVISION(kGeometryDescriptor, geometry_descriptor, 6)
+OXDAT_IMPORTER_REVISION(kSceneDescriptor, scene_descriptor, 2)
+OXDAT_IMPORTER_REVISION(kScriptAsset, script, 3)
+OXDAT_IMPORTER_REVISION(kScriptingSidecar, script_sidecar, 2)
+OXDAT_IMPORTER_REVISION(kPhysicsSidecar, physics_sidecar, 5)
+OXDAT_IMPORTER_REVISION(kInput, input, 2)

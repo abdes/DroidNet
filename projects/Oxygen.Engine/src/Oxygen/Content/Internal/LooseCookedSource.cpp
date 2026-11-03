@@ -25,6 +25,7 @@
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/CookedFormatError.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsResource.h>
@@ -56,7 +57,8 @@ namespace {
   }
 
   // A mounted root stays importable: an import appends to a data file while
-  // the mount reads it, and appending never changes what the index points at.
+  // the mount reads it, and appending never changes what the index points at;
+  // the next writer truncates only bytes no commit records.
   constexpr auto kDataSpec = serio::OpenSpec {
     .sharing = serio::Sharing::kReadWriteDelete,
   };
@@ -158,21 +160,30 @@ auto LooseCookedSource::OpenFiles() -> void
     throw std::invalid_argument(
       "A loose cooked source that reads payloads needs an IO driver");
   }
-  const auto open
-    = [this](ResourceFiles& files,
-        const std::optional<std::filesystem::path>& table,
-        const std::optional<std::filesystem::path>& data) -> void {
+  using data::loose_cooked::FileKind;
+  const auto open = [this](ResourceFiles& files,
+                      const std::optional<std::filesystem::path>& table,
+                      const std::optional<std::filesystem::path>& data,
+                      const FileKind data_kind) -> void {
     if (table) {
       files.table = MapTable(*table);
     }
     if (data) {
       files.data = OpenData(*data, *driver_);
-      auto whole = serio::Region<serio::AnyAsyncDevice>::Whole(*files.data);
-      if (!whole) {
-        throw std::system_error(whole.error(),
-          "Could not size resource data '" + data->string() + "'");
+      // The committed length: bytes a writer appends past it are no
+      // commit's.
+      const auto committed = index_.FindFileSize(data_kind).value_or(0U);
+      auto region = serio::Region<serio::AnyAsyncDevice>::Make(*files.data,
+        serio::ByteRange {
+          .offset = serio::ByteOffset { 0 },
+          .count = serio::ByteCount { committed },
+        });
+      if (!region) {
+        throw std::system_error(region.error(),
+          "Resource data '" + data->string()
+            + "' is shorter than its committed length");
       }
-      files.payloads = *whole;
+      files.payloads = *region;
     }
   };
 
@@ -181,10 +192,14 @@ auto LooseCookedSource::OpenFiles() -> void
   using data::ScriptResource;
   using data::TextureResource;
 
-  open(FilesOf<BufferResource>(), buffers_table_path_, buffers_data_path_);
-  open(FilesOf<TextureResource>(), textures_table_path_, textures_data_path_);
-  open(FilesOf<ScriptResource>(), scripts_table_path_, scripts_data_path_);
-  open(FilesOf<PhysicsResource>(), physics_table_path_, physics_data_path_);
+  open(FilesOf<BufferResource>(), buffers_table_path_, buffers_data_path_,
+    FileKind::kBuffersData);
+  open(FilesOf<TextureResource>(), textures_table_path_, textures_data_path_,
+    FileKind::kTexturesData);
+  open(FilesOf<ScriptResource>(), scripts_table_path_, scripts_data_path_,
+    FileKind::kScriptsData);
+  open(FilesOf<PhysicsResource>(), physics_table_path_, physics_data_path_,
+    FileKind::kPhysicsData);
 }
 
 auto LooseCookedSource::FilesOf(const TypeId resource_type) const noexcept

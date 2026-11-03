@@ -100,18 +100,33 @@ public:
   using std::runtime_error::runtime_error;
 };
 
+//! A cooked root another writer holds: its writer lease is taken.
+/*!
+ A root has one writer at a time, from the start of its session to the end
+ of its last cleanup. The import reports it as `import.cooked_root_busy`,
+ before anything is written; whoever queues the cook decides how long to
+ wait.
+*/
+class LooseCookedRootBusy final : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
+
 //! Result of writing a loose cooked container.
 struct LooseCookedWriteResult final {
   std::filesystem::path cooked_root;
   data::SourceKey source_key {};
 
   uint16_t content_version = 0;
+  //! The commit the published index is.
+  uint64_t commit = 0;
   //! The assets of the published index, in key order.
   std::vector<LooseCookedAssetRecord> assets;
   //! The files of the published index, in path order.
   std::vector<LooseCookedFileRecord> files;
-  //! Container-relative paths of the files the previous index listed and the
-  //! published one does not, which were deleted; in path order.
+  //! Container-relative paths of the files the previous commit listed and the
+  //! published one retires, in path order; each is deleted once no reader
+  //! holds a commit that lists it.
   std::vector<std::string> removed_files;
 };
 
@@ -128,6 +143,26 @@ struct LooseCookedWriteResult final {
  destination atomically.
 
  It is designed to be used by importers (FBX/glTF) and other cook pipelines.
+
+ ### Commits
+
+ It writes the root by the [loose root
+ publication](../../../../../design/proposals/cooked-sources/root-publication.md)
+ protocol. The index it publishes at `Finish` is the root's next commit, and
+ nothing else commits anything:
+
+ - It takes the root's writer lease when it is created and holds it until it
+   is destroyed (LooseCookedRootBusy when another writer holds it), so it
+   reads the latest commit once and no other writer commits before it.
+ - It then drops what no commit records, its own or a crashed writer's: a
+   data file's bytes past its committed length, and every unlisted file of a
+   writer's naming (`data::loose_cooked::IsWriterOutputRelPath`).
+ - Every file but a resource data file is published under its content name
+   (`data::loose_cooked::ContentRelPath`), stably, before the index names it;
+   a commit never changes a file another one lists.
+ - A file the commit stops listing is retired: the index lists it with that
+   commit, and the writer deletes it once no reader holds an earlier commit
+   (`.leases/<commit>.lock`), at the start of a session or after its commit.
 
  ### Identities
 
@@ -153,7 +188,12 @@ struct LooseCookedWriteResult final {
 class LooseCookedWriter final {
 public:
   //! Create a writer targeting `cooked_root`, which it reads, writes and
-  //! removes files of through `storage`.
+  //! removes files of through `storage`, holding its writer lease.
+  /*!
+   @throw LooseCookedRootBusy when another writer holds the root.
+   @throw std::runtime_error when the published index cannot be read, or what
+     no commit records cannot be dropped.
+  */
   OXGN_COOK_API LooseCookedWriter(
     std::filesystem::path cooked_root, cooked::CookerStorage& storage);
   OXGN_COOK_API ~LooseCookedWriter();
@@ -175,7 +215,8 @@ public:
    @param key Stable identity of the asset.
    @param asset_type Loader dispatch type.
    @param virtual_path Virtual path used by tooling/editors.
-   @param descriptor_relpath Container-relative path for the descriptor file.
+   @param descriptor_relpath Container-relative layout path for the
+     descriptor file; the file gets its content name.
    @param bytes Descriptor bytes; must match the runtime loader schema.
    @param references The asset's resource and key references.
    @param producer The source that produces the asset.
@@ -199,15 +240,17 @@ public:
    runtime (buffers/textures).
 
    @param kind Logical kind of file (see LooseCookedIndexFormat.h).
-   @param relpath Container-relative path.
-   @param bytes File bytes.
+   @param relpath Container-relative layout path; any file but a resource data
+     file gets its content name.
+   @param bytes File bytes; a resource data file's must begin with its
+     committed bytes, since a data file only grows.
 
-   Existing file records are preserved. A table or data file is identified by
-   its kind, and a root holds it at one path: writing it again replaces the
-   record, and writing it at another path is refused.
+   Existing file records are preserved. A data file is identified by its
+   kind, and a root holds it at one path; a table of new bytes replaces the
+   record of its kind.
 
-   @throw std::runtime_error on IO errors, invalid paths, or a second path for
-     the kind.
+   @throw std::runtime_error on IO errors, invalid paths, a second path for a
+     data file, or data file bytes that do not extend the committed ones.
   */
   OXGN_COOK_API auto WriteFile(data::loose_cooked::FileKind kind,
     std::string_view relpath, std::span<const std::byte> bytes) -> void;
@@ -250,16 +293,18 @@ public:
    Re-registering the same path refreshes its record. A re-cook of the
    producer retires the file once it no longer writes it.
 
-   @param relpath Container-relative path of the file, such as a `.obuf`
-     buffer sidecar.
+   @param relpath Container-relative content name of the file, such as a
+     `.obuf` buffer sidecar.
+   @param virtual_path The virtual path a reference names the file by, as a
+     buffer sidecar's; empty for a file nothing references.
    @param producer The source that produces the file.
    @param produced The digest the producer computed as it wrote the file.
    @throw std::runtime_error if the file does not exist, a path is invalid,
      or the file does not have the size its producer hashed.
   */
   OXGN_COOK_API auto RegisterExternalAuxiliaryFile(std::string_view relpath,
-    const LooseCookedProducer& producer, const LooseCookedFileDigest& produced)
-    -> void;
+    std::string_view virtual_path, const LooseCookedProducer& producer,
+    const LooseCookedFileDigest& produced) -> void;
 
   //! Register an externally-written texture descriptor under its virtual path.
   /*!
@@ -282,8 +327,10 @@ public:
   //! Registers an asset descriptor its producer wrote, validated and hashed.
   /*!
    The producer (an emitter) validated the descriptor bytes and hashed them as
-   it wrote them; the writer records `produced` and only measures the file,
-   which must exist at `descriptor_relpath` and hold `produced.size` bytes.
+   it wrote them, under their content name; the writer records `produced` and
+   only measures the file, which must exist at `descriptor_relpath` and hold
+   `produced.size` bytes. `requirements` are what the asset requires of other
+   mounts, which the index records with it.
 
    @throw LooseCookedIdentityCollision if another source produces the
      identity, or one differing from it only in case.
@@ -294,7 +341,9 @@ public:
     data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, const LooseCookedFileDigest& produced,
     const data::AssetReferences& references,
-    const LooseCookedProducer& producer) -> void;
+    const LooseCookedProducer& producer,
+    std::span<const data::loose_cooked::IndexedRequirement> requirements = {})
+    -> void;
 
   //! Registers an asset descriptor that exists in the cooked root but that
   //! nothing in this import produced, such as a re-sealed staged descriptor.
@@ -315,9 +364,9 @@ public:
 
   //! Remove an asset's index entry and its descriptor file.
   /*!
-   The removal applies to the index published when `Finish()` runs, so it
-   also removes an entry another writer published since this one opened the
-   root. The descriptor file is deleted after the index no longer lists it.
+   The removal applies to the index published when `Finish()` runs. The
+   descriptor file is retired by that commit, and deleted once no reader
+   holds an earlier one.
    Resource table entries the asset used stay in their tables: other assets
    may share them, and the pak step drops the ones no packed asset reaches.
 
@@ -359,12 +408,12 @@ public:
   /*!
    The index is streamed into a publication of the storage
    (`data::loose_cooked::EncodeLooseCookedIndex`), never held whole in memory,
-   and replaces the published index when it commits.
+   and replaces the published index when it commits, as the commit after the
+   one the writer read. Every entry that commit listed and this writer did
+   not change stays. Unlisted files this session wrote are then deleted, and
+   retired files no reader needs.
 
    @return Summary of written assets and file records.
-
-   The writer MUST not discard an existing index. If an index file already
-   exists, `Finish()` MUST merge new/updated entries into it.
 
    @throw std::runtime_error if required metadata is missing or index emission
      fails.

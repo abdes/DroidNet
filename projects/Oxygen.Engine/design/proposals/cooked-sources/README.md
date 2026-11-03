@@ -15,6 +15,9 @@ It is the Cooker side of the [Serio](../../../src/Oxygen/Serio/README.md) consum
 and ports). The [cooked content builders](../cooked-content-builders/README.md)
 build cooked sources for tests.
 
+How a loose root is published while it is read, and what it requires of
+other mounts, is designed in [loose root publication](root-publication.md).
+
 ## Contents
 
 - [Scenarios](#scenarios)
@@ -127,7 +130,12 @@ Where a loose root's files lie is an internal detail of the loose writer
 their data files and the folders that hold them. Only the index's own name,
 `data::loose_cooked::kIndexFileName`, is part of the format; readers follow the
 paths the index records, and those paths obey one rule,
-`data::loose_cooked::RequireIndexRelPath`, that writers and readers share.
+`data::loose_cooked::RequireIndexRelPath`, that writers and readers share. A
+writer stores every file but a data file under its content name
+(`data::loose_cooked::ContentRelPath`), as
+[loose root publication](root-publication.md) requires; a texture descriptor or
+buffer sidecar a reference names keeps that identity as its index record's
+virtual path.
 
 ### Cooker file system
 

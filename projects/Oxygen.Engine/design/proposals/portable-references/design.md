@@ -169,7 +169,7 @@ table resolves, from a **library facts** record read without loading assets:
 | Format version  | Index header                                 | Pak header and catalog version   |
 | Roots           | Mount roots of the index's virtual paths     | The catalog's `library` name     |
 | External script | Any script entry with `external_source_path` | Never (PakTool seals scripts)    |
-| Requirements    | None                                         | The catalog's requirements (R10) |
+| Requirements    | The index's requirement records              | The catalog's requirements (R10) |
 
 | Finding                           | When                                                                     |
 | --------------------------------- | ------------------------------------------------------------------------ |
@@ -241,6 +241,9 @@ providing layer exists, has the required type, and lies under the required
 the providing entry's virtual path. Patch bases keep their exact identity check
 (`ValidateBaseLayers`). The refusal is a typed `DependencyRequirementError`
 listing each failed requirement, not a `std::invalid_argument` string.
+A loose root records its own requirements in its index and is never refused
+for them: it mounts with its unmet requirements reported
+([loose root publication](../cooked-sources/root-publication.md#requirements)).
 
 **Packing a project** requires every library it depends on to be a pak:
 
@@ -608,9 +611,12 @@ rewrites the written text with `ToReference`, committed as an Undo step.
 `PlaySession` writes the generation folder selected at launch for each
 `.cooked` binding. `PreviewSession` watches the `head.json` of each `.cooked`
 binding next to `.mounts.json`; on a change it mounts the new generation with
-`MountLooseCookedGeneration(new, replaces: old)`. If the engine refuses the
-swap with a requirement error, the old generation stays and the mount reports
-`mount.cooked_dependency_missing`; otherwise the reference check runs again.
+`MountLooseCookedGeneration(new, replaces: old)`. A loose generation mounts
+even when one of its requirements is unmet: the mount reports
+`mount.cooked_dependency_missing` from the engine's unmet requirements, and
+the rest of the content previews. A pak's unmet requirement refuses the swap;
+the old one stays with the same finding. The reference check then runs
+again.
 
 ## User experience
 

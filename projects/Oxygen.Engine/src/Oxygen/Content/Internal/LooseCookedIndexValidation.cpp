@@ -15,6 +15,7 @@
 #include <string_view>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -23,7 +24,9 @@
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Data/CookedFormatError.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/Device.h>
@@ -160,16 +163,22 @@ namespace {
   }
 
   //! Checks every entry `files` lists against `inventory`: links,
-  //! non-regular, unexpected and missing files, sizes and, for `kFull`, the
-  //! digests of files that are not resource data.
+  //! non-regular, unexpected, uncommitted and missing files, sizes and, for
+  //! `kFull`, the digests of files that are not resource data. A file
+  //! `retired` names is an earlier commit's, present or not.
   auto CheckInventory(const lc::RootFiles& files,
     const std::span<const lc::FileIntegrity> inventory,
+    const std::span<const data::loose_cooked::RetiredFile> retired,
     const lc::IntegrityCheck check) -> std::vector<lc::FileIntegrityIssue>
   {
     std::unordered_map<std::string, const lc::FileIntegrity*> remaining;
     remaining.reserve(inventory.size());
     for (const auto& file : inventory) {
       remaining.emplace(file.relative_path, &file);
+    }
+    auto retired_paths = std::unordered_set<std::string_view> {};
+    for (const auto& file : retired) {
+      retired_paths.insert(file.relpath);
     }
 
     std::vector<lc::FileIntegrityIssue> issues;
@@ -195,22 +204,27 @@ namespace {
         remaining.erase(relative);
         continue;
       }
-      if (relative == data::loose_cooked::kIndexFileName
-        || relative == data::loose_cooked::kGenerationLeaseFileName
-        || relative == data::loose_cooked::kIndexLockFileName) {
+      if (data::loose_cooked::IsReservedRelPath(relative)
+        || retired_paths.contains(relative)) {
         continue;
       }
       const auto found = remaining.find(relative);
       if (found == remaining.end()) {
-        report(relative, lc::IntegrityFailure::kUnexpected);
+        report(relative,
+          data::loose_cooked::IsWriterOutputRelPath(relative)
+            ? lc::IntegrityFailure::kUncommitted
+            : lc::IntegrityFailure::kUnexpected);
         continue;
       }
       const auto& expected = *found->second;
-      if (entry.size != expected.size) {
+      const auto is_data_file = expected.kind.has_value()
+        && data::loose_cooked::IsResourceDataFile(*expected.kind);
+      if (is_data_file && entry.size > expected.size) {
+        // Bytes past the committed length belong to no commit.
+        report(relative, lc::IntegrityFailure::kUncommittedTail);
+      } else if (entry.size != expected.size) {
         report(relative, lc::IntegrityFailure::kSizeMismatch);
-      } else if (check == lc::IntegrityCheck::kFull
-        && !(expected.kind.has_value()
-          && data::loose_cooked::IsResourceDataFile(*expected.kind))) {
+      } else if (check == lc::IntegrityCheck::kFull && !is_data_file) {
         const auto digest = serio::ComputeSha256(OpenOrThrow(files, relative));
         if (!digest) {
           throw std::runtime_error(
@@ -301,7 +315,7 @@ auto LooseCookedIndexImpl::CheckContent(const lc::RootFiles& files,
   const lc::IntegrityCheck check) const -> std::vector<lc::FileIntegrityIssue>
 {
   const auto inventory = GetFileInventory();
-  auto issues = CheckInventory(files, inventory, check);
+  auto issues = CheckInventory(files, inventory, retired_, check);
   CheckResources(files, inventory, check, issues);
   std::ranges::sort(issues, [](const auto& a, const auto& b) -> bool {
     return std::tie(a.relative_path, a.resource_row)
@@ -315,10 +329,12 @@ auto LooseCookedIndexImpl::ValidateContent(
   const lc::IntegrityCheck check) const -> void
 {
   const auto issues = CheckContent(cooked_root, check);
-  if (issues.empty()) {
+  const auto damage = std::ranges::find_if(issues,
+    [](const auto& issue) -> bool { return !lc::IsUncommitted(issue.reason); });
+  if (damage == issues.end()) {
     return;
   }
-  const auto& first = issues.front();
+  const auto& first = *damage;
   const auto* const reason = [&] -> const char* {
     switch (first.reason) {
     case lc::IntegrityFailure::kMissing:
@@ -339,6 +355,9 @@ auto LooseCookedIndexImpl::ValidateContent(
       return "Loose cooked resource outside its data file: ";
     case lc::IntegrityFailure::kResourceDigestMismatch:
       return "Loose cooked resource SHA-256 mismatch: ";
+    case lc::IntegrityFailure::kUncommitted:
+    case lc::IntegrityFailure::kUncommittedTail:
+      break;
     }
     return "Invalid loose cooked content: ";
   }();

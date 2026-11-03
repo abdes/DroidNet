@@ -384,10 +384,9 @@ NOLINT_TEST_F(ModelImportRecordTest, NoLockFileOutlivesItsLock)
     std::filesystem::recursive_directory_iterator(TempDir())) {
     if (entry.is_regular_file() && entry.path().extension() == ".lock") {
       const auto name = entry.path().filename().string();
-      EXPECT_TRUE(name == oxygen::data::loose_cooked::kGenerationLeaseFileName
-        || name == oxygen::data::loose_cooked::kIndexLockFileName)
-        << "only a generation's lease marker and index lock may remain: "
-        << entry.path();
+      // The writer lease and reader leases leave no file once released.
+      EXPECT_TRUE(name == oxygen::data::loose_cooked::kGenerationLeaseFileName)
+        << "only a generation's lease marker may remain: " << entry.path();
     }
   }
   for (const auto& entry :

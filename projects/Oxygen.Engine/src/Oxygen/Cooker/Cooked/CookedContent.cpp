@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
@@ -38,6 +39,8 @@
 #include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/LooseCookedPaths.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_audio.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -46,6 +49,7 @@
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Device.h>
+#include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/Types.h>
 
@@ -60,6 +64,7 @@ namespace {
   using data::loose_cooked::FileKind;
   using lc::FileIntegrity;
   using lc::LooseCookedIndex;
+  using oxygen::data::loose_cooked::kGenerationLeaseFileName;
   using oxygen::data::loose_cooked::kIndexFileName;
 
   //! Every table kind, in table order.
@@ -166,6 +171,9 @@ namespace {
       return issue.table_defect.value_or(CookedDefect::kInconsistent);
     case lc::IntegrityFailure::kResourceOutOfBounds:
       return CookedDefect::kOutOfBounds;
+    case lc::IntegrityFailure::kUncommitted:
+    case lc::IntegrityFailure::kUncommittedTail:
+      return CookedDefect::kInconsistent;
     }
     return CookedDefect::kInconsistent;
   }
@@ -195,6 +203,10 @@ namespace {
       return "holds a resource outside the file" + row;
     case lc::IntegrityFailure::kResourceDigestMismatch:
       return "holds a resource without the SHA-256 of its table row" + row;
+    case lc::IntegrityFailure::kUncommitted:
+      return "is a writer's output no commit lists";
+    case lc::IntegrityFailure::kUncommittedTail:
+      return "holds bytes past the length its commit records";
     }
     return "is invalid";
   }
@@ -280,6 +292,98 @@ namespace {
     return LooseCookedIndex::LoadFromBytes(std::move(*bytes));
   }
 
+  //! The commit the index of `root` records now, read from its header.
+  auto CurrentCommitOf(const CookerStorageReader& storage, const fs::path& root)
+    -> uint64_t
+  {
+    const auto index_path = root / kIndexFileName;
+    auto device = storage.Open(index_path);
+    if (!device) {
+      throw Unreadable(index_path);
+    }
+    auto header = data::loose_cooked::IndexHeader {};
+    ReadAt(
+      *device, index_path, 0, std::as_writable_bytes(std::span(&header, 1)));
+    return header.commit;
+  }
+
+  //! A loose root's index and the reader lease of its commit.
+  struct LeasedIndex final {
+    LooseCookedIndex index;
+    std::unique_ptr<StorageLock> lease;
+  };
+
+  //! Loads the index of the plain loose root `root` under the reader lease
+  //! of its commit, as `content::internal::LoadLeasedIndex` does on the real
+  //! file system: no writer reclaims a file that commit lists while the
+  //! lease is held. A generation is read under its own lease, which its
+  //! reader holds, and takes none.
+  auto LoadLeasedIndex(const CookerStorageReader& storage, const fs::path& root)
+    -> LeasedIndex
+  {
+    if (storage.KindOf(root / std::string(kGenerationLeaseFileName))
+      == PathKind::kFile) {
+      return { .index = LoadIndex(storage, root), .lease = nullptr };
+    }
+    // A writer commits a few times a minute at most: a race ends at once.
+    constexpr auto kAttempts = 8;
+    for (auto attempt = 0; attempt < kAttempts; ++attempt) {
+      auto index = LoadIndex(storage, root);
+      auto lease = storage.TryLock(
+        root / data::loose_cooked::LeaseRelPath(index.Commit()),
+        serio::FileLockMode::kShared);
+      if (!lease) {
+        if (lease.error() == std::errc::device_or_resource_busy) {
+          continue;
+        }
+        if (lease.error() == std::errc::permission_denied) {
+          // No writer with this reader's permissions can write it either.
+          LOG_F(WARNING,
+            "Loose cooked root '{}' admits no reader lease; it is read "
+            "unleased",
+            root.generic_string());
+          return { .index = std::move(index), .lease = nullptr };
+        }
+        throw std::system_error(lease.error(),
+          "cannot lease the commit of '" + root.generic_string() + "'");
+      }
+      if (CurrentCommitOf(storage, root) == index.Commit()) {
+        return { .index = std::move(index), .lease = std::move(*lease) };
+      }
+    }
+    throw std::system_error(
+      std::make_error_code(std::errc::device_or_resource_busy),
+      "'" + root.generic_string()
+        + "' committed faster than its index could be leased");
+  }
+
+  //! What a loose root's assets require of other mounts, by mount, each once.
+  auto LooseRequirements(const LooseCookedIndex& index)
+    -> std::vector<data::PakCatalogDependency>
+  {
+    auto by_mount = std::map<std::string, std::vector<data::PakRequirement>> {};
+    for (const auto& [asset, required] : index.Requirements()) {
+      static_cast<void>(asset);
+      auto& requirements = by_mount[required.mount];
+      const auto requirement = data::PakRequirement {
+        .kind = required.kind,
+        .key = required.key,
+        .type = required.type,
+      };
+      if (std::ranges::find(requirements, requirement) == requirements.end()) {
+        requirements.push_back(requirement);
+      }
+    }
+    auto dependencies = std::vector<data::PakCatalogDependency> {};
+    for (auto& [mount, requirements] : by_mount) {
+      dependencies.push_back({
+        .mount = mount,
+        .requirements = std::move(requirements),
+      });
+    }
+    return dependencies;
+  }
+
   auto OpenPak(const CookerStorageReader& storage, const fs::path& path)
     -> std::unique_ptr<PakFile>
   {
@@ -313,7 +417,7 @@ namespace {
       .assets = {},
       .textures = {},
       .deleted = {},
-      .requirements = {},
+      .requirements = LooseRequirements(index),
       .external_scripts = {},
     };
     auto mounts = std::set<std::string> {};
@@ -501,6 +605,9 @@ struct CookedContent::Impl {
   std::vector<FileIntegrity> inventory;
   //! A loose root's index, which checks the root's files.
   std::optional<LooseCookedIndex> loose_index;
+  //! The reader lease of a plain loose root's commit, held for the content's
+  //! life: every file it lists stays.
+  std::unique_ptr<StorageLock> commit_lease;
 
   //! The pak's device; null for a loose root.
   [[nodiscard]] auto PakDevice() const -> observer_ptr<const serio::AnyDevice>
@@ -523,7 +630,9 @@ struct CookedContent::Impl {
 auto CookedContent::Impl::LoadLoose() -> void
 {
   const auto& root = source.path;
-  const auto& loaded = loose_index.emplace(LoadIndex(*storage, root));
+  auto leased = LoadLeasedIndex(*storage, root);
+  commit_lease = std::move(leased.lease);
+  const auto& loaded = loose_index.emplace(std::move(leased.index));
   summary = LooseSummary(*storage, root, loaded);
   inventory = loaded.GetFileInventory();
   LoadLooseAssets(loaded);
@@ -655,6 +764,7 @@ auto CookedContent::Impl::LoadLooseNamedFiles(
       const auto path = root / file.relative_path;
       sidecars.push_back({
         .name = file.relative_path,
+        .virtual_path = file.virtual_path,
         .source_path = file.source_path,
         .stored = { .file = path,
           .range = { .offset = serio::ByteOffset { 0 },
@@ -907,13 +1017,15 @@ auto CookedContent::Sidecars() const noexcept -> std::span<const CookedSidecar>
   return impl_->sidecars;
 }
 
-auto CookedContent::FindSidecar(const std::string_view name) const noexcept
-  -> const CookedSidecar*
+auto CookedContent::FindSidecar(
+  const std::string_view virtual_path) const noexcept -> const CookedSidecar*
 {
-  const auto it = std::ranges::lower_bound(
-    impl_->sidecars, name, std::less {}, &CookedSidecar::name);
-  return it != impl_->sidecars.end() && it->name == name ? std::addressof(*it)
-                                                         : nullptr;
+  if (virtual_path.empty()) {
+    return nullptr;
+  }
+  const auto it = std::ranges::find(
+    impl_->sidecars, virtual_path, &CookedSidecar::virtual_path);
+  return it != impl_->sidecars.end() ? std::addressof(*it) : nullptr;
 }
 
 auto CookedContent::Catalog() const noexcept -> const data::PakCatalog*

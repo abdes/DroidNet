@@ -23,6 +23,7 @@
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -417,7 +418,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   const auto has_output = [&](const std::string_view relpath) -> bool {
     return std::ranges::any_of(
       report->outputs, [&](const ImportOutputRecord& output) -> bool {
-        return output.path == relpath;
+        return oxygen::cooker::test::LayoutPathOf(output.path) == relpath;
       });
   };
   EXPECT_TRUE(has_output("Resources/Buffers/cube_vertices.obuf"));

@@ -26,6 +26,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -143,6 +144,14 @@ protected:
   auto BufferAggregator() -> BufferTableAggregator&
   {
     return table_registry_->BufferAggregator(Root());
+  }
+
+  //! The buffer table the registry published below the cooked root, found by
+  //! its layout path.
+  [[nodiscard]] auto TableFile() const -> std::filesystem::path
+  {
+    return oxygen::cooker::test::CookedFile(
+      Root(), loose_layout::kBuffersTable, files_);
   }
 
   auto FinalizeTables() -> bool
@@ -312,7 +321,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitDuplicateBufferReturnsSameIndex)
   ASSERT_HAS_VALUE(emitter_);
   EXPECT_EQ(emitter_->Count(), 1);
 
-  const auto table_path = Root() / loose_layout::kBuffersTable;
+  const auto table_path = TableFile();
   const auto table = ParseBufferTable(ReadBytes(table_path));
   ASSERT_EQ(table.size(), 2);
 }
@@ -347,8 +356,7 @@ NOLINT_TEST_F(BufferEmitterTest, EqualBufferAskingStricterAlignmentGetsOwnRow)
   EXPECT_TRUE(tables_ok);
   EXPECT_NE(strict, loose);
   EXPECT_EQ(again, strict);
-  const auto table
-    = ParseBufferTable(ReadBytes(Root() / loose_layout::kBuffersTable));
+  const auto table = ParseBufferTable(ReadBytes(TableFile()));
   ASSERT_GT(table.size(), strict);
   EXPECT_NE(table.at(loose).data_offset % kStrictAlignment, 0U);
   EXPECT_EQ(table.at(strict).data_offset % kStrictAlignment, 0U);
@@ -428,7 +436,7 @@ NOLINT_TEST_F(BufferEmitterTest, CountReflectsUniqueEntriesNotEmitRequests)
   ASSERT_HAS_VALUE(emitter_);
   EXPECT_EQ(emitter_->Count(), 1U);
 
-  const auto table_path = Root() / loose_layout::kBuffersTable;
+  const auto table_path = TableFile();
   const auto table = ParseBufferTable(ReadBytes(table_path));
   EXPECT_EQ(table.size(), 2U);
 }
@@ -490,7 +498,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableFileHasCorrectPackedSize)
   EXPECT_TRUE(tables_ok);
 
   // Table file size = count * sizeof(BufferResourceDesc)
-  const auto table_path = Root() / loose_layout::kBuffersTable;
+  const auto table_path = TableFile();
   EXPECT_TRUE(Exists(table_path));
 
   const auto table_size = SizeOf(table_path);
@@ -533,7 +541,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesHaveCorrectAlignedOffsets)
   EXPECT_TRUE(tables_ok);
 
   // Parse table and verify offsets
-  const auto table_path = Root() / loose_layout::kBuffersTable;
+  const auto table_path = TableFile();
   const auto table = ParseBufferTable(ReadBytes(table_path));
 
   ASSERT_EQ(table.size(), 4);
@@ -593,7 +601,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesPreserveMetadata)
   EXPECT_TRUE(tables_ok);
 
   // Parse table and verify metadata
-  const auto table_path = Root() / loose_layout::kBuffersTable;
+  const auto table_path = TableFile();
   const auto table = ParseBufferTable(ReadBytes(table_path));
 
   ASSERT_EQ(table.size(), 3);
@@ -726,8 +734,8 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeNoBuffersSucceedsWithoutWritingFiles)
 
   EXPECT_TRUE(success);
 
-  const auto table_path = Root() / loose_layout::kBuffersTable;
-  EXPECT_FALSE(Exists(table_path));
+  EXPECT_FALSE(oxygen::cooker::test::HasCookedFile(
+    Root(), loose_layout::kBuffersTable, files_));
 }
 
 //=== State Query Tests
@@ -812,7 +820,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitZeroAlignmentUsesDefaultAlignment)
   EXPECT_TRUE(tables_ok);
 
   // Table entry exists
-  const auto table_path = Root() / loose_layout::kBuffersTable;
+  const auto table_path = TableFile();
   const auto table = ParseBufferTable(ReadBytes(table_path));
 
   ASSERT_EQ(table.size(), 2);
@@ -844,7 +852,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitLargeBufferSucceedsWithCorrectSize)
   EXPECT_EQ(SizeOf(data_path), kLargeSize);
 
   // Table entry has correct size
-  const auto table_path = Root() / loose_layout::kBuffersTable;
+  const auto table_path = TableFile();
   const auto table = ParseBufferTable(ReadBytes(table_path));
 
   ASSERT_EQ(table.size(), 2);
@@ -879,7 +887,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitManySmallBuffersAllAlignedCorrectly)
   EXPECT_TRUE(tables_ok);
 
   // All table entries have aligned offsets
-  const auto table_path = Root() / loose_layout::kBuffersTable;
+  const auto table_path = TableFile();
   const auto table = ParseBufferTable(ReadBytes(table_path));
 
   ASSERT_EQ(table.size(), kBufferCount + 1);

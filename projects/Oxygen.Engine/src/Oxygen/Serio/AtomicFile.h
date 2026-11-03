@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <memory>
 #include <span>
+#include <string_view>
 #include <system_error>
 
 #include <Oxygen/Base/Macros.h>
@@ -56,6 +57,11 @@ OXGN_SERIO_NDAPI auto MoveFileOver(const std::filesystem::path& from,
   const std::filesystem::path& to,
   Durability durability = Durability::kStable) noexcept
   -> Result<FileReplacement>;
+
+//! Whether `file_name` names the sibling an `AtomicFileWriter` streams into,
+//! `.oxygen-<uuid>.tmp`: a file a process that died before `Commit()` left.
+OXGN_SERIO_NDAPI auto IsAtomicSiblingName(std::string_view file_name) noexcept
+  -> bool;
 
 //! Streams a file's content into a unique sibling, then atomically replaces
 //! the destination with it.

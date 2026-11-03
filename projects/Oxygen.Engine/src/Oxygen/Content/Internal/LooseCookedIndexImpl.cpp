@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <iterator>
 #include <optional>
@@ -21,21 +22,27 @@
 #include <variant>
 #include <vector>
 
+#include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/Internal/OpenFailure.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedFormatError.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/ByteReader.h>
+#include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/MappedFile.h>
 #include <Oxygen/Serio/Types.h>
 
@@ -47,6 +54,8 @@ using oxygen::data::loose_cooked::kHasFileRecords;
 using oxygen::data::loose_cooked::kHasVirtualPaths;
 using oxygen::data::loose_cooked::kHeaderMagic;
 using oxygen::data::loose_cooked::kKnownIndexFlags;
+using oxygen::data::loose_cooked::RequirementRecord;
+using oxygen::data::loose_cooked::RetiredRecord;
 
 namespace data = oxygen::data;
 namespace content = oxygen::content;
@@ -105,6 +114,25 @@ auto ValidateSectionLayout(const IndexHeader& header) -> void
   if (!records_after_entries) {
     throw data::CookedFormatError(data::CookedDefect::kOverlap,
       "File records must start after the end of the asset entries");
+  }
+
+  const auto expected_retired_min = header.file_records_offset
+    + (static_cast<uint64_t>(header.file_record_count) * sizeof(FileRecord));
+  const auto retired_after_records
+    = header.retired_records_offset >= expected_retired_min;
+  if (!retired_after_records) {
+    throw data::CookedFormatError(data::CookedDefect::kOverlap,
+      "Retired records must start after the end of the file records");
+  }
+
+  const auto expected_requirements_min = header.retired_records_offset
+    + (static_cast<uint64_t>(header.retired_record_count)
+      * sizeof(RetiredRecord));
+  const auto requirements_after_retired
+    = header.requirement_records_offset >= expected_requirements_min;
+  if (!requirements_after_retired) {
+    throw data::CookedFormatError(data::CookedDefect::kOverlap,
+      "Requirement records must start after the end of the retired records");
   }
 }
 
@@ -284,13 +312,6 @@ struct LooseCookedIndexImpl::IndexLoadContext {
   auto RecordFile(const FileRecord& record) const -> void;
 };
 
-auto LooseCookedIndexImpl::LockPathOf(const std::filesystem::path& index_path)
-  -> std::filesystem::path
-{
-  return index_path.parent_path()
-    / std::string(data::loose_cooked::kIndexLockFileName);
-}
-
 auto LooseCookedIndexImpl::LoadFromFile(const std::filesystem::path& index_path)
   -> LooseCookedIndexImpl
 {
@@ -350,19 +371,23 @@ auto LooseCookedIndexImpl::Parse() -> void
 
   LoadAndValidateHeader(context);
   content_version_ = context.header.content_version;
+  commit_ = context.header.commit;
   context.InitializeReferenceBlock();
   ReadStringTable(context);
   ReadAssetEntries(context);
   context.ValidateReferenceBlockCoverage();
   ReadFileRecords(context);
+  ReadRetiredRecords(context);
+  ReadRequirementRecords(context);
   ValidateFilePairs(*this);
   context.StoreReferenceTail();
 }
 
 auto LooseCookedIndexImpl::IndexLoadContext::InitializeReferenceBlock() -> void
 {
-  reference_start = header.file_records_offset
-    + (uint64_t { header.file_record_count } * sizeof(FileRecord));
+  reference_start = header.requirement_records_offset
+    + (uint64_t { header.requirement_record_count }
+      * sizeof(RequirementRecord));
   ValidateSectionRange(file_size, reference_start, 0, "reference block start");
   next_reference_offset = reference_start;
 }
@@ -429,6 +454,22 @@ auto LooseCookedIndexImpl::LoadAndValidateHeader(IndexLoadContext& context)
       "Unexpected FileRecord size in index header");
   }
 
+  // A zero record size is a mismatch too.
+  const auto retired_size_matches = header.retired_record_count == 0
+    || header.retired_record_size == sizeof(RetiredRecord);
+  const auto requirement_size_matches = header.requirement_record_count == 0
+    || header.requirement_record_size == sizeof(RequirementRecord);
+  if (!retired_size_matches || !requirement_size_matches) {
+    throw data::CookedFormatError(data::CookedDefect::kWrongRowSize,
+      "Unexpected retired or requirement record size in index header");
+  }
+
+  const auto has_commit = header.commit != 0U;
+  if (!has_commit) {
+    throw data::CookedFormatError(data::CookedDefect::kInvalidValue,
+      "Loose cooked index commit must be 1 or more");
+  }
+
   const auto reserved_zero = std::ranges::all_of(
     header._reserved, [](const uint8_t value) -> bool { return value == 0U; });
   if (!reserved_zero) {
@@ -451,6 +492,14 @@ auto LooseCookedIndexImpl::LoadAndValidateHeader(IndexLoadContext& context)
       static_cast<uint64_t>(header.file_record_count) * sizeof(FileRecord),
       "file records");
   }
+
+  ValidateSectionRange(context.file_size, header.retired_records_offset,
+    static_cast<uint64_t>(header.retired_record_count) * sizeof(RetiredRecord),
+    "retired records");
+  ValidateSectionRange(context.file_size, header.requirement_records_offset,
+    static_cast<uint64_t>(header.requirement_record_count)
+      * sizeof(RequirementRecord),
+    "requirement records");
 
   // Every section is within the file, so the layout's sums cannot overflow.
   ValidateSectionLayout(header);
@@ -716,9 +765,13 @@ auto LooseCookedIndexImpl::IndexLoadContext::ValidateFileVirtualAndSourcePaths(
     index->string_table_, record.virtual_path_offset);
   const auto source_path = ExtractNullTerminatedString(
     index->string_table_, record.source_path_offset);
-  if (record.kind == FileKind::kTextureDescriptor) {
+  const auto named = record.kind == FileKind::kTextureDescriptor
+    || (record.kind == FileKind::kAuxiliary && !virtual_path.empty());
+  if (named) {
     RequireCanonicalVirtualPath(virtual_path);
-    RequireCanonicalVirtualPath(source_path);
+    if (record.kind == FileKind::kTextureDescriptor || !source_path.empty()) {
+      RequireCanonicalVirtualPath(source_path);
+    }
     const auto unique_virtual_path
       = unique_virtual_paths.insert(virtual_path).second;
     if (!unique_virtual_path) {
@@ -727,7 +780,7 @@ auto LooseCookedIndexImpl::IndexLoadContext::ValidateFileVirtualAndSourcePaths(
     }
   } else if (!virtual_path.empty()) {
     throw data::CookedFormatError(data::CookedDefect::kInvalidValue,
-      "Only texture descriptor records may have a virtual path");
+      "Only texture descriptor and auxiliary records may have a virtual path");
   } else if (!source_path.empty()) {
     // An auxiliary file, such as a buffer sidecar, may record its producer.
     if (record.kind != FileKind::kAuxiliary) {
@@ -757,6 +810,123 @@ auto LooseCookedIndexImpl::IndexLoadContext::RecordFile(
   } else {
     index->kind_to_file_.insert_or_assign(record.kind, info);
     index->file_kinds_.push_back(record.kind);
+  }
+}
+
+auto LooseCookedIndexImpl::ReadRetiredRecords(IndexLoadContext& context) -> void
+{
+  const auto& header = context.header;
+  if (header.retired_record_count == 0) {
+    return;
+  }
+  if (auto res
+    = context.reader->Seek(serio::ByteOffset { header.retired_records_offset });
+    !res) {
+    throw data::CookedFormatError(data::CookedDefect::kTruncated,
+      "Failed to seek to retired records: " + res.error().message());
+  }
+  // A retired path is no listed one, and is retired once.
+  auto retired_paths = std::unordered_set<std::string> {};
+  for (uint32_t i = 0; i < header.retired_record_count; ++i) {
+    auto record_result = context.reader->Read<RetiredRecord>();
+    if (!record_result) {
+      throw data::CookedFormatError(data::CookedDefect::kTruncated,
+        "Failed to read retired record: " + record_result.error().message());
+    }
+    const auto& record = record_result.value();
+    if (record.kind != FileKind::kAssetDescriptor) {
+      ValidateFileKind(record.kind);
+    }
+    const auto retirable = !data::loose_cooked::IsResourceDataFile(record.kind);
+    if (!retirable) {
+      throw data::CookedFormatError(data::CookedDefect::kInvalidValue,
+        "A resource data file is never retired");
+    }
+    const auto retired_by_commit
+      = record.retired_at != 0U && record.retired_at <= header.commit;
+    if (!retired_by_commit) {
+      throw data::CookedFormatError(data::CookedDefect::kInvalidValue,
+        "A retired file's commit does not precede the index");
+    }
+    ValidateStringOffset(header, record.relpath_offset);
+    const auto rel = ExtractNullTerminatedString(
+      context.index->string_table_, record.relpath_offset);
+    RequireCanonicalRelPath(rel);
+    const auto folded = content::FoldCase(rel);
+    if (!folded.has_value()) {
+      throw data::CookedFormatError(data::CookedDefect::kInvalidValue,
+        "A loose cooked index retired path is not UTF-8");
+    }
+    const auto unlisted = !context.unique_file_paths.contains(*folded);
+    if (!unlisted || !retired_paths.insert(*folded).second) {
+      throw data::CookedFormatError(data::CookedDefect::kDuplicate,
+        "A retired path is listed, or retired twice");
+    }
+    context.index->retired_.push_back(data::loose_cooked::RetiredFile {
+      .kind = record.kind,
+      .relpath = std::string(rel),
+      .retired_at = record.retired_at,
+    });
+  }
+}
+
+auto LooseCookedIndexImpl::ReadRequirementRecords(IndexLoadContext& context)
+  -> void
+{
+  const auto& header = context.header;
+  if (header.requirement_record_count == 0) {
+    return;
+  }
+  if (auto res = context.reader->Seek(
+        serio::ByteOffset { header.requirement_records_offset });
+    !res) {
+    throw data::CookedFormatError(data::CookedDefect::kTruncated,
+      "Failed to seek to requirement records: " + res.error().message());
+  }
+  auto& requirements = context.index->requirements_;
+  auto previous_asset = uint32_t { 0 };
+  for (uint32_t i = 0; i < header.requirement_record_count; ++i) {
+    auto record_result = context.reader->Read<RequirementRecord>();
+    if (!record_result) {
+      throw data::CookedFormatError(data::CookedDefect::kTruncated,
+        "Failed to read requirement record: "
+          + record_result.error().message());
+    }
+    const auto& record = record_result.value();
+    const auto in_asset_order = record.asset_index < header.asset_count
+      && record.asset_index >= previous_asset;
+    if (!in_asset_order) {
+      throw data::CookedFormatError(data::CookedDefect::kInvalidReference,
+        "Requirement records must name assets in asset order");
+    }
+    previous_asset = record.asset_index;
+    ValidateStringOffset(header, record.mount_offset);
+    const auto mount = ExtractNullTerminatedString(
+      context.index->string_table_, record.mount_offset);
+    const auto kind = static_cast<data::KeyReferenceKind>(record.kind);
+    const auto is_asset = kind == data::KeyReferenceKind::kAsset;
+    const auto is_texture
+      = kind == data::KeyReferenceKind::kTexture && record.asset_type == 0U;
+    const auto named = !mount.empty() && !mount.contains('/');
+    if (!named || (!is_asset && !is_texture)) {
+      throw data::CookedFormatError(data::CookedDefect::kInvalidValue,
+        "A requirement names no mount, or another kind than an asset or a "
+        "texture");
+    }
+    auto requirement = lc::AssetRequirement {
+      .asset = context.index->asset_keys_.at(record.asset_index),
+      .requirement = data::loose_cooked::IndexedRequirement {
+        .mount = std::string(mount),
+        .kind = kind,
+        .key = record.key,
+        .type = static_cast<data::AssetType>(record.asset_type),
+      },
+    };
+    if (std::ranges::find(requirements, requirement) != requirements.end()) {
+      throw data::CookedFormatError(
+        data::CookedDefect::kDuplicate, "A requirement is listed twice");
+    }
+    requirements.push_back(std::move(requirement));
   }
 }
 
@@ -966,6 +1136,67 @@ auto LooseCookedIndexImpl::FindFileSize(FileKind kind) const noexcept
     return std::nullopt;
   }
   return it->second.size;
+}
+
+namespace {
+
+  //! The commit of the index at `index_path` now, read from its header alone.
+  auto CurrentCommitOf(const std::filesystem::path& index_path) -> uint64_t
+  {
+    auto mapped = serio::MappedFile::Open(index_path);
+    if (!mapped) {
+      oxygen::content::internal::ThrowOpenFailure(mapped.error(), index_path);
+    }
+    const auto bytes = mapped->Bytes();
+    if (bytes.size() < sizeof(IndexHeader)) {
+      throw data::CookedFormatError(data::CookedDefect::kTooSmall,
+        "File too small to hold a loose cooked index header");
+    }
+    auto header = IndexHeader {};
+    std::memcpy(&header, bytes.data(), sizeof(IndexHeader));
+    return header.commit;
+  }
+
+} // namespace
+
+auto LoadLeasedIndex(const std::filesystem::path& cooked_root)
+  -> LeasedLooseCookedIndex
+{
+  // A writer commits a few times a minute at most: a race ends at once.
+  constexpr auto kAttempts = 8;
+  const auto index_path = cooked_root / data::loose_cooked::kIndexFileName;
+  for (auto attempt = 0; attempt < kAttempts; ++attempt) {
+    auto index = LooseCookedIndexImpl::LoadFromFile(index_path);
+    const auto lease_path = base::ToNativePath(cooked_root
+      / std::filesystem::path(
+        data::loose_cooked::LeaseRelPath(index.Commit())));
+    auto created = std::error_code {};
+    std::filesystem::create_directories(lease_path.parent_path(), created);
+    auto lease = serio::FileLock::TryAcquire(lease_path,
+      serio::FileLockMode::kShared, serio::FileLockOpenMode::kTemporary);
+    if (!lease) {
+      if (lease.error() == std::errc::device_or_resource_busy) {
+        // A writer is checking this lease at this instant.
+        continue;
+      }
+      if (created == std::errc::permission_denied
+        || lease.error() == std::errc::permission_denied) {
+        LOG_F(WARNING,
+          "Loose cooked root '{}' admits no reader lease; it is read unleased",
+          cooked_root.string());
+        return { .index = std::move(index), .lease = {} };
+      }
+      throw std::system_error(lease.error(),
+        "Lease loose cooked commit '" + lease_path.string() + "'");
+    }
+    if (CurrentCommitOf(index_path) == index.Commit()) {
+      return { .index = std::move(index), .lease = std::move(lease).value() };
+    }
+  }
+  throw std::system_error(
+    std::make_error_code(std::errc::device_or_resource_busy),
+    "Loose cooked root '" + cooked_root.string()
+      + "' committed faster than its index could be leased");
 }
 
 } // namespace oxygen::content::internal

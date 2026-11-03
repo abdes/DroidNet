@@ -54,8 +54,11 @@ public:
     -> Result<bool> override;
   [[nodiscard]] auto Move(const std::filesystem::path& from,
     const std::filesystem::path& to) -> Result<void> override;
-  [[nodiscard]] auto LockExclusive(const std::filesystem::path& path)
+  [[nodiscard]] auto TryLock(
+    const std::filesystem::path& path, serio::FileLockMode mode) const
     -> Result<std::unique_ptr<cooked::StorageLock>> override;
+  [[nodiscard]] auto Truncate(const std::filesystem::path& path,
+    serio::ByteCount size) -> Result<void> override;
 
 private:
   struct StagedRoot {

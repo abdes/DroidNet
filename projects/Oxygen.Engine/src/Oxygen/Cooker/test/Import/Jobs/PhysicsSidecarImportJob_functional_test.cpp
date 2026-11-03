@@ -17,6 +17,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
@@ -81,8 +82,8 @@ namespace {
       physics_report->diagnostics, "physics.sidecar.target_scene_missing"));
     EXPECT_FALSE(HasDiagnosticCode(
       physics_report->diagnostics, "physics.sidecar.payload_parse_failed"));
-    EXPECT_TRUE(std::filesystem::exists(
-      cooked_root / std::filesystem::path("Scenes/DemoScene.opscene")));
+    EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
+      cooked_root, "Scenes/DemoScene.opscene"));
 
     // The sidecar's entries record the scene's source, not the sidecar's.
     const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);

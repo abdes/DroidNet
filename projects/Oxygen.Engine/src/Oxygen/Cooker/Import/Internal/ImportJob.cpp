@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
@@ -412,12 +413,13 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
   bool execution_completed = false;
   std::exception_ptr execution_failure;
   std::exception_ptr drain_failure;
-  const auto fail = [&](const std::string_view message) -> void {
+  const auto fail
+    = [&](const std::string_view code, const std::string_view message) -> void {
     report.success = false;
     report.cooked_root = request_.ResolveCookedRoot();
     report.diagnostics.push_back({
       .severity = ImportSeverity::kError,
-      .code = "import.exception",
+      .code = std::string(code),
       .message = std::string(message),
       .source_path = request_.source_path.string(),
       .object_path = {},
@@ -478,10 +480,13 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
     try {
       try {
         std::rethrow_exception(failure);
+      } catch (const LooseCookedRootBusy& error) {
+        // Nothing was written: the cook can run again once the root is free.
+        fail("import.cooked_root_busy", error.what());
       } catch (const std::exception& error) {
-        fail(error.what());
+        fail("import.exception", error.what());
       } catch (...) {
-        fail("Unknown import exception");
+        fail("import.exception", "Unknown import exception");
       }
     } catch (...) {
       // A minimal failed report still carries completion during memory

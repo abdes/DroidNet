@@ -398,7 +398,6 @@ auto WorkDispatcher::EmitBufferSidecarDescriptor(
 {
   const auto resource_index = sidecar.resource_index;
   const auto source_id = sidecar.source_id;
-  const auto relpath = sidecar.relpath;
   auto& buffer_emitter = session_.BufferEmitter();
   const auto descriptor
     = buffer_emitter.TryGetDescriptor(static_cast<uint32_t>(resource_index));
@@ -412,8 +411,8 @@ auto WorkDispatcher::EmitBufferSidecarDescriptor(
 
   try {
     [[maybe_unused]] const auto emitted
-      = session_.ResourceDescriptorEmitter().EmitBufferAtRelPath(
-        relpath, resource_index, *descriptor);
+      = session_.ResourceDescriptorEmitter().EmitBuffer(
+        sidecar.virtual_path, resource_index, *descriptor);
     return true;
   } catch (const std::exception& ex) {
     session_.AddDiagnostic(
@@ -668,8 +667,10 @@ auto WorkDispatcher::EmitMeshBuffers(
     if (!EmitBufferSidecarDescriptor({
           .resource_index = data::pak::core::ResourceIndexT { emitted },
           .source_id = buffer_id,
-          .relpath = GeometryBufferRelPath(
-            result.cooked->descriptor_relpath, lod_index, suffix),
+          .virtual_path = std::string(session_.Request().OutputMountRoot())
+            + "/"
+            + GeometryBufferRelPath(
+              result.cooked->descriptor_relpath, lod_index, suffix),
         })) {
       return false;
     }

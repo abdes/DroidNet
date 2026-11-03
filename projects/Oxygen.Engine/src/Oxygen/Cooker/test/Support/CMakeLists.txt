@@ -17,6 +17,8 @@ add_library(
   Oxygen.Cooker.TestSupport
   STATIC
   "AuthoredFiles.h"
+  "CookedFiles.cpp"
+  "CookedFiles.h"
   "Diagnostics.h"
   "FileIo.cpp"
   "FileIo.h"
@@ -117,9 +119,4 @@ function(oxygen_cooker_test area tier)
   )
 endfunction()
 
-oxygen_cooker_test(
-  Support
-  FUNCTIONAL
-  SOURCES
-    "Support_functional_test.cpp"
-)
+oxygen_cooker_test(Support FUNCTIONAL SOURCES "Support_functional_test.cpp")

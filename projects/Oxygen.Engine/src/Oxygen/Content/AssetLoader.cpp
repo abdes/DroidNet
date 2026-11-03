@@ -49,6 +49,7 @@
 #include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/ContentLoadScope.h>
 #include <Oxygen/Content/ContentMounts.h>
+#include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Internal/AssetTypes.h>
@@ -357,6 +358,21 @@ inline auto IsResourceTypeId(const oxygen::TypeId type_id) -> bool
   static const auto ids = MakeTypeIdArray(oxygen::content::ResourceTypeList {});
   return std::ranges::any_of(
     ids, [type_id](const auto id) -> auto { return id == type_id; });
+}
+
+//! Logs each requirement of the mounted loose root `key` that the layers
+//! below it do not meet; the root stays mounted.
+auto WarnUnmetRequirements(
+  const oxygen::content::internal::ContentSourceRegistry& registry,
+  const oxygen::data::SourceKey key, const std::string_view root) -> void
+{
+  for (const auto& failed : registry.UnmetRequirements(key)) {
+    LOG_F(WARNING,
+      "Loose cooked root '{}' requires {} of mount '{}': {}; what references "
+      "it fails to load",
+      root, oxygen::data::to_string(failed.requirement.key), failed.mount,
+      oxygen::content::to_string(failed.failure));
+  }
 }
 } // namespace
 
@@ -1305,9 +1321,11 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
   }
 #endif
 
+  const auto source_key = new_source->GetSourceKey();
   const auto mount_result
     = impl_->source_registry.MountLoose(normalized_s, std::move(new_source));
   ++impl_->mount_revision;
+  WarnUnmetRequirements(impl_->source_registry, source_key, normalized_s);
   if (mount_result.action
       == internal::ContentSourceRegistry::MountAction::kRefreshed
     || was_already_mounted) {
@@ -1345,8 +1363,16 @@ auto AssetLoader::DoMountLooseCookedGeneration(
   static_cast<void>(
     impl_->source_registry.MountGeneration(std::move(source), replaces));
   ++impl_->mount_revision;
+  WarnUnmetRequirements(impl_->source_registry, key, normalized.string());
   AssertSourceKeyConsistency("MountLooseCookedGeneration");
   return key;
+}
+
+auto AssetLoader::UnmetRequirements(const data::SourceKey source_key) const
+  -> std::vector<FailedRequirement>
+{
+  AssertOwningThread();
+  return impl_->source_registry.UnmetRequirements(source_key);
 }
 
 auto AssetLoader::RetireLooseCookedGeneration(const data::SourceKey source_key)

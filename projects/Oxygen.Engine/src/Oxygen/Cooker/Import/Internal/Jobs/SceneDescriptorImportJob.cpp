@@ -27,7 +27,6 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
-#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -370,26 +369,19 @@ namespace {
   //! return nothing.
   auto ResolveEnvironmentTexture(observer_ptr<ImportSession> session,
     observer_ptr<const ImportRequest> request,
-    observer_ptr<IAsyncFileReader> reader,
     const std::span<const internal::MountedCookedSource> mounts,
     std::string text, std::string object_path, const EnvironmentTextureUse use)
     -> co::Co<std::optional<data::TextureTarget>>
   {
     const auto prefix = std::string(EnvironmentTextureDiagnosticPrefix(use));
-    if (!reader) {
-      AddDiagnostic(*session, *request, ImportSeverity::kError,
-        prefix + "reader_unavailable",
-        "Texture descriptor reader is unavailable", object_path);
-      co_return std::nullopt;
-    }
-    const auto reference = co_await internal::ResolveTextureReference(session,
-      request, reader, mounts,
-      {
-        .text = std::move(text),
-        .object_path = object_path,
-        .diagnostic_prefix = "scene.descriptor.",
-        .allow_missing = true,
-      });
+    const auto reference
+      = co_await internal::ResolveTextureReference(session, request, mounts,
+        {
+          .text = std::move(text),
+          .object_path = object_path,
+          .diagnostic_prefix = "scene.descriptor.",
+          .allow_missing = true,
+        });
     if (!reference) {
       co_return std::nullopt;
     }
@@ -1026,8 +1018,8 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       co_return true;
     }
     const auto resolved = co_await ResolveEnvironmentTexture(
-      observer_ptr { &session }, observer_ptr { &Request() }, CookedReader(),
-      context.mounts, *path, std::move(object_path), use);
+      observer_ptr { &session }, observer_ptr { &Request() }, context.mounts,
+      *path, std::move(object_path), use);
     if (!resolved.has_value()) {
       co_return false;
     }

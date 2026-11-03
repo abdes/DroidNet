@@ -29,6 +29,7 @@
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/ScriptSealing.h>
 #include <Oxygen/Cooker/Tools/PakTool/StagedSourceStorage.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Cooker/testing/ScriptBuilder.h>
@@ -201,6 +202,11 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
       .completes = {},
     });
   static_cast<void>(writer.Finish());
+  // Sealing rewrites the descriptor in place, under the content name the
+  // original index lists.
+  const auto script_content_relpath
+    = oxygen::cooker::test::CookedFile(cooked_root, script_relpath)
+        .lexically_relative(cooked_root);
 
   auto request = PakBuildRequest {};
   request.mode = BuildMode::kFull;
@@ -228,14 +234,14 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   EXPECT_TRUE(std::filesystem::exists(
     oxygen::base::ToNativePath(staged_root / "container.index.bin")));
 
-  const auto staged_descriptor = ReadScriptAssetDescriptor(
-    staged_root / std::filesystem::path(script_relpath));
+  const auto staged_descriptor
+    = ReadScriptAssetDescriptor(staged_root / script_content_relpath);
   EXPECT_NE(staged_descriptor.source_resource_index, kNoResourceReference);
   EXPECT_EQ(static_cast<uint32_t>(staged_descriptor.flags), 0U);
   EXPECT_EQ(staged_descriptor.external_source_path_offset, 0U);
   // The sealed descriptor's string table no longer holds the external path.
-  const auto staged_bytes = oxygen::cooker::test::ReadBytes(
-    staged_root / std::filesystem::path(script_relpath));
+  const auto staged_bytes
+    = oxygen::cooker::test::ReadBytes(staged_root / script_content_relpath);
   const auto path_bytes = std::as_bytes(std::span(stored_external_path));
   EXPECT_TRUE(std::ranges::search(staged_bytes, path_bytes).empty());
 
@@ -400,7 +406,7 @@ NOLINT_TEST(
         .source = "/Content/spin.lua",
         .completes = {},
       });
-    writer.RegisterExternalAuxiliaryFile("Ship/Hull.obuf",
+    writer.RegisterExternalAuxiliaryFile("Ship/Hull.obuf", {},
       oxygen::content::import::LooseCookedProducer {
         .source = "/Content/Ship.glb",
         .completes = {},
@@ -411,6 +417,11 @@ NOLINT_TEST(
       });
     static_cast<void>(writer.Finish());
   }
+  // Sealing rewrites the descriptor in place, under the content name the
+  // original index lists.
+  const auto spin_relpath
+    = oxygen::cooker::test::CookedFile(cooked, "spin.oscript", memory)
+        .lexically_relative(cooked);
   auto request = PakBuildRequest {};
   request.mode = BuildMode::kFull;
   request.sources = {
@@ -426,7 +437,7 @@ NOLINT_TEST(
   ASSERT_HAS_VALUE(sealed) << sealed.error().error_code << ": "
                            << sealed.error().error_message;
   const auto& staged_root = sealed->build_request.sources.at(0).path;
-  EXPECT_EQ(memory.KindOf(staged_root / "spin.oscript"), PathKind::kFile);
+  EXPECT_EQ(memory.KindOf(staged_root / spin_relpath), PathKind::kFile);
   EXPECT_EQ(memory.KindOf(staged_root / "Ship/Hull.obuf"), PathKind::kNone);
   EXPECT_EQ(staged.KindOf(staged_root / "Ship/Hull.obuf"), PathKind::kFile);
   const auto index_bytes = oxygen::content::cooked::ReadWholeFile(staged,

@@ -443,7 +443,7 @@ namespace {
     ASSERT_HAS_VALUE(script_c) << "Expected script c to be present";
 
     const auto base_scene_bytes
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key);
     auto base_scene = data::SceneAsset(scene_asset->key, base_scene_bytes);
     ASSERT_GT(base_scene.GetNodes().size(), 1U);
 
@@ -498,7 +498,7 @@ namespace {
     const auto& slots = script_state.slots;
 
     const auto patched_scene_bytes
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key);
     auto patched_scene
       = data::SceneAsset(scene_asset->key, patched_scene_bytes);
     const auto components
@@ -553,7 +553,7 @@ namespace {
     const auto inspection_after_success = LoadInspection(cooked_root);
 
     const auto scene_before_failure
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key);
 
     WriteText(sidecar_source,
       MakeSidecarPayload(
@@ -569,7 +569,7 @@ namespace {
       failure_report.diagnostics, "script.sidecar.script_ref_unresolved"));
 
     const auto scene_after_failure
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key);
 
     EXPECT_EQ(scene_before_failure, scene_after_failure);
   }
@@ -592,7 +592,7 @@ namespace {
     ASSERT_HAS_VALUE(script_asset) << "Expected script asset to be present";
 
     const auto scene_before
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key);
     ASSERT_FALSE(scene_before.empty());
 
     const auto sidecar_source
@@ -606,7 +606,20 @@ namespace {
       .cooked_root = cooked_root,
       .scene_virtual_path = scene_asset->virtual_path,
     });
-    const auto index_before = ReadBytes(cooked_root / "container.index.bin");
+    // A refused write still ends in a commit of the writer's lease, so the
+    // index bytes (its commit number) move; the listing it publishes must not.
+    const auto listed_descriptors = [](const std::filesystem::path& root)
+      -> std::vector<std::pair<data::AssetKey, std::filesystem::path>> {
+      const auto content = LoadInspection(root);
+      auto listed
+        = std::vector<std::pair<data::AssetKey, std::filesystem::path>> {};
+      for (const auto& asset : content.Assets()) {
+        listed.emplace_back(
+          asset.key, content.DescriptorStored(asset.key).file);
+      }
+      return listed;
+    };
+    const auto listing_before = listed_descriptors(cooked_root);
     auto inflight = MakeInflightSceneContext(cooked_root, *scene_asset);
     inflight.descriptor_relpath = "blocked-parent/scene.oscene";
     request.inflight_scene_contexts.push_back(std::move(inflight));
@@ -617,8 +630,8 @@ namespace {
     EXPECT_TRUE(HasDiagnosticCode(
       report.diagnostics, "script.sidecar.scene_emit_failed"));
     EXPECT_EQ(
-      scene_before, ReadBytes(cooked_root / scene_asset->descriptor_relpath));
-    EXPECT_EQ(index_before, ReadBytes(cooked_root / "container.index.bin"));
+      scene_before, ReadCurrentDescriptor(cooked_root, scene_asset->key));
+    EXPECT_EQ(listing_before, listed_descriptors(cooked_root));
   }
 
   NOLINT_TEST_F(
@@ -665,9 +678,7 @@ namespace {
     for (const auto& asset : before_inspection.Assets()) {
       if (asset.type == AssetType::kScript) {
         const auto descriptor_name
-          = before_inspection.DescriptorStored(asset.key)
-              .file.filename()
-              .string();
+          = DescriptorLayoutName(before_inspection, asset.key);
         if (descriptor_name == "script_a.oscript") {
           script_a_asset = AssetRef {
             .key = asset.key,
@@ -722,7 +733,7 @@ namespace {
     EXPECT_EQ(slots.at(0).script_asset_key, script_b_asset->key);
 
     const auto scene_bytes
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key);
     ASSERT_FALSE(scene_bytes.empty());
     auto scene = data::SceneAsset(scene_asset->key, scene_bytes);
     const auto components = scene.GetComponents<ScriptingComponentRecord>();
@@ -778,7 +789,7 @@ namespace {
     const auto first_inspection = LoadInspection(cooked_root);
 
     const auto first_scene_bytes
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key);
 
     ASSERT_TRUE(Submit(MakeSidecarRequest({
                          .source_path = sidecar_source,
@@ -788,7 +799,7 @@ namespace {
         .success);
 
     const auto second_scene_bytes
-      = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key);
 
     EXPECT_EQ(first_scene_bytes, second_scene_bytes);
   }
@@ -819,8 +830,8 @@ namespace {
         std::vector<std::byte>(strings.begin(), strings.end()) };
     };
 
-    const auto core_before = ExtractCoreTables(
-      ReadBytes(cooked_root / scene_asset->descriptor_relpath));
+    const auto core_before
+      = ExtractCoreTables(ReadCurrentDescriptor(cooked_root, scene_asset->key));
 
     const auto sidecar_source
       = cooked_root / "input" / "patch_guard_sidecar.json";
@@ -834,8 +845,8 @@ namespace {
                        }))
         .success);
 
-    const auto core_after = ExtractCoreTables(
-      ReadBytes(cooked_root / scene_asset->descriptor_relpath));
+    const auto core_after
+      = ExtractCoreTables(ReadCurrentDescriptor(cooked_root, scene_asset->key));
 
     // Nodes are untouched; the slot parameters' strings join the string
     // table after the strings already there, which keep their offsets.
@@ -875,8 +886,8 @@ namespace {
                        }))
         .success);
 
-    const auto first_size = std::filesystem::file_size(
-      cooked_root / scene_asset->descriptor_relpath);
+    const auto first_size
+      = ReadCurrentDescriptor(cooked_root, scene_asset->key).size();
 
     WriteText(sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(
@@ -890,8 +901,7 @@ namespace {
         .success);
 
     EXPECT_EQ(
-      std::filesystem::file_size(cooked_root / scene_asset->descriptor_relpath),
-      first_size);
+      ReadCurrentDescriptor(cooked_root, scene_asset->key).size(), first_size);
     const auto script_state = ReadSceneScriptState(cooked_root, *scene_asset);
     const auto& slots = script_state.slots;
     const auto& params = script_state.params;
@@ -969,8 +979,7 @@ namespace {
       if (type != AssetType::kScene) {
         continue;
       }
-      const auto descriptor_name
-        = inspection.DescriptorStored(entry.key).file.filename().string();
+      const auto descriptor_name = DescriptorLayoutName(inspection, entry.key);
       if (descriptor_name == "scene_a.oscene") {
         scene_a = AssetRef {
           .key = entry.key,
@@ -1019,7 +1028,7 @@ namespace {
     const auto ReadSlotStartForNodeZero
       = [&](const AssetRef& scene_ref) -> auto {
       const auto scene_bytes
-        = ReadBytes(cooked_root / scene_ref.descriptor_relpath);
+        = ReadCurrentDescriptor(cooked_root, scene_ref.key);
       auto scene = data::SceneAsset(scene_ref.key, scene_bytes);
       const auto components = scene.GetComponents<ScriptingComponentRecord>();
       const auto component
@@ -1061,8 +1070,7 @@ namespace {
     ASSERT_FALSE(slots.empty());
     ASSERT_FALSE(params.empty());
 
-    const auto scene_b_bytes
-      = ReadBytes(cooked_root / scene_b->descriptor_relpath);
+    const auto scene_b_bytes = ReadCurrentDescriptor(cooked_root, scene_b->key);
     auto scene_b_asset = data::SceneAsset(scene_b->key, scene_b_bytes);
     const auto components
       = scene_b_asset.GetComponents<ScriptingComponentRecord>();

@@ -27,6 +27,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -42,12 +43,14 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -68,36 +71,22 @@ namespace {
     using std::runtime_error::runtime_error;
   };
 
-  //! Creates the file `path` empty when it names nothing.
-  auto EnsureExternalFileExists(
-    cooked::CookerStorage& storage, const std::filesystem::path& path) -> void
-  {
-    if (storage.KindOf(path) != cooked::PathKind::kNone) {
-      return;
-    }
-    if (const auto created = cooked::PublishWholeFile(storage, path, {});
-      !created) {
-      throw std::system_error(
-        created.error(), "Failed to create external file: " + path.string());
-    }
-  }
+  //! A resource table kind, its data file kind and the data file's path.
+  struct ResourceFiles final {
+    data::loose_cooked::FileKind table;
+    data::loose_cooked::FileKind data;
+    std::string_view data_relpath;
+  };
 
-  //! Registers a table this session wrote, with the digest its aggregator
-  //! computed as it wrote it. A table this session did not write keeps the
-  //! record its writer published.
-  auto RegisterExternalTable(LooseCookedIndexRegistry& registry,
-    const data::loose_cooked::FileKind kind,
-    const std::filesystem::path& cooked_root, std::string_view relpath,
-    const ResourceTableRegistry::SessionEnd& tables) -> void
+  //! The table of `kind` this session wrote, under its content name; none
+  //! when the session wrote none, and the published one stays.
+  auto WrittenTableOf(const ResourceTableRegistry::SessionEnd& tables,
+    const data::loose_cooked::FileKind kind)
+    -> const ResourceTableRegistry::WrittenTable*
   {
     const auto written = std::ranges::find(
       tables.written, kind, &ResourceTableRegistry::WrittenTable::kind);
-    if (written == tables.written.end()) {
-      return;
-    }
-    const auto path = cooked_root / std::filesystem::path(relpath);
-    EnsureExternalFileExists(*registry.Storage(), path);
-    registry.RegisterExternalFile(cooked_root, kind, relpath, written->digest);
+    return written == tables.written.end() ? nullptr : &*written;
   }
 
   auto AppendOutputRecord(const cooked::CookerStorage& storage,
@@ -239,7 +228,6 @@ ImportSession::ImportSession(const ImportRequest& request,
   , index_registry_(index_registry)
   , storage_(StorageOf(index_registry))
   , cooked_root_(request.ResolveCookedRoot())
-  , cooked_writer_(cooked_root_, *storage_)
 {
   DLOG_F(INFO, "Session created for: {}", request_.source_path.string());
 
@@ -249,17 +237,14 @@ ImportSession::ImportSession(const ImportRequest& request,
   DCHECK_F(table_registry_ != nullptr,
     "ImportSession requires a ResourceTableRegistry");
 
-  // Set source key if provided in request
-  if (request_.source_key.has_value()) {
-    cooked_writer_.SetSourceKey(request_.source_key);
-  }
-
-  table_participation_.emplace(table_registry_->BeginSession(cooked_root_));
+  // The index session takes the root's writer lease and drops what no
+  // commit records, so the tables load what the latest commit lists.
+  index_participation_.emplace(
+    index_registry_->BeginSession(cooked_root_, request_.source_key));
   try {
-    index_participation_.emplace(
-      index_registry_->BeginSession(cooked_root_, request_.source_key));
+    table_participation_.emplace(table_registry_->BeginSession(cooked_root_));
   } catch (...) {
-    table_registry_->AbortSession(*table_participation_);
+    index_registry_->AbortSession(*index_participation_);
     throw;
   }
 }
@@ -306,11 +291,6 @@ auto ImportSession::Request() const noexcept -> const ImportRequest&
 auto ImportSession::CookedRoot() const noexcept -> const std::filesystem::path&
 {
   return cooked_root_;
-}
-
-auto ImportSession::CookedWriter() noexcept -> LooseCookedWriter&
-{
-  return cooked_writer_;
 }
 
 auto ImportSession::FileReader() const noexcept
@@ -745,60 +725,44 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
 
     bool output_missing = false;
 
-    if (texture_count > 0) {
-      index_registry_->RegisterExternalDataFile(
-        cooked_root_, FileKind::kTexturesData, loose_layout::kTexturesData);
-
-      RegisterExternalTable(*index_registry_, FileKind::kTexturesTable,
-        cooked_root_, loose_layout::kTexturesTable, tables);
-
-      output_missing |= !AppendOutputRecord(*storage_, report.outputs,
-        report.diagnostics, cooked_root_, loose_layout::kTexturesData,
-        request_.source_path.string());
-      output_missing |= !AppendOutputRecord(*storage_, report.outputs,
-        report.diagnostics, cooked_root_, loose_layout::kTexturesTable,
-        request_.source_path.string());
-    }
-
-    if (buffer_count > 0) {
-      index_registry_->RegisterExternalDataFile(
-        cooked_root_, FileKind::kBuffersData, loose_layout::kBuffersData);
-
-      RegisterExternalTable(*index_registry_, FileKind::kBuffersTable,
-        cooked_root_, loose_layout::kBuffersTable, tables);
-
-      output_missing |= !AppendOutputRecord(*storage_, report.outputs,
-        report.diagnostics, cooked_root_, loose_layout::kBuffersData,
-        request_.source_path.string());
-      output_missing |= !AppendOutputRecord(*storage_, report.outputs,
-        report.diagnostics, cooked_root_, loose_layout::kBuffersTable,
-        request_.source_path.string());
-    }
-
-    const auto physics_table_rel = loose_layout::kPhysicsTable;
-    const auto physics_data_rel = loose_layout::kPhysicsData;
-    const auto physics_table_path = cooked_root_ / physics_table_rel;
-    const auto physics_data_path = cooked_root_ / physics_data_rel;
-    const auto physics_table_exists
-      = storage_->KindOf(physics_table_path) == cooked::PathKind::kFile;
-    const auto physics_data_exists
-      = storage_->KindOf(physics_data_path) == cooked::PathKind::kFile;
-
-    if (physics_table_exists || physics_data_exists) {
-      if (physics_data_exists) {
+    // A data file and the table of its rows register together; the table
+    // has its content name, which the session's table finalization gave it.
+    const auto register_resource = [&](const ResourceFiles& files) -> void {
+      if (storage_->KindOf(cooked_root_ / files.data_relpath)
+        == cooked::PathKind::kFile) {
         index_registry_->RegisterExternalDataFile(
-          cooked_root_, FileKind::kPhysicsData, physics_data_rel);
+          cooked_root_, files.data, files.data_relpath);
+        output_missing
+          |= !AppendOutputRecord(*storage_, report.outputs, report.diagnostics,
+            cooked_root_, files.data_relpath, request_.source_path.string());
       }
-      RegisterExternalTable(*index_registry_, FileKind::kPhysicsTable,
-        cooked_root_, physics_table_rel, tables);
-
-      output_missing
-        |= !AppendOutputRecord(*storage_, report.outputs, report.diagnostics,
-          cooked_root_, physics_data_rel, request_.source_path.string());
-      output_missing
-        |= !AppendOutputRecord(*storage_, report.outputs, report.diagnostics,
-          cooked_root_, physics_table_rel, request_.source_path.string());
+      if (const auto* const table = WrittenTableOf(tables, files.table)) {
+        index_registry_->RegisterExternalFile(
+          cooked_root_, files.table, table->relpath, table->digest);
+        output_missing
+          |= !AppendOutputRecord(*storage_, report.outputs, report.diagnostics,
+            cooked_root_, table->relpath, request_.source_path.string());
+      }
+    };
+    if (texture_count > 0) {
+      register_resource({
+        .table = FileKind::kTexturesTable,
+        .data = FileKind::kTexturesData,
+        .data_relpath = loose_layout::kTexturesData,
+      });
     }
+    if (buffer_count > 0) {
+      register_resource({
+        .table = FileKind::kBuffersTable,
+        .data = FileKind::kBuffersData,
+        .data_relpath = loose_layout::kBuffersData,
+      });
+    }
+    register_resource({
+      .table = FileKind::kPhysicsTable,
+      .data = FileKind::kPhysicsData,
+      .data_relpath = loose_layout::kPhysicsData,
+    });
 
     // Only the entries the index records a producer for need one.
     const auto producer = Producer();
@@ -812,14 +776,30 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     if (asset_emitter_.has_value()) {
       const auto& records = (*asset_emitter_)->Records();
       report.outputs.reserve(report.outputs.size() + records.size());
+      // What each asset requires of other mounts, from the cooked roots its
+      // job reads; read once, for the assets that reference other keys.
+      auto mounts
+        = std::optional<std::vector<internal::MountedCookedSource>> {};
       for (const auto& rec : records) {
+        auto requirements
+          = std::vector<data::loose_cooked::IndexedRequirement> {};
+        if (!rec.references.Keys().empty()) {
+          if (!mounts.has_value()) {
+            mounts = internal::LoadMountedCookedSources(
+              *this, request_, "import.requirements.");
+          }
+          const auto own_mount = content::MountRootOf(rec.virtual_path);
+          requirements = internal::RequirementsOf(*mounts,
+            own_mount.empty() ? own_mount : own_mount.substr(1),
+            rec.references);
+        }
         index_registry_->RegisterProducedAssetDescriptor(cooked_root_, rec.key,
           rec.asset_type, rec.virtual_path, rec.descriptor_relpath,
           LooseCookedFileDigest {
             .size = rec.descriptor_size,
             .sha256 = rec.descriptor_sha256,
           },
-          rec.references, recorded_producer());
+          rec.references, recorded_producer(), requirements);
         report.outputs.push_back({
           .path = rec.descriptor_relpath,
           .size_bytes = rec.descriptor_size,
@@ -844,9 +824,9 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
           .size = rec.size_bytes,
           .sha256 = rec.sha256,
         };
-        if (rec.virtual_path.empty()) {
-          index_registry_->RegisterExternalAuxiliaryFile(
-            cooked_root_, rec.relpath, recorded_producer(), produced);
+        if (rec.kind == data::loose_cooked::FileKind::kAuxiliary) {
+          index_registry_->RegisterExternalAuxiliaryFile(cooked_root_,
+            rec.relpath, rec.virtual_path, recorded_producer(), produced);
         } else {
           index_registry_->RegisterExternalTextureDescriptor(cooked_root_,
             rec.relpath, rec.virtual_path, recorded_producer(), produced);

@@ -51,6 +51,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
@@ -1452,7 +1453,7 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, ModelsShareACookedRootByIdentity)
          "A/Triangle.gltf/Triangle.lod0.index.obuf",
          "B/Triangle.gltf/Triangle.lod0.vertex.obuf",
        }) {
-    EXPECT_TRUE(std::filesystem::is_regular_file(cooked_root / buffer))
+    EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(cooked_root, buffer))
       << buffer;
   }
 }

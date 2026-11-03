@@ -14,9 +14,11 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
@@ -209,6 +211,55 @@ namespace {
       static_cast<void>(registry.MountLoose(emptied->DebugName(), emptied)),
       DependencyRequirementError);
     EXPECT_EQ(registry.Sources().front(), engine);
+  }
+
+  //! A loose root of mount `mount` whose material requires the `Engine`
+  //! material.
+  auto LooseContent() -> std::shared_ptr<FakeContentSource>
+  {
+    auto content = std::make_shared<FakeContentSource>(
+      "Content", data::SourceKey { Uuid::Generate() });
+    const auto requirement = MaterialRequirement();
+    content->SetLooseRequirements({ lc::AssetRequirement {
+      .asset = AssetKey::FromVirtualPath("/Content/Wall.omat"),
+      .requirement = data::loose_cooked::IndexedRequirement {
+        .mount = "Engine",
+        .kind = requirement.kind,
+        .key = requirement.key,
+        .type = requirement.type,
+      },
+    }, });
+    return content;
+  }
+
+  //! A loose root is content being authored: it mounts with a requirement
+  //! no layer below meets, and the registry lists it.
+  NOLINT_TEST(ContentSourceRegistryRequirementTest, ALooseRootMountsUnmet)
+  {
+    auto registry = ContentSourceRegistry {};
+    const auto content = LooseContent();
+
+    static_cast<void>(registry.MountLoose(content->DebugName(), content));
+
+    EXPECT_EQ(registry.Sources().size(), 1U);
+    const auto unmet = registry.UnmetRequirements(content->GetSourceKey());
+    ASSERT_EQ(unmet.size(), 1U);
+    EXPECT_EQ(unmet.front().mount, "Engine");
+    EXPECT_EQ(unmet.front().failure, RequirementFailure::kMissing);
+    EXPECT_EQ(unmet.front().requirement, MaterialRequirement());
+  }
+
+  //! A layer below that provides it meets a loose root's requirement.
+  NOLINT_TEST(ContentSourceRegistryRequirementTest, ALooseRootIsMetBelow)
+  {
+    auto registry = ContentSourceRegistry {};
+    const auto engine = Engine();
+    static_cast<void>(registry.MountLoose(engine->DebugName(), engine));
+    const auto content = LooseContent();
+
+    static_cast<void>(registry.MountLoose(content->DebugName(), content));
+
+    EXPECT_TRUE(registry.UnmetRequirements(content->GetSourceKey()).empty());
   }
 
 } // namespace

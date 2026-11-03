@@ -33,6 +33,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Testing/GTest.h>
@@ -279,7 +280,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto result = RunBatch(manifest_path);
   ASSERT_FALSE(result.has_value()) << Messages();
   EXPECT_EQ(result.error(), std::make_error_code(std::errc::invalid_argument));
-  EXPECT_TRUE(std::filesystem::exists(root / ".cooked/Materials/Valid.omat"));
+  EXPECT_TRUE(
+    authored::HasCookedFile(root / ".cooked", "Materials/Valid.omat"));
   EXPECT_THAT(Messages(), ::testing::HasSubstr("validation_errors=1"));
 }
 
@@ -450,8 +452,8 @@ NOLINT_TEST_F(
         "depends_on":["common"]}]})");
 
   EXPECT_TRUE(RunBatch(manifest_path).has_value()) << Messages();
-  EXPECT_TRUE(std::filesystem::exists(
-    cooked_root / "Input" / "Player.input" / "OnFoot.oimap"));
+  EXPECT_TRUE(
+    authored::HasCookedFile(cooked_root, "Input/Player.input/OnFoot.oimap"));
 }
 
 //! A mapping naming an action that no mounted source declares is refused.
@@ -1115,8 +1117,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, TwoManifestsRunAsOneBatch)
   ASSERT_TRUE(stream.is_open());
   const auto report = nlohmann::json::parse(stream);
   EXPECT_EQ(report.at("jobs").size(), 2U);
-  EXPECT_TRUE(std::filesystem::exists(root / ".cooked/Wood.omat"));
-  EXPECT_TRUE(std::filesystem::exists(root / ".cooked/Stone.omat"));
+  EXPECT_TRUE(authored::HasCookedFile(root / ".cooked", "Wood.omat"));
+  EXPECT_TRUE(authored::HasCookedFile(root / ".cooked", "Stone.omat"));
 }
 
 //! Two manifests that map one mount name to two folders cannot share a batch:

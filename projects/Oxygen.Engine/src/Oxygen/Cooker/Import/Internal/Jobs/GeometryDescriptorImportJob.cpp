@@ -205,7 +205,7 @@ namespace {
       if (!mount.content.has_value()) {
         continue;
       }
-      if (mount.content->FindSidecar(relpath) == nullptr) {
+      if (mount.content->FindSidecar(reference->resolved) == nullptr) {
         looked_up.push_back(mount.root / std::filesystem::path(relpath));
         continue;
       }
@@ -235,8 +235,9 @@ namespace {
           std::move(object_path));
         co_return std::nullopt;
       }
+      // The file its index lists, under its content name.
       const auto descriptor_path
-        = matched.root / std::filesystem::path(relpath);
+        = matched.content->FindSidecar(reference->resolved)->stored.file;
       const auto read_start = std::chrono::steady_clock::now();
       const auto read_result
         = co_await context.reader->ReadFile(descriptor_path);

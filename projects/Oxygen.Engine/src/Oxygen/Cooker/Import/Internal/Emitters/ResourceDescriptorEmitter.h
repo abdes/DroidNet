@@ -22,6 +22,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
@@ -32,20 +33,26 @@ namespace oxygen::content::import {
 
 //! Emits sidecar descriptors for resource-table entries (`.otex`, `.obuf`).
 /*!
- Writes compact descriptor files that map a stable authored name to an emitted
- resource-table index and descriptor payload.
+ Writes compact descriptor files that map a stable authored name, the
+ virtual path a reference names it by, to an emitted resource-table index and
+ descriptor payload.
 
- Each descriptor is published through `ImportStorage::PublishAsync` by a task
- of the import session's nursery, and `Finalize()` joins the writes.
+ Each descriptor is published under its content name
+ (`data::loose_cooked::ContentRelPath`) through `ImportStorage::PublishAsync`
+ by a task of the import session's nursery, and `Finalize()` joins the
+ writes.
 */
 class ResourceDescriptorEmitter final {
 public:
   struct Record final {
+    //! `kTextureDescriptor`, or `kAuxiliary` for a buffer descriptor.
+    data::loose_cooked::FileKind kind = data::loose_cooked::FileKind::kUnknown;
+    //! Its content name below the cooked root.
     std::string relpath;
     uint64_t size_bytes = 0;
     //! SHA-256 of the descriptor bytes, computed before they are written.
     base::Sha256Digest sha256 {};
-    //! Virtual path of a texture descriptor; empty for buffer descriptors.
+    //! The virtual path a reference names it by.
     std::string virtual_path;
   };
 
@@ -59,18 +66,17 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ResourceDescriptorEmitter)
   OXYGEN_MAKE_NON_MOVABLE(ResourceDescriptorEmitter)
 
-  //! Emit a texture descriptor at its identity and return its root-relative
-  //! path. An identity in no mount throws std::invalid_argument; a path the
-  //! loose cooked index cannot hold throws std::runtime_error, before any
-  //! write.
+  //! Emit a texture descriptor at its identity and return its content name
+  //! below the cooked root. An identity in no mount throws
+  //! std::invalid_argument; a path the loose cooked index cannot hold throws
+  //! std::runtime_error, before any write.
   OXGN_COOK_NDAPI auto EmitTexture(std::string_view virtual_path,
     data::pak::core::ResourceIndexT resource_index,
     const data::pak::core::TextureResourceDesc& descriptor) -> std::string;
 
-  //! Emit a buffer descriptor at an explicit relative path and return it. A
-  //! path the loose cooked index cannot hold throws std::runtime_error, before
-  //! any write.
-  OXGN_COOK_NDAPI auto EmitBufferAtRelPath(std::string_view relpath,
+  //! Emit a buffer descriptor at its identity and return its content name
+  //! below the cooked root, with the same refusals as `EmitTexture`.
+  OXGN_COOK_NDAPI auto EmitBuffer(std::string_view virtual_path,
     data::pak::core::ResourceIndexT resource_index,
     const data::pak::core::BufferResourceDesc& descriptor,
     std::span<const data::BufferResourceView> views = {}) -> std::string;
@@ -82,13 +88,15 @@ public:
   OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, WriteFailure>>;
 
 private:
-  //! Records the descriptor `bytes` at `relpath`; false when an equal
-  //! descriptor is already recorded there, so nothing is to be written.
+  //! The content name of the descriptor `bytes` of `virtual_path`, after
+  //! checking the identity; the descriptor is recorded and written once.
   /*!
-   @throw std::runtime_error When `relpath` already holds other bytes.
+   @throw std::invalid_argument When `virtual_path` names no mount.
+   @throw std::runtime_error When its path cannot be an index path, or the
+     identity was emitted with other bytes.
   */
-  auto RecordOnce(const std::string& relpath, std::span<const std::byte> bytes,
-    std::string virtual_path) -> bool;
+  auto Emit(data::loose_cooked::FileKind kind, std::string_view virtual_path,
+    std::vector<std::byte> bytes) -> std::string;
   auto QueueWrite(std::string relpath, std::vector<std::byte> bytes) -> void;
   auto WriteDescriptor(std::string relpath, std::vector<std::byte> bytes)
     -> co::Co<Result<void>>;
@@ -97,6 +105,7 @@ private:
   observer_ptr<serio::IoDriver> driver_;
   WriteGroup writes_;
   std::filesystem::path cooked_root_;
+  //! By virtual path.
   std::unordered_map<std::string, Record> records_;
 };
 

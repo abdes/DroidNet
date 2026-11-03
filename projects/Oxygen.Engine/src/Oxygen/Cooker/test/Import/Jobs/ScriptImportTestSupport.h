@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -47,6 +48,8 @@
 namespace oxygen::content::import::test {
 
 namespace lc = oxygen::content::lc;
+using oxygen::cooker::test::CookedFile;
+using oxygen::cooker::test::HasCookedFile;
 using oxygen::cooker::test::HasDiagnosticCode;
 using oxygen::cooker::test::ReadBytes;
 using oxygen::cooker::test::SpellReference;
@@ -245,6 +248,15 @@ inline auto DescriptorRelPath(const cooked::CookedContent& content,
     .generic_string();
 }
 
+//! The file name of the descriptor of `key` as the layout names it: the
+//! stored file carries its content digest, the layout name does not.
+inline auto DescriptorLayoutName(const cooked::CookedContent& content,
+  const data::AssetKey& key) -> std::string
+{
+  return oxygen::cooker::test::LayoutPathOf(
+    content.DescriptorStored(key).file.filename().generic_string());
+}
+
 inline auto MakeAssetRef(const cooked::CookedContent& content,
   const cooked::CookedAsset& entry) -> AssetRef
 {
@@ -278,9 +290,7 @@ inline auto FindScriptAssetByDescriptorName(
     if (asset.type != AssetType::kScript) {
       continue;
     }
-    const auto name
-      = content.DescriptorStored(asset.key).file.filename().string();
-    if (name != descriptor_name) {
+    if (DescriptorLayoutName(content, asset.key) != descriptor_name) {
       continue;
     }
     return MakeAssetRef(content, asset);
@@ -297,9 +307,12 @@ inline auto StoresScriptBindingsFile(const cooked::CookedContent& content)
     return name.ends_with("script-bindings.table")
       || name.ends_with("script-bindings.data");
   };
-  for (const auto kind :
-    { data::ResourceKind::kBuffer, data::ResourceKind::kTexture,
-      data::ResourceKind::kScript, data::ResourceKind::kPhysics }) {
+  for (const auto kind : {
+         data::ResourceKind::kBuffer,
+         data::ResourceKind::kTexture,
+         data::ResourceKind::kScript,
+         data::ResourceKind::kPhysics,
+       }) {
     const auto& table = content.ResourceTable(kind);
     if (is_bindings_file(table.RowsStored().file.generic_string())
       || is_bindings_file(table.DataStored().file.generic_string())) {
@@ -318,10 +331,23 @@ struct SceneScriptState {
   uint64_t parameter_base = 0U;
 };
 
+//! The bytes of the current descriptor of `key` in the loose root `root`.
+/*!
+ A re-import stores a changed descriptor under a new content name, so the path
+ an earlier snapshot of the root recorded can name a retired file.
+*/
+inline auto ReadCurrentDescriptor(const std::filesystem::path& root,
+  const data::AssetKey& key) -> std::vector<std::byte>
+{
+  const auto content
+    = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
+  return ReadBytes(content.DescriptorStored(key).file);
+}
+
 inline auto ReadSceneScriptState(
   const std::filesystem::path& root, const AssetRef& asset) -> SceneScriptState
 {
-  const auto bytes = ReadBytes(root / asset.descriptor_relpath);
+  const auto bytes = ReadCurrentDescriptor(root, asset.key);
   const auto scene = data::SceneAsset(asset.key, bytes);
   uint32_t count = 0U;
   for (const auto& component :

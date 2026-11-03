@@ -20,6 +20,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -40,6 +41,8 @@ namespace oxygen::content::import::test {
 
 namespace {
 
+  using oxygen::cooker::test::CookedFile;
+  using oxygen::cooker::test::HasCookedFile;
   using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
   using oxygen::cooker::testing::CookedPak;
@@ -156,7 +159,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
     const auto bytes
-      = ReadBytes(cooked_root / "Materials" / "HdrEmission.omat");
+      = ReadBytes(CookedFile(cooked_root, "Materials/HdrEmission.omat"));
     ASSERT_GE(bytes.size(), sizeof(data::pak::render::MaterialAssetDesc));
     const auto desc = ReadMaterialDesc(bytes);
     EXPECT_EQ(desc.header.version, data::pak::render::kMaterialAssetVersion);
@@ -193,9 +196,9 @@ namespace {
     EXPECT_FALSE(HasDiagnosticCode(
       report->diagnostics, "material.descriptor.texture_descriptor_missing"));
 
-    const auto material_path = cooked_root / "Materials" / "woodfloor007.omat";
-    ASSERT_TRUE(std::filesystem::exists(material_path));
-    const auto bytes = ReadBytes(material_path);
+    ASSERT_TRUE(HasCookedFile(cooked_root, "Materials/woodfloor007.omat"));
+    const auto bytes
+      = ReadBytes(CookedFile(cooked_root, "Materials/woodfloor007.omat"));
     ASSERT_GE(bytes.size(), sizeof(data::pak::render::MaterialAssetDesc));
     const auto desc = ReadMaterialDesc(bytes);
     EXPECT_EQ(desc.base_color_texture.get(), 0U);
@@ -270,7 +273,7 @@ namespace {
     EXPECT_EQ(missing->severity, ImportSeverity::kWarning);
 
     const auto bytes
-      = ReadBytes(cooked_root / "Materials" / "woodfloor007.omat");
+      = ReadBytes(CookedFile(cooked_root, "Materials/woodfloor007.omat"));
     ASSERT_GE(bytes.size(), sizeof(data::pak::render::MaterialAssetDesc));
     EXPECT_EQ(
       ReadMaterialDesc(bytes).base_color_texture, data::kNoResourceReference);
@@ -322,8 +325,8 @@ namespace {
       // Assert
       ASSERT_HAS_VALUE(report);
       EXPECT_TRUE(report->success) << context;
-      const auto desc
-        = ReadMaterialDesc(ReadBytes(cooked_root / "Materials" / "Tiles.omat"));
+      const auto desc = ReadMaterialDesc(
+        ReadBytes(CookedFile(cooked_root, "Materials/Tiles.omat")));
       EXPECT_EQ(desc.base_color_texture.get(), 0U);
       EXPECT_EQ(desc.normal_texture.get(), 0U);
       const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);

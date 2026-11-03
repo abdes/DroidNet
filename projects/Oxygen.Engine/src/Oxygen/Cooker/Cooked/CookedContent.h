@@ -75,8 +75,12 @@ struct NamedTexture final {
 //! A record that names a resource row from outside the tables, such as a
 //! buffer's `.obuf`. Only loose roots hold sidecars; a pak build reads them.
 struct CookedSidecar final {
-  //! Its name, the path below the loose root, such as `Buffers/Mesh.obuf`.
+  //! Its name, the path below the loose root, such as
+  //! `Buffers/Mesh.0123456789abcdef.obuf`; a content name.
   std::string name;
+  //! The virtual path a reference names it by, such as
+  //! `/Content/Buffers/Mesh.obuf`; empty when it has none.
+  std::string virtual_path;
   //! The virtual path of the source file that produced it.
   std::string source_path;
   StoredBytes stored;
@@ -190,7 +194,8 @@ struct CookedSummary final {
   std::set<data::AssetKey> textures;
   //! The lower assets a pak deletes, which nothing below it then provides.
   std::set<data::AssetKey> deleted;
-  //! What it requires of other mounts. A loose root states none.
+  //! What it requires of other mounts: a pak's catalog dependencies, a loose
+  //! root's requirement records.
   std::vector<data::PakCatalogDependency> requirements;
   //! The virtual paths of its scripts whose source is external, sorted. A pak
   //! has none: PakTool seals scripts.
@@ -205,9 +210,11 @@ struct CookedSummary final {
  textures against their table rows, a pak's header, footer, catalog and
  browse index.
 
- A pak stays open while the content lives. A loose root's storage are opened
- for each read and closed after it, so the import service rewrites them
- while a job holds the content; a read then sees the bytes of that moment.
+ A pak stays open while the content lives. A loose root's files are opened
+ for each read and closed after it, and the content holds the reader lease
+ of the commit it opened (a generation's own lease aside), so no writer
+ reclaims a file that commit lists: a read sees the bytes of that commit
+ while the import service writes the next one.
 */
 class CookedContent final {
 public:
@@ -275,9 +282,8 @@ public:
   OXGN_COOK_NDAPI auto Sidecars() const noexcept
     -> std::span<const CookedSidecar>;
 
-  //! The sidecar its index lists at `name`, the path below the loose root,
-  //! or null.
-  OXGN_COOK_NDAPI auto FindSidecar(std::string_view name) const noexcept
+  //! The sidecar a reference names by `virtual_path`, or null.
+  OXGN_COOK_NDAPI auto FindSidecar(std::string_view virtual_path) const noexcept
     -> const CookedSidecar*;
 
   //! The pak catalog; null for a loose root.

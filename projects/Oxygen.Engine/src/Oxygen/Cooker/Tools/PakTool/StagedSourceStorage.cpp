@@ -16,6 +16,7 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Tools/PakTool/StagedSourceStorage.h>
 #include <Oxygen/Serio/AnyDevice.h>
+#include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::pak::tool {
@@ -106,10 +107,22 @@ auto StagedSourceStorage::Publish(const std::filesystem::path& path)
   return storage_->Publish(path);
 }
 
-auto StagedSourceStorage::LockExclusive(const std::filesystem::path& path)
+auto StagedSourceStorage::TryLock(
+  const std::filesystem::path& path, const serio::FileLockMode mode) const
   -> Result<std::unique_ptr<cooked::StorageLock>>
 {
-  return storage_->LockExclusive(path);
+  return storage_->TryLock(path, mode);
+}
+
+auto StagedSourceStorage::Truncate(const std::filesystem::path& path,
+  const serio::ByteCount size) -> Result<void>
+{
+  // A file the staged root only shows is its original's, which a staged
+  // writer never cuts.
+  if (storage_->KindOf(path) != cooked::PathKind::kFile) {
+    return {};
+  }
+  return storage_->Truncate(path, size);
 }
 
 auto StagedSourceStorage::Remove(const std::filesystem::path& path)

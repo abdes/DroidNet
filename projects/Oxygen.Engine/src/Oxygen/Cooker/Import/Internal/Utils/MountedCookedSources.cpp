@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstddef>
 #include <exception>
 #include <expected>
@@ -16,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -24,8 +26,10 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedFormatError.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 
 namespace oxygen::content::import::internal {
 
@@ -124,6 +128,69 @@ auto LookupReference(const std::span<const MountedCookedSource> mounts,
   };
   return refuse(is_mounted ? AssetReferenceRefusal::kMissing
                            : AssetReferenceRefusal::kUnmounted);
+}
+
+auto RequirementsOf(const std::span<const MountedCookedSource> mounts,
+  const std::string_view own_mount, const data::AssetReferences& references)
+  -> std::vector<data::loose_cooked::IndexedRequirement>
+{
+  // The mount of what `content` provides: a cooked source holds one.
+  const auto mount_of = [](const cooked::CookedContent& content,
+                          const std::string_view virtual_path) -> std::string {
+    if (const auto root = MountRootOf(virtual_path); !root.empty()) {
+      return std::string(root.substr(1));
+    }
+    const auto& listed = content.Summary().mounts;
+    return listed.size() == 1 ? listed.front() : std::string {};
+  };
+  auto required = std::vector<data::loose_cooked::IndexedRequirement> {};
+  for (const auto& reference : references.Keys()) {
+    const auto is_asset = reference.kind == data::KeyReferenceKind::kAsset;
+    const auto is_texture = reference.kind == data::KeyReferenceKind::kTexture;
+    if (!is_asset && !is_texture) {
+      continue;
+    }
+    for (const auto& mount : std::views::reverse(mounts)) {
+      if (!mount.content.has_value()) {
+        continue;
+      }
+      const auto& content = *mount.content;
+      auto requirement
+        = std::optional<data::loose_cooked::IndexedRequirement> {};
+      if (is_asset) {
+        if (const auto* const asset = content.FindAsset(reference.key)) {
+          requirement = data::loose_cooked::IndexedRequirement {
+            .mount = mount_of(content, asset->virtual_path),
+            .kind = reference.kind,
+            .key = reference.key,
+            .type = asset->type,
+          };
+        }
+      } else if (const auto texture
+        = std::ranges::find_if(content.NamedTextures(),
+          [&](const cooked::NamedTexture& named) -> bool {
+            return data::TextureKeyFromVirtualPath(named.virtual_path)
+              == reference.key;
+          });
+        texture != content.NamedTextures().end()) {
+        requirement = data::loose_cooked::IndexedRequirement {
+          .mount = mount_of(content, texture->virtual_path),
+          .kind = reference.kind,
+          .key = reference.key,
+          .type = data::AssetType::kUnknown,
+        };
+      }
+      if (!requirement.has_value()) {
+        continue;
+      }
+      if (!requirement->mount.empty() && requirement->mount != own_mount
+        && std::ranges::find(required, *requirement) == required.end()) {
+        required.push_back(std::move(*requirement));
+      }
+      break;
+    }
+  }
+  return required;
 }
 
 auto DescribeLookup(const ResolvedReference& reference,

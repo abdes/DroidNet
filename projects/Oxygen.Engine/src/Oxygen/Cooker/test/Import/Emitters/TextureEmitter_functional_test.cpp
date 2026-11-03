@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -221,6 +222,14 @@ protected:
     return "/cooked";
   }
 
+  //! The texture table the registry published below the cooked root, found by
+  //! its layout path.
+  [[nodiscard]] auto TableFile() const -> std::filesystem::path
+  {
+    return oxygen::cooker::test::CookedFile(
+      Root(), loose_layout::kTexturesTable, files_);
+  }
+
   //! Whether the file `path` was written.
   [[nodiscard]] auto Exists(const std::filesystem::path& path) const -> bool
   {
@@ -260,6 +269,14 @@ protected:
   [[nodiscard]] auto Root() const -> std::filesystem::path override
   {
     return TempDir();
+  }
+
+  //! The texture table the registry published below the cooked root, found by
+  //! its layout path.
+  [[nodiscard]] auto TableFile() const -> std::filesystem::path
+  {
+    return oxygen::cooker::test::CookedFile(
+      Root(), loose_layout::kTexturesTable);
   }
 };
 
@@ -443,7 +460,7 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureTableFile)
     const bool tables_ok = co_await table_registry_->FinalizeAll();
     EXPECT_TRUE(tables_ok);
 
-    const auto table_path = Root() / loose_layout::kTexturesTable;
+    const auto table_path = TableFile();
     EXPECT_TRUE(Exists(table_path));
 
     const auto table_data = ReadBytes(table_path);
@@ -486,7 +503,7 @@ NOLINT_TEST_F(
     const auto data_path = TempDir() / loose_layout::kTexturesData;
     EXPECT_TRUE(std::filesystem::exists(data_path));
 
-    const auto table_path = TempDir() / loose_layout::kTexturesTable;
+    const auto table_path = TableFile();
     const auto table = ParseTextureTable(ReadBytes(table_path));
 
     EXPECT_EQ(table.size(), 3);
@@ -532,7 +549,7 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeSerializesTextureMetadataToTable)
     const bool tables_ok = co_await table_registry_->FinalizeAll();
     EXPECT_TRUE(tables_ok);
 
-    const auto table_path = Root() / loose_layout::kTexturesTable;
+    const auto table_path = TableFile();
     const auto table = ParseTextureTable(ReadBytes(table_path));
 
     EXPECT_EQ(table.size(), 2);
@@ -555,7 +572,7 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWithoutUserTexturesWritesFallback)
 
     EXPECT_TRUE(success);
 
-    const auto table_path = Root() / loose_layout::kTexturesTable;
+    const auto table_path = TableFile();
     EXPECT_TRUE(Exists(table_path));
 
     const auto data_path = Root() / loose_layout::kTexturesData;
@@ -598,8 +615,7 @@ NOLINT_TEST_F(TextureEmitterTest, TightPackingWritesAReadableTexture)
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
     EXPECT_TRUE(co_await table_registry_->FinalizeAll());
 
-    const auto table
-      = ParseTextureTable(ReadBytes(Root() / loose_layout::kTexturesTable));
+    const auto table = ParseTextureTable(ReadBytes(TableFile()));
     if (table.size() != 1U) {
       ADD_FAILURE() << "Expected only the fallback row, got " << table.size();
       co_return;
@@ -665,7 +681,7 @@ NOLINT_TEST_F(TextureEmitterTest, StatsDataFileSizeTracksAccumulatedSize)
     EXPECT_TRUE(finalized);
     EXPECT_TRUE(tables_ok);
 
-    const auto table_path = Root() / loose_layout::kTexturesTable;
+    const auto table_path = TableFile();
     const auto data_path = Root() / loose_layout::kTexturesData;
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_EQ(table.size(), 3);
@@ -745,7 +761,7 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesPayloadBytes)
     const bool tables_ok = co_await table_registry_->FinalizeAll();
     EXPECT_TRUE(tables_ok);
 
-    const auto table_path = Root() / loose_layout::kTexturesTable;
+    const auto table_path = TableFile();
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_GE(table.size(), 2);
 
@@ -804,7 +820,7 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
     const bool tables_ok = co_await table_registry_->FinalizeAll();
     EXPECT_TRUE(tables_ok);
 
-    const auto table_path = Root() / loose_layout::kTexturesTable;
+    const auto table_path = TableFile();
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_EQ(table.size(), 1 + expected_payloads.size());
 
@@ -855,7 +871,7 @@ NOLINT_TEST_F(TextureEmitterTest, IdenticalPayloadsShareOneIndex)
     EXPECT_EQ(idx1, 1);
     EXPECT_EQ(idx2, 1);
 
-    const auto table_path = Root() / loose_layout::kTexturesTable;
+    const auto table_path = TableFile();
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_EQ(table.size(), 2);
   });
@@ -883,7 +899,7 @@ NOLINT_TEST_F(TextureEmitterTest, DifferentContentEmitsNewIndex)
     EXPECT_EQ(idx1, 1);
     EXPECT_EQ(idx2, 2);
 
-    const auto table_path = Root() / loose_layout::kTexturesTable;
+    const auto table_path = TableFile();
     const auto table = ParseTextureTable(ReadBytes(table_path));
     EXPECT_EQ(table.size(), 3);
   });

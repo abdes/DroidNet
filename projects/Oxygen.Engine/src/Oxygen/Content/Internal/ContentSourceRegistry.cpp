@@ -24,7 +24,6 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Finally.h>
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/ContentSourceView.h>
@@ -34,6 +33,7 @@
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
@@ -136,6 +136,33 @@ namespace {
           = CheckRequirement(dependency.mount, requirement, lower)) {
           failures.push_back(std::move(*failed));
         }
+      }
+    }
+    return failures;
+  }
+
+  //! The requirements of the loose source `source` that the layers `lower`
+  //! below it do not meet, each once, in index order.
+  auto FailedLooseRequirements(const IContentSource& source,
+    const std::span<const IContentSource* const> lower)
+    -> std::vector<FailedRequirement>
+  {
+    auto failures = std::vector<FailedRequirement> {};
+    auto checked = std::vector<data::loose_cooked::IndexedRequirement> {};
+    for (const auto& [asset, required] : source.GetLooseRequirements()) {
+      static_cast<void>(asset);
+      if (std::ranges::find(checked, required) != checked.end()) {
+        continue;
+      }
+      checked.push_back(required);
+      if (auto failed = CheckRequirement(required.mount,
+            data::PakRequirement {
+              .kind = required.kind,
+              .key = required.key,
+              .type = required.type,
+            },
+            lower)) {
+        failures.push_back(std::move(*failed));
       }
     }
     return failures;
@@ -552,10 +579,9 @@ auto ContentSourceRegistry::FindSourceIdByKey(const data::SourceKey key) const
   if (selected) {
     return selected;
   }
-  for (auto id = identities->second.rbegin(); id != identities->second.rend();
-    ++id) {
-    if (records_.at(*id).readable && !records_.at(*id).source.expired()) {
-      return *id;
+  for (auto id : std::views::reverse(identities->second)) {
+    if (records_.at(id).readable && !records_.at(id).source.expired()) {
+      return id;
     }
   }
   return std::nullopt;
@@ -650,6 +676,28 @@ auto ContentSourceRegistry::FindSourceIndexById(
     return it->second;
   }
   return std::nullopt;
+}
+
+auto ContentSourceRegistry::UnmetRequirements(
+  const data::SourceKey source_key) const -> std::vector<FailedRequirement>
+{
+  const auto found
+    = std::ranges::find_if(sources_, [&](const auto& source) -> bool {
+        return source && source->GetPakCatalog() == nullptr
+          && source->GetSourceKey() == source_key;
+      });
+  if (found == sources_.end()) {
+    return {};
+  }
+  // Sources are held lowest precedence first: the layers below come first.
+  auto lower = std::vector<const IContentSource*> {};
+  for (const auto& source : sources_) {
+    if (source == *found) {
+      break;
+    }
+    lower.push_back(source.get());
+  }
+  return FailedLooseRequirements(**found, lower);
 }
 
 auto ContentSourceRegistry::AssertStructuralConsistency(

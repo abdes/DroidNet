@@ -130,13 +130,7 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   item.stop_token = StopToken();
   item.material = std::move(*prepared);
   auto parse_failed = false;
-  auto* const reader = CookedReader().get();
-  if (reader == nullptr) {
-    AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "material.descriptor.reader_unavailable",
-      "Async file reader is not available");
-    parse_failed = true;
-  } else {
+  {
     const auto mounts = internal::LoadMountedCookedSources(
       session, Request(), "material.descriptor.");
     for (const auto& slot : MaterialSource::TextureSlots()) {
@@ -144,15 +138,14 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       if (!binding.assigned) {
         continue;
       }
-      const auto index
-        = co_await internal::ResolveTextureReference(observer_ptr { &session },
-          observer_ptr { &Request() }, observer_ptr { reader }, mounts,
-          {
-            .text = binding.source_id,
-            .object_path = "textures." + std::string(slot.name),
-            .diagnostic_prefix = "material.descriptor.",
-            .allow_missing = true,
-          });
+      const auto index = co_await internal::ResolveTextureReference(
+        observer_ptr { &session }, observer_ptr { &Request() }, mounts,
+        {
+          .text = binding.source_id,
+          .object_path = "textures." + std::string(slot.name),
+          .diagnostic_prefix = "material.descriptor.",
+          .allow_missing = true,
+        });
       if (!index) {
         parse_failed = true;
         continue;

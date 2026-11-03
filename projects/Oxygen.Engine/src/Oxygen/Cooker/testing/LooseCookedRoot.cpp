@@ -119,6 +119,7 @@ namespace {
         = asset.recorded_sha256.value_or(base::ComputeSha256(bytes)),
         .references = asset.references,
         .source_path = virtual_path + ".json",
+        .requirements = asset.requirements,
       });
       files_.insert_or_assign(relpath, std::move(bytes));
     }

@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/Internal/ContentSourceView.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -102,6 +103,12 @@ public:
 
   [[nodiscard]] auto FindSourceIndexById(data::SourceInstanceId source_id) const
     -> std::optional<size_t>;
+
+  //! The requirements of the active loose source `source_key` that the
+  //! layers below it do not meet; a loose source mounts with them, and a load
+  //! of what they name fails as any missing reference does.
+  [[nodiscard]] auto UnmetRequirements(data::SourceKey source_key) const
+    -> std::vector<FailedRequirement>;
   auto AssertStructuralConsistency(std::string_view context) const -> void;
 
   [[nodiscard]] auto Sources() const

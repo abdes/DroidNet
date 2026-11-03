@@ -23,6 +23,7 @@
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferViews.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
@@ -46,65 +47,59 @@ auto ResourceDescriptorEmitter::EmitTexture(const std::string_view virtual_path,
   const data::pak::core::ResourceIndexT resource_index,
   const data::pak::core::TextureResourceDesc& descriptor) -> std::string
 {
-  auto relpath = std::string {};
-  if (!internal::TryVirtualPathToRelPath(virtual_path, relpath)) {
-    throw std::invalid_argument("texture descriptor identity names no mount: "
-      + std::string(virtual_path));
-  }
-  // Refused before anything is written, so no write escapes the cooked root.
-  data::loose_cooked::RequireIndexRelPath(relpath);
-  auto bytes = std::vector<std::byte>(data::EncodeTextureResourceDescriptor({
-    .index = resource_index,
-    .descriptor = descriptor,
-  }));
-  if (RecordOnce(relpath, bytes, std::string(virtual_path))) {
-    QueueWrite(relpath, std::move(bytes));
-  }
-  return relpath;
+  return Emit(data::loose_cooked::FileKind::kTextureDescriptor, virtual_path,
+    std::vector<std::byte>(data::EncodeTextureResourceDescriptor({
+      .index = resource_index,
+      .descriptor = descriptor,
+    })));
 }
 
-auto ResourceDescriptorEmitter::EmitBufferAtRelPath(
-  const std::string_view relpath,
+auto ResourceDescriptorEmitter::EmitBuffer(const std::string_view virtual_path,
   const data::pak::core::ResourceIndexT resource_index,
   const data::pak::core::BufferResourceDesc& descriptor,
   const std::span<const data::BufferResourceView> views) -> std::string
 {
-  // Refused before anything is written, so no write escapes the cooked root.
-  data::loose_cooked::RequireIndexRelPath(relpath);
-  auto path = std::string(relpath);
-  auto bytes = data::EncodeBufferResourceDescriptor({
-    .index = resource_index,
-    .descriptor = descriptor,
-    .views = internal::WithWholeBufferView(descriptor, views),
-  });
-  if (RecordOnce(path, bytes, {})) {
-    QueueWrite(std::move(path), std::move(bytes));
-  }
-  return std::string(relpath);
+  return Emit(data::loose_cooked::FileKind::kAuxiliary, virtual_path,
+    data::EncodeBufferResourceDescriptor({
+      .index = resource_index,
+      .descriptor = descriptor,
+      .views = internal::WithWholeBufferView(descriptor, views),
+    }));
 }
 
-auto ResourceDescriptorEmitter::RecordOnce(const std::string& relpath,
-  const std::span<const std::byte> bytes, std::string virtual_path) -> bool
+auto ResourceDescriptorEmitter::Emit(const data::loose_cooked::FileKind kind,
+  const std::string_view virtual_path, std::vector<std::byte> bytes)
+  -> std::string
 {
+  auto layout_relpath = std::string {};
+  if (!internal::TryVirtualPathToRelPath(virtual_path, layout_relpath)) {
+    throw std::invalid_argument("resource descriptor identity names no mount: "
+      + std::string(virtual_path));
+  }
+  // Refused before anything is written, so no write escapes the cooked root.
+  data::loose_cooked::RequireIndexRelPath(layout_relpath);
   const auto sha256 = base::ComputeSha256(bytes);
-  if (const auto it = records_.find(relpath); it != records_.end()) {
-    // A cook is deterministic: the same descriptor path always holds the same
-    // bytes. Writing it again could finish before the first write, leaving
-    // bytes the recorded digest does not describe.
-    if (it->second.size_bytes != bytes.size() || it->second.sha256 != sha256) {
-      throw std::runtime_error("resource descriptor '" + relpath
+  if (const auto it = records_.find(std::string(virtual_path));
+    it != records_.end()) {
+    // A cook is deterministic: the same identity always has the same bytes.
+    if (it->second.sha256 != sha256) {
+      throw std::runtime_error("resource descriptor '"
+        + std::string(virtual_path)
         + "' was emitted twice with different bytes");
     }
-    return false;
+    return it->second.relpath;
   }
-  records_.emplace(relpath,
+  auto relpath = data::loose_cooked::ContentRelPath(layout_relpath, sha256);
+  records_.emplace(std::string(virtual_path),
     Record {
+      .kind = kind,
       .relpath = relpath,
       .size_bytes = bytes.size(),
       .sha256 = sha256,
-      .virtual_path = std::move(virtual_path),
+      .virtual_path = std::string(virtual_path),
     });
-  return true;
+  QueueWrite(relpath, std::move(bytes));
+  return relpath;
 }
 
 auto ResourceDescriptorEmitter::QueueWrite(
@@ -119,6 +114,11 @@ auto ResourceDescriptorEmitter::WriteDescriptor(const std::string relpath,
   std::vector<std::byte> bytes) -> co::Co<Result<void>>
 {
   const auto full_path = cooked_root_ / std::filesystem::path(relpath);
+  // A file of this content name already holds these bytes.
+  if (const auto size = storage_->SizeOf(full_path);
+    size.has_value() && size->get() == bytes.size()) {
+    co_return Result<void> {};
+  }
   const auto written = co_await storage_->PublishAsync(
     *driver_, full_path, std::span<const std::byte>(bytes));
   if (!written) {

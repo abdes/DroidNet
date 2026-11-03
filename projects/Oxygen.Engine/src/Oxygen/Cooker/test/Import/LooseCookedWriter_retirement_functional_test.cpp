@@ -21,6 +21,7 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Cooker/testing/PhysicsSidecarBuilder.h>
@@ -135,9 +136,20 @@ namespace {
     writer.RegisterExternalTextureDescriptor(kShipModel.File("Hull.otex"),
       kShipModel.Product("Hull.otex"), FromSource(std::string(kShip)),
       ProducedDigest(otex));
-    writer.RegisterExternalAuxiliaryFile(kShipModel.File("Hull.obuf"),
+    writer.RegisterExternalAuxiliaryFile(kShipModel.File("Hull.obuf"), {},
       FromSource(std::string(kShip)), ProducedDigest(obuf));
     static_cast<void>(writer.Finish());
+  }
+
+  //! The content name, relative to the root, of the file with layout path
+  //! `layout_relpath`.
+  auto ContentRelpath(const MemoryFileSystem& storage,
+    const std::filesystem::path& cooked_root,
+    const std::string_view layout_relpath) -> std::string
+  {
+    return cooker::test::CookedFile(cooked_root, layout_relpath, storage)
+      .lexically_relative(cooked_root)
+      .generic_string();
   }
 
   auto OpenCooked(const MemoryFileSystem& storage,
@@ -182,6 +194,8 @@ namespace {
     auto storage = MemoryFileSystem {};
     const auto cooked_root = MemoryRoot() / "retire_recook";
     CookShipAndDock(storage, cooked_root);
+    const auto sail
+      = ContentRelpath(storage, cooked_root, kShipModel.File("Sail.omat"));
 
     LooseCookedWriter writer(cooked_root, storage);
     WriteMaterial(
@@ -192,8 +206,8 @@ namespace {
     auto removed = result.removed_files;
     std::ranges::sort(removed);
     EXPECT_EQ(removed,
-      (std::vector { kShipModel.File("Hull.obuf"), kShipModel.File("Hull.otex"),
-        kShipModel.File("Sail.omat") }));
+      (std::vector {
+        kShipModel.File("Hull.obuf"), kShipModel.File("Hull.otex"), sail }));
     for (const auto& relpath : removed) {
       EXPECT_FALSE(Exists(storage, cooked_root / relpath)) << relpath;
     }
@@ -252,14 +266,16 @@ namespace {
       static_cast<void>(writer.Finish());
     }
 
+    const auto copy_sail
+      = ContentRelpath(storage, cooked_root, kShipCopy.File("Sail.omat"));
+
     LooseCookedWriter writer(cooked_root, storage);
     WriteMaterial(
       writer, kShipCopy, { .seed = 0x21, .name = "Hull", .source = kShip });
     writer.RetireUnwrittenOutputs(Recook(kShip, kShipCopy));
     const auto result = writer.Finish();
 
-    EXPECT_EQ(
-      result.removed_files, std::vector { kShipCopy.File("Sail.omat") });
+    EXPECT_EQ(result.removed_files, std::vector { copy_sail });
     const auto content = OpenCooked(storage, cooked_root);
     EXPECT_EQ(AssetPaths(content),
       (std::vector { kShipCopy.Product("Hull.omat"),

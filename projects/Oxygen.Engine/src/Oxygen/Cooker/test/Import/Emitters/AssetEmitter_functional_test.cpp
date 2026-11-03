@@ -23,6 +23,7 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/GeometryBuilder.h>
@@ -96,24 +97,35 @@ protected:
     return "/cooked";
   }
 
-  //! Whether the file `relpath` below the cooked root was written.
+  //! Whether a file of the layout path `relpath` was written below the cooked
+  //! root.
   [[nodiscard]] auto Exists(const std::string_view relpath) const -> bool
   {
-    return files_.KindOf(Root() / relpath)
-      == oxygen::content::cooked::PathKind::kFile;
+    return oxygen::cooker::test::HasCookedFile(Root(), relpath, files_);
   }
 
-  //! The size of the file `relpath` below the cooked root.
+  //! The size of the file of the layout path `relpath`.
   [[nodiscard]] auto SizeOf(const std::string_view relpath) const -> size_t
   {
-    return files_.Bytes(Root() / relpath).size();
+    return files_
+      .Bytes(oxygen::cooker::test::CookedFile(Root(), relpath, files_))
+      .size();
   }
 
-  //! The bytes of the file `relpath` below the cooked root.
+  //! The bytes of the file of the layout path `relpath`.
   [[nodiscard]] auto ReadBytes(const std::string_view relpath) const
     -> std::vector<std::byte>
   {
-    const auto bytes = files_.Bytes(Root() / relpath);
+    const auto bytes
+      = files_.Bytes(oxygen::cooker::test::CookedFile(Root(), relpath, files_));
+    return { bytes.begin(), bytes.end() };
+  }
+
+  //! The bytes of the file stored under the content name `content_relpath`.
+  [[nodiscard]] auto ReadContent(const std::string_view content_relpath) const
+    -> std::vector<std::byte>
+  {
+    const auto bytes = files_.Bytes(Root() / content_relpath);
     return { bytes.begin(), bytes.end() };
   }
 
@@ -251,11 +263,16 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsCorrectMetadata)
   EXPECT_EQ(records.at(0).key, key);
   EXPECT_EQ(records.at(0).asset_type, AssetType::kGeometry);
   EXPECT_EQ(records.at(0).virtual_path, "/.cooked/Geometry/MyMesh.ogeo");
-  EXPECT_EQ(records.at(0).descriptor_relpath, "Geometry/MyMesh.ogeo");
+  EXPECT_EQ(records.at(0).layout_relpath, "Geometry/MyMesh.ogeo");
+  EXPECT_EQ(
+    oxygen::cooker::test::LayoutPathOf(records.at(0).descriptor_relpath),
+    "Geometry/MyMesh.ogeo");
+  EXPECT_TRUE(Exists("Geometry/MyMesh.ogeo"));
   EXPECT_EQ(records.at(0).descriptor_size, static_cast<uint64_t>(bytes.size()));
 }
 
-NOLINT_TEST_F(AssetEmitterTest, EmitSameKeyTwiceUpdatesRecordAndOverwrites)
+NOLINT_TEST_F(
+  AssetEmitterTest, EmitSameKeyTwiceUpdatesRecordAndNamesTheLatestFile)
 {
   const auto key = MakeSequentialAssetKey(7);
 
@@ -281,14 +298,17 @@ NOLINT_TEST_F(AssetEmitterTest, EmitSameKeyTwiceUpdatesRecordAndOverwrites)
   EXPECT_EQ(emitter_->Count(), 1);
   ASSERT_EQ(emitter_->Records().size(), 1);
   EXPECT_EQ(emitter_->Records().at(0).key, key);
-  EXPECT_EQ(
-    emitter_->Records().at(0).descriptor_relpath, "Materials/Wood.omat");
+  EXPECT_EQ(emitter_->Records().at(0).layout_relpath, "Materials/Wood.omat");
+  EXPECT_EQ(oxygen::cooker::test::LayoutPathOf(
+              emitter_->Records().at(0).descriptor_relpath),
+    "Materials/Wood.omat");
   EXPECT_EQ(emitter_->Records().at(0).descriptor_size,
     static_cast<uint64_t>(second.Bytes().size()));
 
-  const auto* const file_path = "Materials/Wood.omat";
-  EXPECT_TRUE(Exists(file_path));
-  EXPECT_EQ(ReadBytes(file_path), second.Bytes());
+  // Without a writer nothing retires the first descriptor: the content names
+  // keep both files, and the record names the latest.
+  EXPECT_EQ(
+    ReadContent(emitter_->Records().at(0).descriptor_relpath), second.Bytes());
   EXPECT_EQ(emitter_->Records().at(0).references, second.References());
 }
 
@@ -356,11 +376,11 @@ NOLINT_TEST_F(
   ASSERT_HAS_VALUE(emitter_);
   EXPECT_EQ(emitter_->Count(), 2);
   ASSERT_EQ(emitter_->Records().size(), 2);
-  EXPECT_EQ(emitter_->Records().at(0).descriptor_relpath, "Materials/B.omat");
-  EXPECT_EQ(emitter_->Records().at(1).descriptor_relpath, "Materials/A.omat");
-  EXPECT_EQ(ReadBytes("Materials/B.omat"),
+  EXPECT_EQ(emitter_->Records().at(0).layout_relpath, "Materials/B.omat");
+  EXPECT_EQ(emitter_->Records().at(1).layout_relpath, "Materials/A.omat");
+  EXPECT_EQ(ReadContent(emitter_->Records().at(0).descriptor_relpath),
     fixtures::MaterialBuilder { "b-v2" }.Bytes());
-  EXPECT_EQ(ReadBytes("Materials/A.omat"),
+  EXPECT_EQ(ReadContent(emitter_->Records().at(1).descriptor_relpath),
     fixtures::MaterialBuilder { "a-v3" }.Bytes());
 }
 
@@ -488,7 +508,10 @@ NOLINT_TEST_F(AssetEmitterRealFileTest, EmitCreatesNestedDirectories)
   });
 
   // Nested file exists
-  const auto file_path = TempDir() / "Deep" / "Nested" / "Path" / "Mesh.ogeo";
+  ASSERT_TRUE(oxygen::cooker::test::HasCookedFile(
+    TempDir(), "Deep/Nested/Path/Mesh.ogeo"));
+  const auto file_path
+    = oxygen::cooker::test::CookedFile(TempDir(), "Deep/Nested/Path/Mesh.ogeo");
   EXPECT_TRUE(std::filesystem::exists(file_path));
   EXPECT_EQ(oxygen::cooker::test::ReadBytes(file_path),
     fixtures::GeometryBuilder { "nested-mesh" }.Bytes());

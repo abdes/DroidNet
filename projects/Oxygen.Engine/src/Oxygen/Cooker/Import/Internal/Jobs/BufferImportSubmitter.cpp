@@ -93,7 +93,7 @@ namespace {
   /*!
    @throw data::CookedFormatError When the root or a sidecar cannot be read.
   */
-  [[nodiscard]] auto LoadCanonicalBufferSidecarRelpathsByIndex(
+  [[nodiscard]] auto LoadCanonicalBufferSidecarsByIndex(
     const cooked::CookerStorageReader& storage,
     const std::filesystem::path& cooked_root)
     -> std::unordered_map<uint32_t, std::string>
@@ -109,9 +109,10 @@ namespace {
     }
 
     auto by_index = std::unordered_map<uint32_t, std::string> {};
-    // In path order, so the first path of a row is its canonical one.
+    // In path order, so the first identity of a row is its canonical one.
     for (const auto& sidecar : content->Sidecars()) {
-      if (!sidecar.name.ends_with(data::kBufferDescriptorExtension)) {
+      if (sidecar.virtual_path.empty()
+        || !sidecar.virtual_path.ends_with(data::kBufferDescriptorExtension)) {
         continue;
       }
       const auto bytes = cooked::ReadWholeFile(
@@ -125,7 +126,7 @@ namespace {
       if (!decoded) {
         throw std::move(decoded).error();
       }
-      by_index.try_emplace(decoded->index.get(), sidecar.name);
+      by_index.try_emplace(decoded->index.get(), sidecar.virtual_path);
     }
     return by_index;
   }
@@ -265,10 +266,10 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
 {
   auto emitted_buffers = std::vector<EmittedBuffer> {};
   emitted_buffers.reserve(submission.submitted_count);
-  auto canonical_relpath_by_index
+  auto canonical_identity_by_index
     = std::unordered_map<uint32_t, std::string> {};
   try {
-    canonical_relpath_by_index = LoadCanonicalBufferSidecarRelpathsByIndex(
+    canonical_identity_by_index = LoadCanonicalBufferSidecarsByIndex(
       *session_->Storage(), session_->CookedRoot());
   } catch (const data::CookedFormatError& error) {
     AddDiagnostic(*session_, *request_, ImportSeverity::kError,
@@ -325,9 +326,9 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
     }
 
     const auto requested_relpath = NormalizeRelPath(relpath_it->second);
-    const auto existing = canonical_relpath_by_index.find(emitted_index);
-    if (existing != canonical_relpath_by_index.end()
-      && existing->second != requested_relpath) {
+    const auto existing = canonical_identity_by_index.find(emitted_index);
+    if (existing != canonical_identity_by_index.end()
+      && existing->second != result.source_id) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.dedup_virtual_path_conflict",
         "Equivalent buffers deduped to one resource index must share one "
@@ -335,14 +336,14 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
         result.source_id);
       continue;
     }
-    canonical_relpath_by_index.insert_or_assign(
-      emitted_index, requested_relpath);
+    canonical_identity_by_index.insert_or_assign(
+      emitted_index, result.source_id);
 
     try {
       [[maybe_unused]] const auto relpath
-        = session_->ResourceDescriptorEmitter().EmitBufferAtRelPath(
-          requested_relpath, data::pak::core::ResourceIndexT { emitted_index },
-          *descriptor, views_it->second);
+        = session_->ResourceDescriptorEmitter().EmitBuffer(result.source_id,
+          data::pak::core::ResourceIndexT { emitted_index }, *descriptor,
+          views_it->second);
     } catch (const std::exception& ex) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.sidecar_emit_failed",

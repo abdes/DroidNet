@@ -631,10 +631,8 @@ namespace {
     const std::unordered_map<data::AssetKey, SealedDescriptor>& sealed,
     const ScriptTables& tables) -> Result<void, ScriptSealingError>
   {
-    // Finishing the index locks the staged root through its lock file, which
-    // is staging too, whether or not the refresh succeeds.
-    io.published->push_back(
-      staged_root / data::loose_cooked::kIndexLockFileName);
+    // The writer holds the staged root's writer lease while it lives; the
+    // lease file goes with it.
     try {
       auto writer = import::LooseCookedWriter(staged_root, *io.storage);
       for (const auto& asset : content.Assets()) {

@@ -25,6 +25,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
+#include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -197,14 +198,14 @@ namespace {
     const auto has_output = [&](const std::string_view relpath) -> bool {
       return std::ranges::any_of(
         report->outputs, [&](const ImportOutputRecord& output) -> bool {
-          return output.path == relpath;
+          return oxygen::cooker::test::LayoutPathOf(output.path) == relpath;
         });
     };
     EXPECT_TRUE(has_output(kRelPath));
 
-    const auto full_path = cooked_root / std::filesystem::path { kRelPath };
-    ASSERT_TRUE(std::filesystem::exists(full_path));
-    const auto bytes = ReadBytes(full_path);
+    ASSERT_TRUE(oxygen::cooker::test::HasCookedFile(cooked_root, kRelPath));
+    const auto bytes
+      = ReadBytes(oxygen::cooker::test::CookedFile(cooked_root, kRelPath));
     const auto descriptor = ReadCollisionShapeAssetDesc(bytes);
     ASSERT_HAS_VALUE(descriptor);
     EXPECT_EQ(descriptor->header.asset_type,
@@ -270,18 +271,18 @@ namespace {
 
     constexpr auto kShapeRelPath
       = std::string_view { "Physics/Shapes/hull_inline.ocshape" };
-    const auto shape_path
-      = cooked_root / std::filesystem::path { kShapeRelPath };
-    ASSERT_TRUE(std::filesystem::exists(shape_path));
-    const auto bytes = ReadBytes(shape_path);
+    ASSERT_TRUE(
+      oxygen::cooker::test::HasCookedFile(cooked_root, kShapeRelPath));
+    const auto bytes
+      = ReadBytes(oxygen::cooker::test::CookedFile(cooked_root, kShapeRelPath));
     const auto descriptor = ReadCollisionShapeAssetDesc(bytes);
     ASSERT_HAS_VALUE(descriptor);
     EXPECT_EQ(descriptor->shape_type, phys::ShapeType::kConvexHull);
     EXPECT_EQ(descriptor->cooked_shape_ref.payload_type,
       phys::ShapePayloadType::kConvex);
     EXPECT_FALSE(descriptor->cooked_shape_ref.payload_asset_key.IsNil());
-    EXPECT_TRUE(std::filesystem::exists(
-      cooked_root / std::filesystem::path("Physics/Resources/physics.table")));
+    EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
+      cooked_root, "Physics/Resources/physics.table"));
     EXPECT_TRUE(std::filesystem::exists(
       cooked_root / std::filesystem::path("Physics/Resources/physics.data")));
   }
@@ -325,10 +326,12 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
 
-    const auto shape_path = cooked_root
-      / std::filesystem::path("Physics/Shapes/compound_shape.ocshape");
-    ASSERT_TRUE(std::filesystem::exists(shape_path));
-    const auto bytes = ReadBytes(shape_path);
+    constexpr auto kShapeRelPath
+      = std::string_view { "Physics/Shapes/compound_shape.ocshape" };
+    ASSERT_TRUE(
+      oxygen::cooker::test::HasCookedFile(cooked_root, kShapeRelPath));
+    const auto bytes
+      = ReadBytes(oxygen::cooker::test::CookedFile(cooked_root, kShapeRelPath));
     const auto descriptor = ReadCollisionShapeAssetDesc(bytes);
     ASSERT_HAS_VALUE(descriptor);
     ASSERT_EQ(descriptor->shape_type, phys::ShapeType::kCompound);

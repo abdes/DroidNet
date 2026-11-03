@@ -36,8 +36,11 @@ namespace {
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::FileKind;
 
+  //! A second writer of a root appends to a data file the first one
+  //! published: the index records the grown file. (A root has one live writer,
+  //! so no stale writer can publish over the append.)
   NOLINT_TEST(LooseCookedWriterExternalRegistrationTest,
-    ExternalAppendRefreshesMetadataWithoutCollisionOrStaleWriterRollback)
+    ExternalAppendRefreshesMetadataWithoutCollision)
   {
     auto storage = MemoryFileSystem {};
     const auto root = MemoryRoot() / "external_append_refresh";
@@ -50,14 +53,14 @@ namespace {
       writer.WriteFile(FileKind::kBuffersTable, "buffers.table", table);
       static_cast<void>(writer.Finish());
     }
-    auto stale_writer = LooseCookedWriter(root, storage);
-    auto refreshed_writer = LooseCookedWriter(root, storage);
-    const auto appended = std::array { std::byte { 1U }, std::byte { 2U } };
-    storage.AddFile(root / "buffers.data", appended);
-    refreshed_writer.RegisterExternalDataFile(
-      FileKind::kBuffersData, "buffers.data");
-    static_cast<void>(refreshed_writer.Finish());
-    static_cast<void>(stale_writer.Finish());
+    {
+      auto refreshed_writer = LooseCookedWriter(root, storage);
+      const auto appended = std::array { std::byte { 1U }, std::byte { 2U } };
+      storage.AddFile(root / "buffers.data", appended);
+      refreshed_writer.RegisterExternalDataFile(
+        FileKind::kBuffersData, "buffers.data");
+      static_cast<void>(refreshed_writer.Finish());
+    }
     const auto content = CookedContent::Open(storage, root);
     const auto& data
       = content.ResourceTable(data::ResourceKind::kBuffer).DataStored();
@@ -100,7 +103,7 @@ namespace {
     };
     auto writer = LooseCookedWriter(root, storage);
     writer.RegisterExternalAuxiliaryFile(
-      "Ship/Hull.obuf", FromSource("/Content/Ship.glb"), produced);
+      "Ship/Hull.obuf", {}, FromSource("/Content/Ship.glb"), produced);
     writer.RegisterExternalTextureDescriptor("Textures/Sky.otex",
       "/Content/Textures/Sky.otex", FromSource("/Content/Ship.glb"), produced);
 
@@ -178,7 +181,7 @@ namespace {
     const auto bytes = std::array { std::byte { 1U }, std::byte { 2U } };
     storage.AddFile(root / "Ship/Hull.obuf", bytes);
     auto writer = LooseCookedWriter(root, storage);
-    writer.RegisterExternalAuxiliaryFile("Ship/Hull.obuf",
+    writer.RegisterExternalAuxiliaryFile("Ship/Hull.obuf", {},
       FromSource("/Content/Ship.glb"),
       import::LooseCookedFileDigest {
         .size = bytes.size(),
@@ -202,7 +205,7 @@ namespace {
     storage.AddFile(root / "Ship/Hull.obuf", bytes);
     auto writer = LooseCookedWriter(root, storage);
 
-    EXPECT_THROW(writer.RegisterExternalAuxiliaryFile("Ship/Hull.obuf",
+    EXPECT_THROW(writer.RegisterExternalAuxiliaryFile("Ship/Hull.obuf", {},
                    FromSource("/Content/Ship.glb"),
                    import::LooseCookedFileDigest {
                      .size = bytes.size() + 1U,
@@ -291,11 +294,11 @@ namespace {
     auto writer = LooseCookedWriter(root, storage);
 
     // Act & Assert
-    EXPECT_THROW(writer.RegisterExternalAuxiliaryFile("Ship/Hull.obuf",
+    EXPECT_THROW(writer.RegisterExternalAuxiliaryFile("Ship/Hull.obuf", {},
                    FromSource("/Content/Ship.glb"), wrong_size),
       std::runtime_error);
     writer.RegisterExternalAuxiliaryFile(
-      "Ship/Hull.obuf", FromSource("/Content/Ship.glb"), produced);
+      "Ship/Hull.obuf", {}, FromSource("/Content/Ship.glb"), produced);
     storage.AddFile(root / "Ship/Hull.obuf", std::array { std::byte { 1U } });
     EXPECT_THROW(static_cast<void>(writer.Finish()), std::runtime_error);
   }
