@@ -469,20 +469,30 @@ everything outside the rule.
 - Mount names: `content::ValidateMountName` (the mount table's rule),
   `oxygen.mounts.schema.json` and `VirtualPath` agree exactly (one rule, no
   leading `.`); conflicts and folder overlaps are
-  refused, cooked folders included.
+  refused, cooked folders included. The name, mount and reference schemas
+  refuse what `VirtualPathCases.json` refuses, except the rows marked
+  `schema_accepts` (the parity test in `Cooker/test/Import/Schemas`).
 - Mount kinds: `Source` and `Cooked` only; a `Cooked` mount accepts a loose
   root or a pak; an unknown kind is refused, never read as `Source`.
 - `ModelImportRecord`: a record lives at its model's identity, names its
-  source relative to itself, and `Read`, `MakeSettings`, `SelectedGeneration`,
-  `LocateRecord` and `Prepare` refuse malformed records with codes; no
-  `Imports/` path, `virtual_path` field or content-root input survives.
-- `AssetReferenceBuilder`: products spell references the way
-  `LocateReference` resolves them (round trip), relative within a mount and
-  absolute across mounts.
-- `MountedCookedSources` and `TextureReferenceResolver` resolve through the
-  one resolver; flag any second lookup path.
-- `Naming`: product names derived from sources are stable across platforms
-  and reimports.
+  source relative to itself, and `Read`, `SelectedGeneration`, `LocateRecord`,
+  `Save` and `Prepare` refuse with a `ModelImportRecordError` carrying a
+  stable code and field (`model_record_codes`); a selected generation that is
+  gone is `import.generation_missing`, never a path. The schema's `settings`
+  are a gltf or fbx job's and its provenance the provenance schema's, so the
+  schema and the reader accept the same records. No `Imports/` path,
+  `virtual_path` field or content-root input survives.
+- Reference writers (`EngineContent`, `ModelImportRecord::Serialize`) spell
+  references with `content::RelativeReference`, the way `LocateReference`
+  resolves them (round trip), relative within a mount and absolute across
+  mounts; `AssetReferenceBuilder` interns binary keys and writes no text.
+- `LookupReference` is the one lookup of an asset a reference names, over the
+  roots `LoadMountedCookedSources` loads, for every job and sidecar;
+  `TextureReferenceResolver` is its named-texture variant over the same
+  roots. Flag any second lookup path.
+- `Naming`: uniquely named products keep their names across platforms,
+  reimports and reorders; a name that takes a `_N` suffix is
+  `import.name_collision`.
 
 ## R8. Manifests, requests and source analysis
 
