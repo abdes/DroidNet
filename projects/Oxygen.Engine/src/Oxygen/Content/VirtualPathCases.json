@@ -119,7 +119,8 @@
     },
     {
       "segment": "a\u0085",
-      "refusal": "vpath.segment.control_character"
+      "refusal": "vpath.segment.control_character",
+      "schema_accepts": true
     },
     {
       "segment": " a\u0007",
@@ -167,27 +168,33 @@
     },
     {
       "segment": "\u0378",
-      "refusal": "vpath.segment.unassigned_code_point"
+      "refusal": "vpath.segment.unassigned_code_point",
+      "schema_accepts": true
     },
     {
       "segment": "\ud87b\ude5e",
-      "refusal": "vpath.segment.unassigned_code_point"
+      "refusal": "vpath.segment.unassigned_code_point",
+      "schema_accepts": true
     },
     {
       "segment": "a\udb40\udc80",
-      "refusal": "vpath.segment.unassigned_code_point"
+      "refusal": "vpath.segment.unassigned_code_point",
+      "schema_accepts": true
     },
     {
       "segment": "u\u0308",
-      "refusal": "vpath.segment.not_nfc"
+      "refusal": "vpath.segment.not_nfc",
+      "schema_accepts": true
     },
     {
       "segment": "\u212b",
-      "refusal": "vpath.segment.not_nfc"
+      "refusal": "vpath.segment.not_nfc",
+      "schema_accepts": true
     },
     {
       "segment": "\u1100\u1161",
-      "refusal": "vpath.segment.not_nfc"
+      "refusal": "vpath.segment.not_nfc",
+      "schema_accepts": true
     },
     {
       "segment": " u\u0308",
@@ -259,11 +266,13 @@
     },
     {
       "segment": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "refusal": "vpath.segment.too_long"
+      "refusal": "vpath.segment.too_long",
+      "schema_accepts": true
     },
     {
       "segment": "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9",
-      "refusal": "vpath.segment.too_long"
+      "refusal": "vpath.segment.too_long",
+      "schema_accepts": true
     }
   ],
   "mounts": [
@@ -677,19 +686,22 @@
       "anchor": "/Content/Wall.omat",
       "text": "../Brick.otex",
       "rules": "authored",
-      "refusal": "vpath.reference_outside_mount"
+      "refusal": "vpath.reference_outside_mount",
+      "schema_accepts": true
     },
     {
       "anchor": "/Content/Materials/Wall.omat",
       "text": "../../Brick.otex",
       "rules": "authored",
-      "refusal": "vpath.reference_outside_mount"
+      "refusal": "vpath.reference_outside_mount",
+      "schema_accepts": true
     },
     {
       "anchor": "/Content/Materials/Wall.omat",
       "text": "/Content/Materials/Brick.otex",
       "rules": "authored",
-      "refusal": "vpath.reference_self_absolute"
+      "refusal": "vpath.reference_self_absolute",
+      "schema_accepts": true
     },
     {
       "anchor": "/Content/Materials/Wall.omat",
@@ -779,7 +791,8 @@
       "anchor": "/Content/Materials/Wall.omat",
       "text": "Mate\u0301riaux/Brick.otex",
       "rules": "authored",
-      "refusal": "vpath.segment.not_nfc"
+      "refusal": "vpath.segment.not_nfc",
+      "schema_accepts": true
     },
     {
       "anchor": "/Content/Materials/Wall.omat",
@@ -791,13 +804,15 @@
       "anchor": "/Content/Materials/Wall.omat",
       "text": "../SourceMedia/Brick.png",
       "rules": "authored",
-      "refusal": "vpath.segment.derived_content"
+      "refusal": "vpath.segment.derived_content",
+      "schema_accepts": true
     },
     {
       "anchor": "/Content/Materials/Wall.omat",
       "text": ".build/Brick.otex",
       "rules": "authored",
-      "refusal": "vpath.segment.derived_content"
+      "refusal": "vpath.segment.derived_content",
+      "schema_accepts": true
     },
     {
       "anchor": "/Content/Materials/Wall.omat",
@@ -816,6 +831,24 @@
       "text": "/Engine/Default",
       "rules": "authored",
       "refusal": "vpath.leaf.missing_extension"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "Sniper Rifle./Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.trailing_dot"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": " Rifle/Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.edge_space"
+    },
+    {
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "CON/Brick.otex",
+      "rules": "authored",
+      "refusal": "vpath.segment.device_name"
     }
   ],
   "nfc": [

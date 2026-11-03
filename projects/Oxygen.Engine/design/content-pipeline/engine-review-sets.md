@@ -507,6 +507,10 @@ the editor complete, located diagnostics without cooking.
 - Schema and code parity: each rule in a schema is enforced by the request
   builder or by schema validation before it, and each code-only rule is
   either in the schema or documented as semantic. Build a table per schema.
+  Known gap: a gltf or fbx job, and the model import record's `settings`
+  that follow it, accept every `job_settings` key, descriptor-only ones such
+  as `sources` and `derived_from` included; the model job's vocabulary is not
+  stated on its own.
 - `ImportManifest.cpp` (2 400 lines): unknown keys, duplicate job IDs,
   `depends_on` cycles and missing dependencies are refused; defaults are
   stated once.

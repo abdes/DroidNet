@@ -81,6 +81,7 @@ oxygen_cooker_test(
     "Import/Schemas/ReferenceSchema_test.cpp"
     "Import/Schemas/SceneDescriptorSchema_test.cpp"
     "Import/Schemas/TextureDescriptorSchema_test.cpp"
+    "Import/Schemas/VirtualPathSchemaParity_test.cpp"
     "Import/ScratchImage_test.cpp"
     "Import/ScriptImportRequestBuilder_test.cpp"
     "Import/TextureCooker_test.cpp"
@@ -89,12 +90,13 @@ oxygen_cooker_test(
     "Import/TextureSourceAssembly_test.cpp"
 )
 # The mount table and model import record case tables shared with the
-# editor's readers.
+# editor's readers, and the virtual path case table the schemas follow.
 target_compile_definitions(
   Oxygen.Cooker.Import.Unit.Tests
   PRIVATE
     OXYGEN_COOKER_MOUNT_TABLE_CASES="${CMAKE_CURRENT_SOURCE_DIR}/Import/MountTableCases.json"
     OXYGEN_COOKER_MODEL_IMPORT_RECORD_CASES="${CMAKE_CURRENT_SOURCE_DIR}/Import/ModelImportRecordCases.json"
+    OXYGEN_CONTENT_VIRTUAL_PATH_CASES="${CMAKE_CURRENT_SOURCE_DIR}/../../Content/VirtualPathCases.json"
 )
 # Shared builds only: the cooker DLL does not export these internals.
 if(TARGET oxygen-cooker-test-visible-internals)

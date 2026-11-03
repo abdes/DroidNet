@@ -44,7 +44,14 @@ definition of this rule:
 [`oxygen.name.schema.json`](../../Cooker/Import/Schemas/oxygen.name.schema.json).
 A pattern cannot express rules 2, 5, 6 and 9, nor the U+0080-U+009F controls of
 rule 3, so the cooker checks the asset's virtual path after the schema and
-reports the code above.
+reports the code above. The controls are left out because a pattern means
+different characters to the engine's byte-wise validator and to the editor's
+UTF-16 one.
+
+The name, mount and reference schemas follow the case table: the cooker's
+schema tests run every row of it through them, and a row the rules refuse but
+a schema cannot says so with `"schema_accepts": true`. A schema that refuses
+less than its row says, or more than the rules do, fails the test.
 
 ## Mount
 

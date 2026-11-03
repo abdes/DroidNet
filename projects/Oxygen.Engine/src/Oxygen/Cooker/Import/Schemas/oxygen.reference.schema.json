@@ -1,13 +1,13 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Oxygen Reference",
-  "description": "The reference rule shared by every schema field that names another asset or file (Oxygen/Content/Docs/virtual_paths.md, References). A reference is a virtual path in another mount, or text relative to the folder that holds the referring file. This definition refuses what a pattern can express; the cooker resolves the reference and reports the rule's vpath.* code for the rest (the mount rule, the segment rule, a climb above the mount, absolute text in the file's own mount, derived content in an asset reference).",
+  "description": "The reference rule shared by every schema field that names another asset or file (Oxygen/Content/Docs/virtual_paths.md, References). A reference is a virtual path in another mount, or text relative to the folder that holds the referring file. This definition refuses what a pattern can express; the cooker resolves the reference and reports the rule's vpath.* code for the rest: the segment rules a pattern cannot state (NFC, unassigned code points, U+0080-U+009F controls, the 255-byte bound), a climb above the mount, absolute text in the file's own mount, and derived content in an asset reference.",
   "definitions": {
     "reference": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?:/|\\./|(?:\\.\\./)*)(?!.*//)(?!.*/$)(?!(?:.*/)?\\.{1,2}(?:/|$))[^/\\x00-\\x1F\\x7F\\\\:*?\"<>|][^\\x00-\\x1F\\x7F\\\\:*?\"<>|]*$",
-      "description": "Absolute ('/Engine/Materials/Default.omat') or relative ('Brick.otex', './Brick.otex', '../Textures/Brick.otex'). Relative text starts with one './' or any number of '../', then one or more segments; no '.' or '..' after that, no empty segment, no trailing '/', no control characters and none of \\ : * ? \" < > |. Segments are plain text: no percent-encoding, and no asset:/// URIs."
+      "pattern": "^(?:/[A-Za-z_][A-Za-z0-9_-]*/|\\./|(?:\\.\\./)*)(?!.*//)(?!.*/$)(?!(?:.*/)?\\.{1,2}(?:/|$))(?!(?:.*/)? )(?!.*[ .](?:/|$))(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[^/]*)?(?:/|$))(?=(?:.*/)?[^/]+\\.[^/]*$)[^/\\x00-\\x1F\\x7F\\\\:*?\"<>|][^\\x00-\\x1F\\x7F\\\\:*?\"<>|]*$",
+      "description": "Absolute ('/Engine/Materials/Default.omat': a mount name, then a path in it) or relative ('Brick.otex', './Brick.otex', '../Textures/Brick.otex'). Relative text starts with one './' or any number of '../', then one or more segments; no '.' or '..' after that, no empty segment and no trailing '/'. No segment starts with a space, ends with a space or a dot, or is a Windows device name; the leaf has an extension. No C0 control characters, DEL or any of \\ : * ? \" < > |. Segments are plain text: no percent-encoding, and no asset:/// URIs."
     }
   }
 }
