@@ -194,6 +194,11 @@ of the file, by the names `analyze-sources` reports:
   carries: `lod_policy`, and by surface ID `visible` and `casts_shadows`.
 
 A key the file no longer has is kept and warns (`import.setting_target_missing`).
+Products keep the names the file gives them. Two meshes, materials or textures
+of one name, ignoring case, become `Paint` and `Paint_1` in the file's order
+and warn (`import.name_collision`): reordering them in the file would swap the
+two names, and every setting and reference that names them, so rename one in
+the file.
 `up_axis` on a glTF job warns (`import.setting_not_applicable`) and is ignored.
 A glTF primitive without normals stays faceted, as its specification requires,
 unless normals are recalculated; an FBX mesh without normals takes its smoothing

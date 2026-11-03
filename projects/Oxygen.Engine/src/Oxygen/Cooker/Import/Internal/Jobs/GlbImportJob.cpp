@@ -39,6 +39,7 @@
 #include <Oxygen/Cooker/Import/Internal/WorkDispatcher.h>
 #include <Oxygen/Cooker/Import/Internal/WorkPayloadStore.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
+#include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/OxCo/Co.h>
@@ -515,6 +516,10 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
   }
   for (auto& diagnostic : internal::ReportMissingSettingTargets(
          request.options, plan->product_names, source_id_prefix)) {
+    outcome.diagnostics.push_back(std::move(diagnostic));
+  }
+  for (auto& diagnostic :
+    GetNamingService().CollisionWarnings(source_id_prefix)) {
     outcome.diagnostics.push_back(std::move(diagnostic));
   }
 

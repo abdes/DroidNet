@@ -358,6 +358,7 @@ namespace {
     AppendDiagnostics(report.diagnostics,
       internal::ReportMissingSettingTargets(
         input.request.options, names, source_id));
+    AppendDiagnostics(report.diagnostics, naming.CollisionWarnings(source_id));
     report.model = std::move(facts);
     report.complete = materials.success && geometry.success && textures.success;
     return report;

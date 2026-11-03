@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Testing/GTest.h>
@@ -126,18 +127,20 @@ NOLINT_TEST_P(AssetNamingTest, ShortensLongNamesToTheLeafBound)
 {
   NamingService naming;
   const auto context = NamingContext { .kind = GetParam() };
-  const auto suffixes = GetParam() == ImportNameKind::kMesh
-    ? std::vector<std::string> { std::string(
-        oxygen::data::kGeometryDescriptorExtension) }
-    : GetParam() == ImportNameKind::kMaterial
-    ? std::vector<std::string> { std::string(
-        oxygen::data::kMaterialDescriptorExtension) }
-    : std::vector<std::string> {
-        ".base_color.otex",
-        ".normal.otex",
-        ".metallic_roughness.otex",
-        ".clearcoat_normal.otex",
-      };
+  const auto suffixes = [&] -> std::vector<std::string> {
+    if (GetParam() == ImportNameKind::kMesh) {
+      return { std::string(oxygen::data::kGeometryDescriptorExtension) };
+    }
+    if (GetParam() == ImportNameKind::kMaterial) {
+      return { std::string(oxygen::data::kMaterialDescriptorExtension) };
+    }
+    return {
+      ".base_color.otex",
+      ".normal.otex",
+      ".metallic_roughness.otex",
+      ".clearcoat_normal.otex",
+    };
+  }();
   const auto fits = [&suffixes](const std::string& name) -> void {
     for (const auto& suffix : suffixes) {
       const auto leaf = name + suffix;
@@ -235,6 +238,62 @@ NOLINT_TEST(NamingServiceTest, ResetReleasesCaseInsensitiveRegistrations)
   EXPECT_FALSE(naming.HasName(context.kind, "METALGREY"));
   EXPECT_EQ(naming.GetNameCount(context.kind), 0U);
   EXPECT_EQ(naming.MakeUniqueName("metalgrey", context), "metalgrey");
+}
+
+//! A clash the service resolves with a suffix is one
+//! `import.name_collision` warning naming both names: reordering the two in
+//! the source would swap their identities.
+NOLINT_TEST_P(AssetNamingTest, ClashIsReportedWithBothNames)
+{
+  NamingService naming;
+  const auto context = NamingContext { .kind = GetParam() };
+  static_cast<void>(naming.MakeUniqueName("Paint", context));
+  static_cast<void>(naming.MakeUniqueName("Chrome", context));
+
+  const auto assigned = naming.MakeUniqueName("paint", context);
+  const auto warnings = naming.CollisionWarnings("model.gltf");
+
+  ASSERT_EQ(warnings.size(), 1U);
+  EXPECT_EQ(warnings.front().code, "import.name_collision");
+  EXPECT_EQ(warnings.front().severity,
+    oxygen::content::import::ImportSeverity::kWarning);
+  EXPECT_EQ(warnings.front().source_path, "model.gltf");
+  EXPECT_EQ(warnings.front().object_name, assigned);
+  EXPECT_THAT(warnings.front().message, testing::HasSubstr("'paint'"));
+  EXPECT_THAT(warnings.front().message, testing::HasSubstr("'paint_1'"));
+}
+
+//! Uniquely named assets keep their names whatever the order the source
+//! lists them in, and raise no warning.
+NOLINT_TEST_P(AssetNamingTest, UniqueNamesDoNotDependOnOrder)
+{
+  const auto context = NamingContext { .kind = GetParam() };
+  const auto names = [&](const std::vector<std::string_view>& authored) {
+    NamingService naming;
+    auto assigned = std::vector<std::string> {};
+    for (const auto name : authored) {
+      assigned.push_back(naming.MakeUniqueName(name, context));
+    }
+    EXPECT_TRUE(naming.CollisionWarnings("model.gltf").empty());
+    return assigned;
+  };
+
+  const auto forward = names({ "Body", "Glass", "Tyre" });
+  const auto reversed = names({ "Tyre", "Glass", "Body" });
+
+  EXPECT_THAT(reversed, testing::UnorderedElementsAreArray(forward));
+}
+
+//! A node is identified by its path, not its name: same-named nodes raise no
+//! warning.
+NOLINT_TEST(NamingServiceTest, NodeClashesAreNotReported)
+{
+  NamingService naming;
+  const auto context = NamingContext { .kind = ImportNameKind::kSceneNode };
+  static_cast<void>(naming.MakeUniqueName("Wheel", context));
+  static_cast<void>(naming.MakeUniqueName("Wheel", context));
+
+  EXPECT_TRUE(naming.CollisionWarnings("model.gltf").empty());
 }
 
 } // namespace

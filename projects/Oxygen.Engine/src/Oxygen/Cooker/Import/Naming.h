@@ -12,8 +12,10 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::import {
@@ -46,7 +48,7 @@ struct NamingContext final {
   uint32_t ordinal = 0;
 
   //! Appended to the name, such as a mesh variant (`__baked_3`).
-  std::string_view variant = {};
+  std::string_view variant;
 };
 
 //! Assigns the names of one import's products.
@@ -63,7 +65,11 @@ struct NamingContext final {
    boundary; a texture name also leaves room for the longest usage.
  - **Uniqueness.** One registry per kind compares asset names case-folded
    (Unicode simple case folding). A taken name gets `_N`, probing past every
-   occupied name.
+   occupied name. Suffixes follow source order, so reordering two objects of
+   one name in the source swaps their names, and the identities stored for
+   them; `CollisionWarnings` reports each such name, so the author can rename
+   one in the source. Uniquely named assets keep their names whatever the
+   order.
  - **Scene nodes.** A node name is a label, not a path segment: it is kept
    verbatim, takes `Node_<ordinal>` when unnamed, and is unique by exact
    comparison, because the node's key is derived from it.
@@ -94,6 +100,17 @@ public:
   //! Number of names registered for a kind.
   OXGN_COOK_NDAPI auto GetNameCount(ImportNameKind kind) const -> size_t;
 
+  //! One `import.name_collision` warning for each mesh, material or texture
+  //! name that took a `_N` suffix because another asset of its kind had it.
+  /*!
+   Scene nodes are not reported: a node's identity is its path in the source
+   (`ModelNodeIdentity`), not its name.
+
+   @param source_path The source the names come from, as diagnostics name it.
+  */
+  OXGN_COOK_NDAPI auto CollisionWarnings(std::string_view source_path) const
+    -> std::vector<ImportDiagnostic>;
+
   //! Releases every registered name.
   /*!
    @warning Not thread-safe with respect to MakeUniqueName().
@@ -101,9 +118,18 @@ public:
   OXGN_COOK_API auto Reset() -> void;
 
 private:
+  //! A name the service suffixed: the name another object had, and the one
+  //! it assigned instead.
+  struct Collision final {
+    std::string taken;
+    std::string assigned;
+  };
+
   struct NameRegistry {
     //! Comparison key of each taken name, and the next suffix to probe for it.
     std::unordered_map<std::string, uint32_t> next_suffix;
+    //! The suffixed names, in registration order.
+    std::vector<Collision> collisions;
     mutable std::shared_mutex mutex;
   };
 
