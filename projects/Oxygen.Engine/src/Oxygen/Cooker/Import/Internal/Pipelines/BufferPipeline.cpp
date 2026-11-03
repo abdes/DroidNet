@@ -16,6 +16,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
@@ -200,9 +201,11 @@ auto BufferPipeline::Worker() -> co::Co<>
 
 auto BufferPipeline::ReportCancelled(WorkItem item) -> co::Co<>
 {
+  // A cancelled item cooks nothing, even when its bytes were hashed before
+  // the stop arrived.
   WorkResult canceled {
     .source_id = std::move(item.source_id),
-    .cooked = std::move(item.cooked),
+    .cooked = {},
     .diagnostics = {},
     .success = false,
   };

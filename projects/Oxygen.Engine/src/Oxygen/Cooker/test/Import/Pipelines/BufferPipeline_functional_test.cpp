@@ -152,9 +152,13 @@ namespace {
     EXPECT_TRUE(result.cooked.data.Empty());
   }
 
+  //! One cancelled item does not affect another: the cancelled one returns
+  //! a failed result with no payload and the other cooks. The stop precedes
+  //! the submission, so the outcome never depends on when the worker runs.
   NOLINT_TEST_F(BufferPipelineTest, CollectMixedCancellationReturnsMixedResults)
   {
     std::stop_source stop_source;
+    stop_source.request_stop();
     BufferPipeline::WorkResult canceled_result;
     BufferPipeline::WorkResult ok_result;
 
@@ -175,8 +179,6 @@ namespace {
 
         co_await pipeline.Submit(
           MakeWorkItem("ok", std::vector<std::byte>(128, std::byte { 0x22 })));
-
-        stop_source.request_stop();
 
         auto first = co_await pipeline.Collect();
         auto second = co_await pipeline.Collect();
