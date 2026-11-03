@@ -5,10 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <chrono>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -20,12 +18,9 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
-#include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -34,11 +29,10 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
-#include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
+#include <Oxygen/Cooker/Import/Internal/InputSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -59,58 +53,12 @@ namespace {
   using data::pak::input::InputActionAssetDesc;
   using data::pak::input::InputActionAssetFlags;
   using data::pak::input::InputActionMappingRecord;
-  using data::pak::input::InputActionValueType;
   using data::pak::input::InputMappingContextAssetDesc;
   using data::pak::input::InputMappingContextFlags;
   using data::pak::input::InputTriggerAuxRecord;
-  using data::pak::input::InputTriggerBehavior;
   using data::pak::input::InputTriggerRecord;
   using data::pak::input::InputTriggerType;
   using nlohmann::json;
-
-  struct DeclaredAction final {
-    std::string name;
-    InputActionValueType value_type = InputActionValueType::kBool;
-    bool consumes_input = false;
-    bool cumulative = false;
-    data::AssetKey key;
-    std::string virtual_path;
-    std::string descriptor_relpath;
-  };
-
-  struct TriggerAuxSource final {
-    std::string action_name;
-    uint32_t completion_states = 0;
-    uint64_t time_to_complete_ns = 0;
-  };
-
-  struct TriggerSource final {
-    InputTriggerType type = InputTriggerType::kPressed;
-    InputTriggerBehavior behavior = InputTriggerBehavior::kImplicit;
-    float actuation_threshold = 0.5F;
-    float hold_time = 0.0F;
-    bool has_hold_time = false;
-    float interval = 0.0F;
-    bool has_interval = false;
-    std::optional<std::string> linked_action_name;
-    std::vector<TriggerAuxSource> aux;
-  };
-
-  struct MappingSource final {
-    std::string action_name;
-    std::string slot_name;
-    std::array<float, 2> scale { 1.0F, 1.0F };
-    std::array<float, 2> bias { 0.0F, 0.0F };
-    std::vector<TriggerSource> triggers;
-  };
-
-  struct ContextSource final {
-    std::string name;
-    int32_t default_priority = 0;
-    std::vector<MappingSource> mappings;
-    //! Where the context is in the input document.
-    std::string json_pointer;
-  };
 
   struct BuiltContextAsset final {
     std::string name;
@@ -148,113 +96,6 @@ namespace {
   //! The last extension of an input source's identity (`Player.input`).
   constexpr std::string_view kInputSourceSuffix = ".input";
 
-  auto InputSchemaValidator() -> nlohmann::json_schema::json_validator&
-  {
-    thread_local auto validator
-      = internal::MakeJsonSchemaValidator(json::parse(kInputSchema));
-    return validator;
-  }
-
-  auto ValidateInputSchema(const json& doc, ImportSession& session,
-    const ImportRequest& request) -> bool
-  {
-    const auto config = internal::JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "input.schema.validation_failed",
-      .validation_failed_prefix
-      = "Schema validation failed (oxygen.input.schema.json): ",
-      .validator_failure_code = "input.schema.validator_failure",
-      .validator_failure_prefix = "Input schema validator failure: ",
-    };
-    return internal::ValidateJsonSchemaWithDiagnostics(InputSchemaValidator(),
-      doc, config,
-      [&](const std::string_view code, std::string message,
-        std::string json_pointer) -> void {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          std::string(code), std::move(message), std::move(json_pointer));
-      });
-  }
-
-  [[nodiscard]] auto SecondsToNanoseconds(const float seconds, uint64_t& out)
-    -> bool
-  {
-    if (!std::isfinite(seconds) || seconds < 0.0F) {
-      return false;
-    }
-    constexpr long double kNsPerSecond = 1000000000.0L;
-    const auto raw = static_cast<long double>(seconds) * kNsPerSecond;
-    if (raw > static_cast<long double>(std::numeric_limits<uint64_t>::max())) {
-      return false;
-    }
-    out = static_cast<uint64_t>(std::llround(raw));
-    return true;
-  }
-
-  [[nodiscard]] auto ParseActionType(std::string_view value)
-    -> std::optional<InputActionValueType>
-  {
-    if (value == "bool") {
-      return InputActionValueType::kBool;
-    }
-    if (value == "axis1d") {
-      return InputActionValueType::kAxis1D;
-    }
-    if (value == "axis2d") {
-      return InputActionValueType::kAxis2D;
-    }
-    return std::nullopt;
-  }
-
-  [[nodiscard]] auto ParseTriggerType(std::string_view value)
-    -> std::optional<InputTriggerType>
-  {
-    if (value == "pressed") {
-      return InputTriggerType::kPressed;
-    }
-    if (value == "released") {
-      return InputTriggerType::kReleased;
-    }
-    if (value == "down") {
-      return InputTriggerType::kDown;
-    }
-    if (value == "hold") {
-      return InputTriggerType::kHold;
-    }
-    if (value == "hold_and_release") {
-      return InputTriggerType::kHoldAndRelease;
-    }
-    if (value == "pulse") {
-      return InputTriggerType::kPulse;
-    }
-    if (value == "tap") {
-      return InputTriggerType::kTap;
-    }
-    if (value == "chord") {
-      return InputTriggerType::kChord;
-    }
-    if (value == "action_chain") {
-      return InputTriggerType::kActionChain;
-    }
-    if (value == "combo") {
-      return InputTriggerType::kCombo;
-    }
-    return std::nullopt;
-  }
-
-  [[nodiscard]] auto ParseTriggerBehavior(std::string_view value)
-    -> std::optional<InputTriggerBehavior>
-  {
-    if (value == "explicit") {
-      return InputTriggerBehavior::kExplicit;
-    }
-    if (value == "implicit") {
-      return InputTriggerBehavior::kImplicit;
-    }
-    if (value == "blocker") {
-      return InputTriggerBehavior::kBlocker;
-    }
-    return std::nullopt;
-  }
-
   //! Where an input source's products are named: under its identity.
   /*!
    The source's identity is its path without the authoring `.json`
@@ -280,7 +121,7 @@ namespace {
     }
   };
 
-  auto SerializeAction(const DeclaredAction& action) -> std::vector<std::byte>
+  auto SerializeAction(const ActionSource& action) -> std::vector<std::byte>
   {
     auto desc = InputActionAssetDesc {};
     desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
@@ -351,292 +192,11 @@ namespace {
     return bytes;
   }
 
-  struct ParsedInputSource final {
-    std::vector<DeclaredAction> declared_actions;
-    //! The key of each declared action, by its name and by its virtual path.
-    std::unordered_map<std::string, data::AssetKey> local_action_keys;
-    std::vector<ContextSource> context_sources;
-  };
-
-  auto ParseInputSourceDocument(const json& doc,
-    const InputContainer& container, ImportSession& session,
-    const ImportRequest& request, ParsedInputSource& out) -> bool
-  {
-    out.declared_actions.clear();
-    out.local_action_keys.clear();
-    out.context_sources.clear();
-
-    const auto parse_action
-      = [&](const json& node, const json::json_pointer& path) -> bool {
-      auto action = DeclaredAction {};
-      action.name = node.at("name").get<std::string>();
-      action.virtual_path = container.ProductVirtualPath(
-        action.name, data::kInputActionDescriptorExtension);
-      if (auto refused = internal::CheckAssetVirtualPath(
-            request, action.virtual_path, (path / "name").to_string())) {
-        session.AddDiagnostic(std::move(*refused));
-        return false;
-      }
-      const auto parsed_type
-        = ParseActionType(node.at("type").get<std::string>());
-      if (!parsed_type.has_value()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "input.schema.contract_mismatch",
-          "Unsupported action type '" + node.at("type").get<std::string>()
-            + "'",
-          (path / "type").to_string());
-        return false;
-      }
-      action.value_type = *parsed_type;
-      action.consumes_input = node.value("consumes_input", false);
-      const auto accumulation
-        = node.value("accumulation", std::string { "highest_absolute" });
-      if (accumulation != "highest_absolute" && accumulation != "cumulative") {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "input.schema.contract_mismatch",
-          "Unsupported action accumulation '" + accumulation + "'",
-          (path / "accumulation").to_string());
-        return false;
-      }
-      action.cumulative = accumulation == "cumulative";
-
-      if (out.local_action_keys.contains(action.name)) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "input.asset.action_conflict",
-          "Duplicate action declaration '" + action.name + "'",
-          (path / "name").to_string());
-        return false;
-      }
-
-      action.descriptor_relpath = container.ProductRelPath(
-        action.name, data::kInputActionDescriptorExtension);
-      action.key = data::AssetKey::FromVirtualPath(action.virtual_path);
-      out.local_action_keys.emplace(action.name, action.key);
-      out.local_action_keys.emplace(action.virtual_path, action.key);
-      out.declared_actions.push_back(std::move(action));
-      return true;
-    };
-
-    const auto parse_trigger_aux_array
-      = [&](const json& node, const json::json_pointer& path,
-          std::vector<TriggerAuxSource>& trigger_aux) -> bool {
-      bool ok = true;
-      for (size_t i = 0; i < node.size(); ++i) {
-        const auto& entry = node[i];
-        const auto entry_path = path / i;
-        bool entry_ok = true;
-        auto aux = TriggerAuxSource {};
-        aux.action_name = entry.at("action").get<std::string>();
-
-        if (entry.contains("completion_states")) {
-          aux.completion_states = entry.at("completion_states").get<uint32_t>();
-        }
-
-        if (entry.contains("time_to_complete")) {
-          const auto seconds = entry.at("time_to_complete").get<float>();
-          if (!SecondsToNanoseconds(seconds, aux.time_to_complete_ns)) {
-            AddDiagnostic(session, request, ImportSeverity::kError,
-              "input.context.trigger_invalid",
-              "'time_to_complete' exceeds supported range",
-              (entry_path / "time_to_complete").to_string());
-            ok = false;
-            entry_ok = false;
-          }
-        }
-
-        if (entry_ok) {
-          trigger_aux.push_back(std::move(aux));
-        }
-      }
-      return ok;
-    };
-
-    const auto parse_trigger
-      = [&](const json& node, const json::json_pointer& path,
-          TriggerSource& out_trigger) -> bool {
-      const auto parsed_type
-        = ParseTriggerType(node.at("type").get<std::string>());
-      if (!parsed_type.has_value()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "input.schema.contract_mismatch",
-          "Unsupported trigger type '" + node.at("type").get<std::string>()
-            + "'",
-          (path / "type").to_string());
-        return false;
-      }
-      out_trigger.type = *parsed_type;
-
-      if (node.contains("behavior")) {
-        const auto parsed_behavior
-          = ParseTriggerBehavior(node.at("behavior").get<std::string>());
-        if (!parsed_behavior.has_value()) {
-          AddDiagnostic(session, request, ImportSeverity::kError,
-            "input.schema.contract_mismatch",
-            "Unsupported trigger behavior '"
-              + node.at("behavior").get<std::string>() + "'",
-            (path / "behavior").to_string());
-          return false;
-        }
-        out_trigger.behavior = *parsed_behavior;
-      }
-
-      if (node.contains("actuation_threshold")) {
-        out_trigger.actuation_threshold
-          = node.at("actuation_threshold").get<float>();
-      }
-      if (node.contains("hold_time")) {
-        out_trigger.has_hold_time = true;
-        out_trigger.hold_time = node.at("hold_time").get<float>();
-      }
-      if (node.contains("interval")) {
-        out_trigger.has_interval = true;
-        out_trigger.interval = node.at("interval").get<float>();
-      }
-      if (node.contains("chord_action")) {
-        out_trigger.linked_action_name
-          = node.at("chord_action").get<std::string>();
-      }
-      if (node.contains("combo_actions")
-        && (!parse_trigger_aux_array(
-          node["combo_actions"], path / "combo_actions", out_trigger.aux))) {
-        return false;
-      }
-
-      if (node.contains("aux")
-        && (!parse_trigger_aux_array(
-          node["aux"], path / "aux", out_trigger.aux))) {
-        return false;
-      }
-
-      if (out_trigger.type != InputTriggerType::kCombo
-        && !out_trigger.aux.empty()) {
-        AddDiagnostic(session, request, ImportSeverity::kWarning,
-          "input.context.trigger_aux_ignored",
-          "Aux records are ignored for non-combo triggers", path.to_string());
-        out_trigger.aux.clear();
-      }
-      return true;
-    };
-
-    const auto parse_mapping
-      = [&](const json& node, const json::json_pointer& path,
-          MappingSource& out_mapping) -> bool {
-      out_mapping.action_name = node.at("action").get<std::string>();
-      // The schema admits only the slot names the platform registers.
-      out_mapping.slot_name = node.at("slot").get<std::string>();
-
-      if (node.contains("scale")) {
-        out_mapping.scale[0] = node["scale"][0].get<float>();
-        out_mapping.scale[1] = node["scale"][1].get<float>();
-      }
-      if (node.contains("bias")) {
-        out_mapping.bias[0] = node["bias"][0].get<float>();
-        out_mapping.bias[1] = node["bias"][1].get<float>();
-      }
-
-      const bool has_trigger = node.contains("trigger");
-      const bool has_triggers = node.contains("triggers");
-
-      if (has_trigger) {
-        const auto type
-          = ParseTriggerType(node.at("trigger").get<std::string>());
-        if (!type.has_value()) {
-          AddDiagnostic(session, request, ImportSeverity::kError,
-            "input.schema.contract_mismatch",
-            "Unknown trigger shorthand '"
-              + node.at("trigger").get<std::string>() + "'",
-            (path / "trigger").to_string());
-          return false;
-        }
-        out_mapping.triggers.push_back(TriggerSource {
-          .type = *type,
-          .behavior = InputTriggerBehavior::kImplicit,
-          .actuation_threshold = 0.5F,
-        });
-      } else if (has_triggers) {
-        for (size_t i = 0; i < node["triggers"].size(); ++i) {
-          auto trigger = TriggerSource {};
-          if (!parse_trigger(
-                node["triggers"][i], path / "triggers" / i, trigger)) {
-            return false;
-          }
-          out_mapping.triggers.push_back(std::move(trigger));
-        }
-      }
-      return true;
-    };
-
-    const auto parse_context
-      = [&](const json& node, const json::json_pointer& path,
-          ContextSource& out_context) -> bool {
-      out_context.name = node.at("name").get<std::string>();
-      out_context.json_pointer = path.to_string();
-      if (auto refused = internal::CheckAssetVirtualPath(request,
-            container.ProductVirtualPath(
-              out_context.name, data::kInputMappingContextDescriptorExtension),
-            (path / "name").to_string())) {
-        session.AddDiagnostic(std::move(*refused));
-        return false;
-      }
-      if (node.contains("priority")) {
-        out_context.default_priority = node.at("priority").get<int32_t>();
-      }
-      const auto& mappings = node.at("mappings");
-      for (size_t i = 0; i < mappings.size(); ++i) {
-        auto mapping = MappingSource {};
-        if (!parse_mapping(mappings[i], path / "mappings" / i, mapping)) {
-          return false;
-        }
-        out_context.mappings.push_back(std::move(mapping));
-      }
-      return true;
-    };
-
-    bool parse_ok = true;
-    try {
-      if (doc.contains("actions")) {
-        for (size_t i = 0; i < doc["actions"].size(); ++i) {
-          const auto action_path = json::json_pointer {} / "actions" / i;
-          parse_ok = parse_action(doc["actions"][i], action_path) && parse_ok;
-        }
-      }
-
-      auto context_names = std::unordered_set<std::string> {};
-      const auto contexts = doc.value("contexts", json::array());
-      for (size_t i = 0; i < contexts.size(); ++i) {
-        auto context = ContextSource {};
-        const auto context_path = json::json_pointer {} / "contexts" / i;
-        if (!parse_context(contexts[i], context_path, context)) {
-          parse_ok = false;
-          continue;
-        }
-        if (!context_names.insert(context.name).second) {
-          AddDiagnostic(session, request, ImportSeverity::kError,
-            "input.context.name_duplicate",
-            "Duplicate context name '" + context.name + "'",
-            (context_path / "name").to_string());
-          parse_ok = false;
-          continue;
-        }
-        out.context_sources.push_back(std::move(context));
-      }
-    } catch (const std::exception& ex) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "input.schema.contract_mismatch",
-        std::string(
-          "Schema validated input document failed invariant extraction: ")
-          + ex.what());
-      return false;
-    }
-
-    return parse_ok;
-  }
-
   //! Resolves a mapping's action: a local name this source declares, or a
   //! reference to an action, told apart by the `.oiact` suffix.
   class ActionResolver final {
   public:
-    ActionResolver(const ParsedInputSource& source, ImportSession& session,
+    ActionResolver(const InputSourceDocument& source, ImportSession& session,
       const ImportRequest& request)
       : source_(source)
       , session_(session)
@@ -648,14 +208,11 @@ namespace {
       const json::json_pointer& location) -> std::optional<data::AssetKey>
     {
       if (!action.ends_with(data::kInputActionDescriptorExtension)) {
-        if (const auto it = source_.local_action_keys.find(action);
-          it != source_.local_action_keys.end()) {
-          return it->second;
-        }
-        Refuse("input.context.action_unresolved",
-          "No action of this source is named '" + action + "'",
-          location.to_string());
-        return std::nullopt;
+        // The preparation refused a name that no action of the source has.
+        const auto it = source_.local_action_keys.find(action);
+        CHECK_F(it != source_.local_action_keys.end(),
+          "Prepared input source names no action '{}'", action);
+        return it->second;
       }
 
       const auto reference = internal::ResolveJobReference(request_, action);
@@ -704,14 +261,14 @@ namespace {
     }
 
     // NOLINTBEGIN(*-avoid-const-or-ref-data-members)
-    const ParsedInputSource& source_;
+    const InputSourceDocument& source_;
     ImportSession& session_;
     const ImportRequest& request_;
     // NOLINTEND(*-avoid-const-or-ref-data-members)
     std::optional<std::vector<internal::MountedCookedSource>> mounts_;
   };
 
-  auto BuildInputContextAssets(const ParsedInputSource& source,
+  auto BuildInputContextAssets(const InputSourceDocument& source,
     const InputContainer& container, ImportSession& session,
     const ImportRequest& request)
     -> std::optional<std::vector<BuiltContextAsset>>
@@ -724,8 +281,8 @@ namespace {
     };
 
     auto built_contexts = std::vector<BuiltContextAsset> {};
-    built_contexts.reserve(source.context_sources.size());
-    for (const auto& source_ctx : source.context_sources) {
+    built_contexts.reserve(source.contexts.size());
+    for (const auto& source_ctx : source.contexts) {
       auto context = BuiltContextAsset {};
       context.name = source_ctx.name;
       context.flags = InputMappingContextFlags::kNone;
@@ -750,10 +307,9 @@ namespace {
       };
 
       bool build_ok = true;
-      for (size_t i = 0; i < source_ctx.mappings.size(); ++i) {
-        const auto& source_mapping = source_ctx.mappings[i];
+      for (const auto& source_mapping : source_ctx.mappings) {
         const auto mapping_path
-          = json::json_pointer { source_ctx.json_pointer } / "mappings" / i;
+          = json::json_pointer { source_mapping.json_pointer };
         const auto action_key = resolve_action_key(
           source_mapping.action_name, mapping_path / "action");
         const auto slot_offset = intern_slot(source_mapping.slot_name);
@@ -772,9 +328,9 @@ namespace {
         const auto trigger_start
           = static_cast<uint32_t>(context.triggers.size());
 
-        for (size_t t = 0; t < source_mapping.triggers.size(); ++t) {
-          const auto& source_trigger = source_mapping.triggers[t];
-          const auto trigger_path = mapping_path / "triggers" / t;
+        for (const auto& source_trigger : source_mapping.triggers) {
+          const auto trigger_path
+            = json::json_pointer { source_trigger.json_pointer };
           auto trigger = InputTriggerRecord {};
           trigger.type = source_trigger.type;
           trigger.behavior = source_trigger.behavior;
@@ -801,10 +357,9 @@ namespace {
               = static_cast<uint32_t>(context.trigger_aux.size());
             trigger.aux_count
               = static_cast<uint32_t>(source_trigger.aux.size());
-            for (size_t a = 0; a < source_trigger.aux.size(); ++a) {
-              const auto& source_aux = source_trigger.aux[a];
-              const auto aux_key = resolve_action_key(
-                source_aux.action_name, trigger_path / "aux" / a / "action");
+            for (const auto& source_aux : source_trigger.aux) {
+              const auto aux_key = resolve_action_key(source_aux.action_name,
+                json::json_pointer { source_aux.json_pointer } / "action");
               if (!aux_key.has_value()) {
                 build_ok = false;
                 break;
@@ -850,14 +405,18 @@ namespace {
     return built_contexts;
   }
 
-  auto EmitInputActions(const std::vector<DeclaredAction>& actions,
-    ImportSession& session, const ImportRequest& request) -> bool
+  auto EmitInputActions(const std::vector<ActionSource>& actions,
+    const InputContainer& container, ImportSession& session,
+    const ImportRequest& request) -> bool
   {
     for (const auto& action : actions) {
       const auto bytes = SerializeAction(action);
       try {
         session.AssetEmitter().Emit(action.key, AssetType::kInputAction,
-          action.virtual_path, action.descriptor_relpath, bytes, {});
+          action.virtual_path,
+          container.ProductRelPath(
+            action.name, data::kInputActionDescriptorExtension),
+          bytes, {});
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "input.asset.descriptor_emit_failed", ex.what(),
@@ -1083,32 +642,23 @@ auto InputImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     std::memcpy(source_text.data(), source_bytes.data(), source_bytes.size());
   }
 
-  json doc {};
-  try {
-    doc = json::parse(source_text);
-  } catch (const std::exception& ex) {
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      "input.import.parse_failed",
-      std::string("Failed to parse input JSON: ") + ex.what());
-    co_return false;
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto parsed_source = PrepareInputDocument(source_text,
+    request.source_path, container.placement.virtual_path, diagnostics);
+  for (auto& diagnostic : diagnostics) {
+    session->AddDiagnostic(std::move(diagnostic));
   }
-
-  if (!ValidateInputSchema(doc, *session, request)) {
-    co_return false;
-  }
-  auto parsed_source = ParsedInputSource {};
-  if (!ParseInputSourceDocument(
-        doc, container, *session, request, parsed_source)) {
+  if (!parsed_source.has_value()) {
     co_return false;
   }
 
   auto built_contexts
-    = BuildInputContextAssets(parsed_source, container, *session, request);
+    = BuildInputContextAssets(*parsed_source, container, *session, request);
   if (!built_contexts.has_value()) {
     co_return false;
   }
 
-  if (!EmitInputActions(parsed_source.declared_actions, *session, request)) {
+  if (!EmitInputActions(parsed_source->actions, container, *session, request)) {
     co_return false;
   }
   if (!EmitInputContexts(*built_contexts, *session, request)) {

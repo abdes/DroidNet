@@ -99,7 +99,7 @@ NOLINT_TEST(CollisionShapeDescriptorImportRequestBuilderTest,
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("physics.shape.descriptor.schema_validation_failed"));
+    ::testing::HasSubstr("physics.shape.schema_validation_failed"));
 }
 
 //! Verifies missing descriptor files fail with a readable error.

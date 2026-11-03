@@ -81,7 +81,60 @@ namespace {
       });
   }
 
+  auto GetBufferContainerValidator() -> json_validator&
+  {
+    static auto validator
+      = MakeJsonSchemaValidator(json::parse(kBufferContainerSchema));
+    return validator;
+  }
+
+  auto ValidateContainerSchema(std::vector<ImportDiagnostic>& diagnostics,
+    const std::filesystem::path& descriptor_path,
+    const nlohmann::json& document) -> bool
+  {
+    const auto config = internal::JsonSchemaValidationDiagnosticConfig {
+      .validation_failed_code = "buffer.container.schema_validation_failed",
+      .validation_failed_prefix = "Buffer container validation failed: ",
+      .validator_failure_code = "buffer.container.schema_validator_failure",
+      .validator_failure_prefix = "Buffer container schema validator failed: ",
+    };
+
+    return internal::ValidateJsonSchemaWithDiagnostics(
+      GetBufferContainerValidator(), document, config,
+      [&](const std::string_view code, const std::string& message,
+        const std::string& issue_pointer) -> void {
+        AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
+          std::string(code), message, json::json_pointer { issue_pointer });
+      });
+  }
+
 } // namespace
+
+auto BufferSource::FromContainer(const std::string_view bytes,
+  const std::filesystem::path& descriptor_path, const std::string_view anchor,
+  const MountTable& mounts, std::vector<ImportDiagnostic>& diagnostics)
+  -> std::optional<std::vector<BufferSource>>
+{
+  json document;
+  try {
+    document = json::parse(bytes);
+  } catch (const json::exception& failure) {
+    AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
+      "buffer.container.request_invalid_json", failure.what());
+    return std::nullopt;
+  }
+  if (!document.is_object()) {
+    AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
+      "buffer.container.request_invalid_json",
+      "Buffer container must be a JSON object");
+    return std::nullopt;
+  }
+  if (!ValidateContainerSchema(diagnostics, descriptor_path, document)) {
+    return std::nullopt;
+  }
+  return FromDeclarations(
+    document.at("buffers"), descriptor_path, anchor, mounts, diagnostics);
+}
 
 auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
   const std::filesystem::path& descriptor_path, const std::string_view anchor,

@@ -49,6 +49,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
@@ -201,29 +202,6 @@ namespace {
     return (root / source_path).lexically_normal().string();
   }
 
-  auto PrintDiagnostics(const std::span<const ImportDiagnostic> diagnostics,
-    std::ostream& errors) -> void
-  {
-    for (const auto& diagnostic : diagnostics) {
-      switch (diagnostic.severity) {
-      case ImportSeverity::kError:
-        errors << "ERROR";
-        break;
-      case ImportSeverity::kWarning:
-        errors << "WARNING";
-        break;
-      case ImportSeverity::kInfo:
-        errors << "INFO";
-        break;
-      }
-      errors << " [" << diagnostic.code << "]: " << diagnostic.message;
-      if (!diagnostic.json_pointer.empty()) {
-        errors << " (at '" << diagnostic.json_pointer << "')";
-      }
-      errors << "\n";
-    }
-  }
-
   //! Reports a one-fact mount code about a committed field.
   auto ReportCode(const MountCode<std::string_view>& code,
     const std::string_view text, const std::string_view field,
@@ -340,7 +318,7 @@ namespace {
       }
     }
     if (!findings.empty()) {
-      PrintDiagnostics(findings, errors);
+      internal::WriteDiagnostics(findings, errors);
       return std::nullopt;
     }
     return declarations;
@@ -354,7 +332,7 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     auto located = mounts.LocateSource(
       CommittedPath { .text = text, .json_pointer = field }, diagnostics);
-    PrintDiagnostics(diagnostics, errors);
+    internal::WriteDiagnostics(diagnostics, errors);
     return located;
   }
 
@@ -432,7 +410,7 @@ namespace {
     auto findings = std::vector<ImportDiagnostic> {};
     const auto path = ModelImportRecord::RecordPathOf(
       mounts, job.at("virtual_path").get<std::string>(), findings);
-    PrintDiagnostics(findings, errors);
+    internal::WriteDiagnostics(findings, errors);
     if (!path.has_value()) {
       return {};
     }
@@ -440,7 +418,7 @@ namespace {
       return std::make_shared<const ModelImportRecordContent>(
         ModelImportRecord::Read(*path, mounts));
     } catch (const ModelImportRecordError& error) {
-      PrintDiagnostics(std::span { &error.Diagnostic(), 1 }, errors);
+      internal::WriteDiagnostics(std::span { &error.Diagnostic(), 1 }, errors);
       return {};
     } catch (const std::filesystem::filesystem_error& error) {
       errors << "ERROR [" << model_record_codes::kUnreadable
@@ -1462,7 +1440,7 @@ auto ImportManifest::LoadBatch(
     tables.push_back(*manifest.mounts);
   }
   const auto conflicts = CheckMountNameConflicts(tables);
-  PrintDiagnostics(conflicts, error_stream);
+  internal::WriteDiagnostics(conflicts, error_stream);
   if (!conflicts.empty()) {
     return std::nullopt;
   }
@@ -1613,7 +1591,7 @@ namespace {
           .mounts_option = options.mounts_file,
           .owner = options.owner,
         }));
-      PrintDiagnostics(manifest.mounts->diagnostics, error_stream);
+      internal::WriteDiagnostics(manifest.mounts->diagnostics, error_stream);
       if (!manifest.mounts->IsValid()) {
         return std::nullopt;
       }
@@ -2317,8 +2295,11 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
       collision_shape_descriptor, error_stream, captured_inputs));
   }
   if (job_type == "buffer-container") {
-    return AttachOrchestration(internal::BuildBufferContainerRequest(
-      buffer_container, error_stream, captured_inputs));
+    CHECK_NOTNULL_F(mounts.get(), "A manifest job carries its mount table");
+    return AttachOrchestration(
+      internal::BuildBufferContainerRequest(buffer_container,
+        BufferContainerIdentity(virtual_path, source_mount_path), *mounts,
+        error_stream, captured_inputs));
   }
   if (job_type == "geometry-descriptor") {
     CHECK_NOTNULL_F(mounts.get(), "A manifest job carries its mount table");

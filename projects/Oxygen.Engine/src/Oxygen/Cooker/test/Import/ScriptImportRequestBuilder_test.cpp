@@ -284,8 +284,26 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("inline_bindings_json is not valid JSON"));
+  EXPECT_THAT(
+    errors.str(), ::testing::HasSubstr("[script.sidecar.parse_failed]"));
+}
+
+//! The builder refuses a payload the import would refuse, at the same place.
+NOLINT_TEST(ScriptImportRequestBuilderTest,
+  BuildScriptingSidecarRequestRejectsInvalidInlineRow)
+{
+  auto settings = MakeValidSidecarSettings();
+  settings.source_path.clear();
+  settings.inline_bindings_json
+    = R"([{"node_index":0,"slot_id":"nil","script_virtual_path":"/Scripts/test.oscript"}])";
+  std::ostringstream errors;
+
+  const auto request = BuildScriptingSidecarRequest(settings, errors);
+
+  EXPECT_FALSE(request.has_value());
+  EXPECT_THAT(
+    errors.str(), ::testing::HasSubstr("[script.sidecar.slot_id_invalid]"));
+  EXPECT_THAT(errors.str(), ::testing::HasSubstr("(at '/bindings/0/slot_id')"));
 }
 
 } // namespace

@@ -97,8 +97,7 @@ NOLINT_TEST(PhysicsMaterialDescriptorImportRequestBuilderTest,
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr(
-      "physics.material.descriptor.schema_validation_failed"));
+    ::testing::HasSubstr("physics.material.schema_validation_failed"));
 }
 
 NOLINT_TEST(

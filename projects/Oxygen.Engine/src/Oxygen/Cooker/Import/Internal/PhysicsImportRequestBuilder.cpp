@@ -4,19 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <exception>
 #include <filesystem>
 #include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/PhysicsSidecarSource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
@@ -25,36 +27,20 @@ namespace oxygen::content::import::internal {
 
 namespace {
 
+  //! Refuses a payload the sidecar document preparation refuses, and stores
+  //! the accepted payload in its compact form.
   auto NormalizeInlineSidecarPayload(const std::string_view payload_text,
-    std::string& normalized_payload, std::ostream& error_stream) -> bool
+    const std::filesystem::path& source_path, std::string& normalized_payload,
+    std::ostream& error_stream) -> bool
   {
-    using nlohmann::json;
-    json parsed;
-    try {
-      parsed = json::parse(payload_text);
-    } catch (const std::exception& ex) {
-      error_stream << "ERROR: inline_bindings_json is not valid JSON: "
-                   << ex.what() << "\n";
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    if (!PreparePhysicsSidecarDocument(payload_text, source_path, diagnostics)
+          .has_value()) {
+      WriteDiagnostics(diagnostics, error_stream);
       return false;
     }
 
-    if (!parsed.is_object()) {
-      error_stream << "ERROR: inline_bindings_json must be a JSON object\n";
-      return false;
-    }
-
-    if (!parsed.contains("bindings")) {
-      error_stream << "ERROR: inline_bindings_json must contain a top-level "
-                      "'bindings' object\n";
-      return false;
-    }
-    if (!parsed["bindings"].is_object()) {
-      error_stream << "ERROR: inline_bindings_json field 'bindings' must be "
-                      "an object\n";
-      return false;
-    }
-
-    normalized_payload = parsed.dump();
+    normalized_payload = nlohmann::json::parse(payload_text).dump();
     return true;
   }
 
@@ -104,16 +90,16 @@ auto BuildPhysicsSidecarRequest(const PhysicsSidecarImportSettings& settings,
     return std::nullopt;
   }
 
-  auto normalized_inline_bindings = std::string {};
-  if (has_inline
-    && !NormalizeInlineSidecarPayload(settings.inline_bindings_json,
-      normalized_inline_bindings, error_stream)) {
-    return std::nullopt;
-  }
-
   const auto source_path_for_request = has_source
     ? settings.source_path
     : std::string("inline://physics-sidecar");
+
+  auto normalized_inline_bindings = std::string {};
+  if (has_inline
+    && !NormalizeInlineSidecarPayload(settings.inline_bindings_json,
+      source_path_for_request, normalized_inline_bindings, error_stream)) {
+    return std::nullopt;
+  }
 
   auto request = BuildBaseImportRequest(
     {

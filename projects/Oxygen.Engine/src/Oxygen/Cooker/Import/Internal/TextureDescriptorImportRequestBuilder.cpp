@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
@@ -288,14 +289,7 @@ namespace internal {
     }
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto effective = settings.Prepare(document->text, diagnostics);
-    for (const auto& diagnostic : diagnostics) {
-      error_stream << "ERROR [" << diagnostic.code
-                   << "]: " << diagnostic.message;
-      if (!diagnostic.json_pointer.empty()) {
-        error_stream << " (at '" << diagnostic.json_pointer << "')";
-      }
-      error_stream << '\n';
-    }
+    WriteDiagnostics(diagnostics, error_stream);
     if (!effective.has_value()) {
       return std::nullopt;
     }

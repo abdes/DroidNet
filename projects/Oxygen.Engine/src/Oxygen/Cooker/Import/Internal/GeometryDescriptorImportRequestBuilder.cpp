@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 
 namespace oxygen::content::import::internal {
 
@@ -45,13 +46,7 @@ auto BuildGeometryDescriptorRequest(
   auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto source = GeometrySource::FromDescriptor(
     document->text, descriptor_path, identity, mounts, diagnostics);
-  for (const auto& diagnostic : diagnostics) {
-    error_stream << "ERROR [" << diagnostic.code << "]: " << diagnostic.message;
-    if (!diagnostic.json_pointer.empty()) {
-      error_stream << " (at '" << diagnostic.json_pointer << "')";
-    }
-    error_stream << '\n';
-  }
+  WriteDiagnostics(diagnostics, error_stream);
   if (!source.has_value()) {
     return std::nullopt;
   }

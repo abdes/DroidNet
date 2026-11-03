@@ -107,8 +107,8 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("top-level 'bindings' object"));
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr("[physics.sidecar.schema_validation_failed]"));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -154,7 +154,7 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("inline_bindings_json is not valid JSON"));
+    ::testing::HasSubstr("[physics.sidecar.payload_parse_failed]"));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,

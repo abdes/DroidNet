@@ -6,14 +6,13 @@
 
 #include <chrono>
 #include <cstdint>
-#include <exception>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
-#include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -23,11 +22,10 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
-#include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/PhysicsMaterialDescriptorImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/PhysicsMaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsMaterialImportPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -40,7 +38,6 @@ namespace oxygen::content::import::detail {
 namespace {
 
   using nlohmann::json;
-  using nlohmann::json_schema::json_validator;
 
   struct DescriptorTarget final {
     std::string relpath;
@@ -66,34 +63,6 @@ namespace {
       .source_path = request.source_path.string(),
       .json_pointer = std::move(json_pointer),
     });
-  }
-
-  auto GetPhysicsMaterialDescriptorValidator() -> json_validator&
-  {
-    static auto validator = internal::MakeJsonSchemaValidator(
-      json::parse(kPhysicsMaterialDescriptorSchema));
-    return validator;
-  }
-
-  auto ValidateDescriptorSchema(ImportSession& session,
-    const ImportRequest& request, const json& descriptor_doc) -> bool
-  {
-    const auto config = internal::JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "physics.material.schema_validation_failed",
-      .validation_failed_prefix
-      = "Physics material descriptor validation failed: ",
-      .validator_failure_code = "physics.material.schema_validator_failure",
-      .validator_failure_prefix
-      = "Physics material descriptor schema validator failed: ",
-    };
-
-    return internal::ValidateJsonSchemaWithDiagnostics(
-      GetPhysicsMaterialDescriptorValidator(), descriptor_doc, config,
-      [&](const std::string_view code, const std::string& message,
-        const std::string& json_pointer) -> void {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          std::string(code), message, json_pointer);
-      });
   }
 
   [[nodiscard]] auto ParseCombineMode(const std::string_view value)
@@ -180,33 +149,15 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  auto descriptor_doc = json {};
-  auto parse_exception = std::optional<std::string> {};
-  try {
-    descriptor_doc = json::parse(payload->descriptor_json);
-  } catch (const std::exception& ex) {
-    parse_exception = ex.what();
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto descriptor_doc = internal::PreparePhysicsMaterialDescriptor(
+    payload->descriptor_json, Request().source_path, diagnostics);
+  for (auto& diagnostic : diagnostics) {
+    session.AddDiagnostic(std::move(diagnostic));
   }
-  if (parse_exception.has_value()) {
-    AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "physics.material.request_invalid_json",
-      "Descriptor payload is invalid JSON: " + *parse_exception);
-    ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Invalid physics material payload");
-    co_return co_await FinalizeWithTelemetry(session);
-  }
-  if (!descriptor_doc.is_object()) {
-    AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "physics.material.request_invalid_json",
-      "Descriptor payload must be a JSON object");
-    ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Invalid physics material payload");
-    co_return co_await FinalizeWithTelemetry(session);
-  }
-
-  if (!ValidateDescriptorSchema(session, Request(), descriptor_doc)) {
+  if (!descriptor_doc.has_value()) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-      "Physics material descriptor schema validation failed");
+      "Invalid physics material descriptor payload");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
@@ -224,27 +175,27 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto material_name
     = std::filesystem::path(target->relpath).stem().string();
 
-  if (descriptor_doc.contains("static_friction")) {
+  if (descriptor_doc->contains("static_friction")) {
     descriptor.static_friction
-      = descriptor_doc.at("static_friction").get<float>();
+      = descriptor_doc->at("static_friction").get<float>();
   }
-  if (descriptor_doc.contains("dynamic_friction")) {
+  if (descriptor_doc->contains("dynamic_friction")) {
     descriptor.dynamic_friction
-      = descriptor_doc.at("dynamic_friction").get<float>();
+      = descriptor_doc->at("dynamic_friction").get<float>();
   }
-  if (descriptor_doc.contains("restitution")) {
-    descriptor.restitution = descriptor_doc.at("restitution").get<float>();
+  if (descriptor_doc->contains("restitution")) {
+    descriptor.restitution = descriptor_doc->at("restitution").get<float>();
   }
-  if (descriptor_doc.contains("density")) {
-    descriptor.density = descriptor_doc.at("density").get<float>();
+  if (descriptor_doc->contains("density")) {
+    descriptor.density = descriptor_doc->at("density").get<float>();
   }
-  if (descriptor_doc.contains("combine_mode_friction")) {
+  if (descriptor_doc->contains("combine_mode_friction")) {
     descriptor.combine_mode_friction = ParseCombineMode(
-      descriptor_doc.at("combine_mode_friction").get<std::string>());
+      descriptor_doc->at("combine_mode_friction").get<std::string>());
   }
-  if (descriptor_doc.contains("combine_mode_restitution")) {
+  if (descriptor_doc->contains("combine_mode_restitution")) {
     descriptor.combine_mode_restitution = ParseCombineMode(
-      descriptor_doc.at("combine_mode_restitution").get<std::string>());
+      descriptor_doc->at("combine_mode_restitution").get<std::string>());
   }
 
   auto& pipeline = CreatePipeline<PhysicsMaterialImportPipeline>(

@@ -11,60 +11,20 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
-#include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
-#include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
+#include <Oxygen/Cooker/Import/Internal/PhysicsMaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportSettings.h>
 
 namespace oxygen::content::import::internal {
-
-namespace {
-
-  using nlohmann::json;
-  using nlohmann::json_schema::json_validator;
-
-  auto GetPhysicsMaterialDescriptorValidator() -> json_validator&
-  {
-    static auto validator
-      = MakeJsonSchemaValidator(json::parse(kPhysicsMaterialDescriptorSchema));
-    return validator;
-  }
-
-  auto ValidateDescriptorSchema(
-    const json& descriptor_doc, std::ostream& error_stream) -> bool
-  {
-    const auto config = JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code
-      = "physics.material.descriptor.schema_validation_failed",
-      .validation_failed_prefix
-      = "Physics material descriptor validation failed: ",
-      .validator_failure_code
-      = "physics.material.descriptor.schema_validator_failure",
-      .validator_failure_prefix
-      = "Physics material descriptor schema validator failed: ",
-    };
-
-    return ValidateJsonSchemaWithDiagnostics(
-      GetPhysicsMaterialDescriptorValidator(), descriptor_doc, config,
-      [&](const std::string_view code, const std::string& message,
-        const std::string& json_pointer) -> void {
-        error_stream << "ERROR [" << code << "]: " << message;
-        if (!json_pointer.empty()) {
-          error_stream << " (at '" << json_pointer << "')";
-        }
-        error_stream << "\n";
-      });
-  }
-
-} // namespace
 
 auto BuildPhysicsMaterialDescriptorRequest(
   const PhysicsMaterialDescriptorImportSettings& settings,
@@ -84,13 +44,11 @@ auto BuildPhysicsMaterialDescriptorRequest(
   if (!document.has_value()) {
     return std::nullopt;
   }
-  const auto descriptor_doc = ParseDescriptorJsonObject(
-    document->text, "physics material descriptor", error_stream);
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto descriptor_doc = PreparePhysicsMaterialDescriptor(
+    document->text, descriptor_path, diagnostics);
+  WriteDiagnostics(diagnostics, error_stream);
   if (!descriptor_doc.has_value()) {
-    return std::nullopt;
-  }
-
-  if (!ValidateDescriptorSchema(*descriptor_doc, error_stream)) {
     return std::nullopt;
   }
 

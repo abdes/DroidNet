@@ -22,6 +22,7 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -38,7 +39,13 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/Internal/CollisionShapeSource.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/Import/Internal/InputSource.h>
+#include <Oxygen/Cooker/Import/Internal/PhysicsMaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/PhysicsSidecarSource.h>
+#include <Oxygen/Cooker/Import/Internal/ScriptSource.h>
+#include <Oxygen/Cooker/Import/Internal/ScriptingSidecarSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Naming.h>
@@ -1013,20 +1020,31 @@ namespace {
     EXPECT_EQ(result.references.front().json_pointer, "/material_ref");
   }
 
-  //! Whether the only job of `report` refuses its source.
-  auto RefusesItsSource(const ImportSourceAnalysis& report) -> bool
+  //! Each diagnostic as its code and the JSON location it names.
+  auto Located(const std::vector<ImportDiagnostic>& diagnostics)
+    -> std::vector<std::pair<std::string, std::string>>
   {
-    return !report.complete
-      && std::ranges::any_of(
-        report.jobs.front().diagnostics, [](const auto& diagnostic) -> bool {
-          return diagnostic.code == "analysis.source_invalid";
-        });
+    auto located = std::vector<std::pair<std::string, std::string>> {};
+    for (const auto& diagnostic : diagnostics) {
+      located.emplace_back(diagnostic.code, diagnostic.json_pointer);
+    }
+    return located;
+  }
+
+  //! Whether analysis refused the only job of `report` with exactly the
+  //! diagnostics the cook's preparation gives for the same document.
+  auto RefusesAsTheCook(const ImportSourceAnalysis& report,
+    const std::vector<ImportDiagnostic>& cook) -> bool
+  {
+    return !report.complete && !cook.empty()
+      && Located(report.jobs.front().diagnostics) == Located(cook);
   }
 
   //! A source that is not JSON is refused, as its cook refuses it.
   NOLINT_TEST_F(ImportSourceAnalysisTest, SourceThatIsNotJsonIsRefused)
   {
-    const auto path = Write("Park.physics-sidecar.json", "{ not json");
+    constexpr auto kText = std::string_view { "{ not json" };
+    const auto path = Write("Park.physics-sidecar.json", kText);
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
     job.job_type = "physics-sidecar";
@@ -1037,7 +1055,9 @@ namespace {
 
     const auto report = manifest.AnalyzeSources();
 
-    EXPECT_TRUE(RefusesItsSource(report)) << report.ToJson();
+    auto cook = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(PreparePhysicsSidecarDocument(kText, path, cook).has_value());
+    EXPECT_TRUE(RefusesAsTheCook(report, cook)) << report.ToJson();
   }
 
   //! A source without what its job reads is refused: a collision shape names
@@ -1060,7 +1080,11 @@ namespace {
 
     const auto report = manifest.AnalyzeSources();
 
-    EXPECT_TRUE(RefusesItsSource(report)) << report.ToJson();
+    auto cook = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(
+      internal::PrepareCollisionShapeDescriptor(shape.Text(), path, cook)
+        .has_value());
+    EXPECT_TRUE(RefusesAsTheCook(report, cook)) << report.ToJson();
   }
 
   //! A physics sidecar references its target scene and what its bindings
@@ -1181,5 +1205,105 @@ namespace {
         result.references.at(2).json_pointer, "/bindings/0/params/0/value");
     }
   }
+  //! A physics material the schema refuses is refused by analysis with the
+  //! cook's code, at the value.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, PhysicsMaterialIsRefusedAsTheCook)
+  {
+    constexpr auto kText = std::string_view { R"({ "static_friction": -1 })" };
+    const auto path = Write("Wood.opmat.json", kText);
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "physics-material-descriptor";
+    job.physics_material_descriptor.descriptor_path = path.string();
+    job.virtual_path = "/Content/Physics/Wood.opmat";
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    auto cook = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(internal::PreparePhysicsMaterialDescriptor(kText, path, cook)
+        .has_value());
+    EXPECT_TRUE(RefusesAsTheCook(report, cook)) << report.ToJson();
+    EXPECT_TRUE(std::ranges::any_of(cook,
+      [](const auto& diagnostic) -> bool {
+        return diagnostic.code == "physics.material.schema_validation_failed"
+          && diagnostic.json_pointer == "/static_friction";
+      }))
+      << report.ToJson();
+  }
+
+  //! An input source whose actions are not an array is refused by analysis
+  //! with the cook's code, at the field.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, InputSourceIsRefusedAsTheCook)
+  {
+    constexpr auto kText = std::string_view { R"({ "actions": "none" })" };
+    constexpr auto kIdentity
+      = std::string_view { "/Content/Input/Player.input" };
+    const auto path = Write("Player.input.json", kText);
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "input";
+    job.input.source_path = path.string();
+    job.virtual_path = std::string { kIdentity };
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    auto cook = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(
+      PrepareInputDocument(kText, path, kIdentity, cook).has_value());
+    EXPECT_TRUE(RefusesAsTheCook(report, cook)) << report.ToJson();
+    EXPECT_TRUE(std::ranges::any_of(cook,
+      [](const auto& diagnostic) -> bool {
+        return diagnostic.code == "input.schema.validation_failed"
+          && diagnostic.json_pointer == "/actions";
+      }))
+      << report.ToJson();
+  }
+
+  //! A script sidecar row the cook refuses is refused by analysis with the
+  //! cook's code, at the row.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, ScriptSidecarIsRefusedAsTheCook)
+  {
+    constexpr auto kText = std::string_view { R"({ "bindings": [ 7 ] })" };
+    const auto path = Write("Park.scripting-sidecar.json", kText);
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "script-sidecar";
+    job.scripting_sidecar.source_path = path.string();
+    job.scripting_sidecar.target_scene_virtual_path
+      = "/Content/Scenes/Park.oscene";
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    auto cook = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(
+      PrepareScriptingSidecarDocument(kText, path, cook).has_value());
+    EXPECT_TRUE(RefusesAsTheCook(report, cook)) << report.ToJson();
+  }
+
+  //! A script whose declarations the analyzer refuses is refused by analysis
+  //! with the cook's codes.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, ScriptIsRefusedAsTheCook)
+  {
+    constexpr auto kText = std::string_view { "function (" };
+    const auto path = Write("Broken.luau", kText);
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "script";
+    job.script.source_path = path.string();
+    job.virtual_path = "/Content/Scripts/Broken.oscript";
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    auto cook = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(AnalyzeScriptDeclarations(
+      std::as_bytes(std::span { kText }), path.string(), path, cook)
+        .has_value());
+    EXPECT_TRUE(RefusesAsTheCook(report, cook)) << report.ToJson();
+  }
+
 } // namespace
 } // namespace oxygen::content::import::test

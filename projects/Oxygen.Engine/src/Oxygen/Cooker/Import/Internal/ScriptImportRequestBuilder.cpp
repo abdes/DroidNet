@@ -4,19 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <exception>
 #include <filesystem>
 #include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
-#include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
-
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/ScriptingSidecarSource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
@@ -27,6 +28,10 @@ namespace oxygen::content::import::internal {
 namespace {
 
   using core::meta::scripting::ScriptCompileMode;
+
+  //! The source path an inline sidecar reports its diagnostics under.
+  constexpr std::string_view kInlineSidecarSourcePath
+    = "inline://script-sidecar";
 
   auto ParseScriptCompileMode(const std::string_view mode)
     -> std::optional<ScriptCompileMode>
@@ -52,36 +57,22 @@ namespace {
     return std::nullopt;
   }
 
+  //! Prepares the inline sidecar as the import will, and returns it in the form
+  //! the request carries.
   auto NormalizeInlineSidecarPayload(const std::string_view payload_text,
     std::string& normalized_payload, std::ostream& error_stream) -> bool
   {
-    using nlohmann::json;
-    json parsed;
-    try {
-      parsed = json::parse(payload_text);
-    } catch (const std::exception& ex) {
-      error_stream << "ERROR: inline_bindings_json is not valid JSON: "
-                   << ex.what() << "\n";
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto prepared = PrepareScriptingSidecarDocument(
+      payload_text, kInlineSidecarSourcePath, diagnostics);
+    WriteDiagnostics(diagnostics, error_stream);
+    if (!prepared.has_value()) {
       return false;
     }
-
-    json sidecar_doc;
-    if (parsed.is_array()) {
-      sidecar_doc = json { { "bindings", std::move(parsed) } };
-    } else if (parsed.is_object()) {
-      if (!parsed.contains("bindings") || !parsed.at("bindings").is_array()) {
-        error_stream << "ERROR: inline_bindings_json object must contain array "
-                        "field 'bindings'\n";
-        return false;
-      }
-      sidecar_doc = std::move(parsed);
-    } else {
-      error_stream << "ERROR: inline_bindings_json must be a JSON array or an "
-                      "object with array field 'bindings'\n";
-      return false;
-    }
-
-    normalized_payload = sidecar_doc.dump();
+    auto normalized = NormalizeScriptingSidecarText(payload_text);
+    // The preparation parsed the same text.
+    CHECK_F(normalized.has_value());
+    normalized_payload = std::move(*normalized);
     return true;
   }
 
@@ -209,9 +200,8 @@ auto BuildScriptingSidecarRequest(
     return std::nullopt;
   }
 
-  const auto source_path_for_request = has_source
-    ? settings.source_path
-    : std::string("inline://script-sidecar");
+  const auto source_path_for_request
+    = has_source ? settings.source_path : std::string(kInlineSidecarSourcePath);
 
   auto request = BuildBaseImportRequest(
     {

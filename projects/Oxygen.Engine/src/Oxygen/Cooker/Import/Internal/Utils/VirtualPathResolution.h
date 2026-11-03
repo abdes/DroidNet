@@ -40,7 +40,7 @@ inline auto IsCanonicalVirtualPath(const std::string_view virtual_path) -> bool
 
  @return The diagnostic, or nothing when the path is accepted.
 */
-inline auto CheckAssetVirtualPath(const ImportRequest& request,
+inline auto CheckAssetVirtualPath(std::string source_path,
   const std::string_view virtual_path, std::string json_pointer)
   -> std::optional<ImportDiagnostic>
 {
@@ -53,9 +53,19 @@ inline auto CheckAssetVirtualPath(const ImportRequest& request,
     .code = oxygen::content::to_string(*error),
     .message = "The asset name gives a virtual path the engine refuses: "
       + std::string(virtual_path),
-    .source_path = request.source_path.string(),
+    .source_path = std::move(source_path),
     .json_pointer = std::move(json_pointer),
   };
+}
+
+//! The error refusing the virtual path an asset's name gives it, read in the
+//! request's source file.
+inline auto CheckAssetVirtualPath(const ImportRequest& request,
+  const std::string_view virtual_path, std::string json_pointer)
+  -> std::optional<ImportDiagnostic>
+{
+  return CheckAssetVirtualPath(
+    request.source_path.string(), virtual_path, std::move(json_pointer));
 }
 
 //! The path of an identity in a cooked root, which holds the identity's mount.

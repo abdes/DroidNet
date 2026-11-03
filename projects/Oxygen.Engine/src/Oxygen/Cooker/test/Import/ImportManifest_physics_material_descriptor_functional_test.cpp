@@ -206,8 +206,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(request_errors.str(),
-    ::testing::HasSubstr(
-      "physics.material.descriptor.schema_validation_failed"));
+    ::testing::HasSubstr("physics.material.schema_validation_failed"));
 }
 
 NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,

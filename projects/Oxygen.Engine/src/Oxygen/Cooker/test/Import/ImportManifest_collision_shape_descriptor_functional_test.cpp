@@ -205,7 +205,7 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(request_errors.str(),
-    ::testing::HasSubstr("physics.shape.descriptor.schema_validation_failed"));
+    ::testing::HasSubstr("physics.shape.schema_validation_failed"));
 }
 
 } // namespace

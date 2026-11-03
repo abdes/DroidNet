@@ -48,13 +48,19 @@
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
+#include <Oxygen/Cooker/Import/Internal/CollisionShapeSource.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
+#include <Oxygen/Cooker/Import/Internal/InputSource.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelSettings.h>
 #include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
+#include <Oxygen/Cooker/Import/Internal/PhysicsMaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/PhysicsSidecarSource.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
+#include <Oxygen/Cooker/Import/Internal/ScriptSource.h>
+#include <Oxygen/Cooker/Import/Internal/ScriptingSidecarSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
@@ -411,31 +417,17 @@ namespace {
     };
   }
 
-  //! Reports that the source does not hold what its job reads, as the cook
-  //! would refuse it; the job's analysis is incomplete.
-  auto RefuseSource(AnalysisContext& context, std::string message) -> bool
-  {
-    AddError(*context.report, "analysis.source_invalid", std::move(message));
-    return false;
-  }
-
-  //! The JSON document a descriptor or sidecar file holds, or its inline
-  //! bindings; none, reported, when the text is not valid JSON.
-  auto ReadJsonSource(AnalysisContext& context,
+  //! The text a descriptor or sidecar job reads: its file, or its inline
+  //! bindings when it names no file.
+  auto ReadSourceText(AnalysisContext& context,
     const std::filesystem::path& source_path, const std::string& inline_json)
-    -> co::Co<std::optional<nlohmann::json>>
+    -> co::Co<std::string>
   {
-    auto text = inline_json;
-    if (!source_path.empty()) {
-      context.report->source_path = source_path;
-      text = co_await context.ReadText(source_path);
+    if (source_path.empty()) {
+      co_return inline_json;
     }
-    auto document = nlohmann::json::parse(text, nullptr, false, true);
-    if (document.is_discarded()) {
-      RefuseSource(context, "The source is not valid JSON");
-      co_return std::nullopt;
-    }
-    co_return document;
+    context.report->source_path = source_path;
+    co_return co_await context.ReadText(source_path);
   }
 
   //! The string field `field` of `parent`, when it has one.
@@ -462,134 +454,88 @@ namespace {
   //! Reports each action an input source names by virtual path: another
   //! source's product, which the cook resolves, so that source cooks first.
   auto ReportInputActionReferences(
-    const nlohmann::json& root, const AnalysisContext& context) -> void
+    const InputSourceDocument& document, const AnalysisContext& context) -> void
   {
     const auto reference
-      = [&](const nlohmann::json& parent, const std::string_view field,
-          const Pointer& location) -> void {
-      if (parent.is_object() && parent.contains(field)
-        && parent.at(field).is_string()
-        && IsInputActionReference(
-          parent.at(field).get_ref<const std::string&>())) {
-        context.Reference(parent.at(field).get<std::string>(),
-          Kind::kInputAction, (location / std::string(field)).to_string());
+      = [&](const std::string& name, const std::string& json_pointer) -> void {
+      if (IsInputActionReference(name)) {
+        context.Reference(name, Kind::kInputAction, json_pointer);
       }
     };
-    const auto contexts = JsonItems(root, "contexts");
-    for (size_t c = 0; c < contexts.size(); ++c) {
-      const auto mappings = JsonItems(contexts[c], "mappings");
-      for (size_t m = 0; m < mappings.size(); ++m) {
-        const auto mapping_path = Pointer {} / "contexts" / c / "mappings" / m;
-        reference(mappings[m], "action", mapping_path);
-        const auto triggers = JsonItems(mappings[m], "triggers");
-        for (size_t t = 0; t < triggers.size(); ++t) {
-          const auto trigger_path = mapping_path / "triggers" / t;
-          reference(triggers[t], "chord_action", trigger_path);
-          for (const std::string_view list : { "combo_actions", "aux" }) {
-            const auto steps = JsonItems(triggers[t], list);
-            for (size_t i = 0; i < steps.size(); ++i) {
-              reference(
-                steps[i], "action", trigger_path / std::string(list) / i);
-            }
+    for (const auto& input_context : document.contexts) {
+      for (const auto& mapping : input_context.mappings) {
+        reference(mapping.action_name, mapping.json_pointer + "/action");
+        for (const auto& trigger : mapping.triggers) {
+          if (trigger.linked_action_name.has_value()) {
+            reference(*trigger.linked_action_name,
+              trigger.json_pointer + "/chord_action");
+          }
+          for (const auto& step : trigger.aux) {
+            reference(step.action_name, step.json_pointer + "/action");
           }
         }
       }
     }
   }
 
-  //! Analyzes an input source: the file is the only input, and each declared
-  //! action and mapping context is an output named under the source's
-  //! identity. Actions it names by virtual path are its references. A file
-  //! that is not a JSON object is refused, as the import refuses it.
+  //! Analyzes an input source: its actions and contexts are products named
+  //! under its identity, and the actions it names by virtual path are its
+  //! references. The document is prepared as the cook prepares it.
   auto PrepareInputJob(const ImportManifestJob& job, AnalysisContext& context)
     -> co::Co<bool>
   {
-    const auto document
-      = co_await ReadJsonSource(context, job.input.source_path, {});
+    const auto text
+      = co_await ReadSourceText(context, job.input.source_path, {});
+    auto& report = *context.report;
+    const auto document = PrepareInputDocument(
+      text, report.source_path, job.virtual_path, report.diagnostics);
     if (!document.has_value()) {
       co_return false;
     }
-    if (!document->is_object()) {
-      co_return RefuseSource(context, "An input source is a JSON object");
+    for (const auto& action : document->actions) {
+      context.Output(action.virtual_path, Kind::kInputAction);
     }
-    const auto& root = *document;
-
-    const auto declared_name
-      = [](const nlohmann::json& item) -> std::optional<std::string> {
-      if (!item.is_object() || !item.contains("name")
-        || !item.at("name").is_string()) {
-        return std::nullopt;
-      }
-      return item.at("name").get<std::string>();
-    };
-    struct ProductKind final {
-      std::string_view key;
-      std::string_view extension;
-      Kind kind = Kind::kInputAction;
-    };
-    for (const auto& product : {
-           ProductKind {
-             .key = "actions",
-             .extension = data::kInputActionDescriptorExtension,
-             .kind = Kind::kInputAction,
-           },
-           ProductKind {
-             .key = "contexts",
-             .extension = data::kInputMappingContextDescriptorExtension,
-             .kind = Kind::kInputMappingContext,
-           },
-         }) {
-      if (!root.contains(product.key) || !root.at(product.key).is_array()) {
-        continue;
-      }
-      for (const auto& item : root.at(product.key)) {
-        if (const auto name = declared_name(item); name.has_value()) {
-          context.Output(
-            job.virtual_path + "/" + *name + std::string(product.extension),
-            product.kind);
-        }
-      }
+    for (const auto& input_context : document->contexts) {
+      context.Output(job.virtual_path + "/" + input_context.name
+          + std::string(data::kInputMappingContextDescriptorExtension),
+        Kind::kInputMappingContext);
     }
-    ReportInputActionReferences(root, context);
+    ReportInputActionReferences(*document, context);
     co_return true;
   }
 
-  //! Analyzes a script job: the script file is the only input, and the
-  //! script asset at the job's identity is its output.
+  //! Analyzes a script job: the script file is the only input, its
+  //! declarations are checked as the cook checks them, and the script asset at
+  //! the job's identity is its output.
   auto PrepareScriptJob(const ImportManifestJob& job, AnalysisContext& context)
-    -> void
+    -> co::Co<bool>
   {
     auto& report = *context.report;
     report.source_path = job.script.source_path;
-    context.AddFile(report.source_path);
+    const auto bytes = co_await context.Read(report.source_path);
+    if (!AnalyzeScriptDeclarations(bytes.Bytes(), job.script.source_path,
+          report.source_path, report.diagnostics)
+          .has_value()) {
+      co_return false;
+    }
     context.Output(job.virtual_path, Kind::kScript);
+    co_return true;
   }
 
   //! Analyzes a buffer container: it reads its buffers' source files and
-  //! produces each buffer, named relative to the container's identity, its
-  //! mount path without `.json`.
+  //! produces each buffer, named relative to the container's identity.
   auto PrepareBufferContainerJob(
     const ImportManifestJob& job, AnalysisContext& context) -> co::Co<bool>
   {
     auto& report = *context.report;
-    const auto document = co_await ReadJsonSource(
+    const auto text = co_await ReadSourceText(
       context, job.buffer_container.descriptor_path, {});
-    if (!document.has_value()) {
-      co_return false;
-    }
-    if (!document->is_object() || !document->contains("buffers")
-      || !document->at("buffers").is_array()) {
-      co_return RefuseSource(context, "A buffer container lists its 'buffers'");
-    }
-    constexpr auto kAuthoringSuffix = std::string_view { ".json" };
-    const auto& location = job.source_mount_path;
-    context.anchor = location.ends_with(kAuthoringSuffix)
-      ? location.substr(0, location.size() - kAuthoringSuffix.size())
-      : location;
+    context.anchor = std::string {
+      BufferContainerIdentity(job.virtual_path, job.source_mount_path),
+    };
     CHECK_NOTNULL_F(job.mounts.get(), "A manifest job carries its mount table");
-    const auto sources
-      = internal::BufferSource::FromDeclarations(document->at("buffers"),
-        report.source_path, context.anchor, *job.mounts, report.diagnostics);
+    const auto sources = internal::BufferSource::FromContainer(text,
+      report.source_path, context.anchor, *job.mounts, report.diagnostics);
     if (!sources.has_value()) {
       co_return false;
     }
@@ -603,12 +549,18 @@ namespace {
   //! Analyzes a physics material descriptor: the descriptor is the only
   //! input, and it references nothing.
   auto PreparePhysicsMaterialJob(
-    const ImportManifestJob& job, AnalysisContext& context) -> void
+    const ImportManifestJob& job, AnalysisContext& context) -> co::Co<bool>
   {
+    const auto text = co_await ReadSourceText(
+      context, job.physics_material_descriptor.descriptor_path, {});
     auto& report = *context.report;
-    report.source_path = job.physics_material_descriptor.descriptor_path;
-    context.AddFile(report.source_path);
+    if (!internal::PreparePhysicsMaterialDescriptor(
+          text, report.source_path, report.diagnostics)
+          .has_value()) {
+      co_return false;
+    }
     context.Output(job.virtual_path, Kind::kAsset);
+    co_return true;
   }
 
   //! Analyzes a collision shape descriptor: it references its physics
@@ -616,18 +568,18 @@ namespace {
   auto PrepareCollisionShapeJob(
     const ImportManifestJob& job, AnalysisContext& context) -> co::Co<bool>
   {
-    const auto document = co_await ReadJsonSource(
+    const auto text = co_await ReadSourceText(
       context, job.collision_shape_descriptor.descriptor_path, {});
+    auto& report = *context.report;
+    const auto document = internal::PrepareCollisionShapeDescriptor(
+      text, report.source_path, report.diagnostics);
     if (!document.has_value()) {
       co_return false;
     }
     context.Output(job.virtual_path, Kind::kAsset);
-    const auto material = JsonString(*document, "material_ref");
-    if (!material.has_value()) {
-      co_return RefuseSource(context,
-        "A collision shape names its physics material, 'material_ref'");
+    if (const auto material = JsonString(*document, "material_ref")) {
+      context.Reference(*material, Kind::kAsset, "/material_ref");
     }
-    context.Reference(*material, Kind::kAsset, "/material_ref");
     co_return true;
   }
 
@@ -652,11 +604,15 @@ namespace {
     const ImportManifestJob& job, AnalysisContext& context) -> co::Co<bool>
   {
     const auto& settings = job.physics_sidecar;
-    const auto document = co_await ReadJsonSource(
+    const auto text = co_await ReadSourceText(
       context, settings.source_path, settings.inline_bindings_json);
-    if (!document.has_value()) {
+    if (!PreparePhysicsSidecarDocument(
+          text, context.report->source_path, context.report->diagnostics)
+          .has_value()) {
       co_return false;
     }
+    // The prepared document is valid JSON with `bindings` by binding kind.
+    const auto document = std::optional { nlohmann::json::parse(text) };
     const auto& scene = settings.target_scene_virtual_path;
     TargetScene(context, scene);
     constexpr auto kSceneSuffix = data::kSceneDescriptorExtension;
@@ -665,11 +621,6 @@ namespace {
       : scene;
     context.Output(stem + std::string(data::kPhysicsSceneDescriptorExtension),
       Kind::kPhysicsScene);
-    if (!document->is_object() || !document->contains("bindings")
-      || !document->at("bindings").is_object()) {
-      co_return RefuseSource(
-        context, "A physics sidecar holds its 'bindings' by binding kind");
-    }
     const auto& groups = document->at("bindings");
     struct ReferenceField final {
       std::string_view name;
@@ -706,19 +657,16 @@ namespace {
     const ImportManifestJob& job, AnalysisContext& context) -> co::Co<bool>
   {
     const auto& settings = job.scripting_sidecar;
-    const auto document = co_await ReadJsonSource(
+    const auto text = co_await ReadSourceText(
       context, settings.source_path, settings.inline_bindings_json);
-    if (!document.has_value()) {
+    if (!PrepareScriptingSidecarDocument(
+          text, context.report->source_path, context.report->diagnostics)
+          .has_value()) {
       co_return false;
     }
     TargetScene(context, settings.target_scene_virtual_path);
-    // Inline bindings may be the array of rows itself.
-    const auto listed = document->is_array()
-      || (document->is_object() && document->contains("bindings")
-        && document->at("bindings").is_array());
-    if (!listed) {
-      co_return RefuseSource(context, "A script sidecar lists its 'bindings'");
-    }
+    // The prepared document lists its rows, or is the array of rows itself.
+    const auto document = std::optional { nlohmann::json::parse(text) };
     const auto rows
       = document->is_array() ? *document : document->at("bindings");
     const auto params
@@ -757,15 +705,13 @@ namespace {
       co_return co_await PrepareInputJob(job, context);
     }
     if (job.job_type == "script") {
-      PrepareScriptJob(job, context);
-      co_return true;
+      co_return co_await PrepareScriptJob(job, context);
     }
     if (job.job_type == "buffer-container") {
       co_return co_await PrepareBufferContainerJob(job, context);
     }
     if (job.job_type == "physics-material-descriptor") {
-      PreparePhysicsMaterialJob(job, context);
-      co_return true;
+      co_return co_await PreparePhysicsMaterialJob(job, context);
     }
     if (job.job_type == "collision-shape-descriptor") {
       co_return co_await PrepareCollisionShapeJob(job, context);

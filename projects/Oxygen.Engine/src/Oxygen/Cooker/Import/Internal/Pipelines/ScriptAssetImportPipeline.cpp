@@ -39,6 +39,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/ScriptSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
@@ -53,7 +54,6 @@
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/Scripting/Analysis/ScriptAnalyzer.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 
 namespace oxygen::content::import {
@@ -159,20 +159,6 @@ namespace {
     return true;
   }
 
-  auto ToImportSeverity(const scripting::DiagnosticSeverity severity)
-    -> ImportSeverity
-  {
-    switch (severity) {
-    case scripting::DiagnosticSeverity::kError:
-      return ImportSeverity::kError;
-    case scripting::DiagnosticSeverity::kWarning:
-      return ImportSeverity::kWarning;
-    case scripting::DiagnosticSeverity::kNote:
-      break;
-    }
-    return ImportSeverity::kInfo;
-  }
-
   //! Reads the script's parameter declarations into cooked records.
   /*!
    Reports every analysis diagnostic. Fails when the script has errors, so a
@@ -185,32 +171,22 @@ namespace {
     const auto source_name
       = script_import::BuildExternalSourcePath(request).value_or(
         request.source_path.generic_string());
-    const auto analysis = scripting::ScriptAnalyzer {}.Analyze({
-      .source_name = source_name,
-      .source = source_bytes,
-      .level = scripting::AnalysisLevel::kDeclarations,
-    });
-    for (const auto& diagnostic : analysis.diagnostics) {
-      script_import::AddDiagnostic(session, request,
-        ToImportSeverity(diagnostic.severity),
-        "script." + scripting::to_string(diagnostic.code),
-        scripting::FormatSummary(diagnostic));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto declarations = AnalyzeScriptDeclarations(
+      source_bytes, source_name, request.source_path, diagnostics);
+    for (auto& diagnostic : diagnostics) {
+      session.AddDiagnostic(std::move(diagnostic));
     }
-    if (analysis.HasErrors()) {
+    if (!declarations.has_value()) {
       return false;
     }
 
-    context.params.reserve(analysis.declarations.size());
-    for (const auto& declaration : analysis.declarations) {
-      auto record = data::MakeScriptParamRecord(
+    context.params.reserve(declarations->size());
+    for (const auto& declaration : *declarations) {
+      const auto record = data::MakeScriptParamRecord(
         declaration.name, declaration.default_value, context.strings);
-      if (!record) {
-        script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.asset.declaration_unencodable",
-          "Parameter '" + declaration.name
-            + "' has an empty name or holds a NUL byte");
-        return false;
-      }
+      // The analysis found every declaration encodable.
+      CHECK_F(record.has_value());
       context.params.push_back(*record);
     }
     return true;

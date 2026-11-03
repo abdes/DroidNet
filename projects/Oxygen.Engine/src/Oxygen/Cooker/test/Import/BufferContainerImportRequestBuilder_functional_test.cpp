@@ -10,13 +10,17 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <utility>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -25,8 +29,12 @@ namespace {
 using nlohmann::json;
 using oxygen::content::import::BufferContainerImportSettings;
 using oxygen::content::import::internal::BuildBufferContainerRequest;
+using oxygen::cooker::test::BufferContainer;
+using oxygen::cooker::test::ContentMountTable;
 using oxygen::cooker::test::WriteText;
 using oxygen::testing::ScopedTempDir;
+
+constexpr auto kIdentity = std::string_view { "/Content/Buffers/ok.buffers" };
 
 auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   -> BufferContainerImportSettings
@@ -38,31 +46,35 @@ auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
   return settings;
 }
 
+//! A container with one buffer, as authored files name it.
+auto OneBuffer(json buffer = { { "source", "mesh.buffer.bin" } })
+  -> BufferContainer
+{
+  auto container = BufferContainer { std::string(kIdentity) };
+  container.AppendBuffer(std::move(buffer), "/Content/Buffers/ok.obuf");
+  return container;
+}
+
 NOLINT_TEST(BufferContainerImportRequestBuilderTest,
   BuildsRequestFromValidDescriptorWithNormalizedPayload)
 {
   const ScopedTempDir temp;
-  const auto dir = temp.Path() / "valid_request";
-  const auto descriptor_path = dir / "Buffers" / "character.buffers.json";
-  WriteText(descriptor_path,
-    R"({
-      "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-container.schema.json",
-      "name": "CharacterBuffers",
-      "buffers": [
-        {
-          "source": "mesh_vertices.buffer.bin",
-          "virtual_path": "/Cooked/Resources/Buffers/character_vertices.obuf",
-          "usage_flags": 3,
-          "element_stride": 32,
-          "alignment": 16
-        }
-      ]
-    })");
+  const auto descriptor_path = temp.Path() / "Buffers" / "ok.buffers.json";
+  auto container = OneBuffer({
+    { "source", "mesh_vertices.buffer.bin" },
+    { "usage_flags", 3 },
+    { "element_stride", 32 },
+    { "alignment", 16 },
+  });
+  container.Set("/name", "CharacterBuffers");
+  WriteText(descriptor_path, container.Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
   auto errors = std::ostringstream {};
+  const auto mounts = ContentMountTable(temp.Path());
 
-  const auto request = BuildBufferContainerRequest(settings, errors);
+  const auto request
+    = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(errors.str().empty());
@@ -80,46 +92,58 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
   ASSERT_EQ(normalized.at("buffers").size(), 1U);
   EXPECT_EQ(
     normalized.at("buffers").at(0).at("virtual_path").get<std::string>(),
-    "/Cooked/Resources/Buffers/character_vertices.obuf");
+    "ok.obuf");
 }
 
 NOLINT_TEST(BufferContainerImportRequestBuilderTest,
   RejectsDescriptorWithSchemaViolations)
 {
   const ScopedTempDir temp;
-  const auto dir = temp.Path() / "schema_violation";
-  const auto descriptor_path = dir / "Buffers" / "bad.buffers.json";
-  WriteText(descriptor_path,
-    R"({
-      "name": "BadContainer",
-      "buffers": [
-        {
-          "source": "mesh.buffer.bin",
-          "virtual_path": "/Cooked/Resources/Buffers/bad.obuf",
-          "unexpected": true
-        }
-      ]
-    })");
+  const auto descriptor_path = temp.Path() / "Buffers" / "bad.buffers.json";
+  auto container = OneBuffer();
+  container.Set("/buffers/0/unexpected", true);
+  WriteText(descriptor_path, container.Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
   auto errors = std::ostringstream {};
+  const auto mounts = ContentMountTable(temp.Path());
 
-  const auto request = BuildBufferContainerRequest(settings, errors);
+  const auto request
+    = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(errors.str(),
     ::testing::HasSubstr("buffer.container.schema_validation_failed"));
 }
 
+NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsInvalidJson)
+{
+  const ScopedTempDir temp;
+  const auto descriptor_path = temp.Path() / "Buffers" / "broken.buffers.json";
+  WriteText(descriptor_path, "{ \"buffers\": [ ");
+
+  const auto settings = MakeBaseSettings(descriptor_path);
+  auto errors = std::ostringstream {};
+  const auto mounts = ContentMountTable(temp.Path());
+
+  const auto request
+    = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
+
+  EXPECT_FALSE(request.has_value());
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr("buffer.container.request_invalid_json"));
+}
+
 NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsMissingFile)
 {
   const ScopedTempDir temp;
-  const auto dir = temp.Path() / "missing_file";
-  const auto descriptor_path = dir / "Buffers" / "missing.buffers.json";
+  const auto descriptor_path = temp.Path() / "Buffers" / "missing.buffers.json";
   const auto settings = MakeBaseSettings(descriptor_path);
   auto errors = std::ostringstream {};
+  const auto mounts = ContentMountTable(temp.Path());
 
-  const auto request = BuildBufferContainerRequest(settings, errors);
+  const auto request
+    = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(errors.str(),
@@ -129,25 +153,18 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsMissingFile)
 NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsRelativeCookedRoot)
 {
   const ScopedTempDir temp;
-  const auto dir = temp.Path() / "relative_output";
-  const auto descriptor_path = dir / "Buffers" / "ok.buffers.json";
+  const auto descriptor_path = temp.Path() / "Buffers" / "ok.buffers.json";
   WriteText(descriptor_path,
-    R"({
-      "name": "Container",
-      "buffers": [
-        {
-          "source": "mesh.buffer.bin",
-          "virtual_path": "/Cooked/Resources/Buffers/ok.obuf",
-          "element_stride": 16
-        }
-      ]
-    })");
+    OneBuffer({ { "source", "mesh.buffer.bin" }, { "element_stride", 16 } })
+      .Text());
 
   auto settings = MakeBaseSettings(descriptor_path);
   settings.cooked_root = "relative/output";
   auto errors = std::ostringstream {};
+  const auto mounts = ContentMountTable(temp.Path());
 
-  const auto request = BuildBufferContainerRequest(settings, errors);
+  const auto request
+    = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(
@@ -158,24 +175,18 @@ NOLINT_TEST(
   BufferContainerImportRequestBuilderTest, RejectsVirtualPathWithBackslashes)
 {
   const ScopedTempDir temp;
-  const auto dir = temp.Path() / "invalid_virtual_path_backslashes";
-  const auto descriptor_path = dir / "Buffers" / "bad_virtual.buffers.json";
-  WriteText(descriptor_path,
-    R"({
-      "name": "Container",
-      "buffers": [
-        {
-          "source": "mesh.buffer.bin",
-          "virtual_path": "/.cooked\\Resources\\Buffers\\bad.obuf",
-          "element_stride": 16
-        }
-      ]
-    })");
+  const auto descriptor_path = temp.Path() / "Buffers" / "bad.buffers.json";
+  auto container
+    = OneBuffer({ { "source", "mesh.buffer.bin" }, { "element_stride", 16 } });
+  container.Set("/buffers/0/virtual_path", "Resources\\Buffers\\bad.obuf");
+  WriteText(descriptor_path, container.Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
   auto errors = std::ostringstream {};
+  const auto mounts = ContentMountTable(temp.Path());
 
-  const auto request = BuildBufferContainerRequest(settings, errors);
+  const auto request
+    = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(errors.str(),
@@ -186,31 +197,30 @@ NOLINT_TEST(
   BufferContainerImportRequestBuilderTest, AcceptsBufferViewsWithElementRanges)
 {
   const ScopedTempDir temp;
-  const auto dir = temp.Path() / "accepts_buffer_views";
-  const auto descriptor_path = dir / "Buffers" / "views.buffers.json";
+  const auto descriptor_path = temp.Path() / "Buffers" / "views.buffers.json";
   WriteText(descriptor_path,
-    R"({
-      "name": "Container",
-      "buffers": [
-        {
-          "source": "mesh.buffer.bin",
-          "virtual_path": "/Cooked/Resources/Buffers/views.obuf",
-          "element_format": 10,
-          "views": [
-            {
-              "name": "lod0",
-              "element_offset": 0,
-              "element_count": 12
-            }
-          ]
-        }
-      ]
-    })");
+    OneBuffer({
+                { "source", "mesh.buffer.bin" },
+                { "element_format", 10 },
+                {
+                  "views",
+                  json::array({
+                    {
+                      { "name", "lod0" },
+                      { "element_offset", 0 },
+                      { "element_count", 12 },
+                    },
+                  }),
+                },
+              })
+      .Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
   auto errors = std::ostringstream {};
+  const auto mounts = ContentMountTable(temp.Path());
 
-  const auto request = BuildBufferContainerRequest(settings, errors);
+  const auto request
+    = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(errors.str().empty());
@@ -220,31 +230,31 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
   RejectsExplicitImplicitAllViewDeclaration)
 {
   const ScopedTempDir temp;
-  const auto dir = temp.Path() / "rejects_explicit_all_view";
-  const auto descriptor_path = dir / "Buffers" / "bad_view.buffers.json";
+  const auto descriptor_path
+    = temp.Path() / "Buffers" / "bad_view.buffers.json";
   WriteText(descriptor_path,
-    R"({
-      "name": "Container",
-      "buffers": [
-        {
-          "source": "mesh.buffer.bin",
-          "virtual_path": "/Cooked/Resources/Buffers/views.obuf",
-          "element_stride": 16,
-          "views": [
-            {
-              "name": "__all__",
-              "byte_offset": 0,
-              "byte_length": 64
-            }
-          ]
-        }
-      ]
-    })");
+    OneBuffer({
+                { "source", "mesh.buffer.bin" },
+                { "element_stride", 16 },
+                {
+                  "views",
+                  json::array({
+                    {
+                      { "name", "__all__" },
+                      { "byte_offset", 0 },
+                      { "byte_length", 64 },
+                    },
+                  }),
+                },
+              })
+      .Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
   auto errors = std::ostringstream {};
+  const auto mounts = ContentMountTable(temp.Path());
 
-  const auto request = BuildBufferContainerRequest(settings, errors);
+  const auto request
+    = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(errors.str(),
@@ -255,33 +265,33 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
   RejectsViewWithBothByteAndElementRanges)
 {
   const ScopedTempDir temp;
-  const auto dir = temp.Path() / "rejects_mixed_view_ranges";
-  const auto descriptor_path = dir / "Buffers" / "mixed_view.buffers.json";
+  const auto descriptor_path
+    = temp.Path() / "Buffers" / "mixed_view.buffers.json";
   WriteText(descriptor_path,
-    R"({
-      "name": "Container",
-      "buffers": [
-        {
-          "source": "mesh.buffer.bin",
-          "virtual_path": "/Cooked/Resources/Buffers/views.obuf",
-          "element_stride": 16,
-          "views": [
-            {
-              "name": "lod0",
-              "byte_offset": 0,
-              "byte_length": 64,
-              "element_offset": 0,
-              "element_count": 4
-            }
-          ]
-        }
-      ]
-    })");
+    OneBuffer({
+                { "source", "mesh.buffer.bin" },
+                { "element_stride", 16 },
+                {
+                  "views",
+                  json::array({
+                    {
+                      { "name", "lod0" },
+                      { "byte_offset", 0 },
+                      { "byte_length", 64 },
+                      { "element_offset", 0 },
+                      { "element_count", 4 },
+                    },
+                  }),
+                },
+              })
+      .Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
   auto errors = std::ostringstream {};
+  const auto mounts = ContentMountTable(temp.Path());
 
-  const auto request = BuildBufferContainerRequest(settings, errors);
+  const auto request
+    = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(errors.str(),

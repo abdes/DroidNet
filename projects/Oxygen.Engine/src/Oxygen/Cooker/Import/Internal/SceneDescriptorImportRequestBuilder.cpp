@@ -17,6 +17,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportSettings.h>
 
@@ -43,13 +44,7 @@ auto BuildSceneDescriptorRequest(const SceneDescriptorImportSettings& settings,
   auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto source
     = SceneSource::FromDescriptor(document->text, descriptor_path, diagnostics);
-  for (const auto& diagnostic : diagnostics) {
-    error_stream << "ERROR [" << diagnostic.code << "]: " << diagnostic.message;
-    if (!diagnostic.json_pointer.empty()) {
-      error_stream << " (at '" << diagnostic.json_pointer << "')";
-    }
-    error_stream << '\n';
-  }
+  WriteDiagnostics(diagnostics, error_stream);
   if (!source.has_value()) {
     return std::nullopt;
   }

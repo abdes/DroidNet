@@ -14,6 +14,7 @@
 #include <string_view>
 #include <utility>
 
+#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Content/VirtualPath.h>
@@ -292,13 +293,14 @@ public:
     std::string_view asset;
   };
 
-  //! Attaches the script `script` to the scene node `node`, with the asset
-  //! parameter `param` when given.
+  //! Attaches the script `script` to the scene node `node`, in a slot whose
+  //! ID derives from the node, with the asset parameter `param` when given.
   auto Bind(const uint32_t node, const std::string_view script,
     const std::optional<AssetParam>& param = std::nullopt) -> ScriptSidecar&
   {
     auto binding = nlohmann::json {
       { "node_index", node },
+      { "slot_id", fmt::format("00000000-0000-4000-8000-{:012x}", node + 1U) },
       { "script_virtual_path", Spell(script) },
     };
     if (param.has_value()) {

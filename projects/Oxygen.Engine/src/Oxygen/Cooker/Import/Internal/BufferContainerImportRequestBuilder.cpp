@@ -11,58 +11,23 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
-#include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
-#include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
+#include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 
 namespace oxygen::content::import::internal {
 
-namespace {
-
-  using nlohmann::json;
-  using nlohmann::json_schema::json_validator;
-
-  auto GetBufferContainerValidator() -> json_validator&
-  {
-    static auto validator
-      = MakeJsonSchemaValidator(json::parse(kBufferContainerSchema));
-    return validator;
-  }
-
-  auto ValidateDescriptorSchema(
-    const json& descriptor_doc, std::ostream& error_stream) -> bool
-  {
-    const auto config = JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "buffer.container.schema_validation_failed",
-      .validation_failed_prefix = "Buffer container validation failed: ",
-      .validator_failure_code = "buffer.container.schema_validator_failure",
-      .validator_failure_prefix = "Buffer container schema validator failed: ",
-    };
-
-    return ValidateJsonSchemaWithDiagnostics(GetBufferContainerValidator(),
-      descriptor_doc, config,
-      [&](const std::string_view code, const std::string& message,
-        const std::string& json_pointer) -> void {
-        error_stream << "ERROR [" << code << "]: " << message;
-        if (!json_pointer.empty()) {
-          error_stream << " (at '" << json_pointer << "')";
-        }
-        error_stream << "\n";
-      });
-  }
-
-} // namespace
-
 auto BuildBufferContainerRequest(const BufferContainerImportSettings& settings,
+  const std::string_view identity, const MountTable& mounts,
   std::ostream& error_stream,
   std::shared_ptr<const CapturedInputSet> captured_inputs)
   -> std::optional<ImportRequest>
@@ -79,13 +44,12 @@ auto BuildBufferContainerRequest(const BufferContainerImportSettings& settings,
   if (!document.has_value()) {
     return std::nullopt;
   }
-  const auto descriptor_doc = ParseDescriptorJsonObject(
-    document->text, "buffer-container", error_stream);
-  if (!descriptor_doc.has_value()) {
-    return std::nullopt;
-  }
 
-  if (!ValidateDescriptorSchema(*descriptor_doc, error_stream)) {
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto sources = BufferSource::FromContainer(
+    document->text, descriptor_path, identity, mounts, diagnostics);
+  WriteDiagnostics(diagnostics, error_stream);
+  if (!sources.has_value()) {
     return std::nullopt;
   }
 
@@ -108,8 +72,10 @@ auto BuildBufferContainerRequest(const BufferContainerImportSettings& settings,
 
   if (!settings.job_name.empty()) {
     request.job_name = settings.job_name;
-  } else if (descriptor_doc->contains("name")) {
-    request.job_name = descriptor_doc->at("name").get<std::string>();
+  } else if (const auto name_doc = nlohmann::json::parse(document->text);
+    name_doc.contains("name")) {
+    // `FromContainer` parsed and validated this document.
+    request.job_name = name_doc.at("name").get<std::string>();
   } else {
     const auto stem = descriptor_path.stem().string();
     if (!stem.empty()) {

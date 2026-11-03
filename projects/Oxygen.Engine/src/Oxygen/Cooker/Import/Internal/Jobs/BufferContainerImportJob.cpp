@@ -5,13 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
-#include <exception>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -87,27 +83,18 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  auto descriptor_doc = nlohmann::json {};
-  auto parse_exception = std::optional<std::string> {};
-  try {
-    descriptor_doc = nlohmann::json::parse(payload->descriptor_json);
-  } catch (const std::exception& ex) {
-    parse_exception = ex.what();
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  CHECK_NOTNULL_F(Request().source_mounts.get(),
+    "A buffer container locates its sources through the job's mounts");
+  const auto sources = internal::BufferSource::FromContainer(
+    payload->descriptor_json, Request().source_path, Request().OutputIdentity(),
+    *Request().source_mounts, diagnostics);
+  for (auto& diagnostic : diagnostics) {
+    session.AddDiagnostic(std::move(diagnostic));
   }
-  if (parse_exception.has_value()) {
-    AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "buffer.container.request_invalid_json",
-      "Descriptor payload is invalid JSON: " + *parse_exception);
+  if (!sources.has_value()) {
     ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Invalid buffer-container payload");
-    co_return co_await FinalizeWithTelemetry(session);
-  }
-  if (!descriptor_doc.is_object()) {
-    AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "buffer.container.request_invalid_json",
-      "Descriptor payload must be a JSON object");
-    ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Invalid buffer-container payload");
+      ImportPhase::kFailed, 1.0F, "Buffer container preparation failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
@@ -119,22 +106,7 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   auto submitter
     = BufferImportSubmitter(session, Request(), FileReader(), StopToken());
-  const auto buffer_chunks = descriptor_doc.contains("buffers")
-    ? descriptor_doc.at("buffers")
-    : nlohmann::json {};
-  auto diagnostics = std::vector<ImportDiagnostic> {};
-  CHECK_NOTNULL_F(Request().source_mounts.get(),
-    "A buffer container locates its sources through the job's mounts");
-  const auto sources = internal::BufferSource::FromDeclarations(buffer_chunks,
-    Request().source_path, Request().OutputIdentity(), *Request().source_mounts,
-    diagnostics);
-  for (auto& diagnostic : diagnostics) {
-    session.AddDiagnostic(std::move(diagnostic));
-  }
-  auto submission = BufferImportSubmitter::Submission {};
-  if (sources.has_value()) {
-    submission = co_await submitter.SubmitBuffers(*sources, pipeline);
-  }
+  const auto submission = co_await submitter.SubmitBuffers(*sources, pipeline);
   pipeline.Close();
 
   if (submission.submitted_count == 0U) {

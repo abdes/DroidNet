@@ -22,7 +22,6 @@
 #include <utility>
 #include <vector>
 
-#include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -34,13 +33,12 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
+#include <Oxygen/Cooker/Import/Internal/CollisionShapeSource.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
-#include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/CollisionShapeDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/CollisionShapeImportPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -54,7 +52,6 @@ namespace oxygen::content::import::detail {
 namespace {
 
   using nlohmann::json;
-  using nlohmann::json_schema::json_validator;
   namespace phys = data::pak::physics;
 
   struct DescriptorTarget final {
@@ -88,34 +85,6 @@ namespace {
       .source_path = request.source_path.string(),
       .json_pointer = std::move(json_pointer),
     });
-  }
-
-  auto GetCollisionShapeDescriptorValidator() -> json_validator&
-  {
-    static auto validator = internal::MakeJsonSchemaValidator(
-      json::parse(kCollisionShapeDescriptorSchema));
-    return validator;
-  }
-
-  auto ValidateDescriptorSchema(ImportSession& session,
-    const ImportRequest& request, const json& descriptor_doc) -> bool
-  {
-    const auto config = internal::JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "physics.shape.schema_validation_failed",
-      .validation_failed_prefix
-      = "Collision shape descriptor validation failed: ",
-      .validator_failure_code = "physics.shape.schema_validator_failure",
-      .validator_failure_prefix
-      = "Collision shape descriptor schema validator failed: ",
-    };
-
-    return internal::ValidateJsonSchemaWithDiagnostics(
-      GetCollisionShapeDescriptorValidator(), descriptor_doc, config,
-      [&](const std::string_view code, const std::string& message,
-        const std::string& json_pointer) -> void {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          std::string(code), message, json_pointer);
-      });
   }
 
   [[nodiscard]] auto ParseShapeType(const std::string_view value)
@@ -397,10 +366,11 @@ namespace {
     std::ranges::copy(values, out.begin());
   }
 
-  auto ApplyShapeSpecificParameters(ImportSession& session,
-    const ImportRequest& request, const json& descriptor_doc,
+  //! Reads the parameters of the shape; the preparation proved they exist and
+  //! that world boundary limits are ordered.
+  auto ApplyShapeSpecificParameters(const json& descriptor_doc,
     const phys::ShapeType shape_type, phys::CollisionShapeAssetDesc& descriptor)
-    -> bool
+    -> void
   {
     switch (shape_type) {
     case phys::ShapeType::kSphere:
@@ -453,14 +423,6 @@ namespace {
         std::ranges::begin(descriptor.shape_params.world_boundary.limits_min));
       std::ranges::copy(limits_max,
         std::ranges::begin(descriptor.shape_params.world_boundary.limits_max));
-      if (limits_min.at(0) > limits_max.at(0)
-        || limits_min.at(1) > limits_max.at(1)
-        || limits_min.at(2) > limits_max.at(2)) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.shape.world_boundary_limits_invalid",
-          "limits_min must be <= limits_max for each axis", "/limits_min");
-        return false;
-      }
       break;
     }
     case phys::ShapeType::kConvexHull:
@@ -470,147 +432,85 @@ namespace {
     case phys::ShapeType::kInvalid:
       break;
     }
-
-    return true;
   }
 
-  auto ParseCompoundChild(const json& child_doc,
-    const json::json_pointer& child_path, ImportSession& session,
-    const ImportRequest& request, phys::CompoundShapeChildDesc& out_child)
-    -> bool
+  //! Reads one compound child; the preparation proved it is an analytic shape
+  //! with every field it needs.
+  [[nodiscard]] auto ParseCompoundChild(const json& child_doc)
+    -> phys::CompoundShapeChildDesc
   {
-    auto child_error = std::optional<std::string> {};
-    auto child_type = phys::ShapeType::kInvalid;
-    try {
-      child_type
-        = ParseShapeType(child_doc.at("shape_type").get<std::string>());
-      out_child.shape_type = static_cast<uint32_t>(child_type);
-      out_child.local_position[0]
-        = child_doc.at("local_position").at(0).get<float>();
-      out_child.local_position[1]
-        = child_doc.at("local_position").at(1).get<float>();
-      out_child.local_position[2]
-        = child_doc.at("local_position").at(2).get<float>();
-      out_child.local_rotation[0]
-        = child_doc.at("local_rotation").at(0).get<float>();
-      out_child.local_rotation[1]
-        = child_doc.at("local_rotation").at(1).get<float>();
-      out_child.local_rotation[2]
-        = child_doc.at("local_rotation").at(2).get<float>();
-      out_child.local_rotation[3]
-        = child_doc.at("local_rotation").at(3).get<float>();
-      out_child.local_scale[0] = child_doc.at("local_scale").at(0).get<float>();
-      out_child.local_scale[1] = child_doc.at("local_scale").at(1).get<float>();
-      out_child.local_scale[2] = child_doc.at("local_scale").at(2).get<float>();
-    } catch (const std::exception& ex) {
-      child_error = ex.what();
-    }
-    if (child_error.has_value()) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.schema_contract_mismatch",
-        "Compound child extraction failed after schema validation: "
-          + *child_error,
-        child_path.to_string());
-      return false;
-    }
+    auto out_child = phys::CompoundShapeChildDesc {};
+    const auto child_type
+      = ParseShapeType(child_doc.at("shape_type").get<std::string>());
+    out_child.shape_type = static_cast<uint32_t>(child_type);
+    const auto position
+      = child_doc.at("local_position").get<std::array<float, 3>>();
+    std::ranges::copy(position, std::ranges::begin(out_child.local_position));
+    const auto rotation
+      = child_doc.at("local_rotation").get<std::array<float, 4>>();
+    std::ranges::copy(rotation, std::ranges::begin(out_child.local_rotation));
+    const auto scale = child_doc.at("local_scale").get<std::array<float, 3>>();
+    std::ranges::copy(scale, std::ranges::begin(out_child.local_scale));
 
-    if (child_type == phys::ShapeType::kCompound) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.compound_child_invalid",
-        "Nested compound child shapes are not supported",
-        child_path.to_string());
-      return false;
+    switch (child_type) {
+    case phys::ShapeType::kSphere:
+      out_child.radius = child_doc.at("radius").get<float>();
+      break;
+    case phys::ShapeType::kCapsule:
+    case phys::ShapeType::kCylinder:
+    case phys::ShapeType::kCone:
+      out_child.radius = child_doc.at("radius").get<float>();
+      out_child.half_height = child_doc.at("half_height").get<float>();
+      break;
+    case phys::ShapeType::kBox: {
+      const auto half_extents
+        = child_doc.at("half_extents").get<std::array<float, 3>>();
+      std::ranges::copy(
+        half_extents, std::ranges::begin(out_child.half_extents));
+      break;
     }
-
-    try {
-      switch (child_type) {
-      case phys::ShapeType::kSphere:
-        out_child.radius = child_doc.at("radius").get<float>();
-        break;
-      case phys::ShapeType::kCapsule:
-      case phys::ShapeType::kCylinder:
-      case phys::ShapeType::kCone:
-        out_child.radius = child_doc.at("radius").get<float>();
-        out_child.half_height = child_doc.at("half_height").get<float>();
-        break;
-      case phys::ShapeType::kBox:
-        out_child.half_extents[0]
-          = child_doc.at("half_extents").at(0).get<float>();
-        out_child.half_extents[1]
-          = child_doc.at("half_extents").at(1).get<float>();
-        out_child.half_extents[2]
-          = child_doc.at("half_extents").at(2).get<float>();
-        break;
-      case phys::ShapeType::kPlane:
-        out_child.normal[0] = child_doc.at("normal").at(0).get<float>();
-        out_child.normal[1] = child_doc.at("normal").at(1).get<float>();
-        out_child.normal[2] = child_doc.at("normal").at(2).get<float>();
-        out_child.distance = child_doc.at("distance").get<float>();
-        break;
-      case phys::ShapeType::kWorldBoundary: {
-        out_child.boundary_mode = ParseWorldBoundaryMode(
-          child_doc.at("boundary_mode").get<std::string>());
-        out_child.limits_min[0] = child_doc.at("limits_min").at(0).get<float>();
-        out_child.limits_min[1] = child_doc.at("limits_min").at(1).get<float>();
-        out_child.limits_min[2] = child_doc.at("limits_min").at(2).get<float>();
-        out_child.limits_max[0] = child_doc.at("limits_max").at(0).get<float>();
-        out_child.limits_max[1] = child_doc.at("limits_max").at(1).get<float>();
-        out_child.limits_max[2] = child_doc.at("limits_max").at(2).get<float>();
-        if (out_child.limits_min[0] > out_child.limits_max[0]
-          || out_child.limits_min[1] > out_child.limits_max[1]
-          || out_child.limits_min[2] > out_child.limits_max[2]) {
-          AddDiagnostic(session, request, ImportSeverity::kError,
-            "physics.shape.world_boundary_limits_invalid",
-            "Compound child limits_min must be <= limits_max for each axis",
-            (child_path / "limits_min").to_string());
-          return false;
-        }
-        break;
-      }
-      case phys::ShapeType::kInvalid:
-      case phys::ShapeType::kConvexHull:
-      case phys::ShapeType::kTriangleMesh:
-      case phys::ShapeType::kHeightField:
-      case phys::ShapeType::kCompound:
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.shape.compound_child_invalid",
-          "Compound children must use analytic shape types only",
-          child_path.to_string());
-        return false;
-      }
-    } catch (const std::exception& ex) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.schema_contract_mismatch",
-        "Compound child parameter extraction failed after schema validation: "
-          + std::string(ex.what()),
-        child_path.to_string());
-      return false;
+    case phys::ShapeType::kPlane: {
+      const auto normal = child_doc.at("normal").get<std::array<float, 3>>();
+      std::ranges::copy(normal, std::ranges::begin(out_child.normal));
+      out_child.distance = child_doc.at("distance").get<float>();
+      break;
     }
-
-    return true;
+    case phys::ShapeType::kWorldBoundary: {
+      out_child.boundary_mode = ParseWorldBoundaryMode(
+        child_doc.at("boundary_mode").get<std::string>());
+      const auto limits_min
+        = child_doc.at("limits_min").get<std::array<float, 3>>();
+      const auto limits_max
+        = child_doc.at("limits_max").get<std::array<float, 3>>();
+      std::ranges::copy(limits_min, std::ranges::begin(out_child.limits_min));
+      std::ranges::copy(limits_max, std::ranges::begin(out_child.limits_max));
+      break;
+    }
+    case phys::ShapeType::kInvalid:
+    case phys::ShapeType::kConvexHull:
+    case phys::ShapeType::kTriangleMesh:
+    case phys::ShapeType::kHeightField:
+    case phys::ShapeType::kCompound:
+      DCHECK_F(false, "Compound child is not analytic after preparation");
+      break;
+    }
+    return out_child;
   }
 
-  auto ParseCompoundChildren(const json& descriptor_doc, ImportSession& session,
-    const ImportRequest& request,
-    std::vector<phys::CompoundShapeChildDesc>& out_children) -> bool
+  [[nodiscard]] auto ParseCompoundChildren(const json& descriptor_doc)
+    -> std::vector<phys::CompoundShapeChildDesc>
   {
-    out_children.clear();
+    auto children = std::vector<phys::CompoundShapeChildDesc> {};
     if (!descriptor_doc.contains("children")) {
-      return true;
+      return children;
     }
-
-    const auto& children = descriptor_doc.at("children");
-    out_children.reserve(children.size());
-    for (size_t i = 0; i < children.size(); ++i) {
-      const auto child_path = json::json_pointer {} / "children" / i;
-      auto child_desc = phys::CompoundShapeChildDesc {};
-      if (!ParseCompoundChild(
-            children.at(i), child_path, session, request, child_desc)) {
-        continue;
-      }
-      out_children.push_back(child_desc);
-    }
-    return !session.HasErrors();
+    const auto& child_docs = descriptor_doc.at("children");
+    children.reserve(child_docs.size());
+    std::ranges::transform(child_docs, std::back_inserter(children),
+      [](const json& child_doc) -> phys::CompoundShapeChildDesc {
+        return ParseCompoundChild(child_doc);
+      });
+    return children;
   }
 
 } // namespace
@@ -654,35 +554,18 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  auto descriptor_doc = json {};
-  auto parse_exception = std::optional<std::string> {};
-  try {
-    descriptor_doc = json::parse(request_payload->descriptor_json);
-  } catch (const std::exception& ex) {
-    parse_exception = ex.what();
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto prepared = internal::PrepareCollisionShapeDescriptor(
+    request_payload->descriptor_json, Request().source_path, diagnostics);
+  for (auto& diagnostic : diagnostics) {
+    session.AddDiagnostic(std::move(diagnostic));
   }
-  if (parse_exception.has_value()) {
-    AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "physics.shape.request_invalid_json",
-      "Descriptor payload is invalid JSON: " + *parse_exception);
+  if (!prepared.has_value()) {
     ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Invalid collision shape payload");
+      ImportPhase::kFailed, 1.0F, "Invalid collision shape descriptor payload");
     co_return co_await FinalizeWithTelemetry(session);
   }
-  if (!descriptor_doc.is_object()) {
-    AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "physics.shape.request_invalid_json",
-      "Descriptor payload must be a JSON object");
-    ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Invalid collision shape payload");
-    co_return co_await FinalizeWithTelemetry(session);
-  }
-
-  if (!ValidateDescriptorSchema(session, Request(), descriptor_doc)) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-      "Collision shape descriptor schema validation failed");
-    co_return co_await FinalizeWithTelemetry(session);
-  }
+  const auto& descriptor_doc = *prepared;
 
   auto mounts
     = internal::LoadMountedCookedSources(session, Request(), "physics.shape.");
@@ -717,61 +600,38 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       data::AssetType::kCollisionShape,
     });
 
+  // The preparation proved every field read below.
   auto descriptor = phys::CollisionShapeAssetDesc {};
-  auto shape_type = phys::ShapeType::kInvalid;
-  auto descriptor_error = std::optional<std::string> {};
-  try {
-    descriptor.header.asset_type
-      = static_cast<uint8_t>(data::AssetType::kCollisionShape);
-    descriptor.header.version = phys::kCollisionShapeAssetVersion;
+  descriptor.header.asset_type
+    = static_cast<uint8_t>(data::AssetType::kCollisionShape);
+  descriptor.header.version = phys::kCollisionShapeAssetVersion;
 
-    shape_type
-      = ParseShapeType(descriptor_doc.at("shape_type").get<std::string>());
-    descriptor.shape_type = shape_type;
+  const auto shape_type
+    = ParseShapeType(descriptor_doc.at("shape_type").get<std::string>());
+  descriptor.shape_type = shape_type;
 
-    CopyVec3(descriptor_doc, "local_position", descriptor.local_position);
-    CopyQuat(descriptor_doc, "local_rotation", descriptor.local_rotation);
-    CopyVec3(descriptor_doc, "local_scale", descriptor.local_scale);
+  CopyVec3(descriptor_doc, "local_position", descriptor.local_position);
+  CopyQuat(descriptor_doc, "local_rotation", descriptor.local_rotation);
+  CopyVec3(descriptor_doc, "local_scale", descriptor.local_scale);
 
-    if (descriptor_doc.contains("is_sensor")) {
-      descriptor.is_sensor = descriptor_doc.at("is_sensor").get<bool>()
-        ? phys::kShapeIsSensorTrue
-        : phys::kShapeIsSensorFalse;
-    }
-    if (descriptor_doc.contains("collision_own_layer")) {
-      descriptor.collision_own_layer
-        = descriptor_doc.at("collision_own_layer").get<uint64_t>();
-    }
-    if (descriptor_doc.contains("collision_target_layers")) {
-      descriptor.collision_target_layers
-        = descriptor_doc.at("collision_target_layers").get<uint64_t>();
-    }
-  } catch (const std::exception& ex) {
-    descriptor_error = ex.what();
+  if (descriptor_doc.contains("is_sensor")) {
+    descriptor.is_sensor = descriptor_doc.at("is_sensor").get<bool>()
+      ? phys::kShapeIsSensorTrue
+      : phys::kShapeIsSensorFalse;
   }
-  if (descriptor_error.has_value()) {
-    AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "physics.shape.schema_contract_mismatch",
-      "Schema validated descriptor failed extraction: " + *descriptor_error);
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-      "Collision shape descriptor payload extraction failed");
-    co_return co_await FinalizeWithTelemetry(session);
+  if (descriptor_doc.contains("collision_own_layer")) {
+    descriptor.collision_own_layer
+      = descriptor_doc.at("collision_own_layer").get<uint64_t>();
   }
-
-  if (!ApplyShapeSpecificParameters(
-        session, Request(), descriptor_doc, shape_type, descriptor)) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-      "Collision shape descriptor parameter validation failed");
-    co_return co_await FinalizeWithTelemetry(session);
+  if (descriptor_doc.contains("collision_target_layers")) {
+    descriptor.collision_target_layers
+      = descriptor_doc.at("collision_target_layers").get<uint64_t>();
   }
+  ApplyShapeSpecificParameters(descriptor_doc, shape_type, descriptor);
 
   auto compound_children = std::vector<phys::CompoundShapeChildDesc> {};
-  if (shape_type == phys::ShapeType::kCompound
-    && !ParseCompoundChildren(
-      descriptor_doc, session, Request(), compound_children)) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-      "Collision shape compound child parsing failed");
-    co_return co_await FinalizeWithTelemetry(session);
+  if (shape_type == phys::ShapeType::kCompound) {
+    compound_children = ParseCompoundChildren(descriptor_doc);
   }
 
   auto material_key = data::AssetKey {};

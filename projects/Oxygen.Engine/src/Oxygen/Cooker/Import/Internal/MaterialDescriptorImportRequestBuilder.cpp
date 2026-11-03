@@ -17,6 +17,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
 
@@ -43,13 +44,7 @@ auto BuildMaterialDescriptorRequest(
   auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto prepared = MaterialSource::FromDescriptor(
     document->text, descriptor_path, settings.job_name, diagnostics);
-  for (const auto& diagnostic : diagnostics) {
-    error_stream << "ERROR [" << diagnostic.code << "]: " << diagnostic.message;
-    if (!diagnostic.json_pointer.empty()) {
-      error_stream << " (at '" << diagnostic.json_pointer << "')";
-    }
-    error_stream << '\n';
-  }
+  WriteDiagnostics(diagnostics, error_stream);
   if (!prepared) {
     return std::nullopt;
   }

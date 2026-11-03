@@ -35,6 +35,20 @@ struct BufferSource final {
   uint8_t element_format = 0;
   uint64_t alignment = 16;
 
+  //! Prepare a buffer container document: parse it, validate the whole
+  //! document against its schema, then prepare its `buffers`.
+  /*!
+   Refuses, adding the error, an invalid or non-object document
+   (`buffer.container.request_invalid_json`) or one the schema refuses
+   (`buffer.container.schema_validation_failed`); in the latter case the
+   declarations are not prepared again, so no issue is reported twice.
+   `anchor` and `mounts` are those of `FromDeclarations`.
+  */
+  OXGN_COOK_NDAPI static auto FromContainer(std::string_view bytes,
+    const std::filesystem::path& descriptor_path, std::string_view anchor,
+    const MountTable& mounts, std::vector<ImportDiagnostic>& diagnostics)
+    -> std::optional<std::vector<BufferSource>>;
+
   //! Prepare authored buffer declarations without reading or emitting files.
   /*!
    Each `source` is a mount path, or a path relative to the descriptor that

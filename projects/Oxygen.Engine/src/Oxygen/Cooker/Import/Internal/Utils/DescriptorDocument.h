@@ -6,28 +6,37 @@
 
 #pragma once
 
-#include <optional>
 #include <ostream>
-#include <string_view>
+#include <span>
 
-#include <nlohmann/json.hpp>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 
 namespace oxygen::content::import::internal {
-inline auto ParseDescriptorJsonObject(const std::string_view text,
-  const std::string_view kind, std::ostream& errors)
-  -> std::optional<nlohmann::json>
+
+//! Writes each diagnostic as one `SEVERITY [code]: message (at 'pointer')`
+//! line, the form request builders and manifest loading report on a stream.
+inline auto WriteDiagnostics(
+  const std::span<const ImportDiagnostic> diagnostics, std::ostream& errors)
+  -> void
 {
-  try {
-    auto document = nlohmann::json::parse(text);
-    if (!document.is_object()) {
-      errors << "ERROR: " << kind << " descriptor root must be a JSON object\n";
-      return std::nullopt;
+  for (const auto& diagnostic : diagnostics) {
+    switch (diagnostic.severity) {
+    case ImportSeverity::kError:
+      errors << "ERROR";
+      break;
+    case ImportSeverity::kWarning:
+      errors << "WARNING";
+      break;
+    case ImportSeverity::kInfo:
+      errors << "INFO";
+      break;
     }
-    return document;
-  } catch (const nlohmann::json::exception& error) {
-    errors << "ERROR: invalid " << kind << " descriptor JSON: " << error.what()
-           << '\n';
-    return std::nullopt;
+    errors << " [" << diagnostic.code << "]: " << diagnostic.message;
+    if (!diagnostic.json_pointer.empty()) {
+      errors << " (at '" << diagnostic.json_pointer << "')";
+    }
+    errors << "\n";
   }
 }
+
 } // namespace oxygen::content::import::internal
