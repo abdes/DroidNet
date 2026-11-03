@@ -33,7 +33,7 @@ public sealed record ModelImportSettings
     /// <summary>The suffix of a record's file name, after its model's file name.</summary>
     public const string RecordSuffix = AssetFileTypes.ImportSettings;
 
-    private static readonly Lazy<JsonSchema> Schema = new(LoadSchema);
+    private static readonly Lazy<JsonSchema> Schema = new(static () => EngineSchemas.Get("oxygen.model-import.schema.json"));
 
     private static readonly JsonWriterOptions WriterOptions = new()
     {
@@ -399,12 +399,4 @@ public sealed record ModelImportSettings
 
     private static JsonElement EmptyProvenance()
         => JsonSerializer.SerializeToElement(new { schema_version = 2, geometries = Array.Empty<object>() });
-
-    private static JsonSchema LoadSchema()
-    {
-        using var stream = typeof(ModelImportSettings).Assembly.GetManifestResourceStream("oxygen.model-import.schema.json")
-            ?? throw new InvalidOperationException("The engine's model import record schema is missing.");
-        using var reader = new StreamReader(stream);
-        return JsonSchema.FromText(reader.ReadToEnd());
-    }
 }

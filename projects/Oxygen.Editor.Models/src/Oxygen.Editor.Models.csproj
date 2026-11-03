@@ -20,6 +20,15 @@
         <!-- Import sessions are import manifests; the schema also states the ImportTool's execution defaults. -->
         <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.import-manifest.schema.json"
                           LogicalName="oxygen.import-manifest.schema.json" />
+        <!-- The schemas the two reference; EngineSchemas resolves each reference to the embedded copy. -->
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.name.schema.json"
+                          LogicalName="oxygen.name.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.reference.schema.json"
+                          LogicalName="oxygen.reference.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.lod-policy.schema.json"
+                          LogicalName="oxygen.lod-policy.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.surface-provenance.schema.json"
+                          LogicalName="oxygen.surface-provenance.schema.json" />
     </ItemGroup>
 
     <ItemGroup>

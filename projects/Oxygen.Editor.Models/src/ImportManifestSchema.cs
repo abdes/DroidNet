@@ -12,11 +12,11 @@ namespace Oxygen.Editor.Models;
 /// source of the ImportTool's execution defaults.</summary>
 internal static class ImportManifestSchema
 {
-    private const string ResourceName = "oxygen.import-manifest.schema.json";
+    private const string FileName = "oxygen.import-manifest.schema.json";
 
-    private static readonly Lazy<string> Text = new(LoadText);
+    private static readonly Lazy<string> Text = new(static () => EngineSchemas.ReadText(FileName));
 
-    private static readonly Lazy<JsonSchema> Schema = new(() => JsonSchema.FromText(Text.Value));
+    private static readonly Lazy<JsonSchema> Schema = new(static () => EngineSchemas.Get(FileName));
 
     /// <summary>Gets whether <paramref name="manifest"/> is a valid import manifest.</summary>
     /// <param name="manifest">The manifest's root.</param>
@@ -26,12 +26,4 @@ internal static class ImportManifestSchema
     /// <summary>Gets the schema's root object, to read the defaults it states.</summary>
     /// <returns>A fresh copy of the schema.</returns>
     public static JsonObject Read() => JsonNode.Parse(Text.Value)!.AsObject();
-
-    private static string LoadText()
-    {
-        using var stream = typeof(ImportManifestSchema).Assembly.GetManifestResourceStream(ResourceName)
-            ?? throw new InvalidOperationException("The engine's import manifest schema is missing.");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }
 }
