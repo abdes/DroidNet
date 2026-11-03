@@ -65,10 +65,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
@@ -3066,10 +3066,9 @@ namespace {
     const phys::PhysicsResourceFormat format) -> CookedPhysicsResourcePayload
   {
     auto payload = CookedPhysicsResourcePayload {};
-    payload.data.assign(blob_bytes.begin(), blob_bytes.end());
+    payload.data = HashedBytes(blob_bytes);
     payload.format = format;
     payload.alignment = 16;
-    payload.content_hash = base::ComputeSha256(payload.data);
     return payload;
   }
 

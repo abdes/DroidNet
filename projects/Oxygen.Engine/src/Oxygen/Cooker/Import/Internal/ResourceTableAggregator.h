@@ -64,12 +64,13 @@ struct TextureTableTraits {
   using Reservation = WriteReservation;
 
   //! Textures use index 0 for the engine fallback texture (1x1 white
-  //! texel), inserted by packing tooling.  No generic sentinel needed.
+  //! texel), which the texture emitter inserts first. No sentinel needed.
   static constexpr bool kReserveSentinelAtZero = false;
 
   static constexpr auto kTableRelPath = internal::loose_layout::kTexturesTable;
   static constexpr auto kDataRelPath = internal::loose_layout::kTexturesData;
 
+  //! The deduplication key: every field of the row but its `data_offset`.
   [[nodiscard]] static auto SignatureForDescriptor(const Descriptor& desc)
     -> std::string
   {
@@ -77,10 +78,18 @@ struct TextureTableTraits {
     signature.reserve(160);
 
     signature.append("tex:");
+    signature.append(";t=");
+    signature.append(std::to_string(desc.texture_type));
+    signature.append(";c=");
+    signature.append(std::to_string(desc.compression_type));
     signature.append(";w=");
     signature.append(std::to_string(desc.width));
     signature.append("x");
     signature.append(std::to_string(desc.height));
+    signature.append("x");
+    signature.append(std::to_string(desc.depth));
+    signature.append(";l=");
+    signature.append(std::to_string(desc.array_layers));
     signature.append(";m=");
     signature.append(std::to_string(desc.mip_levels));
     signature.append(";f=");
@@ -107,6 +116,7 @@ struct BufferTableTraits {
   static constexpr auto kTableRelPath = internal::loose_layout::kBuffersTable;
   static constexpr auto kDataRelPath = internal::loose_layout::kBuffersData;
 
+  //! The deduplication key: every field of the row but its `data_offset`.
   [[nodiscard]] static auto SignatureForDescriptor(const Descriptor& desc)
     -> std::string
   {
@@ -139,6 +149,8 @@ struct PhysicsTableTraits {
   static constexpr auto kTableRelPath = internal::loose_layout::kPhysicsTable;
   static constexpr auto kDataRelPath = internal::loose_layout::kPhysicsData;
 
+  //! The deduplication key: every field of the row but its `data_offset` and
+  //! the `resource_asset_key` derived from this key.
   [[nodiscard]] static auto SignatureForDescriptor(const Descriptor& desc)
     -> std::string
   {
@@ -189,27 +201,41 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ResourceTableAggregator)
   OXYGEN_MAKE_NON_MOVABLE(ResourceTableAggregator)
 
-  template <typename Builder>
-  auto AcquireOrInsert(const std::string& signature, Builder&& builder)
-    -> AcquireResult
+  //! Finds the row that `row` duplicates, or adds `row` with its data range
+  //! reserved.
+  /*!
+   `row` holds every field but `data_offset`, and its `size_bytes` is the size
+   of its payload. A row with the same `Traits::SignatureForDescriptor` is
+   reused only when its data offset satisfies `alignment`; otherwise `row` is
+   added at an aligned offset and becomes the row later requests reuse.
+
+   @throw std::logic_error When `Finalize` has started.
+  */
+  auto Acquire(Descriptor row, const uint64_t alignment) -> AcquireResult
   {
+    const auto signature = Traits::SignatureForDescriptor(row);
     std::scoped_lock lock(mutex_);
     if (finalize_started_.load(std::memory_order_acquire)) {
-      LOG_F(ERROR, "ResourceTableAggregator: AcquireOrInsert after finalize");
+      throw std::logic_error("a resource row is acquired after finalization");
     }
 
     requests_.fetch_add(1, std::memory_order_acq_rel);
 
     if (const auto it = index_by_signature_.find(signature);
-      it != index_by_signature_.end()) {
+      it != index_by_signature_.end()
+      && IsAligned(table_.at(it->second).data_offset, alignment)) {
       return AcquireResult { .index = it->second, .is_new = false };
     }
 
     EnsureTableFileExists();
+    const auto reservation = ReserveDataRange({
+      .alignment = alignment,
+      .payload_size = row.size_bytes,
+    });
+    row.data_offset = reservation.aligned_offset;
     const uint32_t index = next_index_++;
-    auto [descriptor, reservation] = std::forward<Builder>(builder)();
-    table_.push_back(descriptor);
-    index_by_signature_.emplace(signature, index);
+    table_.push_back(row);
+    index_by_signature_.insert_or_assign(signature, index);
 
     new_entries_this_run_.fetch_add(1, std::memory_order_acq_rel);
 
@@ -291,28 +317,6 @@ public:
 
   auto TablePath() const -> const std::filesystem::path& { return table_path_; }
 
-  auto ReserveDataRange(const WriteRangeRequest request) -> WriteReservation
-  {
-    uint64_t current_size = data_file_size_.load(std::memory_order_acquire);
-    uint64_t aligned_offset = 0;
-    uint64_t new_size = 0;
-
-    while (true) {
-      aligned_offset = AlignUp(current_size, request.alignment);
-      new_size = aligned_offset + request.payload_size;
-      if (data_file_size_.compare_exchange_weak(
-            current_size, new_size, std::memory_order_acq_rel)) {
-        break;
-      }
-    }
-
-    return {
-      .reservation_start = current_size,
-      .aligned_offset = aligned_offset,
-      .padding_size = aligned_offset - current_size,
-    };
-  }
-
   auto DataFileSize() const noexcept -> uint64_t
   {
     return data_file_size_.load(std::memory_order_acquire);
@@ -320,9 +324,9 @@ public:
 
   //! The data file, opened on first use and held until the aggregator ends.
   /*!
-   Emitters await `AsyncWriteAt` on it at the ranges `ReserveDataRange`
-   reserved. The file is created when missing and never truncated, and it is
-   open for writes while the aggregator lives.
+   Emitters await `AsyncWriteAt` on it at the ranges `Acquire` reserved. The
+   file is created when missing and never truncated, and it is open for writes
+   while the aggregator lives.
 
    @return The device, or the error opening it; the pointer stays valid until
            the aggregator is destroyed.
@@ -353,6 +357,20 @@ public:
   }
 
 private:
+  //! Reserves the next aligned range of the data file. Requires `mutex_`.
+  auto ReserveDataRange(const WriteRangeRequest request) -> WriteReservation
+  {
+    const auto current_size = data_file_size_.load(std::memory_order_acquire);
+    const auto aligned_offset = AlignUp(current_size, request.alignment);
+    data_file_size_.store(
+      aligned_offset + request.payload_size, std::memory_order_release);
+    return {
+      .reservation_start = current_size,
+      .aligned_offset = aligned_offset,
+      .padding_size = aligned_offset - current_size,
+    };
+  }
+
   //! Reserve index 0 as an all-zero sentinel descriptor when the
   //! traits opt in via `kReserveSentinelAtZero`.
   //!
@@ -465,6 +483,12 @@ private:
     }
     const auto remainder = value % alignment;
     return (remainder == 0) ? value : (value + (alignment - remainder));
+  }
+
+  [[nodiscard]] static constexpr auto IsAligned(
+    const uint64_t value, const uint64_t alignment) noexcept -> bool
+  {
+    return AlignUp(value, alignment) == value;
   }
 };
 

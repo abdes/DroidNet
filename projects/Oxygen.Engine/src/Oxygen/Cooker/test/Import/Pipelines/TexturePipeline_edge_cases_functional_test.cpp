@@ -179,15 +179,15 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, MaterialPresetPreservesHdrRadiance)
   ASSERT_FALSE(result.cooked->layouts.empty());
   const auto header_read
     = oxygen::serio::CopyAt<oxygen::data::pak::render::TexturePayloadHeader>(
-      std::span { result.cooked->payload });
+      result.cooked->payload.Bytes());
   ASSERT_HAS_VALUE(header_read);
   const auto& header = *header_read;
   const auto& layout = result.cooked->layouts.front();
   std::array<float, 4> actual {};
   const auto offset = header.data_offset_bytes + layout.offset_bytes;
-  ASSERT_GE(result.cooked->payload.size(), offset + sizeof(actual));
+  ASSERT_GE(result.cooked->payload.Size(), offset + sizeof(actual));
   std::memcpy(actual.data(),
-    std::span { result.cooked->payload }.subspan(offset, sizeof(actual)).data(),
+    result.cooked->payload.Bytes().subspan(offset, sizeof(actual)).data(),
     sizeof(actual));
   EXPECT_EQ(actual, pixel);
 }

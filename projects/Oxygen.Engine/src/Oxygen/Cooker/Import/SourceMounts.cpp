@@ -27,6 +27,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
@@ -105,6 +106,20 @@ namespace {
     std::optional<Binding> committed;
     std::optional<Binding> binding;
   };
+
+  //! Why a shared mount has no committed binding, for its debug log line.
+  [[maybe_unused]] auto DescribeUncommitted(const Entry& entry) -> std::string
+  {
+    if (entry.mount.declared_path.has_value()) {
+      return fmt::format(
+        "committed path '{}' refused", *entry.mount.declared_path);
+    }
+    if (entry.binding.has_value()) {
+      return fmt::format("placeholder, bound by {} '{}'",
+        to_string(entry.binding->origin), entry.binding->origin_file.string());
+    }
+    return "placeholder, unbound so far";
+  }
 
   //! What a diagnostic is about, beyond its message.
   struct Subject final {
@@ -237,6 +252,12 @@ namespace {
       -> Result<serio::AnyDevice> override
     {
       return cooked::RealCookerStorage().Open(path);
+    }
+
+    [[nodiscard]] auto List(const fs::path& path) const
+      -> Result<std::vector<content::lc::RootEntry>> override
+    {
+      return cooked::RealCookerStorage().List(path);
     }
 
     [[nodiscard]] auto Canonical(const fs::path& path) const
@@ -674,17 +695,8 @@ namespace {
       DLOG_SCOPE_F(1, "Apply the committed declaration");
       for (auto& entry : entries_) {
         if (!entry.committed.has_value()) {
-          if (entry.mount.scope == MountScope::kLocal) {
-            continue;
-          }
-          if (entry.mount.declared_path.has_value()) {
-            DLOG_F(1, "{}: committed path '{}' refused", entry.mount.name,
-              *entry.mount.declared_path);
-          } else if (entry.binding.has_value()) {
-            DLOG_F(1, "{}: placeholder, bound by {} '{}'", entry.mount.name,
-              entry.binding->origin, entry.binding->origin_file.string());
-          } else {
-            DLOG_F(1, "{}: placeholder, unbound so far", entry.mount.name);
+          if (entry.mount.scope != MountScope::kLocal) {
+            DLOG_F(1, "{}: {}", entry.mount.name, DescribeUncommitted(entry));
           }
           continue;
         }

@@ -17,7 +17,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -30,12 +30,11 @@ namespace oxygen::content::import {
 
 //! Cooked payload consumed by `PhysicsResourceEmitter`.
 struct CookedPhysicsResourcePayload final {
-  std::vector<std::byte> data;
+  //! The resource bytes and their SHA-256.
+  HashedBytes data;
   data::pak::physics::PhysicsResourceFormat format
     = data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary;
   uint64_t alignment = 16;
-  //! The SHA-256 of `data`, computed by the payload's producer.
-  base::Sha256Digest content_hash = {};
 };
 
 struct EmittedPhysicsResourceRef final {
@@ -61,7 +60,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(PhysicsResourceEmitter)
   OXYGEN_MAKE_NON_MOVABLE(PhysicsResourceEmitter)
 
-  //! Emits `cooked`, refusing a payload without its SHA-256.
+  //! Emits `cooked`, refusing an empty payload.
   OXGN_COOK_NDAPI auto Emit(CookedPhysicsResourcePayload cooked)
     -> EmittedPhysicsResourceRef;
 
@@ -80,8 +79,8 @@ private:
     kPayload,
   };
 
-  auto MakeTableEntry(const CookedPhysicsResourcePayload& cooked,
-    uint64_t data_offset, const data::AssetKey& resource_asset_key)
+  //! The table row of `cooked`, without its data offset and resource key.
+  static auto MakeTableEntry(const CookedPhysicsResourcePayload& cooked)
     -> data::pak::physics::PhysicsResourceDesc;
   auto QueueDataWrite(WriteKind kind, std::optional<uint32_t> index,
     uint64_t offset, std::vector<std::byte> data) -> void;

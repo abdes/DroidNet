@@ -82,8 +82,7 @@ namespace {
     const auto vb_source = source_dir / "shared.vertices.buffer.bin";
     const auto ib_source = source_dir / "shared.indices.buffer.bin";
 
-    std::filesystem::create_directories(cooked_root / "Materials");
-    WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+    CookDefaultMaterial(cooked_root);
 
     const auto vb_bytes = std::array<std::byte, 96> {
       std::byte { 0x00 },
@@ -260,8 +259,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   const auto vb_source = source_dir / "cube.vertices.buffer.bin";
   const auto ib_source = source_dir / "cube.indices.buffer.bin";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto vb_bytes = std::array<std::byte, 96> {
     std::byte { 0x00 },
@@ -567,8 +565,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   const auto vb_source = source_dir / "context.vertices.buffer.bin";
   const auto ib_source = source_dir / "context.indices.buffer.bin";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto vb_bytes = std::array<std::byte, 96> {};
   const auto ib_bytes = std::array<std::byte, 12> {};
@@ -638,8 +635,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   const auto vb_source = source_dir / "ambiguous.vertices.buffer.bin";
   const auto ib_source = source_dir / "ambiguous.indices.buffer.bin";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto vb_bytes = std::array<std::byte, 96> {};
   const auto ib_bytes = std::array<std::byte, 12> {};
@@ -707,8 +703,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   const auto cooked_root = root / ".cooked";
   const auto descriptor_path = source_dir / "unmounted.geometry.json";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto descriptor_doc
     = MakeStandardGeometry("/.cooked/Geometry/UnmountedBuffers.ogeo",
@@ -747,8 +742,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   const auto vb_source = source_dir / "cube.vertices.buffer.bin";
   const auto ib_source = source_dir / "cube.indices.buffer.bin";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto vb_bytes = std::array<std::byte, 96> {};
   const auto ib_bytes = std::array<std::byte, 12> {};
@@ -799,8 +793,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   const auto vb_source = source_dir / "shared.vertices.buffer.bin";
   const auto ib_source = source_dir / "shared.indices.buffer.bin";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto vb_bytes = std::array<std::byte, 96> {};
   const auto ib_bytes = std::array<std::byte, 12> {
@@ -884,8 +877,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   const auto descriptor_path = source_dir / "dedup_conflict.geometry.json";
   const auto shared_source = source_dir / "shared.buffer.bin";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto shared_bytes = std::array<std::byte, 12> {
     std::byte { 0x00 },

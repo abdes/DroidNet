@@ -334,8 +334,8 @@ namespace {
 
     const auto& lod0 = cooked.lods.front();
     EXPECT_TRUE(lod0.auxiliary_buffers.empty());
-    EXPECT_EQ(lod0.vertex_buffer.data.size(), sizeof(data::Vertex) * 3U);
-    EXPECT_EQ(lod0.index_buffer.data.size(), sizeof(uint32_t) * 3U);
+    EXPECT_EQ(lod0.vertex_buffer.data.Size(), sizeof(data::Vertex) * 3U);
+    EXPECT_EQ(lod0.index_buffer.data.Size(), sizeof(uint32_t) * 3U);
 
     const auto& bytes = cooked.descriptor_bytes;
     ASSERT_GE(bytes.size(), sizeof(data::pak::geometry::GeometryAssetDesc));
@@ -781,11 +781,11 @@ namespace {
     }
     const auto& lod = cooked.lods.front();
     result.vertices.resize(
-      lod.vertex_buffer.data.size() / sizeof(data::Vertex));
-    std::memcpy(result.vertices.data(), lod.vertex_buffer.data.data(),
+      lod.vertex_buffer.data.Size() / sizeof(data::Vertex));
+    std::memcpy(result.vertices.data(), lod.vertex_buffer.data.Bytes().data(),
       result.vertices.size() * sizeof(data::Vertex));
-    result.indices.resize(lod.index_buffer.data.size() / sizeof(uint32_t));
-    std::memcpy(result.indices.data(), lod.index_buffer.data.data(),
+    result.indices.resize(lod.index_buffer.data.Size() / sizeof(uint32_t));
+    std::memcpy(result.indices.data(), lod.index_buffer.data.Bytes().data(),
       result.indices.size() * sizeof(uint32_t));
     return result;
   }
@@ -1107,12 +1107,12 @@ namespace {
       << "Expected both imports to produce cooked geometry";
     ASSERT_HAS_VALUE(second.cooked)
       << "Expected both imports to produce cooked geometry";
-    const auto& cooked = first.cooked.value();
-    EXPECT_EQ(cooked.descriptor_bytes, second.cooked.value().descriptor_bytes);
-    EXPECT_EQ(cooked.lods.front().vertex_buffer.data,
-      second.cooked.value().lods.front().vertex_buffer.data);
-    EXPECT_EQ(cooked.lods.front().index_buffer.data,
-      second.cooked.value().lods.front().index_buffer.data);
+    const auto& cooked = *first.cooked;
+    EXPECT_EQ(cooked.descriptor_bytes, second.cooked->descriptor_bytes);
+    EXPECT_EQ(cooked.lods.front().vertex_buffer.data.Sha256(),
+      second.cooked->lods.front().vertex_buffer.data.Sha256());
+    EXPECT_EQ(cooked.lods.front().index_buffer.data.Sha256(),
+      second.cooked->lods.front().index_buffer.data.Sha256());
 
     const auto result = ReadCookedViews(cooked);
     ASSERT_EQ(result.views.size(), (triangle_count + kMax - 1U) / kMax);
@@ -1270,8 +1270,8 @@ namespace {
     const auto& cooked = result.cooked.value();
     ASSERT_EQ(cooked.lods.size(), 4U);
     for (size_t lod = 1U; lod < cooked.lods.size(); ++lod) {
-      EXPECT_LE(cooked.lods.at(lod).index_buffer.data.size() * 4U,
-        cooked.lods.at(lod - 1U).index_buffer.data.size() * 3U);
+      EXPECT_LE(cooked.lods.at(lod).index_buffer.data.Size() * 4U,
+        cooked.lods.at(lod - 1U).index_buffer.data.Size() * 3U);
     }
     const auto read = ReadCookedLods(cooked);
     ASSERT_EQ(read.lods.size(), 4U);
@@ -1297,11 +1297,11 @@ namespace {
     ASSERT_EQ(cooked.lods.size(), 3U);
     for (const auto& lod : cooked.lods) {
       const auto vertex_count
-        = lod.vertex_buffer.data.size() / sizeof(data::Vertex);
+        = lod.vertex_buffer.data.Size() / sizeof(data::Vertex);
       ASSERT_GE(lod.auxiliary_buffers.size(), 2U);
-      EXPECT_EQ(lod.auxiliary_buffers.at(0).data.size(),
+      EXPECT_EQ(lod.auxiliary_buffers.at(0).data.Size(),
         vertex_count * sizeof(glm::uvec4));
-      EXPECT_EQ(lod.auxiliary_buffers.at(1).data.size(),
+      EXPECT_EQ(lod.auxiliary_buffers.at(1).data.Size(),
         vertex_count * sizeof(glm::vec4));
     }
   }
@@ -1419,11 +1419,11 @@ namespace {
     // Faceted: the corners of a vertex take their faces' normals, so LOD 0
     // has more vertices than the source shares.
     EXPECT_GT(
-      cooked.lods.front().vertex_buffer.data.size() / sizeof(data::Vertex),
+      cooked.lods.front().vertex_buffer.data.Size() / sizeof(data::Vertex),
       source_vertices);
     for (size_t lod = 1U; lod < cooked.lods.size(); ++lod) {
-      EXPECT_LE(cooked.lods.at(lod).index_buffer.data.size() * 4U,
-        cooked.lods.at(lod - 1U).index_buffer.data.size() * 3U);
+      EXPECT_LE(cooked.lods.at(lod).index_buffer.data.Size() * 4U,
+        cooked.lods.at(lod - 1U).index_buffer.data.Size() * 3U);
     }
   }
 

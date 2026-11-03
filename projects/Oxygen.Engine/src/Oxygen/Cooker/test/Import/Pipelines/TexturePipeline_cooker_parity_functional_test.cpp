@@ -197,12 +197,13 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, CollectParityWithSyncCookerMatches)
   EXPECT_TRUE(result.success);
   ASSERT_HAS_VALUE(result.cooked);
   EXPECT_TRUE(result.diagnostics.empty());
-  EXPECT_EQ(result.cooked->payload, sync->payload);
+  EXPECT_TRUE(
+    std::ranges::equal(result.cooked->payload.Bytes(), sync->payload.Bytes()));
   EXPECT_EQ(result.cooked->desc.width, sync->desc.width);
   EXPECT_EQ(result.cooked->desc.height, sync->desc.height);
   EXPECT_EQ(result.cooked->desc.format, sync->desc.format);
   EXPECT_EQ(result.cooked->desc.mip_levels, sync->desc.mip_levels);
-  EXPECT_EQ(result.cooked->desc.content_hash, sync->desc.content_hash);
+  EXPECT_EQ(result.cooked->payload.Sha256(), sync->payload.Sha256());
 }
 
 NOLINT_TEST_F(TexturePipelineNonRegTest, CollectDepthSlicesParityMatches)
@@ -238,7 +239,8 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, CollectDepthSlicesParityMatches)
   EXPECT_TRUE(result.success);
   ASSERT_HAS_VALUE(result.cooked);
   EXPECT_TRUE(result.diagnostics.empty());
-  EXPECT_EQ(result.cooked->payload, expected->payload);
+  EXPECT_TRUE(std::ranges::equal(
+    result.cooked->payload.Bytes(), expected->payload.Bytes()));
   EXPECT_EQ(result.cooked->desc.depth, kDepth);
   EXPECT_EQ(result.cooked->desc.texture_type, TextureType::kTexture3D);
 }

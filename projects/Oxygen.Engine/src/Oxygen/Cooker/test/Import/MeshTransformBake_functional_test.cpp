@@ -38,6 +38,7 @@
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -61,6 +62,7 @@
 namespace {
 using oxygen::content::import::AsyncImportService;
 using oxygen::content::import::CookedBufferPayload;
+using oxygen::content::import::HashedBytes;
 using oxygen::content::import::ImportDiagnostic;
 using oxygen::content::import::ImportRequest;
 using oxygen::content::import::ImportSeverity;
@@ -117,8 +119,9 @@ auto WorldMatrix(const SceneBuild& scene, size_t index) -> glm::mat4
 template <typename T>
 auto ReadPayload(const CookedBufferPayload& buffer) -> std::vector<T>
 {
-  std::vector<T> values(buffer.data.size() / sizeof(T));
-  std::memcpy(values.data(), buffer.data.data(), buffer.data.size());
+  const auto bytes = buffer.data.Bytes();
+  std::vector<T> values(bytes.size() / sizeof(T));
+  std::memcpy(values.data(), bytes.data(), bytes.size());
   return values;
 }
 
@@ -205,7 +208,7 @@ protected:
     const auto read_buffer =
       [&](const data::pak::core::ResourceIndexT index) -> CookedBufferPayload {
       CookedBufferPayload payload;
-      payload.data = buffer_table.Payload(index);
+      payload.data = HashedBytes(buffer_table.Payload(index));
       return payload;
     };
     for (const auto& asset : inspection.Assets()) {

@@ -414,8 +414,7 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
   std::exception_ptr drain_failure;
   const auto fail = [&](const std::string_view message) -> void {
     report.success = false;
-    report.cooked_root
-      = request_.cooked_root.value_or(request_.source_path.parent_path());
+    report.cooked_root = request_.ResolveCookedRoot();
     report.diagnostics.push_back({
       .severity = ImportSeverity::kError,
       .code = "import.exception",
@@ -530,8 +529,7 @@ auto ImportJob::MakeCancelledReport(const ImportRequest& request) const
   -> ImportReport
 {
   auto report = ImportReport {};
-  report.cooked_root
-    = request.cooked_root.value_or(request.source_path.parent_path());
+  report.cooked_root = request.ResolveCookedRoot();
   report.success = false;
 
   report.telemetry = MakeZeroTelemetry();

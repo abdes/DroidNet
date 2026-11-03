@@ -13,16 +13,21 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Data/PakFormat_audio.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -32,6 +37,34 @@
 namespace oxygen::data {
 
 namespace {
+  template <class Desc>
+  auto RequireRow(const Desc& row, const std::string_view what) -> void
+  {
+    if constexpr (requires { row._reserved; }) {
+      if (!pak::core::IsZeroReserve(
+            std::as_bytes(std::span { row._reserved }))) {
+        throw CookedFormatError(CookedDefect::kReservedNotZero,
+          std::string(what) + " row reserved bytes are not zero");
+      }
+    }
+    if constexpr (std::is_same_v<Desc, pak::core::TextureResourceDesc>) {
+      if (!pak::core::HasSupportedCompression(row)) {
+        throw CookedFormatError(CookedDefect::kInvalidValue,
+          std::string(what) + " row records a compression its format lacks");
+      }
+    }
+    if constexpr (requires { row.content_hash; }) {
+      const auto has_digest = !base::IsAllZero(row.content_hash);
+      if (row.size_bytes == 0U && has_digest) {
+        throw CookedFormatError(CookedDefect::kInvalidValue,
+          std::string(what) + " empty row records a content digest");
+      }
+      if (row.size_bytes != 0U && !has_digest) {
+        throw CookedFormatError(CookedDefect::kMissingDigest,
+          std::string(what) + " row has no content digest");
+      }
+    }
+  }
 
   auto Refusal(const CookedDefect defect, const std::string_view message)
     -> CookedFormatError
@@ -308,6 +341,36 @@ auto DecodeBufferResourceDescriptor(const std::span<const std::byte> bytes)
     return Err(std::move(*error));
   }
   return Ok(std::move(result));
+}
+
+auto RequireResourceRow(const pak::core::TextureResourceDesc& row,
+  const std::string_view what) -> void
+{
+  RequireRow(row, what);
+}
+
+auto RequireResourceRow(
+  const pak::core::BufferResourceDesc& row, const std::string_view what) -> void
+{
+  RequireRow(row, what);
+}
+
+auto RequireResourceRow(
+  const pak::audio::AudioResourceDesc& row, const std::string_view what) -> void
+{
+  RequireRow(row, what);
+}
+
+auto RequireResourceRow(const pak::physics::PhysicsResourceDesc& row,
+  const std::string_view what) -> void
+{
+  RequireRow(row, what);
+}
+
+auto RequireResourceRow(const pak::scripting::ScriptResourceDesc& row,
+  const std::string_view what) -> void
+{
+  RequireRow(row, what);
 }
 
 } // namespace oxygen::data

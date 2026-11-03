@@ -14,6 +14,7 @@ oxygen_cooker_test(
     "CookedPak_test.cpp"
     "DescriptorDefects_test.cpp"
     "LooseCookedRoot_test.cpp"
+    "MemoryFileSystem_test.cpp"
     "ModelRecord_test.cpp"
     "PakWorkspace_test.cpp"
     "PhysicsSidecarBuilder_test.cpp"

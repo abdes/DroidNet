@@ -10,15 +10,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <span>
 #include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
@@ -174,26 +172,22 @@ auto BufferPipeline::Worker() -> co::Co<>
     DLOG_F(1, "processing {}", item.source_id);
     const auto cook_start = std::chrono::steady_clock::now();
 
-    std::vector<ImportDiagnostic> diagnostics;
-    if (auto diag = co_await ComputeContentHash(item); diag.has_value()) {
-      diagnostics.push_back(std::move(*diag));
-    }
+    const auto hashed = co_await HashBytes(item);
 
-    if (IsStopRequested(item.stop_token)) {
+    if (!hashed || IsStopRequested(item.stop_token)) {
       co_await ReportCancelled(std::move(item));
       continue;
     }
 
-    const auto success = diagnostics.empty();
     WorkResult result {
       .source_id = std::move(item.source_id),
       .cooked = std::move(item.cooked),
-      .diagnostics = std::move(diagnostics),
+      .diagnostics = {},
       .telemetry = ImportWorkItemTelemetry {
         .cook_duration = MakeDuration(
           cook_start, std::chrono::steady_clock::now()),
       },
-      .success = success,
+      .success = true,
     };
     if (item.on_finished) {
       item.on_finished();
@@ -218,33 +212,31 @@ auto BufferPipeline::ReportCancelled(WorkItem item) -> co::Co<>
   co_await output_channel_.Send(std::move(canceled));
 }
 
-auto BufferPipeline::ComputeContentHash(WorkItem& item)
-  -> co::Co<std::optional<ImportDiagnostic>>
+auto BufferPipeline::HashBytes(WorkItem& item) -> co::Co<bool>
 {
   if (IsStopRequested(item.stop_token)) {
-    co_return std::nullopt;
+    co_return false;
   }
-
-  std::span<const std::byte> bytes(
-    item.cooked.data.data(), item.cooked.data.size());
 
   const std::string source_id = item.source_id;
-  const auto content_hash = co_await thread_pool_.Run(
-    [bytes, stop_token = item.stop_token, source_id](
-      co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
+  auto hashed = co_await thread_pool_.Run(
+    [bytes = std::move(item.bytes), stop_token = item.stop_token, source_id](
+      co::ThreadPool::CancelToken canceled) mutable noexcept
+      -> std::optional<HashedBytes> {
       if (IsStopRequested(stop_token) || canceled) {
-        return {};
+        return std::nullopt;
       }
 
-      const auto hash = base::ComputeSha256(bytes);
-      DLOG_F(2, "hashed {} -> {}", source_id, base::ToHexString(hash));
-      return hash;
+      auto result = HashedBytes(std::move(bytes));
+      DLOG_F(
+        2, "hashed {} -> {}", source_id, base::ToHexString(result.Sha256()));
+      return result;
     });
-
-  if (!IsStopRequested(item.stop_token)) {
-    item.cooked.content_hash = content_hash;
+  if (!hashed) {
+    co_return false;
   }
-  co_return std::nullopt;
+  item.cooked.data = std::move(*hashed);
+  co_return true;
 }
 
 } // namespace oxygen::content::import

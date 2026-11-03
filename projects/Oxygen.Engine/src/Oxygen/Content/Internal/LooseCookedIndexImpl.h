@@ -143,6 +143,8 @@ public:
     -> std::vector<lc::FileIntegrity>;
   OXGN_CNTT_NDAPI auto CheckContent(const std::filesystem::path& cooked_root,
     lc::IntegrityCheck check) const -> std::vector<lc::FileIntegrityIssue>;
+  OXGN_CNTT_NDAPI auto CheckContent(const lc::RootFiles& files,
+    lc::IntegrityCheck check) const -> std::vector<lc::FileIntegrityIssue>;
   OXGN_CNTT_API auto ValidateContent(const std::filesystem::path& cooked_root,
     lc::IntegrityCheck check) const -> void;
   OXGN_CNTT_NDAPI auto FindFileSha256(

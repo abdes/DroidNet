@@ -21,7 +21,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
@@ -208,36 +207,24 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked) -> uint32_t
   if (finalize_started_.load(std::memory_order_acquire)) {
     throw std::runtime_error("TextureEmitter is finalized");
   }
-  if (base::IsAllZero(cooked.desc.content_hash)) {
-    throw std::invalid_argument("the cooked texture has no SHA-256");
+  if (cooked.payload.Empty()) {
+    throw std::invalid_argument("the cooked texture is empty");
   }
 
   EnsureFallbackTexture();
 
-  const auto signature
-    = TextureTableTraits::SignatureForDescriptor(ToPakDescriptor(cooked, 0));
-  const auto acquire = table_aggregator_.AcquireOrInsert(signature,
-    [&] -> std::pair<data::pak::core::TextureResourceDesc, WriteReservation> {
-      const auto reserved = table_aggregator_.ReserveDataRange({
-        .alignment = config_.data_alignment,
-        .payload_size = cooked.payload.size(),
-      });
-      auto desc = ToPakDescriptor(cooked, reserved.aligned_offset);
-      return std::make_pair(desc, reserved);
-    });
+  const auto acquire = table_aggregator_.Acquire(
+    ToPakDescriptor(cooked), config_.data_alignment);
 
-  RecordEmissionSignature(signature);
+  RecordEmission(acquire.index);
 
   if (!acquire.is_new) {
     return acquire.index;
   }
 
-  UpdateDataFileSize(
-    acquire.reservation.aligned_offset + cooked.payload.size());
-
   const auto reserved = acquire.reservation;
   DLOG_F(INFO, "Emit index={} offset={} size={} padding={} format={}",
-    acquire.index, reserved.aligned_offset, cooked.payload.size(),
+    acquire.index, reserved.aligned_offset, cooked.payload.Size(),
     reserved.padding_size, static_cast<int>(cooked.desc.format));
 
   // Write padding if needed (before the texture data)
@@ -249,7 +236,7 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked) -> uint32_t
 
   // Queue async write at explicit offset for texture data; the write owns it.
   QueueDataWrite(WriteKind::kPayload, TextureKind::kUser, acquire.index,
-    reserved.aligned_offset, std::move(cooked.payload));
+    reserved.aligned_offset, std::move(cooked.payload).TakeBytes());
 
   return acquire.index;
 }
@@ -297,7 +284,7 @@ auto TextureEmitter::GetStats() const noexcept -> Stats
 {
   return {
     .emitted_textures = emitted_count_.load(std::memory_order_acquire),
-    .data_file_size = data_file_size_.load(std::memory_order_acquire),
+    .data_file_size = table_aggregator_.DataFileSize(),
     .error_count = writes_.ErrorCount(),
   };
 }
@@ -308,22 +295,9 @@ auto TextureEmitter::TryGetDescriptor(const uint32_t index) const
   return table_aggregator_.TryGetDescriptor(index);
 }
 
-auto TextureEmitter::UpdateDataFileSize(const uint64_t new_size) -> void
+auto TextureEmitter::RecordEmission(const uint32_t index) -> void
 {
-  auto current = data_file_size_.load(std::memory_order_acquire);
-  while (current < new_size
-    && !data_file_size_.compare_exchange_weak(
-      current, new_size, std::memory_order_acq_rel)) { }
-}
-
-auto TextureEmitter::RecordEmissionSignature(const std::string& signature)
-  -> void
-{
-  if (signature.empty()) {
-    return;
-  }
-
-  if (emitted_signatures_.insert(signature).second) {
+  if (emitted_indices_.insert(index).second) {
     emitted_count_.fetch_add(1, std::memory_order_acq_rel);
   }
 }
@@ -347,8 +321,6 @@ auto TextureEmitter::CreateFallbackPayload() const -> CookedTexturePayload
     LOG_F(ERROR, "failed to build fallback payload");
     throw std::runtime_error("fallback payload build failed");
   }
-  const auto content_hash = base::ComputeSha256(payload_bytes);
-
   CookedTexturePayload cooked {};
   cooked.desc.texture_type = TextureType::kTexture2D;
   cooked.desc.width = 1;
@@ -358,18 +330,17 @@ auto TextureEmitter::CreateFallbackPayload() const -> CookedTexturePayload
   cooked.desc.mip_levels = 1;
   cooked.desc.format = kFallbackFormat;
   cooked.desc.packing_policy_id = config_.packing_policy_id;
-  cooked.desc.content_hash = content_hash;
-  cooked.payload = std::move(payload_bytes);
+  cooked.payload = HashedBytes(std::move(payload_bytes));
   return cooked;
 }
 
-auto TextureEmitter::ToPakDescriptor(const CookedTexturePayload& cooked,
-  const uint64_t data_offset) const -> TextureResourceDesc
+auto TextureEmitter::ToPakDescriptor(const CookedTexturePayload& cooked)
+  -> TextureResourceDesc
 {
   TextureResourceDesc desc {};
-  desc.data_offset = data_offset;
+  desc.data_offset = 0;
   desc.size_bytes
-    = static_cast<data::pak::core::DataBlobSizeT>(cooked.payload.size());
+    = static_cast<data::pak::core::DataBlobSizeT>(cooked.payload.Size());
   desc.texture_type = static_cast<uint8_t>(cooked.desc.texture_type);
   desc.width = cooked.desc.width;
   desc.height = cooked.desc.height;
@@ -378,7 +349,7 @@ auto TextureEmitter::ToPakDescriptor(const CookedTexturePayload& cooked,
   desc.mip_levels = cooked.desc.mip_levels;
   desc.format = static_cast<uint8_t>(cooked.desc.format);
   desc.alignment = data::TextureResource::kDataAlignment;
-  desc.content_hash = cooked.desc.content_hash;
+  desc.content_hash = cooked.payload.Sha256();
 
   desc.compression_type
     = data::pak::core::TextureCompressionOf(cooked.desc.format);
@@ -394,28 +365,15 @@ auto TextureEmitter::EnsureFallbackTexture() -> void
   }
 
   CookedTexturePayload fallback = CreateFallbackPayload();
-  const auto signature
-    = TextureTableTraits::SignatureForDescriptor(ToPakDescriptor(fallback, 0));
+  const auto acquire = table_aggregator_.Acquire(
+    ToPakDescriptor(fallback), config_.data_alignment);
 
-  const auto acquire = table_aggregator_.AcquireOrInsert(signature,
-    [&] -> std::pair<data::pak::core::TextureResourceDesc, WriteReservation> {
-      const auto reserved = table_aggregator_.ReserveDataRange({
-        .alignment = config_.data_alignment,
-        .payload_size = fallback.payload.size(),
-      });
-      auto desc = ToPakDescriptor(fallback, reserved.aligned_offset);
-      return std::make_pair(desc, reserved);
-    });
-
-  RecordEmissionSignature(signature);
+  RecordEmission(acquire.index);
 
   if (!acquire.is_new) {
     fallback_emitted_.store(true, std::memory_order_release);
     return;
   }
-
-  UpdateDataFileSize(
-    acquire.reservation.aligned_offset + fallback.payload.size());
 
   const auto reserved = acquire.reservation;
   if (reserved.padding_size > 0) {
@@ -425,7 +383,7 @@ auto TextureEmitter::EnsureFallbackTexture() -> void
   }
 
   QueueDataWrite(WriteKind::kPayload, TextureKind::kFallback, std::nullopt,
-    reserved.aligned_offset, std::vector<std::byte>(fallback.payload));
+    reserved.aligned_offset, std::move(fallback.payload).TakeBytes());
 
   fallback_emitted_.store(true, std::memory_order_release);
 }

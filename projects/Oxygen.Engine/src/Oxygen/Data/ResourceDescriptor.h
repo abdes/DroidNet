@@ -129,6 +129,40 @@ struct BufferResourceDescriptor {
   std::vector<BufferResourceView> views;
 };
 
+namespace pak::audio {
+  struct AudioResourceDesc;
+} // namespace pak::audio
+namespace pak::physics {
+  struct PhysicsResourceDesc;
+} // namespace pak::physics
+namespace pak::scripting {
+  struct ScriptResourceDesc;
+} // namespace pak::scripting
+
+//! Refuses a resource table row its format does not allow, in a pak or a loose
+//! cooked root alike.
+/*!
+ A row's reserved bytes are zero, a texture row records the compression its
+ format implies, a row of a payload holds the payload's SHA-256, and an empty
+ row, the absent sentinel, holds no digest: writers refuse empty payloads.
+ Where the payload lies is the container's rule, not this one.
+
+ @param row  The row, copied out of its table.
+ @param what The table, for the message.
+ @throw CookedFormatError `kReservedNotZero`, `kInvalidValue` or
+   `kMissingDigest`.
+*/
+OXGN_DATA_API auto RequireResourceRow(
+  const pak::core::TextureResourceDesc& row, std::string_view what) -> void;
+OXGN_DATA_API auto RequireResourceRow(
+  const pak::core::BufferResourceDesc& row, std::string_view what) -> void;
+OXGN_DATA_API auto RequireResourceRow(
+  const pak::audio::AudioResourceDesc& row, std::string_view what) -> void;
+OXGN_DATA_API auto RequireResourceRow(
+  const pak::physics::PhysicsResourceDesc& row, std::string_view what) -> void;
+OXGN_DATA_API auto RequireResourceRow(
+  const pak::scripting::ScriptResourceDesc& row, std::string_view what) -> void;
+
 //! The size of one element of the buffer `descriptor` describes: its
 //! `element_stride`, else the size of its `element_format`, else 1 for a raw
 //! buffer; 0 when its format has no fixed per-element size.

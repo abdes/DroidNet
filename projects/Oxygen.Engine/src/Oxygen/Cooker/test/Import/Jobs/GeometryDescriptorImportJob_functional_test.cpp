@@ -81,15 +81,16 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     HasDiagnosticCode(report->diagnostics, "geometry.material.missing"));
 }
 
-NOLINT_TEST(GeometryDescriptorImportJobTest,
-  NewMaterialRespectsPriorityBeforeIndexPublication)
+//! Only an index lists an asset: a material file no index lists, even in the
+//! root of highest priority, is none, and the indexed library material wins.
+NOLINT_TEST(GeometryDescriptorImportJobTest, UnindexedMaterialFileIsNoAsset)
 {
   const ScopedTempDir temp;
-  const auto root = temp.Path() / "new_material_priority";
+  const auto root = temp.Path() / "unindexed_material";
   std::filesystem::create_directories(root);
   const auto source_dir = root / "Sources";
   const auto cooked_root = root / ".cooked";
-  const auto descriptor_path = source_dir / "priority.geometry.json";
+  const auto descriptor_path = source_dir / "unindexed.geometry.json";
   const auto vb_source = source_dir / "cube.vertices.buffer.bin";
   const auto ib_source = source_dir / "cube.indices.buffer.bin";
 
@@ -100,9 +101,8 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 
   constexpr auto kVb = "/.cooked/Resources/Buffers/cube_vertices.obuf";
   constexpr auto kIb = "/.cooked/Resources/Buffers/cube_indices.obuf";
-  auto geometry
-    = MakeStandardGeometry("/.cooked/Geometry/NewMaterialPriority.ogeo",
-      "/.cooked/Materials/new.omat", kVb, kIb);
+  auto geometry = MakeStandardGeometry("/.cooked/Geometry/Unindexed.ogeo",
+    "/.cooked/Materials/new.omat", kVb, kIb);
   geometry
     .AppendBuffer(
       MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true), kVb)
@@ -129,31 +129,26 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
       .completes = {},
     });
   static_cast<void>(writer.Finish());
-  WriteText(cooked_root / "Materials/new.omat", "new material");
-  for (const auto own_wins : { true, false }) {
-    auto request = MakeGeometryRequest({
-      .source_path = descriptor_path,
-      .cooked_root = cooked_root,
-      .descriptor_doc = geometry.Json(),
-    });
-    request.cooked_context_roots = own_wins
-      ? std::vector<std::filesystem::path> { library, cooked_root }
-      : std::vector<std::filesystem::path> { cooked_root, library };
-    const auto report = SubmitAndWait(service, std::move(request));
-    ASSERT_HAS_VALUE(report);
-    ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
-    const auto descriptor_bytes
-      = ReadBytes(cooked_root / "Geometry/NewMaterialPriority.ogeo");
-    const auto offset = sizeof(data::pak::geometry::GeometryAssetDesc)
-      + sizeof(data::pak::geometry::MeshDesc);
-    const auto submesh
-      = oxygen::serio::CopyAt<data::pak::geometry::SubMeshDesc>(
-        std::span { descriptor_bytes }, oxygen::serio::ByteOffset { offset });
-    ASSERT_HAS_VALUE(submesh);
-    EXPECT_EQ(submesh->material_asset_key,
-      own_wins ? data::AssetKey::FromVirtualPath("/.cooked/Materials/new.omat")
-               : library_key);
-  }
+  WriteText(cooked_root / "Materials/new.omat", "stray material");
+
+  auto request = MakeGeometryRequest({
+    .source_path = descriptor_path,
+    .cooked_root = cooked_root,
+    .descriptor_doc = geometry.Json(),
+  });
+  request.cooked_context_roots
+    = std::vector<std::filesystem::path> { library, cooked_root };
+  const auto report = SubmitAndWait(service, std::move(request));
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
+  const auto descriptor_bytes
+    = ReadBytes(cooked_root / "Geometry/Unindexed.ogeo");
+  const auto offset = sizeof(data::pak::geometry::GeometryAssetDesc)
+    + sizeof(data::pak::geometry::MeshDesc);
+  const auto submesh = oxygen::serio::CopyAt<data::pak::geometry::SubMeshDesc>(
+    std::span { descriptor_bytes }, oxygen::serio::ByteOffset { offset });
+  ASSERT_HAS_VALUE(submesh);
+  EXPECT_EQ(submesh->material_asset_key, library_key);
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
@@ -176,8 +171,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     = source_dir / "skinned.inverse_bind.buffer.bin";
   const auto joint_remap_source = source_dir / "skinned.joint_remap.buffer.bin";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   auto vb_bytes = std::array<std::byte, 96> {};
   auto ib_bytes = std::array<std::byte, 12> {};

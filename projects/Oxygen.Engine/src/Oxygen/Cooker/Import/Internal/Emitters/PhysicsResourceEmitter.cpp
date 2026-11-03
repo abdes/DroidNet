@@ -18,7 +18,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
@@ -34,22 +33,6 @@
 namespace oxygen::content::import {
 
 namespace {
-
-  [[nodiscard]] auto ComputePhysicsIdentity(
-    const CookedPhysicsResourcePayload& cooked, const base::Sha256Digest& hash)
-    -> std::string
-  {
-    auto identity = std::string {};
-    identity.reserve(160);
-    identity.append("phys:");
-    identity.append("f=");
-    identity.append(std::to_string(static_cast<uint32_t>(cooked.format)));
-    identity.append(";n=");
-    identity.append(std::to_string(cooked.data.size()));
-    identity.append(";h=");
-    identity.append(base::ToHexString(hash));
-    return identity;
-  }
 
   [[nodiscard]] auto MakePhysicsResourceAssetKey(std::string_view signature)
     -> data::AssetKey
@@ -85,25 +68,19 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked)
   if (finalize_started_.load(std::memory_order_acquire)) {
     throw std::runtime_error("PhysicsResourceEmitter is finalized");
   }
-  if (base::IsAllZero(cooked.content_hash)) {
-    throw std::invalid_argument("the cooked physics resource has no SHA-256");
+  if (cooked.data.Empty()) {
+    throw std::invalid_argument("the cooked physics resource is empty");
   }
 
-  const auto signature = ComputePhysicsIdentity(cooked, cooked.content_hash);
-  const auto resource_asset_key = MakePhysicsResourceAssetKey(signature);
+  auto row = MakeTableEntry(cooked);
+  // The key names the row's deduplication identity, so equal resources share
+  // one key in every cooked root.
+  const auto resource_asset_key = MakePhysicsResourceAssetKey(
+    PhysicsTableTraits::SignatureForDescriptor(row));
+  row.resource_asset_key = resource_asset_key;
 
   const auto resource_alignment = cooked.alignment > 0 ? cooked.alignment : 16;
-  const auto acquire = table_aggregator_.AcquireOrInsert(signature,
-    [&]
-    -> std::pair<data::pak::physics::PhysicsResourceDesc, WriteReservation> {
-      const auto reserved = table_aggregator_.ReserveDataRange({
-        .alignment = resource_alignment,
-        .payload_size = cooked.data.size(),
-      });
-      auto desc
-        = MakeTableEntry(cooked, reserved.aligned_offset, resource_asset_key);
-      return std::make_pair(desc, reserved);
-    });
+  const auto acquire = table_aggregator_.Acquire(row, resource_alignment);
 
   if (!acquire.is_new) {
     return EmittedPhysicsResourceRef {
@@ -121,7 +98,7 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked)
       std::vector<std::byte>(reserved.padding_size, std::byte { 0 }));
   }
   QueueDataWrite(WriteKind::kPayload, acquire.index, reserved.aligned_offset,
-    std::move(cooked.data));
+    std::move(cooked.data).TakeBytes());
 
   return EmittedPhysicsResourceRef {
     .resource_index = acquire.index,
@@ -158,17 +135,14 @@ auto PhysicsResourceEmitter::Finalize() -> co::Co<Result<void, WriteFailure>>
 }
 
 auto PhysicsResourceEmitter::MakeTableEntry(
-  const CookedPhysicsResourcePayload& cooked, const uint64_t data_offset,
-  const data::AssetKey& resource_asset_key)
+  const CookedPhysicsResourcePayload& cooked)
   -> data::pak::physics::PhysicsResourceDesc
 {
   auto entry = data::pak::physics::PhysicsResourceDesc {};
-  entry.data_offset = data_offset;
   entry.size_bytes
-    = static_cast<data::pak::core::DataBlobSizeT>(cooked.data.size());
+    = static_cast<data::pak::core::DataBlobSizeT>(cooked.data.Size());
   entry.format = cooked.format;
-  entry.resource_asset_key = resource_asset_key;
-  entry.content_hash = cooked.content_hash;
+  entry.content_hash = cooked.data.Sha256();
   return entry;
 }
 

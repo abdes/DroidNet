@@ -280,11 +280,12 @@ remain valid through generation replacement.
     field zeroed). Pipelines have no descriptor-hash step. Loaders and
     `content::ValidateAssetDescriptor` refuse a descriptor whose header does
     not record it (`kMissingDigest` / `kDigestMismatch`). Resource payload
-    `content_hash` values are computed only on the ThreadPool, and always. The
-    invariant is that all dependencies are ready and the full payload is known
-    before hashing. Resource hashes are full SHA-256 digests
-    (`ContentHashDigest`) computed from the bytes the producer holds; no import
-    reads a data file again to hash it.
+    Resource payloads are `HashedBytes` (`Cooker/Import/HashedBytes.h`): bytes
+    plus their SHA-256, computed when constructed, immutable after. Producers
+    construct them on the ThreadPool, and always. The invariant is that all
+    dependencies are ready and the full payload is known before hashing.
+    Emitters record `Sha256()` in the resource row; no import reads a data
+    file again to hash it.
 
 15. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
     emitters (TextureEmitter, BufferEmitter, AssetEmitter). Created lazily on
@@ -1110,10 +1111,17 @@ file's reserved size, and opens the data file once through the storage:
 // Opened on first use, created when missing, never truncated, sharing writes.
 auto DataFile() -> Result<serio::AnyAsyncDevice*>;  // storage->OpenData(...)
 
-// Reserves a unique, aligned range of the data file (atomic).
-auto ReserveDataRange(uint64_t alignment, uint64_t payload_size)
-  -> WriteReservation;  // reservation_start, aligned_offset, padding_size
+// The only entry for a row. The aggregator computes the dedup key from every
+// field of the row except `data_offset` and reuses a row with that key only
+// when its offset satisfies `alignment`. Otherwise it reserves the next aligned
+// range of the data file, sets `row.data_offset`, appends the row and returns
+// the reservation (reservation_start, aligned_offset, padding_size). Throws
+// std::logic_error after finalization.
+auto Acquire(Descriptor row, uint64_t alignment)
+  -> AcquireResult;  // { index, is_new, reservation }
 ```
+
+`ReserveDataRange` is private to the aggregator.
 
 Each emitter holds a `WriteGroup`, the writes it has in flight. The group
 starts every write as a task of the import session's nursery and keeps the
@@ -1151,20 +1159,24 @@ struct WriteFailure {
 // Emit() assigns the index, reserves the range and starts the writes.
 // No blocking: the index is valid the moment Emit() returns.
 auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t {
-  // 1. Stable index and table entry, in memory (tiny: ~100 bytes).
-  // 2. Reserve an aligned range in the data file.
-  const auto range = table_aggregator_.ReserveDataRange(
-    alignment, cooked.data.size());
+  // 0. An empty payload is refused (std::invalid_argument).
+  // 1. Acquire the row: stable index, dedup and, for a new row, the aligned
+  //    range of the data file. The row records cooked.data.Sha256().
+  const auto acquired = table_aggregator_.Acquire(row, alignment);
+  if (!acquired.is_new) {
+    return acquired.index;  // Reused row: no write.
+  }
+  const auto& range = acquired.reservation;
 
-  // 3. Start the writes in the session's nursery; the data lives in the
+  // 2. Start the writes in the session's nursery; the data lives in the
   //    write coroutine.
   if (range.padding_size > 0) {
     QueueDataWrite(WriteKind::kPadding, std::nullopt,
       range.reservation_start, std::vector<std::byte>(range.padding_size));
   }
-  QueueDataWrite(
-    WriteKind::kPayload, index, range.aligned_offset, std::move(cooked.data));
-  return index;  // The caller can use this NOW.
+  QueueDataWrite(WriteKind::kPayload, acquired.index, range.aligned_offset,
+    std::move(cooked.data));
+  return acquired.index;  // The caller can use this NOW.
 }
 
 auto BufferEmitter::QueueDataWrite(WriteKind kind,
@@ -1233,10 +1245,13 @@ simple:
 
 1. **Stable index returned immediately**: `Emit()` assigns and returns an index
    synchronously, before any I/O completes.
-2. **Dedup by descriptor and SHA-256** (when applicable): a payload without a
-   SHA-256 is refused; if the resource signature already exists, `Emit()` returns the existing index and starts no additional write.
-3. **Append semantics via allocation**: the table aggregator maintains an atomic
-   data file size and reserves a unique range with `ReserveDataRange()`.
+2. **Dedup by every field but the offset**: the aggregator keys a row on all
+   its fields except `data_offset` (including the SHA-256); an empty payload is
+   refused. If a row with the key exists and its offset satisfies the requested
+   alignment, `Emit()` returns the existing index and starts no additional
+   write.
+3. **Append semantics via allocation**: `Acquire()` reserves a unique range at
+   the end of the data file for a new row.
 4. **Alignment-aware layout**: the reservation computes `aligned_offset` and
    optional `padding_size`; padding is written as zero bytes at the reserved
    start.

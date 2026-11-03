@@ -22,7 +22,6 @@
 
 using namespace std::chrono_literals;
 using oxygen::co::ThreadPool;
-namespace co = oxygen::co;
 
 namespace oxygen::content::import::test {
 
@@ -41,8 +40,7 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
   auto make_canceled_report = [&] -> ImportReport {
     auto report = ImportReport {};
-    report.cooked_root
-      = Request().cooked_root.value_or(Request().source_path.parent_path());
+    report.cooked_root = Request().ResolveCookedRoot();
     report.success = false;
 
     report.diagnostics.push_back({
@@ -115,8 +113,7 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   auto report = ImportReport {};
-  report.cooked_root
-    = Request().cooked_root.value_or(Request().source_path.parent_path());
+  report.cooked_root = Request().ResolveCookedRoot();
   report.success = true;
 
   co_return report;

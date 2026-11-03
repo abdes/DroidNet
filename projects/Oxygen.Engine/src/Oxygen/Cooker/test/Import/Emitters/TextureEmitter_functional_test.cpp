@@ -12,14 +12,15 @@
 #include <filesystem>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
@@ -132,21 +133,26 @@ protected:
     payload.desc.format = oxygen::Format::kBC7UNorm;
 
     // Fill payload with recognizable pattern
-    payload.payload.resize(payload_props.data_size);
+    std::vector<std::byte> bytes(payload_props.data_size);
     for (size_t i = 0; i < payload_props.data_size; ++i) {
       constexpr size_t kByteMask = std::numeric_limits<uint8_t>::max();
-      payload.payload.at(i) = static_cast<std::byte>(i & kByteMask);
+      bytes.at(i) = static_cast<std::byte>(i & kByteMask);
     }
 
-    SealPayload(payload);
+    payload.payload = import::HashedBytes(std::move(bytes));
     return payload;
   }
 
-  //! Records the SHA-256 of the payload bytes, as a producer does; a test
-  //! that changes the bytes seals the payload again.
-  static auto SealPayload(import::CookedTexturePayload& payload) -> void
+  //! Replaces the payload with its bytes after `edit` changed them; the
+  //! bytes are hashed again, as a producer does.
+  template <typename Edit>
+  static auto EditBytes(import::CookedTexturePayload& payload, Edit edit)
+    -> void
   {
-    payload.desc.content_hash = oxygen::base::ComputeSha256(payload.payload);
+    const auto bytes = payload.payload.Bytes();
+    std::vector<std::byte> edited(bytes.begin(), bytes.end());
+    edit(edited);
+    payload.payload = import::HashedBytes(std::move(edited));
   }
 
   //! Create a test cooked texture payload with default properties.
@@ -303,10 +309,11 @@ NOLINT_TEST_F(TextureEmitterTest, EmitUniqueTexturesAssignsSequentialIndices)
     indices.reserve(kTextureCount);
     for (size_t i = 0; i < kTextureCount; ++i) {
       auto payload = MakeTestPayload();
-      if (!payload.payload.empty()) {
-        payload.payload.at(0) = static_cast<std::byte>(i + 1);
-      }
-      SealPayload(payload);
+      EditBytes(payload, [i](std::vector<std::byte>& bytes) -> void {
+        if (!bytes.empty()) {
+          bytes.at(0) = static_cast<std::byte>(i + 1);
+        }
+      });
       indices.push_back(emitter.Emit(std::move(payload)));
     }
 
@@ -318,6 +325,58 @@ NOLINT_TEST_F(TextureEmitterTest, EmitUniqueTexturesAssignsSequentialIndices)
     }
     EXPECT_TRUE(success);
   });
+}
+
+//! Equal bytes in another shape are another texture: a cube and an array of six
+//! layers, or a volume of the same size, never share a row.
+NOLINT_TEST_F(TextureEmitterTest, EqualBytesOfAnotherShapeGetTheirOwnRow)
+{
+  auto cube_row = std::optional<PakTextureResourceDesc> {};
+  RunInNursery([&](co::Nursery& writes) -> co::Co<> {
+    TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
+    struct Shape final {
+      oxygen::TextureType type = oxygen::TextureType::kTexture2D;
+      uint16_t depth = 1;
+      uint16_t layers = 1;
+    };
+    const auto shaped = [](const Shape& shape) -> import::CookedTexturePayload {
+      auto payload = MakeTestPayload();
+      payload.desc.texture_type = shape.type;
+      payload.desc.depth = shape.depth;
+      payload.desc.array_layers = shape.layers;
+      return payload;
+    };
+    constexpr auto kArray = Shape {
+      .type = oxygen::TextureType::kTexture2DArray,
+      .depth = 1,
+      .layers = 6,
+    };
+
+    const auto array = emitter.Emit(shaped(kArray));
+    const auto cube = emitter.Emit(shaped({
+      .type = oxygen::TextureType::kTextureCube,
+      .depth = 1,
+      .layers = 6,
+    }));
+    const auto volume = emitter.Emit(shaped({
+      .type = oxygen::TextureType::kTexture3D,
+      .depth = 6,
+      .layers = 1,
+    }));
+    const auto same_array = emitter.Emit(shaped(kArray));
+    const auto success = co_await emitter.Finalize();
+
+    EXPECT_NE(array, cube);
+    EXPECT_NE(array, volume);
+    EXPECT_NE(cube, volume);
+    EXPECT_EQ(same_array, array);
+    cube_row = emitter.TryGetDescriptor(cube);
+    EXPECT_TRUE(success);
+  });
+
+  ASSERT_HAS_VALUE(cube_row);
+  EXPECT_EQ(cube_row->texture_type,
+    static_cast<uint8_t>(oxygen::TextureType::kTextureCube));
 }
 
 NOLINT_TEST_F(TextureEmitterTest, EmitStartsWriteAndReturnsBeforeFinalize)
@@ -370,10 +429,11 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureTableFile)
     TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
     auto payload0 = MakeTestPayload();
     auto payload1 = MakeTestPayload();
-    if (!payload1.payload.empty()) {
-      payload1.payload.at(0) ^= std::byte { 0xFF };
-    }
-    SealPayload(payload1);
+    EditBytes(payload1, [](std::vector<std::byte>& bytes) -> void {
+      if (!bytes.empty()) {
+        bytes.at(0) ^= std::byte { 0xFF };
+      }
+    });
     const auto idx0 = emitter.Emit(std::move(payload0));
     const auto idx1 = emitter.Emit(std::move(payload1));
     EXPECT_EQ(idx0, 1);
@@ -629,14 +689,16 @@ NOLINT_TEST_F(TextureEmitterTest, StatsEmittedTexturesCountsFallbackAndUsers)
     auto payload0 = MakeTestPayload();
     auto payload1 = MakeTestPayload();
     auto payload2 = MakeTestPayload();
-    if (!payload1.payload.empty()) {
-      payload1.payload.at(0) ^= std::byte { 0x11 };
-    }
-    if (!payload2.payload.empty()) {
-      payload2.payload.at(0) ^= std::byte { 0x22 };
-    }
-    SealPayload(payload1);
-    SealPayload(payload2);
+    EditBytes(payload1, [](std::vector<std::byte>& bytes) -> void {
+      if (!bytes.empty()) {
+        bytes.at(0) ^= std::byte { 0x11 };
+      }
+    });
+    EditBytes(payload2, [](std::vector<std::byte>& bytes) -> void {
+      if (!bytes.empty()) {
+        bytes.at(0) ^= std::byte { 0x22 };
+      }
+    });
     const auto idx0 = emitter.Emit(std::move(payload0));
     EXPECT_EQ(idx0, 1);
     EXPECT_EQ(emitter.GetStats().emitted_textures, 2);
@@ -673,7 +735,9 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesPayloadBytes)
     TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
     auto payload = MakeTestPayload();
     // Copy before move
-    const std::vector<std::byte> expected_data = payload.payload;
+    const auto expected_bytes = payload.payload.Bytes();
+    const std::vector<std::byte> expected_data(
+      expected_bytes.begin(), expected_bytes.end());
 
     const auto idx = emitter.Emit(std::move(payload));
     EXPECT_EQ(idx, 1);
@@ -719,13 +783,15 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
         .data_size = payload_size,
       });
       // Fill with distinct pattern based on index
-      for (auto& b : payload.payload) {
-        constexpr auto kSalt = 10;
-        b = static_cast<std::byte>((i + 1) * kSalt);
-      }
-      SealPayload(payload);
+      EditBytes(payload, [i](std::vector<std::byte>& bytes) -> void {
+        for (auto& b : bytes) {
+          constexpr auto kSalt = 10;
+          b = static_cast<std::byte>((i + 1) * kSalt);
+        }
+      });
 
-      expected_payloads.push_back(payload.payload);
+      const auto cooked_bytes = payload.payload.Bytes();
+      expected_payloads.emplace_back(cooked_bytes.begin(), cooked_bytes.end());
       payloads.push_back(std::move(payload));
     }
 
@@ -802,10 +868,11 @@ NOLINT_TEST_F(TextureEmitterTest, DifferentContentEmitsNewIndex)
     TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
     auto payload1 = MakeTestPayload();
     auto payload2 = payload1;
-    EXPECT_FALSE(payload2.payload.empty());
+    EXPECT_FALSE(payload2.payload.Empty());
     constexpr auto kAllBitsSet = std::numeric_limits<uint8_t>::max();
-    payload2.payload.at(0) ^= static_cast<std::byte>(kAllBitsSet);
-    SealPayload(payload2);
+    EditBytes(payload2, [](std::vector<std::byte>& bytes) -> void {
+      bytes.at(0) ^= static_cast<std::byte>(kAllBitsSet);
+    });
 
     const uint32_t idx1 = emitter.Emit(std::move(payload1));
     const uint32_t idx2 = emitter.Emit(std::move(payload2));
@@ -822,13 +889,13 @@ NOLINT_TEST_F(TextureEmitterTest, DifferentContentEmitsNewIndex)
   });
 }
 
-//! A payload without its SHA-256 is refused: identity is the hash.
-NOLINT_TEST_F(TextureEmitterTest, EmitZeroHashPayloadThrows)
+//! An empty payload is refused: identity is the hash of the bytes.
+NOLINT_TEST_F(TextureEmitterTest, EmitEmptyPayloadThrows)
 {
   RunInNursery([&](co::Nursery& writes) -> co::Co<> {
     TextureEmitter emitter(writes, TextureAggregator(), MakeEmitterConfig());
     auto payload = MakeTestPayload();
-    payload.desc.content_hash = {};
+    payload.payload = import::HashedBytes {};
 
     EXPECT_THROW((void)emitter.Emit(std::move(payload)), std::invalid_argument);
     co_return;

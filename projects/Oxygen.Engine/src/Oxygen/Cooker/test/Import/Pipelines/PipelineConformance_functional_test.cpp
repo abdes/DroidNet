@@ -69,10 +69,15 @@ namespace {
   //=== Helpers
   //===--------------------------------------------------------------//
 
+  //! The two bytes the buffer work items cook.
+  auto MakeBufferBytes() -> std::vector<std::byte>
+  {
+    return { std::byte { 0x01 }, std::byte { 0x02 } };
+  }
+
   auto MakeBufferPayload() -> CookedBufferPayload
   {
     CookedBufferPayload cooked;
-    cooked.data = { std::byte { 0x01 }, std::byte { 0x02 } };
     cooked.alignment = 16;
     cooked.usage_flags = 1;
     cooked.element_stride = 4;
@@ -248,6 +253,7 @@ namespace {
         pipeline.Start(n);
         co_await pipeline.Submit(BufferPipeline::WorkItem {
           .source_id = "buf0",
+          .bytes = MakeBufferBytes(),
           .cooked = MakeBufferPayload(),
           .stop_token = {},
         });
@@ -307,6 +313,7 @@ namespace {
     const auto result = RunPipelineOnce<BufferPipeline>(loop_,
       BufferPipeline::WorkItem {
         .source_id = "buf0",
+        .bytes = MakeBufferBytes(),
         .cooked = MakeBufferPayload(),
         .stop_token = source.get_token(),
       },

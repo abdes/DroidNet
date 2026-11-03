@@ -63,12 +63,13 @@ OXGN_DATA_NDAPI auto IsResourceTableSize(FileKind table, uint64_t size) -> bool;
 //! The payloads that the rows of a `table` file describe, in row order.
 /*!
  Rows of no payload (`size_bytes` 0), such as a table's reserved empty row,
- are left out: they hold no bytes to verify.
+ are left out: they hold no bytes to verify, and no digest.
 
  @throw std::invalid_argument when `table` is not a resource table kind.
  @throw CookedFormatError `kWrongRowSize` when `rows` ends in a partial row,
    `kMissingDigest` when a row of a payload has no digest, `kInvalidValue`
-   when a texture row records a compression its format does not imply.
+   when a texture row records a compression its format does not imply or an
+   empty row records a digest.
 */
 OXGN_DATA_NDAPI auto ReadResourcePayloads(FileKind table,
   std::span<const std::byte> rows) -> std::vector<ResourcePayload>;

@@ -10,16 +10,15 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
-#include <type_traits>
 #include <vector>
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::data::loose_cooked {
@@ -45,18 +44,9 @@ namespace {
         throw CookedFormatError(CookedDefect::kWrongRowSize,
           "the resource table holds a partial row");
       }
-      if constexpr (std::is_same_v<Desc, pak::core::TextureResourceDesc>) {
-        if (!pak::core::HasSupportedCompression(*desc)) {
-          throw CookedFormatError(CookedDefect::kInvalidValue,
-            "a texture row records a compression its format lacks");
-        }
-      }
+      RequireResourceRow(*desc, "a resource table");
       if (desc->size_bytes == 0U) {
         continue;
-      }
-      if (base::IsAllZero(desc->content_hash)) {
-        throw CookedFormatError(
-          CookedDefect::kMissingDigest, "a resource row has no content digest");
       }
       payloads.push_back({
         .row = static_cast<uint32_t>(row),

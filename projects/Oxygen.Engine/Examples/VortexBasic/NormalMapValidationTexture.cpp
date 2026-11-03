@@ -68,7 +68,7 @@ NormalMapValidationTexture::NormalMapValidationTexture(
   auto packed_desc = TextureDesc {};
   packed_desc.data_offset = sizeof(TextureDesc);
   packed_desc.size_bytes
-    = static_cast<data::pak::core::DataBlobSizeT>(payload.payload.size());
+    = static_cast<data::pak::core::DataBlobSizeT>(payload.payload.Size());
   packed_desc.texture_type
     = static_cast<std::uint8_t>(payload.desc.texture_type);
   packed_desc.width = payload.desc.width;
@@ -80,10 +80,10 @@ NormalMapValidationTexture::NormalMapValidationTexture(
   packed_desc.alignment = 256U;
 
   auto packed = std::make_shared<std::vector<std::uint8_t>>(
-    sizeof(TextureDesc) + payload.payload.size());
+    sizeof(TextureDesc) + payload.payload.Size());
   std::memcpy(packed->data(), &packed_desc, sizeof(TextureDesc));
   std::memcpy(std::to_address(packed->begin() + sizeof(TextureDesc)),
-    payload.payload.data(), payload.payload.size());
+    payload.payload.Bytes().data(), payload.payload.Size());
   key_ = loader_->MintSyntheticTextureKey();
   loader_->StartLoadTexture(
     content::CookedResourceData<data::TextureResource> {

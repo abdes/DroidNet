@@ -427,9 +427,10 @@ cooked source provides, deletes and requires.
   descriptor bytes, and two different payloads never share a row.
 - Emitters compute each resource's digest from the bytes they write; no pass
   rereads a data file to hash it.
-- `CookedContent::Open` and `IsCookedSource` identify a cooked source by its
-  content, not by a file name; `CookedSummary` (provides, deletes, requires)
-  matches what the runtime mounts.
+- `CookedContent::Open` identifies a cooked source by its content (magic,
+  version), not by a file name, and refuses anything else with a typed
+  `CookedFormatError`; `CookedSummary` (provides, deletes, requires) matches
+  what the runtime mounts.
 - `VerifyStorage`, `CheckContent`, `ValidateContent`, `Validate`: every
   corruption a reader would hit (row out of range, digest mismatch, missing
   data file, version) is reported with its code before mount.

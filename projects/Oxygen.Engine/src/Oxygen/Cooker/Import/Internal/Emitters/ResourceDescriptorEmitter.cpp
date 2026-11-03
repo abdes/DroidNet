@@ -23,6 +23,7 @@
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferViews.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
@@ -50,14 +51,8 @@ auto ResourceDescriptorEmitter::EmitTexture(const std::string_view virtual_path,
     throw std::invalid_argument("texture descriptor identity names no mount: "
       + std::string(virtual_path));
   }
-  const auto path = std::filesystem::path(relpath);
-  if (path.empty() || path.has_root_path()
-    || std::ranges::any_of(
-      path, [](const auto& part) -> auto { return part == ".."; })) {
-    throw std::invalid_argument(
-      "texture descriptor path must remain within its cooked root");
-  }
-
+  // Refused before anything is written, so no write escapes the cooked root.
+  data::loose_cooked::RequireIndexRelPath(relpath);
   auto bytes = std::vector<std::byte>(data::EncodeTextureResourceDescriptor({
     .index = resource_index,
     .descriptor = descriptor,
@@ -74,10 +69,8 @@ auto ResourceDescriptorEmitter::EmitBufferAtRelPath(
   const data::pak::core::BufferResourceDesc& descriptor,
   const std::span<const data::BufferResourceView> views) -> std::string
 {
-  if (relpath.empty()) {
-    throw std::runtime_error("buffer descriptor relpath must not be empty");
-  }
-
+  // Refused before anything is written, so no write escapes the cooked root.
+  data::loose_cooked::RequireIndexRelPath(relpath);
   auto path = std::string(relpath);
   auto bytes = data::EncodeBufferResourceDescriptor({
     .index = resource_index,

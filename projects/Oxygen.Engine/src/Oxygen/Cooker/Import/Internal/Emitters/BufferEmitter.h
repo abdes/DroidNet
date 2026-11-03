@@ -42,13 +42,13 @@ namespace oxygen::content::import {
     session's nursery, without blocking the import thread.
 
  3. **Shared Table Aggregation**: Table entries are submitted to the
-   `BufferTableAggregator`. The table file is written once during service
-   shutdown.
+   `BufferTableAggregator`. The last import session of the cooked root's
+   cohort writes the table when it ends.
 
- 4. **Signature-Based Deduplication**: Buffers are deduplicated using a
-    signature of their descriptor and `CookedBufferPayload::content_hash`,
-    the SHA-256 their producer computed. Duplicate buffers reuse an existing
-    index without any additional I/O.
+ 4. **Signature-Based Deduplication**: A buffer whose row matches an existing
+    row in every field but its offset, SHA-256 included, reuses that row
+    when the row's offset satisfies the buffer's alignment, without any
+    additional I/O.
 
  5. **Per-Buffer Alignment**: Each buffer specifies its own alignment
     requirement (vertex buffers = 16 bytes, index buffers = 4 bytes, etc.).
@@ -56,7 +56,7 @@ namespace oxygen::content::import {
 
  ### PAK Format Compliance
 
- - Uses `BufferResourceDesc` (32 bytes packed) from `PakFormat.h`
+ - Uses `BufferResourceDesc` from `PakFormat.h`
  - Alignment is per-buffer (specified in `CookedBufferPayload::alignment`)
  - Table is serialized with packed alignment (no padding between entries)
 
@@ -65,13 +65,13 @@ namespace oxygen::content::import {
  ```cpp
  BufferEmitter emitter(session_nursery, table_aggregator, cooked_root);
 
- // During import (returns immediately)
- auto vb_idx = emitter.Emit(vertex_buffer_payload);  // Returns 0
- auto ib_idx = emitter.Emit(index_buffer_payload);   // Returns 1
+ // During import (returns immediately); index 0 is the absent sentinel
+ auto vb_idx = emitter.Emit(vertex_buffer_payload);  // Returns 1
+ auto ib_idx = emitter.Emit(index_buffer_payload);   // Returns 2
 
  // After all cooking completes
  co_await emitter.Finalize();
- // buffers.data is on disk; buffers.table is written at service shutdown
+ // buffers.data is on disk; buffers.table is written when the session ends
  ```
 
  ### Thread Safety
@@ -108,21 +108,20 @@ public:
    Assigns a table index immediately and starts an async write for the
    buffer data. The index is valid the moment this method returns.
 
-   @param cooked The cooked buffer payload containing data and metadata;
-     its producer computed `content_hash`, the SHA-256 of the data.
-     @return Table index for this buffer (0-based). When deduplicated, this may
-       be an existing index.
+   @param cooked The cooked buffer payload containing data and metadata.
+   @return Table index for this buffer. When deduplicated, this may be an
+     existing index.
+   @throw std::invalid_argument When the payload is empty.
 
    ### What Happens
 
-  1. Builds a dedupe signature from the payload metadata and its SHA-256.
-  2. If the signature was seen before, returns the existing index.
-  3. Otherwise assigns the next index.
-  4. Calculates an aligned data offset based on the buffer's alignment.
-  5. Starts async writes at explicit offsets (padding, then buffer bytes)
+  1. Builds the buffer's row from the payload metadata and its SHA-256.
+  2. If an equal row with a suitably aligned offset exists, returns its index.
+  3. Otherwise assigns the next index at an offset aligned to the buffer's
+     alignment.
+  4. Starts async writes at explicit offsets (padding, then buffer bytes)
      to `buffers.data`.
-  6. Adds the descriptor to the in-memory table and records the signature.
-  7. Returns the assigned index.
+  5. Returns the assigned index.
 
    ### Error Handling
 
@@ -173,8 +172,8 @@ private:
     kPayload,
   };
 
-  //! Build a table descriptor from a cooked payload.
-  auto MakeTableEntry(const CookedBufferPayload& cooked, uint64_t data_offset)
+  //! Build the table row of a cooked payload, without its data offset.
+  static auto MakeTableEntry(const CookedBufferPayload& cooked)
     -> BufferResourceDesc;
 
   //! Start a write (padding or payload) to the data file.

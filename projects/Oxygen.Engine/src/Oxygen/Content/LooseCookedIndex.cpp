@@ -155,6 +155,12 @@ auto LooseCookedIndex::CheckContent(const std::filesystem::path& cooked_root,
   return impl_->CheckContent(cooked_root, check);
 }
 
+auto LooseCookedIndex::CheckContent(const RootFiles& files,
+  const IntegrityCheck check) const -> std::vector<FileIntegrityIssue>
+{
+  return impl_->CheckContent(files, check);
+}
+
 auto LooseCookedIndex::ValidateContent(const std::filesystem::path& cooked_root,
   const IntegrityCheck check) const -> void
 {

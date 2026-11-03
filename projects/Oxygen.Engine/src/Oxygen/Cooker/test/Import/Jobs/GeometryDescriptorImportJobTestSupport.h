@@ -32,6 +32,8 @@
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -61,6 +63,17 @@ struct GeometryRequestInput {
   //! Defaults to `/.cooked/Geometry/<name>.ogeo`.
   std::string asset_virtual_path;
 };
+
+//! Cooks `/.cooked/Materials/default.omat`, the material the geometry
+//! fixtures name, into `cooked_root`: an index lists it, as after the cook of
+//! a material. Call it before any cook into `cooked_root`.
+inline auto CookDefaultMaterial(const std::filesystem::path& cooked_root)
+  -> void
+{
+  auto materials = oxygen::cooker::testing::LooseCookedRoot { ".cooked" };
+  static_cast<void>(materials.Material("Materials/default.omat"));
+  oxygen::cooker::testing::Materialize(materials.Files(), cooked_root);
+}
 
 inline auto MakeGeometryRequest(GeometryRequestInput input) -> ImportRequest
 {

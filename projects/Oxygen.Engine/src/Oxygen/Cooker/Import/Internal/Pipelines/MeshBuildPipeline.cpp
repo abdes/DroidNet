@@ -35,9 +35,9 @@
 #include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -1592,15 +1592,17 @@ namespace {
     return stop_token.stop_requested() || canceled;
   }
 
-  //! Computes the SHA-256 of `payload`, the bytes this build produced.
-  auto HashPayload(CookedBufferPayload& payload,
+  //! The bytes of `data` with their SHA-256; none once the build is
+  //! cancelled.
+  template <typename T>
+  [[nodiscard]] auto ToHashedBytes(const std::span<const T> data,
     const std::stop_token& stop_token,
-    const co::ThreadPool::CancelToken& canceled) -> void
+    const co::ThreadPool::CancelToken& canceled) -> HashedBytes
   {
     if (IsCanceled(stop_token, canceled)) {
-      return;
+      return {};
     }
-    payload.content_hash = base::ComputeSha256(payload.data);
+    return HashedBytes(ToByteVector(data));
   }
 
   [[nodiscard]] auto BuildCookedMeshPayload(const LodBuildData& lod,
@@ -1618,15 +1620,16 @@ namespace {
       | kDefaultStaticUsageFlags;
 
     cooked_mesh.vertex_buffer.data
-      = ToByteVector(std::span(lod.vertices.data(), lod.vertices.size()));
+      = ToHashedBytes(std::span(lod.vertices.data(), lod.vertices.size()),
+        stop_token, canceled);
     cooked_mesh.vertex_buffer.alignment = sizeof(data::Vertex);
     cooked_mesh.vertex_buffer.usage_flags = vb_usage_flags;
     cooked_mesh.vertex_buffer.element_stride = sizeof(data::Vertex);
     cooked_mesh.vertex_buffer.element_format
       = static_cast<uint8_t>(Format::kUnknown);
 
-    cooked_mesh.index_buffer.data
-      = ToByteVector(std::span(lod.indices.data(), lod.indices.size()));
+    cooked_mesh.index_buffer.data = ToHashedBytes(
+      std::span(lod.indices.data(), lod.indices.size()), stop_token, canceled);
     cooked_mesh.index_buffer.alignment = alignof(uint32_t);
     cooked_mesh.index_buffer.usage_flags = ib_usage_flags;
     cooked_mesh.index_buffer.element_stride = 0;
@@ -1640,8 +1643,9 @@ namespace {
         | kDefaultStaticUsageFlags;
 
       auto joint_indices_payload = CookedBufferPayload {};
-      joint_indices_payload.data = ToByteVector(
-        std::span(lod.joint_indices.data(), lod.joint_indices.size()));
+      joint_indices_payload.data = ToHashedBytes(
+        std::span(lod.joint_indices.data(), lod.joint_indices.size()),
+        stop_token, canceled);
       joint_indices_payload.alignment = 16;
       joint_indices_payload.usage_flags = joint_usage_flags;
       joint_indices_payload.element_stride = 0;
@@ -1649,8 +1653,9 @@ namespace {
         = static_cast<uint8_t>(Format::kRGBA32UInt);
 
       auto joint_weights_payload = CookedBufferPayload {};
-      joint_weights_payload.data = ToByteVector(
-        std::span(lod.joint_weights.data(), lod.joint_weights.size()));
+      joint_weights_payload.data = ToHashedBytes(
+        std::span(lod.joint_weights.data(), lod.joint_weights.size()),
+        stop_token, canceled);
       joint_weights_payload.alignment = 16;
       joint_weights_payload.usage_flags = joint_usage_flags;
       joint_weights_payload.element_stride = 0;
@@ -1658,8 +1663,10 @@ namespace {
         = static_cast<uint8_t>(Format::kRGBA32Float);
 
       auto inverse_bind_payload = CookedBufferPayload {};
-      inverse_bind_payload.data = ToByteVector(std::span(
-        lod.inverse_bind_matrices.data(), lod.inverse_bind_matrices.size()));
+      inverse_bind_payload.data
+        = ToHashedBytes(std::span(lod.inverse_bind_matrices.data(),
+                          lod.inverse_bind_matrices.size()),
+          stop_token, canceled);
       inverse_bind_payload.alignment = 16;
       inverse_bind_payload.usage_flags = joint_usage_flags;
       inverse_bind_payload.element_stride = sizeof(glm::mat4);
@@ -1667,27 +1674,20 @@ namespace {
         = static_cast<uint8_t>(Format::kUnknown);
 
       auto joint_remap_payload = CookedBufferPayload {};
-      joint_remap_payload.data = ToByteVector(
-        std::span(lod.joint_remap.data(), lod.joint_remap.size()));
+      joint_remap_payload.data = ToHashedBytes(
+        std::span(lod.joint_remap.data(), lod.joint_remap.size()), stop_token,
+        canceled);
       joint_remap_payload.alignment = alignof(uint32_t);
       joint_remap_payload.usage_flags = joint_usage_flags;
       joint_remap_payload.element_stride = 0;
       joint_remap_payload.element_format
         = static_cast<uint8_t>(Format::kR32UInt);
 
-      HashPayload(joint_indices_payload, stop_token, canceled);
-      HashPayload(joint_weights_payload, stop_token, canceled);
-      HashPayload(inverse_bind_payload, stop_token, canceled);
-      HashPayload(joint_remap_payload, stop_token, canceled);
-
       cooked_mesh.auxiliary_buffers.push_back(std::move(joint_indices_payload));
       cooked_mesh.auxiliary_buffers.push_back(std::move(joint_weights_payload));
       cooked_mesh.auxiliary_buffers.push_back(std::move(inverse_bind_payload));
       cooked_mesh.auxiliary_buffers.push_back(std::move(joint_remap_payload));
     }
-
-    HashPayload(cooked_mesh.vertex_buffer, stop_token, canceled);
-    HashPayload(cooked_mesh.index_buffer, stop_token, canceled);
 
     cooked_mesh.bounds = lod.bounds;
     return cooked_mesh;

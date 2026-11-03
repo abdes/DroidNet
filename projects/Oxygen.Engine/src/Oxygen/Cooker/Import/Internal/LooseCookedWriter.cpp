@@ -495,6 +495,7 @@ struct LooseCookedWriter::Impl final {
     auto current_files = files_;
 
     LoadExistingIndexIfPresent_();
+    const auto published_paths = PhysicalPaths_();
 
     for (const auto& [key, asset] : current_assets) {
       static_cast<void>(key);
@@ -520,12 +521,22 @@ struct LooseCookedWriter::Impl final {
       StoreFile_(std::move(file), "Finish.merge_files");
     }
 
-    auto removed_files = ApplyRemovals_(current_files);
+    ApplyRemovals_(current_files);
 
     const auto cooked_root_str = cooked_root_.string();
     LOG_SCOPE_F(INFO, "Finish {}", cooked_root_str);
 
     ValidateRequiredFilePairs_();
+    // Retired from what the two indexes list: a path the new index lists, as
+    // any kind of file, stays on disk.
+    const auto kept_paths = PhysicalPaths_();
+    auto removed_files = std::vector<std::string> {};
+    for (const auto& [folded, relpath] : published_paths) {
+      if (!kept_paths.contains(folded)) {
+        removed_files.push_back(relpath);
+      }
+    }
+    std::ranges::sort(removed_files);
 
     const auto source_key = ResolveSourceKey_();
     const auto content_version = ResolveContentVersion_();
@@ -571,12 +582,38 @@ struct LooseCookedWriter::Impl final {
   }
 
 private:
-  //! Requires the index file lock and the merged index.
-  [[nodiscard]] auto ApplyRemovals_(
-    const std::unordered_map<std::string, StoredFile>& session_files)
-    -> std::vector<std::string>
+  //! The physical path of every file the index lists, folded as a
+  //! case-insensitive file system compares them, to its spelling.
+  /*!
+   @throw LooseCookedIdentityCollision When two paths differ only in case.
+  */
+  [[nodiscard]] auto PhysicalPaths_() const
+    -> std::unordered_map<std::string, std::string>
   {
-    std::vector<std::string> removed;
+    auto paths = std::unordered_map<std::string, std::string> {};
+    const auto add = [&](const std::string& relpath) -> void {
+      const auto [held, added]
+        = paths.try_emplace(FoldIdentity(relpath), relpath);
+      if (!added && held->second != relpath) {
+        throw LooseCookedIdentityCollision("the cooked file '" + relpath
+          + "' differs only in case from '" + held->second + "'");
+      }
+    };
+    for (const auto& [key, asset] : assets_) {
+      static_cast<void>(key);
+      add(asset.descriptor_relpath);
+    }
+    for (const auto& [relpath, file] : files_) {
+      static_cast<void>(file);
+      add(relpath);
+    }
+    return paths;
+  }
+
+  //! Requires the index file lock and the merged index.
+  auto ApplyRemovals_(
+    const std::unordered_map<std::string, StoredFile>& session_files) -> void
+  {
     for (const auto& virtual_path : removed_virtual_paths_) {
       if (written_virtual_paths_.contains(virtual_path)) {
         throw std::runtime_error(
@@ -593,10 +630,9 @@ private:
           "Loose cooked index maps a virtual path to no asset: "
           + virtual_path);
       }
-      auto descriptor = asset->second.descriptor_relpath;
+      LOG_F(INFO, "Removed cooked asset '{}' ({})", virtual_path,
+        asset->second.descriptor_relpath);
       ForgetAsset_(asset->first);
-      LOG_F(INFO, "Removed cooked asset '{}' ({})", virtual_path, descriptor);
-      removed.push_back(std::move(descriptor));
     }
 
     for (const auto& relpath : removed_auxiliary_files_) {
@@ -614,25 +650,15 @@ private:
       }
       ForgetFile_(relpath);
       LOG_F(INFO, "Removed cooked auxiliary file '{}'", relpath);
-      removed.push_back(relpath);
     }
 
-    RetireUnwrittenOutputs_(session_files, removed);
-
-    // A descriptor still listed by a remaining asset stays on disk.
-    std::erase_if(removed, [&](const std::string& relpath) -> bool {
-      return std::ranges::any_of(assets_, [&](const auto& item) -> bool {
-        return item.second.descriptor_relpath == relpath;
-      });
-    });
-    return removed;
+    RetireUnwrittenOutputs_(session_files);
   }
 
   //! Retires the outputs the index records for a re-cooked source that this
   //! writer does not write. Requires the index file lock and the merged index.
   auto RetireUnwrittenOutputs_(
-    const std::unordered_map<std::string, StoredFile>& session_files,
-    std::vector<std::string>& removed) -> void
+    const std::unordered_map<std::string, StoredFile>& session_files) -> void
   {
     if (recooks_.empty()) {
       return;
@@ -676,7 +702,6 @@ private:
       const auto& asset = assets_.at(key);
       LOG_F(INFO, "Retired cooked asset '{}' ({}): '{}' no longer produces it",
         asset.virtual_path, asset.descriptor_relpath, asset.source_path);
-      removed.push_back(asset.descriptor_relpath);
       ForgetAsset_(key);
     }
 
@@ -693,7 +718,6 @@ private:
       LOG_F(INFO, "Retired cooked file '{}': '{}' no longer produces it",
         relpath, files_.at(relpath).source_path);
       ForgetFile_(relpath);
-      removed.push_back(relpath);
     }
   }
 

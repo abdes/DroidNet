@@ -224,11 +224,6 @@ public:
   OXGN_COOK_NDAPI static auto Open(const CookerStorageReader& storage,
     const std::filesystem::path& path) -> CookedContent;
 
-  //! Whether `path` names something `Open` reads: a pak file or a folder
-  //! holding a loose cooked index.
-  OXGN_COOK_NDAPI static auto IsCookedSource(const CookerStorageReader& storage,
-    const std::filesystem::path& path) noexcept -> bool;
-
   OXGN_COOK_API ~CookedContent();
   OXYGEN_MAKE_NON_COPYABLE(CookedContent)
   OXGN_COOK_API CookedContent(CookedContent&&) noexcept;
@@ -280,15 +275,23 @@ public:
   OXGN_COOK_NDAPI auto Sidecars() const noexcept
     -> std::span<const CookedSidecar>;
 
+  //! The sidecar its index lists at `name`, the path below the loose root,
+  //! or null.
+  OXGN_COOK_NDAPI auto FindSidecar(std::string_view name) const noexcept
+    -> const CookedSidecar*;
+
   //! The pak catalog; null for a loose root.
   OXGN_COOK_NDAPI auto Catalog() const noexcept -> const data::PakCatalog*;
 
-  //! Checks the stored bytes against what the source records of them: a
-  //! loose root's member files against their indexed sizes and, with
-  //! `kFull`, their digests, and each resource of its data files against the
-  //! SHA-256 of its table row; a pak's CRC with `kFull`.
+  //! Checks the stored bytes against what the source records of them: for a
+  //! loose root, the check the engine runs before it mounts one
+  //! (`LooseCookedIndex::CheckContent`): no file the index does not list, no
+  //! link, each member at its indexed size, each resource within its data
+  //! file and, with `kFull`, every digest; a pak's CRC with `kFull`.
   /*!
-   @throw std::runtime_error Naming the first file that disagrees.
+   @throw data::CookedFormatError Naming the first file that disagrees, with
+     the defect of its failure.
+   @throw std::system_error When the storage cannot list or read the root.
   */
   OXGN_COOK_API auto VerifyStorage(lc::IntegrityCheck check) const -> void;
 

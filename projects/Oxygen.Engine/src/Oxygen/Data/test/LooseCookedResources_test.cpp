@@ -219,6 +219,18 @@ NOLINT_TEST(LooseCookedResourcesTest, RowWithoutDigestIsRefused)
     CookedDefect::kMissingDigest);
 }
 
+//! An empty row is the absent sentinel: writers refuse empty payloads, so an
+//! empty row with a digest is no row any writer produces.
+NOLINT_TEST(LooseCookedResourcesTest, EmptyRowWithDigestIsRefused)
+{
+  auto root = BufferRoot {};
+  root.Add(kFirst);
+  root.rows.front().content_hash = ComputeSha256(std::span<const std::byte> {});
+
+  EXPECT_EQ(ReadDefect(FileKind::kBuffersTable, root.Rows()),
+    CookedDefect::kInvalidValue);
+}
+
 //! A texture row records the compression its format implies; a BC7 format
 //! recorded as uncompressed, or an unknown compression, is refused.
 NOLINT_TEST(LooseCookedResourcesTest, TextureRowOfAnotherCompressionIsRefused)

@@ -60,13 +60,16 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(ResourceDescriptorEmitter)
 
   //! Emit a texture descriptor at its identity and return its root-relative
-  //! path. An identity in no mount, or one leaving the root, throws
-  //! std::invalid_argument.
+  //! path. An identity in no mount throws std::invalid_argument; a path the
+  //! loose cooked index cannot hold throws std::runtime_error, before any
+  //! write.
   OXGN_COOK_NDAPI auto EmitTexture(std::string_view virtual_path,
     data::pak::core::ResourceIndexT resource_index,
     const data::pak::core::TextureResourceDesc& descriptor) -> std::string;
 
-  //! Emit a buffer descriptor at an explicit relative path and return it.
+  //! Emit a buffer descriptor at an explicit relative path and return it. A
+  //! path the loose cooked index cannot hold throws std::runtime_error, before
+  //! any write.
   OXGN_COOK_NDAPI auto EmitBufferAtRelPath(std::string_view relpath,
     data::pak::core::ResourceIndexT resource_index,
     const data::pak::core::BufferResourceDesc& descriptor,

@@ -246,7 +246,7 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
   PakTextureResourceDesc pak_desc {};
   pak_desc.data_offset = sizeof(PakTextureResourceDesc);
   pak_desc.size_bytes
-    = static_cast<data::pak::core::DataBlobSizeT>(payload.payload.size());
+    = static_cast<data::pak::core::DataBlobSizeT>(payload.payload.Size());
   pak_desc.texture_type = static_cast<std::uint8_t>(payload.desc.texture_type);
   pak_desc.compression_type = 0;
   pak_desc.width = payload.desc.width;
@@ -261,10 +261,10 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
   const auto resource_key = asset_loader_->MintSyntheticTextureKey();
 
   auto packed = std::make_shared<std::vector<std::uint8_t>>();
-  packed->resize(sizeof(PakTextureResourceDesc) + payload.payload.size());
+  packed->resize(sizeof(PakTextureResourceDesc) + payload.payload.Size());
   std::memcpy(packed->data(), &pak_desc, sizeof(PakTextureResourceDesc));
   std::memcpy(std::to_address(packed->begin() + sizeof(PakTextureResourceDesc)),
-    payload.payload.data(), payload.payload.size());
+    payload.payload.Bytes().data(), payload.payload.Size());
 
   asset_loader_->StartLoadTexture(
     oxygen::content::CookedResourceData<data::TextureResource> {

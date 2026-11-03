@@ -622,6 +622,21 @@ NOLINT_TEST(LooseCookedIndexAssetTest, IdentitiesListedTwiceAreCorrupt)
   ExpectDefect(same_file, CookedDefect::kDuplicate, "Duplicate content path");
 }
 
+//! Content paths differing only in case name one file on a case-insensitive
+//! file system, so the index refuses them as it refuses one path twice.
+NOLINT_TEST(LooseCookedIndexAssetTest, ContentPathsDifferingInCaseAreCorrupt)
+{
+  // Arrange
+  const auto assets = std::array {
+    Material("/Content/Materials/A.omat", "Materials/A.omat"),
+    Material("/Content/Materials/B.omat", "materials/a.omat"),
+  };
+
+  // Act & Assert
+  ExpectDefect(
+    Encode(assets), CookedDefect::kDuplicate, "Duplicate content path");
+}
+
 NOLINT_TEST(LooseCookedIndexAssetTest, DescriptorWithoutDigestIsCorrupt)
 {
   // Arrange

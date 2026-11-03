@@ -52,12 +52,12 @@ namespace oxygen::content::import {
     session's nursery, without blocking the import thread.
 
  3. **Shared Table Aggregation**: Table entries are submitted to the
-   `TextureTableAggregator`. The table file is written once during service
-   shutdown.
+   `TextureTableAggregator`. The last import session of the cooked root's
+   cohort writes the table when it ends.
 
- 4. **Signature Dedupe**: Identical cooked textures are deduplicated using a
-    stable signature derived from the cooked descriptor and its SHA-256.
-    `Emit()` may return an existing index.
+ 4. **Row Dedupe**: A texture whose row matches an existing row in every
+    field but its offset, SHA-256 included, reuses that row. `Emit()` may
+    return an existing index.
 
  ### Usage Pattern
 
@@ -101,7 +101,9 @@ public:
 
   //! Runtime statistics for the emitter.
   struct Stats final {
+    //! The distinct rows this emitter returned, the fallback included.
     uint32_t emitted_textures = 0;
+    //! The size of the data file with every reserved range.
     uint64_t data_file_size = 0;
     size_t error_count = 0;
   };
@@ -130,8 +132,8 @@ public:
    Assigns a table index immediately and starts an async write for the
    texture data. The index is valid the moment this method returns.
 
-   @param cooked The cooked texture payload containing descriptor and data;
-     its producer computed `desc.content_hash`, the SHA-256 of the payload.
+   @param cooked The cooked texture payload containing descriptor and data.
+   @throw std::invalid_argument When the payload is empty.
    @return Table index for this texture. Index
         `data::pak::core::kFallbackResourceIndex` is reserved for the fallback
         texture; user-emitted textures start at
@@ -139,11 +141,10 @@ public:
 
    ### What Happens
 
-   1. Assigns the next index via atomic increment.
-   2. Creates a `TextureResourceDesc` with data offset (based on current
-      data file position).
-   3. Starts async writes at explicit offsets to `textures.data`.
-   4. Adds the descriptor to the in-memory table vector.
+   1. Builds the texture's row from the descriptor and the payload's SHA-256.
+   2. If an equal row exists, returns its index.
+   3. Otherwise assigns the next index at an aligned offset of the data file.
+   4. Starts async writes at explicit offsets to `textures.data`.
    5. Returns the index.
 
    ### Error Handling
@@ -210,12 +211,12 @@ private:
     TextureKind texture_kind, std::optional<uint32_t> index, uint64_t offset,
     std::vector<std::byte> data) -> co::Co<Result<void>>;
 
-  auto UpdateDataFileSize(uint64_t new_size) -> void;
-  auto RecordEmissionSignature(const std::string& signature) -> void;
+  auto RecordEmission(uint32_t index) -> void;
 
   auto CreateFallbackPayload() const -> CookedTexturePayload;
-  auto ToPakDescriptor(const CookedTexturePayload& cooked,
-    uint64_t data_offset) const -> TextureResourceDesc;
+  //! The table row of `cooked`, without its data offset.
+  static auto ToPakDescriptor(const CookedTexturePayload& cooked)
+    -> TextureResourceDesc;
 
   WriteGroup writes_;
   TextureTableAggregator& table_aggregator_;
@@ -224,8 +225,7 @@ private:
   std::atomic<bool> finalize_started_ { false };
   std::atomic<bool> fallback_emitted_ { false };
   std::atomic<uint32_t> emitted_count_ { 0 };
-  std::unordered_set<std::string> emitted_signatures_;
-  std::atomic<uint64_t> data_file_size_ { 0 };
+  std::unordered_set<uint32_t> emitted_indices_;
 };
 
 } // namespace oxygen::content::import

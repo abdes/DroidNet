@@ -97,8 +97,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   const auto cooked_root = root / ".cooked";
   const auto descriptor_path = source_dir / "cube.procedural.geometry.json";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto descriptor_doc = json {
     { "name", "ProceduralCube" },
@@ -169,7 +168,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   const auto root = temp.Path() / "procedural_bounds_too_small";
   const auto cooked_root = root / ".cooked";
   const auto descriptor_path = root / "Sources" / "cube.geometry.json";
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto descriptor_doc = json {
     { "name", "ProceduralCube" },
@@ -241,8 +240,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   const auto cooked_root = root / ".cooked";
   const auto descriptor_path = source_dir / "floor.procedural.geometry.json";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto descriptor_doc = json {
     { "name", "FloorPlane" },
@@ -368,7 +366,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     std::filesystem::create_directories(root);
     const auto cooked_root = root / ".cooked";
     const auto source_path = root / "Sources" / "capsule.geometry.json";
-    WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+    CookDefaultMaterial(cooked_root);
     const auto doc = MakeCapsuleDescriptor(test_case.params);
     WriteText(source_path, doc.dump(2));
     const auto report = SubmitAndWait(service,
@@ -500,7 +498,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     const auto root = temp.Path() / test_case.name;
     const auto cooked_root = root / ".cooked";
     const auto source_path = root / "Sources" / "capsule.geometry.json";
-    WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+    CookDefaultMaterial(cooked_root);
     auto doc = MakeCapsuleDescriptor(nullptr);
     if (!test_case.surfaces.is_null()) {
       doc["surfaces"] = test_case.surfaces;
@@ -567,7 +565,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     std::filesystem::create_directories(root);
     const auto cooked_root = root / ".cooked";
     const auto source_path = root / "Sources" / "capsule.geometry.json";
-    WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+    CookDefaultMaterial(cooked_root);
     const auto doc = MakeCapsuleDescriptor(cases.at(index));
     WriteText(source_path, doc.dump(2));
     const auto report = SubmitAndWait(service,
@@ -597,8 +595,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   const auto descriptor_path
     = source_dir / "icosphere.procedural.geometry.json";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto descriptor_doc = json {
     { "name", "ProceduralIcoSphere" },
@@ -716,8 +713,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   const auto descriptor_path
     = source_dir / "subdivided_cube.procedural.geometry.json";
 
-  std::filesystem::create_directories(cooked_root / "Materials");
-  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+  CookDefaultMaterial(cooked_root);
 
   const auto descriptor_doc = json {
     { "name", "ProceduralSubdividedCube" },

@@ -39,10 +39,8 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
-#include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -224,13 +222,6 @@ namespace {
           + internal::DescribeLookup(*reference, refused),
         std::move(object_path));
       break;
-    case internal::AssetReferenceRefusal::kTypeUnknown:
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_type_unknown",
-        "Unable to infer reference asset type from extension: "
-          + reference->resolved,
-        std::move(object_path));
-      break;
     case internal::AssetReferenceRefusal::kTypeMismatch:
       if (refused.found_type.has_value()) {
         type_mismatch(
@@ -253,15 +244,14 @@ namespace {
   auto ReadListedDescriptor(const SceneDescriptorExecutionContext& context,
     const data::AssetKey& key) -> ListedDescriptor
   {
-    for (auto mount = context.mounts.rbegin(); mount != context.mounts.rend();
-      ++mount) {
-      if (!mount->content || mount->content->FindAsset(key) == nullptr) {
+    for (const auto& mount : std::views::reverse(context.mounts)) {
+      if (!mount.content || mount.content->FindAsset(key) == nullptr) {
         continue;
       }
       try {
         return ListedDescriptor {
           .listed = true,
-          .bytes = mount->content->Descriptor(key),
+          .bytes = mount.content->Descriptor(key),
         };
       } catch (const std::exception&) {
         return ListedDescriptor { .listed = true, .bytes = std::nullopt };
@@ -271,8 +261,7 @@ namespace {
   }
 
   auto LoadSurfaceInventories(SceneDescriptorExecutionContext& context,
-    const internal::SceneSource& source, IAsyncFileReader& file_reader)
-    -> co::Co<bool>
+    const internal::SceneSource& source) -> bool
   {
     for (const auto& renderable : source.renderables) {
       const auto names_a_surface = std::ranges::any_of(renderable.overrides,
@@ -286,47 +275,24 @@ namespace {
       const auto resolved = LookupSceneReference(
         context, path, data::AssetType::kGeometry, "renderables.geometry_ref");
       if (!resolved) {
-        co_return false;
+        return false;
       }
       if (context.geometries.contains(resolved->key)) {
         continue;
       }
-      auto listed_bytes = ReadListedDescriptor(context, resolved->key).bytes;
-      auto file_bytes = serio::ByteBuffer {};
-      auto found = listed_bytes.has_value();
-      if (!found) {
-        // A descriptor this cook writes is not listed in an index yet.
-        std::string relative;
-        if (internal::TryVirtualPathToRelPath(
-              context.request, resolved->resolved, relative)) {
-          for (auto mount = context.mounts.rbegin();
-            mount != context.mounts.rend() && !found; ++mount) {
-            const auto candidate = mount->root / relative;
-            const auto exists = co_await file_reader.Exists(candidate);
-            if (exists && exists.value()) {
-              auto read = co_await file_reader.ReadFile(candidate);
-              if (read.has_value()) {
-                file_bytes = std::move(read.value());
-                found = true;
-              } else if (auto too_large = SourceTooLargeDiagnostic(read.error(),
-                           candidate, file_reader.SourceLimit())) {
-                context.session.AddDiagnostic(std::move(*too_large));
-              }
-            }
-          }
-        }
-      }
-      if (!found) {
+      // The lookup found the geometry in an index, which holds its descriptor.
+      const auto listed_bytes
+        = ReadListedDescriptor(context, resolved->key).bytes;
+      if (!listed_bytes.has_value()) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.geometry_inventory_unavailable",
           "Cannot read geometry for surface validation", path);
-        co_return false;
+        return false;
       }
       try {
-        const auto descriptor_bytes = listed_bytes.has_value()
-          ? std::span<const std::byte>(*listed_bytes)
-          : file_bytes.Bytes();
-        serio::ReadOnlyMemoryStream stream(descriptor_bytes);
+        serio::ReadOnlyMemoryStream stream {
+          std::span<const std::byte> { *listed_bytes },
+        };
         serio::Reader reader(stream);
         const LoaderContext loader_context {
           .current_asset_key = resolved->key,
@@ -339,10 +305,10 @@ namespace {
       } catch (const std::exception& error) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.geometry_inventory_invalid", error.what(), path);
-        co_return false;
+        return false;
       }
     }
-    co_return true;
+    return true;
   }
 
   //! What an environment record uses a texture for.
@@ -1046,8 +1012,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   context.mounts = internal::LoadMountedCookedSources(
     session, Request(), "scene.descriptor.");
 
-  if (!CookedReader()
-    || !co_await LoadSurfaceInventories(context, *source, *CookedReader())) {
+  if (!CookedReader() || !LoadSurfaceInventories(context, *source)) {
     co_return co_await FinalizeWithTelemetry(session);
   }
 

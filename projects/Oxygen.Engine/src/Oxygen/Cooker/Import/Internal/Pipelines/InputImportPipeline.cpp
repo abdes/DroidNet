@@ -685,8 +685,7 @@ namespace {
       if (refused.reason == AssetReferenceRefusal::kUnmounted) {
         session_.AddDiagnostic(internal::RefuseUnmountedReference(
           request_, *reference, object_path));
-      } else if (refused.reason == AssetReferenceRefusal::kTypeMismatch
-        || refused.reason == AssetReferenceRefusal::kTypeUnknown) {
+      } else if (refused.reason == AssetReferenceRefusal::kTypeMismatch) {
         Refuse("input.context.action_type_mismatch",
           internal::DescribeLookup(*reference, refused)
             + "; it does not name an input action",

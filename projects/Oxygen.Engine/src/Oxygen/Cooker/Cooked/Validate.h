@@ -19,7 +19,9 @@ namespace oxygen::content::cooked {
 /*!
  A loose root and a pak are checked the same way.
 
- @throw std::runtime_error Naming the first defect.
+ @throw data::CookedFormatError Naming the first defect, with its code; a
+   descriptor's loader may refuse it with its own typed error.
+ @throw std::system_error When the storage cannot list or read the source.
 */
 OXGN_COOK_API auto Validate(const CookedContent& content,
   lc::IntegrityCheck check = lc::IntegrityCheck::kFull) -> void;

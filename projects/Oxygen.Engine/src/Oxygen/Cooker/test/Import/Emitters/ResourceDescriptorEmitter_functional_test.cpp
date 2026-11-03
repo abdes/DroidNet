@@ -168,4 +168,31 @@ NOLINT_TEST_F(
   });
 }
 
+//! A buffer descriptor path the index cannot hold, one leaving the cooked root
+//! or rooted, is refused before anything is written.
+NOLINT_TEST_F(
+  ResourceDescriptorEmitterTest, BufferPathLeavingTheRootIsRefusedUnwritten)
+{
+  RunEmitter([&](ResourceDescriptorEmitter& emitter) -> Co<> {
+    const oxygen::data::pak::core::BufferResourceDesc descriptor {
+      .size_bytes = 4U,
+    };
+    const auto index = oxygen::data::pak::core::ResourceIndexT { 1U };
+    for (const auto* const relpath :
+      { "../outside.obuf", "/rooted.obuf", "Buffers/../../outside.obuf" }) {
+      EXPECT_THROW(static_cast<void>(
+                     emitter.EmitBufferAtRelPath(relpath, index, descriptor)),
+        std::runtime_error);
+    }
+
+    EXPECT_TRUE(co_await emitter.Finalize());
+  });
+  ASSERT_HAS_VALUE(emitter_);
+  EXPECT_TRUE(emitter_->Records().empty());
+  EXPECT_EQ(
+    files_.KindOf("/outside.obuf"), oxygen::content::cooked::PathKind::kNone);
+  EXPECT_EQ(
+    files_.KindOf("/rooted.obuf"), oxygen::content::cooked::PathKind::kNone);
+}
+
 } // namespace

@@ -6,7 +6,6 @@
 
 // Covers: Import/Internal/Emitters/BufferEmitter.cpp
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -19,9 +18,9 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
@@ -41,6 +40,7 @@ using oxygen::co::Co;
 using oxygen::content::import::BufferEmitter;
 using oxygen::content::import::BufferTableAggregator;
 using oxygen::content::import::CookedBufferPayload;
+using oxygen::content::import::HashedBytes;
 using oxygen::content::import::ImportEventLoop;
 using oxygen::content::import::ResourceTableRegistry;
 using PakBufferResourceDesc = oxygen::data::pak::core::BufferResourceDesc;
@@ -83,14 +83,14 @@ auto MakeTestBuffer(const TestBufferSpec& spec) -> CookedBufferPayload
   const auto fill_u8 = static_cast<uint8_t>(spec.fill_byte);
 
   // Fill payload with recognizable pattern
-  payload.data.resize(spec.size_bytes);
+  std::vector<std::byte> bytes(spec.size_bytes);
   for (size_t i = 0; i < spec.size_bytes; ++i) {
     // Mix fill_byte with position for unique content
-    payload.data.at(i)
+    bytes.at(i)
       = static_cast<std::byte>(static_cast<unsigned>(fill_u8) ^ (i & 0xFFU));
   }
 
-  payload.content_hash = oxygen::base::ComputeSha256(payload.data);
+  payload.data = HashedBytes(std::move(bytes));
   return payload;
 }
 
@@ -268,9 +268,10 @@ NOLINT_TEST_F(BufferEmitterTest, EmitMultipleBuffersReturnsSequentialIndices)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(writes, BufferAggregator(), Root());
     for (int i = 0; i < 5; ++i) {
-      auto payload
-        = MakeTestBuffer({ .size_bytes = static_cast<size_t>(512 + (i * 100)),
-          .element_stride = 32 });
+      auto payload = MakeTestBuffer({
+        .size_bytes = static_cast<size_t>(512 + (i * 100)),
+        .element_stride = 32,
+      });
       indices.push_back(emitter.Emit(std::move(payload)));
     }
 
@@ -316,6 +317,43 @@ NOLINT_TEST_F(BufferEmitterTest, EmitDuplicateBufferReturnsSameIndex)
   ASSERT_EQ(table.size(), 2);
 }
 
+//! An equal buffer reuses a row only where the row's offset satisfies the
+//! alignment it asks for; otherwise it gets a row of its own at an aligned
+//! offset, which later requests reuse.
+NOLINT_TEST_F(BufferEmitterTest, EqualBufferAskingStricterAlignmentGetsOwnRow)
+{
+  constexpr uint64_t kStrictAlignment = 256;
+  uint32_t loose = 0;
+  uint32_t strict = 0;
+  uint32_t again = 0;
+  bool tables_ok = false;
+  RunInNursery([&](co::Nursery& writes) -> Co<> {
+    auto& emitter = emitter_.emplace(writes, BufferAggregator(), Root());
+    // Three bytes first, so the next offset is not 256-aligned.
+    static_cast<void>(emitter.Emit(MakeTestBuffer({
+      .size_bytes = 3,
+      .alignment = 1,
+      .fill_byte = std::byte { 0x01 },
+    })));
+    loose = emitter.Emit(MakeTestBuffer({ .size_bytes = 64, .alignment = 1 }));
+    strict = emitter.Emit(
+      MakeTestBuffer({ .size_bytes = 64, .alignment = kStrictAlignment }));
+    again = emitter.Emit(MakeTestBuffer({ .size_bytes = 64, .alignment = 1 }));
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
+  EXPECT_NE(strict, loose);
+  EXPECT_EQ(again, strict);
+  const auto table
+    = ParseBufferTable(ReadBytes(Root() / loose_layout::kBuffersTable));
+  ASSERT_GT(table.size(), strict);
+  EXPECT_NE(table.at(loose).data_offset % kStrictAlignment, 0U);
+  EXPECT_EQ(table.at(strict).data_offset % kStrictAlignment, 0U);
+}
+
 //! Buffers of different content hash get different indices.
 NOLINT_TEST_F(BufferEmitterTest, DifferentContentEmitsNewIndex)
 {
@@ -324,12 +362,16 @@ NOLINT_TEST_F(BufferEmitterTest, DifferentContentEmitsNewIndex)
   bool tables_ok = false;
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(writes, BufferAggregator(), Root());
-    auto buf0 = MakeTestBuffer({ .size_bytes = 256,
+    auto buf0 = MakeTestBuffer({
+      .size_bytes = 256,
       .element_stride = 32,
-      .fill_byte = std::byte { 0x31 } });
-    auto buf1 = MakeTestBuffer({ .size_bytes = 256,
+      .fill_byte = std::byte { 0x31 },
+    });
+    auto buf1 = MakeTestBuffer({
+      .size_bytes = 256,
       .element_stride = 32,
-      .fill_byte = std::byte { 0x32 } });
+      .fill_byte = std::byte { 0x32 },
+    });
 
     idx0 = emitter.Emit(std::move(buf0));
     idx1 = emitter.Emit(std::move(buf1));
@@ -346,13 +388,13 @@ NOLINT_TEST_F(BufferEmitterTest, DifferentContentEmitsNewIndex)
   EXPECT_EQ(emitter_->Count(), 2U);
 }
 
-//! A payload without its SHA-256 is refused: identity is the hash.
-NOLINT_TEST_F(BufferEmitterTest, EmitZeroHashPayloadThrows)
+//! An empty payload is refused: identity is the hash of the bytes.
+NOLINT_TEST_F(BufferEmitterTest, EmitEmptyPayloadThrows)
 {
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(writes, BufferAggregator(), Root());
     auto payload = MakeTestBuffer({ .size_bytes = 256, .element_stride = 32 });
-    payload.content_hash = {};
+    payload.data = HashedBytes {};
 
     EXPECT_THROW((void)emitter.Emit(std::move(payload)), std::invalid_argument);
     EXPECT_EQ(emitter.Count(), 0U);
@@ -369,9 +411,11 @@ NOLINT_TEST_F(BufferEmitterTest, CountReflectsUniqueEntriesNotEmitRequests)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(writes, BufferAggregator(), Root());
     for (int i = 0; i < kEmitRequests; ++i) {
-      auto buf = MakeTestBuffer({ .size_bytes = 256,
+      auto buf = MakeTestBuffer({
+        .size_bytes = 256,
         .element_stride = 32,
-        .fill_byte = std::byte { 0xA5 } });
+        .fill_byte = std::byte { 0xA5 },
+      });
       (void)emitter.Emit(std::move(buf));
     }
 
@@ -431,9 +475,11 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableFileHasCorrectPackedSize)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(writes, BufferAggregator(), Root());
     for (int i = 0; i < kBufferCount; ++i) {
-      auto idx = emitter.Emit(MakeTestBuffer({ .size_bytes = 256,
+      auto idx = emitter.Emit(MakeTestBuffer({
+        .size_bytes = 256,
         .element_stride = 32,
-        .fill_byte = static_cast<std::byte>(0xA0 + i) }));
+        .fill_byte = static_cast<std::byte>(0xA0 + i),
+      }));
       EXPECT_EQ(idx, static_cast<uint32_t>(i + 1));
     }
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
@@ -516,24 +562,21 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesPreserveMetadata)
 {
 
   CookedBufferPayload vertex_payload;
-  vertex_payload.data.resize(512);
+  vertex_payload.data = HashedBytes(std::vector<std::byte>(512));
   vertex_payload.alignment = 16;
   vertex_payload.usage_flags = 0x01; // Vertex buffer
   vertex_payload.element_stride = 32;
   vertex_payload.element_format = 0;
-  vertex_payload.content_hash
-    = oxygen::base::ComputeSha256(vertex_payload.data);
 
   CookedBufferPayload index_payload;
-  index_payload.data.resize(256);
+  index_payload.data = HashedBytes(std::vector<std::byte>(256));
   index_payload.alignment = 4;
   index_payload.usage_flags = 0x02; // Index buffer
   index_payload.element_stride = 0;
   index_payload.element_format = 0;
-  index_payload.content_hash = oxygen::base::ComputeSha256(index_payload.data);
 
-  const auto vertex_hash = vertex_payload.content_hash;
-  const auto index_hash = index_payload.content_hash;
+  const auto vertex_hash = vertex_payload.data.Sha256();
+  const auto index_hash = index_payload.data.Sha256();
 
   bool tables_ok = false;
   RunInNursery([&](co::Nursery& writes) -> Co<> {
@@ -577,18 +620,14 @@ NOLINT_TEST_F(BufferEmitterRealFileTest, FinalizeDataFileContainsCorrectContent)
 
   // Create two buffers with distinct content
   CookedBufferPayload buf0;
-  buf0.data.resize(100);
-  std::ranges::fill(buf0.data, std::byte { 0xAA });
+  buf0.data = HashedBytes(std::vector<std::byte>(100, std::byte { 0xAA }));
   buf0.alignment = 16;
   buf0.usage_flags = 0x01;
-  buf0.content_hash = oxygen::base::ComputeSha256(buf0.data);
 
   CookedBufferPayload buf1;
-  buf1.data.resize(200);
-  std::ranges::fill(buf1.data, std::byte { 0xBB });
+  buf1.data = HashedBytes(std::vector<std::byte>(200, std::byte { 0xBB }));
   buf1.alignment = 16;
   buf1.usage_flags = 0x01;
-  buf1.content_hash = oxygen::base::ComputeSha256(buf1.data);
 
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(writes, BufferAggregator(), TempDir());
@@ -734,9 +773,11 @@ NOLINT_TEST_F(BufferEmitterTest, CountTracksEmittedBuffers)
     EXPECT_EQ(emitter.Count(), 0);
 
     for (uint32_t i = 0; i < 10; ++i) {
-      auto idx = emitter.Emit(MakeTestBuffer({ .size_bytes = 64,
+      auto idx = emitter.Emit(MakeTestBuffer({
+        .size_bytes = 64,
         .element_stride = 32,
-        .fill_byte = static_cast<std::byte>(0xC0 + i) }));
+        .fill_byte = static_cast<std::byte>(0xC0 + i),
+      }));
       EXPECT_EQ(idx, i + 1);
       EXPECT_EQ(emitter.Count(), i + 1);
     }
@@ -821,11 +862,13 @@ NOLINT_TEST_F(BufferEmitterTest, EmitManySmallBuffersAllAlignedCorrectly)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(writes, BufferAggregator(), Root());
     for (int i = 0; i < kBufferCount; ++i) {
-      auto idx = emitter.Emit(MakeTestBuffer({ .size_bytes = kBufferSize,
+      auto idx = emitter.Emit(MakeTestBuffer({
+        .size_bytes = kBufferSize,
         .alignment = kAlignment,
         .element_stride = 32,
-        .fill_byte = static_cast<std::byte>(
-          0x10U + (static_cast<unsigned>(i) & 0x7FU)) }));
+        .fill_byte
+        = static_cast<std::byte>(0x10U + (static_cast<unsigned>(i) & 0x7FU)),
+      }));
       EXPECT_EQ(idx, static_cast<uint32_t>(i + 1));
     }
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());

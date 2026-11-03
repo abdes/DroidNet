@@ -6,22 +6,21 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
-#include <vector>
 
-#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 
 namespace oxygen::content::import {
 
 //! Cooked buffer payload for async emission.
 /*!
  Contains all metadata needed by the runtime to create a buffer resource,
- plus the raw buffer data bytes.
+ plus the buffer bytes and their SHA-256.
 
  ### Field Descriptions
 
- - `data`: The raw buffer bytes to be written to `buffers.data`.
+ - `data`: The buffer bytes to be written to `buffers.data`, with their
+   SHA-256.
  - `alignment`: Required alignment for this buffer (e.g., 16 for vertex buffers,
    4 for index buffers). Used for D3D12 GPU upload alignment.
  - `usage_flags`: Buffer usage hints:
@@ -32,13 +31,12 @@ namespace oxygen::content::import {
    - `0x10`: Raw buffer
  - `element_stride`: Stride of each element (0 for raw/index buffers).
  - `element_format`: Format enum value (0 = raw or structured).
- - `content_hash`: SHA-256 of `data`, computed by the buffer's producer.
 
  @see BufferResourceDesc for on-disk format
 */
 struct CookedBufferPayload {
-  //! Raw buffer data bytes.
-  std::vector<std::byte> data;
+  //! The buffer bytes and their SHA-256.
+  HashedBytes data;
 
   //! Required alignment for this buffer (defaults to 16).
   uint64_t alignment = 16;
@@ -51,9 +49,6 @@ struct CookedBufferPayload {
 
   //! Element format enum (0 = raw or structured).
   uint8_t element_format = 0;
-
-  //! SHA-256 of `data`, computed by the buffer's producer.
-  base::Sha256Digest content_hash {};
 };
 
 } // namespace oxygen::content::import

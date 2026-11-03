@@ -6,6 +6,7 @@
 
 // Covers: Import/Internal/LooseCookedWriter.cpp (removals)
 
+#include <algorithm>
 #include <cstddef>
 #include <exception>
 #include <filesystem>
@@ -104,6 +105,54 @@ namespace {
     EXPECT_EQ(content.Assets().front().virtual_path, VirtualPath("B"));
     EXPECT_TRUE(HasMatchingContent(storage, cooked_root));
     EXPECT_NO_THROW(cooked::Validate(content));
+  }
+
+  /*!
+   Scenario: a writer removes an asset and writes another file at the path of
+   its descriptor. The new index lists the file, so it stays on disk: only a
+   path the new index does not list, of any kind, is deleted.
+  */
+  NOLINT_TEST(LooseCookedWriterRemovalTest,
+    APathTheNewIndexListsStaysWhenItsFormerAssetIsRemoved)
+  {
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "loose_cooked_writer_reused_path";
+    CookTwoMaterials(storage, cooked_root);
+    const auto auxiliary = std::vector { std::byte { 0x5A } };
+
+    LooseCookedWriter writer(cooked_root, storage);
+    writer.RemoveAssetDescriptor(VirtualPath("A"));
+    writer.WriteFile(FileKind::kAuxiliary, DescriptorPath("A"), auxiliary);
+    const auto result = writer.Finish();
+
+    EXPECT_TRUE(result.removed_files.empty());
+    EXPECT_TRUE(Exists(storage, cooked_root / DescriptorPath("A")));
+    EXPECT_TRUE(HasMatchingContent(storage, cooked_root));
+  }
+
+  /*!
+   Scenario: a writer adds a file whose path differs from an indexed
+   descriptor's only in case. A case-insensitive file system holds both in one
+   file, so the index is not published and the root keeps its old index.
+  */
+  NOLINT_TEST(
+    LooseCookedWriterRemovalTest, AFilePathDifferingOnlyInCaseIsRefused)
+  {
+    auto storage = MemoryFileSystem {};
+    const auto cooked_root = MemoryRoot() / "loose_cooked_writer_case_path";
+    CookTwoMaterials(storage, cooked_root);
+    const auto published = storage.Bytes(cooked_root / "container.index.bin");
+    const auto index
+      = std::vector<std::byte>(published.begin(), published.end());
+
+    LooseCookedWriter writer(cooked_root, storage);
+    writer.WriteFile(FileKind::kAuxiliary, "Materials/a.omat",
+      std::vector { std::byte { 0x5A } });
+
+    EXPECT_THROW(
+      static_cast<void>(writer.Finish()), import::LooseCookedIdentityCollision);
+    EXPECT_TRUE(std::ranges::equal(
+      storage.Bytes(cooked_root / "container.index.bin"), index));
   }
 
   /*!

@@ -11,8 +11,8 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <optional>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -156,6 +156,19 @@ NOLINT_TEST_F(ValidateTest, SourceHoldingNothingPasses)
 
 //=== Invalid content ===-----------------------------------------------------//
 
+//! The defect `Validate` reports for `content`, if it refuses it.
+auto ValidateDefect(const CookedContent& content,
+  const IntegrityCheck check = IntegrityCheck::kFull)
+  -> std::optional<data::CookedDefect>
+{
+  try {
+    Validate(content, check);
+  } catch (const data::CookedFormatError& error) {
+    return error.Defect();
+  }
+  return std::nullopt;
+}
+
 //! A root whose index is of another version cannot be opened to validate.
 NOLINT_TEST_F(ValidateTest, IndexOfAnotherVersionCannotBeOpened)
 {
@@ -176,7 +189,7 @@ NOLINT_TEST_F(ValidateTest, DescriptorOfAnOlderVersionIsRefused)
   const auto content = OpenLoose(LibraryOf(WoodWithVersionShifted(-1)));
 
   // Act / Assert
-  EXPECT_THROW(Validate(content), std::runtime_error);
+  EXPECT_EQ(ValidateDefect(content), data::CookedDefect::kUnsupportedVersion);
 }
 
 NOLINT_TEST_F(ValidateTest, DescriptorOfANewerVersionIsRefused)
@@ -185,7 +198,7 @@ NOLINT_TEST_F(ValidateTest, DescriptorOfANewerVersionIsRefused)
   const auto content = OpenLoose(LibraryOf(WoodWithVersionShifted(1)));
 
   // Act / Assert
-  EXPECT_THROW(Validate(content), std::runtime_error);
+  EXPECT_EQ(ValidateDefect(content), data::CookedDefect::kUnsupportedVersion);
 }
 
 //! The type the index records must be the type the descriptor states.
@@ -196,7 +209,7 @@ NOLINT_TEST_F(ValidateTest, DescriptorOfAnotherTypeThanTheIndexIsRefused)
     fixtures::MaterialBuilder { "Wood" }.Bytes(), data::AssetType::kGeometry));
 
   // Act / Assert
-  EXPECT_THROW(Validate(content), std::runtime_error);
+  EXPECT_EQ(ValidateDefect(content), data::CookedDefect::kInconsistent);
 }
 
 NOLINT_TEST_F(ValidateTest, DescriptorSmallerThanItsHeaderIsRefused)
@@ -206,7 +219,7 @@ NOLINT_TEST_F(ValidateTest, DescriptorSmallerThanItsHeaderIsRefused)
     LibraryOf(std::vector<std::byte>(sizeof(core::AssetHeader) - 1U)));
 
   // Act / Assert
-  EXPECT_THROW(Validate(content), std::runtime_error);
+  EXPECT_EQ(ValidateDefect(content), data::CookedDefect::kTooSmall);
 }
 
 //! Bytes after the descriptor's last record are not part of any asset.
@@ -218,7 +231,7 @@ NOLINT_TEST_F(ValidateTest, DescriptorWithTrailingBytesIsRefused)
   const auto content = OpenLoose(LibraryOf(std::move(bytes)));
 
   // Act / Assert
-  EXPECT_THROW(Validate(content), std::runtime_error);
+  EXPECT_EQ(ValidateDefect(content), data::CookedDefect::kSizeMismatch);
 }
 
 //! A reference past the end of the tables the root holds is refused.
@@ -232,7 +245,7 @@ NOLINT_TEST_F(ValidateTest, ReferenceBeyondTheTablesIsRefused)
     LibraryOf(wood.Bytes(), data::AssetType::kMaterial, wood.References()));
 
   // Act / Assert
-  EXPECT_THROW(Validate(content), std::runtime_error);
+  EXPECT_EQ(ValidateDefect(content), data::CookedDefect::kInvalidReference);
 }
 
 //! A digest the index records wrongly shows only in the full check.
@@ -250,7 +263,8 @@ NOLINT_TEST_F(ValidateTest, ForgedDescriptorDigestFailsTheFullCheckOnly)
 
   // Act / Assert
   EXPECT_NO_THROW(Validate(content, IntegrityCheck::kMetadata));
-  EXPECT_THROW(Validate(content, IntegrityCheck::kFull), std::runtime_error);
+  EXPECT_EQ(ValidateDefect(content, IntegrityCheck::kFull),
+    data::CookedDefect::kDigestMismatch);
 }
 
 //! A pak whose bytes changed fails the full check, which reads its CRC.

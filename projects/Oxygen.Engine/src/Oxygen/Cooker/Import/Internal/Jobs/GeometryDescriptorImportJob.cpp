@@ -12,10 +12,10 @@
 #include <filesystem>
 #include <limits>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -199,14 +199,17 @@ namespace {
     auto matches
       = std::vector<observer_ptr<const internal::MountedCookedSource>> {};
     auto looked_up = std::vector<std::filesystem::path> {};
-    for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
-      const auto descriptor_path = it->root / std::filesystem::path(relpath);
-      auto ec = std::error_code {};
-      if (!std::filesystem::exists(descriptor_path, ec)) {
-        looked_up.push_back(descriptor_path);
+    // Only an index lists a sidecar: a descriptor file it does not list is
+    // none.
+    for (auto& mount : std::views::reverse(context.mounts)) {
+      if (!mount.content.has_value()) {
         continue;
       }
-      matches.emplace_back(&*it);
+      if (mount.content->FindSidecar(relpath) == nullptr) {
+        looked_up.push_back(mount.root / std::filesystem::path(relpath));
+        continue;
+      }
+      matches.emplace_back(&mount);
     }
 
     if (matches.size() > 1U) {
@@ -288,13 +291,14 @@ namespace {
   //! refusals with, and what the family's descriptor is called in them.
   struct AssetReferenceCodes final {
     std::string_view missing;
-    std::string_view type;
+    //! Empty for a family that accepts an asset of any type.
+    std::string_view type_mismatch;
     std::string_view noun;
   };
 
   //! The key of the asset a reference in the descriptor names.
   /*!
-   The mounted indexes and roots are searched by `internal::LookupReference`;
+   The mounted indexes are searched by `internal::LookupReference`;
    a refusal is reported with the family's `codes`, or as
    `import.reference_unmounted` for a reference in no mounted cooked root.
   */
@@ -331,16 +335,9 @@ namespace {
           + " was not found: " + internal::DescribeLookup(*reference, refused),
         std::move(object_path));
       break;
-    case internal::AssetReferenceRefusal::kTypeUnknown:
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        std::string(codes.type),
-        "Unable to infer the asset type of " + std::string(codes.noun)
-          + " from its extension: " + reference->resolved,
-        std::move(object_path));
-      break;
     case internal::AssetReferenceRefusal::kTypeMismatch:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        std::string(codes.type),
+        std::string(codes.type_mismatch),
         std::string(codes.noun) + " names a "
           + std::string(data::to_string(
             refused.found_type.value_or(data::AssetType::kUnknown)))
@@ -697,7 +694,7 @@ namespace {
               lod_path + ".skinning.skeleton_ref", std::nullopt,
               {
                 .missing = "geometry.asset.missing",
-                .type = "geometry.asset.type_unknown",
+                .type_mismatch = {},
                 .noun = "Skeleton descriptor",
               });
             if (!skeleton_key.has_value()) {
@@ -785,7 +782,7 @@ namespace {
           submesh_path + ".material_ref", data::AssetType::kMaterial,
           {
             .missing = "geometry.material.missing",
-            .type = "geometry.material.type_mismatch",
+            .type_mismatch = "geometry.material.type_mismatch",
             .noun = "Material descriptor",
           });
         if (!material_key.has_value()) {

@@ -17,6 +17,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/AnyDevice.h>
@@ -92,6 +93,11 @@ public:
   //! handles may write it (an import's resource data files).
   [[nodiscard]] virtual auto Open(const std::filesystem::path& path) const
     -> Result<serio::AnyDevice> = 0;
+
+  //! Every entry below the folder `path`, recursively, by its path below it
+  //! (`content::lc::RootFiles::List`); a link is listed and nothing below it.
+  [[nodiscard]] virtual auto List(const std::filesystem::path& path) const
+    -> Result<std::vector<content::lc::RootEntry>> = 0;
 };
 
 //! Where the Cooker reads cooked sources and publishes paks, manifests and

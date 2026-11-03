@@ -156,10 +156,10 @@ NOLINT_TEST(
       EXPECT_EQ(cooked->desc.format, output);
       const auto header_read = oxygen::serio::CopyAt<
         oxygen::data::pak::render::TexturePayloadHeader>(
-        std::span { cooked->payload });
+        cooked->payload.Bytes());
       ASSERT_HAS_VALUE(header_read);
       const auto& header = *header_read;
-      const auto data = std::span { cooked->payload }.subspan(
+      const auto data = cooked->payload.Bytes().subspan(
         header.data_offset_bytes + cooked->layouts.at(0).offset_bytes);
       for (unsigned c = 0; c < 4; ++c) {
         const double normalized = static_cast<double>(source.at(c)) / 255;
@@ -231,12 +231,12 @@ NOLINT_TEST(TextureCookerColorTransferTest, FiltersColorMipsInLinearLight)
       ASSERT_EQ(cooked->desc.mip_levels, 2U);
       const auto header_read = oxygen::serio::CopyAt<
         oxygen::data::pak::render::TexturePayloadHeader>(
-        std::span { cooked->payload });
+        cooked->payload.Bytes());
       ASSERT_HAS_VALUE(header_read);
       const auto& header = *header_read;
       std::array<float, 4> actual {};
       std::memcpy(actual.data(),
-        std::span { cooked->payload }
+        cooked->payload.Bytes()
           .subspan(
             header.data_offset_bytes + cooked->layouts.at(1).offset_bytes)
           .data(),
@@ -281,7 +281,7 @@ NOLINT_TEST(
     ASSERT_EQ(cooked->desc.mip_levels, size == 2 ? 2 : 3);
     const auto header_read
       = oxygen::serio::CopyAt<oxygen::data::pak::render::TexturePayloadHeader>(
-        std::span { cooked->payload });
+        cooked->payload.Bytes());
     ASSERT_HAS_VALUE(header_read);
     const auto& header = *header_read;
     for (unsigned mip = 1; mip < cooked->desc.mip_levels; ++mip) {
@@ -292,7 +292,7 @@ NOLINT_TEST(
       EXPECT_GT(expected, 0U);
       const auto width = oxygen::MipExtent(size, mip);
       const auto& layout = cooked->layouts.at(mip);
-      const auto data = std::span { cooked->payload }.subspan(
+      const auto data = cooked->payload.Bytes().subspan(
         header.data_offset_bytes + layout.offset_bytes);
       for (unsigned y = 0; y < width; ++y) {
         for (unsigned x = 0; x < width; ++x) {
@@ -383,8 +383,8 @@ NOLINT_TEST(TextureCookerBasicTest, CooksMinimalBmp)
   EXPECT_EQ(payload.desc.height, 2U);
   EXPECT_EQ(payload.desc.format, Format::kRGBA8UNorm);
   EXPECT_EQ(payload.desc.mip_levels, 1U);
-  EXPECT_FALSE(payload.payload.empty());
-  EXPECT_FALSE(oxygen::base::IsAllZero(payload.desc.content_hash));
+  EXPECT_FALSE(payload.payload.Empty());
+  EXPECT_FALSE(oxygen::base::IsAllZero(payload.payload.Sha256()));
 }
 
 NOLINT_TEST(TextureCookerBasicTest, SetsPackingPolicyId)
@@ -423,7 +423,7 @@ NOLINT_TEST(TextureCookerBasicTest, ContentHashIsDeterministic)
 
   ASSERT_HAS_VALUE(result1);
   ASSERT_HAS_VALUE(result2);
-  EXPECT_EQ(result1->desc.content_hash, result2->desc.content_hash);
+  EXPECT_EQ(result1->payload.Sha256(), result2->payload.Sha256());
 }
 
 //! The content hash is the SHA-256 of the payload bytes, which hold no hash.
@@ -440,8 +440,8 @@ NOLINT_TEST(TextureCookerBasicTest, ContentHashIsTheSha256OfThePayload)
     = CookTexture(GetTestImageBytes(), desc, TightPackedPolicy::Instance());
 
   ASSERT_HAS_VALUE(result);
-  EXPECT_EQ(result->desc.content_hash,
-    oxygen::base::ComputeSha256(std::as_bytes(std::span(result->payload))));
+  EXPECT_EQ(result->payload.Sha256(),
+    oxygen::base::ComputeSha256(result->payload.Bytes()));
 }
 
 //===----------------------------------------------------------------------===//
@@ -485,7 +485,7 @@ NOLINT_TEST(TextureCookerLayoutTest, TightPackedMinimizesSize)
   ASSERT_HAS_VALUE(tight_result);
 
   // Tight should be smaller or equal (never larger)
-  EXPECT_LE(tight_result->payload.size(), d3d12_result->payload.size());
+  EXPECT_LE(tight_result->payload.Size(), d3d12_result->payload.Size());
 }
 
 //===----------------------------------------------------------------------===//
@@ -550,7 +550,7 @@ NOLINT_TEST(TextureCookerBc7Test, ProducesBc7Output)
 
   EXPECT_EQ(result->desc.format, Format::kBC7UNorm);
   // BC7 block is 16 bytes for 4x4 pixels; 2x2 rounds up to 1 block
-  EXPECT_GE(result->payload.size(), 16U);
+  EXPECT_GE(result->payload.Size(), 16U);
 }
 
 NOLINT_TEST(TextureCookerBc7Test, FailsWithoutBc7Quality)
@@ -593,7 +593,7 @@ NOLINT_TEST(TextureCookerNormalMapTest, CooksNormalMap)
   ASSERT_HAS_VALUE(result) << "Error: " << static_cast<int>(result.error());
 
   EXPECT_EQ(result->desc.format, Format::kRGBA8UNorm);
-  EXPECT_FALSE(result->payload.empty());
+  EXPECT_FALSE(result->payload.Empty());
 }
 
 //===----------------------------------------------------------------------===//
@@ -716,11 +716,11 @@ NOLINT_TEST(TextureCookerHdrTest, HalfOutputClampsOutOfRangeRadiance)
     = [](const CookedTexturePayload& cooked) -> std::array<float, 8> {
     const auto header
       = oxygen::serio::CopyAt<oxygen::data::pak::render::TexturePayloadHeader>(
-        std::span { cooked.payload })
+        cooked.payload.Bytes())
           .value_or(oxygen::data::pak::render::TexturePayloadHeader {});
     std::array<std::uint16_t, 8> bits {};
     std::memcpy(bits.data(),
-      std::span { cooked.payload }
+      cooked.payload.Bytes()
         .subspan(header.data_offset_bytes + cooked.layouts.at(0).offset_bytes)
         .data(),
       sizeof(bits));
@@ -854,10 +854,10 @@ NOLINT_TEST(TextureCookerMaxSizeTest, LargerTexturesAreHalvedUntilTheyFit)
   ASSERT_HAS_VALUE(cooked);
   const auto header_read
     = oxygen::serio::CopyAt<oxygen::data::pak::render::TexturePayloadHeader>(
-      std::span { cooked->payload });
+      cooked->payload.Bytes());
   ASSERT_HAS_VALUE(header_read);
   const auto& header = *header_read;
-  const auto data = std::span { cooked->payload }.subspan(
+  const auto data = cooked->payload.Bytes().subspan(
     header.data_offset_bytes + cooked->layouts.at(0).offset_bytes);
   EXPECT_GT(std::to_integer<int>(data[0]), 200);
   EXPECT_LT(std::to_integer<int>(data[4]), 55);

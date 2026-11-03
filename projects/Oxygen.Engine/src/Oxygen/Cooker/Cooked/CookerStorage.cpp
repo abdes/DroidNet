@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/AnyDevice.h>
@@ -130,6 +131,16 @@ namespace {
         return ::oxygen::Err(file.error());
       }
       return ::oxygen::Ok(serio::AnyDevice(std::move(file).value()));
+    }
+
+    [[nodiscard]] auto List(const fs::path& path) const
+      -> Result<std::vector<content::lc::RootEntry>> override
+    {
+      try {
+        return ::oxygen::Ok(content::lc::ListFolder(path));
+      } catch (const fs::filesystem_error& error) {
+        return ::oxygen::Err(error.code());
+      }
     }
 
     [[nodiscard]] auto Publish(const fs::path& path)

@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <exception>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -20,10 +19,12 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Content/PakFile.h>
@@ -37,7 +38,6 @@
 #include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/LooseCookedResources.h>
 #include <Oxygen/Data/PakFormat_audio.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -115,53 +115,88 @@ namespace {
     return std::move(device).value();
   }
 
-  //! Verifies each resource of a loose root's data files against the SHA-256
-  //! of its table row; the tables themselves were verified as files.
-  auto VerifyResources(const CookerStorageReader& storage, const fs::path& root,
-    const std::span<const lc::FileIntegrity> inventory) -> void
-  {
-    for (const auto& table : inventory) {
-      const auto data_kind = table.kind.has_value()
-        ? data::loose_cooked::DataFileKindOf(*table.kind)
-        : std::nullopt;
-      if (!data_kind.has_value()) {
-        continue;
-      }
-      const auto data_file = std::ranges::find(
-        inventory, std::optional { *data_kind }, &lc::FileIntegrity::kind);
-      if (data_file == inventory.end()) {
-        continue;
-      }
-      const auto table_path = root / table.relative_path;
-      const auto rows = serio::ReadAll(
-        OpenFile(storage, table_path), serio::ByteCount { table.size });
-      if (!rows) {
-        throw Unreadable(table_path);
-      }
-      const auto payloads
-        = [&] -> std::vector<data::loose_cooked::ResourcePayload> {
-        try {
-          return data::loose_cooked::ReadResourcePayloads(
-            *table.kind, rows->Bytes());
-        } catch (const CookedFormatError& error) {
-          throw Corrupt(error.Defect(), table_path, error.what());
-        }
-      }();
-      const auto data_path = root / data_file->relative_path;
-      const auto failures = data::loose_cooked::VerifyResourcePayloads(
-        payloads, OpenFile(storage, data_path));
-      if (!failures.empty()) {
-        const auto& first = failures.front();
-        const auto out_of_bounds = first.reason
-          == data::loose_cooked::ResourcePayloadFailure::kOutOfBounds;
-        throw Corrupt(out_of_bounds ? CookedDefect::kOutOfBounds
-                                    : CookedDefect::kDigestMismatch,
-          data_path,
-          "the resource of row " + std::to_string(first.row)
-            + (out_of_bounds ? " lies outside the file"
-                             : " does not have the SHA-256 of its table row"));
-      }
+  //! The files below a loose root of the storage, as Content's integrity
+  //! check reads them.
+  class StorageRootFiles final : public lc::RootFiles {
+  public:
+    StorageRootFiles(const CookerStorageReader& storage, fs::path root)
+      : storage_(make_observer(&storage))
+      , root_(std::move(root))
+    {
     }
+
+    [[nodiscard]] auto List() const -> std::vector<lc::RootEntry> override
+    {
+      auto listed = storage_->List(root_);
+      if (!listed) {
+        throw std::system_error(
+          listed.error(), "cannot list '" + root_.generic_string() + "'");
+      }
+      return std::move(listed).value();
+    }
+
+    [[nodiscard]] auto Open(const std::string_view relative_path) const
+      -> Result<serio::AnyDevice> override
+    {
+      return storage_->Open(root_ / fs::path(relative_path));
+    }
+
+  private:
+    observer_ptr<const CookerStorageReader> storage_;
+    fs::path root_;
+  };
+
+  //! The defect of a loose root's integrity issue.
+  auto DefectOf(const lc::FileIntegrityIssue& issue) -> CookedDefect
+  {
+    switch (issue.reason) {
+    case lc::IntegrityFailure::kMissing:
+      return CookedDefect::kMissingPart;
+    case lc::IntegrityFailure::kUnexpected:
+      return CookedDefect::kInconsistent;
+    case lc::IntegrityFailure::kSizeMismatch:
+      return CookedDefect::kSizeMismatch;
+    case lc::IntegrityFailure::kDigestMismatch:
+    case lc::IntegrityFailure::kResourceDigestMismatch:
+      return CookedDefect::kDigestMismatch;
+    case lc::IntegrityFailure::kLinkedPath:
+    case lc::IntegrityFailure::kNotRegular:
+      return CookedDefect::kInvalidPath;
+    case lc::IntegrityFailure::kMalformedTable:
+      return issue.table_defect.value_or(CookedDefect::kInconsistent);
+    case lc::IntegrityFailure::kResourceOutOfBounds:
+      return CookedDefect::kOutOfBounds;
+    }
+    return CookedDefect::kInconsistent;
+  }
+
+  //! Why the file of `issue` fails its check, for the message.
+  auto ProblemOf(const lc::FileIntegrityIssue& issue) -> std::string
+  {
+    const auto row = issue.resource_row.has_value()
+      ? " (row " + std::to_string(*issue.resource_row) + ")"
+      : std::string {};
+    switch (issue.reason) {
+    case lc::IntegrityFailure::kMissing:
+      return "is missing";
+    case lc::IntegrityFailure::kUnexpected:
+      return "is not listed by the index";
+    case lc::IntegrityFailure::kSizeMismatch:
+      return "does not have its indexed size";
+    case lc::IntegrityFailure::kDigestMismatch:
+      return "does not have its indexed digest";
+    case lc::IntegrityFailure::kLinkedPath:
+      return "is a link";
+    case lc::IntegrityFailure::kNotRegular:
+      return "is not a regular file";
+    case lc::IntegrityFailure::kMalformedTable:
+      return "holds rows that cannot be read";
+    case lc::IntegrityFailure::kResourceOutOfBounds:
+      return "holds a resource outside the file" + row;
+    case lc::IntegrityFailure::kResourceDigestMismatch:
+      return "holds a resource without the SHA-256 of its table row" + row;
+    }
+    return "is invalid";
   }
 
   //! Fills `out` with the bytes at `offset` of `path`: from `device` when it
@@ -464,6 +499,8 @@ struct CookedContent::Impl {
 
   //! A loose root's member files and what the index records of them.
   std::vector<FileIntegrity> inventory;
+  //! A loose root's index, which checks the root's files.
+  std::optional<LooseCookedIndex> loose_index;
 
   //! The pak's device; null for a loose root.
   [[nodiscard]] auto PakDevice() const -> observer_ptr<const serio::AnyDevice>
@@ -481,18 +518,16 @@ struct CookedContent::Impl {
   auto LoadPakTables() -> void;
   auto LoadPakNamedTextures() -> void;
   auto IndexAssets() -> void;
-  auto VerifyLooseFiles(lc::IntegrityCheck check) const -> void;
-  auto VerifyLooseDescriptors(lc::IntegrityCheck check) const -> void;
 };
 
 auto CookedContent::Impl::LoadLoose() -> void
 {
   const auto& root = source.path;
-  const auto index = LoadIndex(*storage, root);
-  summary = LooseSummary(*storage, root, index);
-  inventory = index.GetFileInventory();
-  LoadLooseAssets(index);
-  LoadLooseTables(index);
+  const auto& loaded = loose_index.emplace(LoadIndex(*storage, root));
+  summary = LooseSummary(*storage, root, loaded);
+  inventory = loaded.GetFileInventory();
+  LoadLooseAssets(loaded);
+  LoadLooseTables(loaded);
   LoadLooseNamedFiles(tables.at(TableSlot(TableKind::kTexture)));
 }
 
@@ -768,21 +803,6 @@ auto CookedContent::Open(
     });
 }
 
-auto CookedContent::IsCookedSource(
-  const CookerStorageReader& storage, const fs::path& path) noexcept -> bool
-{
-  // Composing the index path can throw on a path the platform cannot convert;
-  // such a path names no cooked source.
-  try {
-    const auto kind = storage.KindOf(path);
-    return kind == PathKind::kFile
-      || (kind == PathKind::kFolder
-        && storage.KindOf(path / kIndexFileName) == PathKind::kFile);
-  } catch (const std::exception&) {
-    return false;
-  }
-}
-
 CookedContent::CookedContent(std::unique_ptr<Impl> impl) noexcept
   : impl_(std::move(impl))
 {
@@ -887,62 +907,18 @@ auto CookedContent::Sidecars() const noexcept -> std::span<const CookedSidecar>
   return impl_->sidecars;
 }
 
+auto CookedContent::FindSidecar(const std::string_view name) const noexcept
+  -> const CookedSidecar*
+{
+  const auto it = std::ranges::lower_bound(
+    impl_->sidecars, name, std::less {}, &CookedSidecar::name);
+  return it != impl_->sidecars.end() && it->name == name ? std::addressof(*it)
+                                                         : nullptr;
+}
+
 auto CookedContent::Catalog() const noexcept -> const data::PakCatalog*
 {
   return impl_->pak ? &impl_->pak->Catalog() : nullptr;
-}
-
-auto CookedContent::Impl::VerifyLooseFiles(const lc::IntegrityCheck check) const
-  -> void
-{
-  const auto& root = source.path;
-  for (const auto& file : inventory) {
-    const auto path = root / file.relative_path;
-    if (storage->KindOf(path) != PathKind::kFile) {
-      throw Corrupt(CookedDefect::kMissingPart, path, "is missing");
-    }
-    const auto device = OpenFile(*storage, path);
-    if (Size(device, path) != file.size) {
-      throw Corrupt(
-        CookedDefect::kSizeMismatch, path, "does not have its indexed size");
-    }
-    // A resource data file has no digest of its own: its rows do.
-    const auto has_own_digest = !(file.kind.has_value()
-      && data::loose_cooked::IsResourceDataFile(*file.kind));
-    if (check == lc::IntegrityCheck::kFull && has_own_digest) {
-      const auto digest = serio::ComputeSha256(device);
-      if (!digest) {
-        throw Unreadable(path);
-      }
-      if (*digest != file.sha256) {
-        throw Corrupt(CookedDefect::kDigestMismatch, path,
-          "does not have its indexed digest");
-      }
-    }
-  }
-}
-
-auto CookedContent::Impl::VerifyLooseDescriptors(
-  const lc::IntegrityCheck check) const -> void
-{
-  for (size_t i = 0; i < assets.size(); ++i) {
-    const auto& stored = descriptors.at(i);
-    const auto device = OpenFile(*storage, stored.file);
-    if (Size(device, stored.file) != stored.range.count.get()) {
-      throw Corrupt(CookedDefect::kSizeMismatch, stored.file,
-        "does not have its indexed size");
-    }
-    if (check == lc::IntegrityCheck::kFull) {
-      const auto digest = serio::ComputeSha256(device);
-      if (!digest) {
-        throw Unreadable(stored.file);
-      }
-      if (*digest != assets.at(i).descriptor_sha256) {
-        throw Corrupt(CookedDefect::kDigestMismatch, stored.file,
-          "does not have its indexed digest");
-      }
-    }
-  }
 }
 
 auto CookedContent::VerifyStorage(const lc::IntegrityCheck check) const -> void
@@ -953,11 +929,17 @@ auto CookedContent::VerifyStorage(const lc::IntegrityCheck check) const -> void
     }
     return;
   }
-  impl_->VerifyLooseFiles(check);
-  if (check == lc::IntegrityCheck::kFull) {
-    VerifyResources(*impl_->storage, impl_->source.path, impl_->inventory);
+  if (!impl_->loose_index.has_value()) {
+    throw std::logic_error("a loose cooked root is open without its index");
   }
-  impl_->VerifyLooseDescriptors(check);
+  const auto& root = impl_->source.path;
+  const auto issues = impl_->loose_index->CheckContent(
+    StorageRootFiles(*impl_->storage, root), check);
+  if (!issues.empty()) {
+    const auto& first = issues.front();
+    throw Corrupt(
+      DefectOf(first), root / first.relative_path, ProblemOf(first));
+  }
 }
 
 auto ReadCookedSummary(const CookerStorageReader& storage, const fs::path& path)

@@ -23,7 +23,6 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Internal/OpenFailure.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/VirtualPath.h>
@@ -33,6 +32,7 @@
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -353,19 +353,7 @@ auto CheckRows(const Bytes bytes, const ResourceTable& table,
       throw CookedFormatError(
         CookedDefect::kTruncated, std::string(what) + " row is truncated");
     }
-    if constexpr (requires { desc->_reserved; }) {
-      if (!IsZero(desc->_reserved)) {
-        throw CookedFormatError(CookedDefect::kReservedNotZero,
-          std::string(what) + " row reserved bytes are not zero");
-      }
-    }
-    if constexpr (std::is_same_v<Desc,
-                    oxygen::data::pak::core::TextureResourceDesc>) {
-      if (!oxygen::data::pak::core::HasSupportedCompression(*desc)) {
-        throw CookedFormatError(CookedDefect::kInvalidValue,
-          std::string(what) + " row records a compression its format lacks");
-      }
-    }
+    oxygen::data::RequireResourceRow(*desc, what);
     if (desc->size_bytes == 0U) {
       continue;
     }
@@ -380,12 +368,6 @@ auto CheckRows(const Bytes bytes, const ResourceTable& table,
     if (offset % kPakPayloadAlignment != 0U) {
       throw CookedFormatError(CookedDefect::kMisaligned,
         std::string(what) + " row does not start on a payload boundary");
-    }
-    if constexpr (requires { desc->content_hash; }) {
-      if (oxygen::base::IsAllZero(desc->content_hash)) {
-        throw CookedFormatError(CookedDefect::kMissingDigest,
-          std::string(what) + " row has no content digest");
-      }
     }
   }
 }

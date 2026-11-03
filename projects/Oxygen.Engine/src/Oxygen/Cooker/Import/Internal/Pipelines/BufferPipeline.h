@@ -7,6 +7,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -71,8 +72,10 @@ public:
     //! Correlation ID for diagnostics and lookup (e.g., mesh/buffer name).
     std::string source_id;
 
-    //! Cooked buffer payload; the pipeline computes its `content_hash`, the
-    //! SHA-256 of the buffer bytes.
+    //! The buffer bytes; the pipeline hashes them into `cooked.data`.
+    std::vector<std::byte> bytes;
+
+    //! Cooked buffer metadata; its `data` is set by the pipeline.
     CookedBufferPayload cooked;
 
     //! Callback fired when a worker starts processing this item.
@@ -90,7 +93,7 @@ public:
     //! Echoed from WorkItem for correlation.
     std::string source_id;
 
-    //! Cooked payload, with its `content_hash` computed.
+    //! Cooked payload, with its bytes hashed; empty when cancelled.
     CookedBufferPayload cooked;
 
     //! Any diagnostics produced during processing.
@@ -175,8 +178,9 @@ public:
 
 private:
   [[nodiscard]] auto Worker() -> co::Co<>;
-  [[nodiscard]] auto ComputeContentHash(WorkItem& item)
-    -> co::Co<std::optional<ImportDiagnostic>>;
+  //! Hashes `item.bytes` into `item.cooked.data` on the thread pool.
+  //! @return False when the item was cancelled first.
+  [[nodiscard]] auto HashBytes(WorkItem& item) -> co::Co<bool>;
   auto ReportCancelled(WorkItem item) -> co::Co<>;
 
   co::ThreadPool& thread_pool_;

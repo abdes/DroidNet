@@ -12,7 +12,6 @@
 #include <span>
 #include <stop_token>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -42,10 +41,9 @@ namespace {
   //=== Test Helpers
   //===---------------------------------------------------------//
 
-  auto MakePayload(std::vector<std::byte> data) -> CookedBufferPayload
+  auto MakePayload() -> CookedBufferPayload
   {
     CookedBufferPayload cooked;
-    cooked.data = std::move(data);
     cooked.alignment = 16;
     cooked.usage_flags = 0x01;
     cooked.element_stride = 32;
@@ -53,12 +51,14 @@ namespace {
     return cooked;
   }
 
-  auto MakeWorkItem(std::string source_id, CookedBufferPayload cooked,
+  //! The work item for `bytes`: the pipeline hashes them into `cooked.data`.
+  auto MakeWorkItem(std::string source_id, std::vector<std::byte> bytes,
     std::stop_token stop_token = {}) -> BufferPipeline::WorkItem
   {
     return BufferPipeline::WorkItem {
       .source_id = std::move(source_id),
-      .cooked = std::move(cooked),
+      .bytes = std::move(bytes),
+      .cooked = MakePayload(),
       .stop_token = std::move(stop_token),
     };
   }
@@ -84,7 +84,7 @@ namespace {
     const auto expected_hash = oxygen::base::ComputeSha256(span);
 
     const auto result = RunPipelineOnce<BufferPipeline>(loop_,
-      MakeWorkItem("buffer0", MakePayload(std::move(bytes))), pool_,
+      MakeWorkItem("buffer0", std::move(bytes)), pool_,
       BufferPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
@@ -93,30 +93,7 @@ namespace {
     EXPECT_TRUE(result.success);
     EXPECT_TRUE(result.diagnostics.empty());
     EXPECT_EQ(result.source_id, "buffer0");
-    EXPECT_EQ(result.cooked.content_hash, expected_hash);
-  }
-
-  //! The pipeline always computes the SHA-256 of the data: a hash the payload
-  //! came with is not trusted.
-  NOLINT_TEST_F(BufferPipelineTest, CollectReplacesAHashThePayloadCameWith)
-  {
-    std::vector<std::byte> bytes(8, std::byte { 0x01 });
-    const auto expected_hash = oxygen::base::ComputeSha256(bytes);
-    auto payload = MakePayload(std::move(bytes));
-    payload.content_hash = oxygen::base::ComputeSha256(
-      std::as_bytes(std::span(std::string_view("stale"))));
-
-    const auto result = RunPipelineOnce<BufferPipeline>(loop_,
-      MakeWorkItem("buffer0", std::move(payload)), pool_,
-      BufferPipeline::Config {
-        .queue_capacity = 4,
-        .worker_count = 1,
-      });
-
-    EXPECT_TRUE(result.success);
-    EXPECT_TRUE(result.diagnostics.empty());
-    EXPECT_EQ(result.source_id, "buffer0");
-    EXPECT_EQ(result.cooked.content_hash, expected_hash);
+    EXPECT_EQ(result.cooked.data.Sha256(), expected_hash);
   }
 
   NOLINT_TEST_F(BufferPipelineTest, CollectWhenCancelledReturnsFailedResult)
@@ -127,9 +104,7 @@ namespace {
     std::vector<std::byte> bytes(16, std::byte { 0x42 });
 
     const auto result = RunPipelineOnce<BufferPipeline>(loop_,
-      MakeWorkItem(
-        "buffer0", MakePayload(std::move(bytes)), stop_source.get_token()),
-      pool_,
+      MakeWorkItem("buffer0", std::move(bytes), stop_source.get_token()), pool_,
       BufferPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
@@ -159,8 +134,8 @@ namespace {
       {
         pipeline.Start(n);
 
-        co_await pipeline.Submit(MakeWorkItem(
-          "buffer0", MakePayload(std::move(bytes)), stop_source.get_token()));
+        co_await pipeline.Submit(
+          MakeWorkItem("buffer0", std::move(bytes), stop_source.get_token()));
 
         stop_source.request_stop();
 
@@ -174,7 +149,7 @@ namespace {
     EXPECT_FALSE(result.success);
     EXPECT_TRUE(result.diagnostics.empty());
     EXPECT_EQ(result.source_id, "buffer0");
-    EXPECT_TRUE(oxygen::base::IsAllZero(result.cooked.content_hash));
+    EXPECT_TRUE(result.cooked.data.Empty());
   }
 
   NOLINT_TEST_F(BufferPipelineTest, CollectMixedCancellationReturnsMixedResults)
@@ -195,11 +170,11 @@ namespace {
         pipeline.Start(n);
 
         co_await pipeline.Submit(MakeWorkItem("canceled",
-          MakePayload(std::vector<std::byte>(128, std::byte { 0x11 })),
+          std::vector<std::byte>(128, std::byte { 0x11 }),
           stop_source.get_token()));
 
-        co_await pipeline.Submit(MakeWorkItem(
-          "ok", MakePayload(std::vector<std::byte>(128, std::byte { 0x22 }))));
+        co_await pipeline.Submit(
+          MakeWorkItem("ok", std::vector<std::byte>(128, std::byte { 0x22 })));
 
         stop_source.request_stop();
 
@@ -223,12 +198,12 @@ namespace {
     EXPECT_FALSE(canceled_result.success);
     EXPECT_TRUE(canceled_result.diagnostics.empty());
     EXPECT_EQ(canceled_result.source_id, "canceled");
-    EXPECT_TRUE(oxygen::base::IsAllZero(canceled_result.cooked.content_hash));
+    EXPECT_TRUE(canceled_result.cooked.data.Empty());
 
     EXPECT_TRUE(ok_result.success);
     EXPECT_TRUE(ok_result.diagnostics.empty());
     EXPECT_EQ(ok_result.source_id, "ok");
-    EXPECT_FALSE(oxygen::base::IsAllZero(ok_result.cooked.content_hash));
+    EXPECT_FALSE(ok_result.cooked.data.Empty());
   }
 
   NOLINT_TEST_F(BufferPipelineTest, CollectMultipleSubmissionsCollectsAll)
@@ -250,7 +225,7 @@ namespace {
     for (int i = 0; i < kCount; ++i) {
       const std::string id = "buffer" + std::to_string(i);
       std::vector<std::byte> bytes(128 + i, static_cast<std::byte>(0x10 + i));
-      items.push_back(MakeWorkItem(id, MakePayload(std::move(bytes))));
+      items.push_back(MakeWorkItem(id, std::move(bytes)));
     }
 
     const auto results
@@ -265,7 +240,7 @@ namespace {
       EXPECT_TRUE(r.success);
       EXPECT_TRUE(r.diagnostics.empty());
       ASSERT_TRUE(expected_hash_by_id.contains(r.source_id));
-      EXPECT_EQ(r.cooked.content_hash, expected_hash_by_id.at(r.source_id));
+      EXPECT_EQ(r.cooked.data.Sha256(), expected_hash_by_id.at(r.source_id));
     }
   }
 
@@ -288,8 +263,7 @@ namespace {
 
         std::vector<std::byte> bytes(
           size_t { 2 } * 1024 * 1024, std::byte { 0xAB });
-        co_await pipeline.Submit(
-          MakeWorkItem("buffer0", MakePayload(std::move(bytes))));
+        co_await pipeline.Submit(MakeWorkItem("buffer0", std::move(bytes)));
 
         loop_.Post([&posted_ran] -> void { posted_ran.store(true); });
 
@@ -307,7 +281,7 @@ namespace {
     EXPECT_TRUE(result.success);
     EXPECT_TRUE(result.diagnostics.empty());
     EXPECT_EQ(result.source_id, "buffer0");
-    EXPECT_FALSE(oxygen::base::IsAllZero(result.cooked.content_hash));
+    EXPECT_FALSE(result.cooked.data.Empty());
   }
 
 } // namespace

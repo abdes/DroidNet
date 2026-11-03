@@ -38,6 +38,7 @@
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Cooker/testing/AssetDescriptors.h>
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
@@ -80,15 +81,6 @@ namespace {
   using oxygen::cooker::testing::MaterialBuilder;
   using oxygen::cooker::testing::Materialize;
   using oxygen::cooker::testing::SeedBytes;
-
-  auto WriteSurfaceGeometry(const std::filesystem::path& path) -> void
-  {
-    auto geometry = GeometryBuilder { "Cube" };
-    geometry.Submesh(geometry.ProceduralLod(),
-      data::SurfaceId::FromString("00000000-0000-0000-0000-000000000001")
-        .value());
-    WriteBytes(path, geometry.Bytes());
-  }
 
   using oxygen::cooker::test::HasDiagnosticCode;
 
@@ -175,13 +167,16 @@ namespace {
   {
     namespace world = data::pak::world;
     const auto root = TempDir() / "composed_scene";
-    std::filesystem::create_directories(root);
+    // The starting context is cooked: an index lists it.
+    auto inputs = LooseCookedRoot { ".cooked" };
+    static_cast<void>(inputs.InputContext("Input/gameplay.oimap",
+      oxygen::cooker::testing::InputContextBuilder { "Gameplay" }));
+    Materialize(inputs.Files(), root);
     auto model_document = SceneDescriptor { "/.cooked/Scenes/Model.oscene" };
     model_document.Set("/nodes/0/name", "part");
     const auto model = Import(MakeRequest(root, model_document));
     ASSERT_HAS_VALUE(model);
     ASSERT_TRUE(model->success);
-    WriteText(root / "Input/gameplay.oimap", "context");
 
     auto level = SceneDescriptor { "/.cooked/Scenes/Level.oscene" };
     const auto instance = level.Node("model", 0U);
@@ -714,40 +709,35 @@ namespace {
     }
   }
 
-  NOLINT_TEST_F(SceneDescriptorImportJobTest,
-    NewDescriptorRespectsPriorityBeforeIndexPublication)
+  NOLINT_TEST_F(SceneDescriptorImportJobTest, UnindexedDescriptorFileIsNoAsset)
   {
 
     const auto output = TempDir() / "unindexed_output";
     std::filesystem::create_directories(output);
     const auto library = TempDir() / "unindexed_library";
     std::filesystem::create_directories(library);
-    const auto own_key
-      = data::AssetKey::FromVirtualPath("/Art/Geometry/Mesh.ogeo");
     const auto library_key
       = data::AssetKey::FromVirtualPath("/Library/Mesh.ogeo");
-    WriteText(output / "Geometry/Mesh.ogeo", "new descriptor");
+    // Only an index lists an asset; the file at the identity is none.
+    WriteText(output / "Geometry/Mesh.ogeo", "stray descriptor");
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
     auto descriptor = SceneDescriptor { "/Art/Scenes/Scene.oscene" };
     descriptor.Set("/nodes/0/name", "Mesh")
       .Renderable(0, "/Art/Geometry/Mesh.ogeo");
-    for (const auto own_wins : { true, false }) {
-      auto request = MakeRequest(output, descriptor);
-      request.cooked_context_roots = own_wins
-        ? std::vector<std::filesystem::path> { library, output }
-        : std::vector<std::filesystem::path> { output, library };
-      const auto report = Import(std::move(request));
-      ASSERT_HAS_VALUE(report);
-      ASSERT_TRUE(report->success);
-      const auto bytes = ReadBytes(output / "Scenes/Scene.oscene");
-      const auto scene = data::SceneAsset(
-        data::AssetKey {}, std::span<const std::byte>(bytes));
-      const auto renderables
-        = scene.GetComponents<data::pak::world::RenderableRecord>();
-      ASSERT_EQ(renderables.size(), 1U);
-      EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
-        own_wins ? own_key : library_key);
-    }
+    auto request = MakeRequest(output, descriptor);
+    request.cooked_context_roots
+      = std::vector<std::filesystem::path> { library, output };
+    const auto report = Import(std::move(request));
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success)
+      << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
+    const auto bytes = ReadBytes(output / "Scenes/Scene.oscene");
+    const auto scene
+      = data::SceneAsset(data::AssetKey {}, std::span<const std::byte>(bytes));
+    const auto renderables
+      = scene.GetComponents<data::pak::world::RenderableRecord>();
+    ASSERT_EQ(renderables.size(), 1U);
+    EXPECT_EQ(CheckedAt(renderables, 0).geometry_key, library_key);
   }
 
   NOLINT_TEST_F(
@@ -781,13 +771,23 @@ namespace {
   {
 
     const auto cooked_root = TempDir() / "resolves_and_emits";
-    std::filesystem::create_directories(cooked_root);
-    WriteSurfaceGeometry(cooked_root / "Geometry" / "cube.ogeo");
-    WriteText(cooked_root / "Materials" / "cube.omat", "omat");
-    WriteText(cooked_root / "Scripts" / "spin.oscript", "oscript");
-    WriteText(cooked_root / "Input" / "jump.oiact", "oiact");
-    WriteText(cooked_root / "Input" / "gameplay.oimap", "oimap");
-    WriteText(cooked_root / "Scenes" / "DemoScene.opscene", "physics");
+    // Every asset the scene names is cooked: an index lists it.
+    auto cooked = LooseCookedRoot { ".cooked" };
+    auto cube = GeometryBuilder { "Cube" };
+    const auto surface
+      = data::SurfaceId::FromString("00000000-0000-0000-0000-000000000001");
+    ASSERT_HAS_VALUE(surface);
+    cube.Submesh(cube.ProceduralLod(), *surface);
+    static_cast<void>(cooked.Geometry("Geometry/cube.ogeo", cube));
+    static_cast<void>(cooked.Material("Materials/cube.omat"));
+    static_cast<void>(cooked.Script("Scripts/spin.oscript"));
+    static_cast<void>(cooked.InputAction("Input/jump.oiact"));
+    static_cast<void>(cooked.InputContext("Input/gameplay.oimap",
+      oxygen::cooker::testing::InputContextBuilder { "Gameplay" }));
+    const auto physics_scene = cooked.Scene("Scenes/PhysicsScene.oscene");
+    static_cast<void>(
+      cooked.PhysicsSidecar("Scenes/PhysicsScene.opscene", physics_scene));
+    Materialize(cooked.Files(), cooked_root);
 
     auto demo = SceneDescriptor { "/.cooked/Scenes/DemoScene.oscene" };
     auto surface_values = json::object();
@@ -819,7 +819,7 @@ namespace {
       .Append("/references/input_mapping_contexts",
         demo.Spell("/.cooked/Input/gameplay.oimap"))
       .Append("/references/physics_sidecars",
-        demo.Spell("/.cooked/Scenes/DemoScene.opscene"));
+        demo.Spell("/.cooked/Scenes/PhysicsScene.opscene"));
 
     const auto report = Import(MakeRequest(cooked_root, demo));
 

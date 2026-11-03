@@ -15,13 +15,17 @@
 #include <string_view>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedResources.h>
+#include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/NativeFile.h>
@@ -30,11 +34,51 @@
 namespace oxygen::content::internal {
 
 namespace {
+  //! The files below a canonical root of the real file system.
+  class NativeRootFiles final : public lc::RootFiles {
+  public:
+    explicit NativeRootFiles(std::filesystem::path root)
+      : root_(std::move(root))
+    {
+    }
+
+    [[nodiscard]] auto List() const -> std::vector<lc::RootEntry> override
+    {
+      return lc::ListFolder(root_);
+    }
+
+    [[nodiscard]] auto Open(const std::string_view relative_path) const
+      -> Result<serio::AnyDevice> override
+    {
+      auto file = serio::NativeFile::Open(
+        base::ToNativePath(root_ / std::filesystem::path(relative_path)),
+        serio::OpenSpec { .hint = serio::AccessHint::kSequential });
+      if (!file) {
+        return ::oxygen::Err(file.error());
+      }
+      return ::oxygen::Ok(serio::AnyDevice(std::move(file).value()));
+    }
+
+  private:
+    std::filesystem::path root_;
+  };
+
+  auto OpenOrThrow(const lc::RootFiles& files, const std::string& relative)
+    -> serio::AnyDevice
+  {
+    auto device = files.Open(relative);
+    if (!device) {
+      throw std::runtime_error(
+        "cannot open '" + relative + "': " + device.error().message());
+    }
+    return std::move(device).value();
+  }
+
   //! Checks each resource of each data file against its table row: that it
   //! lies in its data file and, for `kFull`, that its bytes hash to the row's
   //! digest. A table or data file that already failed its own check is not
   //! read.
-  auto CheckResources(const std::filesystem::path& root,
+  auto CheckResources(const lc::RootFiles& files,
     const std::span<const lc::FileIntegrity> inventory,
     const lc::IntegrityCheck check, std::vector<lc::FileIntegrityIssue>& issues)
     -> void
@@ -63,28 +107,23 @@ namespace {
       if (!files_sound) {
         continue;
       }
-      const auto table_path = base::ToNativePath(root / table.relative_path);
-      const auto table_file = serio::NativeFile::Open(
-        table_path, serio::OpenSpec { .hint = serio::AccessHint::kSequential });
-      if (!table_file) {
-        throw std::runtime_error("cannot open '" + table_path.string()
-          + "': " + table_file.error().message());
-      }
+      const auto table_file = OpenOrThrow(files, table.relative_path);
       const auto rows
-        = serio::ReadAll(*table_file, serio::ByteCount { table.size });
+        = serio::ReadAll(table_file, serio::ByteCount { table.size });
       if (!rows) {
-        throw std::runtime_error("cannot read '" + table_path.string()
+        throw std::runtime_error("cannot read '" + table.relative_path
           + "': " + rows.error().message());
       }
       auto payloads = std::vector<data::loose_cooked::ResourcePayload> {};
       try {
         payloads = data::loose_cooked::ReadResourcePayloads(
           *table.kind, rows->Bytes());
-      } catch (const data::CookedFormatError&) {
+      } catch (const data::CookedFormatError& error) {
         issues.push_back({
           .relative_path = table.relative_path,
           .reason = lc::IntegrityFailure::kMalformedTable,
           .resource_row = std::nullopt,
+          .table_defect = error.Defect(),
         });
         continue;
       }
@@ -98,21 +137,15 @@ namespace {
               .relative_path = data_file->relative_path,
               .reason = lc::IntegrityFailure::kResourceOutOfBounds,
               .resource_row = payload.row,
+              .table_defect = std::nullopt,
             });
           }
         }
         continue;
       }
-      const auto data_path
-        = base::ToNativePath(root / data_file->relative_path);
-      const auto device = serio::NativeFile::Open(
-        data_path, serio::OpenSpec { .hint = serio::AccessHint::kSequential });
-      if (!device) {
-        throw std::runtime_error("cannot open '" + data_path.string()
-          + "': " + device.error().message());
-      }
+      const auto device = OpenOrThrow(files, data_file->relative_path);
       for (const auto& failure :
-        data::loose_cooked::VerifyResourcePayloads(payloads, *device)) {
+        data::loose_cooked::VerifyResourcePayloads(payloads, device)) {
         issues.push_back({
           .relative_path = data_file->relative_path,
           .reason = failure.reason
@@ -120,15 +153,16 @@ namespace {
             ? lc::IntegrityFailure::kResourceOutOfBounds
             : lc::IntegrityFailure::kResourceDigestMismatch,
           .resource_row = failure.row,
+          .table_defect = std::nullopt,
         });
       }
     }
   }
 
-  //! Checks every file under the canonical `root` against `inventory`: links,
+  //! Checks every entry `files` lists against `inventory`: links,
   //! non-regular, unexpected and missing files, sizes and, for `kFull`, the
   //! digests of files that are not resource data.
-  auto CheckInventory(const std::filesystem::path& root,
+  auto CheckInventory(const lc::RootFiles& files,
     const std::span<const lc::FileIntegrity> inventory,
     const lc::IntegrityCheck check) -> std::vector<lc::FileIntegrityIssue>
   {
@@ -139,79 +173,58 @@ namespace {
     }
 
     std::vector<lc::FileIntegrityIssue> issues;
-    auto iterator = std::filesystem::recursive_directory_iterator(root);
-    const auto end = std::filesystem::recursive_directory_iterator {};
-    for (; iterator != end; ++iterator) {
-      const auto& entry = *iterator;
-      const auto relative
-        = entry.path().lexically_relative(root).generic_string();
-      const auto status = entry.symlink_status();
-      if (std::filesystem::is_symlink(status)
-        || base::ToLogicalPath(
-             std::filesystem::canonical(base::ToNativePath(entry.path())))
-          != base::ToLogicalPath(entry.path()).lexically_normal()) {
-        iterator.disable_recursion_pending();
-        issues.push_back({
-          .relative_path = relative,
-          .reason = lc::IntegrityFailure::kLinkedPath,
-        });
+    const auto report = [&](const std::string& relative,
+                          const lc::IntegrityFailure reason) -> void {
+      issues.push_back({
+        .relative_path = relative,
+        .reason = reason,
+        .resource_row = std::nullopt,
+        .table_defect = std::nullopt,
+      });
+    };
+    for (const auto& entry : files.List()) {
+      const auto& relative = entry.relative_path;
+      if (entry.kind == lc::RootEntryKind::kFolder) {
+        continue;
+      }
+      if (entry.kind != lc::RootEntryKind::kFile) {
+        report(relative,
+          entry.kind == lc::RootEntryKind::kLink
+            ? lc::IntegrityFailure::kLinkedPath
+            : lc::IntegrityFailure::kNotRegular);
         remaining.erase(relative);
         continue;
       }
-      if (std::filesystem::is_directory(status)) {
-        continue;
-      }
-      if (!std::filesystem::is_regular_file(status)) {
-        issues.push_back({
-          .relative_path = relative,
-          .reason = lc::IntegrityFailure::kNotRegular,
-        });
-        remaining.erase(relative);
-        continue;
-      }
-      if (relative == oxygen::data::loose_cooked::kIndexFileName
+      if (relative == data::loose_cooked::kIndexFileName
         || relative == data::loose_cooked::kGenerationLeaseFileName
         || relative == data::loose_cooked::kIndexLockFileName) {
         continue;
       }
       const auto found = remaining.find(relative);
       if (found == remaining.end()) {
-        issues.push_back({
-          .relative_path = relative,
-          .reason = lc::IntegrityFailure::kUnexpected,
-        });
+        report(relative, lc::IntegrityFailure::kUnexpected);
         continue;
       }
       const auto& expected = *found->second;
-      if (entry.file_size() != expected.size) {
-        issues.push_back({
-          .relative_path = relative,
-          .reason = lc::IntegrityFailure::kSizeMismatch,
-        });
+      if (entry.size != expected.size) {
+        report(relative, lc::IntegrityFailure::kSizeMismatch);
       } else if (check == lc::IntegrityCheck::kFull
         && !(expected.kind.has_value()
           && data::loose_cooked::IsResourceDataFile(*expected.kind))) {
-        const auto digest = serio::ComputeFileSha256(entry.path());
+        const auto digest = serio::ComputeSha256(OpenOrThrow(files, relative));
         if (!digest) {
-          throw std::runtime_error("cannot hash '" + entry.path().string()
-            + "': " + digest.error().message());
+          throw std::runtime_error(
+            "cannot hash '" + relative + "': " + digest.error().message());
         }
         if (*digest != expected.sha256) {
-          issues.push_back({
-            .relative_path = relative,
-            .reason = lc::IntegrityFailure::kDigestMismatch,
-          });
+          report(relative, lc::IntegrityFailure::kDigestMismatch);
         }
       }
       remaining.erase(found);
     }
     for (const auto& [relative, file] : remaining) {
       static_cast<void>(file);
-      issues.push_back({
-        .relative_path = relative,
-        .reason = lc::IntegrityFailure::kMissing,
-        .resource_row = std::nullopt,
-      });
+      report(relative, lc::IntegrityFailure::kMissing);
     }
     return issues;
   }
@@ -278,11 +291,18 @@ auto LooseCookedIndexImpl::CheckContent(
   const std::filesystem::path& cooked_root,
   const lc::IntegrityCheck check) const -> std::vector<lc::FileIntegrityIssue>
 {
+  return CheckContent(
+    NativeRootFiles(base::ToNativePath(
+      std::filesystem::canonical(base::ToNativePath(cooked_root)))),
+    check);
+}
+
+auto LooseCookedIndexImpl::CheckContent(const lc::RootFiles& files,
+  const lc::IntegrityCheck check) const -> std::vector<lc::FileIntegrityIssue>
+{
   const auto inventory = GetFileInventory();
-  const auto root = base::ToNativePath(
-    std::filesystem::canonical(base::ToNativePath(cooked_root)));
-  auto issues = CheckInventory(root, inventory, check);
-  CheckResources(root, inventory, check, issues);
+  auto issues = CheckInventory(files, inventory, check);
+  CheckResources(files, inventory, check, issues);
   std::ranges::sort(issues, [](const auto& a, const auto& b) -> bool {
     return std::tie(a.relative_path, a.resource_row)
       < std::tie(b.relative_path, b.resource_row);
@@ -330,3 +350,39 @@ auto LooseCookedIndexImpl::ValidateContent(
 }
 
 } // namespace oxygen::content::internal
+
+namespace oxygen::content::lc {
+
+auto ListFolder(const std::filesystem::path& root) -> std::vector<RootEntry>
+{
+  auto entries = std::vector<RootEntry> {};
+  auto iterator = std::filesystem::recursive_directory_iterator(root);
+  const auto end = std::filesystem::recursive_directory_iterator {};
+  for (; iterator != end; ++iterator) {
+    const auto& entry = *iterator;
+    auto listed = RootEntry {
+      .relative_path = entry.path().lexically_relative(root).generic_string(),
+      .kind = RootEntryKind::kFile,
+      .size = 0,
+    };
+    const auto status = entry.symlink_status();
+    // A junction is no symbolic link, but its canonical path leaves it.
+    if (std::filesystem::is_symlink(status)
+      || base::ToLogicalPath(
+           std::filesystem::canonical(base::ToNativePath(entry.path())))
+        != base::ToLogicalPath(entry.path()).lexically_normal()) {
+      iterator.disable_recursion_pending();
+      listed.kind = RootEntryKind::kLink;
+    } else if (std::filesystem::is_directory(status)) {
+      listed.kind = RootEntryKind::kFolder;
+    } else if (std::filesystem::is_regular_file(status)) {
+      listed.size = entry.file_size();
+    } else {
+      listed.kind = RootEntryKind::kOther;
+    }
+    entries.push_back(std::move(listed));
+  }
+  return entries;
+}
+
+} // namespace oxygen::content::lc

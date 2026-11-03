@@ -176,6 +176,18 @@ auto OpenDefect(const cooked::CookerStorageReader& storage,
   return std::nullopt;
 }
 
+//! The defect `VerifyStorage` reports for `content`, if it fails.
+auto VerifyDefect(const CookedContent& content, const IntegrityCheck check)
+  -> std::optional<data::CookedDefect>
+{
+  try {
+    content.VerifyStorage(check);
+  } catch (const data::CookedFormatError& error) {
+    return error.Defect();
+  }
+  return std::nullopt;
+}
+
 //! The rule `ReadCookedSummary` of `path` reports broken, if it fails.
 auto SummaryDefect(const cooked::CookerStorageReader& storage,
   const fs::path& path) -> std::optional<data::CookedDefect>
@@ -556,15 +568,6 @@ NOLINT_TEST_P(CookedContentFlavorTest, VerifyStoragePassesOnUntouchedBytes)
   EXPECT_NO_THROW(content.VerifyStorage(IntegrityCheck::kFull));
 }
 
-NOLINT_TEST_P(CookedContentFlavorTest, IsCookedSourceRecognizesBothKinds)
-{
-  // Arrange
-  const auto& path = SourceOf(GetParam()).path;
-
-  // Act / Assert
-  EXPECT_TRUE(CookedContent::IsCookedSource(Storage(), path));
-}
-
 //=== One content, two sources ===--------------------------------------------//
 
 //! The loose root and the pak of it answer every query the same way.
@@ -673,7 +676,6 @@ NOLINT_TEST_F(CookedContentTest, FolderWithoutAnIndexIsWrongFormat)
   // Act / Assert
   EXPECT_EQ(OpenDefect(Storage(), folder), data::CookedDefect::kAbsent);
   EXPECT_EQ(SummaryDefect(Storage(), folder), data::CookedDefect::kAbsent);
-  EXPECT_FALSE(CookedContent::IsCookedSource(Storage(), folder));
 }
 
 NOLINT_TEST_F(CookedContentTest, FileThatIsNotAPakIsWrongFormat)
@@ -693,7 +695,6 @@ NOLINT_TEST_F(CookedContentTest, MissingPathIsAbsent)
 
   // Act / Assert
   EXPECT_EQ(OpenDefect(Storage(), missing), data::CookedDefect::kAbsent);
-  EXPECT_FALSE(CookedContent::IsCookedSource(Storage(), missing));
 }
 
 //! A named texture whose descriptor disagrees with its table row is corrupt.
@@ -953,9 +954,9 @@ NOLINT_TEST_F(CookedContentTest, VerifyStorageCatchesADescriptorOfAnotherDigest)
   const auto content = OpenAs(Flavor::kLoose);
 
   // Act / Assert
-  EXPECT_NO_THROW(content.VerifyStorage(IntegrityCheck::kMetadata));
-  EXPECT_THROW(
-    content.VerifyStorage(IntegrityCheck::kFull), std::runtime_error);
+  EXPECT_EQ(VerifyDefect(content, IntegrityCheck::kMetadata), std::nullopt);
+  EXPECT_EQ(VerifyDefect(content, IntegrityCheck::kFull),
+    data::CookedDefect::kDigestMismatch);
 }
 
 //! A loose descriptor that changed its size fails even the cheap check.
@@ -967,8 +968,8 @@ NOLINT_TEST_F(CookedContentTest, VerifyStorageCatchesADescriptorOfAnotherSize)
   const auto content = OpenAs(Flavor::kLoose);
 
   // Act / Assert
-  EXPECT_THROW(
-    content.VerifyStorage(IntegrityCheck::kMetadata), std::runtime_error);
+  EXPECT_EQ(VerifyDefect(content, IntegrityCheck::kMetadata),
+    data::CookedDefect::kSizeMismatch);
 }
 
 NOLINT_TEST_F(
@@ -983,9 +984,9 @@ NOLINT_TEST_F(
   const auto content = OpenAs(Flavor::kLoose);
 
   // Act / Assert
-  EXPECT_NO_THROW(content.VerifyStorage(IntegrityCheck::kMetadata));
-  EXPECT_THROW(
-    content.VerifyStorage(IntegrityCheck::kFull), std::runtime_error);
+  EXPECT_EQ(VerifyDefect(content, IntegrityCheck::kMetadata), std::nullopt);
+  EXPECT_EQ(VerifyDefect(content, IntegrityCheck::kFull),
+    data::CookedDefect::kDigestMismatch);
 }
 
 //! A changed resource payload fails the full check, which names the row whose
@@ -1023,8 +1024,47 @@ NOLINT_TEST_F(CookedContentTest, VerifyStorageCatchesAMissingMemberFile)
     content.ResourceTable(data::ResourceKind::kBuffer).DataStored().file));
 
   // Act / Assert
-  EXPECT_THROW(
-    content.VerifyStorage(IntegrityCheck::kMetadata), std::runtime_error);
+  EXPECT_EQ(VerifyDefect(content, IntegrityCheck::kMetadata),
+    data::CookedDefect::kMissingPart);
+}
+
+//! A file the index does not list fails even the cheap check, as it fails the
+//! engine's check before a mount: the root holds what its index does not
+//! describe.
+NOLINT_TEST_F(CookedContentTest, VerifyStorageCatchesAnUnindexedFile)
+{
+  // Arrange
+  const auto content = OpenAs(Flavor::kLoose);
+  const auto stray = content.Source().path / "Materials/Stray.omat";
+  Storage().AddFile(stray, std::vector { std::byte { 0x5A } });
+
+  // Act / Assert
+  try {
+    content.VerifyStorage(IntegrityCheck::kMetadata);
+    ADD_FAILURE() << "the unindexed file verified";
+  } catch (const data::CookedFormatError& error) {
+    EXPECT_EQ(error.Defect(), data::CookedDefect::kInconsistent);
+    EXPECT_THAT(error.what(), ::testing::HasSubstr(stray.generic_string()));
+  }
+}
+
+//! A resource row placing its payload past its data file fails even the cheap
+//! check, which reads the rows without reading the payloads.
+NOLINT_TEST_F(CookedContentTest, VerifyStorageCatchesARowOutsideItsDataFile)
+{
+  // Arrange
+  const auto content = OpenAs(Flavor::kLoose);
+  const auto& table = content.ResourceTable(data::ResourceKind::kBuffer);
+  const auto offset_high_byte = table.RowsStored().range.offset.get()
+    + (static_cast<uint64_t>(sample_.buffer_row.get())
+      * cooked::CookedResourceTable::RowSize(cooked::TableKind::kBuffer))
+    + offsetof(core::BufferResourceDesc, data_offset)
+    + sizeof(core::BufferResourceDesc::data_offset) - 1U;
+  FlipByte(Storage(), table.RowsStored().file, offset_high_byte);
+
+  // Act / Assert
+  EXPECT_EQ(VerifyDefect(content, IntegrityCheck::kMetadata),
+    data::CookedDefect::kOutOfBounds);
 }
 
 //! The indexed size is checked before a changed descriptor's digest.
@@ -1069,8 +1109,9 @@ NOLINT_TEST_F(CookedContentTest, VerifyStorageReportsFirstMissingFileByPath)
   }
 }
 
-//! The metadata check does not read resource rows; the full check hashes them.
-NOLINT_TEST_F(CookedContentTest, VerifyStorageMetadataDoesNotReadResourceRows)
+//! The metadata check compares no digest, a row's included; the full check
+//! hashes the table that holds it.
+NOLINT_TEST_F(CookedContentTest, VerifyStorageMetadataComparesNoRowDigest)
 {
   // Arrange
   const auto content = OpenAs(Flavor::kLoose);

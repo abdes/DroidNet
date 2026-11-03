@@ -238,8 +238,7 @@ ImportSession::ImportSession(const ImportRequest& request,
   , table_registry_(table_registry)
   , index_registry_(index_registry)
   , storage_(StorageOf(index_registry))
-  , cooked_root_(
-      request.cooked_root.value_or(request.source_path.parent_path()))
+  , cooked_root_(request.ResolveCookedRoot())
   , cooked_writer_(cooked_root_, *storage_)
 {
   DLOG_F(INFO, "Session created for: {}", request_.source_path.string());

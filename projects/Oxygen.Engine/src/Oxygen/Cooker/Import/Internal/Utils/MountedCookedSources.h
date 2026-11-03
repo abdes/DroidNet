@@ -55,10 +55,8 @@ struct ResolvedReference;
 enum class AssetReferenceRefusal : std::uint8_t {
   //! No mounted index lists it, and it is outside the job's mount.
   kUnmounted,
-  //! No mounted index lists it, and no mounted root holds its descriptor.
+  //! It is in the job's mount, and no mounted index lists it.
   kMissing,
-  //! Its descriptor exists, but its extension names no asset type.
-  kTypeUnknown,
   //! It names an asset of another type than the reference expects.
   kTypeMismatch,
 };
@@ -67,8 +65,8 @@ enum class AssetReferenceRefusal : std::uint8_t {
 struct AssetReferenceRefused final {
   AssetReferenceRefusal reason = AssetReferenceRefusal::kMissing;
   std::optional<data::AssetType> found_type;
-  //! The descriptor files looked for, highest precedence first; empty for a
-  //! reference outside the job's mount, which only an index can list.
+  //! Where each mounted index searched would hold the descriptor, highest
+  //! precedence first; empty for a reference outside the job's mount.
   std::vector<std::filesystem::path> looked_up;
 };
 

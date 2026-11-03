@@ -27,10 +27,10 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -450,10 +450,10 @@ namespace {
     }
 
     auto cooked = CookedPhysicsResourcePayload {};
-    cooked.data.assign(blob_bytes.begin(), blob_bytes.end());
+    cooked.data = HashedBytes(
+      std::vector<std::byte>(blob_bytes.begin(), blob_bytes.end()));
     cooked.format = phys::PhysicsResourceFormat::kJoltShapeBinary;
     cooked.alignment = 16;
-    cooked.content_hash = base::ComputeSha256(cooked.data);
 
     try {
       const auto emitted

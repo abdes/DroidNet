@@ -6,11 +6,10 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <memory>
 #include <span>
-#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -28,6 +27,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -42,6 +42,15 @@
 #include <Oxygen/Serio/RegionStream.h>
 
 namespace oxygen::content::cooked {
+
+namespace {
+  //! The refusal of the descriptor `name` for `defect`.
+  auto Refusal(const data::CookedDefect defect, const std::string& name,
+    const std::string_view problem) -> data::CookedFormatError
+  {
+    return { defect, "descriptor '" + name + "' " + std::string(problem) };
+  }
+} // namespace
 
 auto Validate(const CookedContent& content, const lc::IntegrityCheck check)
   -> void
@@ -80,42 +89,47 @@ auto Validate(const CookedContent& content, const lc::IntegrityCheck check)
     const auto descriptor_size = descriptor.size();
     auto file = MemoryFile::FromBytes(descriptor);
     if (!file) {
-      throw std::runtime_error("cannot read descriptor " + descriptor_name);
+      throw Refusal(
+        data::CookedDefect::kTruncated, descriptor_name, "cannot be read");
     }
     auto stream = oxygen::serio::OpenReadStream(*file);
     if (!stream) {
-      throw std::runtime_error("cannot read descriptor " + descriptor_name);
+      throw Refusal(
+        data::CookedDefect::kTruncated, descriptor_name, "cannot be read");
     }
 
     if (descriptor_size < sizeof(AssetHeader)) {
-      throw std::runtime_error(
-        "descriptor is smaller than AssetHeader: " + descriptor_name);
+      throw Refusal(data::CookedDefect::kTooSmall, descriptor_name,
+        "is smaller than its asset header");
     }
 
     Reader<RegionReadStream<MemoryFile>> reader(*stream);
     auto pack = reader.ScopedAlignment(1);
     auto blob = reader.ReadBlob(sizeof(AssetHeader));
     if (!blob) {
-      throw std::runtime_error("failed to read descriptor header");
+      throw Refusal(data::CookedDefect::kTruncated, descriptor_name,
+        "has an unreadable asset header");
     }
 
     const auto header_read
       = serio::CopyAt<AssetHeader>(std::as_bytes(std::span { *blob }));
     if (!header_read) {
-      throw std::runtime_error("failed to read descriptor header");
+      throw Refusal(data::CookedDefect::kTruncated, descriptor_name,
+        "has an unreadable asset header");
     }
     const auto& header = *header_read;
 
     if (static_cast<AssetType>(header.asset_type) != asset.type) {
-      throw std::runtime_error(
-        "descriptor header asset_type mismatch for " + descriptor_name);
+      throw Refusal(data::CookedDefect::kInconsistent, descriptor_name,
+        "has another asset type than its source records");
     }
 
     const auto asset_type = asset.type;
     const auto current_version = data::pak::CurrentAssetVersion(asset_type);
     if (!current_version || header.version != *current_version) {
-      throw std::runtime_error("Unsupported descriptor version in "
-        + descriptor_name + "; re-cook with the current tools");
+      throw Refusal(data::CookedDefect::kUnsupportedVersion, descriptor_name,
+        "has a version this build does not read; re-cook it with the current "
+        "tools");
     }
     size_t min_size = sizeof(AssetHeader);
     switch (asset_type) {
@@ -151,26 +165,27 @@ auto Validate(const CookedContent& content, const lc::IntegrityCheck check)
     }
 
     if (descriptor_size < min_size) {
-      throw std::runtime_error(
-        "descriptor smaller than minimum expected size: " + descriptor_name);
+      throw Refusal(data::CookedDefect::kTooSmall, descriptor_name,
+        "is smaller than its asset type's descriptor");
     }
     if (!data::DescriptorStrings::IsValidLocation(
           header.strings, descriptor_size)
       || header.strings.offset < min_size) {
-      throw std::runtime_error(
-        "descriptor string table lies outside it: " + descriptor_name);
+      throw Refusal(data::CookedDefect::kOutOfBounds, descriptor_name,
+        "has a string table outside it");
     }
 
     const auto& references = asset.references;
     if (const auto valid = references.ValidateResourceBounds(table_counts);
       !valid) {
-      throw std::runtime_error(descriptor_name + ": " + valid.error());
+      throw Refusal(
+        data::CookedDefect::kInvalidReference, descriptor_name, valid.error());
     }
     if (asset_type == AssetType::kScene || asset_type == AssetType::kMaterial
       || asset_type == AssetType::kGeometry) {
       if (!reader.Seek(0)) {
-        throw std::runtime_error(
-          "failed to rewind descriptor: " + descriptor_name);
+        throw Refusal(
+          data::CookedDefect::kTruncated, descriptor_name, "cannot be read");
       }
       try {
         // Runtime parse-only loaders own descriptor versions and value checks.
@@ -191,20 +206,22 @@ auto Validate(const CookedContent& content, const lc::IntegrityCheck check)
         }
         const auto consumed = reader.Position();
         if (!consumed || *consumed != descriptor_size) {
-          throw std::runtime_error(
-            "Asset descriptor contains unexpected trailing bytes");
+          throw Refusal(data::CookedDefect::kSizeMismatch, descriptor_name,
+            "holds bytes after its parsed end");
         }
-      } catch (const std::exception& error) {
-        throw std::runtime_error("invalid asset descriptor '" + descriptor_name
-          + "': " + error.what());
+      } catch (const data::CookedFormatError& error) {
+        // The loaders name no descriptor; the refusal keeps their defect.
+        throw Refusal(error.Defect(), descriptor_name, error.what());
       }
     } else {
       if (!reader.Seek(0)) {
-        throw std::runtime_error("Could not rewind asset descriptor");
+        throw Refusal(
+          data::CookedDefect::kTruncated, descriptor_name, "cannot be read");
       }
       const auto bytes = reader.ReadBlob(descriptor_size);
       if (!bytes) {
-        throw std::runtime_error("Could not read complete asset descriptor");
+        throw Refusal(
+          data::CookedDefect::kTruncated, descriptor_name, "cannot be read");
       }
       ValidateAssetDescriptor(asset_type, asset.key, *bytes, references);
     }
@@ -231,8 +248,9 @@ auto Validate(const CookedContent& content, const lc::IntegrityCheck check)
       }
       const auto node = geometry_by_node.find(record.target.node_index);
       if (node == geometry_by_node.end()) {
-        throw std::runtime_error("override has no renderable in scene "
-          + nostd::to_string(scene->GetAssetKey()));
+        throw Refusal(data::CookedDefect::kInconsistent,
+          nostd::to_string(scene->GetAssetKey()),
+          "overrides a surface of a node without a renderable");
       }
       const auto found = geometries.find(node->second);
       if (found == geometries.end()) {
@@ -240,13 +258,14 @@ auto Validate(const CookedContent& content, const lc::IntegrityCheck check)
       }
       const auto& geometry = *found->second;
       if (geometry.FindSurface(record.part_id) == nullptr) {
-        throw std::runtime_error("unknown surface "
-          + data::to_string(record.part_id) + " in scene "
-          + nostd::to_string(scene->GetAssetKey()));
+        throw Refusal(data::CookedDefect::kInconsistent,
+          nostd::to_string(scene->GetAssetKey()),
+          "overrides the unknown surface " + data::to_string(record.part_id));
       }
       if (geometry.Surfaces().layout_revision != record.layout_revision) {
-        throw std::runtime_error("surface layout requires repair in scene "
-          + nostd::to_string(scene->GetAssetKey()));
+        throw Refusal(data::CookedDefect::kInconsistent,
+          nostd::to_string(scene->GetAssetKey()),
+          "overrides a surface of an older layout; it requires repair");
       }
     }
   }

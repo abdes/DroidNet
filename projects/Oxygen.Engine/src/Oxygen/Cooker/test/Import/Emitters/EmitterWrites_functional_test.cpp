@@ -25,9 +25,9 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
@@ -57,6 +57,7 @@ using oxygen::content::import::AssetEmitter;
 using oxygen::content::import::BufferEmitter;
 using oxygen::content::import::CookedBufferPayload;
 using oxygen::content::import::CookedPhysicsResourcePayload;
+using oxygen::content::import::HashedBytes;
 using oxygen::content::import::ImportEventLoop;
 using oxygen::content::import::PhysicsResourceEmitter;
 using oxygen::content::import::ResourceDescriptorEmitter;
@@ -376,8 +377,7 @@ NOLINT_TEST_F(EmitterWritesTest, BufferEmitterFinalizeReturnsTheDataWriteError)
       payload.alignment = 16;
       payload.usage_flags = 1;
       payload.element_stride = 16;
-      payload.data.resize(64, std::byte { 7 });
-      payload.content_hash = oxygen::base::ComputeSha256(payload.data);
+      payload.data = HashedBytes(std::vector<std::byte>(64, std::byte { 7 }));
       index = emitter.Emit(std::move(payload));
       result = co_await emitter.Finalize();
       co_return co::kJoin;
@@ -390,8 +390,8 @@ NOLINT_TEST_F(EmitterWritesTest, BufferEmitterFinalizeReturnsTheDataWriteError)
   EXPECT_EQ(result.error().path.filename(), "buffers.data");
 }
 
-//! The physics resource emitter refuses a payload without its SHA-256.
-NOLINT_TEST_F(EmitterWritesTest, PhysicsResourceEmitterRefusesAZeroHash)
+//! The physics resource emitter refuses an empty payload.
+NOLINT_TEST_F(EmitterWritesTest, PhysicsResourceEmitterRefusesAnEmptyPayload)
 {
   auto storage = fixtures::MemoryFileSystem {};
   const auto root = std::filesystem::path("/memory/physics_zero_hash");
@@ -405,7 +405,7 @@ NOLINT_TEST_F(EmitterWritesTest, PhysicsResourceEmitterRefusesAZeroHash)
       PhysicsResourceEmitter emitter(
         writes, tables.PhysicsAggregator(root), root);
       CookedPhysicsResourcePayload payload;
-      payload.data.resize(64, std::byte { 7 });
+      payload.data = HashedBytes {};
       try {
         static_cast<void>(emitter.Emit(std::move(payload)));
       } catch (const std::invalid_argument&) {

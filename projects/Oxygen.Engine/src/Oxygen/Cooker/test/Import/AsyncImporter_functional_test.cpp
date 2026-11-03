@@ -64,8 +64,7 @@ namespace {
   -> ImportReport
 {
   auto report = ImportReport {};
-  report.cooked_root
-    = request.cooked_root.value_or(request.source_path.parent_path());
+  report.cooked_root = request.ResolveCookedRoot();
   report.success = true;
   return report;
 }

@@ -239,6 +239,23 @@ auto ValidateGuid(const IndexHeader& header) -> void
     "Loose cooked index must have a non-zero UUIDv7 source identity");
 }
 
+//! Records a content path as a case-insensitive file system compares it:
+//! two paths differing only in case name one file there.
+auto RequireUniqueContentPath(
+  std::unordered_set<std::string>& seen, const std::string_view relpath) -> void
+{
+  auto folded = content::FoldCase(relpath);
+  if (!folded.has_value()) {
+    throw data::CookedFormatError(data::CookedDefect::kInvalidValue,
+      "A loose cooked index content path is not UTF-8");
+  }
+  if (!seen.insert(std::move(*folded)).second) {
+    throw data::CookedFormatError(data::CookedDefect::kDuplicate,
+      "Duplicate content path in loose cooked index, or two differing only "
+      "in case");
+  }
+}
+
 } // namespace
 
 namespace oxygen::content::internal {
@@ -252,7 +269,7 @@ struct LooseCookedIndexImpl::IndexLoadContext {
   IndexHeader header;
   oxygen::observer_ptr<LooseCookedIndexImpl> index;
   std::unordered_set<std::string_view> unique_virtual_paths {}; // NOLINT
-  std::unordered_set<std::string_view> unique_file_paths {}; // NOLINT
+  std::unordered_set<std::string> unique_file_paths {}; // NOLINT
 
   auto InitializeReferenceBlock() -> void;
   auto ValidateReferenceBlockCoverage() const -> void;
@@ -537,12 +554,7 @@ auto LooseCookedIndexImpl::IndexLoadContext::ReadAndValidateAssetPaths(
   RequireCanonicalRelPath(descriptor_rel);
   RequireCanonicalVirtualPath(virtual_path);
   RequireCanonicalVirtualPath(source_path);
-  const auto unique_content_path
-    = unique_file_paths.insert(descriptor_rel).second;
-  if (!unique_content_path) {
-    throw data::CookedFormatError(data::CookedDefect::kDuplicate,
-      "Duplicate content path in loose cooked index");
-  }
+  RequireUniqueContentPath(unique_file_paths, descriptor_rel);
   return virtual_path;
 }
 
@@ -665,11 +677,7 @@ auto LooseCookedIndexImpl::IndexLoadContext::ValidateFileMetadata(
   const auto rel
     = ExtractNullTerminatedString(index->string_table_, record.relpath_offset);
   RequireCanonicalRelPath(rel);
-  const auto unique_content_path = unique_file_paths.insert(rel).second;
-  if (!unique_content_path) {
-    throw data::CookedFormatError(data::CookedDefect::kDuplicate,
-      "Duplicate content path in loose cooked index");
-  }
+  RequireUniqueContentPath(unique_file_paths, rel);
   const auto is_data_file = data::loose_cooked::IsResourceDataFile(record.kind);
   const auto has_digest = !base::IsAllZero(record.sha256);
   const auto data_file_has_no_digest = !is_data_file || !has_digest;

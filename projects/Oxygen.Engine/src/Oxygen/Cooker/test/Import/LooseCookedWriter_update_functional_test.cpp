@@ -163,6 +163,8 @@ namespace {
       "Materials/Red2.omat");
     EXPECT_EQ(asset.references, second.References());
     EXPECT_EQ(asset.descriptor_sha256, base::ComputeSha256(second.Bytes()));
+    // The descriptor at its former path is listed no more, so it is deleted.
+    EXPECT_FALSE(Exists(storage, cooked_root / "Materials/Red.omat"));
   }
 
   //! A source's recook under another key replaces its entry at the identity.

@@ -80,8 +80,9 @@ struct LooseCookedRecook final {
 //! An index entry refused because its identity belongs to another source.
 /*!
  Raised when another source produces the same virtual path, or one differing
- from it only in case, which a case-insensitive file system holds in one file.
- The import reports it as `import.identity_collision`.
+ from it only in case, which a case-insensitive file system holds in one file,
+ and when two files of the index have paths differing only in case. The import
+ reports it as `import.identity_collision`.
 */
 class LooseCookedIdentityCollision final : public std::runtime_error {
 public:
@@ -109,7 +110,8 @@ struct LooseCookedWriteResult final {
   std::vector<LooseCookedAssetRecord> assets;
   //! The files of the published index, in path order.
   std::vector<LooseCookedFileRecord> files;
-  //! Container-relative paths of the files deleted by requested removals.
+  //! Container-relative paths of the files the previous index listed and the
+  //! published one does not, which were deleted; in path order.
   std::vector<std::string> removed_files;
 };
 

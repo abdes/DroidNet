@@ -490,6 +490,38 @@ loose mounts) checks each resource of a data file against the SHA-256 of its
 table row. Its failure reasons are `kMalformedTable`, `kResourceOutOfBounds` and
 `kResourceDigestMismatch`, the latter two naming the row number.
 
+`LooseCookedIndex::CheckContent` has two overloads: a cooked root path (the real
+file system) and an `lc::RootFiles`, a listing plus open interface
+(`lc::ListFolder` lists a real folder; links and junctions are `kLink`).
+`CookedContent::VerifyStorage` (Cooker) runs the same check over the cooker
+storage port, so both report the same failures: unindexed files (`kUnexpected`),
+links, non-regular entries, missing files, size mismatches, resources outside
+their data file, and, with `kFull`, every digest. `VerifyStorage` throws
+`data::CookedFormatError` with a defect mapped from the first issue:
+
+| Issue                      | Defect                             |
+| -------------------------- | ---------------------------------- |
+| `kMissing`                 | `kMissingPart`                     |
+| `kUnexpected`              | `kInconsistent`                    |
+| `kSizeMismatch`            | `kSizeMismatch`                    |
+| digest mismatches          | `kDigestMismatch`                  |
+| links, non-regular entries | `kInvalidPath`                     |
+| `kResourceOutOfBounds`     | `kOutOfBounds`                     |
+| `kMalformedTable`          | `FileIntegrityIssue::table_defect` |
+
+Resource table rows, in a pak and in a loose root alike, follow one rule
+(`data::RequireResourceRow`, `Data/ResourceDescriptor.h`): reserved bytes are
+zero, a texture row records the compression its format implies, a row of a
+payload has its SHA-256, and an empty row (the absent sentinel) has no digest.
+
+The index reader refuses two content paths that differ only in case
+(`kDuplicate`), since a case-insensitive file system holds them in one file; the
+loose cooked writer refuses them with `LooseCookedIdentityCollision`. When the
+writer publishes a new index it deletes every file the previous index listed
+that the new index does not list, of any kind (descriptors whose path changed
+included); a path the new index lists stays.
+`LooseCookedWriteResult::removed_files` lists them in path order.
+
 Concurrent imports into one root retire participation before awaiting the shared
 index publication. Successful completion guarantees that publication finished;
 all participants receive its source identity. A participant's import diagnostics

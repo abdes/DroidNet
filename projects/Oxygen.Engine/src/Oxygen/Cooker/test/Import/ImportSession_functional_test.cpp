@@ -21,10 +21,10 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -144,8 +144,8 @@ protected:
     payload.desc.array_layers = kArrayLayers;
     payload.desc.texture_type = oxygen::TextureType::kTexture2D;
     payload.desc.format = oxygen::Format::kBC7UNorm;
-    payload.payload.resize(kPayloadBytes, kFillByte);
-    payload.desc.content_hash = oxygen::base::ComputeSha256(payload.payload);
+    payload.payload
+      = import::HashedBytes(std::vector<std::byte>(kPayloadBytes, kFillByte));
     return payload;
   }
 
@@ -163,8 +163,8 @@ protected:
     payload.usage_flags = kUsageFlags;
     payload.element_stride = kElementStride;
     payload.element_format = kElementFormat;
-    payload.data.resize(kBufferBytes, kFillByte);
-    payload.content_hash = oxygen::base::ComputeSha256(payload.data);
+    payload.data
+      = import::HashedBytes(std::vector<std::byte>(kBufferBytes, kFillByte));
     return payload;
   }
 

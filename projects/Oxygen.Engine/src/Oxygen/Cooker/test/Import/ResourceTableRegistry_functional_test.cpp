@@ -12,7 +12,6 @@
 #include <filesystem>
 #include <span>
 #include <stdexcept>
-#include <utility>
 
 #include "LooseCookedWriterTestSupport.h"
 
@@ -41,6 +40,22 @@ namespace imp = oxygen::content::import;
 
 using oxygen::cooker::testing::HoldingStorage;
 
+//! The buffer row `MakeBufferRow` builds: rows of another `tag` or size are
+//! other resources. A row of a payload has a size and a digest.
+struct BufferRowSpec final {
+  uint8_t tag = 1U;
+  uint32_t size_bytes = 1U;
+};
+
+auto MakeBufferRow(const BufferRowSpec& spec)
+  -> oxygen::data::pak::core::BufferResourceDesc
+{
+  auto row = oxygen::data::pak::core::BufferResourceDesc {};
+  row.size_bytes = spec.size_bytes;
+  row.content_hash.at(0) = spec.tag;
+  return row;
+}
+
 NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
 {
   const oxygen::testing::ScopedTempDir temp;
@@ -54,12 +69,8 @@ NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
     oxygen::make_observer<oxygen::content::cooked::ImportStorage>(&storage));
   const auto root = temp.Path() / "oxygen_table_admission";
   auto first = tables.BeginSession(root);
-  const auto inserted = tables.BufferAggregator(root).AcquireOrInsert("first",
-    [] -> std::pair<oxygen::data::pak::core::BufferResourceDesc,
-         oxygen::content::import::WriteReservation> {
-      return std::pair { oxygen::data::pak::core::BufferResourceDesc {},
-        imp::WriteReservation {} };
-    });
+  const auto inserted
+    = tables.BufferAggregator(root).Acquire(MakeBufferRow({ .tag = 1U }), 1U);
   uint32_t second_index = 0;
   bool admitted = false;
   co::Event attempting;
@@ -79,17 +90,9 @@ NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
         co_await tables.WaitForFinalization(root);
         admitted = true;
         auto second = tables.BeginSession(root);
-        second_index
-          = tables.BufferAggregator(root)
-              .AcquireOrInsert("second",
-                [] -> std::pair<oxygen::data::pak::core::BufferResourceDesc,
-                     oxygen::content::import::WriteReservation> {
-                  return std::pair {
-                    oxygen::data::pak::core::BufferResourceDesc {},
-                    imp::WriteReservation {}
-                  };
-                })
-              .index;
+        second_index = tables.BufferAggregator(root)
+                         .Acquire(MakeBufferRow({ .tag = 2U }), 1U)
+                         .index;
         EXPECT_TRUE((co_await tables.EndSession(second)).ok);
         finished.Trigger();
       });
@@ -139,12 +142,8 @@ NOLINT_TEST(ResourceTableRegistryTest, LastSessionReportsTheTablesItWrote)
   const auto root = temp.Path() / "oxygen_table_digests";
   auto first = tables.BeginSession(root);
   auto second = tables.BeginSession(root);
-  static_cast<void>(tables.BufferAggregator(root).AcquireOrInsert("only",
-    [] -> std::pair<oxygen::data::pak::core::BufferResourceDesc,
-         imp::WriteReservation> {
-      return std::pair { oxygen::data::pak::core::BufferResourceDesc {},
-        imp::WriteReservation {} };
-    }));
+  static_cast<void>(
+    tables.BufferAggregator(root).Acquire(MakeBufferRow({ .tag = 1U }), 1U));
 
   // Act
   auto first_end = imp::ResourceTableRegistry::SessionEnd {};
@@ -185,9 +184,11 @@ NOLINT_TEST(ResourceTableRegistryTest, ReservedRangesWrittenThroughOneDataFile)
     loop.Driver(), oxygen::make_observer(&storage));
   auto& aggregator = tables.BufferAggregator(root);
   const auto first
-    = aggregator.ReserveDataRange({ .alignment = 1U, .payload_size = 3U });
+    = aggregator.Acquire(MakeBufferRow({ .tag = 1U, .size_bytes = 3U }), 1U)
+        .reservation;
   const auto second
-    = aggregator.ReserveDataRange({ .alignment = 1U, .payload_size = 2U });
+    = aggregator.Acquire(MakeBufferRow({ .tag = 1U, .size_bytes = 2U }), 1U)
+        .reservation;
   const auto one
     = std::array { std::byte { 1U }, std::byte { 2U }, std::byte { 3U } };
   const auto two = std::array { std::byte { 4U }, std::byte { 5U } };
@@ -229,12 +230,8 @@ NOLINT_TEST(ResourceTableRegistryTest, TableThatCannotBePublishedFailsTheEnd)
   imp::ResourceTableRegistry tables(
     loop.Driver(), oxygen::make_observer(&storage));
   auto session = tables.BeginSession(root);
-  static_cast<void>(tables.BufferAggregator(root).AcquireOrInsert("only",
-    [] -> std::pair<oxygen::data::pak::core::BufferResourceDesc,
-         imp::WriteReservation> {
-      return std::pair { oxygen::data::pak::core::BufferResourceDesc {},
-        imp::WriteReservation {} };
-    }));
+  static_cast<void>(
+    tables.BufferAggregator(root).Acquire(MakeBufferRow({ .tag = 1U }), 1U));
   // The empty table is created at the first entry; its publication fails.
   storage.FailPublishing(root / imp::internal::loose_layout::kBuffersTable);
 

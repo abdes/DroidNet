@@ -398,13 +398,14 @@ Architectural split:
     - role: synchronous. Resolves the reference, checks the in-memory
       `asset_cache`, then asks `internal::LookupReference` (file:
       `src/Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h`) to
-      search the mounted indexes and roots for the asset, with an expected
+      search the mounted indexes for the asset, with an expected
       `AssetType` when the family has one (`kMaterial` for `material_ref`,
       none for `skeleton_ref`). A refusal is reported with the family's codes:
       `geometry.material.missing` / `geometry.material.type_mismatch` for
-      materials, `geometry.asset.missing` / `geometry.asset.type_unknown` for
-      skeletons, or `import.reference_unmounted` for a reference in no mounted
-      cooked root. `internal::DescribeLookup` lists the places searched.
+      materials, `geometry.asset.missing` for skeletons, or
+      `import.reference_unmounted` for a reference in no mounted cooked root.
+      Only an index lists an asset: a descriptor file no mounted index lists
+      is missing. `internal::DescribeLookup` lists the places searched.
 
 ### 6.2 Runtime Classes
 
@@ -1082,14 +1083,13 @@ messages written to `error_stream`. Error codes follow the pattern
 | Buffer     | `geometry.buffer.usage_mismatch`               | Buffer sidecar does not advertise required usage flag    |
 | Buffer     | `geometry.buffer.no_submissions`               | No buffer work items were submitted from `buffers` array |
 | Material   | `geometry.material.type_mismatch`              | Index entry exists but asset type is not `kMaterial`     |
-| Material   | `geometry.material.missing`                    | No `.omat` file found for virtual path                   |
+| Material   | `geometry.material.missing`                    | No mounted index lists the virtual path                  |
 | Procedural | `geometry.procedural.params_invalid`           | `BuildProceduralParamBlob` failed to encode params       |
 | Procedural | `geometry.procedural.generation_failed`        | `GenerateMeshBuffers` rejected descriptor params         |
 | Procedural | `geometry.procedural.mesh_too_large`           | Generated vertex/index count exceeds `uint32_t`          |
 | Procedural | `geometry.procedural.view_ref_invalid`         | Procedural `view_ref` is not `"__all__"`                 |
 | Skinning   | `geometry.skinning.skeleton_missing`           | `skeleton_ref` could not be resolved to an `AssetKey`    |
-| Asset      | `geometry.asset.missing`                       | Asset file not found in any mount                        |
-| Asset      | `geometry.asset.type_unknown`                  | Asset type not inferable from the reference extension    |
+| Asset      | `geometry.asset.missing`                       | No mounted index lists the virtual path                  |
 
 ---
 

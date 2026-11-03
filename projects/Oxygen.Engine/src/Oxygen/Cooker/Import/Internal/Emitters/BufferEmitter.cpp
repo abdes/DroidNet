@@ -16,7 +16,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/WriteGroup.h>
@@ -53,25 +52,15 @@ auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t
   if (finalize_started_.load(std::memory_order_acquire)) {
     throw std::runtime_error("BufferEmitter is finalized");
   }
-  if (base::IsAllZero(cooked.content_hash)) {
-    throw std::invalid_argument("the cooked buffer has no SHA-256");
+  if (cooked.data.Empty()) {
+    throw std::invalid_argument("the cooked buffer is empty");
   }
-
-  const auto signature
-    = BufferTableTraits::SignatureForDescriptor(MakeTableEntry(cooked, 0));
 
   // Use buffer's specified alignment (defaults to 16)
   const auto buffer_alignment = cooked.alignment > 0 ? cooked.alignment : 16ULL;
 
-  const auto acquire = table_aggregator_.AcquireOrInsert(signature,
-    [&] -> std::pair<data::pak::core::BufferResourceDesc, WriteReservation> {
-      const auto reserved = table_aggregator_.ReserveDataRange({
-        .alignment = buffer_alignment,
-        .payload_size = cooked.data.size(),
-      });
-      auto desc = MakeTableEntry(cooked, reserved.aligned_offset);
-      return std::make_pair(desc, reserved);
-    });
+  const auto acquire
+    = table_aggregator_.Acquire(MakeTableEntry(cooked), buffer_alignment);
 
   if (!acquire.is_new) {
     return acquire.index;
@@ -83,7 +72,7 @@ auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t
 
   DLOG_F(INFO,
     "Emit: index={} offset={} size={} padding={} usage=0x{:x} stride={}",
-    acquire.index, reserved.aligned_offset, cooked.data.size(),
+    acquire.index, reserved.aligned_offset, cooked.data.Size(),
     reserved.padding_size, cooked.usage_flags, cooked.element_stride);
 
   if (reserved.padding_size > 0) {
@@ -94,7 +83,7 @@ auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t
 
   // Queue async write at explicit offset for buffer data; the write owns it.
   QueueDataWrite(WriteKind::kPayload, acquire.index, reserved.aligned_offset,
-    std::move(cooked.data));
+    std::move(cooked.data).TakeBytes());
 
   return acquire.index;
 }
@@ -162,22 +151,18 @@ auto BufferEmitter::Finalize() -> co::Co<Result<void, WriteFailure>>
   co_return co_await writes_.Join();
 }
 
-auto BufferEmitter::MakeTableEntry(
-  const CookedBufferPayload& cooked, uint64_t data_offset) -> BufferResourceDesc
+auto BufferEmitter::MakeTableEntry(const CookedBufferPayload& cooked)
+  -> BufferResourceDesc
 {
-  using data::pak::core::DataBlobSizeT;
-  using data::pak::core::OffsetT;
-
-  BufferResourceDesc entry {};
-  entry.data_offset = data_offset;
-  entry.size_bytes = static_cast<DataBlobSizeT>(cooked.data.size());
-  entry.usage_flags = cooked.usage_flags;
-  entry.element_stride = cooked.element_stride;
-  entry.element_format = cooked.element_format;
-  entry.content_hash = cooked.content_hash;
-  // entry.reserved is zero-initialized by default
-
-  return entry;
+  return BufferResourceDesc {
+    .data_offset = 0,
+    .size_bytes
+    = static_cast<data::pak::core::DataBlobSizeT>(cooked.data.Size()),
+    .usage_flags = cooked.usage_flags,
+    .element_stride = cooked.element_stride,
+    .element_format = cooked.element_format,
+    .content_hash = cooked.data.Sha256(),
+  };
 }
 
 } // namespace oxygen::content::import

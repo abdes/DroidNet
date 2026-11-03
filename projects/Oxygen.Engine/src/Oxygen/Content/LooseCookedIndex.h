@@ -16,6 +16,8 @@
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -23,6 +25,7 @@
 #include <Oxygen/Data/CookedFormatError.h> // IWYU pragma: export
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/AnyDevice.h>
 
 namespace oxygen::content::internal {
 class LooseCookedIndexImpl;
@@ -66,9 +69,63 @@ struct FileIntegrityIssue final {
   IntegrityFailure reason = IntegrityFailure::kMissing;
   //! The table row of the resource a `kResource*` failure is about.
   std::optional<uint32_t> resource_row;
+  //! What makes the rows of a `kMalformedTable` unreadable.
+  std::optional<data::CookedDefect> table_defect;
 
   auto operator==(const FileIntegrityIssue&) const -> bool = default;
 };
+
+//! What one entry below a loose cooked root is.
+enum class RootEntryKind : uint8_t {
+  kFile,
+  kFolder,
+  //! A symbolic link, junction or other reparse point; it is not followed.
+  kLink,
+  //! Anything else, such as a device or a pipe.
+  kOther,
+};
+
+//! One entry below a loose cooked root.
+struct RootEntry final {
+  //! Its path below the root, with `/` separators.
+  std::string relative_path;
+  RootEntryKind kind = RootEntryKind::kFile;
+  //! The size of a `kFile`; 0 for every other kind.
+  uint64_t size = 0;
+
+  auto operator==(const RootEntry&) const -> bool = default;
+};
+
+//! The files of one loose cooked root, as an integrity check reads them: the
+//! real file system for the engine, the cooker's storage for the cooker.
+class RootFiles {
+public:
+  RootFiles() = default;
+  virtual ~RootFiles() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(RootFiles)
+  OXYGEN_DEFAULT_MOVABLE(RootFiles)
+
+  //! Every entry below the root, recursively; a link is listed and nothing
+  //! below it.
+  /*!
+   @throw std::runtime_error When the root cannot be listed.
+  */
+  [[nodiscard]] virtual auto List() const -> std::vector<RootEntry> = 0;
+
+  //! Opens the file `relative_path` below the root to read.
+  [[nodiscard]] virtual auto Open(std::string_view relative_path) const
+    -> Result<serio::AnyDevice> = 0;
+};
+
+//! Every entry below the folder `root` of the real file system, as
+//! `RootFiles::List` lists it: a symbolic link, or a path whose canonical form
+//! leaves it such as a junction, is a `kLink`.
+/*!
+ @throw std::filesystem::filesystem_error When `root` cannot be listed.
+*/
+OXGN_CNTT_NDAPI auto ListFolder(const std::filesystem::path& root)
+  -> std::vector<RootEntry>;
 
 //! Loose cooked content that fails `LooseCookedIndex::ValidateContent`, and
 //! its first issue.
@@ -165,6 +222,10 @@ public:
 
   //! Inspect every member, retaining per-file failures for incremental repair.
   OXGN_CNTT_NDAPI auto CheckContent(const std::filesystem::path& cooked_root,
+    IntegrityCheck check) const -> std::vector<FileIntegrityIssue>;
+
+  //! Inspect every member of the root `files` reads, as the path overload.
+  OXGN_CNTT_NDAPI auto CheckContent(const RootFiles& files,
     IntegrityCheck check) const -> std::vector<FileIntegrityIssue>;
 
   //! Validate membership, sizes and that each resource lies in its data

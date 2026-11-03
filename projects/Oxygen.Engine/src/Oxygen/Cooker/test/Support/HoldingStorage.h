@@ -87,6 +87,12 @@ public:
     return inner_->Open(path);
   }
 
+  [[nodiscard]] auto List(const std::filesystem::path& path) const
+    -> Result<std::vector<content::lc::RootEntry>> override
+  {
+    return inner_->List(path);
+  }
+
   [[nodiscard]] auto Publish(const std::filesystem::path& path)
     -> Result<std::unique_ptr<content::cooked::Publication>> override
   {

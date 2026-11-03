@@ -11,7 +11,7 @@
 This document describes the **BufferPipeline** as implemented in
 `src/Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.*`.
 The pipeline is compute-only and is responsible for the SHA‑256
-`content_hash` computation for buffer payloads used by async imports.
+SHA‑256 computation for buffer payloads used by async imports.
 
 Core properties:
 
@@ -21,9 +21,10 @@ Core properties:
   provided `co::Nursery` and must be started on the import thread via
   `Start(co::Nursery&)`.
 - **ThreadPool offload**: hashing is offloaded to a shared `co::ThreadPool`.
-- **Always hashed**: the pipeline computes the full SHA‑256 `content_hash`
-  (`base::Sha256Digest`) of every payload from the bytes it holds; no import
-  reads a data file again to hash it.
+- **Always hashed**: the pipeline hashes the bytes of every item into
+  `cooked.data`, a `HashedBytes` (`Cooker/Import/HashedBytes.h`): the bytes plus
+  their SHA‑256, computed when constructed and immutable after. No import reads
+  a data file again to hash it.
 - **Bounded queues**: input/output queues have a bounded capacity (`Config::queue_capacity`);
   `Submit` may suspend when full, `TrySubmit` is provided for non-blocking submits.
 
@@ -38,9 +39,17 @@ import thread and offload CPU-bound hashing to the `co::ThreadPool`.
 
 ### Pipeline vs Emitter Responsibilities
 
-- **BufferPipeline**: compute-only post-processing (`content_hash`).
+- **BufferPipeline**: compute-only post-processing (SHA‑256 of the payload).
 - **BufferEmitter**: deduplication, stable index assignment and writing
-  `buffers.data` / `buffers.table`.
+  `buffers.data` / `buffers.table`. It refuses an empty payload
+  (`std::invalid_argument`); the buffer container job refuses an empty buffer
+  source with `buffer.container.source_empty`.
+- **Deduplication**: a buffer reuses an existing table row only when every
+  field of the row but its offset matches (usage flags, stride, format, size,
+  SHA‑256) and the existing row's offset satisfies the requested alignment;
+  otherwise it gets a new row at an aligned offset.
+- **Buffer table**: written when the last import session of the cooked root's
+  cohort ends.
 
 ---
 
@@ -50,8 +59,9 @@ import thread and offload CPU-bound hashing to the `co::ThreadPool`.
 
 ```cpp
 struct WorkItem {
-  std::string source_id;     // Correlation id (mesh/buffer name)
-  CookedBufferPayload cooked; // Buffer payload
+  std::string source_id;          // Correlation id (mesh/buffer name)
+  std::vector<std::byte> bytes;   // Buffer bytes to hash
+  CookedBufferPayload cooked;     // Metadata; `data` is empty
 
   // Optional lifecycle callbacks executed on the import thread.
   std::function<void()> on_started;
@@ -63,7 +73,8 @@ struct WorkItem {
 
 Notes:
 
-- `cooked.content_hash` is ignored on input and populated by the pipeline.
+- `cooked` carries metadata only; the pipeline hashes `bytes` on the thread
+  pool into `cooked.data`.
 - The planner/orchestrator must submit only finalized payloads.
 
 ### WorkResult
@@ -71,7 +82,7 @@ Notes:
 ```cpp
 struct WorkResult {
   std::string source_id;               // Echoed from WorkItem
-  CookedBufferPayload cooked;          // `content_hash` filled on success
+  CookedBufferPayload cooked;          // `data` filled on success
   std::vector<ImportDiagnostic> diagnostics;
   ImportWorkItemTelemetry telemetry;   // Per-item telemetry captured by pipeline
   bool success = false;
@@ -80,7 +91,8 @@ struct WorkResult {
 
 Notes:
 
-- `success == false` indicates the item was canceled or failed.
+- `success == false` indicates the item was canceled or failed; a cancelled
+  item has an empty `cooked.data`.
 - Any errors during processing are surfaced as `ImportDiagnostic` entries.
 
 ---
@@ -114,9 +126,9 @@ auto OutputQueueSize() const noexcept -> size_t;        // Current queued result
   1. Invoke `on_started()` (if provided) on the import thread.
   2. If the item was cancelled (`stop_token`), short-circuit and return a
      `WorkResult` with `success = false`.
-  3. Offload SHA-256 computation over `cooked.data` to the shared
-     `co::ThreadPool`. The pipeline stores the full digest into
-     `CookedBufferPayload::content_hash` on success. A failure is reported as
+  3. Offload SHA-256 computation over `bytes` to the shared
+     `co::ThreadPool`. The pipeline stores the bytes and digest into
+     `CookedBufferPayload::data` on success. A failure is reported as
      an `ImportDiagnostic` propagated in the `WorkResult`.
   4. Capture per-item telemetry and diagnostics, invoke `on_finished()` and
      enqueue a `WorkResult` for collection.
@@ -128,10 +140,11 @@ auto OutputQueueSize() const noexcept -> size_t;        // Current queued result
 
 ## Cooked Output Contract
 
-- `content_hash` (the full SHA‑256 of the buffer bytes) is computed on the
-  `co::ThreadPool` for every payload.
-- The pipeline never modifies buffer bytes or metadata other than
-  `content_hash` and it preserves other `CookedBufferPayload` fields.
+- `CookedBufferPayload::data` (a `HashedBytes`: the buffer bytes and their
+  SHA‑256) is built on the `co::ThreadPool` for every payload. The payload has
+  no separate hash field.
+- The pipeline never modifies buffer bytes and preserves the other
+  `CookedBufferPayload` fields.
 
 ---
 

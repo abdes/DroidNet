@@ -413,7 +413,7 @@ NOLINT_TEST_F(
             texture_desc.data_offset = sizeof(texture_desc);
             texture_desc.size_bytes
               = static_cast<data::pak::core::DataBlobSizeT>(
-                cooked->payload.size());
+                cooked->payload.Size());
             texture_desc.texture_type
               = static_cast<std::uint8_t>(cooked->desc.texture_type);
             texture_desc.width = cooked->desc.width;
@@ -424,17 +424,17 @@ NOLINT_TEST_F(
             texture_desc.format
               = static_cast<std::uint8_t>(cooked->desc.format);
             texture_desc.alignment = 256;
-            texture_desc.content_hash = cooked->desc.content_hash;
+            texture_desc.content_hash = cooked->payload.Sha256();
             std::vector<std::uint8_t> payload(
-              sizeof(texture_desc) + cooked->payload.size());
+              sizeof(texture_desc) + cooked->payload.Size());
             std::memcpy(payload.data(), &texture_desc, sizeof(texture_desc));
             std::memcpy(
               std::span {
                 payload,
               }
-                .subspan(sizeof(texture_desc), cooked->payload.size())
+                .subspan(sizeof(texture_desc), cooked->payload.Size())
                 .data(),
-              cooked->payload.data(), cooked->payload.size());
+              cooked->payload.Bytes().data(), cooked->payload.Size());
             const auto key = owned_asset_loader_->PreloadCookedTexture(payload);
             const bool base_color_source = forward && unlit;
             const float coverage
@@ -636,7 +636,7 @@ NOLINT_TEST_F(
       wide ? 502U : 501U,
     };
     model.lower_hemisphere_is_solid_color = false;
-    owned_asset_loader_->SetTexture(model.cubemap_resource, std::move(source));
+    owned_asset_loader_->SetTexture(model.cubemap_resource, source);
     auto processor = environment::internal::IblProcessor(*renderer_);
     auto stable = environment::internal::StableAtmosphereState {};
     stable.view_products.sky_light = model;
@@ -754,7 +754,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     511U,
   };
   model.lower_hemisphere_is_solid_color = false;
-  owned_asset_loader_->SetTexture(model.cubemap_resource, std::move(source));
+  owned_asset_loader_->SetTexture(model.cubemap_resource, source);
   auto processor = environment::internal::IblProcessor(*renderer_);
   auto stable = environment::internal::StableAtmosphereState {};
   const auto refresh = [&](const EnvironmentProbeState& previous) -> auto {

@@ -12,7 +12,7 @@
 #include <type_traits>
 #include <vector>
 
-#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -185,9 +185,6 @@ struct TextureResourceDesc {
 
   //! Packing policy identifier (e.g., "d3d12", "tight").
   std::string packing_policy_id;
-
-  //! SHA-256 of the payload, computed by the texture's producer.
-  base::Sha256Digest content_hash {};
 };
 
 //! Values changed while narrowing float texels to RGBA16Float storage.
@@ -234,8 +231,9 @@ struct CookedTexturePayload {
   //! Runtime descriptor (will be serialized into textures.table).
   TextureResourceDesc desc;
 
-  //! Complete payload bytes (header + layout table + subresource data).
-  std::vector<std::byte> payload;
+  //! Complete payload bytes (header + layout table + subresource data) and
+  //! their SHA-256.
+  HashedBytes payload;
 
   //! Subresource layouts for the payload.
   std::vector<data::pak::render::SubresourceLayout> layouts;

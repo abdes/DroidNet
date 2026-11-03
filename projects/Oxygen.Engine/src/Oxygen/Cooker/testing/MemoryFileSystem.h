@@ -25,6 +25,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/OxCo/Co.h>
@@ -114,6 +115,38 @@ public:
       return ::oxygen::Err(file.error());
     }
     return ::oxygen::Ok(serio::AnyDevice(std::move(file).value()));
+  }
+
+  //! Every folder and file below `path`; memory holds no links.
+  [[nodiscard]] auto List(const std::filesystem::path& path) const
+    -> Result<std::vector<content::lc::RootEntry>> override
+  {
+    const auto key = Key(path);
+    const auto prefix = key.ends_with('/') ? key : key + "/";
+    auto entries = std::vector<content::lc::RootEntry> {};
+    for (const auto& folder : folders_) {
+      if (folder.starts_with(prefix)) {
+        entries.push_back({
+          .relative_path = folder.substr(prefix.size()),
+          .kind = content::lc::RootEntryKind::kFolder,
+          .size = 0,
+        });
+      }
+    }
+    for (const auto& [file, bytes] : files_) {
+      if (file.starts_with(prefix)) {
+        entries.push_back({
+          .relative_path = file.substr(prefix.size()),
+          .kind = content::lc::RootEntryKind::kFile,
+          .size = bytes.size(),
+        });
+      }
+    }
+    if (entries.empty() && !folders_.contains(key)) {
+      return ::oxygen::Err(
+        std::make_error_code(std::errc::no_such_file_or_directory));
+    }
+    return ::oxygen::Ok(std::move(entries));
   }
 
   //! Makes publishing `path` fail with `error`, as a read-only or locked

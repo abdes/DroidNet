@@ -41,6 +41,8 @@ public:
     -> cooked::PathKind override;
   [[nodiscard]] auto Open(const std::filesystem::path& path) const
     -> Result<serio::AnyDevice> override;
+  [[nodiscard]] auto List(const std::filesystem::path& path) const
+    -> Result<std::vector<content::lc::RootEntry>> override;
   [[nodiscard]] auto SizeOf(const std::filesystem::path& path) const
     -> std::optional<serio::ByteCount> override;
 

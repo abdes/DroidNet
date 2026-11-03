@@ -8,9 +8,11 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Tools/PakTool/StagedSourceStorage.h>
 #include <Oxygen/Serio/AnyDevice.h>
@@ -84,6 +86,12 @@ auto StagedSourceStorage::Open(const std::filesystem::path& path) const
   -> Result<serio::AnyDevice>
 {
   return storage_->Open(ReadPath(path));
+}
+
+auto StagedSourceStorage::List(const std::filesystem::path& path) const
+  -> Result<std::vector<content::lc::RootEntry>>
+{
+  return storage_->List(ReadPath(path));
 }
 
 auto StagedSourceStorage::SizeOf(const std::filesystem::path& path) const

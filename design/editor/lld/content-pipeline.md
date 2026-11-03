@@ -1094,9 +1094,11 @@ and retain published roots for reused dependencies. Reference lookup follows the
 saved content priority; explicitly listing the destination root places it at
 that position, with the last occurrence of a duplicate root winning. The highest
 priority matching asset must have the requested type; a lower-priority asset
-must not hide a type error in the effective source. Check each root's index and
-newly written descriptors before proceeding to the next root; index publication
-must not change the selected source.
+must not hide a type error in the effective source. Check each root's index
+before proceeding to the next root: only an index lists a cooked asset, and a
+descriptor file no index lists is none. A dependency's job publishes its index
+before its dependents run, so its newly written descriptors are found the same
+way and publication timing never changes the selected source.
 
 Cooked-library dependencies retain the selected source, native key/type and a
 fingerprint of its protected container files. These facts participate in

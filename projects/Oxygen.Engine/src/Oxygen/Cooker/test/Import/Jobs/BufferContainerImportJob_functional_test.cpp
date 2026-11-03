@@ -299,6 +299,55 @@ namespace {
     EXPECT_EQ(view1.element_count, 4U);
   }
 
+  //! A buffer whose source holds no bytes is refused with its code: a cooked
+  //! resource always has a payload.
+  NOLINT_TEST_F(BufferContainerImportJobTest, EmptyBufferSourceIsRefused)
+  {
+    const auto cooked_root = TempDir() / "refuses_empty_source";
+    std::filesystem::create_directories(cooked_root);
+    const auto buffer_source
+      = cooked_root.parent_path() / "source_data" / "empty.buffer.bin";
+    WriteBytes(buffer_source, std::span<const std::byte> {});
+
+    auto descriptor_json = json {
+      { "name", "EmptyBuffers" },
+      {
+        "buffers",
+        json::array({
+          json {
+            {
+              "source",
+              oxygen::cooker::test::SpellReference(
+                oxygen::cooker::test::SourceMountPath(
+                  TempDir() / "inline.buffers.json"),
+                oxygen::cooker::test::MountPathIn(TempDir(), buffer_source)),
+            },
+            { "virtual_path", "Buffers/empty.obuf" },
+            { "usage_flags", 1U },
+          },
+        }),
+      },
+    };
+
+    auto request = ImportRequest {};
+    request.source_path = TempDir() / "inline.buffers.json";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
+    request.asset_virtual_path = "/.cooked/Resources/inline.buffers";
+    request.cooked_root = cooked_root;
+    request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
+    request.buffer_container = ImportRequest::BufferContainerPayload {
+      .normalized_descriptor_json = descriptor_json.dump(),
+    };
+
+    const auto report = Import(std::move(request));
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
+    EXPECT_TRUE(oxygen::cooker::test::HasDiagnosticCode(
+      report->diagnostics, "buffer.container.source_empty"))
+      << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
+  }
+
 } // namespace
 
 } // namespace oxygen::content::import::test

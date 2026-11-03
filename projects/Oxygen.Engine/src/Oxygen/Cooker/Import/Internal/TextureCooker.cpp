@@ -22,7 +22,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
 #include <Oxygen/Cooker/Import/Internal/ImageProcessing.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
@@ -1278,8 +1278,7 @@ namespace {
     result.desc.mip_levels = output->Meta().mip_levels;
     result.desc.format = final_format;
     result.desc.packing_policy_id = std::string(policy.Id());
-    result.desc.content_hash = base::ComputeSha256(final_payload);
-    result.payload = std::move(final_payload);
+    result.payload = HashedBytes(std::move(final_payload));
     result.layouts = std::move(layouts);
     result.half_narrowing = half_narrowing;
 
