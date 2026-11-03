@@ -13,6 +13,7 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <functional>
 #include <latch>
 #include <memory>
 #include <optional>
@@ -1746,7 +1747,6 @@ namespace {
     EXPECT_EQ(loader.EnumerateMountedSources().size(), 2U);
   }
 
-  //! A root of the `test` mount holding the physics sidecar of `target`.
   //! A root that holds only the physics sidecar of the scene `target`, whose
   //! descriptor is the test's scene: the scene lives in another source.
   auto SidecarRoot(const data::AssetKey& target, const std::uint8_t seed)
@@ -1762,66 +1762,87 @@ namespace {
     return root;
   }
 
-  NOLINT_TEST_F(AssetLoaderBasicTest, SidecarDiscoveryUsesCapturedLayerView)
+  //! Loads the scenes `keys` in the activated `loader`, then hands them to
+  //! `check`, still on the loop, before stopping the loader.
+  auto LoadScenesThen(AssetLoader* loader, std::vector<data::AssetKey> keys,
+    std::function<void(std::span<const std::shared_ptr<data::SceneAsset>>)>
+      check) -> co::Co<>
   {
-    const auto sidecar_key
-      = data::AssetKey::FromVirtualPath("/test/scene.opscene");
-    const auto unrelated_scene
-      = data::AssetKey::FromVirtualPath("/test/other.oscene");
-    const auto base = TempDir() / "base";
-    const auto replacement = TempDir() / "replacement";
-    cooker::testing::Materialize(
-      SidecarRoot(SceneKey(), kFirstSeed).Files(), base);
-    cooker::testing::Materialize(
-      SidecarRoot(unrelated_scene, kSecondSeed).Files(), replacement);
-    AssetLoader loader(engine::internal::EngineTagFactory::Get());
-    loader.AddLooseCookedRoot(base);
-    const auto original = loader.BeginLoadScope();
-    const auto scene_bytes = PlainSceneBytes();
-    data::SceneAsset scene(SceneKey(), scene_bytes);
-    EXPECT_EQ(
-      loader.FindPhysicsSidecarAssetKeyForScene(scene, original), sidecar_key);
-    loader.AddLooseCookedRoot(replacement);
-    EXPECT_FALSE(loader.FindPhysicsSidecarAssetKeyForScene(
-      scene, loader.BeginLoadScope()));
-    EXPECT_EQ(
-      loader.FindPhysicsSidecarAssetKeyForScene(scene, original), sidecar_key);
-    AssetLoader foreign(engine::internal::EngineTagFactory::Get());
-    EXPECT_THROW(static_cast<void>(
-                   foreign.FindPhysicsSidecarAssetKeyForScene(scene, original)),
-      std::invalid_argument);
+    OXCO_WITH_NURSERY(nursery)
+    {
+      co_await nursery.Start(&AssetLoader::ActivateAsync, loader);
+      loader->Run();
+      auto scenes = std::vector<std::shared_ptr<data::SceneAsset>> {};
+      for (const auto& key : keys) {
+        scenes.push_back(
+          co_await loader->LoadAssetAsync<data::SceneAsset>(key));
+        EXPECT_NE(scenes.back(), nullptr) << data::to_string(key);
+      }
+      check(scenes);
+      loader->Stop();
+      co_return co::kJoin;
+    };
   }
 
-  NOLINT_TEST_F(
-    AssetLoaderBasicTest, SidecarTombstonedByPatchPakIsAbsentInNewScope)
+  //! A scene's load binds the sidecar that targets it; a scene no sidecar
+  //! targets binds none; another loader's scene is refused.
+  NOLINT_TEST_F(AssetLoaderPoolTest, LoadedSceneBindsTheSidecarThatTargetsIt)
   {
-    const auto sidecar_key
-      = data::AssetKey::FromVirtualPath("/test/scene.opscene");
-    // The base pak holds the scene and its sidecar; the patch above it holds
-    // only another asset, so the sidecar is deleted by the patch.
-    const auto base = TempDir() / "base.pak";
-    auto base_root = LooseCookedRoot { "test", kFirstSeed };
-    const auto base_scene = base_root.Scene("generation.oscene");
-    static_cast<void>(base_root.PhysicsSidecar("scene.opscene", base_scene));
-    const auto base_pak = CookedPak { std::move(base_root) };
-    cooker::testing::Materialize(base_pak.Encode(), base);
-    auto kept = LooseCookedRoot { "test", kSecondSeed };
-    static_cast<void>(kept.Material("kept.omat"));
-    auto patch_pak = CookedPak { std::move(kept) };
-    patch_pak.PatchOf(base_pak);
-    const auto patch = TempDir() / "patch.pak";
-    cooker::testing::Materialize(patch_pak.Encode(), patch);
+    auto content = LooseCookedRoot { "test", kFirstSeed };
+    const auto scene_key = content.Scene("generation.oscene");
+    const auto plain_key = content.Scene("plain.oscene");
+    const auto sidecar_key = content.PhysicsSidecar("scene.opscene", scene_key);
+    const auto root = TempDir() / "root";
+    cooker::testing::Materialize(content.Files(), root);
+    loader_.AddLooseCookedRoot(root);
 
-    AssetLoader loader(engine::internal::EngineTagFactory::Get());
-    loader.AddPakFile(base);
-    const auto original = loader.BeginLoadScope();
-    const auto scene_bytes = PlainSceneBytes();
-    data::SceneAsset scene(SceneKey(), scene_bytes);
-    loader.AddPakFile(patch);
-    EXPECT_FALSE(loader.FindPhysicsSidecarAssetKeyForScene(
-      scene, loader.BeginLoadScope()));
-    EXPECT_EQ(
-      loader.FindPhysicsSidecarAssetKeyForScene(scene, original), sidecar_key);
+    co::Run(loop_,
+      LoadScenesThen(&loader_, { scene_key, plain_key },
+        [&](const std::span<const std::shared_ptr<data::SceneAsset>> scenes)
+          -> void {
+          if (!scenes[0] || !scenes[1]) {
+            return;
+          }
+          EXPECT_EQ(loader_.FindPhysicsSidecarAssetKeyForScene(*scenes[0]),
+            sidecar_key);
+          EXPECT_FALSE(
+            loader_.FindPhysicsSidecarAssetKeyForScene(*scenes[1]).has_value());
+          AssetLoader foreign(engine::internal::EngineTagFactory::Get());
+          NOLINT_EXPECT_THROW(
+            static_cast<void>(
+              foreign.FindPhysicsSidecarAssetKeyForScene(*scenes[0])),
+            std::invalid_argument);
+        }));
+  }
+
+  //! The sidecar is frozen at load: a newer mount whose sidecar of the same key
+  //! targets another scene does not change what the loaded scene binds.
+  NOLINT_TEST_F(AssetLoaderPoolTest, LoadedSceneKeepsItsSidecarAcrossAMount)
+  {
+    auto content = LooseCookedRoot { "test", kFirstSeed };
+    const auto scene_key = content.Scene("generation.oscene");
+    const auto sidecar_key = content.PhysicsSidecar("scene.opscene", scene_key);
+    const auto base = TempDir() / "base";
+    const auto replacement = TempDir() / "replacement";
+    cooker::testing::Materialize(content.Files(), base);
+    cooker::testing::Materialize(
+      SidecarRoot(
+        data::AssetKey::FromVirtualPath("/test/other.oscene"), kSecondSeed)
+        .Files(),
+      replacement);
+    loader_.AddLooseCookedRoot(base);
+
+    co::Run(loop_,
+      LoadScenesThen(&loader_, { scene_key },
+        [&](const std::span<const std::shared_ptr<data::SceneAsset>> scenes)
+          -> void {
+          if (!scenes[0]) {
+            return;
+          }
+          loader_.AddLooseCookedRoot(replacement);
+          EXPECT_EQ(loader_.FindPhysicsSidecarAssetKeyForScene(*scenes[0]),
+            sidecar_key);
+        }));
   }
 
   NOLINT_TEST_F(AssetLoaderBasicTest,

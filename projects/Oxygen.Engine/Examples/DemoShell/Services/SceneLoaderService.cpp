@@ -415,7 +415,7 @@ void SceneLoaderService::OnSceneLoaded(
 
     const auto scene_asset = std::move(asset);
     const auto sidecar_key_opt
-      = loader_->FindPhysicsSidecarAssetKeyForScene(*scene_asset, scope);
+      = loader_->FindPhysicsSidecarAssetKeyForScene(*scene_asset);
 
     if (!sidecar_key_opt.has_value()) {
       LOG_F(INFO,

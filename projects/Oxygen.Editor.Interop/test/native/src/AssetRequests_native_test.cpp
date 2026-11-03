@@ -8,6 +8,8 @@
 
 #pragma managed(push, off)
 
+#include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -18,6 +20,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <Commands/DetachGeometryCommand.h>
@@ -29,6 +32,7 @@
 #include <EditorModule/SceneAssetRequests.h>
 #include <EditorModule/ThreadSafeQueue.h>
 
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -41,6 +45,7 @@
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Data/GeometryIndices.h>
 
 namespace {
@@ -1217,6 +1222,9 @@ auto MakeMaskTexture() -> Requests::Texture
 {
   using namespace oxygen::data::pak;
   auto header = render::TexturePayloadHeader {};
+  // One RGBA8 texel: a 4-byte row, tightly packed.
+  header.packing_policy = nostd::to_underlying(
+    render::TexturePackingPolicyId::kTightPacked);
   header.subresource_count = 1U;
   header.layouts_offset_bytes = sizeof(header);
   header.data_offset_bytes = sizeof(header) + sizeof(render::SubresourceLayout);
@@ -1224,10 +1232,16 @@ auto MakeMaskTexture() -> Requests::Texture
   const auto layout = render::SubresourceLayout {
     .offset_bytes = 0U, .row_pitch_bytes = 4U, .size_bytes = 4U
   };
-  auto bytes = std::vector<uint8_t>(header.total_payload_size, 0U);
+  auto payload = oxygen::serio::ByteBuffer::Allocate(
+    oxygen::serio::ByteCount { header.total_payload_size });
+  if (!payload) {
+    throw std::runtime_error("cannot allocate the mask texture payload");
+  }
+  const auto bytes = payload->Bytes();
+  std::ranges::fill(bytes, std::byte { 0 });
   std::memcpy(bytes.data(), &header, sizeof(header));
-  std::memcpy(
-    bytes.data() + header.layouts_offset_bytes, &layout, sizeof(layout));
+  std::memcpy(bytes.subspan(header.layouts_offset_bytes).data(), &layout,
+    sizeof(layout));
   auto descriptor = core::TextureResourceDesc {};
   descriptor.size_bytes = header.total_payload_size;
   descriptor.texture_type
@@ -1240,7 +1254,7 @@ auto MakeMaskTexture() -> Requests::Texture
   descriptor.format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm);
   descriptor.alignment = 256U;
   return std::make_shared<oxygen::data::TextureResource>(
-    descriptor, std::move(bytes));
+    descriptor, std::move(payload).value());
 }
 
 auto MaskSources(std::string virtual_path) -> EnvironmentTextureSources

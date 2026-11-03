@@ -501,22 +501,32 @@ namespace {
       return {};
     }
 
-    [[nodiscard]] auto ReadMountedSceneHierarchy(
-      const data::AssetKey& /*key*/) const
-      -> std::optional<SceneHierarchy> override
+    [[nodiscard]] auto ReadMountedSceneHierarchyAsync(data::AssetKey /*key*/)
+      -> co::Co<std::optional<SceneHierarchy>> override
     {
-      return std::nullopt;
+      co_return std::nullopt;
     }
-    [[nodiscard]] auto ReadMountedSceneNode(const data::AssetKey& /*key*/,
-      std::span<const data::NodeId> /*path*/) const
-      -> std::optional<SceneNodeValues> override
+    [[nodiscard]] auto ReadMountedSceneNodeAsync(
+      data::AssetKey /*key*/, std::vector<data::NodeId> /*path*/)
+      -> co::Co<std::optional<SceneNodeValues>> override
     {
-      return std::nullopt;
+      co_return std::nullopt;
     }
-    [[nodiscard]] auto EnumerateMountedInputContexts() const
-      -> std::vector<MountedInputContextEntry> override
+    auto StartReadMountedSceneHierarchy(const data::AssetKey& /*key*/,
+      SceneHierarchyCallback on_complete) -> void override
     {
-      return {};
+      on_complete(std::nullopt);
+    }
+    auto StartReadMountedSceneNode(const data::AssetKey& /*key*/,
+      std::vector<data::NodeId> /*path*/, SceneNodeValuesCallback on_complete)
+      -> void override
+    {
+      on_complete(std::nullopt);
+    }
+    [[nodiscard]] auto EnumerateMountedInputContextsAsync()
+      -> co::Co<std::vector<MountedInputContextEntry>> override
+    {
+      co_return std::vector<MountedInputContextEntry> {};
     }
     [[nodiscard]] auto EnumerateMountedSources() const
       -> std::vector<MountedSourceEntry> override
@@ -682,8 +692,7 @@ namespace {
       return {};
     }
     [[nodiscard]] auto FindPhysicsSidecarAssetKeyForScene(
-      const data::Asset& scene, const content::ContentLoadScope& /*scope*/)
-      -> std::optional<data::AssetKey> override
+      const data::Asset& scene) const -> std::optional<data::AssetKey> override
     {
       const auto it = sidecar_keys_by_scene_.find(scene.GetAssetKey());
       return it == sidecar_keys_by_scene_.end()

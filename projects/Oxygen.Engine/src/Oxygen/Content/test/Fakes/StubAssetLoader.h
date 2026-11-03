@@ -173,21 +173,32 @@ public:
   {
     return {};
   }
-  auto ReadMountedSceneHierarchy(const data::AssetKey& /*key*/) const
-    -> std::optional<SceneHierarchy> override
+  auto ReadMountedSceneHierarchyAsync(data::AssetKey /*key*/)
+    -> co::Co<std::optional<SceneHierarchy>> override
   {
-    return std::nullopt;
+    co_return std::nullopt;
   }
-  auto ReadMountedSceneNode(
-    const data::AssetKey& /*key*/, std::span<const data::NodeId> /*path*/) const
-    -> std::optional<SceneNodeValues> override
+  auto ReadMountedSceneNodeAsync(
+    data::AssetKey /*key*/, std::vector<data::NodeId> /*path*/)
+    -> co::Co<std::optional<SceneNodeValues>> override
   {
-    return std::nullopt;
+    co_return std::nullopt;
   }
-  auto EnumerateMountedInputContexts() const
-    -> std::vector<MountedInputContextEntry> override
+  auto StartReadMountedSceneHierarchy(const data::AssetKey& /*key*/,
+    SceneHierarchyCallback on_complete) -> void override
   {
-    return {};
+    on_complete(std::nullopt);
+  }
+  auto StartReadMountedSceneNode(const data::AssetKey& /*key*/,
+    std::vector<data::NodeId> /*path*/, SceneNodeValuesCallback on_complete)
+    -> void override
+  {
+    on_complete(std::nullopt);
+  }
+  auto EnumerateMountedInputContextsAsync()
+    -> co::Co<std::vector<MountedInputContextEntry>> override
+  {
+    co_return std::vector<MountedInputContextEntry> {};
   }
   auto EnumerateMountedSources() const
     -> std::vector<MountedSourceEntry> override
@@ -311,8 +322,8 @@ public:
   {
     return {};
   }
-  auto FindPhysicsSidecarAssetKeyForScene(const data::Asset& /*scene_asset*/,
-    const content::ContentLoadScope& /*scope*/)
+  auto FindPhysicsSidecarAssetKeyForScene(
+    const data::Asset& /*scene_asset*/) const
     -> std::optional<data::AssetKey> override
   {
     return {};

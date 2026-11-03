@@ -14,7 +14,7 @@ Current implementation status snapshot:
 1. Implemented: input request contracts, `InputImportJob`,
    `InputImportPipeline`, async routing, manifest `type: "input"` integration,
    and ImportTool input command wiring.
-2. Implemented: runtime `EnumerateMountedInputContexts()` +
+2. Implemented: runtime `EnumerateMountedInputContextsAsync()` +
    `HydrateInputContext()` APIs, including trigger hydration, slot alias
    normalization, and mounted-context metadata extraction.
 3. Implemented: scene-binding infrastructure removal in native tooling/runtime
@@ -110,7 +110,7 @@ flowchart LR
 
   subgraph Runtime
     E[ContentSourceRegistry]
-    F[EnumerateMountedInputContexts + HydrateInputContext]
+    F[EnumerateMountedInputContextsAsync + HydrateInputContext]
     G[InputSystem]
   end
 
@@ -166,7 +166,7 @@ Architectural split:
      live `InputMappingContext` by resolving action references, building trigger
      chains, and registering with `InputSystem`.
 
-2. `IAssetLoader::EnumerateMountedInputContexts()`
+2. `IAssetLoader::EnumerateMountedInputContextsAsync()`
    - file: `src/Oxygen/Content/IAssetLoader.h` (declaration),
      `src/Oxygen/Content/AssetLoader.cpp` (implementation)
    - role: scan mounted sources for `kInputMappingContext` assets and return
@@ -230,7 +230,7 @@ Architectural split:
       sites.
 
 14. `IAssetLoader`
-    - add `EnumerateMountedInputContexts()` returning
+    - add `EnumerateMountedInputContextsAsync()` returning
       `std::vector<MountedInputContextEntry>`.
     - mirrors existing `EnumerateMountedScenes()` pattern.
     - file: `src/Oxygen/Content/IAssetLoader.h`.
@@ -911,8 +911,8 @@ struct MountedInputContextEntry {
   int32_t default_priority;
 };
 
-auto EnumerateMountedInputContexts() const
-    -> std::vector<MountedInputContextEntry>;
+auto EnumerateMountedInputContextsAsync()
+    -> co::Co<std::vector<MountedInputContextEntry>>;
 ```
 
 Implementation (inside `AssetLoader` / `SceneCatalogQueryService` layer):
@@ -1119,7 +1119,7 @@ Scene input binding records are not authored or emitted.
    - dependency DAG ordering, cycles, missing targets.
    - failure propagation (predecessor fail -> skip dependents).
 4. Runtime:
-   - `EnumerateMountedInputContexts` returns correct entries for mounted
+   - `EnumerateMountedInputContextsAsync` returns correct entries for mounted
      sources.
    - `HydrateInputContext` resolves actions, builds triggers, returns live
      context.
@@ -1138,7 +1138,7 @@ Scene input binding records are not authored or emitted.
 1. Input import path is exclusively `InputImportJob -> InputImportPipeline`.
 2. All scene-bound context association infrastructure is fully removed (no
    struct, no enum, no component type, no parsing, no packing).
-3. `EnumerateMountedInputContexts` + `HydrateInputContext` provide a complete,
+3. `EnumerateMountedInputContextsAsync` + `HydrateInputContext` provide a complete,
    app-driven context lifecycle (no implicit bootstrap service).
 4. Loose-cooked outputs are consistent with new ownership model and remain
    PAK-compatible.

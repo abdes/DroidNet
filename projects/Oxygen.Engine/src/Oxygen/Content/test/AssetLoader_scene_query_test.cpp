@@ -6,11 +6,14 @@
 
 #include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <optional>
+#include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -24,11 +27,14 @@
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -38,102 +44,84 @@ namespace world = oxygen::data::pak::world;
 using data::AssetKey;
 using data::NodeId;
 using data::schema::OverrideId;
+using oxygen::content::AssetLoader;
 using oxygen::content::IAssetLoader;
-using oxygen::content::testing::AssetLoaderBasicTest;
+using oxygen::content::testing::AssetLoaderPoolTest;
+using oxygen::cooker::testing::LooseCookedRoot;
 using oxygen::cooker::testing::NodeTransform;
 using oxygen::cooker::testing::SceneBuilder;
 using oxygen::cooker::testing::SceneNode;
 using SceneIssueCode = IAssetLoader::SceneHierarchyIssueCode;
+using NodePath = std::vector<NodeId>;
 
 constexpr float kModelX = 1.0F;
 constexpr float kCarX = 2.0F;
 constexpr float kStreetX = 3.0F;
 
-auto ModelKey() -> AssetKey
-{
-  return AssetKey::FromVirtualPath("/test/query/Model.oscene");
-}
-auto CarKey() -> AssetKey
-{
-  return AssetKey::FromVirtualPath("/test/query/Car.oscene");
-}
-auto StreetKey() -> AssetKey
-{
-  return AssetKey::FromVirtualPath("/test/query/Street.oscene");
-}
-auto GarageKey() -> AssetKey
-{
-  return AssetKey::FromVirtualPath("/test/query/Garage.oscene");
-}
-auto MissingKey() -> AssetKey
-{
-  return AssetKey::FromVirtualPath("/test/query/Missing.oscene");
-}
-auto LoopAKey() -> AssetKey
-{
-  return AssetKey::FromVirtualPath("/test/query/LoopA.oscene");
-}
-auto LoopBKey() -> AssetKey
-{
-  return AssetKey::FromVirtualPath("/test/query/LoopB.oscene");
-}
-auto WheelGeometryKey() -> AssetKey
-{
-  return AssetKey::FromVirtualPath("/test/query/Wheel.ogeo");
-}
-auto PaintKey() -> AssetKey
-{
-  return AssetKey::FromVirtualPath("/test/query/Paint.omat");
-}
+// The leaves of the mounted root; every key and virtual path derives from one.
+constexpr std::string_view kModel = "query/Model.oscene";
+constexpr std::string_view kCar = "query/Car.oscene";
+constexpr std::string_view kStreet = "query/Street.oscene";
+constexpr std::string_view kGarage = "query/Garage.oscene";
+constexpr std::string_view kMissing = "query/Missing.oscene";
+constexpr std::string_view kLoopA = "query/LoopA.oscene";
+constexpr std::string_view kLoopB = "query/LoopB.oscene";
+constexpr std::string_view kWheelGeometry = "query/Wheel.ogeo";
+constexpr std::string_view kPaint = "query/Paint.omat";
+
 auto RimSurface() -> data::SurfaceId
 {
   return data::SurfaceId::FromStableIdentity("/test/query/rim");
 }
 
-constexpr std::string_view kWheelGeometryPath = "/test/query/Wheel.ogeo";
-constexpr std::string_view kPaintPath = "/test/query/Paint.omat";
-
 //! `Body` with a perspective camera and a child `Wheel` at x = 1, which
-//! renders the wheel geometry with its rim painted, and holds a point light.
-struct ModelFixture {
+//! renders the geometry with its rim painted, and holds a point light.
+struct ModelScene final {
   SceneBuilder scene;
   SceneNode body;
   SceneNode wheel;
 };
 
-auto Model() -> ModelFixture
+//! The assets the model's wheel renders with.
+struct ModelAssets final {
+  AssetKey geometry;
+  AssetKey paint;
+};
+
+auto Model(const ModelAssets& assets) -> ModelScene
 {
+  const auto& [geometry, paint] = assets;
   auto scene = SceneBuilder { "Model" };
   const auto body = scene.Node("Body");
   const auto wheel = scene.Node("Wheel", body);
   scene.Place(wheel, NodeTransform { .translation = { kModelX, 0.0F, 0.0F } });
   scene.PerspectiveCamera(body);
-  scene.Renderable(wheel, WheelGeometryKey());
+  scene.Renderable(wheel, geometry);
   scene.PointLight(wheel);
   auto revision = oxygen::base::Sha256Digest {};
   revision.fill(1U);
-  auto paint = world::OverrideValue {};
-  paint.as_asset = PaintKey();
+  auto value = world::OverrideValue {};
+  value.as_asset = paint;
   scene.Override(
-    wheel, OverrideId::kGeometrySurfaceMaterial, paint, RimSurface(), revision);
+    wheel, OverrideId::kGeometrySurfaceMaterial, value, RimSurface(), revision);
   return { .scene = std::move(scene), .body = body, .wheel = wheel };
 }
 
 //! A scene with a root `<name>Root` and its child `<name>Holder`, which
 //! instances `source`; each change sets a position X below the holder.
-struct InstancingSpec {
+struct InstancingSpec final {
   std::string_view name;
   AssetKey source;
-  std::vector<std::pair<std::vector<NodeId>, float>> changes;
+  std::vector<std::pair<NodePath, float>> changes;
 };
 
-struct InstancingFixture {
+struct InstancingScene final {
   SceneBuilder scene;
   SceneNode root;
   SceneNode holder;
 };
 
-auto Instancing(const InstancingSpec& spec) -> InstancingFixture
+auto Instancing(const InstancingSpec& spec) -> InstancingScene
 {
   auto scene = SceneBuilder { spec.name };
   const auto root = scene.Node(std::string(spec.name) + "Root");
@@ -167,65 +155,139 @@ auto PositionXOf(const IAssetLoader::SceneNodeValues& values)
   return x != nullptr ? std::optional(*x) : std::nullopt;
 }
 
+//! The index of the hierarchy node at `path`; none when no node is there.
+auto IndexOf(const IAssetLoader::SceneHierarchy& hierarchy,
+  const std::span<const NodeId> path) -> std::optional<uint32_t>
+{
+  const auto found = std::ranges::find_if(hierarchy.nodes,
+    [path](const IAssetLoader::SceneHierarchyNode& node) -> bool {
+      return std::ranges::equal(node.path, path);
+    });
+  return found != hierarchy.nodes.end()
+    ? std::optional(
+        static_cast<uint32_t>(std::distance(hierarchy.nodes.begin(), found)))
+    : std::nullopt;
+}
+
+//! What the callback bridges delivered, and on which thread.
+struct BridgedReads final {
+  std::optional<IAssetLoader::SceneHierarchy> hierarchy;
+  std::optional<IAssetLoader::SceneNodeValues> node;
+  std::thread::id hierarchy_thread;
+  std::thread::id node_thread;
+};
+
+auto ReadThroughBridges(AssetLoader* loader, const AssetKey key, NodePath path,
+  BridgedReads* reads) -> oxygen::co::Co<>
+{
+  oxygen::co::Event hierarchy_read;
+  oxygen::co::Event node_read;
+  OXCO_WITH_NURSERY(nursery)
+  {
+    co_await nursery.Start(&AssetLoader::ActivateAsync, loader);
+    loader->Run();
+    loader->StartReadMountedSceneHierarchy(key,
+      [reads, &hierarchy_read](
+        std::optional<IAssetLoader::SceneHierarchy> hierarchy) -> void {
+        reads->hierarchy = std::move(hierarchy);
+        reads->hierarchy_thread = std::this_thread::get_id();
+        hierarchy_read.Trigger();
+      });
+    loader->StartReadMountedSceneNode(key, std::move(path),
+      [reads, &node_read](
+        std::optional<IAssetLoader::SceneNodeValues> node) -> void {
+        reads->node = std::move(node);
+        reads->node_thread = std::this_thread::get_id();
+        node_read.Trigger();
+      });
+    co_await hierarchy_read;
+    co_await node_read;
+    loader->Stop();
+    co_return oxygen::co::kJoin;
+  };
+}
+
 //! Mounts one loose cooked root: a street that instances a car that instances
 //! the model, each changing the wheel's position; a garage that instances a
 //! scene that is not mounted; and two scenes that instance each other.
-class AssetLoaderSceneQueryTest : public AssetLoaderBasicTest {
+class AssetLoaderSceneQueryTest : public AssetLoaderPoolTest {
 protected:
   auto SetUp() -> void override
   {
-    AssetLoaderBasicTest::SetUp();
-    auto model = Model();
+    const auto geometry = content_.Geometry(kWheelGeometry);
+    const auto paint = content_.Material(kPaint);
+    auto model = Model({ .geometry = geometry, .paint = paint });
     body_ = model.scene.IdOf(model.body);
     wheel_ = model.scene.IdOf(model.wheel);
     auto car = Instancing({
       .name = "Car",
-      .source = ModelKey(),
+      .source = Key(kModel),
       .changes = { { { wheel_ }, kCarX } },
     });
     car_root_ = car.scene.IdOf(car.root);
     car_holder_ = car.scene.IdOf(car.holder);
     auto street = Instancing({
       .name = "Street",
-      .source = CarKey(),
+      .source = Key(kCar),
       .changes = { { { car_holder_, wheel_ }, kStreetX } },
     });
     street_root_ = street.scene.IdOf(street.root);
     street_holder_ = street.scene.IdOf(street.holder);
-    auto garage = Instancing({ .name = "Garage", .source = MissingKey() });
+    auto garage = Instancing({ .name = "Garage", .source = Key(kMissing) });
     garage_holder_ = garage.scene.IdOf(garage.holder);
-    garage_holder_index_ = garage.holder.Index();
-    auto loop_a = Instancing({ .name = "LoopA", .source = LoopBKey() });
+    auto loop_a = Instancing({ .name = "LoopA", .source = Key(kLoopB) });
     loop_a_holder_ = loop_a.scene.IdOf(loop_a.holder);
-    auto loop_b = Instancing({ .name = "LoopB", .source = LoopAKey() });
+    auto loop_b = Instancing({ .name = "LoopB", .source = Key(kLoopA) });
     loop_b_holder_ = loop_b.scene.IdOf(loop_b.holder);
 
+    content_.Scene(kModel, model.scene);
+    content_.Scene(kCar, car.scene);
+    content_.Scene(kStreet, street.scene);
+    content_.Scene(kGarage, garage.scene);
+    content_.Scene(kLoopA, loop_a.scene);
+    content_.Scene(kLoopB, loop_b.scene);
     const auto root = TempDir() / "scene_query";
-    auto source = oxygen::cooker::testing::LooseCookedRoot { "test" };
-    const auto write_scene
-      = [&source](const AssetKey& key, const std::string_view name,
-          const SceneBuilder& scene) -> void {
-      source.Add({
-        .type = data::AssetType::kScene,
-        .leaf = "query/" + std::string(name) + ".oscene",
-        .descriptor = scene.Bytes(),
-        .references = scene.References(),
-        .key = key,
-      });
-    };
-    write_scene(ModelKey(), "Model", model.scene);
-    write_scene(CarKey(), "Car", car.scene);
-    write_scene(StreetKey(), "Street", street.scene);
-    write_scene(GarageKey(), "Garage", garage.scene);
-    write_scene(LoopAKey(), "LoopA", loop_a.scene);
-    write_scene(LoopBKey(), "LoopB", loop_b.scene);
-
-    EXPECT_EQ(source.Geometry("query/Wheel.ogeo"), WheelGeometryKey());
-    EXPECT_EQ(source.Material("query/Paint.omat"), PaintKey());
-    oxygen::cooker::testing::Materialize(source.Files(), root);
-    asset_loader_->AddLooseCookedRoot(root);
+    oxygen::cooker::testing::Materialize(content_.Files(), root);
+    loader_.AddLooseCookedRoot(root);
   }
 
+  [[nodiscard]] auto Key(const std::string_view leaf) const -> AssetKey
+  {
+    return content_.KeyOf(leaf);
+  }
+
+  [[nodiscard]] auto ReadNode(const std::string_view scene, NodePath path)
+    -> std::optional<IAssetLoader::SceneNodeValues>
+  {
+    return oxygen::co::Run(
+      loop_, loader_.ReadMountedSceneNodeAsync(Key(scene), std::move(path)));
+  }
+
+  [[nodiscard]] auto ReadHierarchy(const std::string_view scene)
+    -> std::optional<IAssetLoader::SceneHierarchy>
+  {
+    return oxygen::co::Run(
+      loop_, loader_.ReadMountedSceneHierarchyAsync(Key(scene)));
+  }
+
+  //! The street's hierarchy, which every hierarchy test reads.
+  [[nodiscard]] auto StreetHierarchy() -> IAssetLoader::SceneHierarchy
+  {
+    auto hierarchy = ReadHierarchy(kStreet);
+    EXPECT_TRUE(hierarchy.has_value());
+    return hierarchy.value_or(IAssetLoader::SceneHierarchy {});
+  }
+
+  [[nodiscard]] auto StreetWheel() const -> NodePath
+  {
+    return { street_holder_, car_holder_, wheel_ };
+  }
+  [[nodiscard]] auto StreetBody() const -> NodePath
+  {
+    return { street_holder_, car_holder_, body_ };
+  }
+
+  LooseCookedRoot content_ { "test" };
   NodeId body_;
   NodeId wheel_;
   NodeId car_root_;
@@ -235,19 +297,15 @@ protected:
   NodeId garage_holder_;
   NodeId loop_a_holder_;
   NodeId loop_b_holder_;
-  world::SceneNodeIndexT garage_holder_index_ = 0U;
 };
 
 //! The outermost scene's change wins, two nesting levels down; each level read
 //! alone applies its own changes.
 NOLINT_TEST_F(AssetLoaderSceneQueryTest, NodeValuesApplyNestedChanges)
 {
-  const auto street = asset_loader_->ReadMountedSceneNode(
-    StreetKey(), std::array { street_holder_, car_holder_, wheel_ });
-  const auto car = asset_loader_->ReadMountedSceneNode(
-    CarKey(), std::array { car_holder_, wheel_ });
-  const auto model
-    = asset_loader_->ReadMountedSceneNode(ModelKey(), std::array { wheel_ });
+  const auto street = ReadNode(kStreet, StreetWheel());
+  const auto car = ReadNode(kCar, { car_holder_, wheel_ });
+  const auto model = ReadNode(kModel, { wheel_ });
 
   ASSERT_HAS_VALUE(street);
   ASSERT_HAS_VALUE(car);
@@ -261,16 +319,15 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, NodeValuesApplyNestedChanges)
 //! geometry values it replaces, assets by their mounted virtual paths.
 NOLINT_TEST_F(AssetLoaderSceneQueryTest, NodeValuesHoldEveryComponent)
 {
-  const auto wheel = asset_loader_->ReadMountedSceneNode(
-    CarKey(), std::array { car_holder_, wheel_ });
-  const auto body = asset_loader_->ReadMountedSceneNode(
-    CarKey(), std::array { car_holder_, body_ });
+  const auto wheel = ReadNode(kCar, { car_holder_, wheel_ });
+  const auto body = ReadNode(kCar, { car_holder_, body_ });
 
   ASSERT_HAS_VALUE(wheel);
   EXPECT_EQ(wheel->name, "Wheel");
   ASSERT_HAS_VALUE(wheel->geometry);
-  EXPECT_EQ(wheel->geometry->key, WheelGeometryKey());
-  EXPECT_EQ(wheel->geometry->virtual_path, kWheelGeometryPath);
+  EXPECT_EQ(wheel->geometry->key, Key(kWheelGeometry));
+  EXPECT_EQ(
+    wheel->geometry->virtual_path, content_.VirtualPath(kWheelGeometry));
   EXPECT_TRUE(ValueOf(*wheel, OverrideId::kPointLightRange).has_value());
   EXPECT_TRUE(ValueOf(*wheel, OverrideId::kNodeVisibility).has_value());
   EXPECT_FALSE(ValueOf(*wheel, OverrideId::kPerspectiveCameraFieldOfViewDegrees)
@@ -280,8 +337,8 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, NodeValuesHoldEveryComponent)
   ASSERT_HAS_VALUE(paint);
   const auto* paint_asset = std::get_if<IAssetLoader::SceneNodeAsset>(&*paint);
   ASSERT_NE(paint_asset, nullptr);
-  EXPECT_EQ(paint_asset->key, PaintKey());
-  EXPECT_EQ(paint_asset->virtual_path, kPaintPath);
+  EXPECT_EQ(paint_asset->key, Key(kPaint));
+  EXPECT_EQ(paint_asset->virtual_path, content_.VirtualPath(kPaint));
 
   ASSERT_HAS_VALUE(body);
   EXPECT_EQ(body->name, "Body");
@@ -295,117 +352,119 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, NodeValuesHoldEveryComponent)
 //! mounted does not, and the hierarchy reports the instance.
 NOLINT_TEST_F(AssetLoaderSceneQueryTest, UnreadableInstancedSceneHasNoNodes)
 {
-  EXPECT_TRUE(asset_loader_
-      ->ReadMountedSceneNode(GarageKey(), std::array { garage_holder_ })
-      .has_value());
-  EXPECT_FALSE(asset_loader_
-      ->ReadMountedSceneNode(GarageKey(), std::array { garage_holder_, body_ })
-      .has_value());
+  EXPECT_TRUE(ReadNode(kGarage, { garage_holder_ }).has_value());
+  EXPECT_FALSE(ReadNode(kGarage, { garage_holder_, body_ }).has_value());
 
-  const auto hierarchy = asset_loader_->ReadMountedSceneHierarchy(GarageKey());
+  const auto hierarchy = ReadHierarchy(kGarage);
 
   ASSERT_HAS_VALUE(hierarchy);
   EXPECT_EQ(hierarchy->nodes.size(), 2U);
   ASSERT_EQ(hierarchy->issues.size(), 1U);
-  EXPECT_EQ(hierarchy->issues.front().code, SceneIssueCode::kSceneUnavailable);
-  EXPECT_EQ(hierarchy->issues.front().node,
-    std::optional<uint32_t>(garage_holder_index_));
-  EXPECT_EQ(hierarchy->issues.front().scene_key, MissingKey());
+  const auto& issue = hierarchy->issues.front();
+  EXPECT_EQ(issue.code, SceneIssueCode::kSceneUnavailable);
+  EXPECT_EQ(issue.node, IndexOf(*hierarchy, std::array { garage_holder_ }));
+  EXPECT_EQ(issue.scene_key, Key(kMissing));
 }
 
 //! Scenes that instance each other end at the cycle: the nodes before it
 //! read, none after it, and the hierarchy reports it.
 NOLINT_TEST_F(AssetLoaderSceneQueryTest, CycleEndsTheComposition)
 {
-  EXPECT_TRUE(asset_loader_
-      ->ReadMountedSceneNode(
-        LoopAKey(), std::array { loop_a_holder_, loop_b_holder_ })
-      .has_value());
-  EXPECT_FALSE(asset_loader_
-      ->ReadMountedSceneNode(LoopAKey(),
-        std::array { loop_a_holder_, loop_b_holder_, loop_a_holder_ })
+  EXPECT_TRUE(ReadNode(kLoopA, { loop_a_holder_, loop_b_holder_ }).has_value());
+  EXPECT_FALSE(
+    ReadNode(kLoopA, { loop_a_holder_, loop_b_holder_, loop_a_holder_ })
       .has_value());
 
-  const auto hierarchy = asset_loader_->ReadMountedSceneHierarchy(LoopAKey());
+  const auto hierarchy = ReadHierarchy(kLoopA);
 
   ASSERT_HAS_VALUE(hierarchy);
   EXPECT_EQ(hierarchy->nodes.size(), 4U);
   ASSERT_EQ(hierarchy->issues.size(), 1U);
   EXPECT_EQ(hierarchy->issues.front().code, SceneIssueCode::kCycle);
-  EXPECT_EQ(hierarchy->issues.front().scene_key, LoopAKey());
+  EXPECT_EQ(hierarchy->issues.front().scene_key, Key(kLoopA));
 }
 
 //! A key no mounted source provides, or a path that names no node, reads
 //! nothing.
 NOLINT_TEST_F(AssetLoaderSceneQueryTest, UnknownKeyOrPathReadsNothing)
 {
-  EXPECT_FALSE(
-    asset_loader_->ReadMountedSceneNode(MissingKey(), std::array { body_ })
-      .has_value());
-  EXPECT_FALSE(asset_loader_->ReadMountedSceneHierarchy(MissingKey()));
-  EXPECT_FALSE(
-    asset_loader_->ReadMountedSceneNode(CarKey(), std::array { wheel_ })
-      .has_value());
-  EXPECT_FALSE(
-    asset_loader_->ReadMountedSceneNode(CarKey(), std::vector<NodeId> {})
-      .has_value());
+  EXPECT_FALSE(ReadNode(kMissing, { body_ }).has_value());
+  EXPECT_FALSE(ReadHierarchy(kMissing).has_value());
+  EXPECT_FALSE(ReadNode(kCar, { wheel_ }).has_value());
+  EXPECT_FALSE(ReadNode(kCar, {}).has_value());
 }
 
 //! The hierarchy of a two-level nesting lists every node by its path below
-//! the scene read, with its parent, defining scene and instanced scene.
+//! the scene read, in composition order, with its parent, defining scene and
+//! instanced scene.
 NOLINT_TEST_F(AssetLoaderSceneQueryTest, HierarchyListsNestedNodes)
 {
-  const auto hierarchy = asset_loader_->ReadMountedSceneHierarchy(StreetKey());
+  const auto hierarchy = StreetHierarchy();
 
-  ASSERT_HAS_VALUE(hierarchy);
-  EXPECT_TRUE(hierarchy->issues.empty());
-  using Path = std::vector<NodeId>;
-  const auto paths = std::vector<Path> {
+  EXPECT_TRUE(hierarchy.issues.empty());
+  const auto paths = std::vector<NodePath> {
     { street_root_ },
     { street_holder_ },
     { street_holder_, car_root_ },
     { street_holder_, car_holder_ },
-    { street_holder_, car_holder_, body_ },
-    { street_holder_, car_holder_, wheel_ },
+    StreetBody(),
+    StreetWheel(),
   };
-  ASSERT_EQ(hierarchy->nodes.size(), paths.size());
-  for (std::size_t index = 0; index < paths.size(); ++index) {
-    EXPECT_EQ(hierarchy->nodes.at(index).path, paths.at(index)) << index;
+  ASSERT_EQ(hierarchy.nodes.size(), paths.size());
+  for (const auto& [node, path] : std::views::zip(hierarchy.nodes, paths)) {
+    EXPECT_EQ(node.path, path);
   }
-  const auto& wheel = hierarchy->nodes.at(5);
+  const auto& street_root = hierarchy.nodes.front();
+  const auto& street_holder = hierarchy.nodes.at(1);
+  const auto& car_holder = hierarchy.nodes.at(3);
+  const auto& wheel = hierarchy.nodes.back();
+  EXPECT_FALSE(street_root.parent.has_value());
+  EXPECT_EQ(street_holder.instance, std::optional(Key(kCar)));
+  EXPECT_EQ(car_holder.instance, std::optional(Key(kModel)));
   EXPECT_EQ(wheel.name, "Wheel");
-  EXPECT_EQ(wheel.scene_key, ModelKey());
-  EXPECT_EQ(wheel.parent, std::optional<uint32_t>(4U));
-  EXPECT_EQ(hierarchy->nodes.at(1).instance, std::optional(CarKey()));
-  EXPECT_EQ(hierarchy->nodes.at(3).instance, std::optional(ModelKey()));
-  EXPECT_FALSE(hierarchy->nodes.at(0).parent.has_value());
+  EXPECT_EQ(wheel.scene_key, Key(kModel));
+  EXPECT_EQ(wheel.parent, IndexOf(hierarchy, StreetBody()));
 }
 
-//! Each node names the geometry it renders, by its mounted virtual path; a
-//! node that renders nothing names none.
-NOLINT_TEST_F(AssetLoaderSceneQueryTest, HierarchyNodesNameTheirGeometry)
+//! Each node names the geometry it renders by its mounted virtual path and
+//! says whether it has a camera, so a scene can start through a camera an
+//! instance brings in.
+NOLINT_TEST_F(AssetLoaderSceneQueryTest, HierarchyNodesNameGeometryAndCameras)
 {
-  const auto hierarchy = asset_loader_->ReadMountedSceneHierarchy(StreetKey());
+  const auto hierarchy = StreetHierarchy();
 
-  ASSERT_HAS_VALUE(hierarchy);
-  const auto& wheel = hierarchy->nodes.at(5);
-  const auto& body = hierarchy->nodes.at(4);
-  ASSERT_HAS_VALUE(wheel.geometry);
-  EXPECT_EQ(wheel.geometry->key, WheelGeometryKey());
-  EXPECT_EQ(wheel.geometry->virtual_path, kWheelGeometryPath);
-  EXPECT_FALSE(body.geometry.has_value());
+  const auto wheel = IndexOf(hierarchy, StreetWheel());
+  const auto body = IndexOf(hierarchy, StreetBody());
+  ASSERT_HAS_VALUE(wheel);
+  ASSERT_HAS_VALUE(body);
+  const auto& wheel_node = hierarchy.nodes.at(*wheel);
+  const auto& body_node = hierarchy.nodes.at(*body);
+  ASSERT_HAS_VALUE(wheel_node.geometry);
+  EXPECT_EQ(wheel_node.geometry->key, Key(kWheelGeometry));
+  EXPECT_EQ(
+    wheel_node.geometry->virtual_path, content_.VirtualPath(kWheelGeometry));
+  EXPECT_FALSE(wheel_node.camera);
+  EXPECT_FALSE(body_node.geometry.has_value());
+  EXPECT_TRUE(body_node.camera);
 }
 
-//! Each node says whether it has a camera, so a scene can start through a
-//! camera an instance brings in.
-NOLINT_TEST_F(
-  AssetLoaderSceneQueryTest, HierarchyNodesSayWhetherTheyHaveACamera)
+//! The callback bridges deliver what the async reads return, on the owning
+//! thread.
+NOLINT_TEST_F(AssetLoaderSceneQueryTest, BridgesCompleteOnTheOwningThread)
 {
-  const auto hierarchy = asset_loader_->ReadMountedSceneHierarchy(StreetKey());
+  const auto expected_nodes = StreetHierarchy().nodes.size();
+  auto reads = BridgedReads {};
 
-  ASSERT_HAS_VALUE(hierarchy);
-  EXPECT_TRUE(hierarchy->nodes.at(4).camera);
-  EXPECT_FALSE(hierarchy->nodes.at(5).camera);
+  oxygen::co::Run(
+    loop_, ReadThroughBridges(&loader_, Key(kStreet), StreetWheel(), &reads));
+
+  const auto owner = std::this_thread::get_id();
+  ASSERT_HAS_VALUE(reads.hierarchy);
+  ASSERT_HAS_VALUE(reads.node);
+  EXPECT_EQ(reads.hierarchy->nodes.size(), expected_nodes);
+  EXPECT_EQ(PositionXOf(*reads.node), kStreetX);
+  EXPECT_EQ(reads.hierarchy_thread, owner);
+  EXPECT_EQ(reads.node_thread, owner);
 }
 
 } // namespace

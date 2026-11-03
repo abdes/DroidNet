@@ -14,24 +14,28 @@
 
 namespace oxygen::content::internal {
 
-class ContentSourceRegistry;
+class ContentSourceView;
 
+//! Scene queries over one captured view of the mounts.
+/*!
+ The catalog reads the mounted indexes only. The hierarchy and node reads parse
+ scene descriptors; they read only through the view's sources, so they can run
+ on any thread while the view is held.
+*/
 class SceneCatalogQueryService final {
 public:
-  [[nodiscard]] auto EnumerateMountedScenes(
-    const ContentSourceRegistry& source_registry) const
+  [[nodiscard]] static auto EnumerateMountedScenes(
+    const ContentSourceView& view)
     -> std::vector<IAssetLoader::MountedSceneEntry>;
 
   //! The hierarchy of the mounted scene `key`, read from scene descriptors.
-  [[nodiscard]] auto ReadSceneHierarchy(
-    const ContentSourceRegistry& source_registry,
-    const data::AssetKey& key) const
-    -> std::optional<IAssetLoader::SceneHierarchy>;
+  [[nodiscard]] static auto ReadSceneHierarchy(const ContentSourceView& view,
+    const data::AssetKey& key) -> std::optional<IAssetLoader::SceneHierarchy>;
 
   //! The effective values of the node `path` names in the composition of the
   //! mounted scene `key`, read from scene descriptors.
-  [[nodiscard]] auto ReadSceneNode(const ContentSourceRegistry& source_registry,
-    const data::AssetKey& key, std::span<const data::NodeId> path) const
+  [[nodiscard]] static auto ReadSceneNode(const ContentSourceView& view,
+    const data::AssetKey& key, std::span<const data::NodeId> path)
     -> std::optional<IAssetLoader::SceneNodeValues>;
 };
 

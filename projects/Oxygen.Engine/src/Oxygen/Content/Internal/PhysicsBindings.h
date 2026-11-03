@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include <Oxygen/Content/ResourceKey.h>
@@ -18,27 +19,32 @@ namespace oxygen::content::internal {
 class IContentSource;
 
 struct BoundPhysicsShape final {
-  data::AssetKey key {};
+  data::AssetKey key;
   data::pak::physics::CollisionShapeAssetDesc descriptor {};
 };
 
 struct BoundPhysicsMaterial final {
-  data::AssetKey key {};
+  data::AssetKey key;
   data::pak::physics::PhysicsMaterialAssetDesc descriptor {};
 };
 
 struct BoundPhysicsResource final {
-  data::AssetKey asset_key {};
+  data::AssetKey asset_key;
   ResourceKey key {};
-  data::SourceInstanceId source {};
-  std::shared_ptr<const IContentSource> owner {};
+  data::SourceInstanceId source;
+  std::shared_ptr<const IContentSource> owner;
 };
 
 //! Fixed descriptors and deferred payload locations captured before
 //! publication.
+/*!
+ A physics scene asset binds its shapes, materials and payloads. A scene binds
+ the one physics sidecar that targets it in its load's mounts, if any.
+*/
 struct PhysicsBindings final {
-  std::vector<BoundPhysicsShape> shapes {};
-  std::vector<BoundPhysicsMaterial> materials {};
-  std::vector<BoundPhysicsResource> resources {};
+  std::vector<BoundPhysicsShape> shapes;
+  std::vector<BoundPhysicsMaterial> materials;
+  std::vector<BoundPhysicsResource> resources;
+  std::optional<data::AssetKey> sidecar;
 };
 } // namespace oxygen::content::internal

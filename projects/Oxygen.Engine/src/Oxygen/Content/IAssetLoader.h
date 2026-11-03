@@ -108,7 +108,7 @@ public:
     data::SourceInstanceId source_id { 0 };
     ContentSourceKind source_kind { ContentSourceKind::kPak };
     std::filesystem::path source_path;
-    std::string display_name;
+    //! Empty when the source holds the scene without one.
     std::string virtual_path;
   };
 
@@ -549,28 +549,32 @@ public:
     -> ResidencyPolicyState = 0;
 
   //! Enumerate scene entries available from currently mounted sources.
+  /*!
+   Reads the mounted indexes only, never a descriptor.
+  */
   [[nodiscard]] virtual auto EnumerateMountedScenes() const
     -> std::vector<MountedSceneEntry> = 0;
 
   //! Read the hierarchy of a mounted scene and of every scene it instances.
   /*!
-   Reads only the scene descriptors, through the mounted source that provides
-   each key: no geometry, material, texture or other dependency is loaded and
-   nothing is cached. Structure cannot be changed by an instance (instances
-   change values only), so the hierarchy is the descriptors' own. An instanced
-   scene that cannot be read, or that would make a cycle, is reported in
-   `SceneHierarchy::issues` and contributes no nodes.
+   Reads only the scene descriptors, on the thread pool, through the mounts as
+   they are when the read starts: no geometry, material, texture or other
+   dependency is loaded and nothing is cached. Structure cannot be changed by
+   an instance (instances change values only), so the hierarchy is the
+   descriptors' own. An instanced scene that cannot be read, or that would
+   make a cycle, is reported in `SceneHierarchy::issues` and contributes no
+   nodes.
 
    @return The hierarchy, or none when `key` names no mounted, readable scene.
   */
-  [[nodiscard]] virtual auto ReadMountedSceneHierarchy(
-    const data::AssetKey& key) const -> std::optional<SceneHierarchy> = 0;
+  [[nodiscard]] virtual auto ReadMountedSceneHierarchyAsync(data::AssetKey key)
+    -> co::Co<std::optional<SceneHierarchy>> = 0;
 
   //! Read the effective values of one node of a mounted scene's composition.
   /*!
    Composes the scene `key` names, as an instance of it would be, from the
-   scene descriptors alone, as `ReadMountedSceneHierarchy` reads them, and
-   returns the values of the node `path` names: one node ID per nesting
+   scene descriptors alone, as `ReadMountedSceneHierarchyAsync` reads them,
+   and returns the values of the node `path` names: one node ID per nesting
    level, shallowest first, the first a node of the scene itself. Every change
    the scene and the scenes it instances make is applied; asset keys resolve
    to their virtual paths in the mounted content.
@@ -579,13 +583,32 @@ public:
    `path` names no node of its composition, as below an instanced scene that
    cannot be read or that would make a cycle.
   */
-  [[nodiscard]] virtual auto ReadMountedSceneNode(
-    const data::AssetKey& key, std::span<const data::NodeId> path) const
-    -> std::optional<SceneNodeValues> = 0;
+  [[nodiscard]] virtual auto ReadMountedSceneNodeAsync(
+    data::AssetKey key, std::vector<data::NodeId> path)
+    -> co::Co<std::optional<SceneNodeValues>> = 0;
+
+  using SceneHierarchyCallback
+    = std::function<void(std::optional<SceneHierarchy>)>;
+  using SceneNodeValuesCallback
+    = std::function<void(std::optional<SceneNodeValues>)>;
+
+  //! Callback bridge over `ReadMountedSceneHierarchyAsync`; the callback runs
+  //! on the owning thread, with none when the read fails.
+  virtual auto StartReadMountedSceneHierarchy(
+    const data::AssetKey& key, SceneHierarchyCallback on_complete) -> void = 0;
+
+  //! Callback bridge over `ReadMountedSceneNodeAsync`; the callback runs on
+  //! the owning thread, with none when the read fails.
+  virtual auto StartReadMountedSceneNode(const data::AssetKey& key,
+    std::vector<data::NodeId> path, SceneNodeValuesCallback on_complete) -> void
+    = 0;
 
   //! Enumerate input mapping-context entries from currently mounted sources.
-  [[nodiscard]] virtual auto EnumerateMountedInputContexts() const
-    -> std::vector<MountedInputContextEntry> = 0;
+  /*!
+   Reads each effective context's descriptor on the thread pool.
+  */
+  [[nodiscard]] virtual auto EnumerateMountedInputContextsAsync()
+    -> co::Co<std::vector<MountedInputContextEntry>> = 0;
 
   //! Enumerate mounted content sources.
   [[nodiscard]] virtual auto EnumerateMountedSources() const
@@ -678,10 +701,16 @@ public:
     const data::Asset& context_asset,
     const data::AssetKey& material_asset_key) const
     -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc> = 0;
-  //! Find the effective physics sidecar in the scene load scope.
+  //! The physics sidecar bound to a loaded scene.
+  /*!
+   The scene's load finds the one sidecar that targets it in the mounts the
+   load captured, reading it off the owning thread, and freezes it in the
+   scene's bindings; a later mount change does not alter it.
+
+   @return The sidecar's key, or none when no sidecar targets the scene.
+  */
   [[nodiscard]] virtual auto FindPhysicsSidecarAssetKeyForScene(
-    const data::Asset& scene_asset, const content::ContentLoadScope& scope)
-    -> std::optional<data::AssetKey> = 0;
+    const data::Asset& scene_asset) const -> std::optional<data::AssetKey> = 0;
 
   //! Get cached input action asset without triggering a load.
   [[nodiscard]] virtual auto GetInputActionAsset(const data::AssetKey& key,

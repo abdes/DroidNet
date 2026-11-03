@@ -35,8 +35,10 @@ namespace {
   auto ToEntry(const content::IAssetLoader::MountedSceneEntry& scene)
     -> SceneEntry
   {
-    const auto& path
-      = scene.virtual_path.empty() ? scene.display_name : scene.virtual_path;
+    // A scene a pak holds without a browse path is listed by its key.
+    const auto path = scene.virtual_path.empty()
+      ? data::to_string(scene.scene_key)
+      : scene.virtual_path;
     // `/<mount>/<folder>/<middle>.../<leaf>`.
     auto parts = std::vector<std::string> {};
     for (const auto& part : std::filesystem::path(path).relative_path()) {

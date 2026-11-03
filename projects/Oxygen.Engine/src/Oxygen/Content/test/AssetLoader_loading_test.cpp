@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -24,10 +23,8 @@
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
-#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedOpenError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -56,6 +53,7 @@ using oxygen::data::MaterialAsset;
 using oxygen::data::TextureResource;
 
 using oxygen::content::testing::AssetLoaderBasicTest;
+using oxygen::content::testing::AssetLoaderPoolTest;
 
 namespace {
 
@@ -72,33 +70,24 @@ auto WriteLooseCookedIndexWithInvalidTexturesTable(
   oxygen::cooker::testing::Materialize(files, cooked_root);
 }
 
-auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
-  const oxygen::data::AssetKey& key) -> void
-{
-  using oxygen::data::AssetType;
-
-  auto scene = oxygen::cooker::testing::SceneBuilder { "LooseScene" };
-  auto root = LooseCookedRoot { "test" };
-  root.Add({
-    .type = AssetType::kScene,
-    .leaf = "Scenes/LooseScene.scene",
-    .descriptor = scene.Bytes(),
-    .references = scene.References(),
-    .key = key,
-  });
-  oxygen::cooker::testing::Materialize(root.Files(), cooked_root);
-}
-
 //! The keys of the input action and mapping context of a loose root.
 struct LooseInputKeys final {
   oxygen::data::AssetKey action;
   oxygen::data::AssetKey context;
 };
 
-//! Writes into `cooked_root` an input action `Move` and a mapping context that
-//! maps it to `Space`; returns their keys.
-auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root)
-  -> LooseInputKeys
+//! The mapping context a loose root holds: its name and default priority,
+//! and the seed of the root's source key, distinct for roots mounted together.
+struct LooseInputContext final {
+  std::string_view name { "HydratedContext" };
+  int32_t priority { 77 };
+  uint8_t seed { 1U };
+};
+
+//! Writes into `cooked_root` an input action `Move` and the mapping context
+//! `context`, which maps it to `Space`; returns their keys.
+auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
+  const LooseInputContext& context_spec = {}) -> LooseInputKeys
 {
   using oxygen::data::pak::input::InputActionAssetDesc;
   using oxygen::data::pak::input::InputActionAssetFlags;
@@ -107,7 +96,7 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root)
   using oxygen::data::pak::input::InputTriggerRecord;
   using oxygen::data::pak::input::InputTriggerType;
 
-  auto root = LooseCookedRoot { "Game" };
+  auto root = LooseCookedRoot { "Game", context_spec.seed };
   InputActionAssetDesc action_record {};
   action_record.value_type
     = oxygen::data::pak::input::InputActionValueType::kBool;
@@ -116,15 +105,14 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root)
 
   InputMappingContextAssetDesc context_record {};
   context_record.flags = InputMappingContextFlags::kNone;
-  constexpr int32_t kInputPriority = 77;
-  context_record.default_priority = kInputPriority;
+  context_record.default_priority = context_spec.priority;
 
   InputTriggerRecord trigger {};
   trigger.type = InputTriggerType::kPressed;
   trigger.actuation_threshold = 0.5F;
 
   auto context
-    = oxygen::cooker::testing::InputContextBuilder { "HydratedContext",
+    = oxygen::cooker::testing::InputContextBuilder { context_spec.name,
         context_record };
   context.Mapping(action_key, "Space", { trigger });
 
@@ -135,39 +123,46 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root)
 
 //=== AssetLoader Basic Functionality Tests ===-----------------------------//
 
-//! Duplicate AssetKey conflict policy: newest mount wins by default.
-
-//! Patch tombstones must block fallback to lower-priority base mounts.
-
-//! Characterization: duplicate-key resolution follows mount order.
-/*!
- Scenario: Mount two sources that define the same Material AssetKey and
- assert lookup result changes when mount order is reversed. This captures
- current behavior where explicit load priority metadata is not part of the
- runtime load API surface.
-*/
-
-//! Preferred-source override policy: dependency loads follow the parent source.
-
-NOLINT_TEST_F(AssetLoaderBasicTest,
-  EnumerateMountedInputContextsLooseCookedExpectedToExposeEntries)
+//! A mounted context lists the name, priority and flags its descriptor holds.
+NOLINT_TEST_F(AssetLoaderPoolTest, MountedInputContextsListTheirDescriptors)
 {
-  const auto cooked_root = TempDir() / "mounted_input_contexts_loose";
-  const auto [action_key, context_key]
-    = WriteLooseCookedInputAssets(cooked_root);
+  const auto cooked_root = TempDir() / "input_contexts";
+  const auto keys = WriteLooseCookedInputAssets(
+    cooked_root, { .name = "Gameplay", .priority = 77 });
+  loader_.AddLooseCookedRoot(cooked_root);
 
-  asset_loader_->AddLooseCookedRoot(cooked_root);
+  const auto contexts
+    = oxygen::co::Run(loop_, loader_.EnumerateMountedInputContextsAsync());
 
-  const auto mounted_contexts = asset_loader_->EnumerateMountedInputContexts();
-  ASSERT_FALSE(mounted_contexts.empty());
-
-  const auto found = std::ranges::find_if(mounted_contexts,
-    [&](const auto& entry) -> auto { return entry.asset_key == context_key; });
-  ASSERT_NE(found, mounted_contexts.end());
-  EXPECT_EQ(found->name, "HydratedContext");
-  EXPECT_EQ(found->default_priority, 77);
+  ASSERT_EQ(contexts.size(), 1U);
+  const auto& context = contexts.front();
+  EXPECT_EQ(context.asset_key, keys.context);
+  EXPECT_EQ(context.name, "Gameplay");
+  EXPECT_EQ(context.default_priority, 77);
   EXPECT_EQ(
-    found->flags, oxygen::data::pak::input::InputMappingContextFlags::kNone);
+    context.flags, oxygen::data::pak::input::InputMappingContextFlags::kNone);
+}
+
+//! A context a newer mount also holds is listed once, as the newer one.
+NOLINT_TEST_F(AssetLoaderPoolTest, MountedInputContextsFollowMountPrecedence)
+{
+  const auto older = TempDir() / "older";
+  const auto newer = TempDir() / "newer";
+  const auto keys = WriteLooseCookedInputAssets(
+    older, { .name = "Older", .priority = 1, .seed = 1U });
+  ASSERT_EQ(WriteLooseCookedInputAssets(
+              newer, { .name = "Newer", .priority = 2, .seed = 2U })
+              .context,
+    keys.context);
+  loader_.AddLooseCookedRoot(older);
+  loader_.AddLooseCookedRoot(newer);
+
+  const auto contexts
+    = oxygen::co::Run(loop_, loader_.EnumerateMountedInputContextsAsync());
+
+  ASSERT_EQ(contexts.size(), 1U);
+  EXPECT_EQ(contexts.front().name, "Newer");
+  EXPECT_EQ(contexts.front().default_priority, 2);
 }
 
 NOLINT_TEST_F(AssetLoaderBasicTest,
@@ -288,30 +283,26 @@ NOLINT_TEST_F(
                              &el));
 }
 
-NOLINT_TEST_F(AssetLoaderBasicTest,
-  TrimCacheExpectedToPreserveMountedCatalogClearMountsExpectedToClearCatalog)
+//! The scene catalog lists each mounted scene by its key, source and virtual
+//! path; a cache trim keeps it and clearing the mounts empties it.
+NOLINT_TEST_F(AssetLoaderBasicTest, SceneCatalogFollowsTheMountsNotTheCache)
 {
-  const auto loose_scene_key = oxygen::data::AssetKey::FromVirtualPath(
-    "/test/loose_scene_catalog_2.asset");
-  const auto cooked_root = TempDir() / "mounted_scenes_loose_2";
-  WriteLooseCookedSceneForCatalog(cooked_root, loose_scene_key);
-
+  constexpr auto kLeaf = std::string_view { "Scenes/Loose.oscene" };
+  auto content = LooseCookedRoot { "test" };
+  const auto scene_key = content.Scene(kLeaf);
+  const auto cooked_root = TempDir() / "scene_catalog";
+  oxygen::cooker::testing::Materialize(content.Files(), cooked_root);
   asset_loader_->AddLooseCookedRoot(cooked_root);
 
-  const auto sources_before = asset_loader_->EnumerateMountedSources();
-  const auto scenes_before = asset_loader_->EnumerateMountedScenes();
-  ASSERT_FALSE(sources_before.empty());
-  ASSERT_FALSE(scenes_before.empty());
+  const auto scenes = asset_loader_->EnumerateMountedScenes();
 
+  ASSERT_EQ(scenes.size(), 1U);
+  EXPECT_EQ(scenes.front().scene_key, scene_key);
+  EXPECT_EQ(scenes.front().virtual_path, content.VirtualPath(kLeaf));
+  EXPECT_EQ(scenes.front().source_key, content.SourceKey());
   asset_loader_->TrimCache();
-
-  const auto sources_after_trim = asset_loader_->EnumerateMountedSources();
-  const auto scenes_after_trim = asset_loader_->EnumerateMountedScenes();
-  EXPECT_EQ(sources_after_trim.size(), sources_before.size());
-  EXPECT_EQ(scenes_after_trim.size(), scenes_before.size());
-
+  EXPECT_EQ(asset_loader_->EnumerateMountedScenes().size(), 1U);
   asset_loader_->ClearMounts();
-  EXPECT_TRUE(asset_loader_->EnumerateMountedSources().empty());
   EXPECT_TRUE(asset_loader_->EnumerateMountedScenes().empty());
 }
 

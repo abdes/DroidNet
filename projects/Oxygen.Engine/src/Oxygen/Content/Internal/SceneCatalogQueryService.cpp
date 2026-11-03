@@ -23,17 +23,14 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/ContentSourceView.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/SceneCatalogQueryService.h>
 #include <Oxygen/Content/LoaderContext.h>
-#include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -42,48 +39,27 @@
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneChanges.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content::internal {
 
 namespace {
 
-  //! The scene's name.
-  /*!
-   A scene whose descriptor cannot be read is still listed, with an empty name
-   and a warning, so loading it reports why instead of the scene vanishing.
-  */
-  auto ReadSceneName(const IContentSource& source, const data::AssetKey& key)
-    -> std::string
+  //! The source of the layer `id` of `view`.
+  auto SourceOf(const ContentSourceView& view, const data::SourceInstanceId id)
+    -> const IContentSource*
   {
-    auto desc_reader = source.CreateAssetDescriptorReader(key);
-    if (!desc_reader) {
-      LOG_F(
-        WARNING, "scene {} has no readable descriptor", data::to_string(key));
-      return {};
-    }
-    try {
-      const auto base_pos = desc_reader->Position();
-      loaders::CheckLoaderResult(base_pos, "scene", "position");
-      auto header = data::pak::core::AssetHeader {};
-      loaders::LoadAssetHeader(*desc_reader, header);
-      return loaders::ResolveDescriptorString(
-        loaders::ReadDescriptorStrings(*desc_reader, *base_pos, header),
-        header.name_offset, "scene name");
-    } catch (const std::runtime_error& error) {
-      LOG_F(WARNING, "scene {} name is unreadable: {}", data::to_string(key),
-        error.what());
-      return {};
-    }
+    const auto layers = view.Layers();
+    const auto layer = std::ranges::find(layers, id, &ContentSourceLayer::id);
+    return layer != layers.end() ? layer->source.get() : nullptr;
   }
 
   //! The mounted scene descriptors one query reads, each parsed once without
   //! its dependencies, and the virtual paths of the assets they name.
   class MountedScenes final {
   public:
-    MountedScenes(observer_ptr<const ContentSourceRegistry> source_registry,
-      std::shared_ptr<const ContentSourceView> view)
-      : source_registry_(source_registry)
-      , view_(std::move(view))
+    explicit MountedScenes(const ContentSourceView& view)
+      : view_(&view)
     {
     }
 
@@ -111,7 +87,7 @@ namespace {
       if (!source_id.has_value()) {
         return asset;
       }
-      if (const auto source = source_registry_->AcquireSource(*source_id)) {
+      if (const auto* source = SourceOf(*view_, *source_id)) {
         asset.virtual_path
           = source->ResolveVirtualPath(key).value_or(std::string {});
       }
@@ -126,8 +102,9 @@ namespace {
       if (!source_id.has_value()) {
         return nullptr;
       }
-      const auto source = source_registry_->AcquireSource(*source_id);
-      if (!source || source->GetAssetType(key) != data::AssetType::kScene) {
+      const auto* source = SourceOf(*view_, *source_id);
+      if (source == nullptr
+        || source->GetAssetType(key) != data::AssetType::kScene) {
         return nullptr;
       }
       const auto desc_reader = source->CreateAssetDescriptorReader(key);
@@ -154,8 +131,7 @@ namespace {
       }
     }
 
-    observer_ptr<const ContentSourceRegistry> source_registry_;
-    std::shared_ptr<const ContentSourceView> view_;
+    observer_ptr<const ContentSourceView> view_;
     std::unordered_map<data::AssetKey, std::shared_ptr<const data::SceneAsset>>
       loaded_;
   };
@@ -435,20 +411,12 @@ namespace {
 } // namespace
 
 auto SceneCatalogQueryService::EnumerateMountedScenes(
-  const ContentSourceRegistry& source_registry) const
-  -> std::vector<IAssetLoader::MountedSceneEntry>
+  const ContentSourceView& view) -> std::vector<IAssetLoader::MountedSceneEntry>
 {
   std::vector<IAssetLoader::MountedSceneEntry> scenes;
-  const auto view = source_registry.CaptureView();
-  if (!view) {
-    return scenes;
-  }
-  scenes.reserve(view->Layers().size());
-  for (const auto& layer : view->Layers()) {
-    const auto source = source_registry.AcquireSource(layer.id);
-    if (!source) {
-      continue;
-    }
+  scenes.reserve(view.Layers().size());
+  for (const auto& layer : view.Layers()) {
+    const auto& source = layer.source;
     const auto source_id = layer.id;
     const auto source_key = source->GetSourceKey();
     const auto source_path = source->SourcePath();
@@ -466,7 +434,7 @@ auto SceneCatalogQueryService::EnumerateMountedScenes(
       }
 
       if (source->GetAssetType(*scene_key_opt) != data::AssetType::kScene
-        || view->ResolveAsset(*scene_key_opt) != source_id) {
+        || view.ResolveAsset(*scene_key_opt) != source_id) {
         continue;
       }
 
@@ -476,7 +444,6 @@ auto SceneCatalogQueryService::EnumerateMountedScenes(
       scene_entry.source_id = source_id;
       scene_entry.source_kind = source_kind;
       scene_entry.source_path = source_path;
-      scene_entry.display_name = ReadSceneName(*source, *scene_key_opt);
 
       if (const auto vpath = source->ResolveVirtualPath(*scene_key_opt);
         vpath.has_value()) {
@@ -490,28 +457,18 @@ auto SceneCatalogQueryService::EnumerateMountedScenes(
   return scenes;
 }
 
-auto SceneCatalogQueryService::ReadSceneHierarchy(
-  const ContentSourceRegistry& source_registry, const data::AssetKey& key) const
-  -> std::optional<IAssetLoader::SceneHierarchy>
+auto SceneCatalogQueryService::ReadSceneHierarchy(const ContentSourceView& view,
+  const data::AssetKey& key) -> std::optional<IAssetLoader::SceneHierarchy>
 {
-  auto view = source_registry.CaptureView();
-  if (!view) {
-    return std::nullopt;
-  }
-  auto scenes = MountedScenes(observer_ptr(&source_registry), std::move(view));
+  auto scenes = MountedScenes(view);
   return SceneHierarchyReader(scenes).Read(key);
 }
 
-auto SceneCatalogQueryService::ReadSceneNode(
-  const ContentSourceRegistry& source_registry, const data::AssetKey& key,
-  const std::span<const data::NodeId> path) const
+auto SceneCatalogQueryService::ReadSceneNode(const ContentSourceView& view,
+  const data::AssetKey& key, const std::span<const data::NodeId> path)
   -> std::optional<IAssetLoader::SceneNodeValues>
 {
-  auto view = source_registry.CaptureView();
-  if (!view) {
-    return std::nullopt;
-  }
-  auto scenes = MountedScenes(observer_ptr(&source_registry), std::move(view));
+  auto scenes = MountedScenes(view);
   return SceneNodeReader(scenes).Read(key, path);
 }
 

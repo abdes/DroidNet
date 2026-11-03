@@ -184,9 +184,14 @@ Same structure as asset loads, scoped to a single resource identity. The table
 row comes from the mounted table; the payload is read with the source device's
 asynchronous read under the payload budget, then decoded on the thread pool.
 
-The synchronous query APIs (scene catalog, mounted input contexts, physics
-sidecar lookup) read descriptors on the owning thread, as their signatures
-state.
+Queries follow the same rule. Those that read descriptors are asynchronous and
+read on the thread pool through a view captured when they start:
+`ReadMountedSceneHierarchyAsync`, `ReadMountedSceneNodeAsync` (with
+`StartReadMountedScene*` callback bridges) and
+`EnumerateMountedInputContextsAsync`. Those that answer from memory stay
+synchronous: `EnumerateMountedScenes` reads the mounted indexes, and
+`FindPhysicsSidecarAssetKeyForScene` reads the sidecar the scene's load found
+and froze in its bindings.
 
 ### Cooked-bytes resource load (`LoadResourceAsync(CookedResourceData<T>)`)
 

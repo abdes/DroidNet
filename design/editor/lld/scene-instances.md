@@ -1548,7 +1548,7 @@ gigabytes of geometry; its hierarchy is a few records per node.
 
 **How.**
 
-- The engine reads it: `IAssetLoader::ReadMountedSceneHierarchy(key)`
+- The engine reads it: `IAssetLoader::ReadMountedSceneHierarchyAsync(key)`
   (`Oxygen.Engine/src/Oxygen/Content/IAssetLoader.h`), beside
   `EnumerateMountedScenes` in `SceneCatalogQueryService`, reads the scene's
   descriptor through the mounted source that provides its key, parse-only,
@@ -1680,7 +1680,7 @@ nodes would double every section and let them drift.
 
 - Per selected instanced node, the engine reads its effective values from the
   mounted descriptors, as it reads the hierarchy (section 8.2, which carries
-  structure only): `IAssetLoader::ReadMountedSceneNode(key, path)` composes the
+  structure only): `IAssetLoader::ReadMountedSceneNodeAsync(key, path)` composes the
   source with `ComposeInstance`, as an instance of it would be, and returns the
   node's name, its geometry and every property its records hold, with the
   geometry values it replaces, in the schema's units and assets by their

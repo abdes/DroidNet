@@ -24,9 +24,10 @@ namespace oxygen::interop::module {
 //! Reads the effective values of one node of a mounted scene's composition,
 //! from the scene descriptors alone.
 /*!
- The callback runs on the engine thread with no value when the virtual path
- names no mounted scene or the path names no node of its composition. A
- command dropped without running never calls back.
+ The descriptors are read on the loader's thread pool; the callback runs on
+ the engine thread, with no value when the virtual path names no mounted scene
+ or the path names no node of its composition. A command dropped without
+ running, or a read the loader drops at shutdown, never calls back.
 */
 class ReadSceneNodeCommand final : public EditorCommand {
 public:
@@ -60,7 +61,8 @@ public:
       complete_(std::nullopt);
       return;
     }
-    complete_(context.AssetLoader->ReadMountedSceneNode(*key, path_));
+    context.AssetLoader->StartReadMountedSceneNode(
+      *key, std::move(path_), std::move(complete_));
   }
 
 private:

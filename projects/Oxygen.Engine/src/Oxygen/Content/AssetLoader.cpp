@@ -401,6 +401,42 @@ auto ReadInputMappingContextAssetDesc(const internal::IContentSource& source,
   return result;
 }
 
+//! The effective input contexts of `view`, each read from its descriptor.
+auto EnumerateInputContexts(const internal::ContentSourceView& view)
+  -> std::vector<oxygen::content::IAssetLoader::MountedInputContextEntry>
+{
+  using Entry = oxygen::content::IAssetLoader::MountedInputContextEntry;
+  std::vector<Entry> contexts;
+  contexts.reserve(view.Layers().size());
+  for (const auto& layer : view.Layers()) {
+    const auto& source = *layer.source;
+    const auto source_key = source.GetSourceKey();
+    const auto asset_count = source.GetAssetCount();
+    for (size_t i = 0; i < asset_count; ++i) {
+      const auto asset_key_opt
+        = source.GetAssetKeyByIndex(static_cast<uint32_t>(i));
+      if (!asset_key_opt
+        || source.GetAssetType(*asset_key_opt)
+          != oxygen::data::AssetType::kInputMappingContext
+        || view.ResolveAsset(*asset_key_opt) != layer.id) {
+        continue;
+      }
+      auto mounted = ReadInputMappingContextAssetDesc(source, *asset_key_opt);
+      if (!mounted.has_value()) {
+        continue;
+      }
+      contexts.push_back(Entry {
+        .asset_key = *asset_key_opt,
+        .source_key = source_key,
+        .name = std::move(mounted->name),
+        .flags = mounted->desc.flags,
+        .default_priority = mounted->desc.default_priority,
+      });
+    }
+  }
+  return contexts;
+}
+
 //! The driver sources open payload files through: on `loop`, or inline when
 //! the loader has no loop (a tool, a unit test), so a source never runs
 //! without one.
@@ -438,8 +474,6 @@ AssetLoader::AssetLoader(
 
   owning_thread_id_ = std::this_thread::get_id();
   eviction_alive_token_ = std::make_shared<int>(0);
-  scene_catalog_query_service_
-    = std::make_unique<internal::SceneCatalogQueryService>();
   script_query_service_ = std::make_unique<internal::ScriptQueryService>();
 
   payload_budget_ = std::make_unique<internal::PayloadBudget>(
@@ -1748,71 +1782,111 @@ auto AssetLoader::EnumerateMountedScenes() const
   -> std::vector<IAssetLoader::MountedSceneEntry>
 {
   AssertOwningThread();
-  return scene_catalog_query_service_->EnumerateMountedScenes(
-    impl_->source_registry);
-}
-
-auto AssetLoader::ReadMountedSceneHierarchy(const data::AssetKey& key) const
-  -> std::optional<IAssetLoader::SceneHierarchy>
-{
-  AssertOwningThread();
-  return scene_catalog_query_service_->ReadSceneHierarchy(
-    impl_->source_registry, key);
-}
-
-auto AssetLoader::ReadMountedSceneNode(
-  const data::AssetKey& key, const std::span<const data::NodeId> path) const
-  -> std::optional<IAssetLoader::SceneNodeValues>
-{
-  AssertOwningThread();
-  return scene_catalog_query_service_->ReadSceneNode(
-    impl_->source_registry, key, path);
-}
-
-auto AssetLoader::EnumerateMountedInputContexts() const
-  -> std::vector<IAssetLoader::MountedInputContextEntry>
-{
-  AssertOwningThread();
-  std::vector<IAssetLoader::MountedInputContextEntry> contexts;
   const auto view = impl_->source_registry.CaptureView();
+  return view
+    ? internal::SceneCatalogQueryService::EnumerateMountedScenes(*view)
+    : std::vector<IAssetLoader::MountedSceneEntry> {};
+}
+
+auto AssetLoader::ReadMountedSceneHierarchyAsync(const data::AssetKey key)
+  -> co::Co<std::optional<IAssetLoader::SceneHierarchy>>
+{
+  AssertOwningThread();
+  RequireThreadPool("ReadMountedSceneHierarchyAsync");
+  auto view = impl_->source_registry.CaptureView();
   if (!view) {
-    return contexts;
+    co_return std::nullopt;
   }
-  contexts.reserve(view->Layers().size());
-  for (const auto& layer : view->Layers()) {
-    const auto source = ResolveSourceForId(layer.id);
-    if (!source) {
-      continue;
-    }
+  co_return co_await thread_pool_->Run(
+    [view = std::move(view), key] -> std::optional<SceneHierarchy> {
+      return internal::SceneCatalogQueryService::ReadSceneHierarchy(*view, key);
+    });
+}
 
-    const auto source_key = source->GetSourceKey();
-    const auto asset_count = source->GetAssetCount();
-    for (size_t i = 0; i < asset_count; ++i) {
-      const auto asset_key_opt
-        = source->GetAssetKeyByIndex(static_cast<uint32_t>(i));
-      if (!asset_key_opt
-        || source->GetAssetType(*asset_key_opt)
-          != data::AssetType::kInputMappingContext
-        || view->ResolveAsset(*asset_key_opt) != layer.id) {
-        continue;
-      }
-
-      auto mounted = ReadInputMappingContextAssetDesc(*source, *asset_key_opt);
-      if (!mounted.has_value()) {
-        continue;
-      }
-
-      IAssetLoader::MountedInputContextEntry entry {};
-      entry.asset_key = *asset_key_opt;
-      entry.source_key = source_key;
-      entry.name = std::move(mounted->name);
-      entry.flags = mounted->desc.flags;
-      entry.default_priority = mounted->desc.default_priority;
-      contexts.push_back(std::move(entry));
-    }
+auto AssetLoader::ReadMountedSceneNodeAsync(
+  const data::AssetKey key, std::vector<data::NodeId> path)
+  -> co::Co<std::optional<IAssetLoader::SceneNodeValues>>
+{
+  AssertOwningThread();
+  RequireThreadPool("ReadMountedSceneNodeAsync");
+  auto view = impl_->source_registry.CaptureView();
+  if (!view) {
+    co_return std::nullopt;
   }
+  co_return co_await thread_pool_->Run(
+    [view = std::move(view), key,
+      path = std::move(path)] -> std::optional<SceneNodeValues> {
+      return internal::SceneCatalogQueryService::ReadSceneNode(
+        *view, key, path);
+    });
+}
 
-  return contexts;
+auto AssetLoader::StartReadMountedSceneHierarchy(
+  const data::AssetKey& key, SceneHierarchyCallback on_complete) -> void
+{
+  StartQuery("StartReadMountedSceneHierarchy",
+    [this, key, on_complete = std::move(on_complete)] mutable -> co::Co<> {
+      std::optional<SceneHierarchy> result;
+      try {
+        result = co_await ReadMountedSceneHierarchyAsync(key);
+      } catch (const std::exception& error) {
+        LOG_F(ERROR, "scene {} hierarchy read failed: {}", data::to_string(key),
+          error.what());
+      }
+      on_complete(std::move(result));
+    });
+}
+
+auto AssetLoader::StartReadMountedSceneNode(const data::AssetKey& key,
+  std::vector<data::NodeId> path, SceneNodeValuesCallback on_complete) -> void
+{
+  StartQuery("StartReadMountedSceneNode",
+    [this, key, path = std::move(path),
+      on_complete = std::move(on_complete)] mutable -> co::Co<> {
+      std::optional<SceneNodeValues> result;
+      try {
+        result = co_await ReadMountedSceneNodeAsync(key, std::move(path));
+      } catch (const std::exception& error) {
+        LOG_F(ERROR, "scene {} node read failed: {}", data::to_string(key),
+          error.what());
+      }
+      on_complete(std::move(result));
+    });
+}
+
+auto AssetLoader::EnumerateMountedInputContextsAsync()
+  -> co::Co<std::vector<IAssetLoader::MountedInputContextEntry>>
+{
+  AssertOwningThread();
+  RequireThreadPool("EnumerateMountedInputContextsAsync");
+  auto view = impl_->source_registry.CaptureView();
+  if (!view) {
+    co_return std::vector<MountedInputContextEntry> {};
+  }
+  co_return co_await thread_pool_->Run(
+    [view = std::move(view)] -> std::vector<MountedInputContextEntry> {
+      return EnumerateInputContexts(*view);
+    });
+}
+
+auto AssetLoader::RequireThreadPool(const std::string_view operation) const
+  -> void
+{
+  if (!thread_pool_) {
+    throw std::runtime_error(
+      fmt::format("AssetLoader requires a thread pool for {}", operation));
+  }
+}
+
+auto AssetLoader::StartQuery(
+  const std::string_view operation, std::function<co::Co<>()> query) -> void
+{
+  AssertOwningThread();
+  if (!nursery_) {
+    throw std::runtime_error(
+      fmt::format("AssetLoader must be activated before {}", operation));
+  }
+  nursery_->Start(std::move(query));
 }
 
 auto AssetLoader::EnumerateMountedSources() const
@@ -3024,63 +3098,10 @@ auto AssetLoader::ReadPhysicsMaterialAssetDescForAsset(
 }
 
 auto AssetLoader::FindPhysicsSidecarAssetKeyForScene(
-  const data::Asset& scene_asset, const ContentLoadScope& scope)
-  -> std::optional<data::AssetKey>
+  const data::Asset& scene_asset) const -> std::optional<data::AssetKey>
 {
-  const auto request = AdmitAssetRequest(LoadRequest { .scope = scope });
-  const auto& view = request.scope.state_->view;
-  if (!view) {
-    return std::nullopt;
-  }
-  std::optional<data::AssetKey> matched;
-  for (const auto& layer : view->Layers()) {
-    for (size_t i = 0; i < layer.source->GetAssetCount(); ++i) {
-      const auto key
-        = layer.source->GetAssetKeyByIndex(static_cast<uint32_t>(i));
-      if (!key
-        || layer.source->GetAssetType(*key) != data::AssetType::kPhysicsScene
-        || view->ResolveAsset(*key) != layer.id) {
-        continue;
-      }
-      const auto source = ResolveSourceForId(layer.id);
-      if (!source) {
-        throw std::runtime_error(
-          "Physics sidecar source is no longer readable");
-      }
-      const auto reader = source->CreateAssetDescriptorReader(*key);
-      if (!reader) {
-        throw std::runtime_error("Cannot read physics sidecar descriptor");
-      }
-      const auto bytes
-        = reader->ReadBlob(sizeof(data::pak::physics::PhysicsSceneAssetDesc));
-      if (!bytes) {
-        throw std::runtime_error("Cannot read physics sidecar descriptor");
-      }
-      const auto parsed_descriptor
-        = serio::CopyAt<data::pak::physics::PhysicsSceneAssetDesc>(*bytes);
-      if (!parsed_descriptor) {
-        throw std::runtime_error("Cannot read physics sidecar descriptor");
-      }
-      const auto& descriptor = *parsed_descriptor;
-      if (descriptor.header.asset_type
-          != static_cast<uint8_t>(data::AssetType::kPhysicsScene)
-        || descriptor.header.version
-          != data::pak::physics::kPhysicsSceneAssetVersion) {
-        throw std::runtime_error(
-          "Invalid physics sidecar descriptor type/version");
-      }
-      if (descriptor.target_scene_key != scene_asset.GetAssetKey()) {
-        continue;
-      }
-      if (matched) {
-        throw std::runtime_error(
-          "Multiple effective physics sidecars target scene "
-          + data::to_string(scene_asset.GetAssetKey()));
-      }
-      matched = *key;
-    }
-  }
-  return matched;
+  const auto* bindings = GetPhysicsBindings(scene_asset);
+  return bindings != nullptr ? bindings->sidecar : std::nullopt;
 }
 
 auto AssetLoader::ResolveAssetIdentityForKey(const data::AssetKey& key,

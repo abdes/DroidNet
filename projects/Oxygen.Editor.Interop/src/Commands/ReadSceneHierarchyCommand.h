@@ -22,8 +22,10 @@ namespace oxygen::interop::module {
 //! Reads the hierarchy of a scene of the mounted content, with every scene it
 //! instances, from the scene descriptors alone.
 /*!
- The callback runs on the engine thread with no value when the virtual path
- names no mounted scene. A command dropped without running never calls back.
+ The descriptors are read on the loader's thread pool; the callback runs on
+ the engine thread, with no value when the virtual path names no mounted scene.
+ A command dropped without running, or a read the loader drops at shutdown,
+ never calls back.
 */
 class ReadSceneHierarchyCommand final : public EditorCommand {
 public:
@@ -55,7 +57,8 @@ public:
       complete_(std::nullopt);
       return;
     }
-    complete_(context.AssetLoader->ReadMountedSceneHierarchy(*key));
+    context.AssetLoader->StartReadMountedSceneHierarchy(
+      *key, std::move(complete_));
   }
 
 private:

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -57,6 +58,7 @@
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
@@ -69,6 +71,7 @@
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/TaskCancelledException.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content {
 namespace {
@@ -170,6 +173,55 @@ namespace {
       throw std::runtime_error(
         "Unsupported physics descriptor dependency type");
     }
+  }
+
+  //! The one effective physics sidecar in `view` that targets `scene_key`.
+  auto FindPhysicsSidecar(const internal::ContentSourceView& view,
+    const data::AssetKey& scene_key) -> std::optional<data::AssetKey>
+  {
+    std::optional<data::AssetKey> matched;
+    for (const auto& layer : view.Layers()) {
+      const auto& source = *layer.source;
+      for (size_t i = 0; i < source.GetAssetCount(); ++i) {
+        const auto key = source.GetAssetKeyByIndex(static_cast<uint32_t>(i));
+        if (!key || source.GetAssetType(*key) != data::AssetType::kPhysicsScene
+          || view.ResolveAsset(*key) != layer.id) {
+          continue;
+        }
+        const auto reader = source.CreateAssetDescriptorReader(*key);
+        if (!reader) {
+          throw std::runtime_error("Cannot read physics sidecar descriptor");
+        }
+        const auto bytes
+          = reader->ReadBlob(sizeof(data::pak::physics::PhysicsSceneAssetDesc));
+        if (!bytes) {
+          throw std::runtime_error("Cannot read physics sidecar descriptor");
+        }
+        const auto parsed
+          = serio::CopyAt<data::pak::physics::PhysicsSceneAssetDesc>(*bytes);
+        if (!parsed) {
+          throw std::runtime_error("Cannot read physics sidecar descriptor");
+        }
+        const auto& descriptor = *parsed;
+        if (descriptor.header.asset_type
+            != static_cast<uint8_t>(data::AssetType::kPhysicsScene)
+          || descriptor.header.version
+            != data::pak::physics::kPhysicsSceneAssetVersion) {
+          throw std::runtime_error(
+            "Invalid physics sidecar descriptor type/version");
+        }
+        if (descriptor.target_scene_key != scene_key) {
+          continue;
+        }
+        if (matched) {
+          throw std::runtime_error(
+            "Multiple effective physics sidecars target scene "
+            + data::to_string(scene_key));
+        }
+        matched = *key;
+      }
+    }
+    return matched;
   }
 } // namespace
 
@@ -538,6 +590,10 @@ auto AssetLoader::BindDependenciesAsync(data::SceneAsset& asset,
       co_await BindCollectedResourcesAsync<data::BufferResource>(
         collector, bindings, request);
     });
+    nursery.Start(
+      [this, key = asset.GetAssetKey(), &bindings, request] -> co::Co<> {
+        co_await BindPhysicsSidecarAsync(key, bindings, request);
+      });
     for (const auto& renderable :
       asset.GetComponents<data::pak::world::RenderableRecord>()) {
       nursery.Start([this, key = renderable.geometry_key, &asset, &bindings,
@@ -650,6 +706,27 @@ auto AssetLoader::BindDependenciesAsync(data::InputMappingContextAsset& asset,
     }
     co_return co::kJoin;
   };
+}
+
+auto AssetLoader::BindPhysicsSidecarAsync(const data::AssetKey scene_key,
+  internal::ContentBindingBuilder& bindings, const LoadRequest request)
+  -> co::Co<>
+{
+  auto view = request.scope.state_->view;
+  if (!view) {
+    co_return;
+  }
+  // Every physics scene descriptor of the mounts is read to find the target.
+  const auto sidecar = co_await thread_pool_->Run(
+    [view = std::move(view), scene_key] -> std::optional<data::AssetKey> {
+      return FindPhysicsSidecar(*view, scene_key);
+    });
+  bindings.RequireOpen();
+  if (sidecar.has_value()) {
+    auto physics = std::make_unique<internal::PhysicsBindings>();
+    physics->sidecar = sidecar;
+    bindings.SetPhysics(std::move(physics));
+  }
 }
 
 auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,

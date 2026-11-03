@@ -89,7 +89,6 @@ namespace internal {
   class PayloadBudget;
   struct PhysicsBindings;
   class ResourceLoadPipeline;
-  class SceneCatalogQueryService;
   class ScriptQueryService;
   class IContentSource;
   struct ResourceRef;
@@ -332,14 +331,18 @@ public:
     -> ResidencyPolicyState override;
   OXGN_CNTT_NDAPI auto EnumerateMountedScenes() const
     -> std::vector<IAssetLoader::MountedSceneEntry> override;
-  OXGN_CNTT_NDAPI auto ReadMountedSceneHierarchy(
-    const data::AssetKey& key) const
-    -> std::optional<IAssetLoader::SceneHierarchy> override;
-  OXGN_CNTT_NDAPI auto ReadMountedSceneNode(
-    const data::AssetKey& key, std::span<const data::NodeId> path) const
-    -> std::optional<IAssetLoader::SceneNodeValues> override;
-  OXGN_CNTT_NDAPI auto EnumerateMountedInputContexts() const
-    -> std::vector<IAssetLoader::MountedInputContextEntry> override;
+  OXGN_CNTT_NDAPI auto ReadMountedSceneHierarchyAsync(data::AssetKey key)
+    -> co::Co<std::optional<IAssetLoader::SceneHierarchy>> override;
+  OXGN_CNTT_NDAPI auto ReadMountedSceneNodeAsync(
+    data::AssetKey key, std::vector<data::NodeId> path)
+    -> co::Co<std::optional<IAssetLoader::SceneNodeValues>> override;
+  OXGN_CNTT_API auto StartReadMountedSceneHierarchy(const data::AssetKey& key,
+    SceneHierarchyCallback on_complete) -> void override;
+  OXGN_CNTT_API auto StartReadMountedSceneNode(const data::AssetKey& key,
+    std::vector<data::NodeId> path, SceneNodeValuesCallback on_complete)
+    -> void override;
+  OXGN_CNTT_NDAPI auto EnumerateMountedInputContextsAsync()
+    -> co::Co<std::vector<IAssetLoader::MountedInputContextEntry>> override;
   OXGN_CNTT_NDAPI auto EnumerateMountedSources() const
     -> std::vector<IAssetLoader::MountedSourceEntry> override;
   OXGN_CNTT_API auto RegisterConsoleBindings(
@@ -955,7 +958,7 @@ public:
     const data::AssetKey& material_asset_key) const
     -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc> override;
   OXGN_CNTT_NDAPI auto FindPhysicsSidecarAssetKeyForScene(
-    const data::Asset& scene_asset, const content::ContentLoadScope& scope)
+    const data::Asset& scene_asset) const
     -> std::optional<data::AssetKey> override;
 
   [[nodiscard]] auto GetInputActionAsset(
@@ -1332,6 +1335,10 @@ private:
     data::SourceInstanceId source_id) const noexcept -> uint64_t;
   auto GetPhysicsBindings(const data::Asset& context) const
     -> const internal::PhysicsBindings*;
+  auto RequireThreadPool(std::string_view operation) const -> void;
+  //! Run a query's callback bridge in the loader's nursery.
+  auto StartQuery(std::string_view operation, std::function<co::Co<>()> query)
+    -> void;
 
   OXGN_CNTT_NDAPI auto AdmitAssetRequest(LoadRequest request) -> LoadRequest;
   OXGN_CNTT_NDAPI auto ResolveScopedRoot(const data::AssetKey& key,
@@ -1379,6 +1386,8 @@ private:
   auto BindSceneAssetValueAsync(const data::AssetKey& key, data::AssetType type,
     data::SceneAsset& asset, internal::ContentBindingBuilder& bindings,
     LoadRequest request) -> co::Co<>;
+  auto BindPhysicsSidecarAsync(data::AssetKey scene_key,
+    internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
   auto BindDependenciesAsync(data::PhysicsSceneAsset& asset,
     const internal::DependencyCollector& collector,
     internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
@@ -1529,8 +1538,6 @@ private:
   //! Declared before the pipeline, which reads payloads within it.
   std::unique_ptr<internal::PayloadBudget> payload_budget_;
   std::unique_ptr<internal::ResourceLoadPipeline> resource_load_pipeline_;
-  std::unique_ptr<internal::SceneCatalogQueryService>
-    scene_catalog_query_service_;
   std::unique_ptr<internal::ScriptQueryService> script_query_service_;
 
   auto MintSyntheticResourceKey(TypeId resource_type) -> ResourceKey;
