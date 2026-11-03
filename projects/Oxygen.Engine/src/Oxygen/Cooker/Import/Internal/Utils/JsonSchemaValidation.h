@@ -13,7 +13,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include <nlohmann/json-schema.hpp>
@@ -35,11 +34,20 @@ inline constexpr std::string_view kReferenceSchemaFileName
 inline constexpr std::string_view kLodPolicySchemaFileName
   = "oxygen.lod-policy.schema.json";
 
+//! The file the model import record references for its settings.
+inline constexpr std::string_view kImportManifestSchemaFileName
+  = "oxygen.import-manifest.schema.json";
+
+//! The file the model import record references for its surface provenance.
+inline constexpr std::string_view kSurfaceProvenanceSchemaFileName
+  = "oxygen.surface-provenance.schema.json";
+
 //! A validator for an embedded import schema.
 /*!
  The schema's references to `oxygen.name.schema.json`,
- `oxygen.reference.schema.json` and `oxygen.lod-policy.schema.json` resolve to
- the embedded shared schemas.
+ `oxygen.reference.schema.json`, `oxygen.lod-policy.schema.json`,
+ `oxygen.import-manifest.schema.json` and
+ `oxygen.surface-provenance.schema.json` resolve to the embedded schemas.
 
  @throw std::invalid_argument when the schema references any other file.
 */
@@ -56,6 +64,10 @@ inline auto MakeJsonSchemaValidator(const nlohmann::json& schema)
         loaded = nlohmann::json::parse(kReferenceSchema);
       } else if (file == kLodPolicySchemaFileName) {
         loaded = nlohmann::json::parse(kLodPolicySchema);
+      } else if (file == kImportManifestSchemaFileName) {
+        loaded = nlohmann::json::parse(kImportManifestSchema);
+      } else if (file == kSurfaceProvenanceSchemaFileName) {
+        loaded = nlohmann::json::parse(kSurfaceProvenanceSchema);
       } else {
         throw std::invalid_argument(
           "unknown schema reference: " + uri.location());
@@ -83,8 +95,8 @@ struct JsonSchemaValidationDiagnosticConfig final {
 class CollectingJsonSchemaErrorHandler final
   : public nlohmann::json_schema::error_handler {
 public:
-  void error(const nlohmann::json::json_pointer& ptr, const nlohmann::json&,
-    const std::string& message) override
+  void error(const nlohmann::json::json_pointer& ptr,
+    const nlohmann::json& /*unused*/, const std::string& message) override
   {
     issues_.push_back(JsonSchemaIssue {
       .object_path = JsonPointerToObjectPath(ptr.to_string()),
@@ -167,7 +179,7 @@ private:
     return out;
   }
 
-  std::vector<JsonSchemaIssue> issues_ {};
+  std::vector<JsonSchemaIssue> issues_;
 };
 
 inline auto CollectJsonSchemaIssues(
@@ -222,31 +234,15 @@ inline auto ValidateJsonSchema(nlohmann::json_schema::json_validator& validator,
   throw std::invalid_argument(message);
 }
 
-template <typename EmitDiagnosticFn>
-inline auto EmitCollectedJsonSchemaIssues(
-  const std::vector<JsonSchemaIssue>& issues, const std::string_view code,
-  const std::string_view message_prefix, const std::string_view overflow_prefix,
-  const size_t max_issues, EmitDiagnosticFn&& emit) -> void
-{
-  const auto reported = std::min(issues.size(), max_issues);
-  for (size_t i = 0; i < reported; ++i) {
-    const auto& issue = issues[i];
-    emit(code, std::string(message_prefix) + issue.message, issue.object_path);
-  }
-  if (issues.size() > reported) {
-    emit(code,
-      std::string(overflow_prefix) + std::to_string(issues.size())
-        + " error(s); showing first " + std::to_string(reported),
-      std::string {});
-  }
-}
-
+//! Validates `instance` and emits each schema issue, at most
+//! `config.max_issues` of them and then the count, as `emit(code, message,
+//! object_path)`; true when the schema accepts the instance.
 template <typename EmitDiagnosticFn>
 inline auto ValidateJsonSchemaWithDiagnostics(
   nlohmann::json_schema::json_validator& validator,
   const nlohmann::json& instance,
-  const JsonSchemaValidationDiagnosticConfig& config, EmitDiagnosticFn&& emit)
-  -> bool
+  const JsonSchemaValidationDiagnosticConfig& config,
+  const EmitDiagnosticFn& emit) -> bool
 {
   auto issues = std::vector<JsonSchemaIssue> {};
   auto internal_error = std::string {};
@@ -256,14 +252,21 @@ inline auto ValidateJsonSchemaWithDiagnostics(
       std::string {});
     return false;
   }
-  if (issues.empty()) {
-    return true;
+  const auto reported = std::min(issues.size(), config.max_issues);
+  for (size_t i = 0; i < reported; ++i) {
+    const auto& issue = issues[i];
+    emit(config.validation_failed_code,
+      std::string(config.validation_failed_prefix) + issue.message,
+      issue.object_path);
   }
-
-  EmitCollectedJsonSchemaIssues(issues, config.validation_failed_code,
-    config.validation_failed_prefix, config.validation_overflow_prefix,
-    config.max_issues, std::forward<EmitDiagnosticFn>(emit));
-  return false;
+  if (issues.size() > reported) {
+    emit(config.validation_failed_code,
+      std::string(config.validation_overflow_prefix)
+        + std::to_string(issues.size()) + " error(s); showing first "
+        + std::to_string(reported),
+      std::string {});
+  }
+  return issues.empty();
 }
 
 } // namespace oxygen::content::import::internal

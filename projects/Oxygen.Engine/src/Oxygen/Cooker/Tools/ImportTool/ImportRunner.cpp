@@ -41,6 +41,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
+#include <Oxygen/Cooker/Import/ModelImportRecordError.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
@@ -490,8 +491,7 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
         const auto path = ModelImportRecord::RecordPathOf(
           *mounts, settings.virtual_path, findings);
         if (!path.has_value()) {
-          throw std::invalid_argument(
-            "[" + findings.front().code + "] " + findings.front().message);
+          throw ModelImportRecordError(findings.front());
         }
         record_path = *path;
       } else {
@@ -508,8 +508,7 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
       const auto identity
         = ModelImportRecord::IdentityOf(*mounts, record_path, findings);
       if (!identity.has_value()) {
-        throw std::invalid_argument(
-          "[" + findings.front().code + "] " + findings.front().message);
+        throw ModelImportRecordError(findings.front());
       }
       if (*identity != settings.virtual_path) {
         throw std::invalid_argument("--record " + record_path.generic_string()

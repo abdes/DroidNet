@@ -53,6 +53,7 @@
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
+#include <Oxygen/Cooker/Import/ModelImportRecordError.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportRequestBuilder.h>
@@ -436,9 +437,13 @@ namespace {
     try {
       return std::make_shared<const ModelImportRecordContent>(
         ModelImportRecord::Read(*path, mounts));
-    } catch (const std::exception& error) {
-      errors << "ERROR [import.model_record_invalid]: model import record '"
-             << path->string() << "': " << error.what() << "\n";
+    } catch (const ModelImportRecordError& error) {
+      PrintDiagnostics(std::span { &error.Diagnostic(), 1 }, errors);
+      return {};
+    } catch (const std::filesystem::filesystem_error& error) {
+      errors << "ERROR [" << model_record_codes::kUnreadable
+             << "]: model import record '" << path->generic_string()
+             << "': " << error.what() << "\n";
       return {};
     }
   }

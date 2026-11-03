@@ -13,8 +13,27 @@
       "$ref": "oxygen.reference.schema.json#/definitions/reference"
     },
     "settings": {
-      "description": "The model import settings, in the vocabulary of a gltf or fbx import manifest job, without its id, type, source, virtual path or output.",
-      "type": "object"
+      "description": "The model import settings: the settings of a gltf or fbx import manifest job, without the keys the record and its publisher own. The cooker also checks them as that job (import.model_record_invalid).",
+      "allOf": [
+        {
+          "$ref": "oxygen.import-manifest.schema.json#/definitions/job_settings"
+        },
+        {
+          "not": {
+            "anyOf": [
+              { "required": ["id"] },
+              { "required": ["type"] },
+              { "required": ["source"] },
+              { "required": ["virtual_path"] },
+              { "required": ["depends_on"] },
+              { "required": ["output"] },
+              { "required": ["cooked_context_roots"] },
+              { "required": ["source_key"] },
+              { "required": ["surface_provenance"] }
+            ]
+          }
+        }
+      ]
     },
     "source_identity": {
       "description": "From which node and surface IDs are derived; never changes.",
@@ -22,8 +41,8 @@
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
     "surface_provenance": {
-      "description": "oxygen.surface-provenance.schema.json, the identity left out.",
-      "type": "object"
+      "description": "The surface provenance; its identity is the record's source identity.",
+      "$ref": "oxygen.surface-provenance.schema.json"
     },
     "node_continuity": {
       "type": "array",

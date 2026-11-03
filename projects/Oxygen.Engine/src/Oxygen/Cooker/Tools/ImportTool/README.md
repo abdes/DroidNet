@@ -278,6 +278,25 @@ the command that rebinds it. Record imports publish into `--output`, a
 generations folder the tool owns; it is required, and never a project's own
 output folder.
 
+A record's `settings` are the settings of a gltf or fbx manifest job, without
+the keys the record and its publisher own (`id`, `type`, `source`,
+`virtual_path`, `depends_on`, `output`, `cooked_context_roots`, `source_key`).
+Every refusal of a record names a stable code and the field it is about
+(`ModelImportRecordError`), besides the mount and reference codes of its
+location and source:
+
+| Code                             | When                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------- |
+| `import.model_record_misnamed`   | The file is not named `<model>.import.json`                                           |
+| `import.model_record_unreadable` | The record cannot be read; also the warning for a record a lookup skips               |
+| `import.model_record_invalid`    | It breaks its schema, or its settings, provenance, nodes or source format are refused |
+| `import.model_record_duplicate`  | Another record of the mount table has its source identity                             |
+| `import.model_record_busy`       | Another import or save holds it                                                       |
+| `import.model_record_changed`    | It or its selected generation changed while an import ran; nothing was published      |
+| `import.source_missing`          | Its source, or the source a lookup was given, does not exist                          |
+| `import.generation_missing`      | The generation it selects is gone: import the model again                             |
+| `import.generation_invalid`      | The selected generation's head is malformed, it cannot be leased or its index changed |
+
 The publisher commits the import's surface provenance, published nodes and
 source fingerprint to the record together with the validated immutable
 generation, which it selects in

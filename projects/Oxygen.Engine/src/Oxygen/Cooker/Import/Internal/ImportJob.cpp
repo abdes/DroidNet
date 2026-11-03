@@ -34,6 +34,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
+#include <Oxygen/Cooker/Import/ModelImportRecordError.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -483,6 +484,9 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
       } catch (const LooseCookedRootBusy& error) {
         // Nothing was written: the cook can run again once the root is free.
         fail("import.cooked_root_busy", error.what());
+      } catch (const ModelImportRecordError& error) {
+        // The record refused its publication: its code, not the exception's.
+        fail(error.Diagnostic().code, error.Diagnostic().message);
       } catch (const std::exception& error) {
         fail("import.exception", error.what());
       } catch (...) {

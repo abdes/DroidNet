@@ -142,6 +142,7 @@ set(
   "Import/ImportReport.h"
   "Import/SurfaceProvenance.h"
   "Import/ModelImportRecord.h"
+  "Import/ModelImportRecordError.h"
   "Import/ModelImportState.h"
   "Import/ImportRequest.h"
   "CookedVersions.h"

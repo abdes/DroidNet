@@ -47,6 +47,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
+#include <Oxygen/Cooker/Import/ModelImportRecordError.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
@@ -86,14 +87,45 @@ namespace {
 
   constexpr auto kHeadFileName = "head.json";
 
+  namespace codes = model_record_codes;
+
+  //! Refuses with `code`, about `file` and its JSON field `field`.
+  [[noreturn]] auto Refuse(const std::string_view code,
+    const std::filesystem::path& file, std::string field, std::string message)
+    -> void
+  {
+    throw ModelImportRecordError(ImportDiagnostic {
+      .severity = ImportSeverity::kError,
+      .code = std::string(code),
+      .message = std::move(message),
+      .source_path = file.generic_string(),
+      .object_path = std::move(field),
+    });
+  }
+
+  //! Refuses with the first error of a lookup that found nothing, or with
+  //! `fallback` as an invalid record when it reported none.
+  [[noreturn]] auto Refuse(const std::vector<ImportDiagnostic>& findings,
+    const std::filesystem::path& file, std::string field, std::string fallback)
+    -> void
+  {
+    const auto error = std::ranges::find(
+      findings, ImportSeverity::kError, &ImportDiagnostic::severity);
+    if (error != findings.end()) {
+      throw ModelImportRecordError(*error);
+    }
+    Refuse(codes::kInvalid, file, std::move(field), std::move(fallback));
+  }
+
   //! The text of a record file, which its writers publish atomically: it is
   //! opened sharing deletion, so a publication while it is read replaces it.
   auto ReadText(const std::filesystem::path& path) -> std::string
   {
     const auto bytes = serio::ReadPublishedFile(path, kMaxImportMetadataBytes);
     if (!bytes) {
-      throw std::runtime_error("Cannot read model import file: " + path.string()
-        + ": " + bytes.error().message());
+      Refuse(codes::kUnreadable, path, {},
+        "Cannot read model import file " + path.generic_string() + ": "
+          + bytes.error().message());
     }
     const auto chars = bytes->Bytes();
     auto text = std::string(chars.size(), ' ');
@@ -108,21 +140,29 @@ namespace {
       std::as_bytes(std::span(text.data(), text.size())));
   }
 
-  auto FileDigest(const std::filesystem::path& path) -> base::Sha256Digest
+  //! The digest of a file an operation needs; `code` refuses one that cannot
+  //! be read.
+  auto FileDigest(const std::filesystem::path& path,
+    const std::string_view code = codes::kUnreadable) -> base::Sha256Digest
   {
     const auto digest = serio::ComputeFileSha256(path);
     if (!digest) {
-      throw std::runtime_error("Model import file hash failed: " + path.string()
-        + ": " + digest.error().message());
+      Refuse(code, path, {},
+        "Cannot hash " + path.generic_string() + ": "
+          + digest.error().message());
     }
     return *digest;
   }
 
-  auto ReadDigest(const std::string& text) -> base::Sha256Digest
+  //! The digest `text` spells, in the field `field` of `file`; `code`
+  //! refuses another text.
+  auto ReadDigest(const std::string& text, const std::filesystem::path& file,
+    std::string field, const std::string_view code = codes::kInvalid)
+    -> base::Sha256Digest
   {
     const auto digest = base::Sha256DigestFromHex(text);
     if (!digest.has_value()) {
-      throw std::invalid_argument("Invalid model import digest: " + text);
+      Refuse(code, file, std::move(field), "Not a SHA-256 digest: " + text);
     }
     return *digest;
   }
@@ -168,15 +208,6 @@ namespace {
     };
   }
 
-  //! Throws the first finding that refused a lookup, with its code.
-  [[noreturn]] auto Refuse(const std::vector<ImportDiagnostic>& findings,
-    const std::string& fallback) -> void
-  {
-    throw std::invalid_argument(findings.empty()
-        ? fallback
-        : "[" + findings.front().code + "] " + findings.front().message);
-  }
-
   //! The identity of the model whose record is `record_path`; throws what
   //! refuses it.
   auto RequireIdentity(const MountTable& mounts,
@@ -186,8 +217,8 @@ namespace {
     auto identity
       = ModelImportRecord::IdentityOf(mounts, record_path, findings);
     if (!identity.has_value()) {
-      Refuse(
-        findings, "Not a model import record: " + record_path.generic_string());
+      Refuse(findings, record_path, {},
+        "Not a model import record: " + record_path.generic_string());
     }
     return std::move(*identity);
   }
@@ -200,14 +231,14 @@ namespace {
     const auto path
       = ModelImportRecord::RecordPathOf(mounts, identity, findings);
     if (!path.has_value()) {
-      Refuse(findings,
+      Refuse(findings, std::filesystem::path { mounts.declared_in }, {},
         "The model " + std::string(identity) + " has no record location");
     }
     return Absolute(*path);
   }
 
   //! Locks a record. The lock file beside it exists only while the lock is
-  //! held.
+  //! held; another holder is `import.model_record_busy`.
   auto RecordLock(const std::filesystem::path& path) -> serio::FileLock
   {
     auto lock_path = path;
@@ -215,7 +246,13 @@ namespace {
     auto lock = serio::FileLock::TryAcquire(lock_path,
       serio::FileLockMode::kExclusive, serio::FileLockOpenMode::kTemporary);
     if (!lock) {
-      throw std::system_error(lock.error(), "Model import record is busy");
+      if (lock.error() == std::errc::device_or_resource_busy) {
+        Refuse(codes::kBusy, path, {},
+          "Another import or save holds the model import record "
+            + path.generic_string());
+      }
+      throw std::system_error(lock.error(),
+        "Cannot lock the model import record " + path.generic_string());
     }
     return std::move(lock).value();
   }
@@ -227,38 +264,60 @@ namespace {
     return request.GetFormat();
   }
 
-  auto JobType(const std::filesystem::path& source) -> std::string_view
+  //! The manifest job type of the record `record`'s source.
+  auto JobType(const std::filesystem::path& record,
+    const std::filesystem::path& source) -> std::string_view
   {
     const auto format = FormatOf(source);
     if (format != ImportFormat::kGltf && format != ImportFormat::kFbx) {
-      throw std::invalid_argument(
-        "A model import source must be glTF, GLB or FBX: " + source.string());
+      Refuse(codes::kInvalid, record, "source",
+        "A model import source must be glTF, GLB or FBX: "
+          + source.generic_string());
     }
     return format == ImportFormat::kFbx ? "fbx" : "gltf";
   }
 
-  auto RequireSettings(const json& settings) -> void
+  //! Refuses settings that are no object or that hold a key the record and
+  //! its manifest own.
+  auto RequireSettings(
+    const std::filesystem::path& record, const json& settings) -> void
   {
     if (!settings.is_object()) {
-      throw std::invalid_argument("Model import settings must be an object");
+      Refuse(codes::kInvalid, record, "settings",
+        "Model import settings must be an object");
     }
     for (const auto* key : kStructuralKeys) {
       if (settings.contains(key)) {
-        throw std::invalid_argument(
+        Refuse(codes::kInvalid, record, std::string("settings.") + key,
           std::string("Model import settings hold no '") + key
-          + "'; the record and its manifest own it");
+            + "'; the record and its manifest own it");
       }
     }
   }
 
-  auto MakeJobJson(const ModelImportRecordContent& content,
-    const std::string_view identity) -> json
+  //! The settings text `text`, parsed.
+  auto ParseSettings(
+    const std::filesystem::path& record, const std::string& text) -> json
   {
-    auto job = json::parse(content.settings_json);
-    RequireSettings(job);
+    try {
+      auto settings = json::parse(text);
+      RequireSettings(record, settings);
+      return settings;
+    } catch (const json::parse_error& error) {
+      Refuse(codes::kInvalid, record, "settings",
+        std::string("Model import settings are no JSON: ") + error.what());
+    }
+  }
+
+  //! The record `record`'s gltf or fbx job.
+  auto MakeJobJson(const std::filesystem::path& record,
+    const ModelImportRecordContent& content, const std::string_view identity)
+    -> json
+  {
+    auto job = ParseSettings(record, content.settings_json);
     job.update({
       { "id", "model" },
-      { "type", JobType(content.source) },
+      { "type", JobType(record, content.source) },
       { "source", content.source_mount_path },
       { "virtual_path", identity },
     });
@@ -267,12 +326,13 @@ namespace {
 
   //! Validates the settings as the import manifest does, by parsing the
   //! record's job.
-  auto ValidateSettings(const ModelImportRecordContent& content,
-    const std::string_view identity, const MountTable& mounts) -> void
+  auto ValidateSettings(const std::filesystem::path& record,
+    const ModelImportRecordContent& content, const std::string_view identity,
+    const MountTable& mounts) -> void
   {
     const auto manifest = json {
       { "version", 1 },
-      { "jobs", json::array({ MakeJobJson(content, identity) }) },
+      { "jobs", json::array({ MakeJobJson(record, content, identity) }) },
     };
     std::ostringstream errors;
     const auto parsed
@@ -285,23 +345,26 @@ namespace {
         },
         errors);
     if (!parsed || parsed->jobs.size() != 1U) {
-      throw std::invalid_argument(
+      Refuse(codes::kInvalid, record, "settings",
         "Invalid model import settings: " + errors.str());
     }
   }
 
-  auto ReadFingerprint(const json& value) -> ModelSourceFingerprint
+  auto ReadFingerprint(const std::filesystem::path& record, const json& value)
+    -> ModelSourceFingerprint
   {
     auto fingerprint = ModelSourceFingerprint {
       .size = value.at("size").get<uint64_t>(),
-      .sha256 = ReadDigest(value.at("sha256").get<std::string>()),
+      .sha256 = ReadDigest(value.at("sha256").get<std::string>(), record,
+        "source_fingerprint.sha256"),
       .files = {},
     };
     for (const auto& file : value.at("files")) {
       fingerprint.files.push_back({
         .path = file.at("path").get<std::string>(),
         .size = file.at("size").get<uint64_t>(),
-        .sha256 = ReadDigest(file.at("sha256").get<std::string>()),
+        .sha256 = ReadDigest(file.at("sha256").get<std::string>(), record,
+          "source_fingerprint.files"),
       });
     }
     return fingerprint;
@@ -338,15 +401,15 @@ namespace {
     return nodes;
   }
 
-  auto ReadNodes(const json& document, const char* key)
-    -> std::vector<ModelPublishedNode>
+  auto ReadNodes(const std::filesystem::path& record, const json& document,
+    const char* key) -> std::vector<ModelPublishedNode>
   {
     auto nodes = std::vector<ModelPublishedNode> {};
     for (const auto& node : document.value(key, json::array())) {
       const auto id
         = data::NodeId::FromString(node.at("node_id").get<std::string>());
       if (!id) {
-        throw std::invalid_argument(
+        Refuse(codes::kInvalid, record, key,
           std::string("Invalid node ID in '") + key + "'");
       }
       nodes.push_back({
@@ -444,10 +507,10 @@ namespace {
         continue;
       }
       if (other.source_identity == content.source_identity) {
-        throw std::invalid_argument("Two model import records have the source "
-                                    "identity "
-          + content.source_identity.ToString() + ": " + path.generic_string()
-          + " and " + other_path.generic_string());
+        Refuse(codes::kDuplicate, path, "source_identity",
+          "Two model import records have the source identity "
+            + content.source_identity.ToString() + ": " + path.generic_string()
+            + " and " + other_path.generic_string());
       }
     }
   }
@@ -469,20 +532,29 @@ namespace {
     std::string index_sha256;
   };
 
+  //! The head of a record's generations; a malformed one is
+  //! `import.generation_invalid`.
   auto ReadHead(const std::filesystem::path& directory) -> std::optional<Head>
   {
     const auto path = directory / kHeadFileName;
     if (!Exists(path)) {
       return std::nullopt;
     }
-    const auto document = json::parse(ReadText(path));
-    const auto id = Uuid::FromString(document.at("id").get<std::string>());
-    if (!id || !id.value().IsValidV7()) {
-      throw std::invalid_argument("Invalid published import generation");
+    try {
+      const auto document = json::parse(ReadText(path));
+      const auto id = Uuid::FromString(document.at("id").get<std::string>());
+      if (!id || !id.value().IsValidV7()) {
+        Refuse(codes::kGenerationInvalid, path, "id",
+          "The selected generation is not named by a UUIDv7");
+      }
+      auto index = document.at("index_sha256").get<std::string>();
+      static_cast<void>(
+        ReadDigest(index, path, "index_sha256", codes::kGenerationInvalid));
+      return Head { .id = id.value(), .index_sha256 = std::move(index) };
+    } catch (const json::exception& error) {
+      Refuse(codes::kGenerationInvalid, path, {},
+        std::string("The generations head is malformed: ") + error.what());
     }
-    auto index = document.at("index_sha256").get<std::string>();
-    static_cast<void>(ReadDigest(index));
-    return Head { .id = id.value(), .index_sha256 = std::move(index) };
   }
 
   //! What an attempt must find unchanged when it publishes: the record and
@@ -583,14 +655,31 @@ namespace {
     std::string source_text;
   };
 
+  //! The record's JSON, valid against its schema.
+  auto ParseDocument(const std::filesystem::path& path) -> json
+  {
+    auto document = json {};
+    try {
+      document = json::parse(ReadText(path));
+    } catch (const json::parse_error& error) {
+      Refuse(codes::kInvalid, path, {},
+        std::string("A model import record is JSON: ") + error.what());
+    }
+    auto validator
+      = internal::MakeJsonSchemaValidator(json::parse(kModelImportSchema));
+    try {
+      internal::ValidateJsonSchema(
+        validator, document, "Model import record " + path.generic_string());
+    } catch (const std::invalid_argument& error) {
+      Refuse(codes::kInvalid, path, {}, error.what());
+    }
+    return document;
+  }
+
   auto ReadDocument(const std::filesystem::path& record_path) -> RecordDocument
   {
     const auto path = Absolute(record_path);
-    const auto document = json::parse(ReadText(path));
-    auto validator
-      = internal::MakeJsonSchemaValidator(json::parse(kModelImportSchema));
-    internal::ValidateJsonSchema(
-      validator, document, "Model import record " + path.generic_string());
+    const auto document = ParseDocument(path);
 
     auto content = ModelImportRecordContent {};
     content.source_identity
@@ -598,10 +687,14 @@ namespace {
           .value();
     auto source_text = document.at("source").get<std::string>();
     content.settings_json = document.at("settings").dump();
-    content.surface_provenance = document.contains("surface_provenance")
-      ? SurfaceProvenance::Parse(
-          document.at("surface_provenance").dump(), content.source_identity)
-      : std::make_shared<const SurfaceProvenance>(content.source_identity);
+    try {
+      content.surface_provenance = document.contains("surface_provenance")
+        ? SurfaceProvenance::Parse(
+            document.at("surface_provenance").dump(), content.source_identity)
+        : std::make_shared<const SurfaceProvenance>(content.source_identity);
+    } catch (const std::invalid_argument& error) {
+      Refuse(codes::kInvalid, path, "surface_provenance", error.what());
+    }
 
     auto anchors = std::set<std::string> {};
     for (const auto& entry : document.value("node_continuity", json::array())) {
@@ -610,16 +703,16 @@ namespace {
         .continues = entry.at("continues").get<std::string>(),
       });
       if (!anchors.insert(added.anchor).second) {
-        throw std::invalid_argument(
+        Refuse(codes::kInvalid, path, "node_continuity",
           "Two node continuity entries have the anchor '" + added.anchor + "'");
       }
     }
-    content.published_nodes = ReadNodes(document, "published_nodes");
-    content.new_nodes = ReadNodes(document, "new_nodes");
-    content.vanished_nodes = ReadNodes(document, "vanished_nodes");
+    content.published_nodes = ReadNodes(path, document, "published_nodes");
+    content.new_nodes = ReadNodes(path, document, "new_nodes");
+    content.vanished_nodes = ReadNodes(path, document, "vanished_nodes");
     if (document.contains("source_fingerprint")) {
       content.source_fingerprint
-        = ReadFingerprint(document.at("source_fingerprint"));
+        = ReadFingerprint(path, document.at("source_fingerprint"));
     }
     return {
       .content = std::move(content),
@@ -635,7 +728,8 @@ namespace {
     const auto located = mounts.LocateReference(
       record_path, CommittedPath { .text = text, .field = "source" }, findings);
     if (!located.has_value()) {
-      Refuse(findings, "Cannot locate the source '" + text + "'");
+      Refuse(findings, record_path, "source",
+        "Cannot locate the source '" + text + "'");
     }
     return *located;
   }
@@ -647,7 +741,8 @@ namespace {
     auto findings = std::vector<ImportDiagnostic> {};
     const auto located = mounts.MountPathOf(Absolute(source), findings);
     if (!located.has_value()) {
-      Refuse(findings, "Cannot locate the source " + source.generic_string());
+      Refuse(findings, source, {},
+        "Cannot locate the source " + source.generic_string());
     }
     return *located;
   }
@@ -764,7 +859,7 @@ auto ModelImportRecord::Read(const std::filesystem::path& record_path,
   const auto located = LocateRecordSource(record_path, source_text, mounts);
   content.source = located.file;
   content.source_mount_path = located.mount_path;
-  ValidateSettings(content, identity, mounts);
+  ValidateSettings(record_path, content, identity, mounts);
   return content;
 }
 
@@ -847,7 +942,7 @@ auto ModelImportRecord::SerializeImportUpdate(
 auto ModelImportRecord::MakeJob(const ModelImportRecordContent& content,
   const std::string_view identity) -> std::string
 {
-  return MakeJobJson(content, identity).dump();
+  return MakeJobJson({}, content, identity).dump();
 }
 
 auto ModelImportRecord::MakeSettings(const SceneImportSettings& settings)
@@ -933,6 +1028,10 @@ auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
 {
   const auto& [source, identity, mounts] = query;
   const auto file = Absolute(source);
+  if (!Exists(file)) {
+    Refuse(codes::kSourceMissing, file, {},
+      "The model source " + file.generic_string() + " does not exist");
+  }
   const auto mount_path = MountPathOfSource(file, *mounts).mount_path;
   const auto target = RequireRecordPath(*mounts, identity);
   const auto same_source
@@ -1073,14 +1172,13 @@ auto ModelImportRecord::Save(const ModelImportRecordSave& save) -> void
     content.source_mount_path = located.mount_path;
   }
   if (save.settings_json) {
-    const auto settings = json::parse(*save.settings_json);
-    RequireSettings(settings);
-    content.settings_json = settings.dump();
+    content.settings_json = ParseSettings(path, *save.settings_json).dump();
   }
   if (content.source.empty()) {
-    throw std::invalid_argument("A new model import record needs a source");
+    Refuse(codes::kInvalid, path, "source",
+      "A new model import record needs a source");
   }
-  ValidateSettings(content, identity, *save.mounts);
+  ValidateSettings(path, content, identity, *save.mounts);
   RequireUniqueRecord(path, content, *save.mounts);
   const auto text = Serialize(content, identity);
   if (!exists || ReadText(path) != text) {
@@ -1174,10 +1272,10 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
   state->content = Read(state->record_path, mounts);
   RequireUniqueRecord(state->record_path, state->content, mounts);
   if (!Exists(state->content.source)) {
-    throw std::runtime_error("import.source_missing: the source "
-      + state->content.source.generic_string() + " of the model "
-      + state->identity + " is missing; importing the new file as "
-      + state->identity + " rebinds it");
+    Refuse(codes::kSourceMissing, state->record_path, "source",
+      "The source " + state->content.source.generic_string() + " of the model "
+        + state->identity + " is missing; importing the new file as "
+        + state->identity + " rebinds it");
   }
   state->baseline
     = Baseline(state->record_path, state->generations, state->content);
@@ -1223,14 +1321,14 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
       },
       errors);
   if (!parsed || parsed->jobs.size() != 1U) {
-    throw std::invalid_argument(errors.str());
+    Refuse(codes::kInvalid, state->record_path, "settings", errors.str());
   }
   auto& job = parsed->jobs.front();
   auto& settings = job.job_type == "fbx" ? job.fbx : job.gltf;
   settings.cooked_root = root.string();
   auto request = job.BuildRequest(errors);
   if (!request) {
-    throw std::invalid_argument(errors.str());
+    Refuse(codes::kInvalid, state->record_path, "settings", errors.str());
   }
   state->request = std::move(*request);
   state->request.source_key = data::SourceKey { state->generation };
@@ -1298,21 +1396,27 @@ auto ModelImportRecord::SelectedGeneration(
     return std::nullopt;
   }
   auto selected = directory / head->id.ToString();
-  if (!std::filesystem::exists(base::ToNativePath(selected))) {
-    return selected;
+  const auto head_path = directory / kHeadFileName;
+  if (!std::filesystem::is_directory(base::ToNativePath(selected))) {
+    Refuse(codes::kGenerationMissing, head_path, "id",
+      "The selected generation " + selected.generic_string()
+        + " is gone; import the model again");
   }
   const auto lease = serio::FileLock::TryAcquire(
     selected / data::loose_cooked::kGenerationLeaseFileName,
     serio::FileLockMode::kShared);
   if (!lease) {
-    throw std::system_error(
-      lease.error(), "Selected import generation is unavailable");
+    Refuse(codes::kGenerationInvalid, head_path, "id",
+      "The selected generation " + selected.generic_string()
+        + " cannot be leased: " + lease.error().message());
   }
   const auto actual
-    = FileDigest(selected / oxygen::data::loose_cooked::kIndexFileName);
+    = FileDigest(selected / oxygen::data::loose_cooked::kIndexFileName,
+      codes::kGenerationInvalid);
   if (base::ToHexString(actual) != head->index_sha256) {
-    throw std::runtime_error(
-      "Selected import generation index changed after publication");
+    Refuse(codes::kGenerationInvalid, head_path, "index_sha256",
+      "The index of the selected generation " + selected.generic_string()
+        + " changed after publication");
   }
   return selected;
 }
@@ -1424,8 +1528,8 @@ auto ModelImportRecord::Publish(
   const auto lock = RecordLock(state_->record_path);
   if (Baseline(state_->record_path, state_->generations, state_->content)
     != state_->baseline) {
-    throw std::runtime_error(
-      "Model import settings or publication changed during import");
+    Refuse(codes::kChanged, state_->record_path, {},
+      "The model import settings or publication changed during the import");
   }
   if (stop_token.stop_requested()) {
     throw std::runtime_error("Model import publication was cancelled before "

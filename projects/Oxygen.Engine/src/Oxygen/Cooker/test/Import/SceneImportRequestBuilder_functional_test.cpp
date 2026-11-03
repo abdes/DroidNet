@@ -364,7 +364,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
                 { "type", "model" },
                 { "virtual_path", "/Content/missing.gltf" },
               }),
-    testing::HasSubstr("import.model_record_invalid"));
+    testing::HasSubstr("import.model_record_unreadable"));
 }
 
 //! The model import settings a record holds reach the import: up axis,

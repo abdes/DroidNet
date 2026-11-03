@@ -158,26 +158,23 @@ namespace {
   auto ValidateInputSchema(const json& doc, ImportSession& session,
     const ImportRequest& request) -> bool
   {
-    auto issues = std::vector<internal::JsonSchemaIssue> {};
-    auto internal_error = std::string {};
-    if (!internal::CollectJsonSchemaIssues(
-          InputSchemaValidator(), doc, issues, internal_error)) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "input.schema.validator_failure",
-        "Input schema validator failure: " + internal_error);
-      return false;
-    }
-    internal::EmitCollectedJsonSchemaIssues(issues,
-      "input.schema.validation_failed",
-      "Schema validation failed (oxygen.input.schema.json): ",
-      "Schema validation (oxygen.input.schema.json) reported ",
-      kMaxSchemaDiagnostics,
+    const auto config = internal::JsonSchemaValidationDiagnosticConfig {
+      .validation_failed_code = "input.schema.validation_failed",
+      .validation_failed_prefix
+      = "Schema validation failed (oxygen.input.schema.json): ",
+      .validation_overflow_prefix
+      = "Schema validation (oxygen.input.schema.json) reported ",
+      .validator_failure_code = "input.schema.validator_failure",
+      .validator_failure_prefix = "Input schema validator failure: ",
+      .max_issues = kMaxSchemaDiagnostics,
+    };
+    return internal::ValidateJsonSchemaWithDiagnostics(InputSchemaValidator(),
+      doc, config,
       [&](const std::string_view code, std::string message,
         std::string object_path) -> void {
         AddDiagnostic(session, request, ImportSeverity::kError,
           std::string(code), std::move(message), std::move(object_path));
       });
-    return issues.empty();
   }
 
   [[nodiscard]] auto SecondsToNanoseconds(const float seconds, uint64_t& out)

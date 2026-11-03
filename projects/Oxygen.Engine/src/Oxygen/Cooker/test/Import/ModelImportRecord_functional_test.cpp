@@ -37,6 +37,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
+#include <Oxygen/Cooker/Import/ModelImportRecordError.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
@@ -60,6 +61,7 @@ using oxygen::content::import::ImportReport;
 using oxygen::content::import::ImportSeverity;
 using oxygen::content::import::ModelImportGenerations;
 using oxygen::content::import::ModelImportRecord;
+using oxygen::content::import::ModelImportRecordError;
 using oxygen::content::import::ModelImportRecordLocation;
 using oxygen::content::import::ModelPublishedNode;
 using oxygen::content::import::ModelSourceFingerprint;
@@ -104,6 +106,19 @@ auto Fingerprint(const std::filesystem::path& file) -> ModelSourceFingerprint
     .sha256 = FileDigest(file),
     .files = {},
   };
+}
+
+//! The refusal `operation` throws, or an empty diagnostic when it throws
+//! none.
+template <typename Operation>
+auto RefusalOf(Operation operation) -> ImportDiagnostic
+{
+  try {
+    static_cast<void>(operation());
+  } catch (const ModelImportRecordError& error) {
+    return error.Diagnostic();
+  }
+  return {};
 }
 
 class ModelImportRecordTest : public oxygen::testing::TempDirTest {
@@ -261,8 +276,9 @@ NOLINT_TEST_F(ModelImportRecordTest, RecordLivesAtItsIdentityAndRoundTrips)
   EXPECT_EQ(document.at("settings").at("normals_policy"), "generate");
   EXPECT_FALSE(document.at("surface_provenance").contains("source_identity"));
   EXPECT_FALSE(document.contains("source_fingerprint"));
-  EXPECT_THROW(static_cast<void>(ModelImportRecord::Read(misnamed, mounts_)),
-    std::invalid_argument);
+  EXPECT_EQ(
+    RefusalOf([&] { return ModelImportRecord::Read(misnamed, mounts_); }).code,
+    "import.model_record_misnamed");
 }
 
 //! Save names a source elsewhere in the model's mount relative to the record,
@@ -290,28 +306,85 @@ NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesAnAbsoluteSource)
   const auto record
     = WriteRecord({ .identity = kIdentity, .text = document.dump(2) });
 
-  try {
-    static_cast<void>(ModelImportRecord::Read(record, mounts_));
-    FAIL() << "Expected the absolute source to be refused";
-  } catch (const std::invalid_argument& error) {
-    EXPECT_THAT(error.what(), testing::HasSubstr("source:"));
-  }
+  const auto refusal
+    = RefusalOf([&] { return ModelImportRecord::Read(record, mounts_); });
+
+  EXPECT_EQ(refusal.code, "import.model_record_invalid");
+  EXPECT_THAT(refusal.message, testing::HasSubstr("source:"));
 }
 
 //! A record's settings hold no job structure: the record owns the source and
-//! the identity, the manifest the output.
+//! the identity, the manifest the output. Save names the key it refuses.
 NOLINT_TEST_F(ModelImportRecordTest, SettingsHoldNoJobStructure)
 {
   for (const auto* key : { "source", "virtual_path", "output", "type" }) {
-    EXPECT_THROW(ModelImportRecord::Save({
-                   .record_path = record_,
-                   .source = {},
-                   .settings_json = json { { key, "x" } }.dump(),
-                   .mounts = oxygen::make_observer(&mounts_),
-                 }),
-      std::invalid_argument)
-      << key;
+    const auto refusal = RefusalOf([&] {
+      ModelImportRecord::Save({
+        .record_path = record_,
+        .source = {},
+        .settings_json = json { { key, "x" } }.dump(),
+        .mounts = oxygen::make_observer(&mounts_),
+      });
+    });
+
+    EXPECT_EQ(refusal.code, "import.model_record_invalid") << key;
+    EXPECT_EQ(refusal.object_path, std::string("settings.") + key);
   }
+}
+
+//! Read refuses a record whose settings the schema refuses, whether they hold
+//! job structure or a key no import job has: the settings are a gltf or fbx
+//! job's, without the keys the record and its publisher own.
+NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesSettingsTheSchemaRefuses)
+{
+  for (const auto* key : { "virtual_path", "output", "unknown_setting" }) {
+    auto document = json::parse(std::ifstream(record_));
+    document["settings"][key] = "x";
+    const auto record
+      = WriteRecord({ .identity = kIdentity, .text = document.dump(2) });
+
+    const auto refusal
+      = RefusalOf([&] { return ModelImportRecord::Read(record, mounts_); });
+
+    EXPECT_EQ(refusal.code, "import.model_record_invalid") << key;
+  }
+}
+
+//! Read refuses a record that is no JSON, and one whose node continuity names
+//! an anchor twice, at its field.
+NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesAMalformedRecord)
+{
+  auto document = json::parse(std::ifstream(record_));
+  document["node_continuity"] = json::array({
+    { { "anchor", "Root" }, { "continues", "A" } },
+    { { "anchor", "Root" }, { "continues", "B" } },
+  });
+  const auto twice
+    = WriteRecord({ .identity = kIdentity, .text = document.dump(2) });
+  const auto twice_refusal
+    = RefusalOf([&] { return ModelImportRecord::Read(twice, mounts_); });
+  const auto broken = WriteRecord({ .identity = kIdentity, .text = "{ x" });
+  const auto broken_refusal
+    = RefusalOf([&] { return ModelImportRecord::Read(broken, mounts_); });
+
+  EXPECT_EQ(twice_refusal.code, "import.model_record_invalid");
+  EXPECT_EQ(twice_refusal.object_path, "node_continuity");
+  EXPECT_EQ(broken_refusal.code, "import.model_record_invalid");
+}
+
+//! A record's source is a glTF, GLB or FBX file.
+NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesASourceOfAnotherFormat)
+{
+  auto document = json::parse(std::ifstream(record_));
+  document["source"] = "source.obj";
+  const auto record
+    = WriteRecord({ .identity = kIdentity, .text = document.dump(2) });
+
+  const auto refusal
+    = RefusalOf([&] { return ModelImportRecord::Read(record, mounts_); });
+
+  EXPECT_EQ(refusal.code, "import.model_record_invalid");
+  EXPECT_EQ(refusal.object_path, "source");
 }
 
 //! One record per source identity: a copy of a record at another identity is
@@ -322,8 +395,9 @@ NOLINT_TEST_F(ModelImportRecordTest, TwoRecordsWithOneSourceIdentityAreRefused)
   std::filesystem::copy_file(record_, copy);
   const auto before = FileDigest(record_);
 
-  EXPECT_THROW(SaveRecord(copy, source_), std::invalid_argument);
+  const auto refusal = RefusalOf([&] { return SaveRecord(copy, source_); });
 
+  EXPECT_EQ(refusal.code, "import.model_record_duplicate");
   EXPECT_EQ(FileDigest(record_), before);
   EXPECT_EQ(FileDigest(copy), before);
 }
@@ -425,8 +499,10 @@ NOLINT_TEST_F(ModelImportRecordTest, RecordCannotBeWrittenOutsideAMount)
     / (identity_.ToString() + std::string(ModelImportRecord::kRecordSuffix));
   const auto misnamed = TempDir() / "Models" / "other.gltf.json";
 
-  EXPECT_THROW(SaveRecord(outside, source_), std::invalid_argument);
-  EXPECT_THROW(SaveRecord(misnamed, source_), std::invalid_argument);
+  EXPECT_EQ(RefusalOf([&] { return SaveRecord(outside, source_); }).code,
+    "import.source_outside_mount");
+  EXPECT_EQ(RefusalOf([&] { return SaveRecord(misnamed, source_); }).code,
+    "import.model_record_misnamed");
 
   EXPECT_FALSE(std::filesystem::exists(outside));
   EXPECT_FALSE(std::filesystem::exists(misnamed));
@@ -494,13 +570,14 @@ NOLINT_TEST_F(ModelImportRecordTest, WrongRecipeFormatCannotMutateTheRecord)
 NOLINT_TEST_F(ModelImportRecordTest, MissingSourceOnReplayIsSourceMissing)
 {
   std::filesystem::remove(source_);
-  try {
-    static_cast<void>(
-      ModelImportRecord::Prepare(record_, Generations(), mounts_));
-    FAIL() << "Expected import.source_missing";
-  } catch (const std::runtime_error& error) {
-    EXPECT_THAT(error.what(), testing::HasSubstr("import.source_missing"));
-  }
+
+  const auto refusal = RefusalOf([&] {
+    return ModelImportRecord::Prepare(record_, Generations(), mounts_);
+  });
+
+  EXPECT_EQ(refusal.code, "import.source_missing");
+  EXPECT_EQ(refusal.object_path, "source");
+  EXPECT_THAT(refusal.message, testing::HasSubstr("rebinds it"));
 }
 
 //! The publication commits the import's provenance, published nodes and
@@ -588,7 +665,8 @@ NOLINT_TEST_F(
   first->ValidateCandidate(accepted);
   second->ValidateCandidate(stale);
   first->Publish(accepted);
-  EXPECT_THROW(second->Publish(stale), std::runtime_error);
+  EXPECT_EQ(RefusalOf([&] { second->Publish(stale); }).code,
+    "import.model_record_changed");
   EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_, Generations()),
     accepted.cooked_root);
   EXPECT_TRUE(
@@ -602,7 +680,8 @@ NOLINT_TEST_F(ModelImportRecordTest, SettingsChangeInvalidatesPendingCandidate)
   attempt->ValidateCandidate(report);
   settings_.normals_policy = "recalculate";
   SaveRecord(record_, source_);
-  EXPECT_THROW(attempt->Publish(report), std::runtime_error);
+  EXPECT_EQ(RefusalOf([&] { attempt->Publish(report); }).code,
+    "import.model_record_changed");
   EXPECT_FALSE(ModelImportRecord::SelectedGeneration(record_, Generations()));
 }
 
@@ -736,9 +815,34 @@ NOLINT_TEST_F(ModelImportRecordTest, ChangedPublishedIndexRequiresRecook)
       report.cooked_root / "container.index.bin", std::ios::app);
     index << "changed";
   }
-  EXPECT_THROW(static_cast<void>(
-                 ModelImportRecord::SelectedGeneration(record_, Generations())),
-    std::runtime_error);
+  const auto refusal = RefusalOf([&] {
+    return ModelImportRecord::SelectedGeneration(record_, Generations());
+  });
+
+  EXPECT_EQ(refusal.code, "import.generation_invalid");
+  EXPECT_EQ(refusal.object_path, "index_sha256");
+}
+
+//! A selected generation that is gone is `import.generation_missing`, never a
+//! path to nothing; a malformed head is `import.generation_invalid`. A record
+//! that was never imported here selects none.
+NOLINT_TEST_F(ModelImportRecordTest, SelectionRefusesAGenerationItCannotTrust)
+{
+  EXPECT_FALSE(ModelImportRecord::SelectedGeneration(record_, Generations()));
+  const auto report = PublishRead(record_);
+  const auto head = report.cooked_root.parent_path() / "head.json";
+
+  std::filesystem::remove_all(report.cooked_root);
+  const auto missing = RefusalOf([&] {
+    return ModelImportRecord::SelectedGeneration(record_, Generations());
+  });
+  std::ofstream(head, std::ios::trunc) << R"({"id":"not a uuid"})";
+  const auto malformed = RefusalOf([&] {
+    return ModelImportRecord::SelectedGeneration(record_, Generations());
+  });
+
+  EXPECT_EQ(missing.code, "import.generation_missing");
+  EXPECT_EQ(malformed.code, "import.generation_invalid");
 }
 
 //! A real import from the record commits the nodes it emitted and the bytes

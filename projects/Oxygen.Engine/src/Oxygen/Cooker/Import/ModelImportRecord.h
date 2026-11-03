@@ -23,6 +23,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ModelImportRecordError.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -122,6 +123,13 @@ struct ModelImportRecordSave final {
  live in a generations folder the caller owns (`ModelImportGenerations`). A
  project whose outputs another publisher owns, such as an editor project,
  keeps its generations out of this store.
+
+ Every refusal of a record, its location, its source or its generations is a
+ `ModelImportRecordError` with a stable code (`model_record_codes`, or the
+ code of the mount table or the virtual path rules that refused a location)
+ and the record field it is about. Only a failure to write or lock a file
+ (`std::system_error`) and a caller's misuse, such as an empty generations
+ folder (`std::invalid_argument`), are other exceptions.
 */
 class ModelImportRecord final {
 public:
@@ -163,7 +171,10 @@ public:
   /*!
    `source` is a file reference from the record, located through
    `MountTable::LocateReference`, whose codes a source it refuses fails
-   with.
+   with. A record that cannot be read is `import.model_record_unreadable`;
+   one that breaks its schema or a rule the schema cannot state, such as its
+   settings as a gltf or fbx job, is `import.model_record_invalid`, naming the
+   field.
   */
   OXGN_COOK_NDAPI static auto Read(const std::filesystem::path& record_path,
     const MountTable& mounts) -> ModelImportRecordContent;
@@ -202,14 +213,17 @@ public:
    its own identity (`import.source_relocated`, or
    `import.source_relocation_ambiguous` when several match); otherwise a new
    record, with the hints `import.source_copy` and
-   `import.source_relocation_candidate`. Reads only; `Save` writes.
+   `import.source_relocation_candidate`. Reads only; `Save` writes. A
+   `source` that does not exist is `import.source_missing`.
   */
   OXGN_COOK_NDAPI static auto LocateRecord(const ModelImportRecordQuery& query)
     -> ModelImportRecordLocation;
 
   //! Creates or updates a record at its model's identity, keeping everything
   //! earlier imports established. A new record gets a new source identity.
-  //! Refuses a second record with the same source identity.
+  //! Refuses a second record with the same source identity
+  //! (`import.model_record_duplicate`) and a record another writer holds
+  //! (`import.model_record_busy`).
   OXGN_COOK_API static auto Save(const ModelImportRecordSave& save) -> void;
 
   //! Saves the settings and source of a single-job gltf or fbx manifest. Its
@@ -224,9 +238,10 @@ public:
 
   //! Reads a baseline and reserves a private generation in `generations`.
   //! No source bytes or prior cooked output are copied. Concurrent attempts
-  //! have distinct roots. A missing source is `import.source_missing`; an
-  //! empty generations root throws std::invalid_argument. `notes` are the
-  //! lookup's diagnostics, added to the attempt's report.
+  //! have distinct roots. It refuses what `Read` refuses, a missing source
+  //! (`import.source_missing`), a duplicate record and a busy one; an empty
+  //! generations root throws std::invalid_argument. `notes` are the lookup's
+  //! diagnostics, added to the attempt's report.
   OXGN_COOK_NDAPI static auto Prepare(const std::filesystem::path& record_path,
     const ModelImportGenerations& generations, const MountTable& mounts,
     std::vector<ImportDiagnostic> notes = {})
@@ -248,8 +263,9 @@ public:
   //! Atomically commits the import's surface provenance, published nodes and
   //! source fingerprint, and selects the validated candidate, if the record
   //! still matches the baseline. Throws without changing the record or the
-  //! selected generation on validation, cancellation, lock or baseline
-  //! failure.
+  //! selected generation on validation, cancellation, lock
+  //! (`import.model_record_busy`) or baseline
+  //! (`import.model_record_changed`) failure.
   OXGN_COOK_API auto Publish(
     ImportReport& report, std::stop_token stop_token = {}) -> void;
 
@@ -264,6 +280,17 @@ public:
 
   //! Resolves the record's selected immutable root in `generations`
   //! without creating another attempt.
+  /*!
+   Reads the record's content, which names its generations; its location and
+   source are not resolved.
+
+   @return The selected root, or nothing when the record selects none: it was
+     never imported here.
+   @throw ModelImportRecordError `import.generation_missing` when the selected
+     root is gone, `import.generation_invalid` when its head is malformed, it
+     cannot be leased or its index changed, and what `Read` refuses of the
+     record's content.
+  */
   OXGN_COOK_NDAPI static auto SelectedGeneration(
     const std::filesystem::path& record_path,
     const ModelImportGenerations& generations)
