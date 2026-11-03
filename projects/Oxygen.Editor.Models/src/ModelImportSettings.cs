@@ -33,7 +33,9 @@ public sealed record ModelImportSettings
     /// <summary>The suffix of a record's file name, after its model's file name.</summary>
     public const string RecordSuffix = AssetFileTypes.ImportSettings;
 
-    private static readonly Lazy<JsonSchema> Schema = new(static () => EngineSchemas.Get("oxygen.model-import.schema.json"));
+    private static readonly EngineSchemaSet Schemas = new(typeof(ModelImportSettings).Assembly);
+
+    private static readonly Lazy<JsonSchema> Schema = new(static () => Schemas.Get("oxygen.model-import.schema.json"));
 
     private static readonly JsonWriterOptions WriterOptions = new()
     {

@@ -5,6 +5,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Json.Schema;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.Models;
 
@@ -14,9 +15,11 @@ internal static class ImportManifestSchema
 {
     private const string FileName = "oxygen.import-manifest.schema.json";
 
-    private static readonly Lazy<string> Text = new(static () => EngineSchemas.ReadText(FileName));
+    private static readonly EngineSchemaSet Schemas = new(typeof(ImportManifestSchema).Assembly);
 
-    private static readonly Lazy<JsonSchema> Schema = new(static () => EngineSchemas.Get(FileName));
+    private static readonly Lazy<string> Text = new(static () => Schemas.ReadText(FileName));
+
+    private static readonly Lazy<JsonSchema> Schema = new(static () => Schemas.Get(FileName));
 
     /// <summary>Gets whether <paramref name="manifest"/> is a valid import manifest.</summary>
     /// <param name="manifest">The manifest's root.</param>
