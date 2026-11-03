@@ -136,7 +136,8 @@ File references (a texture's `source`, `sources[].file`, a buffer's `source`,
 a geometry's `buffers[].uri`, a model record's `source`) follow the same
 grammar and resolve to a file through `MountTable::LocateReference`, which
 allows `SourceMedia`. It is re-expressed over the same resolution, so one
-rule has one code: `import.reference_outside_mount` is deleted.
+rule has one code: `import.reference_outside_mount` is deleted, and the
+refusal is `import.reference_invalid` naming `vpath.reference_outside_mount`.
 
 ### R3. Shared content never references own mounts
 

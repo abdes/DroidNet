@@ -512,10 +512,12 @@ model record's `source`, with the grammar of every reference
 ([virtual paths](../../../src/Oxygen/Content/Docs/virtual_paths.md#references)):
 relative to the descriptor in its own mount (`Brick.png`,
 `../SourceMedia/Brick.png`), or the mount path of a file in another mount
-(`/RawMedia/Walls/Brick.png`). A relative reference that climbs out of the
-mount fails with `vpath.reference_outside_mount`, an absolute reference into
-the descriptor's own mount with `vpath.reference_self_absolute`, a disk path
-with `path.absolute_committed`, and a mount no folder binds with
+(`/RawMedia/Walls/Brick.png`). Text the grammar refuses fails with
+`import.reference_invalid`, which names the grammar's code:
+`vpath.reference_outside_mount` for a relative reference that climbs out of
+the mount, `vpath.reference_self_absolute` for an absolute reference into the
+descriptor's own mount. A disk path fails with `path.absolute_committed`, and
+a mount no folder binds with
 `import.mount_unbound` (`MountTable::LocateReference`, which also reaches
 `SourceMedia`).
 

@@ -758,11 +758,11 @@ Job rules:
 - a reference in an authored file is an absolute virtual path in another mount
   (`/Engine/Materials/Default.omat`) or text relative to the folder of the
   referring file (`Brick.otex`, `../Textures/Brick.otex`), resolved against the
-  job's identity. Absolute text naming the file's own mount is refused
-  (`vpath.reference_self_absolute`), as is a climb above the mount
-  (`vpath.reference_outside_mount`); unusable text fails with
-  `import.reference_invalid` and a path in no mount with
-  `import.reference_unmounted`. A texture descriptor's `source` and
+  job's identity. Text the grammar refuses fails with
+  `import.reference_invalid`, whose message names the grammar's code:
+  `vpath.reference_self_absolute` for absolute text naming the file's own
+  mount, `vpath.reference_outside_mount` for a climb above the mount. A path
+  in no mount fails with `import.reference_unmounted`. A texture descriptor's `source` and
   `sources[].file` use the same grammar and name files on disk.
 - an `input` job requires `virtual_path`, the input source's identity
   (`/Content/Input/Player.input`); each action and mapping context is named

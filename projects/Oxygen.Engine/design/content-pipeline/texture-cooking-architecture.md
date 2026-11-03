@@ -510,8 +510,9 @@ The `source` field must point to a file conforming to
 `oxygen.texture-descriptor.schema.json` (Section 7.4). The descriptor's `source`
 and `sources[].file` name image files by mount path
 (`/Content/SourceMedia/Images/Sky/sky_px.hdr`) or by a path relative to the
-descriptor that stays in its mount (`vpath.reference_outside_mount` otherwise);
-an absolute path is refused (`path.absolute_committed`).
+descriptor that stays in its mount (otherwise `import.reference_invalid`, naming
+`vpath.reference_outside_mount`); an absolute path is refused
+(`path.absolute_committed`).
 
 Manifest-level defaults may be provided in the `defaults.texture` object.
 

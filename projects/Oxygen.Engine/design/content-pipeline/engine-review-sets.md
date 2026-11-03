@@ -459,8 +459,9 @@ everything outside the rule.
 
 - `LocateReference`: the anchor is the referrer's parent folder for every
   format; `./` and `../` are resolved once; a reference that climbs out of
-  its mount is refused with `vpath.reference_outside_mount`, the one code
-  of `ResolveReference` in `Content/VirtualPath`.
+  its mount is refused by `ResolveReference` in `Content/VirtualPath` with
+  `vpath.reference_outside_mount`, the one grammar code for the rule,
+  reported as `import.reference_invalid` naming that code.
   Windows-specific inputs are covered: case, drive-relative and UNC paths,
   `\` separators, trailing dots and spaces, junctions and symbolic links.
 - Mount names: `IsValidMountName`, `oxygen.mounts.schema.json` and
