@@ -7,6 +7,8 @@
 #include <cassert>
 #include <cstdint>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <ranges>
 #include <string_view>
 #include <type_traits>
@@ -399,12 +401,15 @@ auto InputSlots::AddKeyInputSlot(Key key_code, const InputSlotDetails& details)
 
 auto InputSlots::Initialize() -> void
 {
-  static bool initialized { false };
+  // Content loaders resolve slot names on worker threads: the first caller
+  // registers the slots and any other waits for it. The flag lives in this
+  // module, with the registry it guards, so it is unique in the process.
+  static std::once_flag registered;
+  std::call_once(registered, &InputSlots::RegisterSlots);
+}
 
-  if (initialized) {
-    return;
-  }
-  initialized = true;
+auto InputSlots::RegisterSlots() -> void
+{
 
   LOG_F(INFO, "Initializing the input slots");
 
@@ -585,6 +590,18 @@ auto InputSlots::GetInputSlotForKey(const Key key) -> InputSlot
       static_cast<std::underlying_type_t<Key>>(key));
   }
   return found->second;
+}
+
+auto InputSlots::FindByName(const std::string_view name)
+  -> std::optional<InputSlot>
+{
+  Initialize();
+  for (const auto& slot : slots_ | std::views::keys) {
+    if (slot.GetName() == name) {
+      return slot;
+    }
+  }
+  return std::nullopt;
 }
 
 auto InputSlots::GetInputSlotDetails(const InputSlot& slot)

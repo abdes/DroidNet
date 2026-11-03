@@ -8,6 +8,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -168,11 +169,11 @@ enum class MouseButton : uint8_t {
   kNone = 0, // Unsupported mouse button that should never be transmitted in an
              // event.
 
-  kLeft = 1 << 0,
-  kRight = 1 << 1,
-  kMiddle = 1 << 2,
-  kExtButton1 = 1 << 3,
-  kExtButton2 = 1 << 4,
+  kLeft = 1U << 0U,
+  kRight = 1U << 1U,
+  kMiddle = 1U << 2U,
+  kExtButton1 = 1U << 3U,
+  kExtButton2 = 1U << 4U,
 };
 
 //------------------------------------------------------------------------------
@@ -402,17 +403,22 @@ public:
 
   friend class InputSlot;
 
-  // TODO: review visibility and keep safe methods public
-  // private:
+  //! Registers the built-in categories and slots on the first call; any
+  //! thread may call it.
   OXGN_PLIN_API static auto Initialize() -> void;
 
   OXGN_PLIN_API static auto GetAllInputSlots(std::vector<InputSlot>& out_keys)
     -> void;
   OXGN_PLIN_API static auto GetInputSlotForKey(Key key) -> InputSlot;
+  //! The slot named `name`, its registered name, such as `Up` or `LeftCtrl`;
+  //! none for a name no slot has. Any thread may call it.
+  OXGN_PLIN_NDAPI static auto FindByName(std::string_view name)
+    -> std::optional<InputSlot>;
 
   OXGN_PLIN_API static auto GetCategoryDisplayName(
     std::string_view category_name) -> std::string_view;
 
+private:
   struct CategoryInfo {
     std::string_view display_string;
   };
@@ -421,6 +427,8 @@ public:
   static std::map<Key, InputSlot> key_slots_;
   static std::map<std::string_view, CategoryInfo> categories_;
 
+  //! Registers the built-in categories and slots, once per process.
+  static auto RegisterSlots() -> void;
   // TODO(abdes) add user defined slots and categories
   static auto AddCategory(
     std::string_view category_name, std::string_view display_string) -> void;
