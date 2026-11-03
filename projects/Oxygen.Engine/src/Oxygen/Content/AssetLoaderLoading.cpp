@@ -36,6 +36,7 @@
 #include <Oxygen/Content/Internal/ContentReleaseQueue.h>
 #include <Oxygen/Content/Internal/ContentSourceView.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
+#include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/Internal/PhysicsBindings.h>
@@ -67,6 +68,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/TaskCancelledException.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content {
 namespace {
@@ -126,6 +128,47 @@ namespace {
     } else {
       static_assert(std::same_as<T, data::InputMappingContextAsset>);
       return data::AssetType::kInputMappingContext;
+    }
+  }
+
+  //! A physics descriptor dependency, read and validated off the loop.
+  struct ParsedPhysicsDescriptor final {
+    data::AssetReferences references;
+    std::variant<data::pak::physics::CollisionShapeAssetDesc,
+      data::pak::physics::PhysicsMaterialAssetDesc>
+      descriptor;
+  };
+
+  auto ParsePhysicsDescriptor(const internal::IContentSource& source,
+    const data::KeyReference& reference,
+    const data::SourceInstanceId source_instance) -> ParsedPhysicsDescriptor
+  {
+    auto references = source.ReadAssetReferences(reference.key);
+    const auto reader = source.CreateAssetDescriptorReader(reference.key);
+    if (!reader) {
+      throw std::runtime_error(
+        "Cannot read physics descriptor: " + data::to_string(reference.key));
+    }
+    const LoaderContext context {
+      .current_asset_key = reference.key,
+      .source_instance = source_instance,
+      .desc_reader = reader.get(),
+      .asset_references = observer_ptr(&references),
+      .work_offline = true,
+      .parse_only = true,
+    };
+    switch (reference.expected_type) {
+    case data::AssetType::kCollisionShape: {
+      auto descriptor = loaders::LoadCollisionShapeDescriptor(context);
+      return { .references = std::move(references), .descriptor = descriptor };
+    }
+    case data::AssetType::kPhysicsMaterial: {
+      auto descriptor = loaders::LoadPhysicsMaterialDescriptor(context);
+      return { .references = std::move(references), .descriptor = descriptor };
+    }
+    default:
+      throw std::runtime_error(
+        "Unsupported physics descriptor dependency type");
     }
   }
 } // namespace
@@ -202,8 +245,19 @@ auto AssetLoader::LoadAssetPublicationAsync(const data::AssetKey& key,
     co_return internal::ContentAcquisition {};
   }
   const auto releases = releases_;
-  auto cached = internal::ContentAcquisition::FromCache<T>(
-    content_cache_, *releases, target->cache_key, role);
+  const auto from_cache = [&] -> internal::ContentAcquisition {
+    return internal::ContentAcquisition::FromCache<T>(
+      content_cache_, *releases, target->cache_key, role);
+  };
+  const internal::InFlightOperationTable::OperationKey operation_key {
+    .type_id = T::ClassTypeId(),
+    .cache_key = target->cache_key,
+  };
+  auto cached = from_cache();
+  while (
+    !cached && co_await in_flight_ops_->AwaitClosedOperation(operation_key)) {
+    cached = from_cache();
+  }
   if (cached) {
     RecordAssetTelemetry(kind, LoadTelemetryEvent::kCacheHit);
     co_return cached;
@@ -215,17 +269,15 @@ auto AssetLoader::LoadAssetPublicationAsync(const data::AssetKey& key,
     .sequence = next_load_request_sequence_.fetch_add(1),
   };
   internal::SharedContentResult result;
-  if (auto joined
-    = in_flight_ops_->Find(T::ClassTypeId(), target->cache_key, meta)) {
+  if (auto joined = in_flight_ops_->Find(operation_key, meta)) {
     RecordAssetTelemetry(kind, LoadTelemetryEvent::kTasksDeduped);
     result = co_await *joined;
   } else {
     RecordAssetTelemetry(kind, LoadTelemetryEvent::kTasksSpawned);
     const auto operation = in_flight_ops_->NewOperationId();
-    co::Shared shared(DecodeAndPublishAssetAsync<T>(
-      key, *target, request, operation.get(), releases));
-    in_flight_ops_->Insert(
-      T::ClassTypeId(), target->cache_key, operation, shared, meta);
+    co::Shared shared(internal::RunToCompletion(DecodeAndPublishAssetAsync<T>(
+      key, *target, request, operation.get(), releases)));
+    in_flight_ops_->Insert(operation_key, operation, shared, meta);
     result = co_await shared;
   }
   if (!result || !ResolveSourceForId(target->source_id)) {
@@ -245,7 +297,11 @@ auto AssetLoader::DecodeAndPublishAssetAsync(data::AssetKey key,
   -> co::Co<internal::SharedContentResult>
 {
   const auto erase = Finally([&] noexcept -> void {
-    in_flight_ops_->Erase(T::ClassTypeId(), target.cache_key,
+    in_flight_ops_->Erase(
+      {
+        .type_id = T::ClassTypeId(),
+        .cache_key = target.cache_key,
+      },
       internal::InFlightOperationTable::OperationId { operation_id });
   });
   constexpr auto kind = AssetKind<T>();
@@ -673,38 +729,24 @@ auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
         "Required physics descriptor is missing or has the wrong type: "
         + data::to_string(reference.key));
     }
-    const auto references = source->ReadAssetReferences(reference.key);
-    const auto reader = source->CreateAssetDescriptorReader(reference.key);
-    if (!reader) {
-      throw std::runtime_error(
-        "Cannot read physics descriptor: " + data::to_string(reference.key));
-    }
-    const LoaderContext context {
-      .current_asset_key = reference.key,
-      .source_instance = *source_id,
-      .desc_reader = reader.get(),
-      .asset_references = observer_ptr(&references),
-      .work_offline = true,
-      .parse_only = true,
-    };
-    switch (reference.expected_type) {
-    case data::AssetType::kCollisionShape:
-      frozen->shapes.push_back({
-        .key = reference.key,
-        .descriptor = loaders::LoadCollisionShapeDescriptor(context),
+    auto parsed = co_await thread_pool_->Run(
+      [source, reference,
+        source_instance = *source_id] -> ParsedPhysicsDescriptor {
+        return ParsePhysicsDescriptor(*source, reference, source_instance);
       });
-      break;
-    case data::AssetType::kPhysicsMaterial:
+    bindings.RequireOpen();
+    if (const auto* shape
+      = std::get_if<data::pak::physics::CollisionShapeAssetDesc>(
+        &parsed.descriptor)) {
+      frozen->shapes.push_back({ .key = reference.key, .descriptor = *shape });
+    } else {
       frozen->materials.push_back({
         .key = reference.key,
-        .descriptor = loaders::LoadPhysicsMaterialDescriptor(context),
+        .descriptor = std::get<data::pak::physics::PhysicsMaterialAssetDesc>(
+          parsed.descriptor),
       });
-      break;
-    default:
-      throw std::runtime_error(
-        "Unsupported physics descriptor dependency type");
     }
-    const auto children = references.Keys();
+    const auto children = parsed.references.Keys();
     pending.insert(pending.end(), children.begin(), children.end());
   }
   std::ranges::sort(frozen->shapes, {}, &internal::BoundPhysicsShape::key);

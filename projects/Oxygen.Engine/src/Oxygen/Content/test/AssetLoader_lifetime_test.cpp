@@ -358,17 +358,17 @@ NOLINT_TEST(InFlightOperationTableLifetimeTest, CleanupCanReenterRetirement)
         = [&table, type, id, &retired, &cleanup_failed] noexcept -> void {
         ++retired;
         try {
-          table.Erase(type, kHash, id);
+          table.Erase({ .type_id = type, .cache_key = kHash }, id);
         } catch (...) {
           cleanup_failed = true;
         }
       };
       auto guard
         = std::make_unique<oxygen::ScopeGuard<decltype(cleanup)>>(cleanup);
-      table.Insert(
-        type, kHash, id, oxygen::co::Shared(hold(std::move(guard))), {});
+      table.Insert({ .type_id = type, .cache_key = kHash }, id,
+        oxygen::co::Shared(hold(std::move(guard))), {});
       if (mode == Retirement::kErase) {
-        table.Erase(type, kHash, id);
+        table.Erase({ .type_id = type, .cache_key = kHash }, id);
       } else if (mode == Retirement::kClear) {
         table.Clear();
       }
@@ -390,7 +390,7 @@ NOLINT_TEST(
   const auto cleanup
     = [&table, type, old_id, &cleanup_failed] noexcept -> void {
     try {
-      table.Erase(type, kHash, old_id);
+      table.Erase({ .type_id = type, .cache_key = kHash }, old_id);
     } catch (...) {
       cleanup_failed = true;
     }
@@ -402,17 +402,19 @@ NOLINT_TEST(
   };
   auto old = oxygen::co::Shared(
     hold(std::make_unique<oxygen::ScopeGuard<decltype(cleanup)>>(cleanup)));
-  table.Insert(type, kHash, old_id, old, {});
+  table.Insert({ .type_id = type, .cache_key = kHash }, old_id, old, {});
   table.Clear();
   const auto replacement_id = table.NewOperationId();
   auto replacement = oxygen::co::Shared(
     [] -> Co<oxygen::content::internal::SharedContentResult> {
       co_return oxygen::content::internal::SharedContentResult {};
     }());
-  table.Insert(type, kHash, replacement_id, replacement, {});
+  table.Insert(
+    { .type_id = type, .cache_key = kHash }, replacement_id, replacement, {});
   old = {};
   EXPECT_FALSE(cleanup_failed);
-  EXPECT_TRUE(table.GetRequestMeta(type, kHash).has_value());
+  EXPECT_TRUE(
+    table.GetRequestMeta({ .type_id = type, .cache_key = kHash }).has_value());
   table.Close();
   EXPECT_THROW(static_cast<void>(table.NewOperationId()),
     oxygen::content::OperationCancelledException);
@@ -429,14 +431,15 @@ NOLINT_TEST(
       co_return oxygen::content::internal::SharedContentResult {};
     }());
 
-  table.Insert(kTypeId, kHash, table.NewOperationId(), op,
+  table.Insert({ .type_id = kTypeId, .cache_key = kHash },
+    table.NewOperationId(), op,
     {
       .priority = oxygen::content::LoadPriority::kDefault,
       .intent = oxygen::content::LoadIntent::kRuntime,
       .sequence = 10U,
     });
 
-  auto joined = table.Find(kTypeId, kHash,
+  auto joined = table.Find({ .type_id = kTypeId, .cache_key = kHash },
     {
       .priority = oxygen::content::LoadPriority::kCritical,
       .intent = oxygen::content::LoadIntent::kStreaming,
@@ -444,7 +447,8 @@ NOLINT_TEST(
     });
   EXPECT_TRUE(joined.has_value());
 
-  const auto meta = table.GetRequestMeta(kTypeId, kHash);
+  const auto meta
+    = table.GetRequestMeta({ .type_id = kTypeId, .cache_key = kHash });
   if (!meta.has_value()) {
     FAIL() << "Expected meta to contain a value";
   }
@@ -463,33 +467,34 @@ NOLINT_TEST(InFlightOperationTablePriorityContractTest, TieUsesEarliestSequence)
       co_return oxygen::content::internal::SharedContentResult {};
     }());
 
-  table.Insert(kTypeId, kHash, table.NewOperationId(), op,
+  table.Insert({ .type_id = kTypeId, .cache_key = kHash },
+    table.NewOperationId(), op,
     {
       .priority = oxygen::content::LoadPriority::kDefault,
       .intent = oxygen::content::LoadIntent::kRuntime,
       .sequence = 5U,
     });
 
-  (void)table.Find(kTypeId, kHash,
+  (void)table.Find({ .type_id = kTypeId, .cache_key = kHash },
     {
       .priority = oxygen::content::LoadPriority::kDefault,
       .intent = oxygen::content::LoadIntent::kStreaming,
       .sequence = 9U,
     });
-  auto meta = table.GetRequestMeta(kTypeId, kHash);
+  auto meta = table.GetRequestMeta({ .type_id = kTypeId, .cache_key = kHash });
   if (!meta.has_value()) {
     FAIL() << "Expected meta to contain a value";
   }
   EXPECT_EQ(meta->sequence, 5U);
   EXPECT_EQ(meta->intent, oxygen::content::LoadIntent::kRuntime);
 
-  (void)table.Find(kTypeId, kHash,
+  (void)table.Find({ .type_id = kTypeId, .cache_key = kHash },
     {
       .priority = oxygen::content::LoadPriority::kDefault,
       .intent = oxygen::content::LoadIntent::kPrewarm,
       .sequence = 3U,
     });
-  meta = table.GetRequestMeta(kTypeId, kHash);
+  meta = table.GetRequestMeta({ .type_id = kTypeId, .cache_key = kHash });
   if (!meta.has_value()) {
     FAIL() << "Expected meta to contain a value";
   }

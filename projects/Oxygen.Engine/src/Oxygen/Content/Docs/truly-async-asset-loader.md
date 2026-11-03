@@ -168,7 +168,9 @@ by invoking callbacks with `nullptr`.
 ### Asset load (`LoadAssetAsync<T>`)
 
 1. **Resolve** (owning thread): find the source + locator for the `AssetKey`.
-2. **Read** (thread pool): read descriptor/table/payload bytes as needed.
+2. **Read** (thread pool): open the descriptor, read it whole and check its
+   header hash; physics descriptor dependencies are read the same way during
+   binding.
 3. **Decode** (thread pool): run the registered loader function; record
    dependencies via `DependencyCollector`.
 4. **Publish** (owning thread):
@@ -178,7 +180,13 @@ by invoking callbacks with `nullptr`.
 
 ### Resource load (`LoadResourceAsync<T>(ResourceKey)`)
 
-Same structure as asset loads, scoped to a single resource identity.
+Same structure as asset loads, scoped to a single resource identity. The table
+row comes from the mounted table; the payload is read with the source device's
+asynchronous read under the payload budget, then decoded on the thread pool.
+
+The synchronous query APIs (scene catalog, mounted input contexts, physics
+sidecar lookup) read descriptors on the owning thread, as their signatures
+state.
 
 ### Cooked-bytes resource load (`LoadResourceAsync(CookedResourceData<T>)`)
 
@@ -239,7 +247,12 @@ Decode-time dependency recording uses `DependencyCollector`:
 
 - Assets and resources are cached by their source-qualified identities.
 - In-flight request deduplication ensures concurrent loads of the same identity
-  join a single underlying task.
+  join a single underlying task. Cancelling one waiter leaves the others
+  running. An operation is not cancelled by its waiters: when they all leave,
+  it still completes or fails, publishes what it decoded, then releases its
+  identity. A new request that arrives meanwhile cannot join it; it waits for
+  the operation to end, then takes the published result or starts a new
+  operation. `Stop()` ends operations through the closed release queue.
 - Binding and cache publication run on the owner thread. Published bindings are
   immutable and own their child lifetimes; cached reads do not rebuild them.
 - Final pointer destruction queues an allocation-free return. See

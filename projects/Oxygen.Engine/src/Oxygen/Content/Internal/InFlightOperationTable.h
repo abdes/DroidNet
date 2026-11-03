@@ -19,11 +19,25 @@
 #include <Oxygen/Content/Internal/ContentPublication.h>
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
+#include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/Shared.h>
 
 namespace oxygen::content::internal {
+
+//! Run an in-flight operation to its end, whatever its waiters do.
+/*!
+ A waiter may stop waiting; the operation it joined does not stop. A
+ cancelled coroutine runs its cleanup only when its frame is destroyed, and the
+ table keeps that frame alive, so a cancellable operation would never release
+ its key. Shielded, it always completes or fails, then leaves the table.
+*/
+inline auto RunToCompletion(co::Co<SharedContentResult> operation)
+  -> co::Co<SharedContentResult>
+{
+  co_return co_await co::NonCancellable(std::move(operation));
+}
 
 class InFlightOperationTable final {
 public:
@@ -43,6 +57,11 @@ public:
     uint64_t clear_calls { 0 };
     std::size_t active_type_buckets { 0 };
     std::size_t active_operations { 0 };
+  };
+  //! The identity an operation owns: the content type and its cache key.
+  struct OperationKey final {
+    TypeId type_id {};
+    uint64_t cache_key { 0U };
   };
   struct RequestMeta final {
     LoadPriority priority { LoadPriority::kDefault };
@@ -74,49 +93,73 @@ public:
     while (!table_.empty()) {
       [[maybe_unused]] auto retired = table_.extract(table_.begin());
     }
+    retired_.UnParkAll();
     idle_.UnParkAll();
   }
-  auto Find(TypeId type_id, uint64_t cache_key, const RequestMeta& request)
+  auto Find(const OperationKey& key, const RequestMeta& request)
     -> std::optional<SharedResultOp>
   {
     ++stats_.find_calls;
-    auto type_it = table_.find(type_id);
+    auto type_it = table_.find(key.type_id);
     if (type_it == table_.end()) {
       return std::nullopt;
     }
-    auto it = type_it->second.find(cache_key);
+    auto it = type_it->second.find(key.cache_key);
     if (it == type_it->second.end()) {
       return std::nullopt;
+    }
+    if (it->second.op.Closed()) {
+      throw std::logic_error(
+        "A cancelled in-flight operation cannot be joined; await "
+        "AwaitClosedOperation first");
     }
     ++stats_.find_hits;
     it->second.request = MergeRequestMeta(it->second.request, request);
     return it->second.op;
   }
 
-  auto GetRequestMeta(TypeId type_id, uint64_t cache_key) const
+  //! Wait while an operation whose waiters all left still owns the key.
+  /*!
+   The operation keeps running (see `RunToCompletion`) and may still publish,
+   but it cannot be joined: `co::Shared` refuses parents that arrive after
+   cancellation. It leaves the table when it ends.
+
+   @return True when it waited; the caller looks the key up again.
+  */
+  auto AwaitClosedOperation(const OperationKey key) -> co::Co<bool>
+  {
+    auto waited = false;
+    while (HasClosedOperation(key)) {
+      waited = true;
+      co_await retired_.Park();
+    }
+    co_return waited;
+  }
+
+  [[nodiscard]] auto GetRequestMeta(const OperationKey& key) const
     -> std::optional<RequestMeta>
   {
-    const auto type_it = table_.find(type_id);
+    const auto type_it = table_.find(key.type_id);
     if (type_it == table_.end()) {
       return std::nullopt;
     }
-    const auto it = type_it->second.find(cache_key);
+    const auto it = type_it->second.find(key.cache_key);
     if (it == type_it->second.end()) {
       return std::nullopt;
     }
     return it->second.request;
   }
-  auto Insert(TypeId type_id, uint64_t cache_key, OperationId id,
-    SharedResultOp op, const RequestMeta& request) -> void
+  auto Insert(const OperationKey& key, OperationId id, SharedResultOp op,
+    const RequestMeta& request) -> void
   {
     if (!accepting_) {
       throw OperationCancelledException("Asset loader is stopped");
     }
-    const auto [bucket, created] = table_.try_emplace(type_id);
+    const auto [bucket, created] = table_.try_emplace(key.type_id);
     try {
       const auto inserted
         = bucket->second
-            .try_emplace(cache_key,
+            .try_emplace(key.cache_key,
               Entry { .op = std::move(op), .request = request, .id = id })
             .second;
       if (!inserted) {
@@ -130,14 +173,14 @@ public:
     }
     ++stats_.insert_calls;
   }
-  auto Erase(TypeId type_id, uint64_t cache_key, OperationId id) -> void
+  auto Erase(const OperationKey& key, OperationId id) -> void
   {
     ++stats_.erase_calls;
-    const auto type_it = table_.find(type_id);
+    const auto type_it = table_.find(key.type_id);
     if (type_it == table_.end()) {
       return;
     }
-    const auto entry = type_it->second.find(cache_key);
+    const auto entry = type_it->second.find(key.cache_key);
     if (entry == type_it->second.end() || entry->second.id != id) {
       return;
     }
@@ -147,6 +190,7 @@ public:
         table_.erase(type_it);
       }
     }
+    retired_.UnParkAll();
     if (table_.empty()) {
       idle_.UnParkAll();
     }
@@ -175,10 +219,20 @@ public:
 
 private:
   struct Entry final {
-    SharedResultOp op {};
+    SharedResultOp op;
     RequestMeta request {};
     OperationId id { 0U };
   };
+
+  [[nodiscard]] auto HasClosedOperation(const OperationKey& key) const -> bool
+  {
+    const auto type_it = table_.find(key.type_id);
+    if (type_it == table_.end()) {
+      return false;
+    }
+    const auto it = type_it->second.find(key.cache_key);
+    return it != type_it->second.end() && it->second.op.Closed();
+  }
 
   static auto MergeRequestMeta(
     const RequestMeta& existing, const RequestMeta& incoming) -> RequestMeta
@@ -203,6 +257,7 @@ private:
   bool accepting_ { true };
   Stats stats_ {};
   co::ParkingLot idle_;
+  co::ParkingLot retired_;
 };
 
 } // namespace oxygen::content::internal

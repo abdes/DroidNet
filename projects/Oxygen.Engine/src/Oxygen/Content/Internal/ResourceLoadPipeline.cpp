@@ -313,7 +313,8 @@ namespace {
     -> co::Co<SharedContentResult>
   {
     const auto erase = Finally([&] noexcept -> auto {
-      in_flight_ops->Erase(resource_type, key.get(), operation_id);
+      in_flight_ops->Erase(
+        { .type_id = resource_type, .cache_key = key.get() }, operation_id);
     });
     if (!access.IsReadable()) {
       co_return SharedContentResult {};
@@ -391,10 +392,24 @@ namespace {
     if (callbacks.on_resource_request) {
       callbacks.on_resource_request(resource_type);
     }
-    auto cached = WithResourceType(resource_type, [&]<typename T> -> auto {
-      return ContentAcquisition::FromCache<T>(
-        cache, *releases, key.get(), owner);
-    });
+    const auto from_cache = [&] -> ContentAcquisition {
+      return WithResourceType(resource_type, [&]<typename T> -> auto {
+        return ContentAcquisition::FromCache<T>(
+          cache, *releases, key.get(), owner);
+      });
+    };
+    const InFlightOperationTable::OperationKey operation_key {
+      .type_id = resource_type,
+      .cache_key = key.get(),
+    };
+    auto cached = from_cache();
+    while (
+      !cached && co_await in_flight_ops.AwaitClosedOperation(operation_key)) {
+      if (!access.IsReadable()) {
+        co_return ContentAcquisition {};
+      }
+      cached = from_cache();
+    }
     if (cached) {
       if (callbacks.on_resource_cache_hit) {
         callbacks.on_resource_cache_hit(resource_type);
@@ -409,7 +424,7 @@ namespace {
       .intent = request.intent,
       .sequence = request_sequence,
     };
-    if (auto joined = in_flight_ops.Find(resource_type, key.get(), meta)) {
+    if (auto joined = in_flight_ops.Find(operation_key, meta)) {
       if (callbacks.on_resource_joined_inflight) {
         callbacks.on_resource_joined_inflight(resource_type);
       }
@@ -426,8 +441,8 @@ namespace {
       observer_ptr { &cache }, observer_ptr { &in_flight_ops },
       observer_ptr { &callbacks }, releases, operation_id,
       std::move(decode_fn));
-    co::Shared shared(std::move(op));
-    in_flight_ops.Insert(resource_type, key.get(), operation_id, shared, meta);
+    co::Shared shared(RunToCompletion(std::move(op)));
+    in_flight_ops.Insert(operation_key, operation_id, shared, meta);
     const auto result = co_await shared;
     co_return access.IsReadable()
       ? AcquirePublication(result.publication, cache, *releases, owner)

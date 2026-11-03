@@ -7,14 +7,11 @@
 #pragma once
 
 #include <functional>
-#include <memory>
 #include <optional>
 
-#include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content::internal {
@@ -24,8 +21,6 @@ public:
   struct Callbacks final {
     std::function<std::optional<data::SourceInstanceId>(const data::AssetKey&)>
       resolve_source_id_for_asset;
-    std::function<std::shared_ptr<const IContentSource>(data::SourceInstanceId)>
-      resolve_source_for_id;
     std::function<ResourceKey(
       data::SourceInstanceId, data::pak::core::ResourceIndexT)>
       make_script_resource_key;
@@ -35,12 +30,6 @@ public:
     const data::AssetKey& context_asset_key,
     data::pak::core::ResourceIndexT resource_index, const Callbacks& callbacks)
     -> std::optional<ResourceKey>;
-
-  [[nodiscard]] auto ReadScriptResourceForAsset(
-    const data::AssetKey& context_asset_key,
-    data::pak::core::ResourceIndexT resource_index,
-    const Callbacks& callbacks) const
-    -> std::shared_ptr<const data::ScriptResource>;
 };
 
 } // namespace oxygen::content::internal

@@ -35,9 +35,9 @@ namespace oxygen::co {
  running co_await N times on one copy.
 
  New parents that attempt to join after the shared task has been cancelled (due
- to cancellation of all the parents in the initial batch) will see a
- `std::runtime_error` explaining that the value is unavailable due to
- cancellation; this can also be tested explicitly using the `Closed()` method.
+ to cancellation of all the parents in the initial batch) abort the process,
+ because the value is unavailable and the cancellation cannot be propagated to
+ them. Test `Closed()` before joining, or await `AsOptional()`.
 
  Behavior is undefined if the shared operation indirectly attempts to await
  itself. If this occurs, it is possible for cancellations to result in the

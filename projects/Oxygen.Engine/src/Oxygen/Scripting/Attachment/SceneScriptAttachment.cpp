@@ -395,6 +395,7 @@ namespace {
         });
     }
 
+    //! The script's resource, resident while the loaded script asset is held.
     [[nodiscard]] auto ReadScriptResource(const data::ScriptAsset& script,
       const data::ResourceReferenceIndex index) const
       -> std::shared_ptr<const data::ScriptResource>
@@ -403,10 +404,7 @@ namespace {
       if (!key.has_value()) {
         return nullptr;
       }
-      if (auto resource = loader_->GetScriptResource(*key)) {
-        return resource;
-      }
-      return loader_->ReadScriptResourceForAsset(script, index);
+      return loader_->GetScriptResource(*key);
     }
 
     observer_ptr<content::IAssetLoader> loader_;

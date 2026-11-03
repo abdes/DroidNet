@@ -265,12 +265,6 @@ public:
   {
     return {};
   }
-  auto ReadScriptResourceForAsset(const data::Asset& /*context_asset*/,
-    data::ResourceReferenceIndex /*resource_index*/) const
-    -> std::shared_ptr<const data::ScriptResource> override
-  {
-    return {};
-  }
   auto GetPhysicsSceneAsset(const data::AssetKey& /*key*/)
     -> std::shared_ptr<data::PhysicsSceneAsset> override
   {

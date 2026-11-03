@@ -35,6 +35,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
@@ -43,8 +44,6 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
 #include <Oxygen/Testing/GTest.h>
-
-using ::testing::NotNull;
 
 using oxygen::observer_ptr;
 using oxygen::co::Co;
@@ -209,20 +208,18 @@ auto ExpectStopDrainsDirectLoad(TestEventLoop* loop, std::filesystem::path root,
     decode.finished.store(true);
     return result;
   });
-  loader.RegisterLoader([&](oxygen::content::LoaderContext context)
+  loader.RegisterLoader([&](const oxygen::content::LoaderContext& context)
                           -> std::unique_ptr<BufferResource> {
     decode.Wait(*loop);
-    auto result
-      = oxygen::content::loaders::LoadBufferResource(std::move(context));
+    auto result = oxygen::content::loaders::LoadBufferResource(context);
     decode.finished.store(true);
     return result;
   });
 
-  loader.RegisterLoader([&](oxygen::content::LoaderContext context)
+  loader.RegisterLoader([&](const oxygen::content::LoaderContext& context)
                           -> std::unique_ptr<TextureResource> {
     decode.Wait(*loop);
-    auto result
-      = oxygen::content::loaders::LoadTextureResource(std::move(context));
+    auto result = oxygen::content::loaders::LoadTextureResource(context);
     decode.finished.store(true);
     return result;
   });
@@ -336,6 +333,142 @@ NOLINT_TEST_F(
   TestEventLoop el;
   oxygen::co::Run(el,
     ExpectStopDrainsDirectLoad(&el, root, key, SuspendedLoadKind::kResource));
+}
+
+struct HeldLoad final {
+  AssetLoader* loader { nullptr };
+  oxygen::data::AssetKey material_key;
+  oxygen::content::ResourceKey resource_key;
+  SuspendedLoadKind kind { SuspendedLoadKind::kAsset };
+};
+
+auto LoadHeld(const HeldLoad load) -> Co<bool>
+{
+  if (load.kind == SuspendedLoadKind::kAsset) {
+    co_return co_await load.loader->LoadAssetAsync<MaterialAsset>(
+      load.material_key)
+      != nullptr;
+  }
+  co_return co_await load.loader->LoadResourceAsync<TextureResource>(
+    load.resource_key)
+    != nullptr;
+}
+
+auto AwaitEvent(oxygen::co::Event* event) -> Co<> { co_await *event; }
+
+//! A waiter that is cancelled on request and reports when it has settled.
+struct CancellableWaiter final {
+  oxygen::co::Event cancel;
+  oxygen::co::Event settled;
+};
+
+//! Cancel the only waiter while its decode is held on a worker, then load the
+//! same key again before the decode returns.
+auto ExpectLoadAfterCancelledWaiter(TestEventLoop* loop,
+  std::filesystem::path root, oxygen::data::AssetKey material_key,
+  const SuspendedLoadKind kind) -> Co<>
+{
+  oxygen::co::ThreadPool pool(*loop, 2);
+  AssetLoaderConfig config {};
+  config.thread_pool = observer_ptr { &pool };
+  AssetLoader loader(oxygen::engine::internal::EngineTagFactory::Get(), config);
+  SuspendedDecode decode;
+  loader.RegisterLoader([&](oxygen::content::LoaderContext context)
+                          -> std::unique_ptr<MaterialAsset> {
+    decode.Wait(*loop);
+    return oxygen::content::loaders::LoadMaterialAsset(std::move(context));
+  });
+  loader.RegisterLoader([&](const oxygen::content::LoaderContext& context)
+                          -> std::unique_ptr<TextureResource> {
+    decode.Wait(*loop);
+    return oxygen::content::loaders::LoadTextureResource(context);
+  });
+
+  CancellableWaiter first;
+  OXCO_WITH_NURSERY(n)
+  {
+    co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+    loader.Run();
+    loader.AddLooseCookedRoot(root);
+    const auto sources = loader.EnumerateMountedSources();
+    if (sources.size() != 1U) {
+      ADD_FAILURE() << "Expected one mounted source";
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    }
+    const auto texture_key = loader.MakeTextureResourceKey(
+      sources.front().source_key, oxygen::ResourceIndexT { 1U });
+    if (!texture_key) {
+      ADD_FAILURE() << "Expected the authored texture binding";
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    }
+    const HeldLoad load {
+      .loader = &loader,
+      .material_key = material_key,
+      .resource_key = *texture_key,
+      .kind = kind,
+    };
+
+    n.Start(
+      [](const HeldLoad held, CancellableWaiter* waiter) -> Co<> {
+        co_await oxygen::co::AnyOf(LoadHeld(held), AwaitEvent(&waiter->cancel));
+        waiter->settled.Trigger();
+      },
+      load, &first);
+
+    co_await decode.entered;
+    first.cancel.Trigger();
+    co_await oxygen::co::kYield;
+    // The cancelled operation still owns the key while its decode is held.
+    EXPECT_FALSE(first.settled.Triggered());
+
+    bool second_loaded = false;
+    oxygen::co::Event second_done;
+    n.Start(
+      [](const HeldLoad held, bool* loaded, oxygen::co::Event* done) -> Co<> {
+        *loaded = co_await LoadHeld(held);
+        done->Trigger();
+      },
+      load, &second_loaded, &second_done);
+    co_await oxygen::co::kYield;
+    EXPECT_FALSE(second_done.Triggered());
+
+    decode.release.count_down();
+    co_await first.settled;
+    co_await second_done;
+    EXPECT_TRUE(second_loaded);
+    if (kind == SuspendedLoadKind::kAsset) {
+      EXPECT_TRUE(loader.HasMaterialAsset(material_key));
+    } else {
+      EXPECT_TRUE(loader.HasTexture(*texture_key));
+    }
+    loader.Stop();
+    co_return oxygen::co::kJoin;
+  };
+}
+
+NOLINT_TEST_F(AssetLoaderAsyncTest, AssetLoadAfterCancelledWaiterCompletes)
+{
+  const auto root = TempDir() / "source";
+  const auto key
+    = oxygen::data::AssetKey::FromVirtualPath("/test/Surface.omat");
+  oxygen::content::testing::WriteTexturedMaterialSource(root, key);
+  TestEventLoop el;
+  oxygen::co::Run(el,
+    ExpectLoadAfterCancelledWaiter(&el, root, key, SuspendedLoadKind::kAsset));
+}
+
+NOLINT_TEST_F(AssetLoaderAsyncTest, ResourceLoadAfterCancelledWaiterCompletes)
+{
+  const auto root = TempDir() / "source";
+  const auto key
+    = oxygen::data::AssetKey::FromVirtualPath("/test/Surface.omat");
+  oxygen::content::testing::WriteTexturedMaterialSource(root, key);
+  TestEventLoop el;
+  oxygen::co::Run(el,
+    ExpectLoadAfterCancelledWaiter(
+      &el, root, key, SuspendedLoadKind::kResource));
 }
 
 NOLINT_TEST_F(

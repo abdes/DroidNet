@@ -2272,11 +2272,6 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
   }
   const auto source_id = *resolved_id;
   const auto source_instance = source_id;
-  auto desc_reader = source_content->CreateAssetDescriptorReader(key);
-  if (!desc_reader) {
-    throw std::runtime_error(
-      "Selected asset source did not provide its descriptor");
-  }
   auto collector = std::make_shared<internal::DependencyCollector>();
 
   const auto registered = asset_loaders_.find(type_id);
@@ -2287,11 +2282,17 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
   auto decoder = registered->second;
   const auto default_priority = residency_policy_.default_priority_class;
   LOG_F(2, "scheduling asset decode on thread pool: type_id={}", type_id);
+  // Opening, reading and hash-checking the descriptor is I/O; it stays off the
+  // owning thread with the decode.
   auto decoded = co_await thread_pool_->Run(
     [key, source_content, collector, decoder = std::move(decoder),
       offline = work_offline_, default_priority, request,
-      desc_reader = std::move(desc_reader),
       source_instance] mutable -> DecodedAssetAsyncResult {
+      const auto desc_reader = source_content->CreateAssetDescriptorReader(key);
+      if (!desc_reader) {
+        throw std::runtime_error(
+          "Selected asset source did not provide its descriptor");
+      }
       auto references = source_content->ReadAssetReferences(key);
       LoaderContext context {
         .current_asset_key = key,
@@ -2931,10 +2932,6 @@ auto AssetLoader::MakeScriptResourceKeyForAsset(
         const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
       return ResolveAssetSourceId(context_asset);
     },
-    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
-      -> std::shared_ptr<const internal::IContentSource> {
-      return ResolveSourceForId(source_id);
-    },
     .make_script_resource_key
     = [this](const data::SourceInstanceId source_id,
         const data::pak::core::ResourceIndexT index) -> ResourceKey {
@@ -2944,37 +2941,6 @@ auto AssetLoader::MakeScriptResourceKeyForAsset(
     },
   };
   return script_query_service_->MakeScriptResourceKeyForAsset(
-    context_asset.GetAssetKey(), table_index, callbacks);
-}
-
-auto AssetLoader::ReadScriptResourceForAsset(const data::Asset& context_asset,
-  const data::ResourceReferenceIndex resource_index) const
-  -> std::shared_ptr<const data::ScriptResource>
-{
-  const auto resolved = context_asset.GetReferences().ResolveResource(
-    resource_index, data::ResourceKind::kScript);
-  if (!resolved) {
-    return {};
-  }
-  const auto& index = *resolved;
-  if (!index) {
-    return {};
-  }
-  const auto table_index = *index;
-
-  const internal::ScriptQueryService::Callbacks callbacks {
-    .resolve_source_id_for_asset
-    = [this, &context_asset](
-        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
-      return ResolveAssetSourceId(context_asset);
-    },
-    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
-      -> std::shared_ptr<const internal::IContentSource> {
-      return ResolveSourceForId(source_id);
-    },
-    .make_script_resource_key = {},
-  };
-  return script_query_service_->ReadScriptResourceForAsset(
     context_asset.GetAssetKey(), table_index, callbacks);
 }
 

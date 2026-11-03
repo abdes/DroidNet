@@ -644,11 +644,6 @@ public:
     const data::Asset& context_asset,
     data::ResourceReferenceIndex resource_index)
     -> std::optional<ResourceKey> = 0;
-  //! Read a script resource by table index from the context asset's source.
-  [[nodiscard]] virtual auto ReadScriptResourceForAsset(
-    const data::Asset& context_asset,
-    data::ResourceReferenceIndex resource_index) const
-    -> std::shared_ptr<const data::ScriptResource> = 0;
 
   //! Get cached physics scene sidecar asset without triggering a load.
   [[nodiscard]] virtual auto GetPhysicsSceneAsset(const data::AssetKey& key)
