@@ -8,16 +8,18 @@
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <optional>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "Fixtures/LoaderTestFixtures.h"
 
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -38,6 +40,34 @@ using oxygen::data::pak::geometry::MeshDesc;
 using oxygen::data::pak::geometry::MeshViewDesc;
 using oxygen::data::pak::geometry::SubMeshDesc;
 using oxygen::data::pak::geometry::SurfaceDesc;
+
+using oxygen::content::ContentLoadError;
+using oxygen::content::ContentLoadFailure;
+using oxygen::data::CookedDefect;
+using oxygen::data::CookedFormatError;
+
+//! The failure `load` is refused with for an engine rule, or nothing when it
+//! does not throw.
+auto FailureOf(auto&& load) -> std::optional<ContentLoadFailure>
+{
+  try {
+    load();
+  } catch (const ContentLoadError& error) {
+    return error.Failure();
+  }
+  return std::nullopt;
+}
+
+//! The defect `load` is refused with, or nothing when it does not throw.
+auto DefectOf(auto&& load) -> std::optional<CookedDefect>
+{
+  try {
+    load();
+  } catch (const CookedFormatError& error) {
+    return error.Defect();
+  }
+  return std::nullopt;
+}
 
 //! The procedural cube's vertex and index counts.
 constexpr uint32_t kCubeVertexCount = 24U;
@@ -175,10 +205,13 @@ NOLINT_TEST_F(
   }
 
   const auto context = MakeLoaderContext(false, false);
-  EXPECT_THROW({ (void)LoadGeometryAsset(context); }, std::runtime_error);
+  const auto defect = DefectOf([&] { (void)LoadGeometryAsset(context); });
+  ASSERT_HAS_VALUE(defect);
+  EXPECT_EQ(*defect, CookedDefect::kInvalidValue);
 }
 
-//! Unsupported recipes are decode errors, including metadata-only inspection.
+//! An unsupported recipe breaks an engine rule (kContentInvalid), including in
+//! metadata-only inspection.
 NOLINT_TEST_F(GeometryLoaderContractTest, UnsupportedProceduralGeneratorThrows)
 {
   ASSERT_NO_FATAL_FAILURE(WriteProceduralGeometry("UnsupportedGenerator/Mesh"));
@@ -188,14 +221,16 @@ NOLINT_TEST_F(GeometryLoaderContractTest, UnsupportedProceduralGeneratorThrows)
     try {
       (void)LoadGeometryAsset(context);
       FAIL() << "Unsupported procedural generator must fail decoding";
-    } catch (const std::runtime_error& error) {
+    } catch (const ContentLoadError& error) {
+      EXPECT_EQ(error.Failure(), ContentLoadFailure::kContentInvalid);
       EXPECT_NE(std::string(error.what()).find("UnsupportedGenerator/Mesh"),
         std::string::npos);
     }
   }
 }
 
-//! Rejected procedural dimensions must never reach Mesh's bounds calculation.
+//! Rejected procedural dimensions break an engine rule (kContentInvalid) and
+//! must never reach Mesh's bounds calculation.
 NOLINT_TEST_F(GeometryLoaderContractTest, InvalidProceduralParametersThrow)
 {
   // Capsule requires at least one hemisphere segment; a complete zero-valued
@@ -206,7 +241,9 @@ NOLINT_TEST_F(GeometryLoaderContractTest, InvalidProceduralParametersThrow)
   for (const auto parse_only : { false, true }) {
     auto [context, collector] = MakeDecodeLoaderContext();
     context.parse_only = parse_only;
-    EXPECT_THROW((void)LoadGeometryAsset(context), std::runtime_error);
+    const auto failure = FailureOf([&] { (void)LoadGeometryAsset(context); });
+    ASSERT_HAS_VALUE(failure);
+    EXPECT_EQ(*failure, ContentLoadFailure::kContentInvalid);
   }
 }
 
@@ -219,7 +256,9 @@ NOLINT_TEST_F(GeometryLoaderContractTest, StaleProceduralViewRangeThrows)
   for (const auto parse_only : { false, true }) {
     auto [context, collector] = MakeDecodeLoaderContext();
     context.parse_only = parse_only;
-    EXPECT_THROW((void)LoadGeometryAsset(context), std::runtime_error);
+    const auto defect = DefectOf([&] { (void)LoadGeometryAsset(context); });
+    ASSERT_HAS_VALUE(defect);
+    EXPECT_EQ(*defect, CookedDefect::kOutOfBounds);
   }
 }
 
@@ -253,7 +292,8 @@ NOLINT_TEST_F(GeometryLoaderContractTest, PreviousGeometryVersionIsRejected)
   try {
     (void)LoadGeometryAsset(context);
     FAIL() << "A previous geometry version must not load";
-  } catch (const std::runtime_error& error) {
+  } catch (const CookedFormatError& error) {
+    EXPECT_EQ(error.Defect(), CookedDefect::kUnsupportedVersion);
     EXPECT_NE(std::string(error.what()).find("recooking"), std::string::npos);
   }
 }
@@ -269,7 +309,8 @@ NOLINT_TEST_F(GeometryLoaderContractTest, ViewBoundsOutsideSubmeshAreRejected)
   try {
     (void)LoadGeometryAsset(context);
     FAIL() << "Mesh view bounds outside the submesh must not load";
-  } catch (const std::runtime_error& error) {
+  } catch (const CookedFormatError& error) {
+    EXPECT_EQ(error.Defect(), CookedDefect::kInconsistent);
     EXPECT_NE(std::string(error.what()).find("outside the submesh bounds"),
       std::string::npos);
   }

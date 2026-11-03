@@ -28,6 +28,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PhysicsResource.h>
@@ -115,7 +116,8 @@ public:
       .physics = count(GetPhysicsTable()),
     });
     if (!valid) {
-      throw std::runtime_error(valid.error());
+      throw data::CookedFormatError(
+        data::CookedDefect::kInvalidReference, valid.error());
     }
     return references;
   }

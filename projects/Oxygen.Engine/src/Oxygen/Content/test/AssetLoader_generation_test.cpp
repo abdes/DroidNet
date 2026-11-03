@@ -30,6 +30,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/EvictionEvents.h>
@@ -1843,6 +1844,26 @@ namespace {
           EXPECT_EQ(loader_.FindPhysicsSidecarAssetKeyForScene(*scenes[0]),
             sidecar_key);
         }));
+  }
+
+  //! A scene binds one sidecar, so two in its mounts that target it fail its
+  //! load.
+  NOLINT_TEST_F(AssetLoaderPoolTest, TwoSidecarsForOneSceneFailItsLoad)
+  {
+    auto content = LooseCookedRoot { "test", kFirstSeed };
+    const auto scene_key = content.Scene("generation.oscene");
+    static_cast<void>(content.PhysicsSidecar("first.opscene", scene_key));
+    static_cast<void>(content.PhysicsSidecar("second.opscene", scene_key));
+    const auto root = TempDir() / "root";
+    cooker::testing::Materialize(content.Files(), root);
+    loader_.AddLooseCookedRoot(root);
+
+    const auto error_run = WhileActive(
+      ThrownBy(loader_.LoadAssetAsync<data::SceneAsset>(scene_key)));
+    ASSERT_HAS_VALUE(error_run);
+    const auto& error = *error_run;
+
+    EXPECT_EQ(LoadFailureOf(error), ContentLoadFailure::kBindingFailed);
   }
 
   NOLINT_TEST_F(AssetLoaderBasicTest,

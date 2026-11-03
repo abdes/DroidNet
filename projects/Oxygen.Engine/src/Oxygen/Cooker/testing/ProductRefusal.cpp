@@ -13,6 +13,7 @@
 #include <string_view>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
@@ -43,11 +44,44 @@ namespace {
       read();
     } catch (const data::CookedFormatError& refused) {
       return refused.Defect();
+    } catch (const content::ContentLoadError& refused) {
+      throw std::logic_error(std::string(reader)
+        + " refuses for a rule of the engine, not of the format: "
+        + refused.what());
     } catch (const std::exception& failed) {
       throw std::logic_error(
         std::string(reader) + " refuses without a defect: " + failed.what());
     }
     return std::nullopt;
+  }
+
+  //! The engine rule `read` refuses with, none when it accepts.
+  template <typename Read>
+  auto RuleRefusalOf(const std::string_view reader, const Read& read)
+    -> std::optional<content::ContentLoadFailure>
+  {
+    try {
+      read();
+    } catch (const content::ContentLoadError& refused) {
+      return refused.Failure();
+    } catch (const std::exception& failed) {
+      throw std::logic_error(std::string(reader)
+        + " refuses for no rule of the engine: " + failed.what());
+    }
+    return std::nullopt;
+  }
+
+  //! Reads the geometry descriptor `bytes` as a mount's geometry loader does.
+  auto ReadGeometry(const std::span<const std::byte> bytes) -> void
+  {
+    auto stream = serio::ReadOnlyMemoryStream { bytes };
+    auto reader = serio::Reader<serio::ReadOnlyMemoryStream> { stream };
+    static_cast<void>(
+      content::loaders::LoadGeometryAsset(content::LoaderContext {
+        .desc_reader = &reader,
+        .work_offline = true,
+        .parse_only = true,
+      }));
   }
 
   //! The defect `load` refuses the resource row `desc` and its `payload`
@@ -123,16 +157,15 @@ auto SidecarRefusal(const std::span<const std::byte> bytes)
 auto GeometryRefusal(const std::span<const std::byte> bytes)
   -> std::optional<data::CookedDefect>
 {
-  return RefusalOf("the geometry loader", [bytes] -> void {
-    auto stream = serio::ReadOnlyMemoryStream { bytes };
-    auto reader = serio::Reader<serio::ReadOnlyMemoryStream> { stream };
-    static_cast<void>(
-      content::loaders::LoadGeometryAsset(content::LoaderContext {
-        .desc_reader = &reader,
-        .work_offline = true,
-        .parse_only = true,
-      }));
-  });
+  return RefusalOf(
+    "the geometry loader", [bytes] -> void { ReadGeometry(bytes); });
+}
+
+auto GeometryRuleRefusal(const std::span<const std::byte> bytes)
+  -> std::optional<content::ContentLoadFailure>
+{
+  return RuleRefusalOf(
+    "the geometry loader", [bytes] -> void { ReadGeometry(bytes); });
 }
 
 auto MaterialRefusal(const std::span<const std::byte> bytes)

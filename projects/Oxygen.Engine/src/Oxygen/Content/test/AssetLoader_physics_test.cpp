@@ -7,11 +7,10 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <memory>
 #include <span>
-#include <stdexcept>
-#include <string>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -19,6 +18,7 @@
 #include "AssetLoader_test.h"
 
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
@@ -32,6 +32,7 @@
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -142,14 +143,14 @@ namespace {
     }
   }
 
-  auto ExercisePhysicsBindings(TestEventLoop* loop,
-    const std::filesystem::path root, const DependencyCase scenario) -> co::Co<>
+  auto ExercisePhysicsBindings(
+    TestEventLoop* loop, const std::filesystem::path root) -> co::Co<>
   {
     const auto owner_root = root / "owner";
     const auto first_root = root / "first";
     const auto second_root = root / "second";
     WriteSidecar(owner_root);
-    WriteDependencies(first_root, 1U, scenario);
+    WriteDependencies(first_root, 1U, DependencyCase::kValid);
     WriteDependencies(second_root, 2U, DependencyCase::kValid);
     co::ThreadPool pool(*loop, 2);
     AssetLoaderConfig config {};
@@ -164,26 +165,8 @@ namespace {
       const auto first_source = loader.MountLooseCookedGeneration(first_root);
       static_cast<void>(loader.MountLooseCookedGeneration(owner_root));
       auto original = loader.BeginLoadScope();
-      std::shared_ptr<data::PhysicsSceneAsset> first;
-      std::string failure;
-      try {
-        first = co_await loader.LoadAssetAsync<data::PhysicsSceneAsset>(
-          kSidecar, LoadRequest { .scope = original });
-      } catch (const std::runtime_error& error) {
-        failure = error.what();
-      }
-      if (scenario != DependencyCase::kValid) {
-        const auto expected = scenario == DependencyCase::kMissingMaterial
-          ? "Required physics descriptor is missing or has the wrong type: "
-            + data::to_string(kMaterial)
-          : std::string("Collision shape descriptor type/version is invalid");
-        EXPECT_EQ(failure, expected);
-        EXPECT_FALSE(first);
-        EXPECT_FALSE(loader.GetPhysicsSceneAsset(kSidecar));
-        loader.Stop();
-        co_return co::kJoin;
-      }
-      EXPECT_TRUE(failure.empty()) << failure;
+      auto first = co_await loader.LoadAssetAsync<data::PhysicsSceneAsset>(
+        kSidecar, LoadRequest { .scope = original });
       if (!first) {
         ADD_FAILURE() << "Valid physics graph did not publish";
         loader.Stop();
@@ -277,25 +260,61 @@ namespace {
     PhysicsBindingsRetainCapturedCrossRootValuesAndPayloads)
   {
     TestEventLoop loop;
-    co::Run(
-      loop, ExercisePhysicsBindings(&loop, TempDir(), DependencyCase::kValid));
+    co::Run(loop, ExercisePhysicsBindings(&loop, TempDir()));
   }
-  NOLINT_TEST_F(
-    AssetLoaderBasicTest, MissingPhysicsMaterialPreventsSidecarPublication)
+
+  //! What a sidecar load over a failing dependency root left.
+  struct SidecarLoad final {
+    std::exception_ptr error;
+    bool published = false;
+  };
+
+  //! Mounts the sidecar's root over a dependency root written for `scenario`
+  //! and loads the sidecar.
+  auto LoadSidecarOver(AssetLoader& loader, const std::filesystem::path& root,
+    const DependencyCase scenario) -> co::Co<SidecarLoad>
   {
-    TestEventLoop loop;
-    co::Run(loop,
-      ExercisePhysicsBindings(
-        &loop, TempDir(), DependencyCase::kMissingMaterial));
+    WriteDependencies(root / "dependencies", 1U, scenario);
+    WriteSidecar(root / "owner");
+    static_cast<void>(loader.MountLooseCookedGeneration(root / "dependencies"));
+    static_cast<void>(loader.MountLooseCookedGeneration(root / "owner"));
+    auto error = co_await ThrownBy(
+      loader.LoadAssetAsync<data::PhysicsSceneAsset>(kSidecar));
+    co_return SidecarLoad {
+      .error = error,
+      .published = loader.GetPhysicsSceneAsset(kSidecar) != nullptr,
+    };
   }
-  NOLINT_TEST_F(
-    AssetLoaderBasicTest, InvalidShapeVersionPreventsSidecarPublication)
+
+  //! A physics material the mounts do not hold fails the sidecar's load as a
+  //! missing dependency, and nothing is published.
+  NOLINT_TEST_F(AssetLoaderPoolTest, MissingPhysicsMaterialFailsTheSidecar)
   {
-    TestEventLoop loop;
-    co::Run(loop,
-      ExercisePhysicsBindings(
-        &loop, TempDir(), DependencyCase::kWrongShapeVersion));
+    const auto load_run = WhileActive(
+      LoadSidecarOver(loader_, TempDir(), DependencyCase::kMissingMaterial));
+    ASSERT_HAS_VALUE(load_run);
+    const auto& load = *load_run;
+
+    EXPECT_EQ(
+      LoadFailureOf(load.error), ContentLoadFailure::kDependencyMissing);
+    EXPECT_FALSE(load.published);
   }
+
+  //! A collision shape whose descriptor is refused fails the sidecar's load as
+  //! a failed dependency, with the shape's refusal nested.
+  NOLINT_TEST_F(AssetLoaderPoolTest, RefusedShapeDescriptorFailsTheSidecar)
+  {
+    const auto load_run = WhileActive(
+      LoadSidecarOver(loader_, TempDir(), DependencyCase::kWrongShapeVersion));
+    ASSERT_HAS_VALUE(load_run);
+    const auto& load = *load_run;
+
+    EXPECT_EQ(LoadFailureOf(load.error), ContentLoadFailure::kDependencyFailed);
+    EXPECT_EQ(
+      CookedDefectIn(load.error), data::CookedDefect::kUnsupportedVersion);
+    EXPECT_FALSE(load.published);
+  }
+
   //! Mounts a pak whose physics table holds the reserved entry 0 and a 4-byte
   //! payload at entry 1, then loads entry 1 through the pak's source key.
   auto LoadPhysicsPayloadFromPak(

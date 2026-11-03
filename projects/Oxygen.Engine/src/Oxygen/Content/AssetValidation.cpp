@@ -23,6 +23,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -38,13 +39,23 @@ auto ValidateAssetDescriptor(const data::AssetType type,
 {
   const auto parsed_header = serio::CopyAt<data::pak::core::AssetHeader>(bytes);
   if (!parsed_header) {
-    throw std::runtime_error("Asset descriptor is smaller than its header");
+    throw data::CookedFormatError(data::CookedDefect::kTooSmall,
+      "Asset descriptor is smaller than its header");
   }
   const auto header = *parsed_header;
   const auto version = data::pak::CurrentAssetVersion(type);
-  if (!version || header.version != *version
-    || header.asset_type != static_cast<uint8_t>(type)) {
-    throw std::runtime_error("Asset descriptor type/version is invalid");
+  if (!version) {
+    // The index lists a type that has no descriptor format.
+    throw data::CookedFormatError(data::CookedDefect::kInvalidValue,
+      "Asset descriptor type/version is invalid");
+  }
+  if (header.asset_type != static_cast<uint8_t>(type)) {
+    throw data::CookedFormatError(data::CookedDefect::kWrongMagic,
+      "Asset descriptor type/version is invalid");
+  }
+  if (header.version != *version) {
+    throw data::CookedFormatError(data::CookedDefect::kUnsupportedVersion,
+      "Asset descriptor type/version is invalid");
   }
   data::CheckDescriptorHash(bytes);
   serio::ReadOnlyMemoryStream stream(bytes);
@@ -85,12 +96,13 @@ auto ValidateAssetDescriptor(const data::AssetType type,
     static_cast<void>(loaders::LoadCollisionShapeDescriptor(context));
     break;
   default:
-    throw std::runtime_error(
-      "Unsupported asset type for descriptor validation");
+    // Every type with a current descriptor version is handled above, and a
+    // type without one is refused before this switch.
+    throw std::logic_error("Unsupported asset type for descriptor validation");
   }
   const auto consumed = reader.Position();
   if (!consumed || *consumed != bytes.size()) {
-    throw std::runtime_error(
+    throw data::CookedFormatError(data::CookedDefect::kSizeMismatch,
       "Asset descriptor contains unexpected trailing bytes");
   }
 }

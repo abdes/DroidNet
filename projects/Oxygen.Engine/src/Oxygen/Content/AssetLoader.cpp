@@ -46,6 +46,7 @@
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/ContentLoadScope.h>
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/EvictionEvents.h>
@@ -284,7 +285,7 @@ inline auto GetResourceTypeIndexByTypeId(const oxygen::TypeId type_id)
       return static_cast<uint16_t>(i);
     }
   }
-  throw std::runtime_error("Unknown resource type id for ResourceRef binding");
+  throw std::logic_error("Unknown resource type id for ResourceRef binding");
 }
 
 inline auto IsResourceTypeId(const oxygen::TypeId type_id) -> bool
@@ -2130,8 +2131,8 @@ auto AssetLoader::BindResourceRefToKey(const internal::ResourceRef& ref)
 {
   AssertOwningThread();
   if (!impl_->source_registry.AcquireSource(ref.source)) {
-    throw std::runtime_error(
-      "Resource dependency source is no longer readable");
+    throw ContentLoadError(ContentLoadFailure::kDependencyMissing,
+      "Required resource dependency left the mounts");
   }
   return InternResourceKey(ref.source,
     GetResourceTypeIndexByTypeId(ref.resource_type_id), ref.resource_index);
@@ -2350,8 +2351,9 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
 
   const auto registered = asset_loaders_.find(type_id);
   if (registered == asset_loaders_.end()) {
-    LOG_F(ERROR, "No loader registered for asset type id: {}", type_id);
-    co_return DecodedAssetAsyncResult {};
+    // The constructor registers a decoder for every asset type.
+    throw std::logic_error(
+      fmt::format("No loader registered for asset type id: {}", type_id));
   }
   auto decoder = registered->second;
   const auto default_priority = residency_policy_.default_priority_class;
@@ -2363,9 +2365,10 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
       offline = work_offline_, default_priority, request,
       source_instance] mutable -> DecodedAssetAsyncResult {
       const auto desc_reader = source_content->CreateAssetDescriptorReader(key);
+      // The source lists the asset, so its descriptor must open.
       if (!desc_reader) {
-        throw std::runtime_error(
-          "Selected asset source did not provide its descriptor");
+        throw data::CookedFormatError(data::CookedDefect::kMissingPart,
+          "Asset descriptor is absent: " + data::to_string(key));
       }
       auto references = source_content->ReadAssetReferences(key);
       LoaderContext context {
@@ -2518,7 +2521,8 @@ auto AssetLoader::BindMaterialTextureKeys(data::MaterialAsset& material,
   for (const auto reference : indices) {
     const auto resolved = material.GetReferences().ResolveTexture(reference);
     if (!resolved) {
-      throw std::runtime_error(resolved.error());
+      throw ContentLoadError(
+        ContentLoadFailure::kReferenceInvalid, resolved.error());
     }
     if (const auto* texture_key = std::get_if<data::AssetKey>(&*resolved)) {
       // A texture of another source is the one bound at load; when no
@@ -2560,7 +2564,8 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
     const auto resolved = asset.GetReferences().ResolveResource(
       reference, data::ResourceKind::kBuffer);
     if (!resolved) {
-      throw std::runtime_error(resolved.error());
+      throw ContentLoadError(
+        ContentLoadFailure::kReferenceInvalid, resolved.error());
     }
     const auto& index = *resolved;
     if (!index) {
@@ -2611,9 +2616,10 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
 
       auto mat_it = materials_by_key.find(mat_key);
       if (mat_it == materials_by_key.end() || !mat_it->second) {
-        throw std::runtime_error(fmt::format(
-          "Required submesh material {} was not bound for geometry {}", mat_key,
-          asset.GetAssetKey()));
+        throw ContentLoadError(ContentLoadFailure::kBindingFailed,
+          fmt::format(
+            "Required submesh material {} was not bound for geometry {}",
+            mat_key, asset.GetAssetKey()));
       }
 
       mesh.SetSubMeshMaterial(

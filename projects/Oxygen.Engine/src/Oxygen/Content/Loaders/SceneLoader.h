@@ -156,12 +156,8 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   const auto references = detail::CollectSceneAssetReferences(*asset);
 
   if (!context.parse_only || context.dependency_collector) {
-    if (!context.dependency_collector) {
-      LOG_F(ERROR,
-        "SceneLoader requires a DependencyCollector for non-parse-only loads");
-      throw std::runtime_error(
-        "SceneLoader requires a DependencyCollector for async decode");
-    }
+    DCHECK_NOTNULL_F(context.dependency_collector,
+      "SceneLoader requires a DependencyCollector for non-parse-only loads");
     auto& collector = *context.dependency_collector;
     for (const auto& dep : references.geometries) {
       collector.AddAssetDependency(dep);

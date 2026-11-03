@@ -6,8 +6,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
-#include <stdexcept>
 #include <string_view>
 #include <vector>
 
@@ -15,6 +15,7 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Testing/GTest.h>
@@ -24,6 +25,17 @@ using testing::NotNull;
 using oxygen::content::loaders::LoadPhysicsResource;
 
 namespace {
+
+//! The defect `load` is refused with, or nothing when it does not throw.
+auto DefectOf(auto&& load) -> std::optional<oxygen::data::CookedDefect>
+{
+  try {
+    load();
+  } catch (const oxygen::data::CookedFormatError& error) {
+    return error.Defect();
+  }
+  return std::nullopt;
+}
 
 class PhysicsResourceLoaderHappyPathTest
   : public oxygen::content::testing::PhysicsResourceFixtureBase { };
@@ -65,8 +77,10 @@ NOLINT_TEST_F(
     std::span<const std::byte>(short_bytes.data(), short_bytes.size()));
   ASSERT_TRUE(write_result);
 
-  EXPECT_THROW(
-    { (void)LoadPhysicsResource(MakeContext()); }, std::runtime_error);
+  const auto defect
+    = DefectOf([&] { (void)LoadPhysicsResource(MakeContext()); });
+  ASSERT_HAS_VALUE(defect);
+  EXPECT_EQ(*defect, oxygen::data::CookedDefect::kTruncated);
 }
 
 NOLINT_TEST_F(
@@ -83,8 +97,10 @@ NOLINT_TEST_F(
   const auto desc_result = desc_writer_.WriteBlob(desc_bytes);
   ASSERT_TRUE(desc_result);
 
-  EXPECT_THROW(
-    { (void)LoadPhysicsResource(MakeContext()); }, std::runtime_error);
+  const auto defect
+    = DefectOf([&] { (void)LoadPhysicsResource(MakeContext()); });
+  ASSERT_HAS_VALUE(defect);
+  EXPECT_EQ(*defect, oxygen::data::CookedDefect::kSizeMismatch);
 }
 
 } // namespace

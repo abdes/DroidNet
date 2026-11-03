@@ -9,13 +9,14 @@
 #include <memory>
 #include <optional>
 #include <span>
-#include <stdexcept>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/ByteBuffer.h>
@@ -41,7 +42,8 @@ struct LoaderContext {
     }
     const auto valid = asset_references->ValidateUsage(resources, keys);
     if (!valid) {
-      throw std::runtime_error(valid.error());
+      throw data::CookedFormatError(
+        data::CookedDefect::kInvalidReference, valid.error());
     }
   }
 
@@ -52,13 +54,12 @@ struct LoaderContext {
     if (reference == data::kNoResourceReference) {
       return std::nullopt;
     }
-    if (!asset_references) {
-      throw std::runtime_error(
-        "Asset reference metadata is required for resource resolution");
-    }
+    DCHECK_NOTNULL_F(
+      asset_references, "a decode that resolves references holds them");
     const auto resolved = asset_references->ResolveResource(reference, kind);
     if (!resolved) {
-      throw std::runtime_error(resolved.error());
+      throw data::CookedFormatError(
+        data::CookedDefect::kInvalidReference, resolved.error());
     }
     return *resolved;
   }
@@ -71,13 +72,12 @@ struct LoaderContext {
     if (reference == data::kNoResourceReference) {
       return {};
     }
-    if (!asset_references) {
-      throw std::runtime_error(
-        "Asset reference metadata is required for resource resolution");
-    }
+    DCHECK_NOTNULL_F(
+      asset_references, "a decode that resolves references holds them");
     auto resolved = asset_references->ResolveTexture(reference);
     if (!resolved) {
-      throw std::runtime_error(resolved.error());
+      throw data::CookedFormatError(
+        data::CookedDefect::kInvalidReference, resolved.error());
     }
     return *resolved;
   }
@@ -90,13 +90,13 @@ struct LoaderContext {
    This token is safe to copy across threads and MUST be used by async decode
    pipelines when recording `internal::ResourceRef` dependencies.
   */
-  data::SourceInstanceId source_instance {};
+  data::SourceInstanceId source_instance;
 
   //! Reader, already positioned at the start of the asset/resource descriptor
   //! to load.
   serio::AnyReader* desc_reader {};
   //! Borrowed only during synchronous decode; the result takes ownership.
-  observer_ptr<const data::AssetReferences> asset_references {};
+  observer_ptr<const data::AssetReferences> asset_references;
 
   //! The payload of the resource being loaded, already read in full.
   /*!
@@ -105,7 +105,7 @@ struct LoaderContext {
    into it, within Content's payload budget. Null for assets, whose
    descriptors hold everything they decode.
   */
-  observer_ptr<serio::ByteBuffer> payload {};
+  observer_ptr<serio::ByteBuffer> payload;
 
   //! Whether offline mode must not perform GPU side effects.
   /*!
@@ -135,10 +135,10 @@ struct LoaderContext {
   @note The collector is shared to provide strong lifetime guarantees across
   thread-pool execution and cancellation paths.
   */
-  std::shared_ptr<internal::DependencyCollector> dependency_collector {};
+  std::shared_ptr<internal::DependencyCollector> dependency_collector;
 
   //! Retains source readers and auxiliary records through decode and asset use.
-  std::shared_ptr<const internal::IContentSource> source_content {};
+  std::shared_ptr<const internal::IContentSource> source_content;
   //! Decoders preserve this identity on disk-loaded Data::Asset objects.
   data::SourceKey source_key {};
 

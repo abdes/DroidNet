@@ -9,12 +9,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include <Oxygen/Content/Loaders/Helpers.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -27,6 +28,17 @@ namespace {
 using oxygen::data::pak::core::AssetHeader;
 using oxygen::serio::ReadOnlyMemoryStream;
 using Reader = oxygen::serio::Reader<ReadOnlyMemoryStream>;
+
+//! The defect `load` is refused with, or nothing when it does not throw.
+auto DefectOf(auto&& load) -> std::optional<oxygen::data::CookedDefect>
+{
+  try {
+    load();
+  } catch (const oxygen::data::CookedFormatError& error) {
+    return error.Defect();
+  }
+  return std::nullopt;
+}
 
 //=== LoadAssetHeader Basic Tests ===--------------------------------------//
 
@@ -84,8 +96,10 @@ NOLINT_TEST(LoadAssetHeaderError, ThrowsOnInvalidAssetType)
 
   // Act & Assert
   AssetHeader result;
-  NOLINT_EXPECT_THROW(oxygen::content::loaders::LoadAssetHeader(reader, result),
-    std::runtime_error);
+  const auto defect = DefectOf(
+    [&] { oxygen::content::loaders::LoadAssetHeader(reader, result); });
+  ASSERT_HAS_VALUE(defect);
+  EXPECT_EQ(*defect, oxygen::data::CookedDefect::kInvalidValue);
 }
 
 //=== Descriptor String Table Tests ===------------------------------------//
@@ -145,10 +159,12 @@ NOLINT_TEST(DescriptorStrings, RejectsOffsetOutsideTable)
     = oxygen::content::loaders::ReadDescriptorStrings(reader, 0U, header);
 
   // Act & Assert
-  NOLINT_EXPECT_THROW(
+  const auto defect = DefectOf([&] {
     static_cast<void>(oxygen::content::loaders::ResolveDescriptorString(
-      table, header.strings.size, "name")),
-    std::runtime_error);
+      table, header.strings.size, "name"));
+  });
+  ASSERT_HAS_VALUE(defect);
+  EXPECT_EQ(*defect, oxygen::data::CookedDefect::kOutOfBounds);
 }
 
 //! Scenario: a table that does not end with NUL is rejected.
@@ -165,10 +181,12 @@ NOLINT_TEST(DescriptorStrings, RejectsUnterminatedTable)
   oxygen::content::loaders::LoadAssetHeader(reader, header);
 
   // Act & Assert
-  NOLINT_EXPECT_THROW(
+  const auto defect = DefectOf([&] {
     static_cast<void>(
-      oxygen::content::loaders::ReadDescriptorStrings(reader, 0U, header)),
-    std::runtime_error);
+      oxygen::content::loaders::ReadDescriptorStrings(reader, 0U, header));
+  });
+  ASSERT_HAS_VALUE(defect);
+  EXPECT_EQ(*defect, oxygen::data::CookedDefect::kInvalidString);
 }
 
 } // anonymous namespace

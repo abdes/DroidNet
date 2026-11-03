@@ -15,6 +15,7 @@
 
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Cooker/testing/DescriptorDefects.h>
 #include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/ProductRefusal.h>
@@ -26,9 +27,11 @@
 
 namespace {
 
+using oxygen::content::ContentLoadFailure;
 using oxygen::cooker::testing::DescriptorDefects;
 using oxygen::cooker::testing::GeometryBuilder;
 using oxygen::cooker::testing::GeometryRefusal;
+using oxygen::cooker::testing::GeometryRuleRefusal;
 using oxygen::data::CookedDefect;
 using oxygen::data::SurfaceId;
 using oxygen::data::pak::geometry::LodPolicyRecord;
@@ -95,15 +98,16 @@ NOLINT_TEST_F(GeometryStructureTest, ReadsAWellFormedGeometry)
   EXPECT_EQ(GeometryRefusal(Geometry()), std::nullopt);
 }
 
-//! A view draws at least one vertex and one index.
+//! A view draws at least one vertex and one index, a rule of the engine
+//! the format does not state.
 NOLINT_TEST_F(GeometryStructureTest, RefusesAnEmptyView)
 {
-  EXPECT_EQ(GeometryRefusal(WithView(
+  EXPECT_EQ(GeometryRuleRefusal(WithView(
               [](MeshViewDesc& view) -> void { view.vertex_count = 0; })),
-    CookedDefect::kInvalidValue);
-  EXPECT_EQ(GeometryRefusal(WithView(
+    ContentLoadFailure::kContentInvalid);
+  EXPECT_EQ(GeometryRuleRefusal(WithView(
               [](MeshViewDesc& view) -> void { view.index_count = 0; })),
-    CookedDefect::kInvalidValue);
+    ContentLoadFailure::kContentInvalid);
 }
 
 //! A view ends within the 32-bit range of its buffer's elements.

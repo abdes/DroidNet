@@ -10,6 +10,7 @@
 #include <optional>
 #include <span>
 
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
@@ -55,6 +56,16 @@ namespace oxygen::cooker::testing {
 */
 [[nodiscard]] auto GeometryRefusal(std::span<const std::byte> bytes)
   -> std::optional<data::CookedDefect>;
+
+//! The rule of the engine the geometry loader refuses the geometry
+//! descriptor `bytes` for, when they follow their format.
+/*!
+ @return No failure when the loader accepts the geometry.
+ @throw std::logic_error When the loader refuses for another reason, such as
+   a defect of the format.
+*/
+[[nodiscard]] auto GeometryRuleRefusal(std::span<const std::byte> bytes)
+  -> std::optional<content::ContentLoadFailure>;
 
 //! The defect the product refuses the material descriptor `bytes` with.
 /*!

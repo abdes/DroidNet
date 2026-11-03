@@ -11,7 +11,6 @@
 #include <limits>
 #include <memory>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -20,6 +19,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -112,13 +112,9 @@ namespace detail {
       return { nullptr, nullptr };
     }
 
-    if (!context.dependency_collector) {
-      LOG_F(ERROR,
-        "GeometryLoader requires a DependencyCollector for non-parse-only "
-        "loads (standard mesh buffers)");
-      throw std::runtime_error(
-        "GeometryLoader requires a DependencyCollector for async decode");
-    }
+    DCHECK_NOTNULL_F(context.dependency_collector,
+      "GeometryLoader requires a DependencyCollector for non-parse-only "
+      "loads (standard mesh buffers)");
 
     auto collect_buffer_ref
       = [&](const ResourceReferenceIndex reference) -> void {
@@ -175,7 +171,7 @@ namespace detail {
     auto mesh_opt
       = data::GenerateMeshBuffers(name, std::span<const std::byte>(param_blob));
     if (!mesh_opt || mesh_opt->first.empty() || mesh_opt->second.empty()) {
-      throw data::CookedFormatError(data::CookedDefect::kInvalidValue,
+      throw ContentLoadError(ContentLoadFailure::kContentInvalid,
         fmt::format("Failed to generate procedural mesh '{}': unsupported "
                     "generator or invalid parameters",
           name));
@@ -257,13 +253,9 @@ namespace detail {
       return { nullptr, nullptr };
     }
 
-    if (!context.dependency_collector) {
-      LOG_F(ERROR,
-        "GeometryLoader requires a DependencyCollector for non-parse-only "
-        "loads (skinned mesh buffers)");
-      throw std::runtime_error(
-        "GeometryLoader requires a DependencyCollector for async decode");
-    }
+    DCHECK_NOTNULL_F(context.dependency_collector,
+      "GeometryLoader requires a DependencyCollector for non-parse-only "
+      "loads (skinned mesh buffers)");
 
     auto collect_buffer_ref
       = [&](const ResourceReferenceIndex reference) -> void {
@@ -343,7 +335,7 @@ namespace detail {
     constexpr auto kLast = std::numeric_limits<uint32_t>::max();
     const auto draws = view.vertex_count != 0U && view.index_count != 0U;
     if (!draws) {
-      throw data::CookedFormatError(data::CookedDefect::kInvalidValue,
+      throw ContentLoadError(ContentLoadFailure::kContentInvalid,
         fmt::format("submesh {} mesh view {} draws no vertex or no index",
           submesh_index, view_index));
     }
@@ -384,8 +376,8 @@ namespace detail {
       "sm.surface_id");
     desc.surface_id = data::SurfaceId::FromBytes(surface_bytes);
     if (desc.surface_id.IsNil()) {
-      throw data::CookedFormatError(
-        data::CookedDefect::kInvalidValue, "Geometry surface identity is nil");
+      throw ContentLoadError(ContentLoadFailure::kContentInvalid,
+        "Geometry surface identity is nil");
     }
 
     // mesh_view_count
@@ -512,15 +504,10 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod,
       context.dependency_collector->AddAssetDependency(
         sm_desc.material_asset_key);
     }
-    if (context.parse_only || context.dependency_collector) {
-      material = MaterialAsset::CreateDefault();
-    } else {
-      LOG_F(ERROR,
-        "GeometryLoader requires a DependencyCollector for non-parse-only "
-        "loads (material dependencies)");
-      throw std::runtime_error(
-        "GeometryLoader requires a DependencyCollector for async decode");
-    }
+    DCHECK_F(context.parse_only || context.dependency_collector,
+      "GeometryLoader requires a DependencyCollector for non-parse-only "
+      "loads (material dependencies)");
+    material = MaterialAsset::CreateDefault();
 
     auto sm_builder
       = builder.BeginSubMesh(sm_name, material).WithDescriptor(sm_desc);

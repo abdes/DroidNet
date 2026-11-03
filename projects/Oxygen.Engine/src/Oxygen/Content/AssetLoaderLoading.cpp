@@ -9,10 +9,12 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <optional>
 #include <ranges>
-#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -29,6 +31,7 @@
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ContentId.h>
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/Internal/ContentBindingBundle.h>
 #include <Oxygen/Content/Internal/ContentIdentity.h>
 #include <Oxygen/Content/Internal/ContentIdentityRegistry.h>
@@ -53,6 +56,7 @@
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
@@ -134,6 +138,26 @@ namespace {
     }
   }
 
+  //! Awaits the load of a dependency: when it fails, the dependent's load
+  //! fails as `kDependencyFailed`, with the dependency's error nested and its
+  //! message, the root cause, ending the dependent's.
+  template <typename T>
+  auto AwaitDependency(co::Co<T> load, const std::string& dependency)
+    -> co::Co<T>
+  {
+    try {
+      co_return co_await std::move(load);
+    } catch (const OperationCancelledException&) {
+      throw;
+    } catch (const co::TaskCancelledException&) {
+      throw;
+    } catch (const std::exception& error) {
+      std::throw_with_nested(
+        ContentLoadError(ContentLoadFailure::kDependencyFailed,
+          dependency + " failed to load: " + error.what()));
+    }
+  }
+
   //! A physics descriptor dependency, read and validated off the loop.
   struct ParsedPhysicsDescriptor final {
     data::AssetReferences references;
@@ -149,8 +173,9 @@ namespace {
     auto references = source.ReadAssetReferences(reference.key);
     const auto reader = source.CreateAssetDescriptorReader(reference.key);
     if (!reader) {
-      throw std::runtime_error(
-        "Cannot read physics descriptor: " + data::to_string(reference.key));
+      throw ContentLoadError(ContentLoadFailure::kDependencyMissing,
+        "Required physics descriptor is missing: "
+          + data::to_string(reference.key));
     }
     const LoaderContext context {
       .current_asset_key = reference.key,
@@ -170,9 +195,29 @@ namespace {
       return { .references = std::move(references), .descriptor = descriptor };
     }
     default:
-      throw std::runtime_error(
-        "Unsupported physics descriptor dependency type");
+      throw ContentLoadError(ContentLoadFailure::kReferenceInvalid,
+        "Physics dependency " + data::to_string(reference.key)
+          + " is neither a collision shape nor a physics material");
     }
+  }
+
+  auto ParsePhysicsDescriptorAsync(co::ThreadPool& pool,
+    std::shared_ptr<const internal::IContentSource> source,
+    const data::KeyReference reference,
+    const data::SourceInstanceId source_instance)
+    -> co::Co<ParsedPhysicsDescriptor>
+  {
+    co_return co_await pool.Run([source = std::move(source), reference,
+                                  source_instance] -> ParsedPhysicsDescriptor {
+      return ParsePhysicsDescriptor(*source, reference, source_instance);
+    });
+  }
+
+  [[noreturn]] auto RefuseSidecar(const data::AssetKey& key,
+    const data::CookedDefect defect, const std::string_view what) -> void
+  {
+    throw data::CookedFormatError(
+      defect, fmt::format("Physics sidecar descriptor {} {}", key, what));
   }
 
   //! The one effective physics sidecar in `view` that targets `scene_key`.
@@ -188,35 +233,39 @@ namespace {
           || view.ResolveAsset(*key) != layer.id) {
           continue;
         }
+        // The index lists the sidecar, so its descriptor must open.
         const auto reader = source.CreateAssetDescriptorReader(*key);
         if (!reader) {
-          throw std::runtime_error("Cannot read physics sidecar descriptor");
+          RefuseSidecar(*key, data::CookedDefect::kMissingPart, "is absent");
         }
         const auto bytes
           = reader->ReadBlob(sizeof(data::pak::physics::PhysicsSceneAssetDesc));
         if (!bytes) {
-          throw std::runtime_error("Cannot read physics sidecar descriptor");
+          RefuseSidecar(*key, data::CookedDefect::kTruncated, "is truncated");
         }
         const auto parsed
           = serio::CopyAt<data::pak::physics::PhysicsSceneAssetDesc>(*bytes);
         if (!parsed) {
-          throw std::runtime_error("Cannot read physics sidecar descriptor");
+          RefuseSidecar(*key, data::CookedDefect::kTruncated, "is truncated");
         }
         const auto& descriptor = *parsed;
         if (descriptor.header.asset_type
-            != static_cast<uint8_t>(data::AssetType::kPhysicsScene)
-          || descriptor.header.version
-            != data::pak::physics::kPhysicsSceneAssetVersion) {
-          throw std::runtime_error(
-            "Invalid physics sidecar descriptor type/version");
+          != static_cast<uint8_t>(data::AssetType::kPhysicsScene)) {
+          RefuseSidecar(
+            *key, data::CookedDefect::kWrongMagic, "is not a physics scene");
+        }
+        if (descriptor.header.version
+          != data::pak::physics::kPhysicsSceneAssetVersion) {
+          RefuseSidecar(*key, data::CookedDefect::kUnsupportedVersion,
+            "has an unsupported version");
         }
         if (descriptor.target_scene_key != scene_key) {
           continue;
         }
         if (matched) {
-          throw std::runtime_error(
+          throw ContentLoadError(ContentLoadFailure::kBindingFailed,
             "Multiple effective physics sidecars target scene "
-            + data::to_string(scene_key));
+              + data::to_string(scene_key));
         }
         matched = *key;
       }
@@ -362,20 +411,15 @@ auto AssetLoader::DecodeAndPublishAssetAsync(data::AssetKey key,
     auto decoded = co_await DecodeAssetAsyncErasedImpl(
       T::ClassTypeId(), key, target.source_id, request);
     releases->RequireOpen();
+    // The decoder registered for `T` decodes a `T`, or nothing when the source
+    // left the mounts or no longer lists the asset.
     const auto typed = std::static_pointer_cast<T>(decoded.asset);
-    if (!typed || typed->GetTypeId() != T::ClassTypeId()) {
-      LOG_F(ERROR, "Loaded asset type mismatch: expected {}, got {}",
-        T::ClassTypeNamePretty(), typed ? typed->GetTypeName() : "nullptr");
-      RecordAssetTelemetry(kind, LoadTelemetryEvent::kTypeMismatch);
-      if (!typed) {
-        RecordAssetTelemetry(kind, LoadTelemetryEvent::kDecodeFailure);
-      }
-      co_return internal::SharedContentResult {};
-    }
-    if (!decoded.dependency_collector) {
+    if (!typed) {
       RecordAssetTelemetry(kind, LoadTelemetryEvent::kDecodeFailure);
       co_return internal::SharedContentResult {};
     }
+    DCHECK_F(typed->GetTypeId() == T::ClassTypeId());
+    DCHECK_NOTNULL_F(decoded.dependency_collector);
     typed->SetReferences(std::move(decoded.references));
     const auto& view = request.scope.state_->view;
     internal::ContentBindingBuilder builder(releases);
@@ -427,19 +471,22 @@ auto AssetLoader::BindAssetAsync(const data::AssetKey& key,
   if (key.IsNil() || !bindings.TryBeginAsset(key, T::ClassTypeId())) {
     co_return;
   }
+  const auto dependency = fmt::format("Required {} dependency {} of asset {}",
+    T::ClassTypeNamePretty(), key, parent.GetAssetKey());
   const auto source = ResolveScopedRoot(key, std::nullopt, request.scope);
   if (!source) {
-    throw std::runtime_error(
-      fmt::format("Required {} dependency {} is missing for asset {}",
-        T::ClassTypeNamePretty(), key, parent.GetAssetKey()));
+    throw ContentLoadError(
+      ContentLoadFailure::kDependencyMissing, dependency + " is missing");
   }
-  auto acquired = co_await LoadAssetPublicationAsync<T>(
-    key, source, request, CheckoutOwner::kInternal);
+  auto acquired
+    = co_await AwaitDependency(LoadAssetPublicationAsync<T>(key, source,
+                                 request, CheckoutOwner::kInternal),
+      dependency);
   bindings.RequireOpen();
   if (!acquired) {
-    throw std::runtime_error(
-      fmt::format("Required {} dependency {} could not load for asset {}",
-        T::ClassTypeNamePretty(), key, parent.GetAssetKey()));
+    // Its source left the mounts while it loaded.
+    throw ContentLoadError(
+      ContentLoadFailure::kDependencyMissing, dependency + " is missing");
   }
   static_cast<void>(bindings.AddAsset<T>(std::move(acquired)));
 }
@@ -452,13 +499,16 @@ auto AssetLoader::BindResourceAsync(ResourceKey key,
   if (key.get() == 0U || key.IsError() || !bindings.TryBeginResource(key)) {
     co_return;
   }
-  auto acquired = co_await resource_load_pipeline_->LoadErased(
-    T::ClassTypeId(), key, request, CheckoutOwner::kInternal);
+  const auto dependency = fmt::format(
+    "Required {} resource {}", T::ClassTypeNamePretty(), key.get());
+  auto acquired = co_await AwaitDependency(
+    resource_load_pipeline_->LoadErased(
+      T::ClassTypeId(), key, request, CheckoutOwner::kInternal),
+    dependency);
   bindings.RequireOpen();
   if (!acquired) {
-    throw std::runtime_error(
-      fmt::format("Required {} resource {} could not load",
-        T::ClassTypeNamePretty(), key.get()));
+    throw ContentLoadError(
+      ContentLoadFailure::kDependencyMissing, dependency + " is missing");
   }
   static_cast<void>(bindings.AddResource<T>(key, std::move(acquired)));
 }
@@ -747,7 +797,9 @@ auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
       continue;
     }
     if (!view) {
-      throw std::runtime_error("Physics dependency has no content layer view");
+      throw ContentLoadError(ContentLoadFailure::kDependencyMissing,
+        "Required physics dependency " + data::to_string(reference.key)
+          + " is missing: nothing is mounted");
     }
     if (reference.kind == data::KeyReferenceKind::kPhysicsResource) {
       if (!payloads.insert(reference.key).second) {
@@ -765,14 +817,16 @@ auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
         });
       if (match.status != internal::KeyResolutionStatus::kFound
         || !index.has_value()) {
-        throw std::runtime_error("Required physics payload is missing: "
-          + data::to_string(reference.key));
+        throw ContentLoadError(ContentLoadFailure::kDependencyMissing,
+          "Required physics payload is missing: "
+            + data::to_string(reference.key));
       }
       const auto& layer = *match.layer;
       const auto source = ResolveSourceForId(layer.id);
       if (!source) {
-        throw std::runtime_error(
-          "Physics payload source is no longer readable");
+        throw ContentLoadError(ContentLoadFailure::kDependencyMissing,
+          "Required physics payload " + data::to_string(reference.key)
+            + " left the mounts");
       }
       constexpr auto type_index = static_cast<uint16_t>(
         IndexOf<data::PhysicsResource, ResourceTypeList>::value);
@@ -788,29 +842,27 @@ auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
       = descriptors.emplace(reference.key, reference.expected_type);
     if (!inserted) {
       if (previous->second != reference.expected_type) {
-        throw std::runtime_error(
-          "Physics dependency has conflicting asset types");
+        throw ContentLoadError(ContentLoadFailure::kReferenceInvalid,
+          "Physics dependency " + data::to_string(reference.key)
+            + " is referenced as two asset types");
       }
       continue;
     }
+    const auto dependency
+      = "Required physics descriptor " + data::to_string(reference.key);
     const auto source_id = view->ResolveAsset(reference.key);
-    if (!source_id) {
-      throw std::runtime_error(
-        "Required physics descriptor is missing or has the wrong type: "
-        + data::to_string(reference.key));
+    const auto source = source_id ? ResolveSourceForId(*source_id) : nullptr;
+    if (!source_id || !source) {
+      throw ContentLoadError(
+        ContentLoadFailure::kDependencyMissing, dependency + " is missing");
     }
-    const auto source = ResolveSourceForId(*source_id);
-    if (!source
-      || source->GetAssetType(reference.key) != reference.expected_type) {
-      throw std::runtime_error(
-        "Required physics descriptor is missing or has the wrong type: "
-        + data::to_string(reference.key));
+    if (source->GetAssetType(reference.key) != reference.expected_type) {
+      throw ContentLoadError(ContentLoadFailure::kReferenceInvalid,
+        dependency + " has another asset type");
     }
-    auto parsed = co_await thread_pool_->Run(
-      [source, reference,
-        source_instance = *source_id] -> ParsedPhysicsDescriptor {
-        return ParsePhysicsDescriptor(*source, reference, source_instance);
-      });
+    auto parsed = co_await AwaitDependency(
+      ParsePhysicsDescriptorAsync(*thread_pool_, source, reference, *source_id),
+      dependency);
     bindings.RequireOpen();
     if (const auto* shape
       = std::get_if<data::pak::physics::CollisionShapeAssetDesc>(

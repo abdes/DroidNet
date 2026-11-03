@@ -36,6 +36,7 @@
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
@@ -194,7 +195,8 @@ namespace {
       resource_type, [row]<typename T> -> serio::ByteRange {
         const auto desc = serio::CopyAt<typename T::DescT>(row);
         if (!desc) {
-          throw std::runtime_error("Resource descriptor is truncated");
+          throw data::CookedFormatError(
+            data::CookedDefect::kTruncated, "Resource descriptor is truncated");
         }
         return {
           .offset = serio::ByteOffset { desc->data_offset },
@@ -212,11 +214,13 @@ namespace {
       co_return LoadedPayload {};
     }
     if (!payloads) {
-      throw std::runtime_error("The source holds no payloads of this resource");
+      throw data::CookedFormatError(data::CookedDefect::kMissingPart,
+        "The source holds no payloads of this resource");
     }
     const auto region = IContentSource::PayloadWithin(*payloads, extent);
     if (!region) {
-      throw std::runtime_error("Resource payload lies outside its region");
+      throw data::CookedFormatError(data::CookedDefect::kOutOfBounds,
+        "Resource payload lies outside its region");
     }
     auto lease = co_await budget->Acquire(extent.count);
     auto buffer = serio::ByteBuffer::Allocate(extent.count);

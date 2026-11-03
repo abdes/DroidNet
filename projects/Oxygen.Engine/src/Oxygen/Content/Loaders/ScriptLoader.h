@@ -12,16 +12,15 @@
 #include <span>
 #include <vector>
 
-#include <fmt/format.h>
-
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
@@ -36,7 +35,10 @@ namespace detail {
    @param reader Descriptor reader; its position is unspecified afterwards.
    @param base_pos Reader position of the descriptor's first byte.
    @param table The descriptor's declaration table.
-   @throw std::runtime_error if the table or a declaration is invalid.
+   @throw data::CookedFormatError if the table is invalid: `kInconsistent` for
+          an empty table with a nonzero offset, `kWrongRowSize` for another
+          entry size, `kOutOfBounds` for an offset inside the descriptor, or
+          `kTruncated` if a read fails.
   */
   inline auto ReadScriptParamDeclarations(serio::AnyReader& reader,
     const size_t base_pos, const data::pak::scripting::ScriptDataTable& table)
@@ -47,14 +49,18 @@ namespace detail {
     auto declarations = std::vector<ScriptParamRecord> {};
     if (table.count == 0U) {
       if (table.offset != 0U) {
-        throw std::runtime_error(
+        throw data::CookedFormatError(data::CookedDefect::kInconsistent,
           "Empty script parameter declarations have nonzero offset");
       }
       return declarations;
     }
-    if (table.entry_size != sizeof(ScriptParamRecord)
-      || table.offset < sizeof(data::pak::scripting::ScriptAssetDesc)) {
-      throw std::runtime_error("Script parameter declaration table is invalid");
+    if (table.entry_size != sizeof(ScriptParamRecord)) {
+      throw data::CookedFormatError(data::CookedDefect::kWrongRowSize,
+        "Script parameter declaration table is invalid");
+    }
+    if (table.offset < sizeof(data::pak::scripting::ScriptAssetDesc)) {
+      throw data::CookedFormatError(data::CookedDefect::kOutOfBounds,
+        "Script parameter declaration table is invalid");
     }
 
     CheckLoaderResult(reader.Seek(base_pos + table.offset), "script asset",
@@ -92,10 +98,11 @@ inline auto LoadScriptAsset(const LoaderContext& context)
 
   if (static_cast<data::AssetType>(desc.header.asset_type)
     != data::AssetType::kScript) {
-    throw std::runtime_error("invalid asset type for script descriptor");
+    throw data::CookedFormatError(data::CookedDefect::kWrongMagic,
+      "invalid asset type for script descriptor");
   }
   if (desc.header.version != data::pak::scripting::kScriptAssetVersion) {
-    throw std::runtime_error(
+    throw data::CookedFormatError(data::CookedDefect::kUnsupportedVersion,
       "Script descriptor version is not current; re-cook the script");
   }
 
@@ -119,15 +126,12 @@ inline auto LoadScriptAsset(const LoaderContext& context)
   try {
     params = data::DecodeScriptParameters(declared_params, strings);
   } catch (const std::invalid_argument& error) {
-    throw std::runtime_error(error.what());
+    throw ContentLoadError(ContentLoadFailure::kContentInvalid, error.what());
   }
 
   if (!context.parse_only) {
-    if (!context.dependency_collector) {
-      throw std::runtime_error(
-        "ScriptAsset loader requires a dependency collector for non-parse-only "
-        "loads");
-    }
+    DCHECK_NOTNULL_F(
+      context.dependency_collector, "a script decode collects its resources");
 
     const auto script_indices
       = std::array { desc.bytecode_resource_index, desc.source_resource_index };
@@ -185,13 +189,6 @@ inline auto LoadScriptResource(const LoaderContext& context)
   const auto desc = *parsed_desc;
 
   auto data_buffer = TakePayload(context, desc.size_bytes, "script resource");
-
-  if (const auto digest = base::ComputeSha256(data_buffer.Bytes());
-    digest != desc.content_hash) {
-    throw std::runtime_error(
-      fmt::format("script resource SHA-256 mismatch (expected={}, got={})",
-        base::ToHexString(desc.content_hash), base::ToHexString(digest)));
-  }
 
   return std::make_unique<data::ScriptResource>(desc, std::move(data_buffer));
 }

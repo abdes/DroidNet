@@ -14,6 +14,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/PhysicsResource.h>
@@ -38,7 +39,7 @@ inline auto LoadPhysicsResource(const LoaderContext& context)
     if (!result) {
       LOG_F(
         ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
-      throw std::runtime_error(
+      throw data::CookedFormatError(data::CookedDefect::kTruncated,
         fmt::format("error reading physics resource ({}): {}", field,
           result.error().message()));
     }

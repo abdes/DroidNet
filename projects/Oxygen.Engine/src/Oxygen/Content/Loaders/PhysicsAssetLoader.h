@@ -9,13 +9,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <stdexcept>
 #include <vector>
 
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Serio/ByteReader.h>
 
@@ -34,10 +35,13 @@ inline auto LoadPhysicsMaterialDescriptor(const LoaderContext& context)
   CheckLoaderResult(parsed, "physics material", "descriptor");
   const auto descriptor = *parsed;
   if (descriptor.header.asset_type
-      != static_cast<uint8_t>(data::AssetType::kPhysicsMaterial)
-    || descriptor.header.version
-      != data::pak::physics::kPhysicsMaterialAssetVersion) {
-    throw std::runtime_error(
+    != static_cast<uint8_t>(data::AssetType::kPhysicsMaterial)) {
+    throw data::CookedFormatError(data::CookedDefect::kWrongMagic,
+      "Physics material descriptor type/version is invalid");
+  }
+  if (descriptor.header.version
+    != data::pak::physics::kPhysicsMaterialAssetVersion) {
+    throw data::CookedFormatError(data::CookedDefect::kUnsupportedVersion,
       "Physics material descriptor type/version is invalid");
   }
   static_cast<void>(ResolveDescriptorString(
@@ -62,16 +66,20 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
   CheckLoaderResult(parsed, "collision shape", "descriptor");
   const auto descriptor = *parsed;
   if (descriptor.header.asset_type
-      != static_cast<uint8_t>(data::AssetType::kCollisionShape)
-    || descriptor.header.version != physics::kCollisionShapeAssetVersion) {
-    throw std::runtime_error(
+    != static_cast<uint8_t>(data::AssetType::kCollisionShape)) {
+    throw data::CookedFormatError(data::CookedDefect::kWrongMagic,
+      "Collision shape descriptor type/version is invalid");
+  }
+  if (descriptor.header.version != physics::kCollisionShapeAssetVersion) {
+    throw data::CookedFormatError(data::CookedDefect::kUnsupportedVersion,
       "Collision shape descriptor type/version is invalid");
   }
   static_cast<void>(ResolveDescriptorString(
     ReadDescriptorStrings(reader, *base_pos, descriptor.header),
     descriptor.header.name_offset, "asset name"));
   if (descriptor.material_asset_key.IsNil()) {
-    throw std::runtime_error("Collision shape requires a physics material key");
+    throw ContentLoadError(ContentLoadFailure::kContentInvalid,
+      "Collision shape requires a physics material key");
   }
   auto required_payload = physics::ShapePayloadType::kInvalid;
   switch (descriptor.shape_type) {
@@ -95,18 +103,21 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
     break;
   case physics::ShapeType::kInvalid:
   default:
-    throw std::runtime_error("Collision shape kind is invalid");
+    throw data::CookedFormatError(
+      data::CookedDefect::kInvalidValue, "Collision shape kind is invalid");
   }
   const auto reserves_zero = physics::HasZeroReserves(descriptor);
   if (!reserves_zero) {
-    throw std::runtime_error("Collision shape reserved bytes are not zero");
+    throw data::CookedFormatError(data::CookedDefect::kReservedNotZero,
+      "Collision shape reserved bytes are not zero");
   }
   if (descriptor.cooked_shape_ref.payload_type != required_payload
     || (required_payload != physics::ShapePayloadType::kInvalid
       && descriptor.cooked_shape_ref.payload_asset_key.IsNil())
     || (required_payload == physics::ShapePayloadType::kInvalid
       && !descriptor.cooked_shape_ref.payload_asset_key.IsNil())) {
-    throw std::runtime_error("Collision shape payload does not match its kind");
+    throw data::CookedFormatError(data::CookedDefect::kInconsistent,
+      "Collision shape payload does not match its kind");
   }
   std::vector<data::KeyReference> keys {
     {
@@ -124,11 +135,12 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
     const auto& compound = descriptor.shape_params.compound;
     if (compound.child_count == 0U) {
       if (compound.child_byte_offset != 0U) {
-        throw std::runtime_error("Empty compound child range is not canonical");
+        throw data::CookedFormatError(data::CookedDefect::kNotCanonical,
+          "Empty compound child range is not canonical");
       }
     } else {
       if (compound.child_byte_offset < sizeof(descriptor)) {
-        throw std::runtime_error(
+        throw data::CookedFormatError(data::CookedDefect::kOverlap,
           "Compound children overlap the shape descriptor");
       }
       CheckLoaderResult(
@@ -143,7 +155,7 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
         CheckLoaderResult(child, "collision shape", "compound child");
         const auto child_reserves_zero = physics::HasZeroReserves(*child);
         if (!child_reserves_zero) {
-          throw std::runtime_error(
+          throw data::CookedFormatError(data::CookedDefect::kReservedNotZero,
             "Compound child reserved bytes are not zero");
         }
         keys.push_back({
