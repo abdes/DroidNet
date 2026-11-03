@@ -4,9 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -105,7 +103,7 @@ NOLINT_TEST(PatchResolutionPolicyTest,
 {
   namespace policy = oxygen::content::internal;
 
-  constexpr auto kVirtualPath = "/.cooked/collision.bin";
+  constexpr auto kVirtualPath = "/Cooked/collision.bin";
   constexpr auto kSourceA = data::SourceInstanceId { 10U };
   constexpr auto kSourceB = data::SourceInstanceId { 20U };
   constexpr auto kSourceC = data::SourceInstanceId { 30U };
@@ -163,7 +161,7 @@ NOLINT_TEST(PatchResolutionPolicyTest,
 {
   namespace policy = oxygen::content::internal;
 
-  constexpr auto kVirtualPath = "/.cooked/masked.bin";
+  constexpr auto kVirtualPath = "/Cooked/masked.bin";
   constexpr auto kSourceBase = data::SourceInstanceId { 11U };
   constexpr auto kSourceMid = data::SourceInstanceId { 21U };
   constexpr auto kSourceWinner = data::SourceInstanceId { 31U };
@@ -213,7 +211,7 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   const uint8_t identity_seed) -> void
 {
   auto loose
-    = oxygen::cooker::testing::LooseCookedRoot { ".cooked", identity_seed };
+    = oxygen::cooker::testing::LooseCookedRoot { "Cooked", identity_seed };
   static_cast<void>(loose.Add({ .leaf = std::string(leaf), .key = key }));
   oxygen::cooker::testing::Materialize(loose.Files(), cooked_root);
 }
@@ -228,7 +226,7 @@ protected:
 
 NOLINT_TEST_F(PatchResolutionRuntimeTest, LastMountedWinsForVirtualPathLookup)
 {
-  constexpr auto kVirtualPath = "/.cooked/Asset.bin";
+  constexpr auto kVirtualPath = "/Cooked/Asset.bin";
   const auto root0 = RootPath() / "root0";
   const auto root1 = RootPath() / "root1";
   const auto key0 = MakeAssetKey(kAssetSeedA);

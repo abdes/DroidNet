@@ -55,7 +55,7 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
         {
           "type": "collision-shape-descriptor",
           "source": "Physics/floor_box.shape.json",
-          "virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape",
+          "virtual_path": "/Cooked/Physics/Shapes/floor_box.ocshape",
           "name": "floor_box_job"
         }
       ]
@@ -74,7 +74,7 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "floor_box_job" });
   EXPECT_EQ(
-    request->asset_virtual_path, "/.cooked/Physics/Shapes/floor_box.ocshape");
+    request->asset_virtual_path, "/Cooked/Physics/Shapes/floor_box.ocshape");
   ASSERT_HAS_VALUE(request->collision_shape_descriptor);
 
   const auto normalized = json::parse(
@@ -109,13 +109,13 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
           "id": "physics.material.ground",
           "type": "physics-material-descriptor",
           "source": "Physics/ground.material.json",
-          "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
+          "virtual_path": "/Cooked/Physics/Materials/ground.opmat"
         },
         {
           "id": "physics.shape.floor",
           "type": "collision-shape-descriptor",
           "source": "Physics/floor_box.shape.json",
-          "virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape",
+          "virtual_path": "/Cooked/Physics/Shapes/floor_box.ocshape",
           "depends_on": ["physics.material.ground"]
         }
       ]
@@ -177,7 +177,7 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
     R"({
       "name": "bad_shape",
       "shape_type": "sphere",
-      "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+      "material_ref": "/Cooked/Physics/Materials/ground.opmat",
       "radius": 1.0,
       "unexpected": true
     })");
@@ -191,7 +191,7 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
         {
           "type": "collision-shape-descriptor",
           "source": "Physics/bad.shape.json",
-          "virtual_path": "/.cooked/Physics/Shapes/bad_shape.ocshape"
+          "virtual_path": "/Cooked/Physics/Shapes/bad_shape.ocshape"
         }
       ]
     })");

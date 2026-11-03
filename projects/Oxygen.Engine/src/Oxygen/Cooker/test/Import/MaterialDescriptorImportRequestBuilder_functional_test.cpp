@@ -57,7 +57,7 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
       },
       "textures": {
         "base_color": {
-          "virtual_path": "/.cooked/Textures/WoodFloor_Color.otex",
+          "virtual_path": "/Cooked/Textures/WoodFloor_Color.otex",
           "uv_set": 0
         }
       }
@@ -84,7 +84,7 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
               .at("base_color")
               .at("virtual_path")
               .get<std::string>(),
-    "/.cooked/Textures/WoodFloor_Color.otex");
+    "/Cooked/Textures/WoodFloor_Color.otex");
 }
 
 NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
@@ -98,7 +98,7 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
       "name": "Bad",
       "textures": {
         "base_color": {
-          "virtual_path": "/.cooked/Textures/WoodFloor_Color.otex",
+          "virtual_path": "/Cooked/Textures/WoodFloor_Color.otex",
           "unexpected": true
         }
       }

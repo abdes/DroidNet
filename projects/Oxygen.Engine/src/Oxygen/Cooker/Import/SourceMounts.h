@@ -482,10 +482,6 @@ struct MountTable final {
     -> std::optional<MountedSource>;
 };
 
-//! True when `name` follows the mount name rule: the virtual path mount rule
-//! (`content::ValidateMountName`), without a leading `.`.
-OXGN_COOK_NDAPI auto IsValidMountName(std::string_view name) -> bool;
-
 /*!
  Builds the mount table of one run and checks it.
 

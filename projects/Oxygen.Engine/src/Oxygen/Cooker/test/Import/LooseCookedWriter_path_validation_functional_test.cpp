@@ -63,7 +63,7 @@ namespace {
 
     const auto bytes = fixtures::MaterialBuilder { "bytes" }.Bytes();
     const auto valid_virtual_path
-      = std::string("/.cooked/Materials/") + MaterialFile("A");
+      = std::string("/Cooked/Materials/") + MaterialFile("A");
     const auto valid_relpath = "Materials/" + MaterialFile("A");
 
     LooseCookedWriter writer(cooked_root, storage);
@@ -72,13 +72,13 @@ namespace {
     case PathTarget::kVirtualPath:
       EXPECT_THROW(writer.WriteAssetDescriptor(key, AssetType::kMaterial,
                      std::string_view(GetParam().path), valid_relpath, bytes,
-                     {}, FromSource("/.cooked/Materials/A.omat.json")),
+                     {}, FromSource("/Cooked/Materials/A.omat.json")),
         std::runtime_error);
       break;
     case PathTarget::kDescriptorRelPath:
       EXPECT_THROW(writer.WriteAssetDescriptor(key, AssetType::kMaterial,
                      valid_virtual_path, GetParam().path, bytes, {},
-                     FromSource("/.cooked/Materials/A.omat.json")),
+                     FromSource("/Cooked/Materials/A.omat.json")),
         std::runtime_error);
       break;
     case PathTarget::kFileRelPath:
@@ -99,7 +99,7 @@ namespace {
       BadPathCase {
         .case_name = "DotSegments",
         .target = PathTarget::kVirtualPath,
-        .path = std::string("/.cooked/../") + MaterialFile("A"),
+        .path = std::string("/Cooked/../") + MaterialFile("A"),
       },
       BadPathCase {
         .case_name = "Backslashes",
@@ -109,12 +109,12 @@ namespace {
       BadPathCase {
         .case_name = "DoubleSlash",
         .target = PathTarget::kVirtualPath,
-        .path = std::string("/.cooked//") + MaterialFile("A"),
+        .path = std::string("/Cooked//") + MaterialFile("A"),
       },
       BadPathCase {
         .case_name = "TrailingSlash",
         .target = PathTarget::kVirtualPath,
-        .path = std::string("/.cooked/") + MaterialFile("A") + "/",
+        .path = std::string("/Cooked/") + MaterialFile("A") + "/",
       },
       BadPathCase {
         .case_name = "AbsoluteDescriptorRelPath",

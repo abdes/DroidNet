@@ -67,15 +67,15 @@ namespace {
   };
 
   constexpr auto kShipModel = Identity {
-    .virtual_path = "/.cooked/Ship.glb",
+    .virtual_path = "/Cooked/Ship.glb",
     .relpath = "Ship.glb",
   };
   constexpr auto kShipCopy = Identity {
-    .virtual_path = "/.cooked/Copy/Ship.glb",
+    .virtual_path = "/Cooked/Copy/Ship.glb",
     .relpath = "Copy/Ship.glb",
   };
   constexpr auto kDockModel = Identity {
-    .virtual_path = "/.cooked/Dock.glb",
+    .virtual_path = "/Cooked/Dock.glb",
     .relpath = "Dock.glb",
   };
 

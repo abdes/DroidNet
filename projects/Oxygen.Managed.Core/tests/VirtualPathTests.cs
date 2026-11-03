@@ -53,11 +53,11 @@ public sealed class VirtualPathTests
         => _ = VirtualPath.ValidateSegment(segment, rules).Should().Be(expected);
 
     [TestMethod]
-    [DataRow(".code", VirtualPathRuleSet.Cooked, null)]
-    [DataRow(".code", VirtualPathRuleSet.Authored, VirtualPathError.InvalidMountName)]
-    [DataRow("Content", VirtualPathRuleSet.Authored, null)]
-    public void ValidateMountName_RuleSet_ReservesTheDotForTheEngine(string mount, VirtualPathRuleSet rules, VirtualPathError? expected)
-        => _ = VirtualPath.ValidateMountName(mount, rules).Should().Be(expected);
+    [DataRow(".code", VirtualPathError.InvalidMountName)]
+    [DataRow(".Hidden", VirtualPathError.InvalidMountName)]
+    [DataRow("Content", null)]
+    public void ValidateMountName_LeadingDot_IsRefused(string mount, VirtualPathError? expected)
+        => _ = VirtualPath.ValidateMountName(mount).Should().Be(expected);
 
     [TestMethod]
     public void CaseFolded_CaseOnlySiblings_AreEqualWithEqualHashes()

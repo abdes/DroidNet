@@ -52,11 +52,11 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
-  constexpr auto kVb = "/.cooked/Resources/Buffers/cube_vertices.obuf";
-  constexpr auto kIb = "/.cooked/Resources/Buffers/cube_indices.obuf";
+  constexpr auto kVb = "/Cooked/Resources/Buffers/cube_vertices.obuf";
+  constexpr auto kIb = "/Cooked/Resources/Buffers/cube_indices.obuf";
   auto geometry
-    = MakeStandardGeometry("/.cooked/Geometry/CubeMissingMaterial.ogeo",
-      "/.cooked/Materials/missing.omat", kVb, kIb);
+    = MakeStandardGeometry("/Cooked/Geometry/CubeMissingMaterial.ogeo",
+      "/Cooked/Materials/missing.omat", kVb, kIb);
   geometry
     .AppendBuffer(
       MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true), kVb)
@@ -100,10 +100,10 @@ NOLINT_TEST(GeometryDescriptorImportJobTest, UnindexedMaterialFileIsNoAsset)
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
-  constexpr auto kVb = "/.cooked/Resources/Buffers/cube_vertices.obuf";
-  constexpr auto kIb = "/.cooked/Resources/Buffers/cube_indices.obuf";
-  auto geometry = MakeStandardGeometry("/.cooked/Geometry/Unindexed.ogeo",
-    "/.cooked/Materials/new.omat", kVb, kIb);
+  constexpr auto kVb = "/Cooked/Resources/Buffers/cube_vertices.obuf";
+  constexpr auto kIb = "/Cooked/Resources/Buffers/cube_indices.obuf";
+  auto geometry = MakeStandardGeometry(
+    "/Cooked/Geometry/Unindexed.ogeo", "/Cooked/Materials/new.omat", kVb, kIb);
   geometry
     .AppendBuffer(
       MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true), kVb)
@@ -123,10 +123,10 @@ NOLINT_TEST(GeometryDescriptorImportJobTest, UnindexedMaterialFileIsNoAsset)
     = LooseCookedWriter(library, oxygen::content::cooked::RealCookerStorage());
   const auto material = oxygen::cooker::testing::MaterialBuilder {};
   writer.WriteAssetDescriptor(library_key, data::AssetType::kMaterial,
-    "/.cooked/Materials/new.omat", "Materials/new.omat", material.Bytes(),
+    "/Cooked/Materials/new.omat", "Materials/new.omat", material.Bytes(),
     material.References(),
     content::import::LooseCookedProducer {
-      .source = "/.cooked/Materials/new.omat.json",
+      .source = "/Cooked/Materials/new.omat.json",
       .completes = {},
     });
   static_cast<void>(writer.Finish());
@@ -207,12 +207,12 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     inverse_bind_source, std::span<const std::byte>(inverse_bind_bytes));
   WriteBytes(joint_remap_source, std::span<const std::byte>(joint_remap_bytes));
 
-  constexpr auto kPrefix = "/.cooked/Resources/Buffers/skinned_";
+  constexpr auto kPrefix = "/Cooked/Resources/Buffers/skinned_";
   const auto buffer = [](const std::string_view leaf) -> std::string {
     return std::string { kPrefix } + std::string { leaf } + ".obuf";
   };
-  auto geometry = MakeStandardGeometry("/.cooked/Geometry/SkinnedCube.ogeo",
-    "/.cooked/Materials/default.omat", buffer("vb"), buffer("ib"));
+  auto geometry = MakeStandardGeometry("/Cooked/Geometry/SkinnedCube.ogeo",
+    "/Cooked/Materials/default.omat", buffer("vb"), buffer("ib"));
   geometry.Set("/lods/0/mesh_type", "skinned")
     .Reference("/lods/0/skinning/joint_index_ref", buffer("joint_index"))
     .Reference("/lods/0/skinning/joint_weight_ref", buffer("joint_weight"))

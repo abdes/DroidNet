@@ -46,7 +46,7 @@ struct EmittedAssetRecord {
   //! Asset type for loader dispatch.
   data::AssetType asset_type = data::AssetType::kUnknown;
 
-  //! Virtual path for tooling/editors (e.g., "/.cooked/Materials/Wood").
+  //! Virtual path for tooling/editors (e.g., "/Cooked/Materials/Wood").
   std::string virtual_path;
 
   //! Container-relative content name of the descriptor file (e.g.,
@@ -95,10 +95,10 @@ struct EmittedAssetRecord {
 
  // During import
  emitter.Emit(material_key, AssetType::kMaterial,
-              "/.cooked/Materials/Wood", "Materials/Wood.omat",
+              "/Cooked/Materials/Wood", "Materials/Wood.omat",
               material_bytes);
  emitter.Emit(geometry_key, AssetType::kGeometry,
-              "/.cooked/Geometry/Cube", "Geometry/Cube.ogeo",
+              "/Cooked/Geometry/Cube", "Geometry/Cube.ogeo",
               geometry_bytes);
 
  // After all cooking completes

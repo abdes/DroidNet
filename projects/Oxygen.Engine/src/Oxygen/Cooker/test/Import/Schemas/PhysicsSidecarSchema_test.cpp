@@ -33,11 +33,11 @@ auto Schema() -> const json&
 }
 
 constexpr auto kShape
-  = std::string_view { "/.cooked/Physics/Shapes/test_shape.ocshape" };
+  = std::string_view { "/Cooked/Physics/Shapes/test_shape.ocshape" };
 constexpr auto kInnerShape
-  = std::string_view { "/.cooked/Physics/Shapes/test_inner.ocshape" };
+  = std::string_view { "/Cooked/Physics/Shapes/test_inner.ocshape" };
 constexpr auto kMaterial
-  = std::string_view { "/.cooked/Physics/Materials/default.opmat" };
+  = std::string_view { "/Cooked/Physics/Materials/default.opmat" };
 
 auto Sidecar() -> PhysicsSidecar
 {
@@ -131,9 +131,9 @@ INSTANTIATE_TEST_SUITE_P(Cases, PhysicsSidecarSchemaCaseTest,
             }
           })"))
         .Reference("/bindings/soft_bodies/0/source_mesh_ref",
-          "/.cooked/Geometry/softbody_sphere.ogeo")
+          "/Cooked/Geometry/softbody_sphere.ogeo")
         .Reference("/bindings/soft_bodies/0/collision_mesh_ref",
-          "/.cooked/Geometry/softbody_collision.ogeo")
+          "/Cooked/Geometry/softbody_collision.ogeo")
         .AppendBinding("joints", json::parse(R"({
             "node_index_a": 0,
             "node_index_b": 1,
@@ -269,7 +269,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PhysicsSidecarSchemaCaseTest,
             "backend": { "target": "jolt" }
           })"))
         .Reference("/bindings/soft_bodies/0/source_mesh_ref",
-          "/.cooked/Geometry/softbody_sphere.ogeo")
+          "/Cooked/Geometry/softbody_sphere.ogeo")
         .Text(),
       false,
       "'collision_layer'",
@@ -282,8 +282,8 @@ NOLINT_TEST(PhysicsSidecarSchemaTest, RejectsLegacyFieldNames)
   const auto doc = Sidecar()
                      .AppendBinding("rigid_bodies", json::parse(R"({
             "node_index": 0,
-            "shape_virtual_path": "/.cooked/Physics/Shapes/test_shape.ocshape",
-            "material_virtual_path": "/.cooked/Physics/Materials/default.opmat"
+            "shape_virtual_path": "/Cooked/Physics/Shapes/test_shape.ocshape",
+            "material_virtual_path": "/Cooked/Physics/Materials/default.opmat"
           })"))
                      .AppendBinding("joints", json::parse(R"({
             "node_index_a": 0,
@@ -300,7 +300,7 @@ NOLINT_TEST(PhysicsSidecarSchemaTest, RejectsLegacyFieldNames)
           })"))
                      .AppendBinding("soft_bodies", json::parse(R"({
             "node_index": 3,
-            "jolt_settings_ref": "/.cooked/Physics/Resources/soft_body_settings_jolt.opres",
+            "jolt_settings_ref": "/Cooked/Physics/Resources/soft_body_settings_jolt.opres",
             "cluster_count": 8,
             "stiffness": 4.0,
             "damping": 0.08

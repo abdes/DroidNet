@@ -51,9 +51,9 @@ namespace {
   using oxygen::data::loose_cooked::FileKind;
 
   using oxygen::data::loose_cooked::kIndexFileName;
-  constexpr std::string_view kRed = "/.cooked/Materials/Red.omat";
-  constexpr std::string_view kRedSource = "/.cooked/Materials/Red.omat.json";
-  constexpr std::string_view kOtherSource = "/.cooked/Other/Red.omat.json";
+  constexpr std::string_view kRed = "/Cooked/Materials/Red.omat";
+  constexpr std::string_view kRedSource = "/Cooked/Materials/Red.omat.json";
+  constexpr std::string_view kOtherSource = "/Cooked/Other/Red.omat.json";
 
   //! The only asset of an index, copied out of its inspection.
   auto Asset(const CookedContent& content) -> CookedAsset
@@ -104,9 +104,9 @@ namespace {
     {
       LooseCookedWriter red(cooked_root, storage);
       red.WriteAssetDescriptor(MakeFirstByteAssetKey(0x31),
-        AssetType::kMaterial, "/.cooked/Materials/Red.omat",
+        AssetType::kMaterial, "/Cooked/Materials/Red.omat",
         "Materials/Red.omat", bytes, {},
-        FromSource("/.cooked/Materials/Red.omat.json"));
+        FromSource("/Cooked/Materials/Red.omat.json"));
 
       auto refused = false;
       auto other = std::thread([&] -> void {
@@ -122,8 +122,8 @@ namespace {
     }
     LooseCookedWriter blue(cooked_root, storage);
     blue.WriteAssetDescriptor(MakeFirstByteAssetKey(0x32), AssetType::kMaterial,
-      "/.cooked/Materials/Blue.omat", "Materials/Blue.omat", bytes, {},
-      FromSource("/.cooked/Materials/Blue.omat.json"));
+      "/Cooked/Materials/Blue.omat", "Materials/Blue.omat", bytes, {},
+      FromSource("/Cooked/Materials/Blue.omat.json"));
     (void)blue.Finish();
 
     const auto content = CookedContent::Open(storage, cooked_root);
@@ -245,9 +245,9 @@ namespace {
 
     LooseCookedWriter writer(cooked_root, storage);
     EXPECT_THROW(writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x12),
-                   AssetType::kMaterial, "/.cooked/Materials/red.omat",
+                   AssetType::kMaterial, "/Cooked/Materials/red.omat",
                    "Materials/red2.omat", bytes, {},
-                   FromSource("/.cooked/Materials/red.omat.json")),
+                   FromSource("/Cooked/Materials/red.omat.json")),
       LooseCookedIdentityCollision);
   }
 
@@ -306,10 +306,10 @@ namespace {
     EXPECT_EQ(Asset(Inspect(storage, cooked_root)).source_path, kRedSource);
     LooseCookedWriter writer(cooked_root, storage);
     EXPECT_THROW(writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x12),
-                   AssetType::kMaterial, "/.cooked/Materials/Blue.omat",
+                   AssetType::kMaterial, "/Cooked/Materials/Blue.omat",
                    "Materials/Blue.omat", bytes, {},
-                   LooseCookedProducer { .source = {},
-                     .completes = "/.cooked/Scenes/None.oscene" }),
+                   LooseCookedProducer {
+                     .source = {}, .completes = "/Cooked/Scenes/None.oscene" }),
       std::runtime_error);
   }
 
@@ -383,15 +383,15 @@ namespace {
     {
       LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x10),
-        AssetType::kMaterial, "/.cooked/Materials/A.omat", "Materials/A.omat",
-        bytes, {}, FromSource("/.cooked/Materials/A.omat.json"));
+        AssetType::kMaterial, "/Cooked/Materials/A.omat", "Materials/A.omat",
+        bytes, {}, FromSource("/Cooked/Materials/A.omat.json"));
       (void)writer.Finish();
     }
     {
       LooseCookedWriter writer(cooked_root, storage);
       writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x20),
-        AssetType::kMaterial, "/.cooked/Materials/B.omat", "Materials/B.omat",
-        bytes, {}, FromSource("/.cooked/Materials/B.omat.json"));
+        AssetType::kMaterial, "/Cooked/Materials/B.omat", "Materials/B.omat",
+        bytes, {}, FromSource("/Cooked/Materials/B.omat.json"));
       (void)writer.Finish();
     }
 

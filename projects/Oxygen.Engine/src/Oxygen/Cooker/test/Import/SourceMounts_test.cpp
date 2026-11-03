@@ -51,7 +51,6 @@ using oxygen::make_observer;
 using oxygen::content::import::CheckMountNameConflicts;
 using oxygen::content::import::CommittedPath;
 using oxygen::content::import::ImportManifest;
-using oxygen::content::import::IsValidMountName;
 using oxygen::content::import::kMountsFileName;
 using oxygen::content::import::MountDeclaration;
 using oxygen::content::import::MountDeclarationForm;
@@ -188,30 +187,19 @@ auto ExpectBound(const MountTable& table, std::string_view name,
 
 // -- Names -------------------------------------------------------------------
 
-//! Names follow the virtual path mount rule, without a leading `.`.
-NOLINT_TEST(SourceMountNameTest, FollowsTheNameRule)
-{
-  EXPECT_TRUE(IsValidMountName("Content"));
-  EXPECT_TRUE(IsValidMountName("a_b-9"));
-  EXPECT_TRUE(IsValidMountName("_Content"));
-  EXPECT_TRUE(IsValidMountName(std::string(255, 'a')));
-  EXPECT_FALSE(IsValidMountName(""));
-  EXPECT_FALSE(IsValidMountName("9Content"));
-  EXPECT_FALSE(IsValidMountName(".Content"));
-  EXPECT_FALSE(IsValidMountName("Con tent"));
-  EXPECT_FALSE(IsValidMountName("Con.tent"));
-  EXPECT_FALSE(IsValidMountName(std::string(256, 'a')));
-}
-
-//! An invalid committed name is `mount.name_invalid`.
+//! A committed name the mount rule refuses, a hidden one included, is
+//! `mount.name_invalid`.
 NOLINT_TEST_F(SourceMountsTest, InvalidCommittedNameIsRefused)
 {
-  const auto table
-    = ResolveMountTable(Request({ Declared("1Bad", "Content") }));
+  for (const auto* const name : { "1Bad", ".Hidden" }) {
+    const auto table
+      = ResolveMountTable(Request({ Declared(name, "Content") }));
 
-  EXPECT_FALSE(table.IsValid());
-  EXPECT_TRUE(HasDiagnosticCode(table.diagnostics, codes::kNameInvalid.id));
-  EXPECT_FALSE(table.Find("1Bad"));
+    EXPECT_FALSE(table.IsValid()) << name;
+    EXPECT_TRUE(HasDiagnosticCode(table.diagnostics, codes::kNameInvalid.id))
+      << name;
+    EXPECT_FALSE(table.Find(name)) << name;
+  }
 }
 
 //! An invalid name in `.mounts.json` is `mount.name_invalid`.

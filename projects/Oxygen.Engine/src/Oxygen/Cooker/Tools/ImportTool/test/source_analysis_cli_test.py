@@ -69,12 +69,12 @@ class SourceAnalysisCliTests(unittest.TestCase):
                 {
                     "type": "material-descriptor",
                     "source": "material.json",
-                    "virtual_path": "/.cooked/Materials/Stone.omat",
+                    "virtual_path": "/Cooked/Materials/Stone.omat",
                 },
                 {
                     "type": "scene-descriptor",
                     "source": "scene.json",
-                    "virtual_path": "/.cooked/Scenes/Empty.oscene",
+                    "virtual_path": "/Cooked/Scenes/Empty.oscene",
                 },
             ]
         )
@@ -89,7 +89,7 @@ class SourceAnalysisCliTests(unittest.TestCase):
     def test_refused_job_cannot_overwrite_its_primary_source(self):
         # A shape naming its own mount by an absolute path is refused.
         text = (
-            '{"shape_type":"box","material_ref":"/.cooked/Physics/wood.opmat",'
+            '{"shape_type":"box","material_ref":"/Cooked/Physics/wood.opmat",'
             '"half_extents":[0.5,0.5,0.5]}'
         )
         source = self.root / "crate.shape.json"
@@ -99,7 +99,7 @@ class SourceAnalysisCliTests(unittest.TestCase):
                 {
                     "type": "collision-shape-descriptor",
                     "source": source.name,
-                    "virtual_path": "/.cooked/Physics/crate.ocshape",
+                    "virtual_path": "/Cooked/Physics/crate.ocshape",
                 }
             ]
         )
@@ -119,7 +119,7 @@ class SourceAnalysisCliTests(unittest.TestCase):
                 {
                     "type": "texture",
                     "source": "Missing.PNG",
-                    "virtual_path": "/.cooked/Textures/Missing.otex",
+                    "virtual_path": "/Cooked/Textures/Missing.otex",
                 }
             ]
         )
@@ -137,7 +137,7 @@ class SourceAnalysisCliTests(unittest.TestCase):
                     "type": "texture",
                     "source": "sky.png",
                     "cubemap": True,
-                    "virtual_path": "/.cooked/Textures/sky.otex",
+                    "virtual_path": "/Cooked/Textures/sky.otex",
                 }
             ]
         )
@@ -252,7 +252,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         source = self.root / "material.json"
         original = '{"name":"Published"}'
         source.write_text(original, encoding="utf-8")
-        replacement = "/.cooked/Textures/Replacement.otex"
+        replacement = "/Cooked/Textures/Replacement.otex"
         # The material is in the same mount: it names the texture relatively.
         entry = self.capture(
             source.name,
@@ -269,7 +269,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
             {
                 "type": "material-descriptor",
                 "source": source.name,
-                "virtual_path": "/.cooked/Materials/Stone.omat",
+                "virtual_path": "/Cooked/Materials/Stone.omat",
             }
         ]
         result = self.analyze(jobs)
@@ -300,7 +300,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
             {
                 "type": "material-descriptor",
                 "source": "material.json",
-                "virtual_path": "/.cooked/Materials/Stone.omat",
+                "virtual_path": "/Cooked/Materials/Stone.omat",
             }
         ]
         for entry in (used, unused):
@@ -328,7 +328,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
             {
                 "type": "material-descriptor",
                 "source": source.name,
-                "virtual_path": "/.cooked/Materials/Stone.omat",
+                "virtual_path": "/Cooked/Materials/Stone.omat",
             }
         ]
         result = self.analyze(jobs)
@@ -353,12 +353,12 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                 {
                     "type": "material-descriptor",
                     "source": "material.json",
-                    "virtual_path": "/.cooked/Materials/Stone.omat",
+                    "virtual_path": "/Cooked/Materials/Stone.omat",
                 },
                 {
                     "type": "scene-descriptor",
                     "source": "scene.json",
-                    "virtual_path": "/.cooked/Scenes/Empty.oscene",
+                    "virtual_path": "/Cooked/Scenes/Empty.oscene",
                 },
             ]
         )
@@ -381,7 +381,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         png += chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\xff"))
         png += chunk(b"IEND", b"")
         self.capture("image.png", png)
-        texture_path = "/.cooked/Textures/Red.otex"
+        texture_path = "/Cooked/Textures/Red.otex"
         self.capture(
             "texture.json",
             json.dumps(
@@ -409,7 +409,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
             {
                 "type": "material-descriptor",
                 "source": "material.json",
-                "virtual_path": "/.cooked/Materials/RedMaterial.omat",
+                "virtual_path": "/Cooked/Materials/RedMaterial.omat",
                 "depends_on": ["texture"],
             },
         ]
@@ -428,14 +428,14 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         self.capture(
             "texture.json",
             json.dumps(
-                {"source": "image.png", "virtual_path": "/.cooked/Textures/Other.otex"}
+                {"source": "image.png", "virtual_path": "/Cooked/Textures/Other.otex"}
             ),
         )
         jobs = [
             {
                 "type": "texture-descriptor",
                 "source": "texture.json",
-                "virtual_path": "/.cooked/Textures/Intended.otex",
+                "virtual_path": "/Cooked/Textures/Intended.otex",
             }
         ]
         result = self.analyze(jobs)
@@ -466,7 +466,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                         {
                             "type": extension,
                             "source": name,
-                            "virtual_path": f"/.cooked/{name}",
+                            "virtual_path": f"/Cooked/{name}",
                         }
                     ]
                 )
@@ -482,8 +482,8 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         self.capture("vertices.bin", vertices)
         self.capture("indices.bin", struct.pack("<3I", 0, 1, 2))
         bounds = {"min": [0, 0, 0], "max": [1, 1, 0]}
-        # The geometry is /.cooked/Geometry/Triangle.ogeo: its references to
-        # the same mount are relative to /.cooked/Geometry.
+        # The geometry is /Cooked/Geometry/Triangle.ogeo: its references to
+        # the same mount are relative to /Cooked/Geometry.
         vb = "../Resources/Buffers/vertices.obuf"
         ib = "../Resources/Buffers/indices.obuf"
         buffers = [
@@ -547,19 +547,19 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                     "id": "material",
                     "type": "material-descriptor",
                     "source": "material.json",
-                    "virtual_path": "/.cooked/Materials/Stone.omat",
+                    "virtual_path": "/Cooked/Materials/Stone.omat",
                 },
                 {
                     "id": "geometry",
                     "type": "geometry-descriptor",
                     "source": "geometry.json",
-                    "virtual_path": "/.cooked/Geometry/Triangle.ogeo",
+                    "virtual_path": "/Cooked/Geometry/Triangle.ogeo",
                     "depends_on": ["material"],
                 },
                 {
                     "type": "scene-descriptor",
                     "source": "scene.json",
-                    "virtual_path": "/.cooked/Scenes/TriangleScene.oscene",
+                    "virtual_path": "/Cooked/Scenes/TriangleScene.oscene",
                     "depends_on": ["geometry"],
                 },
             ]
@@ -575,7 +575,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                 {
                     "type": "material-descriptor",
                     "source": "material.json",
-                    "virtual_path": "/.cooked/Materials/Stone.omat",
+                    "virtual_path": "/Cooked/Materials/Stone.omat",
                 }
             ]
         )
@@ -590,7 +590,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                 {
                     "type": "material-descriptor",
                     "source": "material.json",
-                    "virtual_path": "/.cooked/Materials/Stone.omat",
+                    "virtual_path": "/Cooked/Materials/Stone.omat",
                 }
             ]
         )
@@ -607,13 +607,13 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                     "id": "scene",
                     "type": "scene-descriptor",
                     "source": "scene.json",
-                    "virtual_path": "/.cooked/Scenes/Empty.oscene",
+                    "virtual_path": "/Cooked/Scenes/Empty.oscene",
                 },
                 {
                     "id": "physics",
                     "type": "physics-sidecar",
                     "source": "physics.json",
-                    "target_scene_virtual_path": "/.cooked/Scenes/Empty.oscene",
+                    "target_scene_virtual_path": "/Cooked/Scenes/Empty.oscene",
                 },
             ]
         )

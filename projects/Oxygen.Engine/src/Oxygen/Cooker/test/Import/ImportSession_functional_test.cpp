@@ -106,7 +106,7 @@ protected:
       .source_path = TempDir() / source_name,
       .cooked_root = TempDir() / "cooked",
     };
-    request.asset_virtual_path = "/.cooked/" + source_name;
+    request.asset_virtual_path = "/Cooked/" + source_name;
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     return request;
@@ -704,7 +704,7 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
         16,
       });
     const auto descriptor_relpath = std::string("Wood.omat");
-    const auto virtual_path = "/.cooked/" + descriptor_relpath;
+    const auto virtual_path = "/Cooked/" + descriptor_relpath;
     const auto descriptor = oxygen::cooker::testing::MaterialBuilder { "Wood" };
 
     const auto tex_idx
@@ -851,10 +851,10 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeIncludesResourceSidecarOutputs)
     }
 
     const auto texture_rel = session.ResourceDescriptorEmitter().EmitTexture(
-      "/.cooked/Wood.glb/wood.base_color.otex",
+      "/Cooked/Wood.glb/wood.base_color.otex",
       oxygen::data::pak::core::ResourceIndexT { texture_index }, *texture_desc);
     const auto buffer_rel = session.ResourceDescriptorEmitter().EmitBuffer(
-      "/.cooked/Wood.glb/Mesh.lod0.vertex.obuf",
+      "/Cooked/Wood.glb/Mesh.lod0.vertex.obuf",
       oxygen::data::pak::core::ResourceIndexT { buffer_index }, *buffer_desc);
 
     const auto report = co_await session.Finalize();

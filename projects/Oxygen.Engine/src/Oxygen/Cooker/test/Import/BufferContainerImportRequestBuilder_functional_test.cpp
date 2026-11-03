@@ -51,7 +51,7 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
       "buffers": [
         {
           "source": "mesh_vertices.buffer.bin",
-          "virtual_path": "/.cooked/Resources/Buffers/character_vertices.obuf",
+          "virtual_path": "/Cooked/Resources/Buffers/character_vertices.obuf",
           "usage_flags": 3,
           "element_stride": 32,
           "alignment": 16
@@ -80,7 +80,7 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
   ASSERT_EQ(normalized.at("buffers").size(), 1U);
   EXPECT_EQ(
     normalized.at("buffers").at(0).at("virtual_path").get<std::string>(),
-    "/.cooked/Resources/Buffers/character_vertices.obuf");
+    "/Cooked/Resources/Buffers/character_vertices.obuf");
 }
 
 NOLINT_TEST(BufferContainerImportRequestBuilderTest,
@@ -95,7 +95,7 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
       "buffers": [
         {
           "source": "mesh.buffer.bin",
-          "virtual_path": "/.cooked/Resources/Buffers/bad.obuf",
+          "virtual_path": "/Cooked/Resources/Buffers/bad.obuf",
           "unexpected": true
         }
       ]
@@ -137,7 +137,7 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsRelativeCookedRoot)
       "buffers": [
         {
           "source": "mesh.buffer.bin",
-          "virtual_path": "/.cooked/Resources/Buffers/ok.obuf",
+          "virtual_path": "/Cooked/Resources/Buffers/ok.obuf",
           "element_stride": 16
         }
       ]
@@ -194,7 +194,7 @@ NOLINT_TEST(
       "buffers": [
         {
           "source": "mesh.buffer.bin",
-          "virtual_path": "/.cooked/Resources/Buffers/views.obuf",
+          "virtual_path": "/Cooked/Resources/Buffers/views.obuf",
           "element_format": 10,
           "views": [
             {
@@ -228,7 +228,7 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
       "buffers": [
         {
           "source": "mesh.buffer.bin",
-          "virtual_path": "/.cooked/Resources/Buffers/views.obuf",
+          "virtual_path": "/Cooked/Resources/Buffers/views.obuf",
           "element_stride": 16,
           "views": [
             {
@@ -263,7 +263,7 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
       "buffers": [
         {
           "source": "mesh.buffer.bin",
-          "virtual_path": "/.cooked/Resources/Buffers/views.obuf",
+          "virtual_path": "/Cooked/Resources/Buffers/views.obuf",
           "element_stride": 16,
           "views": [
             {

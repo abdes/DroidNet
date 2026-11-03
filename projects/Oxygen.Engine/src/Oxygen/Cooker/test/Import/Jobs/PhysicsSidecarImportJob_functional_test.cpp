@@ -38,7 +38,7 @@ namespace {
     request.source_path = "inline://scene.oscene.json";
     request.job_name = "DemoScene";
     request.cooked_root = cooked_root;
-    request.asset_virtual_path = "/.cooked/Scenes/DemoScene.oscene";
+    request.asset_virtual_path = "/Cooked/Scenes/DemoScene.oscene";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
@@ -57,7 +57,7 @@ namespace {
     request.job_name = "DemoScene.physics";
     request.cooked_root = cooked_root;
     request.physics = PhysicsImportSettings {
-      .target_scene_virtual_path = "/.cooked/Scenes/DemoScene.oscene",
+      .target_scene_virtual_path = "/Cooked/Scenes/DemoScene.oscene",
       .inline_bindings_json = R"({"bindings":{}})",
     };
     return request;
@@ -88,7 +88,7 @@ namespace {
     // The sidecar's entries record the scene's source, not the sidecar's.
     const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
     const auto key
-      = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/DemoScene.opscene");
+      = index.FindAssetKeyByVirtualPath("/Cooked/Scenes/DemoScene.opscene");
     ASSERT_HAS_VALUE(key);
     EXPECT_EQ(index.FindSourcePath(*key),
       std::optional<std::string_view>("/Content/scene.oscene.json"));

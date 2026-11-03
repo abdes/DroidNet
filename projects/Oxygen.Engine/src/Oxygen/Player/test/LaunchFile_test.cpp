@@ -53,7 +53,7 @@ NOLINT_TEST_F(LaunchFileTest, ReadsEveryFieldAndResolvesRelativePaths)
   const auto launch = Parse(R"({
     "version": 3,
     "mounts": ["base.pak", "cooked"],
-    "scene": "/.cooked/Scenes/Level.oscene",
+    "scene": "/Cooked/Scenes/Level.oscene",
     "source_mounts": { "Content": "scripts" },
     "window": { "title": "Level", "mode": "borderless", "width": 1600,
                 "height": 900, "vsync": false, "frame_cap": 60 },
@@ -65,7 +65,7 @@ NOLINT_TEST_F(LaunchFileTest, ReadsEveryFieldAndResolvesRelativePaths)
   EXPECT_EQ(launch.mounts[0].path, (TempDir() / "base.pak").lexically_normal());
   EXPECT_EQ(launch.mounts[1].kind, LaunchMount::Kind::kLooseCookedRoot);
   EXPECT_EQ(launch.mounts[1].path, (TempDir() / "cooked").lexically_normal());
-  EXPECT_EQ(launch.scene, "/.cooked/Scenes/Level.oscene");
+  EXPECT_EQ(launch.scene, "/Cooked/Scenes/Level.oscene");
   ASSERT_EQ(launch.source_mounts.size(), 1U);
   ASSERT_TRUE(launch.source_mounts.contains("Content"));
   EXPECT_EQ(launch.source_mounts.at("Content"),

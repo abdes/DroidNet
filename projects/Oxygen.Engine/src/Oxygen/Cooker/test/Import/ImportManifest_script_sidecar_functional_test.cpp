@@ -183,12 +183,12 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
         {
           "type": "script",
           "source": "Authoring/main.lua",
-          "virtual_path": "/.cooked/Scripts/AuthoringMain.oscript"
+          "virtual_path": "/Cooked/Scripts/AuthoringMain.oscript"
         },
         {
           "type": "script",
           "source": "Other/main.lua",
-          "virtual_path": "/.cooked/Scripts/OtherMain.oscript"
+          "virtual_path": "/Cooked/Scripts/OtherMain.oscript"
         }
       ]
     })");
@@ -257,7 +257,7 @@ NOLINT_TEST(
         {
           "type": "script",
           "source": "main.luau",
-          "virtual_path": "/.cooked/Scripts/Main.oscript",
+          "virtual_path": "/Cooked/Scripts/Main.oscript",
           "output": "oxygen_manifest_script_root",
           "bindings": [
             {
@@ -296,7 +296,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
         {
           "type": "script",
           "source": "main.luau",
-          "virtual_path": "/.cooked/Scripts/Main.oscript"
+          "virtual_path": "/Cooked/Scripts/Main.oscript"
         },
         {
           "type": "script-sidecar",

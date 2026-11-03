@@ -176,7 +176,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitSingleMaterialCreatesFile)
 
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
-    emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
+    emitter.Emit(key, AssetType::kMaterial, "/Cooked/Materials/Wood.omat",
       "Materials/Wood.omat", bytes, {});
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
@@ -194,15 +194,15 @@ NOLINT_TEST_F(AssetEmitterTest, EmitMultipleAssetsCreatesAllFiles)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Wood.omat", "Materials/Wood.omat",
+      "/Cooked/Materials/Wood.omat", "Materials/Wood.omat",
       fixtures::MaterialBuilder { "wood-material" }.Bytes(), {});
 
     emitter.Emit(MakeSequentialAssetKey(2), AssetType::kGeometry,
-      "/.cooked/Geometry/Cube.ogeo", "Geometry/Cube.ogeo",
+      "/Cooked/Geometry/Cube.ogeo", "Geometry/Cube.ogeo",
       fixtures::GeometryBuilder { "cube-geometry" }.Bytes(), {});
 
     emitter.Emit(MakeSequentialAssetKey(3), AssetType::kScene,
-      "/.cooked/Scenes/Level1.oscene", "Scenes/Level1.oscene",
+      "/Cooked/Scenes/Level1.oscene", "Scenes/Level1.oscene",
       fixtures::SceneBuilder { "level1-scene" }.Bytes(), {});
 
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
@@ -227,7 +227,7 @@ NOLINT_TEST_F(AssetEmitterTest, CountTracksEmittedAssets)
 
     for (uint32_t i = 1; i <= 5; ++i) {
       emitter.Emit(MakeSequentialAssetKey(i), AssetType::kMaterial,
-        "/.cooked/Materials/Mat" + std::to_string(i) + ".omat",
+        "/Cooked/Materials/Mat" + std::to_string(i) + ".omat",
         "Materials/Mat" + std::to_string(i) + ".omat",
         fixtures::MaterialBuilder { "mat-" + std::to_string(i) }.Bytes(), {});
       EXPECT_EQ(emitter.Count(), i);
@@ -251,7 +251,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsCorrectMetadata)
 
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
-    emitter.Emit(key, AssetType::kGeometry, "/.cooked/Geometry/MyMesh.ogeo",
+    emitter.Emit(key, AssetType::kGeometry, "/Cooked/Geometry/MyMesh.ogeo",
       "Geometry/MyMesh.ogeo", bytes, {});
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
@@ -262,7 +262,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsCorrectMetadata)
 
   EXPECT_EQ(records.at(0).key, key);
   EXPECT_EQ(records.at(0).asset_type, AssetType::kGeometry);
-  EXPECT_EQ(records.at(0).virtual_path, "/.cooked/Geometry/MyMesh.ogeo");
+  EXPECT_EQ(records.at(0).virtual_path, "/Cooked/Geometry/MyMesh.ogeo");
   EXPECT_EQ(records.at(0).layout_relpath, "Geometry/MyMesh.ogeo");
   EXPECT_EQ(
     oxygen::cooker::test::LayoutPathOf(records.at(0).descriptor_relpath),
@@ -287,9 +287,9 @@ NOLINT_TEST_F(
   second.PixelShader();
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
-    emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
+    emitter.Emit(key, AssetType::kMaterial, "/Cooked/Materials/Wood.omat",
       "Materials/Wood.omat", first.Bytes(), first.References());
-    emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
+    emitter.Emit(key, AssetType::kMaterial, "/Cooked/Materials/Wood.omat",
       "Materials/Wood.omat", second.Bytes(), second.References());
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
@@ -320,11 +320,11 @@ NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathConflictBetweenKeysThrows)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Shared.omat", "Materials/SharedA.omat", bytes, {});
+      "/Cooked/Materials/Shared.omat", "Materials/SharedA.omat", bytes, {});
 
     EXPECT_THROW(
       emitter.Emit(MakeSequentialAssetKey(2), AssetType::kMaterial,
-        "/.cooked/Materials/Shared.omat", "Materials/SharedB.omat", bytes, {}),
+        "/Cooked/Materials/Shared.omat", "Materials/SharedB.omat", bytes, {}),
       std::runtime_error);
 
     success = (co_await emitter.Finalize()).has_value();
@@ -341,11 +341,11 @@ NOLINT_TEST_F(AssetEmitterTest, EmitDescriptorPathConflictBetweenKeysThrows)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/A.omat", "Materials/Shared.omat", bytes_a, {});
+      "/Cooked/Materials/A.omat", "Materials/Shared.omat", bytes_a, {});
 
     EXPECT_THROW(
       emitter.Emit(MakeSequentialAssetKey(2), AssetType::kMaterial,
-        "/.cooked/Materials/B.omat", "Materials/Shared.omat", bytes_b, {}),
+        "/Cooked/Materials/B.omat", "Materials/Shared.omat", bytes_b, {}),
       std::runtime_error);
 
     success = (co_await emitter.Finalize()).has_value();
@@ -362,12 +362,12 @@ NOLINT_TEST_F(
 
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
-    emitter.Emit(shared_key, AssetType::kMaterial, "/.cooked/Materials/A.omat",
+    emitter.Emit(shared_key, AssetType::kMaterial, "/Cooked/Materials/A.omat",
       "Materials/A.omat", fixtures::MaterialBuilder { "a-v1" }.Bytes(), {});
-    emitter.Emit(shared_key, AssetType::kMaterial, "/.cooked/Materials/B.omat",
+    emitter.Emit(shared_key, AssetType::kMaterial, "/Cooked/Materials/B.omat",
       "Materials/B.omat", fixtures::MaterialBuilder { "b-v2" }.Bytes(), {});
     emitter.Emit(MakeSequentialAssetKey(8), AssetType::kMaterial,
-      "/.cooked/Materials/C.omat", "Materials/A.omat",
+      "/Cooked/Materials/C.omat", "Materials/A.omat",
       fixtures::MaterialBuilder { "a-v3" }.Bytes(), {});
     const auto success = co_await emitter.Finalize();
     EXPECT_TRUE(success);
@@ -390,13 +390,13 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsPreservesEmissionOrder)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/A.omat", "Materials/A.omat",
+      "/Cooked/Materials/A.omat", "Materials/A.omat",
       fixtures::MaterialBuilder { "a" }.Bytes(), {});
     emitter.Emit(MakeSequentialAssetKey(2), AssetType::kGeometry,
-      "/.cooked/Geometry/B.ogeo", "Geometry/B.ogeo",
+      "/Cooked/Geometry/B.ogeo", "Geometry/B.ogeo",
       fixtures::GeometryBuilder { "b" }.Bytes(), {});
     emitter.Emit(MakeSequentialAssetKey(3), AssetType::kScene,
-      "/.cooked/Scenes/C.oscene", "Scenes/C.oscene",
+      "/Cooked/Scenes/C.oscene", "Scenes/C.oscene",
       fixtures::SceneBuilder { "c" }.Bytes(), {});
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
@@ -419,10 +419,10 @@ NOLINT_TEST_F(AssetEmitterTest, FinalizeWaitsForPendingIO)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Mat1.omat", "Materials/Mat1.omat",
+      "/Cooked/Materials/Mat1.omat", "Materials/Mat1.omat",
       fixtures::MaterialBuilder { "content-1" }.Bytes(), {});
     emitter.Emit(MakeSequentialAssetKey(2), AssetType::kMaterial,
-      "/.cooked/Materials/Mat2.omat", "Materials/Mat2.omat",
+      "/Cooked/Materials/Mat2.omat", "Materials/Mat2.omat",
       fixtures::MaterialBuilder { "content-2" }.Bytes(), {});
 
     const auto success = co_await emitter.Finalize();
@@ -455,7 +455,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitAfterFinalizeThrows)
     EXPECT_TRUE(success);
 
     EXPECT_THROW(emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-                   "/.cooked/Materials/After.omat", "Materials/After.omat",
+                   "/Cooked/Materials/After.omat", "Materials/After.omat",
                    fixtures::MaterialBuilder { "content" }.Bytes(), {}),
       std::runtime_error);
   });
@@ -474,7 +474,7 @@ NOLINT_TEST_F(AssetEmitterTest, FinalizeFileContentMatchesEmittedBytes)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Binary.omat", "Materials/Binary.omat", expected_bytes,
+      "/Cooked/Materials/Binary.omat", "Materials/Binary.omat", expected_bytes,
       {});
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
@@ -500,7 +500,7 @@ NOLINT_TEST_F(AssetEmitterRealFileTest, EmitCreatesNestedDirectories)
         = emitter_.emplace(oxygen::content::cooked::RealCookerStorage(),
           loop_->Driver(), writes, TempDir());
       emitter.Emit(MakeSequentialAssetKey(1), AssetType::kGeometry,
-        "/.cooked/Deep/Nested/Path/Mesh.ogeo", "Deep/Nested/Path/Mesh.ogeo",
+        "/Cooked/Deep/Nested/Path/Mesh.ogeo", "Deep/Nested/Path/Mesh.ogeo",
         fixtures::GeometryBuilder { "nested-mesh" }.Bytes(), {});
       EXPECT_TRUE((co_await emitter.Finalize()).has_value());
       co_return co::kJoin;
@@ -528,7 +528,7 @@ NOLINT_TEST_F(AssetEmitterTest, FinalizeJoinsTheWritesEmitStarted)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Mat.omat", "Materials/Mat.omat",
+      "/Cooked/Materials/Mat.omat", "Materials/Mat.omat",
       fixtures::MaterialBuilder { "content" }.Bytes(), {});
 
     success = (co_await emitter.Finalize()).has_value();
@@ -546,7 +546,7 @@ NOLINT_TEST_F(AssetEmitterTest, ErrorCountZeroAfterSuccessfulWrites)
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     for (uint32_t i = 1; i <= 10; ++i) {
       emitter.Emit(MakeSequentialAssetKey(i), AssetType::kMaterial,
-        "/.cooked/Materials/Mat" + std::to_string(i) + ".omat",
+        "/Cooked/Materials/Mat" + std::to_string(i) + ".omat",
         "Materials/Mat" + std::to_string(i) + ".omat",
         fixtures::MaterialBuilder { "content-" + std::to_string(i) }.Bytes(),
         {});
@@ -566,7 +566,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmptyDescriptorIsRejectedBeforePublication)
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     EXPECT_THROW(
       emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-        "/.cooked/Materials/Empty.omat", "Materials/Empty.omat", {}, {}),
+        "/Cooked/Materials/Empty.omat", "Materials/Empty.omat", {}, {}),
       std::runtime_error);
     EXPECT_EQ(emitter.Count(), 0U);
     EXPECT_TRUE(emitter.Records().empty());
@@ -584,7 +584,7 @@ NOLINT_TEST_F(
     bool rejected = false;
     try {
       co_await emitter.EmitSync(MakeSequentialAssetKey(1), AssetType::kMaterial,
-        "/.cooked/Materials/Invalid.omat", "Materials/Invalid.omat", {}, {});
+        "/Cooked/Materials/Invalid.omat", "Materials/Invalid.omat", {}, {});
     } catch (const std::runtime_error&) {
       rejected = true;
     }
@@ -610,7 +610,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitLargeDescriptorWrittenCorrectly)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kScene,
-      "/.cooked/Scenes/Large.oscene", "Scenes/Large.oscene", large_bytes, {});
+      "/Cooked/Scenes/Large.oscene", "Scenes/Large.oscene", large_bytes, {});
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
@@ -654,25 +654,25 @@ NOLINT_TEST_P(AssetEmitterPathRejectionTest, EmitThrows)
 
 INSTANTIATE_TEST_SUITE_P(InvalidPaths, AssetEmitterPathRejectionTest,
   ::testing::Values(PathRejectionCase { "RelativePathWithBackslash",
-                      "/.cooked/Materials/Wood.omat", "Materials\\Wood.omat" },
+                      "/Cooked/Materials/Wood.omat", "Materials\\Wood.omat" },
     PathRejectionCase { "RelativePathWithLeadingSlash",
-      "/.cooked/Materials/Wood.omat", "/Materials/Wood.omat" },
-    PathRejectionCase { "RelativePathWithColon", "/.cooked/Materials/Wood.omat",
+      "/Cooked/Materials/Wood.omat", "/Materials/Wood.omat" },
+    PathRejectionCase { "RelativePathWithColon", "/Cooked/Materials/Wood.omat",
       "C:Materials/Wood.omat" },
     PathRejectionCase { "RelativePathWithDoubleSlash",
-      "/.cooked/Materials/Wood.omat", "Materials//Wood.omat" },
+      "/Cooked/Materials/Wood.omat", "Materials//Wood.omat" },
     PathRejectionCase { "RelativePathWithDotSegment",
-      "/.cooked/Materials/Wood.omat", "Materials/./Wood.omat" },
+      "/Cooked/Materials/Wood.omat", "Materials/./Wood.omat" },
     PathRejectionCase { "RelativePathWithDotDotSegment",
-      "/.cooked/Materials/Wood.omat", "Materials/../Wood.omat" },
+      "/Cooked/Materials/Wood.omat", "Materials/../Wood.omat" },
     PathRejectionCase { "VirtualPathWithoutLeadingSlash",
       ".cooked/Materials/Wood.omat", "Materials/Wood.omat" },
     PathRejectionCase { "VirtualPathWithBackslash",
       "/.cooked\\Materials\\Wood.omat", "Materials/Wood.omat" },
     PathRejectionCase { "VirtualPathWithDoubleSlash",
-      "/.cooked//Materials/Wood.omat", "Materials/Wood.omat" },
+      "/Cooked//Materials/Wood.omat", "Materials/Wood.omat" },
     PathRejectionCase {
-      "EmptyRelativePath", "/.cooked/Materials/Wood.omat", "" },
+      "EmptyRelativePath", "/Cooked/Materials/Wood.omat", "" },
     PathRejectionCase { "EmptyVirtualPath", "", "Materials/Wood.omat" }),
   [](const ::testing::TestParamInfo<PathRejectionCase>& info) -> std::string {
     return std::string(info.param.name);
@@ -710,7 +710,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsSha256Hash)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Hashed.omat", "Materials/Hashed.omat", bytes, {});
+      "/Cooked/Materials/Hashed.omat", "Materials/Hashed.omat", bytes, {});
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
@@ -728,9 +728,9 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsDifferentContentHasDifferentHash)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/One.omat", "Materials/One.omat", bytes1, {});
+      "/Cooked/Materials/One.omat", "Materials/One.omat", bytes1, {});
     emitter.Emit(MakeSequentialAssetKey(2), AssetType::kMaterial,
-      "/.cooked/Materials/Two.omat", "Materials/Two.omat", bytes2, {});
+      "/Cooked/Materials/Two.omat", "Materials/Two.omat", bytes2, {});
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
@@ -749,7 +749,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitRecordsTheDescriptorContentHash)
   RunInNursery([&](co::Nursery& writes) -> Co<> {
     auto& emitter = emitter_.emplace(Storage(), Driver(), writes, Root());
     emitter.Emit(MakeSequentialAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Stamped.omat", "Materials/Stamped.omat", bytes, {});
+      "/Cooked/Materials/Stamped.omat", "Materials/Stamped.omat", bytes, {});
     EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 

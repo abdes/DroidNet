@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
-#include <ios>
 #include <iterator>
 #include <memory>
 #include <stdexcept>
@@ -343,7 +342,7 @@ NOLINT_TEST_F(SourceLayoutWitnessTest, MovingTheModelKeepsItsSurfaceIds)
 
   auto request = ImportRequest {};
   request.source_path = FixturePath("gltf");
-  request.asset_virtual_path = "/.cooked/Moved/Renamed.gltf";
+  request.asset_virtual_path = "/Cooked/Moved/Renamed.gltf";
   request.source_mount_path
     = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = MakeTempDir("source_witness_moved");

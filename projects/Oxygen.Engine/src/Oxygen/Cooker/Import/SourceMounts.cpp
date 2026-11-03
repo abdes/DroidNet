@@ -348,11 +348,6 @@ namespace {
   auto CheckName(std::string_view name, MountTableOwner owner,
     const Subject& subject, const Reporter& reporter) -> bool
   {
-    if (name.starts_with('.')) {
-      reporter.Report(mount_codes::kNameInvalid, subject, name,
-        "a mount name never starts with '.'");
-      return false;
-    }
     if (const auto error = content::ValidateMountName(name);
       error.has_value()) {
       reporter.Report(mount_codes::kNameInvalid, subject, name,
@@ -1151,12 +1146,6 @@ auto RealMountFileSystem() -> const IMountFileSystem&
 {
   static const auto files = RealFileSystem {};
   return files;
-}
-
-auto IsValidMountName(const std::string_view name) -> bool
-{
-  return !name.starts_with('.')
-    && !content::ValidateMountName(name).has_value();
 }
 
 auto ResolveMountTable(const MountTableRequest& request) -> MountTable

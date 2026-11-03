@@ -59,7 +59,7 @@ namespace {
     auto request = ImportRequest {};
     request.source_path = source_root / "ground.material.json";
     request.cooked_root = cooked_root;
-    request.asset_virtual_path = "/.cooked/Physics/Materials/ground.opmat";
+    request.asset_virtual_path = "/Cooked/Physics/Materials/ground.opmat";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
@@ -118,7 +118,7 @@ namespace {
     auto request = ImportRequest {};
     request.source_path = source_root / "bad.material.json";
     request.cooked_root = cooked_root;
-    request.asset_virtual_path = "/.cooked/Physics/Materials/bad.opmat";
+    request.asset_virtual_path = "/Cooked/Physics/Materials/bad.opmat";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
@@ -163,7 +163,7 @@ namespace {
     std::filesystem::create_directories(cooked_root);
 
     const auto report = Import(MakeIdentityRequest(cooked_root,
-      "/.cooked/Physics/Materials/Wet Ground.v2 (2).opmat",
+      "/Cooked/Physics/Materials/Wet Ground.v2 (2).opmat",
       nlohmann::json { { "name", "ground" } }));
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
@@ -182,7 +182,7 @@ namespace {
 
     // The leaf exceeds the 255-byte segment bound.
     const auto report = Import(MakeIdentityRequest(cooked_root,
-      "/.cooked/Physics/Materials/" + std::string(255U, 'x') + ".opmat",
+      "/Cooked/Physics/Materials/" + std::string(255U, 'x') + ".opmat",
       nlohmann::json { { "name", "ground" } }));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
@@ -197,12 +197,12 @@ namespace {
     const auto cooked_root = TempDir() / "document_virtual_path";
     std::filesystem::create_directories(cooked_root);
 
-    const auto report = Import(MakeIdentityRequest(cooked_root,
-      "/.cooked/Physics/Materials/ground.opmat",
-      nlohmann::json {
-        { "name", "ground" },
-        { "virtual_path", "/.cooked/Physics/Materials/other.opmat" },
-      }));
+    const auto report = Import(
+      MakeIdentityRequest(cooked_root, "/Cooked/Physics/Materials/ground.opmat",
+        nlohmann::json {
+          { "name", "ground" },
+          { "virtual_path", "/Cooked/Physics/Materials/other.opmat" },
+        }));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(

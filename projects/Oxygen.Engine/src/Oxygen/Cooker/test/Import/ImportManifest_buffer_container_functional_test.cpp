@@ -40,7 +40,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
       "buffers": [
         {
           "source": "mesh_vertices.buffer.bin",
-          "virtual_path": "/.cooked/Resources/Buffers/character_vertices.obuf",
+          "virtual_path": "/Cooked/Resources/Buffers/character_vertices.obuf",
           "element_stride": 32
         }
       ]
@@ -98,7 +98,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
       "buffers": [
         {
           "source": "lego.buffer.bin",
-          "virtual_path": "/.cooked/Resources/Buffers/lego_shared.obuf",
+          "virtual_path": "/Cooked/Resources/Buffers/lego_shared.obuf",
           "element_stride": 16
         }
       ]
@@ -114,7 +114,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
           "id": "prep.textures",
           "type": "texture",
           "source": "albedo.png",
-          "virtual_path": "/.cooked/Textures/Albedo.otex"
+          "virtual_path": "/Cooked/Textures/Albedo.otex"
         },
         {
           "id": "lego.buffers",

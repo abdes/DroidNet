@@ -88,7 +88,7 @@ NOLINT_TEST_F(AsyncImportServiceRoutingTest,
 
   auto request = ImportRequest {};
   request.source_path = "unrecognized.asset";
-  request.asset_virtual_path = "/.cooked/Materials/BadMat.omat";
+  request.asset_virtual_path = "/Cooked/Materials/BadMat.omat";
   request.source_mount_path
     = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root

@@ -32,7 +32,7 @@ auto MakeValidSourceSettings() -> PhysicsSidecarImportSettings
   settings.source_path = "physics/scene_physics_sidecar.json";
   settings.cooked_root = MakeAbsoluteCookedRoot();
   settings.job_name = "scene-physics-sidecar";
-  settings.target_scene_virtual_path = "/.cooked/Scenes/TestScene.oscene";
+  settings.target_scene_virtual_path = "/Cooked/Scenes/TestScene.oscene";
   return settings;
 }
 
@@ -41,7 +41,7 @@ auto MakeValidInlineSettings() -> PhysicsSidecarImportSettings
   auto settings = MakeValidSourceSettings();
   settings.source_path.clear();
   settings.inline_bindings_json
-    = R"({"bindings":{"rigid_bodies":[{"node_index":0,"shape_ref":"/.cooked/Physics/Shapes/test_shape.ocshape","material_ref":"/.cooked/Physics/Materials/default.opmat"}]}})";
+    = R"({"bindings":{"rigid_bodies":[{"node_index":0,"shape_ref":"/Cooked/Physics/Shapes/test_shape.ocshape","material_ref":"/Cooked/Physics/Materials/default.opmat"}]}})";
   return settings;
 }
 
@@ -101,7 +101,7 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   auto settings = MakeValidSourceSettings();
   settings.source_path.clear();
   settings.inline_bindings_json
-    = R"({"rigid_bodies":[{"node_index":0,"shape_ref":"/.cooked/Physics/Shapes/test_shape.ocshape","material_ref":"/.cooked/Physics/Materials/default.opmat"}]})";
+    = R"({"rigid_bodies":[{"node_index":0,"shape_ref":"/Cooked/Physics/Shapes/test_shape.ocshape","material_ref":"/Cooked/Physics/Materials/default.opmat"}]})";
   auto errors = std::ostringstream {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
@@ -175,7 +175,7 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   BuildPhysicsSidecarRequestRejectsNonCanonicalVirtualPath)
 {
   auto settings = MakeValidSourceSettings();
-  settings.target_scene_virtual_path = "/.cooked/Scenes/./TestScene.oscene";
+  settings.target_scene_virtual_path = "/Cooked/Scenes/./TestScene.oscene";
   auto errors = std::ostringstream {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);

@@ -84,7 +84,7 @@ namespace {
       auto request = ImportRequest {};
       request.source_path = source;
       request.cooked_root = CookedRoot();
-      request.asset_virtual_path = "/.cooked/Textures/"
+      request.asset_virtual_path = "/Cooked/Textures/"
         + std::filesystem::path(file).stem().string() + ".otex";
       request.source_mount_path
         = oxygen::cooker::test::SourceMountPath(request.source_path);
@@ -119,7 +119,7 @@ namespace {
     WriteBytes(source.parent_path() / "normal.ktx2", Ktx2());
     auto request = ImportRequest {};
     request.source_path = source;
-    request.asset_virtual_path = "/.cooked/model.gltf";
+    request.asset_virtual_path = "/Cooked/model.gltf";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = CookedRoot();

@@ -100,7 +100,7 @@ public sealed partial class AuthoringMountPointTreeItemAdapter : TreeItemAdapter
     }
 
     /// <inheritdoc />
-    public override bool ValidateItemName(string name) => VirtualPath.ValidateMountName(name, VirtualPathRuleSet.Authored) is null;
+    public override bool ValidateItemName(string name) => VirtualPath.ValidateMountName(name) is null;
 
     /// <inheritdoc />
     public override bool Equals(ITreeItem? other)

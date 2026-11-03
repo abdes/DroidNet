@@ -378,8 +378,8 @@ constexpr auto kMisspelledMounts = std::array {
   "Pro ps",
   "Pro.ps",
   ".",
+  ".Props",
   "Pr\xC3\xB6ps", // "Pröps": a letter beyond ASCII
-
 };
 
 //! A catalog names only mounts a virtual path can name, for itself and for
@@ -394,9 +394,9 @@ NOLINT_TEST(PakCatalogTest, RejectsMountsAVirtualPathCannotName)
     dependency.dependencies.at(0).mount = mount;
     EXPECT_FALSE(dependency.ComputeDigest()) << mount;
   }
-  auto derived = Catalog();
-  derived.mount = ".Derived_Props-2";
-  EXPECT_TRUE(derived.ComputeDigest());
+  auto spelled = Catalog();
+  spelled.mount = "_Props-2";
+  EXPECT_TRUE(spelled.ComputeDigest());
 }
 
 //! A decoded catalog whose mount a virtual path cannot name is refused, even

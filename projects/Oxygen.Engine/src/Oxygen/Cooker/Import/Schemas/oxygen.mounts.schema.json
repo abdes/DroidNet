@@ -7,7 +7,7 @@
   "required": ["version"],
   "definitions": {
     "mount_name": {
-      "description": "A mount name: the first segment of every mount path in it. It follows the virtual path mount rule and never starts with '.'.",
+      "description": "A mount name: the first segment of every mount path in it. It follows the virtual path mount rule, so it never starts with '.'.",
       "type": "string",
       "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
       "maxLength": 255

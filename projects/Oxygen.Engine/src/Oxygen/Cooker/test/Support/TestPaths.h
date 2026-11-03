@@ -25,7 +25,7 @@ namespace oxygen::cooker::test {
 [[nodiscard]] auto ModelPath(std::string_view name) -> std::filesystem::path;
 
 //! The identity these tests give a model: its file name at the default mount
-//! root (`/.cooked/Tabuleiro.glb`), under which its products are named.
+//! root (`/Cooked/Tabuleiro.glb`), under which its products are named.
 [[nodiscard]] auto ModelVirtualPath(const std::filesystem::path& source)
   -> std::string;
 

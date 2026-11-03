@@ -47,7 +47,7 @@ auto ParamError(const std::string_view key) -> std::string
 }
 
 constexpr auto kDefaultMaterial
-  = std::string_view { "/.cooked/Materials/default.omat" };
+  = std::string_view { "/Cooked/Materials/default.omat" };
 
 //! A one-LOD procedural capsule named `name`, with one submesh of the default
 //! material.
@@ -178,8 +178,8 @@ NOLINT_TEST(GeometryDescriptorSchemaTest, RequiresBoundsOnBufferMeshes)
     = Procedural("Capsule")
         .Remove("/lods/0/procedural")
         .Set("/lods/0/mesh_type", "standard")
-        .Reference("/lods/0/buffers/vb_ref", "/.cooked/Buffers/vertices.obuf")
-        .Reference("/lods/0/buffers/ib_ref", "/.cooked/Buffers/indices.obuf")
+        .Reference("/lods/0/buffers/vb_ref", "/Cooked/Buffers/vertices.obuf")
+        .Reference("/lods/0/buffers/ib_ref", "/Cooked/Buffers/indices.obuf")
         .Set("/lods/0/submeshes/0/views/0/view_ref", "surface")
         .Json();
   auto& lod = doc.at("lods").at(0);

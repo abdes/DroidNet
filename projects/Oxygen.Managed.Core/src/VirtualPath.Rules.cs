@@ -91,26 +91,15 @@ public static class VirtualPath
     }
 
     /// <summary>
-    /// Checks a mount name, without its leading <c>/</c>. An authored mount, one a project names, refuses the leading
-    /// dot that marks a mount the engine reserves.
+    /// Checks a mount name, without its leading <c>/</c>. A mount name never starts with a dot: no content lives in a
+    /// hidden mount.
     /// </summary>
-    /// <param name="mount">The mount name.</param>
-    /// <param name="rules">The rules to check it against.</param>
-    /// <returns>The refusal, or <see langword="null"/> when the rules accept the name.</returns>
-    public static VirtualPathError? ValidateMountName(string mount, VirtualPathRuleSet rules)
-    {
-        ArgumentNullException.ThrowIfNull(mount);
-        return rules == VirtualPathRuleSet.Authored && mount.StartsWith('.') ? VirtualPathError.InvalidMountName : ValidateMountName(mount);
-    }
-
-    /// <summary>Checks a mount name, without its leading <c>/</c>.</summary>
     /// <param name="mount">The mount name.</param>
     /// <returns>The refusal, or <see langword="null"/> when the rule accepts the name.</returns>
     public static VirtualPathError? ValidateMountName(string mount)
     {
         ArgumentNullException.ThrowIfNull(mount);
-        var name = mount.StartsWith('.') ? mount[1..] : mount;
-        if (name.Length == 0 || !IsIdentifierStart(name[0]) || name.AsSpan(1).ContainsAnyExcept(IdentifierCharacters))
+        if (mount.Length == 0 || !IsIdentifierStart(mount[0]) || mount.AsSpan(1).ContainsAnyExcept(IdentifierCharacters))
         {
             return VirtualPathError.InvalidMountName;
         }

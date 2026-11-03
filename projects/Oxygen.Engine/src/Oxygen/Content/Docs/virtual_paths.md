@@ -48,15 +48,16 @@ reports the code above.
 
 ## Mount
 
-The first segment names the mount: an identifier, `[A-Za-z_][A-Za-z0-9_-]*`,
-optionally preceded by `.` (`vpath.mount.invalid`), at most 255 bytes
-(`vpath.segment.too_long`). A mount starting with `.` is reserved by the engine,
-as hidden names are by an operating system. A project names its mounts without
-the dot. The reserved mount:
+The first segment names the mount: an identifier, `[A-Za-z_][A-Za-z0-9_-]*`
+(`vpath.mount.invalid`), at most 255 bytes (`vpath.segment.too_long`). The same
+rule names the mounts of a mount table and of a pak catalog. A mount name never
+starts with `.`, so a path such as `/.Hidden/Brick.png` names nothing any
+mount could serve and is refused where it is written.
 
-| Mount   | Holds                                                                                                                                                                                                                                                   |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.code` | Never content. The keys of objects created in code, such as input actions and contexts, come from paths below it (`AssetKey::FromCodePath`). The first segment names the owner (`Editor`, `Examples`, `Test`); the leaf has the asset type's extension. |
+The keys of objects created in code, such as input actions and contexts, hash
+`/.code/<owner>/<path>` (`AssetKey::FromCodePath`): the owner is `Editor`,
+`Examples` or `Test`, and the leaf has the asset type's extension. That text is
+not a virtual path, so no content can take one of these keys.
 
 ## Path
 

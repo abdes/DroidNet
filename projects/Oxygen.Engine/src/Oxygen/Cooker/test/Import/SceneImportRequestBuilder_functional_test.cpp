@@ -95,7 +95,7 @@ protected:
   {
     auto settings = SceneImportSettings {};
     settings.source_path = TempPath("model.gltf").string();
-    settings.virtual_path = "/.cooked/model.gltf";
+    settings.virtual_path = "/Cooked/model.gltf";
     settings.cooked_root = TempPath("cooked").string();
     return settings;
   }
@@ -158,20 +158,19 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, TheSourceIsRecordedAsItsMountPath)
   const auto manifest_path = TempPath("import-manifest.json");
   {
     std::ofstream output(manifest_path);
-    output << ProjectFields(
-      {
-        { "version", 1 },
-        {
-          "jobs",
-          json::array({
-            {
-              { "type", "material-descriptor" },
-              { "source", "Materials/Red.omat.json" },
-              { "virtual_path", "/.cooked/Look/Red.omat" },
-            },
-          }),
-        },
-      })
+    output << ProjectFields({
+                              { "version", 1 },
+                              {
+                                "jobs",
+                                json::array({
+                                  {
+                                    { "type", "material-descriptor" },
+                                    { "source", "Materials/Red.omat.json" },
+                                    { "virtual_path", "/Cooked/Look/Red.omat" },
+                                  },
+                                }),
+                              },
+                            })
                 .dump();
     ASSERT_TRUE(output.good());
   }
@@ -192,11 +191,11 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, CarriesTheModelIdentity)
   const auto request
     = BuildSceneRequest(Settings(), ImportFormat::kGltf, errors);
   ASSERT_HAS_VALUE(request) << errors.str();
-  EXPECT_EQ(request->asset_virtual_path, "/.cooked/model.gltf");
+  EXPECT_EQ(request->asset_virtual_path, "/Cooked/model.gltf");
   EXPECT_EQ(request->GetSceneName(), "model");
   EXPECT_EQ(request->ModelProductVirtualPath(
               request->GetSceneName(), oxygen::data::kSceneDescriptorExtension),
-    "/.cooked/model.gltf/model.oscene");
+    "/Cooked/model.gltf/model.oscene");
 
   auto settings = Settings();
   settings.virtual_path.clear();
@@ -353,7 +352,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
   static_cast<void>(refused({
     { "type", "gltf" },
     { "source", "model.gltf" },
-    { "virtual_path", "/.cooked/model.gltf" },
+    { "virtual_path", "/Cooked/model.gltf" },
     { "surface_source_identity", kSourceIdentity },
   }));
   static_cast<void>(refused({
@@ -546,7 +545,7 @@ NOLINT_TEST_F(
                                     {
                                       { "type", "fbx" },
                                       { "source", "model.fbx" },
-                                      { "virtual_path", "/.cooked/model.fbx" },
+                                      { "virtual_path", "/Cooked/model.fbx" },
                                       { "geometry_defaults", defaults },
                                     },
                                   }),

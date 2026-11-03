@@ -117,7 +117,7 @@ NOLINT_TEST_F(
   RunEmitter([&](ResourceDescriptorEmitter& emitter) -> Co<> {
     const oxygen::data::pak::core::TextureResourceDesc descriptor {};
     static_cast<void>(
-      emitter.EmitTexture("/.cooked/Resources/Ship.glb/Paint.base_color.otex",
+      emitter.EmitTexture("/Cooked/Resources/Ship.glb/Paint.base_color.otex",
         oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
     const auto result = co_await emitter.Finalize();
     if (result) {
@@ -141,10 +141,9 @@ NOLINT_TEST_F(
   RunEmitter([&](ResourceDescriptorEmitter& emitter) -> Co<> {
     const oxygen::data::pak::core::TextureResourceDesc descriptor {};
     const auto index = oxygen::data::pak::core::ResourceIndexT { 1U };
-    first
-      = emitter.EmitTexture("/.cooked/Textures/Sky.otex", index, descriptor);
+    first = emitter.EmitTexture("/Cooked/Textures/Sky.otex", index, descriptor);
     second
-      = emitter.EmitTexture("/.cooked/Textures/Sky.otex", index, descriptor);
+      = emitter.EmitTexture("/Cooked/Textures/Sky.otex", index, descriptor);
 
     EXPECT_TRUE(co_await emitter.Finalize());
   });
@@ -160,11 +159,11 @@ NOLINT_TEST_F(
 {
   RunEmitter([&](ResourceDescriptorEmitter& emitter) -> Co<> {
     const oxygen::data::pak::core::TextureResourceDesc descriptor {};
-    static_cast<void>(emitter.EmitTexture("/.cooked/Textures/Sky.otex",
+    static_cast<void>(emitter.EmitTexture("/Cooked/Textures/Sky.otex",
       oxygen::data::pak::core::ResourceIndexT { 1U }, descriptor));
 
     EXPECT_THROW(
-      static_cast<void>(emitter.EmitTexture("/.cooked/Textures/Sky.otex",
+      static_cast<void>(emitter.EmitTexture("/Cooked/Textures/Sky.otex",
         oxygen::data::pak::core::ResourceIndexT { 2U }, descriptor)),
       std::runtime_error);
     EXPECT_TRUE(co_await emitter.Finalize());

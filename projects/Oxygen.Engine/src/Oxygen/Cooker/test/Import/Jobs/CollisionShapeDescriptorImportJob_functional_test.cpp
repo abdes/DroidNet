@@ -120,7 +120,7 @@ namespace {
     auto request = ImportRequest {};
     request.source_path = roots.source / "ground.material.json";
     request.cooked_root = roots.cooked;
-    request.asset_virtual_path = "/.cooked/Physics/Materials/ground.opmat";
+    request.asset_virtual_path = "/Cooked/Physics/Materials/ground.opmat";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     auto material = oxygen::cooker::test::PhysicsMaterialDescriptor {
@@ -137,7 +137,7 @@ namespace {
     return request;
   }
 
-  constexpr auto kGroundMaterial = "/.cooked/Physics/Materials/ground.opmat";
+  constexpr auto kGroundMaterial = "/Cooked/Physics/Materials/ground.opmat";
 
   //! A box shape document named `name`, at `identity`, of the ground material.
   auto MakeShape(const std::string& identity, const std::string_view name)
@@ -185,7 +185,7 @@ namespace {
     ASSERT_TRUE(material_report->success);
 
     auto shape
-      = MakeShape("/.cooked/Physics/Shapes/floor_box.ocshape", "floor_box");
+      = MakeShape("/Cooked/Physics/Shapes/floor_box.ocshape", "floor_box");
     shape.Set("/half_extents", { 25.0F, 0.5F, 25.0F });
 
     const auto report = Import(MakeCollisionShapeRequest(
@@ -234,11 +234,11 @@ namespace {
     ASSERT_TRUE(material_report->success);
 
     auto shape
-      = MakeShape("/.cooked/Physics/Shapes/hull.ocshape", "convex_hull_shape");
+      = MakeShape("/Cooked/Physics/Shapes/hull.ocshape", "convex_hull_shape");
     shape.Set("/shape_type", "convex_hull")
       .Remove("/half_extents")
       .Set(
-        "/unexpected_field", "/.cooked/Physics/Resources/shape_payload.opres");
+        "/unexpected_field", "/Cooked/Physics/Resources/shape_payload.opres");
 
     const auto report = Import(MakeCollisionShapeRequest(
       { .source = source_root, .cooked = cooked_root }, shape));
@@ -260,7 +260,7 @@ namespace {
     ASSERT_HAS_VALUE(material_report);
     ASSERT_TRUE(material_report->success);
 
-    auto shape = MakeShape("/.cooked/Physics/Shapes/hull_inline.ocshape",
+    auto shape = MakeShape("/Cooked/Physics/Shapes/hull_inline.ocshape",
       "convex_hull_inline_payload");
     shape.Set("/shape_type", "convex_hull").Remove("/half_extents");
 
@@ -300,7 +300,7 @@ namespace {
     ASSERT_TRUE(material_report->success);
 
     auto shape = MakeShape(
-      "/.cooked/Physics/Shapes/compound_shape.ocshape", "compound_shape");
+      "/Cooked/Physics/Shapes/compound_shape.ocshape", "compound_shape");
     shape.Set("/shape_type", "compound")
       .Remove("/half_extents")
       .Set("/children",
@@ -370,7 +370,7 @@ namespace {
     ASSERT_HAS_VALUE(material_report);
     ASSERT_TRUE(material_report->success);
 
-    auto shape = MakeShape("/.cooked/Physics/Shapes/bad_compound.ocshape",
+    auto shape = MakeShape("/Cooked/Physics/Shapes/bad_compound.ocshape",
       "bad_compound_child_payload");
     shape.Set("/shape_type", "compound")
       .Remove("/half_extents")
@@ -405,9 +405,9 @@ namespace {
     ASSERT_TRUE(material_report->success);
 
     auto shape
-      = MakeShape("/.cooked/Physics/Shapes/floor_box.ocshape", "floor_box");
+      = MakeShape("/Cooked/Physics/Shapes/floor_box.ocshape", "floor_box");
     shape.Set("/half_extents", { 25.0F, 0.5F, 25.0F })
-      .Set("/virtual_path", "/.cooked/Physics/Shapes/other.ocshape");
+      .Set("/virtual_path", "/Cooked/Physics/Shapes/other.ocshape");
 
     const auto report = Import(MakeCollisionShapeRequest(
       { .source = source_root, .cooked = cooked_root }, shape));

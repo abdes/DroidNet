@@ -70,7 +70,7 @@ struct LooseCookedProducer final {
 struct LooseCookedRecook final {
   //! Mount path of the re-cooked source, such as `/Content/Ship/Ship.glb`.
   std::string source;
-  //! Virtual path of the job's identity, such as `/.cooked/Ship/Ship.glb`.
+  //! Virtual path of the job's identity, such as `/Cooked/Ship/Ship.glb`.
   std::string identity;
   //! Container-relative path of the identity, under which the job's
   //! auxiliary files are.

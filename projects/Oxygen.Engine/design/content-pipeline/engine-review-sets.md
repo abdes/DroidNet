@@ -464,8 +464,9 @@ everything outside the rule.
   reported as `import.reference_invalid` naming that code.
   Windows-specific inputs are covered: case, drive-relative and UNC paths,
   `\` separators, trailing dots and spaces, junctions and symbolic links.
-- Mount names: `IsValidMountName`, `oxygen.mounts.schema.json` and
-  `VirtualPath` agree exactly (one rule); conflicts and folder overlaps are
+- Mount names: `content::ValidateMountName` (the mount table's rule),
+  `oxygen.mounts.schema.json` and `VirtualPath` agree exactly (one rule, no
+  leading `.`); conflicts and folder overlaps are
   refused, cooked folders included.
 - Mount kinds: `Source` and `Cooked` only; a `Cooked` mount accepts a loose
   root or a pak; an unknown kind is refused, never read as `Source`.

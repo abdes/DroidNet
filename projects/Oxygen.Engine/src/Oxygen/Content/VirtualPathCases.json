@@ -281,7 +281,7 @@
     },
     {
       "mount": ".code",
-      "refusal": null
+      "refusal": "vpath.mount.invalid"
     },
     {
       "mount": "a",
@@ -375,7 +375,7 @@
     {
       "path": "/.code/Test/Wood.omat",
       "rules": "cooked",
-      "refusal": null
+      "refusal": "vpath.mount.invalid"
     },
     {
       "path": "/Content/.build/Wood.omat",
@@ -405,7 +405,7 @@
     {
       "path": "/.code/Test/Wood.omat",
       "rules": "authored",
-      "refusal": null
+      "refusal": "vpath.mount.invalid"
     },
     {
       "path": "/Content/Sources/Media.omat",
@@ -475,7 +475,7 @@
     {
       "path": "/.code",
       "rules": "cooked",
-      "refusal": "vpath.mount_only"
+      "refusal": "vpath.mount.invalid"
     },
     {
       "path": "/Content/Red",
@@ -668,12 +668,10 @@
       "spelled": "../SourceMedia/Brick.png"
     },
     {
-      "anchor": "/.cooked/Materials/Wall.omat",
-      "text": "../Textures/Brick.otex",
+      "anchor": "/Content/Materials/Wall.omat",
+      "text": "/.Hidden/Textures/Brick.otex",
       "rules": "cooked",
-      "refusal": null,
-      "resolved": "/.cooked/Textures/Brick.otex",
-      "spelled": "../Textures/Brick.otex"
+      "refusal": "vpath.mount.invalid"
     },
     {
       "anchor": "/Content/Wall.omat",

@@ -56,7 +56,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
         { "id": "00000000-0000-4000-8000-000000000002", "name": "MeshNode", "parent": 0 }
       ],
       "renderables": [
-        { "node": 1, "geometry_ref": "/.cooked/Geometry/cube.ogeo" }
+        { "node": 1, "geometry_ref": "/Cooked/Geometry/cube.ogeo" }
       ]
     })")
       .dump());

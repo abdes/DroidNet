@@ -1414,7 +1414,7 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, ModelsShareACookedRootByIdentity)
     = TestModelsDirFromFile() / "static_textured_triangle.gltf";
   const auto cooked_root = MakeTempDir("async_gltf_two_models");
   for (const auto* identity :
-    { "/.cooked/A/Triangle.gltf", "/.cooked/B/Triangle.gltf" }) {
+    { "/Cooked/A/Triangle.gltf", "/Cooked/B/Triangle.gltf" }) {
     ImportRequest request {};
     request.source_path = source_path;
     request.asset_virtual_path = identity;
@@ -1436,7 +1436,7 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, ModelsShareACookedRootByIdentity)
     paths.push_back(texture.virtual_path);
   }
   for (const auto* model :
-    { "/.cooked/A/Triangle.gltf", "/.cooked/B/Triangle.gltf" }) {
+    { "/Cooked/A/Triangle.gltf", "/Cooked/B/Triangle.gltf" }) {
     const auto product = [model](const std::string_view leaf) -> std::string {
       return std::string(model) + "/" + std::string(leaf);
     };
@@ -1464,7 +1464,7 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, ModelIdentityOfAnotherTypeIsRefused)
   ImportRequest request {};
   request.source_path
     = TestModelsDirFromFile() / "static_textured_triangle.gltf";
-  request.asset_virtual_path = "/.cooked/Triangle.fbx";
+  request.asset_virtual_path = "/Cooked/Triangle.fbx";
   request.source_mount_path
     = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = MakeTempDir("async_gltf_wrong_identity");

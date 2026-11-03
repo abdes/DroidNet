@@ -45,7 +45,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
           "submeshes": [
             {
               "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-              "material_ref": "/.cooked/Materials/default.omat",
+              "material_ref": "/Cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__" } ]
             }
           ]
@@ -67,7 +67,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
         {
           "type": "geometry-descriptor",
           "source": "Geometry/cube.geometry.json",
-          "virtual_path": "/.cooked/Geometry/Cube.ogeo",
+          "virtual_path": "/Cooked/Geometry/Cube.ogeo",
           "name": "cube-job"
         }
       ]
@@ -88,7 +88,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
     << "Expected request->cooked_root to contain a value";
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "cube-job" });
-  EXPECT_EQ(request->asset_virtual_path, "/.cooked/Geometry/Cube.ogeo");
+  EXPECT_EQ(request->asset_virtual_path, "/Cooked/Geometry/Cube.ogeo");
   ASSERT_HAS_VALUE(request->geometry_descriptor)
     << "Expected request->geometry_descriptor to contain a value";
   ASSERT_EQ(request->cooked_context_roots.size(), 1U);
@@ -118,7 +118,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
           "submeshes": [
             {
               "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-              "material_ref": "/.cooked/Materials/default.omat",
+              "material_ref": "/Cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__" } ]
             }
           ]
@@ -141,7 +141,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
           "id": "proc.cube",
           "type": "geometry-descriptor",
           "source": "Geometry/cube.geometry.json",
-          "virtual_path": "/.cooked/Geometry/Cube.ogeo",
+          "virtual_path": "/Cooked/Geometry/Cube.ogeo",
           "depends_on": ["shared.buffers"]
         }
       ]

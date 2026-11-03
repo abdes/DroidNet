@@ -173,7 +173,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
             "parent": 0,
             "transform": { "translation": [1, 0, 0] }
           })"))
-        .Renderable(1, "/.cooked/Geometry/cube.ogeo")
+        .Renderable(1, "/Cooked/Geometry/cube.ogeo")
         .Set("/renderables/0/overrides", json::parse(R"({
             "values": { "/lod_policy": { "type": "fixed", "lod_index": 1 } },
             "parts": [{
@@ -184,20 +184,20 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
             }]
           })"))
         .Reference("/renderables/0/overrides/parts/0/values/~1material",
-          "/.cooked/Materials/cube.omat")
+          "/Cooked/Materials/cube.omat")
         .Set("/cameras/perspective", json::parse(R"([
             { "node": 0, "aspect_mode": "auto", "fov_y": 1.2, "near_plane": 0.1, "far_plane": 500.0 }
           ])"))
         .Set("/lights/directional", json::parse(R"([
             { "node": 0, "common": { "casts_shadows": true }, "intensity_lux": 10000.0 }
           ])"))
-        .AppendReference("/references/scripts", "/.cooked/Scripts/spin.oscript")
+        .AppendReference("/references/scripts", "/Cooked/Scripts/spin.oscript")
         .AppendReference(
-          "/references/input_actions", "/.cooked/Input/jump.oiact")
+          "/references/input_actions", "/Cooked/Input/jump.oiact")
         .AppendReference(
-          "/references/input_mapping_contexts", "/.cooked/Input/gameplay.oimap")
+          "/references/input_mapping_contexts", "/Cooked/Input/gameplay.oimap")
         .AppendReference(
-          "/references/physics_sidecars", "/.cooked/Scenes/DemoScene.opscene")
+          "/references/physics_sidecars", "/Cooked/Scenes/DemoScene.opscene")
         .Text(),
       true,
       "",
@@ -244,7 +244,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     SchemaCase {
       "RejectsAnOverrideKeyItsOwnerDoesNotHave",
       Scene("BadScene")
-        .Renderable(0, "/.cooked/Geometry/cube.ogeo")
+        .Renderable(0, "/Cooked/Geometry/cube.ogeo")
         .Set("/renderables/0/overrides/values/~1visible", false)
         .Text(),
       false,
@@ -286,9 +286,9 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
           })"))
         .Set("/environment", json::parse(kFogEnvironment))
         .Reference("/environment/fog/inscattering_color_cubemap_ref",
-          "/.cooked/Textures/fog_probe.otex")
+          "/Cooked/Textures/fog_probe.otex")
         .Reference("/environment/sky_light/cubemap_ref",
-          "/.cooked/Textures/sky_probe.otex")
+          "/Cooked/Textures/sky_probe.otex")
         .Set("/local_fog_volumes", json::parse(R"([
             {
               "node": 1,

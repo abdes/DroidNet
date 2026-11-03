@@ -163,7 +163,7 @@ NOLINT_TEST(ImportJobLifetimeTest, ExceptionPreservesDrainedSessionTelemetry)
   const auto root = temp.Path() / "root";
   imp::ImportRequest request;
   request.source_path = root / "source.json";
-  request.asset_virtual_path = "/.cooked/source.omat";
+  request.asset_virtual_path = "/Cooked/source.omat";
   request.source_mount_path
     = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root;
@@ -213,7 +213,7 @@ NOLINT_TEST(ImportJobLifetimeTest,
   const auto root = temp.Path() / "oxygen_job_lifetime_retry";
   imp::ImportRequest request;
   request.source_path = root / "source.json";
-  request.asset_virtual_path = "/.cooked/source.omat";
+  request.asset_virtual_path = "/Cooked/source.omat";
   request.source_mount_path
     = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root;

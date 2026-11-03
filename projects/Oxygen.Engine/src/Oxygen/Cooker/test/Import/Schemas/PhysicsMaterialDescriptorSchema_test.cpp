@@ -30,9 +30,7 @@ auto Schema() -> const json&
 
 auto Ground() -> PhysicsMaterialDescriptor
 {
-  return PhysicsMaterialDescriptor {
-    "/.cooked/Physics/Materials/ground.opmat"
-  };
+  return PhysicsMaterialDescriptor { "/Cooked/Physics/Materials/ground.opmat" };
 }
 
 class PhysicsMaterialDescriptorSchemaTest
@@ -73,7 +71,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PhysicsMaterialDescriptorSchemaTest,
     SchemaCase {
       "RejectsStaleIdentityField",
       Ground()
-        .Set("/virtual_path", "/.cooked/Physics/Materials/ground.opmat")
+        .Set("/virtual_path", "/Cooked/Physics/Materials/ground.opmat")
         .Text(),
       false,
       "'virtual_path'",

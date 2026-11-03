@@ -124,7 +124,7 @@ loose cooked tree. `VirtualPath` implements the same rules as the engine's
 [virtual path rules](../Oxygen.Engine/src/Oxygen/Content/Docs/virtual_paths.md):
 segments in NFC Unicode 15.1 without control or reserved characters, edge
 spaces, trailing dots or Windows device names, at most 255 bytes; mounts that
-are identifiers, with a leading dot reserved for the engine; and no limit on the
+are identifiers, never starting with a dot; and no limit on the
 length of a path. Every refusal is a `VirtualPathError` whose `ToCode()` is the
 code the engine returns for the same input, and whose `ToMessage()` tells a user
 what to change.
@@ -157,7 +157,7 @@ engine source tree.
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `Validate(path, rules)`                            | A whole virtual path; `VirtualPathRuleSet.Authored` adds the derived content rule               |
 | `ValidateSegment(segment, rules)`                  | One file or folder name below a mount                                                           |
-| `ValidateMountName(mount, rules)`                  | A mount name; an authored mount refuses the leading dot the engine reserves                     |
+| `ValidateMountName(mount)`                         | A mount name, the same rule for every mount table and path                                      |
 | `NormalizeTypedName(typed)`                        | A name a user typed, trimmed and in NFC, the form it is checked and used in                     |
 | `FoldCase(text)`, `VirtualPathComparer.CaseFolded` | Case-only siblings, which a case-insensitive file system holds in one file                      |
 | `IsDerivedContent(segment)`                        | Segments an authored path refuses: any starting with `.` (`.build`, `.pipeline`), `SourceMedia` |

@@ -47,7 +47,7 @@ namespace {
   {
     auto request = ImportRequest {};
     request.source_path = paths.source.lexically_normal();
-    request.asset_virtual_path = "/.cooked/Resources/inline.buffers";
+    request.asset_virtual_path = "/Cooked/Resources/inline.buffers";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = paths.cooked;
@@ -201,22 +201,22 @@ namespace {
     WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
     auto container = oxygen::cooker::test::BufferContainer {
-      "/.cooked/Resources/inline.buffers",
+      "/Cooked/Resources/inline.buffers",
     };
     container.Set("/name", "SharedBuffers")
       .AppendBuffer(
         MakeContainerBuffer(vb_source.filename().generic_string(), 1U, 32U),
-        "/.cooked/Resources/Buffers/shared_vertices.obuf")
+        "/Cooked/Resources/Buffers/shared_vertices.obuf")
       .AppendBuffer(
         MakeContainerBuffer(ib_source.filename().generic_string(), 2U, 4U),
-        "/.cooked/Resources/Buffers/shared_indices.obuf");
+        "/Cooked/Resources/Buffers/shared_indices.obuf");
     const auto buffer_descriptor = container.Json();
     WriteText(buffer_manifest_path, container.Text());
 
     const auto geometry_descriptor = MakeStandardGeometry(
-      "/.cooked/Geometry/SharedCube.ogeo", "/.cooked/Materials/default.omat",
-      "/.cooked/Resources/Buffers/shared_vertices.obuf",
-      "/.cooked/Resources/Buffers/shared_indices.obuf");
+      "/Cooked/Geometry/SharedCube.ogeo", "/Cooked/Materials/default.omat",
+      "/Cooked/Resources/Buffers/shared_vertices.obuf",
+      "/Cooked/Resources/Buffers/shared_indices.obuf");
     WriteText(geometry_path, geometry_descriptor.Text());
 
     return LocalBufferSources {
@@ -377,17 +377,17 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
-  auto descriptor_doc = MakeStandardGeometry("/.cooked/Geometry/Cube.ogeo",
-    "/.cooked/Materials/default.omat",
-    "/.cooked/Resources/Buffers/cube_vertices.obuf",
-    "/.cooked/Resources/Buffers/cube_indices.obuf");
+  auto descriptor_doc = MakeStandardGeometry("/Cooked/Geometry/Cube.ogeo",
+    "/Cooked/Materials/default.omat",
+    "/Cooked/Resources/Buffers/cube_vertices.obuf",
+    "/Cooked/Resources/Buffers/cube_indices.obuf");
   descriptor_doc
     .AppendBuffer(
       MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true),
-      "/.cooked/Resources/Buffers/cube_vertices.obuf")
+      "/Cooked/Resources/Buffers/cube_vertices.obuf")
     .AppendBuffer(
       MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true),
-      "/.cooked/Resources/Buffers/cube_indices.obuf");
+      "/Cooked/Resources/Buffers/cube_indices.obuf");
   WriteText(descriptor_path, descriptor_doc.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {
@@ -454,7 +454,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   ASSERT_HAS_VALUE(submesh_desc_read);
   const auto& submesh_desc = *submesh_desc_read;
   EXPECT_EQ(submesh_desc.material_asset_key,
-    oxygen::data::AssetKey::FromVirtualPath("/.cooked/Materials/default.omat"));
+    oxygen::data::AssetKey::FromVirtualPath("/Cooked/Materials/default.omat"));
   EXPECT_TRUE(CanParseGeometryDescriptor(descriptor_bytes));
 }
 
@@ -574,23 +574,22 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
   auto container = oxygen::cooker::test::BufferContainer {
-    "/.cooked/Resources/inline.buffers",
+    "/Cooked/Resources/inline.buffers",
   };
   container.Set("/name", "ContextSharedBuffers")
     .AppendBuffer(
       MakeContainerBuffer(vb_source.filename().generic_string(), 1U, 32U),
-      "/.cooked/Resources/Buffers/context_vertices.obuf")
+      "/Cooked/Resources/Buffers/context_vertices.obuf")
     .AppendBuffer(
       MakeContainerBuffer(ib_source.filename().generic_string(), 2U, 4U),
-      "/.cooked/Resources/Buffers/context_indices.obuf");
+      "/Cooked/Resources/Buffers/context_indices.obuf");
   const auto buffer_descriptor = container.Json();
   WriteText(buffer_manifest_path, container.Text());
 
-  const auto geometry_descriptor
-    = MakeStandardGeometry("/.cooked/Geometry/ContextSharedCube.ogeo",
-      "/.cooked/Materials/default.omat",
-      "/.cooked/Resources/Buffers/context_vertices.obuf",
-      "/.cooked/Resources/Buffers/context_indices.obuf");
+  const auto geometry_descriptor = MakeStandardGeometry(
+    "/Cooked/Geometry/ContextSharedCube.ogeo", "/Cooked/Materials/default.omat",
+    "/Cooked/Resources/Buffers/context_vertices.obuf",
+    "/Cooked/Resources/Buffers/context_indices.obuf");
   WriteText(geometry_path, geometry_descriptor.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {
@@ -644,22 +643,22 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
   auto container = oxygen::cooker::test::BufferContainer {
-    "/.cooked/Resources/inline.buffers",
+    "/Cooked/Resources/inline.buffers",
   };
   container.Set("/name", "AmbiguousBuffers")
     .AppendBuffer(
       MakeContainerBuffer(vb_source.filename().generic_string(), 1U, 32U),
-      "/.cooked/Resources/Buffers/ambiguous_vertices.obuf")
+      "/Cooked/Resources/Buffers/ambiguous_vertices.obuf")
     .AppendBuffer(
       MakeContainerBuffer(ib_source.filename().generic_string(), 2U, 4U),
-      "/.cooked/Resources/Buffers/ambiguous_indices.obuf");
+      "/Cooked/Resources/Buffers/ambiguous_indices.obuf");
   const auto buffer_descriptor = container.Json();
   WriteText(buffer_manifest_path, container.Text());
 
   const auto geometry_descriptor = MakeStandardGeometry(
-    "/.cooked/Geometry/AmbiguousCube.ogeo", "/.cooked/Materials/default.omat",
-    "/.cooked/Resources/Buffers/ambiguous_vertices.obuf",
-    "/.cooked/Resources/Buffers/ambiguous_indices.obuf");
+    "/Cooked/Geometry/AmbiguousCube.ogeo", "/Cooked/Materials/default.omat",
+    "/Cooked/Resources/Buffers/ambiguous_vertices.obuf",
+    "/Cooked/Resources/Buffers/ambiguous_indices.obuf");
   WriteText(geometry_path, geometry_descriptor.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {
@@ -706,11 +705,10 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   CookDefaultMaterial(cooked_root);
 
-  const auto descriptor_doc
-    = MakeStandardGeometry("/.cooked/Geometry/UnmountedBuffers.ogeo",
-      "/.cooked/Materials/default.omat",
-      "/foreign/Resources/Buffers/foreign_vertices.obuf",
-      "/foreign/Resources/Buffers/foreign_indices.obuf");
+  const auto descriptor_doc = MakeStandardGeometry(
+    "/Cooked/Geometry/UnmountedBuffers.ogeo", "/Cooked/Materials/default.omat",
+    "/foreign/Resources/Buffers/foreign_vertices.obuf",
+    "/foreign/Resources/Buffers/foreign_indices.obuf");
   WriteText(descriptor_path, descriptor_doc.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {
@@ -751,16 +749,16 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
   auto descriptor_doc = MakeStandardGeometry(
-    "/.cooked/Geometry/CubeMissingView.ogeo", "/.cooked/Materials/default.omat",
-    "/.cooked/Resources/Buffers/cube_vertices.obuf",
-    "/.cooked/Resources/Buffers/cube_indices.obuf", "lod_missing");
+    "/Cooked/Geometry/CubeMissingView.ogeo", "/Cooked/Materials/default.omat",
+    "/Cooked/Resources/Buffers/cube_vertices.obuf",
+    "/Cooked/Resources/Buffers/cube_indices.obuf", "lod_missing");
   descriptor_doc
     .AppendBuffer(
       MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true),
-      "/.cooked/Resources/Buffers/cube_vertices.obuf")
+      "/Cooked/Resources/Buffers/cube_vertices.obuf")
     .AppendBuffer(
       MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true),
-      "/.cooked/Resources/Buffers/cube_indices.obuf");
+      "/Cooked/Resources/Buffers/cube_indices.obuf");
   WriteText(descriptor_path, descriptor_doc.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {
@@ -814,30 +812,30 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
-  auto descriptor_a = MakeStandardGeometry("/.cooked/Geometry/SharedA.ogeo",
-    "/.cooked/Materials/default.omat",
-    "/.cooked/Resources/Buffers/shared_vertices.obuf",
-    "/.cooked/Resources/Buffers/shared_indices.obuf");
+  auto descriptor_a = MakeStandardGeometry("/Cooked/Geometry/SharedA.ogeo",
+    "/Cooked/Materials/default.omat",
+    "/Cooked/Resources/Buffers/shared_vertices.obuf",
+    "/Cooked/Resources/Buffers/shared_indices.obuf");
   descriptor_a
     .AppendBuffer(
       MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true),
-      "/.cooked/Resources/Buffers/shared_vertices.obuf")
+      "/Cooked/Resources/Buffers/shared_vertices.obuf")
     .AppendBuffer(
       MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true),
-      "/.cooked/Resources/Buffers/shared_indices.obuf");
+      "/Cooked/Resources/Buffers/shared_indices.obuf");
   WriteText(descriptor_a_path, descriptor_a.Text());
 
-  auto descriptor_b = MakeStandardGeometry("/.cooked/Geometry/SharedB.ogeo",
-    "/.cooked/Materials/default.omat",
-    "/.cooked/Resources/Buffers/alt_vertices.obuf",
-    "/.cooked/Resources/Buffers/alt_indices.obuf");
+  auto descriptor_b = MakeStandardGeometry("/Cooked/Geometry/SharedB.ogeo",
+    "/Cooked/Materials/default.omat",
+    "/Cooked/Resources/Buffers/alt_vertices.obuf",
+    "/Cooked/Resources/Buffers/alt_indices.obuf");
   descriptor_b
     .AppendBuffer(
       MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true),
-      "/.cooked/Resources/Buffers/alt_vertices.obuf")
+      "/Cooked/Resources/Buffers/alt_vertices.obuf")
     .AppendBuffer(
       MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true),
-      "/.cooked/Resources/Buffers/alt_indices.obuf");
+      "/Cooked/Resources/Buffers/alt_indices.obuf");
   WriteText(descriptor_b_path, descriptor_b.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {
@@ -897,16 +895,16 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   WriteBytes(shared_source, std::span<const std::byte>(shared_bytes));
 
   auto descriptor_doc = MakeStandardGeometry(
-    "/.cooked/Geometry/DedupConflict.ogeo", "/.cooked/Materials/default.omat",
-    "/.cooked/Resources/Buffers/conflict_vb.obuf",
-    "/.cooked/Resources/Buffers/conflict_ib.obuf");
+    "/Cooked/Geometry/DedupConflict.ogeo", "/Cooked/Materials/default.omat",
+    "/Cooked/Resources/Buffers/conflict_vb.obuf",
+    "/Cooked/Resources/Buffers/conflict_ib.obuf");
   descriptor_doc
     .AppendBuffer(
       MakeBuffer(shared_source.filename().generic_string(), 3U, 4U, true),
-      "/.cooked/Resources/Buffers/conflict_vb.obuf")
+      "/Cooked/Resources/Buffers/conflict_vb.obuf")
     .AppendBuffer(
       MakeBuffer(shared_source.filename().generic_string(), 3U, 4U, true),
-      "/.cooked/Resources/Buffers/conflict_ib.obuf");
+      "/Cooked/Resources/Buffers/conflict_ib.obuf");
   WriteText(descriptor_path, descriptor_doc.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {

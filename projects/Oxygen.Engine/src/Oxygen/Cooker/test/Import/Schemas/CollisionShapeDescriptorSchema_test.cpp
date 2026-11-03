@@ -38,8 +38,8 @@ auto Shape(const std::string& name, const std::string& material)
   -> CollisionShapeDescriptor
 {
   return CollisionShapeDescriptor {
-    "/.cooked/Physics/Shapes/" + name + ".ocshape",
-    "/.cooked/Physics/Materials/" + material + ".opmat",
+    "/Cooked/Physics/Shapes/" + name + ".ocshape",
+    "/Cooked/Physics/Materials/" + material + ".opmat",
   }
     .Set("/name", name);
 }
@@ -102,7 +102,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, CollisionShapeDescriptorSchemaCaseTest,
     SchemaCase {
       "RejectsStaleIdentityField",
       Shape("floor_box", "ground")
-        .Set("/virtual_path", "/.cooked/Physics/Shapes/floor_box.ocshape")
+        .Set("/virtual_path", "/Cooked/Physics/Shapes/floor_box.ocshape")
         .Text(),
       false,
       "'virtual_path'",
@@ -110,7 +110,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, CollisionShapeDescriptorSchemaCaseTest,
     SchemaCase {
       "RejectsTopLevelUnknownFieldDocument",
       HullShape()
-        .Set("/unexpected_field", "/.cooked/Physics/Resources/hull.opres")
+        .Set("/unexpected_field", "/Cooked/Physics/Resources/hull.opres")
         .Text(),
       false,
       "'unexpected_field'",
@@ -127,8 +127,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, CollisionShapeDescriptorSchemaCaseTest,
         .Set("/shape_type", "sphere")
         .Remove("/half_extents")
         .Set("/radius", 1.0)
-        .Set(
-          "/unexpected_field", "/.cooked/Physics/Resources/not_allowed.opres")
+        .Set("/unexpected_field", "/Cooked/Physics/Resources/not_allowed.opres")
         .Text(),
       false,
       "'unexpected_field'",

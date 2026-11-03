@@ -62,8 +62,7 @@ namespace {
 
   //! The identity a material request is submitted under.
   struct MaterialIdentity final {
-    std::string_view asset_virtual_path
-      = "/.cooked/Materials/woodfloor007.omat";
+    std::string_view asset_virtual_path = "/Cooked/Materials/woodfloor007.omat";
     std::string_view job_name = "woodfloor007";
   };
 
@@ -134,7 +133,7 @@ namespace {
       HasDiagnosticCode(other->diagnostics, "import.identity_collision"));
     const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
     const auto key
-      = index.FindAssetKeyByVirtualPath("/.cooked/Materials/woodfloor007.omat");
+      = index.FindAssetKeyByVirtualPath("/Cooked/Materials/woodfloor007.omat");
     ASSERT_HAS_VALUE(key);
     EXPECT_EQ(index.FindSourcePath(*key),
       std::optional<std::string_view>("/Content/A/woodfloor007.omat.json"));
@@ -153,7 +152,7 @@ namespace {
       }
     })",
       {
-        .asset_virtual_path = "/.cooked/Materials/HdrEmission.omat",
+        .asset_virtual_path = "/Cooked/Materials/HdrEmission.omat",
         .job_name = "HdrEmission",
       }));
     ASSERT_HAS_VALUE(report);
@@ -174,7 +173,7 @@ namespace {
   {
     const auto cooked_root = TempDir() / "resolve_texture_virtual_path";
     std::filesystem::create_directories(cooked_root);
-    auto textures = LooseCookedRoot { ".cooked" };
+    auto textures = LooseCookedRoot { "Cooked" };
     const auto texture_row = textures.AddTexture(SeedBytes(1U));
     textures.DescribeTexture(
       "Resources/Textures/woodfloor007_color.otex", texture_row);
@@ -204,7 +203,7 @@ namespace {
     EXPECT_EQ(desc.base_color_texture.get(), 0U);
     const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
     const auto key
-      = index.FindAssetKeyByVirtualPath("/.cooked/Materials/woodfloor007.omat");
+      = index.FindAssetKeyByVirtualPath("/Cooked/Materials/woodfloor007.omat");
     ASSERT_HAS_VALUE(key);
     const auto references = index.FindAssetReferences(*key);
     ASSERT_HAS_VALUE(references);
@@ -222,7 +221,7 @@ namespace {
   {
     const auto cooked_root = TempDir() / "ignore_hashed_texture_name";
     std::filesystem::create_directories(cooked_root);
-    auto textures = LooseCookedRoot { ".cooked" };
+    auto textures = LooseCookedRoot { "Cooked" };
     const auto texture_row = textures.AddTexture(SeedBytes(1U));
     textures.DescribeTexture(
       "Resources/Textures/woodfloor007_color_1234567890abcdef.otex",
@@ -314,7 +313,7 @@ namespace {
       std::filesystem::create_directories(cooked_root);
       auto request = MakeRequest(cooked_root, kDescriptor,
         {
-          .asset_virtual_path = "/.cooked/Materials/Tiles.omat",
+          .asset_virtual_path = "/Cooked/Materials/Tiles.omat",
           .job_name = "Tiles",
         });
       request.cooked_context_roots = { context };
@@ -331,7 +330,7 @@ namespace {
       EXPECT_EQ(desc.normal_texture.get(), 0U);
       const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
       const auto key
-        = index.FindAssetKeyByVirtualPath("/.cooked/Materials/Tiles.omat");
+        = index.FindAssetKeyByVirtualPath("/Cooked/Materials/Tiles.omat");
       ASSERT_HAS_VALUE(key);
       const auto references = index.FindAssetReferences(*key);
       ASSERT_HAS_VALUE(references);

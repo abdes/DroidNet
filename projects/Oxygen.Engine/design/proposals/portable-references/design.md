@@ -189,10 +189,11 @@ a project, like `mount.folder_missing`.
 
 Further mount rules this design fixes:
 
-- **One mount-name rule.** `IsValidMountName` and the editor's
+- **One mount-name rule.** The engine's mount table and the editor's
   `MountTableBuilder` call the virtual path mount rule
-  (`content::ValidateMountName`, `VirtualPath.ValidateMount`) and add only the
-  table's own restrictions: no leading `.` and no reserved name. The schema
+  (`content::ValidateMountName`, `VirtualPath.ValidateMountName`), which
+  refuses a leading `.`, and add only the table's own restriction: no reserved
+  name. The schema
   pattern in `oxygen.mounts.schema.json` and `Project.oxy` follows it. The
   64-character cap that only the mount table had is gone.
 - **Cooked folders overlap like source folders.** A `Cooked` mount bound to a

@@ -240,7 +240,7 @@ For each work item:
 1. Check cancellation; if canceled, return `success=false`.
 2. Compute material identity:
    - `virtual_path = request.ModelProductVirtualPath(storage_material_name, ".omat")`,
-     flat under the model (`/.cooked/Ship.glb/Paint.omat`), or a material
+     flat under the model (`/Cooked/Ship.glb/Paint.omat`), or a material
      descriptor job's identity
    - `descriptor_relpath`: that virtual path under the mount (`Ship.glb/Paint.omat`)
    - `material_key = xxHash3-128(canonical virtual_path)`

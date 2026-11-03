@@ -65,7 +65,7 @@ namespace {
       }
       auto request = ImportRequest {};
       request.source_path = source;
-      request.asset_virtual_path = "/.cooked/" + std::string(name);
+      request.asset_virtual_path = "/Cooked/" + std::string(name);
       request.source_mount_path
         = oxygen::cooker::test::SourceMountPath(request.source_path);
       request.cooked_root = CookedRoot();

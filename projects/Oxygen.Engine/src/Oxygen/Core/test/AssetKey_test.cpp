@@ -58,7 +58,7 @@ NOLINT_TEST_F(AssetKeyOrderingTest, DifferentCanonicalPathsProduceDistinctKeys)
     "/Game/Physics/Shapes/BoulderConvexHull.ocshape",
     "/Engine/Physics/Materials/Default.opmat",
     "/Pak/DLC01/Game/Physics/Materials/Lava.opmat",
-    "/.cooked/Physics/Materials/Rubber.opmat",
+    "/Cooked/Physics/Materials/Rubber.opmat",
   };
 
   auto keys = std::vector<AssetKey> {};
@@ -90,28 +90,28 @@ NOLINT_TEST_F(AssetKeyBasicTest, CanonicalVirtualPathGoldenVectorsAreStable)
 
   constexpr auto kCases = std::array<Case, 6> {
     Case {
-      "/Game/Physics/Materials/Rubber.opmat",
-      "5793612a-1c25-ca81-a7a2-8e696378559e",
+      .path = "/Game/Physics/Materials/Rubber.opmat",
+      .expected_key_text = "5793612a-1c25-ca81-a7a2-8e696378559e",
     },
     Case {
-      "/Game/Physics/Materials/Ice.opmat",
-      "2ae46e8e-adec-053c-79a8-4285244f4aa8",
+      .path = "/Game/Physics/Materials/Ice.opmat",
+      .expected_key_text = "2ae46e8e-adec-053c-79a8-4285244f4aa8",
     },
     Case {
-      "/Game/Physics/Shapes/BoulderConvexHull.ocshape",
-      "289f608f-101f-5a5d-b773-511a2a6f58f7",
+      .path = "/Game/Physics/Shapes/BoulderConvexHull.ocshape",
+      .expected_key_text = "289f608f-101f-5a5d-b773-511a2a6f58f7",
     },
     Case {
-      "/.cooked/Physics/Materials/Rubber.opmat",
-      "ce5e7e39-2579-0900-0498-db0169cef835",
+      .path = "/Cooked/Physics/Materials/Rubber.opmat",
+      .expected_key_text = "14b714ce-f2d7-0c1a-0dc9-b32216eaecc2",
     },
     Case {
-      "/.cooked/Scenes/physics_domains.opscene",
-      "a88a8d99-89e0-172b-a204-efa6f602182a",
+      .path = "/Cooked/Scenes/physics_domains.opscene",
+      .expected_key_text = "8a24ccca-1938-cae8-0d8d-dfb1cce89240",
     },
     Case {
-      "/Engine/Physics/Materials/Default.opmat",
-      "cdd33a69-2a2d-8cd7-dbb9-3e626bdb26c3",
+      .path = "/Engine/Physics/Materials/Default.opmat",
+      .expected_key_text = "cdd33a69-2a2d-8cd7-dbb9-3e626bdb26c3",
     },
   };
 

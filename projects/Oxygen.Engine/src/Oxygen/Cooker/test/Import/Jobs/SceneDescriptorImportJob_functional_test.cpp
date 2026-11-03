@@ -77,7 +77,6 @@ namespace {
   using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
   using oxygen::cooker::test::SceneDescriptor;
-  using oxygen::cooker::test::WriteBytes;
   using oxygen::cooker::test::WriteText;
   using oxygen::cooker::testing::GeometryBuilder;
   using oxygen::cooker::testing::LooseCookedRoot;
@@ -117,7 +116,7 @@ namespace {
 
     const auto root = TempDir() / "empty_scene_environment";
     std::filesystem::create_directories(root);
-    auto document = SceneDescriptor { "/.cooked/Scenes/EmptyScene.oscene" };
+    auto document = SceneDescriptor { "/Cooked/Scenes/EmptyScene.oscene" };
     document.Set("/nodes", json::array())
       .Set("/environment/background/color_rgb", json::array({ 0.1, 0.2, 0.3 }))
       .Set("/environment/post_process_volume/manual_exposure_ev", 9.5);
@@ -151,7 +150,7 @@ namespace {
 
     const auto root = TempDir() / "empty_scene_invalid_camera";
     std::filesystem::create_directories(root);
-    auto document = SceneDescriptor { "/.cooked/Scenes/EmptyScene.oscene" };
+    auto document = SceneDescriptor { "/Cooked/Scenes/EmptyScene.oscene" };
     document.Set("/nodes", json::array())
       .Set("/cameras/perspective",
         json::array({ json { { "node", 0 }, { "aspect_mode", "auto" } } }));
@@ -171,27 +170,27 @@ namespace {
     namespace world = data::pak::world;
     const auto root = TempDir() / "composed_scene";
     // The starting context is cooked: an index lists it.
-    auto inputs = LooseCookedRoot { ".cooked" };
+    auto inputs = LooseCookedRoot { "Cooked" };
     static_cast<void>(inputs.InputContext("Input/gameplay.oimap",
       oxygen::cooker::testing::InputContextBuilder { "Gameplay" }));
     Materialize(inputs.Files(), root);
-    auto model_document = SceneDescriptor { "/.cooked/Scenes/Model.oscene" };
+    auto model_document = SceneDescriptor { "/Cooked/Scenes/Model.oscene" };
     model_document.Set("/nodes/0/name", "part");
     const auto model = Import(MakeRequest(root, model_document));
     ASSERT_HAS_VALUE(model);
     ASSERT_TRUE(model->success);
 
-    auto level = SceneDescriptor { "/.cooked/Scenes/Level.oscene" };
+    auto level = SceneDescriptor { "/Cooked/Scenes/Level.oscene" };
     const auto instance = level.Node("model", 0U);
     level.Node("camera", 0U);
     level.Set("/nodes/" + std::to_string(instance) + "/instance",
-      json { { "scene_ref", level.Spell("/.cooked/Scenes/Model.oscene") } });
+      json { { "scene_ref", level.Spell("/Cooked/Scenes/Model.oscene") } });
     level.Set("/cameras/perspective",
       json::array({ json { { "node", 2 }, { "aspect_mode", "auto" } } }));
     level.Set("/starting_camera/node", 2);
     level.Append("/starting_input_contexts",
       json {
-        { "context_ref", level.Spell("/.cooked/Input/gameplay.oimap") },
+        { "context_ref", level.Spell("/Cooked/Input/gameplay.oimap") },
         { "priority", 3 },
       });
     const auto report = Import(MakeRequest(root, level));
@@ -199,9 +198,9 @@ namespace {
     ASSERT_TRUE(report->success);
 
     const auto model_key
-      = data::AssetKey::FromVirtualPath("/.cooked/Scenes/Model.oscene");
+      = data::AssetKey::FromVirtualPath("/Cooked/Scenes/Model.oscene");
     const auto context_key
-      = data::AssetKey::FromVirtualPath("/.cooked/Input/gameplay.oimap");
+      = data::AssetKey::FromVirtualPath("/Cooked/Input/gameplay.oimap");
     const auto bytes = ReadBytes(CookedFile(root, "Scenes/Level.oscene"));
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     EXPECT_FALSE(scene.IsModelScene());
@@ -219,7 +218,7 @@ namespace {
 
     const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
     const auto scene_key
-      = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/Level.oscene");
+      = index.FindAssetKeyByVirtualPath("/Cooked/Scenes/Level.oscene");
     ASSERT_HAS_VALUE(scene_key);
     const auto references = index.FindAssetReferences(*scene_key);
     ASSERT_HAS_VALUE(references);
@@ -243,7 +242,7 @@ namespace {
   {
     const auto root = TempDir() / "starting_camera_without_camera";
     std::filesystem::create_directories(root);
-    auto document = SceneDescriptor { "/.cooked/Scenes/Scene.oscene" };
+    auto document = SceneDescriptor { "/Cooked/Scenes/Scene.oscene" };
     document.Set("/starting_camera/node", 0);
     const auto report = Import(MakeRequest(root, document));
     ASSERT_HAS_VALUE(report);
@@ -261,7 +260,7 @@ namespace {
     const auto scene = [](const std::string_view name,
                          const std::string_view instanced) -> SceneDescriptor {
       auto document = SceneDescriptor {
-        "/.cooked/Scenes/" + std::string { name } + ".oscene",
+        "/Cooked/Scenes/" + std::string { name } + ".oscene",
       };
       if (!instanced.empty()) {
         document.Set("/nodes/0/instance",
@@ -269,7 +268,7 @@ namespace {
             {
               "scene_ref",
               document.Spell(
-                "/.cooked/Scenes/" + std::string(instanced) + ".oscene"),
+                "/Cooked/Scenes/" + std::string(instanced) + ".oscene"),
             },
           });
       }
@@ -307,7 +306,7 @@ namespace {
       = std::string_view { "00000000-0000-4000-8000-000000000002" };
     constexpr auto kStranger
       = std::string_view { "00000000-0000-4000-8000-000000000009" };
-    auto rig_document = SceneDescriptor { "/.cooked/Scenes/Rig.oscene" };
+    auto rig_document = SceneDescriptor { "/Cooked/Scenes/Rig.oscene" };
     rig_document.Set("/nodes/0/name", "rig");
     rig_document.Node("eye", 0U);
     const auto rig = Import(MakeRequest(root, rig_document));
@@ -321,11 +320,11 @@ namespace {
         { "components", std::move(components) },
       };
     };
-    auto level = SceneDescriptor { "/.cooked/Scenes/Level.oscene" };
+    auto level = SceneDescriptor { "/Cooked/Scenes/Level.oscene" };
     const auto rig_node = level.Node("rig", 0U);
     level
       .Set("/nodes/" + std::to_string(rig_node) + "/instance",
-        json { { "scene_ref", level.Spell("/.cooked/Scenes/Rig.oscene") } })
+        json { { "scene_ref", level.Spell("/Cooked/Scenes/Rig.oscene") } })
       .Set("/nodes/1/instance/overrides",
         nlohmann::json::array({ change(kEye), change(kStranger) }))
       .Set("/starting_camera",
@@ -356,7 +355,7 @@ namespace {
   auto MaterializeMeteringMask(const std::filesystem::path& root,
     const Format format, const bool reserved_row = false) -> ResourceIndexT
   {
-    auto textures = LooseCookedRoot { ".cooked" };
+    auto textures = LooseCookedRoot { "Cooked" };
     auto desc = LooseCookedRoot::OnePixelTexture();
     desc.format = static_cast<uint8_t>(format);
     const auto row = textures.AddTexture(SeedBytes(1U), desc);
@@ -385,10 +384,10 @@ namespace {
 
     const auto root = TempDir() / "mask_reference";
     std::filesystem::create_directories(root);
-    auto mask_scene = SceneDescriptor { "/.cooked/Scenes/MaskScene.oscene" };
+    auto mask_scene = SceneDescriptor { "/Cooked/Scenes/MaskScene.oscene" };
     mask_scene.Reference(
       "/environment/post_process_volume/auto_exposure_metering_mask",
-      "/.cooked/Textures/Meter.otex");
+      "/Cooked/Textures/Meter.otex");
     const auto mask_row = MaterializeMeteringMask(root, Format::kRGBA8UNorm);
     const auto success = Import(MakeRequest(root, mask_scene));
     ASSERT_HAS_VALUE(success);
@@ -400,7 +399,7 @@ namespace {
     EXPECT_EQ(exposure->auto_exposure_metering_mask.get(), 0U);
     const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
     const auto scene_key
-      = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/MaskScene.oscene");
+      = index.FindAssetKeyByVirtualPath("/Cooked/Scenes/MaskScene.oscene");
     ASSERT_HAS_VALUE(scene_key);
     const auto references = index.FindAssetReferences(*scene_key);
     ASSERT_HAS_VALUE(references);
@@ -427,7 +426,7 @@ namespace {
 
     // A deleted mask, a root that keeps the texture but no longer describes
     // it, leaves the scene without one, with a warning.
-    auto undescribed = LooseCookedRoot { ".cooked" };
+    auto undescribed = LooseCookedRoot { "Cooked" };
     static_cast<void>(undescribed.AddTexture(SeedBytes(1U)));
     Materialize(undescribed.Files(), root);
     std::filesystem::remove(root / "Textures/Meter.otex");
@@ -458,7 +457,7 @@ namespace {
     const auto kMask
       = library_root.DescribeTexture("Textures/Meter.otex", mask_row);
     Materialize(library_root.Files(), library);
-    auto mask_scene = SceneDescriptor { "/.cooked/Scenes/MaskScene.oscene" };
+    auto mask_scene = SceneDescriptor { "/Cooked/Scenes/MaskScene.oscene" };
     mask_scene.Reference(
       "/environment/post_process_volume/auto_exposure_metering_mask",
       "/Library/Textures/Meter.otex");
@@ -473,7 +472,7 @@ namespace {
     ASSERT_TRUE(report->success);
     const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
     const auto scene_key
-      = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/MaskScene.oscene");
+      = index.FindAssetKeyByVirtualPath("/Cooked/Scenes/MaskScene.oscene");
     ASSERT_HAS_VALUE(scene_key);
     const auto references = index.FindAssetReferences(*scene_key);
     ASSERT_HAS_VALUE(references);
@@ -495,7 +494,7 @@ namespace {
 
     const auto root = TempDir() / "physical_cameras";
     std::filesystem::create_directories(root);
-    auto physical = SceneDescriptor { "/.cooked/Scenes/Physical.oscene" };
+    auto physical = SceneDescriptor { "/Cooked/Scenes/Physical.oscene" };
     for (const auto* const name : { "Camera1", "Camera2", "Camera3" }) {
       physical.Node(name);
     }
@@ -586,7 +585,7 @@ namespace {
            },
            { { "exposure_compensation_ev", 10000 } },
          }) {
-      auto document = SceneDescriptor { "/.cooked/Scenes/Invalid.oscene" };
+      auto document = SceneDescriptor { "/Cooked/Scenes/Invalid.oscene" };
       document.Set("/environment/post_process_volume", invalid);
       SCOPED_TRACE(document.Text());
       const auto report = Import(MakeRequest(root, document));
@@ -605,7 +604,7 @@ namespace {
 
     const auto root = TempDir() / "node_flag_source_modes";
     std::filesystem::create_directories(root);
-    auto flags = SceneDescriptor { "/.cooked/Scenes/Flags.oscene" };
+    auto flags = SceneDescriptor { "/Cooked/Scenes/Flags.oscene" };
     flags.Set("/nodes/0/name", "HiddenRoot")
       .Set("/nodes/0/flags",
         json {
@@ -759,7 +758,7 @@ namespace {
     WriteIndexedReference(library,
       data::AssetKey::FromVirtualPath("/Library/Wrong.omat"),
       data::AssetType::kMaterial);
-    auto scene_document = SceneDescriptor { "/.cooked/Scenes/Scene.oscene" };
+    auto scene_document = SceneDescriptor { "/Cooked/Scenes/Scene.oscene" };
     scene_document.Set("/nodes/0/name", "Mesh")
       .Renderable(0, "/Art/Geometry/Mesh.ogeo");
     auto request = MakeRequest(output, scene_document);
@@ -777,7 +776,7 @@ namespace {
 
     const auto cooked_root = TempDir() / "resolves_and_emits";
     // Every asset the scene names is cooked: an index lists it.
-    auto cooked = LooseCookedRoot { ".cooked" };
+    auto cooked = LooseCookedRoot { "Cooked" };
     auto cube = GeometryBuilder { "Cube" };
     const auto surface
       = data::SurfaceId::FromString("00000000-0000-0000-0000-000000000001");
@@ -794,9 +793,9 @@ namespace {
       cooked.PhysicsSidecar("Scenes/PhysicsScene.opscene", physics_scene));
     Materialize(cooked.Files(), cooked_root);
 
-    auto demo = SceneDescriptor { "/.cooked/Scenes/DemoScene.oscene" };
+    auto demo = SceneDescriptor { "/Cooked/Scenes/DemoScene.oscene" };
     auto surface_values = json::object();
-    surface_values["/material"] = demo.Spell("/.cooked/Materials/cube.omat");
+    surface_values["/material"] = demo.Spell("/Cooked/Materials/cube.omat");
     surface_values["/visible"] = false;
     surface_values["/casts_shadows"] = true;
     auto lod_policy = json {
@@ -815,16 +814,15 @@ namespace {
       },
     });
     demo.Node("MeshNode", 0U);
-    demo.Renderable(1, "/.cooked/Geometry/cube.ogeo")
+    demo.Renderable(1, "/Cooked/Geometry/cube.ogeo")
       .Set("/renderables/0/overrides", std::move(override_document))
+      .Append("/references/scripts", demo.Spell("/Cooked/Scripts/spin.oscript"))
       .Append(
-        "/references/scripts", demo.Spell("/.cooked/Scripts/spin.oscript"))
-      .Append(
-        "/references/input_actions", demo.Spell("/.cooked/Input/jump.oiact"))
+        "/references/input_actions", demo.Spell("/Cooked/Input/jump.oiact"))
       .Append("/references/input_mapping_contexts",
-        demo.Spell("/.cooked/Input/gameplay.oimap"))
+        demo.Spell("/Cooked/Input/gameplay.oimap"))
       .Append("/references/physics_sidecars",
-        demo.Spell("/.cooked/Scenes/PhysicsScene.opscene"));
+        demo.Spell("/Cooked/Scenes/PhysicsScene.opscene"));
 
     const auto report = Import(MakeRequest(cooked_root, demo));
 
@@ -852,7 +850,7 @@ namespace {
     ASSERT_EQ(overrides.size(), 4U);
     EXPECT_EQ(overrides[0].override_id, OverrideId::kGeometrySurfaceMaterial);
     EXPECT_EQ(overrides[0].value.as_asset,
-      oxygen::data::AssetKey::FromVirtualPath("/.cooked/Materials/cube.omat"));
+      oxygen::data::AssetKey::FromVirtualPath("/Cooked/Materials/cube.omat"));
     EXPECT_EQ(overrides[1].override_id, OverrideId::kGeometrySurfaceVisibility);
     EXPECT_EQ(overrides[1].value.as_bool, 0U);
     EXPECT_EQ(
@@ -876,9 +874,9 @@ namespace {
     const auto cooked_root = TempDir() / "missing_geometry_reference";
     std::filesystem::create_directories(cooked_root);
 
-    auto demo = SceneDescriptor { "/.cooked/Scenes/DemoScene.oscene" };
+    auto demo = SceneDescriptor { "/Cooked/Scenes/DemoScene.oscene" };
     demo.Node("MeshNode", 0U);
-    demo.Renderable(1, "/.cooked/Geometry/missing.ogeo");
+    demo.Renderable(1, "/Cooked/Geometry/missing.ogeo");
 
     const auto report = Import(MakeRequest(cooked_root, demo));
 
@@ -895,8 +893,7 @@ namespace {
     const auto cooked_root = TempDir() / "directional_light_tuning";
     std::filesystem::create_directories(cooked_root);
 
-    auto tuning
-      = SceneDescriptor { "/.cooked/Scenes/DirectionalTuning.oscene" };
+    auto tuning = SceneDescriptor { "/Cooked/Scenes/DirectionalTuning.oscene" };
     auto sun = json::object();
     sun["node"] = 1;
     sun["common"] = json {
@@ -1020,7 +1017,7 @@ namespace {
     const auto cooked_root = TempDir() / "legacy_version";
     std::filesystem::create_directories(cooked_root);
 
-    auto legacy = SceneDescriptor { "/.cooked/Scenes/LegacyScene.oscene" };
+    auto legacy = SceneDescriptor { "/Cooked/Scenes/LegacyScene.oscene" };
     legacy.Set("/version", 2);
 
     const auto report = Import(MakeRequest(cooked_root, legacy));
@@ -1037,17 +1034,17 @@ namespace {
 
     const auto cooked_root = TempDir() / "environment_and_local_fog";
     std::filesystem::create_directories(cooked_root);
-    auto textures = LooseCookedRoot { ".cooked" };
+    auto textures = LooseCookedRoot { "Cooked" };
     const auto sky_probe = AddCubemap(textures, "Textures/sky_probe.otex");
     const auto fog_probe = AddCubemap(textures, "Textures/fog_probe.otex");
     const auto backdrop = AddCubemap(textures, "Textures/backdrop.otex");
     Materialize(textures.Files(), cooked_root);
 
     auto environment_scene
-      = SceneDescriptor { "/.cooked/Scenes/EnvironmentScene.oscene" };
+      = SceneDescriptor { "/Cooked/Scenes/EnvironmentScene.oscene" };
     const auto texture
       = [&environment_scene](const std::string_view leaf) -> std::string {
-      return environment_scene.Spell("/.cooked/Textures/" + std::string(leaf));
+      return environment_scene.Spell("/Cooked/Textures/" + std::string(leaf));
     };
     auto fog_document = json {
       { "enabled", true },
@@ -1179,7 +1176,7 @@ namespace {
     // Each cubemap binds its own source texture through the reference table.
     const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
     const auto scene_key = index.FindAssetKeyByVirtualPath(
-      "/.cooked/Scenes/EnvironmentScene.oscene");
+      "/Cooked/Scenes/EnvironmentScene.oscene");
     ASSERT_HAS_VALUE(scene_key);
     const auto references = index.FindAssetReferences(*scene_key);
     ASSERT_HAS_VALUE(references);
@@ -1210,7 +1207,7 @@ namespace {
 
     const auto root = TempDir() / "complete_environment";
     std::filesystem::create_directories(root);
-    auto document = SceneDescriptor { "/.cooked/Scenes/Environment.oscene" };
+    auto document = SceneDescriptor { "/Cooked/Scenes/Environment.oscene" };
     document
       .Set("/environment/post_process_volume",
         json {
@@ -1334,7 +1331,7 @@ namespace {
 
     const auto root = TempDir() / "previous_scene_version";
     std::filesystem::create_directories(root);
-    auto old_scene = SceneDescriptor { "/.cooked/Scenes/Old.oscene" };
+    auto old_scene = SceneDescriptor { "/Cooked/Scenes/Old.oscene" };
     old_scene.Set("/version", 5);
     const auto report = Import(MakeRequest(root, old_scene));
     ASSERT_HAS_VALUE(report);
@@ -1403,7 +1400,7 @@ namespace {
     std::filesystem::create_directories(output);
     const auto surface
       = data::to_string(data::SurfaceId::FromStableIdentity("fixture-surface"));
-    auto scene_document = SceneDescriptor { "/.cooked/Scenes/Scene.oscene" };
+    auto scene_document = SceneDescriptor { "/Cooked/Scenes/Scene.oscene" };
     auto surface_values = json::object();
     surface_values["/material"] = scene_document.Spell(kEngineDefault);
     scene_document.Set("/nodes/0/name", "Mesh")
@@ -1427,7 +1424,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
     const auto scene = data::SceneAsset(
-      data::AssetKey::FromVirtualPath("/.cooked/Scenes/Scene.oscene"),
+      data::AssetKey::FromVirtualPath("/Cooked/Scenes/Scene.oscene"),
       ReadBytes(CookedFile(output, "Scenes/Scene.oscene")));
     const auto renderables
       = scene.GetComponents<data::pak::world::RenderableRecord>();
@@ -1447,7 +1444,7 @@ namespace {
     std::filesystem::create_directories(output);
     const auto surface = data::to_string(
       data::SurfaceId::FromStableIdentity("surface-the-cube-does-not-declare"));
-    auto scene_document = SceneDescriptor { "/.cooked/Scenes/Scene.oscene" };
+    auto scene_document = SceneDescriptor { "/Cooked/Scenes/Scene.oscene" };
     auto surface_values = json::object();
     surface_values["/visible"] = false;
     scene_document.Set("/nodes/0/name", "Mesh")
@@ -1477,7 +1474,7 @@ namespace {
     ASSERT_NE(warning, report->diagnostics.end());
     EXPECT_EQ(warning->severity, ImportSeverity::kWarning);
     const auto scene = data::SceneAsset(
-      data::AssetKey::FromVirtualPath("/.cooked/Scenes/Scene.oscene"),
+      data::AssetKey::FromVirtualPath("/Cooked/Scenes/Scene.oscene"),
       ReadBytes(CookedFile(output, "Scenes/Scene.oscene")));
     EXPECT_EQ(
       scene.GetComponents<data::pak::world::RenderableRecord>().size(), 1U);

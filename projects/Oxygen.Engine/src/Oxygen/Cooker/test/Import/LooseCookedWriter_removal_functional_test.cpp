@@ -47,7 +47,7 @@ namespace {
 
   auto VirtualPath(const std::string& name) -> std::string
   {
-    return "/.cooked/Materials/" + MaterialFile(name);
+    return "/Cooked/Materials/" + MaterialFile(name);
   }
 
   auto DescriptorPath(const std::string& name) -> std::string

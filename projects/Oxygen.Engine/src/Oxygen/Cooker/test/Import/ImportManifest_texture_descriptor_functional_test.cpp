@@ -53,13 +53,13 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
         {
           { "type", "texture" },
           { "source", "first.png" },
-          { "virtual_path", "/.cooked/Textures/First.otex" },
+          { "virtual_path", "/Cooked/Textures/First.otex" },
           { "id", "first" },
         },
         {
           { "type", "texture" },
           { "source", "second.png" },
-          { "virtual_path", "/.cooked/Textures/Second.otex" },
+          { "virtual_path", "/Cooked/Textures/Second.otex" },
           { "id", "second" },
           { "output", "second" },
           { "source_key", job_key.ToString() },
@@ -114,7 +114,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
         {
           "type": "texture-descriptor",
           "source": "Textures/brick.texture.json",
-          "virtual_path": "/.cooked/Textures/Brick.otex",
+          "virtual_path": "/Cooked/Textures/Brick.otex",
           "name": "brick-job",
           "color_space": "linear"
         }
@@ -143,7 +143,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   // Descriptor value overrides default packing policy for this job.
   EXPECT_EQ(request->options.texture_tuning.packing_policy_id, "tight");
   // The job's identity reaches the request.
-  EXPECT_EQ(request->asset_virtual_path, "/.cooked/Textures/Brick.otex");
+  EXPECT_EQ(request->asset_virtual_path, "/Cooked/Textures/Brick.otex");
 }
 
 NOLINT_TEST(ImportManifestTextureDescriptorTest,
@@ -196,7 +196,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
         {
           "type": "texture-descriptor",
           "source": "Textures/bad.texture.json",
-          "virtual_path": "/.cooked/Textures/Bad.otex"
+          "virtual_path": "/Cooked/Textures/Bad.otex"
         }
       ]
     })");

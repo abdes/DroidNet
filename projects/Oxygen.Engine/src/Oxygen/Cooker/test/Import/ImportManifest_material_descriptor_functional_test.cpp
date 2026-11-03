@@ -41,7 +41,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       "domain": "opaque",
       "textures": {
         "base_color": {
-          "virtual_path": "/.cooked/Textures/WoodFloor_Color.otex"
+          "virtual_path": "/Cooked/Textures/WoodFloor_Color.otex"
         }
       }
     })");
@@ -59,7 +59,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
         {
           "type": "material-descriptor",
           "source": "Materials/wood.material.json",
-          "virtual_path": "/.cooked/Materials/WoodFloor.omat",
+          "virtual_path": "/Cooked/Materials/WoodFloor.omat",
           "name": "wood-job"
         }
       ]
@@ -77,7 +77,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "wood-job" });
-  EXPECT_EQ(request->asset_virtual_path, "/.cooked/Materials/WoodFloor.omat");
+  EXPECT_EQ(request->asset_virtual_path, "/Cooked/Materials/WoodFloor.omat");
   ASSERT_HAS_VALUE(request->material_descriptor);
 
   const auto normalized
@@ -110,13 +110,13 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
           "id": "wood.color",
           "type": "texture-descriptor",
           "source": "woodfloor007_color.texture.json",
-          "virtual_path": "/.cooked/Textures/WoodFloor_Color.otex"
+          "virtual_path": "/Cooked/Textures/WoodFloor_Color.otex"
         },
         {
           "id": "wood.material",
           "type": "material-descriptor",
           "source": "Materials/wood.material.json",
-          "virtual_path": "/.cooked/Materials/WoodFloor.omat",
+          "virtual_path": "/Cooked/Materials/WoodFloor.omat",
           "depends_on": ["wood.color"]
         }
       ]
@@ -178,7 +178,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       "name": "Bad",
       "textures": {
         "base_color": {
-          "virtual_path": "/.cooked/Textures/WoodFloor_Color.otex",
+          "virtual_path": "/Cooked/Textures/WoodFloor_Color.otex",
           "bad_key": 1
         }
       }
@@ -193,7 +193,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
         {
           "type": "material-descriptor",
           "source": "Materials/bad.material.json",
-          "virtual_path": "/.cooked/Materials/Bad.omat"
+          "virtual_path": "/Cooked/Materials/Bad.omat"
         }
       ]
     })");
@@ -275,7 +275,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, CarriesCookedContextRoots)
         {
           "type": "material-descriptor",
           "source": "Materials/tiles.material.json",
-          "virtual_path": "/.cooked/Materials/Tiles.omat",
+          "virtual_path": "/Cooked/Materials/Tiles.omat",
           "cooked_context_roots": ["Libraries/Textures"]
         }
       ]
@@ -353,7 +353,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, ModelJobRequiresItsIdentity)
       ::testing::HasSubstr("import.manifest.virtual_path_missing"))
       << type;
 
-    job["virtual_path"] = "/.cooked/Vehicles/Ship.src";
+    job["virtual_path"] = "/Cooked/Vehicles/Ship.src";
     WriteText(manifest_path,
       json {
         { "version", 1 },
@@ -367,7 +367,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, ModelJobRequiresItsIdentity)
     auto errors = std::ostringstream {};
     const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
     ASSERT_HAS_VALUE(manifest) << type << errors.str();
-    EXPECT_EQ(manifest->jobs.at(0).virtual_path, "/.cooked/Vehicles/Ship.src");
+    EXPECT_EQ(manifest->jobs.at(0).virtual_path, "/Cooked/Vehicles/Ship.src");
   }
 }
 

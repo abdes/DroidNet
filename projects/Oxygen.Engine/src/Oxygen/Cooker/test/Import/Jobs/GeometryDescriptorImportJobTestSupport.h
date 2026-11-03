@@ -61,17 +61,17 @@ struct GeometryRequestInput {
   std::filesystem::path cooked_root;
   json descriptor_doc;
   std::vector<std::filesystem::path> cooked_context_roots;
-  //! Defaults to `/.cooked/Geometry/<name>.ogeo`.
+  //! Defaults to `/Cooked/Geometry/<name>.ogeo`.
   std::string asset_virtual_path;
 };
 
-//! Cooks `/.cooked/Materials/default.omat`, the material the geometry
+//! Cooks `/Cooked/Materials/default.omat`, the material the geometry
 //! fixtures name, into `cooked_root`: an index lists it, as after the cook of
 //! a material. Call it before any cook into `cooked_root`.
 inline auto CookDefaultMaterial(const std::filesystem::path& cooked_root)
   -> void
 {
-  auto materials = oxygen::cooker::testing::LooseCookedRoot { ".cooked" };
+  auto materials = oxygen::cooker::testing::LooseCookedRoot { "Cooked" };
   static_cast<void>(materials.Material("Materials/default.omat"));
   oxygen::cooker::testing::Materialize(materials.Files(), cooked_root);
 }
@@ -81,7 +81,7 @@ inline auto MakeGeometryRequest(GeometryRequestInput input) -> ImportRequest
   auto& asset_virtual_path = input.asset_virtual_path;
   const auto& descriptor_doc = input.descriptor_doc;
   if (asset_virtual_path.empty()) {
-    asset_virtual_path = "/.cooked/Geometry/"
+    asset_virtual_path = "/Cooked/Geometry/"
       + descriptor_doc.at("name").get<std::string>() + ".ogeo";
   }
   auto request = ImportRequest {};

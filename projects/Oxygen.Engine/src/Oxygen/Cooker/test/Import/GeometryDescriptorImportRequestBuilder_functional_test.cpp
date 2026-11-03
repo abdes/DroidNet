@@ -58,7 +58,7 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
           "submeshes": [
             {
               "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-              "material_ref": "/.cooked/Materials/default.omat",
+              "material_ref": "/Cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__" } ]
             }
           ]
@@ -107,7 +107,7 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
           "submeshes": [
             {
               "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-              "material_ref": "/.cooked/Materials/default.omat",
+              "material_ref": "/Cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__", "unexpected": true } ]
             }
           ]
@@ -161,7 +161,7 @@ NOLINT_TEST(
           "submeshes": [
             {
               "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-              "material_ref": "/.cooked/Materials/default.omat",
+              "material_ref": "/Cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__" } ]
             }
           ]

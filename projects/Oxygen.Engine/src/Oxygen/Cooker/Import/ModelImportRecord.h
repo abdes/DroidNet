@@ -130,7 +130,7 @@ public:
   //! The suffix of a record's file name.
   static constexpr std::string_view kRecordSuffix = ".import.json";
   //! The conventional name of a generations folder in a host's own output
-  //! folder, such as `<project>/.cooked/ModelGenerations`.
+  //! folder, such as `<project>/Cooked/ModelGenerations`.
   static constexpr std::string_view kModelGenerationsFolder
     = "ModelGenerations";
 
@@ -273,7 +273,7 @@ private:
   friend class AsyncImportService;
   friend class detail::ImportJob;
   auto ClaimSubmission() -> void;
-  auto ReclaimUnusedGenerations() const -> size_t;
+  [[nodiscard]] auto ReclaimUnusedGenerations() const -> size_t;
   [[nodiscard]] auto AllowsWriting(const std::filesystem::path& root) const
     -> bool;
   struct State;

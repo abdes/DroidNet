@@ -35,16 +35,14 @@ are those of [virtual paths](../../Content/Docs/virtual_paths.md).
 **Mount roots.** A mount root is a short identifier registered with the
 `VirtualPathResolver` that maps to a physical content source namespace. Mount
 roots are not limited to a fixed allowlist: any mount name the rules accept
-works, and names starting with `.`, such as `/.cooked`, are reserved by the
-engine.
+works. A mount name never starts with `.`.
 
-| Mount root | Source type                                                                                                     | Example                                        |
-| ---------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `/Engine`  | Built-in engine assets (shipped with the engine binary, read-only)                                              | `/Engine/Physics/Materials/Default.opmat`      |
-| `/Game`    | Project-specific game assets (the primary authoring namespace)                                                  | `/Game/Physics/Materials/Rubber.opmat`         |
-| `/.cooked` | Active loose cooked output root (`container.index.bin`); used by the editor and cooker tools during development | `/.cooked/Physics/Materials/Rubber.opmat`      |
-| `/Pak`     | Conventional PAK namespace root; teams often place a package/mount identifier in the next segment               | `/Pak/DLC01/Game/Physics/Materials/Lava.opmat` |
-| `/Custom`  | User-defined root identifier                                                                                    | `/Custom/Physics/Materials/Rubber.opmat`       |
+| Mount root | Source type                                                                                       | Example                                        |
+| ---------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `/Engine`  | Built-in engine assets (shipped with the engine binary, read-only)                                | `/Engine/Physics/Materials/Default.opmat`      |
+| `/Game`    | Project-specific game assets (the primary authoring namespace)                                    | `/Game/Physics/Materials/Rubber.opmat`         |
+| `/Pak`     | Conventional PAK namespace root; teams often place a package/mount identifier in the next segment | `/Pak/DLC01/Game/Physics/Materials/Lava.opmat` |
+| `/Custom`  | User-defined root identifier                                                                      | `/Custom/Physics/Materials/Rubber.opmat`       |
 
 Resolution priority: patch PAKs beat base PAKs, base PAKs beat loose cooked
 roots, loose cooked roots beat engine built-ins. When multiple sources map the
@@ -61,8 +59,8 @@ Because the mount root is part of the identity,
 
 - The cooked layout follows the path: the job that cooks a physics material
   names its identity, and its descriptor is written there below the mount. A
-  loose cooked root mounted at `/.cooked` stores
-  `/.cooked/Physics/Materials/Rubber.opmat` at `Physics/Materials/Rubber.opmat`.
+  loose cooked root mounted at `/Game` stores
+  `/Game/Physics/Materials/Rubber.opmat` at `Physics/Materials/Rubber.opmat`.
 - A rename of any part of the virtual path — mount root, domain, asset name, or
   type suffix — produces a **new identity**. Cooked artifacts referencing the
   old `AssetKey` become dangling. This is intentional: it requires explicit
@@ -76,7 +74,7 @@ Because the mount root is part of the identity,
 
 | Segment       | Convention                                                                                                                       | Examples                                                                          |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `MountRoot`   | A mount name; engine-reserved names start with `.`                                                                               | `/Engine`, `/Game`, `/.cooked`, `/Custom`, `/game`                                |
+| `MountRoot`   | A mount name, never starting with `.`                                                                                            | `/Engine`, `/Game`, `/Custom`, `/game`                                            |
 | `Domain`      | **PascalCase**, one word, broad functional area that owns the asset class                                                        | `Physics`, `Rendering`, `Audio`, `Animation`, `World`, `UI`                       |
 | `Category`    | **PascalCase**, one or two words, logical sub-grouping within the domain                                                         | `Materials`, `Shapes`, `Joints`, `Vehicles`, `SoftBodies`, `Characters`, `Scenes` |
 | `Subcategory` | **PascalCase**, optional, for large categories                                                                                   | `Wheeled`, `Tracked`, `Ragdolls`                                                  |

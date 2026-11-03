@@ -60,14 +60,14 @@ INSTANTIATE_TEST_SUITE_P(Cases, MaterialDescriptorSchemaCaseTest,
         .Set("/parameters/base_color", json::array({ 1.0, 1.0, 1.0, 1.0 }))
         .Set("/parameters/metalness", 0.1)
         .Set("/parameters/roughness", 0.8)
-        .Texture("base_color", "/.cooked/Textures/WoodFloor_Color.otex")
+        .Texture("base_color", "/Cooked/Textures/WoodFloor_Color.otex")
         .Set("/textures/base_color/uv_set", 0)
         .Set(
           "/textures/base_color/uv_transform/scale", json::array({ 1.0, 1.0 }))
         .Set(
           "/textures/base_color/uv_transform/offset", json::array({ 0.0, 0.0 }))
         .Set("/textures/base_color/uv_transform/rotation_radians", 0.0)
-        .Texture("roughness", "/.cooked/Textures/WoodFloor_Roughness.otex")
+        .Texture("roughness", "/Cooked/Textures/WoodFloor_Roughness.otex")
         .Append("/shaders", json::parse(R"({
             "stage": "vertex",
             "source_path": "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl",
@@ -86,7 +86,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, MaterialDescriptorSchemaCaseTest,
     SchemaCase {
       "RejectsUnknownNestedFields",
       WoodFloor()
-        .Texture("base_color", "/.cooked/Textures/WoodFloor_Color.otex")
+        .Texture("base_color", "/Cooked/Textures/WoodFloor_Color.otex")
         .Set("/textures/base_color/unknown_setting", true)
         .Text(),
       false,

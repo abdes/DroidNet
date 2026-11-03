@@ -143,12 +143,12 @@ auto FloorShapeText(const std::string& identity, const std::string_view name,
 auto FloorBindingsText(const std::initializer_list<uint32_t> nodes,
   const std::string_view material) -> std::string
 {
-  auto sidecar = authored::PhysicsSidecar { "/.cooked/Scenes/level.opscene" };
+  auto sidecar = authored::PhysicsSidecar { "/Cooked/Scenes/level.opscene" };
   for (const auto node : nodes) {
     sidecar.AppendBinding("rigid_bodies",
       nlohmann::json {
         { "node_index", node },
-        { "shape_ref", sidecar.Spell("/.cooked/Physics/Shapes/floor.ocshape") },
+        { "shape_ref", sidecar.Spell("/Cooked/Physics/Shapes/floor.ocshape") },
         { "material_ref", sidecar.Spell(material) },
       });
   }
@@ -259,10 +259,10 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto root = MakeScenarioDir("rejected_descriptor_with_valid_material");
   const auto manifest_path = root / "import-manifest.json";
   WriteText(root / "Valid.material.json",
-    authored::MaterialDescriptor { "/.cooked/Materials/Valid.omat" }.Text());
+    authored::MaterialDescriptor { "/Cooked/Materials/Valid.omat" }.Text());
   // A geometry without LODs: the descriptor the batch must refuse.
   WriteText(root / "Invalid.geometry.json",
-    authored::GeometryDescriptor { "/.cooked/Geometry/Invalid.ogeo" }
+    authored::GeometryDescriptor { "/Cooked/Geometry/Invalid.ogeo" }
       .Remove("/lods")
       .Text());
   WriteText(manifest_path, R"({
@@ -271,9 +271,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     "mounts": [{"name": "Content", "path": "."}],
     "jobs": [
       {"type":"material-descriptor","source":"Valid.material.json",
-       "virtual_path":"/.cooked/Materials/Valid.omat"},
+       "virtual_path":"/Cooked/Materials/Valid.omat"},
       {"type":"geometry-descriptor","source":"Invalid.geometry.json",
-       "virtual_path":"/.cooked/Geometry/Invalid.ogeo"}
+       "virtual_path":"/Cooked/Geometry/Invalid.ogeo"}
     ]
   })");
 
@@ -318,9 +318,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
   const auto manifest_path = root / "import-manifest.json";
   const auto report_path = root / "report.json";
   WriteText(root / "Wood.material.json",
-    authored::MaterialDescriptor { "/.cooked/Wood.omat" }.Text());
+    authored::MaterialDescriptor { "/Cooked/Wood.omat" }.Text());
   WriteText(root / "Input" / "Player.input.json",
-    authored::InputSource { "/.cooked/Input/Player.input" }
+    authored::InputSource { "/Cooked/Input/Player.input" }
       .Action("Jump", "bool")
       .Context("OnFoot")
       .Append("/contexts/0/mappings",
@@ -330,9 +330,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
     R"({"version":1,"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[{"type":"material-descriptor","source":"Wood.material.json",
-      "virtual_path":"/.cooked/Wood.omat"},
+      "virtual_path":"/Cooked/Wood.omat"},
       {"id":"input","type":"input","source":"Input/Player.input.json",
-        "virtual_path":"/.cooked/Input/Player.input"}]})");
+        "virtual_path":"/Cooked/Input/Player.input"}]})");
 
   ASSERT_TRUE(RunBatch(manifest_path, std::nullopt, report_path).has_value())
     << Messages();
@@ -357,7 +357,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
   EXPECT_EQ(material.at(0).at("kind"), "asset");
   EXPECT_EQ(material.at(0).at("asset_type"),
     static_cast<uint8_t>(oxygen::data::AssetType::kMaterial));
-  EXPECT_EQ(material.at(0).at("virtual_path"), "/.cooked/Wood.omat");
+  EXPECT_EQ(material.at(0).at("virtual_path"), "/Cooked/Wood.omat");
 
   auto input_types = std::vector<uint8_t> {};
   auto input_paths = std::vector<std::string> {};
@@ -373,8 +373,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
       static_cast<uint8_t>(oxygen::data::AssetType::kInputAction),
       static_cast<uint8_t>(oxygen::data::AssetType::kInputMappingContext)));
   EXPECT_THAT(input_paths,
-    ::testing::UnorderedElementsAre("/.cooked/Input/Player.input/Jump.oiact",
-      "/.cooked/Input/Player.input/OnFoot.oimap"));
+    ::testing::UnorderedElementsAre("/Cooked/Input/Player.input/Jump.oiact",
+      "/Cooked/Input/Player.input/OnFoot.oimap"));
 }
 
 //! Two input sources in one folder that declare the same action name cook two
@@ -386,7 +386,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, InputSourcesInOneFolderKeepTheirKeys)
   const auto report_path = root / "report.json";
   for (const auto* name : { "Player", "Vehicle" }) {
     WriteText(root / "Input" / (std::string(name) + ".input.json"),
-      authored::InputSource { "/.cooked/Input/" + std::string(name) + ".input" }
+      authored::InputSource { "/Cooked/Input/" + std::string(name) + ".input" }
         .Action("Jump", "bool")
         .Text());
   }
@@ -395,9 +395,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, InputSourcesInOneFolderKeepTheirKeys)
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[
       {"id":"player","type":"input","source":"Input/Player.input.json",
-        "virtual_path":"/.cooked/Input/Player.input"},
+        "virtual_path":"/Cooked/Input/Player.input"},
       {"id":"vehicle","type":"input","source":"Input/Vehicle.input.json",
-        "virtual_path":"/.cooked/Input/Vehicle.input"}]})");
+        "virtual_path":"/Cooked/Input/Vehicle.input"}]})");
 
   ASSERT_TRUE(RunBatch(manifest_path, std::nullopt, report_path).has_value())
     << Messages();
@@ -413,8 +413,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, InputSourcesInOneFolderKeepTheirKeys)
     }
   }
   EXPECT_THAT(paths,
-    ::testing::UnorderedElementsAre("/.cooked/Input/Player.input/Jump.oiact",
-      "/.cooked/Input/Vehicle.input/Jump.oiact"));
+    ::testing::UnorderedElementsAre("/Cooked/Input/Player.input/Jump.oiact",
+      "/Cooked/Input/Vehicle.input/Jump.oiact"));
   ASSERT_EQ(keys.size(), 2U);
   EXPECT_NE(keys.at(0), keys.at(1));
 }
@@ -428,15 +428,15 @@ NOLINT_TEST_F(
   const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   WriteText(root / "Input" / "Common.input.json",
-    authored::InputSource { "/.cooked/Input/Common.input" }
+    authored::InputSource { "/Cooked/Input/Common.input" }
       .Action("Jump", "bool")
       .Text());
-  auto player = authored::InputSource { "/.cooked/Input/Player.input" };
+  auto player = authored::InputSource { "/Cooked/Input/Player.input" };
   player.Context("OnFoot").Append("/contexts/0/mappings",
     {
       {
         "action",
-        player.ActionReference("/.cooked/Input/Common.input/Jump.oiact"),
+        player.ActionReference("/Cooked/Input/Common.input/Jump.oiact"),
       },
       { "slot", "Space" },
     });
@@ -446,9 +446,9 @@ NOLINT_TEST_F(
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[
       {"id":"common","type":"input","source":"Input/Common.input.json",
-        "virtual_path":"/.cooked/Input/Common.input"},
+        "virtual_path":"/Cooked/Input/Common.input"},
       {"id":"player","type":"input","source":"Input/Player.input.json",
-        "virtual_path":"/.cooked/Input/Player.input",
+        "virtual_path":"/Cooked/Input/Player.input",
         "depends_on":["common"]}]})");
 
   EXPECT_TRUE(RunBatch(manifest_path).has_value()) << Messages();
@@ -461,13 +461,13 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, MappingToAMissingActionIsRefused)
 {
   const auto root = MakeScenarioDir("input_missing_action");
   const auto manifest_path = root / "import-manifest.json";
-  auto player = authored::InputSource { "/.cooked/Input/Player.input" };
+  auto player = authored::InputSource { "/Cooked/Input/Player.input" };
   player.Context("OnFoot")
     .Append("/contexts/0/mappings",
       {
         {
           "action",
-          player.ActionReference("/.cooked/Input/Common.input/Jump.oiact"),
+          player.ActionReference("/Cooked/Input/Common.input/Jump.oiact"),
         },
         { "slot", "Space" },
       })
@@ -479,7 +479,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, MappingToAMissingActionIsRefused)
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[
       {"id":"player","type":"input","source":"Input/Player.input.json",
-        "virtual_path":"/.cooked/Input/Player.input"}]})");
+        "virtual_path":"/Cooked/Input/Player.input"}]})");
 
   EXPECT_FALSE(RunBatch(manifest_path).has_value());
   EXPECT_THAT(
@@ -495,7 +495,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   WriteText(root / "Wood.material.json",
-    authored::MaterialDescriptor { "/.cooked/Wood.omat" }.Text());
+    authored::MaterialDescriptor { "/Cooked/Wood.omat" }.Text());
   WriteText(manifest_path,
     R"({"version":1,"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
@@ -515,9 +515,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto manifest_path = root / "import-manifest.json";
   std::ostringstream manifest;
   manifest << R"({"version":1,"mounts":[{"name":"Content","path":"."}],"jobs":[
-    {"id":"first","type":"texture","source":"first.png","virtual_path":"/.cooked/first.otex","output":"first","source_key":")"
+    {"id":"first","type":"texture","source":"first.png","virtual_path":"/Cooked/first.otex","output":"first","source_key":")"
            << oxygen::Uuid::Generate().ToString() << R"("},
-    {"id":"second","type":"texture","source":"second.png","virtual_path":"/.cooked/second.otex","output":"second","depends_on":["first"],"source_key":")"
+    {"id":"second","type":"texture","source":"second.png","virtual_path":"/Cooked/second.otex","output":"second","depends_on":["first"],"source_key":")"
            << oxygen::Uuid::Generate().ToString() << R"("}]})";
   WriteText(manifest_path, manifest.str());
   const auto shared_root = root / "shared";
@@ -534,9 +534,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto manifest_path = root / "import-manifest.json";
   std::ostringstream manifest;
   manifest << R"({"version":1,"mounts":[{"name":"Content","path":"."}],"jobs":[
-    {"type":"texture","source":"first.png","virtual_path":"/.cooked/first.otex","output":"Cooked","source_key":")"
+    {"type":"texture","source":"first.png","virtual_path":"/Cooked/first.otex","output":"Cooked","source_key":")"
            << oxygen::Uuid::Generate().ToString() << R"("},
-    {"type":"texture","source":"second.png","virtual_path":"/.cooked/second.otex","output":"cooked","source_key":")"
+    {"type":"texture","source":"second.png","virtual_path":"/Cooked/second.otex","output":"cooked","source_key":")"
            << oxygen::Uuid::Generate().ToString() << R"("}]})";
   WriteText(manifest_path, manifest.str());
   EXPECT_FALSE(RunBatch(manifest_path).has_value());
@@ -564,13 +564,13 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     const auto name = std::string("M") + std::to_string(index);
     const auto source = std::string("Materials/") + name + ".material.json";
     WriteText(root / source,
-      authored::MaterialDescriptor { "/.cooked/Materials/" + name + ".omat" }
+      authored::MaterialDescriptor { "/Cooked/Materials/" + name + ".omat" }
         .Text());
     if (index != 0U) {
       manifest << ',';
     }
     manifest << R"({"type":"material-descriptor","source":")" << source
-             << R"(","virtual_path":"/.cooked/Materials/)" << name
+             << R"(","virtual_path":"/Cooked/Materials/)" << name
              << R"(.omat"})";
   }
   manifest << "]}";
@@ -605,10 +605,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
         {
           "id": "physics.sidecar.main",
           "type": "physics-sidecar",
-          "target_scene_virtual_path": "/.cooked/Scenes/level.oscene",
+          "target_scene_virtual_path": "/Cooked/Scenes/level.oscene",
           "bindings": )"
-      + FloorBindingsText({ 0U }, "/.cooked/Physics/Materials/floor.opmat")
-      + R"(
+      + FloorBindingsText({ 0U }, "/Cooked/Physics/Materials/floor.opmat") + R"(
         }
       ]
     })");
@@ -636,9 +635,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
         {
           "id": "physics.sidecar.main",
           "type": "physics-sidecar",
-          "target_scene_virtual_path": "/.cooked/Scenes/level.oscene",
+          "target_scene_virtual_path": "/Cooked/Scenes/level.oscene",
           "bindings": )"
-      + FloorBindingsText({ 0U, 1U }, "/.cooked/Physics/Materials/floor.opmat")
+      + FloorBindingsText({ 0U, 1U }, "/Cooked/Physics/Materials/floor.opmat")
       + R"(
         }
       ]
@@ -664,13 +663,13 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 
   WriteText(mat_a,
     PhysicsMaterialText(
-      "/.cooked/Physics/Materials/shared.opmat", "shared_a", 0.8, 0.1));
+      "/Cooked/Physics/Materials/shared.opmat", "shared_a", 0.8, 0.1));
   WriteText(mat_b,
     PhysicsMaterialText(
-      "/.cooked/Physics/Materials/shared.opmat", "shared_b", 0.7, 0.2));
+      "/Cooked/Physics/Materials/shared.opmat", "shared_b", 0.7, 0.2));
   WriteText(shape,
-    FloorShapeText("/.cooked/Physics/Shapes/floor.ocshape", "floor_shape",
-      "/.cooked/Physics/Materials/shared.opmat"));
+    FloorShapeText("/Cooked/Physics/Shapes/floor.ocshape", "floor_shape",
+      "/Cooked/Physics/Materials/shared.opmat"));
 
   WriteText(manifest_path,
     R"({
@@ -682,19 +681,19 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "id": "physics.material.shared_a",
           "type": "physics-material-descriptor",
           "source": "Physics/shared_a.physics-material.json",
-          "virtual_path": "/.cooked/Physics/Materials/shared.opmat"
+          "virtual_path": "/Cooked/Physics/Materials/shared.opmat"
         },
         {
           "id": "physics.material.shared_b",
           "type": "physics-material-descriptor",
           "source": "Physics/shared_b.physics-material.json",
-          "virtual_path": "/.cooked/Physics/Materials/shared.opmat"
+          "virtual_path": "/Cooked/Physics/Materials/shared.opmat"
         },
         {
           "id": "physics.shape.floor",
           "type": "collision-shape-descriptor",
           "source": "Physics/floor.physics-shape.json",
-          "virtual_path": "/.cooked/Physics/Shapes/floor.ocshape"
+          "virtual_path": "/Cooked/Physics/Shapes/floor.ocshape"
         }
       ]
     })");
@@ -721,19 +720,19 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 
   WriteText(mat_a,
     PhysicsMaterialText(
-      "/.cooked/Physics/Materials/shared.opmat", "shared_a", 0.8, 0.1));
+      "/Cooked/Physics/Materials/shared.opmat", "shared_a", 0.8, 0.1));
   WriteText(mat_b,
     PhysicsMaterialText(
-      "/.cooked/Physics/Materials/shared.opmat", "shared_b", 0.7, 0.2));
+      "/Cooked/Physics/Materials/shared.opmat", "shared_b", 0.7, 0.2));
   WriteText(mat_base,
     PhysicsMaterialText(
-      "/.cooked/Physics/Materials/base.opmat", "base", 0.5, 0.1));
+      "/Cooked/Physics/Materials/base.opmat", "base", 0.5, 0.1));
   WriteText(shape_a,
-    FloorShapeText("/.cooked/Physics/Shapes/floor.ocshape", "floor_shape_a",
-      "/.cooked/Physics/Materials/base.opmat"));
+    FloorShapeText("/Cooked/Physics/Shapes/floor.ocshape", "floor_shape_a",
+      "/Cooked/Physics/Materials/base.opmat"));
   WriteText(shape_b,
-    FloorShapeText("/.cooked/Physics/Shapes/floor.ocshape", "floor_shape_b",
-      "/.cooked/Physics/Materials/base.opmat"));
+    FloorShapeText("/Cooked/Physics/Shapes/floor.ocshape", "floor_shape_b",
+      "/Cooked/Physics/Materials/base.opmat"));
 
   WriteText(manifest_path,
     R"({
@@ -745,38 +744,38 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "id": "physics.material.shared_a",
           "type": "physics-material-descriptor",
           "source": "Physics/shared_a.physics-material.json",
-          "virtual_path": "/.cooked/Physics/Materials/shared.opmat"
+          "virtual_path": "/Cooked/Physics/Materials/shared.opmat"
         },
         {
           "id": "physics.material.shared_b",
           "type": "physics-material-descriptor",
           "source": "Physics/shared_b.physics-material.json",
-          "virtual_path": "/.cooked/Physics/Materials/shared.opmat"
+          "virtual_path": "/Cooked/Physics/Materials/shared.opmat"
         },
         {
           "id": "physics.material.base",
           "type": "physics-material-descriptor",
           "source": "Physics/base.physics-material.json",
-          "virtual_path": "/.cooked/Physics/Materials/base.opmat"
+          "virtual_path": "/Cooked/Physics/Materials/base.opmat"
         },
         {
           "id": "physics.shape.floor_a",
           "type": "collision-shape-descriptor",
           "source": "Physics/floor_a.physics-shape.json",
-          "virtual_path": "/.cooked/Physics/Shapes/floor.ocshape"
+          "virtual_path": "/Cooked/Physics/Shapes/floor.ocshape"
         },
         {
           "id": "physics.shape.floor_b",
           "type": "collision-shape-descriptor",
           "source": "Physics/floor_b.physics-shape.json",
-          "virtual_path": "/.cooked/Physics/Shapes/floor.ocshape"
+          "virtual_path": "/Cooked/Physics/Shapes/floor.ocshape"
         },
         {
           "id": "physics.sidecar.main",
           "type": "physics-sidecar",
-          "target_scene_virtual_path": "/.cooked/Scenes/level.oscene",
+          "target_scene_virtual_path": "/Cooked/Scenes/level.oscene",
           "bindings": )"
-      + FloorBindingsText({ 0U, 1U }, "/.cooked/Physics/Materials/shared.opmat")
+      + FloorBindingsText({ 0U, 1U }, "/Cooked/Physics/Materials/shared.opmat")
       + R"(
         }
       ]
@@ -801,10 +800,10 @@ NOLINT_TEST_F(
 
   WriteText(mat_a,
     PhysicsMaterialText(
-      "/.cooked/Physics/Materials/mat_a.opmat", "mat_a", 0.5, 0.1));
+      "/Cooked/Physics/Materials/mat_a.opmat", "mat_a", 0.5, 0.1));
   WriteText(mat_b,
     PhysicsMaterialText(
-      "/.cooked/Physics/Materials/mat_b.opmat", "mat_b", 0.5, 0.1));
+      "/Cooked/Physics/Materials/mat_b.opmat", "mat_b", 0.5, 0.1));
 
   WriteText(manifest_path,
     R"({
@@ -817,14 +816,14 @@ NOLINT_TEST_F(
           "depends_on": ["mat.b"],
           "type": "physics-material-descriptor",
           "source": "Physics/mat_a.physics-material.json",
-          "virtual_path": "/.cooked/Physics/Materials/mat_a.opmat"
+          "virtual_path": "/Cooked/Physics/Materials/mat_a.opmat"
         },
         {
           "id": "mat.b",
           "depends_on": ["mat.a"],
           "type": "physics-material-descriptor",
           "source": "Physics/mat_b.physics-material.json",
-          "virtual_path": "/.cooked/Physics/Materials/mat_b.opmat"
+          "virtual_path": "/Cooked/Physics/Materials/mat_b.opmat"
         }
       ]
     })");
@@ -848,9 +847,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 
   WriteText(scene_source, "{}");
   WriteText(input_source,
-    authored::InputSource { "/.cooked/Input/rotate.input" }.Text());
+    authored::InputSource { "/Cooked/Input/rotate.input" }.Text());
   const auto sidecar = authored::PhysicsSidecar {
-    "/.cooked/Scenes/showcase_scene.opscene",
+    "/Cooked/Scenes/showcase_scene.opscene",
   };
   WriteText(sidecar_source, sidecar.Text());
 
@@ -870,13 +869,13 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "depends_on": ["physics.sidecar.main"],
           "type": "input",
           "source": "Input/rotate.input.json",
-          "virtual_path": "/.cooked/Input/rotate.input"
+          "virtual_path": "/Cooked/Input/rotate.input"
         },
         {
           "id": "physics.sidecar.main",
           "type": "physics-sidecar",
           "source": "Scenes/showcase_scene.physics.json",
-          "target_scene_virtual_path": "/.cooked/Scenes/showcase_scene.oscene",
+          "target_scene_virtual_path": "/Cooked/Scenes/showcase_scene.oscene",
           "bindings": )"
       + sidecar.Json().at("bindings").dump() + R"(
         }
@@ -901,7 +900,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 
   // A sidecar with its bindings at the top level instead of under `bindings`.
   WriteText(sidecar_source,
-    authored::PhysicsSidecar { "/.cooked/Scenes/missing_bindings.opscene" }
+    authored::PhysicsSidecar { "/Cooked/Scenes/missing_bindings.opscene" }
       .Remove("/bindings")
       .Set("/rigid_bodies", nlohmann::json::array())
       .Text());
@@ -916,7 +915,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "id": "physics.sidecar.main",
           "type": "physics-sidecar",
           "source": "Scenes/missing_bindings.physics-sidecar.json",
-          "target_scene_virtual_path": "/.cooked/Scenes/level.oscene"
+          "target_scene_virtual_path": "/Cooked/Scenes/level.oscene"
         }
       ]
     })");
@@ -946,14 +945,14 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleStillUsesLegacyCode)
           "depends_on": ["input.b"],
           "type": "input",
           "source": "Input/a.input.json",
-          "virtual_path": "/.cooked/Input/a.input"
+          "virtual_path": "/Cooked/Input/a.input"
         },
         {
           "id": "input.b",
           "depends_on": ["input.a"],
           "type": "input",
           "source": "Input/b.input.json",
-          "virtual_path": "/.cooked/Input/b.input"
+          "virtual_path": "/Cooked/Input/b.input"
         }
       ]
     })");
@@ -982,13 +981,13 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "depends_on": ["script.sidecar.b"],
           "type": "script-sidecar",
           "source": "Scenes/a.script-sidecar.json",
-          "target_scene_virtual_path": "/.cooked/Scenes/a.oscene"
+          "target_scene_virtual_path": "/Cooked/Scenes/a.oscene"
         },
         {
           "id": "script.sidecar.b",
           "type": "script-sidecar",
           "source": "Scenes/b.script-sidecar.json",
-          "target_scene_virtual_path": "/.cooked/Scenes/b.oscene"
+          "target_scene_virtual_path": "/Cooked/Scenes/b.oscene"
         }
       ]
     })");
@@ -1009,7 +1008,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 
   WriteText(material_source,
     PhysicsMaterialText(
-      "/.cooked/Physics/Materials/mat.opmat", "mat", 0.6, 0.1));
+      "/Cooked/Physics/Materials/mat.opmat", "mat", 0.6, 0.1));
 
   WriteText(manifest_path,
     R"({
@@ -1021,7 +1020,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "id": "physics.material.main",
           "type": "physics-material-descriptor",
           "source": "Physics/mat.physics-material.json",
-          "virtual_path": "/.cooked/Physics/Materials/mat.opmat",
+          "virtual_path": "/Cooked/Physics/Materials/mat.opmat",
           "depends_on": ["missing.id", "missing.id"]
         }
       ]
@@ -1046,10 +1045,10 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 
   WriteText(mat_a,
     PhysicsMaterialText(
-      "/.cooked/Physics/Materials/mat_a.opmat", "mat_a", 0.6, 0.1));
+      "/Cooked/Physics/Materials/mat_a.opmat", "mat_a", 0.6, 0.1));
   WriteText(mat_b,
     PhysicsMaterialText(
-      "/.cooked/Physics/Materials/mat_b.opmat", "mat_b", 0.7, 0.2));
+      "/Cooked/Physics/Materials/mat_b.opmat", "mat_b", 0.7, 0.2));
 
   WriteText(manifest_path,
     R"({
@@ -1061,13 +1060,13 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "id": "dup.id",
           "type": "physics-material-descriptor",
           "source": "Physics/mat_a.physics-material.json",
-          "virtual_path": "/.cooked/Physics/Materials/mat_a.opmat"
+          "virtual_path": "/Cooked/Physics/Materials/mat_a.opmat"
         },
         {
           "id": "dup.id",
           "type": "physics-material-descriptor",
           "source": "Physics/mat_b.physics-material.json",
-          "virtual_path": "/.cooked/Physics/Materials/mat_b.opmat"
+          "virtual_path": "/Cooked/Physics/Materials/mat_b.opmat"
         }
       ]
     })");
@@ -1091,9 +1090,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, TwoManifestsRunAsOneBatch)
   const auto second_path = root / "second.import-manifest.json";
   const auto report_path = root / "report.json";
   WriteText(root / "Wood.material.json",
-    authored::MaterialDescriptor { "/.cooked/Wood.omat" }.Text());
+    authored::MaterialDescriptor { "/Cooked/Wood.omat" }.Text());
   WriteText(root / "Stone.material.json",
-    authored::MaterialDescriptor { "/.cooked/Stone.omat" }.Text());
+    authored::MaterialDescriptor { "/Cooked/Stone.omat" }.Text());
   const auto manifest
     = [](const std::string_view id, const std::string_view source,
         const std::string_view virtual_path) {
@@ -1105,9 +1104,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, TwoManifestsRunAsOneBatch)
           + std::string(virtual_path) + R"("}]})";
       };
   WriteText(
-    first_path, manifest("wood", "Wood.material.json", "/.cooked/Wood.omat"));
+    first_path, manifest("wood", "Wood.material.json", "/Cooked/Wood.omat"));
   WriteText(second_path,
-    manifest("stone", "Stone.material.json", "/.cooked/Stone.omat"));
+    manifest("stone", "Stone.material.json", "/Cooked/Stone.omat"));
 
   const auto result
     = RunBatchOf({ first_path, second_path }, std::nullopt, report_path);
@@ -1129,9 +1128,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ManifestsMappingOneMountToTwoFolders)
   const auto first_path = root / "first.import-manifest.json";
   const auto second_path = root / "second.import-manifest.json";
   WriteText(root / "A" / "Wood.material.json",
-    authored::MaterialDescriptor { "/.cooked/Wood.omat" }.Text());
+    authored::MaterialDescriptor { "/Cooked/Wood.omat" }.Text());
   WriteText(root / "B" / "Stone.material.json",
-    authored::MaterialDescriptor { "/.cooked/Stone.omat" }.Text());
+    authored::MaterialDescriptor { "/Cooked/Stone.omat" }.Text());
   const auto manifest
     = [](const std::string_view folder, const std::string_view source,
         const std::string_view virtual_path) {
@@ -1143,9 +1142,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ManifestsMappingOneMountToTwoFolders)
           + std::string(virtual_path) + R"("}]})";
       };
   WriteText(
-    first_path, manifest("A", "Wood.material.json", "/.cooked/Wood.omat"));
+    first_path, manifest("A", "Wood.material.json", "/Cooked/Wood.omat"));
   WriteText(
-    second_path, manifest("B", "Stone.material.json", "/.cooked/Stone.omat"));
+    second_path, manifest("B", "Stone.material.json", "/Cooked/Stone.omat"));
 
   const auto result = RunBatchOf({ first_path, second_path });
 

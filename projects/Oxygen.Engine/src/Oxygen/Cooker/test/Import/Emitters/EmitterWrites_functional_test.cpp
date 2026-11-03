@@ -320,11 +320,11 @@ NOLINT_TEST_F(EmitterWritesTest, AssetEmitterFinalizeReturnsTheFirstWriteError)
     OXCO_WITH_NURSERY(writes)
     {
       AssetEmitter emitter(storage, loop_->Driver(), writes, root);
-      emitter.Emit(AssetKey::FromVirtualPath("/.cooked/Materials/A.omat"),
-        AssetType::kMaterial, "/.cooked/Materials/A.omat", "Materials/A.omat",
+      emitter.Emit(AssetKey::FromVirtualPath("/Cooked/Materials/A.omat"),
+        AssetType::kMaterial, "/Cooked/Materials/A.omat", "Materials/A.omat",
         fixtures::MaterialBuilder { "a" }.Bytes(), {});
-      emitter.Emit(AssetKey::FromVirtualPath("/.cooked/Materials/B.omat"),
-        AssetType::kMaterial, "/.cooked/Materials/B.omat", "Materials/B.omat",
+      emitter.Emit(AssetKey::FromVirtualPath("/Cooked/Materials/B.omat"),
+        AssetType::kMaterial, "/Cooked/Materials/B.omat", "Materials/B.omat",
         fixtures::MaterialBuilder { "b" }.Bytes(), {});
       result = co_await emitter.Finalize();
       errors = emitter.ErrorCount();
@@ -349,7 +349,7 @@ NOLINT_TEST_F(
   auto memory = fixtures::MemoryFileSystem {};
   fixtures::HoldingStorage storage(memory);
   const auto root = std::filesystem::path("/memory/asset_coalesce");
-  const auto key = AssetKey::FromVirtualPath("/.cooked/Materials/Wood.omat");
+  const auto key = AssetKey::FromVirtualPath("/Cooked/Materials/Wood.omat");
   const auto first = fixtures::MaterialBuilder { "v1" }.Bytes();
   const auto latest = fixtures::MaterialBuilder { "v2" }.Bytes();
   auto result = oxygen::Result<void, WriteFailure> {};
@@ -359,14 +359,14 @@ NOLINT_TEST_F(
     OXCO_WITH_NURSERY(writes)
     {
       AssetEmitter emitter(storage, loop_->Driver(), writes, root);
-      emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
+      emitter.Emit(key, AssetType::kMaterial, "/Cooked/Materials/Wood.omat",
         "Materials/Wood.omat", first, {});
       // The first write stops in flight.
       co_await storage.publication_held;
-      emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
+      emitter.Emit(key, AssetType::kMaterial, "/Cooked/Materials/Wood.omat",
         "Materials/Wood.omat", first, {});
       EXPECT_EQ(storage.InFlight(), 1U);
-      emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
+      emitter.Emit(key, AssetType::kMaterial, "/Cooked/Materials/Wood.omat",
         "Materials/Wood.omat", latest, {});
       storage.Release();
       result = co_await emitter.Finalize();

@@ -26,19 +26,18 @@ namespace detail {
 } // namespace detail
 
 //! Whether `mount` is spelled as a mount name: an identifier (an ASCII letter
-//! or `_`, then letters, digits, `_` or `-`), after an optional leading `.`
-//! that marks a mount of derived content.
+//! or `_`, then letters, digits, `_` or `-`).
 /*!
  This is the spelling rule of the first segment of every virtual path, so a
- pak catalog names only mounts a virtual path can name. Length bounds belong
- to each owner: a virtual path segment's, a catalog field's.
+ pak catalog names only mounts a virtual path can name. A name never starts
+ with `.`: no content lives in a hidden mount. Length bounds belong to each
+ owner: a virtual path segment's, a catalog field's.
 */
 [[nodiscard]] constexpr auto IsMountNameSpelling(
   const std::string_view mount) noexcept -> bool
 {
-  const auto name = mount.starts_with('.') ? mount.substr(1) : mount;
-  return !name.empty() && detail::IsMountNameStart(name.front())
-    && std::ranges::all_of(name.substr(1), detail::IsMountNameChar);
+  return !mount.empty() && detail::IsMountNameStart(mount.front())
+    && std::ranges::all_of(mount.substr(1), detail::IsMountNameChar);
 }
 
 } // namespace oxygen::data

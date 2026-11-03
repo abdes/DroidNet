@@ -57,7 +57,7 @@ auto MakeValidSidecarSettings() -> ScriptingSidecarImportSettings
   settings.source_path = "scripts/scene_scripting_sidecar.yaml";
   settings.cooked_root = MakeAbsoluteCookedRoot();
   settings.job_name = "scene-sidecar";
-  settings.target_scene_virtual_path = "/.cooked/Scenes/TestScene.oscene";
+  settings.target_scene_virtual_path = "/Cooked/Scenes/TestScene.oscene";
   return settings;
 }
 
@@ -174,7 +174,7 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   BuildScriptingSidecarRequestRejectsNonCanonicalVirtualPath)
 {
   auto settings = MakeValidSidecarSettings();
-  settings.target_scene_virtual_path = "/.cooked/Scenes/./TestScene.oscene";
+  settings.target_scene_virtual_path = "/Cooked/Scenes/./TestScene.oscene";
   std::ostringstream errors;
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);

@@ -45,9 +45,9 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     "defaults":{"scene_descriptor":{"cooked_context_roots":["Libraries/Low"]}},
     "jobs":[
       {"type":"scene-descriptor","source":"scene.json",
-       "virtual_path":"/.cooked/Scenes/Low.oscene"},
+       "virtual_path":"/Cooked/Scenes/Low.oscene"},
       {"type":"scene-descriptor","source":"scene.json",
-       "virtual_path":"/.cooked/Scenes/High.oscene",
+       "virtual_path":"/Cooked/Scenes/High.oscene",
        "cooked_context_roots":["Libraries/High","out"]}
     ]})");
   auto errors = std::ostringstream {};
@@ -83,9 +83,9 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, BaseContextRootsPrecedeJobRoots)
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[
       {"type":"scene-descriptor","source":"scene.json",
-       "virtual_path":"/.cooked/Scenes/Plain.oscene"},
+       "virtual_path":"/Cooked/Scenes/Plain.oscene"},
       {"type":"scene-descriptor","source":"scene.json",
-       "virtual_path":"/.cooked/Scenes/Named.oscene",
+       "virtual_path":"/Cooked/Scenes/Named.oscene",
        "cooked_context_roots":["Libraries/High"]}
     ]})");
   auto errors = std::ostringstream {};
@@ -155,7 +155,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
         { "id": "00000000-0000-4000-8000-000000000002", "name": "MeshNode", "parent": 0 }
       ],
       "renderables": [
-        { "node": 1, "geometry_ref": "/.cooked/Geometry/cube.ogeo" }
+        { "node": 1, "geometry_ref": "/Cooked/Geometry/cube.ogeo" }
       ]
     })")
       .dump());
@@ -173,7 +173,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
         {
           "type": "scene-descriptor",
           "source": "Scenes/demo.scene.json",
-          "virtual_path": "/.cooked/Scenes/Demo.oscene",
+          "virtual_path": "/Cooked/Scenes/Demo.oscene",
           "name": "demo-scene-job"
         }
       ]
@@ -194,7 +194,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     << "Expected request->cooked_root to contain a value";
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "demo-scene-job" });
-  EXPECT_EQ(request->asset_virtual_path, "/.cooked/Scenes/Demo.oscene");
+  EXPECT_EQ(request->asset_virtual_path, "/Cooked/Scenes/Demo.oscene");
   ASSERT_HAS_VALUE(request->scene_descriptor)
     << "Expected request->scene_descriptor to contain a value";
 
@@ -228,13 +228,13 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
           "id": "geo.cube",
           "type": "geometry-descriptor",
           "source": "Geometry/cube.geometry.json",
-          "virtual_path": "/.cooked/Geometry/Cube.ogeo"
+          "virtual_path": "/Cooked/Geometry/Cube.ogeo"
         },
         {
           "id": "scene.demo",
           "type": "scene-descriptor",
           "source": "Scenes/demo.scene.json",
-          "virtual_path": "/.cooked/Scenes/Demo.oscene",
+          "virtual_path": "/Cooked/Scenes/Demo.oscene",
           "depends_on": ["geo.cube"]
         }
       ]

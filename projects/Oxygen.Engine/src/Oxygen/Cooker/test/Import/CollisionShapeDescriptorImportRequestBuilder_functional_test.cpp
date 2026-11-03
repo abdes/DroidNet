@@ -50,7 +50,7 @@ NOLINT_TEST(CollisionShapeDescriptorImportRequestBuilderTest,
       "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json",
       "name": "floor_box",
       "shape_type": "box",
-      "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+      "material_ref": "/Cooked/Physics/Materials/ground.opmat",
       "half_extents": [25.0, 0.5, 25.0]
     })");
 
@@ -87,7 +87,7 @@ NOLINT_TEST(CollisionShapeDescriptorImportRequestBuilderTest,
     R"({
       "name": "bad_shape",
       "shape_type": "sphere",
-      "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+      "material_ref": "/Cooked/Physics/Materials/ground.opmat",
       "radius": 1.0,
       "unexpected": true
     })");
@@ -130,7 +130,7 @@ NOLINT_TEST(
     R"({
       "name": "ok_shape",
       "shape_type": "sphere",
-      "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+      "material_ref": "/Cooked/Physics/Materials/ground.opmat",
       "radius": 1.0
     })");
 

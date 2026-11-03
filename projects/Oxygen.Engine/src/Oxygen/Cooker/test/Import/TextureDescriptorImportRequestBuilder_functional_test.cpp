@@ -286,7 +286,7 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
 {
   auto settings = oxygen::content::import::TextureImportSettings {};
   settings.source_path = "authoring/texture.png";
-  settings.virtual_path = "/.cooked/Textures/Layered.otex";
+  settings.virtual_path = "/Cooked/Textures/Layered.otex";
   settings.job_name = "Layered";
   settings.sources
     = { { .file = "layer.png", .layer = 1, .mip = 0, .slice = 0 } };

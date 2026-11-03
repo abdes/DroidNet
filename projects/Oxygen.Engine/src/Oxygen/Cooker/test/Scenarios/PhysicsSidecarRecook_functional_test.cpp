@@ -65,15 +65,15 @@ namespace {
 
   constexpr auto kSceneName = std::string_view { "ComplexScene" };
   constexpr auto kSceneVirtualPath
-    = std::string_view { "/.cooked/Scenes/ComplexScene.oscene" };
+    = std::string_view { "/Cooked/Scenes/ComplexScene.oscene" };
   constexpr auto kSidecarVirtualPath
-    = std::string_view { "/.cooked/Scenes/ComplexScene.opscene" };
+    = std::string_view { "/Cooked/Scenes/ComplexScene.opscene" };
   constexpr auto kMaterialVirtualPath
-    = std::string_view { "/.cooked/Physics/Materials/ground.opmat" };
+    = std::string_view { "/Cooked/Physics/Materials/ground.opmat" };
   constexpr auto kShapeVirtualPath
-    = std::string_view { "/.cooked/Physics/Shapes/chassis_compound.ocshape" };
+    = std::string_view { "/Cooked/Physics/Shapes/chassis_compound.ocshape" };
   constexpr auto kGeometryVirtualPath
-    = std::string_view { "/.cooked/Geometry/cloth.ogeo" };
+    = std::string_view { "/Cooked/Geometry/cloth.ogeo" };
 
   struct ParsedPhysicsSidecarFile final {
     phys::PhysicsSceneAssetDesc descriptor {};
@@ -604,7 +604,7 @@ namespace {
       3U, // base
     };
 
-    auto root = LooseCookedRoot { ".cooked" };
+    auto root = LooseCookedRoot { "Cooked" };
     auto vertex_row = data::pak::core::BufferResourceDesc {};
     vertex_row.usage_flags = 0x01U;
     vertex_row.element_stride = sizeof(VertexPosition);

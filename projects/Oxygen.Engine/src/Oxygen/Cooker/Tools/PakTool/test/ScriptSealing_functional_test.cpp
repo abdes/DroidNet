@@ -138,7 +138,7 @@ protected:
     script.Flags(ScriptAssetFlags::kAllowExternalSource).ExternalSource(stored);
     LooseCookedWriter writer(
       cooked, oxygen::content::cooked::RealCookerStorage());
-    const auto virtual_path = std::string("/.cooked/rooted.oscript");
+    const auto virtual_path = std::string("/Cooked/rooted.oscript");
     writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
       AssetType::kScript, virtual_path, "rooted.oscript", script.Bytes(),
       script.References(),
@@ -179,7 +179,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     = content_root / "scenes" / "proc-cubes" / "proc_cubes.lua";
   WriteTextFile(external_script_path, "return { update = function() end }\n");
 
-  const auto script_virtual_path = std::string("/.cooked/proc_cubes.oscript");
+  const auto script_virtual_path = std::string("/Cooked/proc_cubes.oscript");
   const auto script_relpath = std::string("proc_cubes.oscript");
   const auto script_key = AssetKey::FromVirtualPath(script_virtual_path);
 
@@ -399,8 +399,8 @@ NOLINT_TEST(
   {
     auto writer = LooseCookedWriter(cooked, memory);
     writer.WriteAssetDescriptor(
-      AssetKey::FromVirtualPath("/.cooked/spin.oscript"), AssetType::kScript,
-      "/.cooked/spin.oscript", "spin.oscript", script.Bytes(),
+      AssetKey::FromVirtualPath("/Cooked/spin.oscript"), AssetType::kScript,
+      "/Cooked/spin.oscript", "spin.oscript", script.Bytes(),
       script.References(),
       oxygen::content::import::LooseCookedProducer {
         .source = "/Content/spin.lua",

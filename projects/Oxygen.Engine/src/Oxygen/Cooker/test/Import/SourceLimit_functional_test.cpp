@@ -228,7 +228,7 @@ namespace {
       WriteText(source, document.dump());
       auto request = ImportRequest {};
       request.source_path = source;
-      request.asset_virtual_path = "/.cooked/model.gltf";
+      request.asset_virtual_path = "/Cooked/model.gltf";
       request.source_mount_path
         = oxygen::cooker::test::SourceMountPath(request.source_path);
       request.cooked_root = CookedRoot();

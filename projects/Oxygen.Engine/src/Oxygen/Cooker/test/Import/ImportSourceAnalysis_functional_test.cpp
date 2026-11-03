@@ -148,12 +148,12 @@ namespace {
     static auto Analyze() -> void
     {
       namespace authored = oxygen::cooker::test;
-      constexpr auto kMaterial = "/.cooked/Materials/Stone.omat";
-      constexpr auto kScene = "/.cooked/Scenes/Scene.oscene";
+      constexpr auto kMaterial = "/Cooked/Materials/Stone.omat";
+      constexpr auto kScene = "/Cooked/Scenes/Scene.oscene";
       const auto material = WriteFile("material.json",
         authored::MaterialDescriptor { kMaterial }
-          .Texture("base_color", "/.cooked/Textures/color.otex")
-          .Texture("thickness", "/.cooked/Textures/thickness.otex")
+          .Texture("base_color", "/Cooked/Textures/color.otex")
+          .Texture("thickness", "/Cooked/Textures/thickness.otex")
           .Text());
       auto scene_document = authored::SceneDescriptor { kScene };
       scene_document.Set("/name", "Scene.v2")
@@ -167,7 +167,7 @@ namespace {
               {
                 {
                   "scene_ref",
-                  scene_document.Spell("/.cooked/Props/Crate.glb/Crate.oscene"),
+                  scene_document.Spell("/Cooked/Props/Crate.glb/Crate.oscene"),
                 },
                 {
                   "overrides",
@@ -196,7 +196,7 @@ namespace {
                                         {
                                           "/material",
                                           scene_document.Spell(
-                                            "/.cooked/Materials/Red.omat"),
+                                            "/Cooked/Materials/Red.omat"),
                                         },
                                       },
                                     },
@@ -213,34 +213,34 @@ namespace {
               },
             },
           })
-        .Renderable(0, "/.cooked/Geometry/body.ogeo")
+        .Renderable(0, "/Cooked/Geometry/body.ogeo")
         .Set("/starting_input_contexts",
           nlohmann::json::array({
             {
               {
                 "context_ref",
-                scene_document.Spell("/.cooked/Input/Gameplay.oimap"),
+                scene_document.Spell("/Cooked/Input/Gameplay.oimap"),
               },
               { "priority", 2 },
             },
           }))
         .Set("/references/scripts",
           nlohmann::json::array(
-            { scene_document.Spell("/.cooked/Scripts/move.oscript") }))
+            { scene_document.Spell("/Cooked/Scripts/move.oscript") }))
         .Set("/environment/post_process_volume/auto_exposure_metering_mask",
-          scene_document.Spell("/.cooked/Textures/mask.otex"));
+          scene_document.Spell("/Cooked/Textures/mask.otex"));
       const auto scene = WriteFile("scene.json", scene_document.Text());
       auto manifest = ImportManifest {};
       auto material_job = ImportManifestJob {};
       material_job.id = "material";
       material_job.job_type = "material-descriptor";
-      material_job.virtual_path = "/.cooked/Materials/Stone.omat";
+      material_job.virtual_path = "/Cooked/Materials/Stone.omat";
       material_job.material_descriptor.descriptor_path = material.string();
       manifest.jobs.push_back(material_job);
       auto scene_job = ImportManifestJob {};
       scene_job.id = "scene";
       scene_job.job_type = "scene-descriptor";
-      scene_job.virtual_path = "/.cooked/Scenes/Scene.oscene";
+      scene_job.virtual_path = "/Cooked/Scenes/Scene.oscene";
       scene_job.scene_descriptor.descriptor_path = scene.string();
       manifest.jobs.push_back(scene_job);
       report_ = manifest.AnalyzeSources();
@@ -264,7 +264,7 @@ namespace {
     EXPECT_EQ(report.jobs.front().references.size(), 2U);
     EXPECT_EQ(report.jobs.back().references.size(), 6U);
     EXPECT_EQ(report.jobs.back().outputs.front().virtual_path,
-      "/.cooked/Scenes/Scene.oscene");
+      "/Cooked/Scenes/Scene.oscene");
   }
 
   //! A scene's starting input contexts must be cooked before it, so they are
@@ -281,7 +281,7 @@ namespace {
     const auto& references = report.jobs.back().references;
     const auto context
       = std::ranges::find_if(references, [](const auto& reference) -> bool {
-          return reference.virtual_path == "/.cooked/Input/Gameplay.oimap";
+          return reference.virtual_path == "/Cooked/Input/Gameplay.oimap";
         });
     ASSERT_NE(context, references.end()) << report.ToJson();
     EXPECT_EQ(context->kind, ImportDependencyKind::kInputMappingContext);
@@ -308,12 +308,12 @@ namespace {
           return reference.virtual_path == path;
         });
     };
-    const auto scene = find("/.cooked/Props/Crate.glb/Crate.oscene");
+    const auto scene = find("/Cooked/Props/Crate.glb/Crate.oscene");
     ASSERT_NE(scene, references.end()) << report.ToJson();
     EXPECT_EQ(scene->kind, ImportDependencyKind::kScene);
     EXPECT_EQ(scene->object_path, "nodes[1].instance.scene_ref");
     EXPECT_TRUE(scene->required);
-    const auto material = find("/.cooked/Materials/Red.omat");
+    const auto material = find("/Cooked/Materials/Red.omat");
     ASSERT_NE(material, references.end()) << report.ToJson();
     EXPECT_EQ(material->kind, ImportDependencyKind::kMaterial);
     EXPECT_TRUE(material->required);
@@ -502,7 +502,7 @@ namespace {
     static_cast<void>(
       Write("pixels.png", "metadata analysis must not decode this"));
     const auto path = Write("texture.json",
-      cooker::test::TextureDescriptor { "/.cooked/Pixels.otex", "pixels.png" }
+      cooker::test::TextureDescriptor { "/Cooked/Pixels.otex", "pixels.png" }
         .Set("/name", "Pixels")
         .Text());
     auto manifest = ImportManifest {};
@@ -510,7 +510,7 @@ namespace {
     job.job_type = "texture-descriptor";
     job.mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     job.texture.source_path = path.string();
-    job.virtual_path = "/.cooked/Pixels.otex";
+    job.virtual_path = "/Cooked/Pixels.otex";
     job.texture.virtual_path = job.virtual_path;
     manifest.jobs.push_back(job);
     const auto report = manifest.AnalyzeSources();
@@ -534,7 +534,7 @@ namespace {
       settings.source_path
         = (models / (std::string("static_scalar_triangle.") + type)).string();
       job.virtual_path
-        = std::string("/.cooked/Props/static_scalar_triangle.") + type;
+        = std::string("/Cooked/Props/static_scalar_triangle.") + type;
       settings.virtual_path = job.virtual_path;
       manifest.jobs.push_back(job);
     }
@@ -607,7 +607,7 @@ namespace {
     job.id = "rooms";
     job.job_type = "gltf";
     job.gltf.source_path = source.string();
-    job.virtual_path = "/.cooked/rooms.gltf";
+    job.virtual_path = "/Cooked/rooms.gltf";
     job.gltf.virtual_path = job.virtual_path;
     manifest.jobs.push_back(job);
     const auto report = manifest.AnalyzeSources();
@@ -688,7 +688,7 @@ namespace {
     job.id = "glb";
     job.job_type = "gltf";
     job.gltf.source_path = source.string();
-    job.virtual_path = "/.cooked/Props/Tabuleiro.glb";
+    job.virtual_path = "/Cooked/Props/Tabuleiro.glb";
     job.gltf.virtual_path = job.virtual_path;
     manifest.jobs.push_back(job);
     const auto report = manifest.AnalyzeSources();
@@ -744,7 +744,7 @@ namespace {
   {
     const auto source = oxygen::cooker::test::AssetsDir() / "Models"
       / "static_scalar_triangle.gltf";
-    for (const auto* identity : { "", "/.cooked/static_scalar_triangle.fbx" }) {
+    for (const auto* identity : { "", "/Cooked/static_scalar_triangle.fbx" }) {
       SCOPED_TRACE(identity);
       auto manifest = ImportManifest {};
       auto job = ImportManifestJob {};
@@ -768,7 +768,7 @@ namespace {
     auto job = ImportManifestJob {};
     job.job_type = "texture";
     job.texture.source_path = TempPath("missing.png").string();
-    job.virtual_path = "/.cooked/missing.otex";
+    job.virtual_path = "/Cooked/missing.otex";
     job.texture.virtual_path = job.virtual_path;
     manifest.jobs.push_back(job);
     const auto report = manifest.AnalyzeSources();
@@ -791,7 +791,7 @@ namespace {
     auto job = ImportManifestJob {};
     job.job_type = "texture";
     job.texture.source_path = directory.string();
-    job.virtual_path = "/.cooked/directory.otex";
+    job.virtual_path = "/Cooked/directory.otex";
     job.texture.virtual_path = job.virtual_path;
     manifest.jobs.push_back(job);
     const auto report = manifest.AnalyzeSources();
@@ -849,7 +849,7 @@ namespace {
     auto job = ImportManifestJob {};
     job.job_type = "texture";
     job.texture.source_path = TempPath("sky.png").string();
-    job.virtual_path = "/.cooked/sky.otex";
+    job.virtual_path = "/Cooked/sky.otex";
     job.texture.virtual_path = job.virtual_path;
     job.texture.cubemap = true;
     manifest.jobs.push_back(job);
@@ -882,7 +882,7 @@ namespace {
     job.id = "remapped";
     job.job_type = "gltf";
     job.gltf.source_path = source.string();
-    job.virtual_path = "/.cooked/remapped.gltf";
+    job.virtual_path = "/Cooked/remapped.gltf";
     job.gltf.virtual_path = job.virtual_path;
     job.gltf.material_remap = {
       { "Paint", "/Content/Materials/Red.omat" },

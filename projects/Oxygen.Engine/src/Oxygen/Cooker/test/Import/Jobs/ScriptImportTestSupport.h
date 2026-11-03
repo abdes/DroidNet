@@ -99,7 +99,7 @@ inline auto ExpectPackagingSummaryMatchesDiagnostics(const ImportReport& report)
 inline auto CanonicalScriptVirtualPath(std::string_view script_name)
   -> std::string
 {
-  return std::string("/.cooked/") + std::string(script_name)
+  return std::string("/Cooked/") + std::string(script_name)
     + std::string(data::kScriptDescriptorExtension);
 }
 
@@ -165,7 +165,7 @@ struct SceneWithScriptSpec final {
 inline auto CanonicalSceneVirtualPath(std::string_view scene_name)
   -> std::string
 {
-  return std::string("/.cooked/") + std::string(scene_name)
+  return std::string("/Cooked/") + std::string(scene_name)
     + std::string(data::kSceneDescriptorExtension);
 }
 

@@ -4,12 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -40,7 +37,7 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   const oxygen::data::AssetKey& key, const std::string_view leaf,
   const std::uint8_t seed = 1U) -> void
 {
-  auto loose = oxygen::cooker::testing::LooseCookedRoot { ".cooked", seed };
+  auto loose = oxygen::cooker::testing::LooseCookedRoot { "Cooked", seed };
   static_cast<void>(loose.Add({ .leaf = std::string(leaf), .key = key }));
   oxygen::cooker::testing::Materialize(loose.Files(), cooked_root);
 }
@@ -64,7 +61,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyFoundReturnsKey)
   resolver.AddLooseCookedRoot(cooked_root);
 
   // Act
-  const auto resolved = resolver.ResolveAssetKey("/.cooked/A.bin");
+  const auto resolved = resolver.ResolveAssetKey("/Cooked/A.bin");
 
   // Assert
   if (!resolved.has_value()) {
@@ -98,7 +95,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyDuplicatePathLastWins)
   resolver.AddLooseCookedRoot(cooked_root1);
 
   // Act
-  const auto resolved = resolver.ResolveAssetKey("/.cooked/A.bin");
+  const auto resolved = resolver.ResolveAssetKey("/Cooked/A.bin");
 
   // Assert
   if (!resolved.has_value()) {
@@ -106,7 +103,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyDuplicatePathLastWins)
   }
   EXPECT_EQ(*resolved, key1);
   resolver.AddLooseCookedRoot(cooked_root0);
-  EXPECT_EQ(resolver.ResolveAssetKey("/.cooked/A.bin"), key0);
+  EXPECT_EQ(resolver.ResolveAssetKey("/Cooked/A.bin"), key0);
 }
 
 //! Test: Resolver returns nullopt when the virtual path is not found
@@ -128,7 +125,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyNotFoundReturnsNullopt)
   resolver.AddLooseCookedRoot(cooked_root);
 
   // Act
-  const auto resolved = resolver.ResolveAssetKey("/.cooked/DoesNotExist.bin");
+  const auto resolved = resolver.ResolveAssetKey("/Cooked/DoesNotExist.bin");
 
   // Assert
   EXPECT_FALSE(resolved.has_value());
@@ -146,8 +143,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyInvalidVirtualPathThrows)
 
   // Act & Assert
   EXPECT_THROW(
-    { (void)resolver.ResolveAssetKey(".cooked/A.bin"); },
-    std::invalid_argument);
+    { (void)resolver.ResolveAssetKey("Cooked/A.bin"); }, std::invalid_argument);
 }
 
 } // namespace

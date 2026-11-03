@@ -20,7 +20,7 @@
       }
     },
     "scene": {
-      "description": "Virtual path of the scene to play, e.g. /.cooked/Scenes/Level.oscene.",
+      "description": "Virtual path of the scene to play, e.g. /Cooked/Scenes/Level.oscene.",
       "type": "string",
       "pattern": "^/.+"
     },

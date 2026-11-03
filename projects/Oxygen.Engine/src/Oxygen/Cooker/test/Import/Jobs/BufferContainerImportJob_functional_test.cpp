@@ -130,7 +130,7 @@ namespace {
     request.source_path = TempDir() / "inline.buffers.json";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
-    request.asset_virtual_path = "/.cooked/Resources/inline.buffers";
+    request.asset_virtual_path = "/Cooked/Resources/inline.buffers";
     request.cooked_root = cooked_root;
     request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {
@@ -269,7 +269,7 @@ namespace {
     request.source_path = TempDir() / "inline.buffers.json";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
-    request.asset_virtual_path = "/.cooked/Resources/inline.buffers";
+    request.asset_virtual_path = "/Cooked/Resources/inline.buffers";
     request.cooked_root = cooked_root;
     request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {
@@ -336,7 +336,7 @@ namespace {
     request.source_path = TempDir() / "inline.buffers.json";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
-    request.asset_virtual_path = "/.cooked/Resources/inline.buffers";
+    request.asset_virtual_path = "/Cooked/Resources/inline.buffers";
     request.cooked_root = cooked_root;
     request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {
@@ -392,7 +392,7 @@ namespace {
     request.source_path = TempDir() / "busy.buffers.json";
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
-    request.asset_virtual_path = "/.cooked/Resources/busy.buffers";
+    request.asset_virtual_path = "/Cooked/Resources/busy.buffers";
     request.cooked_root = cooked_root;
     request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {
