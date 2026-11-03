@@ -13,7 +13,7 @@ namespace Oxygen.Managed.Assets.Authoring;
 /// <summary>What the readers of the engine's JSON descriptors share: parsing, the embedded engine schemas and problems.</summary>
 internal static class DescriptorFormat
 {
-    private const string NameSchemaFileName = "oxygen.name.schema.json";
+    private static readonly EngineSchemaSet Schemas = new(typeof(DescriptorFormat).Assembly);
 
     /// <summary>Parses descriptor JSON as the cooker does, with comments and trailing commas.</summary>
     /// <param name="jsonUtf8">The descriptor bytes, with or without a UTF-8 byte order mark.</param>
@@ -49,18 +49,10 @@ internal static class DescriptorFormat
     public static ReadOnlySpan<byte> WithoutByteOrderMark(ReadOnlySpan<byte> jsonUtf8)
         => jsonUtf8.StartsWith(Encoding.UTF8.Preamble) ? jsonUtf8[Encoding.UTF8.Preamble.Length..] : jsonUtf8;
 
-    /// <summary>Loads an engine schema embedded in this assembly, with the shared name definitions it references.</summary>
+    /// <summary>Loads an engine schema embedded in this assembly, with the shared definitions it references.</summary>
     /// <param name="fileName">The schema's file name.</param>
     /// <returns>The schema.</returns>
-    public static JsonSchema LoadSchema(string fileName)
-    {
-        var options = new BuildOptions();
-        options.SchemaRegistry.Fetch = static (uri, _) =>
-            string.Equals(Path.GetFileName(uri.LocalPath), NameSchemaFileName, StringComparison.Ordinal)
-                ? JsonSchema.FromText(ReadSchemaResource(NameSchemaFileName))
-                : null;
-        return JsonSchema.FromText(ReadSchemaResource(fileName), options);
-    }
+    public static JsonSchema LoadSchema(string fileName) => Schemas.Get(fileName);
 
     /// <summary>Describes the errors of a failed schema evaluation, one per line.</summary>
     /// <param name="evaluation">The evaluation, in list output format.</param>
@@ -94,12 +86,4 @@ internal static class DescriptorFormat
     /// <returns>The exception to throw.</returns>
     public static AssetFormatException Problem(string code, string message, string? explanation = null)
         => new(new AssetProblem(DiagnosticSeverity.Error, code, message) { Explanation = explanation });
-
-    private static string ReadSchemaResource(string fileName)
-    {
-        using var stream = typeof(DescriptorFormat).Assembly.GetManifestResourceStream(fileName)
-            ?? throw new InvalidOperationException($"The engine schema '{fileName}' is missing.");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }
 }

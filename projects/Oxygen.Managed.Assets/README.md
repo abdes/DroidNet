@@ -30,6 +30,10 @@ descriptor models, `*.omat.json` and `*.otex.json`, with their readers and
 writers. Both check a descriptor against the engine schema embedded in this
 library and report problems by code (`MaterialSourceCodes`,
 `TextureSourceCodes`); every editor module reads these formats through them.
+`EngineSchemaSet` builds the engine schemas an assembly embeds with one
+registry, so a schema's references to the shared name and reference
+definitions resolve to the embedded copies; an assembly embeds every schema its
+schemas reference.
 Scenes link to assets by URI only; this library has no asset object model.
 Native source inspection, import, texture cooking and packaging are coordinated
 by [Oxygen.Editor.ContentPipeline](../Oxygen.Editor.ContentPipeline/README.md)

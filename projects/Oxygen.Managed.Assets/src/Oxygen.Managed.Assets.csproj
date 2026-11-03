@@ -32,6 +32,9 @@
                           LogicalName="oxygen.material-descriptor.schema.json" />
         <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.name.schema.json"
                           LogicalName="oxygen.name.schema.json" />
+        <!-- The descriptors reference the shared reference definition; EngineSchemaSet resolves it here. -->
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.reference.schema.json"
+                          LogicalName="oxygen.reference.schema.json" />
         <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.texture-descriptor.schema.json"
                           LogicalName="oxygen.texture-descriptor.schema.json" />
     </ItemGroup>
