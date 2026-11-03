@@ -5,7 +5,6 @@ _module boundaries_ of the Oxygen Content subsystem.
 
 - Async loader architecture (design, invariants): `truly-async-asset-loader.md`
 - Loose cooked (filesystem-backed cooked sources, PIE requirements): `loose_cooked_content.md`
-- Implementation status / roadmap: `implementation_plan.md`
 - PAK format details (layout, alignment): `chunking.md`
 - Dependency + cache mechanics (forward-only model): `deps_and_cache.md`
 - Tooling and diagnostics: `tooling_and_diagnostics.md`
@@ -223,9 +222,9 @@ format's rules. Content refuses anything else before serving from it.
 - **One refusal, nothing mounted.** A mount set with a refused member commits
   no member.
 
-A refusal is a `data::CookedOpenError`. Its `Defect()` is the
+A refusal is a `data::CookedFormatError`. Its `Defect()` is the
 `data::CookedDefect` rule the bytes break, such as `kReservedNotZero` or
-`kDigestMismatch`. Its `Failure()` is the `data::CookedOpenFailure` family a
+`kDigestMismatch`. Its `Failure()` is the `data::CookedFormatFailure` family a
 caller acts on:
 
 | Family                | Meaning                                 | Caller action                 |
@@ -242,17 +241,29 @@ to read it, such as a sharing violation or a denied access, is a
 thread, a verified pak's CRC32 included; `PrepareMountsAsync` awaits those
 reads on the loop.
 
-Asset descriptors are checked when they load, not when they mount. A loader
-refuses a descriptor that breaks its format, such as a physics sidecar with a
-non-zero reserve in the arm its backend selects, and the load fails.
+Asset descriptors are checked when they load, not when they mount. Two errors
+separate what is wrong:
+
+- `data::CookedFormatError`: a cooked artifact (pak, index or descriptor)
+  breaks a rule of its format, such as a physics sidecar with a non-zero
+  reserve in the arm its backend selects.
+- `content::ContentLoadError` (`Content/ContentLoadError.h`): the descriptor
+  follows its format but the content is refused or the mounts cannot satisfy
+  it. Its `ContentLoadFailure` is `kContentInvalid` (an engine rule is
+  broken, such as an unknown input slot), `kDependencyMissing`,
+  `kDependencyFailed` (the dependency's error is nested), `kReferenceInvalid`
+  or `kBindingFailed`.
+
+The codes and the nesting rule are in the
+[failure contract](truly-async-asset-loader.md#failure-contract).
 
 ---
 
 ## Entity relationships (conceptual)
 
----
+How a geometry asset decomposes for rendering, and what its materials name.
 
-## Relationship Summary Table
+### Relationship summary
 
 | From     | To       | Cardinality | Notes                                                                                                                 |
 | -------- | -------- | ----------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -263,7 +274,7 @@ non-zero reserve in the arm its backend selects, and the load fails.
 | Material | Texture  | 0 : N       | 🖼️ A Material can have zero or more Textures (e.g., color maps, normal maps).                                         |
 | Material | Shader   | 1 : N       | 🧠 A Material can reference multiple Shaders, at most one per stage (see ShaderStageFlags).                           |
 
-## Entity Dependency Flowchart
+### Dependency flowchart
 
 ```mermaid
 flowchart TD
@@ -291,7 +302,6 @@ flowchart TD
 - If you need **loose cooked / PIE requirements**: `loose_cooked_content.md`
 - If you need **cache/dependency rules**: `deps_and_cache.md`
 - If you need **async loader architecture**: `truly-async-asset-loader.md`
-- If you need the **roadmap**: `implementation_plan.md`
 - If you need **tooling / diagnostics**: `tooling_and_diagnostics.md`
 - If you need **GPU copy submission**: start with `src/Oxygen/Vortex/Upload/`,
   `src/Oxygen/Vortex/Resources/`, and `src/Oxygen/Graphics/Common/`.

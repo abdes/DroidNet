@@ -456,9 +456,9 @@ Release CPU baseline (2026-09-29, Ryzen 9 9950X, MSVC 14.51 x64):
 
 Each run measures 512 batches of 128 acquisitions and 32 large-payload releases.
 The batch limit bounds bookkeeping; individual CPU payload destruction remains
-synchronous. Existing entry-unit budget accounting is unchanged; byte weighting
-is tracked as
-[CNTT-BUDGET-01](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/implementation_plan.md#cpu-budget-accounting).
+synchronous. Byte-weighted budget accounting (CNTT-BUDGET-01) is delivered:
+an entry costs the cooked bytes it holds, per the
+[cost rule](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/eviction_and_residency.md#cost-rule).
 
 Reproduce from the engine root:
 

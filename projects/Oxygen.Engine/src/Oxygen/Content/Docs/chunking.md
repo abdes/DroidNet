@@ -1,7 +1,6 @@
 # Chunking / Loading
 
-> Defines the PAK file format (layout, alignment, classification). For
-> implementation status see `implementation_plan.md#detailed-feature-matrix`.
+> Defines the PAK file format (layout, alignment, classification).
 
 This document defines a binary `.pak` container format optimized for GPU asset
 streaming, alignment, and fast loading. Inspired by Unreal Engine, Frostbite,

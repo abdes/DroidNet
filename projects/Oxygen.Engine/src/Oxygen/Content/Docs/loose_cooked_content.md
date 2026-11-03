@@ -126,7 +126,8 @@ so a reader maps a whole index, the old one or the new one.
 ## Non-goals
 
 - Runtime import of source formats.
-- Hot reload (see the dedicated hot reload design doc).
+- In-place reload: a recooked root is mounted as a new
+  [published generation](#published-generations).
 - GPU uploads/residency/budgets.
 
 ---

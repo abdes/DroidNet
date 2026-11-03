@@ -212,14 +212,27 @@ objectively verifiable.
 
 ---
 
-## Implementation Status & Roadmap
+## Open work
 
-All status tables and roadmap details have moved to
-`Docs/implementation_plan.md`. This README stays lightweight for orientation.
+Open Content work is tracked in GitHub issues: per-request load cancellation
+(#124), chunk metadata and partial decode (#125), dependency graph export
+(#126), load benchmarks (#127), stable resource indices across recooks (#128)
+and animation and audio asset families (#129).
 
-## Roadmap
+## Testing Content contracts
 
-See `Docs/implementation_plan.md#roadmap-phases`.
+Content tests depend on the Cooker's cooked content builders
+(`Oxygen.Cooker.Testing`) and on no Cooker tool. Tests that mount loose roots
+or paks build them with those builders and write them out with their
+`Materialize`. Decoder tests use minimal in-memory descriptors. Source,
+identity, ownership and reload tests exercise their owning APIs. Async tests
+control suspension with events and gates, then assert publication,
+cancellation and retained lifetimes.
+
+PAK construction and package/load integration belong to `Cooker/test/Pak` and
+use the native `PakBuilder` API. To inspect a failing archive, build
+`Oxygen.Cooker.PakDump` and run `Oxygen.Cooker.PakDump <path-to.pak> --verbose
+--show-data`.
 
 ## LoaderContext Architecture
 

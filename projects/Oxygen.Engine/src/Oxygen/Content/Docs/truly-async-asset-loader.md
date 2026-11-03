@@ -18,7 +18,7 @@ Out of scope:
 
 ---
 
-## Key Terms
+## Key terms
 
 - **Owning thread**: the engine thread that owns an `AssetLoader` instance.
 - **Asset**: identified by `oxygen::data::AssetKey`.
@@ -38,7 +38,7 @@ Internal decode/publish bridge types:
 
 ---
 
-## Design Invariants
+## Design invariants
 
 ### Threading
 
@@ -75,7 +75,7 @@ portable.
 
 ---
 
-## Identity Model
+## Identity model
 
 ### Runtime identities and decode handoff
 
@@ -163,7 +163,7 @@ by invoking callbacks with `nullptr`.
 
 ---
 
-## Load Pipelines
+## Load pipelines
 
 ### Asset load (`LoadAssetAsync<T>`)
 
@@ -207,7 +207,7 @@ so the same product can be reloaded after decoded-payload eviction.
 
 ---
 
-## Dependency Model
+## Dependency model
 
 The runtime dependency graph is identity-only:
 
@@ -224,7 +224,7 @@ re-entrancy into `AssetLoader`.
 
 ---
 
-## Public API Contract (summary)
+## Public API contract (summary)
 
 This document does not restate the full header API; it specifies behavioral
 contracts the API upholds.
@@ -248,7 +248,45 @@ Decode-time dependency recording uses `DependencyCollector`:
 
 ---
 
-## Caching and Concurrency
+## Failure contract
+
+A load that fails completes its awaitable exceptionally; the `StartLoad*`
+bridges report the same failure as `nullptr`. Three kinds of failure are
+distinct:
+
+- `data::CookedFormatError`: a cooked artifact (pak, loose index, descriptor)
+  breaks a rule of its format. Its `Failure()` is a `CookedFormatFailure`
+  family and its `Defect()` a `CookedDefect` code. See the
+  [admission section](overview.md#admitting-cooked-content).
+- `content::ContentLoadError` (`Content/ContentLoadError.h`): the descriptors
+  follow their formats, but the content is refused or the mounts cannot
+  satisfy it. Its `Failure()` is a `ContentLoadFailure`:
+
+  | Code                 | Meaning                                                                                                                                                                                         |
+  | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `kContentInvalid`    | Breaks an engine rule, e.g. unknown input slot, mapping without action, action without name, invalid script parameters, unknown procedural mesh generator, view drawing nothing, nil surface id |
+  | `kDependencyMissing` | A required dependency is in none of the load's mounts                                                                                                                                           |
+  | `kDependencyFailed`  | A required dependency failed its own load                                                                                                                                                       |
+  | `kReferenceInvalid`  | A reference resolves to content of another kind                                                                                                                                                 |
+  | `kBindingFailed`     | The mounts hold content that cannot be bound to the asset, e.g. two physics sidecars that target one scene                                                                                      |
+
+- `OperationCancelledException`: the loader stopped.
+
+For `kDependencyFailed` the dependency's error is nested in the dependent's
+and its message ends the dependent's. Catch `std::nested_exception` to reach
+it; the engine builds without RTTI, so `dynamic_cast` is unavailable.
+
+Textures are optional inputs. Every asset's load loads and holds every
+texture it names: the local ones its loader collects and those of other
+sources bound by key, including a scene's environment textures (sky sphere,
+sky light, fog, auto-exposure metering mask). A texture no mounted source
+holds, or that fails to load, does not fail the asset: the load warns and the
+field shows the error texture. `IAssetLoader::MakeTextureResourceKeyForAsset`
+returns `ResourceKey::kError` for such a field.
+
+---
+
+## Caching and concurrency
 
 - Assets and resources are cached by their source-qualified identities.
 - In-flight request deduplication ensures concurrent loads of the same identity

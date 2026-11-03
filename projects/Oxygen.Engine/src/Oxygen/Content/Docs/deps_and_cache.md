@@ -156,9 +156,8 @@ Explicit trim and memory-pressure recovery drain pending returns fully. Trim rem
 policy-eligible entries, drains child returns, and repeats until no further entries
 become eligible. Active callers, bound children and pins retain their usages. The
 RefCountedEviction cache keeps one baseline residency reference until trim, budget
-policy or explicit invalidation removes the entry. Its current default cost is one
-unit per entry; byte-weighted accounting remains
-[CNTT-BUDGET-01](implementation_plan.md#cpu-budget-accounting).
+policy or explicit invalidation removes the entry. An entry costs the cooked bytes
+it holds; see the [cost rule](eviction_and_residency.md#cost-rule).
 
 Shutdown closes enqueueing before invalidating the cache. Remaining queued records
 then dispose CPU storage without touching cache accounting. Late pointer destruction

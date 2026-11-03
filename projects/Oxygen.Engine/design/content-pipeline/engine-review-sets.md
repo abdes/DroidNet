@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-11-01
+Last updated: 2026-11-03
 
 The portable-references plan ends its engine work with S6f. From S7 on, the
 editor is the content pipeline's main consumer: it reads cooked formats in
@@ -216,7 +216,7 @@ API is the only way the engine reads, writes, hashes and publishes files.
 **Files.** `Data/PakFormat*.h`, `Data/PakFormatSerioLoaders.h`,
 `Data/PakFormatSerioWriters.h`, `Data/PakFormatVersions.{h,inc}`,
 `Data/LooseCooked*`, `Data/ResourceDescriptor.*`, `Data/PakCatalog.*`,
-`Data/PatchManifest.h`, `Data/CookedSource.*`, `Data/CookedOpenError.h`,
+`Data/PatchManifest.h`, `Data/CookedSource.*`, `Data/CookedFormatError.h`,
 `Data/AssetReferences.*`, `Data/DescriptorStrings.*`, `Data/SourceKey.h`,
 `Data/AssetType.h`; the engine readers' refusal paths, read for the format
 checks only: `Content/PakFile.*`, `Content/LooseCookedIndex.*`,
@@ -350,7 +350,7 @@ retire, clear, load during a swap.
 - `VirtualPath` and `VirtualPathResolver`: one grammar, shared with the
   managed side through `VirtualPathCases.json`; the two `reinterpret_cast`s
   in `VirtualPath.cpp` are safe for every UTF-8 input.
-- Open failures of paks and loose indices are typed (`CookedOpenError`), not
+- Open failures of paks and loose indices are typed (`CookedFormatError`), not
   logged and swallowed.
 - `PlayerModule.cpp`: `DependencyRequirementError` at launch becomes
   `player.launch.dependency_missing`, and the launch file is
@@ -374,11 +374,10 @@ retire, clear, load during a swap.
 `Content/OperationCancelledException.h`, `Content/ResourceKey.*`,
 `Content/ResourceTable.h`, `Content/ResourceTypeList.h`,
 `SceneInstantiation/*`; `Content/Docs/eviction_and_residency.md`,
-`deps_and_cache.md`, `hot_reload.md`, `truly-async-asset-loader.md`,
-`scenes_and_levels.md`.
+`deps_and_cache.md`, `truly-async-asset-loader.md`, `scenes_and_levels.md`.
 
 **Objectives.** Loads are correct and safe under concurrency, cancellation,
-eviction and hot reload, which Live Preview exercises constantly.
+eviction and mount replacement, which Live Preview exercises constantly.
 
 **Critical points.**
 
@@ -394,13 +393,13 @@ eviction and hot reload, which Live Preview exercises constantly.
 - `ContentReleaseQueue`: GPU-side release is deferred to a safe frame, never
   run on a loader thread.
 - `SceneInstantiation`: instances, changes and starting state apply in the
-  documented order; a bad reference fails the instantiation with a code
-  rather than producing a partial scene; `EnvironmentHydration` refuses
-  unknown blocks.
-- `MaterialLoader.h:314` (shader references are not resources): confirm the
-  effect on hot reload and dependency tracking.
-- Docs: `implementation_plan.md` and the other plan-style docs in
-  `Content/Docs` are current or retired.
+  documented order (environment, composed tree, start state and input
+  contexts, scripts); instantiation is best effort: a bad reference is an
+  issue and the rest of the scene loads. `EnvironmentHydration` applies a
+  closed set of blocks, and the scene refuses an environment record type the
+  format does not define when it is decoded.
+- Docs: `Content/Docs` states current facts only; open Content work lives in
+  GitHub issues.
 
 ## R6. Cooked roots: write, read, verify
 

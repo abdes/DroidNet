@@ -2,12 +2,10 @@
 
 This document specifies a minimal **Scene/Level** asset for Oxygen.
 
-It documents the current **Scene/Level** asset and the remaining work to make
-scene authoring and editor workflows first-class.
+It documents the current **Scene/Level** asset.
 
 Related:
 
-- Roadmap: `implementation_plan.md`
 - Loose cooked mode: `loose_cooked_content.md`
 - Content boundaries: `overview.md`
 
@@ -22,10 +20,6 @@ Oxygen needs an editor-facing “Map/Level” concept equivalent to:
 - Godot: Scene
 
 Oxygen has a cooked `SceneAsset` format and a runtime loader.
-
-The remaining gap is primarily tooling/editor-facing: authoring, validation,
-iteration workflows (including loose cooked), and higher-level editor concepts
-around maps/levels.
 
 ---
 
@@ -68,10 +62,10 @@ A Scene/Level is a hierarchical scene graph descriptor that the loader can use
 to reconstruct an `oxygen::scene::Scene` consisting of named nodes with local
 transforms.
 
-Phase 1.5 is intentionally minimal: it captures only what is required to
+The base format is intentionally minimal: it captures only what is required to
 instantiate nodes and bind renderable geometry.
 
-### Required data (Phase 1.5)
+### Required data
 
 - `Node`
   - stable id: `data::NodeId`, unique within the scene or model that defines
@@ -87,13 +81,6 @@ instantiate nodes and bind renderable geometry.
 Material assignment is intentionally _not_ part of the base scene format.
 Geometry assets already encode their default per-submesh materials, and the
 content pipeline can register geometry → material → texture dependencies.
-
-### Optional data (future)
-
-- explicit material overrides (per node / per submesh)
-- `Light` (directional/point)
-- `Camera` (editor-only)
-- instancing/prefabs
 
 ---
 
@@ -163,7 +150,7 @@ The scene loader must:
    - For each non-nil renderable `material_key`:
      - call `AddAssetDependency(scene_key, material_key)`
 
-3. Eager-load geometry assets (Phase 1.5 decision): once dependencies are
+3. Eager-load geometry assets: once dependencies are
    registered, request/load all referenced geometry assets and scene-authored
    material overrides.
 
@@ -196,7 +183,7 @@ See [Content ownership](deps_and_cache.md#owning-and-borrowed-access).
 
 ---
 
-## Toolchain (Phase 1.5)
+## Toolchain
 
 Two workflows are expected:
 
@@ -214,7 +201,8 @@ cooked roots; tooling determines how those artifacts are produced.
 
 - Node ids must be stable across saves to support selection and gizmos.
 - Referenced AssetKeys must be stable across cooks.
-- Scene changes should be hot-reloadable (see `hot_reload.md`).
+- A recooked scene is mounted as a new published generation (see
+  [published generations](loose_cooked_content.md#published-generations)).
 
 ---
 
@@ -239,10 +227,3 @@ model.
   relative to the parent: <https://docs.unity3d.com/Manual/class-Transform.html>
 - Godot: nodes form a tree; a “scene” is a tree of nodes:
   <https://docs.godotengine.org/en/stable/classes/class_node.html>
-
----
-
-## Open questions
-
-- Should we support instancing or prefabs at the scene level? Not required for
-  Phase 1.5.
